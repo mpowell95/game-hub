@@ -32,11 +32,47 @@ function machineFor(board) {
 
 /** One throw = one fresh world (cheap: ~150 static boxes) so every throw is a clean determinism
  *  boundary - nothing persists from the previous ball. */
+/** THE BROADPHASE, SPECIALISED FOR THE ONE THING THIS WORLD HOLDS (2026-08-26): a single dynamic
+ *  body - the ball - among 195 static ones (126 cup segments over 9 holes, plus the cabinet, lane, hump,
+ *  rails and trough every machine shares).
+ *
+ *  `NaiveBroadphase` tests EVERY PAIR and throws all but the ball's away, because
+ *  `needBroadphaseCollision` rejects static-against-static. At the 240Hz step that is millions of
+ *  rejected pair tests a second, and it is the single biggest cost in a frame of this machine's
+ *  physics. This walks the ball's own pairs instead: 195 tests, same answer.
+ *
+ *  DETERMINISM, which is the whole reason it is written this awkwardly. It emits pairs in
+ *  NaiveBroadphase's EXACT order (`for i, for j < i`, so the ball is `bi` against everything before
+ *  it and `bj` against everything after), because the solver's result depends on the order it is
+ *  handed its pairs. Verified rather than assumed - see the commit for the 41x21 grid this was
+ *  proven identical over. It FALLS BACK to the naive sweep whenever the world does not hold exactly
+ *  one non-static body, so a future mover here cannot silently get a different pair list than the
+ *  one it was tuned against.
+ *
+ *  POPONGO ONLY, per the HARD RULE in skeeball/CLAUDE.md. Each machine that has this has its own
+ *  copy; they are not to be "kept in sync" with each other. */
+class BallBroadphase extends CANNON.NaiveBroadphase {
+  collisionPairs(world, pairs1, pairs2) {
+    const bodies = world.bodies;
+    const n = bodies.length;
+    let k = -1, dynamic = 0;
+    for (let i = 0; i < n; i++) if (bodies[i].type !== CANNON.Body.STATIC) { k = i; dynamic++; }
+    if (dynamic !== 1) { super.collisionPairs(world, pairs1, pairs2); return; }
+    const ball = bodies[k];
+    for (let j = 0; j < k; j++) {
+      if (this.needBroadphaseCollision(ball, bodies[j])) this.intersectionTest(ball, bodies[j], pairs1, pairs2);
+    }
+    for (let i = k + 1; i < n; i++) {
+      if (this.needBroadphaseCollision(bodies[i], ball)) this.intersectionTest(bodies[i], ball, pairs1, pairs2);
+    }
+  }
+}
+
 function buildWorld(board) {
   const G = board.geom;
   const M = machineFor(board);
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
-  world.broadphase = new CANNON.NaiveBroadphase();
+  world.broadphase = new BallBroadphase();
   world.allowSleep = false;
   world.solver.iterations = 10;
 
