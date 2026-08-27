@@ -1364,10 +1364,34 @@ re-derive it.
 - **1** is `js/ui.js` plus the probe helper in all five `render.js` - a page-global resource bug, and
   the reasoning for touching all five is written out above.
 - **2** is `js/ui.js`, which every machine shares, so every machine got it.
-- **3, 4 and 5** are `machines/brickcity/` only, and **are not to be carried into the other four "to
-  keep them in sync"** - that is the rule this repo paid for. Known and still true elsewhere: the
-  other four all leak popup textures the same way, and all four run the naive broadphase. Each is a
-  machine's own work, on its own day.
+- **3, 4 and 5** are per-machine work, and **are not to be carried across "to keep them in sync"** -
+  that is the rule this repo paid for. Each is a machine's own work, on its own day.
+
+**RUNAWAY got 3, 4 and 5 on 2026-08-27** (Matt: *"any of the tweaks we've made recently to other
+boards like the back wall bounce or the glitchy/choppy rendering?"*). Its back wall was already
+right - it was copied from HOT SHOT after that change - and the capture-frame and collar-frame
+fixes had landed the day before. Still true and still owed elsewhere: **THE CLASSIC, POPONGO and
+HOT SHOT all leak popup textures and all three run the naive broadphase.**
+
+Two things RUNAWAY's copies do differently, and both are about its moving parts:
+
+- **The broadphase guard counts DYNAMIC bodies, not non-static ones.** BRICK CITY's version falls
+  back whenever the world holds more than one non-static body, which is correct there because every
+  one of its solids is static. **Every collar on RUNAWAY is KINEMATIC** - any basket can end up the
+  last one standing in its row - so that world holds 112 kinematic bodies and the stricter guard
+  would fall back to the naive sweep every single step, buying nothing. Counting DYNAMIC bodies is
+  safe because every machine body carries `collisionFilterMask: GROUP_BALL`, so a machine-vs-machine
+  pair fails the FILTER check before its type is ever considered. **Widen any machine body's mask
+  and that stops being true.** Measured: 17,391 -> 186 pair tests per substep (98.9% fewer), and
+  proven equal on a 1,722-throw grid - identical hole, value, settle time to six decimals, bounces,
+  board contact, watchdog and full event sequence.
+- **A SWEEPING BASKET DOES NOT CAST A SHADOW.** The first cut of the shadow gate ignored the movers
+  and was visibly wrong the moment a row went down to one: the map still held the basket where it
+  stood at the last pass, so a DETACHED basket shadow sat on the riser while the basket slid away
+  from it. Found by looking at a screenshot, not by reasoning. Firing the pass every frame something
+  moves would fix it and hand most of the saving back, because on this machine something is moving
+  for most of a rack - so a moving basket turns its shadow off instead, and the pass fires once on
+  each transition to clear what it cast while standing still.
 
 ### The one red test, and it is not this
 

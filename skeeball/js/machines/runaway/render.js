@@ -26,6 +26,22 @@
 
 import * as THREE from '../../vendor/three.module.min.js';
 import { buildMachine, holeOffset } from './machine.js';
+
+/** Dispose a material AND the texture it points at.
+ *
+ *  GUARD: `Material.dispose()` DOES NOT DISPOSE THE MATERIAL'S TEXTURES. Every score popup builds
+ *  its own 256x128 CanvasTexture, and disposing only the material left it on the GPU forever -
+ *  about 1 MB a rack, never freed, which is why a long session gets choppier than a fresh one.
+ *  Burst particles had the same shape of bug with no dispose at all. Measured on BRICK CITY where
+ *  this was found (2026-08-26): 17 textures at rest -> 44 with the popups up -> 44 once they had
+ *  faded, against 17 -> 44 -> 17 once fixed.
+ *
+ *  DISPOSE .map WHENEVER YOU DISPOSE A MATERIAL HERE. */
+function disposeMat(mat) {
+  if (!mat) return;
+  if (mat.map && mat.map.dispose) mat.map.dispose();
+  if (mat.dispose) mat.dispose();
+}
 import { BALLS_PER_GAME } from '../../boards.js';
 
 const REDUCED = typeof matchMedia === 'function'
@@ -142,6 +158,15 @@ export class Renderer {
     this.renderer.setPixelRatio(soft ? 0.5 : Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)));
     this.renderer.shadowMap.enabled = !soft;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // ON DEMAND, NOT EVERY FRAME. three.js re-renders the whole shadow map every frame by default,
+    // drawing every caster in the scene a second time - and this machine is a STILL LIFE for most
+    // of a rack while the player lines up a swipe. render() sets `needsUpdate` for exactly the
+    // frames a caster moved. Ported from machines/brickcity/render.js (2026-08-26), where it
+    // measured 172 draw calls / 37,206 triangles per frame down to 138 / 26,026 while idle.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
+    this._shadowBalls = -1;    // ball count on the last shadow pass; -1 forces the first one
+    this._shadowMovers = -1;   // how many baskets were sweeping on the last shadow pass
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
@@ -2117,9 +2142,11 @@ export class Renderer {
     // freeze gameplay (docs/BUILDING-A-GAME.md, Part 0, and pinball/CLAUDE.md's "a pinball table
     // that does not move is not a pinball table"). The basket IS this machine - stopping it
     // would leave a player aiming at a target the physics is still sliding out from under them.
+    // `sweeps` is read again by the shadow gate at the bottom of this method, so it is scoped to
+    // the whole of render() rather than to this block.
+    const sweeps = (game && game.sweeps) || null;
     {
       const T = game ? game.machineT || 0 : 0;
-      const sweeps = (game && game.sweeps) || null;
       const closed = this._closedSet;
       closed.clear();
       for (const h of (game && game.closed) || []) closed.add(h);
@@ -2172,7 +2199,7 @@ export class Renderer {
       s.userData.t += dt;
       s.position.y += step * 0.22;
       s.material.opacity = Math.max(0, 1 - s.userData.t / 1.1);
-      if (s.userData.t > 1.1) { this.scene.remove(s); s.material.dispose(); this._popups.splice(i, 1); }
+      if (s.userData.t > 1.1) { this.scene.remove(s); disposeMat(s.material); this._popups.splice(i, 1); }
     }
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const pt = this._particles[i];
@@ -2180,7 +2207,7 @@ export class Renderer {
       pt.userData.vel.y -= dt * 2.2;
       pt.position.addScaledVector(pt.userData.vel, dt);
       pt.material.opacity = Math.max(0, 0.9 - pt.userData.t);
-      if (pt.userData.t > 1) { this.scene.remove(pt); this._particles.splice(i, 1); }
+      if (pt.userData.t > 1) { this.scene.remove(pt); disposeMat(pt.material); this._particles.splice(i, 1); }
     }
     if (this._celebrateT > 0) {
       this._celebrateT -= dt;
@@ -2188,6 +2215,41 @@ export class Renderer {
       for (const b of this._marqueeBulbs) b.material.emissiveIntensity = on;
       if (this._celebrateT <= 0) for (const b of this._marqueeBulbs) b.material.emissiveIntensity = 0.55;
     }
+    // SHADOWS: only re-render the map on a frame where a caster actually moved.
+    //
+    // GUARD: GATE ON `live.length`, NOT ON `used`. `used` counts the ball parked on the serve
+    // spot, which does not move, so gating on it leaves the pass running through the whole wait
+    // between throws - which is exactly the still life the gate exists for. `used` CHANGING still
+    // counts, or the frame a ball stops being drawn leaves its shadow lying on the lane under
+    // nothing.
+    //
+    // GUARD: A SWEEPING BASKET DOES NOT CAST, AND THAT IS WHAT MAKES THE GATE SAFE HERE. The first
+    // cut of this gate ignored the movers, and it was VISIBLY WRONG the moment a row went down to
+    // one: the shadow map still held the basket where it stood at the last pass, so a detached
+    // basket shadow sat on the riser while the basket itself slid away from it. Found by looking
+    // at a screenshot, not by reasoning - see VISUAL-PROCESS.md.
+    //
+    // Firing the pass every frame something moves would fix it and give most of the saving back,
+    // because on this machine something is moving for most of a rack. So a basket that is sweeping
+    // turns its shadow OFF instead: it is the one caster whose shadow nobody is looking at (it
+    // falls on the riser directly behind it), and a basket that is MOVING is already the most
+    // conspicuous thing on the face. The pass fires once on each transition, which is what clears
+    // the shadow it cast while it was still standing.
+    let movers = 0;
+    for (const [id, grp] of this._holeGroups) {
+      const moving = !!(sweeps && sweeps[id]);
+      if (moving) movers += 1;
+      if (grp.userData.casting !== !moving) {
+        grp.userData.casting = !moving;
+        grp.traverse((o) => { if (o.isMesh) o.castShadow = !moving; });
+      }
+    }
+    if (live.length || used !== this._shadowBalls || movers !== this._shadowMovers
+      || this._celebrateT > 0) {
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    this._shadowBalls = used;
+    this._shadowMovers = movers;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2238,8 +2300,8 @@ export class Renderer {
   // --- teardown --------------------------------------------------------------------------------
 
   dispose() {
-    for (const p of this._popups) { this.scene.remove(p); p.material.dispose(); }
-    for (const p of this._particles) this.scene.remove(p);
+    for (const p of this._popups) { this.scene.remove(p); disposeMat(p.material); }
+    for (const p of this._particles) { this.scene.remove(p); disposeMat(p.material); }
     this._popups = [];
     this._particles = [];
     for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }

@@ -63,6 +63,55 @@ const GROUP_FLOOR = 2;           // the board slab only - what capture removes f
 const GROUP_REST = 4;            // everything else: lane, hump, trough, collars, band, walls
 
 // Machine descriptions are pure per-board data; build each once.
+/** THE BALL'S OWN PAIRS, INSTEAD OF ALL 20,000 OF THEM.
+ *
+ *  A throw's world holds ONE dynamic body - the ball - among ~200 others. NaiveBroadphase tests
+ *  every pair and throws all but the ball's away, because `needBroadphaseCollision` rejects them:
+ *  4.8 million rejected pair tests a second at the 240Hz step. This walks the ball's own pairs
+ *  instead. Ported from machines/brickcity/physics.js (2026-08-26), where it measured 26% less
+ *  physics time per frame.
+ *
+ *  GUARD: IT EMITS PAIRS IN NAIVEBROADPHASE'S EXACT ORDER (`for i, for j < i`). The solver's answer
+ *  depends on the order it is handed its pairs, so a different order is a different machine.
+ *
+ *  GUARD: THIS MACHINE NEEDED A WIDER GUARD THAN BRICK CITY'S, AND THE DIFFERENCE MATTERS.
+ *  BRICK CITY's copy falls back whenever the world holds more than one NON-STATIC body, which is
+ *  correct there because every one of its solids is static. **Every collar on this machine is
+ *  KINEMATIC** - any basket can end up the last one standing in its row and start sweeping, and
+ *  cannon-es cannot change a body's type after the world is built - so this world holds ~112
+ *  kinematic bodies and that guard would fall back to the naive sweep every single step, buying
+ *  nothing.
+ *
+ *  So it counts DYNAMIC bodies, and that is safe for one specific reason worth stating: every
+ *  machine body is built with `collisionFilterMask: GROUP_BALL`, so a machine-vs-machine pair
+ *  fails `needBroadphaseCollision`'s FILTER check before its type check is ever reached
+ *  (GROUP_REST & GROUP_BALL === 0). Kinematic collars therefore cannot pair with each other or
+ *  with the static board, no matter what their type says. The ball is the only body any pair can
+ *  involve. **If a future edit ever widens a machine body's collisionFilterMask, this stops being
+ *  true and this class has to go back to the stricter guard.**
+ *
+ *  Proven equal rather than assumed: the same 41x21 grid the reachability tests use, before and
+ *  after - see the commit. */
+class BallBroadphase extends CANNON.NaiveBroadphase {
+  collisionPairs(world, pairs1, pairs2) {
+    const bodies = world.bodies;
+    const n = bodies.length;
+    let k = -1;
+    let dynamic = 0;
+    for (let i = 0; i < n; i++) {
+      if (bodies[i].type === CANNON.Body.DYNAMIC) { k = i; dynamic++; }
+    }
+    if (dynamic !== 1) { super.collisionPairs(world, pairs1, pairs2); return; }
+    const ball = bodies[k];
+    for (let j = 0; j < k; j++) {
+      if (this.needBroadphaseCollision(ball, bodies[j])) this.intersectionTest(ball, bodies[j], pairs1, pairs2);
+    }
+    for (let i = k + 1; i < n; i++) {
+      if (this.needBroadphaseCollision(bodies[i], ball)) this.intersectionTest(bodies[i], ball, pairs1, pairs2);
+    }
+  }
+}
+
 const machines = new Map();
 function machineFor(board) {
   let m = machines.get(board.id);
@@ -80,7 +129,7 @@ function buildWorld(board, closed) {
   // the hole it belongs to. substep() drives each one to `baseX + holeOffset(...)` every step;
   // nothing else ever touches them.
   const movers = [];
-  world.broadphase = new CANNON.NaiveBroadphase();
+  world.broadphase = new BallBroadphase();
   world.allowSleep = false;
   world.solver.iterations = 10;
 
