@@ -429,7 +429,7 @@ machine's objectives are about its FACE, not about a score.
    objective on the machine. Each basket closes when you hit it, so covering the face means eight
    scoring balls of nine into eight different baskets, three of which are sweeping by the time you
    reach them.
-3. **600 in a single round** (`RA_BEST`). Matt, replacing a 10,000-point lifetime total:
+3. **750 in a single round** (`RA_BEST`). Matt, replacing a 10,000-point lifetime total:
    *"let's do a crazy good single round... the king of games keeps beating everything i set way
    faster than i expect."*
 
@@ -452,6 +452,40 @@ which is this machine's hard shot and the thing worth asking for. Verified: a pe
 `full 1/1 MET` and `best 460/600`.
 
 **Do not move this bar under 460.** It stops meaning anything there.
+
+### 750, and why it is not the 600 this first shipped at
+
+It shipped at 600 and was raised the same day, because the obvious question got asked: *"look at
+what the king of games has done on other boards."* His record on the SIBLING machine settles it.
+
+| | HOT SHOT | BRICK CITY | THE CLASSIC |
+|---|---|---|---|
+| racks | 286 | 198 | 507 |
+| **best** | **900 - the literal maximum** | 450 | 500 |
+| average per rack | **481** | 136 | 142 |
+| perfect racks | 5 | 3 | 27 |
+
+HOT SHOT is this machine's direct sibling - same cabinet, same ramp, same ball, rows 1 and 2
+identical to the digit. **He has scored 900 on it, which is that machine's theoretical ceiling:
+nine balls, nine 100s.** Of his scored balls, two thirds were the 100, which works out to landing a
+STATIC 100 on roughly **43% of every throw**. He plays about **200 racks a day** (1,003 skeeball
+racks in five days).
+
+So the ceiling is not his barrier - only the MOVEMENT is. Blind sweeps put the moving 100 at about
+two thirds the availability of HOT SHOT's static one, which projects him to ~2.6 runaway catches a
+rack, a typical rack near 450-500, and a best of 700-800 once he has a few hundred racks on it.
+**600 was a good rack for him, not a crazy one**; he would have taken it the first afternoon. 750
+is 83% of ceiling, against the 100% he already managed on the easier static face.
+
+**CAVEAT ON THE 43%.** `slotHits` only began counting on 2026-08-25, so it covers about 28% of his
+HOT SHOT points (39,030 tracked against 137,570 total). The RATIOS between baskets are sound; the
+absolute percentages are understated, and the 43% is cross-checked against points-per-rack rather
+than read straight off the counter.
+
+**THE ONE NUMBER NOBODY HAS is his hit rate on a MOVING basket** - everything above is projected
+from a static one. When he has 50-100 racks on this machine, **re-read them and re-derive** rather
+than nudging the bar by feel: the per-board record carries `best`/`points`/`plays`, and
+`sk.runaways` carries the catches.
 
 **`fullRacks` is a PER-BOARD counter, not a global one**, and that saved the three-edit rule
 entirely: `js/arcade-scores.js` already owns the per-board record's shape and its cross-device
