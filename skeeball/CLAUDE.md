@@ -846,6 +846,26 @@ Two details that are load-bearing:
   `_goalsSpent()` treats "opens nothing" as spent. Anything unreadable answers NO, so the failure
   mode is showing the objectives, never hiding something still owed.
 
+**But they are still REACHABLE, on a tap (2026-08-27).** Matt: they "disappear after they've been
+achieved... add something above the machines that players can click to see the objectives after
+they've already completed them." So the two RAILS still go entirely, and the wide bar becomes a
+small **`Objectives ✓` chip** (`_goalDoneMarkup`, `.sk-gdone`) in the same in-flow row the running
+total used - the one place above the machine that is measured clear on every board. Tapping it
+opens the same `_showGoalDefs` sheet every objective box opens, so a finished machine still says
+what it asked for and what the player did.
+
+- **It carries `data-def` with NO id**, so the sheet opens with nothing singled out - there is no
+  one objective being asked about - and deliberately **no `data-goal`**: `_checkGoalsNow` pops
+  boxes by that attribute, and nothing on a spent machine can turn met.
+- **It is smaller than the bar it replaces** (11px label, ~23px chip against ~30px, row 31px
+  against 40px measured at 375x667 and 393x852), because this row is IN FLOW and every pixel it
+  takes is a pixel of machine. A finished machine still renders bigger than one you are working
+  on - just no longer by the whole bar.
+- The 44px hit area is `.sk-gtotal`'s overhang trick, for the same reason and with the same
+  clearance from `.sk-swipe`.
+- `.sk-gtotal-row:empty` still collapses the row, and now only fires when there are no objectives
+  to show at all. The chip is what gives the row a reason to exist.
+
 ## The unlock ceremony (2026-08-25)
 
 Matt's sequence, in his words: the third objective completes, fireworks, the three objective tiles

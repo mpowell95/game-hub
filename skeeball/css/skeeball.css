@@ -751,10 +751,67 @@
   padding: 2px 12px 6px;
   pointer-events: none;
 }
-/* SPENT OBJECTIVES GIVE THEIR SPACE BACK (2026-08-25). ui.js paints this row empty once the
-   machine's three are all met and the machine they open is in the player's hands; the padding
-   alone would otherwise keep 8px of the stage - and the stage is the machine. */
+/* SPENT OBJECTIVES GIVE MOST OF THEIR SPACE BACK (2026-08-25). ui.js paints this row empty once
+   the machine's three are all met and the machine they open is in the player's hands; the padding
+   alone would otherwise keep 8px of the stage - and the stage is the machine.
+   Since 2026-08-27 the row is not empty on a spent machine - it holds the small .sk-gdone chip
+   below - so this rule only fires when there are no objectives to show at all (a board with no
+   goals). The chip is what gives the row a reason to exist; the :empty rule is what handles its
+   absence. */
 .sk-root .sk-gtotal-row:empty { display: none; }
+
+/* THE WAY BACK TO OBJECTIVES YOU HAVE ALREADY FINISHED (2026-08-27). Matt: they "disappear after
+   they've been achieved... add something above the machines that players can click to see the
+   objectives after they've already completed them."
+
+   It is deliberately SMALLER than the .sk-gtotal chip it replaces (11px label, tighter padding;
+   measured 111x23 against ~30px, taking the row to 31px against 40px, at 375x667 and 393x852):
+   this row is IN FLOW, so every pixel it takes is a pixel of machine, and a
+   finished machine should still render bigger than one you are working on. It says one word and a
+   tick, because there is no progress left to report - the sheet a tap away carries all three
+   objectives, their numbers and what they meant.
+
+   The 44px hit area is the same overhang trick .sk-gtotal uses and for the same reason (see the
+   block below it): the chip keeps its size and the tap floor spills into this row's inert padding
+   and the dead band at the top of the stage. The swipe surface is the bottom 52% of the stage and
+   nowhere near it. */
+.sk-root .sk-gdone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding: 3px 11px 4px;
+  border-radius: 8px;
+  background: rgba(26, 16, 12, 0.7);
+  border: 1px solid var(--sk-line);
+  white-space: nowrap;
+}
+.sk-root .sk-gdone::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+.sk-root .sk-gdone em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sk-dim);
+}
+.sk-root .sk-gdone i {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--sk-amber);
+}
 
 .sk-root .sk-gtotal {
   position: relative;
@@ -859,6 +916,7 @@
 }
 .sk-root .sk-goal:focus-visible,
 .sk-root .sk-gtotal:focus-visible,
+.sk-root .sk-gdone:focus-visible,
 .sk-root .sk-gtile:focus-visible { outline: 2px solid var(--sk-amber); outline-offset: 2px; }
 .sk-root .sk-goal em {
   display: block;
