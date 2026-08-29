@@ -26,22 +26,38 @@ import {
  * 18-unit ball 25.3 mm, against a real pinball's 27 - the scale is honest, so this number can be
  * checked against a real machine and is, in test.js section 6e).
  *
- * 790 units/s^2 = 1.62 m/s^2 = g * sin(6.5 degrees), which is exactly how a real cabinet is set up.
- * It was 1150 until 2026-08-20: g * sin(9.5 degrees), steeper than any real machine (tournament
- * setups stop around 7) and the reason a playtester said the table felt "basically on a vertical
- * wall."
+ * 564 units/s^2 = 0.79 m/s^2 = (5/7) * g * sin(6.5 degrees).
  *
- * THIS WAS A UNIFORM TIME-RESCALE, NOT A PHYSICS REWRITE, and that is the part to preserve. Every
- * velocity constant in physics.js and table.js was multiplied by sqrt(790/1150) at the same time -
- * MAX_SPEED, the flipper sweep rate, both plunger limits, both kicker strengths, the ramp exit and
- * its duration, the ramp's needUp gate. Since a ballistic rise is v^2/2g and both halves scaled
- * together, EVERY TRAJECTORY IS GEOMETRICALLY IDENTICAL to the shipped table: the shot map, the
- * clearances in table.js and the plunger skill curve are all untouched, and the ball simply travels
- * the same paths 21% slower. Change this number on its own and all of that silently drifts - the
- * plunger skill curve is the first thing to go, because minV is tuned to just barely FAIL to clear
- * the arch.
+ * THE 5/7 IS THE WHOLE POINT AND IT WAS MISSING UNTIL 2026-08-29. A pinball ROLLS down the
+ * playfield, it does not slide: the rolling constraint puts two sevenths of gravity into spinning
+ * the ball and only five sevenths into forward motion. This engine has no rotational inertia at
+ * all (physics.js's ball.spin is advanced from vx for the RENDERER and never fed back), so the
+ * 5/7 has to be carried in this constant or it is simply absent.
+ *
+ * It was 1150 until 2026-08-20 (an effective 9.5 degrees; a playtester said the table felt
+ * "basically on a vertical wall"), then 790 until 2026-08-29. 790 is g * sin(6.5 deg) for a ball
+ * that SLIDES - correct arithmetic for the wrong ball. Against a rolling ball it is
+ * (5/7) * g * sin(9.1 deg): still a table pitched nine degrees, when real machines run 6-7 and
+ * Visual Pinball's own default is 6.0 (DefaultTableMinSlope). Matt, on the 790 build: "You tried,
+ * but it didn't make the game better." It was 40 percent too fast.
+ *
+ * WHAT MOVED WITH IT, AND WHAT DELIBERATELY DID NOT. The 08-20 change was a UNIFORM time rescale -
+ * every velocity in the engine moved by sqrt(new/old) together, so every trajectory came out
+ * geometrically identical and the table simply ran slower. That is very likely why it changed
+ * nothing that mattered: a uniformly slower game feels like the same game in slow motion.
+ *
+ * So this change is NOT uniform. Only the two BALLISTIC GATES moved, by k = sqrt(564/790) = 0.845,
+ * because each is a v^2/2g threshold that would silently drift otherwise:
+ *   - PLUNGER.minV / maxV (table.js) - minV is tuned to just barely FAIL to clear the arch, which
+ *     is the entire plunger skill curve;
+ *   - the rampIn switch's needUp gate (table.js) - "was that hard enough to make the habitrail".
+ * The flipper sweep rate, both kicker strengths (pops, slings) and MAX_SPEED are UNCHANGED, on
+ * purpose. A real flipper's coil does not know what the cabinet is pitched at. Leaving them means
+ * the flippers hit just as hard against weaker gravity, so the ball hangs and shots reach - which
+ * is the actual difference between a real machine and a ball dropped down a wall. Nothing got
+ * faster, so tunnelling cannot have got worse.
  */
-export const GRAVITY = 790;
+export const GRAVITY = 564;
 
 /** Difficulty is the shared 1-4 tier vocabulary on the stats WRITE path, so these keys go straight
  *  into byDiff and difficulty-tiers.js maps them for the leaderboard with no translation layer. */

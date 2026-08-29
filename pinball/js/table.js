@@ -55,7 +55,7 @@ const mx = (x) => 368 - x;
 // dribbles back down the lane and has to be re-plunged, a normal pull makes the orbit. That is the
 // whole plunger skill curve, and it only works because a dribbled ball is handed straight back to
 // the plunger (game.js's shooter-lane rest check) rather than sitting there dead.
-export const PLUNGER = { x: 373, y: 708, minV: 812, maxV: 1508, laneX: 360 };
+export const PLUNGER = { x: 373, y: 708, minV: 686, maxV: 1274, laneX: 360 };  // 2026-08-29: x0.845 with GRAVITY 790 -> 564 (a v^2/2g gate; see game.js GRAVITY)
 
 /** Flipper geometry, shared with the renderer so the paddle art and the collider can never drift. */
 export const FLIP = { len: 58, r: 8, rest: 27 * D, sweep: 52 * D, pivotY: 640, dx: 68 };
@@ -69,7 +69,7 @@ export const SWITCHES = [
   { id: 'laneH', x: 152, y: 146, r: 13 },
   { id: 'laneU', x: 192, y: 132, r: 13 },
   { id: 'laneB', x: 232, y: 146, r: 13 },
-  { id: 'rampIn', x: 184, y: 396, r: 17, needUp: 191 },         // fast enough UP = made the ramp
+  { id: 'rampIn', x: 184, y: 396, r: 17, needUp: 161 },         // fast enough UP = made the ramp (x0.845, see game.js GRAVITY)
   { id: 'scoop', x: 298, y: 302, r: 10, capture: true },        // saucer: holds the ball (see SCOOP)
   { id: 'inlaneL', x: 93, y: 568, r: 12 },
   { id: 'inlaneR', x: mx(93), y: 568, r: 12 },
