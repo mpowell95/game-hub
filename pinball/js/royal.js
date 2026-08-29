@@ -3,26 +3,28 @@
 // WHY THIS IS A SEPARATE CLASS AND NOT A BRANCH INSIDE game.js. game.js's rules are welded to
 // STARHUB's shots: missions keyed off a scoop, a lock lit by five ramps, H-U-B lanes, a scripted
 // habitrail with its own RAMP_PATH. Royal Flush has none of those - no scoop, no H-U-B, four drop
-// banks instead of one, an upper right flipper, three ramps this engine cannot yet climb. Threading
+// banks instead of one, an upper right flipper, three ELEVATED RAMPS the ball actually climbs. Threading
 // two shot maps through one 849-line class would put a board check on every rule in it and leave
 // STARHUB one typo away from breaking. So this file is deliberately SMALL and deliberately DUMB:
 // it is the same public surface ui.js already drives (start/update/setFlipper/plungerDown/
 // plungerUp/nudge/hud/takeEvents/result/score/phase) over a much simpler rule set.
 //
-// WHAT IT DOES NOT DO YET, ON PURPOSE: no missions, no multiball, no bonus count-up, no tilt. This
-// build exists so the BOARD and the BALL can be judged - the thing Matt actually asked to test.
-// Scores come from the parts themselves, using the point values carried in the source table.
+// THE BOARD IS IMPORTED WHOLE: all four layers, all 18 sensors, every colour. What is NOT here is
+// their RULES - the Java Field9Delegate - which we are not taking. Scoring is the parts themselves,
+// at the point values the source table carries. No missions, multiball, bonus or tilt yet.
 //
 // THE LAW: this class stores nothing. The only record of a score is recordPinball() in
 // js/game-stats.js, exactly as STARHUB's is - see pinball/CLAUDE.md, "Persistence".
 import { step, makeBall, PHYS_DT, BALL_R } from './physics.js';
-import T, { buildRoyal, BUMPER_SCORES } from './table-royal.js';
+import T, { buildLayer } from './table-royal.js';
 
 const SAVE_SECS = 8;          // ball save at the start of every ball, as STARHUB's Standard does
 const MAX_HOLD = 3;           // seconds; the held-ball invariant from pinball/CLAUDE.md
 const DROP_RESET_SECS = 2;    // their table's own `reset` value on all four banks
 const SEARCH_DIST = 22;       // units a ball must cover to count as "moving" - just over one ball
-const SEARCH_SECS = 4;        // seconds parked inside that circle before the table shoves it
+const SEARCH_SECS = 3;        // seconds parked inside that circle before the table shoves it
+const SEARCH_VX = 210;        // sideways shove. At GRAVITY 80 a gentler one just re-parked it -
+const SEARCH_VY = 150;        // the first try used 120/70 and the soak still logged 59 episodes.
 
 export class RoyalPinball {
   constructor(opts = {}) {
@@ -34,6 +36,7 @@ export class RoyalPinball {
 
   reset() {
     this.down = new Set();            // drop-target keys currently knocked over
+    this.retracted = new Set();       // retract-when-hit wall ids (their two ball savers)
     this._rebuild();
     this.balls = [];
     this.phase = 'attract';
@@ -51,16 +54,27 @@ export class RoyalPinball {
     this.events.length = 0;
   }
 
-  /** Colliders are REBUILT whenever a drop target falls, never mutated, so a knocked-over target
-   *  simply is not a wall this frame. Same discipline table.js uses for STARHUB's bank. */
+  /**
+   * FOUR WORLDS, ONE PER LAYER. The source table is a playfield with three elevated ramps stacked
+   * over it, and a ball on a ramp must touch that ramp's walls and NOTHING on the playfield below -
+   * that separation is the entire difference between a ramp and a wall lying across the table. So
+   * each layer gets its own collider set and each ball carries the layer it is on.
+   *
+   * Everything is REBUILT rather than mutated when a drop target falls or a wall retracts, the same
+   * discipline table.js uses for STARHUB's bank.
+   */
   _rebuild() {
-    const built = buildRoyal(this.down);
-    this.colliders = built.colliders;
-    this.flippers = built.flippers;
-    this.world = {
-      colliders: this.colliders, flippers: this.flippers,
-      gravity: T.GRAVITY, drag: 0.04, nudgeX: 0, nudgeY: 0,
-    };
+    this.layers = [0, 1, 2, 3].map((n) => {
+      const built = buildLayer(n, this.down, this.retracted);
+      return {
+        colliders: built.colliders, flippers: built.flippers,
+        gravity: T.GRAVITY, drag: 0.04, nudgeX: 0, nudgeY: 0,
+      };
+    });
+    // The playfield is where the flippers live, and ui.js and the renderer both read these.
+    this.world = this.layers[0];
+    this.colliders = this.layers[0].colliders;
+    this.flippers = this.layers[0].flippers;
   }
 
   emit(e) { this.events.push(e); }
@@ -78,6 +92,7 @@ export class RoyalPinball {
   _serve() {
     const b = makeBall(T.PLUNGER.x, T.PLUNGER.y, 0, 0);
     b.onPlunger = true;
+    b.layer = 0;                      // every ball is served onto the playfield
     this.balls.push(b);
     this.saveTimer = SAVE_SECS;
     this.ballScore = 0;
@@ -143,11 +158,53 @@ export class RoyalPinball {
     for (let i = 0; i < steps; i++) {
       const held = this._plungerBall();
       if (held) { held.x = T.PLUNGER.x; held.y = T.PLUNGER.y; held.vx = 0; held.vy = 0; }
-      step(this.world, this.balls, (kind, id, x, y, speed) => this._contact(kind, id, x, y, speed));
+      // One step per layer, each with only the balls standing on it. Layer 0 is stepped even when
+      // the ball is up a ramp, because that is where the flippers are and they still have to swing.
+      for (let L = 0; L < this.layers.length; L++) {
+        const on = this.balls.filter((b) => (b.layer | 0) === L);
+        if (L !== 0 && !on.length) continue;
+        step(this.layers[L], on, (kind, id, x, y, speed) => this._contact(kind, id, x, y, speed));
+      }
+      this._sensors();
       this._rollovers();
       this._drain();
     }
     this._ballSearch(dt);
+  }
+
+  /**
+   * THE 18 SENSORS, and they come in two kinds - the difference is whether the source gave the
+   * element a `ballLayer`.
+   *
+   *   - With one, the sensor MOVES the ball between levels: seven of them, an entry and an exit for
+   *     each of the three ramps. This is how a ball gets onto a ramp and how it comes off.
+   *   - Without one, it is an EVENT trigger, live only while the ball is on `ballLayerFrom` - the
+   *     ramp enter/trigger/drop sensors their own rules use.
+   *
+   * A sensor fires on ENTRY only. `_inSensor` remembers which the ball was already inside, so a ball
+   * that stops on top of one does not re-trigger it every step - the same edge-detection mistake
+   * that let STARHUB's scoop bank 1.5 million in one shot (pinball/CLAUDE.md).
+   */
+  _sensors() {
+    for (const b of this.balls) {
+      if (b.onPlunger) continue;
+      if (!b._inSensor) b._inSensor = new Set();
+      for (let i = 0; i < T.SENSORS.length; i++) {
+        const s = T.SENSORS[i];
+        const inside = b.x >= s.x1 && b.x <= s.x2 && b.y >= s.y1 && b.y <= s.y2;
+        const was = b._inSensor.has(i);
+        if (!inside) { b._inSensor.delete(i); continue; }
+        if (was) continue;
+        b._inSensor.add(i);
+        if (s.from !== null && (b.layer | 0) !== s.from) continue;
+        if (s.to !== null) {
+          b.layer = s.to;
+          this.emit({ type: s.to === 0 ? 'rampexit' : 'ramp', x: b.x, y: b.y });
+        } else if (s.id) {
+          this.emit({ type: 'ramp', x: b.x, y: b.y, id: s.id });
+        }
+      }
+    }
   }
 
   /**
@@ -176,8 +233,8 @@ export class RoyalPinball {
       // Shove it the way a solenoid would: mostly sideways, slightly up, alternating direction so
       // a second search cannot re-park it in the same corner.
       const dir = (b._searches = (b._searches | 0) + 1) % 2 ? 1 : -1;
-      b.vx += dir * 120;
-      b.vy -= 70;
+      b.vx += dir * SEARCH_VX;
+      b.vy -= SEARCH_VY;
       b._anchor = [b.x, b.y];
       b._still = 0;
       this.emit({ type: 'ballsearch' });
@@ -190,7 +247,7 @@ export class RoyalPinball {
     if (!id) return;
     if (id.startsWith('bump:')) {
       const idx = Number(id.slice(5));
-      const pts = (BUMPER_SCORES[idx] | 0) || 100;
+      const pts = ((T.BUMPERS[idx] || [])[5] | 0) || 100;
       this._award(pts, x, y);
       this.stats.bumpers++;
       this.emit({ type: 'bumper', x, y, i: idx });
@@ -225,6 +282,7 @@ export class RoyalPinball {
     for (const b of this.balls) {
       if (b.onPlunger || !b.live) continue;
       for (const g of T.ROLLOVERS) {
+        if ((g.layer | 0) !== (b.layer | 0)) continue;
         for (let i = 0; i < g.pts.length; i++) {
           const key = g.id + ':' + i;
           const [px, py] = g.pts[i];
@@ -239,7 +297,8 @@ export class RoyalPinball {
           }
         }
       }
-      for (const [sx, sy, sr, sc] of T.SPINNERS) {
+      for (const [sx, sy, sr, sc, sl] of T.SPINNERS) {
+        if ((sl | 0) !== (b.layer | 0)) continue;
         const key = 'spin:' + sx;
         const inside = Math.hypot(b.x - sx, b.y - sy) < sr + BALL_R;
         if (inside && !this.rollLit.get(key)) {
@@ -257,7 +316,7 @@ export class RoyalPinball {
   _drain() {
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const b = this.balls[i];
-      const out = b.y > T.DRAIN_Y + BALL_R * 2 || b.x < -40 || b.x > T.W + 40 || b.y < -80;
+      const out = (b.y > T.DRAIN_Y + BALL_R * 2 && (b.layer | 0) === 0) || b.x < -40 || b.x > T.W + 40 || b.y < -80;
       if (!out) continue;
       if (this.saveTimer > 0 && this.phase === 'play') {
         b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0; b.onPlunger = true;
@@ -279,6 +338,7 @@ export class RoyalPinball {
     }
     this.ball++;
     this.down.clear();
+    this.retracted.clear();
     this.dropTimers.length = 0;
     this._rebuild();
     this.phase = 'ready';
