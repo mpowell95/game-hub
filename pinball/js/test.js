@@ -584,15 +584,23 @@ function launched(g) {
 }
 
 {
-  // (e) THE TABLE PLAYED LIKE A WALL. GRAVITY 1150 units/s^2, on a table scaled so 760 units is a
-  // real 42-inch playfield, is 1.615 m/s^2 - g*sin(9.5deg). Real machines are set to 6.5 degrees and
-  // the steepest tournament setups stop around 7. The fix is a uniform time-rescale: velocities
-  // scale by sqrt(790/1150), so every trajectory stays geometrically identical and the shot map is
-  // untouched - the ball simply travels it 21% slower.
+  // (e) THE TABLE PLAYED LIKE A WALL, TWICE. GRAVITY was 1150 (an effective 9.5 deg), then 790.
+  //
+  // THIS TEST WAS PART OF WHY THE SECOND ATTEMPT DID NOT WORK. It read the incline back with
+  // asin(a/g) - the SLIDING formula - so it signed off on 790 at "6.5 degrees" and would sign off
+  // on any sliding-ball number. A pinball ROLLS: the rolling constraint spends two sevenths of
+  // gravity spinning the ball, so only a = (5/7) g sin(theta) reaches the ball's forward motion.
+  // Against that, 790 was really a 9.1-degree table - Matt on the 790 build: "You tried, but it
+  // didn't make the game better."
+  //
+  // Read back with the ROLLING formula now, so this can never again certify a number that only
+  // looks right for a ball that slides. Real machines run 6-7 degrees; Visual Pinball's own
+  // default is 6.0 (DefaultTableMinSlope). 564 units/s^2 reads as 6.5.
   const unit = 1.067 / H;                     // metres per table unit, from the long dimension
-  const deg = Math.asin(GRAVITY * unit / 9.81) * 180 / Math.PI;
+  const ROLL = 5 / 7;                         // rolling-inertia factor for a solid sphere
+  const deg = Math.asin(GRAVITY * unit / (ROLL * 9.81)) * 180 / Math.PI;
   ok('[PLAYTEST 2026-08-20] the playfield is a real pinball incline, not a vertical wall',
-    deg >= 5.5 && deg <= 7.2, `${deg.toFixed(1)} degrees (shipped build: 9.5)`);
+    deg >= 5.5 && deg <= 7.2, `${deg.toFixed(1)} degrees rolling (1150 build: 13.4, 790 build: 9.1)`);
   ok('[PLAYTEST 2026-08-20] the ball is still a real pinball at that scale',
     Math.abs(18 * unit * 1000 - 27) < 4, `${(18 * unit * 1000).toFixed(1)} mm`);
 
