@@ -68,6 +68,37 @@ const DEF_DROP = [0, 255, 0];
 const DEF_FLIPPER = [0, 255, 0];
 const DEF_SPINNER = [224, 224, 224];
 
+// THE PHYSICAL PROPERTIES, ALSO READ FROM THEIR SOURCE RATHER THAN CHOSEN.
+// Box2DFactory.createCircle gives the BALL density 1.0, friction 0.3, restitution 0.6.
+// Walls get restitution 0 unless the table asks for more (`if (restitution > 0)`), and this table
+// asks NOWHERE - there is not one `restitution` key in all 122 elements - while wall friction
+// defaults to DEFAULT_WALL_FRICTION = 0.2. Box2D then combines a contact as
+// restitution = MAX(a, b) and friction = sqrt(fa * fb), so on this board:
+//   every contact restitution = max(0.6, 0)          = 0.6
+//   every contact friction    = sqrt(0.3 * wallMu)   = 0.245 by default
+// The first import used OUR e = 0.42 and mu = 0. Neither number was ever theirs, and that pair is
+// why the ball there never settled and almost never drained.
+const BALL_RESTITUTION = 0.6;
+const BALL_FRICTION = 0.3;
+const DEFAULT_WALL_FRICTION = 0.2;
+const contactMu = (wallFriction) => +Math.sqrt(BALL_FRICTION * wallFriction).toFixed(4);
+
+// WALL THICKNESS, AND WHY IT IS 1 RATHER THAN STARHUB'S DEFAULT OF 4.
+// Their walls are Box2DFactory.createThinWall - zero-width line segments. Ours are capsules, which
+// need SOME radius, because a zero-width line is the classic 2D tunnelling trap. But that radius is
+// eaten out of every channel on the table FROM BOTH SIDES, and their channels are sized against a
+// zero-width wall.
+//
+// The first import used r: 3, and it broke the board outright. The shooter lane is a 24-unit
+// channel (x 374 to 398); 3 a side leaves 18; the ball is 20 ACROSS. The ball could not fit down
+// its own launch lane. A soak spent 84% of ball life parked in the top-right corner and drained
+// twice in 1,500 seconds of play - and every other symptom I chased (never drains, parks forever,
+// "their gravity needs their solver") was downstream of that one number.
+//
+// r: 1 leaves 22 units of a 24-unit lane. Tunnelling is still bounded, and by a wide margin: the
+// ball moves at most MAX_SPEED * PHYS_DT = 3.8 units per step against a ball+wall radius of 11.
+const WALL_R = 1;
+
 function arcPoints(e) {
   const cx = Number(e.center[0]);
   const cy = Number(e.center[1]);
@@ -102,7 +133,7 @@ function pushWall(pts, e) {
     for (const [, py] of pts) drainY = drainY === null ? Y(py) : Math.min(drainY, Y(py));
     return;
   }
-  const mu = e.friction === undefined ? 0 : Number(e.friction);
+  const mu = contactMu(e.friction === undefined ? DEFAULT_WALL_FRICTION : Number(e.friction));
   const kick = e.kick ? N(e.kick) : 0;
   const layer = e.layer ?? 0;
   const c = col(e.color, DEF_WALL);
@@ -243,6 +274,14 @@ const out = [
   ' *  against STARHUB\'s 1.64s. The layout was designed around this number. */',
   'export const GRAVITY = ' + N(src.gravity) + ';',
   'export const BALLS = ' + (src.numballs | 0) + ';',
+  '',
+  '/** Box2D combines a contact as restitution = MAX(a,b) and friction = sqrt(fa*fb). Their ball is',
+  ' *  restitution 0.6 / friction 0.3; their walls are restitution 0 (this table overrides it',
+  ' *  NOWHERE) and friction 0.2 by default. Both numbers are theirs, read from their source. */',
+  'export const BALL_E = ' + BALL_RESTITUTION + ';',
+  'export const BALL_MU = ' + contactMu(DEFAULT_WALL_FRICTION) + ';',
+  '/** Their walls are zero-width; ours are capsules. See the generator header for why this is 1. */',
+  'const WALL_R = ' + WALL_R + ';',
   'export const BALL_COLOR = ' + j(col(src.ballcolor, [240, 240, 240])) + ';',
   'export const PLUNGER = { x: ' + X(src.launchPosition[0]) + ', y: ' + Y(src.launchPosition[1])
     + ', v: ' + N(src.launchVelocity[1]) + ', jitter: ' + N(src.launchVelocityRandomDelta[1]) + ' };',
@@ -271,12 +310,12 @@ const out = [
   '  for (const [ax, ay, bx, by, mu, kick, ly, , , ghost, disabled, , id] of WALLS) {',
   '    if (ly !== layer || ghost || disabled) continue;',
   '    if (id && retracted.has(id)) continue;',
-  "    colliders.push(seg(ax, ay, bx, by, { r: 3, mu, kick, id: id || (kick ? 'kick' : '') }));",
+  "    colliders.push(seg(ax, ay, bx, by, { r: WALL_R, e: BALL_E, mu, kick, id: id || (kick ? 'kick' : '') }));",
   '  }',
   '  for (let i = 0; i < BUMPERS.length; i++) {',
   '    const [x, y, r, , kick, , ly] = BUMPERS[i];',
   '    if (ly !== layer) continue;',
-  "    colliders.push(circle(x, y, r, { kick, e: 0.5, id: 'bump:' + i }));",
+  "    colliders.push(circle(x, y, r, { kick, e: BALL_E, mu: BALL_MU, id: 'bump:' + i }));",
   '  }',
   '  for (const d of DROPS) {',
   '    if ((d.layer ?? 0) !== layer) continue;',
@@ -284,14 +323,14 @@ const out = [
   "      const key = d.id + ':' + i;",
   '      if (down.has(key)) continue;',
   '      const [ax, ay, bx, by] = d.targets[i];',
-  "      colliders.push(seg(ax, ay, bx, by, { r: 3, e: 0.35, id: 'drop:' + key }));",
+  "      colliders.push(seg(ax, ay, bx, by, { r: WALL_R, e: BALL_E, mu: BALL_MU, id: 'drop:' + key }));",
   '    }',
   '  }',
   '  const flippers = [];',
   '  for (let i = 0; i < FLIPPERS.length; i++) {',
   '    const [px, py, len, rest, up, right, ly] = FLIPPERS[i];',
   '    if (ly !== layer) continue;',
-  "    flippers.push(flipper(px, py, len, rest, up, { r: 8, id: (right ? 'flipR' : 'flipL') + i }));",
+  "    flippers.push(flipper(px, py, len, rest, up, { r: 8, e: BALL_E, mu: BALL_MU, id: (right ? 'flipR' : 'flipL') + i }));",
   '  }',
   '  return { colliders, flippers };',
   '}',
