@@ -276,19 +276,31 @@ check on every rule in it. So:
 `RoyalPinball` and `RoyalRenderer` expose exactly the surface `ui.js` already drives, so the engine
 choice is **one line** at mount and nothing downstream knows which board is running.
 
-### What the import does and does not include
+### What the import includes
 
-- **122 source elements -> 583 wall segments, 6 bumpers, 3 flippers, 4 drop banks (14 targets),
-  2 rollover groups, 1 spinner.** STARHUB has 29 colliders and one 4-target bank.
+Matt, after the first attempt: *"the fix is to implement the board exactly as is. Don't simplify or
+change anything. Make it work with our gamehub setup but do not take any creative liberties."* The
+first import broke that twice and both are fixed:
+
+- **ALL FOUR LAYERS.** 1,315 wall segments - 585 on the playfield and 730 across the three elevated
+  ramps - plus the 18 sensors. Seven of those sensors MOVE the ball between levels (an entry and an
+  exit per ramp); the other eleven are event triggers, live only while the ball is on their layer.
+  The first import kept layer 0 only, throwing away roughly half the table.
+- **EVERY COLOUR IS THE TABLE'S.** 53 elements carry an explicit `color`; where one does not, the
+  generator fills in **Vector Pinball's own default read from their source** (wall rgb(64,64,160),
+  bumper rgb(0,0,255), rollover/drop/flipper rgb(0,255,0), spinner rgb(224,224,224)). 37 elements
+  carry an `inactiveLayerColor`, which is how their renderer shows a ramp the ball is not currently
+  on - honoured exactly. **No colour in `render-royal.js` is a choice of ours**, and the background
+  is black because Vector Pinball is a vector game. If a colour looks wrong, the conversion is wrong.
 - **Arcs are tessellated, not converted.** 21 of their 39 arcs are ELLIPTICAL, which our circular
-  `arc()` cannot express. Each arc carries its own `segments` count, so the curve resolution is
-  theirs rather than a guess.
-- **Only LAYER 0 is here.** Their table is built in four layers - a playfield plus three elevated
-  ramps, with 18 sensors handing the ball between them. This engine has one playfield. The ramps are
-  **absent rather than flattened**, because flattening would drop walls into shots meant to run
-  underneath them. Their entrances are open lanes until the engine grows real layers.
-- **No missions, multiball, bonus or tilt.** This build exists so the BOARD and the BALL can be
-  judged. Points come from the parts, using the source table's own values.
+  `arc()` cannot express. Each carries its own `segments` count, so the resolution is theirs.
+- **What is NOT taken is their RULES** - the Java `Field9Delegate`. Scoring is the parts themselves
+  at the source table's own point values. No missions, multiball, bonus or tilt yet.
+
+**The renderer was wrong twice before this, both times my fault, not the table's:** first flat
+hairlines in invented colours ("what? it looks terrible"), then an invented felt-green playfield with
+a glow and a vignette - a creative liberty, which is the thing that was explicitly not wanted. The
+file header records both so a future session does not decorate it again.
 
 ### Two things the first soak found, both worth keeping
 
