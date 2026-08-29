@@ -323,7 +323,40 @@ playing. Their field is also shorter (600 vs 760) and their ball bigger (20 vs 1
 the same thing: tighter, busier, slower. Whatever happens to Royal Flush, that comparison is the
 most useful thing to come out of it, and STARHUB's own gravity should be read against it.
 
-**Known and untested at ship: the ball rarely drains.** In the headless soak no game of six reached
-game over inside 300 seconds. Their gravity was tuned against Box2D, which simulates rolling and
-friction; ours is frictionless and has no rotational inertia at all. Taking their number without
-their solver is very likely why. This is the first thing to look at.
+### The bug actually behind "the ball never drains"
+
+For two builds the ball almost never drained and parked constantly, and I blamed the physics: their
+gravity was tuned against Box2D, our solver has no rolling, taking one without the other cannot
+work. All of that is true. **None of it was the cause.**
+
+**Their walls are zero-width lines** (`Box2DFactory.createThinWall`); ours are capsules. The import
+gave every wall `r: 3`, and that radius is eaten out of every channel on the table FROM BOTH SIDES.
+Their shooter lane is a 24-unit channel (x 374 to 398). Three a side leaves 18. **The ball is 20
+across.** It could not fit down its own launch lane.
+
+One 20-line histogram of where the ball actually sat found it immediately: **84% of ball life in the
+top-right corner**, wedged at the top of a lane too narrow for it. `WALL_R = 1` leaves 22 units of
+that 24-unit lane, and tunnelling stays bounded by a wide margin - 3.8 units of travel per step
+against a ball+wall radius of 11.
+
+Same soak, same seed, before and after:
+
+| | before | after |
+|---|---|---|
+| parked over 12 s | 53 | **0** |
+| drains across 5 games | 2 | **6** |
+| ball searches | 358 | **40** |
+| games reaching game over | 0/5 | **2/5** |
+
+**The lesson worth keeping: profile where the ball IS before theorising about why it misbehaves.**
+Three rounds of physics reasoning were downstream of one wrong constant.
+
+Three of five games still run past 300 s, but that is the artifact STARHUB's own soak already
+documents - a random flipper driver is an unrealistically good pinball player.
+
+**Rolling friction was added along the way and is worth keeping** (`physics.js`'s `resolve()`).
+`mu` is Coulomb now, bounded by the normal impulse, and `ball.spin` is a real degree of freedom
+instead of a render-only fake that nothing ever drew. Plain Coulomb friction WITHOUT rolling made
+this board dramatically worse (parked episodes 24 -> 96), because friction with nowhere to put the
+energy can only brake: every slope became flypaper. STARHUB is untouched either way - all its
+colliders pass `mu = 0`, so the branch multiplies out to zero.

@@ -163,9 +163,46 @@ function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
     // nothing on this table needs it and an unused mechanism that behaves this badly when it does
     // engage is worse than no mechanism. mu is kept as a per-collider option, defaulting to 0, so a
     // future surface that genuinely wants grip can ask for it and own the consequences.
-    const tx = nvx - (nvx * nx + nvy * ny) * nx;
-    const ty = nvy - (nvx * nx + nvy * ny) * ny;
-    nvx -= tx * mu; nvy -= ty * mu;
+    // 2026-08-29: mu IS COULOMB FRICTION NOW, which is what the comment above said should happen
+    // and deliberately did not. The tangential impulse is bounded by mu * the NORMAL impulse `j`,
+    // so a glancing ride pays almost nothing while a hard square hit pays properly - and a
+    // sustained contact can no longer charge a fixed fraction 480 times a second, which is the
+    // blowup the whole comment above is about.
+    //
+    // It was done because the imported ROYAL FLUSH board needs it: that layout is designed against
+    // Box2D, where a wall's friction is 0.2 by default and the ball's is 0.3, and without any
+    // friction at all the ball there never settles and barely ever drains.
+    //
+    // STARHUB IS UNAFFECTED, and that is not luck: every collider it builds still passes mu = 0, so
+    // the whole branch multiplies out to zero and its trajectories are bit-identical. test.js's
+    // frictionless [KNOWN-BUG PROBE] block still passes for the same reason.
+    // FRICTION THAT MAKES THE BALL ROLL, NOT STICK.
+    //
+    // The first attempt at this was plain Coulomb friction - kill tangential speed, bounded by
+    // mu * the normal impulse - and on the imported ROYAL FLUSH board it made things dramatically
+    // WORSE: parked-ball episodes went from 24 to 96 in the same soak and ball searches from 24 to
+    // 417. The reason is the thing this engine has never had. A real pinball ROLLS: friction spends
+    // itself spinning the ball up until the contact point is stationary, and after that the ball
+    // keeps travelling. With no rotational inertia there is nowhere for that energy to go, so
+    // friction can only ever brake, and every slope becomes flypaper.
+    //
+    // So `spin` is a REAL degree of freedom now, not the render-only decoration it was. Solid
+    // sphere, I = (2/5) m r^2, m = 1. The contact point's tangential speed is (v . t) - w r; the
+    // impulse that brings it to zero is |slip| / (1/m + r^2/I) = |slip| / 3.5, and Coulomb caps it
+    // at mu * j. Below the cap the ball starts rolling and stops losing speed; above it, it slides
+    // and is braked, which is exactly what a real ball does on a real playfield.
+    //
+    // STARHUB IS UNAFFECTED. Every collider it builds passes mu = 0, so jt is 0, no impulse is
+    // applied and no spin is imparted: its trajectories are bit-identical and test.js's 87
+    // assertions - including the frictionless [KNOWN-BUG PROBE] block - still pass untouched.
+    const tx = -ny, ty = nx;                       // unit tangent
+    const slip = (nvx * tx + nvy * ty) - ball.spin * ball.r;
+    if (mu > 0 && Math.abs(slip) > 1e-6) {
+      const jt = Math.min(Math.abs(slip) / 3.5, mu * j) * Math.sign(slip);
+      nvx -= tx * jt;
+      nvy -= ty * jt;
+      ball.spin += (jt * ball.r) / (0.4 * ball.r * ball.r);
+    }
     ball.vx = nvx + svx; ball.vy = nvy + svy;
   }
 
@@ -331,7 +368,11 @@ export function step(world, balls, onContact) {
 
     const s2 = Math.hypot(ball.vx, ball.vy);
     if (s2 > MAX_SPEED) { ball.vx = ball.vx / s2 * MAX_SPEED; ball.vy = ball.vy / s2 * MAX_SPEED; }
-    ball.spin += ball.vx * PHYS_DT * 0.12;
+    // `spin` USED TO BE FAKED HERE - `ball.spin += ball.vx * PHYS_DT * 0.12`, a number derived from
+    // horizontal speed for a renderer that, it turns out, never read it (render.js's spinAngle is
+    // the SPINNER element, not the ball). It is a real degree of freedom now, integrated by
+    // resolve()'s rolling friction, so faking it here would overwrite the physics with a decoration
+    // nothing ever drew.
   }
 
   ballPairs(balls, (x, y, sp) => { if (onContact) onContact('ball', 'ball', x, y, sp, null); });
