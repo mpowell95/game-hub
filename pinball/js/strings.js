@@ -12,7 +12,8 @@ export const STRINGS = {
 
     // setup
     setup_new: 'New game',
-    setup_table: 'Table',
+    setup_board: 'Board',
+    setup_table: 'Difficulty',
     diff_easy: 'Casual',
     diff_medium: 'Standard',
     diff_hard: 'Tournament',
@@ -129,7 +130,8 @@ export const STRINGS = {
     title: 'Pinball',
 
     setup_new: 'Partida nueva',
-    setup_table: 'Mesa',
+    setup_board: 'Mesa',
+    setup_table: 'Dificultad',
     diff_easy: 'Tranquila',
     diff_medium: 'Normal',
     diff_hard: 'Torneo',

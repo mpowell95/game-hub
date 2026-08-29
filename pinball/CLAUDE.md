@@ -242,3 +242,76 @@ honest state and this paragraph is the reason.
   TABLE'S FOUR SHOTS ARE, and that is a picture. If you add a mode, resist adding a paragraph.
 - Spanish keeps the borrowed pinball vocabulary (flipper, bumper, jackpot, tilt, multibola) because
   that is what Spanish players say — the same standing rule that keeps Oros/Copas in English.
+
+## The second board: ROYAL FLUSH, imported (2026-08-29)
+
+Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
+but they don't work."* And on the 2026-08-20 pitch/friction attempt at his "vertical wall"
+complaint: *"You tried, but it didn't make the game better."* Then: *"I'd rather you do what i said
+and find a board someone else created and 'import' it. Our board is not worth salvaging."*
+
+**PROVENANCE, stated plainly.** The ROYAL FLUSH playfield is **table9.json from Vector Pinball by
+dozingcat** (https://github.com/dozingcat/Vector-Pinball). The layout is that project's design. Only
+the conversion, the rules and the renderer here are ours. **Vector Pinball is licensed GPL-3.0.**
+This repo carries **no license file** and Matt has explicitly not decided to add one: he asked to
+use the boards without one, and was told plainly that "not making money" does not exempt a
+distribution from that license. So this note is a record of where the layout came from - it is
+**not** a claim of compliance. If the repo is ever made to comply, the missing pieces are the
+license text and keeping the hub publicly readable. **Do not delete this paragraph to tidy up.**
+
+### Why it is a whole second engine and not a `board` flag in game.js
+
+`game.js` is welded to STARHUB's shot map: missions keyed off a scoop, a lock lit by five ramps, the
+H-U-B lanes, `RAMP_PATH`. Royal Flush has none of them - no scoop, no H-U-B, four drop banks instead
+of one, an upper right flipper. Threading two shot maps through one 849-line class would put a board
+check on every rule in it. So:
+
+| File | Role |
+|---|---|
+| `tools/import-vp-table.mjs` | GENERATOR: their JSON -> our shapes. Re-runnable |
+| `js/table-royal.js` | GENERATED geometry. Do not hand-edit |
+| `js/royal.js` | `RoyalPinball` - the rules, small and deliberately dumb |
+| `js/render-royal.js` | `RoyalRenderer` - draws the geometry, vector style |
+
+`RoyalPinball` and `RoyalRenderer` expose exactly the surface `ui.js` already drives, so the engine
+choice is **one line** at mount and nothing downstream knows which board is running.
+
+### What the import does and does not include
+
+- **122 source elements -> 583 wall segments, 6 bumpers, 3 flippers, 4 drop banks (14 targets),
+  2 rollover groups, 1 spinner.** STARHUB has 29 colliders and one 4-target bank.
+- **Arcs are tessellated, not converted.** 21 of their 39 arcs are ELLIPTICAL, which our circular
+  `arc()` cannot express. Each arc carries its own `segments` count, so the curve resolution is
+  theirs rather than a guess.
+- **Only LAYER 0 is here.** Their table is built in four layers - a playfield plus three elevated
+  ramps, with 18 sensors handing the ball between them. This engine has one playfield. The ramps are
+  **absent rather than flattened**, because flattening would drop walls into shots meant to run
+  underneath them. Their entrances are open lanes until the engine grows real layers.
+- **No missions, multiball, bonus or tilt.** This build exists so the BOARD and the BALL can be
+  judged. Points come from the parts, using the source table's own values.
+
+### Two things the first soak found, both worth keeping
+
+1. **`kill: true` is the DRAIN, not a wall.** Built as a collider it becomes a solid floor: the
+   first soak scored normally and **never drained once in four 240-second games**, because the ball
+   bounced off the bottom of the table forever. `DRAIN_Y` now comes from that element's own y.
+2. **Imported geometry parks balls, and the ball search is not optional here.** With the drain
+   fixed, the soak logged **44 episodes of a ball sitting still for over 12 seconds**, one of them
+   taking **185 rollover awards while parked in a lane** - a stuck ball that SCORES, the exact
+   failure this file records STARHUB shipping once already. `_ballSearch()` measures DISPLACEMENT
+   FROM AN ANCHOR, never speed, for the reason written up above: a wedged ball jitters. That took
+   stuck episodes to **zero**. This is 583 segments we did not shape, so the watchdog is the safety
+   net, not a tuning knob.
+
+### The number this board exists to expose
+
+**Their gravity, in our units, is 80. STARHUB's is 564.** A ball crosses their field in **3.87 s**
+against STARHUB's **1.64 s** - their ball is **2.4x floatier**, on a layout people actually enjoy
+playing. Their field is also shorter (600 vs 760) and their ball bigger (20 vs 18). Every axis says
+the same thing: tighter, busier, slower. Whatever happens to Royal Flush, that comparison is the
+most useful thing to come out of it, and STARHUB's own gravity should be read against it.
+
+**Known and untested at ship: the ball rarely drains.** In the headless soak no game of six reached
+game over inside 300 seconds. Their gravity was tuned against Box2D, which simulates rolling and
+friction; ours is frictionless and has no rotational inertia at all. Taking their number without
+their solver is very likely why. This is the first thing to look at.

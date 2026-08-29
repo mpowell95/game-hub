@@ -21,6 +21,11 @@ import { Pinball, MISSIONS } from './game.js';
 import { Renderer, PALETTE } from './render.js';
 import { loadSettings, saveSettings, bestScore } from './store.js';
 import { H as TH } from './table.js';
+// The imported ROYAL FLUSH board runs its own rules and its own renderer; see royal.js's header for
+// why it is a second class rather than a branch inside game.js.
+import { RoyalPinball } from './royal.js';
+import { RoyalRenderer } from './render-royal.js';
+import RT from './table-royal.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -101,23 +106,41 @@ export class PinballUI {
       </button>`;
     }).join('');
 
+    // Two boards: STARHUB (ours) and the imported ROYAL FLUSH layout. Difficulty applies only to
+    // STARHUB - Royal Flush carries its own gravity and ball count from the source table - so the
+    // difficulty row is simply not rendered when it would do nothing.
+    const boards = [
+      { id: 'starhub', label: 'STARHUB' },
+      { id: 'royal', label: RT.NAME },
+    ].map((b) => `<button type="button" class="pb-board${b.id === this.settings.board ? ' is-on' : ''}" data-board="${b.id}">${esc(b.label)}</button>`).join('');
+
     this.root.innerHTML = `
       <div class="pb-setup">
         <div class="pb-setup-inner">
           <div class="pb-brand">
             <span class="pb-brand-sub">${esc(t('title'))}</span>
-            <span class="pb-brand-main">STARHUB</span>
+            <span class="pb-brand-main">${esc(this.settings.board === 'royal' ? RT.NAME : 'STARHUB')}</span>
           </div>
           <p class="pb-best">${best ? `${esc(t('your_best'))}: <b>${fmt(best)}</b>` : esc(t('no_best'))}</p>
 
+          <h2 class="pb-h">${esc(t('setup_board'))}</h2>
+          <div class="pb-boards">${boards}</div>
+
+          ${this.settings.board === 'royal' ? '' : `
           <h2 class="pb-h">${esc(t('setup_table'))}</h2>
-          <div class="pb-diffs">${cards}</div>
+          <div class="pb-diffs">${cards}</div>`}
 
           <button type="button" class="pb-play" data-role="play">${esc(t('play'))}</button>
           <button type="button" class="pb-link" data-role="howto">${esc(t('howto'))}</button>
         </div>
       </div>`;
 
+    this.root.querySelectorAll('[data-board]').forEach((el) => {
+      el.addEventListener('click', () => {
+        this.settings = saveSettings({ board: el.dataset.board });
+        this._renderSetup();
+      });
+    });
     this.root.querySelectorAll('[data-diff]').forEach((el) => {
       el.addEventListener('click', () => {
         this.settings = saveSettings({ difficulty: el.dataset.diff });
@@ -259,8 +282,12 @@ export class PinballUI {
       timer: this.root.querySelector('[data-role="timer"]'),
     };
 
-    this.renderer = new Renderer(this.el.canvas);
-    this.game = new Pinball({ difficulty: this.settings.difficulty });
+    // ONE line picks the whole engine. Both classes expose the same surface (start / update /
+    // setFlipper / plungerDown / plungerUp / nudge / hud / takeEvents / result / score / phase),
+    // so nothing below here has to know which board is running.
+    const royal = this.settings.board === 'royal';
+    this.renderer = royal ? new RoyalRenderer(this.el.canvas) : new Renderer(this.el.canvas);
+    this.game = royal ? new RoyalPinball({}) : new Pinball({ difficulty: this.settings.difficulty });
     this.game.start();
     this.messages = [];
     this.msgUntil = 0;

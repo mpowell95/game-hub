@@ -18,7 +18,12 @@ import { loadStats } from '../../js/game-stats.js';
 
 const KEY = 'gamehub.pinball.v1';
 
-const DEFAULTS = { difficulty: 'medium' };
+// `board` is which PLAYFIELD you last chose - STARHUB, or the imported ROYAL FLUSH layout (see
+// pinball/js/table-royal.js). Like `difficulty` it is a one-tap-recreatable preference, so THE
+// LAW rule 2's carve-out applies: losing it costs a tap, never a score.
+const BOARDS = ['starhub', 'royal'];
+
+const DEFAULTS = { difficulty: 'medium', board: 'starhub' };
 
 /** Read settings. Any malformed or missing value falls back to a default rather than throwing:
  *  a settings read must never be able to stop the game mounting. */
@@ -29,6 +34,7 @@ export function loadSettings() {
     const v = JSON.parse(raw) || {};
     return {
       difficulty: ['easy', 'medium', 'hard'].includes(v.difficulty) ? v.difficulty : DEFAULTS.difficulty,
+      board: BOARDS.includes(v.board) ? v.board : DEFAULTS.board,
     };
   } catch (err) {
     console.warn('[pinball] settings unreadable, using defaults', err);

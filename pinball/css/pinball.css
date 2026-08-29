@@ -610,3 +610,16 @@
   .pb-root .pb-dmd { min-height: 58px; }
   .pb-root .pb-btn { padding: 14px 10px; }
 }
+
+/* Board picker on the setup screen (2026-08-29). Two boards: STARHUB and the imported ROYAL FLUSH
+   layout. Deliberately just two labelled buttons - the setup screen already carried more prose than
+   this repo's minimal-copy rule allows, and a second paragraph block would make that worse. */
+.pb-boards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 0 18px; }
+.pb-board {
+  flex: 1 1 0; min-width: 128px; min-height: 48px; padding: 12px 14px;
+  font: 700 15px/1.2 inherit; letter-spacing: 0.06em;
+  color: #cfd8e6; background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.16); border-radius: 12px;
+  cursor: pointer; touch-action: manipulation;
+}
+.pb-board.is-on { color: #0d1420; background: #ffce3a; border-color: #ffce3a; }
