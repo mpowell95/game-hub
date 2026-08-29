@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v510';
+const CACHE = 'game-hub-v511';
 
 const ASSETS = [
   './',
@@ -227,6 +227,9 @@ const ASSETS = [
   './pinball/js/game.js',
   './pinball/js/physics.js',
   './pinball/js/table.js',
+  './pinball/js/table-royal.js',
+  './pinball/js/royal.js',
+  './pinball/js/render-royal.js',
   './pinball/js/render.js',
   './pinball/js/store.js',
   './pinball/js/strings.js',
@@ -509,14 +512,17 @@ const REST_MANIFEST = {
   './snake/js/strings.js': '1ee900a666',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
-  './pinball/css/pinball.css': '4190ce90c2',
-  './pinball/js/ui.js': '3777c696fd',
+  './pinball/css/pinball.css': 'ad923df9b2',
+  './pinball/js/ui.js': 'ebe0819801',
   './pinball/js/game.js': '426c2d21df',
   './pinball/js/physics.js': '735c0a6ccf',
   './pinball/js/table.js': 'cb4122f22d',
+  './pinball/js/table-royal.js': '5c0f27195e',
+  './pinball/js/royal.js': '420c3a1dce',
+  './pinball/js/render-royal.js': '207f8354df',
   './pinball/js/render.js': '5bb2276ded',
-  './pinball/js/store.js': '4a7c698554',
-  './pinball/js/strings.js': 'fca568b412',
+  './pinball/js/store.js': 'f5a3107853',
+  './pinball/js/strings.js': 'fa0a1f44c5',
   './hill-climb/': '527615b38c',
   './hill-climb/index.html': '527615b38c',
   './hill-climb/css/hill-climb.css': '6458e7789d',
