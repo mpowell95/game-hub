@@ -20,7 +20,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { recordPipes } from '../../js/game-stats.js';
 import { PipesGame } from './game.js';
-import { TIER_ORDER, kindOf, popcount, N, E, S, W, DIRS } from './generator.js';
+import { TIER_ORDER, tierConfig, kindOf, popcount, N, E, S, W, DIRS } from './generator.js';
 import { STRINGS } from './strings.js';
 
 const t = makeT(STRINGS);
@@ -101,30 +101,37 @@ class PipesUI {
     this.screen = 'setup';
     this._stopWater();
     const saved = loadSave();
-    // A .gh-card holding a .gh-seg segmented control for the tier, then .gh-btn--block actions -
-    // the same vocabulary every other screen in the hub uses. The difficulty SHAPE marker comes
-    // from js/difficulty-tiers.js, because hue alone is never allowed (Matt is red/green
-    // colourblind).
+    // THE SHAPE IS NUTS & BOLTS', DELIBERATELY, because that is the game Matt compared this one
+    // to and it is this hub's reference for a solo-puzzle setup screen: a header with the game
+    // name and one line under it, a labelled field holding ONE ROW of tier options (shape marker
+    // above the name, a sub-line under it), then a primary action and a ghost "How to play".
+    //
+    // Two earlier versions of this screen were invented from scratch instead of copied, and Matt
+    // said so twice. The lesson written into pipes/CLAUDE.md is the checklist's own: copy the
+    // reference per axis, and for a setup screen the reference is a real screen in this repo.
     const seg = TIER_ORDER.map((d) => `
-      <button type="button" class="gh-btn pi-seg${d === this.settings.tier ? ' is-on' : ''}" data-tier="${d}"
-        aria-pressed="${d === this.settings.tier ? 'true' : 'false'}">
-        ${diffShapeSVG(tierOf(d))}<span>${esc(t('diff_' + d))}</span>
+      <button type="button" class="pi-seg${d === this.settings.tier ? ' is-on' : ''}" data-tier="${d}"
+        role="radio" aria-checked="${d === this.settings.tier ? 'true' : 'false'}">
+        <span class="pi-seg-label">${diffShapeSVG(tierOf(d))}<b>${esc(t('diff_' + d))}</b></span>
+        <span class="pi-seg-sub">${esc(t('grid_n', { w: tierConfig(d).w, h: tierConfig(d).h }))}</span>
       </button>`).join('');
 
     this.root.innerHTML = `
       <div class="pi-screen pi-setup">
-        <div class="gh-card pi-setup-card">
-          <h2 class="gh-field__label">${esc(t('setup_difficulty'))}</h2>
-          <div class="pi-seg-wrap" role="group" aria-label="${esc(t('setup_difficulty'))}">${seg}</div>
-          <p class="pi-best">${esc(this._bestLine())}</p>
+        <div class="pi-menu-header">
+          <h1>${esc(t('title'))}</h1>
+          <p>${esc(t('tagline'))}</p>
         </div>
-        <div class="pi-actions">
-          ${saved && saved.solvedAt === null
-            ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>`
-            : ''}
-          <button type="button" class="gh-btn gh-btn--block ${saved && saved.solvedAt === null ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-role="play">${esc(t('play'))}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">${esc(t('howto'))}</button>
+        <div class="pi-field">
+          <span class="pi-fieldlabel" id="pi-difflabel">${esc(t('setup_difficulty'))}</span>
+          <div class="pi-seg-wrap" role="radiogroup" aria-labelledby="pi-difflabel">${seg}</div>
         </div>
+        <p class="pi-best">${esc(this._bestLine())}</p>
+        ${saved && saved.solvedAt === null
+          ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>`
+          : ''}
+        <button type="button" class="gh-btn gh-btn--block ${saved && saved.solvedAt === null ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-role="play">${esc(t('play'))}</button>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">${esc(t('howto'))}</button>
       </div>`;
 
     this.root.querySelectorAll('[data-tier]').forEach((el) => {
