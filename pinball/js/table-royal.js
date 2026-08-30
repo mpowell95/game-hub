@@ -25,6 +25,13 @@ export const DRAIN_Y = 598;
 export const GRAVITY = 80;
 export const BALLS = 3;
 
+/** THE CLOCK, AND IT IS NOT OPTIONAL. Their FieldDriver advances the world by
+ *  nanosPerFrame * targetTimeRatio every frame, so this table runs at 2.3x REAL TIME.
+ *  Run it at 1x and every shot, drop and bounce is 2.3x too slow: the free fall down this
+ *  field goes from a real machine-like 1.68s to 3.87s. That is exactly what
+ *  the 1x build felt like, and Matt described it in three words. */
+export const TIME_RATIO = 2.3;
+
 /** Box2D combines a contact as restitution = MAX(a,b) and friction = sqrt(fa*fb). Their ball is
  *  restitution 0.6 / friction 0.3; their walls are restitution 0 (this table overrides it
  *  NOWHERE) and friction 0.2 by default. Both numbers are theirs, read from their source. */
@@ -86,6 +93,6 @@ export function buildLayer(layer, down = new Set(), retracted = new Set()) {
 
 export { BALL_R };
 export default {
-  NAME, W, H, DRAIN_Y, GRAVITY, BALLS, BALL_COLOR, PLUNGER,
+  NAME, W, H, DRAIN_Y, GRAVITY, BALLS, BALL_COLOR, TIME_RATIO, PLUNGER,
   WALLS, BUMPERS, FLIPPERS, ROLLOVERS, DROPS, SPINNERS, SENSORS, buildLayer,
 };

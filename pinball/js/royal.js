@@ -23,8 +23,9 @@ const MAX_HOLD = 3;           // seconds; the held-ball invariant from pinball/C
 const DROP_RESET_SECS = 2;    // their table's own `reset` value on all four banks
 const SEARCH_DIST = 30;       // how big a box the ball may stay inside and still count as parked
 const SEARCH_SECS = 3;        // seconds inside that box before the table shoves it
-const SEARCH_VX = 210;        // sideways shove. At GRAVITY 80 a gentler one just re-parked it -
-const SEARCH_VY = 150;        // the first try used 120/70 and the soak still logged 59 episodes.
+const SEARCH_VX = 210;        // sideways shove; a gentler 120/70 just re-parked the ball
+const SEARCH_VY = 150;
+const SEARCH_GIVE_UP = 3;     // shoves before the machine calls the ball lost and re-serves it
 
 export class RoyalPinball {
   constructor(opts = {}) {
@@ -138,7 +139,12 @@ export class RoyalPinball {
   // --- the frame ---------------------------------------------------------------------------------
 
   update(dt) {
-    dt = Math.min(dt, 0.05);
+    // THEIR CLOCK. The source table carries targetTimeRatio, and their FieldDriver advances the
+    // world by nanosPerFrame * that ratio - this board is designed to run at 2.3x real time. The
+    // first build ran it at 1x and it was unplayable: a free fall down the field took 3.87s instead
+    // of 1.68s, so every shot, drop and bounce moved like treacle. The real dt is clamped FIRST, so
+    // a stalled frame cannot become a 2.3x bigger stall.
+    dt = Math.min(dt, 0.05) * T.TIME_RATIO;
     this.time += dt;
     if (this.phase === 'over' || this.phase === 'attract') return;
 
@@ -248,6 +254,20 @@ export class RoyalPinball {
       const dir = (b._searches = (b._searches | 0) + 1) % 2 ? 1 : -1;
       b.vx += dir * SEARCH_VX;
       b.vy -= SEARCH_VY;
+
+      // AND IF THE SHOVE KEEPS FAILING, GIVE THE BALL BACK. This board has narrow pockets a
+      // sideways shove cannot empty - the shooter lane is one, and a real session found another on
+      // the right at about (363, 400-480), where the ball sat with the score frozen for twenty
+      // seconds. A real machine does exactly this: ball search runs a few times, then the machine
+      // decides the ball is lost and serves it again. Without this the game can dead-end with balls
+      // still on the card, which is the difference between "hard" and "broken".
+      if (b._searches >= SEARCH_GIVE_UP) {
+        b._searches = 0;
+        b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
+        b.onPlunger = true; b.layer = 0; b._box = null;
+        this.emit({ type: 'reload' });
+        continue;
+      }
       b._still = 0;
       this.emit({ type: 'ballsearch' });
     }
