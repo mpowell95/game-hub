@@ -42,7 +42,10 @@ export class RoyalRenderer {
     this.time = 0;
     this.static = null;
     this.staticKey = '';
-    this.flash = new Map();          // collider id -> remaining flash, seconds
+    // NAMED `flashes`, NOT `flash`. It was `this.flash` and that instance property SHADOWED the
+    // flash() method ui.js calls, so every jackpot/bank event threw "R.flash is not a function".
+    // Found by playing it; no headless test constructs a renderer at all.
+    this.flashes = new Map();        // collider id -> remaining glow, seconds
     this.reduced = false;
     try {
       this.reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -64,7 +67,7 @@ export class RoyalRenderer {
     this.static = null;
   }
 
-  pulse(id) { if (id) this.flash.set(id, 0.22); }
+  pulse(id) { if (id) this.flashes.set(id, 0.22); }
 
   /**
    * THE EFFECT SURFACE ui.js CALLS, and the reason this block exists at all.
@@ -155,9 +158,9 @@ export class RoyalRenderer {
   render(game, dt) {
     const ctx = this.ctx;
     this.time += dt;
-    for (const [k, v] of this.flash) {
+    for (const [k, v] of this.flashes) {
       const n = v - dt;
-      if (n <= 0) this.flash.delete(k); else this.flash.set(k, n);
+      if (n <= 0) this.flashes.delete(k); else this.flashes.set(k, n);
     }
 
     const active = RoyalRenderer._activeLayer(game);
@@ -195,7 +198,7 @@ export class RoyalRenderer {
     // --- bumpers: their inner disc and their translucent outer ring ---------------------------------
     for (let i = 0; i < T.BUMPERS.length; i++) {
       const [x, y, r, outer, , , layer, color, outerColor] = T.BUMPERS[i];
-      const hot = this.flash.get('bump:' + i) || 0;
+      const hot = this.flashes.get('bump:' + i) || 0;
       ctx.globalAlpha = (layer | 0) === active ? 1 : 0.3;
       ctx.fillStyle = outerColor;
       ctx.beginPath();

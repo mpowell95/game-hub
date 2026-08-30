@@ -383,3 +383,32 @@ All three are in the DOM/renderer glue, which `pinball/js/test.js` deliberately 
 for a Chromium and there is no playwright browser installed, but `playwright-core` IS in
 `node_modules` and Chrome is at `C:\Program Files\Google\Chrome\Application\chrome.exe`. Point
 `CHROMIUM_PATH` at it. There is no excuse for shipping this game unplayed again.
+
+### Three more, all found by playing, none findable headlessly
+
+A second real browser session, after the first one fixed the thrown events:
+
+1. **`R.flash is not a function`.** `RoyalRenderer`'s constructor set `this.flash = new Map()`, and
+   that instance property SHADOWED the `flash()` method `ui.js` calls. The Map is `flashes` now.
+   A property quietly eating a method of the same name is invisible to anything that does not
+   construct the class and then call it.
+
+2. **A rollover paid out on every pass, forever.** Instrumented play showed the ball pinned against
+   the left wall at x 16-20, y 400-430, drifting in and out of one lane: **eighteen awards over
+   thirty-one seconds, 9,000 points, on ball one, with the player doing nothing.** It is the STARHUB
+   scoop bug in a different coat. A lane LIGHTS now and pays nothing while lit; completing a set
+   pays a bonus and clears it, which is what `RolloverGroupElement` is for.
+
+3. **The ball rolled back down the shooter lane and died there.** Their table keeps it out with a
+   `LaunchBarrier` wall their Java rules raise after a launch; it ships `disabled: true` and we do
+   not take their rules, so nothing ever raised it. Result: launch, return, sit. **Score 0 for a
+   hundred seconds with three balls unplayed.** `_shooterLane()` hands a slow ball in the lane back
+   to the plunger - what a real machine does, and what STARHUB's own shooter-lane rest check does.
+
+**And the ball search was measuring the wrong thing.** It reset its timer whenever the ball got 22
+units from an anchor, so a ball oscillating in place kept resetting it and sat for thirty-one
+seconds. It tracks a BOUNDING BOX over a window now: "not going anywhere" rather than "not moving".
+
+After all three: ball one lasts about 75 seconds, drains, **the game advances to ball two**, ~20,000
+points off 25 bumper hits, 10 drop targets and 2 cleared banks, no page errors, and no scoring
+without a player. That is the first build of this board that is actually a game.
