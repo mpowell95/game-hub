@@ -66,6 +66,37 @@ export class RoyalRenderer {
 
   pulse(id) { if (id) this.flash.set(id, 0.22); }
 
+  /**
+   * THE EFFECT SURFACE ui.js CALLS, and the reason this block exists at all.
+   *
+   * `_drainEvents()` reaches straight into the renderer for every game event - `R.hitBumper(i)`,
+   * `R.spawnHit(...)`, `R.kick(...)`, `R.hitRamp()`, `R.hitLane(id)`, `R.popup(...)` and more. That
+   * is STARHUB's Renderer API, and this class did not have it, so ON THIS BOARD EVERY SCORING EVENT
+   * THREW: "R.hitRamp is not a function", "R.spawnHit is not a function", one uncaught error per
+   * contact, forever.
+   *
+   * FOUR HEADLESS SOAKS COULD NOT SEE ANY OF IT, because they drive the game class directly and
+   * never construct a renderer or a DOM. It took thirty seconds of actually playing the thing in a
+   * real browser. Matt: "you need to play it." That is the lesson, and it is why
+   * `pinball/js/test.js` is not sufficient on its own for this game.
+   *
+   * The effects are real where this board has something to show (a bumper flash, a ramp glow) and
+   * honest no-ops where it does not: Royal Flush has no scoop, no slingshots and no stand-up
+   * targets, so those three exist purely so ui.js's switch cannot throw.
+   */
+  spawnHit() { /* no particle layer on this board */ }
+  popup() { /* the DMD already carries the message */ }
+  hitBumper(i) { this.pulse('bump:' + i); }
+  hitSling() { /* Royal Flush has no slingshots */ }
+  hitStand() { /* ...nor stand-up targets */ }
+  hitScoop() { /* ...nor a scoop */ }
+  hitLane(id) { this.pulse(id); }
+  hitSpinner() { this.pulse('spinner'); }
+  hitRamp() { this.pulse('ramp'); }
+  flash() { /* no full-screen flasher on this board */ }
+  kick() { /* no shake: this table is drawn as thin lines and shake reads as a rendering fault */ }
+  map() { /* STARHUB's mini-map has no equivalent here */ }
+
   /** Which layer the ball is on. Everything else is drawn in its inactive colour, which is what the
    *  table's own `inactiveLayerColor` values exist for. */
   static _activeLayer(game) {
