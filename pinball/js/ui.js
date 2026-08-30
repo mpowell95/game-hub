@@ -430,7 +430,10 @@ export class PinballUI {
     for (const ev of this.game.takeEvents()) {
       switch (ev.type) {
         case 'bumper': {
-          const i = Number(ev.id.slice(3)) || 0;
+          // ev.id is STARHUB's 'pop0'/'pop1'/'pop2'. The ROYAL FLUSH board emits the bumper's index
+          // as `ev.i` and no id at all, and reading .slice on that undefined threw once per bumper
+          // hit - found by playing it, invisible to every headless test.
+          const i = ev.id ? (Number(ev.id.slice(3)) || 0) : (ev.i | 0);
           R.hitBumper(i); R.spawnHit(ev.x, ev.y, 9, PALETTE.cyan, 260); R.kick(2.5);
           break;
         }
@@ -587,6 +590,10 @@ export class PinballUI {
    *  Purely derived from the HUD snapshot: it holds no state of its own, so it can never disagree
    *  with the lamps on the playfield. */
   _objective(hud) {
+    // ROYAL FLUSH has no missions, no lock and no scoop, so every branch below falls through to
+    // "Drop the 4 targets" - STARHUB's bank, which does not exist on that board. Playing it is how
+    // that was found; the DMD sat there naming a shot the table does not have.
+    if (this.settings.board === 'royal') return t('hint_royal');
     if (hud.multiball) return hud.superLit ? t('hint_super') : t('hint_jackpot');
     if (hud.bankLit) return t('hint_scoop');
     if (hud.lockLit) return t('hint_lock');

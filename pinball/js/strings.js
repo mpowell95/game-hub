@@ -76,6 +76,7 @@ export const STRINGS = {
 
     // standing objective, shown on the dot-matrix line when nothing else is
     hint_bank: 'Drop the 4 targets',
+    hint_royal: 'Drop the targets, ride the ramps',
     hint_scoop: 'Scoop lit: start a mission',
     hint_ramp: 'Ramps light the lock',
     hint_lock: 'Scoop to lock a ball',
@@ -180,6 +181,7 @@ export const STRINGS = {
     msg_extra_ball: 'Bola extra',
 
     hint_bank: 'Tumba las 4 dianas',
+    hint_royal: 'Tumba las dianas, sube las rampas',
     hint_scoop: 'Hoyo listo: empieza una misión',
     hint_ramp: 'Las rampas encienden el bloqueo',
     hint_lock: 'Hoyo para guardar una bola',

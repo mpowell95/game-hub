@@ -360,3 +360,26 @@ instead of a render-only fake that nothing ever drew. Plain Coulomb friction WIT
 this board dramatically worse (parked episodes 24 -> 96), because friction with nowhere to put the
 energy can only brake: every slope became flypaper. STARHUB is untouched either way - all its
 colliders pass `mu = 0`, so the branch multiplies out to zero.
+
+### Four soaks said it worked. Playing it took thirty seconds to prove otherwise.
+
+Matt, after the fourth green headless run: *"you need to play it."* He was right, and the first real
+browser session found three things no headless test could:
+
+1. **Every scoring event threw.** `ui.js`s `_drainEvents()` reaches into the renderer for each event
+   - `R.hitBumper`, `R.spawnHit`, `R.kick`, `R.hitRamp`, `R.hitLane`, `R.popup` and more - and
+   `RoyalRenderer` had none of them. One uncaught error per contact, forever. Those methods exist
+   now: real where this board has something to show, honest no-ops where it does not (no scoop, no
+   slingshots, no stand-ups).
+2. **`ev.id.slice(3)` threw on every bumper hit.** That id is STARHUBs `pop0`/`pop1`/`pop2`; this
+   board emits an index as `ev.i` and no id at all.
+3. **The display named a shot the table does not have.** `_objective()` fell through every branch to
+   `hint_bank` - "Drop the 4 targets" - which is STARHUBs bank.
+
+All three are in the DOM/renderer glue, which `pinball/js/test.js` deliberately never constructs.
+**So a green engine suite says nothing about whether this game runs.**
+
+**`test-visual.mjs` CAN run on Matts machine**, and it was skipping for a fixable reason: it looks
+for a Chromium and there is no playwright browser installed, but `playwright-core` IS in
+`node_modules` and Chrome is at `C:\Program Files\Google\Chrome\Application\chrome.exe`. Point
+`CHROMIUM_PATH` at it. There is no excuse for shipping this game unplayed again.
