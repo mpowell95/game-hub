@@ -14,6 +14,7 @@
 // changes a CSS `transform: rotate()`. That is why rotation animates for free and costs nothing:
 // no path is rebuilt, no layout runs, and `transform` is on the UX floor's allowed list. The
 // authoritative mask is always game.cells[i]; the transform is presentation only.
+import '../../js/theme.js';   // side effect: stamps .gh-dark so the screens theme standalone too
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -84,26 +85,45 @@ class PipesUI {
     this.renderSetup();
   }
 
+  /** The best line under the tier picker, read from the SHARED store - this game keeps no
+   *  earned history of its own (see pipes/CLAUDE.md, Persistence). */
+  _bestLine() {
+    try {
+      const pi = (JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).pipes;
+      const solved = ((pi || {}).pi || {}).solved | 0;
+      return solved ? `${t('best_level')}: ${solved}` : t('no_best');
+    } catch { return t('no_best'); }
+  }
+
   // --- screens -----------------------------------------------------------------------------------
 
   renderSetup() {
     this.screen = 'setup';
     this._stopWater();
     const saved = loadSave();
-    const cards = TIER_ORDER.map((d) => `
-      <button type="button" class="pi-diff${d === this.settings.tier ? ' is-on' : ''}" data-tier="${d}">
+    // A .gh-card holding a .gh-seg segmented control for the tier, then .gh-btn--block actions -
+    // the same vocabulary every other screen in the hub uses. The difficulty SHAPE marker comes
+    // from js/difficulty-tiers.js, because hue alone is never allowed (Matt is red/green
+    // colourblind).
+    const seg = TIER_ORDER.map((d) => `
+      <button type="button" class="gh-btn pi-seg${d === this.settings.tier ? ' is-on' : ''}" data-tier="${d}"
+        aria-pressed="${d === this.settings.tier ? 'true' : 'false'}">
         ${diffShapeSVG(tierOf(d))}<span>${esc(t('diff_' + d))}</span>
       </button>`).join('');
 
     this.root.innerHTML = `
-      <div class="pi-screen">
-        <div class="pi-brand">${esc(t('title'))}</div>
-        <h2 class="pi-h">${esc(t('setup_difficulty'))}</h2>
-        <div class="pi-diffs">${cards}</div>
+      <div class="pi-screen pi-setup">
+        <div class="gh-card pi-setup-card">
+          <h2 class="gh-field__label">${esc(t('setup_difficulty'))}</h2>
+          <div class="pi-seg-wrap" role="group" aria-label="${esc(t('setup_difficulty'))}">${seg}</div>
+          <p class="pi-best">${esc(this._bestLine())}</p>
+        </div>
         <div class="pi-actions">
-          ${saved && saved.solvedAt === null ? `<button type="button" class="pi-btn" data-role="resume">${esc(t('resume'))}</button>` : ''}
-          <button type="button" class="pi-btn${saved && saved.solvedAt === null ? ' pi-btn--ghost' : ''}" data-role="play">${esc(t('play'))}</button>
-          <button type="button" class="pi-btn pi-btn--ghost" data-role="howto">${esc(t('howto'))}</button>
+          ${saved && saved.solvedAt === null
+            ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>`
+            : ''}
+          <button type="button" class="gh-btn gh-btn--block ${saved && saved.solvedAt === null ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-role="play">${esc(t('play'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">${esc(t('howto'))}</button>
         </div>
       </div>`;
 
@@ -134,6 +154,7 @@ class PipesUI {
       </figure>`;
     this.root.innerHTML = `
       <div class="pi-screen">
+        <div class="gh-card">
         <p class="pi-howto-lead">${esc(t('howto_lead'))}</p>
         <div class="pi-howto-fig">
           ${box(N | E | S, 'var(--pi-leak)', t('howto_leak'))}
@@ -145,8 +166,9 @@ class PipesUI {
           <li>${esc(t('howto_rule_2'))}</li>
           <li>${esc(t('howto_rule_3'))}</li>
         </ul>
+        </div>
         <div class="pi-actions">
-          <button type="button" class="pi-btn" data-role="close">${esc(t('howto_close'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="close">${esc(t('howto_close'))}</button>
         </div>
       </div>`;
     this.root.querySelector('[data-role="close"]').addEventListener('click', () => this.renderSetup());
@@ -164,9 +186,9 @@ class PipesUI {
     this.root.innerHTML = `
       <div class="pi-screen">
         <div class="pi-hud">
-          <button type="button" class="pi-hud-btn" data-role="back">${esc(t('hud_back'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="back">${esc(t('hud_back'))}</button>
           <span class="pi-hud-stat">${esc(t('hud_moves'))} <b data-role="moves">0</b></span>
-          <button type="button" class="pi-hud-btn" data-role="new">${esc(t('hud_new'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="new">${esc(t('hud_new'))}</button>
         </div>
         <div class="pi-boardwrap"><div class="pi-board" data-role="board"
           role="group" aria-label="${esc(t('aria_board', { w: g.w, h: g.h }))}"></div></div>
@@ -191,6 +213,9 @@ class PipesUI {
     try { window.__piTest = { ui: this, game: g }; } catch { /* no window */ }
     this._buildBoard();
     this._fit();
+    // The hub mounts this container and lays it out in the same frame, so the first measure can
+    // land before the host has a height. Measure again once layout has settled.
+    requestAnimationFrame(() => { this._fit(); requestAnimationFrame(() => this._fit()); });
     this._paint();
     if (g.solvedAt !== null) this._runWater(true);
   }
@@ -342,16 +367,40 @@ class PipesUI {
    * 44px tap floor. A game screen that scrolls at all is a bug (dominoes/CLAUDE.md), and the tier
    * sizes in generator.js were chosen against this arithmetic rather than by eye.
    */
+  /**
+   * Size the cells so the board fills the space it actually has.
+   *
+   * IT MEASURES AGAINST THE VIEWPORT, NOT ITS OWN WRAPPER, and that is the fix rather than a
+   * detail. The first version measured `.pi-boardwrap`, which is `flex: 1` inside a column - and
+   * inside the HUB the host container has no definite height, so that flex child collapsed to its
+   * own content and reported a box barely bigger than the board already was. The board came out
+   * tiny and pinned to the top with the whole screen empty below it (Matt: "the box is not the
+   * right size at all"). Reading the viewport and subtracting what is above and below cannot
+   * collapse that way.
+   *
+   * A game screen that scrolls at all is a bug (dominoes/CLAUDE.md), so the result is clamped to
+   * what fits - and never below the 44px tap floor unless the device genuinely cannot give it,
+   * in which case fitting on screen wins and the tier sizes are what keep that from happening.
+   */
   _fit() {
     if (this.screen !== 'play' || !this.el || !this.el.board) return;
     const wrap = this.el.board.parentElement;
     const r = wrap.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
+    if (r.width < 2) return;
     const g = this.game;
+    // THESE MUST MATCH .pi-board IN THE CSS. They did not at first (4 and 14 against the sheet's
+    // 2 and 6), which quietly shaved every cell: this arithmetic has to describe the box that
+    // actually gets laid out, not an approximation of it.
     const GAP = 2, PAD = 12;
+
+    // visualViewport is the honest height on mobile while the URL bar is animating.
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+    const below = (this.el.banner ? this.el.banner.getBoundingClientRect().height : 44) + 16;
+    const avail = Math.max(120, vh - r.top - below);
+
     const byW = (r.width - PAD - GAP * (g.w - 1)) / g.w;
-    const byH = (r.height - PAD - GAP * (g.h - 1)) / g.h;
-    const size = Math.max(28, Math.floor(Math.min(byW, byH)));
+    const byH = (avail - PAD - GAP * (g.h - 1)) / g.h;
+    const size = Math.max(26, Math.floor(Math.min(byW, byH)));
     this.el.board.style.setProperty('--pi-cell', size + 'px');
     this.el.board.style.gridTemplateColumns = `repeat(${g.w}, ${size}px)`;
     this.el.board.style.gridAutoRows = size + 'px';
@@ -378,11 +427,24 @@ class PipesUI {
 let instance = null;
 
 function injectCSS() {
-  const href = new URL('../css/pipes.css', import.meta.url).href;
-  if (document.querySelector(`link[data-pipes-css]`)) return;
+  // THE SHARED PRIMITIVES FIRST. This game's screens are BUILT on css/ui.css - the .gh-* buttons,
+  // cards, fields and segmented controls - rather than reinvented. Root CLAUDE.md puts it plainly:
+  // a new game is the cheapest possible place to adopt them, because there is nothing to migrate.
+  // The first version of this file ignored that and hand-rolled its own chrome; Matt: "you made
+  // this setup screen completely from scratch. it looks nothing like anything we've created
+  // before." Same injection marker skeeball/js/ui.js and bug-report-ui.js use, so the sheet is
+  // never double-loaded.
+  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
+    const ui = document.createElement('link');
+    ui.rel = 'stylesheet';
+    ui.href = new URL('../../css/ui.css', import.meta.url).href;
+    ui.setAttribute('data-gh-ui-css', '1');
+    document.head.appendChild(ui);
+  }
+  if (document.querySelector('link[data-pipes-css]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = href;
+  link.href = new URL('../css/pipes.css', import.meta.url).href;
   link.setAttribute('data-pipes-css', '1');
   document.head.appendChild(link);
 }

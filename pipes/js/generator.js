@@ -72,7 +72,7 @@ const TIERS = {
   easy: { w: 5, h: 5, pieces: ['straight', 'elbow'], decoy: 0.35, minPath: 8 },
   medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee'], decoy: 0.5, minPath: 14 },
   hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 0.65, minPath: 20 },
-  extraHard: { w: 8, h: 9, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 0.8, minPath: 30 },
+  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 0.8, minPath: 30 },
 };
 
 export function tierConfig(tier) { return TIERS[tier] || TIERS.easy; }

@@ -69,13 +69,6 @@
   color: var(--pi-dim);
 }
 
-.pi-root .pi-brand {
-  text-align: center;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 .pi-root .pi-best {
   margin: 0;
   text-align: center;
@@ -85,30 +78,8 @@
 
 /* --- setup ------------------------------------------------------------------------------------- */
 
-.pi-root .pi-diffs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.pi-root .pi-diff {
-  display: flex; align-items: center; gap: 8px;
-  min-height: 52px; padding: 10px 12px;
-  font: 700 15px/1.2 inherit; color: var(--pi-ink);
-  background: var(--pi-tile);
-  border: 2px solid var(--pi-line); border-radius: 12px;
-  cursor: pointer; touch-action: manipulation;
-}
-.pi-root .pi-diff.is-on { border-color: var(--pi-accent); box-shadow: inset 0 0 0 2px var(--pi-accent); }
-.pi-root .pi-diff svg { flex: none; }
 
 .pi-root .pi-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
-.pi-root .pi-btn {
-  min-height: 52px; padding: 12px 18px;
-  font: 800 17px/1.2 inherit; letter-spacing: 0.04em;
-  color: #101725; background: var(--pi-accent);
-  border: none; border-radius: 14px;
-  cursor: pointer; touch-action: manipulation;
-}
-.pi-root .pi-btn--ghost {
-  color: var(--pi-ink); background: transparent;
-  border: 2px solid var(--pi-line);
-}
 
 /* --- play -------------------------------------------------------------------------------------- */
 
@@ -118,12 +89,6 @@
 }
 .pi-root .pi-hud-stat { font-size: 13px; font-weight: 700; color: var(--pi-dim); }
 .pi-root .pi-hud-stat b { font-size: 19px; color: var(--pi-ink); }
-.pi-root .pi-hud-btn {
-  min-height: 44px; min-width: 44px; padding: 8px 14px;
-  font: 700 14px/1.2 inherit; color: var(--pi-ink);
-  background: transparent; border: 2px solid var(--pi-line); border-radius: 10px;
-  cursor: pointer; touch-action: manipulation;
-}
 
 .pi-root .pi-boardwrap { flex: 1 1 auto; display: grid; place-items: center; min-height: 0; }
 .pi-root .pi-board {
@@ -210,3 +175,21 @@
   .pi-root .pi-water { transition: none; transform: scale(1); }
   .pi-root .pi-cell.is-nudge .pi-art { animation: none; }
 }
+
+/* --- what this game adds on top of css/ui.css ---------------------------------------------------
+ * The buttons, cards, fields and segmented control all come from the shared sheet now. Only the
+ * things that are genuinely Pipes live here. The first version hand-rolled all of the above and
+ * looked like nothing else in the hub; see pipes/CLAUDE.md. */
+
+.pi-root .pi-setup { justify-content: center; gap: 16px; }
+.pi-root .pi-setup-card { display: grid; gap: 10px; }
+.pi-root .pi-seg-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+/* The difficulty SHAPE marker must be sized explicitly: diffShapeSVG() returns an SVG with a
+   viewBox and no width/height, so inside a flex button it expands to fill and swallows the screen.
+   These are pinball/css/pinball.css's numbers, which is where the same lesson is already written. */
+.pi-root .pi-seg { justify-content: flex-start; gap: 9px; min-height: 48px; }
+.pi-root .pi-seg svg { width: 17px; height: 17px; flex: none; }
+.pi-root .pi-seg .lb-dshape-x2 { width: 29px; }
+.pi-root .pi-seg.is-on { border-color: var(--gh-accent); box-shadow: inset 0 0 0 2px var(--gh-accent); }
+.pi-root .pi-best { margin: 0; font-size: var(--gh-fs-sm); color: var(--gh-muted); text-align: center; }
+.pi-root .pi-actions { display: grid; gap: 8px; }

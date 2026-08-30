@@ -156,3 +156,40 @@ revisit if the animation ever needs to look better.
 **Reduced motion thins garnish, it does not freeze gameplay.** The pipe's own rotation — which IS
 the game — keeps its transition; only the water sequence and the nudge go instant, and nothing is
 `display: none`'d.
+
+## The screens were built from scratch first, and that was wrong
+
+Matt, on the first build: *"again, you made this setup screen completely from scratch. it looks
+nothing like anything we've created before. i hate it. and the box is not the right size at all."*
+
+Both faults were mine, and the first one was written into my own scope document before I ignored it.
+
+**1. USE `css/ui.css`. It is not optional.** Root `CLAUDE.md`'s "USE WHAT EXISTS" table says buttons,
+cards, fields and modals come from the shared `.gh-*` primitives, and that a new game is the
+*cheapest possible place* to adopt them because there is nothing to migrate. The first version
+hand-rolled `.pi-diff`, `.pi-btn`, `.pi-brand` and `.pi-hud-btn` instead. Those are all deleted. The
+screens are now a `.gh-card` holding the tier picker, `.gh-btn--block` actions, and `.gh-btn--sm`
+in the HUD - `skeeball/js/ui.js` is the reference, and it injects the sheet with the same
+`data-gh-ui-css` marker so it is never double-loaded.
+
+**2. `diffShapeSVG()` MUST BE SIZED BY THE CALLER.** It returns an SVG with a `viewBox` and no
+width or height, so inside a flex button it expands to fill and swallows the screen - the first
+screenshot had a difficulty marker bigger than the Play button. `pinball/css/pinball.css` already
+carries the numbers (17px, 29px for the two-diamond tier 4) and they are copied here.
+
+**3. The board measured a box that could not have a height.** `_fit()` read `.pi-boardwrap`, which
+is `flex: 1` inside a column - and in the HUB the host container has no definite height, so that
+flex child collapsed to its own content and reported a box barely bigger than the board already
+was. The board came out tiny, pinned to the top, with the screen empty below it. It measures
+against the **viewport** now (`visualViewport` height minus what is above and below), which cannot
+collapse that way, and re-fits on the next two animation frames because the first measure can land
+before the hub has laid the container out.
+
+**4. Its constants did not match the CSS** (gap 4 and padding 14, against the sheet's 2 and 6),
+which quietly shaved every cell. The arithmetic has to describe the box that actually gets laid
+out.
+
+**5. Extra Hard is 7x10, not 8 wide, and WIDTH is why.** Measured in a real browser inside the hub:
+8 columns needs `8*44 + 7*2 = 366px` of board, and a padded 393px phone leaves about 365. So it
+trades width for length - still the longest board, and every tier clears the 44px floor. Easy
+renders at 62px and Extra Hard at exactly 44px, with no scrolling in either axis.
