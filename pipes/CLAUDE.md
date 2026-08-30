@@ -193,3 +193,32 @@ out.
 8 columns needs `8*44 + 7*2 = 366px` of board, and a padded 393px phone leaves about 365. So it
 trades width for length - still the longest board, and every tier clears the 44px floor. Easy
 renders at 62px and Extra Hard at exactly 44px, with no scrolling in either axis.
+
+## The setup screen, third time
+
+Matt, after the second attempt: *"fix the setup screen."* The problem was never the primitives -
+it was that I kept inventing the SHAPE of the screen instead of copying one.
+
+**It is Nuts & Bolts' layout now, on purpose.** That is the game Matt compared Pipes to, it is this
+hub's reference for a solo-puzzle setup screen, and `nuts-bolts/js/ui.js`'s `renderMenu()` is the
+code that was actually read before writing this one:
+
+- a centred header: the game name large, one line of tagline under it;
+- a small-caps field label;
+- **ONE ROW of four tier options**, not a 2x2 grid - shape marker beside the name, the grid size on
+  a sub-line under it;
+- the primary action, then a ghost "How to play".
+
+Three details worth keeping:
+
+- **The primary button is `gh-btn--primary`, which is BLUE.** `--gh-accent` in `css/ui.css` is
+  `#1769d4`; the gold I reached for is Nuts & Bolts' own `--nb-` token, not a shared one. Skeeball,
+  the newest game, uses the blue - so that is the house default and this follows it.
+- **"Extra Hard" wrapped to two lines** and broke the row's alignment. Nuts & Bolts had already
+  solved that by calling the fourth tier **Expert**, which fits on one line. Copied.
+- **`diffShapeSVG()` must be sized by the caller** - it returns a viewBox with no width or height,
+  so in a flex parent it expands to fill. It once rendered larger than the Play button.
+
+**The rule this game learned three times:** the "Adding a game" checklist says to copy the
+reference PER AXIS, and for a setup screen the reference is a real screen in this repo. Open it
+and read it. Do not approximate it from the primitives list.

@@ -3,12 +3,14 @@
 export const STRINGS = {
   en: {
     title: 'Pipes',
+    tagline: 'Turn the pipes, get the water out',
+    grid_n: '{w} x {h}',
 
     setup_difficulty: 'Difficulty',
     diff_easy: 'Easy',
     diff_medium: 'Medium',
     diff_hard: 'Hard',
-    diff_extraHard: 'Extra Hard',
+    diff_extraHard: 'Expert',
     play: 'Play',
     resume: 'Resume',
     howto: 'How to play',
@@ -44,12 +46,14 @@ export const STRINGS = {
 
   es: {
     title: 'Tuberias',
+    tagline: 'Gira las tuberias, saca el agua',
+    grid_n: '{w} x {h}',
 
     setup_difficulty: 'Dificultad',
     diff_easy: 'Facil',
     diff_medium: 'Normal',
     diff_hard: 'Dificil',
-    diff_extraHard: 'Muy dificil',
+    diff_extraHard: 'Experto',
     play: 'Jugar',
     resume: 'Continuar',
     howto: 'Como se juega',

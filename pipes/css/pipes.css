@@ -177,19 +177,47 @@
 }
 
 /* --- what this game adds on top of css/ui.css ---------------------------------------------------
- * The buttons, cards, fields and segmented control all come from the shared sheet now. Only the
- * things that are genuinely Pipes live here. The first version hand-rolled all of the above and
- * looked like nothing else in the hub; see pipes/CLAUDE.md. */
+ * Buttons, cards and fields come from the shared sheet. The SHAPE of this screen is Nuts & Bolts',
+ * which is this hub's reference for a solo-puzzle setup screen and the game Matt compared Pipes to:
+ * a header, a labelled field holding one row of tiers, then the actions. Two earlier versions were
+ * invented instead of copied. See pipes/CLAUDE.md. */
 
-.pi-root .pi-setup { justify-content: center; gap: 16px; }
-.pi-root .pi-setup-card { display: grid; gap: 10px; }
-.pi-root .pi-seg-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
-/* The difficulty SHAPE marker must be sized explicitly: diffShapeSVG() returns an SVG with a
-   viewBox and no width/height, so inside a flex button it expands to fill and swallows the screen.
-   These are pinball/css/pinball.css's numbers, which is where the same lesson is already written. */
-.pi-root .pi-seg { justify-content: flex-start; gap: 9px; min-height: 48px; }
-.pi-root .pi-seg svg { width: 17px; height: 17px; flex: none; }
-.pi-root .pi-seg .lb-dshape-x2 { width: 29px; }
-.pi-root .pi-seg.is-on { border-color: var(--gh-accent); box-shadow: inset 0 0 0 2px var(--gh-accent); }
+.pi-root .pi-setup { justify-content: flex-start; gap: 14px; padding-top: 22px; }
+
+.pi-root .pi-menu-header { text-align: center; }
+.pi-root .pi-menu-header h1 {
+  margin: 0; font-size: 30px; font-weight: 800; letter-spacing: 0.02em; color: var(--gh-ink);
+}
+.pi-root .pi-menu-header p { margin: 4px 0 0; font-size: 15px; color: var(--gh-muted); }
+
+.pi-root .pi-field { display: grid; gap: 8px; }
+.pi-root .pi-fieldlabel {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--gh-muted); text-align: center;
+}
+
+/* ONE ROW of four, the reference's layout - not a 2x2 grid. */
+.pi-root .pi-seg-wrap {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  padding: 6px; border-radius: var(--gh-r-lg);
+  background: var(--gh-surface-2); border: 1px solid var(--gh-border);
+}
+.pi-root .pi-seg {
+  display: grid; gap: 3px; justify-items: center; align-content: start;
+  min-height: 68px; padding: 8px 4px;
+  background: transparent; border: none; border-radius: var(--gh-r-md);
+  color: var(--gh-muted); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.pi-root .pi-seg.is-on { background: var(--gh-surface); box-shadow: var(--gh-sh-1); }
+.pi-root .pi-seg.is-on b { color: var(--gh-accent); }
+.pi-root .pi-seg.is-on .pi-seg-sub { color: var(--gh-ink); }
+/* diffShapeSVG() returns a viewBox with NO width or height, so it must be sized by the caller or
+   it expands to fill its flex parent - it once rendered bigger than the Play button. */
+.pi-root .pi-seg svg { width: 15px; height: 15px; flex: none; }
+.pi-root .pi-seg .lb-dshape-x2 { width: 26px; }
+.pi-root .pi-seg-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; }
+.pi-root .pi-seg-label b { font-weight: 800; }
+.pi-root .pi-seg-sub { font-size: 11px; color: var(--gh-muted); }
+
 .pi-root .pi-best { margin: 0; font-size: var(--gh-fs-sm); color: var(--gh-muted); text-align: center; }
 .pi-root .pi-actions { display: grid; gap: 8px; }
