@@ -1,0 +1,212 @@
+/* pipes/css/pipes.css - every rule descendant-scoped under .pi-root.
+ *
+ * A PREFIX ALONE IS NOT ISOLATION (docs/BUILDING-A-GAME.md item 3): module stylesheets go into the
+ * shared document.head and are never removed on destroy(), so a collision is permanent for the life
+ * of the page, not just while this game is mounted. Hence `.pi-root .pi-x`, never a bare `.pi-x`.
+ *
+ * Dark mode is the `.gh-dark` class from js/theme.js, never a prefers-color-scheme query - 'auto'
+ * is resolved once in JS so the theme toggle always wins.
+ */
+
+.pi-root {
+  --pi-ink: #101725;
+  --pi-dim: #5c6a80;
+  --pi-line: rgba(16, 23, 37, 0.14);
+  --pi-bg: #f4f6fa;
+  --pi-tile: #ffffff;
+  --pi-pipe: #8e9bb3;
+  --pi-water: #1f8fd6;
+  --pi-leak: #e0532f;
+  --pi-cap: #F2B705;
+  --pi-accent: #ffce3a;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--pi-ink);
+  background: var(--pi-bg);
+  font: 400 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Rapid tapping is this game's whole interaction, so the iOS text-selection guard goes on the
+     root's descendants, not just the root - these properties do not inherit the way you expect
+     (hill-climb/CLAUDE.md). */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pi-root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root.gh-dark .pi-root {
+  --pi-ink: #e8edf5;
+  --pi-dim: #94a3b8;
+  --pi-line: rgba(232, 237, 245, 0.16);
+  --pi-bg: #0d1420;
+  --pi-tile: #172131;
+  --pi-pipe: #5a6880;
+  --pi-water: #43b6f5;
+}
+
+/* --- shared chrome ------------------------------------------------------------------------------ */
+
+.pi-root .pi-screen {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  gap: 12px;
+  min-height: 0;
+}
+
+.pi-root .pi-h {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pi-dim);
+}
+
+.pi-root .pi-brand {
+  text-align: center;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.pi-root .pi-best {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--pi-dim);
+}
+
+/* --- setup ------------------------------------------------------------------------------------- */
+
+.pi-root .pi-diffs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pi-root .pi-diff {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 52px; padding: 10px 12px;
+  font: 700 15px/1.2 inherit; color: var(--pi-ink);
+  background: var(--pi-tile);
+  border: 2px solid var(--pi-line); border-radius: 12px;
+  cursor: pointer; touch-action: manipulation;
+}
+.pi-root .pi-diff.is-on { border-color: var(--pi-accent); box-shadow: inset 0 0 0 2px var(--pi-accent); }
+.pi-root .pi-diff svg { flex: none; }
+
+.pi-root .pi-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.pi-root .pi-btn {
+  min-height: 52px; padding: 12px 18px;
+  font: 800 17px/1.2 inherit; letter-spacing: 0.04em;
+  color: #101725; background: var(--pi-accent);
+  border: none; border-radius: 14px;
+  cursor: pointer; touch-action: manipulation;
+}
+.pi-root .pi-btn--ghost {
+  color: var(--pi-ink); background: transparent;
+  border: 2px solid var(--pi-line);
+}
+
+/* --- play -------------------------------------------------------------------------------------- */
+
+.pi-root .pi-hud {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 44px;
+}
+.pi-root .pi-hud-stat { font-size: 13px; font-weight: 700; color: var(--pi-dim); }
+.pi-root .pi-hud-stat b { font-size: 19px; color: var(--pi-ink); }
+.pi-root .pi-hud-btn {
+  min-height: 44px; min-width: 44px; padding: 8px 14px;
+  font: 700 14px/1.2 inherit; color: var(--pi-ink);
+  background: transparent; border: 2px solid var(--pi-line); border-radius: 10px;
+  cursor: pointer; touch-action: manipulation;
+}
+
+.pi-root .pi-boardwrap { flex: 1 1 auto; display: grid; place-items: center; min-height: 0; }
+.pi-root .pi-board {
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  background: var(--pi-line);
+  border-radius: 14px;
+}
+
+.pi-root .pi-cell {
+  position: relative;
+  background: var(--pi-tile);
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+  display: grid;
+  place-items: center;
+}
+.pi-root .pi-cell:focus-visible { outline: 3px solid var(--pi-accent); outline-offset: -3px; }
+.pi-root .pi-cell.is-fixed { cursor: default; }
+
+/* The pipe art. ROTATION IS A `transform`, which is on the UX floor's allowed list and animates on
+   the compositor - the SVG itself is drawn once, for the piece's original mask, and never redrawn
+   on a turn. */
+.pi-root .pi-art {
+  position: absolute; inset: 0;
+  transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+.pi-root .pi-cell.is-nudge .pi-art { animation: pi-nudge 220ms ease; }
+@keyframes pi-nudge {
+  0%, 100% { transform: rotate(var(--pi-rot)) translateX(0); }
+  30% { transform: rotate(var(--pi-rot)) translateX(-3%); }
+  70% { transform: rotate(var(--pi-rot)) translateX(3%); }
+}
+
+/* The water layer. Revealed per tile with opacity + a small scale pop, sequenced along the flow
+   order - both on the allowed list. A true directional fill would want stroke-dashoffset, which is
+   NOT on that list; see pipes/CLAUDE.md for why that trade was made. */
+.pi-root .pi-water {
+  position: absolute; inset: 0;
+  opacity: 0;
+  transform: scale(0.55);
+  transition: opacity 130ms linear, transform 190ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+.pi-root .pi-cell.is-wet .pi-water { opacity: 1; transform: scale(1); }
+
+.pi-root .pi-cell.is-leak::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 3px var(--pi-leak);
+  pointer-events: none;
+}
+
+.pi-root .pi-banner {
+  min-height: 44px;
+  display: grid; place-items: center;
+  font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--pi-dim);
+}
+.pi-root .pi-banner.is-win { color: var(--pi-water); }
+.pi-root .pi-banner.is-leak { color: var(--pi-leak); }
+
+/* --- how to play ------------------------------------------------------------------------------- */
+
+.pi-root .pi-howto-lead { margin: 0; font-size: 17px; font-weight: 700; }
+.pi-root .pi-howto-fig { display: flex; gap: 18px; justify-content: center; align-items: flex-start; }
+.pi-root .pi-howto-fig figure { margin: 0; text-align: center; }
+.pi-root .pi-howto-fig figcaption { margin-top: 6px; font-size: 12px; color: var(--pi-dim); }
+.pi-root .pi-howto-cap { margin: 0; font-size: 13px; color: var(--pi-dim); }
+.pi-root .pi-howto-rules { margin: 0; padding-left: 20px; font-size: 14px; }
+.pi-root .pi-howto-rules li { margin: 6px 0; }
+
+/* --- reduced motion ------------------------------------------------------------------------------
+ * Reduced motion thins garnish, it does NOT freeze gameplay (docs/BUILDING-A-GAME.md Part 0, and
+ * pinball/CLAUDE.md states it outright). So the pipe's own rotation - which IS the game - keeps its
+ * transition, and only the celebratory water sequence and the nudge are cut to instant. Nothing is
+ * display:none'd; every element settles to its final pose. */
+@media (prefers-reduced-motion: reduce) {
+  .pi-root .pi-water { transition: none; transform: scale(1); }
+  .pi-root .pi-cell.is-nudge .pi-art { animation: none; }
+}

@@ -167,6 +167,19 @@ export function aggregatePlayers(all, corrections) {
         if (!dst.nb) dst.nb = { solved: 0, moves: 0, bestLevel: 0 };
         dst.nb.solved += src.nb.solved | 0; dst.nb.moves += src.nb.moves | 0;
         dst.nb.bestLevel = Math.max(dst.nb.bestLevel, src.nb.bestLevel | 0);
+      } else if (g === 'pipes' && src.pi) {
+        // Item 7's third edit, the one that gets forgotten: without this branch every Pipes
+        // counter reads ZERO the moment a person's second device syncs, while each device's own
+        // store stays intact - THE LAW rule 1, and how Dots and Boxes and Boggle both shipped.
+        // Counters add; bests take Math.max, never a sum.
+        if (!dst.pi) dst.pi = { solved: 0, moves: 0, bestLevel: 0, bestByTier: {} };
+        dst.pi.solved += src.pi.solved | 0;
+        dst.pi.moves += src.pi.moves | 0;
+        dst.pi.bestLevel = Math.max(dst.pi.bestLevel | 0, src.pi.bestLevel | 0);
+        const pbt = src.pi.bestByTier || {};
+        for (const k of Object.keys(pbt)) {
+          dst.pi.bestByTier[k] = Math.max(dst.pi.bestByTier[k] | 0, pbt[k] | 0);
+        }
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /
         // bestObstaclesByDiff), not meters. Old meter-shaped records (pre-migration, no

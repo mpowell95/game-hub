@@ -1,0 +1,87 @@
+// pipes/js/strings.js - the EN/ES dictionary. English is the source of truth; a missing Spanish
+// key falls back to English, so partial translation never breaks a screen.
+export const STRINGS = {
+  en: {
+    title: 'Pipes',
+
+    setup_difficulty: 'Difficulty',
+    diff_easy: 'Easy',
+    diff_medium: 'Medium',
+    diff_hard: 'Hard',
+    diff_extraHard: 'Extra Hard',
+    play: 'Play',
+    resume: 'Resume',
+    howto: 'How to play',
+    best_level: 'Best',
+    no_best: 'No games yet',
+
+    hud_moves: 'Turns',
+    hud_new: 'New board',
+    hud_back: 'Back',
+    solved: 'Solved',
+    solved_moves: '{n} turns',
+    leaking: 'Leaking',
+
+    howto_lead: 'Tap a pipe to turn it. Get the water from the inlet to the outlet.',
+    howto_caption: 'An open end spills. Seal the whole run, not just the ends.',
+    howto_leak: 'This leaks',
+    howto_sealed: 'This is sealed',
+    howto_rule_1: 'Every tap turns a pipe a quarter turn clockwise.',
+    howto_rule_2: 'Spare pipes off to the side do not matter. Only the ones the water reaches.',
+    howto_rule_3: 'A cross cannot be turned. Work around it.',
+    howto_close: 'Got it',
+
+    aria_board: 'Pipe board, {w} by {h}',
+    aria_cell: 'Row {r}, column {c}, {piece}',
+    aria_turn: 'Turn this pipe',
+    piece_blank: 'empty',
+    piece_cap: 'end',
+    piece_straight: 'straight pipe',
+    piece_elbow: 'bend',
+    piece_tee: 'T junction',
+    piece_cross: 'crossroads',
+  },
+
+  es: {
+    title: 'Tuberias',
+
+    setup_difficulty: 'Dificultad',
+    diff_easy: 'Facil',
+    diff_medium: 'Normal',
+    diff_hard: 'Dificil',
+    diff_extraHard: 'Muy dificil',
+    play: 'Jugar',
+    resume: 'Continuar',
+    howto: 'Como se juega',
+    best_level: 'Mejor',
+    no_best: 'Aun no hay partidas',
+
+    hud_moves: 'Giros',
+    hud_new: 'Tablero nuevo',
+    hud_back: 'Atras',
+    solved: 'Resuelto',
+    solved_moves: '{n} giros',
+    leaking: 'Hay fugas',
+
+    howto_lead: 'Toca una tuberia para girarla. Lleva el agua de la entrada a la salida.',
+    howto_caption: 'Un extremo abierto gotea. Sella todo el recorrido, no solo las puntas.',
+    howto_leak: 'Esto gotea',
+    howto_sealed: 'Esto esta sellado',
+    howto_rule_1: 'Cada toque gira la tuberia un cuarto de vuelta.',
+    howto_rule_2: 'Las tuberias sueltas no importan. Solo las que toca el agua.',
+    howto_rule_3: 'Un cruce no se puede girar. Rodealo.',
+    howto_close: 'Entendido',
+
+    aria_board: 'Tablero de tuberias, {w} por {h}',
+    aria_cell: 'Fila {r}, columna {c}, {piece}',
+    aria_turn: 'Girar esta tuberia',
+    piece_blank: 'vacio',
+    piece_cap: 'extremo',
+    piece_straight: 'tuberia recta',
+    piece_elbow: 'codo',
+    piece_tee: 'union en T',
+    piece_cross: 'cruce',
+  },
+};
+
+export default STRINGS;
