@@ -222,3 +222,32 @@ Three details worth keeping:
 **The rule this game learned three times:** the "Adding a game" checklist says to copy the
 reference PER AXIS, and for a setup screen the reference is a real screen in this repo. Open it
 and read it. Do not approximate it from the primitives list.
+## The art, redrawn from Matt's reference screenshots (2026-08-30)
+
+Matt pushed eleven screenshots of a real Pipes app into this folder (`IMG_4594` to `IMG_4604`) and
+said: *"Make our game look more like that."* **They are the reference for how this game looks. Do
+not redesign away from them.** The drawing lives in `js/art.js`, which is pure - mask in, SVG out.
+
+Four things were wrong, and none of them was a detail:
+
+1. **NO TILE BOXES, NO GRID, NO GAPS.** The reference draws pipes on one flat field, running edge
+   to edge, so a joined run reads as ONE CONTINUOUS PIPE. Ours had a per-cell background, per-cell
+   rounding, a 2px gap and a board frame - which is what made it read as a spreadsheet. The board
+   is `gap: 0`, no padding, no frame, and a cell has no background at all. **`_fit()`'s GAP and PAD
+   are 0 to match; they must always describe the box that actually gets laid out.**
+2. **A DRY PIPE IS HOLLOW, A WET ONE IS SOLID.** Drawn with two strokes - a wide one in the outline
+   colour, then a narrower one in the BACKGROUND colour on top, leaving a wall a few pixels thick.
+   It joins correctly across neighbouring cells because both halves meet exactly on the shared
+   edge, which is another reason the gap has to be zero.
+3. **ELBOWS ARE CURVES.** A quadratic through the centre (`M50 0 Q50 50 100 50`), not two straight
+   arms meeting at a corner. `stroke-linejoin: round` on a right angle does not come close.
+4. **AN END IS A BULB** - a real circle on a stem, with a dark centre when wet - not a dot on a
+   stub.
+
+A leak is now marked by a glow on the PIPE rather than a ring around the cell, because a ring puts
+back the grid the art is deliberately without.
+
+**The one thing deliberately NOT copied is the rule.** The reference says *"Rotate the pipes to link
+them together into a single network"* - that is the FULL NET variant, which `docs/PIPES-SCOPE.md`
+put to Matt as option (c) and he chose (b), path with no leaks. Copy the look; the rules are
+already decided.

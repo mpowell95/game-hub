@@ -12,10 +12,11 @@
   --pi-ink: #101725;
   --pi-dim: #5c6a80;
   --pi-line: rgba(16, 23, 37, 0.14);
-  --pi-bg: #f4f6fa;
-  --pi-tile: #ffffff;
-  --pi-pipe: #8e9bb3;
-  --pi-water: #1f8fd6;
+  /* The reference is a flat charcoal field with near-white pipes and one blue. Light theme keeps
+     the same relationship rather than inverting it into something else. */
+  --pi-bg: #eef1f6;
+  --pi-pipe: #7d8ba1;
+  --pi-water: #38a9ef;
   --pi-leak: #e0532f;
   --pi-cap: #F2B705;
   --pi-accent: #ffce3a;
@@ -25,6 +26,13 @@
   min-height: 100%;
   color: var(--pi-ink);
   background: var(--pi-bg);
+  /* The rounded card with a shadow is nuts-bolts/css/nuts-bolts.css's treatment, which is this
+     hub's house pattern for a NON-immersive game - it is a panel on the launcher's ground, not a
+     full-bleed takeover. Square edges read as an unfinished slab. */
+  border-radius: 20px;
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
   font: 400 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Rapid tapping is this game's whole interaction, so the iOS text-selection guard goes on the
      root's descendants, not just the root - these properties do not inherit the way you expect
@@ -43,10 +51,9 @@
   --pi-ink: #e8edf5;
   --pi-dim: #94a3b8;
   --pi-line: rgba(232, 237, 245, 0.16);
-  --pi-bg: #0d1420;
-  --pi-tile: #172131;
-  --pi-pipe: #5a6880;
-  --pi-water: #43b6f5;
+  --pi-bg: #3a3a3c;      /* the reference field */
+  --pi-pipe: #f2f4f7;    /* near-white outline */
+  --pi-water: #5eb8f5;   /* its blue */
 }
 
 /* --- shared chrome ------------------------------------------------------------------------------ */
@@ -91,24 +98,21 @@
 .pi-root .pi-hud-stat b { font-size: 19px; color: var(--pi-ink); }
 
 .pi-root .pi-boardwrap { flex: 1 1 auto; display: grid; place-items: center; min-height: 0; }
-.pi-root .pi-board {
-  display: grid;
-  gap: 2px;
-  padding: 6px;
-  background: var(--pi-line);
-  border-radius: 14px;
-}
 
+/* NO FRAME, NO GAPS. The reference draws pipes on one flat field running edge to edge, and gap 0
+   is what lets two neighbouring cells' halves meet exactly on the shared edge so a joined run reads
+   as one continuous pipe. Any gap at all puts a seam through every join. */
+.pi-root .pi-board { display: grid; gap: 0; padding: 0; background: transparent; }
+
+/* NO PER-CELL BOX. A tile background and a border radius is what made the first version read as a
+   spreadsheet rather than plumbing. */
 .pi-root .pi-cell {
   position: relative;
-  background: var(--pi-tile);
-  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
   touch-action: manipulation;
-  display: grid;
-  place-items: center;
 }
-.pi-root .pi-cell:focus-visible { outline: 3px solid var(--pi-accent); outline-offset: -3px; }
+.pi-root .pi-cell:focus-visible { outline: 2px solid var(--pi-accent); outline-offset: -2px; border-radius: 4px; }
 .pi-root .pi-cell.is-fixed { cursor: default; }
 
 /* The pipe art. ROTATION IS A `transform`, which is on the UX floor's allowed list and animates on
@@ -139,13 +143,9 @@
 }
 .pi-root .pi-cell.is-wet .pi-water { opacity: 1; transform: scale(1); }
 
-.pi-root .pi-cell.is-leak::after {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 3px var(--pi-leak);
-  pointer-events: none;
-}
+/* A leak is marked on the PIPE, not by boxing the cell - a box would put back the grid the art is
+   deliberately without. */
+.pi-root .pi-cell.is-leak .pi-art { filter: drop-shadow(0 0 5px var(--pi-leak)); }
 
 .pi-root .pi-banner {
   min-height: 44px;
