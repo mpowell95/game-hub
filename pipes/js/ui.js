@@ -21,6 +21,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { recordPipes } from '../../js/game-stats.js';
 import { PipesGame } from './game.js';
 import { TIER_ORDER, tierConfig, kindOf, popcount, N, E, S, W, DIRS } from './generator.js';
+import { pipeSVG } from './art.js';
 import { STRINGS } from './strings.js';
 
 const t = makeT(STRINGS);
@@ -51,24 +52,6 @@ function writeSave(game) {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-/** The pipe art for one mask: a stroked arm from the centre to each open side, plus a hub dot.
- *  Drawn in a 100x100 box so the cell can be any size. */
-function pipeSVG(mask, cls, color) {
-  if (!popcount(mask)) return '';
-  const arms = [];
-  if (mask & N) arms.push('M50 50 L50 2');
-  if (mask & E) arms.push('M50 50 L98 50');
-  if (mask & S) arms.push('M50 50 L50 98');
-  if (mask & W) arms.push('M50 50 L2 50');
-  const cap = popcount(mask) === 1
-    ? `<circle cx="50" cy="50" r="17" fill="${color}"/>`
-    : `<circle cx="50" cy="50" r="11" fill="${color}"/>`;
-  return `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true">`
-    + `<g stroke="${color}" stroke-width="22" stroke-linecap="round" fill="none">`
-    + arms.map((d) => `<path d="${d}"/>`).join('')
-    + `</g>${cap}</svg>`;
-}
 
 class PipesUI {
   constructor(root) {
@@ -151,11 +134,10 @@ class PipesUI {
    *  pipes", which anyone can see; it is that an open end anywhere on the run is a leak. */
   renderHowTo() {
     this.screen = 'howto';
-    const box = (mask, color, label) => `
+    const box = (mask, mode, label) => `
       <figure>
         <svg viewBox="0 0 100 100" width="76" height="76" aria-hidden="true">
-          <rect width="100" height="100" rx="10" fill="var(--pi-tile)"/>
-          ${pipeSVG(mask, '', color).replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}
+          ${pipeSVG(mask, '', mode).replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}
         </svg>
         <figcaption>${esc(label)}</figcaption>
       </figure>`;
@@ -164,8 +146,8 @@ class PipesUI {
         <div class="gh-card">
         <p class="pi-howto-lead">${esc(t('howto_lead'))}</p>
         <div class="pi-howto-fig">
-          ${box(N | E | S, 'var(--pi-leak)', t('howto_leak'))}
-          ${box(N | S, 'var(--pi-water)', t('howto_sealed'))}
+          ${box(N | E | S, 'dry', t('howto_leak'))}
+          ${box(N | S, 'wet', t('howto_sealed'))}
         </div>
         <p class="pi-howto-cap">${esc(t('howto_caption'))}</p>
         <ul class="pi-howto-rules">
@@ -191,7 +173,7 @@ class PipesUI {
     this._stopWater();
     const g = this.game;
     this.root.innerHTML = `
-      <div class="pi-screen">
+      <div class="pi-screen pi-play">
         <div class="pi-hud">
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="back">${esc(t('hud_back'))}</button>
           <span class="pi-hud-stat">${esc(t('hud_moves'))} <b data-role="moves">0</b></span>
@@ -248,8 +230,7 @@ class PipesUI {
         el.setAttribute('tabindex', '0');
       }
       el.setAttribute('aria-label', t('aria_cell', { r: y + 1, c: x + 1, piece: t('piece_' + kindOf(mask)) }));
-      el.innerHTML = pipeSVG(mask, 'pi-art', 'var(--pi-pipe)')
-        + pipeSVG(mask, 'pi-water', i === g.src || i === g.dst ? 'var(--pi-cap)' : 'var(--pi-water)');
+      el.innerHTML = pipeSVG(mask, 'pi-art', 'dry') + pipeSVG(mask, 'pi-water', 'wet');
       frag.appendChild(el);
       this.cellEls[i] = el;
     }
@@ -395,10 +376,11 @@ class PipesUI {
     const r = wrap.getBoundingClientRect();
     if (r.width < 2) return;
     const g = this.game;
-    // THESE MUST MATCH .pi-board IN THE CSS. They did not at first (4 and 14 against the sheet's
-    // 2 and 6), which quietly shaved every cell: this arithmetic has to describe the box that
+    // THESE MUST MATCH .pi-board IN THE CSS, and since the board lost its frame and gaps to match
+    // the reference art (see art.js), both are now zero. They were 4 and 14 against a sheet that
+    // said 2 and 6, which quietly shaved every cell: this arithmetic has to describe the box that
     // actually gets laid out, not an approximation of it.
-    const GAP = 2, PAD = 12;
+    const GAP = 0, PAD = 0;
 
     // visualViewport is the honest height on mobile while the URL bar is animating.
     const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
