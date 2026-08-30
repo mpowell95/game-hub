@@ -412,3 +412,35 @@ seconds. It tracks a BOUNDING BOX over a window now: "not going anywhere" rather
 After all three: ball one lasts about 75 seconds, drains, **the game advances to ball two**, ~20,000
 points off 25 bumper hits, 10 drop targets and 2 cleared banks, no page errors, and no scoring
 without a player. That is the first build of this board that is actually a game.
+
+### The number that made it unplayable: `targetTimeRatio`
+
+Matt, after the "playable" build: *"dude it's terrible. absolutely unplayable."*
+
+He was right, and the cause was one field in the source table I had read past. `table9.json` carries
+**`targetTimeRatio: 2.3`**, and Vector Pinball's `FieldDriver` uses it as the CLOCK:
+
+```java
+long fieldTickNanos = (long) (nanosPerFrame * field.getTargetTimeRatio());
+```
+
+**Their engine advances the world at 2.3x real time.** Run the same table at 1x - which is what every
+build before this did - and every shot, drop, bounce and flip is 2.3 times too slow. A free fall down
+the field takes **3.87 s instead of 1.68 s**. For comparison STARHUB's is 1.64 s and a real machine is
+about the same. The board was not badly imported at that point; it was being played in slow motion.
+
+`royal.js`'s `update()` multiplies the (already clamped) real dt by `T.TIME_RATIO`. Measured after,
+in a real browser: peak ball speed **947-1036 units/s** where it had been ~200, the ball reaches the
+top of the table (y 18), the score climbs continuously, and balls drain and advance.
+
+**And the ball search now gives up.** Three failed shoves and the machine re-serves the ball to the
+plunger, which is what a real machine does when ball search cannot find it. This board has narrow
+pockets a sideways shove simply cannot empty - the shooter lane is one, and a browser session found
+another on the right at about (363, 400-480) where the ball sat with the score frozen for twenty
+seconds. Without the give-up rule a game can dead-end with balls still on the card, which is the
+difference between hard and broken.
+
+**Every one of these was a number that was in the source file the whole time.** The pattern across
+this whole import is the same: wall radius, restitution, friction, and now the clock. When this board
+feels wrong, the next thing to check is which of their constants is still being ignored - not our
+physics.
