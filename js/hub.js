@@ -152,6 +152,16 @@ export const GAMES = [
     art: GAME_ART["mancala"],
   },
   {
+    id: 'pipes',
+    title: { en: 'Pipes', es: 'Tuberias' },
+    blurb: { en: 'Turn the pipes. Get the water from the inlet to the outlet without a leak.',
+      es: 'Gira las tuberias. Lleva el agua de la entrada a la salida sin fugas.' },
+    module: '../pipes/js/ui.js',
+    accent: '#1f8fd6',
+    released: '2026-08-29',
+    art: GAME_ART['pipes'],
+  },
+  {
     id: 'nuts-bolts',
     title: { en: 'Nuts & Bolts', es: 'Tuercas y Tornillos' },
     blurb: { en: 'Colour-sort puzzle. Stack matching nuts onto bolts.',

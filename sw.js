@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v516';
+const CACHE = 'game-hub-v517';
 
 const ASSETS = [
   './',
@@ -164,6 +164,12 @@ const ASSETS = [
   // Nuts & Bolts
   './nuts-bolts/',
   './nuts-bolts/index.html',
+  './pipes/index.html',
+  './pipes/css/pipes.css',
+  './pipes/js/ui.js',
+  './pipes/js/game.js',
+  './pipes/js/generator.js',
+  './pipes/js/strings.js',
   './nuts-bolts/css/nuts-bolts.css',
   './nuts-bolts/js/ui.js',
   './nuts-bolts/js/game.js',
@@ -462,6 +468,12 @@ const REST_MANIFEST = {
   './mancala/js/strings.js': '0c41a1d1a7',
   './nuts-bolts/': 'd334645324',
   './nuts-bolts/index.html': 'd334645324',
+  './pipes/index.html': '738b6ac21a',
+  './pipes/css/pipes.css': '3ad62514c2',
+  './pipes/js/ui.js': '1ce76568fe',
+  './pipes/js/game.js': '8df65c1ff3',
+  './pipes/js/generator.js': 'c0592c742f',
+  './pipes/js/strings.js': '58614f9a4f',
   './nuts-bolts/css/nuts-bolts.css': 'e5a74a7a3c',
   './nuts-bolts/js/ui.js': '93d5071c00',
   './nuts-bolts/js/game.js': '9116062404',

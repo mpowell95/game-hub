@@ -34,6 +34,7 @@ const TABS = [
   { id: 'business', labelKey: 'game_title_business' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
+  { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -74,7 +75,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -243,6 +244,24 @@ function nutsBoltsScreen(rec) {
       <div class="gs-tally"><b>${best}</b><span>${t('gs_nb_best')}</span></div>
       <div class="gs-tally"><b>${moves}</b><span>${t('gs_nb_moves')}</span></div>
       <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>${t('gs_nb_avg_moves')}</span></div>
+    </div>`;
+}
+
+/** Pipes: a solo puzzle like Nuts & Bolts, so no wins/losses/win-rate - you cannot lose a board,
+ *  only keep turning. Boards solved, the hardest tier cleared, and the turns it took.
+ *
+ *  ITEM 7's SECOND EDIT. Storing a counter is not enough: history no screen shows reads as
+ *  deleted (THE LAW rule 1), so a sub-counter without a renderer is a bug, not a shortcut. */
+function pipesScreen(rec) {
+  const pi = (rec && rec.pi) || {};
+  const solved = pi.solved | 0, moves = pi.moves | 0, best = pi.bestLevel | 0;
+  if (!solved) return emptyState('Pipes');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_pi_solved')}</span></div>
+      <div class="gs-tally"><b>${best}</b><span>${t('gs_pi_best')}</span></div>
+      <div class="gs-tally"><b>${moves}</b><span>${t('gs_pi_moves')}</span></div>
+      <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>${t('gs_pi_avg')}</span></div>
     </div>`;
 }
 
@@ -775,6 +794,7 @@ function hasPlays(id, rec) {
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'pinball') return !!(rec.pb && rec.pb.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
+  if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   return ((rec.total || {}).played | 0) > 0;
 }
@@ -789,6 +809,7 @@ function headlineOf(id, rec) {
   if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'skeeball') return { n: (rec.sk && rec.sk.bestGame) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
 }
 
@@ -903,6 +924,7 @@ function screenFor(id, st) {
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
+  if (id === 'pipes') return pipesScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

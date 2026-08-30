@@ -186,6 +186,7 @@ const GAME_META = [
   { id: 'mancala', labelKey: 'game_title_mancala' },
   { id: 'business', labelKey: 'game_title_business' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
+  { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },

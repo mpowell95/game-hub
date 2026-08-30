@@ -186,6 +186,24 @@ export const GAME_ART = {
               <circle cx="140.5" cy="46" r="1.9"/><circle cx="135.5" cy="51" r="1.9"/><circle cx="139.5" cy="57" r="1.9"/>
             </g>
           </svg>`,
+  // Pipes: a run of pipe crossing the frame left to right, half of it already carrying water and
+  // half still dry and mis-turned - the game's whole idea in one picture. Landscape and
+  // full-bleed per checklist item 5; composed FOR 160x90, never a square cropped to fit.
+  'pipes': `<svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#12303f"/>
+    <g fill="none" stroke="#2f4d5e" stroke-width="9" stroke-linecap="round">
+      <path d="M20 66 H44 V26 H70"/>
+      <path d="M96 26 H120 V64 H146"/>
+      <path d="M112 78 H136"/>
+      <path d="M34 14 V34"/>
+    </g>
+    <g fill="none" stroke="#43b6f5" stroke-width="9" stroke-linecap="round">
+      <path d="M20 66 H44 V26 H70"/>
+    </g>
+    <circle cx="20" cy="66" r="7" fill="#F2B705"/>
+    <circle cx="146" cy="64" r="7" fill="#2f4d5e"/>
+    <circle cx="70" cy="26" r="5" fill="#43b6f5"/>
+  </svg>`,
   'nuts-bolts': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#3f4652"/>
             <g fill="#9aa7bd">
