@@ -289,6 +289,9 @@ export class PinballUI {
     this.renderer = royal ? new RoyalRenderer(this.el.canvas) : new Renderer(this.el.canvas);
     this.game = royal ? new RoyalPinball({}) : new Pinball({ difficulty: this.settings.difficulty });
     this.game.start();
+    // Dev hook: the ONLY way a browser session can see what the ball is actually doing. Read-only,
+    // and it exists because four green headless soaks shipped a board that threw on every contact.
+    try { window.__pbTest = { game: this.game, renderer: this.renderer }; } catch { /* no window */ }
     this.messages = [];
     this.msgUntil = 0;
     this.paused = false;

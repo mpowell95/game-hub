@@ -21,8 +21,8 @@ import T, { buildLayer } from './table-royal.js';
 const SAVE_SECS = 8;          // ball save at the start of every ball, as STARHUB's Standard does
 const MAX_HOLD = 3;           // seconds; the held-ball invariant from pinball/CLAUDE.md
 const DROP_RESET_SECS = 2;    // their table's own `reset` value on all four banks
-const SEARCH_DIST = 22;       // units a ball must cover to count as "moving" - just over one ball
-const SEARCH_SECS = 3;        // seconds parked inside that circle before the table shoves it
+const SEARCH_DIST = 30;       // how big a box the ball may stay inside and still count as parked
+const SEARCH_SECS = 3;        // seconds inside that box before the table shoves it
 const SEARCH_VX = 210;        // sideways shove. At GRAVITY 80 a gentler one just re-parked it -
 const SEARCH_VY = 150;        // the first try used 120/70 and the soak still logged 59 episodes.
 
@@ -167,6 +167,7 @@ export class RoyalPinball {
       }
       this._sensors();
       this._rollovers();
+      this._shooterLane();
       this._drain();
     }
     this._ballSearch(dt);
@@ -222,20 +223,31 @@ export class RoyalPinball {
   _ballSearch(dt) {
     if (this.phase !== 'play') return;
     for (const b of this.balls) {
-      if (b.onPlunger) { b._anchor = null; b._still = 0; continue; }
-      if (!b._anchor || Math.hypot(b.x - b._anchor[0], b.y - b._anchor[1]) > SEARCH_DIST) {
-        b._anchor = [b.x, b.y];
+      if (b.onPlunger) { b._box = null; b._still = 0; continue; }
+      // A BOUNDING BOX OVER A WINDOW, NOT DISPLACEMENT FROM A POINT.
+      //
+      // The first version reset its timer whenever the ball got 22 units from an anchor, and a real
+      // browser session found the hole in that: a ball pinned against the left wall at x 16-20,
+      // y 400-430, oscillating at 2-53 units/s. It moved far enough every second to keep resetting
+      // the anchor, and went nowhere for THIRTY-ONE SECONDS - long enough to collect eighteen
+      // rollover awards while it sat there. "Not moving" is the wrong test; "not going anywhere" is
+      // the right one, and only a box over time can tell them apart.
+      if (!b._box) b._box = [b.x, b.y, b.x, b.y];
+      b._box[0] = Math.min(b._box[0], b.x); b._box[1] = Math.min(b._box[1], b.y);
+      b._box[2] = Math.max(b._box[2], b.x); b._box[3] = Math.max(b._box[3], b.y);
+      if (b._box[2] - b._box[0] > SEARCH_DIST || b._box[3] - b._box[1] > SEARCH_DIST) {
+        b._box = [b.x, b.y, b.x, b.y];
         b._still = 0;
         continue;
       }
       b._still += dt;
       if (b._still < SEARCH_SECS) continue;
+      b._box = [b.x, b.y, b.x, b.y];
       // Shove it the way a solenoid would: mostly sideways, slightly up, alternating direction so
       // a second search cannot re-park it in the same corner.
       const dir = (b._searches = (b._searches | 0) + 1) % 2 ? 1 : -1;
       b.vx += dir * SEARCH_VX;
       b.vy -= SEARCH_VY;
-      b._anchor = [b.x, b.y];
       b._still = 0;
       this.emit({ type: 'ballsearch' });
     }
@@ -276,8 +288,21 @@ export class RoyalPinball {
     if (speed > 260) this.emit({ type: 'clack', x, y });
   }
 
-  /** Rollovers and the spinner are not colliders - the ball passes THROUGH them - so they are
-   *  tested geometrically, and a lane only re-arms once the ball has genuinely left it. */
+  /**
+   * Rollovers and the spinner are not colliders - the ball passes THROUGH them - so they are tested
+   * geometrically.
+   *
+   * A ROLLOVER LIGHTS, IT DOES NOT PAY EVERY PASS, and that distinction is the whole point. The
+   * first version paid `score` on every entry and re-armed the moment the ball left the circle. A
+   * real browser session found what that is worth: a ball pinned against the left wall, drifting in
+   * and out of one lane, collected EIGHTEEN awards over thirty-one seconds and 9,000 points, on
+   * ball one, without the player touching anything. It is the STARHUB scoop bug wearing a different
+   * hat, and this file's own `_sensors()` comment warns about it three methods up.
+   *
+   * A lit lane now stays lit and pays nothing. Completing every lane in a group pays a bonus and
+   * resets the set, which is what `RolloverGroupElement` is for and how a real machine's lane set
+   * behaves. The ceiling on a parked ball is therefore one award, not an income.
+   */
   _rollovers() {
     for (const b of this.balls) {
       if (b.onPlunger || !b.live) continue;
@@ -287,13 +312,16 @@ export class RoyalPinball {
           const key = g.id + ':' + i;
           const [px, py] = g.pts[i];
           const inside = Math.hypot(b.x - px, b.y - py) < g.r + BALL_R;
-          if (inside && !this.rollLit.get(key)) {
-            this.rollLit.set(key, true);
-            this._award(g.score, px, py);
-            this.stats.rollovers++;
-            this.emit({ type: 'lane', x: px, y: py });
-          } else if (!inside && this.rollLit.get(key)) {
-            this.rollLit.set(key, false);
+          if (!inside || this.rollLit.get(key)) continue;
+          this.rollLit.set(key, true);
+          this._award(g.score, px, py);
+          this.stats.rollovers++;
+          this.emit({ type: 'lane', x: px, y: py });
+          // A completed set pays once and clears, so the lanes are worth chasing again.
+          if (g.pts.every((_, k) => this.rollLit.get(g.id + ':' + k))) {
+            this._award(g.score * 4, px, py);
+            this.emit({ type: 'laneset', x: px, y: py });
+            for (let k = 0; k < g.pts.length; k++) this.rollLit.set(g.id + ':' + k, false);
           }
         }
       }
@@ -310,6 +338,31 @@ export class RoyalPinball {
           this.rollLit.set(key, false);
         }
       }
+    }
+  }
+
+  /**
+   * A BALL THAT ROLLS BACK DOWN THE SHOOTER LANE IS HANDED TO THE PLUNGER.
+   *
+   * Their table keeps the ball out of the lane with a `LaunchBarrier` wall that their own rules
+   * raise after a launch - it ships `disabled: true` and the Java delegate enables it. We do not
+   * take their rules, so nothing raised it, and a real browser session found exactly what that
+   * costs: the ball launched, came straight back down the lane, and SAT THERE for a hundred
+   * seconds. Score 0, three balls unplayed, nothing on screen moving. The ball search cannot help -
+   * the lane is 24 units wide, so a sideways shove has nowhere to send it.
+   *
+   * STARHUB solves the same problem the same way (`game.js`'s shooter-lane rest check), and it is
+   * what a real machine does: the ball returns to the plunger and you shoot again.
+   */
+  _shooterLane() {
+    for (const b of this.balls) {
+      if (b.onPlunger) continue;
+      const inLane = b.x > T.PLUNGER.x - 22 && b.y > T.PLUNGER.y - 40;
+      if (!inLane || Math.hypot(b.vx, b.vy) > 60) continue;
+      b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
+      b.onPlunger = true;
+      b._box = null; b._still = 0;
+      this.emit({ type: 'reload' });
     }
   }
 
@@ -339,6 +392,7 @@ export class RoyalPinball {
     this.ball++;
     this.down.clear();
     this.retracted.clear();
+    this.rollLit.clear();          // lanes reset with the ball, as a real machine does
     this.dropTimers.length = 0;
     this._rebuild();
     this.phase = 'ready';
