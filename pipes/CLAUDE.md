@@ -383,7 +383,9 @@ and lands within a pixel.
 **The one thing deliberately NOT copied is the rule.** The reference says *"Rotate the pipes to link
 them together into a single network"* - that is the FULL NET variant, which `docs/PIPES-SCOPE.md`
 put to Matt as option (c) and he chose (b), path with no leaks. Copy the look; the rules are
-already decided. **The visible consequence is bulbs**: the reference uses dead-end caps as ordinary
-decoys, so its boards are dotted with circles. Ours has exactly two per board, because here a bulb
-means the inlet or the outlet, and scattering decoy bulbs would be a lie about where the water goes.
-That is the one texture difference from the reference that is on purpose.
+already decided. **The visible consequence is bulbs**: the reference's boards are dotted with them,
+and they are NOT decoys - under full net every one is an endpoint that has to be connected, which is
+why its solved board is a single blue network. Ours has exactly two per board, the inlet and the
+outlet, because under path-with-no-leaks those are the only endpoints that exist. It follows from
+the rule; it is not a separate decision, and calling them "decoy bulbs" (as this file did) was
+wrong.
