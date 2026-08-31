@@ -201,6 +201,7 @@ function render(card, opts = {}) {
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
+      ${sec('messages', t('adm_msgs_title'), messagesSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
     <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
@@ -365,6 +366,16 @@ function isDevOrigin() {
   } catch { return false; }
 }
 
+// --- messages -------------------------------------------------------------------------------------
+// READ-ONLY, and that is a property of js/messages.js, not of this button: that module has no admin
+// write path at all, so nothing reachable from here can edit or remove anything anybody said.
+
+function messagesSectionHTML() {
+  return `<div class="adm-actions">
+      <button type="button" class="gh-btn gh-btn--sm" data-role="msgs">${esc(t('adm_msgs_btn'))}</button>
+    </div>`;
+}
+
 function deviceSectionHTML() {
   let id = '';
   try { id = statsId() || ''; } catch { id = ''; }
@@ -447,6 +458,13 @@ function wire(card) {
       const m = await import('./bug-report-ui.js');
       closeOverlay();
       await m.openBugInbox();
+    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
+  });
+  on('msgs', async () => {
+    try {
+      const m = await import('./messages-ui.js');
+      closeOverlay();
+      await m.openMessages({ admin: true });
     } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
   });
   on('announce', () => {

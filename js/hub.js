@@ -390,8 +390,9 @@ class Hub {
     // here, on the same three moments stats sync uses: load, reconnect, return to the launcher. A
     // report that only exists on the phone that was having trouble is no report.
     this._drainBugReports();
+    this._drainMessages();
     this._paintReplyBadge();
-    this._onOnlineBugs = () => { this._drainBugReports(); this._paintReplyBadge(); };
+    this._onOnlineBugs = () => { this._drainBugReports(); this._drainMessages(); this._paintReplyBadge(); };
     window.addEventListener('online', this._onOnlineBugs);
     this._maybeAnnounce();
     // The app-wide admin config (which games are live, which Skeeball machines are open). The
@@ -408,6 +409,14 @@ class Hub {
       const m = await import('./bug-report.js');
       if (m.pendingCount() > 0) await m.drainPendingReports();
     } catch (err) { console.warn('[hub] could not retry queued bug reports', err); }
+  }
+
+  /** Same for a message written with no signal (js/messages.js's outbox), on the same beats. */
+  async _drainMessages() {
+    try {
+      const m = await import('./messages.js');
+      if (m.outboxCount() > 0) await m.drainOutbox();
+    } catch (err) { console.warn('[hub] could not retry queued messages', err); }
   }
 
   /** The one-time launcher announcement, if this device still owes one. Once per page load, never
@@ -476,18 +485,26 @@ class Hub {
     } catch { /* offline: the plain label is already correct */ }
   }
 
-  /** A badge on the profile pill when Matt has answered one of this player's bug reports. The pill
-   *  is the only route to them, so it has to advertise itself - a reply nobody notices is the same
-   *  as never having replied. Silent on failure: no badge is the honest state when we cannot look. */
+  /** A badge on the profile pill when something is waiting for this player: a reply to one of their
+   *  bug reports, or a message from another player. The pill is the only route to either, so it has
+   *  to advertise itself - a reply nobody notices is the same as never having replied.
+   *
+   *  ONE badge for both, summed, because the pill leads to one page that holds both. A second pill
+   *  would compete with it for the same glance and the same top-bar width.
+   *
+   *  Silent on failure: no badge is the honest state when we cannot look. The two counts are read
+   *  independently, so one failing (or one being unconfigured) still shows the other. */
   async _paintReplyBadge() {
     const el = this.el && this.el.profile;
     if (!el) return;
-    try {
-      const m = await import('./bug-report-ui.js');
-      const n = await m.myUnreadReplies();
-      el.classList.toggle('hub-profile-mail', n > 0);
-      if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail;
-    } catch { /* offline, or Firebase unconfigured: leave the pill plain */ }
+    const count = async (path, fn) => {
+      try { const m = await import(path); return (await m[fn]()) | 0; }
+      catch { return 0; }
+    };
+    const n = (await count('./bug-report-ui.js', 'myUnreadReplies'))
+            + (await count('./messages-ui.js', 'myUnreadMessages'));
+    el.classList.toggle('hub-profile-mail', n > 0);
+    if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail;
   }
 
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).

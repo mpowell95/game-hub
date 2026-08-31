@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v520';
+const CACHE = 'game-hub-v521';
 
 const ASSETS = [
   './',
@@ -52,6 +52,11 @@ const ASSETS = [
   './js/bug-report-ui.js',
   './js/announce.js',
   './js/announce-ui.js',
+  // Player-to-player messages (2026-08-31). SHELL for the same reason the bug report is: messages.js
+  // is imported by the launcher on every load (the profile pill's badge, and the outbox drain), and
+  // a message written offline has to be able to queue itself on the device that is offline.
+  './js/messages.js',
+  './js/messages-ui.js',
   // The admin control page and the app-wide config it reads. admin-config.js is SHELL because every
   // device reads it on every launcher render (it decides which game cards exist); admin-ui.js sits
   // beside it because it is tiny and only Matt ever imports it.
@@ -470,7 +475,7 @@ const REST_MANIFEST = {
   './nuts-bolts/': 'd334645324',
   './nuts-bolts/index.html': 'd334645324',
   './pipes/index.html': '738b6ac21a',
-  './pipes/css/pipes.css': '709eb51031',
+  './pipes/css/pipes.css': '42d4d2a610',
   './pipes/js/ui.js': '690ff553cc',
   './pipes/js/art.js': 'd3b6c4c7c6',
   './pipes/js/game.js': '8df65c1ff3',

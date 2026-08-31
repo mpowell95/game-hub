@@ -147,6 +147,8 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab: `installState()` -> `{installed, mode, browser, device, a2hsDismissed}`. Dependency-free on purpose - `stats-net.js` and `bug-report.js` both need it and must not import each other (device-report.js already imports stats-net, so that graph would go circular). Checks BOTH `display-mode: standalone` and `navigator.standalone`, or half the family's iPhones file as "browser" |
 | `js/bug-report.js` | (2026-08-11) the DATA half of Report a bug: `gatherEnvironment()` (device/browser/install-state/screen/network/storage/SW/GPU/recent-errors) plus the whole `gatherDeviceReport()` payload, `prepareScreenshot()`'s downscale-until-it-fits, the `bugReports/`+`bugReportShots/` write with a verifying re-read, and the offline outbox (`gamehub.bugreports.pending.v1`) the hub drains on load/reconnect/return-to-launcher. See "Report a bug" below |
 | `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
+| `js/messages.js` | (2026-08-31) the DATA half of player-to-player Messages: the `messages/threads/<pairKey>` + `messages/index/<CODE>` node, addressed by PLAYER CODE (never deviceId), the pure helpers (`pairKey`/`isUnread`/`visibleThreads`/`indexPatch`), verified writes, the dev-origin write guard, and the offline outbox (`gamehub.messages.outbox.v1`) the hub drains on load/reconnect. See "Messages" below |
+| `js/messages-ui.js` | (2026-08-31) the SCREEN half: conversation list, one thread, the recipient picker, Matt's Everyone broadcast, and his read-only view of every conversation. Built on `css/ui.css`'s `.gh-*` primitives, like `js/bug-report-ui.js` and `js/admin-ui.js` |
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
 | `js/admin-config.js` | (2026-08-24) the app-wide admin config at `adminConfig/v1`: `isGameLive(hubId, codeDefault)` and `isBoardReleased(boardId)` (synchronous reads of the `gamehub.adminConfig.v1` cache), the pure resolvers behind them, `refreshAdminConfig()` (one background read per hub load, fires `gamehub:adminconfig` only on a real change) and the two writers, each dev-origin-guarded and verified by fresh re-read. See "The admin config" below |
 | `js/stats-corrections.js` | (2026-08-24) the read-time score-correction overlay: `correctBoard()`, `correctSkeeballRecord()`, `correctStats()` and `snapshotOf()`. Pure, headless-testable, and never mutates its input. Applied by `players-agg.js` (per source record, before the merge), `game-stats-ui.js` (both paints) and `skeeball/js/ui.js` (the backboard) |
@@ -164,8 +166,9 @@ init race that motivated it. Node ownership is disciplined by convention: stats-
 `players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
 nodes, device-report.js touches `deviceReports/` only (read of the first two, write of
 the third), and bug-report.js touches `bugReports/` + `bugReportShots/` only (it READS
-everything device-report.js reads, by calling it, and writes neither). Nothing enforces
-this but comments.
+everything device-report.js reads, by calling it, and writes neither), and messages.js touches
+`messages/` only (it READS `players/` through stats-net.js's `readPlayersOnce` to build the
+recipient list, and writes nothing there). Nothing enforces this but comments.
 
 ---
 
@@ -1014,6 +1017,100 @@ pending note shown; repeated in dark mode and in Spanish). **No report has ever 
 real Firebase from this branch** — the same caveat every MP consumer above carries.
 
 ---
+
+## Messages (2026-08-31)
+
+Player-to-player messages, threaded. Two modules, one new Firebase node, one new local key. **THE
+LAW has no surface here by construction**: every path is new, and nothing in it writes to a stats
+key, a profile field or a `players/` record.
+
+### The node
+
+```
+messages/threads/<pairKey>/msgs/<pushId>  = { from, text, atMs }
+messages/index/<CODE>/<otherCode>         = { at, from, preview, name, emoji, seenAt, hiddenAt }
+```
+
+**`pairKey` is the two player codes sorted A-Z and joined with `_`.** Both people compute the same
+key from their own side, so one conversation is one node rather than two half-conversations that can
+drift apart. The codes come from an alphabet with no `. $ # [ ] /` in it, so they are safe RTDB keys
+with no encoding step (unlike `usernames/`, which has to `encodeKey` a free-text name).
+
+**The index exists because a device otherwise cannot know which pair keys concern it** — it would
+have to download every thread in the system to find its own. A send writes the message once and
+`update()`s two index rows, each carrying the OTHER person's name and emoji, so an inbox renders from
+one read. **`update()`, never `set()`**: `seenAt`/`hiddenAt` live on the same row, and a `set` would
+wipe the recipient's read state on every message they receive.
+
+### Addressed by player code, not deviceId
+
+This is the deliberate departure from `bugReplies/`, which is keyed by `reporter.deviceId` and
+therefore only ever reaches the phone that filed the report. Several people here have two devices
+(Lili is the documented case), so a device-addressed message would be read on one phone and be
+invisible on the other — which to the person who sent it is indistinguishable from being ignored.
+
+The code (`profile.playerId`) is minted at the name gate for everyone (`js/name-gate.js`), and it is
+what `js/players-agg.js` already groups devices by. The recipient list is `readPlayersOnce()` →
+`aggregatePlayers()`, so it is one row per PERSON, already folded, with no work of its own.
+
+### Read state is server-side, and it is a preference
+
+`seenAt` and `hiddenAt` are in Firebase rather than localStorage because reading on one phone has to
+clear the badge on the other. Both are PREFERENCES (rule 2's carve-out, same class as the
+announcement seen-list): one-tap recreatable, never earned history. The messages themselves are
+neither — they are only ever added.
+
+**Opening a thread stamps `seenAt` from the newest message's OWN timestamp, not from `Date.now()`**,
+so a message arriving while the screen is open is still unread next time instead of being silently
+skipped. Same rule as `markRepliesSeen`.
+
+**`isUnread` guards on `from`.** A send bumps `at` on the sender's row too, so without that guard
+everyone would badge themselves. (The send also stamps its own `seenAt`; both, deliberately.)
+
+### Hiding is not deleting
+
+There is no hard delete anywhere in `js/messages.js`. "Hide this conversation" stamps `hiddenAt` on
+that person's own index row; `visibleThreads` drops the thread only while `hiddenAt >= at`, so
+**anything newer brings it straight back** and the other person's copy is untouched. That is what
+makes the hide safe to offer with no confirmation step, and it is the same habit as the bug inbox's
+soft delete (rule 5).
+
+### The rest, briefly
+
+- **Writes verify by fresh re-read** (rule 6). The MESSAGE is verified before either index row is
+  touched: a row pointing at a message that is not there would show a preview that opens an empty
+  conversation, which reads as data loss even though nothing was lost.
+- **A send with no signal goes to `gamehub.messages.outbox.v1`** (cap 10) and retries on the same
+  beats the bug outbox uses — `js/hub.js`'s `_drainMessages`, on load and on `online`. A queued send
+  that can never succeed (no recipient, empty text) is dropped rather than retried forever; only
+  `retryable` failures stay.
+- **A dev origin never writes**, same guard and same opt-in key (`gamehub.devAllowSync.v1`) as
+  `js/stats-net.js`. Reads stay on.
+- **Matt's Everyone broadcast is N ordinary messages**, one per person in their own thread. No
+  separate node and no separate reader, so replying to a broadcast is an ordinary conversation.
+- **The admin read-all is read-only because the MODULE has no admin write path**, not because the
+  button avoids one.
+- **The test-account filter in `readContacts` is a SECOND SITE** of `isHiddenRow()`'s rule from
+  `js/leaderboard-ui.js` (a third copy lives in `test-leaderboard-rank.mjs`). Duplicated rather than
+  imported because `js/messages.js` is a SHELL asset the launcher loads on every start just to paint
+  the badge, and pulling the whole leaderboard overlay onto that path is the wrong trade. **If the
+  canonical list changes, change this one too.**
+- **No push notifications.** The badge appears when a player opens the app. Web Push needs FCM, a
+  server to send from, and a permission prompt — the same platform limit Report a bug documents.
+  `navigator.setAppBadge()` on the installed app is the cheapest half-step if it is ever wanted.
+- **Privacy, stated plainly**: the RTDB rules are `auth != null`, so anyone who can sign in
+  anonymously can read every thread. The privacy here is the UI's shape, not an ACL — exactly the
+  same as `bugReplies/`. If that is ever not good enough, `messages/` is the node that needs a rule
+  of its own first.
+
+### What is NOT covered by a test
+
+`test-messages.mjs` covers the pure halves. The Firebase write path and the whole of
+`js/messages-ui.js` were driven by hand in a real Chromium at 375x812 in dark mode, against the real
+database, using two throwaway player codes in the then-empty `messages/` node: send → verify →
+both index rows → the recipient's badge → open clears it → reply → hide → a newer message brings the
+thread back. Those two throwaway subtrees were removed afterwards and the node re-read empty. No
+committed suite covers that path.
 
 ## Who is on the installed app, and who is in a browser tab (2026-08-11)
 
