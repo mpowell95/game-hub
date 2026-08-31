@@ -293,6 +293,7 @@ export const STRINGS = {
     msg_admin_title: 'All messages',
     msg_admin_sub: 'Read only',
     msg_admin_empty: 'No messages yet.',
+    msg_admin_denied: 'This device is not on the admins list, so it cannot read every thread. Add this auth id under admins in the Firebase console:',
 
     ann_dialog_aria: 'Announcement',
     ann_dismiss: 'Got it',
@@ -832,6 +833,7 @@ export const STRINGS = {
     msg_admin_title: 'Todos los mensajes',
     msg_admin_sub: 'Solo lectura',
     msg_admin_empty: 'Todavía no hay mensajes.',
+    msg_admin_denied: 'Este dispositivo no está en la lista de admins, así que no puede leer todas las conversaciones. Añade este id de autenticación en admins en la consola de Firebase:',
 
     ann_dialog_aria: 'Anuncio',
     ann_dismiss: 'Entendido',

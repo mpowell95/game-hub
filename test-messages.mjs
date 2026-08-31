@@ -14,6 +14,7 @@
 //     hide that could swallow a later message would be a delete wearing a preference's clothes.
 //   - the outbox's cap and its drop-vs-retry decision.
 
+import { readFileSync } from 'node:fs';
 import {
   MAX_MESSAGE, asCode, normalizeText, previewOf, pairKey, otherInPair, isUnread,
   countUnreadThreads, visibleThreads, sortMessagesOldestFirst, indexPatch, isTestName,
@@ -127,6 +128,32 @@ for (let i = 0; i < mod.MAX_OUTBOX + 4; i += 1) mod.queueOutbox({ toCode: 'BBBBB
 eq(mod.outboxCount(), mod.MAX_OUTBOX, 'the outbox is capped');
 const kept = JSON.parse(store.get(mod.OUTBOX_KEY)).queue;
 eq(kept[kept.length - 1].text, 'm' + (mod.MAX_OUTBOX + 3), 'the cap keeps the NEWEST, not the oldest');
+
+// --- [STRUCTURAL] the rules file and the backup script must agree ---------------------------
+// Scoping messages/ forced the root .read to false, and a granted ancestor read cannot be revoked
+// below - so every OTHER branch now has to be listed in database.rules.json by hand. Two silent
+// failures live here, and neither one shows up at runtime until somebody needs it:
+//   - a branch missing from the rules is unreadable AND unwritable, so its whole feature breaks;
+//   - a branch missing from BRANCHES is absent from every future backup, which is worse, because
+//     a backup with a hole in it is trusted.
+const rules = JSON.parse(readFileSync(new URL('./database.rules.json', import.meta.url), 'utf8')).rules;
+const { BRANCHES } = await import('./backups/rtdb-backup.mjs');
+
+eq(rules['.read'], false, 'the root read is closed (or nothing below it can be scoped)');
+eq(rules['.write'], false, 'the root write is closed');
+ok(rules.messages && rules.messages['.read'].includes('admins'), 'messages is admin-readable as a whole');
+ok(rules.messages.threads.$pair['.read'].includes('msgAuth'), 'a thread is scoped by the claimed code');
+ok(rules.messages.index.$code['.read'].includes('msgAuth'), 'an index row is scoped by the claimed code');
+ok(rules.messages.index.$code.$other['.write'].includes('$other'),
+  'a SENDER can write the recipient index row (or no message ever reaches anybody)');
+ok(rules.msgAuth.$uid['.write'].includes('auth.uid === $uid'), 'a claim is writable only by its own uid');
+eq(rules.admins['.write'], false, 'the admins allowlist is console-only');
+
+const ruleBranches = Object.keys(rules).filter((k) => !k.startsWith('.') && k !== 'msgAuth');
+const missingFromBackup = ruleBranches.filter((b) => !BRANCHES.includes(b));
+const missingFromRules = BRANCHES.filter((b) => !ruleBranches.includes(b));
+eq(missingFromBackup.join(','), '', 'every ruled branch is in the backup BRANCHES list');
+eq(missingFromRules.join(','), '', 'every backed-up branch has a rule (or it is unreadable)');
 
 console.log(`  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
