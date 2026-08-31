@@ -300,6 +300,14 @@
         </details>
       </section>
 
+      <!-- Messages (js/messages-ui.js). Near the TOP, not in the footer beside Report a bug: the
+           launcher's profile pill carries the unread badge and this is where that badge sends
+           people, so it must not be a scroll away. Rendered always, count or no count. -->
+      <section class="pf-section">
+        <h2 data-i18n="msg_title">Messages</h2>
+        <button type="button" class="pf-report-btn" id="pf-msgs-btn" data-i18n="msg_btn">💬 Messages</button>
+      </section>
+
       <section class="pf-section">
         <h2 data-i18n="pf_sync_h">Sync devices</h2>
         <div class="pf-code-row">
@@ -400,7 +408,8 @@
     // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
-      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat(); paintReplyCount();
+      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat();
+      paintReplyCount(); paintMessageCount();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
       searchIndex = null; searchPromise = null;
@@ -904,6 +913,25 @@
         await m.openBugReport();
       } catch (e) { console.error('Bug report form failed to load', e); }
     });
+
+    // -- Messages ------------------------------------------------------------------
+    // Same lazy import as the two buttons below: this page pays nothing for it until it is
+    // pressed. The label picks up an unread count once we can see one.
+    $('#pf-msgs-btn').addEventListener('click', async () => {
+      try {
+        const m = await import('../js/messages-ui.js');
+        await m.openMessages();
+        paintMessageCount();
+      } catch (e) { console.error('Messages failed to load', e); }
+    });
+    async function paintMessageCount() {
+      try {
+        const m = await import('../js/messages-ui.js');
+        const n = await m.myUnreadMessages();
+        $('#pf-msgs-btn').textContent = n > 0 ? t('msg_btn_new', { n }) : t('msg_btn');
+      } catch { /* offline: the plain label is already correct */ }
+    }
+    paintMessageCount();
 
     // -- Replies to your reports ---------------------------------------------------
     // Same lazy import. The label picks up an unread count once we can see one; the button is

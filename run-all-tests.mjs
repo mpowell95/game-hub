@@ -48,6 +48,7 @@ const SUITES = [
   { file: 'test-new-badge.mjs' },
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
+  { file: 'test-messages.mjs' },
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'test-emoji.mjs' },

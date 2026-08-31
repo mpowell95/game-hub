@@ -247,6 +247,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
+| `js/messages.js` | (2026-08-31) player-to-player **Messages**: the `messages/` node, addressed by PLAYER CODE so a message follows a person to every device they own. Pure helpers (`pairKey`, unread, hide) plus the verified writes and the offline outbox |
+| `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
 | `js/admin-config.js` | (2026-08-24) the app-wide **admin config** (`adminConfig/v1` in Firebase): which games are live for everyone and which Skeeball machines are open to everyone. Pure resolvers over a localStorage cache, so every reader is synchronous and offline-safe; an absent override always falls back to the code default |
@@ -302,6 +304,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. **DO NOT run this before a deploy, or on your own initiative — only when Matt asks for it by name.** His instruction, 2026-08-24, after a session ran it five times in one day: *"stop running the engine suites on games we are not working on... So STOP wasting time and tokens constantly running all this shit."* It takes ~4.5 minutes and spends nearly all of it on games the change never touched (dots-boxes 92s, yahtzee-ai 121s, uno 18s, sw-strategy 14s; the other 30+ suites finish in about 30s combined). **What to run instead: the suites covering the files you actually changed, plus `validate-sw-assets.mjs` before a deploy** (0.2s, and a missing precache entry is the one thing a deploy cannot survive). A game's engine suite only when you touched that game's engine. |
 | `test-stats-corrections.mjs` | (2026-08-24) headless tests for `js/stats-corrections.js`: what a void removes, what it deliberately leaves alone (a best is not a sum; `balls`/100s/50s have no per-machine breakdown, so they are left rather than guessed), that a later score still counts, and that the raw record is unchanged every time. Plus structural checks that a TESTING machine's racks never reach a counter. The Firebase write and the admin page's own screen are not covered, and the suite header says so |
 | `test-admin-config.mjs` | (2026-08-24) headless tests for `js/admin-config.js`: the shape normalizer, both resolvers, the override readers and the cache, plus STRUCTURAL checks that the callers still OR the resolvers in (the hub card gate, the My Stats tab gate, Skeeball's three unlock gates, and Pinball's leaderboard row). The Firebase write path and `js/admin-ui.js` are not covered, and the suite header says so |
+| `test-messages.mjs` | (2026-08-31) headless tests for the pure halves of `js/messages.js`: `pairKey`'s symmetry (both people must compute the same thread key from their own side, or one conversation quietly becomes two), the unread count at real epoch precision including the guard that stops your own message badging you, the hide rule (a newer message must bring a hidden thread back), and the outbox cap. The Firebase write path and `js/messages-ui.js` are NOT covered, and the suite header says so |
 | `test-bug-report.mjs` | (2026-08-11) headless tests for the pure halves of Report a bug: the screenshot budget, the description clamp, the inbox order and unread count (with real epoch timestamps - a `\| 0` on one scrambled both in the first draft), and the announcement's show-once/expire-by-itself decision, including the shipped announcement's own dates and EN/ES completeness. The DOM and Firebase halves are NOT covered, and the suite header says so. |
 | `read-install-state.mjs` | (2026-08-11) Matt-only: who is on the installed app and who is still in a browser tab, browser tabs first, from `players/<id>/device`. Only shows a device once it has opened the hub since this shipped - "(not seen yet)" is missing data, not a browser tab, and nothing here is retroactive |
 | `read-bug-reports.mjs` | (2026-08-11) Matt-only, the terminal view of the in-app inbox: lists `bugReports/` newest first, prints one in full, and is the only way to get the screenshots onto disk - `node read-bug-reports.mjs [--open] [<id> [--shots [dir]]] [--json]` |
@@ -445,6 +448,33 @@ profile is DEFAULTS-ONLY — every game prefills from it, each game's own saved 
 and games never write it back (the profile page is the primary writer, plus `js/hub.js`'s
 first-run gate). Extend the shape additively, never rename fields. Readers try/catch and treat
 missing or malformed data as "no profile"; a profile must never crash a game.
+## Messages (2026-08-31)
+
+Players can write to each other. **📬 Messages** sits at the top of the profile page; the launcher's
+profile pill carries the unread badge, which is why the button is there and not in the page footer
+(the badge must not send anyone to a control a scroll away).
+
+- **A message is addressed to a PLAYER CODE, never a deviceId.** This is the one thing `bugReplies/`
+  gets wrong: keyed by device, Matt's answer only ever reaches the phone that filed the report.
+  Several people here have two phones, so a device-addressed message would be read on one and be
+  invisible on the other. The code is minted at the name gate for everyone.
+- **One conversation is one node**, at `messages/threads/<pairKey>`, where `pairKey` is the two codes
+  sorted A-Z. Both people compute the same key from their own side. `messages/index/<CODE>/<other>`
+  is what makes an inbox listable, and it carries `seenAt`/`hiddenAt`, so the badge costs one read no
+  matter how many conversations exist. Read state lives in Firebase, not localStorage: reading on one
+  phone has to clear the badge on the other.
+- **Nothing is ever deleted.** "Hide this conversation" stamps `hiddenAt` on that one person's own
+  index row; anything newer brings the thread straight back, and the other person's copy is untouched.
+  There is no hard delete anywhere in `js/messages.js`.
+- **Matt can send to Everyone**, which is just one ordinary message per person in their own thread, so
+  replying to a broadcast is an ordinary conversation.
+- **The admin page has a read-only "Messages" section.** Read-only is a property of the module (there
+  is no admin write path in `js/messages.js` at all), not of the button.
+- **No push notifications.** The badge appears when a player opens the app. Real push needs FCM and a
+  permission prompt, which is its own job.
+- One badge on the pill, summing bug replies and messages, because the pill leads to one page holding
+  both. Full contract and the node shape: `js/CLAUDE.md`, "Messages".
+
 ## The admin control page (2026-08-24)
 
 Matt: *"I need an admin control page in the hub. I need to be able to make games admin only for
