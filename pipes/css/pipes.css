@@ -30,14 +30,17 @@
   min-height: 100%;
   color: var(--pi-ink);
   background: var(--pi-bg);
-  /* The rounded card with a shadow is nuts-bolts/css/nuts-bolts.css's treatment, which is this
-     hub's house pattern for a NON-immersive game - it is a panel on the launcher's ground, not a
-     full-bleed takeover. Square edges read as an unfinished slab. */
-  border-radius: 20px;
-  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  /* NO CARD. This used to be nuts-bolts' rounded panel with a shadow, sitting on the launcher's
+     ground in a different colour - and next to the reference, which is one flat field running edge
+     to edge with the pipes floating on it, the card was the single loudest difference. Matt:
+     "Make Pipes look EXACTLY like the screen recording." A frame is exactly what it does not have. */
+  border-radius: 0;
+  box-shadow: none;
+  border: 0;
   overflow: hidden;
-  font: 400 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* The reference's type is a rounded geometric sans. ui-rounded gets it natively on the iPhone
+     this is played on and falls back cleanly everywhere else. */
+  font: 400 16px/1.4 ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Rapid tapping is this game's whole interaction, so the iOS text-selection guard goes on the
      root's descendants, not just the root - these properties do not inherit the way you expect
      (hill-climb/CLAUDE.md). */
@@ -96,19 +99,35 @@
 
 /* --- play -------------------------------------------------------------------------------------- */
 
+/* THE REFERENCE'S HUD: a back chevron, the level centred with one line under it, and two icons on
+   the right. Ours had three TEXT buttons ("Back", "New board") which is the shape of a toolbar, not
+   of that screen. The two icons keep our functions - new board, leaderboard - in the reference's
+   layout. */
 .pi-root .pi-hud {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 44px;
 }
+.pi-root .pi-icon {
+  width: 44px; height: 44px; flex: none;         /* the tap floor, even though the glyph is 24px */
+  display: grid; place-items: center;
+  background: none; border: 0; padding: 0; margin: 0;
+  color: var(--pi-ink); cursor: pointer; touch-action: manipulation;
+}
+.pi-root .pi-icon svg {
+  width: 24px; height: 24px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.pi-root .pi-icon:focus-visible { outline: 2px solid var(--pi-accent); outline-offset: -4px; border-radius: 10px; }
+.pi-root .pi-hud-icons { display: flex; align-items: center; }
 /* The level sits ABOVE the turn count rather than beside it, so adding progress to the HUD costs
    the row no width - "New board" already makes this the widest bar in the game at 393px. */
 .pi-root .pi-hud-stats { display: grid; justify-items: center; gap: 1px; line-height: 1.15; }
 .pi-root .pi-hud-level {
-  font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--pi-water);
+  font-size: 17px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--pi-ink);
 }
-.pi-root .pi-hud-stat { font-size: 13px; font-weight: 700; color: var(--pi-dim); }
-.pi-root .pi-hud-stat b { font-size: 19px; color: var(--pi-ink); }
+.pi-root .pi-hud-stat { font-size: 15px; font-weight: 500; color: var(--pi-dim); font-variant-numeric: tabular-nums; }
+.pi-root .pi-hud-stat b { font-weight: 600; color: var(--pi-ink); }
 
 .pi-root .pi-boardwrap { flex: 1 1 auto; display: grid; place-items: center; min-height: 0; }
 
