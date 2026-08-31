@@ -455,10 +455,34 @@ function wireComposer(card, onSend) {
     if (!text) { say(card, t('msg_type_something'), 'err'); return; }
     send.disabled = true;
     say(card, t('msg_sending'), '');
+
+    // CLEAR NOW, not after the await. Matt: "Why doesn't my message leave the typing area after I
+    // send it? I have to manually delete it if I want to send two messages back to back."
+    //
+    // The message lands in Firebase, watchThread fires, and draw() rebuilds this whole card -
+    // carrying the box's CURRENT value across to the new textarea so a half-typed draft is not
+    // lost by an arriving message. All of that happens BEFORE `await onSend` resolves, so the old
+    // code then cleared a textarea that had already been replaced and was no longer on screen.
+    //
+    // Clearing first is also what stops a fast second tap re-sending the same words: the button is
+    // re-enabled by that same re-render, so `disabled` alone was never the guard it looked like.
+    box.value = '';
+    paint();
+    _guardClose = null;
+
     const ok = await onSend(text);
     if (!_host) return;
-    send.disabled = false;
-    if (ok) { box.value = ''; paint(); _guardClose = null; }
+    // `box` and `send` may both be detached by now, so re-read them from the card.
+    const nowBox = card.querySelector('#msg-text') || box;
+    const nowSend = card.querySelector('[data-role="send"]') || send;
+    nowSend.disabled = false;
+    if (!ok) {
+      // Put the words back where they were typed. Nothing anyone wrote is thrown away because a
+      // send failed - they can fix the connection and press send again.
+      nowBox.value = text;
+      nowBox.dispatchEvent(new Event('input'));
+      _guardClose = () => !normalizeText(nowBox.value);
+    }
   });
 }
 
