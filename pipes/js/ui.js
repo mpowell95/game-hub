@@ -31,10 +31,6 @@ const SAVE_KEY = 'gamehub.pipes.save.v1';
 /** Per-tile delay along the flow order. 9 tiles/second reads as water travelling rather than a
  *  board flicking on, and a 30-tile path lands inside the 1.2-1.8s window the scope asked for. */
 const WET_STEP_MS = 34;
-/** How long the solved board is held before the next one replaces it, measured from the moment the
- *  water finishes arriving. Long enough to read the turn count and see the finished run; short
- *  enough that it feels like the game moving you on rather than a pause you have to sit through. */
-const ADVANCE_HOLD_MS = 1600;
 
 function loadSettings() {
   try {
@@ -89,9 +85,10 @@ class PipesUI {
     this.cellEls = [];
     this.spins = null;
     this.wetTimers = [];
-    this.advanceTimer = null;
     this._lastFillMs = 0;
     this.level = 1;
+    this.replaying = false;
+    this._onFootClick = null;
     this.offViewport = null;
     this.offLang = null;
     this._onKey = null;
@@ -111,7 +108,6 @@ class PipesUI {
   renderSetup() {
     this.screen = 'setup';
     this._stopWater();
-    this._stopAdvance();
     const saved = loadSave();
     // THE SHAPE IS NUTS & BOLTS', DELIBERATELY, because that is the game Matt compared this one
     // to and it is this hub's reference for a solo-puzzle setup screen: a header with the game
@@ -194,8 +190,8 @@ class PipesUI {
   }
 
   startGame(saved) {
-    this._stopAdvance();
     this.game = saved || new PipesGame({ tier: this.settings.tier });
+    this.replaying = false;
     // Captured when the board starts, so the number on screen cannot change under the player
     // mid-board when the solve is recorded.
     this.level = levelOf(this.game.tier);
@@ -218,14 +214,35 @@ class PipesUI {
         </div>
         <div class="pi-boardwrap"><div class="pi-board" data-role="board"
           role="group" aria-label="${esc(t('aria_board', { w: g.w, h: g.h }))}"></div></div>
-        <div class="pi-banner" data-role="banner"></div>
+        <div class="pi-foot" data-role="foot">
+          <div class="pi-banner" data-role="banner"></div>
+          <div class="pi-done" data-role="done" hidden>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="continue">${esc(t('continue'))}</button>
+            <div class="pi-done-row">
+              <button type="button" class="gh-btn gh-btn--block" data-act="replay">${esc(t('replay'))}</button>
+              <button type="button" class="gh-btn gh-btn--block" data-act="leaderboard">${esc(t('leaderboard'))}</button>
+            </div>
+          </div>
+        </div>
       </div>`;
 
     this.el = {
       board: this.root.querySelector('[data-role="board"]'),
       moves: this.root.querySelector('[data-role="moves"]'),
       banner: this.root.querySelector('[data-role="banner"]'),
+      foot: this.root.querySelector('[data-role="foot"]'),
+      done: this.root.querySelector('[data-role="done"]'),
     };
+    // ONE delegated listener for all three completion buttons, so destroy() has one to remove -
+    // the same reason the board itself has one listener rather than 70.
+    this._onFootClick = (ev) => {
+      const btn = ev.target.closest('[data-act]');
+      if (!btn) return;
+      if (btn.dataset.act === 'continue') { clearSave(); this.startGame(null); }
+      else if (btn.dataset.act === 'replay') this._replay();
+      else if (btn.dataset.act === 'leaderboard') this._openLeaderboard();
+    };
+    this.el.foot.addEventListener('click', this._onFootClick);
     this.root.querySelector('[data-role="back"]').addEventListener('click', () => this.renderSetup());
     this.root.querySelector('[data-role="new"]').addEventListener('click', () => {
       clearSave();
@@ -317,7 +334,7 @@ class PipesUI {
     this._paint();
     writeSave(g);
 
-    if (justSolved) {
+    if (justSolved && !this.replaying) {
       try {
         // `r.level` is the TIER INDEX (1-4), not the board number on screen. It is what
         // `pi.bestLevel` / `pi.bestByTier` have always meant - "the hardest tier cleared" - and
@@ -327,34 +344,9 @@ class PipesUI {
         const r = g.result();
         recordPipes(r.level, r.moves, r.tier);
       } catch (err) { console.error('[pipes] recordPipes', err); }
-      this._scheduleAdvance();
     }
   }
 
-  /**
-   * ON TO THE NEXT BOARD, BY ITSELF. Matt: *"It should automatically move me to the next board
-   * after I complete one."* Solving used to leave you parked on a finished board with nothing to
-   * do but find "New board", which is the one control that does not read as "continue".
-   *
-   * It waits for the WATER first - the board is solved the moment the last pipe turns, while the
-   * run is still filling - and then holds the finished board long enough to actually look at it.
-   * Cancelled by Back, by New board, and by destroy(); a tap during the hold cannot start a turn
-   * because `turn()` refuses once solved.
-   */
-  _scheduleAdvance() {
-    this._stopAdvance();
-    this.advanceTimer = setTimeout(() => {
-      this.advanceTimer = null;
-      if (this.screen !== 'play') return;
-      clearSave();
-      this.startGame(null);
-    }, (this._lastFillMs || 0) + ADVANCE_HOLD_MS);
-  }
-
-  _stopAdvance() {
-    if (this.advanceTimer) clearTimeout(this.advanceTimer);
-    this.advanceTimer = null;
-  }
 
   /** Repaint the live state: move count, which tiles are wet, which are leaking. */
   _paint(instant) {
@@ -379,7 +371,18 @@ class PipesUI {
     // arrive rather than announcing the win over a half-filled board.
     const banner = () => {
       this.el.banner.className = 'pi-banner' + (solved ? ' is-win' : leaking ? ' is-leak' : '');
-      this.el.banner.textContent = solved ? t('solved_moves', { n: g.moves }) : (leaking ? t('leaking') : '');
+      if (solved) {
+        // The reference's headline, with the turn count kept as a sub-line - it is this game's
+        // stat and the only place the player ever sees it.
+        this.el.banner.innerHTML = `<b>${esc(t('solved_title'))}</b><span>${esc(t('solved_moves', { n: g.moves }))}</span>`;
+      } else {
+        this.el.banner.textContent = leaking ? t('leaking') : '';
+      }
+      if (this.el.done) {
+        this.el.done.hidden = !solved;
+        // The footer just changed height, so the board has to be re-measured against it.
+        if (solved) this._fit();
+      }
     };
     if (solved && fillMs > 0) {
       this.el.banner.className = 'pi-banner';
@@ -433,6 +436,32 @@ class PipesUI {
     return fresh.length * WET_STEP_MS;
   }
 
+  /**
+   * REPLAY THE SAME BOARD. `generate()` is deterministic on (tier, seed), so rebuilding the game
+   * with this board's own seed gives back the identical scramble.
+   *
+   * A REPLAYED SOLVE IS NOT RECORDED AGAIN. The board was credited the first time; counting it
+   * twice would inflate the level, which is defined as "boards solved at this tier". Nothing is
+   * lost by declining the duplicate - the original solve is already in the stats store, and this
+   * only ever appears on a board that has just been recorded.
+   */
+  _replay() {
+    const g = this.game;
+    clearSave();
+    this.replaying = true;
+    this.game = new PipesGame({ tier: g.tier, seed: g.seed });
+    this.renderPlay();
+  }
+
+  /** The hub's Leaderboards overlay, which is where this game's rows already live. Lazily imported
+   *  exactly as js/hub.js does it, and it is `position: fixed` so it covers a mounted game the same
+   *  way it covers the launcher. */
+  _openLeaderboard() {
+    import('../../js/leaderboard-ui.js')
+      .then((m) => m.openLeaderboard())
+      .catch((err) => console.error('[pipes] leaderboard', err));
+  }
+
   _stopWater() {
     for (const id of this.wetTimers) clearTimeout(id);
     this.wetTimers.length = 0;
@@ -472,7 +501,10 @@ class PipesUI {
 
     // visualViewport is the honest height on mobile while the URL bar is animating.
     const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-    const below = (this.el.banner ? this.el.banner.getBoundingClientRect().height : 44) + 16;
+    // THE WHOLE FOOTER, not just the banner. The completion actions live in that box and appear
+    // when the board is solved, so measuring only the banner would let them overlap the board the
+    // moment they showed up. _fit() re-runs when they appear and the board makes room for them.
+    const below = (this.el.foot ? this.el.foot.getBoundingClientRect().height : 44) + 16;
     const avail = Math.max(120, vh - r.top - below);
 
     const byW = (r.width - PAD - GAP * (g.w - 1)) / g.w;
@@ -485,7 +517,7 @@ class PipesUI {
 
   destroy() {
     this._stopWater();
-    this._stopAdvance();
+    if (this.el && this.el.foot && this._onFootClick) this.el.foot.removeEventListener('click', this._onFootClick);
     if (this.el && this.el.board) {
       this.el.board.removeEventListener('click', this._onBoardClick);
       this.el.board.removeEventListener('keydown', this._onBoardKey);

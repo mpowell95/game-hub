@@ -128,11 +128,29 @@ to nuts and bolts - the difficulties with the various boards and stuff."*
 
 - **Each tier carries its own level**, shown on its button in the picker exactly as Nuts & Bolts
   shows "Level N" on each of its four.
-- **Solving advances you automatically** — no "Next level" button. Nuts & Bolts has one; Matt asked
-  for this one to move on by itself. `_scheduleAdvance()` waits for the WATER to finish arriving
-  (the board is solved the moment the last pipe turns, while the run is still filling) and then
-  holds the finished board for `ADVANCE_HOLD_MS` (1600 ms) so it can actually be looked at. It is
-  cancelled by Back, by New board and by `destroy()`.
+- **Solving shows a completion screen and WAITS FOR A TAP.** This reversed once, and the reversal
+  is the point. Matt first asked for it to *"automatically move me to the next board"*, that
+  shipped, and then he uploaded a screen recording of the reference app completing two levels —
+  which does the opposite: **"Puzzle Solved!"** over a full-width **Continue**, with **Replay** and
+  **Leaderboard** side by side under it, and it sits there until you tap. Asked which he wanted, he
+  chose *"copy the video exactly"*. So there is no auto-advance and no timer to cancel; the panel
+  is revealed when the water finishes arriving, in the same beat the banner appears.
+  - **Continue** — clear the save, next board, level + 1.
+  - **Replay** — the SAME board again. `generate()` is deterministic on `(tier, seed)`, so
+    rebuilding from this board's own seed gives back the identical scramble.
+  - **Leaderboard** — the hub's overlay, lazily imported exactly as `js/hub.js` does it. This is
+    the first game to open it from inside itself; it is `position: fixed`, so it covers a mounted
+    game the same way it covers the launcher, and it closes back onto the completion screen.
+- **A REPLAYED SOLVE IS NOT RECORDED AGAIN** (`this.replaying`). The board was already credited when
+  it was first solved, and counting it twice would inflate the level, which is defined as "boards
+  solved at this tier". Nothing is lost by declining the duplicate — this only ever appears on a
+  board that has just been recorded.
+- **`_fit()` measures the WHOLE FOOTER, not just the banner.** The completion actions live in that
+  box, so measuring only the banner would let them overlap the board the moment they appeared, and
+  `_fit()` re-runs when they are revealed. Measured: on a 393x852 phone the board does not shrink at
+  all on any tier (the buttons use space that was already below it); only Expert on a 664px-tall
+  phone gives up cell size, 43px to 32px, and that board is no longer interactive by then, so the
+  44px tap floor does not apply to it.
 - **The level is DERIVED, never stored.** `recordPipes()` already increments
   `games.pipes.byDiff[<tier>].won` on every solve, so "boards solved at this tier, plus one" IS the
   level. There is no second copy to drift, nothing new that could be lost, and — because the stats
