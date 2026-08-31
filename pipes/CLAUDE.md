@@ -78,11 +78,16 @@ afterwards — "generate and hope" is how a puzzle game ships an unsolvable leve
    existing path on more than one side is refused: that makes a loop, and a loop makes the
    "correct" rotation of a cell ambiguous.
 2. Lay pipe along it — each cell opens toward its path neighbours, the two ends becoming caps.
-3. **Decoys, and the constraint that makes them safe.** A decoy must have a rotation whose openings
-   all avoid the path, or the board would be unsolvable under the no-leaks rule. The generator
-   checks all four rotations and downgrades the piece (cross → tee → elbow → straight → blank) until
-   one fits. **This is why a cross never appears beside the path**: a cross has an opening on every
-   side and can never avoid anything.
+3. **Decoys: every remaining cell, pointing wherever it likes** (`decoy: 1`). This used to refuse
+   any decoy that pointed at the path, on the stated grounds that it "would be unsolvable under the
+   no-leaks rule", and downgraded the piece (cross → tee → elbow → straight → **blank**) until one
+   fitted. That was wrong, and it is where the blank cells came from — 43% of Easy, 25% of Hard,
+   against a reference board with a piece in all 63 of its cells.
+   **A decoy pointing INTO a path cell cannot leak**, because a leak is only ever reported for a
+   cell the water REACHES, and two cells are joined only when EACH opens at the other. In the
+   constructed solution a path cell opens along the path and nowhere else, so it never opens back
+   at a decoy: the decoy never joins the network and stays dry whatever it is aimed at. Removing
+   the restriction is also what lets a cross sit beside the path.
 4. Scramble, then apply the quality gates: **no more than 12% of pieces may start already correct**
    (a board that arrives half-solved reads as cheap — "a mess of pipes" was the brief) and the board
    must be **at least 6 turns from solved**.
@@ -100,10 +105,18 @@ solvable**, over every tier and 40 seeds, and it is checked two ways on purpose:
 
 Only (1) would let a generator and a win check be wrong *together* and still pass.
 
-**The independent solver was wrong first, in a way worth keeping.** Its first draft required every
-cell on the board to agree with every neighbour — which is the FULL NET rule, not this game's — so
-it rejected perfectly solvable boards and reported 0/12 against a generator that was fine. A checker
-stricter than the rule is not a stricter checker; it is a broken one.
+**The independent solver drifted STRICTER than the rule TWICE**, and the second time is why it is
+now built the way it is. Its first draft required every cell on the board to agree with every
+neighbour — the FULL NET rule, not this game's — so it rejected perfectly solvable boards and
+reported 0/12 against a generator that was fine. The fix left a weaker version of the same mistake
+in place: it still required every OFF-path cell to be rotatable so that nothing FACED the path.
+That assumption went red the day the generator started filling every cell (2026-08-31), on boards
+whose constructed solution the assertion directly above it was accepting.
+
+So it no longer holds an opinion about what solved means: it builds a candidate and hands it to the
+real `isSolved()`, which is the only arrangement that cannot drift in either direction. **A checker
+stricter than the rule is not a stricter checker; it is a broken one** — and it will read as a bug
+in whatever it is pointed at, which the first time cost a day chasing a healthy generator.
 
 ## Persistence
 
@@ -222,32 +235,75 @@ Three details worth keeping:
 **The rule this game learned three times:** the "Adding a game" checklist says to copy the
 reference PER AXIS, and for a setup screen the reference is a real screen in this repo. Open it
 and read it. Do not approximate it from the primitives list.
-## The art, redrawn from Matt's reference screenshots (2026-08-30)
+## The art, redrawn from Matt's reference screenshots (2026-08-30, MEASURED 2026-08-31)
 
 Matt pushed eleven screenshots of a real Pipes app into this folder (`IMG_4594` to `IMG_4604`) and
 said: *"Make our game look more like that."* **They are the reference for how this game looks. Do
 not redesign away from them.** The drawing lives in `js/art.js`, which is pure - mask in, SVG out.
 
-Four things were wrong, and none of them was a detail:
+Four things were wrong in the first version, and none of them was a detail:
 
 1. **NO TILE BOXES, NO GRID, NO GAPS.** The reference draws pipes on one flat field, running edge
    to edge, so a joined run reads as ONE CONTINUOUS PIPE. Ours had a per-cell background, per-cell
    rounding, a 2px gap and a board frame - which is what made it read as a spreadsheet. The board
    is `gap: 0`, no padding, no frame, and a cell has no background at all. **`_fit()`'s GAP and PAD
    are 0 to match; they must always describe the box that actually gets laid out.**
-2. **A DRY PIPE IS HOLLOW, A WET ONE IS SOLID.** Drawn with two strokes - a wide one in the outline
-   colour, then a narrower one in the BACKGROUND colour on top, leaving a wall a few pixels thick.
+2. **A DRY PIPE IS HOLLOW, A WET ONE IS FULL.** Both are the SAME two-stroke construction - a wide
+   stroke, then a narrower one punched back out of the middle - and only the two colours change.
    It joins correctly across neighbouring cells because both halves meet exactly on the shared
    edge, which is another reason the gap has to be zero.
-3. **ELBOWS ARE CURVES.** A quadratic through the centre (`M50 0 Q50 50 100 50`), not two straight
-   arms meeting at a corner. `stroke-linejoin: round` on a right angle does not come close.
-4. **AN END IS A BULB** - a real circle on a stem, with a dark centre when wet - not a dot on a
-   stub.
+3. **AN END IS A BULB** - a real circle on a stem, roughly one pipe-width in radius, with a hole
+   punched through it in the FIELD colour when wet - not a dot on a stub.
 
-A leak is now marked by a glow on the PIPE rather than a ring around the cell, because a ring puts
+A leak is marked by a glow on the PIPE rather than a ring around the cell, because a ring puts
 back the grid the art is deliberately without.
+
+### Then Matt looked at it and it still did not match (2026-08-31)
+
+*"This does not look like those reference photos."* He was right, and the reason is that the
+2026-08-30 pass matched the reference by EYE and wrote its guesses down as if they were findings.
+**So this pass decoded `IMG_4602.png` and read the geometry out of the pixels.** That board is 7x9
+on a 155px grid, and every number in `js/art.js` is now a measurement over 155:
+
+| | reference | was | now |
+|---|---|---|---|
+| pipe outer width | 55px = **35.5** | 27 | 35.5 |
+| wall thickness | 3px = **1.94** | 5.5 | 1.94 |
+| bulb outer radius | 55.5px = **35.8** | 21 | 35.8 |
+| field / pipe / water | `#353535` / `#ffffff` / `#73bcf5` | `#3a3a3c` / `#f2f4f7` / `#5eb8f5` | measured |
+
+Two of those were the whole complaint: every pipe was two thirds the width it should be, and the
+wall was nearly **three times** too thick - so what should read as a hairline around a wide channel
+read as a fat soft double-stroke around a narrow one.
+
+**THE ELBOW WAS THE THIRD, AND THIS FILE HAD IT EXACTLY BACKWARDS.** Item 3 used to read *"ELBOWS
+ARE CURVES. A quadratic through the centre, not two straight arms meeting at a corner.
+`stroke-linejoin: round` on a right angle does not come close."* The reference is two straight arms
+meeting at the cell centre with a round linejoin, **and nothing else**. Measured on a real elbow
+(cell 3,1 of `IMG_4602`): the inner wall of the turn is a sharp right angle, and the outer wall is
+an arc whose radius is exactly half the stroke width, centred on the cell centre. That pair - sharp
+inside, outer radius = half the stroke - is the signature of a stroke join and is not something a
+quadratic produces. Ours swung ~13 units wide of the reference's centreline, which is what made our
+elbows read as lazy S-bends beside its crisp turns.
+
+**A WET PIPE KEEPS A RIM.** Measured across the blue, the water is the pipe's INTERIOR width and it
+carries a near-black rim exactly where a dry pipe has its white wall (`--pi-water-rim`). The old
+version drew the water as a bare stroke, narrower than the pipe around it and with no edge, so a
+wet run was a blue slab that did not line up with the dry run it continued into.
+
+**The board is FULL now** (`decoy: 1`, and no restriction on where a decoy may point - see the
+generator). The reference has a piece in all 63 of its cells; ours was 43% empty on Easy and 25% on
+Hard, which is most of why it read as scattered fragments rather than plumbing.
+
+**Verify a change here by measuring, not by looking.** The reference PNGs are still in this folder,
+and a 60-line dependency-free PNG reader plus the ratios above will tell you in seconds whether a
+render is right. Every ratio in the shipped build was checked back against the reference this way
+and lands within a pixel.
 
 **The one thing deliberately NOT copied is the rule.** The reference says *"Rotate the pipes to link
 them together into a single network"* - that is the FULL NET variant, which `docs/PIPES-SCOPE.md`
 put to Matt as option (c) and he chose (b), path with no leaks. Copy the look; the rules are
-already decided.
+already decided. **The visible consequence is bulbs**: the reference uses dead-end caps as ordinary
+decoys, so its boards are dotted with circles. Ours has exactly two per board, because here a bulb
+means the inlet or the outlet, and scattering decoy bulbs would be a lie about where the water goes.
+That is the one texture difference from the reference that is on purpose.

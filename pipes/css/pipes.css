@@ -17,6 +17,10 @@
   --pi-bg: #eef1f6;
   --pi-pipe: #7d8ba1;
   --pi-water: #38a9ef;
+  /* A wet pipe keeps a rim where a dry one has its wall, so it holds its silhouette instead of
+     becoming a bare slab. The reference's is near-black on charcoal; on a light field that reads
+     as soot, so light theme uses a deep blue that plays the same role. */
+  --pi-water-rim: #12537f;
   --pi-leak: #e0532f;
   --pi-cap: #F2B705;
   --pi-accent: #ffce3a;
@@ -51,9 +55,11 @@
   --pi-ink: #e8edf5;
   --pi-dim: #94a3b8;
   --pi-line: rgba(232, 237, 245, 0.16);
-  --pi-bg: #3a3a3c;      /* the reference field */
-  --pi-pipe: #f2f4f7;    /* near-white outline */
-  --pi-water: #5eb8f5;   /* its blue */
+  /* Sampled straight out of IMG_4602.png rather than approximated. */
+  --pi-bg: #353535;      /* the reference field */
+  --pi-pipe: #ffffff;    /* its pipe wall - pure white, not off-white */
+  --pi-water: #73bcf5;   /* its blue */
+  --pi-water-rim: #040404;
 }
 
 /* --- shared chrome ------------------------------------------------------------------------------ */
@@ -161,6 +167,11 @@
 .pi-root .pi-howto-lead { margin: 0; font-size: 17px; font-weight: 700; }
 .pi-root .pi-howto-fig { display: flex; gap: 18px; justify-content: center; align-items: flex-start; }
 .pi-root .pi-howto-fig figure { margin: 0; text-align: center; }
+/* A figure is a SWATCH OF BOARD and has to be painted like one. The art punches a pipe's hollow
+   interior in --pi-bg (that is what makes a dry pipe read as empty), so on any other background the
+   punch shows through as a slab of the wrong colour - which is exactly what it did on the gh-card
+   here, and got twice as obvious when the pipes were widened to the reference's width. */
+.pi-root .pi-howto-fig svg { display: block; background: var(--pi-bg); border-radius: 10px; }
 .pi-root .pi-howto-fig figcaption { margin-top: 6px; font-size: 12px; color: var(--pi-dim); }
 .pi-root .pi-howto-cap { margin: 0; font-size: 13px; color: var(--pi-dim); }
 .pi-root .pi-howto-rules { margin: 0; padding-left: 20px; font-size: 14px; }

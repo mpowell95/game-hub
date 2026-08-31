@@ -1,29 +1,56 @@
 // pipes/js/art.js - how a pipe is drawn. Pure: takes a mask, returns SVG. No DOM, no state.
 //
-// REDRAWN 2026-08-30 FROM THE REFERENCE SCREENSHOTS Matt pushed into pipes/ (IMG_4594 to IMG_4604,
-// a real Pipes app). The differences from the first version were not details:
+// EVERY NUMBER IN THIS FILE WAS MEASURED OFF THE REFERENCE, NOT CHOSEN (2026-08-31).
 //
-//   - NO TILE BOXES, NO GRID, NO GAPS. The reference draws pipes on one flat dark field, running
-//     edge to edge, so a joined run reads as ONE CONTINUOUS PIPE instead of a row of decorated
-//     squares. That is why the board now has no per-cell background, no per-cell rounding and no
-//     gap at all. It was the single biggest thing making ours look like a spreadsheet.
-//   - A DRY PIPE IS HOLLOW - a thin outline with the background showing through - and a WET one is
-//     solid. Drawn with two strokes: a wide one in the outline colour, then a narrower one in the
-//     BACKGROUND colour on top, which leaves a wall a few pixels thick. It joins correctly across
-//     neighbouring cells because both halves meet exactly on the shared edge.
-//   - ELBOWS ARE CURVES, not two straight arms meeting at a corner. A quadratic through the centre
-//     is what gives the reference its plumbed look; `stroke-linejoin: round` on a right angle does
-//     not come close.
-//   - AN END IS A BULB - a real circle on a stem - not a dot on a stub. The source bulb has a dark
-//     centre when wet, which is straight off the reference.
+// The 2026-08-30 pass redrew this "from the reference screenshots" by eye and Matt's answer was
+// that it still did not look like them. So this pass decoded IMG_4602.png pixel by pixel and read
+// the geometry out of it. The board there is 7x9 on a 155px grid, and every ratio below is that
+// measurement divided by 155:
+//
+//   cell pitch            155 px    ->  100     (the viewBox)
+//   pipe outer width       55 px    ->   35.5   ARM
+//   wall thickness          3 px    ->    1.94  WALL
+//   pipe interior          49 px    ->   31.6   ARM - 2*WALL
+//   bulb outer radius      55.5px   ->   35.8   BULB
+//   bulb hole radius       15.5px   ->   10.2   BULB_HOLE
+//
+// Two of those were the visible faults. The old ARM was 27, so every pipe was two thirds the width
+// it should be; the old WALL was 5.5, nearly THREE TIMES the reference's, so what should read as a
+// hairline outline around a wide channel read as a fat soft double-stroke around a narrow one.
+//
+// THE ELBOW WAS THE OTHER ONE, AND THE OLD FILE HAD IT EXACTLY BACKWARDS. Its comment said
+// "ELBOWS ARE CURVES ... not two straight arms meeting at a corner. stroke-linejoin: round on a
+// right angle does not come close." The reference is two straight arms meeting at the cell centre
+// with a round linejoin, and nothing else. Measured on a real elbow (cell 3,1 of IMG_4602): the
+// INNER wall of the turn is a sharp right angle at exactly (centre - ARM/2, centre - ARM/2), and
+// the OUTER wall is an arc of radius ~26px = ARM/2 centred on the cell centre. That pair - sharp
+// inside, outer radius exactly half the stroke width - is the signature of a stroke join, and it
+// is not something a quadratic produces. The old quadratic swung ~13 units wide of it, which is
+// what made our elbows read as lazy S-bends next to the reference's crisp turns.
+//
+// A DRY PIPE IS HOLLOW AND A WET ONE IS FULL, and both are the same two-stroke construction: a
+// wide stroke, then a narrower one punched back out of the middle. Only the two colours change.
+// Measured across a wet pipe, the water is the interior width (31.6) and it carries a near-black
+// rim exactly where the white wall is on a dry one - so a wet pipe keeps its silhouette instead of
+// becoming a bare blue slab, and a wet run lines up with the dry run it continues into. The old
+// file drew the water as a naked solid stroke narrower than the pipe around it.
 //
 // Everything is drawn in a 100x100 box, so a cell can be any size.
 import { N, E, S, W, popcount } from './generator.js';
 
-export const ARM = 27;      // pipe outer width
-const WALL = 5.5;           // outline thickness; the inner stroke is ARM - 2*WALL
+export const ARM = 35.5;       // pipe outer width (55/155 of a cell)
+const WALL = 1.94;             // wall thickness (3/155); the inner stroke is ARM - 2*WALL
+const BULB = 35.8;             // a cap's outer radius - almost exactly one pipe width across
+const BULB_HOLE = 0.3;         // the hole in a WET bulb, as a fraction of the bulb's interior
 
-/** The centreline path(s) for a mask. */
+/**
+ * The centreline path(s) for a mask.
+ *
+ * An elbow is two straight arms meeting at the cell centre. It is drawn as ONE path so the corner
+ * is a stroke JOIN - that is what rounds the outside of the turn while leaving the inside square,
+ * which is what the reference does. Splitting it into two paths would lose the join and give two
+ * butt-ended arms with a notch between them.
+ */
 export function pipePaths(mask) {
   const has = (d) => (mask & d) !== 0;
   const n = popcount(mask);
@@ -37,10 +64,10 @@ export function pipePaths(mask) {
   if (n === 2) {
     if (has(N) && has(S)) return ['M50 0 V100'];
     if (has(E) && has(W)) return ['M0 50 H100'];
-    if (has(N) && has(E)) return ['M50 0 Q50 50 100 50'];
-    if (has(E) && has(S)) return ['M100 50 Q50 50 50 100'];
-    if (has(S) && has(W)) return ['M50 100 Q50 50 0 50'];
-    return ['M0 50 Q50 50 50 0'];
+    if (has(N) && has(E)) return ['M50 0 L50 50 L100 50'];
+    if (has(E) && has(S)) return ['M100 50 L50 50 L50 100'];
+    if (has(S) && has(W)) return ['M50 100 L50 50 L0 50'];
+    return ['M0 50 L50 50 L50 0'];
   }
   if (n === 4) return ['M50 0 V100', 'M0 50 H100'];
   // Tee: the run straight through, plus the branch out to the third side.
@@ -52,7 +79,7 @@ export function pipePaths(mask) {
 
 /** A cap piece ends in a bulb; everything else does not. */
 export function bulbRadius(mask) {
-  return popcount(mask) === 1 ? ARM * 0.78 : 0;
+  return popcount(mask) === 1 ? BULB : 0;
 }
 
 /**
@@ -66,23 +93,28 @@ export function pipeSVG(mask, cls, mode) {
 
   const paths = pipePaths(mask);
   const r = bulbRadius(mask);
+  // BUTT caps, not round. An arm ends exactly on the cell edge, so a round cap would bulge half a
+  // pipe width into the neighbouring cell - which is invisible where two pipes join and a stray
+  // nub everywhere they do not. ROUND joins, because the elbow's outer corner is one (see above).
   const stroke = (w, color) => paths.map((d) =>
     `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}"`
-    + ' stroke-linecap="round" stroke-linejoin="round"/>').join('');
+    + ' stroke-linecap="butt" stroke-linejoin="round"/>').join('');
 
-  if (mode === 'wet') {
-    return open
-      + stroke(ARM, 'var(--pi-water)')
-      + (r ? `<circle cx="50" cy="50" r="${r}" fill="var(--pi-water)"/>`
-        + `<circle cx="50" cy="50" r="${(r * 0.26).toFixed(2)}" fill="var(--pi-bg)"/>` : '')
-      + '</svg>';
-  }
-  // Dry: the wide outline, then the background punched back out of the middle.
+  // The same construction either way: the wall colour wide, then the fill colour punched back out
+  // of the middle. Dry fills with the field so the pipe reads as empty; wet fills with water.
+  const wall = mode === 'wet' ? 'var(--pi-water-rim)' : 'var(--pi-pipe)';
+  const fill = mode === 'wet' ? 'var(--pi-water)' : 'var(--pi-bg)';
+  const inner = (r - WALL).toFixed(2);
+
   return open
-    + stroke(ARM, 'var(--pi-pipe)')
-    + (r ? `<circle cx="50" cy="50" r="${r}" fill="var(--pi-pipe)"/>` : '')
-    + stroke(ARM - WALL * 2, 'var(--pi-bg)')
-    + (r ? `<circle cx="50" cy="50" r="${(r - WALL).toFixed(2)}" fill="var(--pi-bg)"/>` : '')
+    + stroke(ARM, wall)
+    + (r ? `<circle cx="50" cy="50" r="${r}" fill="${wall}"/>` : '')
+    + stroke(ARM - WALL * 2, fill)
+    + (r ? `<circle cx="50" cy="50" r="${inner}" fill="${fill}"/>` : '')
+    // The reference punches a hole clean through a bulb once it fills, in the FIELD colour rather
+    // than a dark one - it reads as an opening, which is what a source or a drain is.
+    + (r && mode === 'wet'
+      ? `<circle cx="50" cy="50" r="${(inner * BULB_HOLE).toFixed(2)}" fill="var(--pi-bg)"/>` : '')
     + '</svg>';
 }
 

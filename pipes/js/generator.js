@@ -69,10 +69,14 @@ export function turnsBetween(from, to) {
 export const TIER_ORDER = ['easy', 'medium', 'hard', 'extraHard'];
 
 const TIERS = {
-  easy: { w: 5, h: 5, pieces: ['straight', 'elbow'], decoy: 0.35, minPath: 8 },
-  medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee'], decoy: 0.5, minPath: 14 },
-  hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 0.65, minPath: 20 },
-  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 0.8, minPath: 30 },
+  // decoy 1 = EVERY cell off the path carries a piece. The reference board has no holes in it at
+  // all (IMG_4602: 63 cells, 63 pieces) and "a mess of pipes" was the brief; at 0.35 easy came out
+  // 43% empty and read as a handful of scattered fragments rather than plumbing. See the decoy
+  // block below for why filling those cells cannot cost solvability.
+  easy: { w: 5, h: 5, pieces: ['straight', 'elbow'], decoy: 1, minPath: 8 },
+  medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee'], decoy: 1, minPath: 14 },
+  hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 1, minPath: 20 },
+  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 1, minPath: 30 },
 };
 
 export function tierConfig(tier) { return TIERS[tier] || TIERS.easy; }
@@ -174,36 +178,31 @@ export function generate(tier, seed) {
     solution[idx(x, y, w)] = m;
   }
 
-  // Decoys. A decoy must be placeable so that it does NOT touch the water's network, or the board
-  // would be unsolvable under the no-leaks rule - so only a piece with a rotation whose openings
-  // all avoid the path is allowed here, and the piece is downgraded until one fits. A cross beside
-  // the path can never avoid it, which is exactly why crosses cannot go there.
-  const order = ['cross', 'tee', 'elbow', 'straight'];
+  // Decoys - every cell that is not on the path, with no restriction on where they may point.
+  //
+  // THIS USED TO REFUSE ANY DECOY THAT POINTED AT THE PATH, on the stated grounds that it "would be
+  // unsolvable under the no-leaks rule", and downgraded the piece (cross -> tee -> elbow ->
+  // straight -> blank) until one fitted. That was wrong, and it cost a quarter of the board: it is
+  // where the blank cells came from, and it is why a cross could never sit beside the path.
+  //
+  // A decoy pointing INTO a path cell cannot leak, because a leak is only ever reported for a cell
+  // the water REACHES (`flow()` in game.js walks `order`, and only pushes a cell it can get to).
+  // Two cells are joined only when EACH opens toward the other, and in the constructed solution a
+  // path cell opens along the path and nowhere else - so it never opens back at a decoy, the decoy
+  // never joins the network, and it stays dry whatever it is pointing at. The solved board is still
+  // solved with a piece in every cell; pipes/js/test.js proves it independently over every tier and
+  // 40 seeds, and would go red here first if this reasoning were wrong.
   const MASKS = { straight: N | S, elbow: N | E, tee: N | E | S, cross: N | E | S | W };
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = idx(x, y, w);
       if (onPath[i]) continue;
       if (rnd() >= cfg.decoy) continue;
-      let forbidden = 0;
-      for (const d of DIRS) {
-        const nx = x + DX[d], ny = y + DY[d];
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        if (onPath[idx(nx, ny, w)]) forbidden |= d;
-      }
-      const allowed = order.filter((k) => cfg.pieces.includes(k));
-      const wanted = allowed[Math.floor(rnd() * allowed.length)];
-      const tryOrder = [wanted, ...order.filter((k) => k !== wanted && cfg.pieces.includes(k))];
-      let placed = 0;
-      for (const k of tryOrder) {
-        let m = MASKS[k];
-        for (let r = 0; r < 4; r++) {
-          if ((m & forbidden) === 0) { placed = m; break; }
-          m = rotate(m);
-        }
-        if (placed) break;
-      }
-      solution[i] = placed;                       // 0 (blank) when nothing fits, which is fine
+      const kind = cfg.pieces[Math.floor(rnd() * cfg.pieces.length)];
+      let m = MASKS[kind];
+      const spins = Math.floor(rnd() * 4);
+      for (let r = 0; r < spins; r++) m = rotate(m);
+      solution[i] = m;
     }
   }
 

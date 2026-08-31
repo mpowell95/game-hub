@@ -57,8 +57,21 @@ ok('direction offsets and opposites agree',
  * So it searches what the rule actually asks for:
  *   1. a simple path from inlet to outlet whose every cell can be ROTATED to open exactly toward
  *      its path neighbours (one opening at each end, two in between - a cap, straight or elbow);
- *   2. every cell OFF that path rotated so no opening faces the path, so nothing leaks out of the
- *      water's network. Dry cells may point wherever they like.
+ *   2. every cell OFF that path left wherever it happens to point, because it cannot join the
+ *      water: joining takes BOTH sides opening at each other, and by (1) no path cell opens at
+ *      anything but the path.
+ *
+ * AND THEN IT ASKS THE GAME. The candidate is handed to the real `isSolved()` rather than to a
+ * private opinion about what solved means, which is the only way this file cannot drift stricter
+ * or looser than the rule it is checking. It drifted STRICTER twice, the same way both times:
+ * the first draft demanded the whole board agree with every neighbour (the FULL NET rule) and
+ * reported 0/12 against a fine generator; step 2 then kept a weaker version of the same mistake -
+ * it required every off-path cell to be rotatable so that nothing FACED the path - and that
+ * assumption went red the day the generator started filling every cell (2026-08-31), on boards
+ * whose constructed solution `isSolved()` accepted in the assertion directly above. A checker
+ * stricter than the rule is not a stricter checker; it is a broken one, and it will read as a bug
+ * in whatever it is pointed at.
+ *
  * Rotation sets come from the board in front of it, so it can prove a solution exists without
  * being told one.
  */
@@ -78,21 +91,12 @@ function solve(board) {
   let steps = 0;
   const MAX = 300000;
 
-  // Can every off-path cell be turned so nothing faces the water?
-  function decoysFit() {
-    for (let i = 0; i < n; i++) {
-      if (onPath[i]) continue;
-      const x = i % w, y = (i / w) | 0;
-      let forbidden = 0;
-      for (const d of DIRS) {
-        const nx = x + DX[d], ny = y + DY[d];
-        if (inBounds(nx, ny) && onPath[ny * w + nx]) forbidden |= d;
-      }
-      let fits = false;
-      for (const m of rots[i]) if ((m & forbidden) === 0) { chosen[i] = m; fits = true; break; }
-      if (!fits) return false;
-    }
-    return true;
+  // Fill in every off-path cell (any rotation will do - they cannot join the water) and put the
+  // finished candidate to the game's own win check.
+  function settleAndVerify() {
+    for (let i = 0; i < n; i++) if (!onPath[i]) chosen[i] = board.cells[i];
+    const g = new PipesGame({ board: { ...board, cells: Uint8Array.from(chosen) } });
+    return g.isSolved();
   }
 
   function walk(i, cameFrom) {
@@ -102,7 +106,9 @@ function solve(board) {
       const need = cameFrom;                       // the outlet is a cap facing back up the path
       if (!rots[i].has(need)) return false;
       chosen[i] = need;
-      return decoysFit();
+      if (settleAndVerify()) return true;
+      chosen[i] = null;
+      return false;
     }
     for (const d of DIRS) {
       const nx = x + DX[d], ny = y + DY[d];
@@ -190,7 +196,10 @@ for (const tier of ['easy', 'medium']) {
   const tries = 12;
   for (let s = 1; s <= tries; s++) {
     const b = generate(tier, s * 40503);
-    if (solve(b)) solved++;
+    const found = solve(b);
+    // Verified against the real rule a second time, out here, so the assertion says what it means:
+    // the solver did not merely terminate, it produced a board the GAME calls solved.
+    if (found && new PipesGame({ board: { ...b, cells: Uint8Array.from(found) } }).isSolved()) solved++;
   }
   ok(`[${tier}] an INDEPENDENT solver finds a solution without seeing the generator's`,
     solved === tries, `${solved}/${tries}`);
