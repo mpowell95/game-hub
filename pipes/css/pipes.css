@@ -163,12 +163,24 @@
 .pi-root .pi-cell.is-leak .pi-art,
 .pi-root .pi-cell.is-leak .pi-water { filter: drop-shadow(0 0 5px var(--pi-leak)); }
 
+/* THE FOOTER IS ONE MEASURED BOX. _fit() sizes the board against this whole element, not just the
+   banner, so when the completion actions appear the board makes room for them instead of being
+   overlapped by them. */
+.pi-root .pi-foot { display: grid; gap: 8px; }
+
 .pi-root .pi-banner {
   min-height: 44px;
-  display: grid; place-items: center;
+  display: grid; place-items: center; gap: 1px;
   font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--pi-dim);
 }
+/* The reference's completion headline, with this game's own stat kept underneath it. */
+.pi-root .pi-banner b { font-size: 19px; letter-spacing: 0.02em; text-transform: none; }
+.pi-root .pi-banner span { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--pi-dim); }
+
+/* Copied off the recording: one full-width primary, then two side by side under it. */
+.pi-root .pi-done { display: grid; gap: 8px; }
+.pi-root .pi-done-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pi-root .pi-banner.is-win { color: var(--pi-water); }
 .pi-root .pi-banner.is-leak { color: var(--pi-leak); }
 

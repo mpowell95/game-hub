@@ -78,9 +78,9 @@ fully visible, and three buttons sit below it:
 ```
 
 **It does NOT advance by itself.** In the recording Matt sits on this screen about five seconds and
-then taps Continue. Ours auto-advances after a 1.6s hold, on his explicit instruction
-(*"It should automatically move me to the next board after I complete one"*) — so this is the one
-place where the reference and the instruction disagree, and the instruction is newer.
+then taps Continue. Ours briefly did auto-advance, on his earlier instruction (*"It should
+automatically move me to the next board after I complete one"*); shown that the reference waits for
+a tap, he chose *"copy the video exactly"*, and ours now does. **Ours matches this screen.**
 
 **Levels are ONE ascending sequence** — Level 1, 2, 3 — with no difficulty picker anywhere in the
 recording. Ours has four difficulties each carrying their own level, which is the Nuts & Bolts model
