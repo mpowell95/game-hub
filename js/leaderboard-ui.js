@@ -673,6 +673,82 @@ function miniTilesHTML(tiers, valueFn) {
   }).join('')}</div>`;
 }
 
+/** The difficulty breakdown on a By Player card, INLINE on the line that already exists under the
+ *  name - not a row of its own (2026-08-31). Matt, after the chip strip came off: "I want the
+ *  difficuly information. But don't want you to waste so much space on it." So this costs ZERO
+ *  extra height: the card stays the 66px of a Skeeball board row, and the breakdown simply takes
+ *  the place of the old "N wins"/"N played" subline text.
+ *
+ *  It is SHAPES, not the letter badges it replaces ("E 3003", "NT 33"), which is what makes it fit
+ *  and what makes it readable at the same time. The ski-slope shapes are this app's own difficulty
+ *  vocabulary - circle/square/diamond/double-diamond, the same `diffShapeSVG()` on every game's
+ *  setup screen, in the filter dropdown two inches above this list, and on the tier tiles of the
+ *  game boards Matt likes. Nobody has to learn them here. They are also colorblind-safe by
+ *  construction (shape first, hue second), which a one-letter badge never was.
+ *
+ *  TIER ORDER, never value order. The old strip sorted by value, so the shapes landed in a
+ *  different sequence on every card and the column could not be read downwards. In tier order the
+ *  same shape sits in the same place on every row, which is exactly what miniTilesHTML does on a
+ *  game board.
+ *
+ *  The two buckets with no shape are the two that are not difficulties: 'NT' (Skeeball machines,
+ *  Pinball tables, Hill Climb stages, plus legacy history) and 'VS' (wins against real people).
+ *  They are drawn with their real WORD, never their initials - they are the last things to fit,
+ *  and an unlabelled shape invented for them would claim a difficulty they do not have (rule 4's
+ *  habit). Dropping them entirely was the alternative and is worse: 'NT' is the BIGGEST bucket for
+ *  anyone who mostly plays Skeeball, so a card without it would show shapes summing to a small
+ *  fraction of that player's real wins. */
+// TIER ORDER, and the two shapeless ones last - which also makes them the first to be dropped when
+// the row runs out of width, and that is the right order to lose them in: they are the two that
+// are not difficulties, and difficulty is what this line is for.
+const CAT_ORDER = [1, 2, 3, 4, 'NT', 'VS'];
+// The cap is a WIDTH ESTIMATE IN PIXELS, not a character count and not an item count. The first
+// draft counted characters and was wrong in both directions at once - it treated a 4px-wide "1"
+// and a whole word as comparable units, so it clipped "No tier 1342" while still refusing a fourth
+// two-digit tier that had 20px of room going spare. These five constants were read off a real
+// Chromium at 393x852 against .lb-cat's own type (11.5px/800 tabular, 10.5px/700 for the word) and
+// predict the measured natural widths to within a few px; BUDGET is the narrowest row the card
+// produces (164px on the widest name), minus a little slack. `overflow:hidden` in the CSS is the
+// belt to this braces - if an estimate is ever off, a category vanishes rather than half-drawing.
+const CAT_W = { shape: 10, shapeX2: 18, digit: 8, word: 5.9, inner: 4, gap: 9, budget: 158 };
+function catInlineHTML(g) {
+  const vals = CAT_ORDER.map((id) => ({ c: catMeta(id), v: catValueOf(g, id) }));
+  // A category with no plays is not drawn - EXCEPT the one being filtered on, which is drawn even
+  // at zero so that picking Expert shows you the zero instead of an empty line (the one rule worth
+  // keeping from the strip this replaces).
+  const widthOf = (x) => (typeof x.c.id !== 'number' ? t(x.c.nameKey).length * CAT_W.word
+    : x.c.id === 4 ? CAT_W.shapeX2 : CAT_W.shape)
+    + CAT_W.inner + String(x.v).length * CAT_W.digit;
+  // WHAT to show is chosen by VALUE; WHERE it goes is tier order. Those are two different
+  // questions and the first draft answered both with tier order, so the row filled up left to
+  // right and Expert - the one number on the line anybody brags about - was always the first to be
+  // dropped. Taking the biggest first and then sorting the survivors back into CAT_ORDER keeps the
+  // shapes lined up down the column AND keeps the numbers worth reading.
+  const pinned = vals.filter((x) => x.c.id === _cat);
+  const rest = vals.filter((x) => x.c.id !== _cat && x.v > 0).sort((a, b) => b.v - a.v);
+  const shown = [];
+  let cost = 0;
+  for (const x of pinned.concat(rest)) {
+    const w = widthOf(x) + (shown.length ? CAT_W.gap : 0);
+    // The first one always earns its place, budget or not: a player whose whole history is in one
+    // bucket (a Skeeball-only player has nothing BUT 'No tier') must not get a blank line.
+    if (shown.length && cost + w > CAT_W.budget) continue;
+    shown.push(x);
+    cost += w;
+  }
+  if (!shown.length) return '';
+  shown.sort((a, b) => CAT_ORDER.indexOf(a.c.id) - CAT_ORDER.indexOf(b.c.id));
+  return `<span class="lb-cats">${shown.map(({ c, v }) => {
+    const sel = _cat === c.id ? ' is-sel' : '';
+    const label = esc(t(c.nameKey));
+    const mark = typeof c.id === 'number'
+      ? diffShapeSVG(c.id)
+      : `<i class="lb-cat-w">${label}</i>`;
+    const color = typeof c.id === 'number' ? `style="--lb-pill-color:${TIER_COLOR[c.id]}"` : '';
+    return `<span class="lb-cat${sel}" ${color} title="${label}">${mark}<b>${v}</b></span>`;
+  }).join('')}</span>`;
+}
+
 /** UNUSED since 2026-08-31 - left in place, with its CSS, exactly as metaLine() above was: nothing
  *  deleted, just not rendered, and the helper is here if it is ever wanted back. Matt: "i don't
  *  like the chips. they are not obvious. try a new approach." See the note at its old call site in
@@ -790,16 +866,21 @@ function metaLine(games, runs) {
  *  OTHER metric, already formatted, e.g. "105 wins"/"246 played"); `tilesHtml` is the tier-tile
  *  row (unchanged, wins-per-tier always - see gameDetail/playerListHTML, it never follows the
  *  sort). Every card is a button opening the player detail screen. */
-function playerCardHTML(g, chip, big, subText, tilesHtml) {
+// `subHtml` (optional) replaces the escaped `subText` on the subline with real markup - the By
+// Player card passes catInlineHTML(g) there, which is how the difficulty breakdown rides a line
+// that already exists instead of costing the card a row. Every game board omits it and is
+// byte-identical to before.
+function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml) {
   const me = g.key === _meKey ? ' is-me' : '';
   // Row 2 is the breakdown alone; the OTHER number moved under the name (row 1) in the 2026-08-25
   // handoff, so the card reads name / what they played on one line and the breakdown below it.
   const footer = tilesHtml ? `<div class="lb-pfoot">${tilesHtml}</div>` : '';
+  const sub = subHtml || esc(subText || '');
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(subText || '')}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${sub}</span></span>
       <span class="lb-pnum"><b>${big.val}</b><span>${esc(big.unit)}</span></span>
     </div>
     ${footer}
@@ -872,7 +953,7 @@ function playerListHTML(list) {
     const subText = _sort === 'played'
       ? `${value(g)} ${catUnit(_cat)}`
       : t('lb_played_count', { n: played });
-    // NO FOOTER STRIP HERE (2026-08-31). Matt, on this screen beside a game board's: "I don't like
+    // NO FOOTER ROW HERE (2026-08-31). Matt, on this screen beside a game board's: "I don't like
     // the spacing on the leaderboard homepage. I DO like the spacing on the individual game
     // leaderboard (skeeball for example)" - then, on the chips themselves: "i don't like the chips.
     // they are not obvious. try a new approach."
@@ -883,14 +964,17 @@ function playerListHTML(list) {
     // person happened to have played, so the list had no rhythm. Passing no footer makes this card
     // structurally identical to the board card he likes - same markup, same height, one row.
     //
-    // The breakdown is not lost, and this is the "new approach" to it: it was only ever cryptic
-    // HERE (a one- or two-letter key badge - "E 3003", "NT 33", "+3" - sized down to fit one line).
-    // The same six categories are already spelled out in full words in the two places that have
-    // room for them: the filter dropdown right above this list names the active one ("Showing:
-    // Everything" / "Showing: Expert") with a per-category total beside every option, and tapping
-    // any card opens catGridHTML, which always renders all six with their real names and includes
-    // the zeroes. Nothing became unreachable (THE LAW rule 1) - it became legible.
-    return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, subText, '');
+    // The breakdown itself is NOT gone - Matt, when it was: "I want the difficuly information. But
+    // don't want you to waste so much space on it." It moved INLINE, onto the subline that already
+    // exists under the name, as shapes rather than letter badges (see catInlineHTML). So the card
+    // carries the difficulty split AND stays 66px: the strip cost a whole row, this costs none.
+    //
+    // What the subline no longer carries is the OTHER metric ("1082 wins" beside a "3490 PLAYED"
+    // headline). That is the trade Matt picked, and it is the cheap half: under the Wins sort the
+    // shapes ARE that number, split up, and under either sort the full pair is one tap away on the
+    // player's detail screen - which also renders all six categories under their real names,
+    // zeroes included (catGridHTML). Nothing became unreachable (THE LAW rule 1).
+    return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, subText, '', catInlineHTML(g));
   }).join('')}</div>`;
 }
 
@@ -1608,7 +1692,30 @@ function ensureCss() {
     '.lb-pname{max-width:100%;font-size:15px;font-weight:700;color:var(--lb-ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pcard.is-me .lb-pname{font-weight:800}',
     '.lb-you{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.1em;background:var(--lb-ink);color:var(--lb-surface);padding:3px 5px;border-radius:3px}',
-    '.lb-psubline{flex:1 0 100%;font-size:11.5px;color:var(--lb-muted);margin-top:2px;font-variant-numeric:tabular-nums}',
+    '.lb-psubline{flex:1 0 100%;font-size:11.5px;color:var(--lb-muted);margin-top:2px;font-variant-numeric:tabular-nums;min-width:0}',
+    // The inline difficulty breakdown (catInlineHTML). It lives INSIDE .lb-psubline, so it costs
+    // the card no height at all. NO WRAP and no sideways scroll, same rule the old strip had: the
+    // JS budget decides what fits, and `overflow:hidden` is only the belt to that braces - a number
+    // must never be half-drawn.
+    // The padding/negative-margin pair gives the selected item's 2px underline somewhere to be
+    // drawn: `overflow:hidden` clips to the padding box, so without it the marker was clipped away
+    // and the class painted nothing. The negative margin hands the 3px straight back, so the row
+    // - and therefore the card - is exactly the height it would be without any of this.
+    '.lb-cats{display:flex;flex-wrap:nowrap;align-items:center;gap:9px;min-width:0;overflow:hidden;padding-bottom:3px;margin-bottom:-3px}',
+    '.lb-cat{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums}',
+    '.lb-cat .lb-dshape{width:10px;height:10px;fill:var(--lb-pill-color,#5b6b82)}',
+    // Expert is a DOUBLE diamond, drawn on a 2:1 viewBox. Squaring it here (the rule above sizes
+    // every other shape) collapsed it into two dots that read as neither diamond, which is the one
+    // pair in the ski-slope set a player has to be able to tell apart.
+    '.lb-cat .lb-dshape-x2{width:18px}',
+    // The two shapeless categories carry their real word, muted so the shapes still lead the eye.
+    '.lb-cat-w{font-style:normal;font-size:11px;font-weight:700;color:var(--lb-muted)}',
+    // The filtered-on category is underlined in the selection accent - a LINE, plus the dropdown
+    // directly above already naming it in full, so never hue alone. box-shadow rather than
+    // text-decoration (which does not paint across a flex container, so the first draft applied
+    // the class and drew nothing) and rather than a border (which would shift every other item on
+    // the row by 2px the moment a filter was picked).
+    '.lb-cat.is-sel{box-shadow:0 2px 0 var(--lb-sel)}',
     '.lb-pnum{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1}',
     '.lb-pnum b{font-size:23px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.025em}',
     '.lb-pnum span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin-top:3px}',
