@@ -30,6 +30,48 @@ const esc = (s) => String(s == null ? '' : s)
 /** Re-export so js/hub.js and profile/index.html can paint a count without importing the data half. */
 export async function myUnreadMessages() { return unreadMessageCount(); }
 
+/**
+ * The profile page's Messages section, rendered in place.
+ *
+ * It used to be a heading reading "Messages" over a button reading "Messages", alone in a card the
+ * size of every other section - the word twice and nothing else. The page already fetches this
+ * player's conversations to put a count on that button, so showing the newest two costs no extra
+ * read and answers "is anything waiting" without a tap.
+ */
+export async function renderProfileMessages(host) {
+  if (!host) return;
+  ensureCss();
+  const me = myCode();
+  const open = (row) => openMessages(row ? { to: row.code, toName: row.name, toEmoji: row.emoji } : {});
+  const draw = (inner) => {
+    host.innerHTML = inner;
+    host.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => open({
+      code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji,
+    })));
+    const all = host.querySelector('[data-role="all"]');
+    if (all) all.addEventListener('click', () => open(null));
+  };
+
+  draw(`<button type="button" class="gh-btn gh-btn--block" data-role="all">${esc(t('msg_btn'))}</button>`);
+  if (!me) return;
+
+  const rows = (await readMyThreads()).slice(0, 2);
+  if (!rows.length) return;
+  const unread = rows.filter((r) => isUnread(r, me)).length;
+  draw(`<ul class="msg-list">${rows.map((r) => `
+      <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
+            data-code="${esc(r.code)}" data-name="${esc(r.name || r.code)}" data-emoji="${esc(r.emoji || '🙂')}">
+        <span class="msg-row-emoji" aria-hidden="true">${esc(r.emoji || '🙂')}</span>
+        <span class="msg-row-main">
+          <span class="msg-row-name">${esc(r.name || r.code)}</span>
+          <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
+        </span>
+        <span class="msg-row-when">${esc(whenText(r.at))}</span>
+      </button></li>`).join('')}</ul>
+    <button type="button" class="gh-btn gh-btn--block msg-allbtn" data-role="all">${
+      esc(unread > 0 ? t('msg_open_all_new', { n: unread }) : t('msg_open_all'))}</button>`);
+}
+
 // --- css ------------------------------------------------------------------------------------
 
 function ensureCss() {
@@ -82,6 +124,10 @@ function ensureCss() {
                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .msg-row-when { flex: 0 0 auto; font-size: var(--gh-fs-xs); color: var(--gh-muted); white-space: nowrap;
                   align-self: flex-start; }
+  /* The picker's rows carry a name and nothing else, so they do not need a conversation row's
+     height. At 20-odd people the full-size row turned the list into a long scroll for no content. */
+  .msg-row--compact { padding: 9px var(--gh-sp-3); gap: var(--gh-sp-2); }
+  .msg-row--compact .msg-row-emoji { font-size: 19px; }
   /* Unread is marked by a DOT and by bold text, never by colour alone (the repo's colourblind
      rule): the accent fills the dot, the weight carries the same meaning without it. */
   .msg-row.is-unread { border-color: var(--gh-accent); }
@@ -133,11 +179,16 @@ function ensureCss() {
   .msg-msg { margin: var(--gh-sp-2) 0 0; font-size: var(--gh-fs-sm); font-weight: 600;
              color: var(--gh-ink); min-height: 1.2em; }
   .msg-msg.is-err { color: var(--gh-cb-vermilion); }
+  /* A small label over a group of rows: the picker's Recent / Everyone else. */
+  .msg-allbtn { margin-top: var(--gh-sp-2); }
+  .msg-group { margin: var(--gh-sp-4) 0 var(--gh-sp-2); font-size: var(--gh-fs-xs); font-weight: 800;
+               text-transform: uppercase; letter-spacing: .05em; color: var(--gh-muted); }
+  .msg-list + .msg-group { margin-top: var(--gh-sp-4); }
   /* --- admin read-all ---------------------------------------------------------------------- */
-  .msg-admin-head { font-size: var(--gh-fs-sm); font-weight: 800; margin: var(--gh-sp-3) 0 var(--gh-sp-1); }
-  .msg-admin-line { margin: 0 0 var(--gh-sp-1); font-size: var(--gh-fs-sm); line-height: 1.45;
-                    word-break: break-word; }
-  .msg-admin-who { font-weight: 700; color: var(--gh-muted); }
+  /* In a moderation thread both sides are somebody else, so the mine/theirs sides mean nothing on
+     their own: each bubble is named. */
+  .msg-admin-who { display: block; font-size: var(--gh-fs-xs); font-weight: 800; color: var(--gh-muted);
+                   margin-bottom: 2px; }
   /* This device's anonymous auth id, shown when it is not on the admins allowlist. Selectable and
      wrapped: it is a long opaque string somebody has to copy into the Firebase console. */
   .msg-id { font: 12px/1.5 var(--gh-font-mono); user-select: all; word-break: break-all;
@@ -296,23 +347,33 @@ async function renderPicker(card) {
   shellHTML(card, { title: t('msg_new_title'), backable: true, body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
   card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
 
-  const contacts = await readContacts();
+  const [contacts, threads] = await Promise.all([readContacts(), readMyThreads()]);
   if (!_host) return;
 
   const prof = loadProfile() || {};
   const isMatt = await amIAdmin(prof.name);
+  // People already talked to come first, in the order they last wrote. The full list is 20-odd
+  // names and alphabetical order buries whoever you actually message, at the bottom, every time.
+  const recentCodes = threads.map((r) => r.code);
+  const recent = recentCodes.map((c) => contacts.find((x) => x.code === c)).filter(Boolean);
+  const rest = contacts.filter((c) => !recentCodes.includes(c.code));
+
+  const personRow = (c) => `<li><button type="button" class="msg-row msg-row--compact"
+      data-code="${esc(c.code)}" data-name="${esc(c.name)}" data-emoji="${esc(c.emoji)}">
+    <span class="msg-row-emoji" aria-hidden="true">${esc(c.emoji)}</span>
+    <span class="msg-row-main"><span class="msg-row-name">${esc(c.name)}</span></span>
+  </button></li>`;
+  const group = (label, list) => (list.length
+    ? `<p class="msg-group">${esc(label)}</p><ul class="msg-list">${list.map(personRow).join('')}</ul>` : '');
+
   const body = contacts.length
-    ? `<ul class="msg-list">
-        ${isMatt ? `<li><button type="button" class="msg-row" data-all="1">
+    ? `${isMatt ? `<ul class="msg-list"><li><button type="button" class="msg-row" data-all="1">
           <span class="msg-row-emoji" aria-hidden="true">📣</span>
           <span class="msg-row-main"><span class="msg-row-name">${esc(t('msg_everyone'))}</span>
           <span class="msg-row-prev">${esc(t('msg_everyone_sub', { n: contacts.length }))}</span></span>
-        </button></li>` : ''}
-        ${contacts.map((c) => `<li><button type="button" class="msg-row"
-            data-code="${esc(c.code)}" data-name="${esc(c.name)}" data-emoji="${esc(c.emoji)}">
-          <span class="msg-row-emoji" aria-hidden="true">${esc(c.emoji)}</span>
-          <span class="msg-row-main"><span class="msg-row-name">${esc(c.name)}</span></span>
-        </button></li>`).join('')}</ul>`
+        </button></li></ul>` : ''}
+       ${recent.length ? group(t('msg_recent'), recent) : ''}
+       ${recent.length ? group(t('msg_everyone_else'), rest) : `<ul class="msg-list">${rest.map(personRow).join('')}</ul>`}`
     : `<p class="msg-lead">${esc(navigator.onLine === false ? t('msg_offline') : t('msg_nobody'))}</p>`;
 
   shellHTML(card, { title: t('msg_new_title'), backable: true, body });
@@ -487,15 +548,43 @@ async function renderAdmin(card) {
   if (mine) byCode.set(mine, prof.name || mine);
   const nameOf = (code) => byCode.get(code) || code;
 
-  const body = threads.length
-    ? threads.map((th) => `
-        <p class="msg-admin-head">${esc(nameOf(th.a))} &harr; ${esc(nameOf(th.b))}
-          <span class="msg-row-when">${esc(whenText(th.at))} · ${th.count}</span></p>
-        ${th.msgs.slice(-12).map((m) => `<p class="msg-admin-line">
-          <span class="msg-admin-who">${esc(nameOf(m.from))}:</span> ${esc(m.text || '')}</p>`).join('')}`).join('')
-    : `<p class="msg-lead">${esc(navigator.onLine === false ? t('msg_offline') : t('msg_admin_empty'))}</p>`;
+  // A LIST, then one conversation - the same shape a player's own inbox uses. The first version
+  // printed every thread's last twelve lines one after another, which on a phone is a wall of
+  // other people's half-conversations with no way to follow any single one of them.
+  const list = () => {
+    const body = threads.length
+      ? `<ul class="msg-list">${threads.map((th, i) => `
+          <li><button type="button" class="msg-row" data-th="${i}">
+            <span class="msg-row-emoji" aria-hidden="true">💬</span>
+            <span class="msg-row-main">
+              <span class="msg-row-name">${esc(nameOf(th.a))} &harr; ${esc(nameOf(th.b))}</span>
+              <span class="msg-row-prev">${esc(previewLine(th))}</span>
+            </span>
+            <span class="msg-row-when">${esc(whenText(th.at))}<br>${th.count}</span>
+          </button></li>`).join('')}</ul>`
+      : `<p class="msg-lead">${esc(navigator.onLine === false ? t('msg_offline') : t('msg_admin_empty'))}</p>`;
+    shellHTML(card, { title: t('msg_admin_title'), sub: t('msg_admin_sub'), body });
+    card.querySelectorAll('[data-th]').forEach((b) =>
+      b.addEventListener('click', () => one(threads[+b.dataset.th])));
+  };
 
-  shellHTML(card, { title: t('msg_admin_title'), sub: t('msg_admin_sub'), body });
+  const one = (th) => {
+    shellHTML(card, {
+      title: `${nameOf(th.a)} ↔ ${nameOf(th.b)}`, sub: t('msg_admin_sub'), backable: true,
+      body: `<ul class="msg-thread">${th.msgs.map((m, i) => `
+        ${splitBefore(m, th.msgs[i - 1]) ? `<li class="msg-daysplit">${esc(splitText(m.atMs))}</li>` : ''}
+        <li class="msg-bubble msg-bubble--${m.from === th.a ? 'theirs' : 'mine'}">
+          <span class="msg-admin-who">${esc(nameOf(m.from))}</span>${esc(m.text || '')}</li>`).join('')}</ul>`,
+    });
+    card.querySelector('[data-role="back"]').addEventListener('click', list);
+  };
+
+  const previewLine = (th) => {
+    const last = th.msgs[th.msgs.length - 1];
+    return last ? `${nameOf(last.from)}: ${last.text || ''}` : '';
+  };
+
+  list();
 }
 
 export default { openMessages, myUnreadMessages };

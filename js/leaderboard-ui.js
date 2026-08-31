@@ -255,6 +255,24 @@ function messageHTML(g) {
   return m ? `<p class="lb-pmsg">${esc(m)}</p>` : '';
 }
 
+/** "Send message" on a player's own detail screen (2026-08-31). This is the natural place to want
+ *  it - you are already looking at the person - so it is the second way into Messages after the
+ *  profile page.
+ *
+ *  Not rendered for YOUR OWN row (nobody messages themselves; js/messages.js's pairKey refuses it
+ *  anyway), and not for a row with no player code, which is what a message is addressed to. A
+ *  legacy record with no code cannot receive one, and a dead button would be worse than none. */
+function sendMsgHTML(g) {
+  if (!g || g.key === _meKey) return '';
+  const code = (typeof g.playerId === 'string' ? g.playerId : '').trim().toUpperCase();
+  if (!code) return '';
+  return `<div class="lb-pactions">
+    <button type="button" class="lb-msgbtn" data-role="lb-msg"
+            data-code="${esc(code)}" data-name="${esc(rankName(g))}" data-emoji="${esc(g.emoji || '🙂')}"
+    >${esc(t('lb_send_message'))}</button>
+  </div>`;
+}
+
 // --- difficulty tier maths ---------------------------------------------------
 // Solo games (Ball Run/Nuts & Bolts/Snake) ALSO populate total/byDiff with the standard
 // {played,won,lost} bucket shape (game-stats.js's bumpTotals path) - every recordX() call bumps it
@@ -1232,7 +1250,7 @@ function playerDetail(list, key) {
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + gsGameListHTML(g.games);
+  return head + messageHTML(g) + sendMsgHTML(g) + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -1385,6 +1403,16 @@ function onClick(e) {
     _saved = { sort: _sort, cat: _cat };
     saveView({ sort: _sort, cat: _cat, gameSort: _gameSort });
     rerender();
+    return;
+  }
+  // Messages is imported LAZILY, only when somebody actually taps this - the leaderboard opens on
+  // every device and must not pull that module's chain just to render a button.
+  const msg = e.target.closest('[data-role="lb-msg"]');
+  if (msg) {
+    const { code, name, emoji } = msg.dataset;
+    import('./messages-ui.js')
+      .then((m) => m.openMessages({ to: code, toName: name, toEmoji: emoji }))
+      .catch((err) => console.error('[leaderboard] messages failed to load', err));
     return;
   }
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
@@ -1635,6 +1663,13 @@ function ensureCss() {
     '.lb-pdetail-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:18px;font-weight:800;color:var(--lb-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pdetail-meta{font-size:11.5px;font-weight:600;color:var(--lb-muted)}',
     '.lb-pmsg{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:var(--lb-surface-2);border:1px solid var(--lb-line);color:var(--lb-ink);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
+    // Send message, on a player's detail screen. Built from this overlay's own --lb-* tokens rather
+    // than css/ui.css's .gh-* set, because the leaderboard does not inject that stylesheet.
+    '.lb-pactions{margin:12px 0 0}',
+    '.lb-msgbtn{width:100%;min-height:44px;padding:11px 14px;border-radius:12px;border:1px solid var(--lb-accent,#1F5FA8);'
+      + 'background:var(--lb-accent,#1F5FA8);color:#fff;font:inherit;font-size:15px;font-weight:800;'
+      + 'cursor:pointer;touch-action:manipulation}',
+    '.lb-msgbtn:active{transform:translateY(1px)}',
     '.lb-pgame{margin-top:10px}',
     // --- skeleton + empty -------------------------------------------------------------------------
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--lb-surface-2);vertical-align:middle}',
