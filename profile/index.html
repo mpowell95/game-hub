@@ -162,12 +162,16 @@
       border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
     }
 
+    /* Copy, Link and + Add opponent. They were the page's last odd style - a dashed accent outline
+       on transparent - against the solid, filled rows everything else uses. Same fill, same border,
+       same weight as .pf-linkbtn now; only the width differs, because Copy and Link hug their input
+       (.pf-code-btn) while + Add opponent spans its section. */
     .pf-add {
-      font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 14px; width: 100%;
-      border-radius: 11px; border: 1px dashed var(--hub-accent); background: transparent; color: var(--hub-accent);
-      cursor: pointer; touch-action: manipulation;
+      font: inherit; font-weight: 800; margin-top: 12px; padding: 11px 14px; width: 100%;
+      border-radius: 12px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
+      color: var(--hub-ink); cursor: pointer; touch-action: manipulation;
     }
-    .pf-add:hover { background: rgba(23, 105, 212, .07); }
+    .pf-add:hover { background: var(--hub-surface); border-color: var(--hub-muted); }
     .pf-add[hidden] { display: none; }
 
     .pf-foot {
@@ -292,10 +296,10 @@
         </div>
         <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
 
-        <!-- Labelled "Your note", not "Message for other players": this is a line on your own
+        <!-- Labelled "Your tagline", not "Message for other players": this is a line on your own
              leaderboard page, and the old label read as the Messages feature two cards below. -->
         <div class="pf-name-wrap" style="margin-top:14px">
-          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Your note</label>
+          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Your tagline</label>
           <textarea class="pf-input" id="pf-you-msg" rows="2" maxlength="80"
                     placeholder="Shown when someone opens your profile"
                     data-i18n-placeholder="pf_msg_placeholder"></textarea>
