@@ -150,8 +150,11 @@
 .pi-root .pi-cell.is-wet .pi-water { opacity: 1; transform: scale(1); }
 
 /* A leak is marked on the PIPE, not by boxing the cell - a box would put back the grid the art is
-   deliberately without. */
-.pi-root .pi-cell.is-leak .pi-art { filter: drop-shadow(0 0 5px var(--pi-leak)); }
+   deliberately without. BOTH layers carry the glow: a leaking pipe is usually a WET one (the water
+   has arrived and is spilling out), and the water layer sits on top of the dry art, so glowing only
+   .pi-art would hide the mark under the very blue that makes it worth showing. */
+.pi-root .pi-cell.is-leak .pi-art,
+.pi-root .pi-cell.is-leak .pi-water { filter: drop-shadow(0 0 5px var(--pi-leak)); }
 
 .pi-root .pi-banner {
   min-height: 44px;
