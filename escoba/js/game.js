@@ -6,8 +6,9 @@
 // animation) happens in the awaited `onEvent` hook, never here.
 //
 // Rules implemented (Fournier "Escoba" rules, 40-card Spanish deck):
-//   - Each player is dealt 3 cards; 4 go face up on the table. If those 4 sum
-//     to 15 the dealer captures them for one escoba (30: two escobas).
+//   - Each player is dealt 3 cards; 4 go face up on the table. The opening
+//     table is always played against: there is no dealer's-luck rule here
+//     (see "Removed: the dealer's-luck opening escoba" in CLAUDE.md).
 //   - On your turn you play one card. If it sums to 15 with one or more table
 //     cards you capture them (mandatory when possible, you pick the combo).
 //     Clearing the whole table is an escoba: 1 point.
@@ -26,7 +27,7 @@
 // out as runTurnLoop() so a restored mid-round game can re-enter it at the
 // saved player index instead of replaying the round from its start.
 
-import { makeDeck, shuffle, sumValues, captureOptions } from './deck.js';
+import { makeDeck, shuffle, captureOptions } from './deck.js';
 
 export const DEFAULT_CONFIG = {
   targetScore: 21,       // 21 or 31
@@ -203,25 +204,12 @@ export class Game {
 
     // First deal: 3 to each player, then 4 face up on the table. The turn
     // loop starts left of the dealer, so a snapshot taken here is already
-    // stamped with the correct resume point (the initial-escoba check right
-    // below hasn't run an await yet, so it can't be interrupted mid-way).
+    // stamped with the correct resume point, and nothing runs between this
+    // emit and the loop below -- the opening table is simply played against.
     this.dealHands();
     this.table = this.stock.splice(0, 4);
     this._nextTurn = (this.dealer + 1) % n;
     await this.emit('deal', { first: true });
-
-    // Dealer's luck: table summing to 15 (or 30) goes straight to the dealer.
-    const t = sumValues(this.table);
-    if (t === 15 || t === 30) {
-      const d = this.byId(this.dealer);
-      const cards = this.table;
-      const count = t === 30 ? 2 : 1;
-      d.captured.push(...cards);
-      d.escobas += count;
-      this.table = [];
-      this.lastCapturer = d.id;
-      await this.emit('initialEscoba', { playerId: d.id, cards, count });
-    }
 
     await this.runTurnLoop((this.dealer + 1) % n);
   }

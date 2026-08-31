@@ -239,15 +239,29 @@ the same rows no matter which game you drilled in from, and was removed. See `js
 - **Whitewash**: a player who captures zero cards all round loses the match outright,
   2-player only (`_whitewash` in `scoreRound()`), checked before the normal target-score
   win condition in `checkMatchEnd()`.
-- **Initial-table escoba** (the dealer's opening 4 cards summing to 15 or 30) is resolved
-  synchronously before the turn loop starts, so `_nextTurn` is already correctly set to
-  `(dealer+1)%n` by the time its `initialEscoba` event fires, so a snapshot taken there is
-  safe to resume from via the ordinary turn-loop path.
-- **The UI intentionally never snapshots the very first `deal` of a round** (`payload.
-  first === true`): the initial-escoba check runs synchronously right after with no
-  further `await`, so there's no useful mid-step there, and resuming from that instant
-  would skip the initial-escoba check entirely (the resume path only replays the turn
-  loop, not the first-deal setup). `test.js`'s resume test mirrors this exclusion.
+- **Removed: the dealer's-luck opening escoba (2026-08-31).** Matt, shown a round where
+  the opening four cards totalled 30 and handed the dealer two free points: *"I don't like
+  that rule... it should just be deleted."* Fournier's rules give the dealer the opening
+  table when those four cards sum to 15 (one escoba) or 30 (two), and `playRound()` used
+  to resolve that between the first `deal` and the turn loop, emitting an `initialEscoba`
+  event the UI answered with a broom sweep and a banner. **All of it is gone**: the
+  opening table is now always played against, whatever it sums to. Do not re-add it as
+  "the real rules" — this was a deliberate house-rule call, and `escoba/js/test.js`
+  carries a `[KNOWN-BUG PROBE]` asserting no `initialEscoba` event is ever emitted and
+  that nobody holds an escoba before a card is played.
+  - The rule was worth about 1 opening deal in 16 (3.41% sum exactly 15, 2.73% sum 30),
+    and the double payout for 30 was a flat rule rather than two real sweeps: only 35% of
+    the 2,492 possible 30-sum tables even contain a subset that makes 15.
+  - Two things it also silently did, now also gone: it seeded `lastCapturer` with the
+    dealer before a card was played (so the round's leftover cards defaulted to them),
+    and it put 4 cards in the dealer's pile toward "most cards"/coins/sevens.
+- **Every `deal` is a resumable checkpoint, the round's first one included.** The UI used
+  to skip the snapshot on `payload.first === true`, because the dealer's-luck check ran
+  synchronously right after it and a restore from that instant would have skipped the
+  check. With the rule deleted, `playRound()` goes straight from the first deal into the
+  turn loop with `_nextTurn` already stamped, so that save is now both safe and useful:
+  leaving right after a round is dealt resumes exactly that deal instead of the previous
+  round boundary. `test.js`'s resume test and `test-mp-lockstep.mjs`'s glue mirror it.
 - **`finishRoundAfterPlay()` orders things deliberately** for resume correctness: it
   scores the round, resolves `checkMatchEnd()`, and advances the dealer for the *next*
   round **before** emitting `roundScored`, so a snapshot taken while the round-end modal
@@ -292,9 +306,10 @@ the same rows no matter which game you drilled in from, and was removed. See `js
   traversal (confirmed by inspecting the actual asset), so the container's `left`
   property is animated separately to supply the real across-the-felt travel; the two
   animations run concurrently at the same duration (`BROOM_MS`). Triggered on `play`
-  events where `payload.escoba === true` and on `initialEscoba` (which re-shows the
-  swept cards briefly since the engine already moved them into the dealer's pile before
-  the event fires). Captured cards get a directional `is-swept` exit (fly right +
+  events where `payload.escoba === true`, and only there since the dealer's-luck opening
+  escoba was deleted (2026-08-31; that path re-showed the swept cards briefly because the
+  engine had already moved them into the dealer's pile before the event fired).
+  Captured cards get a directional `is-swept` exit (fly right +
   rotate + fade) instead of the plain `is-taken` lift-and-fade, timed so cards start
   flying ~150ms into the sweep and the escoba banner pops ~450ms in. Skipped entirely
   under `prefers-reduced-motion` (falls back to the ordinary capture exit). **Note**:
@@ -430,7 +445,8 @@ their printed number. The one-line note (`howto_figures_note`) only renders when
 ## Scope status
 
 - **Initial build:** full Fournier ruleset (capture-to-15, escobas incl. the dealer's
-  initial-table escoba, last-cards/leftover sweep, complete round scoring incl. guindis/
+  initial-table escoba (deleted 2026-08-31, see "Rules engine notes"), last-cards/leftover
+  sweep, complete round scoring incl. guindis/
   all-sevens/all-coins/under-10 bonus, whitewash instant win), three AI tiers, 2-3
   players, play to 21 or 31, reusing the Anita deck. Round-end modal, match modal with a
   cumulative-score chart, How to Play sheet, profile prefill.
