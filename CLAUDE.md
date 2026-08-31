@@ -472,8 +472,37 @@ profile pill carries the unread badge, which is why the button is there and not 
   is no admin write path in `js/messages.js` at all), not of the button.
 - **No push notifications.** The badge appears when a player opens the app. Real push needs FCM and a
   permission prompt, which is its own job.
-- One badge on the pill, summing bug replies and messages, because the pill leads to one page holding
-  both. Full contract and the node shape: `js/CLAUDE.md`, "Messages".
+- **Messages has the top bar's third button since 2026-08-31, where My Stats used to be.** Matt: *"I
+  don't think My Stats is used by anyone... we could change it into a Messages button?"* Four buttons
+  wrap to a second row on a phone (measured), so it was a swap or nothing. **My Stats moved to the
+  profile page** and is unchanged; every screen it shows is ALSO reachable at Leaderboards → your own
+  row → a game, which is what keeps a player's full win/loss record visible (rule 1 — the leaderboard
+  itself is wins-only by design). Nothing was removed.
+- **Two badges, one per button.** Unread messages badge the Messages button; a reply to a bug report
+  badges the profile pill. They were summed onto the pill while it was the only route to either.
+- **A "Send message" button sits on a player's leaderboard detail screen.** Hidden on your own row,
+  and on a legacy record with no player code (a message is addressed to a code, so a dead button
+  would be worse than none). Full contract and the node shape: `js/CLAUDE.md`, "Messages".
+
+## The profile page's structure (2026-08-31)
+
+Matt: *"We've just kind of thrown stuff in there over time and it looks disorganized."* It had FOUR
+container patterns at once — a card with a heading, a card that was itself a collapsible,
+collapsibles nested inside a card, and three loose buttons in no card at all. Now:
+
+**You** (identity only) · **Messages** · **Settings** (one list of collapsible rows) · **Your
+devices** · **Help** · **Reset profile**, alone at the bottom.
+
+- **One pattern**: every block is a `.pf-section` card. The only collapsibles are the rows inside
+  Settings, and they are one level deep (`.pf-rows > details`).
+- **Colour, theme and quick chat moved OUT of "You"** into Settings; they are settings, and having
+  them there is what made that card a grab-bag.
+- **Language joined Theme in Settings.** It had only ever been in the hub's top bar, so the two
+  halves of one choice lived on different screens.
+- **"Message for other players" is now "Your note".** It is a line on your own leaderboard page, and
+  the old label read as the Messages feature two cards below it.
+- **My Stats and the two Help buttons share one full-width row-button style** (`.pf-linkbtn`). They
+  were three different widths, centred, in no container.
 
 **`messages/` is the ONE node in this database with real security rules on it.** Matt: *"Only admin
 should be able to see every thread. Others should only see their own."* Everything else is
