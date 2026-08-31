@@ -55,10 +55,11 @@ reference PNGs are 16-bit, so a reader that assumes bit depth 8 will throw on th
 | Water | `#73bcf5` | `#4fb5fa` |
 | Wet pipe rim | `#040404` | near-black |
 
-The rule underneath: **the wet rim is near-black in both themes**; only the DRY wall flips to
-whatever contrasts with the field. Our light theme currently uses a grey-blue dry wall and a deep
-blue wet rim rather than black — a deliberate softening, not a match, and worth knowing before
-anyone "fixes" it.
+The rule underneath: **the wet rim is black in both themes**; only the DRY wall flips to whatever
+contrasts with the field — white on charcoal, black on grey. **Ours matches both**, on Matt's
+instruction (*"I prefer the colors the screen recording shows"*). Light theme briefly ran a
+softened grey-blue wall on an off-white card, invented on the theory that black would read as soot
+on a light field; it does not, and the measured palette is crisper.
 
 ## The level flow, as the recording shows it
 
@@ -92,7 +93,8 @@ blue, the next one a raised white card, a valve wheel at the start. A footer of 
 rotations *and* time; only time is on the play screen.
 
 **An achievement toast** slides in from the top on completing a level ("No Hesitation — Complete a
-puzzle without pausing f..."). Nothing like it exists in this hub.
+puzzle without pausing f..."). **Matt, 2026-08-31: "Ignore all achievement toasts."** Do not build
+one, here or anywhere else in the hub.
 
 ## What the reference does that ours deliberately does NOT
 
@@ -101,10 +103,15 @@ Each of these is a settled decision, recorded so nobody re-opens it as a bug:
 1. **Full net, not path-with-no-leaks.** In the reference every piece on the board must join up —
    its level-1 solved frame is one single connected blue network. `docs/PIPES-SCOPE.md` put that to
    Matt as option (c) and he chose (b).
-2. **Dead-end bulbs as ordinary decoys.** The reference's boards are dotted with them. Matt,
-   2026-08-31: *"I do not want decoy bulbs."* Ours has exactly two per board, the inlet and the
-   outlet, so a circle always means something.
-3. **A timer as the headline stat.** Ours counts turns.
+2. **Bulbs on most cells.** The reference's boards are dotted with them, and **they are not
+   decoys** — under full-net every one is an endpoint that must be connected, which is why its
+   solved board is a single blue network. (An earlier draft of this file called them "decoy bulbs".
+   Matt: *"No decoy bulbs have ever existed in anything I've ever sent you."* He is right; the word
+   was mine and it was wrong.) Ours has exactly two, the inlet and the outlet, because under
+   path-with-no-leaks those are the only endpoints there are. It follows from item 1, it is not a
+   separate decision.
+3. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
+   easier so that's fine."*
 
 ## Retention
 

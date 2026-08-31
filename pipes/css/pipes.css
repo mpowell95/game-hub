@@ -12,15 +12,15 @@
   --pi-ink: #101725;
   --pi-dim: #5c6a80;
   --pi-line: rgba(16, 23, 37, 0.14);
-  /* The reference is a flat charcoal field with near-white pipes and one blue. Light theme keeps
-     the same relationship rather than inverting it into something else. */
-  --pi-bg: #eef1f6;
-  --pi-pipe: #7d8ba1;
-  --pi-water: #38a9ef;
-  /* A wet pipe keeps a rim where a dry one has its wall, so it holds its silhouette instead of
-     becoming a bare slab. The reference's is near-black on charcoal; on a light field that reads
-     as soot, so light theme uses a deep blue that plays the same role. */
-  --pi-water-rim: #12537f;
+  /* SAMPLED OFF MATT'S SCREEN RECORDING, which is the reference app in its LIGHT theme - he asked
+     for these colours by name. Earlier this was a softened grey-blue on an off-white card, invented
+     rather than measured, on the theory that a black outline would read as soot on a light field.
+     It does not: the reference runs pure black on flat grey and it is the crispest the game looks.
+     Both walls are black here - dry AND wet - unlike dark theme, where only the wet rim is. */
+  --pi-bg: #ebebeb;
+  --pi-pipe: #000000;
+  --pi-water: #4fb5fa;
+  --pi-water-rim: #000000;
   --pi-leak: #e0532f;
   --pi-cap: #F2B705;
   --pi-accent: #ffce3a;
