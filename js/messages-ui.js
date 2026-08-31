@@ -57,6 +57,15 @@ function ensureCss() {
   .msg-back { margin-right: var(--gh-sp-2); }
   .gh-modal__title .msg-sub { display: block; font-size: var(--gh-fs-xs); font-weight: 600;
                               color: var(--gh-muted); margin-top: 2px; }
+  /* The conversation header: back, the person (emoji + name, matching their inbox row), then Hide.
+     Hide lives up here rather than under the last message, where it sat exactly where the eye
+     lands after the newest thing said and read as part of the conversation. */
+  .msg-head { display: flex; align-items: center; gap: var(--gh-sp-2); min-width: 0;
+              padding-right: 40px; }
+  .msg-head-emoji { font-size: 22px; line-height: 1; flex: 0 0 auto; }
+  .msg-head-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                   white-space: nowrap; }
+  .msg-head-hide { flex: 0 0 auto; }
   /* --- conversation list ------------------------------------------------------------------ */
   .msg-list { list-style: none; margin: 0; padding: 0; }
   .msg-list li + li { margin-top: var(--gh-sp-2); }
@@ -65,8 +74,11 @@ function ensureCss() {
              background: var(--gh-surface); color: var(--gh-ink); cursor: pointer; font-family: var(--gh-font); }
   .msg-row-emoji { font-size: 24px; line-height: 1; flex: 0 0 auto; }
   .msg-row-main { flex: 1 1 auto; min-width: 0; }
-  .msg-row-name { font-size: var(--gh-fs-sm); font-weight: 800; }
-  .msg-row-prev { margin: 2px 0 0; font-size: var(--gh-fs-sm); color: var(--gh-muted);
+  /* BOTH need display:block. A row's contents are spans (they sit inside a <button>, which may not
+     contain block-level flow content), so without this the name and the preview run together on one
+     line AND text-overflow never fires, because an inline box does not clip. */
+  .msg-row-name { display: block; font-size: var(--gh-fs-sm); font-weight: 800; }
+  .msg-row-prev { display: block; margin: 2px 0 0; font-size: var(--gh-fs-sm); color: var(--gh-muted);
                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .msg-row-when { flex: 0 0 auto; font-size: var(--gh-fs-xs); color: var(--gh-muted); white-space: nowrap;
                   align-self: flex-start; }
@@ -88,17 +100,36 @@ function ensureCss() {
      cue, so the two sides stay distinguishable with no colour at all. */
   .msg-bubble--mine { align-self: flex-end; border: 1px solid var(--gh-accent); }
   .msg-bubble--theirs { align-self: flex-start; border: 1px solid var(--gh-border); }
-  .msg-when { display: block; margin-top: var(--gh-sp-1); font-size: var(--gh-fs-xs); color: var(--gh-muted); }
+  /* A time under EVERY bubble was three stamps a minute apart repeating down the screen. The
+     divider below carries it instead, only where there is a real gap. */
+  .msg-daysplit { align-self: center; font-size: var(--gh-fs-xs); color: var(--gh-muted);
+                  padding: var(--gh-sp-1) 0; }
   /* --- composer ---------------------------------------------------------------------------- */
+  /* One row: the box grows with what is typed, Send is a round button beside it. The old stack
+     (label + a 64px box + two rows of chips + a Send row) cost about 45% of a phone screen, so
+     only four messages of the conversation fitted above it. */
   .msg-compose { flex: 0 0 auto; padding-top: var(--gh-sp-3); border-top: 1px solid var(--gh-border); }
-  .msg-text { min-height: 64px; padding: var(--gh-sp-3); line-height: 1.45; resize: vertical;
-              font-family: var(--gh-font); width: 100%; }
-  .msg-presets { display: flex; flex-wrap: wrap; gap: var(--gh-sp-2); margin-top: var(--gh-sp-2); }
-  .msg-preset { font: inherit; font-size: var(--gh-fs-xs); font-weight: 700; padding: 6px 10px;
-                border-radius: 999px; border: 1px solid var(--gh-border); background: var(--gh-surface);
-                color: var(--gh-ink); cursor: pointer; touch-action: manipulation; }
+  .msg-composerow { display: flex; align-items: flex-end; gap: var(--gh-sp-2); }
+  .msg-text { flex: 1 1 auto; min-height: 44px; max-height: 132px; padding: 11px var(--gh-sp-3);
+              line-height: 1.4; resize: none; overflow-y: auto; font-family: var(--gh-font); }
+  /* 44px square: the tap-target floor, and it lines up with the box at one row. */
+  .msg-send { flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border-radius: 50%;
+              font-size: 19px; line-height: 1; }
+  /* ONE row that scrolls sideways, not two that wrap. contain, so a flick that runs out of chips
+     does not start panning the conversation behind them. */
+  .msg-presets { display: flex; flex-wrap: nowrap; gap: var(--gh-sp-2); margin-bottom: var(--gh-sp-2);
+                 overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+                 scrollbar-width: none; padding-bottom: 2px; }
+  .msg-presets::-webkit-scrollbar { display: none; }
+  .msg-preset { flex: 0 0 auto; font: inherit; font-size: var(--gh-fs-xs); font-weight: 700;
+                padding: 7px 12px; border-radius: 999px; border: 1px solid var(--gh-border);
+                background: var(--gh-surface); color: var(--gh-ink); cursor: pointer;
+                touch-action: manipulation; white-space: nowrap; }
   .msg-preset:hover { background: var(--gh-surface-2); }
-  .msg-count { font-size: var(--gh-fs-xs); color: var(--gh-muted); }
+  /* Only near the cap. A counter reading 12/300 is noise on every message anyone ever writes. */
+  .msg-count { display: block; margin-top: var(--gh-sp-1); text-align: right;
+               font-size: var(--gh-fs-xs); color: var(--gh-muted); }
+  .msg-count:empty { display: none; }
   .msg-msg { margin: var(--gh-sp-2) 0 0; font-size: var(--gh-fs-sm); font-weight: 600;
              color: var(--gh-ink); min-height: 1.2em; }
   .msg-msg.is-err { color: var(--gh-cb-vermilion); }
@@ -160,16 +191,40 @@ function whenText(atMs) {
   return d.toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short' });
 }
 
-function shellHTML(card, { title, sub, backable, body, footer }) {
+function shellHTML(card, { title, sub, backable, body, footer, emoji, hide }) {
+  const heading = backable
+    ? `<span class="msg-head">
+         <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-back" data-role="back">&#8249; ${esc(t('msg_back'))}</button>
+         ${emoji ? `<span class="msg-head-emoji" aria-hidden="true">${esc(emoji)}</span>` : ''}
+         <span class="msg-head-name">${esc(title)}</span>
+         ${hide ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-head-hide" data-role="hide">${esc(t('msg_hide'))}</button>` : ''}
+       </span>`
+    : `📬 ${esc(title)}`;
   card.innerHTML = `
     <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('msg_close'))}">&times;</button>
-    <h2 class="gh-modal__title">${backable
-      ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-back" data-role="back">&#8249; ${esc(t('msg_back'))}</button>`
-      : '📬 '}${esc(title)}${sub ? `<span class="msg-sub">${esc(sub)}</span>` : ''}</h2>
+    <h2 class="gh-modal__title">${heading}${sub ? `<span class="msg-sub">${esc(sub)}</span>` : ''}</h2>
     <div class="msg-scroll">${body}</div>
     ${footer || ''}
     <p class="msg-msg" data-role="msg" role="status" aria-live="polite"></p>`;
   card.querySelector('[data-role="close"]').addEventListener('click', closeOverlay);
+}
+
+/** Should a divider go BEFORE this message? A new day, or more than an hour of silence. Anything
+ *  tighter than that and the stamp says nothing the order of the bubbles did not already say. */
+function splitBefore(msg, prev) {
+  if (!prev) return true;
+  const a = new Date(Number(prev.atMs) || 0), b = new Date(Number(msg.atMs) || 0);
+  return a.toDateString() !== b.toDateString() || (b - a) > 3_600_000;
+}
+
+/** The divider's own label: a time today, a date and time before that. */
+function splitText(atMs) {
+  const n = Number(atMs) || 0;
+  if (!n) return '';
+  const d = new Date(n), loc = getLang() === 'es' ? 'es-ES' : 'en-GB';
+  const time = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString(loc, { day: 'numeric', month: 'short' })} · ${time}`;
 }
 
 function say(card, text, kind) {
@@ -279,19 +334,19 @@ async function amIAdmin(name) {
 function composerHTML(placeholder) {
   const palette = loadPalette();
   const lang = getLang();
-  const presets = (palette.phrases || []).slice(0, 6)
+  const presets = (palette.phrases || []).slice(0, 8)
     .map((id) => (PHRASES[id] ? { id, text: PHRASES[id][lang] || PHRASES[id].en } : null)).filter(Boolean);
   return `<div class="msg-compose">
-    <label class="gh-field__label" for="msg-text">${esc(t('msg_write_label'))}</label>
-    <textarea class="gh-input msg-text" id="msg-text" rows="2" maxlength="${MAX_MESSAGE}"
-              placeholder="${esc(placeholder)}"></textarea>
     ${presets.length ? `<div class="msg-presets">${presets
       .map((p) => `<button type="button" class="msg-preset" data-preset="${esc(p.text)}">${esc(p.text)}</button>`)
       .join('')}</div>` : ''}
-    <div class="gh-modal__actions">
-      <span class="msg-count" data-role="count">0/${MAX_MESSAGE}</span>
-      <button type="button" class="gh-btn gh-btn--primary" data-role="send">${esc(t('msg_send'))}</button>
+    <div class="msg-composerow">
+      <textarea class="gh-input msg-text" id="msg-text" rows="1" maxlength="${MAX_MESSAGE}"
+                aria-label="${esc(t('msg_write_label'))}" placeholder="${esc(placeholder)}"></textarea>
+      <button type="button" class="gh-btn gh-btn--primary msg-send" data-role="send"
+              aria-label="${esc(t('msg_send'))}" title="${esc(t('msg_send'))}">&#8593;</button>
     </div>
+    <span class="msg-count" data-role="count" aria-live="polite"></span>
   </div>`;
 }
 
@@ -302,7 +357,15 @@ function wireComposer(card, onSend) {
   const send = card.querySelector('[data-role="send"]');
   if (!box || !send) return;
   _guardClose = () => !normalizeText(box.value);
-  const paint = () => { if (count) count.textContent = `${box.value.length}/${MAX_MESSAGE}`; };
+  // The box grows with what is typed, up to the CSS max-height, then scrolls. Reset to `auto`
+  // first or scrollHeight only ever reports the height it already has, so it can never shrink back.
+  const paint = () => {
+    box.style.height = 'auto';
+    box.style.height = Math.min(box.scrollHeight, 132) + 'px';
+    // The counter appears only in the last stretch. On every ordinary message it says nothing.
+    const left = MAX_MESSAGE - box.value.length;
+    if (count) count.textContent = left <= 60 ? String(left) : '';
+  };
   box.addEventListener('input', paint);
   paint();
   card.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
@@ -327,20 +390,17 @@ async function renderThread(card, who) {
   const title = who.name || who.code;
   const draw = (msgs) => {
     const body = msgs.length
-      ? `<ul class="msg-thread">${msgs.map((m) => `
-          <li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}
-            <span class="msg-when">${esc(whenText(m.atMs))}</span></li>`).join('')}</ul>`
+      ? `<ul class="msg-thread">${msgs.map((m, i) => `
+          ${splitBefore(m, msgs[i - 1]) ? `<li class="msg-daysplit">${esc(splitText(m.atMs))}</li>` : ''}
+          <li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}</li>`).join('')}</ul>`
       : `<p class="msg-lead">${esc(t('msg_thread_empty', { name: title }))}</p>`;
-    // Hiding is reversible by anything newer (js/messages.js's hideThread), so it needs no
-    // confirmation step and is safe sitting at the end of the conversation. Not offered on an
-    // EMPTY thread: there is nothing there to hide, and the button would read as the main action.
-    const withHide = body + (msgs.length ? `<div class="gh-modal__actions">
-      <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="hide">${esc(t('msg_hide'))}</button>
-    </div>` : '');
     const box = card.querySelector('#msg-text');
     const draft = box ? box.value : '';
     shellHTML(card, {
-      title, backable: true, body: withHide,
+      title, emoji: who.emoji, backable: true, body,
+      // Hiding is reversible by anything newer (js/messages.js's hideThread), so it needs no
+      // confirmation step. Not offered on an EMPTY thread: there is nothing there to hide.
+      hide: msgs.length > 0,
       footer: composerHTML(t('msg_placeholder', { name: title })),
     });
     card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
