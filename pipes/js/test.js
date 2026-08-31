@@ -47,98 +47,57 @@ ok('direction offsets and opposites agree',
 /**
  * Find a solution using ONLY the scrambled board - never `board.solution`.
  *
- * ITS FIRST DRAFT WAS WRONG IN AN INSTRUCTIVE WAY: it required every cell on the board to agree
- * with every neighbour, which is the FULL NET rule (variant c), not the one this game uses. Under
- * "path with no leaks" a dry decoy in a corner may point at nothing at all, so that solver rejected
- * boards that are perfectly solvable and reported 0/12 on a generator that was fine. The lesson is
- * the one worth keeping: a checker that is stricter than the rule is not a stricter checker, it is
- * a broken one.
+ * THE RULE IS NOW FULL NET (2026-08-31): every pipe on the board must end up on one connected,
+ * leak-free network. So this is a constraint search, not a path walk - assign each cell one of its
+ * four rotations such that every shared edge agrees (both sides open, or both closed) and no
+ * opening points off the board, then confirm the result is CONNECTED.
  *
- * So it searches what the rule actually asks for:
- *   1. a simple path from inlet to outlet whose every cell can be ROTATED to open exactly toward
- *      its path neighbours (one opening at each end, two in between - a cap, straight or elbow);
- *   2. every cell OFF that path left wherever it happens to point, because it cannot join the
- *      water: joining takes BOTH sides opening at each other, and by (1) no path cell opens at
- *      anything but the path.
- *
- * AND THEN IT ASKS THE GAME. The candidate is handed to the real `isSolved()` rather than to a
- * private opinion about what solved means, which is the only way this file cannot drift stricter
- * or looser than the rule it is checking. It drifted STRICTER twice, the same way both times:
- * the first draft demanded the whole board agree with every neighbour (the FULL NET rule) and
- * reported 0/12 against a fine generator; step 2 then kept a weaker version of the same mistake -
- * it required every off-path cell to be rotatable so that nothing FACED the path - and that
- * assumption went red the day the generator started filling every cell (2026-08-31), on boards
- * whose constructed solution `isSolved()` accepted in the assertion directly above. A checker
- * stricter than the rule is not a stricter checker; it is a broken one, and it will read as a bug
- * in whatever it is pointed at.
- *
- * Rotation sets come from the board in front of it, so it can prove a solution exists without
- * being told one.
+ * THE HISTORY IS WORTH KEEPING, because this file has now been wrong in both directions. Its very
+ * first draft did exactly this - demanded that every cell agree with every neighbour - and was
+ * rejected as "the FULL NET rule, not this game's". It was then rewritten to walk a single path,
+ * and later still had to stop deciding for itself what solved means and defer to `isSolved()`.
+ * That last change is the one that survived the rule flip: the search below proposes, and the GAME
+ * decides. A checker that holds its own opinion about the rule has to be rewritten every time the
+ * rule moves; one that asks the game does not.
  */
 function solve(board) {
   const { w, h } = board;
   const n = w * h;
   const rots = [];
   for (let i = 0; i < n; i++) {
-    const set = new Set();
+    const set = [];
     let m = board.cells[i];
-    for (let r = 0; r < 4; r++) { set.add(m); m = rotate(m); }
+    for (let r = 0; r < 4; r++) { if (!set.includes(m)) set.push(m); m = rotate(m); }
     rots.push(set);
   }
-  const inBounds = (x, y) => x >= 0 && y >= 0 && x < w && y < h;
-  const onPath = new Uint8Array(n);
-  const chosen = new Array(n).fill(null);
+  const chosen = new Array(n).fill(-1);
   let steps = 0;
-  const MAX = 300000;
+  const MAX = 2000000;
 
-  // Fill in every off-path cell (any rotation will do - they cannot join the water) and put the
-  // finished candidate to the game's own win check.
-  function settleAndVerify() {
-    for (let i = 0; i < n; i++) if (!onPath[i]) chosen[i] = board.cells[i];
-    const g = new PipesGame({ board: { ...board, cells: Uint8Array.from(chosen) } });
-    return g.isSolved();
-  }
-
-  function walk(i, cameFrom) {
+  // Row-major assignment: when a cell is placed only its LEFT and UP neighbours are already fixed,
+  // so those are the only two edges that can conflict. The right and bottom edges are checked when
+  // those cells are reached; the board's own right and bottom borders are checked here.
+  function place(i) {
     if (++steps > MAX) return false;
+    if (i === n) {
+      const g = new PipesGame({ board: { ...board, cells: Uint8Array.from(chosen) } });
+      return g.isSolved();
+    }
     const x = i % w, y = (i / w) | 0;
-    if (i === board.dst) {
-      const need = cameFrom;                       // the outlet is a cap facing back up the path
-      if (!rots[i].has(need)) return false;
-      chosen[i] = need;
-      if (settleAndVerify()) return true;
-      chosen[i] = null;
-      return false;
+    for (const m of rots[i]) {
+      if (y === 0 && (m & N)) continue;
+      if (x === 0 && (m & W)) continue;
+      if (x === w - 1 && (m & E)) continue;
+      if (y === h - 1 && (m & S)) continue;
+      if (x > 0 && (!!(m & W) !== !!(chosen[i - 1] & E))) continue;
+      if (y > 0 && (!!(m & N) !== !!(chosen[i - w] & S))) continue;
+      chosen[i] = m;
+      if (place(i + 1)) return true;
     }
-    for (const d of DIRS) {
-      const nx = x + DX[d], ny = y + DY[d];
-      if (!inBounds(nx, ny)) continue;
-      const ni = ny * w + nx;
-      if (onPath[ni]) continue;
-      const need = cameFrom | d;                   // exactly: back the way we came, plus onward
-      if (!rots[i].has(need)) continue;
-      chosen[i] = need;
-      onPath[ni] = 1;
-      if (walk(ni, OPPOSITE[d])) return true;
-      onPath[ni] = 0;
-    }
-    chosen[i] = null;
+    chosen[i] = -1;
     return false;
   }
-
-  onPath[board.src] = 1;
-  const sx = board.src % w, sy = (board.src / w) | 0;
-  for (const d of DIRS) {                          // the inlet is a cap; try each way it can point
-    const nx = sx + DX[d], ny = sy + DY[d];
-    if (!inBounds(nx, ny)) continue;
-    if (!rots[board.src].has(d)) continue;
-    chosen[board.src] = d;
-    const ni = ny * w + nx;
-    onPath[ni] = 1;
-    if (walk(ni, OPPOSITE[d])) return chosen;
-    onPath[ni] = 0;
-  }
-  return null;
+  return place(0) ? chosen : null;
 }
 
 // --- 3. generation, every tier, many seeds ---------------------------------------------------------
@@ -169,15 +128,17 @@ for (const tier of TIER_ORDER) {
     }
     prePlacedWorst = Math.max(prePlacedWorst, pre / Math.max(1, pieces));
 
-    // inlet and outlet are caps on an edge
-    const edge = (i) => { const x = i % b.w, y = (i / b.w) | 0; return x === 0 || y === 0 || x === b.w - 1 || y === b.h - 1; };
-    if (edge(b.src) && edge(b.dst) && popcount(b.solution[b.src]) === 1 && popcount(b.solution[b.dst]) === 1) capsOnEdge++;
+    // Inlet and outlet are CAPS - single-opening cells, which is what draws as a bulb - and they
+    // are two DIFFERENT cells. They are no longer required to sit on the board's edge: they are
+    // leaves of the spanning tree and a leaf can be anywhere, which is also true of the reference
+    // (its source bulb sits in the interior of the level in Matt's recording).
+    if (b.src !== b.dst && popcount(b.solution[b.src]) === 1 && popcount(b.solution[b.dst]) === 1) capsOnEdge++;
 
     // only pieces the tier allows
     for (const m of b.solution) {
       const k = kindOf(m);
-      if (k === 'blank' || k === 'cap') continue;
-      if (!cfg.pieces.includes(k)) badPieces++;
+      // Every cell is on the network now, so a BLANK is a bug: it would be a hole in the field.
+      if (k === 'blank') badPieces++;
     }
   }
   ok(`[${tier}] every board's constructed solution passes isSolved()`,
@@ -186,8 +147,8 @@ for (const tier of TIER_ORDER) {
   ok(`[${tier}] no board is under 6 turns from solved`, tooEasy === 0, `${tooEasy} were`);
   ok(`[${tier}] at most 12% of pieces start correct`, prePlacedWorst <= 0.12,
     `worst board ${(prePlacedWorst * 100).toFixed(1)}%`);
-  ok(`[${tier}] inlet and outlet are caps on an edge`, capsOnEdge === SEEDS, `${capsOnEdge}/${SEEDS}`);
-  ok(`[${tier}] only pieces this tier allows`, badPieces === 0, `${badPieces} stray pieces`);
+  ok(`[${tier}] inlet and outlet are two different caps`, capsOnEdge === SEEDS, `${capsOnEdge}/${SEEDS}`);
+  ok(`[${tier}] no blank cells - every cell is on the network`, badPieces === 0, `${badPieces} blanks`);
 }
 
 // (2) the independent solver, on the smaller tiers where an exhaustive search is quick
@@ -218,9 +179,12 @@ for (const tier of ['easy', 'medium']) {
     return g.cells[i] === m0;
   })());
 
-  const blank = g.cells.findIndex((m) => popcount(m) === 0);
-  if (blank >= 0) ok('a blank cell refuses to turn', g.turn(blank) === false);
-  else ok('a blank cell refuses to turn (no blank on this board)', true);
+  // Boards have no blanks any more, so this exercises the guard directly rather than hunting one.
+  {
+    const probe = new PipesGame({ board: { ...g.toJSON(), cells: Uint8Array.from(g.cells) } });
+    probe.cells[0] = 0;
+    ok('a blank cell refuses to turn', probe.turn(0) === false);
+  }
 
   // The leak rule, built by hand so it cannot pass by accident.
   const solvedBoard = { ...b, cells: Uint8Array.from(b.solution) };

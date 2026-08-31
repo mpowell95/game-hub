@@ -69,23 +69,10 @@ export function turnsBetween(from, to) {
 export const TIER_ORDER = ['easy', 'medium', 'hard', 'extraHard'];
 
 const TIERS = {
-  // decoy 1 = EVERY cell off the path carries a piece. The reference board has no holes in it at
-  // all (IMG_4602: 63 cells, 63 pieces) and "a mess of pipes" was the brief; at 0.35 easy came out
-  // 43% empty and read as a handful of scattered fragments rather than plumbing. See the decoy
-  // block below for why filling those cells cannot cost solvability.
-  // 'cap' IS IN EVERY LIST, and it is what puts BULBS on the board. The reference's boards are
-  // dotted with them and ours had exactly two, which is most of why a board of ours read as bare
-  // lines next to one of theirs. A cap is a dead end: under this game's rule it can never leak
-  // (nothing reaches it), so it is a pure piece of texture. The inlet and outlet stay legible
-  // because a bulb the water is IN gets a hole punched through it - the reference's own tell.
-  // 4x4 IS THE REFERENCE'S OWN EARLY BOARD (its level 2, measured off the recording: 1047px square
-  // on a 1206px screen, four cells across). Fewer, bigger cells is most of why its pipes read as
-  // fat and confident where a 5x5 of ours read as thin lines - the art ratios were already right,
-  // the cells were just smaller.
-  easy: { w: 4, h: 4, pieces: ['straight', 'elbow', 'cap'], decoy: 1, minPath: 6 },
-  medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee', 'cap'], decoy: 1, minPath: 14 },
-  hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross', 'cap'], decoy: 1, minPath: 20 },
-  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross', 'cap'], decoy: 1, minPath: 30 },
+  easy: { w: 4, h: 4 },
+  medium: { w: 6, h: 7 },
+  hard: { w: 7, h: 8 },
+  extraHard: { w: 7, h: 10 },
 };
 
 export function tierConfig(tier) { return TIERS[tier] || TIERS.easy; }
@@ -114,44 +101,44 @@ export function rng(seed) {
 
 const idx = (x, y, w) => y * w + x;
 
-/** A self-avoiding walk from an edge cell to a DIFFERENT edge, at least `minPath` cells long. */
-function carvePath(w, h, minPath, rnd) {
-  for (let attempt = 0; attempt < GATES.walkTries; attempt++) {
-    const startLeft = rnd() < 0.5;
-    const sx = startLeft ? 0 : w - 1;
-    const sy = Math.floor(rnd() * h);
-    const seen = new Uint8Array(w * h);
-    const path = [[sx, sy]];
-    seen[idx(sx, sy, w)] = 1;
-    let x = sx, y = sy;
-    let guard = w * h * 6;
-    while (guard-- > 0) {
-      const opts = [];
-      for (const d of DIRS) {
-        const nx = x + DX[d], ny = y + DY[d];
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        if (seen[idx(nx, ny, w)]) continue;
-        // Refuse a step that would touch the existing path on more than one side: that creates a
-        // loop, and a loop makes the "correct" rotation of a cell ambiguous.
-        let touches = 0;
-        for (const e of DIRS) {
-          const ax = nx + DX[e], ay = ny + DY[e];
-          if (ax < 0 || ay < 0 || ax >= w || ay >= h) continue;
-          if (seen[idx(ax, ay, w)]) touches++;
-        }
-        if (touches > 1) continue;
-        opts.push([nx, ny]);
-      }
-      if (!opts.length) break;
-      const [nx, ny] = opts[Math.floor(rnd() * opts.length)];
-      seen[idx(nx, ny, w)] = 1;
-      path.push([nx, ny]);
-      x = nx; y = ny;
-      const onFarEdge = startLeft ? x === w - 1 : x === 0;
-      if (onFarEdge && path.length >= minPath) return path;
+/**
+ * Carve a random SPANNING TREE over every cell, and return each cell's mask.
+ *
+ * A randomised depth-first carve (the recursive-backtracker maze) visits every cell exactly once
+ * and opens exactly one edge into each newly reached cell, so the result is connected and has no
+ * loops. A loop would make a cell's "correct" rotation ambiguous; leaving a cell out would make it
+ * filler, which is the whole thing this replaced.
+ *
+ * The piece KINDS fall out of it rather than being chosen: a leaf of the tree has one opening and
+ * is a cap (a bulb), a pass-through is a straight or an elbow, a fork is a tee, and a cell with all
+ * four is a cross.
+ */
+function carveTree(w, h, rnd) {
+  const n = w * h;
+  const mask = new Uint8Array(n);
+  const seen = new Uint8Array(n);
+  const start = Math.floor(rnd() * n);
+  const stack = [start];
+  seen[start] = 1;
+  while (stack.length) {
+    const i = stack[stack.length - 1];
+    const x = i % w, y = (i / w) | 0;
+    const opts = [];
+    for (const d of DIRS) {
+      const nx = x + DX[d], ny = y + DY[d];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      if (seen[idx(nx, ny, w)]) continue;
+      opts.push(d);
     }
+    if (!opts.length) { stack.pop(); continue; }
+    const d = opts[Math.floor(rnd() * opts.length)];
+    const ni = idx(x + DX[d], y + DY[d], w);
+    mask[i] |= d;
+    mask[ni] |= OPPOSITE[d];
+    seen[ni] = 1;
+    stack.push(ni);
   }
-  return null;
+  return mask;
 }
 
 /**
@@ -161,71 +148,45 @@ function carvePath(w, h, minPath, rnd) {
  * board the player sees and `solution` is the configuration it was built from. `solution` is kept
  * for the tests and for the "minimum turns" measure; the game never consults it, because the win
  * check is computed from the board itself and a second source of truth would be one too many.
+ *
+ * THERE ARE NO DECOYS AND NO FILLER. Every cell is on the one network, so every piece a player
+ * turns is a piece that matters. The old construction carved a single path and sprinkled the rest
+ * of the grid with pieces the water could never reach - 52% of a Medium board was unreachable, and
+ * adding bulbs to that filler (2026-08-31) turned it into a field of visible dead ends. Matt,
+ * shown his own board: "Explain how this board doesn't have dead ends or 'decoys'." It could not
+ * be explained; it could only be removed.
  */
 export function generate(tier, seed) {
   const cfg = tierConfig(tier);
   const { w, h } = cfg;
   const rnd = rng(seed);
+  const n = w * h;
 
-  const path = carvePath(w, h, cfg.minPath, rnd);
-  if (!path) return generate(tier, (seed + 0x9e3779b9) >>> 0);   // vanishingly rare; try another seed
+  const solution = carveTree(w, h, rnd);
 
-  const solution = new Uint8Array(w * h);
-  const onPath = new Uint8Array(w * h);
-  for (const [x, y] of path) onPath[idx(x, y, w)] = 1;
-
-  // Lay pipe along the path: each cell opens toward its path neighbours. The two ends get one
-  // opening each, which makes them caps - the inlet and the outlet.
-  for (let i = 0; i < path.length; i++) {
-    const [x, y] = path[i];
-    let m = 0;
-    for (const j of [i - 1, i + 1]) {
-      if (j < 0 || j >= path.length) continue;
-      const [ax, ay] = path[j];
-      for (const d of DIRS) if (x + DX[d] === ax && y + DY[d] === ay) m |= d;
-    }
-    solution[idx(x, y, w)] = m;
+  // The source and the drain are two LEAVES of the tree - single-opening cells, which is what draws
+  // as a bulb. Picking leaves (rather than any two cells) is what makes them read as the ends of
+  // the run, and the reference marks its source the same way.
+  const leaves = [];
+  for (let i = 0; i < n; i++) if (popcount(solution[i]) === 1) leaves.push(i);
+  const src = leaves.length ? leaves[Math.floor(rnd() * leaves.length)] : 0;
+  let dst = src;
+  if (leaves.length > 1) {
+    let guard = 64;
+    while (dst === src && guard-- > 0) dst = leaves[Math.floor(rnd() * leaves.length)];
   }
 
-  // Decoys - every cell that is not on the path, with no restriction on where they may point.
-  //
-  // THIS USED TO REFUSE ANY DECOY THAT POINTED AT THE PATH, on the stated grounds that it "would be
-  // unsolvable under the no-leaks rule", and downgraded the piece (cross -> tee -> elbow ->
-  // straight -> blank) until one fitted. That was wrong, and it cost a quarter of the board: it is
-  // where the blank cells came from, and it is why a cross could never sit beside the path.
-  //
-  // A decoy pointing INTO a path cell cannot leak, because a leak is only ever reported for a cell
-  // the water REACHES (`flow()` in game.js walks `order`, and only pushes a cell it can get to).
-  // Two cells are joined only when EACH opens toward the other, and in the constructed solution a
-  // path cell opens along the path and nowhere else - so it never opens back at a decoy, the decoy
-  // never joins the network, and it stays dry whatever it is pointing at. The solved board is still
-  // solved with a piece in every cell; pipes/js/test.js proves it independently over every tier and
-  // 40 seeds, and would go red here first if this reasoning were wrong.
-  const MASKS = { straight: N | S, elbow: N | E, tee: N | E | S, cross: N | E | S | W, cap: N };
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = idx(x, y, w);
-      if (onPath[i]) continue;
-      if (rnd() >= cfg.decoy) continue;
-      const kind = cfg.pieces[Math.floor(rnd() * cfg.pieces.length)];
-      let m = MASKS[kind];
-      const spins = Math.floor(rnd() * 4);
-      for (let r = 0; r < spins; r++) m = rotate(m);
-      solution[i] = m;
-    }
-  }
-
-  // Scramble, honouring the quality gates.
+  // Scramble, honouring the quality gates. A cross has one rotation, so it is never scrambled.
   const cells = new Uint8Array(solution);
   let turns = 0;
   let prePlaced = 0;
   const live = [];
-  for (let i = 0; i < cells.length; i++) if (popcount(cells[i]) > 0 && kindOf(cells[i]) !== 'cross') live.push(i);
+  for (let i = 0; i < n; i++) if (popcount(cells[i]) > 0 && kindOf(cells[i]) !== 'cross') live.push(i);
   for (const i of live) {
     const spins = 1 + Math.floor(rnd() * 3);      // 1..3, so never a no-op turn
     for (let r = 0; r < spins; r++) cells[i] = rotate(cells[i]);
   }
-  for (let i = 0; i < cells.length; i++) {
+  for (let i = 0; i < n; i++) {
     if (cells[i] === solution[i]) { if (popcount(cells[i]) > 0) prePlaced++; continue; }
     const t = turnsBetween(cells[i], solution[i]);
     turns += t < 0 ? 0 : Math.min(t, 4 - t);
@@ -235,14 +196,7 @@ export function generate(tier, seed) {
     return generate(tier, (seed + 0x85ebca6b) >>> 0);
   }
 
-  const [sx, sy] = path[0];
-  const [dx, dy] = path[path.length - 1];
-  return {
-    w, h, tier, seed, turns,
-    cells, solution,
-    src: idx(sx, sy, w),
-    dst: idx(dx, dy, w),
-  };
+  return { w, h, tier, seed, turns, cells, solution, src, dst };
 }
 
 export default { generate, rotate, kindOf, popcount, turnsBetween, tierConfig, TIER_ORDER, rng };

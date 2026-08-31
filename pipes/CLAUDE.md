@@ -6,7 +6,7 @@
 > them. This game's answer to THE LAW is short and is stated under "Persistence".
 
 A grid of pipe pieces, every one dropped in at a random rotation. Tap a piece to turn it a quarter
-turn clockwise. Get the water from the inlet to the outlet **without a leak**. Built 2026-08-29 from
+turn clockwise. Join **every pipe on the board** into one leak-free network. Built 2026-08-29 from
 `docs/PIPES-SCOPE.md`, which is the scope Matt approved and still the place to read for the options
 that were considered and rejected.
 
@@ -53,41 +53,50 @@ hundreds of boards without constructing an element.
 - the piece **kind** (straight, elbow, tee, cross, cap) is *derived* from the mask, so nothing has
   to store it or keep it in sync.
 
-## The win condition: path with no leaks
+## The win condition: FULL NET (changed 2026-08-31)
 
-Matt chose this variant (2026-08-29) over "path only" and "full net". Water floods from the inlet
-through joined openings, and to win:
+Water floods from the inlet through joined openings, and to win:
 
-1. the water must reach the outlet, **and**
-2. every pipe the water reaches must be sealed — no opening pointing at a neighbour that does not
-   open back, and none pointing off the board.
+1. the water must reach **every pipe on the board**, and
+2. nothing may leak — no opening pointing at a neighbour that does not open back, and none
+   pointing off the edge of the board.
 
-**Only pipes ON THE WATER'S NETWORK are checked.** A dry decoy in a corner with an open end is not
-a leak, because nothing is flowing out of it. That asymmetry is the rule, and it is easy to get
-wrong — see the solver note below.
+**This replaced "path with no leaks", and the replacement is the most important thing in this
+file.** The old rule checked only the pipes the water reached, which meant every cell off that one
+path was irrelevant: measured, **52% of a Medium board was pieces the water could never touch**. A
+player could finish having ignored most of what was in front of them, and the board was, by
+construction, mostly decoration. Matt, shown one of his own solved boards with the entire right-hand
+side untouched: *"Explain how this board doesn't have dead ends or 'decoys'."* It could not be
+explained. It could only be removed.
 
-Rule 2 is what makes the animation mean something: a leak is a thing you can *see*, at a specific
-cell, so "you are not finished yet" is shown on the board instead of announced in text.
+`docs/PIPES-SCOPE.md` records Matt picking (b) path-with-no-leaks over (c) full net on 2026-08-29.
+**That is superseded.** He chose it from a description; he rejected it after playing it and after
+watching the reference, which is full net and is why its boards look purposeful. Do not "restore"
+the old rule on the strength of the scope document.
+
+Both halves of the check are needed. Leak-free alone would accept a sealed loop sitting off on its
+own; all-reached alone would accept a network spilling off the edge.
+
+**There are no decoys, no filler and no blank cells.** Every piece a player turns is a piece that
+matters, so the words "decoy" and "dead end" no longer describe anything in this game. A bulb is an
+endpoint OF the network, not an ornament beside it.
 
 ## The generator, which is the whole game
 
 **Build the solution first, then destroy it.** A board is never generated randomly and checked
 afterwards — "generate and hope" is how a puzzle game ships an unsolvable level to a real player.
 
-1. Carve a self-avoiding walk from an edge cell to the opposite edge. A step that would touch the
-   existing path on more than one side is refused: that makes a loop, and a loop makes the
-   "correct" rotation of a cell ambiguous.
-2. Lay pipe along it — each cell opens toward its path neighbours, the two ends becoming caps.
-3. **Decoys: every remaining cell, pointing wherever it likes** (`decoy: 1`). This used to refuse
-   any decoy that pointed at the path, on the stated grounds that it "would be unsolvable under the
-   no-leaks rule", and downgraded the piece (cross → tee → elbow → straight → **blank**) until one
-   fitted. That was wrong, and it is where the blank cells came from — 43% of Easy, 25% of Hard,
-   against a reference board with a piece in all 63 of its cells.
-   **A decoy pointing INTO a path cell cannot leak**, because a leak is only ever reported for a
-   cell the water REACHES, and two cells are joined only when EACH opens at the other. In the
-   constructed solution a path cell opens along the path and nowhere else, so it never opens back
-   at a decoy: the decoy never joins the network and stays dry whatever it is aimed at. Removing
-   the restriction is also what lets a cross sit beside the path.
+1. **Carve a random SPANNING TREE over every cell** (`carveTree`) — a randomised depth-first carve,
+   the recursive-backtracker maze. It visits every cell exactly once and opens exactly one edge into
+   each newly reached cell, so the result is connected and loop-free. A loop would make a cell's
+   "correct" rotation ambiguous; leaving a cell out would make it filler.
+2. **The piece kinds fall out of it** rather than being chosen: a leaf has one opening and is a cap
+   (a bulb), a pass-through is a straight or an elbow, a fork is a tee, four ways is a cross. There
+   is no per-tier piece list any more, and no `decoy` or `minPath` setting — **board size is the
+   entire difficulty axis.**
+3. **The inlet and the drain are two different LEAVES**, which is what draws as a bulb. They are no
+   longer required to be on the board's edge: a leaf can be anywhere, and the reference's own source
+   sits in the interior of the level in Matt's recording.
 4. Scramble, then apply the quality gates: **no more than 12% of pieces may start already correct**
    (a board that arrives half-solved reads as cheap — "a mess of pipes" was the brief) and the board
    must be **at least 6 turns from solved**.
@@ -105,18 +114,20 @@ solvable**, over every tier and 40 seeds, and it is checked two ways on purpose:
 
 Only (1) would let a generator and a win check be wrong *together* and still pass.
 
-**The independent solver drifted STRICTER than the rule TWICE**, and the second time is why it is
-now built the way it is. Its first draft required every cell on the board to agree with every
-neighbour — the FULL NET rule, not this game's — so it rejected perfectly solvable boards and
-reported 0/12 against a generator that was fine. The fix left a weaker version of the same mistake
-in place: it still required every OFF-path cell to be rotatable so that nothing FACED the path.
-That assumption went red the day the generator started filling every cell (2026-08-31), on boards
-whose constructed solution the assertion directly above it was accepting.
+**The independent solver has now been wrong in BOTH directions, and the lesson is the same one.**
+Its first draft demanded that every cell agree with every neighbour — which was the FULL NET rule,
+and was rejected at the time as "not this game's". It was rewritten to walk a single path. Then it
+kept a weaker version of the same over-strictness (every off-path cell had to be rotatable so that
+nothing FACED the path) and went red the day the generator started filling every cell. **Then the
+rule became full net after all, and the first draft turned out to have been right about the shape
+of the problem.**
 
-So it no longer holds an opinion about what solved means: it builds a candidate and hands it to the
-real `isSolved()`, which is the only arrangement that cannot drift in either direction. **A checker
-stricter than the rule is not a stricter checker; it is a broken one** — and it will read as a bug
-in whatever it is pointed at, which the first time cost a day chasing a healthy generator.
+What survived all of that is the arrangement, not the algorithm: the search PROPOSES a candidate
+and the GAME decides, by handing it to the real `isSolved()`. A checker that holds its own opinion
+about the rule has to be rewritten every time the rule moves, and will read as a bug in whatever it
+is pointed at. One that asks the game does not. It is a full-net constraint search now — assign each
+cell a rotation such that every shared edge agrees and nothing points off the board — and it still
+never sees `board.solution`.
 
 ## Levels, and moving on by itself (2026-08-31)
 
@@ -380,10 +391,11 @@ and a 60-line dependency-free PNG reader plus the ratios above will tell you in 
 render is right. Every ratio in the shipped build was checked back against the reference this way
 and lands within a pixel.
 
-**The one thing deliberately NOT copied is the rule.** The reference says *"Rotate the pipes to link
-them together into a single network"* - that is the FULL NET variant, which `docs/PIPES-SCOPE.md`
-put to Matt as option (c) and he chose (b), path with no leaks. Copy the look; the rules are
-already decided.
+**The rule is copied too, as of 2026-08-31.** The reference says *"Rotate the pipes to link them
+together into a single network"* - full net - and this file used to end here by saying that was the
+one thing deliberately not copied. Three rounds of "why does this board have dead ends" later, it
+turned out the rule WAS the look: a board where every piece must connect is why the reference's
+boards read as purposeful and ours read as noise. See "The win condition" at the top.
 
 ## "Make Pipes look EXACTLY like the screen recording" (2026-08-31)
 
@@ -402,11 +414,12 @@ were different and none of them was the art - the pipe ratios were already right
    the page 40px taller than the screen; measuring the document instead is circular, because
    collapsing the element to measure it changes the document's height. `test-visual`'s fit probe
    caught both.
-3. **BULBS ON EVERY DEAD END.** `'cap'` is now in every tier's piece list. The reference's boards
-   are dotted with them and ours had exactly two, which is most of why a board of ours read as bare
-   lines. A cap is a dead end and under this game's rule can never leak, so it is pure texture; the
-   inlet and outlet stay legible because a bulb the water is IN gets a hole punched through it,
-   which is the reference's own tell.
+3. **BULBS.** Ours had exactly two, which is most of why a board of ours read as bare lines. This
+   was first "fixed" by sprinkling cap pieces as pure texture - which is precisely how the board
+   ended up full of visible dead ends, and is what Matt caught. **The real fix was the rule** (see
+   the win condition): under full net a bulb is a LEAF OF THE NETWORK, so boards are dotted with
+   them and every one has to be connected. The hole marks the SOURCE and only the source - the
+   reference's solved level has exactly one holed bulb and the rest solid.
 4. **THE HUD IS THE REFERENCE'S**: a back chevron, the level centred with one line under it, and
    two icons right. Ours was three text buttons, which is the shape of a toolbar. The icons keep
    our functions (new board, leaderboard) in the reference's layout, at 44px tap targets.
