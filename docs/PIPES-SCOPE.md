@@ -1,5 +1,28 @@
 # Pipes — build scope
 
+> ## SUPERSEDED ON TWO POINTS (2026-08-31). READ THIS FIRST.
+>
+> This document was written by a Claude session, not by Matt, and on the two decisions below it
+> steered him wrong. **Do not build from it without reading `pipes/CLAUDE.md`**, which has what was
+> actually settled.
+>
+> 1. **The win condition is FULL NET, not "path with no leaks".** Section 1 below offers three
+>    variants, recommends (b), and describes (c) full net — which is what the real app Matt was
+>    pointing at actually does — as *"Hardest, and much slower to solve on a phone."* He picked (b)
+>    off that menu with my thumb on the scale. Playing it showed why it was wrong: under (b) only
+>    the pipes the water reaches are checked, so **52% of a Medium board was pieces the water could
+>    never touch.**
+> 2. **THERE ARE NO DECOYS.** Section 2 step 3 says *"Add decoys. Fill some of the remaining cells
+>    with pieces that CANNOT join the solution."* That was not a consequence Matt accepted — it was
+>    designed in here, by me, on day one, and it is the direct cause of every "why does this board
+>    have dead ends" round that followed. Matt: *"I do not want decoy bulbs"*, and later, looking at
+>    a solved board of his with the whole right-hand side untouched: *"Explain how this board
+>    doesn't have dead ends or 'decoys'."* The generator now carves a spanning tree over every cell,
+>    so every piece is on the network and the word "decoy" describes nothing in this game.
+>
+> The rest of the document — the module contract, the tiers, the animation notes, the test plan — is
+> still accurate. These two are the ones that cost days.
+
 Matt, 2026-08-29: *"a pipes game. where water flows into a pipe, then there's a mess of pipes all
 misrotated and whatever and you have to find the path for the water to flow to the exit. similar
 puzzle vibe as nuts and bolts."*
