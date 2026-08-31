@@ -305,7 +305,10 @@
            people, so it must not be a scroll away. Rendered always, count or no count. -->
       <section class="pf-section">
         <h2 data-i18n="msg_title">Messages</h2>
-        <button type="button" class="pf-report-btn" id="pf-msgs-btn" data-i18n="msg_btn">💬 Messages</button>
+        <!-- Filled by js/messages-ui.js's renderProfileMessages: the newest two conversations plus
+             an All messages button, or just the button when there is nothing to show. The heading
+             above used to sit over a button that repeated the same word and nothing else. -->
+        <div id="pf-msgs"></div>
       </section>
 
       <section class="pf-section">
@@ -917,19 +920,11 @@
     // -- Messages ------------------------------------------------------------------
     // Same lazy import as the two buttons below: this page pays nothing for it until it is
     // pressed. The label picks up an unread count once we can see one.
-    $('#pf-msgs-btn').addEventListener('click', async () => {
-      try {
-        const m = await import('../js/messages-ui.js');
-        await m.openMessages();
-        paintMessageCount();
-      } catch (e) { console.error('Messages failed to load', e); }
-    });
     async function paintMessageCount() {
       try {
         const m = await import('../js/messages-ui.js');
-        const n = await m.myUnreadMessages();
-        $('#pf-msgs-btn').textContent = n > 0 ? t('msg_btn_new', { n }) : t('msg_btn');
-      } catch { /* offline: the plain label is already correct */ }
+        await m.renderProfileMessages($('#pf-msgs'));
+      } catch (e) { console.error('Messages failed to load', e); }
     }
     paintMessageCount();
 
