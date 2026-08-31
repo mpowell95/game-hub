@@ -102,12 +102,24 @@ function ensureCss() {
   /* The conversation header: back, the person (emoji + name, matching their inbox row), then Hide.
      Hide lives up here rather than under the last message, where it sat exactly where the eye
      lands after the newest thing said and read as part of the conversation. */
-  .msg-head { display: flex; align-items: center; gap: var(--gh-sp-2); min-width: 0;
-              padding-right: 40px; }
+  /* NO padding-right here. .gh-modal__title already carries a right margin to clear the close
+     button, so reserving 40px again took the row from 361px to 281px, and the name was the only
+     flexible thing left to pay for it: measured, it got 94px of the 148px it needed.
+     (This whole block is inside a JS template literal - never use a backtick in these comments.) */
+  .msg-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  /* Square, chevron only. nowrap because a squeezed flex item breaks the glyph onto its own line
+     before it agrees to shrink. */
+  .msg-back { flex: 0 0 auto; width: 34px; padding: 0; font-size: 20px; line-height: 1;
+              white-space: nowrap; }
   .msg-head-emoji { font-size: 22px; line-height: 1; flex: 0 0 auto; }
+  /* The name is the only thing here that may shrink, and it runs at the modal title's --gh-fs-xl
+     (24px) by default, which is far too big for a row that also holds three controls: at that size
+     "Alec king of games" - the longest name on the real board - clipped to "Alec ki…" on a 393px
+     phone. Sized so THAT name fits whole, which means every shorter one does too. */
   .msg-head-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-                   white-space: nowrap; }
-  .msg-head-hide { flex: 0 0 auto; }
+                   white-space: nowrap; font-size: var(--gh-fs-md); }
+  .msg-head-hide { flex: 0 0 auto; font-size: var(--gh-fs-xs); color: var(--gh-muted);
+                   padding: 0 var(--gh-sp-2); }
   /* --- conversation list ------------------------------------------------------------------ */
   .msg-list { list-style: none; margin: 0; padding: 0; }
   .msg-list li + li { margin-top: var(--gh-sp-2); }
@@ -243,9 +255,14 @@ function whenText(atMs) {
 }
 
 function shellHTML(card, { title, sub, backable, body, footer, emoji, hide }) {
+  // Back is a CHEVRON, not "‹ Back". With the word, four things competed for a 393px row - back,
+  // emoji, name, Hide - and the loser was the name: "King of Games" truncated to "Kin…" while the
+  // back button itself wrapped onto two lines. The word costs about 45px and says nothing the
+  // chevron does not; the label is on the button for a screen reader.
   const heading = backable
     ? `<span class="msg-head">
-         <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-back" data-role="back">&#8249; ${esc(t('msg_back'))}</button>
+         <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-back" data-role="back"
+                 aria-label="${esc(t('msg_back'))}" title="${esc(t('msg_back'))}">&#8249;</button>
          ${emoji ? `<span class="msg-head-emoji" aria-hidden="true">${esc(emoji)}</span>` : ''}
          <span class="msg-head-name">${esc(title)}</span>
          ${hide ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-head-hide" data-role="hide">${esc(t('msg_hide'))}</button>` : ''}
