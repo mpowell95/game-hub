@@ -170,6 +170,63 @@ function writesAllowed(what) {
   return false;
 }
 
+// --- the auth claim: what lets the RTDB rules scope this node ---------------------------------
+//
+// Matt, on being told the database served every thread to anyone signed in: *"Only admin should be
+// able to see every thread. Others should only see their own."*
+//
+// The rules can only see one thing about a client: its anonymous auth `uid`. They cannot see a
+// player code, because a code lives in localStorage. So a device WRITES the link - `msgAuth/<uid> =
+// <CODE>` - and the rules read it back to answer "is this thread yours". Without a claim, a device
+// can read and write nothing under `messages/` at all.
+//
+// The claim is rewritable by its own uid and nobody else's. It is deliberately NOT claim-once: a
+// player who links this device to another player code (js/name-gate.js) changes their code, and a
+// frozen claim would lock them out of their own messages. Claim-once would also buy nothing against
+// a determined person, who can simply sign in again for a fresh uid.
+//
+// WHAT THIS DOES AND DOES NOT BUY, stated plainly so nobody oversells it: the app, and the database
+// behind it, no longer hand anyone another player's messages - which is the whole of what was wrong.
+// It is NOT proof against a person who has somebody's 5-character player code and opens developer
+// tools, because that code is printed on the profile page and typed in to link a second device, so
+// it is not a secret and cannot be made one. Real per-person authentication is the only thing that
+// would close that, and this app has none by design.
+//
+// Best-effort and cached per page load: a failed claim leaves the reads returning empty (which they
+// already do offline), never an exception.
+
+let _claimed = null;
+
+async function ensureAuthClaim(boot) {
+  const me = myCode();
+  if (!me || !boot || !boot.uid) return null;
+  if (_claimed === me) return me;
+  try {
+    const { db, api, uid } = boot;
+    const snap = await api.get(api.ref(db, `msgAuth/${uid}`));
+    const have = (snap && snap.exists()) ? snap.val() : null;
+    // Only write when it is actually wrong: this runs on every hub load, and a no-op write is a
+    // round trip every device would pay forever for nothing.
+    if (have !== me) {
+      if (!writesAllowed('msgAuth claim')) return null;
+      await api.set(api.ref(db, `msgAuth/${uid}`), me);
+    }
+    _claimed = me;
+    return me;
+  } catch (err) {
+    console.warn('[messages] could not claim this device for ' + me + '; messages will read as empty', err);
+    return null;
+  }
+}
+
+/** Boot Firebase AND make sure this device has claimed its code. null when either is unavailable. */
+async function ready() {
+  const boot = await getStatsApp();
+  if (!boot) return null;
+  await ensureAuthClaim(boot);
+  return boot;
+}
+
 // --- sending --------------------------------------------------------------------------------
 
 /**
@@ -196,7 +253,7 @@ export async function sendMessage({ toCode, toName, toEmoji, text }) {
 
   const atMs = Date.now();
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
 
@@ -246,7 +303,7 @@ export async function readMyThreads() {
   const me = myCode();
   if (!me) return [];
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return [];
     const { db, api } = boot;
     const snap = await api.get(api.ref(db, `messages/index/${me}`));
@@ -264,7 +321,7 @@ export async function readThread(otherCode) {
   const key = pairKey(myCode(), otherCode);
   if (!key) return [];
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return [];
     const { db, api } = boot;
     const snap = await api.get(api.ref(db, `messages/threads/${key}/msgs`));
@@ -283,7 +340,7 @@ export async function watchThread(otherCode, cb) {
   const key = pairKey(myCode(), otherCode);
   if (!key) return () => {};
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return () => {};
     const { db, api } = boot;
     return api.onValue(api.ref(db, `messages/threads/${key}/msgs`), (s) => {
@@ -300,7 +357,7 @@ export async function markThreadSeen(otherCode, atMs) {
   const me = myCode(), to = asCode(otherCode);
   if (!me || !to || !writesAllowed('markThreadSeen')) return false;
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return false;
     const { db, api } = boot;
     await api.update(api.ref(db, `messages/index/${me}/${to}`), { seenAt: ms(atMs) || Date.now() });
@@ -318,7 +375,7 @@ export async function hideThread(otherCode) {
   const me = myCode(), to = asCode(otherCode);
   if (!me || !to || !writesAllowed('hideThread')) return false;
   try {
-    const boot = await getStatsApp();
+    const boot = await ready();
     if (!boot) return false;
     const { db, api } = boot;
     await api.update(api.ref(db, `messages/index/${me}/${to}`), { hiddenAt: Date.now() });
@@ -425,26 +482,44 @@ export async function drainOutbox() {
 /**
  * Every conversation in the system, newest first, for the admin page's moderation view. Read-only:
  * there is no admin write path in this file at all, so nothing here can edit or remove what anyone
- * said. Rows are { key, a, b, count, at, last }.
+ * said.
+ *
+ * The RTDB rules, not this function, are what make it admin-only: reading `messages/threads` needs
+ * `admins/<auth.uid> === true`, so anybody else gets a permission error here no matter how they
+ * reached the call.
+ *
+ * Returns `{ threads, denied }`, not a bare array, because "no messages exist" and "this device is
+ * not on the allowlist" must not render as the same empty screen - the second is a thing Matt has
+ * to fix (his auth id changes when a browser's site data is cleared), and a screen that says
+ * "No messages yet" would hide it.
  */
 export async function readAllThreads() {
   try {
-    const boot = await getStatsApp();
-    if (!boot) return [];
+    const boot = await ready();
+    if (!boot) return { threads: [], denied: false };
     const { db, api } = boot;
     const snap = await api.get(api.ref(db, 'messages/threads'));
     const val = (snap && snap.exists()) ? snap.val() : null;
-    if (!val) return [];
-    return Object.keys(val).map((key) => {
+    if (!val) return { threads: [], denied: false };
+    const threads = Object.keys(val).map((key) => {
       const msgs = sortMessagesOldestFirst(Object.values((val[key] || {}).msgs || {}));
       const parts = key.split('_');
       const last = msgs.length ? msgs[msgs.length - 1] : null;
       return { key, a: parts[0] || '', b: parts[1] || '', count: msgs.length, at: ms(last && last.atMs), msgs };
     }).sort((x, y) => y.at - x.at);
+    return { threads, denied: false };
   } catch (err) {
+    const denied = /permission|PERMISSION_DENIED/i.test(String((err && err.message) || err));
     console.error('[messages] could not read every thread', err);
-    return [];
+    return { threads: [], denied };
   }
+}
+
+/** This device's anonymous auth id - the ONLY thing the RTDB rules can see about a client, and so
+ *  the value that goes in `admins/<uid>`. Shown on the admin page so Matt can copy it. */
+export async function authId() {
+  try { const boot = await getStatsApp(); return (boot && boot.uid) || null; }
+  catch { return null; }
 }
 
 export { isTestName };
@@ -454,5 +529,5 @@ export default {
   countUnreadThreads, visibleThreads, sortMessagesOldestFirst, indexPatch, myCode,
   sendMessage, sendBroadcast, readMyThreads, readThread, watchThread, markThreadSeen,
   hideThread, unreadMessageCount, readContacts, queueOutbox, drainOutbox, outboxCount,
-  readAllThreads,
+  readAllThreads, authId,
 };

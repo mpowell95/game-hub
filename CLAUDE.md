@@ -475,6 +475,26 @@ profile pill carries the unread badge, which is why the button is there and not 
 - One badge on the pill, summing bug replies and messages, because the pill leads to one page holding
   both. Full contract and the node shape: `js/CLAUDE.md`, "Messages".
 
+**`messages/` is the ONE node in this database with real security rules on it.** Matt: *"Only admin
+should be able to see every thread. Others should only see their own."* Everything else is
+`auth != null`. A device claims `msgAuth/<auth.uid> = <its player code>`, and the rules scope every
+read to threads that code is in; `admins/<auth.uid>` (which already existed, set by hand in the
+console) grants Matt the read-all. **It does not survive somebody who has another player's
+5-character code and opens developer tools** - that code is printed on the profile page, so it is
+not a secret and cannot be made one.
+
+Two knock-on effects, because a granted ancestor `.read` cascades and cannot be revoked below:
+
+- **The root `.read`/`.write` are now `false` and every branch is enumerated in
+  `database.rules.json`.** Add a new top-level node there or it is unreachable.
+- **`backups/rtdb-backup.mjs` reads branch by branch now**, from a `BRANCHES` list that must stay in
+  step with that file, and it CANNOT read `messages/` (it signs in anonymously). It says so loudly
+  rather than recording an empty branch. Export that node from the Firebase console.
+
+**The rules are published by hand** (console → Realtime Database → Rules → paste → Publish); no
+script in this repo deploys them. Deploy the app first, the rules second: a device claims itself on
+its next hub load.
+
 ## The admin control page (2026-08-24)
 
 Matt: *"I need an admin control page in the hub. I need to be able to make games admin only for

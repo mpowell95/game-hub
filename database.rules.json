@@ -1,6 +1,49 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null"
+    ".read": false,
+    ".write": false,
+
+    "messages": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+
+      "threads": {
+        "$pair": {
+          ".read": "auth != null && root.child('msgAuth').child(auth.uid).exists() && $pair.contains(root.child('msgAuth').child(auth.uid).val())",
+          ".write": "auth != null && root.child('msgAuth').child(auth.uid).exists() && $pair.contains(root.child('msgAuth').child(auth.uid).val())"
+        }
+      },
+
+      "index": {
+        "$code": {
+          ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
+          "$other": {
+            ".write": "auth != null && root.child('msgAuth').child(auth.uid).exists() && ($code === root.child('msgAuth').child(auth.uid).val() || $other === root.child('msgAuth').child(auth.uid).val())"
+          }
+        }
+      }
+    },
+
+    "msgAuth": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "admins": { ".read": "auth != null", ".write": false },
+
+    "adminConfig":    { ".read": "auth != null", ".write": "auth != null" },
+    "archive":        { ".read": "auth != null", ".write": "auth != null" },
+    "bugReplies":     { ".read": "auth != null", ".write": "auth != null" },
+    "bugReportShots": { ".read": "auth != null", ".write": "auth != null" },
+    "bugReports":     { ".read": "auth != null", ".write": "auth != null" },
+    "challenge":      { ".read": "auth != null", ".write": "auth != null" },
+    "deviceReports":  { ".read": "auth != null", ".write": "auth != null" },
+    "flight":         { ".read": "auth != null", ".write": "auth != null" },
+    "players":        { ".read": "auth != null", ".write": "auth != null" },
+    "rooms":          { ".read": "auth != null", ".write": "auth != null" },
+    "selfies":        { ".read": "auth != null", ".write": "auth != null" },
+    "skeeballThrows": { ".read": "auth != null", ".write": "auth != null" },
+    "usernames":      { ".read": "auth != null", ".write": "auth != null" }
   }
 }

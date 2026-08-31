@@ -16,7 +16,7 @@
 import {
   MAX_MESSAGE, myCode, readMyThreads, readThread, watchThread, markThreadSeen, hideThread,
   readContacts, sendMessage, sendBroadcast, unreadMessageCount, readAllThreads,
-  queueOutbox, normalizeText, isUnread,
+  queueOutbox, normalizeText, isUnread, authId,
 } from './messages.js';
 import { loadProfile } from './profile-store.js';
 import { loadPalette, PHRASES } from './mp-reactions.js';
@@ -107,6 +107,11 @@ function ensureCss() {
   .msg-admin-line { margin: 0 0 var(--gh-sp-1); font-size: var(--gh-fs-sm); line-height: 1.45;
                     word-break: break-word; }
   .msg-admin-who { font-weight: 700; color: var(--gh-muted); }
+  /* This device's anonymous auth id, shown when it is not on the admins allowlist. Selectable and
+     wrapped: it is a long opaque string somebody has to copy into the Firebase console. */
+  .msg-id { font: 12px/1.5 var(--gh-font-mono); user-select: all; word-break: break-all;
+            background: var(--gh-surface-2); border-radius: var(--gh-r-md); padding: var(--gh-sp-3);
+            margin: var(--gh-sp-2) 0 0; }
   `;
   document.head.appendChild(style);
 }
@@ -398,8 +403,23 @@ function renderBroadcast(card, contacts) {
 
 async function renderAdmin(card) {
   shellHTML(card, { title: t('msg_admin_title'), body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
-  const [threads, contacts] = await Promise.all([readAllThreads(), readContacts()]);
+  const [all, contacts] = await Promise.all([readAllThreads(), readContacts()]);
   if (!_host) return;
+  const threads = all.threads;
+
+  // Not on the allowlist is NOT the same screen as "nobody has written anything". This device's
+  // auth id changes whenever its site data is cleared, so the fix is to paste the id below into
+  // `admins/` in the Firebase console - which the screen has to actually say.
+  if (all.denied) {
+    const uid = await authId();
+    if (!_host) return;
+    shellHTML(card, {
+      title: t('msg_admin_title'),
+      body: `<p class="msg-lead">${esc(t('msg_admin_denied'))}</p>
+        <p class="msg-id">${esc(uid || "?")}</p>`,
+    });
+    return;
+  }
 
   const mine = myCode();
   const byCode = new Map(contacts.map((c) => [c.code, c.name]));

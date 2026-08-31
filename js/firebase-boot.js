@@ -45,7 +45,11 @@ async function boot() {
   const db = dbMod.getDatabase(app);
   const auth = authMod.getAuth(app);
   if (!auth.currentUser) await authMod.signInAnonymously(auth);
-  return { db, api: dbMod };
+  // `uid` is ADDITIVE (2026-08-31) and every existing caller ignores it. It is the anonymous
+  // sign-in's own id - stable for this browser until its site data is cleared - and it is the only
+  // identity the RTDB rules can see. `messages/` scopes itself on it (js/messages.js claims
+  // msgAuth/<uid>), and `admins/<uid>` is the allowlist that grants Matt the read-all.
+  return { db, api: dbMod, uid: (auth.currentUser && auth.currentUser.uid) || null };
 }
 
 /** Resolves to { db, api } once the named 'stats' app + anonymous auth are ready, or null if

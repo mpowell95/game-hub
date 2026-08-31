@@ -1098,10 +1098,51 @@ soft delete (rule 5).
 - **No push notifications.** The badge appears when a player opens the app. Web Push needs FCM, a
   server to send from, and a permission prompt — the same platform limit Report a bug documents.
   `navigator.setAppBadge()` on the installed app is the cheapest half-step if it is ever wanted.
-- **Privacy, stated plainly**: the RTDB rules are `auth != null`, so anyone who can sign in
-  anonymously can read every thread. The privacy here is the UI's shape, not an ACL — exactly the
-  same as `bugReplies/`. If that is ever not good enough, `messages/` is the node that needs a rule
-  of its own first.
+
+### Privacy: this is the one node with real rules on it
+
+Matt, the day it shipped: *"Only admin should be able to see every thread. Others should only see
+their own."* Every other node in this database is `auth != null` for read and write, and the privacy
+of `bugReplies/` is the UI's shape rather than an ACL. `messages/` is not.
+
+**The rules can only see a client's anonymous `auth.uid`.** They cannot see a player code, which
+lives in localStorage. So `ensureAuthClaim()` writes the link - `msgAuth/<uid> = <CODE>` - and the
+rules read it back to answer "is this thread yours". A device that has not claimed can read and
+write nothing under `messages/` at all. `js/firebase-boot.js` returns `uid` for this (additive;
+every existing caller ignores it).
+
+- `messages/threads/<pairKey>` needs the claimed code to be IN the pair key. A code is exactly five
+  characters from an alphabet with no `_` in it, so `contains()` cannot match across the join.
+- `messages/index/<CODE>` is readable only by the uid that claimed `<CODE>`; its `<other>` children
+  are writable by either participant, because a send updates the recipient's row too.
+- `messages` as a whole is readable when `admins/<auth.uid> === true` - that ancestor grant is what
+  gives Matt the read-all. **`admins/` already existed** (set by hand in the console, two uids) and
+  nothing in the repo had ever used it; it is load-bearing now.
+
+**The claim is rewritable by its own uid, deliberately not claim-once.** A player who links this
+device to another code (`js/name-gate.js`) changes their code, and a frozen claim would lock them
+out of their own messages. Claim-once would also buy nothing against a determined person, who can
+simply sign in again for a fresh uid.
+
+**What this buys and does not buy, so nobody oversells it:** the app and the database no longer hand
+anyone another player's messages, which is the whole of what was wrong. It is NOT proof against
+somebody who has a player's 5-character code and opens developer tools - that code is printed on the
+profile page and typed in to link a second device, so it is not a secret and cannot be made one.
+Real per-person authentication is the only thing that would close that, and this app has none.
+
+**Two consequences worth knowing before touching anything nearby:**
+
+1. **The root `.read`/`.write` had to become `false`,** because a granted ancestor read cascades and
+   cannot be revoked below. Every other branch is now enumerated in `database.rules.json` with the
+   permissions it always had. **A new top-level node must be added there or it is unreachable.**
+2. **`backups/rtdb-backup.mjs` can no longer read `/` in one request,** so it reads branch by branch
+   from a `BRANCHES` list that must stay in step with the rules file. Signing in anonymously also
+   means it is not on the admins list, so `messages/` comes back DENIED - recorded and warned about
+   loudly, never as an empty branch. Export that node from the console instead.
+
+`readAllThreads()` returns `{ threads, denied }` rather than a bare array for the same reason: "no
+messages exist" and "this device is not on the allowlist" must not render as the same empty screen.
+The admin view shows the device's auth id when denied, ready to paste into `admins/`.
 
 ### What is NOT covered by a test
 
