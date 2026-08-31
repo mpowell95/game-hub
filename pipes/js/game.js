@@ -4,14 +4,15 @@
 // THE WIN CONDITION IS "PATH WITH NO LEAKS" (Matt's choice, 2026-08-29), and the leak half is the
 // part worth reading. Water floods from the inlet through joined openings. To win:
 //
-//   1. the water must reach the outlet, AND
-//   2. every pipe the water reaches must be sealed - no opening pointing at a neighbour that does
-//      not open back, and none pointing off the edge of the board.
+//   1. the water must reach EVERY pipe on the board, AND
+//   2. nothing may leak - no opening pointing at a neighbour that does not open back, and none
+//      pointing off the edge of the board.
 //
 // Rule 2 is what makes the animation mean something: a leak is a thing you can SEE spilling, at a
 // specific cell, so "you are not finished" is shown on the board rather than announced in text.
-// Only pipes ON THE WATER'S NETWORK are checked - a dry decoy in the corner with an open end is
-// not a leak, because nothing is flowing out of it.
+// A leak is only ever REPORTED for a cell the water has reached, because a cell it has not reached
+// yet is not spilling anything - but rule 1 means every cell has to be reached in the end, so
+// nothing on the board is exempt from being got right.
 import { DIRS, DX, DY, OPPOSITE, rotate, popcount, kindOf, generate, tierConfig } from './generator.js';
 
 export class PipesGame {
@@ -85,10 +86,25 @@ export class PipesGame {
     return { reached, order, leaks };
   }
 
-  /** Solved = the water reaches the outlet AND nothing on its network leaks. */
+  /**
+   * Solved = the water reaches EVERY pipe on the board and nothing leaks.
+   *
+   * This used to be "reaches the outlet, and nothing on the water's network leaks", which made
+   * every cell off that one path irrelevant - 52% of a Medium board was pieces the water could
+   * never touch, and the player could finish having ignored most of what was in front of them.
+   * Matt, shown a solved board of his with the whole right-hand side untouched: "Explain how this
+   * board doesn't have dead ends or 'decoys'."
+   *
+   * Both halves are needed. Leak-free alone would accept a sealed loop sitting off on its own;
+   * all-reached alone would accept a network spilling off the edge of the board.
+   */
   isSolved() {
     const { reached, leaks } = this.flow();
-    return reached.has(this.dst) && leaks.length === 0;
+    if (leaks.length) return false;
+    for (let i = 0; i < this.cells.length; i++) {
+      if (popcount(this.cells[i]) > 0 && !reached.has(i)) return false;
+    }
+    return true;
   }
 
   /** Call after a turn. Stamps `solvedAt` once, so the UI can fire the water run exactly once. */

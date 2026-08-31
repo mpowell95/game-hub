@@ -86,8 +86,9 @@ export function bulbRadius(mask) {
  * @param {number} mask
  * @param {string} cls   class for the <svg>
  * @param {'dry'|'wet'} mode
+ * @param {boolean} [isSource]  the inlet, which is the ONLY bulb that gets a hole
  */
-export function pipeSVG(mask, cls, mode) {
+export function pipeSVG(mask, cls, mode, isSource) {
   const open = `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true">`;
   if (!popcount(mask)) return open + '</svg>';
 
@@ -111,9 +112,11 @@ export function pipeSVG(mask, cls, mode) {
     + (r ? `<circle cx="50" cy="50" r="${r}" fill="${wall}"/>` : '')
     + stroke(ARM - WALL * 2, fill)
     + (r ? `<circle cx="50" cy="50" r="${inner}" fill="${fill}"/>` : '')
-    // The reference punches a hole clean through a bulb once it fills, in the FIELD colour rather
-    // than a dark one - it reads as an opening, which is what a source or a drain is.
-    + (r && mode === 'wet'
+    // THE HOLE MARKS THE SOURCE, AND ONLY THE SOURCE. It is punched in the FIELD colour, so it
+    // reads as an opening - water coming in. Every wet bulb used to get one, which on a solved
+    // board of the new full-net rule meant four or five "sources"; the reference's own solved level
+    // has exactly one holed bulb and the rest solid.
+    + (r && mode === 'wet' && isSource
       ? `<circle cx="50" cy="50" r="${(inner * BULB_HOLE).toFixed(2)}" fill="var(--pi-bg)"/>` : '')
     + '</svg>';
 }

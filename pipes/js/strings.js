@@ -30,12 +30,12 @@ export const STRINGS = {
     replay: 'Replay',
     leaderboard: 'Leaderboard',
 
-    howto_lead: 'Tap a pipe to turn it. Get the water from the inlet to the outlet.',
-    howto_caption: 'An open end spills. Seal the whole run, not just the ends.',
+    howto_lead: 'Tap a pipe to turn it. Join every pipe into one network.',
+    howto_caption: 'An open end spills. Nothing on the board is spare.',
     howto_leak: 'This leaks',
     howto_sealed: 'This is sealed',
     howto_rule_1: 'Every tap turns a pipe a quarter turn clockwise.',
-    howto_rule_2: 'Spare pipes off to the side do not matter. Only the ones the water reaches.',
+    howto_rule_2: 'Every pipe belongs. You are done when the water reaches all of them.',
     howto_rule_3: 'A cross cannot be turned. Work around it.',
     howto_close: 'Got it',
 
@@ -79,12 +79,12 @@ export const STRINGS = {
     replay: 'Repetir',
     leaderboard: 'Clasificacion',
 
-    howto_lead: 'Toca una tuberia para girarla. Lleva el agua de la entrada a la salida.',
-    howto_caption: 'Un extremo abierto gotea. Sella todo el recorrido, no solo las puntas.',
+    howto_lead: 'Toca una tuberia para girarla. Une todas las tuberias en una sola red.',
+    howto_caption: 'Un extremo abierto gotea. Nada en el tablero sobra.',
     howto_leak: 'Esto gotea',
     howto_sealed: 'Esto esta sellado',
     howto_rule_1: 'Cada toque gira la tuberia un cuarto de vuelta.',
-    howto_rule_2: 'Las tuberias sueltas no importan. Solo las que toca el agua.',
+    howto_rule_2: 'Todas las tuberias cuentan. Terminas cuando el agua llega a todas.',
     howto_rule_3: 'Un cruce no se puede girar. Rodealo.',
     howto_close: 'Entendido',
 

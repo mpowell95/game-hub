@@ -296,7 +296,7 @@ class PipesUI {
         el.setAttribute('tabindex', '0');
       }
       el.setAttribute('aria-label', t('aria_cell', { r: y + 1, c: x + 1, piece: t('piece_' + kindOf(mask)) }));
-      el.innerHTML = pipeSVG(mask, 'pi-art', 'dry') + pipeSVG(mask, 'pi-water', 'wet');
+      el.innerHTML = pipeSVG(mask, 'pi-art', 'dry') + pipeSVG(mask, 'pi-water', 'wet', i === g.src);
       frag.appendChild(el);
       this.cellEls[i] = el;
     }

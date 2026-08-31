@@ -105,18 +105,21 @@ one, here or anywhere else in the hub.
 
 Each of these is a settled decision, recorded so nobody re-opens it as a bug:
 
-1. **Full net, not path-with-no-leaks.** In the reference every piece on the board must join up —
-   its level-1 solved frame is one single connected blue network. `docs/PIPES-SCOPE.md` put that to
-   Matt as option (c) and he chose (b).
-2. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
+1. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
    easier so that's fine."*
 
-**Bulbs are NOT on this list any more.** They were, on the reasoning that ours only has two
-endpoints, and that was me defending a difference instead of removing it. Ours now puts a bulb on
-every dead end like the reference does; the two that matter stay legible because a bulb the water is
-in gets a hole punched through it. (This file also once called them "decoy bulbs". Matt: *"No decoy
-bulbs have ever existed in anything I've ever sent you."* Right — under full-net every one is an
-endpoint that must connect. The word was mine and it was wrong.)
+**Full net is no longer on this list — ours uses it now (2026-08-31).** It was the headline
+divergence, on the strength of `docs/PIPES-SCOPE.md` recording Matt choosing path-with-no-leaks from
+a written description. Playing it told a different story: under that rule 52% of a Medium board was
+pieces the water could never reach, so the board was mostly decoration, and no amount of art work
+fixed that. **The reference's boards look purposeful because its rule makes every piece matter.**
+
+**Bulbs are not on this list either.** They were, on the reasoning that ours only had two
+endpoints — me defending a difference instead of removing it. Under full net a bulb is a leaf of the
+network, so ours now has as many as the reference and every one must be connected. Only the SOURCE
+carries a hole. (This file also once called them "decoy bulbs". Matt: *"No decoy bulbs have ever
+existed in anything I've ever sent you."* Right, twice over: they were never decoys in the
+reference, and there are no decoys in ours now either.)
 
 ## Retention
 
