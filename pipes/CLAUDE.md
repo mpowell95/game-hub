@@ -157,9 +157,35 @@ Matt, on why this is not polish: *"Animations are what really impresses people p
 the king of games is really WOWed by the key animation. Stuff like that is valuable to me."* So it
 was prototyped as part of the build rather than bolted on, and it drives the render approach.
 
+**WATER IS DRAWN WHEREVER IT REACHES, ALWAYS — INCLUDING WHILE THE BOARD IS LEAKING.** This is the
+rule; do not put a condition in front of it. `_paint()` used to gate the wet class on
+`!leakSet.size`, so a single open end **anywhere** blanked the water across the **whole board** —
+which means an unsolved puzzle, the state a player is in the entire time they are playing, was a
+screen of white outlines with no blue in it at all. Matt, looking at exactly that (2026-08-31):
+*"And I want it to be blue. Like I've told you to do several times."* A leak is not a reason to hide
+the water; it is the reason to show it arriving at the place it is spilling out of. The leak glow
+is now on **both** the `.pi-art` and `.pi-water` layers, because a leaking pipe is usually a wet one
+and the water layer sits on top — glowing only the dry art hid the mark under the blue.
+
+The visible payoff: the inlet bulb is blue from the first frame, so "this is where the water comes
+in" is shown rather than explained, and a run that stops mid-board points straight at the piece to
+turn next.
+
 It walks `flow().order` — **the rules' own breadth-first order out of the inlet** — and wets one
 tile every 34 ms. The render layer never works the path out for itself, so it cannot disagree with
 the rules about where the water goes.
+
+**Only NEWLY reached tiles are sequenced.** A tile already wet is left alone, so a turn that extends
+the run reads as water creeping onward instead of the whole network blinking off and refilling from
+the inlet. Water that no longer reaches a tile is removed at once — a receding network is a mistake
+being undone, not something to celebrate in slow motion. `_flowWater()` is the single place that
+touches the wet class, and it returns the ms until the last tile lands so a caller can wait for it.
+
+**`checkSolved()` runs BEFORE the repaint on a turn**, and the celebratory replay is gone. The old
+order painted the winning turn's whole run wet and then a separate `_runWater()` wiped every tile
+and refilled from the inlet — a flash of white across a board the player had just watched fill. Now
+one paint draws the final state, the last stretch flows on from where the water already was, and the
+win banner waits for it (`fillMs + 120`) rather than announcing over a half-filled board.
 
 **Each tile is revealed with `opacity` plus a small `scale` pop, both on the UX floor's allowed
 list.** A true directional fill along each pipe would want `stroke-dashoffset`, which is *not* on

@@ -205,8 +205,8 @@ class PipesUI {
     // The hub mounts this container and lays it out in the same frame, so the first measure can
     // land before the host has a height. Measure again once layout has settled.
     requestAnimationFrame(() => { this._fit(); requestAnimationFrame(() => this._fit()); });
-    this._paint();
-    if (g.solvedAt !== null) this._runWater(true);
+    // Instant on mount: a restored board shows the water it already had, it does not replay it.
+    this._paint(true);
   }
 
   _buildBoard() {
@@ -273,12 +273,15 @@ class PipesUI {
     el.setAttribute('aria-label', t('aria_cell', {
       r: g.xy(i)[1] + 1, c: g.xy(i)[0] + 1, piece: t('piece_' + kindOf(g.cells[i])),
     }));
+    // Solved is decided BEFORE the repaint, so _paint() draws the finished state in one pass. The
+    // other order meant the winning turn painted the whole run wet and then a separate celebratory
+    // replay wiped it and refilled from the inlet - a flash of white across a board the player had
+    // just watched fill.
+    const justSolved = g.checkSolved(Date.now());
     this._paint();
     writeSave(g);
 
-    if (g.checkSolved(Date.now())) {
-      writeSave(g);
-      this._runWater(false);
+    if (justSolved) {
       try {
         const r = g.result();
         recordPipes(r.level, r.moves, r.tier);
@@ -287,62 +290,79 @@ class PipesUI {
   }
 
   /** Repaint the live state: move count, which tiles are wet, which are leaking. */
-  _paint() {
+  _paint(instant) {
     const g = this.game;
     this.el.moves.textContent = String(g.moves);
-    const { reached, leaks } = g.flow();
+    const { reached, order, leaks } = g.flow();
     const leakSet = new Set(leaks);
+    const solved = g.solvedAt !== null;
     // NO LEAK STYLING BEFORE THE FIRST TURN. A fresh board's inlet cap points at whatever the
     // scramble gave it, so `flow()` honestly reports a leak on move zero - and a puzzle that opens
     // by telling you off, in red, before you have touched anything reads as a fault rather than a
     // hint. Feedback starts the moment the player engages.
-    const showLeaks = g.moves > 0;
+    const showLeaks = g.moves > 0 && !solved;
     for (let i = 0; i < this.cellEls.length; i++) {
-      const el = this.cellEls[i];
-      el.classList.toggle('is-leak', showLeaks && g.solvedAt === null && leakSet.has(i));
-      if (g.solvedAt === null) el.classList.toggle('is-wet', reached.has(i) && !leakSet.size);
+      this.cellEls[i].classList.toggle('is-leak', showLeaks && leakSet.has(i));
     }
-    const solved = g.solvedAt !== null;
+    const fillMs = this._flowWater(order, reached, instant);
+
     const leaking = showLeaks && leaks.length > 0;
-    this.el.banner.className = 'pi-banner' + (solved ? ' is-win' : leaking ? ' is-leak' : '');
-    this.el.banner.textContent = solved ? t('solved_moves', { n: g.moves }) : (leaking ? t('leaking') : '');
+    // On the winning turn the last stretch is still flowing, so the banner waits for the water to
+    // arrive rather than announcing the win over a half-filled board.
+    const banner = () => {
+      this.el.banner.className = 'pi-banner' + (solved ? ' is-win' : leaking ? ' is-leak' : '');
+      this.el.banner.textContent = solved ? t('solved_moves', { n: g.moves }) : (leaking ? t('leaking') : '');
+    };
+    if (solved && fillMs > 0) {
+      this.el.banner.className = 'pi-banner';
+      this.el.banner.textContent = '';
+      this.wetTimers.push(setTimeout(banner, fillMs + 120));
+    } else banner();
   }
 
   /**
-   * THE WATER RUN, and it is the thing Matt asked to be treated as first-class:
+   * THE WATER, and it is the thing Matt asked to be treated as first-class:
    * *"Animations are what really impresses people playing the games."*
    *
-   * It walks `flow().order` - the rules' own breadth-first order out of the inlet - and wets one
-   * tile every WET_STEP_MS. The render layer never works the path out for itself, so it cannot
-   * disagree with the rules about where the water goes.
+   * **Water is drawn wherever it REACHES, always** - while the board is leaking included. It used
+   * to be gated on `!leakSet.size`, so a single open end anywhere blanked the water on the WHOLE
+   * board and an unsolved puzzle was a screen of white outlines with no blue in it at all. Matt,
+   * looking at exactly that: *"I want it to be blue."* A leak is not a reason to hide the water;
+   * it is a reason to show it arriving at the place it is spilling out of.
+   *
+   * It walks `flow().order` - the rules' own breadth-first order out of the inlet - so the render
+   * layer never works the path out for itself and cannot disagree with the rules about where the
+   * water goes. Only NEWLY reached tiles are sequenced: tiles already wet are left alone, so a turn
+   * that extends the run looks like water creeping onward instead of the whole network blinking off
+   * and refilling from the inlet. Water that no longer reaches a tile is removed at once - a
+   * receding network is a mistake being undone, not something to celebrate in slow motion.
    *
    * Each tile is revealed with opacity + a small scale pop, both on the UX floor's allowed list.
    * A true directional fill along each pipe would want `stroke-dashoffset`, which is NOT on that
    * list; see pipes/CLAUDE.md for that trade.
+   *
+   * @returns {number} ms until the last newly-wet tile lands, so a caller can wait for it.
    */
-  _runWater(instant) {
+  _flowWater(order, reached, instant) {
     this._stopWater();
-    const g = this.game;
-    const order = g.flow().order;
-    const reduced = (() => {
-      try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
-      catch { return false; }
-    })();
-    for (const i of this.cellEls.keys()) this.cellEls[i].classList.remove('is-leak');
-    if (instant || reduced) {
-      for (const i of order) this.cellEls[i].classList.add('is-wet');
-      this.el.banner.className = 'pi-banner is-win';
-      this.el.banner.textContent = t('solved_moves', { n: g.moves });
-      return;
+    for (let i = 0; i < this.cellEls.length; i++) {
+      if (!reached.has(i)) this.cellEls[i].classList.remove('is-wet');
     }
-    for (const i of this.cellEls.keys()) this.cellEls[i].classList.remove('is-wet');
-    order.forEach((i, k) => {
+    const fresh = order.filter((i) => !this.cellEls[i].classList.contains('is-wet'));
+    if (!fresh.length) return 0;
+    // Reduced motion thins garnish, it does not freeze gameplay: the water still ARRIVES, it just
+    // does not crawl (docs/BUILDING-A-GAME.md Part 0).
+    let reduced = false;
+    try { reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    catch { /* no matchMedia: animate */ }
+    if (instant || reduced) {
+      for (const i of fresh) this.cellEls[i].classList.add('is-wet');
+      return 0;
+    }
+    fresh.forEach((i, k) => {
       this.wetTimers.push(setTimeout(() => this.cellEls[i].classList.add('is-wet'), k * WET_STEP_MS));
     });
-    this.wetTimers.push(setTimeout(() => {
-      this.el.banner.className = 'pi-banner is-win';
-      this.el.banner.textContent = t('solved_moves', { n: g.moves });
-    }, order.length * WET_STEP_MS + 120));
+    return fresh.length * WET_STEP_MS;
   }
 
   _stopWater() {
