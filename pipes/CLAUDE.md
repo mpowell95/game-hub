@@ -118,12 +118,48 @@ real `isSolved()`, which is the only arrangement that cannot drift in either dir
 stricter than the rule is not a stricter checker; it is a broken one** — and it will read as a bug
 in whatever it is pointed at, which the first time cost a day chasing a healthy generator.
 
+## Levels, and moving on by itself (2026-08-31)
+
+Matt: *"It should automatically move me to the next board after I complete one. It should be similar
+to nuts and bolts - the difficulties with the various boards and stuff."*
+
+**Nuts & Bolts is the model, and it was read before this was written** (`nuts-bolts/js/ui.js`, its
+`levels` map and `renderMenu()`), the same rule the setup screen had to learn three times.
+
+- **Each tier carries its own level**, shown on its button in the picker exactly as Nuts & Bolts
+  shows "Level N" on each of its four.
+- **Solving advances you automatically** — no "Next level" button. Nuts & Bolts has one; Matt asked
+  for this one to move on by itself. `_scheduleAdvance()` waits for the WATER to finish arriving
+  (the board is solved the moment the last pipe turns, while the run is still filling) and then
+  holds the finished board for `ADVANCE_HOLD_MS` (1600 ms) so it can actually be looked at. It is
+  cancelled by Back, by New board and by `destroy()`.
+- **The level is DERIVED, never stored.** `recordPipes()` already increments
+  `games.pipes.byDiff[<tier>].won` on every solve, so "boards solved at this tier, plus one" IS the
+  level. There is no second copy to drift, nothing new that could be lost, and — because the stats
+  store syncs to `players/<id>` — **your level follows you to your other phone**, which Nuts &
+  Bolts' own local `levels` map does not.
+- **Read it with a LOWERCASE tier id.** `js/game-stats.js` runs every tier through `normDiff()`, so
+  `'extraHard'` is stored under `'extrahard'`. Reading it back mixed-case silently pins that one
+  tier at Level 1 forever, and it is the tier hardest to notice it on.
+- **The level number is NOT what goes to `recordPipes()`.** That call still takes the TIER INDEX
+  (1-4), because that is what `pi.bestLevel` / `pi.bestByTier` have always meant — "the hardest tier
+  cleared" — and both are already read by My Stats and the leaderboard. Passing the board number
+  would quietly repurpose a stored field (THE LAW rule 5) and turn every existing player's
+  `bestLevel` into a number about something else.
+- **The level does not change the board.** The TIER is still the whole difficulty axis (grid size
+  and which pieces appear), and the quality gates are tuned per tier; the level is which board
+  you are on within that tier. Nuts & Bolts feeds its level into its generator, and this
+  deliberately does not — a within-tier difficulty ramp would be a new thing to tune against those
+  gates, not a port of the reference.
+
 ## Persistence
 
 `gamehub.pipes.v1` holds the tier and nothing else. `gamehub.pipes.save.v1` holds the board in
 progress. **Neither holds anything a player earned** — the only record of a solved board is
 `recordPipes()` in `js/game-stats.js`, so nothing in this game's own storage can lose history. Both
-values are one-tap-recreatable preferences, so THE LAW rule 2's carve-out applies.
+values are one-tap-recreatable preferences, so THE LAW rule 2's carve-out applies. **The per-tier
+level is not stored here either** — it is derived from the shared stats store (see above), which is
+what keeps that carve-out honest now that this game has progression at all.
 
 **There is deliberately no "fewest turns" best.** Every cross-device combine in `js/players-agg.js`
 is built on `Math.max` (`docs/BUILDING-A-GAME.md` item 7: *bests take `Math.max`, never a sum*), so

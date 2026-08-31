@@ -15,7 +15,9 @@ export const STRINGS = {
     resume: 'Resume',
     howto: 'How to play',
     best_level: 'Best',
+    solved_total: '{n} boards solved',
     no_best: 'No games yet',
+    level_n: 'Level {n}',
 
     hud_moves: 'Turns',
     hud_new: 'New board',
@@ -58,7 +60,9 @@ export const STRINGS = {
     resume: 'Continuar',
     howto: 'Como se juega',
     best_level: 'Mejor',
+    solved_total: '{n} tableros resueltos',
     no_best: 'Aun no hay partidas',
+    level_n: 'Nivel {n}',
 
     hud_moves: 'Giros',
     hud_new: 'Tablero nuevo',

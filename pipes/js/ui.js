@@ -31,6 +31,10 @@ const SAVE_KEY = 'gamehub.pipes.save.v1';
 /** Per-tile delay along the flow order. 9 tiles/second reads as water travelling rather than a
  *  board flicking on, and a 30-tile path lands inside the 1.2-1.8s window the scope asked for. */
 const WET_STEP_MS = 34;
+/** How long the solved board is held before the next one replaces it, measured from the moment the
+ *  water finishes arriving. Long enough to read the turn count and see the finished run; short
+ *  enough that it feels like the game moving you on rather than a pause you have to sit through. */
+const ADVANCE_HOLD_MS = 1600;
 
 function loadSettings() {
   try {
@@ -51,6 +55,29 @@ function writeSave(game) {
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
+/**
+ * WHICH BOARD YOU ARE ON, PER TIER - DERIVED, never stored here.
+ *
+ * `recordPipes()` already increments `games.pipes.byDiff[<tier>].won` on every solve, so "boards
+ * solved at this tier, plus one" IS the level. Deriving it means there is no second copy to drift
+ * out of step, nothing new that could be lost (THE LAW), and - because the stats store syncs to
+ * `players/<id>` - your level follows you to your other phone. Nuts & Bolts, which this is modelled
+ * on, keeps its levels in its own local settings key and they do not travel.
+ *
+ * NOTE THE LOWERCASE. `js/game-stats.js` runs every tier id through `normDiff()`, so 'extraHard' is
+ * stored under 'extrahard'. Reading it back with the mixed-case id silently returns level 1 forever
+ * on the one tier hardest to reach.
+ */
+function pipesStats() {
+  try { return (JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).pipes || {}; }
+  catch { return {}; }
+}
+function levelOf(tier) {
+  const byDiff = pipesStats().byDiff || {};
+  return ((byDiff[String(tier).toLowerCase()] || {}).won | 0) + 1;
+}
+function solvedTotal() { return (pipesStats().pi || {}).solved | 0; }
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 class PipesUI {
@@ -62,20 +89,21 @@ class PipesUI {
     this.cellEls = [];
     this.spins = null;
     this.wetTimers = [];
+    this.advanceTimer = null;
+    this._lastFillMs = 0;
+    this.level = 1;
     this.offViewport = null;
     this.offLang = null;
     this._onKey = null;
     this.renderSetup();
   }
 
-  /** The best line under the tier picker, read from the SHARED store - this game keeps no
-   *  earned history of its own (see pipes/CLAUDE.md, Persistence). */
+  /** The running total under the tier picker, read from the SHARED store - this game keeps no
+   *  earned history of its own (see pipes/CLAUDE.md, Persistence). Each tier button carries its own
+   *  level now, so this is the sum across all four rather than a "best" of anything. */
   _bestLine() {
-    try {
-      const pi = (JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).pipes;
-      const solved = ((pi || {}).pi || {}).solved | 0;
-      return solved ? `${t('best_level')}: ${solved}` : t('no_best');
-    } catch { return t('no_best'); }
+    const n = solvedTotal();
+    return n ? t('solved_total', { n }) : t('no_best');
   }
 
   // --- screens -----------------------------------------------------------------------------------
@@ -83,6 +111,7 @@ class PipesUI {
   renderSetup() {
     this.screen = 'setup';
     this._stopWater();
+    this._stopAdvance();
     const saved = loadSave();
     // THE SHAPE IS NUTS & BOLTS', DELIBERATELY, because that is the game Matt compared this one
     // to and it is this hub's reference for a solo-puzzle setup screen: a header with the game
@@ -96,6 +125,7 @@ class PipesUI {
       <button type="button" class="pi-seg${d === this.settings.tier ? ' is-on' : ''}" data-tier="${d}"
         role="radio" aria-checked="${d === this.settings.tier ? 'true' : 'false'}">
         <span class="pi-seg-label">${diffShapeSVG(tierOf(d))}<b>${esc(t('diff_' + d))}</b></span>
+        <span class="pi-seg-lvl">${esc(t('level_n', { n: levelOf(d) }))}</span>
         <span class="pi-seg-sub">${esc(t('grid_n', { w: tierConfig(d).w, h: tierConfig(d).h }))}</span>
       </button>`).join('');
 
@@ -164,7 +194,11 @@ class PipesUI {
   }
 
   startGame(saved) {
+    this._stopAdvance();
     this.game = saved || new PipesGame({ tier: this.settings.tier });
+    // Captured when the board starts, so the number on screen cannot change under the player
+    // mid-board when the solve is recorded.
+    this.level = levelOf(this.game.tier);
     this.renderPlay();
   }
 
@@ -176,7 +210,10 @@ class PipesUI {
       <div class="pi-screen pi-play">
         <div class="pi-hud">
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="back">${esc(t('hud_back'))}</button>
-          <span class="pi-hud-stat">${esc(t('hud_moves'))} <b data-role="moves">0</b></span>
+          <span class="pi-hud-stats">
+            <span class="pi-hud-level">${esc(t('level_n', { n: this.level }))}</span>
+            <span class="pi-hud-stat">${esc(t('hud_moves'))} <b data-role="moves">0</b></span>
+          </span>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="new">${esc(t('hud_new'))}</button>
         </div>
         <div class="pi-boardwrap"><div class="pi-board" data-role="board"
@@ -192,8 +229,7 @@ class PipesUI {
     this.root.querySelector('[data-role="back"]').addEventListener('click', () => this.renderSetup());
     this.root.querySelector('[data-role="new"]').addEventListener('click', () => {
       clearSave();
-      this.game = new PipesGame({ tier: this.settings.tier });
-      this.renderPlay();
+      this.startGame(null);
     });
 
     // Dev hook, read-only. Pinball shipped four times on green headless tests while being
@@ -283,10 +319,41 @@ class PipesUI {
 
     if (justSolved) {
       try {
+        // `r.level` is the TIER INDEX (1-4), not the board number on screen. It is what
+        // `pi.bestLevel` / `pi.bestByTier` have always meant - "the hardest tier cleared" - and
+        // passing the board number instead would quietly repurpose a stored field that My Stats and
+        // the leaderboard already read (THE LAW rule 5). The board number is DERIVED from
+        // `byDiff[tier].won`, which this same call increments.
         const r = g.result();
         recordPipes(r.level, r.moves, r.tier);
       } catch (err) { console.error('[pipes] recordPipes', err); }
+      this._scheduleAdvance();
     }
+  }
+
+  /**
+   * ON TO THE NEXT BOARD, BY ITSELF. Matt: *"It should automatically move me to the next board
+   * after I complete one."* Solving used to leave you parked on a finished board with nothing to
+   * do but find "New board", which is the one control that does not read as "continue".
+   *
+   * It waits for the WATER first - the board is solved the moment the last pipe turns, while the
+   * run is still filling - and then holds the finished board long enough to actually look at it.
+   * Cancelled by Back, by New board, and by destroy(); a tap during the hold cannot start a turn
+   * because `turn()` refuses once solved.
+   */
+  _scheduleAdvance() {
+    this._stopAdvance();
+    this.advanceTimer = setTimeout(() => {
+      this.advanceTimer = null;
+      if (this.screen !== 'play') return;
+      clearSave();
+      this.startGame(null);
+    }, (this._lastFillMs || 0) + ADVANCE_HOLD_MS);
+  }
+
+  _stopAdvance() {
+    if (this.advanceTimer) clearTimeout(this.advanceTimer);
+    this.advanceTimer = null;
   }
 
   /** Repaint the live state: move count, which tiles are wet, which are leaking. */
@@ -305,6 +372,7 @@ class PipesUI {
       this.cellEls[i].classList.toggle('is-leak', showLeaks && leakSet.has(i));
     }
     const fillMs = this._flowWater(order, reached, instant);
+    this._lastFillMs = fillMs;
 
     const leaking = showLeaks && leaks.length > 0;
     // On the winning turn the last stretch is still flowing, so the banner waits for the water to
@@ -417,6 +485,7 @@ class PipesUI {
 
   destroy() {
     this._stopWater();
+    this._stopAdvance();
     if (this.el && this.el.board) {
       this.el.board.removeEventListener('click', this._onBoardClick);
       this.el.board.removeEventListener('keydown', this._onBoardKey);

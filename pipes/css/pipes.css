@@ -100,6 +100,13 @@
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 44px;
 }
+/* The level sits ABOVE the turn count rather than beside it, so adding progress to the HUD costs
+   the row no width - "New board" already makes this the widest bar in the game at 393px. */
+.pi-root .pi-hud-stats { display: grid; justify-items: center; gap: 1px; line-height: 1.15; }
+.pi-root .pi-hud-level {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--pi-water);
+}
 .pi-root .pi-hud-stat { font-size: 13px; font-weight: 700; color: var(--pi-dim); }
 .pi-root .pi-hud-stat b { font-size: 19px; color: var(--pi-ink); }
 
@@ -231,6 +238,10 @@
 .pi-root .pi-seg .lb-dshape-x2 { width: 26px; }
 .pi-root .pi-seg-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; }
 .pi-root .pi-seg-label b { font-weight: 800; }
+/* Nuts & Bolts' picker carries each tier's own "Level N"; this is that, above the grid size. The
+   floor is 11px (docs/BUILDING-A-GAME.md Part 0) and this sits on it. */
+.pi-root .pi-seg-lvl { font-size: 11px; font-weight: 800; color: var(--gh-accent); }
+.pi-root .pi-seg.is-on .pi-seg-lvl { color: var(--gh-accent); }
 .pi-root .pi-seg-sub { font-size: 11px; color: var(--gh-muted); }
 
 .pi-root .pi-best { margin: 0; font-size: var(--gh-fs-sm); color: var(--gh-muted); text-align: center; }
