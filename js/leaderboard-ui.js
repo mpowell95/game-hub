@@ -673,7 +673,14 @@ function miniTilesHTML(tiers, valueFn) {
   }).join('')}</div>`;
 }
 
-/** The category breakdown on a LIST CARD: ONE line, never two (Matt, 2026-08-25, seeing the 3x2
+/** UNUSED since 2026-08-31 - left in place, with its CSS, exactly as metaLine() above was: nothing
+ *  deleted, just not rendered, and the helper is here if it is ever wanted back. Matt: "i don't
+ *  like the chips. they are not obvious. try a new approach." See the note at its old call site in
+ *  playerListHTML for where the six categories are read in full words instead. The history below
+ *  is kept because it records what this line already cost once, and why the grid it replaced is
+ *  not the thing to reach for either.
+ *
+ *  The category breakdown on a LIST CARD: ONE line, never two (Matt, 2026-08-25, seeing the 3x2
  *  grid on a real phone - "the 6 difficulty boxes take up a lot of space"). It replaced a six-cell
  *  grid that cost ~105px of every card; this costs ~20px.
  *
@@ -865,7 +872,25 @@ function playerListHTML(list) {
     const subText = _sort === 'played'
       ? `${value(g)} ${catUnit(_cat)}`
       : t('lb_played_count', { n: played });
-    return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, subText, catStripHTML(g));
+    // NO FOOTER STRIP HERE (2026-08-31). Matt, on this screen beside a game board's: "I don't like
+    // the spacing on the leaderboard homepage. I DO like the spacing on the individual game
+    // leaderboard (skeeball for example)" - then, on the chips themselves: "i don't like the chips.
+    // they are not obvious. try a new approach."
+    //
+    // Both complaints have the same cause. Skeeball's board has no difficulty axis, so its cards
+    // carry no footer at all and are one clean row; every card here carried the six-category strip,
+    // which took the card from ~61px to ~99px AND made the height vary with how many categories a
+    // person happened to have played, so the list had no rhythm. Passing no footer makes this card
+    // structurally identical to the board card he likes - same markup, same height, one row.
+    //
+    // The breakdown is not lost, and this is the "new approach" to it: it was only ever cryptic
+    // HERE (a one- or two-letter key badge - "E 3003", "NT 33", "+3" - sized down to fit one line).
+    // The same six categories are already spelled out in full words in the two places that have
+    // room for them: the filter dropdown right above this list names the active one ("Showing:
+    // Everything" / "Showing: Expert") with a per-category total beside every option, and tapping
+    // any card opens catGridHTML, which always renders all six with their real names and includes
+    // the zeroes. Nothing became unreachable (THE LAW rule 1) - it became legible.
+    return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, subText, '');
   }).join('')}</div>`;
 }
 
@@ -1589,6 +1614,9 @@ function ensureCss() {
     '.lb-pnum span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin-top:3px}',
     '.lb-pfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px}',
     // --- the six-category strip: 3 by 2, so it fits 360px with nothing truncated ----------------
+    // .lb-strip/.lb-chipv are UNRENDERED since 2026-08-31 (see catStripHTML) - kept, not deleted,
+    // so the helper still paints correctly if it is ever wanted back. `.lb-key` below is NOT dead:
+    // the filter dropdown's own option rows use it.
     // The card's one-line strip. NO WRAP: `flex-wrap:nowrap` plus a chip count capped in JS
     // (MAX_CHIPS) is what keeps it to one line without ever clipping a number - a row that could
     // overflow would need either a second line or a sideways scroll, and neither is allowed here.
