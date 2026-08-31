@@ -112,7 +112,6 @@ export const STRINGS = {
 
     // In-game announcements / chips
     announce_last_cards: 'Last cards',
-    banner_takes_opening: '{name} takes the opening table',
     banner_clears_table: '{name} clears the table',
     announce_takes_leftover: '{name} takes the leftover cards',
     announce_plays_captures: '{name} plays {card} · captures {n}',
@@ -252,7 +251,6 @@ export const STRINGS = {
     howto_figures_note: 'La Sota, el Caballo y el Rey valen 8, 9 y 10, no el número impreso.',
 
     announce_last_cards: 'Últimas cartas',
-    banner_takes_opening: '{name} se lleva la mesa inicial',
     banner_clears_table: '{name} despeja la mesa',
     announce_takes_leftover: '{name} se lleva las cartas restantes',
     announce_plays_captures: '{name} juega {card} · captura {n}',

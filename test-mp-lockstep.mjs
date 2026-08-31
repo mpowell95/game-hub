@@ -671,8 +671,7 @@ class EscobaSide {
       case 'roundStart':
         if (this.mp.isHost) await this.room.startRound(this.game.round, this.game.lastDeckOrder, this.game.dealer);
         break;
-      case 'deal': if (!payload.first) this.save('deal'); break;    // :739
-      case 'initialEscoba': this.save('initialEscoba'); break;               // :744
+      case 'deal': this.save('deal'); break;    // :807 (every deal, first included: dealer's luck is gone)
       case 'play':
         // afterPlay FIRST, save second: _mpAfterPlay advances appliedSeq for this very
         // play, and the autosave records that seq (the E4 off-by-one fix).

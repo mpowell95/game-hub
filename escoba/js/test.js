@@ -22,10 +22,12 @@ async function playMatch(seed, nPlayers, diffs, target, deckMode) {
   const g = new Game({ players, config: { targetScore: target, deckMode }, rng: lcg(seed) });
 
   g.onEvent = async (type, p) => {
-    if (type === 'initialEscoba') {
-      const t = sumValues(p.cards);
-      ok(t === 15 || t === 30, `initial escoba table sums to 15/30, got ${t}`);
-      ok(p.count === (t === 30 ? 2 : 1), 'initial escoba count matches sum');
+    // [KNOWN-BUG PROBE] The dealer's-luck opening escoba was deleted (2026-08-31):
+    // the opening four cards are always played against, never gifted to the dealer.
+    ok(type !== 'initialEscoba', 'no initial-escoba event: dealer\'s luck is gone');
+    if (type === 'deal' && p.first) {
+      ok(g.table.length === 4, `opening table keeps its 4 cards, got ${g.table.length}`);
+      ok(g.players.every((pl) => pl.escobas === 0), 'nobody holds an escoba before a card is played');
     }
     if (type === 'play') {
       if (p.captured.length) {
@@ -101,10 +103,6 @@ async function playMatchWithResume(seed, nPlayers, diffs, target, deckMode) {
 
   const makeHandler = (game) => async (type, p) => {
     if (type === 'play' || type === 'deal') qualifyingCount++;
-    if (type === 'initialEscoba') {
-      const t = sumValues(p.cards);
-      ok(t === 15 || t === 30, `resume: initial escoba sums to 15/30, got ${t}`);
-    }
     if (type === 'play' && p.captured.length) {
       ok(p.card.value + sumValues(p.captured) === 15, `resume: capture sums to 15 (${p.card.id})`);
     }
@@ -113,10 +111,10 @@ async function playMatchWithResume(seed, nPlayers, diffs, target, deckMode) {
       ok(total === 40, `resume: all 40 cards accounted at round end, got ${total}`);
       ok(game.table.length === 0, 'resume: table empty after round');
     }
-    // A snapshot taken on the FIRST deal of a round can't safely resume mid
-    // initial-escoba-check (same reason the real UI skips saving there), so
-    // the test mirrors that and never picks a first-deal event to pause at.
-    const eligible = type === 'play' || (type === 'deal' && !p.first);
+    // Every deal is now a resumable checkpoint, the round's first included:
+    // with the dealer's-luck check gone, playRound() goes straight from the
+    // first deal into the turn loop, so the UI saves there too.
+    const eligible = type === 'play' || type === 'deal';
     if (resumesDone < 3 && eligible && qualifyingCount % 7 === 0 && !pauseRequested) {
       pauseRequested = true;
       game.aborted = true;

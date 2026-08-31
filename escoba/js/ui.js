@@ -806,33 +806,14 @@ class EscobaUI {
         break;
       case 'deal':
         this.render();
-        // Skip the snapshot on the very first deal of a round: the initial-
-        // escoba check runs synchronously right after with no further await,
-        // so there is no useful mid-step to resume into there.
-        if (!payload.first) this._saveSnapshot();
+        // Every deal is a safe checkpoint, the round's first one included:
+        // playRound() stamps _nextTurn before emitting and then goes straight
+        // into the turn loop, so a restore resumes exactly this deal. (The
+        // first deal used to be skipped because the dealer's-luck check ran
+        // synchronously after it; that rule is gone, and with it the reason.)
+        this._saveSnapshot();
         if (payload.lastCards) { this.announce(t('announce_last_cards')); await this.beat(BEAT_TURN); }
         break;
-      case 'initialEscoba': {
-        this.render();   // the engine already moved these into the dealer's pile
-        this._saveSnapshot();
-        if (!reducedMotion()) {
-          // Briefly re-show the swept cards (render() just cleared the table
-          // since game.table is already empty) so the broom has something
-          // to act on, mirroring a played-card escoba's fly-out.
-          this._layoutTable(payload.cards);
-          const cardEls = payload.cards
-            .map((c) => this._tableCells.get(c.id))
-            .filter(Boolean).map((cell) => cell.querySelector('.eb-card')).filter(Boolean);
-          await this.beat(60);
-          this._startBroomSweep();
-          await this.beat(BROOM_TO_FLYOUT_MS);
-          cardEls.forEach((el) => el.classList.add('is-swept'));
-          await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
-          this._layoutTable(this.game.table);   // drops the now-stale temp cells
-        }
-        await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', t('banner_takes_opening', { name: p.name }));
-        break;
-      }
       case 'turnStart':
         this.activePlayerId = payload.playerId;
         this.render();
