@@ -499,10 +499,12 @@ devices** · **Help** · **Reset profile**, alone at the bottom.
   them there is what made that card a grab-bag.
 - **Language joined Theme in Settings.** It had only ever been in the hub's top bar, so the two
   halves of one choice lived on different screens.
-- **"Message for other players" is now "Your note".** It is a line on your own leaderboard page, and
-  the old label read as the Messages feature two cards below it.
+- **"Message for other players" is now "Your tagline".** It is a line on your own leaderboard page,
+  and the old label read as the Messages feature two cards below it.
 - **My Stats and the two Help buttons share one full-width row-button style** (`.pf-linkbtn`). They
-  were three different widths, centred, in no container.
+  were three different widths, centred, in no container. **Copy, Link and + Add opponent
+  (`.pf-add`) were unified with them** — they were the page's last odd style, a dashed accent
+  outline on transparent against solid filled rows everywhere else. Only their widths still differ.
 
 **`messages/` is the ONE node in this database with real security rules on it.** Matt: *"Only admin
 should be able to see every thread. Others should only see their own."* Everything else is
