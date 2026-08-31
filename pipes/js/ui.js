@@ -153,6 +153,8 @@ class PipesUI {
     if (resume) resume.addEventListener('click', () => this.startGame(loadSave()));
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => this.startGame(null));
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this.renderHowTo());
+    this._fillHeight();
+    requestAnimationFrame(() => this._fillHeight());
   }
 
   /** One bold sentence, ONE diagram carrying the non-obvious part, a caption, short rules - the
@@ -187,6 +189,7 @@ class PipesUI {
         </div>
       </div>`;
     this.root.querySelector('[data-role="close"]').addEventListener('click', () => this.renderSetup());
+    this._fillHeight();
   }
 
   startGame(saved) {
@@ -205,12 +208,21 @@ class PipesUI {
     this.root.innerHTML = `
       <div class="pi-screen pi-play">
         <div class="pi-hud">
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="back">${esc(t('hud_back'))}</button>
+          <button type="button" class="pi-icon" data-role="back" aria-label="${esc(t('hud_back'))}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20"/></svg>
+          </button>
           <span class="pi-hud-stats">
             <span class="pi-hud-level">${esc(t('level_n', { n: this.level }))}</span>
             <span class="pi-hud-stat">${esc(t('hud_moves'))} <b data-role="moves">0</b></span>
           </span>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="new">${esc(t('hud_new'))}</button>
+          <span class="pi-hud-icons">
+            <button type="button" class="pi-icon" data-role="new" aria-label="${esc(t('hud_new'))}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6"/><path d="M20 4v7h-7"/></svg>
+            </button>
+            <button type="button" class="pi-icon" data-role="lb" aria-label="${esc(t('leaderboard'))}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/></svg>
+            </button>
+          </span>
         </div>
         <div class="pi-boardwrap"><div class="pi-board" data-role="board"
           role="group" aria-label="${esc(t('aria_board', { w: g.w, h: g.h }))}"></div></div>
@@ -248,6 +260,7 @@ class PipesUI {
       clearSave();
       this.startGame(null);
     });
+    this.root.querySelector('[data-role="lb"]').addEventListener('click', () => this._openLeaderboard());
 
     // Dev hook, read-only. Pinball shipped four times on green headless tests while being
     // unplayable, because every fault lived in the DOM glue no headless test constructs. This is
@@ -487,7 +500,33 @@ class PipesUI {
    * what fits - and never below the 44px tap floor unless the device genuinely cannot give it,
    * in which case fitting on screen wins and the tier sizes are what keep that from happening.
    */
+  /**
+   * THE FIELD RUNS TO THE BOTTOM OF THE SCREEN. The reference is one flat field filling the phone,
+   * and ours was a panel ending partway down with the launcher's own (slightly different) grey
+   * below it - which read as a card even after the border-radius and shadow came off. The host
+   * container has no definite height, so this is measured rather than a CSS percentage, the same
+   * way _fit() measures the board.
+   */
+  _fillHeight() {
+    if (!this.root) return;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+    if (!vh) return;
+    // Allow for what the HOST puts BELOW us - the hub's .hub-main carries 40px of bottom padding,
+    // and filling straight to the viewport bottom pushed the page 40px taller than the screen
+    // (test-visual's fit probe caught exactly that). Read from the container chain's padding, which
+    // is a fixed fact about the layout: measuring the document instead is circular, because
+    // collapsing this element to measure it also changes the document's height.
+    let below = 0;
+    for (let el = this.root.parentElement; el; el = el.parentElement) {
+      below += parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      if (el === document.body) break;
+    }
+    const top = this.root.getBoundingClientRect().top;
+    this.root.style.minHeight = Math.max(320, Math.round(vh - top - below)) + 'px';
+  }
+
   _fit() {
+    this._fillHeight();
     if (this.screen !== 'play' || !this.el || !this.el.board) return;
     const wrap = this.el.board.parentElement;
     const r = wrap.getBoundingClientRect();

@@ -68,7 +68,12 @@ ours** — several of these are variants Matt has already decided against.
 
 **Play screen.** Back chevron top-left; centre is **"Level 2"** with an elapsed **timer `00:09`**
 directly under it; top-right a hint (lightbulb) and a stats/leaderboard icon. No turn counter and
-no "new board" control on this screen.
+no "new board" control on this screen. **Ours matches this layout**, with the turn count where the
+timer is and new-board / leaderboard as the two right icons.
+
+**The board is 1047px square on a 1206px screen — 87% of the width, four cells across at 262px**,
+centred with generous space above and below. It is sized by WIDTH, not stretched to fill the height.
+The field is flat and runs edge to edge; there is no card, panel or frame anywhere.
 
 **Completion.** The headline **"Puzzle Solved!"** appears above the board, the solved board stays
 fully visible, and three buttons sit below it:
@@ -103,15 +108,15 @@ Each of these is a settled decision, recorded so nobody re-opens it as a bug:
 1. **Full net, not path-with-no-leaks.** In the reference every piece on the board must join up —
    its level-1 solved frame is one single connected blue network. `docs/PIPES-SCOPE.md` put that to
    Matt as option (c) and he chose (b).
-2. **Bulbs on most cells.** The reference's boards are dotted with them, and **they are not
-   decoys** — under full-net every one is an endpoint that must be connected, which is why its
-   solved board is a single blue network. (An earlier draft of this file called them "decoy bulbs".
-   Matt: *"No decoy bulbs have ever existed in anything I've ever sent you."* He is right; the word
-   was mine and it was wrong.) Ours has exactly two, the inlet and the outlet, because under
-   path-with-no-leaks those are the only endpoints there are. It follows from item 1, it is not a
-   separate decision.
-3. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
+2. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
    easier so that's fine."*
+
+**Bulbs are NOT on this list any more.** They were, on the reasoning that ours only has two
+endpoints, and that was me defending a difference instead of removing it. Ours now puts a bulb on
+every dead end like the reference does; the two that matter stay legible because a bulb the water is
+in gets a hole punched through it. (This file also once called them "decoy bulbs". Matt: *"No decoy
+bulbs have ever existed in anything I've ever sent you."* Right — under full-net every one is an
+endpoint that must connect. The word was mine and it was wrong.)
 
 ## Retention
 

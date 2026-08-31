@@ -73,10 +73,19 @@ const TIERS = {
   // all (IMG_4602: 63 cells, 63 pieces) and "a mess of pipes" was the brief; at 0.35 easy came out
   // 43% empty and read as a handful of scattered fragments rather than plumbing. See the decoy
   // block below for why filling those cells cannot cost solvability.
-  easy: { w: 5, h: 5, pieces: ['straight', 'elbow'], decoy: 1, minPath: 8 },
-  medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee'], decoy: 1, minPath: 14 },
-  hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 1, minPath: 20 },
-  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross'], decoy: 1, minPath: 30 },
+  // 'cap' IS IN EVERY LIST, and it is what puts BULBS on the board. The reference's boards are
+  // dotted with them and ours had exactly two, which is most of why a board of ours read as bare
+  // lines next to one of theirs. A cap is a dead end: under this game's rule it can never leak
+  // (nothing reaches it), so it is a pure piece of texture. The inlet and outlet stay legible
+  // because a bulb the water is IN gets a hole punched through it - the reference's own tell.
+  // 4x4 IS THE REFERENCE'S OWN EARLY BOARD (its level 2, measured off the recording: 1047px square
+  // on a 1206px screen, four cells across). Fewer, bigger cells is most of why its pipes read as
+  // fat and confident where a 5x5 of ours read as thin lines - the art ratios were already right,
+  // the cells were just smaller.
+  easy: { w: 4, h: 4, pieces: ['straight', 'elbow', 'cap'], decoy: 1, minPath: 6 },
+  medium: { w: 6, h: 7, pieces: ['straight', 'elbow', 'tee', 'cap'], decoy: 1, minPath: 14 },
+  hard: { w: 7, h: 8, pieces: ['straight', 'elbow', 'tee', 'cross', 'cap'], decoy: 1, minPath: 20 },
+  extraHard: { w: 7, h: 10, pieces: ['straight', 'elbow', 'tee', 'cross', 'cap'], decoy: 1, minPath: 30 },
 };
 
 export function tierConfig(tier) { return TIERS[tier] || TIERS.easy; }
@@ -192,7 +201,7 @@ export function generate(tier, seed) {
   // never joins the network, and it stays dry whatever it is pointing at. The solved board is still
   // solved with a piece in every cell; pipes/js/test.js proves it independently over every tier and
   // 40 seeds, and would go red here first if this reasoning were wrong.
-  const MASKS = { straight: N | S, elbow: N | E, tee: N | E | S, cross: N | E | S | W };
+  const MASKS = { straight: N | S, elbow: N | E, tee: N | E | S, cross: N | E | S | W, cap: N };
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = idx(x, y, w);

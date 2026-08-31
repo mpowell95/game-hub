@@ -383,9 +383,40 @@ and lands within a pixel.
 **The one thing deliberately NOT copied is the rule.** The reference says *"Rotate the pipes to link
 them together into a single network"* - that is the FULL NET variant, which `docs/PIPES-SCOPE.md`
 put to Matt as option (c) and he chose (b), path with no leaks. Copy the look; the rules are
-already decided. **The visible consequence is bulbs**: the reference's boards are dotted with them,
-and they are NOT decoys - under full net every one is an endpoint that has to be connected, which is
-why its solved board is a single blue network. Ours has exactly two per board, the inlet and the
-outlet, because under path-with-no-leaks those are the only endpoints that exist. It follows from
-the rule; it is not a separate decision, and calling them "decoy bulbs" (as this file did) was
-wrong.
+already decided.
+
+## "Make Pipes look EXACTLY like the screen recording" (2026-08-31)
+
+Matt, after three rounds of me explaining which differences were deliberate instead of removing
+them. Put side by side at matched scale, against a light-theme frame of the recording, five things
+were different and none of them was the art - the pipe ratios were already right:
+
+1. **THE CARD IS GONE.** `.pi-root` was nuts-bolts' rounded panel with a shadow, sitting on the
+   launcher's ground in a slightly different grey. The reference is one flat field with pipes
+   floating on it, and the card was the loudest difference on the screen. No radius, no shadow, no
+   border.
+2. **THE FIELD RUNS TO THE BOTTOM** (`_fillHeight()`). Without it the panel stopped partway down
+   and the launcher's own grey showed below, which still read as a card even with the frame off.
+   The host has no definite height, so it is measured - and it must subtract the CONTAINER CHAIN'S
+   BOTTOM PADDING (the hub's `.hub-main` has 40px). Filling straight to the viewport bottom makes
+   the page 40px taller than the screen; measuring the document instead is circular, because
+   collapsing the element to measure it changes the document's height. `test-visual`'s fit probe
+   caught both.
+3. **BULBS ON EVERY DEAD END.** `'cap'` is now in every tier's piece list. The reference's boards
+   are dotted with them and ours had exactly two, which is most of why a board of ours read as bare
+   lines. A cap is a dead end and under this game's rule can never leak, so it is pure texture; the
+   inlet and outlet stay legible because a bulb the water is IN gets a hole punched through it,
+   which is the reference's own tell.
+4. **THE HUD IS THE REFERENCE'S**: a back chevron, the level centred with one line under it, and
+   two icons right. Ours was three text buttons, which is the shape of a toolbar. The icons keep
+   our functions (new board, leaderboard) in the reference's layout, at 44px tap targets.
+5. **EASY IS 4x4.** Measured off the recording, its board is 1047px square on a 1206px screen -
+   four cells across at 262px each. Fewer, bigger cells is why its pipes read as fat and confident
+   where our 5x5 read as thin lines.
+
+**`immersive: true` was tried and reverted.** It hides the hub's title bar, which is closer to the
+reference, but it also floats a "‹ Hub" pill above the game - a second back button directly over our
+own chevron, which looks worse than the title bar it removes.
+
+The type is `ui-rounded` first, which is the reference's rounded geometric sans natively on the
+iPhone this is played on.
