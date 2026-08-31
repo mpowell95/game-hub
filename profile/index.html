@@ -29,10 +29,23 @@
     }
     details.pf-collapse[open] > summary::after { transform: rotate(-135deg); }
     details.pf-collapse[open] > summary { margin-bottom: 14px; }
-    /* Sub-collapse (preferred color, inside You): a muted label, not a section header. */
-    details.pf-subcollapse { margin-top: 16px; }
-    details.pf-subcollapse > summary { font-size: .82rem; font-weight: 700; color: var(--hub-muted); }
-    details.pf-subcollapse[open] > summary { margin-bottom: 10px; }
+    /* Settings: ONE list of collapsible rows, divided rather than boxed. Every row is the same
+       height closed, so the section reads as a list of choices and not as five nested cards. */
+    .pf-rows > details { border-top: 1px solid var(--hub-surface-2); }
+    .pf-rows > details:first-child { border-top: 0; }
+    .pf-rows > details > summary { padding: 13px 0; font-size: .95rem; }
+    .pf-rows > details[open] > summary { margin-bottom: 0; }
+    .pf-rowbody { padding: 4px 0 16px; }
+
+    /* The one full-width row button on this page: My Stats, Report a bug, Replies. They were three
+       different widths, centred, in no container - the page's most obvious loose end. */
+    .pf-linkbtn {
+      display: block; width: 100%; margin-top: 12px; padding: 13px 14px;
+      border-radius: 12px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
+      color: var(--hub-ink); font: inherit; font-weight: 800; text-align: center;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .pf-linkbtn:hover { background: var(--hub-surface); border-color: var(--hub-muted); }
 
     /* Sync code rows: value/input flexes, the button hugs. */
     .pf-code-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
@@ -260,6 +273,14 @@
     </header>
 
     <main class="hub-main pf-main">
+      <!-- ONE container pattern per block (2026-08-31). The page had four at once: a card with a
+           heading, a card that was itself a collapsible, collapsibles nested inside a card, and
+           three loose buttons in no card at all. Now every block is a .pf-section; the only
+           collapsibles are the rows inside Settings, and they are one level deep.
+
+           WHO YOU ARE. Identity only: your face, your name, and the note that shows on your
+           leaderboard page. Colour, theme and quick chat used to live in here too, which is what
+           made this card a grab-bag - they are settings, and they moved. -->
       <section class="pf-section">
         <h2 data-i18n="pf_you_h">You</h2>
         <div class="pf-you-row">
@@ -271,33 +292,16 @@
         </div>
         <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
 
-        <div class="pf-name-wrap" style="margin-top:12px">
-          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Message for other players</label>
+        <!-- Labelled "Your note", not "Message for other players": this is a line on your own
+             leaderboard page, and the old label read as the Messages feature two cards below. -->
+        <div class="pf-name-wrap" style="margin-top:14px">
+          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Your note</label>
           <textarea class="pf-input" id="pf-you-msg" rows="2" maxlength="80"
                     placeholder="Shown when someone opens your profile"
                     data-i18n-placeholder="pf_msg_placeholder"></textarea>
         </div>
 
-        <details class="pf-collapse pf-subcollapse">
-          <summary data-i18n="pf_color_summary">Preferred color</summary>
-          <div class="pf-swatches" id="pf-colors"></div>
-        </details>
-
-        <details class="pf-collapse pf-subcollapse">
-          <summary data-i18n="pf_theme_h">Theme</summary>
-          <div class="pf-seg" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div>
-        </details>
-
-        <details class="pf-collapse pf-subcollapse" id="pf-quickchat">
-          <summary data-i18n="pf_quickchat_summary">Quick chat</summary>
-          <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:6px 0 10px">Pick the reactions you send during multiplayer games.</p>
-          <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
-          <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
-          <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
-          <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
-          <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
-          <div class="pf-qc-custom" id="pf-qc-custom"></div>
-        </details>
+        <button type="button" class="pf-linkbtn" id="pf-stats-btn" data-i18n="hub_stats_btn">My Stats</button>
       </section>
 
       <!-- Messages (js/messages-ui.js). Near the TOP, not in the footer beside Report a bug: the
@@ -306,13 +310,59 @@
       <section class="pf-section">
         <h2 data-i18n="msg_title">Messages</h2>
         <!-- Filled by js/messages-ui.js's renderProfileMessages: the newest two conversations plus
-             an All messages button, or just the button when there is nothing to show. The heading
-             above used to sit over a button that repeated the same word and nothing else. -->
+             an All messages button, or just the button when there is nothing to show. -->
         <div id="pf-msgs"></div>
       </section>
 
+      <!-- SETTINGS. Everything that changes how the app behaves for this person, as ONE list of
+           collapsible rows rather than scattered between a sub-collapse inside You and a whole card
+           of its own. Language joins Theme here: it was only ever in the hub's top bar, so the two
+           halves of the same choice lived on different screens. -->
       <section class="pf-section">
-        <h2 data-i18n="pf_sync_h">Sync devices</h2>
+        <h2 data-i18n="pf_settings_h">Settings</h2>
+        <div class="pf-rows">
+          <details class="pf-collapse">
+            <summary data-i18n="pf_theme_h">Theme</summary>
+            <div class="pf-rowbody">
+              <div class="pf-seg" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div>
+            </div>
+          </details>
+          <details class="pf-collapse">
+            <summary data-i18n="pf_lang_h">Language</summary>
+            <div class="pf-rowbody">
+              <div class="pf-seg" id="pf-lang-seg" role="group" data-i18n-aria="pf_lang_h" aria-label="Language"></div>
+            </div>
+          </details>
+          <details class="pf-collapse">
+            <summary data-i18n="pf_color_summary">Preferred color</summary>
+            <div class="pf-rowbody"><div class="pf-swatches" id="pf-colors"></div></div>
+          </details>
+          <details class="pf-collapse" id="pf-quickchat">
+            <summary data-i18n="pf_quickchat_summary">Quick chat</summary>
+            <div class="pf-rowbody">
+              <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:0 0 10px">Pick the reactions you send during multiplayer games.</p>
+              <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
+              <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
+              <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
+              <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
+              <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
+              <div class="pf-qc-custom" id="pf-qc-custom"></div>
+            </div>
+          </details>
+          <details class="pf-collapse">
+            <summary data-i18n="pf_customize_summary">Computer players</summary>
+            <div class="pf-rowbody">
+              <div id="pf-opps"></div>
+              <button type="button" class="pf-add" id="pf-add-opp" data-i18n="pf_add_opp_btn">+ Add opponent</button>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- DEVICES. Your code and linking belong together: one is what you read out, the other is
+           where the other phone types it. -->
+      <section class="pf-section">
+        <h2 data-i18n="pf_sync_h">Your devices</h2>
         <div class="pf-code-row">
           <code id="pf-code" class="pf-code" aria-label="Your code" data-i18n-aria="pf_code_aria">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
           <button type="button" class="pf-add pf-code-btn" id="pf-code-copy" data-i18n="pf_copy_btn">Copy</button>
@@ -330,22 +380,18 @@
         <p class="pf-devid" id="pf-device-id"></p>
       </section>
 
-      <details class="pf-section pf-collapse">
-        <summary data-i18n="pf_customize_summary">Customize Computer Players</summary>
-        <div id="pf-opps"></div>
-        <button type="button" class="pf-add" id="pf-add-opp" data-i18n="pf_add_opp_btn">+ Add opponent</button>
-      </details>
+      <!-- HELP. The two halves of one conversation, in one card, instead of loose buttons floating
+           at the bottom of the page at three different widths. -->
+      <section class="pf-section">
+        <h2 data-i18n="pf_help_h">Help</h2>
+        <button type="button" class="pf-linkbtn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
+        <!-- Rendered ALWAYS, not only when something is waiting, so it is a place the player learns
+             exists rather than a control that appears and vanishes. -->
+        <button type="button" class="pf-linkbtn" id="pf-replies-btn" data-i18n="bug_mine_btn">📬 Replies to your reports</button>
+      </section>
 
+      <!-- Destructive, so it is alone at the bottom with nothing to mis-tap it for. -->
       <div class="pf-foot">
-        <!-- The same form the launcher opens (js/bug-report-ui.js). Here too because this is where
-             someone already comes when something looks wrong, and directly above Device details on
-             purpose: a report SENDS that whole diagnostic, so nobody need press both. -->
-        <button type="button" class="pf-report-btn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
-        <!-- The other half of that conversation: what Matt wrote back. Rendered ALWAYS, not only
-             when something is waiting, so it is a place the player learns exists rather than a
-             control that appears and vanishes. The launcher's profile pill carries the unread
-             badge; this is where the badge sends them. -->
-        <button type="button" class="pf-report-btn" id="pf-replies-btn" data-i18n="bug_mine_btn">📬 Replies to your reports</button>
         <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
     </main>
@@ -391,7 +437,7 @@
   <script type="module">
     import { loadProfile, saveProfile, clearProfile, newPlayerCode, canonicalizeCode } from '../js/profile-store.js';
     import * as net from '../js/stats-net.js';
-    import { makeT, onLangChange, getLang } from '../js/i18n.js';
+    import { makeT, onLangChange, getLang, setLang } from '../js/i18n.js';
     // Validation only (~2 KB). The browsable set itself is imported lazily when the picker opens.
     import { isEmoji, firstEmoji } from '../js/emoji.js';
     import { getTheme, setTheme } from '../js/theme.js';
@@ -411,7 +457,7 @@
     // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
-      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat();
+      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderQuickChat();
       paintReplyCount(); paintMessageCount();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
@@ -469,6 +515,7 @@
       youMsg: $('#pf-you-msg'),
       colors: $('#pf-colors'),
       themeSeg: $('#pf-theme-seg'),
+      langSeg: $('#pf-lang-seg'),
       opps: $('#pf-opps'),
       addOpp: $('#pf-add-opp'),
       saved: $('#pf-saved'),
@@ -742,6 +789,36 @@
       });
     }
 
+    // -- Language -------------------------------------------------------------------
+    // The same preference the hub's top-bar flag knob sets (gamehub.lang.v1 via js/i18n.js).
+    // It was only ever THERE, which left the two halves of one settings screen on different
+    // pages. Self-labelled, so the options never need translating.
+    const LANG_OPTS = [{ v: 'en', label: 'English' }, { v: 'es', label: 'Español' }];
+    function renderLang() {
+      if (!els.langSeg) return;
+      const cur = getLang();
+      els.langSeg.innerHTML = LANG_OPTS.map((o) =>
+        `<button type="button" data-lang="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${o.label}</button>`).join('');
+    }
+    if (els.langSeg) {
+      els.langSeg.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-lang]');
+        if (!btn || btn.dataset.lang === getLang()) return;
+        setLang(btn.dataset.lang);   // onLangChange below re-renders the whole page
+      });
+    }
+
+    // -- My Stats -------------------------------------------------------------------
+    // The same overlay the launcher's own button opens. Here because the top bar has room for
+    // three controls and Messages took the third: this is where My Stats now lives, one tap
+    // from the profile pill. Lazily imported, like every other overlay on this page.
+    $('#pf-stats-btn').addEventListener('click', async () => {
+      try {
+        const m = await import('../js/game-stats-ui.js');
+        await m.openStatsOverlay();
+      } catch (e) { console.error('My Stats failed to load', e); }
+    });
+
     // -- Quick chat -----------------------------------------------------------------
     // The palette of reactions this device sends in multiplayer games. A device
     // preference (gamehub.quickchat.v1 via js/mp-reactions.js), same class as theme/
@@ -956,6 +1033,7 @@
       renderColors();
       renderOpps();
       renderTheme();
+      renderLang();
       renderQuickChat();
     }
     // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from

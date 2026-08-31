@@ -495,16 +495,21 @@ class Hub {
    *  Silent on failure: no badge is the honest state when we cannot look. The two counts are read
    *  independently, so one failing (or one being unconfigured) still shows the other. */
   async _paintReplyBadge() {
-    const el = this.el && this.el.profile;
-    if (!el) return;
     const count = async (path, fn) => {
       try { const m = await import(path); return (await m[fn]()) | 0; }
       catch { return 0; }
     };
-    const n = (await count('./bug-report-ui.js', 'myUnreadReplies'))
-            + (await count('./messages-ui.js', 'myUnreadMessages'));
-    el.classList.toggle('hub-profile-mail', n > 0);
-    if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail;
+    const badge = (el, n) => {
+      if (!el) return;
+      el.classList.toggle('hub-profile-mail', n > 0);
+      if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail;
+    };
+    // TWO badges now, on the two buttons they each belong to. They were summed onto the profile
+    // pill while that pill was the only route to either; Messages has its own button in the bar
+    // since 2026-08-31, and a count on the pill that turned out to be about messages would send
+    // people to the wrong place.
+    badge(this.el && this.el.messages, await count('./messages-ui.js', 'myUnreadMessages'));
+    badge(this.el && this.el.profile, await count('./bug-report-ui.js', 'myUnreadReplies'));
   }
 
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
@@ -575,7 +580,13 @@ class Hub {
             <button type="button" class="hub-version" data-role="version" hidden></button>
           </div>
           <div class="hub-top-right">
-            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="${t('hub_stats_aria')}">${t('hub_stats_btn')}</button>
+            <!-- Messages took My Stats' place here (2026-08-31, Matt: "I don't think My Stats is
+                 used by anyone... we could change it into a Messages button?"). Four buttons wrap
+                 to a second row on a phone, so it was a swap or nothing. My Stats moved to the
+                 profile page - one tap from the pill immediately to its right - and every screen it
+                 shows is ALSO reachable at Leaderboards > your own row, which is what keeps a
+                 player's full win/loss record visible (THE LAW rule 1). Nothing was removed. -->
+            <button type="button" class="hub-statsbtn" data-role="messages" aria-label="${t('msg_title')}">${t('msg_bar_btn')}</button>
             <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${t('hub_leaderboard_btn')}</button>
             <a class="hub-profile" data-role="profile" href="profile/">${t('hub_profile_btn')}</a>
           </div>
@@ -614,7 +625,7 @@ class Hub {
       game: this.root.querySelector('[data-role="game"]'),
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
-      stats: this.root.querySelector('[data-role="stats"]'),
+      messages: this.root.querySelector('[data-role="messages"]'),
       leaderboard: this.root.querySelector('[data-role="leaderboard"]'),
       lang: this.root.querySelector('[data-role="lang"]'),
       theme: this.root.querySelector('[data-role="theme"]'),
@@ -682,8 +693,10 @@ class Hub {
       this._paintInboxCount();
     }
 
-    this.el.stats.addEventListener('click', () => {
-      import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
+    this.el.messages.addEventListener('click', () => {
+      import('./messages-ui.js')
+        .then((m) => m.openMessages())
+        .catch((err) => console.error('[hub] messages failed to load', err));
     });
 
     this.el.leaderboard.addEventListener('click', () => {
