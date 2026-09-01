@@ -41,6 +41,12 @@ const SUITES = [
   { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
+  // Monopoly Deal had NO automated coverage at all until 2026-09-01 - it is excluded from
+  // test-game-conventions.mjs as a documented non-ESM exception, and its own self-test was
+  // never wired up anywhere. It runs in ~5s and carries the difficulty-ladder probe, which is
+  // born red against the values that shipped before that date (Medium and Hard were then
+  // statistically the same opponent). See business-deal/CLAUDE.md, "Difficulty".
+  { file: 'business-deal/js/ai.js' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },

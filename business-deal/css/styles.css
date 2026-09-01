@@ -568,7 +568,22 @@ html, body {
   width: 56px; height: 56px; border-radius: 16px; border: none; cursor: pointer;
   font-size: 22px; font-weight: 900; color: #143a72; background: linear-gradient(180deg,#fff,#dfeaff); box-shadow: 0 3px 0 #9fb7e6;
 }
-.count-btn.sel { color: #6b4e00; background: linear-gradient(180deg,#ffe79a,var(--coin)); box-shadow: 0 3px 0 var(--coin-edge); }
+/* Selection is marked by an inset ring as well as the gold fill, so it is never
+   signalled by colour alone (Matt is red/green colorblind). */
+.count-btn.sel {
+  color: #6b4e00; background: linear-gradient(180deg,#ffe79a,var(--coin));
+  box-shadow: 0 3px 0 var(--coin-edge), inset 0 0 0 3px #6b4e00;
+}
+/* The difficulty buttons carry the hub's ski-slope tier shape (circle / square /
+   diamond) above the label - the same marker js/difficulty-tiers.js draws on
+   every other game's setup screen and on the leaderboard. Monopoly Deal is a
+   classic-script app, so the SVG is inlined in js/ui.js's diffShapeSVG(). */
+.count-btn.diff {
+  width: auto; min-width: 92px; height: 56px; padding: 0 14px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; font-size: 14px; font-weight: 800;
+}
+.count-btn.diff .bd-dshape { width: 16px; height: 16px; display: block; }
 /* Challenge mode: fixed config is grayed out + non-interactive; start becomes a solid
    black "Begin challenge" bar. Once won, a completed note shows and play is normal. */
 .count-row.bd-locked { opacity: .45; pointer-events: none; }
