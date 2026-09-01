@@ -60,7 +60,17 @@
 // config. js/hub.js kicks refreshAdminConfig() once per load; when the fetched value differs from
 // the cache it fires `gamehub:adminconfig` and the launcher re-renders in place.
 
-import { statsId } from './game-stats.js';
+// statsId is imported LAZILY, at its one call site, on purpose (2026-09-01).
+//
+// js/hub.js imports this module statically to decide which game tiles exist, so a static edge from
+// here to game-stats.js put that file (91 KB) plus arcade-scores.js, firebase-boot.js and
+// install-state.js on the hub's critical path - on every launch, for a value used exactly once, in
+// the audit trail of an ADMIN WRITE that only Matt ever performs. Cutting js/hub.js's own
+// stats-net.js import without cutting this one does nothing at all: the graph arrives anyway.
+//
+// GUARD: import it, do not re-implement it. statsId() is resolveStore().syncId - the identity core
+// that test-stats-identity.mjs guards and that decides WHOSE stats a device is writing. A local
+// copy of that logic is how two devices start disagreeing about who a player is.
 
 /** The local cache of the remote config. A CACHE, not a source of truth: safe to lose. */
 export const CACHE_KEY = 'gamehub.adminConfig.v1';
@@ -341,7 +351,7 @@ async function writeNode(path, fields, verify) {
   const full = `${CONFIG_PATH}/${path}`;
   const cleared = Object.keys(fields).every((k) => fields[k] === null);
   let by = '';
-  try { by = statsId() || ''; } catch { by = ''; }
+  try { by = (await import('./game-stats.js')).statsId() || ''; } catch { by = ''; }
   const patch = Object.assign({}, fields, cleared ? { at: null, by: null } : { at: Date.now(), by });
   try {
     await api.update(api.ref(db, full), patch);

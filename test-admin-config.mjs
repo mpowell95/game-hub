@@ -124,8 +124,24 @@ ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') ===
 // not a sentence in a CLAUDE.md.
 console.log('\n--- the wiring ---');
 const sk = readFileSync(new URL('./skeeball/js/ui.js', import.meta.url), 'utf8');
-const orsEarned = [...sk.matchAll(/isBoardReleased\(b\.id\)/g)].length;
-ok(`skeeball/js/ui.js consults isBoardReleased on every gallery gate (${orsEarned} sites)`, orsEarned >= 3);
+// THE GATE IS CENTRALISED, SO COUNT THE CENTRE, NOT THE CALL SITES (2026-09-01).
+//
+// This used to require `isBoardReleased(b.id)` at 3+ places, which described the code as it was
+// when the admin release shipped. The gallery gates were later folded into ONE resolver,
+// `_slideState()`, so the correct count became 1 and this assertion had been failing on main ever
+// since - red for a refactor that made the thing it was guarding strictly harder to get wrong.
+// A red check nobody can act on is worse than no check, so it now asserts the shape that actually
+// matters: the admin release is resolved inside _slideState, and every gate reads _slideState.
+const slideState = /_slideState\(b, sk, devAll\)\s*{[\s\S]*?\n  }/.exec(sk);
+ok('skeeball/js/ui.js resolves the admin release inside _slideState, the one gallery gate',
+  !!slideState && /isBoardReleased\(b\.id\)/.test(slideState[0]),
+  slideState ? 'found _slideState but it never consults isBoardReleased' : 'could not find _slideState');
+ok('...and it ORs it with the EARNED unlock rather than replacing it (THE LAW rule 2)',
+  !!slideState && /open:\s*devAll \|\| released \|\| \(earned/.test(slideState[0]),
+  'a machine the player earned must stay open regardless of the admin switch');
+const gateReads = [...sk.matchAll(/_slideState\(/g)].length;
+ok(`...and every gallery gate goes through it (${gateReads} sites, incl. its own definition)`,
+  gateReads >= 4);
 // The unlock paths must read the RESOLVED testing state, not boards.js's raw adminOnly flag -
 // otherwise "Unlockable" is a label with no effect, which is the bug this revision fixes.
 const testingSites = [...sk.matchAll(/isBoardTesting\(/g)].length;

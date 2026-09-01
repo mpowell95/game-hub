@@ -148,8 +148,9 @@ const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SRC)[1];
 // The real ASSETS/SHELL/REST arrays, pulled from the file itself so the tests describe the shipped
 // list rather than a guess at it (the same extraction trick validate-sw-assets.mjs uses).
 const buildSrc = SW_SRC.slice(SW_SRC.indexOf('const ASSETS = ['), SW_SRC.indexOf("self.addEventListener('install'"));
-const { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY } =
-  new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY };`)();
+const { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY, NETWORK_FIRST, SHELL_CACHE_FIRST } =
+  new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY, `
+    + `NETWORK_FIRST, SHELL_CACHE_FIRST };`)();
 
 /** The warm is fire-and-forget from activate, so probes wait for its own completion signal:
  *  the manifest it writes as its second-to-last act (cleanup of old caches is the last). */
@@ -230,7 +231,10 @@ const NET_TIMEOUT_MS = Number(/const NET_TIMEOUT_MS = (\d+)/.exec(SW_SRC)[1]);
 ok('NET_TIMEOUT_MS is a sane deadline (0.5s-5s)', NET_TIMEOUT_MS >= 500 && NET_TIMEOUT_MS <= 5000, `got ${NET_TIMEOUT_MS}`);
 
 /** Seed a worker whose cache already holds `path` with the given body, then fetch it. */
-async function fetchWith({ cachedBody, netBody, netDelayMs, netFails = false, path = './js/hub.js', mode = 'no-cors' }) {
+// NOTE the default path: it must be one of the NETWORK_FIRST modules (2026-09-01). ./js/hub.js was
+// the default until the shell split, and every probe below silently stopped exercising the
+// network-first branch the moment the launcher went cache-first.
+async function fetchWith({ cachedBody, netBody, netDelayMs, netFails = false, path = './js/game-stats.js', mode = 'no-cors' }) {
   const w = bootWorker({
     net: async () => {
       if (netDelayMs) await new Promise((r) => setTimeout(r, netDelayMs));
@@ -254,7 +258,7 @@ async function fetchWith({ cachedBody, netBody, netDelayMs, netFails = false, pa
 
   // The slow response must still land in the cache, or the next load repeats the same slow path.
   await new Promise((r) => setTimeout(r, 600));
-  const after = await cache.match(new FakeRequest('./js/hub.js'));
+  const after = await cache.match(new FakeRequest('./js/game-stats.js'));
   eq('the slow response still refreshes the cache in the background', after.body, 'NEW');
 }
 
@@ -302,22 +306,23 @@ console.log('\n--- fetch: the slow-connection latch ---');
     net: async () => { netCalls++; await new Promise((r) => setTimeout(r, NET_TIMEOUT_MS + 500)); return new FakeResponse('NEW'); },
   });
   const cache = await w.cachesApi.open(CACHE_NAME);
-  for (const p of ['./js/hub.js', './js/game-stats.js', './js/strings.js']) {
+  // All three must be NETWORK_FIRST paths, or the latch is never even consulted.
+  for (const p of ['./js/game-stats.js', './js/stats-net.js', './js/players-agg.js']) {
     await cache.put(new FakeRequest(p), new FakeResponse('CACHED:' + p));
   }
 
   const t0 = Date.now();
-  const first = await w.fire('fetch', { request: new FakeRequest('./js/hub.js') });
+  const first = await w.fire('fetch', { request: new FakeRequest('./js/game-stats.js') });
   const afterFirst = Date.now() - t0;
-  eq('the first slow request still serves cache', first.body, 'CACHED:./js/hub.js');
+  eq('the first slow request still serves cache', first.body, 'CACHED:./js/game-stats.js');
   ok('and it paid the deadline once', afterFirst >= NET_TIMEOUT_MS - 100, `took ${afterFirst}ms`);
 
   const t1 = Date.now();
-  const second = await w.fire('fetch', { request: new FakeRequest('./js/game-stats.js') });
-  const third = await w.fire('fetch', { request: new FakeRequest('./js/strings.js') });
+  const second = await w.fire('fetch', { request: new FakeRequest('./js/stats-net.js') });
+  const third = await w.fire('fetch', { request: new FakeRequest('./js/players-agg.js') });
   const afterRest = Date.now() - t1;
-  eq('the next request is served from cache', second.body, 'CACHED:./js/game-stats.js');
-  eq('and the one after that too', third.body, 'CACHED:./js/strings.js');
+  eq('the next request is served from cache', second.body, 'CACHED:./js/stats-net.js');
+  eq('and the one after that too', third.body, 'CACHED:./js/players-agg.js');
   ok('neither re-paid the deadline (the chain costs one stall, not one per module)',
     afterRest < 500, `two further requests took ${afterRest}ms; without the latch they would take ~${NET_TIMEOUT_MS * 2}ms`);
   ok('the latched requests still went to the network to refresh the cache', netCalls >= 3, `netCalls=${netCalls}`);
@@ -368,14 +373,28 @@ console.log('\n--- fetch: game code is served from cache, not re-downloaded ---'
 }
 
 {
-  // The shell is deliberately NOT in this branch: it is how a device finds out a build changed.
+  // The shell SPLIT (2026-09-01): a module that touches player data still prefers the network...
+  let hitNetwork = false;
+  const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('NEW'); } });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put(new FakeRequest('./js/game-stats.js'), new FakeResponse('CACHED'));
+  const res = await w.fire('fetch', { request: new FakeRequest('./js/game-stats.js') });
+  eq('a player-data shell module still prefers the network (Matt: keep the stats code fresh)', res.body, 'NEW');
+  ok('...which means it did go to the network', hitNetwork);
+}
+
+{
+  // ...and the rest of the shell does not. This assertion replaced its own opposite: until
+  // 2026-09-01 it read "a SHELL module still prefers the network", using this very path.
   let hitNetwork = false;
   const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('NEW'); } });
   const cache = await w.cachesApi.open(CACHE_NAME);
   await cache.put(new FakeRequest('./js/hub.js'), new FakeResponse('CACHED'));
   const res = await w.fire('fetch', { request: new FakeRequest('./js/hub.js') });
-  eq('a SHELL module still prefers the network (freshness of the app itself is unchanged)', res.body, 'NEW');
-  ok('...which means it did go to the network', hitNetwork);
+  eq('[KNOWN-BUG PROBE] the launcher itself is served from cache (was: 687 KB re-downloaded per launch)',
+    res.body, 'CACHED');
+  ok('[KNOWN-BUG PROBE] and never touches the network', !hitNetwork,
+    'the whole shell was network-first, so opening the app re-downloaded it every single time');
 }
 
 {
@@ -515,10 +534,97 @@ console.log('\n--- fetch: current cache beats a lingering older generation ---')
   eq('the CURRENT cache answers even though the older cache was created first', res.body, 'FRESH');
 
   const onlyOld = await w.fire('fetch', { request: new FakeRequest('./css/hub.css') }).catch(() => null);
-  // seed only the old generation for a second path:
-  await older.put(new FakeRequest('./css/name-gate.css'), new FakeResponse('OLD-ONLY'));
-  const res2 = await w.fire('fetch', { request: new FakeRequest('./css/name-gate.css') });
+  // Seed only the old generation for a second path. It must be one that is STILL network-first,
+  // or this probe silently stops exercising the network-first fallback it exists for: ./css/ went
+  // cache-first in the 2026-09-01 shell split.
+  await older.put(new FakeRequest('./js/stats-net.js'), new FakeResponse('OLD-ONLY'));
+  const res2 = await w.fire('fetch', { request: new FakeRequest('./js/stats-net.js') });
   eq('an entry only the older generation holds still answers mid-warm (no dead window)', res2.body, 'OLD-ONLY');
+}
+
+// --- 8b. the shell split: the hand-written fresh list must not drift ----------------------------
+//
+// Matt chose "keep the stats code fresh" over caching the whole shell, and accepted that the list
+// is hand-maintained ON CONDITION that something fails when a data module goes missing from it.
+// This is that something. Everything here is structural: it reads sw.js and the files on disk, so
+// a module ADDED tomorrow is covered the day it is written, not the day someone remembers it.
+
+console.log('\n--- the shell split: NETWORK_FIRST vs SHELL_CACHE_FIRST ---');
+
+{
+  ok('sw.js exposes both halves of the split', Array.isArray(NETWORK_FIRST) && Array.isArray(SHELL_CACHE_FIRST),
+    `NETWORK_FIRST=${typeof NETWORK_FIRST}, SHELL_CACHE_FIRST=${typeof SHELL_CACHE_FIRST}`);
+
+  // 1. No phantom entries. A rename (js/messages.js -> js/msgs.js) would otherwise silently DEMOTE
+  //    a player-data module to cache-first, with nothing anywhere reporting it.
+  const phantom = NETWORK_FIRST.filter((p) => !ASSETS.includes(p));
+  ok('every NETWORK_FIRST path exists in ASSETS (a rename cannot silently demote a data module)',
+    phantom.length === 0, `not in ASSETS: ${phantom.join(', ')}`);
+
+  // 2. The drift guard. Any shell module that TOUCHES PLAYER DATA must be network-first.
+  //
+  //    GUARD: THIS IS DELIBERATELY NOT TRANSITIVE, AND MUST NOT BE "FIXED" INTO A CLOSURE.
+  //    js/hub.js is cache-first and statically imports js/profile-store.js, which is network-first.
+  //    That is correct: ES modules are fetched per URL, so one graph is served from both places at
+  //    once and each file gets the freshness it asked for. Following imports here would drag
+  //    hub.js, name-gate.js and announce.js into NETWORK_FIRST and delete the entire point of the
+  //    split - a 687 KB re-download on every launch.
+  //    The test is "does this file WRITE player data", not "does it import something that does".
+  //    A first draft used the import edge too and immediately flagged js/hub.js and
+  //    js/name-gate.js for importing profile-store.js - which is a one-hop transitive closure,
+  //    i.e. precisely the mistake the guard above forbids. Calling loadProfile() does not make a
+  //    file a data module; owning the write does.
+  const DATA_WRITE = /localStorage\.(setItem|removeItem)\s*\(\s*[`'"]?gamehub\./;
+  const leaked = [];
+  for (const rel of SHELL_CACHE_FIRST) {
+    if (!/^\.\/js\/.*\.js$/.test(rel)) continue;
+    let src;
+    try { src = readFileSync(join(ROOT, rel.slice(2)), 'utf8'); } catch { continue; }
+    if (DATA_WRITE.test(src)) leaked.push(`${rel} (writes a gamehub.* localStorage key)`);
+  }
+  ok('[KNOWN-BUG PROBE] no cache-first shell module touches player data', leaked.length === 0,
+    `${leaked.join('\n      ')}\n      -> add it to NETWORK_FIRST in sw.js, or stop it touching player data.`
+    + '\n      Do NOT make this check transitive - read the guard above it first.');
+
+  // 3. Positive pins: nobody can quietly empty the cache-first half back into network-first.
+  for (const must of ['./js/hub.js', './css/hub.css', './css/ui.css', './js/game-art.js', './js/strings.js']) {
+    ok(`${must} is cache-first (the launch path stays off the network)`, SHELL_CACHE_FIRST.includes(must));
+  }
+  // ...and the reverse: the modules Matt explicitly wanted fresh.
+  for (const must of ['./js/game-stats.js', './js/stats-net.js', './js/players-agg.js', './js/leaderboard-ui.js']) {
+    ok(`${must} is network-first (Matt: keep the stats code fresh)`, NETWORK_FIRST.includes(must));
+  }
+}
+
+{
+  // 4. [KNOWN-BUG PROBE] sw.js must NEVER be answered from cache.
+  //
+  // js/hub.js's _latestVersion() asks the network what is deployed. If that answer can come from
+  // the cache, `running === latest` for ever: the version pill can never go stale and _forceUpdate
+  // never reloads, so a device can sit on an old build with the UI insisting it is current.
+  // sw.js is safe by CONSTRUCTION - CACHE_FIRST_PATHS is an allow-list built from ASSETS, and
+  // sw.js is not in ASSETS - which is exactly the property this probe pins. Note the worker is
+  // ALREADY in the cache in real life: the network-first branch's background put writes it there.
+  ok('sw.js is not in ASSETS (the allow-list cannot reach it)', !ASSETS.includes('./sw.js'));
+  let hitNetwork = false;
+  const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('DEPLOYED'); } });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put(new FakeRequest('./sw.js'), new FakeResponse('STALE-COPY'));
+  const res = await w.fire('fetch', { request: new FakeRequest('./sw.js') });
+  eq('[KNOWN-BUG PROBE] a cached sw.js never beats the network (the version pill must not freeze)',
+    res.body, 'DEPLOYED');
+  ok('...which means the version check really did leave the device', hitNetwork);
+}
+
+{
+  // 5. version.json is the pill's source and must match CACHE, or the pill lies. It is also
+  //    deliberately OUT of ASSETS, for the same reason as sw.js above.
+  let v = null;
+  try { v = JSON.parse(readFileSync(join(ROOT, 'version.json'), 'utf8')); } catch { /* reported below */ }
+  ok('version.json exists and matches CACHE (else run: node validate-sw-assets.mjs)',
+    !!v && v.cache === CACHE_NAME, `version.json=${v ? v.cache : '(missing/unparseable)'} vs CACHE=${CACHE_NAME}`);
+  ok('version.json is not in ASSETS (a cached answer would freeze the version pill)',
+    !ASSETS.includes('./version.json'));
 }
 
 // --- 9. the manifest itself must match the bytes on disk ----------------------------------------
