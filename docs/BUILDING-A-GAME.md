@@ -80,6 +80,24 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
 - **A pulsing "look here" control should animate via glow, never scale.** A control that keeps
   changing size moves its own edge out from under a thumb already on the way down
   (`battleship/CLAUDE.md`).
+- **If you paint before the data has arrived, name the path back to the truth.** Every glitch Matt
+  filmed on 2026-09-01 - three recordings in one day - was this one bug wearing a different face: a
+  screen painted a provisional state and had no way to correct itself.
+
+  | what he saw | what was painted | what never arrived |
+  |---|---|---|
+  | broken machine images | an `<img>` with no `src` | - |
+  | "the leaderboard needs a connection" | offline, on a 3.5s timer | reality |
+  | "Hub-wide record: -" | a dash | the answer, with no repaint |
+  | an empty machine box | nothing at all | the picture |
+  | a version chip stuck on `v551 → v552` | a stale snapshot | the update landing |
+
+  So when you paint a placeholder, a dash, a spinner or an empty box, write down in the same breath
+  WHAT replaces it and WHEN - the event, the callback, the subscription. A screen whose only
+  correction is a reload is not finished. The two shapes that keep recurring: **a timer standing in
+  for a fact** (use the real event - `online`, `controllerchange`, a store's change hook), and **a
+  one-shot paint of something asynchronous** (subscribe, or repaint when the answer lands).
+
 - **A game screen that scrolls at all is a bug** (`dominoes/CLAUDE.md`). If content doesn't fit,
   that's a layout problem to fix, not something to let the page scroll around.
 
