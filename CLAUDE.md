@@ -63,15 +63,29 @@ on the stats/sync code they mostly govern):
 9. **A milestone is not done until CLAUDE.md reflects it** — undocumented conventions get
    silently re-derived (and re-diverged) by the next session.
 
-## "Commit," "push," or "deploy" means LIVE on the deployed Game Hub — not just committed to a branch
+## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
 Matt (2026-08-04), after a session pushed a finished game to its feature branch and stopped
 there, leaving it invisible on the real site: *"Anytime I say, commit, push, or deploy, it means
 make it live on the gamehub app... Do not respond until it's fucking live."*
 
+**THE TRIGGER IS NOT THE WORD, IT IS THE REQUEST** (Matt, 2026-09-01, after a session fixed
+Skeeball's launch, pushed the branch, and asked whether to merge: *"ugh. you should know to deploy
+it. we've discussed this many times"*). This rule was written down as three words - commit, push,
+deploy - and a session read that as a whitelist, so **"fix it" got treated as a request for a diff
+rather than a request for a working app.** It is not. Any instruction to change, fix, add or
+remove something in this app is an instruction to make that change live, and the deploy is part of
+the work, not a separate decision to bring back for approval. A fix sitting on a branch has not
+fixed anything for the people playing the game.
+
+Asking first is only right for a genuinely destructive step this sequence does not cover (a
+force-push, a history rewrite) - never for the ordinary merge-and-deploy below. If the change
+really should not ship yet, that is Matt's call to make and he will say so; the session's job is
+to ship it and report that it is live.
+
 A commit on a feature branch, or even a pushed branch with an open PR, is **not done** under this
-instruction. Pages deploys from `main` only. When Matt asks for a commit/push/deploy, the session
-must, without waiting for further confirmation at each step:
+instruction. Pages deploys from `main` only. When Matt asks for any change, the session must,
+without waiting for further confirmation at each step:
 
 1. Commit and push the work (to the branch it's already on, per that session's own instructions).
 2. Open a PR into `main` if one doesn't already exist for that branch.
@@ -84,7 +98,7 @@ must, without waiting for further confirmation at each step:
    are exactly what caused the confusion this rule exists to prevent.
 
 This whole sequence is pre-authorized by this instruction; it does not need to be re-confirmed
-per session. The one thing worth pausing for is a genuinely destructive step this doesn't cover
+per session, and it does not need Matt to have used one of the three words. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
 ## Answer about the game you were asked about
