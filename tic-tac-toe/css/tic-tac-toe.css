@@ -19,6 +19,7 @@
   --ttt-o: #1f5fa8;
   --ttt-gold: #ffce4a;
   --ttt-dead: #97a3b6;
+  --ttt-grid: rgba(22, 36, 58, 0.16);
   display: block;
   min-height: 100%;
   background: var(--ttt-bg);
@@ -321,9 +322,16 @@
 /* The three small boards that completed the winning meta-line, at match end. */
 .ttt-root .ttt-sboard.is-win-board { border-color: var(--ttt-gold); box-shadow: 0 0 0 4px rgba(255, 206, 74, 0.55); opacity: 1; }
 
+/* Each small board carries its own gridlines: without them the nine cells
+   read as one blank panel (in dark theme the cell background matched the
+   board's exactly, so a lone X sat in empty space with nothing to place it
+   against). A 1px inset line per cell is the whole cue -- box-sizing is
+   pinned to border-box so the border eats no layout, and the line is a
+   translucent ink so it themes with the surface underneath it. */
 .ttt-root .ttt-scell {
   appearance: none;
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ttt-grid);
   border-radius: 4px;
   background: #fff;
   display: flex;
@@ -554,11 +562,12 @@
   --ttt-bg: #11182a;
   --ttt-surface: #1b2333;
   --ttt-surface-2: #2b3547;
+  --ttt-grid: rgba(233, 238, 246, 0.22);
 }
 :root.gh-dark .ttt-root .ttt-segbtn.is-selected { background: var(--ttt-surface-2); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
 :root.gh-dark .ttt-root .ttt-cell.is-live:hover { background: #384463; }
-:root.gh-dark .ttt-root .ttt-scell { background: #2b3547; }
-:root.gh-dark .ttt-root .ttt-scell:disabled { background: rgba(43, 53, 71, 0.6); }
+:root.gh-dark .ttt-root .ttt-scell { background: #232c3d; }
+:root.gh-dark .ttt-root .ttt-scell:disabled { background: rgba(35, 44, 61, 0.6); }
 :root.gh-dark .ttt-root .ttt-btn-ghost.is-confirm { background: rgba(255, 99, 82, 0.2); color: #ff8478; border-color: rgba(255, 99, 82, 0.45); }
 :root.gh-dark .ttt-root .ttt-help-rule { color: var(--ttt-muted); }
 :root.gh-dark .ttt-root .lb-dshape-t3,
