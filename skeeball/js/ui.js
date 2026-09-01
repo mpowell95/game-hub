@@ -605,7 +605,7 @@ export class SkeeballUI {
       // text about earning it, because there is nothing left to earn.
       if (pending) {
         return `<div class="sk-slide sk-slide-locked sk-slide-pop" data-board="${b.id}">
-          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
+          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-machine-locked="${b.id}" alt="" /></div>
           <button type="button" class="sk-lock sk-lock--pop" data-pop="${b.id}" aria-label="${esc(t('pop_aria', { name: b.name }))}">${LOCK_SVG}<span class="sk-lock-key">${KEY_SVG}</span></button>
           <p class="sk-slide-name">${esc(b.name)}</p>
           <p class="sk-slide-locktext sk-slide-poptext">${esc(t('pop_hint'))}</p>
@@ -624,7 +624,7 @@ export class SkeeballUI {
             ? t('unlock_goals_hint', { name: from.name })
             : t('unlock_hint', { score: b.unlock.score, name: from.name });
         return `<div class="sk-slide sk-slide-locked" data-board="${b.id}">
-          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
+          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-machine-locked="${b.id}" alt="" /></div>
           <div class="sk-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
           <p class="sk-slide-name">${esc(b.name)}</p>
           <p class="sk-slide-locktext">${esc(hint)}</p>
@@ -637,7 +637,7 @@ export class SkeeballUI {
       const myAvg = bRec.plays ? Math.round((bRec.points | 0) / bRec.plays) : null;
       return `<div class="sk-slide" data-board="${b.id}">
         <p class="sk-slide-name">${esc(b.name)}${!earned ? ' <span class="sk-devtag">TEST</span>' : ''}</p>
-        <div class="sk-slide-machine"><img class="sk-slide-img" data-machine="${b.id}" alt="${esc(b.name)}" /></div>
+        <div class="sk-slide-machine"><img class="sk-slide-img" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-machine="${b.id}" alt="${esc(b.name)}" /></div>
         <div class="sk-slide-rec3">
           <div class="sk-slide-rec"><b>${val(r.mine)}</b><em>${esc(t('rec_mine'))}</em></div>
           <div class="sk-slide-rec"><b>${val(r.today)}</b><em>${esc(t('rec_today'))}</em></div>
@@ -788,7 +788,14 @@ export class SkeeballUI {
     else setTimeout(go, 600);
   }
 
-  /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
+  /** EVERY SLIDE'S <img> SHIPS WITH A TRANSPARENT 1x1 (2026-09-01). An <img> with no `src` renders
+   *  as a BROKEN-IMAGE ICON, with its alt text beside it. That was survivable while every slide was
+   *  painted at mount; once only the SELECTED slide paints (see _machinesWorthPainting) every swipe
+   *  showed a broken image until its render landed. Matt: "None of the skeeball machine images are
+   *  there... broken images appear, then the machines load." The placeholder is inert and one
+   *  pixel; the real picture replaces it.
+   *
+   *  Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
    *  deferred one frame so the setup paints first. A failure leaves the dark placeholder. */
   _ensureMachineImg(board, imgEl) {
     const sb = this._scoreboardFor(board.id);
