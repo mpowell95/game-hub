@@ -19,7 +19,7 @@
   --ttt-o: #1f5fa8;
   --ttt-gold: #ffce4a;
   --ttt-dead: #97a3b6;
-  --ttt-grid: rgba(22, 36, 58, 0.16);
+  --ttt-grid: rgba(22, 36, 58, 0.22);
   display: block;
   min-height: 100%;
   background: var(--ttt-bg);
@@ -284,7 +284,7 @@
 
 .ttt-root .ttt-uboard {
   --ttt-ugap: 7px;
-  --ttt-sgap: 3px;
+  --ttt-sgap: 0px;
   --ttt-ucell: 24px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -322,18 +322,20 @@
 /* The three small boards that completed the winning meta-line, at match end. */
 .ttt-root .ttt-sboard.is-win-board { border-color: var(--ttt-gold); box-shadow: 0 0 0 4px rgba(255, 206, 74, 0.55); opacity: 1; }
 
-/* Each small board carries its own gridlines: without them the nine cells
-   read as one blank panel (in dark theme the cell background matched the
-   board's exactly, so a lone X sat in empty space with nothing to place it
-   against). A 1px inset line per cell is the whole cue -- box-sizing is
-   pinned to border-box so the border eats no layout, and the line is a
-   translucent ink so it themes with the surface underneath it. */
+/* Each small board draws a real tic-tac-toe grid: the two vertical and two
+   horizontal lines of a `#`, not an outline around every cell. So the cells
+   sit flush (no gap, no radius, no fill of their own) and only the INNER
+   edges carry a line -- border-right on columns 1 and 2, border-bottom on
+   rows 1 and 2 -- which leaves the outer edge open the way a drawn board is.
+   Without any lines the nine cells read as one blank panel; in dark theme
+   the cell fill also matched the board's exactly, so a lone X sat in empty
+   space with nothing to place it against. */
 .ttt-root .ttt-scell {
   appearance: none;
   box-sizing: border-box;
-  border: 1px solid var(--ttt-grid);
-  border-radius: 4px;
-  background: #fff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -342,7 +344,10 @@
   line-height: 1;
   cursor: pointer;
 }
-.ttt-root .ttt-scell:disabled { cursor: default; background: rgba(255, 255, 255, 0.6); }
+.ttt-root .ttt-scell:nth-child(3n+1),
+.ttt-root .ttt-scell:nth-child(3n+2) { border-right: 1px solid var(--ttt-grid); }
+.ttt-root .ttt-scell:nth-child(-n+6) { border-bottom: 1px solid var(--ttt-grid); }
+.ttt-root .ttt-scell:disabled { cursor: default; }
 .ttt-root .ttt-scell.is-live:active { transform: scale(0.9); }
 .ttt-root .ttt-scell[data-mark='X'] { color: var(--ttt-x); }
 .ttt-root .ttt-scell[data-mark='O'] { color: var(--ttt-o); }
@@ -562,12 +567,10 @@
   --ttt-bg: #11182a;
   --ttt-surface: #1b2333;
   --ttt-surface-2: #2b3547;
-  --ttt-grid: rgba(233, 238, 246, 0.22);
+  --ttt-grid: rgba(233, 238, 246, 0.26);
 }
 :root.gh-dark .ttt-root .ttt-segbtn.is-selected { background: var(--ttt-surface-2); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
 :root.gh-dark .ttt-root .ttt-cell.is-live:hover { background: #384463; }
-:root.gh-dark .ttt-root .ttt-scell { background: #232c3d; }
-:root.gh-dark .ttt-root .ttt-scell:disabled { background: rgba(35, 44, 61, 0.6); }
 :root.gh-dark .ttt-root .ttt-btn-ghost.is-confirm { background: rgba(255, 99, 82, 0.2); color: #ff8478; border-color: rgba(255, 99, 82, 0.45); }
 :root.gh-dark .ttt-root .ttt-help-rule { color: var(--ttt-muted); }
 :root.gh-dark .ttt-root .lb-dshape-t3,
