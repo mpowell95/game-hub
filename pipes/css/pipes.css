@@ -182,25 +182,43 @@
 .pi-root .pi-cell.is-leak .pi-art,
 .pi-root .pi-cell.is-leak .pi-water { filter: drop-shadow(0 0 5px var(--pi-leak)); }
 
-/* THE FOOTER IS ONE MEASURED BOX. _fit() sizes the board against this whole element, not just the
-   banner, so when the completion actions appear the board makes room for them instead of being
-   overlapped by them. */
-.pi-root .pi-foot { display: grid; gap: 8px; }
+/* THE FOOTER'S HEIGHT NEVER CHANGES. It holds the banner, whose min-height is reserved from the
+   first frame, and the completion actions - which are taken OUT OF FLOW so they cost it nothing. */
+.pi-root .pi-foot { display: grid; gap: 8px; position: relative; }
 
 .pi-root .pi-banner {
-  min-height: 44px;
+  /* FIXED, not min-height. The banner is empty during play and gains two lines on a solve, and at
+     min-height it grew by 1px when it did - which moved the board by 1px, which is still moving.
+     48px holds the two lines (19px + 13px + gap) with room to spare in both languages. */
+  height: 48px;
   display: grid; place-items: center; gap: 1px;
   font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--pi-dim);
 }
-/* The reference's completion headline, with this game's own stat kept underneath it. */
-.pi-root .pi-banner b { font-size: 19px; letter-spacing: 0.02em; text-transform: none; }
-.pi-root .pi-banner span { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--pi-dim); }
 
-/* Copied off the recording: one full-width primary, then two side by side under it. */
-.pi-root .pi-done { display: grid; gap: 8px; }
+/* THE BOARD MUST NEVER MOVE. Matt: "When you finish a level, the entire level shifts up to let the
+   continue replay leaderboard buttons appear. Don't do that. The board should never move. Those
+   buttons should appear on top of the board."
+   So the panel is ABSOLUTE - `bottom: 100%` of the footer puts it directly above the banner,
+   overlaying the lower part of the board - and contributes ZERO height. Nothing reflows when it
+   appears, and _fit() has nothing to re-measure. The buttons are opaque, so they stay legible over
+   whatever pipes are behind them. */
+.pi-root .pi-done {
+  position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 8px;
+  display: grid; gap: 8px;
+  /* A scrim, because the panel floats over the finished board. The BUTTONS are opaque and were
+     always fine; the headline was transparent text sitting on blue pipes and could not be read.
+     The gradient fades the board out under the controls rather than boxing them in. */
+  padding-top: 34px;
+  background: linear-gradient(to bottom, transparent 0, var(--pi-bg) 34px);
+}
 .pi-root .pi-done-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.pi-root .pi-banner.is-win { color: var(--pi-water); }
+.pi-root .pi-done-title {
+  margin: 0 0 2px; display: grid; place-items: center; gap: 1px; text-align: center;
+  font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pi-water);
+}
+.pi-root .pi-done-title b { font-size: 19px; letter-spacing: 0.02em; text-transform: none; }
+.pi-root .pi-done-title span { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--pi-dim); }
 .pi-root .pi-banner.is-leak { color: var(--pi-leak); }
 
 /* --- how to play ------------------------------------------------------------------------------- */

@@ -156,12 +156,22 @@ to nuts and bolts - the difficulties with the various boards and stuff."*
   it was first solved, and counting it twice would inflate the level, which is defined as "boards
   solved at this tier". Nothing is lost by declining the duplicate — this only ever appears on a
   board that has just been recorded.
-- **`_fit()` measures the WHOLE FOOTER, not just the banner.** The completion actions live in that
-  box, so measuring only the banner would let them overlap the board the moment they appeared, and
-  `_fit()` re-runs when they are revealed. Measured: on a 393x852 phone the board does not shrink at
-  all on any tier (the buttons use space that was already below it); only Expert on a 664px-tall
-  phone gives up cell size, 43px to 32px, and that board is no longer interactive by then, so the
-  44px tap floor does not apply to it.
+- **THE BOARD NEVER MOVES.** Matt: *"When you finish a level, the entire level shifts up to let the
+  continue replay leaderboard buttons appear. Don't do that. The board should never move. Those
+  buttons should appear on top of the board."* The panel was in the layout flow and `_fit()` re-ran
+  when it appeared, so finishing a level shoved the whole board upward and shrank it. Now:
+  - `.pi-done` is **`position: absolute`, `bottom: 100%`** of the footer, so it floats directly
+    above the banner over the board's lower edge and contributes ZERO height. Nothing reflows.
+  - **There is no `_fit()` on reveal.** There is nothing to re-measure.
+  - **The banner is a FIXED 48px, not `min-height`.** It is empty during play and gained two lines
+    on a solve, which grew it by 1px — and 1px is still moving.
+  - **The headline rides WITH the buttons** inside the floating panel, so the panel reads in the
+    reference's order (Puzzle Solved!, Continue, Replay / Leaderboard). Left in the in-flow banner
+    it was stranded *under* the buttons.
+  - **The panel carries a gradient scrim.** The buttons are opaque and were always legible; the
+    headline was transparent text over blue pipes and could not be read.
+  Verified by measuring the board's rect before and after a real solve on all four tiers, both
+  themes and a short phone: byte-identical every time.
 - **The level is DERIVED, never stored.** `recordPipes()` already increments
   `games.pipes.byDiff[<tier>].won` on every solve, so "boards solved at this tier, plus one" IS the
   level. There is no second copy to drift, nothing new that could be lost, and — because the stats
