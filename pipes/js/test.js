@@ -18,7 +18,7 @@ import {
   generate, rotate, kindOf, popcount, turnsBetween, tierConfig, TIER_ORDER,
   DIRS, DX, DY, OPPOSITE, N, E, S, W,
 } from './generator.js';
-import { PipesGame } from './game.js';
+import { PipesGame, SAVE_V } from './game.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, detail) {
@@ -244,8 +244,105 @@ for (const tier of ['easy', 'medium']) {
     && Array.from(back.cells).join() === Array.from(g.cells).join());
   ok('a corrupt save returns null instead of throwing',
     PipesGame.fromJSON(null) === null
-    && PipesGame.fromJSON({ v: 1, w: 3, h: 3, cells: [1, 2] }) === null
-    && PipesGame.fromJSON({ v: 9 }) === null);
+    && PipesGame.fromJSON({ v: SAVE_V, w: 3, h: 3, cells: [1, 2] }) === null
+    && PipesGame.fromJSON({ v: 99 }) === null);
+}
+
+// --- 6. [KNOWN-BUG PROBE] a save this generator did not make is REFUSED --------------------------
+//
+// Matt, 2026-09-01, on a board he had visibly completed: "How is this not finished?" It was a
+// board built by the 2026-08-29 generator, restored verbatim into the 2026-08-31 FULL NET rule.
+// Under the rule it was built with he had won; under full net it could never be finished, and
+// `fromJSON` handed it back to him anyway because the old payload also stamped `v: 1`.
+//
+// These are born red against that `fromJSON`. The first two are the mechanism; the third is the
+// property that makes the whole class of bug impossible, and it is checked WITHOUT reference to
+// any particular old generator, so it keeps working after the next rule change too.
+
+{
+  const g = new PipesGame({ tier: 'medium', seed: 4242 });
+  g.turn(0); g.turn(5); g.turn(5);
+  const good = JSON.parse(JSON.stringify(g.toJSON()));
+
+  ok('[KNOWN-BUG PROBE] a save stamped with the OLD rule generation is refused',
+    PipesGame.fromJSON({ ...good, v: 1 }) === null);
+
+  // The version stamp alone is not the guard: a board from another generator is refused on its
+  // CONTENT, so a forged or coincidental version cannot get one through.
+  const foreign = { ...good, cells: good.cells.slice() };
+  const at = foreign.cells.findIndex((m) => popcount(m) === 2 && kindOf(m) === 'elbow');
+  foreign.cells[at] = N | E | S;   // a tee where the board has an elbow: not a rotation of it
+  ok('[KNOWN-BUG PROBE] a board that is not a rotation of its own seed is refused',
+    PipesGame.fromJSON(foreign) === null);
+
+  ok('a save whose seed regenerates a different SIZE is refused',
+    PipesGame.fromJSON({ ...good, tier: 'easy' }) === null);
+
+  ok('the honest save still restores', PipesGame.fromJSON(good) !== null);
+
+  // NOTHING EARNED IS IN THIS PAYLOAD (THE LAW). A refused save costs a scratch board and nothing
+  // else - so pin that the snapshot carries no counter, best, level or history field.
+  const EARNED = ['won', 'played', 'best', 'bestLevel', 'level', 'stats', 'byDiff', 'moves_total'];
+  ok('a save payload holds nothing a player earned',
+    EARNED.every((k) => !(k in good)));
+}
+
+// --- 7. no shipped board can be unsolvable ------------------------------------------------------
+//
+// The two NECESSARY conditions for any full-net solution, asserted straight from the pieces on the
+// board: every opening has to pair with another (so the total must be even), and joining n cells
+// into one network needs at least n-1 joins. This is the check that would have caught the incident
+// above from the GENERATOR side - replaying the old one out of git, 157 of 200 Medium boards fail
+// it. It is cheap, it needs no solver, and it cannot pass a board with no solution.
+
+{
+  let bad = 0;
+  for (const tier of TIER_ORDER) {
+    for (let s = 1; s <= 40; s++) {
+      const b = generate(tier, (s * 2654435761) >>> 0);
+      let openings = 0, pieces = 0;
+      for (const m of b.cells) { const p = popcount(m); if (p) { pieces++; openings += p; } }
+      if (openings % 2 !== 0 || openings / 2 < pieces - 1) bad++;
+    }
+  }
+  ok('every generated board passes the necessary conditions for a full-net solution', bad === 0,
+    bad + ' board(s) failed');
+}
+
+// --- 8. the banner's third state is real --------------------------------------------------------
+//
+// "Sealed but not finished" - zero leaks, not solved - is the state that used to render as a BLANK
+// banner with no explanation, and is exactly the screen Matt was looking at. Prove it is reachable
+// on a real board, so the third banner state has something to say in it.
+//
+// Construction: the inlet is a cap (one opening). Find another cap beside it in the GRID and turn
+// the two to face each other. They are not joined in the spanning tree, so the pair is a closed
+// two-cell network - leak-free, and the rest of the board unreached. Cells still pointing AT the
+// inlet are unreached themselves, and flow() only reports a leak for a cell the water has got to.
+
+{
+  let found = null;
+  for (const tier of ['medium', 'hard', 'extraHard']) {
+    for (let s = 1; s <= 200 && !found; s++) {
+      const g = new PipesGame({ tier, seed: (s * 2654435761) >>> 0 });
+      const b = generate(tier, g.seed);
+      g.cells = Uint8Array.from(b.solution);
+      const [sx, sy] = g.xy(g.src);
+      for (const d of DIRS) {
+        const nx = sx + DX[d], ny = sy + DY[d];
+        if (nx < 0 || ny < 0 || nx >= g.w || ny >= g.h) continue;
+        const ni = g.index(nx, ny);
+        if (popcount(b.solution[ni]) !== 1) continue;   // must be a cap too
+        g.cells[g.src] = d;
+        g.cells[ni] = OPPOSITE[d];
+        const { reached, leaks } = g.flow();
+        if (leaks.length === 0 && reached.size < g.cells.length) { found = { g, reached }; }
+        break;
+      }
+    }
+  }
+  ok('a board can be leak-free and still unfinished (the banner needs a third state)', !!found);
+  ok('and that state is NOT solved', !!found && !found.g.isSolved());
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);

@@ -1,8 +1,9 @@
 // pipes/js/game.js - the rules. Pure: no DOM, no timers, no randomness. `node pipes/js/test.js`
 // drives this and generator.js without constructing a single element.
 //
-// THE WIN CONDITION IS "PATH WITH NO LEAKS" (Matt's choice, 2026-08-29), and the leak half is the
-// part worth reading. Water floods from the inlet through joined openings. To win:
+// THE WIN CONDITION IS FULL NET (2026-08-31; it was "path with no leaks" until then, and the old
+// wording survived here for two commits after the code changed). Water floods from the inlet
+// through joined openings. To win:
 //
 //   1. the water must reach EVERY pipe on the board, AND
 //   2. nothing may leak - no opening pointing at a neighbour that does not open back, and none
@@ -13,7 +14,29 @@
 // A leak is only ever REPORTED for a cell the water has reached, because a cell it has not reached
 // yet is not spilling anything - but rule 1 means every cell has to be reached in the end, so
 // nothing on the board is exempt from being got right.
-import { DIRS, DX, DY, OPPOSITE, rotate, popcount, kindOf, generate, tierConfig } from './generator.js';
+import { DIRS, DX, DY, OPPOSITE, rotate, popcount, kindOf, generate, tierConfig, turnsBetween } from './generator.js';
+
+/** The RULE generation stamped into every save. Bumped to 2 when the win condition became full
+ *  net (2026-08-31); a v1 payload is a board built for the superseded rule. See `fromJSON`. */
+export const SAVE_V = 2;
+
+/**
+ * Does this snapshot describe a board THIS generator would produce? Pure, and deliberately not a
+ * solvability check: solvability is a property of the generator, and asking "is this the board its
+ * own seed makes" catches every way a save can go stale, including ones nobody has thought of yet.
+ */
+function madeByThisGenerator(raw, n) {
+  const built = generate(raw.tier, raw.seed >>> 0);
+  if (built.w !== raw.w || built.h !== raw.h) return false;
+  if (built.cells.length !== n) return false;
+  if (built.src !== raw.src || built.dst !== raw.dst) return false;
+  for (let i = 0; i < n; i++) {
+    // A player can only ROTATE a piece, so a saved cell must be some rotation of the solution's.
+    // turnsBetween returns -1 for two masks that are not rotations of each other.
+    if (turnsBetween(raw.cells[i] & 15, built.solution[i]) < 0) return false;
+  }
+  return true;
+}
 
 export class PipesGame {
   /** @param {{ tier?: string, seed?: number, board?: object }} opts */
@@ -126,23 +149,59 @@ export class PipesGame {
     };
   }
 
-  /** A plain, JSON-safe snapshot for the save key. Uint8Array does not survive JSON. */
+  /** A plain, JSON-safe snapshot for the save key. Uint8Array does not survive JSON.
+   *
+   *  `v` IS THE RULE GENERATION, NOT A FILE FORMAT VERSION. It went to 2 when the win condition
+   *  became full net (see `isSolved`), because a v1 payload is a board built for the OLD rule and
+   *  is usually impossible under the new one - see `fromJSON`. */
   toJSON() {
     return {
-      v: 1, w: this.w, h: this.h, tier: this.tier, seed: this.seed,
+      v: SAVE_V, w: this.w, h: this.h, tier: this.tier, seed: this.seed,
       cells: Array.from(this.cells), src: this.src, dst: this.dst,
       turns: this.minTurns, moves: this.moves, solvedAt: this.solvedAt,
     };
   }
 
   /** Rebuild from a snapshot. Returns null for anything malformed rather than throwing - a corrupt
-   *  save must never stop the game mounting (root CLAUDE.md's profile rule, same reasoning). */
+   *  save must never stop the game mounting (root CLAUDE.md's profile rule, same reasoning).
+   *
+   *  IT ALSO REFUSES A BOARD THIS GENERATOR DID NOT MAKE, and that is the important half.
+   *
+   *  Matt, 2026-09-01, on a screenshot of a board he had visibly finished: "How is this not
+   *  finished?" It was a MEDIUM board from the 2026-08-29 build, restored verbatim into the
+   *  2026-08-31 full-net rule. Under the rule it was built with, joining the source to the drain
+   *  without a leak WAS the win, and he had done it. Under full net it could never be finished:
+   *  replaying the old generator out of git and testing 200 boards a tier against two NECESSARY
+   *  conditions for any full-net solution (total openings even; openings/2 >= n-1 to span n cells;
+   *  plus connectivity over the non-blank cells) says 155/200 Easy, 157/200 Medium, 135/200 Hard
+   *  and 108/200 Expert were already unsolvable the moment that deploy landed. Those are LOWER
+   *  bounds. He was turning pieces on a board with no solution, and nothing told him.
+   *
+   *  Two gates, cheapest first:
+   *
+   *  1. The rule generation (`v`). Every known legacy save is refused here, at no cost.
+   *  2. RECONSTRUCTION, which is the part worth having. `generate(tier, seed)` is deterministic
+   *     and returns the FINAL seed even when a quality gate makes it recurse, so a stored
+   *     (tier, seed) reproduces its own board exactly. Regenerate it and require every saved cell
+   *     to be a ROTATION of the regenerated solution cell - which is the only thing a player can
+   *     do to a board. Anything else came from a different generator.
+   *
+   *  Gate 2 is self-maintaining: it invalidates a foreign save after ANY future generator, tier
+   *  size or rule change, with nobody having to remember to bump a number. If a future generator
+   *  is ever made non-deterministic this degrades to "always start a fresh board", which the tests
+   *  say out loud rather than a player discovering it. Cost is one generate() on at most 70 cells.
+   *
+   *  NOTHING EARNED IS AT RISK HERE (THE LAW). This key holds a scratch board and nothing else:
+   *  the only record of a solved board is `recordPipes()` in `gamehub.stats`, and the per-tier
+   *  level is derived from it. Refusing an unsolvable board loses no history - it hands the player
+   *  a board that can actually be finished. */
   static fromJSON(raw) {
     try {
-      if (!raw || raw.v !== 1) return null;
+      if (!raw || raw.v !== SAVE_V) return null;
       const n = (raw.w | 0) * (raw.h | 0);
       if (!n || !Array.isArray(raw.cells) || raw.cells.length !== n) return null;
       if (!(raw.src >= 0 && raw.src < n) || !(raw.dst >= 0 && raw.dst < n)) return null;
+      if (!madeByThisGenerator(raw, n)) return null;
       return new PipesGame({ board: { ...raw, cells: Uint8Array.from(raw.cells) } });
     } catch { return null; }
   }

@@ -212,6 +212,13 @@
   padding-top: 34px;
   background: linear-gradient(to bottom, transparent 0, var(--pi-bg) 34px);
 }
+/* AND IT HAS TO OBEY `hidden`. `.pi-root .pi-done` is specificity (0,2,0) and the browser's own
+   `[hidden] { display: none }` is (0,1,0), so `display: grid` quietly won and the panel sat over
+   the board from the first frame of every game - Continue, Replay and Leaderboard offered on a
+   puzzle nobody had started. Shipped that way in v539. `hidden` is the ONLY thing that hides this
+   panel (ui.js sets `.hidden = !solved`), so the rule that hides it has to outrank the rule that
+   shows it. */
+.pi-root .pi-done[hidden] { display: none; }
 .pi-root .pi-done-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pi-root .pi-done-title {
   margin: 0 0 2px; display: grid; place-items: center; gap: 1px; text-align: center;
