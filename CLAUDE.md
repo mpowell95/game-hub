@@ -127,21 +127,47 @@ can't run from `file://`). It sends `Cache-Control: no-store` so dev edits aren'
 ### Diagnostic: the version pill stuck at `vN → vN+1`
 
 The hub's top-bar version pill compares the ACTIVE service worker's cache version
-(`GET_VERSION` message to `navigator.serviceWorker.controller`) against the version parsed
-from a fresh, no-store fetch of the deployed `sw.js`. If they differ it renders
-`vN → vN+1` and marks itself stale. **If that arrow never resolves after a reload (or two),
-the new service worker's install failed.** This is the tell to look for before suspecting
-anything else when a deploy "didn't take." `validate-sw-assets.mjs` and `test-sw-strategy.mjs`
-are the prevention/detection pair. (`RESTORE.md` is a different thing — a device-restore/data-
-custody runbook, not a service-worker diagnostic; see "The shared profile" below for its role.)
+(`GET_VERSION` message to `navigator.serviceWorker.controller`) against the deployed version
+(`version.json`, no-store). If they differ it renders `vN → vN+1` and marks itself stale.
+
+**THERE ARE TWO CAUSES AND THEY LOOK IDENTICAL. Tell them apart before you do anything else.**
+Until 2026-09-01 this section named only the second one, and that cost a session twenty minutes
+hunting a missing file that was not missing:
+
+1. **The pill is not listening** (fixed 2026-09-01, `_watchForUpdates` in `js/hub.js`). The update
+   ALREADY LANDED and the pill never noticed. `_initVersionPill` used to run once at load and
+   nothing subscribed to the service worker's lifecycle, so a perfectly successful update could not
+   reach the chip — measured: the controller swapped at t+8s, `controllerchange` fired, and the pill
+   read `v551 → v552` for ever on a device running v552. **Tapping it made it worse**: the old
+   `_forceUpdate` read the controller immediately after `reg.update()` (which resolves BEFORE the
+   new worker activates), concluded "stale", and reloaded into the same screen. Only force-quitting
+   cleared it. Matt filmed exactly this.
+2. **The shell install failed.** The atomic `cache.addAll(SHELL)` aborted — one 404 in the ~600 KB
+   SHELL tier is enough — so `skipWaiting()` at the end of `install` never ran and the old worker
+   kept serving the old build. `validate-sw-assets.mjs` and `test-sw-strategy.mjs` are the
+   prevention/detection pair.
+
+**The check that separates them, in that order:**
+
+- **Is a `controllerchange` listener wired up?** If not, you are in case 1. `test-sw-update.mjs` is
+  the regression probe — it drives a real deploy in a real browser and fails if the chip does not
+  end up telling the truth on its own.
+- **Do all the deployed SHELL entries answer 200?** Pull the deployed `sw.js`, evaluate its `ASSETS`
+  + `isShellAsset` to get the SHELL list, and request every one against the live site. All 200 rules
+  out case 2 entirely. (Done on 2026-09-01: 62 of 62, which is what proved the incident was case 1.)
+
+Since 2026-09-01 a new build also **applies itself silently** — the hub reloads onto it, but only on
+the launcher, never while a game is mounted (`this.current` gates it, and a held update is taken in
+`showLauncher`). So in normal use the pill should never show an arrow for more than a few seconds.
+An arrow that persists is a bug, not a prompt.
 
 **Much narrower since 2026-08-02** (see "The service worker's caching strategy" below): the
 install used to `cache.addAll()` the ENTIRE ~8.8 MB list atomically, so one 404'd `ASSETS`
 entry — a single missing card image — aborted the whole install and the previous worker kept
 serving the old build offline forever. Only the ~600 KB app shell is atomic now, so a bad path
 in a game folder no longer strands a deploy; it warms best-effort, logs loudly, and caches on
-demand instead. A stuck pill now means the SHELL failed to install, which is a much shorter
-list of suspects. `test-sw-strategy.mjs` pins this as a regression probe.
+demand instead. (`RESTORE.md` is a different thing — a device-restore/data-custody runbook, not a
+service-worker diagnostic; see "The shared profile" below for its role.)
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
 
@@ -340,6 +366,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `sight.mjs` | (2026-08-14) can the camera see the bottom of Skeeball's board over its ramp crest? One number; keep it positive whenever the ramp, the board or the camera moves |
 | `measure-reach.mjs` | (2026-08-14) the curve `tune-ladder.mjs` sits on: how far up Skeeball's face each power setting gets, with the holes taken OUT so nothing captures. Hole positions are read off this, never guessed |
 | `sweep-mover.mjs` | (2026-08-25, rewritten 2026-08-26) reachability on Skeeball's HOT SHOT: RUNAWAY, the one machine with a MOVING PART and a FACE THAT CHANGES SHAPE MID-RACK. Every other machine's reachability is a 2-D question (power x aim) and `skeeball/js/test.js`'s 41x21 grid answers it. This machine breaks that twice: a moving hole makes the same swipe land somewhere different depending on where the basket was at release (so a 2-axis grid measures ONE arbitrary frozen PHASE), and the face is different on ball 1 and ball 9 (two still 100s and every basket open, against one sweeping 100 and the rest closed). So it sweeps power x aim x phase at a STAGE of a rack: `--stage open` (ball 1), `--stage run --rung N` (one 100 capped, the other sweeping at ladder rung N), `--stage endgame` (everything closed but the runaway), or `--ladder` for every rung of the escalation at once. Reports captures per hole, the jam rate against a 1% budget, the slowest settle, which phases score the mover at all, and - crucially - fails if a CLOSED basket still captures. `node sweep-mover.mjs runaway --ladder`; re-run after any change to that face, its amplitude, its ladder or its materials. **Its `--ladder` output is the only honest way to talk about whether the escalation makes the shot harder** - a faster basket is a bigger target in TIME even though it is the same target in space, so the intuition is unreliable in both directions |
+| `test-sw-update.mjs` | (2026-09-01) does the app NOTICE its own update? Serves a COPY of the repo, loads it, then edits that copy's `sw.js` + `version.json` exactly as a deploy does, and drives the real hub in Chromium. Asserts the version chip ends up reading the new build **with no manual reload**, never settles on a stale `vN → vN+1` arrow, and **never reloads the page while a game is mounted**. Browser-only on purpose: the defect is a race between the service-worker lifecycle and the page, and install/skipWaiting/activate/claim/`controllerchange` exist nowhere else - reading `hub.js` as text can prove a listener is present, only this proves the chip ends up telling the truth. ~30s. Born red against `ec482d7`, where it reports the incident verbatim: *"the chip still read v551 → v552 while the controller was game-hub-v552"*. The working tree is never touched |
 | `measure-gallery.mjs` | (2026-09-01) Skeeball's GALLERY, counted rather than timed: how many times a machine's picture is built in WebGL and read back - on the first mount, on the swipe to the next machine, and on re-entering the game. Drives the real UI in Chromium. It reports COUNTS on purpose: this container renders through SwiftShader, so a millisecond here says nothing about a phone, while "is that swipe a cache hit" transfers exactly. Run it after any change to `_ensureMachineImg`, `_prewarmNeighbours` or the picture cache; the numbers it produced are in `skeeball/CLAUDE.md`, "The gallery drew each machine only when you reached it" |
 | `test-runaway-capped.mjs` | (2026-08-26) HOT SHOT: RUNAWAY's CLOSED-BASKET probe. That machine is the only one whose face changes shape during a rack - every basket except the runaway is a ONE-SHOT and closes once a ball has gone in - and neither `skeeball/js/test.js` (DEFAULT_BOARD only) nor `sweep-mover.mjs` (reachability) ever throws at a face that has been closing baskets for eight balls, which is the face the last ball of every good rack meets. "Closed" is implemented in TWO places and needs both (the collar is not built, AND capture skips the hole); do only the second and the cup becomes a BOWL a ball can never leave, which is `test-brickcity-stall.mjs`'s parked ball rebuilt on purpose one file over. It also pins that a closed basket scores NOTHING and that the runaway is still reachable with the rest of the face shut. **It compares the closed face against the OPEN one in the same run rather than checking a fixed settle budget** - its first draft asserted a median under 3.0s, a number borrowed from BRICK CITY, and the closed face measured 3.04s against this machine's own open-face 2.90s: a failure that meant nothing, because on a board where most throws roll the full length back, three seconds is what a ball costs. ~90s |
 | `test-brickcity-stall.mjs` | (2026-08-26) BRICK CITY's PARKED-BALL probe, and the only engine test any machine other than THE CLASSIC has. `skeeball/js/test.js` sweeps `DEFAULT_BOARD` only, so the staircase machines - which removed the continuous slope that makes "a resting ball always rolls back down" true - had nothing checking that their balls ever stop resting. Matt: *"the ball sometimes gets stuck IN the negative baskets."* It balanced on the back rim of the bottom-row cups against the riser behind them, at the same world z every time, where capture cannot reach it. 21x11 grid, ~30s; asserts nothing sits dead still past 0.75s, every row is still reachable and the median settle stays under 3s. Born red against the pre-fix engine (2.59s). Re-run after any change to that machine's geometry, materials or watchdog |

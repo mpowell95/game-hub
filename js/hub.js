@@ -25,7 +25,7 @@ import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame } from './new-badge.js';
-import { installErrorLog } from './error-log.js';
+import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
 import { isGameLive, refreshAdminConfig, onAdminConfig, refreshAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
@@ -35,6 +35,17 @@ const t = makeT(STRINGS);
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
 // happen while a game module is loading or mounting. Idempotent; see js/error-log.js.
 installErrorLog();
+
+/* WHAT THE APP WAS DOING, so the next mystery is a line in a bug report instead of a screen
+ * recording (2026-09-01). Matt has had to film three of these in a day; two of them turned on
+ * WHEN something happened relative to something else, which a screenshot cannot show.
+ *
+ * Rides js/error-log.js's existing ring buffer and its existing key - noteError is exported for
+ * exactly this ("so a game can note something it caught itself"), Report a bug already sends the
+ * buffer, and there is no new storage and no new UI. Measured cost with the ring at its full
+ * 20-entry cap: 0.067 ms per breadcrumb, ~3 per app open, so about 0.2 ms - a fifth of one
+ * percent of a frame. Nothing here is on the render path. */
+const noteLifecycle = (msg) => { try { noteError('lifecycle', { msg }); } catch { /* never a second bug */ } };
 /** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
  *  (Monopoly Deal, Parchís — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
 const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) : b;
@@ -421,6 +432,9 @@ class Hub {
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._afterPaint(() => this._maybeAnnounce());
+    // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
+    // and so a new build applies itself while they are on the launcher (see _watchForUpdates).
+    this._watchForUpdates();
     // The app-wide admin config (which games are live, which Skeeball machines are open). The
     // launcher has ALREADY painted from the cached copy - this refresh only re-renders when the
     // fetched value actually differs, so the common case costs one background read and no repaint.
@@ -806,6 +820,85 @@ class Hub {
 
   // --- version pill: shows the running build; tap = update check + reload ----
 
+  /** THE APP UPDATES ITSELF, AND THE CHIP TELLS THE TRUTH ABOUT IT (2026-09-01).
+   *
+   *  THE BUG THIS FIXES. Matt filmed a chip reading "v551 -> v552" that never resolved; tapping it
+   *  flashed "Checking..." and came straight back to the same arrow, and only force-quitting the
+   *  app cleared it. Nothing was broken: the device had ALREADY updated itself to v552. Measured in
+   *  a real browser against a real deploy - the controller swapped at t+8s, `controllerchange`
+   *  fired, and the chip went on reading "v551 -> v552" for ever - because _initVersionPill ran
+   *  once at load and NOTHING in this file subscribed to the service worker's lifecycle. The chip
+   *  was reporting a moment that had passed.
+   *
+   *  Root CLAUDE.md's older diagnostic (a stuck arrow means the shell install failed) was ruled out
+   *  before this was written: every one of the deployed SHELL entries answered 200.
+   *
+   *  So: subscribe. `controllerchange` is the browser telling us the new build is in charge, and it
+   *  was already firing - we simply were not listening. */
+  _watchForUpdates() {
+    if (!('serviceWorker' in navigator)) return;
+    // The version this PAGE is running. A reload is only ever worth doing when the worker actually
+    // moves off it - see _onNewBuildActive.
+    this._loadedVersion = null;
+    this._runningVersion().then((v) => { this._loadedVersion = v; noteLifecycle(`load: ${v || 'no worker'}`); });
+
+    this._onController = () => this._onNewBuildActive();
+    navigator.serviceWorker.addEventListener('controllerchange', this._onController);
+
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (!reg || this._destroyed) return;
+      this._reg = reg;
+      // A new build is DOWNLOADING. Say "Updating..." rather than the old "v551 -> v552" arrow:
+      // that arrow read as "you are stuck, do something", which was never true - skipWaiting()
+      // means the app is already updating itself, unprompted, and will be done in seconds.
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if (!w || this._destroyed) return;
+        noteLifecycle('new build found, installing');
+        this._paintUpdating();
+        w.addEventListener('statechange', () => {
+          if (w.state === 'redundant') { noteLifecycle('install FAILED (worker went redundant)'); this._initVersionPill(); }
+        });
+      });
+    }).catch(() => { /* no registration is not an error worth surfacing */ });
+  }
+
+  /** The new build has taken control of this page. */
+  async _onNewBuildActive() {
+    if (this._destroyed) return;
+    const running = await this._runningVersion();
+    noteLifecycle(`update took over: ${running || 'unknown'}`);
+    this._initVersionPill();          // the chip is now honest again, whatever we do next
+
+    // GUARD 1: THE PAGE MUST HAVE LOADED UNDER A WORKER AT ALL. On a first-ever visit (or after
+    // clearing site data) there is no controller, the very first worker installs and claims, and
+    // controllerchange fires - but nothing about this page is stale, it came straight off the
+    // network. Reloading there would give every new player a pointless flash on their first open.
+    if (!this._loadedVersion) return;
+    // GUARD 2: only ever act on a version that actually MOVED. Reloading because
+    // `latest !== running` is what the old tap handler did, and it is wrong: that condition is
+    // true precisely while the new worker is still installing, so the reload changed nothing and
+    // came back to the same stale screen. A half-deployed state (version.json and the worker's
+    // CACHE disagreeing) must be allowed to sit there looking stale rather than reload for ever.
+    if (!running || running === this._loadedVersion) return;
+    // GUARD 3: once per page. Belt and braces against any loop the above does not cover.
+    if (this._reloaded) return;
+
+    // NEVER INTERRUPT A GAME (Matt's call, 2026-09-01: refresh silently, "but ONLY on the launcher,
+    // never while a game is open or mid-rack"). `this.current` is the same gate _adminUnsub uses
+    // for the same reason. The flag is picked up by showLauncher when they come back.
+    if (this.current) { this._updateWaiting = true; noteLifecycle('holding the refresh: a game is open'); return; }
+    this._applyUpdate();
+  }
+
+  /** Reload onto the new build. Only ever called with the new worker already in charge. */
+  _applyUpdate() {
+    if (this._destroyed || this._reloaded || this.current) return;
+    this._reloaded = true;
+    noteLifecycle('refreshing onto the new build');
+    location.reload();
+  }
+
   /** 'game-hub-v108' -> 'v108' (null passes through). */
   _shortVersion(cache) {
     const m = /game-hub-(v\d+)/.exec(cache || '');
@@ -862,47 +955,101 @@ class Hub {
     } catch { /* never break the hub */ }
   }
 
-  /** Tap = check for an update, with feedback on the pill itself. A reload (the only thing that
-   *  "re-renders the whole hub root", which QA caught resurfacing the first-run gate for
-   *  profile-less devices) only happens when a newer build is actually found - checking while
-   *  already current just flashes "Up to date" and reverts, no navigation at all. */
+  /** A new build is downloading right now. Quiet and honest: it will finish by itself. */
+  _paintUpdating() {
+    const el = this.el.version;
+    // Leave a pill that _initVersionPill deliberately never showed (no worker AND offline) hidden -
+    // it has nothing truthful to say, and this is not the moment to start.
+    if (!el || el.disabled || el.hidden) return;
+    el.classList.add('is-stale');
+    el.textContent = t('hub_version_updating');
+    el.setAttribute('aria-label', t('hub_version_updating'));
+  }
+
+  /** Wait for the new worker to actually TAKE OVER this page. Resolves true on controllerchange,
+   *  false on timeout. This is the wait the old tap handler did not do - see _forceUpdate. */
+  _awaitNewBuild(ms) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        navigator.serviceWorker.removeEventListener('controllerchange', on);
+        clearTimeout(timer);
+        resolve(v);
+      };
+      const on = () => finish(true);
+      const timer = setTimeout(() => finish(false), ms);
+      try { navigator.serviceWorker.addEventListener('controllerchange', on); }
+      catch { finish(false); }
+    });
+  }
+
+  /** Tap = check for an update, and WAIT for it rather than guessing (2026-09-01).
+   *
+   *  THE BUG THIS FIXES. This used to `await reg.update()` and then immediately read the running
+   *  version. `reg.update()` resolves when the registration job completes - NOT when the new worker
+   *  has installed, activated or claimed - so the read reliably still saw the OLD worker, concluded
+   *  "stale", and called location.reload(). That is the one reload that cannot help: the new build
+   *  is mid-install, so the page comes back and paints the same stale chip. On Matt's recording
+   *  that round trip took 300 ms and he went to the app switcher.
+   *
+   *  Now the reload only ever happens AFTER the new worker is genuinely in charge, which is the
+   *  only moment a reload does anything. If it has not landed inside the window we say so plainly
+   *  and leave _watchForUpdates armed, so the silent path finishes the job on its own. */
   async _forceUpdate() {
     const el = this.el.version;
     if (!el || el.disabled) return;
     const prevText = el.textContent;
     const prevAria = el.getAttribute('aria-label') || '';
     const prevStale = el.classList.contains('is-stale');
-    el.disabled = true;
-    el.textContent = t('hub_version_checking');
-    el.setAttribute('aria-label', t('hub_version_checking'));
-    try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) await reg.update();   // fetches the new sw.js; skipWaiting activates it
-    } catch { /* fall through to a fresh version check regardless */ }
-    const [running, latest] = await Promise.all([this._runningVersion(), this._latestVersion()]);
-    const cur = running || latest;
-    if (!cur) {   // offline / no service worker: nothing truthful learned, restore prior state
+    const restore = () => {
       el.textContent = prevText;
       el.setAttribute('aria-label', prevAria);
       el.classList.toggle('is-stale', prevStale);
       el.disabled = false;
+    };
+    el.disabled = true;
+    el.textContent = t('hub_version_checking');
+    el.setAttribute('aria-label', t('hub_version_checking'));
+
+    // ARM THE WAIT BEFORE ASKING. A worker that installs fast can claim the page while update() is
+    // still settling, and a listener added afterwards would miss the event and report a false
+    // timeout on a device that had in fact just updated.
+    const landed = this._awaitNewBuild(20000);
+    let reg = null;
+    try {
+      reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    } catch { /* fall through: the version check below is still worth doing */ }
+
+    const [running, latest] = await Promise.all([this._runningVersion(), this._latestVersion()]);
+    if (!running && !latest) { restore(); return; }   // offline: nothing truthful learned
+
+    // Already on the newest build - which, since this bug, is usually the real answer.
+    if (running && latest && running === latest) {
+      el.classList.remove('is-stale');
+      el.textContent = t('hub_version_up_to_date');
+      el.setAttribute('aria-label', t('hub_version_up_to_date'));
+      setTimeout(() => { if (!this._destroyed) this._initVersionPill(); el.disabled = false; }, 2000);
       return;
     }
-    if (running && latest && latest !== running) {
-      el.textContent = `${running} → ${latest}`;
-      el.classList.add('is-stale');
-      el.setAttribute('aria-label', t('hub_version_update_aria', { latest }));
-      location.reload();   // a real update was found - this is the actual update action
-      return;
-    }
-    el.classList.remove('is-stale');
-    el.textContent = t('hub_version_up_to_date');
-    el.setAttribute('aria-label', t('hub_version_up_to_date'));
-    setTimeout(() => {
-      el.textContent = cur;
-      el.setAttribute('aria-label', t('hub_version_current_aria', { cur }));
+
+    // A newer build exists. It is installing (or about to); wait for it to take over.
+    el.textContent = t('hub_version_updating');
+    el.setAttribute('aria-label', t('hub_version_updating'));
+    if (await landed) {
+      // _onNewBuildActive already repainted, and reloads unless a game is open. Reloading here as
+      // well would be a second reload for one update.
       el.disabled = false;
-    }, 2000);
+      this._applyUpdate();
+      return;
+    }
+    // Not yet. Say so instead of reloading into the same screen; the watcher above will finish it.
+    noteLifecycle('tap: new build not active within 20s, leaving the watcher armed');
+    el.textContent = t('hub_version_still_updating');
+    el.setAttribute('aria-label', t('hub_version_still_updating'));
+    el.disabled = false;
   }
 
   /** A device with no profile name cannot record plays under an identity, so gate it: pick a name,
@@ -1093,6 +1240,9 @@ class Hub {
     if (this.el.topRight) this.el.topRight.hidden = false;
     this._syncStats();   // a game may have just updated the stats
     this._drainBugReports();   // and the connection may have come back while they played
+    // A new build that landed WHILE they were playing was deliberately held (never interrupt a
+    // game). They are on the launcher now, so it is safe to take it.
+    if (this._updateWaiting) { this._updateWaiting = false; this._applyUpdate(); }
   }
 
   destroy() {
@@ -1102,6 +1252,7 @@ class Hub {
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
+    if (this._onController) navigator.serviceWorker.removeEventListener('controllerchange', this._onController);
     if (this._themeUnsub) this._themeUnsub();
     this.root.innerHTML = '';
   }
