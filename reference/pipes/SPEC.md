@@ -107,6 +107,17 @@ Each of these is a settled decision, recorded so nobody re-opens it as a bug:
 
 1. **A timer as the headline stat.** Ours counts turns — Matt, asked directly: *"turn count is
    easier so that's fine."*
+2. **A progress count under the board** (`N / TOTAL CONNECTED`), where the reference shows nothing.
+   Added 2026-09-01 after Matt looked at a board with a sealed blue run and dry pipes around it and
+   asked *"How is this not finished?"* — the slot was a fixed 48px that had been EMPTY in exactly
+   that state, so the screen never said what remained. It reuses the box the `Leaking` message
+   already lived in, so it costs the layout nothing. The reference can afford silence here because
+   its players learned full net from its own level 1; ours had the rule changed under them.
+
+   (The board in that screenshot was ALSO unsolvable — a save from the 2026-08-29 build restored
+   into the full-net rule. That half is a bug and is fixed in `pipes/js/game.js`; see
+   `pipes/CLAUDE.md`, "A save is validated by reconstruction". The counter is the part that is a
+   deliberate difference from the reference.)
 
 **Full net is no longer on this list — ours uses it now (2026-08-31).** It was the headline
 divergence, on the strength of `docs/PIPES-SCOPE.md` recording Matt choosing path-with-no-leaks from

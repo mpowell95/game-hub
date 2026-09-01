@@ -105,7 +105,7 @@ Gates live in the generator, where a player can never meet a board that failed t
 
 ## Testing
 
-`node pipes/js/test.js` — 45 assertions. The one that matters is **every generated board is
+`node pipes/js/test.js` — 53 assertions. The one that matters is **every generated board is
 solvable**, over every tier and 40 seeds, and it is checked two ways on purpose:
 
 1. restore each cell to its constructed rotation and assert `isSolved()` accepts it — this proves
@@ -113,6 +113,13 @@ solvable**, over every tier and 40 seeds, and it is checked two ways on purpose:
 2. run an **independent solver** over the scrambled board that never sees `board.solution`.
 
 Only (1) would let a generator and a win check be wrong *together* and still pass.
+
+**Sections 6-8 are the 2026-09-01 additions**, and section 6 is a `[KNOWN-BUG PROBE]`: a save
+stamped with the old rule generation, and a board that is not a rotation of its own seed, must both
+be refused (see "A save is validated by reconstruction"). Section 7 asserts the two necessary
+conditions for a full-net solution over every generated board - the check that would have caught
+that incident from the GENERATOR side, and it needs no solver. Section 8 proves "leak-free but
+unfinished" is a real reachable state, which is what the banner's third state is for.
 
 **The independent solver has now been wrong in BOTH directions, and the lesson is the same one.**
 Its first draft demanded that every cell agree with every neighbour — which was the FULL NET rule,
@@ -200,6 +207,53 @@ values are one-tap-recreatable preferences, so THE LAW rule 2's carve-out applie
 level is not stored here either** — it is derived from the shared stats store (see above), which is
 what keeps that carve-out honest now that this game has progression at all.
 
+### A SAVE IS VALIDATED BY RECONSTRUCTION, and this is the most important thing on this page
+
+Matt, 2026-09-01, with a screenshot of a board he had visibly completed - a blue run joining two
+bulbs, dry white pipes around it: *"How is this not finished?"*
+
+It was not finished, and it could not be. That board was made by the **2026-08-29** generator
+(`medium: { w: 6, h: 7, decoy: 0.5 }`, which left about a third of the cells EMPTY - the current
+`carveTree` fills every cell, so blank cells on a board are the tell) and was restored verbatim
+into the **2026-08-31 full net** rule. Under the rule it was built with, joining the source to the
+drain without a leak WAS the win, and he had done it. Under full net it had no solution at all.
+
+Replaying the old generator out of git and testing 200 boards a tier against two NECESSARY
+conditions for any full-net solution (openings must be even, openings/2 must be at least n-1 to
+span n cells, plus connectivity over the non-blank cells):
+
+| Tier | already unsolvable the moment full net deployed |
+|---|---|
+| Easy | 155 / 200 |
+| Medium | **157 / 200** |
+| Hard | 135 / 200 |
+| Expert | 108 / 200 |
+
+Lower bounds, both of them. **The deploy silently handed a large fraction of the family a board
+with no solution**, and nothing on screen said so.
+
+The cause was that `fromJSON` validated SHAPE and never PROVENANCE: it checked `v === 1`, the cell
+count and the src/dst range, and the old payload also stamped `v: 1`. Two gates now:
+
+1. **`v` is the RULE GENERATION, not a file format version.** It is 2 since full net. Every known
+   legacy save is refused here for free.
+2. **Reconstruction, which is the gate that matters.** `generate(tier, seed)` is deterministic and
+   returns the FINAL seed even when a quality gate makes it recurse, so a stored `(tier, seed)`
+   reproduces its own board exactly. `madeByThisGenerator()` regenerates it and requires every
+   saved cell to be a **rotation** of the regenerated solution cell - which is the only thing a
+   player can do to a board. Anything else came from a different generator.
+
+Gate 2 is self-maintaining: it invalidates a foreign save after ANY future generator, tier-size or
+rule change, with nobody having to remember to bump a number. **Do not replace it with a
+solvability check** - solvability is the generator's job, and "is this the board its own seed
+makes" catches staleness nobody has thought of yet. If a future generator is ever made
+non-deterministic this degrades to "always a fresh board", which `pipes/js/test.js` says out loud.
+
+**A refused save costs nothing earned** (THE LAW). The key holds a scratch board; the record of a
+solved board is `recordPipes()` in `gamehub.stats`, and the level is derived from it. The player
+taps Play and gets a board that can actually be finished - **silently**, with no toast about a bug
+they never saw the inside of.
+
 **There is deliberately no "fewest turns" best.** Every cross-device combine in `js/players-agg.js`
 is built on `Math.max` (`docs/BUILDING-A-GAME.md` item 7: *bests take `Math.max`, never a sum*), so
 a lower-is-better best would need a `Math.min` branch contradicting the rule the whole layer is
@@ -210,6 +264,25 @@ written to. Nuts & Bolts already solved this and is the precedent copied here: `
 
 ## UI notes worth knowing before editing
 
+- **THE BANNER ALWAYS SAYS HOW MUCH IS LEFT** - three states, and the third one is why it exists.
+  It used to have two: `Leaking`, and EMPTY. Empty is the state a player lands in the moment they
+  seal the source's own run without having connected the rest of the board, and it is half of why
+  Matt's screenshot above was unanswerable: `flow()` only reports a leak for a cell the water has
+  REACHED, so a disconnected region is not marked either, and an unreached pipe is drawn exactly
+  like a reached-but-dry one. Blue pipes, white pipes, a blank 48px strip. Now: empty when solved
+  (the floating panel takes over), `Leaking` when the water is spilling, and otherwise
+  **`N / TOTAL CONNECTED`**. It is NOT gated on `moves > 0` the way the red leak glow is - a number
+  is information, not an accusation. The denominator is counted in `_buildBoard()`
+  (`this._pieceCount`, cells with `popcount > 0`) so it can never disagree with `isSolved()`.
+  **This is a deliberate divergence from the reference**, which puts an elapsed timer in this slot;
+  it is one line in a box that already existed, so it costs the layout nothing.
+- **`.pi-done` MUST OBEY `hidden`, and it needs its own rule to do it.** `.pi-root .pi-done` is
+  specificity (0,2,0) and the browser's `[hidden] { display: none }` is (0,1,0), so `display: grid`
+  quietly won and **the Continue / Replay / Leaderboard panel sat over the board from the first
+  frame of every game** - shipped that way in v539 and found by driving the play screen in a real
+  browser, which nothing had done before (`test-visual.mjs` has no PLAY probe for Pipes). `hidden`
+  is the only thing `ui.js` uses to hide that panel, so `.pi-root .pi-done[hidden] { display: none }`
+  has to outrank the rule that shows it.
 - **A tile's SVG is built once**, for the mask the piece had at mount, and a turn only changes a CSS
   `transform: rotate()`. That is why rotation animates for free: no path is rebuilt and no layout
   runs. The authoritative mask is always `game.cells[i]`; the transform is presentation only.

@@ -281,6 +281,11 @@ class PipesUI {
     const g = this.game;
     this.cellEls = new Array(g.w * g.h);
     this.spins = new Int16Array(g.w * g.h);
+    // The denominator of the banner's count, and it is isSolved()'s own definition of "every pipe"
+    // - cells that hold a piece. A spanning-tree board has one in every cell, so on a shipped board
+    // this is w*h; it is counted rather than assumed so the two can never disagree.
+    this._pieceCount = 0;
+    for (let i = 0; i < g.cells.length; i++) if (popcount(g.cells[i]) > 0) this._pieceCount++;
     this.el.board.style.gridTemplateColumns = `repeat(${g.w}, var(--pi-cell))`;
     const frag = document.createDocumentFragment();
     for (let i = 0; i < g.cells.length; i++) {
@@ -382,14 +387,23 @@ class PipesUI {
     this._lastFillMs = fillMs;
 
     const leaking = showLeaks && leaks.length > 0;
-    // On the winning turn the last stretch is still flowing, so the banner waits for the water to
-    // arrive rather than announcing the win over a half-filled board.
+    // THE BANNER ALWAYS SAYS HOW MUCH IS LEFT. It used to have two states, "Leaking" and EMPTY -
+    // and empty was the state a player lands in the moment they seal the source's own run without
+    // having connected the rest of the board. `flow()` only ever reports a leak for a cell the
+    // water has REACHED, so a disconnected region is not marked either. Blue pipes, white pipes,
+    // a blank 48px strip, and nothing anywhere saying what remained. Matt, 2026-09-01, looking at
+    // exactly that: "How is this not finished?"
+    // The count is not gated on `showLeaks`: a number is information, not an accusation, so unlike
+    // the red glow it is fine on move zero.
+    const total = this._pieceCount;
     const banner = () => {
       // The headline rides WITH the buttons, in the floating panel, so the completion screen reads
       // in the reference's order - "Puzzle Solved!", then Continue, then Replay / Leaderboard.
       // Putting it in the in-flow banner instead left it stranded UNDER the buttons.
       this.el.banner.className = 'pi-banner' + (leaking && !solved ? ' is-leak' : '');
-      this.el.banner.textContent = (leaking && !solved) ? t('leaking') : '';
+      this.el.banner.textContent = solved ? ''
+        : leaking ? t('leaking')
+        : t('connected', { n: reached.size, total });
       if (this.el.doneTitle) {
         this.el.doneTitle.innerHTML = solved
           ? `<b>${esc(t('solved_title'))}</b><span>${esc(t('solved_moves', { n: g.moves }))}</span>`
