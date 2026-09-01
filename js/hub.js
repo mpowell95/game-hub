@@ -6,13 +6,20 @@
 //
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
-import { loadProfile } from './profile-store.js';
+import { loadProfile, hasName } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
-import { syncMyStats } from './stats-net.js';
-// The first-run "choose a name" gate lives in name-gate.js now (2026-07-31) so the hub and every
+// stats-net.js and name-gate.js are imported LAZILY, at their call sites (2026-09-01).
+//
+// Both were static, and between them they put game-stats.js (91 KB), arcade-scores.js,
+// firebase-boot.js, install-state.js and stats-net.js itself on the hub's critical path - on every
+// launch - when nothing in them is needed to DRAW the launcher. syncMyStats() runs after the first
+// render by design, and the name gate only opens for a device that has no name. `hasName()` moved
+// to profile-store.js (already on the path, 4 KB) so this file can ask that question without the
+// gate's whole graph coming with it.
+//
+// The first-run "choose a name" gate lives in name-gate.js (2026-07-31) so the hub and every
 // standalone game page run the same one; the profile/code/username plumbing it used to do inline
 // here moved with it.
-import { requireName, hasName } from './name-gate.js';
 import { getLang, setLang, makeT } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
@@ -369,6 +376,7 @@ export const GAMES = [
 class Hub {
   constructor(root) {
     this.root = root;
+    this._destroyed = false;
     this.current = null;     // { module, id } of the mounted game
     this._onBack = () => this.requestLeave();
     this.render();
@@ -385,13 +393,26 @@ class Hub {
     // preference change while the stored mode is 'auto' (not only on an explicit tap) -
     // subscribed once here (not per render(), which rebinds the button itself).
     this._themeUnsub = onThemeChange(() => this._paintThemeToggle());
-    this._syncStats();
-    // A report filed with no signal is kept on the device (js/bug-report.js's outbox) and retried
-    // here, on the same three moments stats sync uses: load, reconnect, return to the launcher. A
-    // report that only exists on the phone that was having trouble is no report.
-    this._drainBugReports();
-    this._drainMessages();
-    this._paintReplyBadge();
+    // EVERYTHING BELOW WAITS FOR THE LAUNCHER TO PAINT (2026-09-01).
+    //
+    // These all fire dynamic imports, and firing them here - synchronously, immediately after
+    // render() - put ~180 KB of fetches in a race with the very first frame. None of them draws
+    // the launcher.
+    //
+    // DEFERRED, NEVER DROPPED. _drainBugReports/_drainMessages are THE LAW rule 6's retry paths:
+    // a report or message written with no signal lives only on the device that had the trouble
+    // until one of these runs. The `online` and showLauncher() retriggers below are untouched, so
+    // the same three moments still apply - load, reconnect, back to the launcher - and "load" is
+    // now a beat later rather than gone.
+    this._afterPaint(() => {
+      this._syncStats();
+      // A report filed with no signal is kept on the device (js/bug-report.js's outbox) and retried
+      // here, on the same three moments stats sync uses: load, reconnect, return to the launcher. A
+      // report that only exists on the phone that was having trouble is no report.
+      this._drainBugReports();
+      this._drainMessages();
+      this._paintReplyBadge();
+    });
     this._onOnlineBugs = () => { this._drainBugReports(); this._drainMessages(); this._paintReplyBadge(); };
     window.addEventListener('online', this._onOnlineBugs);
     // Reading a message happens in an overlay on TOP of this page, so nothing here would otherwise
@@ -399,7 +420,7 @@ class Hub {
     // new message badge doesn't go away after I've already read a message."
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
-    this._maybeAnnounce();
+    this._afterPaint(() => this._maybeAnnounce());
     // The app-wide admin config (which games are live, which Skeeball machines are open). The
     // launcher has ALREADY painted from the cached copy - this refresh only re-renders when the
     // fetched value actually differs, so the common case costs one background read and no repaint.
@@ -520,10 +541,25 @@ class Hub {
     badge(this.el && this.el.profile, await count('./bug-report-ui.js', 'myUnreadReplies'));
   }
 
+  /** Run `fn` once the launcher has had its chance to paint. Idle time if the browser offers it,
+   *  the next task if not, and capped either way so a busy device cannot postpone a THE LAW rule 6
+   *  retry indefinitely. */
+  _afterPaint(fn) {
+    const go = () => { if (!this._destroyed) { try { fn(); } catch (err) { console.error('[hub] deferred startup step failed', err); } } };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 2000 });
+    else setTimeout(go, 0);
+  }
+
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
    *  syncMyStats never throws and reports its own failures loudly (see stats-net.js's syncHealth) -
-   *  this guard is only for a synchronous import-time fault, and must not re-swallow the result. */
-  _syncStats() { try { syncMyStats(); } catch (err) { console.error('[hub] stats sync could not start', err); } }
+   *  this guard is only for a load-time fault, and must not re-swallow the result.
+   *  Dynamically imported since 2026-09-01: it runs after the first render, so its 100+ KB graph
+   *  has no business blocking that render. A failure to LOAD is now a rejection, not a throw. */
+  _syncStats() {
+    import('./stats-net.js')
+      .then((m) => m.syncMyStats())
+      .catch((err) => console.error('[hub] stats sync could not start', err));
+  }
 
   render() {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
@@ -790,12 +826,19 @@ class Hub {
     });
   }
 
-  /** Read the deployed sw.js from the network and parse its version. Null offline. */
+  /** Read the DEPLOYED version from the network. Null offline.
+   *
+   *  Reads version.json, not sw.js (2026-09-01). This ran on every launch and pulled the whole
+   *  52 KB worker to read one string out of it - on top of the browser's own update check of the
+   *  same file - and then parsed all of it on the main thread. version.json is generated from
+   *  CACHE by validate-sw-assets.mjs and is deliberately NOT in sw.js's ASSETS, so it can never be
+   *  answered from the cache; a cached answer here would pin the pill on "up to date" for ever. */
   async _latestVersion() {
     try {
-      const res = await fetch('sw.js', { cache: 'no-store' });
+      const res = await fetch('version.json', { cache: 'no-store' });
       if (!res.ok) return null;
-      return this._shortVersion(await res.text());
+      const { cache } = await res.json();
+      return this._shortVersion(cache || '');
     } catch { return null; }
   }
 
@@ -872,7 +915,12 @@ class Hub {
    *  already exists, and idempotent, so calling it from every render() is safe. */
   initFirstRun() {
     if (hasName()) return;
-    requireName().then(() => { this.render(); this._syncStats(); this._maybeAnnounce(); });
+    // Only a device with no name ever loads the gate, which is why this import is here and not at
+    // the top of the file - see the import block's note.
+    import('./name-gate.js')
+      .then((m) => m.requireName())
+      .then(() => { this.render(); this._syncStats(); this._maybeAnnounce(); })
+      .catch((err) => console.error('[hub] the name gate could not load', err));
   }
 
   /** The language toggle's face: ONE state at a time (the active language), Matt's flag-knob
@@ -1048,6 +1096,7 @@ class Hub {
   }
 
   destroy() {
+    this._destroyed = true;   // _afterPaint's callbacks check this before firing into a dead hub
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);

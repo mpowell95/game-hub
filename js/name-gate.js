@@ -23,7 +23,8 @@
 // a bare page that loads no hub chrome. Firebase is touched lazily and never blocks: offline, the
 // name is accepted locally and claimed on a later sync, exactly as the hub's gate always behaved.
 
-import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
+import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode,
+  hasName, isPlaceholderName } from './profile-store.js';
 import { statsOwner } from './game-stats.js';
 import { usernameStatus, claimUsername, lookupCodeOwner, syncMyStats } from './stats-net.js';
 import { getLang, setLang, makeT } from './i18n.js';
@@ -31,15 +32,13 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 
-/** 'You' is profile-store's default for a blank name, so it is a placeholder, not an identity.
- *  Kept in step with players-agg.js's isPlaceholderName (same rule, no import: that module is
- *  headless/Node-safe and this one is DOM-only, so they stay independently loadable). */
-const isPlaceholder = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
-
-/** True when this device has a real profile name to record plays under. */
-export function hasName() {
-  try { return !isPlaceholder((loadProfile() || {}).name); } catch { return false; }
-}
+// hasName()/isPlaceholderName moved to profile-store.js on 2026-09-01 and are re-exported here so
+// every existing caller is unchanged. They moved because they were the ONLY reason js/hub.js
+// imported this module at load, and this module's own graph pulls game-stats.js and stats-net.js -
+// 100+ KB on the hub's critical path to answer a question the profile alone can answer. The gate
+// itself is still imported here, dynamically, only when there is actually no name.
+export { hasName, isPlaceholderName };
+const isPlaceholder = isPlaceholderName;
 
 function ensureCss() {
   const href = new URL('../css/name-gate.css', import.meta.url).href;

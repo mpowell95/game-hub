@@ -82,4 +82,22 @@ export function clearProfile() {
   try { localStorage.removeItem(KEY); return true; } catch { return false; }
 }
 
-export default { loadProfile, saveProfile, clearProfile };
+/** 'You' is this module's own default for a blank name, so it is a placeholder, not an identity.
+ *  Kept in step with players-agg.js's isPlaceholderName (same rule, no import: that module is
+ *  headless/Node-safe and must stay independently loadable). */
+export const isPlaceholderName = (n) => {
+  const s = (typeof n === 'string' ? n : '').trim().toLowerCase();
+  return !s || s === 'you';
+};
+
+/** True when this device has a real profile name to record plays under.
+ *
+ *  LIVES HERE, NOT IN name-gate.js (2026-09-01). It is two lines over loadProfile(), and it was the
+ *  only reason js/hub.js imported name-gate.js at module scope - which re-dragged game-stats.js and
+ *  stats-net.js onto the hub's critical path for a question answerable from the profile alone.
+ *  name-gate.js re-exports it, so every existing caller is unchanged. */
+export function hasName() {
+  try { return !isPlaceholderName((loadProfile() || {}).name); } catch { return false; }
+}
+
+export default { loadProfile, saveProfile, clearProfile, hasName, isPlaceholderName };

@@ -204,4 +204,31 @@ let manifestFailed = false;
   }
 }
 
+// --- version.json: the version pill's one-line answer (2026-09-01) -----------------------------
+//
+// js/hub.js's _latestVersion() used to fetch the whole of sw.js (52 KB, ~17 KB gzipped) on every
+// single launch to read one string out of it, on top of the browser's own update check of the same
+// file. This writes that string to a file of its own instead.
+//
+// GUARD: version.json IS DELIBERATELY NOT IN `ASSETS`. That is what keeps it out of sw.js's
+// CACHE_FIRST_PATHS, which is an allow-list derived from ASSETS - a cached answer to "what is
+// deployed?" freezes the pill on "up to date" for ever. The "deployed file not in the list"
+// warning above is therefore CORRECT for this file and must stay.
+//
+// Generated, not hand-kept, for the same reason REST_MANIFEST is: a version.json that disagrees
+// with CACHE is a pill that lies, and test-sw-strategy.mjs asserts the two match.
+{
+  const cache = /const CACHE = '([^']+)'/.exec(readFileSync(SW_PATH, 'utf8'))[1];
+  const VERSION_PATH = join(ROOT, 'version.json');
+  const want = `${JSON.stringify({ cache }, null, 2)}\n`;
+  let have = null;
+  try { have = readFileSync(VERSION_PATH, 'utf8'); } catch { /* first run */ }
+  if (have !== want) {
+    writeFileSync(VERSION_PATH, want);
+    console.log(`ok   version.json written for ${cache} - commit it`);
+  } else {
+    console.log(`ok   version.json matches ${cache}`);
+  }
+}
+
 process.exit(offenders.length || manifestFailed ? 1 : 0);
