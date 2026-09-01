@@ -170,7 +170,14 @@ function ensureCss() {
   .msg-row-prev { display: block; margin: 2px 0 0; font-size: var(--gh-fs-sm); color: var(--gh-muted);
                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .msg-row-when { flex: 0 0 auto; font-size: var(--gh-fs-xs); color: var(--gh-muted); white-space: nowrap;
-                  align-self: flex-start; }
+                  align-self: flex-start; text-align: right; }
+  /* The admin row's second line: how many messages are in the thread. It used to be a bare number
+     after a <br>, which inherited the row's line-height and sat right on top of the time - two
+     unrelated numbers touching, and the lower one with nothing to say what it counted. Its own
+     line box, its own gap, and the word (Matt, 2026-09-01: "The hours on the right shouldn't be
+     on top of itself"). */
+  .msg-row-n { display: block; margin-top: 4px; font-size: var(--gh-fs-xs); font-weight: 700;
+               line-height: 1; color: var(--gh-muted); font-variant-numeric: tabular-nums; }
   /* The picker's rows carry a name and nothing else, so they do not need a conversation row's
      height. At 20-odd people the full-size row turned the list into a long scroll for no content. */
   .msg-row--compact { padding: 9px var(--gh-sp-3); gap: var(--gh-sp-2); }
@@ -732,7 +739,8 @@ async function renderAdmin(card) {
               <span class="msg-row-name">${esc(nameOf(th.a))} &harr; ${esc(nameOf(th.b))}</span>
               <span class="msg-row-prev">${esc(previewLine(th))}</span>
             </span>
-            <span class="msg-row-when">${esc(whenText(th.at))}<br>${th.count}</span>
+            <span class="msg-row-when">${esc(whenText(th.at))}
+              <b class="msg-row-n">${esc(t('msg_admin_count', { n: th.count }))}</b></span>
           </button></li>`).join('')}</ul>`
       : `<p class="msg-lead">${esc(navigator.onLine === false ? t('msg_offline') : t('msg_admin_empty'))}</p>`;
     shellHTML(card, { title: t('msg_admin_title'), sub: t('msg_admin_sub'), body });
