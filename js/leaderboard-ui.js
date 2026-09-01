@@ -261,16 +261,24 @@ function messageHTML(g) {
  *
  *  Not rendered for YOUR OWN row (nobody messages themselves; js/messages.js's pairKey refuses it
  *  anyway), and not for a row with no player code, which is what a message is addressed to. A
- *  legacy record with no code cannot receive one, and a dead button would be worse than none. */
+ *  legacy record with no code cannot receive one, and a dead button would be worse than none.
+ *
+ *  (2026-09-01) It is an ICON BESIDE THE NAME, not a full-width bar under the tier grid. Matt:
+ *  "This is a bad spot for the send a message button. It should be a smaller icon and be next to
+ *  the players name." A full-width accent bar mid-screen read as the primary action of a stats
+ *  page whose actual content is the game list below it, and it pushed that list down a phone
+ *  screen. It is icon-only, so the label lives in `aria-label`/`title` rather than being dropped -
+ *  and it is still 44x44, the UX floor's tap-target minimum (docs/BUILDING-A-GAME.md, Part 0);
+ *  "smaller" here means smaller than a full-width bar, never smaller than a thumb. */
 function sendMsgHTML(g) {
   if (!g || g.key === _meKey) return '';
   const code = (typeof g.playerId === 'string' ? g.playerId : '').trim().toUpperCase();
   if (!code) return '';
-  return `<div class="lb-pactions">
-    <button type="button" class="lb-msgbtn" data-role="lb-msg"
+  const label = esc(t('lb_send_message'));
+  return `<button type="button" class="lb-msgbtn" data-role="lb-msg"
             data-code="${esc(code)}" data-name="${esc(rankName(g))}" data-emoji="${esc(g.emoji || '🙂')}"
-    >${esc(t('lb_send_message'))}</button>
-  </div>`;
+            aria-label="${label}" title="${label}"
+    ><span aria-hidden="true">💬</span></button>`;
 }
 
 // --- difficulty tier maths ---------------------------------------------------
@@ -1413,10 +1421,11 @@ function playerDetail(list, key) {
       <span class="lb-pdetail-name">${rankName(g)}${youBadge(g)}</span>
       <span class="lb-pdetail-meta">${t('lb_played_count', { n: played })}</span>
     </span>
+    ${sendMsgHTML(g)}
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + sendMsgHTML(g) + gsGameListHTML(g.games);
+  return head + messageHTML(g) + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -1889,15 +1898,20 @@ function ensureCss() {
     '.lb-detail-top{display:flex;align-items:center;gap:10px;min-height:44px}',
     '.lb-pdetail-head{display:flex;align-items:center;gap:11px;margin:4px 0 11px}',
     '.lb-pdetail-head .lb-av{width:42px;height:42px;font-size:22px}',
-    '.lb-pdetail-id{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}',
+    '.lb-pdetail-id{flex:0 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}',
     '.lb-pdetail-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:18px;font-weight:800;color:var(--lb-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pdetail-meta{font-size:11.5px;font-weight:600;color:var(--lb-muted)}',
     '.lb-pmsg{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:var(--lb-surface-2);border:1px solid var(--lb-line);color:var(--lb-ink);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
-    // Send message, on a player's detail screen. Built from this overlay's own --lb-* tokens rather
-    // than css/ui.css's .gh-* set, because the leaderboard does not inject that stylesheet.
-    '.lb-pactions{margin:12px 0 0}',
-    '.lb-msgbtn{width:100%;min-height:44px;padding:11px 14px;border-radius:12px;border:1px solid var(--lb-accent,#1F5FA8);'
-      + 'background:var(--lb-accent,#1F5FA8);color:#fff;font:inherit;font-size:15px;font-weight:800;'
+    // Send message, beside the player's name in the detail header. Built from this overlay's own
+    // --lb-* tokens rather than css/ui.css's .gh-* set, because the leaderboard does not inject
+    // that stylesheet. What keeps it BESIDE THE NAME is that the name block no longer grows
+    // (`.lb-pdetail-id` is `flex:0 1 auto`) and the wins number takes the slack instead
+    // (`margin-left:auto` below) - so the button hugs the name whether or not it is rendered, and
+    // the wins number stays pinned right either way. 44x44 is the tap-target floor, not a style.
+    '.lb-pdetail-head .lb-pnum{margin-left:auto}',
+    '.lb-msgbtn{flex:0 0 auto;width:44px;height:44px;display:inline-flex;'
+      + 'align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--lb-line);'
+      + 'background:var(--lb-surface-2);color:var(--lb-ink);font:inherit;font-size:19px;line-height:1;'
       + 'cursor:pointer;touch-action:manipulation}',
     '.lb-msgbtn:active{transform:translateY(1px)}',
     '.lb-pgame{margin-top:10px}',
