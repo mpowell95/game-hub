@@ -111,7 +111,10 @@ function bootWorker({ net, src = SW_SRC, existingCaches } = {}) {
     addEventListener: (type, fn) => { listeners[type] = fn; },
     skipWaiting: async () => {},
     clients: { claim: async () => {} },
-    location: { origin: ORIGIN },
+    // A real ServiceWorkerGlobalScope's location is a full WorkerLocation at the worker's own
+    // URL, and sw.js resolves its relative ASSETS paths against it (REST_PATHS). Modelling it
+    // as an origin alone made the sandbox lie about the one thing this file exists to check.
+    location: { origin: ORIGIN, href: `${ORIGIN}/sw.js`, pathname: '/sw.js' },
   };
 
   const sandbox = {
@@ -338,6 +341,65 @@ console.log('\n--- fetch: images remain cache-first ---');
   const res = await w.fire('fetch', { request: new FakeRequest('./chinchon/decks/anita/oros-6.webp') });
   eq('a cached image is served from cache', res.body, 'CACHED');
   ok('and never touches the network (card boards must not flash blank)', !hitNetwork);
+}
+
+// --- 4b. game code (the REST tier) is cache-first ----------------------------------------------
+//
+// [KNOWN-BUG PROBE] Born red on 2026-09-01 against the network-first worker. Matt, on a screen
+// recording from Anita's phone of opening Skeeball: "Why does it take so long? It needs to be
+// better than this." With the whole game verifiably already in this cache, opening it still sent
+// 28 requests and 2,188 KB to the server, because network-first only falls back to cache when the
+// network LOSES the deadline race. The deadline capped how bad that got; it never stopped it.
+
+console.log('\n--- fetch: game code is served from cache, not re-downloaded ---');
+
+{
+  const restJs = REST.find((p) => p.startsWith('./skeeball/js/') && p.endsWith('.js'));
+  ok('the REST tier contains skeeball code to test with', !!restJs, `REST has ${REST.length} entries`);
+
+  let hitNetwork = false;
+  const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('NEW'); } });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put(new FakeRequest(restJs), new FakeResponse('CACHED'));
+  const res = await w.fire('fetch', { request: new FakeRequest(restJs) });
+  eq(`[KNOWN-BUG PROBE] a cached game module is served from cache (${restJs})`, res.body, 'CACHED');
+  ok('[KNOWN-BUG PROBE] and never touches the network (was: 2,188 KB re-downloaded per open)',
+    !hitNetwork, 'network-first re-fetched every module in the game on every single open');
+}
+
+{
+  // The shell is deliberately NOT in this branch: it is how a device finds out a build changed.
+  let hitNetwork = false;
+  const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('NEW'); } });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put(new FakeRequest('./js/hub.js'), new FakeResponse('CACHED'));
+  const res = await w.fire('fetch', { request: new FakeRequest('./js/hub.js') });
+  eq('a SHELL module still prefers the network (freshness of the app itself is unchanged)', res.body, 'NEW');
+  ok('...which means it did go to the network', hitNetwork);
+}
+
+{
+  // Nothing cached yet (a new device, or mid-warm): cache-first must fall through, not fail.
+  const restJs = REST.find((p) => p.startsWith('./skeeball/js/') && p.endsWith('.js'));
+  const w = bootWorker({ net: async () => new FakeResponse('FROM-NET') });
+  const res = await w.fire('fetch', { request: new FakeRequest(restJs) });
+  eq('a game module with nothing cached still comes off the network', res.body, 'FROM-NET');
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  const after = await cache.match(new FakeRequest(restJs));
+  eq('...and is written into the cache for next time', after.body, 'FROM-NET');
+}
+
+{
+  // A standalone game page is a DOCUMENT. Answering it from cache would hide a new deploy from
+  // the one request that is supposed to reveal it.
+  const restPage = REST.find((p) => p.endsWith('/index.html'));
+  let hitNetwork = false;
+  const w = bootWorker({ net: async () => { hitNetwork = true; return new FakeResponse('NEW PAGE'); } });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put(new FakeRequest(restPage), new FakeResponse('CACHED PAGE'));
+  const res = await w.fire('fetch', { request: new FakeRequest(restPage, { mode: 'navigate' }) });
+  eq(`a standalone game NAVIGATION is not answered from cache (${restPage})`, res.body, 'NEW PAGE');
+  ok('...which is how a device still discovers a new deploy', hitNetwork);
 }
 
 // --- 5. non-GET is left alone ------------------------------------------------------------------

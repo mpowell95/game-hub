@@ -47,7 +47,7 @@
 
 import { boardById, BOARDS } from './skeeball/js/boards.js';
 import { sweepU } from './skeeball/js/machines/runaway/machine.js';
-import { engineFor } from './skeeball/js/engines.js';
+import { engineFor, loadEngine } from './skeeball/js/engines.js';
 
 const X = 1.00 / 6.875;
 
@@ -81,6 +81,9 @@ const PERIODS = (mover && mover.periods) || [6];
 // direction, and a basket sweeping toward the ball is not the same shot as one sweeping away.
 const PHASES = mover ? flag('phases', full ? 12 : 8) : 1;
 
+// engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+// fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+await loadEngine(board.id);
 const { simulateThrow } = engineFor(board.id).physics;
 const allHoles = Object.keys(board.geom.holes);
 

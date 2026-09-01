@@ -63,15 +63,29 @@ on the stats/sync code they mostly govern):
 9. **A milestone is not done until CLAUDE.md reflects it** — undocumented conventions get
    silently re-derived (and re-diverged) by the next session.
 
-## "Commit," "push," or "deploy" means LIVE on the deployed Game Hub — not just committed to a branch
+## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
 Matt (2026-08-04), after a session pushed a finished game to its feature branch and stopped
 there, leaving it invisible on the real site: *"Anytime I say, commit, push, or deploy, it means
 make it live on the gamehub app... Do not respond until it's fucking live."*
 
+**THE TRIGGER IS NOT THE WORD, IT IS THE REQUEST** (Matt, 2026-09-01, after a session fixed
+Skeeball's launch, pushed the branch, and asked whether to merge: *"ugh. you should know to deploy
+it. we've discussed this many times"*). This rule was written down as three words - commit, push,
+deploy - and a session read that as a whitelist, so **"fix it" got treated as a request for a diff
+rather than a request for a working app.** It is not. Any instruction to change, fix, add or
+remove something in this app is an instruction to make that change live, and the deploy is part of
+the work, not a separate decision to bring back for approval. A fix sitting on a branch has not
+fixed anything for the people playing the game.
+
+Asking first is only right for a genuinely destructive step this sequence does not cover (a
+force-push, a history rewrite) - never for the ordinary merge-and-deploy below. If the change
+really should not ship yet, that is Matt's call to make and he will say so; the session's job is
+to ship it and report that it is live.
+
 A commit on a feature branch, or even a pushed branch with an open PR, is **not done** under this
-instruction. Pages deploys from `main` only. When Matt asks for a commit/push/deploy, the session
-must, without waiting for further confirmation at each step:
+instruction. Pages deploys from `main` only. When Matt asks for any change, the session must,
+without waiting for further confirmation at each step:
 
 1. Commit and push the work (to the branch it's already on, per that session's own instructions).
 2. Open a PR into `main` if one doesn't already exist for that branch.
@@ -84,7 +98,7 @@ must, without waiting for further confirmation at each step:
    are exactly what caused the confusion this rule exists to prevent.
 
 This whole sequence is pre-authorized by this instruction; it does not need to be re-confirmed
-per session. The one thing worth pausing for is a genuinely destructive step this doesn't cover
+per session, and it does not need Matt to have used one of the three words. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
 ## Answer about the game you were asked about
@@ -187,6 +201,26 @@ a fast desktop connection and misbehaved on a phone with poor service. The full 
   remainder is the page's own load plus the still-atomic ~865 KB shell install), and the warm
   settles in ~0 s instead of 17-31 s. A stale manifest is bounded: code is network-first at
   request time regardless, so stale bytes could only ever be served offline or past the deadline.
+- **(2026-09-01) The REST tier (every game's own files) is served CACHE-FIRST; the shell stays
+  network-first.** Matt, on a screen recording from Anita's phone of opening Skeeball: *"Why does
+  it take so long? It needs to be better than this."* Measured cause, with the whole game
+  verifiably already in the cache: opening it still sent **28 requests and 2,188 KB** to the
+  server. Network-first is why - `cache: 'reload'` bypasses the browser's HTTP cache on purpose,
+  and the cached copy was only served if the network LOST the `NET_TIMEOUT_MS` race, so every
+  module in a game's graph was re-downloaded in full on every open. The deadline and the latch
+  capped how bad that got; they never stopped it. The REST tier is the right boundary because it
+  is already per-deploy versioned by `REST_MANIFEST` (a content hash per file, generated from
+  disk, with `test-sw-strategy.mjs` failing a deploy whose manifest is stale) - a better freshness
+  signal than an HTTP validator, since Pages re-stamps every ETag on every deploy. **The shell -
+  `index.html`, `css/`, `js/`, `profile/` - is deliberately untouched**, so the app still
+  discovers a new deploy on the very next hub load, the version pill keeps telling the truth, and
+  every shared module that touches player data (`js/game-stats.js`, `js/stats-net.js`) keeps its
+  freshness guarantee. Navigations are excluded too, so a game's standalone `index.html` is still
+  fetched honestly. **The cost, accepted and verified:** on the first hub load after a deploy, a
+  game opened before the warm reaches its files runs the previous build's code for that one visit
+  (~15s on a fast link) - already true offline, now briefly true online. After: **19 KB and 2
+  requests** to open Skeeball. Full write-up, including the Skeeball-side half of the fix,
+  `skeeball/CLAUDE.md`, "What tapping Skeeball used to cost".
 - **(2026-08-23) Old caches are deleted at the END of the warm, not at activate.** They are the
   carry-forward copy source AND the fetch handler's fallback while the warm runs - the old
   delete-at-activate behaviour opened a window on every deploy (seconds on wifi, minutes on a
@@ -281,7 +315,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 |---|---|
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. **Since 2026-08-23 it also maintains sw.js's generated `REST_MANIFEST` block** (content hash per REST file - what lets the warm carry unchanged files across a CACHE bump instead of re-downloading ~11 MB per deploy): a stale block is rewritten in place, so re-run it and commit sw.js after changing any game file. Run before every deploy. **Since 2026-08-25 a text asset is hashed with its line endings NORMALISED to LF**, because `core.autocrlf=true` means a Windows checkout holds CRLF while the blob GitHub Pages serves is LF: hashing raw bytes made the manifest depend on which machine ran the deploy, so `test-sw-strategy.mjs` failed on any Windows checkout of `main` and every Windows/cloud flip marked ~190 unchanged files as changed - re-downloading ~11 MB per deploy, the exact regression the manifest exists to prevent. Binaries are still hashed raw. |
-| `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
+| `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` blocks are the regression tripwires for the atomic-install failure that used to strand a whole deploy on one 404, and (2026-09-01) for the network-first path that re-downloaded 2,188 KB of game code on every single open of a game already sitting complete in the cache. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. **A second structural probe (2026-08-11) covers the whole GAME, not its sub-counters**: every stats id in `game-stats.js` must have a `GAME_META` row in `js/leaderboard-ui.js`, or be listed in `OFF_THE_BOARD` *and* still be `devOnly` in `js/hub.js` — so a game released off the board fails the day it ships. Written because Yahtzee had no row, and it took a player's bug report to notice. |
 | `build-emoji-data.mjs` | (2026-08-25) GENERATOR for `js/emoji-data.js` + `js/emoji-search-{en,es}.js`. Fetches unicode.org's `emoji-test.txt` and CLDR's annotations live, so a re-run picks up a newer Unicode release. Its three filters (fully-qualified only, no skin tones, nothing newer than E15.0) are each a size or a tofu-box decision, documented in the file. Re-run it, then `validate-sw-assets.mjs`, and commit all four files |
 | `test-emoji.mjs` | (2026-08-25) the picker's two halves, headless: what `isEmoji()` accepts and refuses (initials like "MP" are the case it exists for), and the generated set's integrity — every entry passes its own validator, no duplicates, no skin tones, and **the keyword files line up index-for-index with `ALL_EMOJI`**. That last one is the silent failure: a one-entry shift labels every emoji after it with its neighbour's name, and nothing at runtime would notice |

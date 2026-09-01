@@ -13,7 +13,7 @@ import { BOARDS } from './skeeball/js/boards.js';
 // EACH BOARD IS BUILT BY ITS OWN machine.js (skeeball/js/engines.js) - there is no shared one
 // since 2026-08-23. Building every board with the classic's would check geometry no player ever
 // touches, which is worse than not checking it.
-import { engineFor } from './skeeball/js/engines.js';
+import { engineFor, loadEngine } from './skeeball/js/engines.js';
 import STRINGS from './skeeball/js/strings.js';
 import { readFileSync } from 'node:fs';
 
@@ -208,6 +208,9 @@ for (const board of BOARDS) {
     `every hole needs a numeric value: ${badValue.join(', ')}`);
 
   // --- 8 rings ------------------------------------------------------------------------------
+  // engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+  // fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+  await loadEngine(board.id);
   const M = engineFor(board.id).buildMachine(G);
   const notDerived = [];
   const clipped = [];

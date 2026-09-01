@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v543';
+const CACHE = 'game-hub-v544';
 
 const ASSETS = [
   './',
@@ -556,12 +556,12 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': 'f05e2d58fa',
-  './skeeball/js/ui.js': '3c4e263cea',
+  './skeeball/js/ui.js': '8257091c4c',
   './skeeball/js/swipe.js': 'c596f565de',
-  './skeeball/js/game.js': '014893cb1f',
+  './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': 'bedd796565',
   './skeeball/js/boards.js': '9360080c04',
-  './skeeball/js/engines.js': '202b6fe4cc',
+  './skeeball/js/engines.js': '9d1dd1cf73',
   './skeeball/js/machines/classic/physics.js': 'c07c866a04',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
   './skeeball/js/machines/classic/render.js': '8285385105',
@@ -871,6 +871,41 @@ self.addEventListener('activate', (event) => {
 // are versioned by the CACHE bump on each deploy, so cache-first is always safe.
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 
+// The REST tier's own paths, for the cache-first branch below.
+//
+// GAME CODE IS CACHE-FIRST (2026-09-01). Matt, on a screen recording from Anita's phone of
+// opening Skeeball: "Why does it take so long? It needs to be better than this."
+//
+// Measured cause, with the whole game verifiably sitting in this cache already: opening Skeeball
+// still sent 28 requests and 2,188 KB to the server. Network-first is why. `cache: 'reload'`
+// below deliberately bypasses the browser's HTTP cache, and the cached copy is only served if the
+// network LOSES the NET_TIMEOUT_MS race - so on any connection that is not outright bad, every
+// module in a game's graph is re-downloaded in full on every single open. The deadline and the
+// slow latch cap how BAD that gets; they do not stop it happening.
+//
+// The REST tier is exactly the right boundary for fixing it, and the boundary already exists:
+//   - It is per-deploy versioned already. CACHE is bumped on essentially every commit, and
+//     REST_MANIFEST (generated from the bytes on disk by validate-sw-assets.mjs, with
+//     test-sw-strategy.mjs failing the deploy if it is stale) is what decides, file by file,
+//     whether a deploy carries a copy forward or re-fetches it. A content hash is a better
+//     freshness signal than an HTTP validator here - GitHub Pages re-stamps every ETag on every
+//     deploy - so re-asking the network per request buys nothing it does not already have.
+//   - THE SHELL IS DELIBERATELY LEFT ALONE. index.html, css/, js/ and profile/ stay
+//     network-first, so the app still discovers a new deploy on the very next hub load, the
+//     version pill keeps telling the truth, and every shared module that touches player data
+//     (js/game-stats.js, js/stats-net.js) keeps its freshness guarantee. THE LAW is untouched by
+//     this: nothing here decides what is written or shown, only where a game's own bytes come
+//     from.
+//   - Navigations are excluded (see the handler), so a game's standalone index.html is still
+//     fetched honestly.
+//
+// THE COST, ACCEPTED: on the first hub load after a deploy, a game opened before warmRest() has
+// reached its files runs the PREVIOUS build's code for that one visit. That was already true
+// offline and past the deadline; it is now briefly true online too. The warm finishes in seconds
+// and the next open is the new build. Two point two megabytes per open, on a phone, was the worse
+// bargain.
+const REST_PATHS = new Set(REST.map((p) => new URL(p, self.location.href).pathname));
+
 // How long a code/markup request waits on the network before the cached copy is served instead.
 // Long enough that a merely-average connection still wins the race (and the player keeps getting
 // the freshest build), short enough that a bad one never makes the hub feel broken.
@@ -903,15 +938,21 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  const sameOrigin = new URL(req.url).origin === self.location.origin;
+  const url = new URL(req.url);
+  const sameOrigin = url.origin === self.location.origin;
 
-  // Cache-first for immutable same-origin assets.
+  // Cache-first for immutable same-origin assets: images and fonts (which are versioned by the
+  // CACHE bump, and whose network round-trip made card boards flash blank on every re-render),
+  // and every file in the REST tier - each game's own code and assets. See REST_PATHS above.
+  // A navigation is never answered from here: a standalone game page is a document, and a
+  // document is how a device finds out a new build exists.
   //
   // The CURRENT cache is consulted before the global caches.match (2026-08-23): while warmRest()
   // runs, the previous deploy's cache is still alive as a fallback, and caches.match searches
   // caches in CREATION order - so without this, an entry already refreshed into the new cache
   // would keep being answered by the older cache's stale copy until the warm finished.
-  if (sameOrigin && STATIC_RE.test(new URL(req.url).pathname)) {
+  if (sameOrigin && req.mode !== 'navigate'
+      && (STATIC_RE.test(url.pathname) || REST_PATHS.has(url.pathname))) {
     event.respondWith((async () => {
       const cur = await caches.open(CACHE);
       const cached = (await cur.match(req, { ignoreSearch: true }))

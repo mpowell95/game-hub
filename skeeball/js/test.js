@@ -8,7 +8,7 @@
 // pins the mechanics tuned by feel, so a geometry or material tweak that kills the 100
 // pockets or the rollback fails here before anyone plays a broken machine.
 
-import { engineFor } from './engines.js';
+import { engineFor, loadEngine } from './engines.js';
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 
@@ -101,6 +101,9 @@ const board = boardById(DEFAULT_BOARD);
 // call below is on THE CLASSIC, so these are the classic's own physics.js and machine.js, and
 // nothing in another machine's folder can move them. The game-level blocks (SkeeballGame)
 // resolve their engine per board, so a popongo rack there runs popongo's.
+// engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+// fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+await loadEngine(board.id);
 const { physics: { simulateThrow, startThrow, step, takeEvents, STEP }, buildMachine } = engineFor(board.id);
 const M = buildMachine(board.geom);
 const outcomeOf = (power, aim) => {

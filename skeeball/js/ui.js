@@ -13,7 +13,7 @@
 // lossless. A ball in flight is not part of the saved state.
 
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
-import { engineFor } from './engines.js';
+import { engineFor, loadEngine } from './engines.js';
 import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
 import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
 import STRINGS from './strings.js';
@@ -38,22 +38,57 @@ const SAVE_KEY = 'gamehub.skeeball.save.v1';  // the mid-rack snapshot (game.js'
 
 let instance = null;
 
+/** How long the first paint is allowed to wait on a stylesheet before it goes ahead without it.
+ *  A cap, not a budget: a sheet that 404s or hangs must never leave the player looking at a blank
+ *  rectangle for ever. Unstyled-for-a-moment is a bad screen; nothing at all is a broken app. */
+const CSS_WAIT_CAP_MS = 1500;
+
+/** Resolves once `link` has actually parsed - or failed, which is just as final. */
+function sheetReady(link) {
+  if (link.sheet) return Promise.resolve();
+  return new Promise((resolve) => {
+    link.addEventListener('load', resolve, { once: true });
+    link.addEventListener('error', resolve, { once: true });
+  });
+}
+
+/** Inject the two stylesheets this game draws with, and RESOLVE WHEN THEY HAVE PARSED.
+ *
+ *  THE BUG THIS FIXES (2026-09-01). This used to append the <link>s and return, and the
+ *  constructor rendered the whole setup screen on the very next line. On a phone that is half a
+ *  second of RAW UNSTYLED HTML - a page-high black padlock over left-aligned text - which is
+ *  exactly what Anita's screen recording caught, and the same thing Matt reported for the
+ *  launcher in 2026-08-11 ("Whoa what the hell?"). Awaiting the sheets turns a garbled screen
+ *  into a brief blank one, and with game code now served cache-first (sw.js) the wait is a cache
+ *  read rather than a download.
+ *
+ *  GUARD: matched by RESOLVED HREF as well as by marker attribute, because skeeball/index.html
+ *  links css/skeeball.css itself. Without the href test the standalone page loaded a second,
+ *  identical copy of a 64 KB stylesheet on every mount. */
 function ensureCSS() {
-  // The shared primitives first (the setup screen is BUILT on css/ui.css - the same injection
-  // marker bug-report-ui.js uses, so the two never double-load it), then the game's own sheet.
-  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
-    const ui = document.createElement('link');
-    ui.rel = 'stylesheet';
-    ui.href = new URL('../../css/ui.css', import.meta.url).href;
-    ui.setAttribute('data-gh-ui-css', '1');
-    document.head.appendChild(ui);
+  const want = [
+    { href: new URL('../../css/ui.css', import.meta.url).href, attr: 'data-gh-ui-css' },
+    { href: new URL('../css/skeeball.css', import.meta.url).href, attr: 'data-sk-css' },
+  ];
+  const waits = [];
+  for (const { href, attr } of want) {
+    let link = document.querySelector(`link[${attr}]`);
+    if (!link) {
+      link = [...document.querySelectorAll('link[rel="stylesheet"]')].find((l) => l.href === href);
+    }
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute(attr, '1');
+      document.head.appendChild(link);
+    }
+    waits.push(sheetReady(link));
   }
-  if (document.querySelector('link[data-sk-css]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = new URL('../css/skeeball.css', import.meta.url).href;
-  link.setAttribute('data-sk-css', '1');
-  document.head.appendChild(link);
+  return Promise.race([
+    Promise.all(waits),
+    new Promise((resolve) => setTimeout(resolve, CSS_WAIT_CAP_MS)),
+  ]);
 }
 
 /** THE KEY, drawn once and used twice - the one that grows out of the ceremony's point, and the
@@ -308,7 +343,15 @@ export class SkeeballUI {
       this._showGoalDefs(box.getAttribute('data-def'));
     };
 
-    ensureCSS();
+    this.disposed = false;
+    this._startToken = 0;              // which _startGame call is still the current one
+
+    // FIRST PAINT WAITS FOR THE STYLESHEET, and is capped so it can never wait for ever. The
+    // root is hidden with an INLINE style on purpose: hub.js sets `.hidden = false` on this same
+    // element the instant init() returns, so the hidden attribute is not ours to use.
+    this.root.style.visibility = 'hidden';
+    const unveil = () => { if (!this.disposed) this.root.style.visibility = ''; };
+    ensureCSS().then(unveil, unveil);
     this.root.classList.add('sk-root');
     this.root.innerHTML = '';
 
@@ -459,7 +502,12 @@ export class SkeeballUI {
     // painted a dash in that column and never went back for it. Re-ensure whatever slide is
     // still on screen: the image cache is keyed on the records, so this is a no-op unless a
     // number actually moved, and there is nothing to find on the play screen.
-    for (const b of BOARDS) {
+    //
+    // THE SELECTED SLIDE ONLY (2026-09-01), plus any machine already drawn once. Redrawing all
+    // five means building all five machines in WebGL - five contexts against a phone's small
+    // global budget, and five engines' worth of JavaScript loaded for four slides nobody is
+    // looking at. The rest repaint as they are swiped to.
+    for (const b of this._machinesWorthPainting()) {
       const imgEl = this.root.querySelector(`img[data-machine="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
     }
@@ -623,9 +671,13 @@ export class SkeeballUI {
         </div>
       </div>`;
 
-    // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
+    // Paint the machine's actual board (cached), deferred so the setup shows first. A locked
     // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
-    for (const b of BOARDS) {
+    //
+    // THE SELECTED SLIDE ONLY, plus anything already drawn - the others paint on the swipe that
+    // brings them into view (see the carousel's settle handler below). See
+    // _machinesWorthPainting.
+    for (const b of this._machinesWorthPainting()) {
       // GUARD: the SAME answer the slide was built from (_slideState). Two copies of this test
       // drifted once already, and a mismatch paints the machine into a picture element that the
       // other branch never rendered - a blank slide.
@@ -633,6 +685,9 @@ export class SkeeballUI {
         ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
     }
+    // The machine on screen is the one about to be played: warm its PHYSICS in the background,
+    // while the player is still reading the card, so Play is not where cannon-es gets downloaded.
+    this._warmSelected();
 
     // The golden lock. One tap, one animation, then the machine is just a machine.
     for (const btn of this.root.querySelectorAll('[data-pop]')) {
@@ -653,12 +708,20 @@ export class SkeeballUI {
           const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
           const b = BOARDS[i];
           const bOpen = !!b && this._slideState(b, sk, devAll).open;
+          // Whatever just came to rest under the player's thumb is what gets drawn (and, if it
+          // is playable, warmed). This is the other half of painting one slide instead of five.
+          if (b) {
+            const slideImg = this.root.querySelector(bOpen
+              ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
+            if (slideImg) this._ensureMachineImg(b, slideImg);
+          }
           if (bOpen && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
             // The selection moved, so Resume/Play have to move with it. This screen is not
             // re-rendered on a swipe (the carousel owns its own scroll position), so repaint
             // just the two buttons.
             this._paintSetupActions();
+            this._warmSelected();
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
         });
@@ -708,6 +771,23 @@ export class SkeeballUI {
     play.classList.toggle('gh-btn--primary', !mine);
   }
 
+  /** The machines whose picture is worth drawing right now: the selected one, plus any this
+   *  session has already drawn (those are a cache hit, so they cost nothing and stop a slide
+   *  going blank when the screen is re-rendered under a player who had swiped away). */
+  _machinesWorthPainting() {
+    const drawn = new Set(Object.keys(this._machineImg).map((k) => k.split('|')[0]));
+    return BOARDS.filter((b) => b.id === this.settings.board || drawn.has(b.id));
+  }
+
+  /** Load the selected machine's PHYSICS in the background, off the critical path.
+   *  Best-effort by design: a failure here just means Play pays for it instead. */
+  _warmSelected() {
+    const id = this.settings.board;
+    const go = () => { if (!this.disposed && this.screen === 'setup') loadEngine(id).catch(() => {}); };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 2000 });
+    else setTimeout(go, 600);
+  }
+
   /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
    *  deferred one frame so the setup paints first. A failure leaves the dark placeholder. */
   _ensureMachineImg(board, imgEl) {
@@ -720,13 +800,22 @@ export class SkeeballUI {
     const key = [board.id, at.score || 0, at.name || '', v.best, v.today, v.last].join('|');
     const cached = this._machineImg[key];
     if (cached) { imgEl.src = cached; return; }
-    requestAnimationFrame(() => {
-      if (this.disposed) return;
-      const url = renderMachineImage(board, sb);
-      if (!url) return;
-      this._machineImg[key] = url;
-      imgEl.src = url;
-    });
+    // ONE MACHINE'S ENGINE, ON DEMAND (2026-09-01). Drawing this picture needs that machine's
+    // render.js, its machine.js and three.js - not its physics, and not the other four machines.
+    // engines.js used to import all fifteen files statically, which is why opening the gallery
+    // cost 2.3 MB.
+    loadEngine(board.id, { physics: false })
+      .then(() => new Promise((r) => requestAnimationFrame(r)))
+      .then(() => {
+        // isConnected: the screen may have been re-rendered (or left) while this was in flight,
+        // and painting into a detached <img> is silent, wasted WebGL work.
+        if (this.disposed || !imgEl.isConnected) return;
+        const url = renderMachineImage(board, sb);
+        if (!url) return;
+        this._machineImg[key] = url;
+        imgEl.src = url;
+      })
+      .catch((err) => console.error('[skeeball] machine picture failed', board.id, err));
   }
 
   /** The pause card. This button used to be an INSTANT QUIT: one tap and you were on the
@@ -812,8 +901,14 @@ export class SkeeballUI {
     this.root.appendChild(el);
     this.overlay = el;
     const canvas = el.querySelector('.sk-hp-canvas');
-    // Start after layout so the canvas has real dimensions to size the renderer to.
-    if (canvas) requestAnimationFrame(() => { if (this.overlay === el) this._startHpDemo(board, canvas); });
+    // Start after layout so the canvas has real dimensions to size the renderer to. The demo is
+    // a REAL throw, so it needs this machine's physics as well as its renderer.
+    if (canvas) {
+      loadEngine(board.id)
+        .then(() => new Promise((r) => requestAnimationFrame(r)))
+        .then(() => { if (this.overlay === el) this._startHpDemo(board, canvas); })
+        .catch((err) => console.error('[skeeball] how-to demo failed to load', board.id, err));
+    }
     const close = () => {
       this._stopHpDemo();
       if (el.parentNode) el.parentNode.removeChild(el);
@@ -937,8 +1032,22 @@ export class SkeeballUI {
 
   // --- play ------------------------------------------------------------------------------------
 
-  _startGame(snap) {
+  async _startGame(snap) {
     const board = boardById(this.settings.board);
+    // THE ENGINE FIRST (2026-09-01). game.js steps this machine's physics every frame and cannot
+    // await, so the rack does not begin until its engine is in hand. Already-loaded resolves on
+    // the next microtask, which is the normal case: the gallery warms the selected machine while
+    // the player is still looking at it.
+    const token = ++this._startToken;
+    try {
+      await loadEngine(board.id);
+    } catch (err) {
+      console.error('[skeeball] could not load the engine for', board.id, err);
+      return;   // the gallery is still on screen and still usable
+    }
+    // A second Play tap (or a back-to-the-hub) landed while that was in flight: that call owns
+    // the screen now, not this one.
+    if (this.disposed || token !== this._startToken) return;
     this.screen = 'play';
     this.recorded = false;
     this._closeOverlay();
@@ -1836,6 +1945,7 @@ export class SkeeballUI {
     releaseRenderer(this.renderer);   // dispose() alone does NOT release the context - see releaseRenderer
     this.renderer = null;
     this.root.classList.remove('sk-root');
+    this.root.style.visibility = '';
     this.root.innerHTML = '';
   }
 }
