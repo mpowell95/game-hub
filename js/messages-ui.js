@@ -385,7 +385,11 @@ export async function openMessages(opts = {}) {
  *  touching the DOM: a slow or offline read must not hold up the conversation list, and must not
  *  graft buttons onto a screen the reader has already navigated away from. */
 async function addAdminButtons(card, gen) {
-  if (!(await amIAdmin((loadProfile() || {}).name))) return;
+  // The ALLOWLIST, not the profile name (2026-09-01). See js/admin-config.js's "who is actually an
+  // admin": the name gate was defeatable by reading Matt's name off the leaderboard and typing it
+  // into your own profile, which handed a player these two buttons.
+  const { isAdminDevice, refreshAdminDevice } = await import('./admin-config.js');
+  if (!isAdminDevice()) { if ((await refreshAdminDevice()) !== true) return; }
   if (!current(gen)) return;
   const acts = card.querySelector('[data-role="acts"]');
   if (!acts) return;

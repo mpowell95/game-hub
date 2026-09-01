@@ -393,6 +393,13 @@
              is the one thing that cannot be worked out remotely (a shared phone whose profile has been
              switched looks identical to its own device record). Read-only: it never mints an id. -->
         <p class="pf-devid" id="pf-device-id"></p>
+        <!-- The anonymous auth id, beside the device id and just as quiet. It is the BOOTSTRAP for
+             the admin allowlist: an admin device is one whose uid is in `admins/` in the Firebase
+             console, and a device that is not on that list has no admin UI at all - so without a
+             line like this there would be nowhere to read the id it needs to be granted. Safe to
+             show to anyone: it identifies a device, grants nothing, and `admins` is `".write":
+             false` so no client can act on it. -->
+        <p class="pf-devid" id="pf-auth-id"></p>
       </section>
 
       <!-- HELP. The two halves of one conversation, in one card, instead of loose buttons floating
@@ -1023,17 +1030,29 @@
     // these rows would keep showing "unread" until the page was reloaded.
     window.addEventListener('gamehub:messages', paintMessageCount);
 
+    // -- This device's auth id (see the note beside #pf-auth-id) --------------------
+    (async () => {
+      try {
+        const { myAuthUid } = await import('../js/admin-config.js');
+        const uid = await myAuthUid();
+        if (uid) $('#pf-auth-id').textContent = 'auth ' + uid;
+      } catch { /* offline: the line just stays empty */ }
+    })();
+
     // -- Admin controls (Matt only) -------------------------------------------------
     // The section ships `hidden` and only ever unhides after isAdmin() says so, so a non-admin
     // device never renders it and never imports js/admin-ui.js. Same gate js/hub.js used for the
     // launcher button it replaces: a profile-name hash, which is a SCREEN, not a lock.
     (async () => {
       try {
-        const [{ isAdmin }, { loadProfile }] = await Promise.all([
-          import('../js/challenge/hooks.js'), import('../js/profile-store.js'),
-        ]);
-        const prof = loadProfile() || {};
-        if (!(prof.name && isAdmin(prof.name))) return;
+        // Gated on the ADMINS ALLOWLIST, not on the profile name (2026-09-01). Matt: "nobody else
+        // should see 'admin mode' as an option". The name gate was a hash of a name printed on the
+        // leaderboard - anyone could wear it. `admins/<uid>` is `".write": false`, so this one
+        // cannot be faked from a client at all. See js/admin-config.js.
+        const { isAdminDevice, refreshAdminDevice } = await import('../js/admin-config.js');
+        let ok = isAdminDevice();
+        if (!ok) ok = (await refreshAdminDevice()) === true;
+        if (!ok) return;
         $('#pf-admin-sec').hidden = false;
         $('#pf-admin-btn').addEventListener('click', async () => {
           try { (await import('../js/admin-ui.js')).openAdmin(); }
