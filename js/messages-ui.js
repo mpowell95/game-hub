@@ -31,6 +31,41 @@ const esc = (s) => String(s == null ? '' : s)
 export async function myUnreadMessages() { return unreadMessageCount(); }
 
 /**
+ * "The new message badge doesn't go away after I've already read a message." (Matt, 2026-08-31.)
+ *
+ * The launcher painted its badge on page LOAD and on `online`, and nothing else. Reading a message
+ * happens inside an overlay on top of that same page, so the count behind it stayed exactly as it
+ * was until the next reload - the message was read, the badge disagreed, and the only cure was
+ * closing the app.
+ *
+ * So the read state announces itself. `js/hub.js` and `profile/index.html` listen for this and
+ * repaint; anything else that wants to can too. A CustomEvent on `window` rather than a callback
+ * registry because the listeners live on two different pages and neither imports the other.
+ */
+export const MESSAGES_CHANGED = 'gamehub:messages';
+function announceChange() {
+  try { window.dispatchEvent(new CustomEvent(MESSAGES_CHANGED)); }
+  catch { /* no window (or no CustomEvent): a badge is not worth throwing over */ }
+}
+
+/**
+ * Stamp a thread read, SERIALISED, and announce it once the write has actually landed.
+ *
+ * Serialised because these fire from the live watch, which can deliver several times in a row, and
+ * two overlapping writes to the same row are a race with no winner worth having. Awaited by
+ * renderList before it re-reads: going Back immediately after reading used to re-list from the
+ * server before the seen-stamp arrived, so the row you had just read came back still bold.
+ */
+let _seenWrite = Promise.resolve();
+function markSeen(code, atMs) {
+  _seenWrite = _seenWrite
+    .then(() => markThreadSeen(code, atMs))
+    .then(() => announceChange())
+    .catch(() => { /* markThreadSeen already logs; never break the chain for the next caller */ });
+  return _seenWrite;
+}
+
+/**
  * The profile page's Messages section, rendered in place.
  *
  * It used to be a heading reading "Messages" over a button reading "Messages", alone in a card the
@@ -216,7 +251,25 @@ let _host = null;
 let _onKey = null;
 let _unwatch = null;
 
+/**
+ * Which screen is on show. Bumped by every render; anything async that started under an older
+ * number must not paint.
+ *
+ * Found by testing the badge fix (2026-08-31): tapping Back left you in the conversation. A
+ * conversation subscribes to its thread, and every delivery calls draw(), which rebuilds the WHOLE
+ * card. Back renders the list into that same card - and the list's own "Loading…" line satisfied
+ * the watch callback's "is a conversation still on screen" guard, so the next delivery redrew the
+ * conversation straight over the list, and every delivery after that kept it there.
+ *
+ * `watchThread` is also awaited, so a Back tapped before it resolved got a subscription assigned
+ * AFTER the teardown that was meant to cancel it - a live watch nothing held a handle to.
+ */
+let _view = 0;
+/** True while `gen` is still the screen the player is looking at. */
+const current = (gen) => _host !== null && gen === _view;
+
 function closeOverlay() {
+  _view += 1;                                   // orphan every in-flight render
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
   if (_host) { _host.remove(); _host = null; }
@@ -323,13 +376,17 @@ export async function openMessages(opts = {}) {
 // --- the conversation list ----------------------------------------------------------------------
 
 async function renderList(card) {
+  const gen = ++_view;
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
   _guardClose = null;
   shellHTML(card, { title: t('msg_title'), body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
 
   const me = myCode();
+  // Wait for any read-stamp still in flight. Tapping Back straight after reading used to re-list
+  // from the server before that write arrived, so the row just read came back bold.
+  await _seenWrite;
   const rows = await readMyThreads();
-  if (!_host) return;
+  if (!current(gen)) return;
 
   const body = rows.length
     ? `<ul class="msg-list">${rows.map((r) => `
@@ -360,12 +417,13 @@ async function renderList(card) {
 // --- pick somebody to write to -------------------------------------------------------------------
 
 async function renderPicker(card) {
+  const gen = ++_view;
   _guardClose = null;
   shellHTML(card, { title: t('msg_new_title'), backable: true, body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
   card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
 
   const [contacts, threads] = await Promise.all([readContacts(), readMyThreads()]);
-  if (!_host) return;
+  if (!current(gen)) return;
 
   const prof = loadProfile() || {};
   const isMatt = await amIAdmin(prof.name);
@@ -487,9 +545,18 @@ function wireComposer(card, onSend) {
 }
 
 async function renderThread(card, who) {
+  const gen = ++_view;
   _guardClose = null;
   const me = myCode();
   const title = who.name || who.code;
+  // Leaving KILLS the subscription on the click itself, before renderList does any of its own
+  // async work. Tearing it down inside renderList was not enough: the thread's watch could still
+  // deliver in the gap and redraw the conversation over the list, and then keep it there.
+  const leave = () => {
+    _view += 1;
+    if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
+    renderList(card);
+  };
   const draw = (msgs) => {
     const body = msgs.length
       ? `<ul class="msg-thread">${msgs.map((m, i) => `
@@ -505,14 +572,14 @@ async function renderThread(card, who) {
       hide: msgs.length > 0,
       footer: composerHTML(t('msg_placeholder', { name: title })),
     });
-    card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
+    card.querySelector('[data-role="back"]').addEventListener('click', leave);
     const scroll = card.querySelector('.msg-scroll');
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
     const fresh = card.querySelector('#msg-text');
     if (fresh && draft) fresh.value = draft;
     wireComposer(card, async (text) => {
       const res = await sendMessage({ toCode: who.code, toName: who.name, toEmoji: who.emoji, text });
-      if (res.ok) { say(card, '', ''); return true; }
+      if (res.ok) { say(card, '', ''); announceChange(); return true; }
       if (res.retryable && queueOutbox({ toCode: who.code, toName: who.name, toEmoji: who.emoji, text })) {
         say(card, t('msg_queued'), '');
         return true;
@@ -521,29 +588,37 @@ async function renderThread(card, who) {
       return false;
     });
     const hide = card.querySelector('[data-role="hide"]');
-    if (hide) hide.addEventListener('click', async () => { await hideThread(who.code); renderList(card); });
+    if (hide) hide.addEventListener('click', async () => { await hideThread(who.code); announceChange(); renderList(card); });
   };
 
   shellHTML(card, { title, backable: true, body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
-  card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
+  card.querySelector('[data-role="back"]').addEventListener('click', leave);
 
   const first = await readThread(who.code);
-  if (!_host) return;
+  if (!current(gen)) return;
   draw(first);
-  if (first.length) markThreadSeen(who.code, first[first.length - 1].atMs);
+  if (first.length) markSeen(who.code, first[first.length - 1].atMs);
 
   // Live while the screen is open, so a reply lands in front of the person waiting for it.
-  if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } }
-  _unwatch = await watchThread(who.code, (msgs) => {
-    if (!_host || !card.querySelector('.msg-thread, .msg-lead')) return;
+  if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
+  const stop = await watchThread(who.code, (msgs) => {
+    // The GENERATION, not "does the card still look like a conversation". The list's own loading
+    // line satisfied that older test, so a delivery arriving just after Back redrew this thread
+    // straight over the list.
+    if (!current(gen)) return;
     draw(msgs);
-    if (msgs.length) markThreadSeen(who.code, msgs[msgs.length - 1].atMs);
+    if (msgs.length) markSeen(who.code, msgs[msgs.length - 1].atMs);
   });
+  // Back may have been tapped while that await was in flight, in which case the teardown has
+  // already run and this subscription is an orphan nothing holds a handle to. Stop it here.
+  if (!current(gen)) { try { stop(); } catch { /* already gone */ } return; }
+  _unwatch = stop;
 }
 
 // --- broadcast (Matt only) --------------------------------------------------------------------
 
 function renderBroadcast(card, contacts) {
+  _view += 1;
   shellHTML(card, {
     title: t('msg_everyone'), sub: t('msg_everyone_sub', { n: contacts.length }), backable: true,
     body: `<p class="msg-lead">${esc(t('msg_everyone_hint'))}</p>`,
@@ -564,9 +639,10 @@ function renderBroadcast(card, contacts) {
 // or remove anything anybody said.
 
 async function renderAdmin(card) {
+  const gen = ++_view;
   shellHTML(card, { title: t('msg_admin_title'), body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
   const [all, contacts] = await Promise.all([readAllThreads(), readContacts()]);
-  if (!_host) return;
+  if (!current(gen)) return;
   const threads = all.threads;
 
   // Not on the allowlist is NOT the same screen as "nobody has written anything". This device's
@@ -574,7 +650,7 @@ async function renderAdmin(card) {
   // `admins/` in the Firebase console - which the screen has to actually say.
   if (all.denied) {
     const uid = await authId();
-    if (!_host) return;
+    if (!current(gen)) return;
     shellHTML(card, {
       title: t('msg_admin_title'),
       body: `<p class="msg-lead">${esc(t('msg_admin_denied'))}</p>
