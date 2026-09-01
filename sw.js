@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v538';
+const CACHE = 'game-hub-v539';
 
 const ASSETS = [
   './',
@@ -475,8 +475,8 @@ const REST_MANIFEST = {
   './nuts-bolts/': 'd334645324',
   './nuts-bolts/index.html': 'd334645324',
   './pipes/index.html': '738b6ac21a',
-  './pipes/css/pipes.css': '694a66cd98',
-  './pipes/js/ui.js': '3ba60d055f',
+  './pipes/css/pipes.css': 'fb92ba47c6',
+  './pipes/js/ui.js': '5a64b75c39',
   './pipes/js/art.js': '539a122c19',
   './pipes/js/game.js': '2e4c71bcc1',
   './pipes/js/generator.js': '6a9107ccb3',

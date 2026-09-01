@@ -229,6 +229,7 @@ class PipesUI {
         <div class="pi-foot" data-role="foot">
           <div class="pi-banner" data-role="banner"></div>
           <div class="pi-done" data-role="done" hidden>
+            <p class="pi-done-title" data-role="donetitle"></p>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="continue">${esc(t('continue'))}</button>
             <div class="pi-done-row">
               <button type="button" class="gh-btn gh-btn--block" data-act="replay">${esc(t('replay'))}</button>
@@ -242,6 +243,7 @@ class PipesUI {
       board: this.root.querySelector('[data-role="board"]'),
       moves: this.root.querySelector('[data-role="moves"]'),
       banner: this.root.querySelector('[data-role="banner"]'),
+      doneTitle: this.root.querySelector('[data-role="donetitle"]'),
       foot: this.root.querySelector('[data-role="foot"]'),
       done: this.root.querySelector('[data-role="done"]'),
     };
@@ -383,19 +385,19 @@ class PipesUI {
     // On the winning turn the last stretch is still flowing, so the banner waits for the water to
     // arrive rather than announcing the win over a half-filled board.
     const banner = () => {
-      this.el.banner.className = 'pi-banner' + (solved ? ' is-win' : leaking ? ' is-leak' : '');
-      if (solved) {
-        // The reference's headline, with the turn count kept as a sub-line - it is this game's
-        // stat and the only place the player ever sees it.
-        this.el.banner.innerHTML = `<b>${esc(t('solved_title'))}</b><span>${esc(t('solved_moves', { n: g.moves }))}</span>`;
-      } else {
-        this.el.banner.textContent = leaking ? t('leaking') : '';
+      // The headline rides WITH the buttons, in the floating panel, so the completion screen reads
+      // in the reference's order - "Puzzle Solved!", then Continue, then Replay / Leaderboard.
+      // Putting it in the in-flow banner instead left it stranded UNDER the buttons.
+      this.el.banner.className = 'pi-banner' + (leaking && !solved ? ' is-leak' : '');
+      this.el.banner.textContent = (leaking && !solved) ? t('leaking') : '';
+      if (this.el.doneTitle) {
+        this.el.doneTitle.innerHTML = solved
+          ? `<b>${esc(t('solved_title'))}</b><span>${esc(t('solved_moves', { n: g.moves }))}</span>`
+          : '';
       }
-      if (this.el.done) {
-        this.el.done.hidden = !solved;
-        // The footer just changed height, so the board has to be re-measured against it.
-        if (solved) this._fit();
-      }
+      // No re-fit: the panel is out of flow, so revealing it changes no box on the screen and the
+      // board stays exactly where the player left it.
+      if (this.el.done) this.el.done.hidden = !solved;
     };
     if (solved && fillMs > 0) {
       this.el.banner.className = 'pi-banner';
