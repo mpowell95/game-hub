@@ -456,6 +456,7 @@ export const STRINGS = {
     lb_sort_played: 'Games Played',
     lb_sort_wins: 'Wins',
     lb_sort_points: 'Points',
+    lb_sort_high: 'High score',
     lb_sort_obstacles: 'Obstacles',
     lb_sort_longest: 'Longest',
     lb_sort_solved: 'Solved',
@@ -473,6 +474,7 @@ export const STRINGS = {
     lb_unit_solved: 'solved',
     lb_unit_meters: 'meters',
     lb_unit_points: 'points',
+    lb_unit_high: 'high score',
     lb_runs_count: '{n} runs',
     // --- 2026-08-25 design handoff (screens 1, 2, 3) -------------------------------------------
     // Six categories, not four tiers: every play a person makes lands in exactly one of them.
@@ -1010,6 +1012,7 @@ export const STRINGS = {
     lb_sort_played: 'Partidas jugadas',
     lb_sort_wins: 'Victorias',
     lb_sort_points: 'Puntos',
+    lb_sort_high: 'Récord',
     lb_sort_obstacles: 'Obstáculos',
     lb_sort_longest: 'Más larga',
     lb_sort_solved: 'Resueltos',
@@ -1025,6 +1028,7 @@ export const STRINGS = {
     lb_unit_solved: 'resueltos',
     lb_unit_meters: 'metros',
     lb_unit_points: 'puntos',
+    lb_unit_high: 'récord',
     lb_runs_count: '{n} carreras',
     lb_cat_all: 'Todo',
     lb_cat_nt: 'Sin nivel',

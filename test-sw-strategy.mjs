@@ -372,6 +372,28 @@ console.log('\n--- fetch: game code is served from cache, not re-downloaded ---'
     !hitNetwork, 'network-first re-fetched every module in the game on every single open');
 }
 
+// [KNOWN-BUG PROBE] Born red on 2026-09-01 against the worker that shipped the cache-first split
+// hours earlier. A REST file with nothing in the cache falls through to a network fetch whose
+// response is written into the CURRENT cache -- and that fetch was a PLAIN fetch(req). The
+// browser's HTTP disk cache sits between the worker and the wire (Pages sends max-age=600), so
+// within ten minutes of a deploy it answers with the PREVIOUS build's bytes, which then land in
+// the new cache under the new name. warmRest() skips anything already present, and every later
+// deploy carries it forward (the manifest hash it is stored against is the correct one -- only
+// the bytes are wrong), so the device serves the old file for ever while its version pill reads
+// the new build. Measured in a real Chromium: after the server changed the file, a plain fetch in
+// a service worker returned the OLD body and `cache: 'reload'` returned the new one.
+
+{
+  const restCss = REST.find((p) => p.endsWith('.css'));
+  ok('the REST tier contains a stylesheet to test with', !!restCss, `REST has ${REST.length} entries`);
+
+  let sawCacheMode = null;
+  const w = bootWorker({ net: async (req) => { sawCacheMode = req && req.cache; return new FakeResponse('NEW'); } });
+  await w.fire('fetch', { request: new FakeRequest(restCss) });
+  eq(`[KNOWN-BUG PROBE] an uncached REST file is fetched with cache:'reload' (${restCss})`,
+    sawCacheMode, 'reload');
+}
+
 {
   // The shell SPLIT (2026-09-01): a module that touches player data still prefers the network...
   let hitNetwork = false;
