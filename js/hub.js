@@ -20,7 +20,7 @@ import { GAME_ART } from './game-art.js';
 import { isNewGame } from './new-badge.js';
 import { installErrorLog } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
-import { isGameLive, refreshAdminConfig, onAdminConfig } from './admin-config.js';
+import { isGameLive, refreshAdminConfig, onAdminConfig, refreshAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -405,6 +405,9 @@ class Hub {
     // fetched value actually differs, so the common case costs one background read and no repaint.
     this._adminUnsub = onAdminConfig(() => { if (!this.current) this.render(); });
     refreshAdminConfig();
+    // Is THIS device on the admins allowlist? One read per load, cached, so the profile page and
+    // the Messages screen can both gate synchronously. A console change lands on the next load.
+    refreshAdminDevice();
   }
 
   /** Send anything in this device's bug-report outbox. Lazy import: only worth loading at all on
