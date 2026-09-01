@@ -11,6 +11,30 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="../manifest.webmanifest">
   <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <!-- THEME BEFORE FIRST PAINT (2026-09-01). Matt: navigating between the hub and the profile
+       "flash[es] a white screen... not smooth at all". Three paints were happening: the browser's
+       own white canvas during the cross-document navigation, then hub.css's LIGHT --hub-bg
+       (#f4f6fb) once the stylesheet applied, and only then the dark one - because .gh-dark is
+       stamped by js/theme.js, which rides a deferred <script type="module"> and therefore runs
+       after the document has already been parsed and painted.
+       This runs SYNCHRONOUSLY, before the stylesheet is even requested, so the class is on <html>
+       for the first paint. The inline <style> gives that paint a background with no network wait,
+       and color-scheme tells the browser to paint ITS canvas (and scrollbars) to match, which is
+       what closes the gap during the navigation itself.
+       THE TWO HEX VALUES AND THE KEY BELOW DUPLICATE css/hub.css's --hub-bg and js/theme.js's
+       storage key. They are the price of running before both files exist; keep them in step. -->
+  <script>
+    try {
+      var t = localStorage.getItem('gamehub.theme.v1');
+      if (t !== 'light' && (t === 'dark' || matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.className += ' gh-dark';
+      }
+    } catch (e) { /* private mode: the deferred module still themes it a moment later */ }
+  </script>
+  <style>
+    :root { color-scheme: light; background: #f4f6fb; }
+    :root.gh-dark { color-scheme: dark; background: #0e1420; }
+  </style>
   <link rel="stylesheet" href="../css/hub.css">
   <style>
     .pf-main { max-width: 640px; }
