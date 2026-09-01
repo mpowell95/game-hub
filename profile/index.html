@@ -294,7 +294,7 @@
   <div class="hub">
     <header class="hub-top">
       <div class="hub-top-info">
-        <a class="hub-back" href="../">&#8249; Hub</a>
+        <a class="hub-back" id="pf-back" href="../">&#8249; Hub</a>
         <h1 class="hub-top-title" data-i18n="pf_title">Profile</h1>
         <span class="pf-saved" id="pf-saved" role="status" aria-live="polite" data-i18n="pf_saved">Saved</span>
       </div>
@@ -1053,6 +1053,25 @@
     // Same reason as the launcher's badge: reading happens in an overlay on top of this page, so
     // these rows would keep showing "unread" until the page was reloaded.
     window.addEventListener('gamehub:messages', paintMessageCount);
+
+    // -- Back to the hub: HISTORY, not a fresh load ---------------------------------
+    // Matt: "It still flashes. Black now... i still don't want that." Following the href re-loads
+    // index.html, which ships EMPTY - <div id="hub-root"></div> with the whole launcher built by
+    // js/hub.js - so the browser paints the right background and then sits on nothing until that
+    // module graph has run (measured: a 120ms blank frame even with the cross-document view
+    // transition, because what the transition fades TO is that blank first paint).
+    // history.back() restores the hub from the back/forward cache instead: already rendered,
+    // already scrolled where it was, no re-run of anything. Only when we actually came FROM a
+    // same-origin page - otherwise (opened directly, or shared link) the href is the honest
+    // answer, so the link keeps working and still works with JS off.
+    $('#pf-back').addEventListener('click', (e) => {
+      try {
+        if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) {
+          e.preventDefault();
+          history.back();
+        }
+      } catch { /* fall through to the href */ }
+    });
 
     // -- This device's auth id (see the note beside #pf-auth-id) --------------------
     (async () => {
