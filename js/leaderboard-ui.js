@@ -1421,6 +1421,7 @@ let _all = {};
 let _meKey = '';
 let _unsub = null;
 let _connected = false;
+let _onLine = null;   // 'online' listener, removed in closeLeaderboard (listeners must balance)
 
 const SEGMENTS = [{ id: 'players', labelKey: 'lb_by_player' }, { id: 'games', labelKey: 'lb_by_game' }];
 
@@ -1466,6 +1467,11 @@ function rerender({ fromData = false } = {}) {
     _lastBodyHTML = bodyHTML;
     _host.scrollTop = keepTop;
   }
+}
+
+function renderMessage(key) {
+  const bodyEl = _host && _host.querySelector('[data-role="lb-body"]');
+  if (bodyEl) bodyEl.innerHTML = `<p class="lb-none">${t(key)}</p>`;
 }
 
 function renderOffline() {
@@ -1550,6 +1556,8 @@ export function closeLeaderboard() {
   if (typeof _unsub === 'function') { try { _unsub(); } catch { /* ignore */ } _unsub = null; }
   if (_host) { _host.remove(); _host = null; }
   document.removeEventListener('keydown', onKey);
+  if (_onLine) { window.removeEventListener('online', _onLine); _onLine = null; }
+  _connected = false;
 }
 
 export async function openLeaderboard() {
@@ -1602,8 +1610,38 @@ export async function openLeaderboard() {
   try {
     _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
-    // If watchPlayers never fires (unconfigured), show offline after a short grace.
-    setTimeout(() => { if (_host && !_connected) renderOffline(); }, 3500);
+
+    // DO NOT TELL A PLAYER THEY ARE OFFLINE WHEN THEY ARE NOT (2026-09-01).
+    //
+    // Matt: "you broke the leaderboard too. it says 'The leaderboard needs a connection...' But I
+    // am online and have a strong wifi connection. That I confirmed is working properly."
+    //
+    // This used to hard-swap to that message 3.5s after opening, on the assumption that a
+    // watchPlayers which had not fired by then meant Firebase was unconfigured. It is not a safe
+    // assumption: getting the first value costs THREE serial cross-origin module imports from
+    // gstatic plus an anonymous sign-in round trip, and on a phone - especially one whose service
+    // worker is warming a fresh deploy in the background - that can comfortably exceed 3.5s. The
+    // board then accused a perfectly good wifi connection of being down, which is worse than
+    // saying nothing: it sends the player to go and check their router.
+    //
+    // Now the message is only ever shown when the browser itself says the device is offline.
+    // Otherwise the loading skeleton stays up, the subscription stays live, and the board fills in
+    // whenever the answer lands - plus an honest "still loading" note once the wait is long enough
+    // to need explaining.
+    const GRACE_MS = 3500;         // long enough that a normal load never shows anything extra
+    const SLOW_MS = 12000;         // ...and past this, say so rather than leaving a dead skeleton
+    const openedAt = Date.now();
+    const tick = () => {
+      if (!_host || _connected) return;                       // gone, or the data arrived
+      if (navigator.onLine === false) { renderOffline(); return; }
+      const waited = Date.now() - openedAt;
+      if (waited >= SLOW_MS) { renderMessage('lb_slow'); return; }
+      setTimeout(tick, 500);
+    };
+    setTimeout(tick, GRACE_MS);
+    // A connection that comes back should not need the overlay reopening to notice.
+    _onLine = () => { if (_host && !_connected) { renderMessage('lb_slow'); } };
+    window.addEventListener('online', _onLine);
   } catch { renderOffline(); }
 }
 
