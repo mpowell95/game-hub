@@ -237,6 +237,71 @@ export async function refreshAdminConfig() {
   }
 }
 
+// --- who is actually an admin -------------------------------------------------------------------
+//
+// Matt, 2026-09-01: "nobody else should see 'admin mode' as an option and especially should never
+// see 'read all messages' or whatever."
+//
+// Every admin surface used to be gated on `isAdmin(profile.name)` - a hash of the PROFILE NAME.
+// That name is printed on the leaderboard, so anyone in the family could read it off their own
+// screen, type it into their profile, and be handed the Admin button and the read-all button. The
+// database has refused them the actual threads since the rules landed, but the OPTION was there,
+// and `adminConfig` is still `auth != null` for writes - so a renamed profile could flip games
+// live or into testing for everybody.
+//
+// So the UI now asks the SAME QUESTION THE DATABASE ASKS: is this device's anonymous auth uid in
+// `admins/`? That node is `".write": false` in database.rules.json - unreachable from any client,
+// only editable in the Firebase console - so this cannot be faked by renaming, by editing
+// localStorage, or by anything short of console access.
+//
+// `admins` is `".read": "auth != null"`, so a device is allowed to ask about itself. Reading
+// another uid's row tells you nothing you can act on.
+const ADMIN_DEVICE_KEY = 'gamehub.adminDevice.v1';
+let _adminDevice = null;
+
+/** Cached answer, SYNCHRONOUS, so a render never waits on the network (same shape as the config
+ *  cache above). Unknown until the first successful read, and `false` is the safe default: a
+ *  device that has never been able to ask simply does not show the controls. */
+export function isAdminDevice() {
+  if (_adminDevice !== null) return _adminDevice;
+  try { _adminDevice = localStorage.getItem(ADMIN_DEVICE_KEY) === '1'; }
+  catch { _adminDevice = false; }
+  return _adminDevice;
+}
+
+/**
+ * Ask the database whether THIS device is on the allowlist, and cache it. Called once per hub load
+ * and by the profile page.
+ *
+ * A FAILED READ NEVER REVOKES a cached yes: offline, or with Firebase unreachable, Matt keeps the
+ * controls he had on his own phone. A successful read that says no DOES clear it, so removing a
+ * uid in the console really does take the buttons away on that device's next load.
+ * @returns {Promise<boolean|null>} the fresh answer, or null when it could not be read
+ */
+export async function refreshAdminDevice() {
+  try {
+    const r = await boot();
+    if (!r || !r.uid) return null;
+    const { db, api } = r;
+    const snap = await api.get(api.ref(db, 'admins/' + r.uid));
+    const yes = snap.exists() && snap.val() === true;
+    _adminDevice = yes;
+    try { localStorage.setItem(ADMIN_DEVICE_KEY, yes ? '1' : '0'); } catch { /* memory only */ }
+    return yes;
+  } catch (err) {
+    console.warn('[admin-config] could not read the admins allowlist; the cached answer stays', err);
+    return null;
+  }
+}
+
+/** This device's anonymous auth uid - the value that goes in `admins/`. Shown on the profile page
+ *  so there is a way to BOOTSTRAP: a device that is not on the list yet has no admin UI at all, so
+ *  without this there would be nowhere to read the id it needs to be granted. Harmless to show to
+ *  anyone: it is an identifier, not a credential, and `admins` cannot be written from a client. */
+export async function myAuthUid() {
+  try { const r = await boot(); return (r && r.uid) || null; } catch { return null; }
+}
+
 // A DEV SERVER NEVER WRITES APP-WIDE CONFIG, for the same reason js/stats-net.js never writes
 // player records from one: this node is shared by every device in the family, and a switch flipped
 // while poking at localhost would go live for everyone. Same opt-in key as stats-net's, so a
