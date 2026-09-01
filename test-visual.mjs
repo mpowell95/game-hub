@@ -431,7 +431,42 @@ const PLAY = {
         catch { return null; }
       });
       if (save) return { ok: false, why: 'the rack recorded but its autosave was left banked - the next mount would resume a finished rack' };
-      return { ok: true, why: `played a rack to the sheet (final ${finalTxt}); sk.played ${before.played | 0} -> ${after.played | 0}` };
+
+      // [KNOWN-BUG PROBE] RESUME A RACK ON A MACHINE THE CAROUSEL IS NOT SHOWING (2026-09-01).
+      //
+      // Matt, with a screenshot of a painted HUD over an empty playfield: "You broke skeeball. I
+      // can go back to the hub but nothing else." _startGame loaded the engine for the carousel's
+      // selection while restore() rebuilt on the SNAPSHOT's board; a swipe after leaving mid-rack
+      // makes those differ, and with the engines lazy that threw into a half-mounted dead screen.
+      //
+      // This is the check that would have caught it. The probe above never catches it because it
+      // plays THE CLASSIC from the gallery, with no banked save and no swipe - the ordinary path.
+      //
+      // RE-MOUNTED IN PLACE, NOT RELOADED: checkPlay's addInitScript wipes every `*.save.*` key on
+      // EVERY navigation, so a reload deletes the very snapshot this probe needs before the page
+      // even runs. init() re-enters the same constructor path a real resume takes.
+      const resumed = await page.evaluate(async () => {
+        localStorage.setItem('gamehub.skeeball.save.v1', JSON.stringify({
+          v: 1, board: 'runaway', score: 100, ballsUsed: 4,
+          throws: [{ value: 100, hole: 'topL', earned: 100 }, { value: 0, hole: 'gutter', earned: 0 },
+            { value: 0, hole: 'gutter', earned: 0 }, { value: 0, hole: 'gutter', earned: 0 }],
+        }));
+        localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'classic' }));
+        const m = await import('./js/ui.js');
+        const host = document.getElementById('skeeball') || document.querySelector('.sk-root');
+        m.init(host);
+        await new Promise((r) => setTimeout(r, 2500));   // the engine load + first _fit
+        const c = host.querySelector('canvas.sk-canvas');
+        try { localStorage.removeItem('gamehub.skeeball.save.v1'); } catch { /* no residue */ }
+        // 300x150 is the untouched default: the renderer never got as far as sizing it.
+        return { has: !!c, w: c ? c.width : 0, h: c ? c.height : 0 };
+      });
+      if (!resumed.has || (resumed.w === 300 && resumed.h === 150) || resumed.w < 32) {
+        return { ok: false, why: `resuming a rack banked on another machine left the playfield dead `
+          + `(canvas ${resumed.w}x${resumed.h}) - the engine loaded was the carousel's, not the rack's` };
+      }
+      return { ok: true, why: `played a rack to the sheet (final ${finalTxt}); sk.played ${before.played | 0} -> ${after.played | 0}; `
+        + `and a rack resumed on an unselected machine still drew (canvas ${resumed.w}x${resumed.h})` };
     },
   },
 
