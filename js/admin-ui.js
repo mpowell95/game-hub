@@ -89,25 +89,45 @@ function ensureCss() {
   /* --- accordion: four headings until one is tapped --- */
   .adm-sec { border-top: 1px solid var(--gh-border); }
   .adm-sec:last-of-type { border-bottom: 1px solid var(--gh-border); }
-  .adm-sec > summary { display: flex; align-items: center; gap: var(--gh-sp-2); padding: var(--gh-sp-4) 0;
+  /* The headings carried gh-sp-4 top AND bottom on top of a 44px min-height, so five collapsed
+     sections filled the sheet with gaps. The 44px target is untouched; only the padding went. */
+  .adm-sec > summary { display: flex; align-items: center; gap: var(--gh-sp-2); padding: var(--gh-sp-1) 0;
                        font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink);
                        cursor: pointer; list-style: none; min-height: 44px; }
   .adm-sec > summary::-webkit-details-marker { display: none; }
   .adm-sec > summary::after { content: '\\203A'; margin-left: auto; font-size: 22px; line-height: 1;
                               color: var(--gh-muted); transform: rotate(90deg); transition: transform .15s; }
   .adm-sec[open] > summary::after { transform: rotate(-90deg); }
-  .adm-secbody { padding-bottom: var(--gh-sp-4); }
-  .adm-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gh-sp-2);
-             padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
+  .adm-secbody { padding-bottom: var(--gh-sp-3); }
+  /* ONE ROW PER THING (2026-09-01). Matt: "Look how much space is used for all this stuff." The
+     row used to be flex-wrap:wrap with a 200px flex-basis on the name, which on a phone is a
+     guaranteed wrap: the name took a line, the control took another, and 22 games cost ~130px
+     each. nowrap puts them side by side and the row is the height of the control alone. The
+     control keeps its full 44px tap target (docs/BUILDING-A-GAME.md's floor - which the old
+     40px seg was quietly under); the height comes off the LAYOUT, never off the target. */
+  .adm-row { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--gh-sp-2);
+             padding: var(--gh-sp-2) 0; border-top: 1px solid var(--gh-border); }
   .adm-row:first-child { border-top: 0; }
-  .adm-row-main { flex: 1 1 200px; min-width: 0; }
-  .adm-ctl { display: flex; align-items: center; gap: var(--gh-sp-2); margin-left: auto; }
+  .adm-row-main { flex: 1 1 auto; min-width: 0; }
+  .adm-ctl { flex: 0 0 auto; display: flex; align-items: center; gap: var(--gh-sp-2); margin-left: auto; }
+  /* Skeeball is the one section that still stacks: three labels plus a name like "HOT SHOT: BRICK
+     CITY" genuinely do not fit one 329px row, and truncating either half is worse than a line. */
+  .adm-row--stack { flex-wrap: wrap; }
   .adm-row--stack .adm-row-main { flex: 1 1 100%; }
   .adm-ctl--wide { flex: 1 1 100%; margin-left: 0; }
   .adm-ctl--wide .gh-seg { flex: 1 1 100%; }
   .adm-ctl--wide .gh-seg__item { flex: 1 1 0; }
-  .adm-seg .gh-seg__item { font-size: var(--gh-fs-xs); padding: 0 var(--gh-sp-3); min-height: 40px; }
-  .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink); }
+  .adm-seg { padding: 3px; }
+  .adm-seg .gh-seg__item { font-size: var(--gh-fs-xs); padding: 0 var(--gh-sp-3); min-height: 44px; }
+  /* THE SELECTED SIDE HAS TO BE VISIBLE. .gh-seg paints the track --gh-surface-2 and the pressed
+     item --gh-surface, which in DARK are all but the same colour - so the whole page read as a
+     row of dead controls (Matt, looking at exactly that: "why don't I have admin controls?").
+     Scoped to .adm-seg rather than fixing .gh-seg globally, which would restyle every game's
+     setup screen in the same commit. Border + weight, so it is never colour alone. */
+  .adm-seg .gh-seg__item[aria-pressed="true"] { background: var(--gh-ink); color: var(--gh-surface);
+             font-weight: 800; box-shadow: none; }
+  .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
@@ -201,7 +221,6 @@ function render(card, opts = {}) {
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
-      ${sec('messages', t('adm_msgs_title'), messagesSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
     <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
@@ -370,6 +389,12 @@ function isDevOrigin() {
 // READ-ONLY, and that is a property of js/messages.js, not of this button: that module has no admin
 // write path at all, so nothing reachable from here can edit or remove anything anybody said.
 
+/** UNRENDERED since 2026-09-01 - kept, not deleted, the same way js/leaderboard-ui.js keeps a
+ *  helper whose screen changed under it. Its one button (read every conversation) moved to the
+ *  Messages screen itself, beside the bug inbox, when Matt asked for the bug reports to live
+ *  there: an admin view OF the messages belongs with the messages, and a second route to it from
+ *  here was a whole accordion heading spent on a duplicate. The `msgs` handler below still fires
+ *  if the section is ever put back. */
 function messagesSectionHTML() {
   return `<div class="adm-actions">
       <button type="button" class="gh-btn gh-btn--sm" data-role="msgs">${esc(t('adm_msgs_btn'))}</button>

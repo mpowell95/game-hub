@@ -375,6 +375,36 @@ export async function openMessages(opts = {}) {
 
 // --- the conversation list ----------------------------------------------------------------------
 
+/** Matt's two admin entry points on the Messages screen: the bug inbox and the read-every-thread
+ *  view. Both were launcher-footer buttons; both are about reading what players have written, so
+ *  they belong with the messages rather than under the game grid (Matt, 2026-09-01: the admin
+ *  button "should be moved into my profile or something instead of all the way down there", and
+ *  "the bug reports should be part of my messages area").
+ *
+ *  Everything here is awaited AFTER the list has painted and re-checks `current(gen)` before
+ *  touching the DOM: a slow or offline read must not hold up the conversation list, and must not
+ *  graft buttons onto a screen the reader has already navigated away from. */
+async function addAdminButtons(card, gen) {
+  if (!(await amIAdmin((loadProfile() || {}).name))) return;
+  if (!current(gen)) return;
+  const acts = card.querySelector('[data-role="acts"]');
+  if (!acts) return;
+  acts.insertAdjacentHTML('afterbegin',
+    `<button type="button" class="gh-btn" data-role="buginbox">${esc(t('bug_inbox_btn'))}</button>`
+    + `<button type="button" class="gh-btn" data-role="alladmin">${esc(t('msg_admin_btn'))}</button>`);
+  const inbox = acts.querySelector('[data-role="buginbox"]');
+  inbox.addEventListener('click', async () => {
+    try { (await import('./bug-report-ui.js')).openBugInbox(); }
+    catch (err) { console.error('[messages] bug inbox failed to load', err); }
+  });
+  acts.querySelector('[data-role="alladmin"]').addEventListener('click', () => renderAdmin(card));
+  // The count is a second await, and a stale label is better than a late list.
+  try {
+    const n = await (await import('./bug-report-ui.js')).adminUnreadCount();
+    if (current(gen) && n > 0) inbox.textContent = t('bug_inbox_btn_new', { n });
+  } catch { /* offline: the plain label is already correct */ }
+}
+
 async function renderList(card) {
   const gen = ++_view;
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
@@ -401,14 +431,19 @@ async function renderList(card) {
         </button></li>`).join('')}</ul>`
     : `<p class="msg-lead">${esc(navigator.onLine === false ? t('msg_offline') : t('msg_empty'))}</p>`;
 
+  // BUG REPORTS LIVE HERE NOW (2026-09-01). Matt: "the bug reports should be part of my messages
+  // area." A bug report IS a message from a player that he answers in a thread - it only ever sat
+  // in the launcher footer because it shipped before Messages existed. Admin-only, and appended
+  // after the render so the list never waits on the isAdmin() import or the unread read.
   shellHTML(card, {
     title: t('msg_title'),
     body,
-    footer: `<div class="gh-modal__actions">
+    footer: `<div class="gh-modal__actions" data-role="acts">
       <button type="button" class="gh-btn gh-btn--primary" data-role="new">${esc(t('msg_new_btn'))}</button>
     </div>`,
   });
   card.querySelector('[data-role="new"]').addEventListener('click', () => renderPicker(card));
+  addAdminButtons(card, gen);
   card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => renderThread(card, {
     code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji,
   })));
@@ -651,11 +686,27 @@ async function renderAdmin(card) {
   if (all.denied) {
     const uid = await authId();
     if (!current(gen)) return;
+    // WITH A COPY BUTTON (2026-09-01). The id is 28 opaque characters that have to reach a
+    // Firebase console on another machine, and `user-select: all` is not a way to get it there
+    // from a phone. Nothing in the app can shortcut this: `admins` is the ONE node in
+    // database.rules.json with `".write": false`, so the allowlist is deliberately unreachable
+    // from any client - which is the whole reason it is worth anything as a gate.
     shellHTML(card, {
       title: t('msg_admin_title'),
       body: `<p class="msg-lead">${esc(t('msg_admin_denied'))}</p>
-        <p class="msg-id">${esc(uid || "?")}</p>`,
+        <p class="msg-id">${esc(uid || '?')}</p>
+        <div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--sm"
+          data-role="copyuid">${esc(t('adm_copy_id'))}</button></div>`,
     });
+    const copy = card.querySelector('[data-role="copyuid"]');
+    if (copy) {
+      copy.addEventListener('click', async () => {
+        // On failure the id is already on screen above, selectable - the same fallback the admin
+        // page's own Copy button uses, rather than a second failure string to translate.
+        try { await navigator.clipboard.writeText(uid || ''); copy.textContent = t('adm_copied'); }
+        catch { /* the id stays visible in .msg-id */ }
+      });
+    }
     return;
   }
 
