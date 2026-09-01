@@ -29,8 +29,11 @@
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
   // Bump alongside the sw.js cache name on every release so the visible stamp
-  // and the cached build always match.
-  const APP_VERSION = 'v26';
+  // and the cached build always match. They had drifted six builds apart by
+  // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
+  // stamp on the setup screen - the whole point of which is telling you which
+  // build you are on - a lie. Resynced to the cache number; keep them equal.
+  const APP_VERSION = 'v33';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -72,6 +75,50 @@
   // null when absent/malformed. Names are stripped of < > so they are safe wherever
   // the UI shows them. Keep in sync with the hub contract.
   const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
+
+  // The DISPLAYED difficulty vocabulary. The stored ids stay 'easy'/'normal'/
+  // 'hard' forever - they are the byDiff bucket keys inside every player's
+  // gamehub.stats and inside players/<id> in Firebase (THE LAW rule 5, and
+  // js/difficulty-tiers.js maps 'normal' -> tier 2 on the read path). This is a
+  // label-only rename so the middle rung reads "Medium" here like it does on
+  // every other game's setup screen and on the leaderboard.
+  const DIFF_LABEL = { easy: 'Easy', normal: 'Medium', hard: 'Hard' };
+  const DIFF_TIER = { easy: 1, normal: 2, hard: 3 };
+
+  // Ski-slope difficulty shapes, inlined from js/difficulty-tiers.js's
+  // diffShapeSVG()/TIER_COLOR the same way readHubProfile() inlines the profile
+  // read path: Monopoly Deal is a classic-script app and cannot import the hub's
+  // ES modules. Keep in step with that file. Colour is ALWAYS paired with a
+  // shape here, never used alone - Matt is red/green colorblind, and these
+  // buttons used to signal the selected difficulty by fill colour only.
+  const TIER_COLOR = { 1: '#2e9e44', 2: '#1F5FA8', 3: '#1c2430' };
+  function diffShapeSVG(tier) {
+    const fill = TIER_COLOR[tier] || 'currentColor';
+    if (tier === 1) return `<svg viewBox="0 0 20 20" class="bd-dshape" fill="${fill}" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>`;
+    if (tier === 2) return `<svg viewBox="0 0 20 20" class="bd-dshape" fill="${fill}" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>`;
+    if (tier === 3) return `<svg viewBox="0 0 20 20" class="bd-dshape" fill="${fill}" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>`;
+    return '';
+  }
+
+  // Remembered setup choice. A one-tap preference, so it is exempt from THE LAW
+  // rule 2 (additive writes) exactly as the hub's launcher favorites are - it
+  // holds no earned history. Before this the choice lived only in memory, so
+  // every fresh open of the app silently reset the difficulty.
+  const SETUP_KEY = 'gamehub.bd.setup.v1';
+  function loadSetupPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null');
+      if (!p || typeof p !== 'object') return null;
+      return {
+        numAI: [1, 2, 3, 4].includes(p.numAI | 0) ? (p.numAI | 0) : null,
+        difficulty: DIFF_LABEL[p.difficulty] ? p.difficulty : null,
+      };
+    } catch (e) { return null; }
+  }
+  function saveSetupPrefs(numAI, difficulty) {
+    try { localStorage.setItem(SETUP_KEY, JSON.stringify({ numAI: numAI | 0, difficulty: difficulty })); }
+    catch (e) { /* a remembered preference is never worth breaking the game over */ }
+  }
   function readHubProfile() {
     try {
       const raw = localStorage.getItem('gamehub.profile');
@@ -397,10 +444,15 @@
       // (precedence: last-used > profile > built-in). Difficulty is one global
       // setting here, so it comes from the first opponent's tier.
       const prof = readHubProfile();
-      // MD-2: default 2 AI opponents (3 players total) when there's no
-      // last-used choice or profile-derived opponent count to prefill from.
-      let chosen = this._lastNumAI || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 2);
-      let diff = this._lastDiff || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
+      // Precedence: this session's last-used choice > the choice remembered from
+      // a previous visit > the hub profile > the built-in default.
+      // MD-2: default 2 AI opponents (3 players total) when there's nothing to
+      // prefill from.
+      const saved = loadSetupPrefs() || {};
+      let chosen = this._lastNumAI || saved.numAI
+        || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 2);
+      let diff = this._lastDiff || saved.difficulty
+        || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
       const root = this.$('setup');
       // Hidden challenge: while unwon, force the qualifying config (2+ opponents at
       // Normal/Hard), gray out the choices, and show a "Begin challenge" bar. Once won,
@@ -421,7 +473,9 @@
           '<div class="count-row' + lock + '">' +
           [1, 2, 3, 4].map(n => `<button class="count-btn${n === chosen ? ' sel' : ''}" data-n="${n}">${n}</button>`).join('') +
           '</div><p style="margin-top:14px">Difficulty</p><div class="count-row' + lock + '">' +
-          ['easy', 'normal', 'hard'].map(d => `<button class="count-btn diff${d === diff ? ' sel' : ''}" data-d="${d}" style="width:auto;padding:0 16px;font-size:15px">${d[0].toUpperCase() + d.slice(1)}</button>`).join('') +
+          ['easy', 'normal', 'hard'].map(d =>
+            `<button class="count-btn diff${d === diff ? ' sel' : ''}" data-d="${d}">` +
+            diffShapeSVG(DIFF_TIER[d]) + `<span>${DIFF_LABEL[d]}</span></button>`).join('') +
           '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : 'Start Game') + '</button>' +
           '<button class="cta ghost-cta" id="setup-stats">Stats</button>' +
           `<div class="setup-version">${APP_VERSION}</div></div>`;
@@ -431,7 +485,11 @@
           root.querySelectorAll('.count-btn[data-d]').forEach(b =>
             b.addEventListener('click', () => { diff = b.dataset.d; render(); }));
         }
-        this.$('start-btn').addEventListener('click', () => { root.classList.remove('show'); this.newGame(chosen, diff); });
+        this.$('start-btn').addEventListener('click', () => {
+          root.classList.remove('show');
+          saveSetupPrefs(chosen, diff);
+          this.newGame(chosen, diff);
+        });
         this.$('setup-stats').addEventListener('click', () => this.showStats('setup'));
         this.$('setup-back-btn').addEventListener('click', () => this._toHub());
         root.querySelector('.scrim').addEventListener('click', () => { if (this.game) root.classList.remove('show'); });
@@ -1773,13 +1831,21 @@
       const sheet = this._sheet(
         '<h3>Your Stats</h3><div class="stats-grid">' +
         cell(s.played, 'Played') + cell(s.won, 'Won') + cell(s.lost, 'Lost') + cell(rate + '%', 'Win rate') +
-        '</div><button class="cta" id="stats-back">← Back</button>' +
-        '<button class="cta ghost-cta" id="stats-reset">Reset stats</button>');
+        '</div><button class="cta" id="stats-back">← Back</button>');
       sheet.querySelector('#stats-back').addEventListener('click', () => this._statsBack(origin));
-      sheet.querySelector('#stats-reset').addEventListener('click', () => {
-        try { localStorage.removeItem('bd-stats'); } catch (e) {}
-        this._closeOverlay(); this.showStats(origin);
-      });
+      // THERE IS NO "RESET STATS" BUTTON, and there must not be one again
+      // (removed 2026-09-01). It called localStorage.removeItem('bd-stats') with
+      // no confirmation, one tap from Back. Two ways that broke THE LAW:
+      //   1. It wiped the played/won/lost this screen exists to show, with no
+      //      undo - earned history, which rule 2 says is never destroyed.
+      //   2. bd-stats is folded into the unified gamehub.stats ONCE, and that
+      //      fold only ever runs inside game-stats-global.js's record(), i.e.
+      //      only when a game FINISHES. On any device where business._leg had
+      //      not latched yet, this deleted that player's entire pre-unified
+      //      Monopoly Deal history before it could ever be carried forward -
+      //      permanently, since foldLegacy would then find nothing (rules 1/5).
+      // The app-wide clears that legitimately exist are node scripts with a
+      // backup, a dry run and a verified re-read. A button is the wrong home.
     }
     /** Return from Stats to where it was opened from — showStats hid that screen,
      *  so re-show it now (rebuilds cleanly, no stacked overlays). */
