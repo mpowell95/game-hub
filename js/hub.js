@@ -600,10 +600,13 @@ class Hub {
           <section class="hub-grid" data-role="grid" aria-label="${t('hub_games_aria')}">
             ${gridHTML}
           </section>
+          <!-- Matt's two admin buttons USED TO BE HERE (2026-09-01). "Bug reports" moved into the
+               Messages screen and "Admin" onto the profile page - his ask, and the right shape:
+               both sat under the whole game grid, past every tile, which is exactly where he said
+               he did not want them. The openAdmin()/openBugInbox() methods and the null-guards on
+               their element lookups above are kept, and still work if a button is ever put back. -->
           <section class="hub-extra">
             <button type="button" class="hub-statsbtn hub-bug-btn" data-role="bug" aria-label="${t('bug_btn_aria')}">${t('bug_btn')}</button>
-            ${admin ? `<button type="button" class="hub-statsbtn hub-bug-inbox" data-role="buginbox">${t('bug_inbox_btn')}</button>` : ''}
-            ${admin ? `<button type="button" class="hub-statsbtn hub-admin-btn" data-role="admin">${t('adm_btn')}</button>` : ''}
             ${showKeepsake ? `<button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">${t('hub_challenge_btn')}</button>` : ''}
           </section>
           <section class="hub-game" data-role="game" hidden></section>

@@ -318,6 +318,17 @@
         <div id="pf-msgs"></div>
       </section>
 
+      <!-- Admin (js/admin-ui.js). Matt, 2026-09-01: the launcher's Admin button "should be moved
+           into my profile or something instead of all the way down there" - it sat under the game
+           grid, past every tile. HIGH on this page on purpose, for the same reason Messages is:
+           being on the profile page is only an improvement if it is not another scroll away.
+           Hidden for everyone else (`hidden` until js/hub.js's own isAdmin() says otherwise), so
+           nobody but Matt ever downloads js/admin-ui.js or knows the section exists. -->
+      <section class="pf-section" id="pf-admin-sec" hidden>
+        <h2 data-i18n="adm_title">Admin controls</h2>
+        <button type="button" class="pf-linkbtn" id="pf-admin-btn" data-i18n="adm_btn">🛠️ Admin</button>
+      </section>
+
       <!-- SETTINGS. Everything that changes how the app behaves for this person, as ONE list of
            collapsible rows rather than scattered between a sub-collapse inside You and a whole card
            of its own. Language joins Theme here: it was only ever in the hub's top bar, so the two
@@ -1011,6 +1022,25 @@
     // Same reason as the launcher's badge: reading happens in an overlay on top of this page, so
     // these rows would keep showing "unread" until the page was reloaded.
     window.addEventListener('gamehub:messages', paintMessageCount);
+
+    // -- Admin controls (Matt only) -------------------------------------------------
+    // The section ships `hidden` and only ever unhides after isAdmin() says so, so a non-admin
+    // device never renders it and never imports js/admin-ui.js. Same gate js/hub.js used for the
+    // launcher button it replaces: a profile-name hash, which is a SCREEN, not a lock.
+    (async () => {
+      try {
+        const [{ isAdmin }, { loadProfile }] = await Promise.all([
+          import('../js/challenge/hooks.js'), import('../js/profile-store.js'),
+        ]);
+        const prof = loadProfile() || {};
+        if (!(prof.name && isAdmin(prof.name))) return;
+        $('#pf-admin-sec').hidden = false;
+        $('#pf-admin-btn').addEventListener('click', async () => {
+          try { (await import('../js/admin-ui.js')).openAdmin(); }
+          catch (e) { console.error('Admin controls failed to load', e); }
+        });
+      } catch (e) { console.error('admin gate failed', e); }
+    })();
 
     // -- Replies to your reports ---------------------------------------------------
     // Same lazy import. The label picks up an unread count once we can see one; the button is
