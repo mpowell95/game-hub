@@ -394,6 +394,11 @@ class Hub {
     this._paintReplyBadge();
     this._onOnlineBugs = () => { this._drainBugReports(); this._drainMessages(); this._paintReplyBadge(); };
     window.addEventListener('online', this._onOnlineBugs);
+    // Reading a message happens in an overlay on TOP of this page, so nothing here would otherwise
+    // know the count had changed and the badge sat there, wrong, until the next reload. Matt: "The
+    // new message badge doesn't go away after I've already read a message."
+    this._onMessagesChanged = () => this._paintReplyBadge();
+    window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._maybeAnnounce();
     // The app-wide admin config (which games are live, which Skeeball machines are open). The
     // launcher has ALREADY painted from the cached copy - this refresh only re-renders when the

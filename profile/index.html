@@ -1008,6 +1008,9 @@
       } catch (e) { console.error('Messages failed to load', e); }
     }
     paintMessageCount();
+    // Same reason as the launcher's badge: reading happens in an overlay on top of this page, so
+    // these rows would keep showing "unread" until the page was reloaded.
+    window.addEventListener('gamehub:messages', paintMessageCount);
 
     // -- Replies to your reports ---------------------------------------------------
     // Same lazy import. The label picks up an unread count once we can see one; the button is
