@@ -129,7 +129,9 @@ class HillClimb {
     this.root.classList.add('hc-root');
     this.rerender();
     this.tick = this.tick.bind(this);
-    this.raf = requestAnimationFrame(this.tick);
+    // NOT armed here any more: the first screen is the garage, which does not animate. startLoop()
+    // is called when a run actually begins (see startLoop's header).
+    if (this.screen === 'play') this.startLoop();
   }
 
   persist() { store.save(this.save); }
@@ -381,6 +383,7 @@ class HillClimb {
     this.pointers.clear();
     this.screen = 'play';
     this.renderPlay();
+    this.startLoop();
   }
 
   renderPlay() {
@@ -586,6 +589,7 @@ class HillClimb {
     this.result = null;
     this.paused = false;
     this.screen = 'garage';
+    this.stopLoop();
     this.renderGarage();
   }
 
@@ -640,9 +644,32 @@ class HillClimb {
 
   // --- the loop ----------------------------------------------------------------------------
 
-  tick(now) {
+  /** ARM THE LOOP ONLY WHILE THERE IS A RUN TO DRAW (2026-09-01).
+   *
+   *  `tick` used to re-arm at the top and only THEN check the screen, so the loop woke 60 times a
+   *  second on the garage and the menu - for the entire time the game was mounted - to do nothing
+   *  but re-arm itself and return. One chain, so nothing leaked; it was simply a permanent 60 Hz
+   *  wake on two screens that never animate, on a phone, sharing the frame budget with whatever
+   *  the player was actually reading. Now the play screen starts it and leaving stops it.
+   *
+   *  Idempotent (see Pinball's `_startLoop`, and Skeeball's before that): arming a running loop is
+   *  a no-op rather than a second chain. */
+  startLoop() {
+    if (this.raf) return;
+    this.lastT = 0;
     this.raf = requestAnimationFrame(this.tick);
-    if (this.screen !== 'play' || !this.run || !this.renderer) { this.lastT = now; return; }
+  }
+
+  stopLoop() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
+
+  tick(now) {
+    // Not on the play screen any more: let the chain END rather than re-arming into a no-op.
+    if (this.screen !== 'play') { this.raf = 0; this.lastT = 0; return; }
+    this.raf = requestAnimationFrame(this.tick);
+    if (!this.run || !this.renderer) { this.lastT = now; return; }
     if (!this.lastT) this.lastT = now;
     let dt = (now - this.lastT) / 1000;
     this.lastT = now;

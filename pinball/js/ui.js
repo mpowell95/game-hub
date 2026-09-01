@@ -299,8 +299,7 @@ export class PinballUI {
     this._bindPlay();
     this._fit();
     this._drainEvents();
-    this.last = 0;
-    this.raf = requestAnimationFrame(this._loop);
+    this._startLoop();
   }
 
   _bindPlay() {
@@ -413,6 +412,25 @@ export class PinballUI {
     this._drainEvents();
     this.renderer.render(this.game, dt);
     this._paintHud(dt);
+  }
+
+  /** ARM THE LOOP ONCE (2026-09-01). Ported from Skeeball, which had this exact defect and fixed
+   *  it on 2026-08-26 (skeeball/CLAUDE.md, "Frame rate: why it got slower the longer you played").
+   *
+   *  THE BUG THIS FIXES. `_startGame()` used to arm a rAF chain unconditionally, and it is
+   *  reachable from TWO places: the setup screen's Play, which is preceded by `_renderSetup()`'s
+   *  `_stopLoop()`, and the game-over card's "Play again", which is not. `_frame` re-arms at the
+   *  top of every frame, and `_stopLoop` only ever held the LAST chain's id - so every "Play
+   *  again" left the previous chain running with nothing able to cancel it. The orphans stack
+   *  (each one stepping physics and drawing), `destroy()` cannot reach them, and they keep
+   *  running IN THE HUB for the life of the page: leave Pinball after three replays and the
+   *  launcher and whatever you open next are sharing the frame budget with three dead tables.
+   *
+   *  Idempotent, so arming an already-running loop is a no-op instead of a second chain. */
+  _startLoop() {
+    if (this.raf) return;
+    this.last = 0;
+    this.raf = requestAnimationFrame(this._loop);
   }
 
   _stopLoop() {

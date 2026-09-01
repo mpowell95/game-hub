@@ -179,7 +179,20 @@
       setTimeout(function () {
         var root = document.getElementById('hub-root');
         if (shown || !root) return;
-        if (root.children.length > 0) return;   // hub mounted fine, stand down
+        // "DID THE REAL LAUNCHER MOUNT", not "is there anything in here" (2026-09-01).
+        //
+        // This used to be `root.children.length > 0`, which was true the moment the first-paint
+        // skeleton shipped (v546) - the skeleton is a child of #hub-root from parse time, so this
+        // watchdog stood down unconditionally and could never fire again, on any device, including
+        // one stuck on a white screen with no way to recover but clearing site data (which wipes
+        // unsynced history - the exact thing resetSW() exists to avoid).
+        //
+        // js/hub.js's render() replaces this element's innerHTML wholesale, so the ABSENCE of
+        // .hub-skel is the precise "the real UI mounted" signal. Testing for that rather than for
+        // the skeleton also catches a PARTIAL render - hub.js writing its markup and then throwing
+        // leaves real children behind and no skeleton, which a skeleton-only test would read as
+        // healthy.
+        if (root.children.length > 0 && !root.querySelector('.hub-skel')) return;
         shown = true;
 
         // AUTO-RECOVER, once per tab, BEFORE showing anyone an error panel. The overwhelmingly
