@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v553';
+const CACHE = 'game-hub-v554';
 
 const ASSETS = [
   './',
@@ -787,8 +787,21 @@ const MANIFEST_KEY = './__rest-manifest__';
 // so a game opened mid-warm still serves from cache instead of queueing behind the warm on the
 // network. This function deletes them itself once the new cache is complete.
 const WARM_CONCURRENCY = 6;
+// ONE-TIME FORCED REFETCH (2026-09-01). The surgical counterpart to PURGE_ALL_CACHES below: a
+// cached entry that is stale under its CURRENT name is invisible to every check this worker makes
+// (the manifest hash it is stored against is the correct one -- the BYTES are wrong), so it
+// survives deploys indefinitely. Anything listed here is dropped from the current cache at the
+// start of the warm, which then refetches it with `cache: 'reload'`. Cost is one file, not 8.4 MB.
+// Entries can be removed once a deploy carrying them has shipped.
+const FORCE_REFETCH = [
+  './tic-tac-toe/css/tic-tac-toe.css',
+];
+
 async function warmRest() {
   const cache = await caches.open(CACHE);
+  for (const p of FORCE_REFETCH) {
+    try { await cache.delete(p, { ignoreSearch: true }); } catch { /* nothing to drop */ }
+  }
   const oldCaches = [];
   for (const k of await caches.keys()) {
     if (k !== CACHE && k.startsWith('game-hub-')) oldCaches.push(await caches.open(k));
@@ -1009,7 +1022,17 @@ self.addEventListener('fetch', (event) => {
         || (await caches.match(req, { ignoreSearch: true }));
       if (cached) return cached;
       try {
-        const res = await fetch(req);
+        // `cache: 'reload'` is LOAD-BEARING, for the same reason it is on the network-first path
+        // below (the "fifth-playthrough fix"): the browser's own HTTP disk cache sits between this
+        // handler and the wire, and Pages serves every file with `max-age=600`. A plain fetch()
+        // here can be answered out of that disk cache with the PREVIOUS deploy's bytes, and this
+        // line then writes them into the NEW cache under the new name -- where warmRest()'s
+        // "already present, skip it" check leaves them for ever, and every later deploy CARRIES
+        // THEM FORWARD, since the manifest hash they are stored against is the correct new one.
+        // The result is a device whose version pill reads the new build while a game renders the
+        // old one, with no way to clear it from inside the app. That shipped on 2026-09-01 with
+        // the cache-first split and stranded Tic Tac Toe's board on one device.
+        const res = await fetch(new Request(req, { cache: 'reload' }));
         if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
       } catch (err) {
