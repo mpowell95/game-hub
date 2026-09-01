@@ -355,6 +355,31 @@ const PLAY = {
       if (!play) return { ok: false, why: 'no Play button on the setup screen' };
       const recSlots = await page.$$eval('.sk-slide-rec b, .sk-slide-recwide b', (els) => els.length);
       if (recSlots < 4) return { ok: false, why: `the machine slide shows ${recSlots} record slots, spec says 4 (best / today / average / hub-wide record)` };
+
+      // [KNOWN-BUG PROBE] THE NEXT SLIDE IS DRAWN BEFORE THE PLAYER SWIPES TO IT (2026-09-01).
+      //
+      // Matt's second screen recording: every swipe landed on an empty black box for half a second
+      // warm and a second and a half cold, because a machine's picture is a WebGL scene that is not
+      // even STARTED until the carousel reaches that slide. ui.js now draws the two neighbours at
+      // idle while the player reads the card they are on.
+      //
+      // WITHOUT TOUCHING THE CAROUSEL - that is the whole assertion. Any slide other than the
+      // selected one holding a real picture can only have got there from the prewarm. The budget is
+      // generous because this browser is on SwiftShader, where building a machine is far slower
+      // than on the phone this is about.
+      const neighbourDrawn = await page.evaluate(async () => {
+        const painted = () => [...document.querySelectorAll('img[data-machine], img[data-machine-locked]')]
+          .filter((el) => /^data:image\/jpeg/.test(el.getAttribute('src') || '')).length;
+        // TWO, not "more than it started with": the selection sits on THE CLASSIC, which is first
+        // in the list and so has exactly one neighbour. Asking for the count to keep growing fails
+        // on a correct build the moment that one neighbour has landed.
+        for (let i = 0; i < 50 && painted() < 2; i++) await new Promise((r) => setTimeout(r, 500));
+        return painted();
+      });
+      if (neighbourDrawn < 2) {
+        return { ok: false, why: 'no slide other than the selected one was ever drawn - the gallery '
+          + 'is not prewarming its neighbours, so every swipe lands on an empty box' };
+      }
       const readSk = () => page.evaluate(() => {
         try { return ((JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).skeeball || {}).sk || {}; }
         catch { return {}; }

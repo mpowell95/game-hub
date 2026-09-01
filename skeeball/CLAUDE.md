@@ -1636,6 +1636,104 @@ swipe - the ordinary path. Nothing anywhere resumed a rack, and nothing exercise
   **re-mounts in place rather than reloading**: `checkPlay`'s `addInitScript` wipes every `*.save.*`
   key on every navigation, so a reload deletes the very snapshot the probe needs.
 
+## The gallery drew each machine only when you reached it (2026-09-01)
+
+Matt's SECOND screen recording that day, on v550 - which is to say, on a build where the broken
+images were already fixed and the hub-wide records were already reading correctly. What it shows is
+the thing underneath both of those:
+
+```
+2.0s   taps Skeeball -> the gallery is up, THE CLASSIC's picture box is EMPTY
+3.0s   the picture paints                                        ~1.0s blank
+4.5s   swipes to HOT SHOT                     blank -> 6.0s      ~1.5s blank
+17.5s  swipes to RUNAWAY                      blank -> 19.0s     ~1.5s blank
+25.0s  RE-ENTERS Skeeball; hub-wide record reads "-" -> 25.5s it fills in
+28.0s  swipes again                           blank -> 28.5s     ~0.5s, every swipe, still
+```
+
+Both halves came out of the lazy-engine work earlier the same day (see "What tapping Skeeball used
+to cost" below), and neither had a test.
+
+### The picture is only STARTED when the carousel reaches the slide
+
+`_machinesWorthPainting()` paints the selected slide and nothing else, so every other machine's
+picture waits for the swipe that brings it into view - and that picture is a dynamic import of that
+machine's `render.js` + `machine.js` (110-146 KB), a whole WebGL scene built, `toDataURL`, and the
+context handed back. Cold that is ~1.5s; warm ~0.5s. And `_machineImg` was a field on the UI
+INSTANCE, so leaving Skeeball and coming back threw every picture away and paid for all of it again.
+
+- **The cache is module scope now** (`MACHINE_IMG`, capped at 16, oldest evicted). Safe because of
+  the KEY, not luck: it is [board, all-time score, all-time holder, your best, today, last game] -
+  every value the picture has baked into it - so a number that moves mints a new key and a stale
+  picture cannot be served, including to a second player on a shared phone.
+- **The two neighbouring machines are drawn at idle** (`_prewarmNeighbours`), so the next swipe is a
+  cache hit. Three constraints hold it: NEIGHBOURS ONLY (each extra machine is 110-146 KB, and the
+  set follows the player as the carousel settles); STRICTLY SEQUENTIAL, never `Promise.all`
+  (`renderMachineImage` hands its context back before returning, so one at a time never adds to the
+  page's WebGL context budget - and that budget is what made the whole hub choppy on 2026-08-26);
+  and SETUP SCREEN ONLY, cancelled on `destroy()` and at the top of `_startGameInner`, because a
+  queued picture must never build a scene on top of a live rack's frame budget.
+- **A slide being drawn shows a quiet skeleton, not an empty box** (`[data-painting]` in
+  `skeeball.css`). The emptiness is what read as BROKEN rather than slow, and a FAILED render left
+  exactly the same box - ui.js clears the attribute only on success, so a failure keeps the
+  skeleton. Not animated, for the reason `css/hub.css`'s `.hub-card-skel` gives about the launcher's
+  own first paint: over a few hundred milliseconds a pulse reads as a glitch. Open slides only; a
+  locked slide's picture lives in `.sk-lock-peek` and is already a greyed, blurred sliver.
+
+### The hub-wide record arrived after the picture that has it baked in
+
+`_refreshTopRecords()` awaits `readPlayersOnce()` - a full read of the `players/` node - with no
+local cache, so every mount painted a dash in the "Hub-wide record" row and in the backboard's ALL
+TIME column. And because the picture is KEYED on those values, the answer landing minted a new key
+and **the selected machine was rendered in WebGL a second time, on every single mount.**
+
+`this.top` is seeded from `TOP_KEY` (`gamehub.skeeball.top.v1`) before the first paint. Four things
+about that cache, since it is the only part of this change that touches anything record-shaped:
+
+- It is a **display cache of other people's records**. Nothing that scores, records or unlocks reads
+  it, `myRecords()` (the player's own best and today) does not come through it at all, and the live
+  read still runs every mount.
+- **The live answer replaces it; there is deliberately no `Math.max`.** The reflex is THE LAW rule 2
+  and it is the wrong reflex here: an admin void (`js/stats-corrections.js`) has to be able to bring
+  an app-wide record DOWN, and a monotonic cache would pin a voided score on a backboard for ever.
+- **An unanswered read never overwrites it and is never written back.** `readPlayersOnce()` returns
+  `{}` both when it fails and when it is not signed in, so an offline mount arrives with every
+  board's remote best reading 0 - and writing that back would erase the record the moment signal
+  dropped. `answered` (`rows.length > 0`) gates both. The first draft of this got it wrong in a
+  second way too, and `test-visual.mjs` caught it: with nothing held AND nothing answered the row
+  was assigned `undefined`, and the next line read `.score` off it.
+- Missing or malformed reads as "no cache" and behaves exactly as this screen did before.
+
+### Measured, same harness both sides (`measure-gallery.mjs`)
+
+Counts, not milliseconds: this browser is on SwiftShader, so the timings say nothing about a phone,
+but "how many times is a scene built and read back" transfers exactly.
+
+| | v550 (what Matt recorded) | after |
+|---|---|---|
+| slides holding a picture once the gallery settles | **1 of 5** | **3 of 5** |
+| renders caused by swiping to the next machine | **1** | **0** |
+| renders on re-entering Skeeball | **1** | **0** |
+
+The guarantee is ONE MACHINE AHEAD, not the whole carousel: a player swiping faster than the
+prewarm still meets a skeleton, and under SwiftShader a second immediate swipe measurably does.
+
+Verified separately, by seeding `gamehub.skeeball.top.v1` (the container cannot reach Firebase):
+the first paint reads `500 · King of Games` instead of a dash, and an offline mount leaves both the
+displayed value and the stored cache untouched.
+
+### What catches it now
+
+- **`skeeball/js/test.js`**, structural (this is DOM code the node suite cannot mount): ten
+  assertions, all born red against `4ca164c` except the slide-`src` one, which is born red against
+  `8bd8879` - the build the broken images were reported on. They pin the module-scope cache and its
+  cap, the prewarm existing / being sequential / being cancelled, the skeleton existing and not
+  animating, the seeded record, the offline guard, and that the cache is display-only.
+- **`test-visual.mjs`**'s skeeball probe asserts a second slide is drawn **without the carousel
+  being touched**. Its bar is `>= 2` painted slides, not "the count grew": the selection sits on THE
+  CLASSIC, which is first in the list and has exactly one neighbour, so a growing-count test fails
+  on a correct build the moment that neighbour lands.
+
 ## What tapping Skeeball used to cost (2026-09-01)
 
 Matt, with a screen recording from Anita's phone of opening this game: *"What's wrong with it? Why
@@ -1791,6 +1889,15 @@ browser throttles the whole hub.
   real lane with real touch through full racks and asserts the score moved and the rack recorded.
   There is no separate MOTION probe for the same reason as Pinball: everything that moves is
   drawn into one canvas, so the canvas-sampling check lives inside the PLAY probe.
+
+  **THE PLAY PROBE IS FLAKY, MEASURED, AND IT IS NOT YOUR DIFF** (2026-09-01). Run three times
+  against an untouched `origin/main` checkout it failed **2 of 3** with *"threw a full rack and the
+  rack-over sheet never appeared"*, and passed the third. The scripted swipes are timing-based
+  against a SwiftShader canvas, so a slow frame turns a throw into a dribble and the rack never
+  finishes inside the probe's budget. **Re-run it before you believe that particular failure**, and
+  do not spend an afternoon bisecting your own change for it. A DIFFERENT failure message from the
+  same probe is worth taking seriously. Fixing the flake properly means driving the rack off the
+  game's own events rather than off wall-clock swipes, and is not yet done.
 
 ## Things a future session will want to know
 

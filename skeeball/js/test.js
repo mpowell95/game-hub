@@ -739,6 +739,81 @@ if (G.mat) {
     'without this, any future throw between the HUD write and _bindPlay repeats the same incident');
 }
 
+// --- [KNOWN-BUG PROBE] the gallery's pictures, and how long a slide is allowed to be empty ------
+//
+// Born of Matt's SECOND screen recording, 2026-09-01: v550, every swipe landing on an empty black
+// box for half a second warm and a second and a half cold, and the hub-wide record reading "-" on
+// every mount before it filled in. All of it came out of the lazy-engine change earlier that day
+// (a machine's picture is only STARTED when the carousel reaches it), and none of it had a test.
+//
+// Structural, for the same reason as the probe above: this is DOM code the node suite cannot mount.
+{
+  const uiSrc = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const cssSrc = readFileSync(new URL('../css/skeeball.css', import.meta.url), 'utf8');
+
+  // v550's fix, which shipped with no test at all: an <img> with no src renders as a BROKEN-IMAGE
+  // icon next to its alt text. Matt: "None of the skeeball machine images are there - broken
+  // images appear, then the machines load." Born red against 8bd8879, the build he saw it on.
+  const imgTags = uiSrc.match(/<img class="sk-(?:slide|lock)-img"[^>]*>/g) || [];
+  ok('[KNOWN-BUG PROBE] every slide <img> ships with a src (a src-less <img> is a broken-image icon)',
+    imgTags.length >= 3 && imgTags.every((tag) => /\ssrc="data:image\/gif;base64,/.test(tag)),
+    `${imgTags.filter((t) => !/\ssrc=/.test(t)).length} of ${imgTags.length} slide images have no src`);
+
+  // The picture cache must outlive the UI instance, or leaving Skeeball and coming back re-renders
+  // every machine in WebGL from scratch - which is what Matt's recording caught at 25s.
+  ok('[KNOWN-BUG PROBE] the machine-picture cache is MODULE scope, not a field on the instance',
+    /^const MACHINE_IMG = new Map\(\)/m.test(uiSrc) && !/this\._machineImg/.test(uiSrc),
+    'a per-instance cache is thrown away on every unmount, so re-entering the gallery pays for\n'
+    + '        every picture again - see MACHINE_IMG in ui.js for why module scope is safe here');
+
+  // ... and it must be bounded. A page that never reloads must not grow a JPEG cache for ever.
+  ok('the picture cache is capped and evicts oldest-first',
+    /MACHINE_IMG_CAP/.test(uiSrc) && /while \(MACHINE_IMG\.size > MACHINE_IMG_CAP\)/.test(uiSrc));
+
+  // The neighbours are drawn ahead of the swipe - and STRICTLY ONE AT A TIME. renderMachineImage
+  // hands its WebGL context back before returning, so sequential prewarm never adds to the page's
+  // context budget; a parallel one would, and that budget is what made the hub choppy on
+  // 2026-08-26 (see "Frame rate: why it got slower the longer you played" in the folder doc).
+  const prewarm = /_prewarmNeighbours\(\)\s*{[\s\S]*?\n  }/.exec(uiSrc);
+  ok('[KNOWN-BUG PROBE] the neighbouring slides are drawn before the player swipes to them',
+    !!prewarm && /_ensureMachineImg\(/.test(prewarm[0]),
+    'without this every swipe lands on an empty box while that machine renders');
+  ok('the prewarm is sequential, never parallel (one WebGL context at a time)',
+    !!prewarm && !/Promise\.all/.test(prewarm[0]) && /queue\.shift\(\)/.test(prewarm[0]),
+    'building several machines at once is the context-budget bug of 2026-08-26 rebuilt on purpose');
+  ok('the prewarm is cancelled on teardown and never runs on the play screen',
+    /destroy\(\)\s*{[\s\S]{0,400}?_cancelPrewarm\(\)/.test(uiSrc)
+    && /_startGameInner\(snap, board\)\s*{[\s\S]{0,300}?_cancelPrewarm\(\)/.test(uiSrc),
+    'a queued picture must not build a WebGL scene on top of a live rack, or after the game is gone');
+
+  // The empty box is the half that read as BROKEN rather than slow, so it must say "loading".
+  ok('a slide being drawn shows the quiet skeleton, not an empty box',
+    /\[data-painting\]::after/.test(cssSrc) && /setAttribute\('data-painting'/.test(uiSrc));
+  // And nothing in it animates - it is on screen for a few hundred ms, where a pulse reads as a
+  // glitch (css/hub.css's .hub-card-skel says the same about the launcher's own first paint).
+  const skel = /\[data-painting\]::after\s*{[^}]*}/.exec(cssSrc);
+  ok('the skeleton does not animate (so it needs no reduced-motion branch)',
+    !!skel && !/animation|transition/.test(skel[0]));
+
+  // The hub-wide record is seeded from a local cache so the first paint is not a dash - and so the
+  // picture, which has that number baked into it, is rendered ONCE per mount rather than twice.
+  ok('[KNOWN-BUG PROBE] the hub-wide record is seeded from cache before the first paint',
+    /this\.top = loadTopCache\(\)/.test(uiSrc),
+    'an empty this.top paints a dash, then the network answer mints a new picture key and the\n'
+    + '        selected machine is rendered in WebGL a second time on every single mount');
+  // THE LAW-adjacent, and the trap worth pinning: an offline mount reads zero rows, and that must
+  // never overwrite or be written back over a real cached record.
+  const refresh = /_refreshTopRecords\(\)\s*{[\s\S]*?\n  }/.exec(uiSrc);
+  ok('an unanswered (offline) read never overwrites or re-saves the cached record',
+    !!refresh && /const answered = rows\.length > 0/.test(refresh[0])
+    && /if \(answered\) saveTopCache\(/.test(refresh[0]),
+    'writing an offline zero back would erase the app-wide record the moment signal dropped');
+  // ... and it is a DISPLAY cache only: nothing that scores, records or unlocks may read it.
+  ok('the record cache is display-only (no scoring, recording or unlock path reads it)',
+    (uiSrc.match(/(?<!function )loadTopCache\(\)/g) || []).length === 1
+    && !/recordSkeeball\([^)]*loadTopCache/.test(uiSrc));
+}
+
 // --- summary -----------------------------------------------------------------------------------
 
 console.log(`\nSkeeball engine: ${passed} passed, ${failures.length} failed.`);
