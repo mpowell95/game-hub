@@ -117,7 +117,7 @@ function isHiddenRow(g) {
 // carve-out applies, same class as favorites/theme/language. Unlike the difficulty filter
 // (which resets to All every open), the sort choice PERSISTS across opens (Matt, D6).
 const SORT_KEY = 'gamehub.lb.sort.v1';
-const VALID_SORTS = new Set(['alpha', 'played', 'wins']);
+const VALID_SORTS = new Set(['alpha', 'played', 'wins', 'high']);   // 'high' = Skeeball's best single rack
 function loadSort() {
   try {
     const raw = localStorage.getItem(SORT_KEY);
@@ -452,6 +452,22 @@ function hcBestAt(g, tier) {
  *  tierOf('classic') is null, so there is no tier to slice a best by. gameDetail already drops
  *  rows with no plays at the selected tier, so this is only ever asked with tier null today.
  *  When the filter becomes a MACHINE filter, read sk.boards[machine].best here. */
+/** LIFETIME points - every point this player has ever scored on Skeeball, or on ONE machine when
+ *  the filter names one. This is what the board's Points sort ranks by (2026-09-01). Matt: "Points
+ *  should show lifetime points. Not your best single round."
+ *  It used to read skBestAt below, so a player with 1451 games and one 900 rack read "900 POINTS" -
+ *  a single rack's ceiling standing in for a lifetime, which told you nothing about how much anyone
+ *  had actually played. Both numbers were always stored; only the wrong one was on the board.
+ *  Adds across a person's devices in players-agg.js, which is what makes a lifetime total honest
+ *  for somebody who plays on two phones. */
+function skPointsAt(g, machine) {
+  const sk = g.games.skeeball && g.games.skeeball.sk;
+  if (!sk) return 0;
+  if (!machine || machine === 'all') return sk.points | 0;
+  return ((sk.boards || {})[machine] || {}).points | 0;
+}
+/** BEST SINGLE RACK - the high score. The same reading it always was; it is just no longer what
+ *  "Points" means. The board offers it as its own sort now (see sortItemsFor). */
 function skBestAt(g, machine) {
   const sk = g.games.skeeball && g.games.skeeball.sk;
   if (!sk) return 0;
@@ -479,7 +495,7 @@ function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
-  if (id === 'skeeball') return skBestAt(g, _machine);
+  if (id === 'skeeball') return skPointsAt(g, _machine);
   return winsAtTier(g, [id], tier);
 }
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
@@ -526,10 +542,19 @@ function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[unitKeyOf(id)] || 'lb_sort_wins';
   return [
     { sort: 'wins', labelKey },
+    // SKEEBALL ONLY, and only since Points started meaning a lifetime (2026-09-01). Matt: "Another
+    // sort option should be added for best single round tho. High scores or something like that."
+    // It is offered nowhere else because no other game stores a per-game best AND a lifetime total
+    // as two separate numbers - everywhere else the metric already IS the one number there is.
+    ...(id === 'skeeball' ? [{ sort: 'high', labelKey: 'lb_sort_high' }] : []),
     { sort: 'played', labelKey: 'lb_sort_games_short' },
     { sort: 'alpha', labelKey: 'lb_sort_name' },
   ];
 }
+/** `_sort` is ONE value shared by By Player and every game board, and 'high' means something on
+ *  exactly one of them. Everywhere else it resolves to the metric sort, so a saved default of
+ *  'high' can never leave a screen with no pill lit and no order anybody asked for. */
+function effectiveSort(id) { return _sort === 'high' && id !== 'skeeball' ? 'wins' : _sort; }
 // By Game's own three orders, remembered the same way By Player's are (saved default view).
 // 'fav' reads js/favorites.js, the launcher's own favorites list, keyed by HUB id.
 const GAME_SORTS = [
@@ -584,7 +609,7 @@ function catControlsHTML(list) {
     <button type="button" class="lb-default${isDefault ? ' is-set' : ''}" data-role="lb-default"${isDefault ? ' disabled' : ''}>${esc(t(isDefault ? 'lb_is_default' : 'lb_make_default'))}</button>
   </div>`;
   return `<div class="lb-ctrls">
-    ${sortPillsHTML(SORT_ITEMS_DEFAULT, _sort, 'sort')}
+    ${sortPillsHTML(SORT_ITEMS_DEFAULT, effectiveSort(null), 'sort')}
     ${selectBtnHTML('cat', t('lb_showing', { name: t(cur.nameKey) }))}
     ${panel}
   </div>`;
@@ -602,7 +627,7 @@ function catControlsHTML(list) {
  *   - a game with neither gets no filter at all, and the row is just the sort pills.
  *  Tier items keep their SHAPE (`diffShapeSVG`), never hue alone. */
 function boardControlsHTML(id, fieldTiers, machineIds) {
-  const pills = sortPillsHTML(sortItemsFor(id), _sort, 'sort');
+  const pills = sortPillsHTML(sortItemsFor(id), effectiveSort(id), 'sort');
   if (id === 'skeeball' && machineIds.length > 1) {
     const cur = _machine === 'all' ? t('lb_machine_all') : skMachineMeta(_machine).name;
     const panel = _panel !== 'machine' ? '' : `<div class="lb-panel-list" role="listbox" aria-label="${esc(t('lb_machine_filter_aria'))}">
@@ -899,6 +924,10 @@ function playerListHTML(list) {
   const rows = list.filter((g) => playedOf(g, null) > 0);
   if (!rows.length) return emptyState(t('lb_empty_all'));
   const value = (g) => catValueOf(g, _cat);
+  // 'high' is Skeeball's board sort and means nothing here; effectiveSort resolves it to the
+  // measure sort so a saved default of it cannot leave this screen with no pill lit (see its own
+  // note). Everything below reads pSort, never _sort, so the pills and the order cannot disagree.
+  const pSort = effectiveSort(null);
   // THE BADGE RANKS BY WHATEVER THE LIST IS SORTED BY, when that sort is a MEASURE (2026-08-26).
   // rankMap's own comment says the chip must not depend on the list's order, so that re-sorting
   // by name cannot renumber the podium - which is right for NAME, and was applied to all three
@@ -906,8 +935,8 @@ function playerListHTML(list) {
   // list is literally in order of most played), so a badge frozen to the wins order sat beside it
   // reading 1, 2, 6, 3, 5, 4. Matt, from the live board: "Why did that break?"
   // Alphabetical is not a ranking, so it keeps the wins podium exactly as before.
-  const { rankOf, tiedAt } = rankMap(rows, _sort === 'played' ? (g) => playedOf(g, null) : value);
-  if (_sort === 'alpha') {
+  const { rankOf, tiedAt } = rankMap(rows, pSort === 'played' ? (g) => playedOf(g, null) : value);
+  if (pSort === 'alpha') {
     rows.sort((a, b) => {
       const n = (a.name || '').localeCompare(b.name || '');
       if (n) return n;
@@ -915,7 +944,7 @@ function playerListHTML(list) {
       if (w) return w;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
-  } else if (_sort === 'played') {
+  } else if (pSort === 'played') {
     rows.sort((a, b) => {
       const p = playedOf(b, null) - playedOf(a, null);
       if (p) return p;
@@ -947,10 +976,10 @@ function playerListHTML(list) {
     // gameDetail below never lost this (see its own `big`), so the two screens had drifted apart.
     // Restored here in the redesign's category vocabulary: the category value is still what the
     // Wins and Name sorts lead with, and the OTHER number moves to the subline either way.
-    const big = _sort === 'played'
+    const big = pSort === 'played'
       ? { val: played, unit: unitWord('lb_played_count') }
       : { val: value(g), unit: catUnit(_cat) };
-    const subText = _sort === 'played'
+    const subText = pSort === 'played'
       ? `${value(g)} ${catUnit(_cat)}`
       : t('lb_played_count', { n: played });
     // NO FOOTER ROW HERE (2026-08-31). Matt, on this screen beside a game board's: "I don't like
@@ -1239,6 +1268,16 @@ function sortRows(rows, id, sort) {
     });
     return;
   }
+  if (sort === 'high') {
+    rows.sort((a, b) => {
+      const h = skBestAt(b, _machine) - skBestAt(a, _machine);
+      if (h) return h;
+      const m = gameMetricAt(b, id, _tier) - gameMetricAt(a, id, _tier);   // lifetime points breaks a tie
+      if (m) return m;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+    return;
+  }
   if (id === 'tictactoe') {
     rows.sort((a, b) => {
       const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
@@ -1295,10 +1334,15 @@ function gameDetail(list, id) {
   const rows = list.filter((g) => boardPlaysOf(g, id) > 0);
   // Same rule as By Player above: the badge follows the sort when the sort is a measure. This
   // board scrambled identically under "Games Played" - the badge stayed on the game's own metric.
-  const { rankOf, tiedAt } = rankMap(rows, _sort === 'played'
+  // The badge follows the sort whenever the sort is a MEASURE (By Player above has the same rule):
+  // ranking by lifetime points and then numbering the rows by best rack reads as a broken board.
+  const bSort = effectiveSort(id);
+  const { rankOf, tiedAt } = rankMap(rows, bSort === 'played'
     ? (g) => boardPlaysOf(g, id)
-    : (g) => gameMetricAt(g, id, _tier));
-  sortRows(rows, id, _sort);
+    : bSort === 'high'
+      ? (g) => skBestAt(g, _machine)
+      : (g) => gameMetricAt(g, id, _tier));
+  sortRows(rows, id, bSort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
         const chip = rankChipHTML(rankOf[g.key], tiedAt(g.key));
@@ -1309,8 +1353,21 @@ function gameDetail(list, id) {
         const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null))
           + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(unitKeyOf(id));
-        const big = _sort === 'played' ? { val: played, unit: unitWord('lb_played_count') } : { val: metric, unit: metricUnit };
-        const subText = _sort === 'played' ? `${metric} ${metricUnit}` : t('lb_played_count', { n: played });
+        // THE HEADLINE IS WHAT YOU SORTED BY, the rule this file already keeps for By Player and
+        // for Games Played. Skeeball's 'high' sort leads with the best single rack and keeps the
+        // lifetime total on the subline, so the two are never confusable and neither is hidden.
+        let big;
+        let subText;
+        if (bSort === 'played') {
+          big = { val: played, unit: unitWord('lb_played_count') };
+          subText = `${metric} ${metricUnit}`;
+        } else if (bSort === 'high') {
+          big = { val: skBestAt(g, _machine), unit: t('lb_unit_high') };
+          subText = `${metric} ${metricUnit}`;
+        } else {
+          big = { val: metric, unit: metricUnit };
+          subText = t('lb_played_count', { n: played });
+        }
         return playerCardHTML(g, chip, big, subText, tiles);
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
