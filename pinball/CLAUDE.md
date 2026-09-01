@@ -222,6 +222,37 @@ probe (three frames a fifth of a second apart, failing if they are identical), w
 same failure MOTION exists for. Every run still prints "No motion probe yet: pinball"; that is the
 honest state and this paragraph is the reason.
 
+## Every "Play again" left a loop running (2026-09-01)
+
+Ported from Skeeball, which had this exact defect and fixed it on 2026-08-26
+(`skeeball/CLAUDE.md`, "Frame rate: why it got slower the longer you played"). Found by an audit of
+the whole hub for the same shape, not by a report.
+
+`_startGame()` armed a rAF chain unconditionally, and it is reachable from **two** places: the setup
+screen's Play, which `_renderSetup()` precedes with `_stopLoop()`, and the game-over card's "Play
+again", which does not. `_frame` re-arms at the top of every frame and `_stopLoop()` only ever held
+the LAST chain's id, so every "Play again" left the previous chain running with nothing able to
+cancel it.
+
+**The orphans outlive the game.** `destroy()` cannot reach them, so they keep stepping physics and
+drawing **in the hub** for the life of the page — leave Pinball after a few replays and the
+launcher, and whatever you open next, are sharing the frame budget with dead tables.
+
+Measured in Chromium, counting rAF callbacks per half-second (one chain at 60 fps ≈ 30):
+
+```
+                                      before      after
+one game running                          29         29
+after three more "Play again"            116         29
+after destroy(), back on the hub          87          0
+```
+
+The fix is `_startLoop()`, idempotent — `if (this.raf) return;` — exactly as in
+`skeeball/js/ui.js:1275`. Re-run the count above after touching `_startGame`, `_frame` or
+`_stopLoop`. **Nothing enforces this yet**: a `test-game-conventions.mjs` check for rAF idempotence
+is planned but not written, so for now this defect is caught by reading the code, which is exactly
+how it survived here for as long as it did.
+
 ## Things a future session will want to know
 
 - **The speed cap is a correctness bound, not a difficulty knob.** `MAX_SPEED / PHYS_DT` is the

@@ -254,6 +254,23 @@ no stuck pedal; a held touch drives; `touchend` releases; both pedals held at on
 independently; and a **deliberately forced** selection over the distance readout is removed
 immediately. Mouse and keyboard paths re-smoke-tested for regression.
 
+## The loop woke 60 times a second on the garage (2026-09-01)
+
+`tick()` re-armed at the top and only THEN checked the screen, so from the moment the game mounted
+it woke every animation frame — on the garage and the menu, screens that never animate — to do
+nothing but re-arm itself and return. One chain, so nothing leaked; it was simply a permanent 60 Hz
+wake on a phone, sharing the frame budget with whatever the player was actually reading.
+
+Measured in Chromium, sitting on the garage for one second: **59 rAF callbacks before, 0 after.**
+
+`startLoop()`/`stopLoop()` now bracket the play screen (`startRun()` starts it, the return to the
+garage stops it), and `tick` lets the chain END rather than re-arming when `screen !== 'play'`.
+`startLoop()` is idempotent for the same reason Pinball's and Skeeball's are.
+
+**The garage preview's `_previewRaf` is a separate, one-shot chain and is untouched** — it is the
+retry in the three-guard fix described under "The garage preview measured 1x1", and it must stay
+independent of the play loop.
+
 ## Known gaps / next steps
 
 - **No multiplayer.** There is no shared state to lockstep here (see `js/CLAUDE.md`'s Boggle
