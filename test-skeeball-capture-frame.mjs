@@ -29,7 +29,7 @@
 //   node test-skeeball-capture-frame.mjs
 
 import { BOARDS } from './skeeball/js/boards.js';
-import { engineFor } from './skeeball/js/engines.js';
+import { engineFor, loadEngine } from './skeeball/js/engines.js';
 
 // Machines whose engine has NOT had the fix yet, each with the reason it is still open. A stale
 // entry FAILS this suite, the same way test-game-conventions.mjs's KNOWN_GAPS does - a waiver
@@ -51,6 +51,9 @@ const stillBroken = new Set();
 
 for (const board of BOARDS) {
   const G = board.geom;
+  // engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+  // fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+  await loadEngine(board.id);
   const E = engineFor(board.id);
   const M = E.buildMachine(G);
   // The one question physics.js section 2 asks, in the frame it would ask it in.

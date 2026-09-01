@@ -38,7 +38,7 @@
 // Default 21 x 11 x 3 closed + 21 x 11 open = 924 throws, ~90s.
 
 import { boardById } from './skeeball/js/boards.js';
-import { engineFor } from './skeeball/js/engines.js';
+import { engineFor, loadEngine } from './skeeball/js/engines.js';
 
 const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] ? Number(argv[i + 1]) : d; };
@@ -48,6 +48,9 @@ const PHASES = flag('phases', 3);
 
 const board = boardById('runaway');
 const G = board.geom;
+// engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+// fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+await loadEngine(board.id);
 const { simulateThrow } = engineFor(board.id).physics;
 const [, runner] = G.mover.holes;
 

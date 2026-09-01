@@ -188,7 +188,7 @@ export class SkeeballGame {
     // comes off its mark mid-flight. Sharing the object is what keeps the ball, any other live
     // ball, and the renderer looking at ONE machine. `closed` is passed as a Set built here,
     // which physics.js only reads.
-    this.balls.push(engineFor(this.board.id).physics.startThrow(
+    this.balls.push(engineFor(this.board.id, { physics: true }).physics.startThrow(
       this.board,
       { ...params, t0: this.machineT, closed: new Set(this.closed), sweeps: this.sweeps },
     ));
@@ -205,7 +205,7 @@ export class SkeeballGame {
     if (!this.balls.length) return;
     // A COPY: _settle removes from this.balls while we are walking it.
     for (const ball of this.balls.slice()) {
-      const P = engineFor(this.board.id).physics;
+      const P = engineFor(this.board.id, { physics: true }).physics;
       P.step(this.board, ball, dt);
       for (const ev of P.takeEvents(ball)) {
         // Physics events pass through for the renderer, and the rules react to the two that

@@ -55,7 +55,7 @@
 // engine"), and THE CLASSIC's continuous slope is exactly why it never needed this.
 
 import { boardById } from './skeeball/js/boards.js';
-import { engineFor } from './skeeball/js/engines.js';
+import { engineFor, loadEngine } from './skeeball/js/engines.js';
 import { buildMachine } from './skeeball/js/machines/brickcity/machine.js';
 
 const BOARD = 'brickcity';
@@ -75,6 +75,9 @@ const ok = (name, cond, detail) => {
 };
 
 const board = boardById(BOARD);
+// engines.js loads a machine's three files ON DEMAND since 2026-09-01 (the launch-weight
+// fix): engineFor() is synchronous and throws unless that machine has been loaded first.
+await loadEngine(BOARD);
 const P = engineFor(BOARD).physics;
 const G = board.geom;
 const M = buildMachine(G);

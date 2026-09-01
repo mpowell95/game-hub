@@ -170,7 +170,7 @@ gallery `padding-top: 84px` to clear it.
 |---|---|
 | `js/vendor/` | **vendored battle-tested libraries** (2026-08-13, Matt's explicit instruction - see below): `cannon-es.js` (rigid-body physics, ESM), `three.module.min.js` + `three.core.min.js` (renderer). Committed files, no build step, no network fetch. Never hand-edit them |
 | `js/machines/<id>/machine.js` | **one per machine.** That machine's GEOMETRY, once, in metres: every floor, wall, band segment and collar as data. physics.js builds cannon bodies from it and render.js builds three meshes from it, so the wall you see IS the wall the ball hits |
-| `js/engines.js` | board id -> that machine's own `{ physics, buildMachine, Renderer }`. The ONLY file that knows the three engine folders exist; see the HARD RULE above |
+| `js/engines.js` | board id -> that machine's own `{ physics, buildMachine, Renderer }`. The ONLY file that knows the engine folders exist; see the HARD RULE above. **Loads them ON DEMAND since 2026-09-01** (`loadEngine(id, { physics })`); `engineFor(id)` stays synchronous for the hot paths and THROWS if that machine has not been loaded - see "What tapping Skeeball used to cost" below |
 | `js/boards.js` | the machine registry: identity, look tokens, the `geom` block (sizes, angles, launch speeds, hole layout), unlock chain. Pure |
 | `js/machines/<id>/physics.js` | **one per machine.** The ball, simulated by cannon-es: materials/contact tuning, speed-aware hole capture, trough scoring, the watchdog (NO magnetism - see below). Deterministic, no rng |
 | `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
@@ -1574,6 +1574,107 @@ from cup floor to rim and asks the one question `physics.js` asks. The 41x21 gri
 BRICK CITY's parked ball only 4 times in 861; a geometric check cannot be fooled by a grid that
 misses the conditions, costs nothing to run, and discovers machines from `BOARDS`, so the next
 one is covered the day it ships.
+
+## What tapping Skeeball used to cost (2026-09-01)
+
+Matt, with a screen recording from Anita's phone of opening this game: *"What's wrong with it? Why
+does it take so long? I even opened and played a game before taking this screen recording. And
+never closed or even left the gamehub. It needs to be better than this."*
+
+### What the recording actually shows
+
+19 seconds, 384x832 at 60fps. Stepped frame by frame, with the scene-change timestamps:
+
+```
+4.17s  she taps Skeeball
+4.58s  the gallery appears                                    (0.4s - the good case)
+8.15s  back on the hub
+10.30s the app RESTARTS ITSELF - dark splash, then a blank white launch screen
+11.02s the hub again, from scratch.  She never left it.
+15.18s she taps Skeeball again
+15.92s RAW UNSTYLED HTML - a page-high black padlock over left-aligned text
+16.48s the CSS finally applies
+16.55s the machine picture paints                             (1.4s, 570ms of it looking broken)
+```
+
+### The three causes, each measured
+
+**1. The module graph was 2,318 KB across 41 files.** Walking the ES-module graph from
+`js/ui.js`: Ball Run 988 KB is the next heaviest game in the hub, and the median of the ones
+sampled (Pinball, Pool, Hill Climb, Escoba) is 328 KB. Skeeball was 7x that.
+
+**2. All of it was re-downloaded on every single open.** With the whole game verifiably already in
+the service worker's cache - warmed and confirmed present before the test - opening it still sent
+**28 requests and 2,188 KB** to the server. `sw.js` was network-first for `.js`/`.css` with
+`cache: 'reload'`, so the cached copy was only used if the network LOST the 2.5s race. The
+deadline and the slow latch capped how bad that got; neither stopped it happening.
+
+**3. Almost none of it was needed to draw that screen.** `engines.js` imported all five machines'
+`physics.js` + `machine.js` + `render.js` statically, which drags in three.js (733 KB, its normal
+two-file split build) and cannon-es (338 KB) - to show one still picture of THE CLASSIC. And
+`_renderSetup` then drew a picture for EVERY slide, so five WebGL contexts were built against a
+phone's small global budget before the player had swiped anywhere.
+
+```
+as shipped                                  41 files, 2318 KB
+only the machine being shown                29 files, 1677 KB
+... and physics deferred until Play         27 files, 1309 KB
+```
+
+The restart at 10.3s is the same story from the other end: 2.3 MB of resident JavaScript plus
+three.js scenes is the footprint that gets a PWA's web view reclaimed on iOS. The GL teardown
+itself was already careful (`releaseRenderer`, 2026-08-26) - this was weight, not a leak.
+
+### What changed
+
+- **`engines.js` loads a machine's three files on demand.** `loadEngine(id, { physics: false })`
+  loads only what DRAWS a machine (the gallery picture, the how-to card); the default loads
+  physics too and is what a rack needs. `engineFor(id)` is still synchronous - `game.js` calls it
+  inside the physics step and cannot await - and now THROWS if that machine has not been loaded.
+  **It does not fall back to the classic for a machine it simply has not loaded yet**: substituting
+  one machine's physics for another is the precise failure the HARD RULE above exists to prevent,
+  so it is loud instead. The unknown-board-id fallback is unchanged.
+- **The gallery draws ONE machine at a time** (`_machinesWorthPainting`): the selected slide, plus
+  any already drawn this session. The rest paint on the swipe that brings them into view, and the
+  carousel's settle handler warms that machine's physics in the background - so Play is not where
+  cannon-es gets downloaded.
+- **`ensureCSS()` now resolves when the stylesheets have actually parsed**, and the constructor
+  keeps the root hidden (an INLINE `visibility`, because `hub.js` sets `.hidden = false` on that
+  same element the instant `init()` returns) until they have, capped at `CSS_WAIT_CAP_MS`. A sheet
+  that 404s or hangs must never leave a player looking at a blank rectangle for ever. It also
+  matches an existing `<link>` by resolved href now, so `skeeball/index.html`'s own
+  `<link rel="stylesheet" href="css/skeeball.css">` is no longer loaded a second time on the
+  standalone page.
+- **`sw.js` serves the REST tier cache-first.** Root `CLAUDE.md`'s service-worker section carries
+  the reasoning and what it deliberately does NOT cover; the short version is that the shell stays
+  network-first, so the app still finds a new deploy on the next hub load.
+
+### Measured after, same harness, warm cache
+
+```
+                                  before          after
+bytes that left the device        2,188 KB        19 KB   (js/viewport.js + css/ui.css, both SHELL)
+requests that left the device     28              2
+import() the module graph         -               23 ms
+init() (builds the DOM)           -                6 ms
+tap -> the gallery on screen      -               ~50 ms, and never unstyled
+```
+
+The machine picture still costs one WebGL render after that (~100ms on Anita's phone, read off
+her own recording at 16.48 -> 16.55s); it is deferred behind a painted screen and always was.
+
+### Things that are still true, and one that is now a caveat
+
+- The five machines are as isolated as they ever were - MORE so, since a machine is not even
+  loaded unless it is the one on screen. Nothing in `machines/<id>/` was touched.
+- Six node scripts call `engineFor` at module scope and now `await loadEngine(...)` first:
+  `js/test.js`, `sweep-mover.mjs`, `test-brickcity-stall.mjs`, `test-runaway-capped.mjs`,
+  `test-skeeball-capture-frame.mjs`, `test-skeeball-machine-spec.mjs`. A new one must too.
+- **CAVEAT, accepted:** on the first hub load after a deploy, a game opened before `warmRest()`
+  has reached its files runs the PREVIOUS build's code for that one visit. Measured on a fast
+  local link, the window is about 15 seconds. Verified end to end (new worker installs -> new
+  cache warms -> old cache deleted -> the device runs the new build), and it is why the shell is
+  deliberately left on network-first.
 
 ## Adding the next machine
 
