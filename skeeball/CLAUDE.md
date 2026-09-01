@@ -1575,6 +1575,67 @@ BRICK CITY's parked ball only 4 times in 861; a geometric check cannot be fooled
 misses the conditions, costs nothing to run, and discovers machines from `BOARDS`, so the next
 one is covered the day it ships.
 
+## The rack resumed on the wrong machine's engine (2026-09-01)
+
+Matt, with a screenshot of HOT SHOT: RUNAWAY - a fully painted HUD (score 100, the ball pips, all
+three goal rails) over a completely empty playfield: *"You broke skeeball. I can go back to the hub
+but nothing else."*
+
+Shipped and found the same day as the lazy-engine change below, and caused by it.
+
+### The mechanism
+
+`_startGame` resolved its board from **the carousel's selection** while `SkeeballGame.restore(snap)`
+(`game.js`) rebuilds the rack on **the snapshot's board**:
+
+```
+_startGame      boardById(this.settings.board)  ->  await loadEngine(that)
+restore(snap)   new SkeeballGame(snap.board)
+then            engineFor(this.game.board.id)   ->  THROWS when they differ
+```
+
+They diverge constantly, because **the carousel writes `settings.board` on every swipe settle** (and
+`_popLock`'s `done()` does too) while a mid-rack autosave stays pinned to the machine it was banked
+on. Play a rack, leave mid-rack, swipe the gallery to anything else, come back: the constructor's
+automatic resume restores the saved rack and loads a different machine's engine.
+
+Harmless before the engines went lazy - `engineFor` returned a statically imported engine for any
+id. Now it throws, and **where** it throws is what made it so bad: after the HUD's `innerHTML` is
+written, before `_bindPlay`, `_fit` and `_startLoop`. So the player gets a painted score over a
+dead, unsized canvas (300x150, the untouched default) with no input bound and nothing on screen
+admitting anything is wrong. Only the hub's own back button works, because that is hub chrome.
+
+The Resume BUTTON was always guarded (`snap.board === this.settings.board`, `_paintSetupActions`).
+It is the constructor's resume-at-mount that had no such gate.
+
+**No player data was ever at risk**: `_startGame` throws before anything writes, and `clearSave()`
+only runs on an explicit Play / New game, so the banked rack survived and came straight back.
+
+### The fix, both halves
+
+1. **One source for the board.** `_startGame` now resolves
+   `boardById(snap && snap.board ? snap.board : this.settings.board)`. `restore()` resolves
+   `snap.board` through the same `boardById`, so the engine loaded and the engine used agree by
+   construction rather than by coincidence.
+2. **A mount that throws lands on the gallery.** The wrong engine was the defect; the
+   unrecoverable screen is what cost a session. The body moved to `_startGameInner` and the caller
+   catches, logs loudly (rule 6) and falls back to `_renderSetup()`. Any future throw between the
+   HUD write and `_bindPlay` is now "it bounced me to the machine picker" - recoverable, and
+   something a player can report.
+
+### Why the suites missed it, and what now catches it
+
+`test-visual.mjs`'s PLAY probe plays THE CLASSIC from the gallery, with no banked save and no
+swipe - the ordinary path. Nothing anywhere resumed a rack, and nothing exercised a second machine.
+
+- **`skeeball/js/test.js`** carries a `[KNOWN-BUG PROBE]` pair, born red against the broken build:
+  `_startGame` must derive its board from the snapshot, and a mid-mount throw must fall back to the
+  gallery. Structural, because the defect is in DOM code that node suite cannot mount.
+- **`test-visual.mjs`**'s skeeball probe now finishes by banking a rack on RUNAWAY, pointing the
+  selection at THE CLASSIC, re-mounting, and asserting the canvas gets a real size. Note it
+  **re-mounts in place rather than reloading**: `checkPlay`'s `addInitScript` wipes every `*.save.*`
+  key on every navigation, so a reload deletes the very snapshot the probe needs.
+
 ## What tapping Skeeball used to cost (2026-09-01)
 
 Matt, with a screen recording from Anita's phone of opening this game: *"What's wrong with it? Why

@@ -13,6 +13,7 @@ import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 // RUN ONLY WHAT YOUR CHANGE COULD BREAK. Nearly all of this file's runtime is a handful of
 // blocks that fire thousands of simulated throws at the real engine. They are grouped by what
@@ -708,6 +709,34 @@ if (G.mat) {
   eq('the real list today: nothing to unlock yet', unlocksEarned('classic', 900), []);
   ok('every board id is unique', new Set(BOARDS.map((b) => b.id)).size === BOARDS.length);
   ok("the first machine is 'classic' (recordSkeeball's fallback id - frozen)", DEFAULT_BOARD === 'classic');
+}
+
+// --- [KNOWN-BUG PROBE] the resumed rack and the loaded engine must be the SAME machine ----------
+//
+// Born red on 2026-09-01 against the build that shipped that morning. Matt, with a screenshot of a
+// painted HUD over an empty playfield: "You broke skeeball. I can go back to the hub but nothing
+// else."
+//
+// ui.js's _startGame loaded the engine for `this.settings.board` - the carousel's selection - while
+// game.js's SkeeballGame.restore rebuilds on `snap.board`. Those diverge whenever a swipe moves the
+// selection while a mid-rack autosave is banked on another machine, and once the engines went lazy
+// (the same morning) engineFor threw on the mismatch - after the HUD's innerHTML was written and
+// before input was bound, so the player got a dead screen with no way out but the hub.
+//
+// Structural because the defect is in DOM code this node suite cannot mount, and the shape is
+// exact: the board _startGame resolves must be derived from the snapshot when there is one.
+{
+  const uiSrc = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const head = /async _startGame\(snap\)\s*{[\s\S]{0,2600}?await loadEngine\(/.exec(uiSrc);
+  ok('[KNOWN-BUG PROBE] _startGame picks its board from the SNAPSHOT, not just the carousel',
+    !!head && /boardById\(\s*snap\s*&&\s*snap\.board\s*\?/.test(head[0]),
+    'ui.js resumes a rack on snap.board but would load the engine for settings.board - the two\n'
+    + '        must come from one source, or a resume after a swipe throws into a dead screen.');
+
+  // And the other half: a mount that throws anyway must land the player on the gallery.
+  ok('a throw mid-mount falls back to the gallery rather than stranding the player',
+    /catch \(err\)[\s\S]{0,400}?_renderSetup\(\)/.test(uiSrc),
+    'without this, any future throw between the HUD write and _bindPlay repeats the same incident');
 }
 
 // --- summary -----------------------------------------------------------------------------------

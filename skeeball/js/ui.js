@@ -1033,7 +1033,26 @@ export class SkeeballUI {
   // --- play ------------------------------------------------------------------------------------
 
   async _startGame(snap) {
-    const board = boardById(this.settings.board);
+    // THE SNAPSHOT'S BOARD, NOT THE CAROUSEL'S (2026-09-01, same day, hotfix).
+    //
+    // THE BUG THIS FIXES. Matt, with a screenshot of a painted HUD over an empty playfield: "You
+    // broke skeeball. I can go back to the hub but nothing else." This line read
+    // `boardById(this.settings.board)` while `SkeeballGame.restore(snap)` (game.js) rebuilds on
+    // `snap.board`. The two diverge routinely - the carousel writes settings.board on EVERY swipe
+    // settle, and a mid-rack autosave stays pinned to the machine it was banked on - so playing a
+    // rack, leaving mid-rack, swiping the gallery and coming back resumed the saved rack while
+    // loading a different machine's engine. `engineFor(this.game.board.id)` below then threw,
+    // AFTER the HUD's innerHTML had been written and BEFORE _bindPlay/_fit/_startLoop: a painted
+    // score over a dead, unsized canvas with nothing bound. Only the hub's own back button worked.
+    //
+    // Harmless until the engines went lazy earlier the same day: engineFor used to return a
+    // statically imported engine for any id. Now the two must agree, so they are derived from ONE
+    // source - restore() resolves snap.board through this same boardById, so they agree by
+    // construction rather than by coincidence.
+    //
+    // The Resume BUTTON was always guarded (`snap.board === this.settings.board`, see
+    // _paintSetupActions); it is the constructor's automatic resume-at-mount that has no such gate.
+    const board = boardById(snap && snap.board ? snap.board : this.settings.board);
     // THE ENGINE FIRST (2026-09-01). game.js steps this machine's physics every frame and cannot
     // await, so the rack does not begin until its engine is in hand. Already-loaded resolves on
     // the next microtask, which is the normal case: the gallery warms the selected machine while
@@ -1048,6 +1067,28 @@ export class SkeeballUI {
     // A second Play tap (or a back-to-the-hub) landed while that was in flight: that call owns
     // the screen now, not this one.
     if (this.disposed || token !== this._startToken) return;
+    // A MOUNT THAT THROWS MUST LAND ON THE GALLERY, NOT ON A DEAD SCREEN (2026-09-01).
+    //
+    // The wrong-engine bug above was the defect; THIS is why it cost a whole session. Everything
+    // below writes the HUD's innerHTML first and binds input, sizes the canvas and starts the loop
+    // after - so a throw anywhere in the middle leaves a painted score over a dead playfield with
+    // no way out but the hub's own back button, and nothing on screen says anything is wrong.
+    // Falling back to the gallery makes the worst case "it bounced me to the machine picker":
+    // annoying, recoverable, and something a player can actually report. Logged loudly, never
+    // swallowed (THE LAW rule 6) - and the autosave is untouched, so the rack is still there.
+    try {
+      this._startGameInner(snap, board);
+    } catch (err) {
+      console.error('[skeeball] the rack could not be mounted - falling back to the gallery', err);
+      this.screen = 'setup';
+      this._stopLoop();
+      try { this._renderSetup(); } catch (e2) { console.error('[skeeball] the gallery failed too', e2); }
+    }
+  }
+
+  /** The body of _startGame. Split out purely so the caller above can catch a mid-mount throw;
+   *  see its comment. Never call this directly - it assumes the engine is already loaded. */
+  _startGameInner(snap, board) {
     this.screen = 'play';
     this.recorded = false;
     this._closeOverlay();
