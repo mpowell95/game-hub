@@ -1,6 +1,24 @@
 /* hub.css — Game Hub shell: top bar + launcher grid. The game modules bring
    their own styles; this only styles the shell chrome. */
 
+/* CROSS-DOCUMENT VIEW TRANSITION (2026-09-01). Matt, after the white flash was fixed: "It still
+   flashes. Black now... It's better, but i still don't want that."
+   The colour was only half of it. profile/ is a separate document, and index.html ships EMPTY -
+   just <div id="hub-root"></div>, with the whole launcher built by js/hub.js - so coming BACK to
+   the hub paints the right background and then sits there with nothing on it until that module
+   graph has loaded and rendered. Measured at 83ms on a warm desktop cache; a phone is worse. The
+   profile direction is 0ms, because that page's content is real markup.
+   This keeps the OUTGOING page on screen until the incoming one has actually painted, so there is
+   no empty frame to see in either direction. It needs no JS and both documents load this file.
+   Browsers without cross-document view transitions ignore the at-rule and behave exactly as
+   before, so there is nothing to fall back to and nothing to break. */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
+@media (prefers-reduced-motion: reduce) {
+  /* Still no blank frame - the swap just is not animated (the UX floor's motion rule). */
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
+
 :root {
   --hub-bg: #f4f6fb;
   --hub-surface: #ffffff;
@@ -239,6 +257,22 @@ body {
   box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.18);
 }
 .hub-keepsake-btn:hover { box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.32); }
+/* The first-paint skeleton's tiles (see index.html's #hub-root). Deliberately flat and quiet -
+   they exist to give the first frame the app's shape, not to imitate a card. No pulse animation:
+   it would be visible for ~120ms and read as a glitch rather than as loading. */
+.hub-card-skel {
+  display: block;
+  background: var(--hub-surface);
+  border: 1px solid var(--hub-surface-2);
+  border-radius: 14px;
+  /* Measured, not guessed: at opacity .5 this frame scored a stddev of 3.4 against the settled
+     launcher's 34.9 - technically not blank, but faint enough that the eye still reads the
+     transition as a blink. Full opacity against --hub-surface-2 is the floor that actually looks
+     like the app loading. */
+  background: var(--hub-surface-2);
+  border-color: var(--hub-surface);
+}
+
 .hub-card {
   position: relative;
   width: 100%;

@@ -39,7 +39,36 @@
   <link rel="stylesheet" href="css/hub.css">
 </head>
 <body>
-  <div id="hub-root"></div>
+  <!-- FIRST-PAINT SKELETON (2026-09-01). Matt, on coming BACK from the profile: "It still
+       flashes. Black now... i still don't want that."
+       This div used to ship empty, and js/hub.js builds the entire launcher, so the browser had
+       nothing to paint until that module graph had loaded and run - a measured 120ms of correctly
+       coloured NOTHING on every return trip. (Going the other way is already 0ms: profile/ is real
+       markup.) A cross-document view transition cannot fix it either, because what it fades to IS
+       that blank first paint.
+       So the first paint now has the app's own chrome and the shape of the grid. js/hub.js does
+       `this.root.innerHTML = ...`, which replaces all of this the moment it runs, so there is
+       nothing to keep in step except the title - which is a literal in hub.js too, not a t() key,
+       precisely because it is a proper noun. NO other text here: a label in the wrong language for
+       a moment would be a worse flash than the one being fixed. aria-hidden because it is
+       scaffolding; the real UI announces itself a frame later. -->
+  <div id="hub-root">
+    <div class="hub hub-skel" aria-hidden="true">
+      <header class="hub-top">
+        <div class="hub-top-info"><h1 class="hub-top-title">Matt&#39;s Game Hub</h1></div>
+      </header>
+      <main class="hub-main">
+        <section class="hub-grid">
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+          <span class="hub-cell"><span class="hub-card hub-card-skel"></span></span>
+        </section>
+      </main>
+    </div>
+  </div>
 
   <!-- BOOT GUARD (2026-08-04) - a white screen must never again be the whole error message.
        Matt hit a hub that rendered nothing at all, in Chrome AND from the home-screen icon, with
