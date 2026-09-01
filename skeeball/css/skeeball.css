@@ -182,10 +182,37 @@
   border-radius: 12px;
   overflow: hidden;
   background: #140d0a;
+  /* the containing block for the loading skeleton below - on the BASE rule, so toggling
+     data-painting can never change this box's layout */
+  position: relative;
 }
 /* contain, not cover: the box is now whatever height the card can spare, so a fixed crop would
    cut the machine off at one size and not another. */
 .sk-root .sk-slide-img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* WHILE THE PICTURE IS BEING DRAWN (2026-09-01). A machine's picture is a WebGL scene built on
+   demand and read back as a JPEG (js/ui.js, _ensureMachineImg), so a slide the player has just
+   swiped to is an empty box for a moment - half a second on a warm cache, a second and a half
+   when that machine's engine still has to be imported. On Matt's second screen recording the
+   EMPTINESS is what read as broken, and a failed render left exactly the same box, so there was
+   no way to tell "coming" from "gone wrong". The box now says a machine is on its way, and ui.js
+   clears the attribute only on success, so a failure KEEPS this rather than falling back to bare.
+
+   Deliberately flat, quiet and NOT ANIMATED, for the reason css/hub.css's .hub-card-skel gives
+   about the launcher's own first-paint tiles: this is on screen for a few hundred milliseconds
+   and a pulse over that window reads as a glitch rather than as loading. Nothing here animates,
+   so there is no reduced-motion branch to keep in step.
+
+   Only the OPEN slides get it. A locked slide's picture lives in .sk-lock-peek, which is already
+   a greyed, blurred sliver behind a padlock - a skeleton in there would be noise, and ui.js finds
+   no .sk-slide-machine to mark. */
+.sk-root .sk-slide-machine[data-painting]::after {
+  content: '';
+  position: absolute;
+  inset: 14% 18%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
 /* THE RECORDS ARE REFERENCE, NOT FURNITURE (Matt, 2026-08-22: "a bit crowded"). They used to be
    four filled, bordered boxes stacked under the machine - inside a card that is already a box,
    under a picture that is already a box. The Game over card settled this same question the other

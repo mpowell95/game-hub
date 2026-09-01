@@ -205,6 +205,77 @@ function clearCeremonyOwed(id) {
 }
 const isCeremonyOwed = (id) => !!ceremoniesOwed()[id];
 
+/* THE MACHINE PICTURES OUTLIVE THE SCREEN THAT DREW THEM (2026-09-01).
+ *
+ * Each picture costs a dynamic import of that machine's render.js + machine.js (110-146 KB), a
+ * whole WebGL scene built and read back as a JPEG, and the context handed straight back. On
+ * Matt's own recording that is ~1.5s cold and ~0.5s warm, and it was paid AGAIN every time he
+ * left Skeeball and came back, because this map used to be a field on the UI instance.
+ *
+ * MODULE SCOPE IS SAFE HERE BECAUSE OF THE KEY, not because of luck: it is
+ * [board id, all-time score, all-time holder, your best, today, last game] - every value the
+ * picture has baked into it (see _ensureMachineImg). A number that moves mints a new key, so a
+ * stale picture cannot be served, INCLUDING to a second player on a shared phone. Two players
+ * whose six values all match get the same picture, which is correct - it is a pure function of
+ * exactly those values and the board.
+ *
+ * Capped and oldest-evicted: five machines times a handful of record states, and a page that
+ * never reloads must not grow a JPEG cache without a ceiling. */
+const MACHINE_IMG = new Map();          // key -> data URL
+const MACHINE_IMG_CAP = 16;
+function cachedMachineImg(key) {
+  return MACHINE_IMG.get(key) || null;
+}
+function cacheMachineImg(key, url) {
+  MACHINE_IMG.delete(key);              // re-insert so Map iteration order IS the LRU order
+  MACHINE_IMG.set(key, url);
+  while (MACHINE_IMG.size > MACHINE_IMG_CAP) MACHINE_IMG.delete(MACHINE_IMG.keys().next().value);
+}
+/** Which boards have a picture already drawn this PAGE (not this mount) - the keys are prefixed
+ *  with the board id, so this is a read of the same cache and never a second list to keep in step. */
+function drawnBoardIds() {
+  const s = new Set();
+  for (const k of MACHINE_IMG.keys()) s.add(k.split('|')[0]);
+  return s;
+}
+
+/* THE HUB-WIDE RECORD IS ALREADY ON SCREEN WHEN THE FIRST PICTURE IS DRAWN (2026-09-01).
+ *
+ * `_refreshTopRecords` awaits `readPlayersOnce()` - a full read of the players node - and had no
+ * local cache at all, so EVERY mount painted a dash in the "Hub-wide record" row and in the
+ * backboard's ALL TIME column, then filled it in about half a second later. Worse: the picture is
+ * keyed on those very values, so the answer landing minted a new key and the selected machine was
+ * rendered in WebGL a SECOND time, on every single mount.
+ *
+ * This is a DISPLAY CACHE of other people's records. It is never a source of truth, is never read
+ * by anything that scores, records or unlocks, and the live read still runs on every mount and
+ * still replaces it. `myRecords()` - the player's OWN best and today - does not come through here
+ * and is still read from the real store every time.
+ *
+ * THE LIVE ANSWER REPLACES IT; THERE IS DELIBERATELY NO Math.max. The reflex here is THE LAW rule
+ * 2 and it is the wrong reflex: an admin void (js/stats-corrections.js) has to be able to bring an
+ * app-wide record DOWN, and a monotonic cache would pin a voided score on the backboard for ever.
+ * Missing or malformed reads as "no cache" and behaves exactly as this screen did before. */
+const TOP_KEY = 'gamehub.skeeball.top.v1';   // { [boardId]: { score, name } } - display cache
+function loadTopCache() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TOP_KEY) || '{}');
+    if (!o || typeof o !== 'object') return {};
+    const out = {};
+    for (const b of BOARDS) {
+      const r = o[b.id];
+      if (r && typeof r === 'object' && +r.score > 0) {
+        out[b.id] = { score: +r.score | 0, name: typeof r.name === 'string' ? r.name : '' };
+      }
+    }
+    return out;
+  } catch { return {}; }
+}
+function saveTopCache(top) {
+  try { localStorage.setItem(TOP_KEY, JSON.stringify(top || {})); }
+  catch { /* a picture of someone else's record; the live read answers again next mount */ }
+}
+
 /** GIVE THE WEBGL CONTEXT BACK, not just the GPU objects (2026-08-26).
  *
  *  THE BUG THIS FIXES. `WebGLRenderer.dispose()` frees three.js's buffers and programs and
@@ -312,9 +383,12 @@ export class SkeeballUI {
     this.swipe = null;                 // active pointer samples while a swipe is live
     this._pending = null;              // a captured ball's score, held until it has settled
     this.msgTimer = 0;
-    this.top = {};                     // boardId -> { score, name } once the network answers
+    // SEEDED, NOT EMPTY (2026-09-01, see TOP_KEY). The live read still runs from init() and still
+    // replaces every entry; this is only what the first paint gets to show instead of a dash.
+    this.top = loadTopCache();         // boardId -> { score, name }
     this.hubAvg = {};                  // boardId -> hub-wide average score across synced players (game-over card)
-    this._machineImg = {};             // board id + its records -> cached data URL of that render
+    this._prewarm = 0;                 // the idle callback drawing the neighbouring slides, if any
+    this._prewarmIdle = false;         // ...and which scheduler handed out that id (see _cancelPrewarm)
 
     this._onPointerMove = (e) => this._swipeMove(e);
     this._onPointerUp = (e) => this._swipeEnd(e);
@@ -469,12 +543,26 @@ export class SkeeballUI {
     try { rows = aggregatePlayers(await readPlayersOnce(), corrections()); }
     catch { rows = []; /* offline: local merge below still answers */ }
     if (this.disposed) return;
+    // DID THE NETWORK ACTUALLY ANSWER? readPlayersOnce() returns {} both when it fails and when it
+    // is not signed in, so an offline mount reaches here with an empty field and every board's
+    // remote best reading 0. That number must never be allowed to overwrite the seeded cache or
+    // be written back over it - doing so would erase the app-wide record the moment Matt's phone
+    // dropped signal, which is the exact regression TOP_KEY exists to prevent. With no rows there
+    // is nothing to learn about anybody's record, so this leaves what it already had.
+    const answered = rows.length > 0;
     let myName = '';
     try { myName = (loadProfile()?.name || '').trim(); } catch { /* no profile is fine */ }
     for (const b of BOARDS) {
       const remote = appWideBest(rows, 'skeeball', 'sk', b.id);
       const localBest = myRecords(b.id).mine;
-      this.top[b.id] = localBest > remote.score ? { score: localBest, name: myName } : remote;
+      const fresh = localBest > remote.score ? { score: localBest, name: myName } : remote;
+      const held = this.top[b.id];
+      // Online, the live answer REPLACES what is held, downwards included - a voided score
+      // (js/stats-corrections.js) has to be able to bring a record back down. Offline, the held
+      // value stands unless this device's own history beats it - and "nothing held" always takes
+      // the fresh answer, or this row becomes undefined and every reader of it throws.
+      const keepHeld = !answered && held && (held.score | 0) >= (fresh.score | 0);
+      this.top[b.id] = keepHeld ? held : fresh;
       const slot = this.root.querySelector(`[data-rec-top="${b.id}"]`);
       if (slot && this.top[b.id].score) {
         slot.textContent = this._topText(b.id);
@@ -484,6 +572,10 @@ export class SkeeballUI {
         line.textContent = String(this.top[b.id].score);
       }
     }
+    // Bank the answer so the NEXT mount paints it straight away instead of a dash, and so the
+    // machine picture is drawn once with it rather than twice (see TOP_KEY). Only ever from a
+    // real answer.
+    if (answered) saveTopCache(this.top);
     // Hub-wide average score across every synced player, PER MACHINE (each board's own points /
     // plays - machines score on different scales, so a blended average would mean nothing), for
     // the game-over card. Falls to nulls offline; the tile shows a dash and fills in once online.
@@ -678,16 +770,19 @@ export class SkeeballUI {
     // brings them into view (see the carousel's settle handler below). See
     // _machinesWorthPainting.
     for (const b of this._machinesWorthPainting()) {
-      // GUARD: the SAME answer the slide was built from (_slideState). Two copies of this test
-      // drifted once already, and a mismatch paints the machine into a picture element that the
-      // other branch never rendered - a blank slide.
-      const imgEl = this.root.querySelector(this._slideState(b, sk, devAll).open
-        ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
+      // GUARD: the SAME answer the slide was built from (_slideState), which is why this goes
+      // through _slideImgFor rather than repeating the test. Two copies of it drifted once
+      // already, and a mismatch paints the machine into a picture element that the other branch
+      // never rendered - a blank slide.
+      const imgEl = this._slideImgFor(b, sk, devAll);
       if (imgEl) this._ensureMachineImg(b, imgEl);
     }
     // The machine on screen is the one about to be played: warm its PHYSICS in the background,
     // while the player is still reading the card, so Play is not where cannon-es gets downloaded.
     this._warmSelected();
+    // And DRAW the machines either side of it, so the next swipe lands on a picture instead of an
+    // empty box (see _prewarmNeighbours).
+    this._prewarmNeighbours();
 
     // The golden lock. One tap, one animation, then the machine is just a machine.
     for (const btn of this.root.querySelectorAll('[data-pop]')) {
@@ -711,8 +806,7 @@ export class SkeeballUI {
           // Whatever just came to rest under the player's thumb is what gets drawn (and, if it
           // is playable, warmed). This is the other half of painting one slide instead of five.
           if (b) {
-            const slideImg = this.root.querySelector(bOpen
-              ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
+            const slideImg = this._slideImgFor(b, sk, devAll);
             if (slideImg) this._ensureMachineImg(b, slideImg);
           }
           if (bOpen && b.id !== this.settings.board) {
@@ -722,6 +816,8 @@ export class SkeeballUI {
             // just the two buttons.
             this._paintSetupActions();
             this._warmSelected();
+            // The neighbours moved with it: draw the two either side of where the player now is.
+            this._prewarmNeighbours();
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
         });
@@ -771,11 +867,12 @@ export class SkeeballUI {
     play.classList.toggle('gh-btn--primary', !mine);
   }
 
-  /** The machines whose picture is worth drawing right now: the selected one, plus any this
-   *  session has already drawn (those are a cache hit, so they cost nothing and stop a slide
-   *  going blank when the screen is re-rendered under a player who had swiped away). */
+  /** The machines whose picture is worth drawing right now: the selected one, plus any already
+   *  drawn (those are a cache hit, so they cost nothing and stop a slide going blank when the
+   *  screen is re-rendered under a player who had swiped away). Since 2026-09-01 the cache
+   *  outlives the mount, so coming BACK to Skeeball is a cache hit too. */
   _machinesWorthPainting() {
-    const drawn = new Set(Object.keys(this._machineImg).map((k) => k.split('|')[0]));
+    const drawn = drawnBoardIds();
     return BOARDS.filter((b) => b.id === this.settings.board || drawn.has(b.id));
   }
 
@@ -788,6 +885,66 @@ export class SkeeballUI {
     else setTimeout(go, 600);
   }
 
+  /** DRAW THE MACHINE ON EITHER SIDE BEFORE THE PLAYER SWIPES TO IT (2026-09-01).
+   *
+   *  Matt's second recording: every swipe landed on an empty box for half a second on a warm
+   *  cache and a second and a half on a cold one, because a machine's picture is not even STARTED
+   *  until the carousel brings it into view. Drawing the two neighbours while the player is
+   *  reading the card they are on makes the next swipe a cache hit.
+   *
+   *  Three things here are load-bearing, not incidental:
+   *
+   *  - NEIGHBOURS ONLY, never all five. Each extra machine is 110-146 KB of render.js +
+   *    machine.js. Two is the smallest set that makes the next swipe free either way, and
+   *    walking the carousel re-runs this at each settle, so the set follows the player.
+   *  - STRICTLY SEQUENTIAL, never Promise.all. renderMachineImage hands its WebGL context back
+   *    through releaseRenderer before it returns, so one at a time never adds to the page's
+   *    context budget - and that budget is what made the whole hub choppy on 2026-08-26.
+   *  - SETUP SCREEN ONLY, and cancelled on dispose. The play screen's frame budget is not
+   *    somewhere to build a scene and read it back. */
+  _prewarmNeighbours() {
+    this._cancelPrewarm();
+    if (BOARDS.length < 2) return;
+    const idx = Math.max(0, BOARDS.findIndex((b) => b.id === this.settings.board));
+    const queue = [BOARDS[idx + 1], BOARDS[idx - 1]].filter(Boolean);
+    const step = () => {
+      this._prewarm = 0;
+      if (this.disposed || this.screen !== 'setup') return;
+      const b = queue.shift();
+      if (!b) return;
+      const imgEl = this._slideImgFor(b);
+      // Already drawn (or the slide is not in the DOM): fall straight through to the next one.
+      if (imgEl) this._ensureMachineImg(b, imgEl);
+      if (queue.length) this._schedulePrewarm(step);
+    };
+    this._schedulePrewarm(step);
+  }
+
+  /** GUARD: REMEMBER WHICH SCHEDULER GAVE US THE ID. Idle-callback ids and timer ids are separate
+   *  namespaces, so cancelling one id through BOTH cancelIdleCallback and clearTimeout can kill an
+   *  unrelated timer that happens to share the number. */
+  _schedulePrewarm(fn) {
+    this._prewarmIdle = typeof requestIdleCallback === 'function';
+    this._prewarm = this._prewarmIdle ? requestIdleCallback(fn, { timeout: 2500 }) : setTimeout(fn, 800);
+  }
+
+  _cancelPrewarm() {
+    if (!this._prewarm) return;
+    if (this._prewarmIdle) cancelIdleCallback(this._prewarm);
+    else clearTimeout(this._prewarm);
+    this._prewarm = 0;
+  }
+
+  /** The <img> a board's slide paints into - open slides and locked slides use different
+   *  attributes, and _slideState is the ONE answer to which this board has (a second copy of that
+   *  test drifted once already and painted a machine into an element nothing was showing). */
+  _slideImgFor(board, sk, devAll) {
+    const st = sk || (loadStats().games.skeeball || {}).sk || {};
+    const dev = devAll === undefined ? isDevProfile() : devAll;
+    return this.root.querySelector(this._slideState(board, st, dev).open
+      ? `img[data-machine="${board.id}"]` : `img[data-machine-locked="${board.id}"]`);
+  }
+
   /** EVERY SLIDE'S <img> SHIPS WITH A TRANSPARENT 1x1 (2026-09-01). An <img> with no `src` renders
    *  as a BROKEN-IMAGE ICON, with its alt text beside it. That was survivable while every slide was
    *  painted at mount; once only the SELECTED slide paints (see _machinesWorthPainting) every swipe
@@ -795,8 +952,13 @@ export class SkeeballUI {
    *  there... broken images appear, then the machines load." The placeholder is inert and one
    *  pixel; the real picture replaces it.
    *
+   *  While the render is in flight the slide's box carries data-painting, which paints the quiet
+   *  skeleton panel in skeeball.css - an empty black rectangle and a failed one looked identical,
+   *  and on Matt's recording the empty one is what read as broken. A FAILED render KEEPS the
+   *  skeleton rather than falling back to the bare box, for the same reason.
+   *
    *  Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
-   *  deferred one frame so the setup paints first. A failure leaves the dark placeholder. */
+   *  deferred one frame so the setup paints first. */
   _ensureMachineImg(board, imgEl) {
     const sb = this._scoreboardFor(board.id);
     const v = sb.values;
@@ -805,8 +967,10 @@ export class SkeeballUI {
     // setup screen would go on showing yesterday's numbers until the tab was closed.
     const at = v.allTime || {};
     const key = [board.id, at.score || 0, at.name || '', v.best, v.today, v.last].join('|');
-    const cached = this._machineImg[key];
-    if (cached) { imgEl.src = cached; return; }
+    const box = imgEl.closest('.sk-slide-machine');
+    const cached = cachedMachineImg(key);
+    if (cached) { imgEl.src = cached; if (box) box.removeAttribute('data-painting'); return; }
+    if (box) box.setAttribute('data-painting', '');
     // ONE MACHINE'S ENGINE, ON DEMAND (2026-09-01). Drawing this picture needs that machine's
     // render.js, its machine.js and three.js - not its physics, and not the other four machines.
     // engines.js used to import all fifteen files statically, which is why opening the gallery
@@ -815,12 +979,17 @@ export class SkeeballUI {
       .then(() => new Promise((r) => requestAnimationFrame(r)))
       .then(() => {
         // isConnected: the screen may have been re-rendered (or left) while this was in flight,
-        // and painting into a detached <img> is silent, wasted WebGL work.
-        if (this.disposed || !imgEl.isConnected) return;
+        // and painting into a detached <img> is silent, wasted WebGL work. The screen test is the
+        // narrow window that leaves open: _cancelPrewarm stops the SCHEDULING, not a render already
+        // in flight, and a rack that starts in that gap would pay for a whole scene build on its
+        // first frames. (Play does detach the slides, so isConnected catches it a moment later -
+        // this just makes "never on a live rack" true rather than nearly true.)
+        if (this.disposed || this.screen !== 'setup' || !imgEl.isConnected) return;
         const url = renderMachineImage(board, sb);
         if (!url) return;
-        this._machineImg[key] = url;
+        cacheMachineImg(key, url);
         imgEl.src = url;
+        if (box) box.removeAttribute('data-painting');
       })
       .catch((err) => console.error('[skeeball] machine picture failed', board.id, err));
   }
@@ -1098,6 +1267,8 @@ export class SkeeballUI {
   _startGameInner(snap, board) {
     this.screen = 'play';
     this.recorded = false;
+    // A queued gallery picture must not build a WebGL scene on top of a live rack's frame budget.
+    this._cancelPrewarm();
     this._closeOverlay();
     this.game = snap ? SkeeballGame.restore(snap) : new SkeeballGame(board.id);
     // What was already met before this rack. Anything that turns met from here is fresh.
@@ -1976,6 +2147,7 @@ export class SkeeballUI {
   destroy() {
     this.disposed = true;
     this._stopLoop();
+    this._cancelPrewarm();
     this._stopHpDemo();
     this._closeOverlay();
     this.root.removeEventListener('click', this._onDefTap);
