@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v551';
+const CACHE = 'game-hub-v552';
 
 const ASSETS = [
   './',
@@ -533,7 +533,7 @@ const REST_MANIFEST = {
   './nuts-bolts/js/strings.js': 'd7ba835b23',
   './tic-tac-toe/': '3846811228',
   './tic-tac-toe/index.html': '3846811228',
-  './tic-tac-toe/css/tic-tac-toe.css': '30764c846a',
+  './tic-tac-toe/css/tic-tac-toe.css': 'c37410d2ac',
   './tic-tac-toe/js/ui.js': '4956f7a2c4',
   './tic-tac-toe/js/game.js': '5dd6dfd541',
   './tic-tac-toe/js/ai.js': 'ea779916ba',
