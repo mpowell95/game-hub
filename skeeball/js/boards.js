@@ -242,11 +242,17 @@ export const BOARDS = [
       // Contact model overrides (defaults and the reasoning live in physics.js). A board the
       // ball LANDS on and rolls up has to be dead, not lively.
       mat: {
-        boardFric: 0.62,
+        // 2026-09-02, Matt: "set friction = 0 everywhere except the back wall ABOVE the
+        // scoreboard" - and that one was already 0. So every pair below is frictionless. NOTE what
+        // that means: friction is the only thing that sheds the ball's serve topspin or turns a
+        // slide into a roll, so the ball now skids the whole length of the lane and the face
+        // keeping the spin it was served with. Capture is kinematic and does not read friction, so
+        // scoring is unaffected.
+        boardFric: 0,
         boardRest: 0.08,
-        woodFric: 0.30,
+        woodFric: 0,
         woodRest: 0.22,
-        wallFric: 0.04,
+        wallFric: 0,
         // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
         // pair is every 'wall' part in machines/classic/machine.js - the side rails, the lane
         // rails, the trough cheeks AND the flare - so it is also half of why a flare catch used
@@ -254,7 +260,7 @@ export const BOARDS = [
         // corner 100 is a real shot on this machine, and both 100s still land in the 861-throw
         // sweep (4 each) with the emergency path empty.
         wallRest: 0.10,   // 2026-09-02, Matt, twice: the walls are still bouncy. Dead is what he wants.
-        ringFric: 0.06,
+        ringFric: 0,
         // 2026-09-02, Matt: rings 10-50 come down to 0.10 as well (the 100 is already dead).
         ringRest: 0.10,
         // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
@@ -267,9 +273,9 @@ export const BOARDS = [
         // 2026-09-02, Matt's number. NOTE the standing guard above: ring friction is kept near
         // zero everywhere else because lateral grip can wedge a ball against a ring on the
         // slope. 0.2 is the 100 rings ALONE, and it is deliberate.
-        ring100Fric: 0.2,
+        ring100Fric: 0,
         ring100Rest: 0.0,   // 2026-09-02: dead. Matt: it bounces off with MORE energy than it came in with.
-        deadFric: 0.24,
+        deadFric: 0,
         deadRest: 0.10,
         // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall
         // must never convert serve topspin into climb (DECISIONS.md, "The back wall does not
@@ -290,7 +296,7 @@ export const BOARDS = [
         // machine: every other back-wall pair is zero grip, because a gripping wall converts
         // the ball's serve topspin into CLIMB (DECISIONS.md, "The back wall does not lift the
         // ball"). Below the scoreboard's line is where a ball arrives with the least spin left.
-        backLowFric: 0.2,
+        backLowFric: 0,
         backLowRest: 0.10,
       },
     },
