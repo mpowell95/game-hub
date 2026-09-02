@@ -846,7 +846,12 @@ function headlineOf(id, rec) {
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
-  if (id === 'skeeball') return { n: (rec.sk && rec.sk.bestGame) | 0, unitKey: unitKeyOf(id) };
+  // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
+  // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
+  // show lifetime points. Not your best single round"). This second call site (My Stats' and
+  // the leaderboard player detail's shared game list) still read bestGame under a "POINTS"
+  // label until 2026-09-02 - a player with 101 games and one 730 rack read "730 POINTS".
+  if (id === 'skeeball') return { n: (rec.sk && rec.sk.points) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
