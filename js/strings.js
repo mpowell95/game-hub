@@ -412,6 +412,10 @@ export const STRINGS = {
     gs_sk_fifties: '50s',
     gs_sk_balls: 'Balls thrown',
     gs_sk_points: 'Lifetime points',
+    // The machine card's own column header. "Lifetime points" wraps to two lines in a quarter of a
+    // phone's width and drags the whole row of four numbers out of line; the machine's name is
+    // directly above it, so the shorter word loses nothing.
+    gs_sk_points_short: 'Points',
     gs_sk_by_board: 'By machine',
     gs_sk_today: 'Today',
     gs_sk_days: 'Days played',
@@ -481,6 +485,13 @@ export const STRINGS = {
     // NT is a play in a game with no difficulty axis at all (Skeeball machines, Pinball tables,
     // Hill Climb stages), counted as a RUN; VS is a win against a real person.
     lb_cat_all: 'Everything',
+    // (2026-09-02) The player-detail breakdown's two headings. The six cells used to sit under
+    // no heading at all, so "E 1  M 12  H 0" was a row of numbers with no stated subject.
+    lb_pd_wins_h: 'Wins by difficulty',
+    lb_pd_games_h: 'Games',
+    lb_pd_other_h: 'Everything else',
+    lb_pd_nt: 'Runs, no difficulty',
+    lb_pd_vs: 'Wins against people',
     lb_cat_nt: 'No tier',
     lb_cat_vs: 'Versus',
     // Key badges: one or two characters, paired with the full name beside them, never alone.
@@ -970,6 +981,7 @@ export const STRINGS = {
     gs_sk_fifties: 'Cincuentas',
     gs_sk_balls: 'Bolas lanzadas',
     gs_sk_points: 'Puntos totales',
+    gs_sk_points_short: 'Puntos',
     gs_sk_by_board: 'Por máquina',
     gs_sk_today: 'Hoy',
     gs_sk_days: 'Días jugados',
@@ -1031,6 +1043,11 @@ export const STRINGS = {
     lb_unit_high: 'récord',
     lb_runs_count: '{n} carreras',
     lb_cat_all: 'Todo',
+    lb_pd_wins_h: 'Victorias por dificultad',
+    lb_pd_games_h: 'Juegos',
+    lb_pd_other_h: 'Lo demás',
+    lb_pd_nt: 'Carreras, sin nivel',
+    lb_pd_vs: 'Victorias contra personas',
     lb_cat_nt: 'Sin nivel',
     lb_cat_vs: 'Versus',
     lb_key_all: '★',
