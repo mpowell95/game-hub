@@ -309,10 +309,14 @@ const FIXTURE_PRE_UNIFIED = {
   // safety against the real records rather than taking the reasoning for it: an unlock is an
   // additive set entry and nothing anywhere removes one, so a player standing on either link keeps
   // every machine they had.
+  // (2026-09-02) The expected list is in CHAIN order now, because the BOARDS array is. The 08-27
+  // swap re-pointed both `unlock` fields and left the array in its old order, so this fixture was
+  // written to match the array and quietly disagreed with its own name for a week - which is the
+  // same drift the gallery was showing the player (POPONGO fourth, RUNAWAY last).
   eq('G: the chain is classic -> basketball -> brickcity -> runaway -> popongo',
     BOARDS.map((b) => `${b.id}<-${b.unlock ? b.unlock.board : 'open'}`),
-    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-runaway',
-      'runaway<-brickcity']);
+    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'runaway<-brickcity',
+      'popongo<-runaway']);
 
   for (const [tag, SK] of [['A', REAL_SK_A], ['B', REAL_SK_B]]) {
     // Load the real record through the CURRENT writer, exactly as a device does on its next hub

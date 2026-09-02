@@ -1136,6 +1136,13 @@ nothing from anyone for the usual reason (rule 2, an additive set nothing remove
 `test-stats-replay.mjs` scenario G carries the chain as data and proves it against the real
 records.
 
+**The GALLERY's order is the `BOARDS` array's order, and it did NOT follow the swap.** The
+2026-08-27 change re-pointed both `unlock` fields and left the array as it was, so the
+carousel kept showing POPONGO fourth and RUNAWAY last - the chain said one thing and the
+screen said another. Fixed 2026-09-02 (Matt: *"make popongo the last game. Runaway should
+come before it"*); the array now carries a guard saying so, and `SK_MACHINES` in
+`js/game-stats-ui.js` is in the same order. Nothing derives an unlock from either list.
+
 **POPONGO is the TERMINAL machine now, and RUNAWAY is not.** Nothing in the code needed changing
 for that - `_goalsSpent()` asks whether a machine opens anything rather than naming a last machine -
 but two things that were written when RUNAWAY was last are no longer true of it: its objectives now
