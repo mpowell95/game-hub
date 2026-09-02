@@ -247,10 +247,23 @@ export const BOARDS = [
         woodFric: 0.30,
         woodRest: 0.22,
         wallFric: 0.04,
-        wallRest: 0.42,
+        // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
+        // pair is every 'wall' part in machines/classic/machine.js - the side rails, the lane
+        // rails, the trough cheeks AND the flare - so it is also half of why a flare catch used
+        // to fling the ball out of the cabinet. Kept above dead: a bank off the side rail into a
+        // corner 100 is a real shot on this machine, and both 100s still land in the 861-throw
+        // sweep (4 each) with the emergency path empty.
+        wallRest: 0.28,
         ringFric: 0.06,
         ringRest: 0.18,
-        ring100Rest: 0.18,
+        // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
+        // bouncy. it seems to ADD energy to the ball"). 0.18 -> 0.06. Measured, the ring does NOT
+        // add energy - every contact within 16cm of a 100 LOST kinetic energy, and the few that
+        // gained SPEED gained it from spin turning into roll - but that ring is a 14.5cm wall
+        // around a mouth only 4cm wider than the ball, so a miss meets a tall tube side-on and
+        // leaves fast enough to read as a kick. This is the split the ring100 material exists
+        // for: the 10 through 50 keep 0.18.
+        ring100Rest: 0.06,
         deadFric: 0.24,
         deadRest: 0.10,
         // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall
