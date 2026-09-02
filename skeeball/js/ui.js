@@ -1444,7 +1444,14 @@ export class SkeeballUI {
     // screen, not a round number - too large a divisor and the corner 100s need a swipe angle
     // that physically doesn't fit on the screen, making them unreachable.
     const raw = Math.max(-1, Math.min(1, Math.atan2(end.x - first.x, first.y - end.y) / 0.38));
-    const aim = Math.sign(raw) * (raw * raw);
+    // THE CURVE IS A BOARD'S TO CHOOSE (2026-09-02). `raw * raw` is the default every machine has
+    // always had: forgiving near straight, steep out at the corners. `geom.aimCurve` is the
+    // exponent; a board that sets it to 1 gets a swipe angle that maps to a serve angle in
+    // straight proportion, so a corner-basket shot is as forgiving as a straight one. Only
+    // BRICK CITY sets it today (see its geom in boards.js for the measurements); every other
+    // machine leaves it unset and is byte-for-byte on the old line.
+    const curve = this.game.board.geom.aimCurve > 0 ? this.game.board.geom.aimCurve : 2;
+    const aim = Math.sign(raw) * Math.pow(Math.abs(raw), curve);
 
     if (this.game.throwBall({ power, aim })) {
       // Held until the ball settles, then logged with its real result at ballDone.
