@@ -1765,6 +1765,54 @@ displayed value and the stored cache untouched.
   CLASSIC, which is first in the list and has exactly one neighbour, so a growing-count test fails
   on a correct build the moment that neighbour lands.
 
+## The machine picture survives the page now (2026-09-02)
+
+Matt: *"can we make it so the skeeball images of the machines load faster? it's a black screen for
+a second before the machine image loads."*
+
+The 2026-09-01 pass above made the picture survive LEAVING the game and drew the next machine
+before the swipe, but its cache is module scope - it dies with the page. So the FIRST open of every
+session still paid the whole thing: a dynamic import of that machine's `render.js` + `machine.js`
+(110-146 KB), a WebGL scene built and read back as a JPEG, with the skeleton on screen throughout.
+A PWA gets reloaded often (and the hub applies its own updates by reloading), so "first open of the
+session" is most opens.
+
+**`skeeball/js/picstore.js` writes the picture to IndexedDB and reads it back.** Two outcomes, and
+the difference is the whole design:
+
+- **EXACT KEY** - the stored key is the 2026-09-01 cache key (board plus every record baked into
+  the backboard), so an exact match IS the picture this mount would have drawn. It is painted as
+  final and **the render is skipped entirely**: no import, no context, no readback.
+- **OLDER KEY** - the same machine with older numbers. Painted anyway as a provisional picture and
+  replaced the moment the fresh render lands, which is the repo's own rule for painting before the
+  data arrives (`docs/BUILDING-A-GAME.md` Part 0: name what replaces it, and when). A rack changes
+  the records, so this is the normal path after playing - and it is a picture instead of a black
+  box either way.
+
+**Measured in a real browser, same harness both sides** (SwiftShader, so the COUNTS transfer and
+the milliseconds do not):
+
+| | before | after |
+|---|---|---|
+| second open of the gallery: WebGL renders | 2 | **0** |
+| second open: picture on screen | t+6.6s | **t+0.2s** |
+| after the records changed: picture on screen | (a render away) | **t+0.2s**, then 1 render to refresh |
+
+Four things about the store, all load-bearing:
+
+- **It is NOT localStorage.** Five machines of ~60 KB of JPEG data URL is a real bite out of the
+  ~5 MB origin budget `gamehub.stats` lives in, and a stats write that fails for space is THE LAW's
+  problem. IndexedDB has its own, far larger budget; `test.js` asserts the module never reaches for
+  localStorage at all.
+- **It is a cache and only a cache.** Every byte can be redrawn. Nothing here is player data,
+  nothing reads it to score, record or unlock, and every path is guarded and resolves to null - a
+  browser with IndexedDB blocked behaves exactly as the app did before the file existed.
+- **The read is deadline-bounded (300ms).** The render waits on this answer, so a read that never
+  settles would leave the slide on its skeleton for ever: the cache would have become a way to LOSE
+  the picture. A disk hit that arrives after the render has landed never paints over it.
+- **`PIC_V` is the invalidator.** A session that changes how a machine is DRAWN must bump it, or
+  old pictures are served for ever. One line, and it costs one re-render per machine.
+
 ## What tapping Skeeball used to cost (2026-09-01)
 
 Matt, with a screen recording from Anita's phone of opening this game: *"What's wrong with it? Why
