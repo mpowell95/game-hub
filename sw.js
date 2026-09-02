@@ -6,7 +6,11 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
+<<<<<<< HEAD
 const CACHE = 'game-hub-v561';
+=======
+const CACHE = 'game-hub-v560';
+>>>>>>> origin/main
 
 const ASSETS = [
   './',
