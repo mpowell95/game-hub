@@ -255,7 +255,8 @@ export const BOARDS = [
         // sweep (4 each) with the emergency path empty.
         wallRest: 0.10,   // 2026-09-02, Matt, twice: the walls are still bouncy. Dead is what he wants.
         ringFric: 0.06,
-        ringRest: 0.18,
+        // 2026-09-02, Matt: rings 10-50 come down to 0.10 as well (the 100 is already dead).
+        ringRest: 0.10,
         // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
         // bouncy. it seems to ADD energy to the ball"). 0.18 -> 0.06. Measured, the ring does NOT
         // add energy - every contact within 16cm of a 100 LOST kinetic energy, and the few that
@@ -275,6 +276,13 @@ export const BOARDS = [
         // deadFric/deadRest above.
         backFric: 0,
         backRest: 0.60,
+        // THE BACK WALL IS TWO HALVES NOW (Matt, 2026-09-02): "the back wall bounce should
+        // be 0.05 BELOW the horizontal line dividing the score section... and remain 0.60
+        // above that line." The line is the rule between the scoreboard's top row (hub
+        // all-time, your best) and its bottom row (daily, last game). Its height is DERIVED
+        // from render.js's own panel layout in machines/classic/physics.js, never typed in
+        // twice, so the paint and the physics cannot drift apart.
+        backLowRest: 0.05,
       },
     },
 
