@@ -404,6 +404,74 @@ to hit, by design. If either plays wrong once there are real racks behind it, **
 `goals.js` — do not resize a mouth**, which is what makes the face mean something. POPONGO can also
 be opened for everyone from the in-app Admin page in the meantime.
 
+## The corner 100s: a well-aimed ball goes in (2026-09-02)
+
+Matt, with two screen recordings: a swipe that visually looks aimed at a corner 100 *"sometimes
+scores, sometimes misses completely"*, and a degree of angle or a hair of power flips it. A first
+fix capped `aimMax` to 0.12 rad (`a5ec37d`), which he rejected on sight: *"why would we move the
+physical basket around instead of simply correcting that physics issue? ... Just fix that."* He
+was right on both counts: the cap made a basket drawn 8.9 deg off the ball need a 20.8 deg swipe,
+and it fixed nothing about what happened when the ball got there. **Neither the basket nor its
+3.20 in mouth moved for this.** Every number below was measured with the real engine in node
+(`simulateThrow` / `startThrow` + `step`, no browser).
+
+### Where the basket is on screen is not where it is in the world
+
+Projected through the play camera (render.js, eye (0, 0.50, 1.20), aimed at 20% up the face), the
+corner 100 sits **8.9 deg** off the ball's own screen position (the 40 below it 11.3 deg, the -20
+15.3 deg - perspective spreads the near rows). Its serve bearing is 6.3 deg, and the serve that
+actually lands on its axis is **about 5.5 deg**: the lane's friction bleeds a serve's sideways skid
+off in the first 40 cm (a 5 deg serve is rolling at 3 deg by z -0.2), then the 70-degree hump kicks
+what is left, so the ball FLIES at ~8.4 deg. That flight angle is the "10-plus degrees" a swipe at
+that basket looks like; the serve angle is an internal number.
+
+`ui.js`'s swipe curve was `aim = raw^2`, `raw = swipe angle / 0.38` - forgiving near straight,
+steep at the corners, and the corner 100 IS a corner. At the old `aimMax` 0.45 an 8.9 deg swipe
+served at 4.3 deg (short) and 12 deg served at 7.8 deg (the side wall), so the whole window was
+about two degrees of swipe with the sensitivity climbing the further out you aimed. **The curve is
+per board now: `geom.aimCurve` is the exponent (unset = 2, every other machine byte-identical), and
+this machine sets 1** - serve angle proportional to swipe angle - **with `aimMax` 0.235**, the
+proportion (0.38 / 0.235 = 1.62) that puts an 8.9 deg swipe on a 5.5 deg serve. Measured end to
+end (screen angle -> the ui.js curve -> the engine), the 100's hits form one contiguous band at
+8.5-10.5 deg of swipe for powers 0.70-0.78, on the drawn basket, where before they were scattered
+clumps at 12-13 deg.
+
+### The engine threw well-aimed balls back out
+
+The bigger half. Over the serve grid that reaches this basket (4.5-7.5 deg x power 0.62-0.92, 403
+throws), **balls that arrived over the mouth scored 9 times in 36.** Stepped through at 5.5 deg /
+power 0.70 the ball arrives 2 cm off the axis, dead centre, descending at 2.4 m/s - and
+capture cannot see it: section 2's gate was `f.h < ballR * 1.9` (10.4 cm above the TREAD, THE
+CLASSIC's number for flush holes a ball rolls over) and this rim stands 11.6 cm above its tread. So
+the ball's underside grazes the rim's inner top EDGE, whose 45-degree contact normal turns the
+descent into a 1.5 m/s kick across the mouth; the far edge turns that into 1.6 m/s straight UP; and
+capture finally fires on the way out, as a rim-out. A 3.00 in ball into a 3.20 in rigid tube has
+3.7 mm of clearance and no net - any off-axis entry meets an edge, and an edge meets it back.
+
+Four rules in `machines/brickcity/physics.js`, this machine only:
+
+| rule | what it does | the case it was measured on |
+|---|---|---|
+| **the gate is measured from the rim** (`st.maxLip`, and per hole `fh.h < lip + 1.9 ballR`) | a ball dropping toward a basket is seen while it is still above it | the 2 cm-off arrival above |
+| **the net** (`cupBit`: each collar has its own collision group; a captured ball drops the one it was captured by) | capture already means "the floor is gone and gravity takes it through" - on a collar board the collar has to let go with the floor or the rule pays nothing. The other eight collars, the riser and the wall stay solid | same ball, which now drops straight through |
+| **the lip-rest rule** (`rRest = r - 0.10 ballR`, speed < 0.6 m/s) | a ball resting on a rim with its centre over the opening falls in | a riser slide that sat on the inner edge 5.0 cm off the axis of a 5.8 cm mouth, was refused by the 4.3 cm crossing inset, teetered and rolled into the -10 |
+| **a rim-out must be moving away from the face** | a captured ball still descending has not bounced out | forward momentum carried a captured centre 2 mm past the mouth radius toward the riser while still going down; the collar came back solid, kicked it 2.6 m/s up, and it rolled off the rim top in the crack against the riser |
+
+After: **22 of 28 over-the-mouth arrivals score** (79%); 82 of the 403 throws are 100s (was 61). The
+crossing inset (`rEff = r - 0.28 ballR`) and its kinematic test are THE CLASSIC's and unchanged, so
+a ball never over the mouth is never captured and rattles the rim as it always did.
+
+**Tried and rejected, so nobody tries them again:** rim restitution (`ringRest` 0.30 -> 0.05 on
+every collar: 25% -> 28%; and `ring100Rest` is a dead knob on this machine, see physics.js's
+material note), and the full rolling serve spin (`omega = (up x v) / R` instead of forward roll
+only - the hump turned the sideways spin into a lateral kick and a 4.5 deg serve landed 6-11 cm
+right of the axis instead of 1-2). The perspective ratio does differ by row (1.41 top, 1.59 middle,
+1.89 bottom); one proportion cannot serve all three, and it is set for the row that has to be aimed.
+
+`test-brickcity-corner100.mjs` pins all of it: 90 throws over the band, at least 70% of
+over-the-mouth arrivals must score (born red at 25%), plus structural checks that the four rules
+and the two aim numbers are still in the files.
+
 ## Spec waivers
 
 Per `MACHINE-SPEC.md` section 20, keyed by rule id, in the board entry's `specWaivers`:
