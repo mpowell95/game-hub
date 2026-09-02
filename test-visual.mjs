@@ -80,6 +80,15 @@ const KNOWN_GAPS = {
   // were competing with, and taking the words out gave it back. Worth knowing next time a screen
   // "needs a layout pass": sometimes it just needs fewer sentences.
   'fits one screen': {
+    // 2026-09-01: went 154px -> 136px, and the other THREE cases now pass (both standalone
+    // heights and the tall hub). What is left is not spacing: .cc-game measures 664px in the hub
+    // against 526px of room, and the bulk is the hand (305px, cards 135px tall on two rows) and
+    // the mat (217px). Chinchon's own .cc-compact latch is already applied and already spent.
+    // Closing it means SHRINKING THE CARDS, which is a readability redesign of the game with the
+    // most fragile CSS in the repo (246 bare top-level rules) and needs eyes on screenshots per
+    // VISUAL-PROCESS.md - not a number nudged until a test goes green.
+    chinchon: '136px too tall (hub, 390x664) only. Both standalone heights and the tall hub fit '
+      + 'since 2026-09-01; the rest needs a card-size pass, not spacing.',
     escoba: 'up to 165px too tall (hub, 390x664). Fits fine at 393x852, both hosts.',
     mancala: 'up to 222px too tall (hub, 390x664), and 34px even on a TALL phone in the hub - the '
       + 'worst of the three, and the only one that overflows a full-size screen.',

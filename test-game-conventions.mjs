@@ -41,12 +41,12 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const KNOWN_GAPS = {
   'no CSS font-size under 11px (docs/BUILDING-A-GAME.md, "The UX floor")': {
     'boggle/css/boggle.css:106': 'score summary micro-label, pre-existing',
-    'boggle/css/boggle.css:225': 'tally count micro-label, pre-existing',
-    'chinchon/css/chinchon.css:640': 'stats chart axis label, pre-existing',
+    'boggle/css/boggle.css:242': 'tally count micro-label, pre-existing',
+    'chinchon/css/chinchon.css:646': 'stats chart axis label, pre-existing',
     'escoba/css/escoba.css:314': 'card badge, pre-existing',
     'escoba/css/escoba.css:677': 'stats chart axis label, pre-existing',
-    'filler/css/filler.css:229': 'pre-existing',
-    'filler/css/filler.css:272': 'pre-existing',
+    'filler/css/filler.css:247': 'pre-existing',
+    'filler/css/filler.css:290': 'pre-existing',
     'mancala/css/mancala.css:284': 'pre-existing',
     'mancala/css/mancala.css:868': 'pit-count micro-label, pre-existing',
     'mancala/css/mancala.css:876': 'pit-count micro-label, pre-existing',

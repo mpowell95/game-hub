@@ -108,6 +108,23 @@
 /* --- game: board ------------------------------------------------------------ */
 
 .bg-root .bg-board-wrap { position: relative; width: min(100%, 340px); aspect-ratio: 1; }
+/* FITTING ONE SCREEN (2026-09-01). Measured 672px of shell against a 664px viewport standalone,
+   and against only 526px in the hub once its chrome takes ~138px. Two steps, because they solve
+   different halves:
+   1. Spacing. Worth ~47px and touches nothing the player reads or taps.
+   2. The BOARD, in the hub only. It is sized from its width (aspect-ratio 1), so on a short
+      screen it has no idea it does not fit vertically. The third term caps it by HEIGHT instead:
+      everything that is not the board costs ~285px, plus the hub's ~138px of chrome, so the
+      board may have whatever is left. A tall phone never reaches the cap and keeps all 340px.
+      At 390x664 in the hub it lands near 240px - a 4x4 grid at ~57px a tile, still well over the
+      44px tap floor.
+   A height media query cannot do this job: the hub's chrome is invisible to it, which is why the
+   hub rules are keyed off .hub-main instead. */
+@media (max-height: 760px) {
+  .bg-root .bg-shell { padding: 10px 14px 14px; gap: 9px; }
+}
+.hub-main .bg-root .bg-shell { padding: 10px 14px 14px; gap: 9px; }
+.hub-main .bg-root .bg-board-wrap { width: min(100%, 340px, calc(100dvh - 425px)); }
 .bg-root .bg-path-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
 .bg-root .bg-path-line { stroke: var(--bg-accent-deep); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
