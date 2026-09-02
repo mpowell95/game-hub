@@ -15,6 +15,7 @@
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { engineFor, loadEngine } from './engines.js';
 import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
+import { readPic, writePic } from './picstore.js';
 import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -971,26 +972,55 @@ export class SkeeballUI {
     const cached = cachedMachineImg(key);
     if (cached) { imgEl.src = cached; if (box) box.removeAttribute('data-painting'); return; }
     if (box) box.setAttribute('data-painting', '');
+
+    // THE PICTURE OUTLIVES THE PAGE NOW (2026-09-02, skeeball/js/picstore.js). Matt: "it's a black
+    // screen for a second before the machine image loads." The module-scope cache above dies with
+    // the page, so the first open of every session paid the whole cost again - an engine import, a
+    // WebGL scene and a readback - with nothing but the skeleton on screen meanwhile.
+    //
+    // Two outcomes, and the difference matters:
+    //   EXACT KEY  -> this IS the picture this call would have drawn (the key is the board plus
+    //                 every record baked into the backboard), so it is painted as final and the
+    //                 render is SKIPPED entirely. No import, no context, no readback.
+    //   OLDER KEY  -> the same machine with older numbers on its backboard. Painted anyway, as a
+    //                 provisional picture, and REPLACED the moment the fresh render lands below -
+    //                 which is the repo's rule for painting before the data arrives (Part 0 of
+    //                 docs/BUILDING-A-GAME.md): name what replaces it, and when.
+    // A disk hit that arrives AFTER the render has already landed must not paint over it, which is
+    // what `painted` tracks. Everything is guarded; a browser with no IndexedDB behaves as before.
+    let painted = false;
+    const fromDisk = readPic(board.id, key).then((hit) => {
+      if (!hit || painted || this.disposed || !imgEl.isConnected) return false;
+      imgEl.src = hit.url;
+      if (box) box.removeAttribute('data-painting');
+      if (hit.fresh) { painted = true; cacheMachineImg(key, hit.url); }
+      return !!hit.fresh;
+    }).catch(() => false);
+
     // ONE MACHINE'S ENGINE, ON DEMAND (2026-09-01). Drawing this picture needs that machine's
     // render.js, its machine.js and three.js - not its physics, and not the other four machines.
     // engines.js used to import all fifteen files statically, which is why opening the gallery
     // cost 2.3 MB.
-    loadEngine(board.id, { physics: false })
-      .then(() => new Promise((r) => requestAnimationFrame(r)))
-      .then(() => {
+    fromDisk
+      .then((final) => (final ? null : loadEngine(board.id, { physics: false })
+        .then(() => new Promise((r) => requestAnimationFrame(r)))
+        .then(() => {
         // isConnected: the screen may have been re-rendered (or left) while this was in flight,
         // and painting into a detached <img> is silent, wasted WebGL work. The screen test is the
         // narrow window that leaves open: _cancelPrewarm stops the SCHEDULING, not a render already
         // in flight, and a rack that starts in that gap would pay for a whole scene build on its
         // first frames. (Play does detach the slides, so isConnected catches it a moment later -
         // this just makes "never on a live rack" true rather than nearly true.)
-        if (this.disposed || this.screen !== 'setup' || !imgEl.isConnected) return;
-        const url = renderMachineImage(board, sb);
-        if (!url) return;
-        cacheMachineImg(key, url);
-        imgEl.src = url;
-        if (box) box.removeAttribute('data-painting');
-      })
+          if (this.disposed || this.screen !== 'setup' || !imgEl.isConnected) return;
+          const url = renderMachineImage(board, sb);
+          if (!url) return;
+          painted = true;
+          cacheMachineImg(key, url);
+          imgEl.src = url;
+          if (box) box.removeAttribute('data-painting');
+          // Fire and forget: a failed write costs the next open its head start, nothing more.
+          writePic(board.id, key, url);
+        })))
       .catch((err) => console.error('[skeeball] machine picture failed', board.id, err));
   }
 

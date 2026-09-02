@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v562';
+const CACHE = 'game-hub-v563';
 
 const ASSETS = [
   './',
@@ -267,6 +267,7 @@ const ASSETS = [
   './skeeball/js/goals.js',
   './skeeball/js/boards.js',
   './skeeball/js/engines.js',
+  './skeeball/js/picstore.js',
   './skeeball/js/machines/classic/physics.js',
   './skeeball/js/machines/classic/machine.js',
   './skeeball/js/machines/classic/render.js',
@@ -601,12 +602,13 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': '927126d1ed',
-  './skeeball/js/ui.js': '90f402bc5d',
+  './skeeball/js/ui.js': '1178b50a6b',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': 'bedd796565',
   './skeeball/js/boards.js': 'abe3bdc2db',
   './skeeball/js/engines.js': '9d1dd1cf73',
+  './skeeball/js/picstore.js': 'cf57e56755',
   './skeeball/js/machines/classic/physics.js': 'c07c866a04',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
   './skeeball/js/machines/classic/render.js': '8285385105',

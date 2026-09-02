@@ -786,6 +786,39 @@ if (G.mat) {
     && /_startGameInner\(snap, board\)\s*{[\s\S]{0,300}?_cancelPrewarm\(\)/.test(uiSrc),
     'a queued picture must not build a WebGL scene on top of a live rack, or after the game is gone');
 
+  // THE PICTURE SURVIVES THE PAGE (2026-09-02, skeeball/js/picstore.js). Matt: "it's a black
+  // screen for a second before the machine image loads." The module-scope cache above dies with
+  // the page, so the FIRST open of every session re-imported an engine, built a WebGL scene and
+  // read it back with nothing but the skeleton on screen. Measured in a real browser, same
+  // harness both sides: a reload went from 2 WebGL renders and a picture at t+6.6s to ZERO
+  // renders and a picture at t+0.2s (SwiftShader, so the counts transfer and the ms do not).
+  const picSrc = readFileSync(new URL('./picstore.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] the machine picture is read back from disk before anything is rendered',
+    /readPic\(board\.id, key\)/.test(uiSrc) && /import \{ readPic, writePic \}/.test(uiSrc),
+    'without a persistent store the first open of every session pays for the whole render again');
+  ok('an EXACT stored key skips the render entirely (no import, no context, no readback)',
+    /hit\.fresh/.test(uiSrc) && /\(final \? null : loadEngine\(/.test(uiSrc));
+  ok('a STALE stored picture is still painted, and the fresh render replaces it',
+    /imgEl\.src = hit\.url/.test(uiSrc) && /painted = true;[\s\S]{0,200}?imgEl\.src = url/.test(uiSrc),
+    'the same machine with older numbers beats a black box - and the repo rule is to name what\n'
+    + '        replaces a provisional paint, which the render below does');
+  ok('a disk hit that arrives after the render must not paint over it',
+    /if \(!hit \|\| painted \|\|/.test(uiSrc));
+  ok('the fresh render is written back for next time',
+    /writePic\(board\.id, key, url\)/.test(uiSrc));
+  // The read is on the critical path (an exact hit means the render never starts), so a read that
+  // never settles would leave the slide on its skeleton for ever - the cache would have become a
+  // way to LOSE the picture.
+  ok('the disk read is deadline-bounded, so a wedged IndexedDB cannot strand the slide',
+    /const READ_MS =/.test(picSrc) && /Promise\.race\(\[read, deadline\(READ_MS\)\]\)/.test(picSrc));
+  // Pictures are a cache; player data is not. Keeping ~60 KB of JPEG per machine out of the
+  // localStorage budget `gamehub.stats` lives in is THE LAW's business, not performance's.
+  ok('the picture store never touches localStorage',
+    !/localStorage\s*\.\s*(?:get|set|remove)Item/.test(picSrc));
+  ok('every picstore path is guarded and resolves rather than throwing',
+    /catch \{ resolve\(null\); return; \}/.test(picSrc) && /export const PIC_V/.test(picSrc),
+    'a browser with IndexedDB blocked must behave exactly as the app did before the store existed');
+
   // The empty box is the half that read as BROKEN rather than slow, so it must say "loading".
   ok('a slide being drawn shows the quiet skeleton, not an empty box',
     /\[data-painting\]::after/.test(cssSrc) && /setAttribute\('data-painting'/.test(uiSrc));
