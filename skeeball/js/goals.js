@@ -45,7 +45,23 @@ export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 // Same shape as BRICK CITY's, and it reuses the same per-board `slots` set - no new counter.
 export const BB_BASKETS = 9;     // HOT SHOT: land in every basket at least once
 export const BB_BEST = 700;      // HOT SHOT: score 700+ in a single game (was 300)
-export const BB_TOTAL = 30000;   // HOT SHOT: 30,000 points in total on the machine (3,000 -> 10,000 -> 30,000)
+// HOT SHOT: 20,000 points in total on the machine (3,000 -> 10,000 -> 30,000 -> 20,000, the last
+// one DOWN, 2026-09-02). Matt asked for the machine to be a little easier and this is the only bar
+// that was hard: 700 in a game is 1.5x the machine's measured average (467 over 400 real games),
+// where THE CLASSIC asks 2.1x its own, and all three players had already beaten it. 30,000 was
+// ~64 games at that average - the same grind as the classic's 10,000 (~59), just a bigger number
+// because this machine pays 2.7x more - but it was the only thing standing between two players
+// and BRICK CITY, with nothing left to learn on the way.
+//
+// WHY 20,000 AND NOT 15,000, which is what he wanted before HDJ started playing: a goal is DERIVED
+// from the stored total, so lowering it is retroactive - every point already thrown counts the
+// instant the new number ships. At 15,000 MattyIce (18,440) would have been handed the unlock on
+// his next app open having played nothing for it, and HDJ would have gone from ~41 games left to
+// ~8 mid-climb. Matt: "it feels weird to make it easier for him." 20,000 is the largest cut that
+// sits ABOVE every current total (HDJ 11,420, MattyIce 18,440), so nobody is granted anything for
+// free and both still have a real target (~19 and ~5 games). Nothing anyone earned is affected
+// either way: unlocks are an additive set and nothing removes from it (THE LAW rule 2).
+export const BB_TOTAL = 20000;
 
 // HOT SHOT: BRICK CITY. Its three are about its FACE, not about a number - Matt, 2026-08-24,
 // replacing the first draft's "sink a 100" and "score 240 in a game" - and RAISED on 2026-08-25,
@@ -65,7 +81,9 @@ export const BB_TOTAL = 30000;   // HOT SHOT: 30,000 points in total on the mach
 //      balls are spent and every one of them scored. `cleanRacks` is still counted and still
 //      stored - nothing that was recorded stops being recorded - it is simply no longer what the
 //      objective reads.
-//   3. NET points, 30,000 - HOT SHOT's number, which Matt set for this machine too. On this face
+//   3. NET points, 30,000 - what HOT SHOT asked for at the time, and Matt set it for this machine
+//      too. HOT SHOT's own total came DOWN to 20,000 on 2026-09-02 and this one did NOT: he asked
+//      for that machine to be easier, not this one. On this face
 //      a round contributes what it FINISHED with after the penalties took their cut, which is why
 //      the label says NET where the other machines say Total.
 //
