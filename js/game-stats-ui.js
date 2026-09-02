@@ -593,7 +593,12 @@ function battleshipScreen(rec) {
  *  machine filter on Skeeball's board, so the two screens can never disagree on a machine's name. */
 export const SK_MACHINES = {
   classic: { name: 'THE CLASSIC', color: '#a86f38' },
-  basketball: { name: 'BASKET FEVER', color: '#f2c526' },
+  // Renamed to HOT SHOT in skeeball/js/boards.js on 2026-08-22; this copy was missed and went
+  // on printing the old name on the leaderboard and My Stats. The ID stays `basketball` for
+  // ever (THE LAW rule 5 - it keys every play ever thrown on the machine); only the display
+  // name moved. boards.js is the source of truth for a machine's name: if the two ever
+  // disagree again, boards.js wins.
+  basketball: { name: 'HOT SHOT', color: '#f2c526' },
   popongo: { name: 'POPONGO', color: '#c9a36a' },
 };
 
