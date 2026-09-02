@@ -253,7 +253,7 @@ export const BOARDS = [
         // to fling the ball out of the cabinet. Kept above dead: a bank off the side rail into a
         // corner 100 is a real shot on this machine, and both 100s still land in the 861-throw
         // sweep (4 each) with the emergency path empty.
-        wallRest: 0.28,
+        wallRest: 0.10,   // 2026-09-02, Matt, twice: the walls are still bouncy. Dead is what he wants.
         ringFric: 0.06,
         ringRest: 0.18,
         // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
@@ -263,7 +263,7 @@ export const BOARDS = [
         // around a mouth only 4cm wider than the ball, so a miss meets a tall tube side-on and
         // leaves fast enough to read as a kick. This is the split the ring100 material exists
         // for: the 10 through 50 keep 0.18.
-        ring100Rest: 0.06,
+        ring100Rest: 0.0,   // 2026-09-02: dead. Matt: it bounces off with MORE energy than it came in with.
         deadFric: 0.24,
         deadRest: 0.10,
         // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall
