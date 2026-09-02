@@ -772,7 +772,22 @@ export const BOARDS = [
 
       minSpeed: 2.60,
       maxSpeed: 6.60,
-      aimMax: 0.45,
+      // NARROWED FROM 0.45 (2026-09-02, Matt: a corner-100 swipe that visually looks aimed at the
+      // basket was landing the ball on the side wall instead). Measured with the real engine
+      // (simulateThrow, full power x aim grid): at 0.45 rad (25.8 deg) max aim, a throw aimed
+      // between roughly 7 and 21 degrees flies past the basket's own u before it falls low enough
+      // to score, clips the RIGHT SIDE WALL, and then rides that wall for up to 2 seconds before
+      // landing somewhere unpredictable - a single power/angle step off gives a totally different
+      // outcome. Only two narrow bands were clean (bounces=0, never touched the wall or board):
+      // roughly 4-6.75 deg, and roughly 22-25.5 deg. The 4-6.75 deg band is a genuine straight-line
+      // shot at the corner 100 - it is the hole's real geometric bearing from the serve point,
+      // reachable across a wide power range (0.645-0.925 measured) with zero contact.
+      //
+      // 0.12 rad = 6.9 deg caps EVERY possible swipe inside that clean band, so a full-strength
+      // "aimed at the corner" swipe can no longer reach the wall-clip zone at all. Re-swept after:
+      // all nine holes on this board still reachable at this aimMax. This board's own geom only -
+      // no other machine's aimMax changed.
+      aimMax: 0.12,
 
       // HOT SHOT's materials, verbatim and for its reasons: slick treads so a miss rolls off the
       // front edge, a near-frictionless back wall (a fast ball sliding down a GRIPPING wall gets
