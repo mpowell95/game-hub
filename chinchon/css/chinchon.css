@@ -232,7 +232,13 @@
    the top" - rather than only shrinking the hand/board (THE LAW rule 7:
    redistribute the budget, don't just shrink indiscriminately). */
 .cc-root.cc-compact { padding-top: 0; }
-.cc-root.cc-compact .cc-game { gap: 5px; padding: 6px; }
+/* Compact also gives back the ROOT's own padding (2026-09-01). `.cc-root` carries
+   `padding: 6px 6px 16px`, and those 22px were the last of the 72px chinchon stood proud of a
+   664px phone once the standalone page's stray 56px of body padding was removed. Compact is the
+   right home for it: it is the game's own "I am short on space" mode, already latched by
+   fitToViewport(). */
+.cc-root.cc-compact { padding: 0 6px 2px; }
+.cc-root.cc-compact .cc-game { gap: 5px; padding: 4px; }
 .cc-root.cc-compact .cc-mat { padding: 8px; gap: 5px; }
 .cc-root.cc-compact .cc-actions { min-height: 40px; }
 .cc-root.cc-compact .cc-hand { padding-bottom: 6px; }
