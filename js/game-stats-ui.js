@@ -625,7 +625,15 @@ export function skMachineMeta(id) {
 function skNum(v) { return v == null ? '&mdash;' : Number(v).toLocaleString(); }
 
 /** The daily best map as a sparkline, oldest day first. Returns '' for fewer than two days - a
- *  one-point line says nothing a number has not already said. */
+ *  one-point line says nothing a number has not already said.
+ *
+ *  (2026-09-02) IT CARRIES ITS OWN SCALE NOW. Matt, on the old one: "It's not clear what you're
+ *  looking at unless you really look." It was an unlabelled line on an unlabelled box - the same
+ *  picture whether the days ran 10 to 20 or 260 to 330, because the y axis is normalised to the
+ *  player's own min and max. So the low and the high are PRINTED, at the ends they belong to, and
+ *  the last day gets a dot: the shape is then readable as a shape, and the numbers say what it
+ *  spans. The area under the line is filled for the same reason - a 2px line on a phone, at arm's
+ *  length, is nearly invisible. */
 function skSparkHTML(daily) {
   const days = Object.keys(daily || {}).sort();
   if (days.length < 2) return '';
@@ -633,10 +641,23 @@ function skSparkHTML(daily) {
   const max = Math.max(...vals);
   const min = Math.min(...vals);
   const span = Math.max(1, max - min);
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * 316 + 2).toFixed(1)},${(34 - (v - min) / span * 28).toFixed(1)}`).join(' ');
+  const x = (i) => (i / (vals.length - 1) * 316 + 2);
+  const y = (v) => (34 - (v - min) / span * 26);
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `2,38 ${pts} 318,38`;
   return `<div class="gs-sk-spark">
-    <div class="gs-sk-spark-h"><span>${esc(t('gs_sk_best_per_day'))}</span><span>${esc(t('gs_sk_days_span', { n: days.length }))}</span></div>
-    <svg viewBox="0 0 320 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline></svg>
+    <div class="gs-sk-spark-h">
+      <span>${esc(t('gs_sk_best_per_day'))}</span>
+      <span>${esc(t('gs_sk_days_span', { n: days.length }))}</span>
+    </div>
+    <div class="gs-sk-spark-plot">
+      <svg viewBox="0 0 320 40" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="${area}" class="gs-sk-spark-fill"></polygon>
+        <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>
+      </svg>
+      <span class="gs-sk-spark-hi">${Number(max).toLocaleString()}</span>
+      <span class="gs-sk-spark-lo">${Number(min).toLocaleString()}</span>
+    </div>
   </div>`;
 }
 
@@ -662,32 +683,25 @@ function skPracticeHTML(sk) {
   </div>`;
 }
 
-/** One machine the player has actually thrown on: best game and points always visible, everything
- *  else behind a disclosure that starts closed (including the first machine's). */
+/** One machine the player has actually thrown on.
+ *
+ *  (2026-09-02) ALL FOUR NUMBERS ARE VISIBLE; there is no "More" disclosure any more. It hid
+ *  Games and Best throw behind a tap on a screen that has at most a handful of machines on it,
+ *  which bought nothing and cost the card its shape - two numbers, a link, then a strip of empty
+ *  card. Matt: "SO much wasted space everywhere, but it still feels crowded." A disclosure is
+ *  right when the hidden thing is long or rare; four numbers about one machine are neither. */
 function skMachineCardHTML(id, b) {
   const meta = skMachineMeta(id);
-  const detail = [
-    [t('gs_sk_games'), skNum(b.plays | 0)],
-    [t('gs_sk_best_throw'), skNum(b.bestThrow | 0)],
-  ].map(([k, v]) => `<div class="gs-sk-d"><span>${esc(k)}</span><b>${v}</b></div>`).join('');
-  return `<div class="gs-sk-mc">
-    <div class="gs-sk-mc-top">
-      <span class="gs-sk-stripe" style="background:${meta.color}"></span>
-      <div class="gs-sk-mc-body">
-        <div class="gs-sk-mc-id"><span class="gs-sk-mark" style="background:${meta.color}"></span><span class="gs-sk-nm">${esc(meta.name)}</span></div>
-        <div class="gs-sk-mc-nums">
-          <div><b>${skNum(b.best | 0)}</b><span>${esc(t('gs_sk_best_game'))}</span></div>
-          <div><b>${skNum(b.points | 0)}</b><span>${esc(t('gs_sk_points'))}</span></div>
-        </div>
-      </div>
-    </div>
-    <details class="gs-sk-more">
-      <summary><span class="gs-sk-more-lbl">${esc(t('gs_sk_more'))}</span><span class="gs-sk-more-hint">${esc(t('gs_sk_games_hint', { n: b.plays | 0 }))}</span></summary>
-      <div class="gs-sk-more-body">
-        <div class="gs-sk-dgrid">${detail}</div>
-        ${skSparkHTML(b.daily)}
-      </div>
-    </details>
+  const nums = [
+    [skNum(b.best | 0), t('gs_sk_best_game')],
+    [skNum(b.points | 0), t('gs_sk_points_short')],
+    [skNum(b.plays | 0), t('gs_sk_games')],
+    [skNum(b.bestThrow | 0), t('gs_sk_best_throw')],
+  ].map(([v, l]) => `<div class="gs-sk-mn"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
+  return `<div class="gs-sk-mc" style="--mc:${meta.color}">
+    <div class="gs-sk-mc-id"><span class="gs-sk-mark"></span><span class="gs-sk-nm">${esc(meta.name)}</span></div>
+    <div class="gs-sk-mc-nums">${nums}</div>
+    ${skSparkHTML(b.daily)}
   </div>`;
 }
 
@@ -718,25 +732,38 @@ function skeeballScreen(rec) {
   const throwN = throwCounts[sk.bestThrow | 0];
   const throwNote = throwN == null ? '' : t('gs_sk_hit_times', { n: Number(throwN).toLocaleString() });
 
-  const lifetime = [
+  const cells = (rows) => rows.map(([v, l]) => `<div class="gs-sk-cell"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
+
+  // THE LIFETIME BLOCK IS THREE EVEN ROWS, NOT ONE RAGGED GRID (2026-09-02). It used to be seven
+  // cells in a three-column grid, so the last row was one number beside a hole the width of two -
+  // the single most visible piece of the "so much wasted space" Matt reported. Three groups, each
+  // of which divides evenly: what you did (3), what you threw (6), and the two rare counters (2).
+  // Nothing was dropped, and the ball values are no longer behind a disclosure - see below.
+  const totals = cells([
     [skNum(sk.played | 0), t('gs_sk_games')],
     [skNum(sk.balls | 0), t('gs_sk_balls')],
     [skNum(sk.points | 0), t('gs_sk_points')],
-    [skNum(sk.hundreds), t('gs_sk_hundreds')],
-    [skNum(sk.fifties), t('gs_sk_fifties')],
-    [skNum(sk.colorSweeps), t('gs_sk_sweeps')],
-    [skNum(sk.runaways), t('gs_sk_runaways')],
-  ].map(([v, l]) => `<div class="gs-sk-cell"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
+  ]);
 
+  // The six ball values, ascending, ALWAYS VISIBLE. They were split across two places for no
+  // reason a player could see: 100s and 50s sat in the lifetime grid while 10s-40s hid behind an
+  // "Every ball value" disclosure. One strip, in order, is both smaller on the screen and easier
+  // to read than a grid plus a link. A value the store has never recorded still prints a dash
+  // (skNum), so a device that predates a counter is honest rather than showing a false zero.
   const ballRows = [
     [t('gs_sk_tens'), sk.tens], [t('gs_sk_twenties'), sk.twenties],
     [t('gs_sk_thirties'), sk.thirties], [t('gs_sk_forties'), sk.forties],
+    [t('gs_sk_fifties'), sk.fifties], [t('gs_sk_hundreds'), sk.hundreds],
   ];
-  const hasBalls = ballRows.some(([, v]) => v != null);
-  const ballBreakdown = !hasBalls ? '' : `<details class="gs-sk-more is-flat">
-    <summary><span class="gs-sk-more-lbl">${esc(t('gs_sk_every_ball'))}</span><span class="gs-sk-more-hint">${esc(t('gs_sk_ball_hint'))}</span></summary>
-    <div class="gs-sk-balls">${ballRows.map(([l, v]) => `<div class="gs-sk-d"><span>${esc(l)}</span><b>${skNum(v)}</b></div>`).join('')}</div>
-  </details>`;
+  const balls = cells(ballRows.map(([l, v]) => [skNum(v), l]));
+
+  // Color sweeps and runaways are POPONGO's and RUNAWAY's, so on most records they are two zeros.
+  // They stay (rule 1 - a stored counter no screen shows reads as deleted) but they sit last, in
+  // their own quiet two-up row, instead of taking prime space in the middle of the grid.
+  const rare = cells([
+    [skNum(sk.colorSweeps), t('gs_sk_sweeps')],
+    [skNum(sk.runaways), t('gs_sk_runaways')],
+  ]);
 
   // Frozen pre-2026-08-11 vs-computer history: shown only when it exists, never merged with the
   // solo numbers, and never re-derived (THE LAW rule 1 keeps it on a screen; rule 5 keeps it stored).
@@ -754,19 +781,19 @@ function skeeballScreen(rec) {
       <div class="gs-sk-hero-a">
         <span class="gs-sk-k">${esc(t('gs_sk_best_game'))}</span>
         <b>${skNum(sk.bestGame | 0)}</b>
-        ${bestNote ? `<span class="gs-sk-note">${esc(bestNote)}</span>` : ''}
+        <span class="gs-sk-note">${bestNote ? esc(bestNote) : '&nbsp;'}</span>
       </div>
       <div class="gs-sk-hero-b">
-        <div>
-          <span class="gs-sk-k">${esc(t('gs_sk_best_throw'))}</span>
-          <b>${skNum(sk.bestThrow | 0)}</b>
-        </div>
-        ${throwNote ? `<span class="gs-sk-note">${esc(throwNote)}</span>` : ''}
+        <span class="gs-sk-k">${esc(t('gs_sk_best_throw'))}</span>
+        <b>${skNum(sk.bestThrow | 0)}</b>
+        <span class="gs-sk-note">${throwNote ? esc(throwNote) : '&nbsp;'}</span>
       </div>
     </div>
     <h4 class="gs-tbl-h">${esc(t('gs_sk_lifetime_h', { n: playedIds.length }))}</h4>
-    <div class="gs-sk-grid">${lifetime}</div>
-    ${ballBreakdown}
+    <div class="gs-sk-grid is-3">${totals}</div>
+    <div class="gs-sk-sub">${esc(t('gs_sk_every_ball'))}</div>
+    <div class="gs-sk-grid is-3">${balls}</div>
+    <div class="gs-sk-grid is-2 is-quiet">${rare}</div>
     <h4 class="gs-tbl-h">${esc(t('gs_sk_machines_h'))}</h4>
     <div class="gs-sk-machines">
       ${playedIds.map((id) => skMachineCardHTML(id, boards[id])).join('')}
@@ -1058,8 +1085,14 @@ function ensureCss() {
     '.gs-ov-id{display:flex;align-items:center;gap:8px;min-height:28px}',
     '.gs-ov-av{font-size:1.4rem;line-height:1}',
     '.gs-ov-name{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a)}',
-    '.gs-glist{display:flex;flex-direction:column;gap:8px}',
-    '.gs-grow{appearance:none;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 11px;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;box-shadow:0 4px 16px rgba(20,40,80,.06);font:inherit;color:inherit}',
+    // ONE LIST, NOT A STACK OF FLOATING CARDS (2026-09-02). Every row used to be its own bordered,
+    // rounded, drop-shadowed card with an 8px gap - twelve games meant twelve shadows and eleven
+    // gaps, which is a lot of chrome to say "here are some games". One container, hairline
+    // separators, no per-row shadow: denser, quieter, and two more games fit on a phone screen.
+    '.gs-glist{display:flex;flex-direction:column;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;overflow:hidden}',
+    '.gs-grow{appearance:none;cursor:pointer;display:flex;align-items:center;gap:11px;width:100%;min-height:52px;text-align:left;padding:8px 12px;background:transparent;border:0;font:inherit;color:inherit}',
+    '.gs-grow+.gs-grow{border-top:1px solid var(--hub-surface-2,#eef2f8)}',
+    '.gs-grow:active{background:var(--hub-surface-2,#eef2f8)}',
     '.gs-gart{flex:0 0 auto;width:46px;height:26px;border-radius:6px;overflow:hidden;line-height:0}',
     '.gs-gart svg{width:100%;height:100%;display:block}',
     '.gs-gname{flex:1 1 auto;min-width:0;font-size:.9rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -1097,50 +1130,54 @@ function ensureCss() {
     // 11px is the floor for every caption and unit word here, every control is at least 44px tall,
     // and every numeric slot is tabular-nums and sized for six digits (112,730 is the widest real
     // number in the system).
-    '.gs-sk-hero{display:flex;gap:10px}',
-    '.gs-sk-hero-a{flex:1.4;background:var(--hub-ink,#16243a);color:var(--hub-surface,#fff);border-radius:12px;padding:14px 15px;min-width:0}',
-    '.gs-sk-hero-b{flex:1;background:var(--hub-surface-2,#eef2f8);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:14px 15px;min-width:0;display:flex;flex-direction:column;justify-content:space-between;color:var(--hub-ink,#16243a)}',
-    '.gs-sk-k{display:block;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;opacity:.72}',
-    '.gs-sk-hero-a b{display:block;font-size:46px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.035em;line-height:1;margin-top:4px}',
-    '.gs-sk-hero-b b{display:block;font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;margin-top:4px}',
-    '.gs-sk-note{display:block;font-size:11px;opacity:.72;margin-top:6px;overflow-wrap:anywhere}',
-    '.gs-sk-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--hub-surface-2,#eef2f8);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:10px;overflow:hidden}',
-    '.gs-sk-cell{background:var(--hub-surface,#fff);padding:11px 10px 12px;min-width:0}',
-    '.gs-sk-cell b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--hub-ink,#16243a);line-height:1.1}',
-    '.gs-sk-cell span{display:block;font-size:11px;color:var(--hub-muted,#5b6b82);margin-top:3px;line-height:1.25}',
-    // The disclosures are native <details>: no JS state to thread through two overlays, and the
-    // reduced-motion behaviour is the browser's already.
-    '.gs-sk-more{border:1px solid var(--hub-surface-2,#eef2f8);border-radius:0 0 10px 10px;border-top:0;overflow:hidden}',
-    '.gs-sk-more.is-flat{border-radius:10px;border-top:1px solid var(--hub-surface-2,#eef2f8);margin-top:-4px}',
-    '.gs-sk-more summary{list-style:none;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;cursor:pointer;font-size:12.5px;font-weight:800;color:var(--hub-accent,#1769d4);background:var(--hub-surface,#fff)}',
-    '.gs-sk-more summary::-webkit-details-marker{display:none}',
-    '.gs-sk-more-hint{font-weight:600;color:var(--hub-muted,#5b6b82);font-variant-numeric:tabular-nums}',
-    '.gs-sk-more[open] .gs-sk-more-hint{display:none}',
-    '.gs-sk-more-body{border-top:1px solid var(--hub-surface-2,#eef2f8);padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px;background:var(--hub-surface,#fff)}',
-    '.gs-sk-dgrid,.gs-sk-balls{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}',
-    '.gs-sk-balls{border-top:1px solid var(--hub-surface-2,#eef2f8);padding:12px 14px 14px;background:var(--hub-surface,#fff)}',
-    '.gs-sk-d{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--hub-surface-2,#eef2f8);padding-bottom:5px;min-width:0}',
-    '.gs-sk-d span{font-size:11.5px;color:var(--hub-muted,#5b6b82)}',
-    '.gs-sk-d b{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
-    '.gs-sk-spark{color:var(--hub-accent,#1769d4)}',
-    '.gs-sk-spark-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-hero{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
+    // Both halves are the SAME shape now. They used to be 1.4fr dark against 1fr light with two
+    // different type sizes, which read as one card plus an afterthought rather than as the two
+    // records they are. Equal width, equal type, one filled and one outlined.
+    '.gs-sk-hero-a,.gs-sk-hero-b{border-radius:14px;padding:13px 14px 12px;min-width:0;display:flex;flex-direction:column}',
+    '.gs-sk-hero-a{background:var(--hub-ink,#16243a);color:var(--hub-surface,#fff)}',
+    '.gs-sk-hero-b{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);color:var(--hub-ink,#16243a)}',
+    '.gs-sk-k{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;opacity:.72}',
+    '.gs-sk-hero-a b,.gs-sk-hero-b b{display:block;font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.035em;line-height:1;margin-top:5px}',
+    '.gs-sk-note{display:block;font-size:11px;opacity:.7;margin-top:5px;line-height:1.3;overflow-wrap:anywhere}',
+    // A SUB-LABEL, not a second heading. The lifetime block is three even rows under one heading;
+    // this names the middle one without competing with it (h4 is 15px ink, this is 11px muted).
+    '.gs-sk-sub{margin:11px 0 -2px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-grid{display:grid;gap:1px;background:var(--hub-surface-2,#eef2f8);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;overflow:hidden}',
+    '.gs-sk-grid.is-3{grid-template-columns:repeat(3,1fr)}',
+    '.gs-sk-grid.is-2{grid-template-columns:repeat(2,1fr)}',
+    '.gs-sk-grid+.gs-sk-grid{margin-top:8px}',
+    '.gs-sk-cell{background:var(--hub-surface,#fff);padding:10px 11px 11px;min-width:0}',
+    '.gs-sk-cell b{display:block;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--hub-ink,#16243a);line-height:1.05}',
+    '.gs-sk-cell span{display:block;font-size:11px;color:var(--hub-muted,#5b6b82);margin-top:2px;line-height:1.25}',
+    // The two rare counters (color sweeps, runaways) are two zeros on most records. Same grid,
+    // dialled down, so they read as a footnote to the block rather than headline numbers.
+    '.gs-sk-grid.is-quiet .gs-sk-cell b{font-size:15px;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-spark{color:var(--hub-accent,#1769d4);margin-top:11px}',
+    '.gs-sk-spark-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:5px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',
     '.gs-sk-spark-h span+span{letter-spacing:0;text-transform:none;font-weight:600;font-variant-numeric:tabular-nums}',
-    '.gs-sk-spark svg{display:block;width:100%;height:40px;border:1px solid var(--hub-surface-2,#eef2f8);border-radius:6px;background:var(--hub-surface-2,#eef2f8)}',
+    '.gs-sk-spark-plot{position:relative}',
+    '.gs-sk-spark svg{display:block;width:100%;height:44px;border-radius:8px;background:var(--hub-surface-2,#eef2f8)}',
+    '.gs-sk-spark-fill{fill:currentColor;opacity:.16}',
+    // The two numbers that make the shape mean something: the high sits at the top of the plot,
+    // the low at the bottom, both against the plot's own background rather than over the line.
+    '.gs-sk-spark-hi,.gs-sk-spark-lo{position:absolute;right:7px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-muted,#5b6b82);background:var(--hub-surface-2,#eef2f8);padding:0 2px;border-radius:3px}',
+    '.gs-sk-spark-hi{top:2px}',
+    '.gs-sk-spark-lo{bottom:2px}',
     '.gs-sk-machines{display:flex;flex-direction:column;gap:10px}',
-    '.gs-sk-mc{border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;overflow:hidden;background:var(--hub-surface,#fff)}',
-    '.gs-sk-mc-top{display:flex;align-items:stretch}',
-    // The stripe and the mark are the cabinet's OWN colour (skeeball/js/boards.js `look`), so the
-    // swatch is visibly the same object the player throws at. The colour is decoration; the NAME
-    // is the identifier, which is why both are always drawn together.
-    '.gs-sk-stripe{width:6px;flex:none;border-right:1px solid var(--hub-surface-2,#eef2f8)}',
-    '.gs-sk-mc-body{flex:1;min-width:0;padding:13px 14px}',
+    // The cabinet's OWN colour (skeeball/js/boards.js `look`) rides the card as a left rail plus
+    // the swatch beside the name, so the card is identifiable at a glance and still names itself
+    // in words - colour is never the only signal (Matt is red/green colorblind).
+    '.gs-sk-mc{border:1px solid var(--hub-surface-2,#eef2f8);border-left:5px solid var(--mc,#8a93a3);border-radius:12px;background:var(--hub-surface,#fff);padding:12px 14px 13px}',
     '.gs-sk-mc-id{display:flex;align-items:center;gap:7px;min-width:0}',
-    '.gs-sk-mark{width:9px;height:9px;flex:none;border-radius:2px;border:1px solid var(--hub-ink,#16243a)}',
+    '.gs-sk-mark{width:9px;height:9px;flex:none;border-radius:2px;background:var(--mc,#8a93a3);border:1px solid var(--hub-ink,#16243a)}',
     '.gs-sk-nm{font-size:13px;font-weight:800;letter-spacing:.05em;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.gs-sk-mc-nums{display:flex;gap:22px;margin-top:11px}',
-    '.gs-sk-mc-nums b{display:block;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;color:var(--hub-ink,#16243a)}',
-    '.gs-sk-mc-nums span{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--hub-muted,#5b6b82);font-weight:700;margin-top:4px}',
-    '.gs-sk-mc .gs-sk-more{border:0;border-top:1px solid var(--hub-surface-2,#eef2f8);border-radius:0}',
+    // Four numbers, one row, no disclosure. minmax(0,1fr) rather than 1fr so a six-digit points
+    // total shrinks its own column instead of pushing the row wider than the card.
+    '.gs-sk-mc-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}',
+    '.gs-sk-mn{min-width:0}',
+    '.gs-sk-mn b{display:block;font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;color:var(--hub-ink,#16243a)}',
+    '.gs-sk-mn span{display:block;font-size:11px;color:var(--hub-muted,#5b6b82);font-weight:600;margin-top:4px;line-height:1.2}',
     // A machine nobody has earned still appears, so three machines always read as three machines.
     '.gs-sk-locked{display:flex;align-items:center;gap:9px;min-height:44px;border:1px dashed var(--hub-surface-2,#eef2f8);border-radius:10px;padding:11px 13px;color:var(--hub-muted,#5b6b82)}',
     '.gs-sk-locked svg{width:15px;height:15px;flex:none}',

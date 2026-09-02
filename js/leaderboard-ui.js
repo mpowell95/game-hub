@@ -840,14 +840,34 @@ function catStripHTML(g) {
  *  with nothing truncated. This is where every category is always shown, including the zeroes and
  *  the ones the card's one-line strip collapsed - so the card can stay a summary without any
  *  number becoming unreachable (THE LAW rule 1). */
+/** The player-detail breakdown (2026-09-02, rewritten).
+ *
+ *  It was one six-cell grid with no heading: "E 1 · M 12 · H 0 · X 0 · NT 36 · VS 8". Matt: "It's
+ *  not clear what you're looking at unless you really look." Two things were wrong with it. It had
+ *  no stated subject, and it was not one subject: four of the six cells are WINS AT A DIFFICULTY,
+ *  the fifth is a count of RUNS in games that have no difficulty, and the sixth is wins against
+ *  people. Three kinds of number under one unlabelled roof.
+ *
+ *  So: four tiers in their own row under their own heading (four cells, four columns, no ragged
+ *  last row), then the other two under a heading of their own, each spelled out in words rather
+ *  than left to a two-letter chip. The chips stay because the By Game filter uses the same six
+ *  keys, and dropping them here would break that legend; they are just no longer carrying the
+ *  meaning by themselves. Every number is the same number as before - catValueOf is untouched. */
 function catGridHTML(g) {
-  return `<div class="lb-grid6">${CATS.map((c) => {
+  const cell = (c, label) => {
     const sel = _cat === c.id;
     return `<span class="lb-cell${sel ? ' is-sel' : ''}">
-      <span class="lb-cell-top"><i class="lb-key${sel ? ' is-sel' : ''}">${esc(t(c.keyKey))}</i><em>${esc(t(c.nameKey))}</em></span>
+      <span class="lb-cell-top"><i class="lb-key${sel ? ' is-sel' : ''}">${esc(t(c.keyKey))}</i><em>${esc(label)}</em></span>
       <b>${catValueOf(g, c.id)}</b>
     </span>`;
-  }).join('')}</div>`;
+  };
+  const tiers = CATS.filter((c) => typeof c.id === 'number');
+  const nt = CATS.find((c) => c.id === 'NT');
+  const vs = CATS.find((c) => c.id === 'VS');
+  return `<h4 class="lb-h4">${esc(t('lb_pd_wins_h'))}</h4>
+    <div class="lb-grid6 is-4">${tiers.map((c) => cell(c, t(c.nameKey))).join('')}</div>
+    <h4 class="lb-h4">${esc(t('lb_pd_other_h'))}</h4>
+    <div class="lb-grid6 is-2">${cell(nt, t('lb_pd_nt'))}${cell(vs, t('lb_pd_vs'))}</div>`;
 }
 
 // --- By Player ---------------------------------------------------------------
@@ -1400,9 +1420,22 @@ function playerDetail(list, key) {
   const backLabel = _game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_players');
   const g = list.find((x) => x.key === key);
   if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button></div>` + emptyState(t('lb_empty_all'));
+  // THE DRILL-IN SAYS WHOSE PAGE IT IS AND WHICH GAME (2026-09-02). It used to be a bare
+  // "< Games" link above a wall of numbers: the overlay's own title says "Leaderboard", the
+  // player's name was two screens back, and the game's name appeared nowhere at all. Matt, on a
+  // screenshot of exactly this screen: "It's not clear what you're looking at unless you really
+  // look... I created both and I can't even tell from a distance." One compact strip - avatar,
+  // name, game - fixes that for every game's screen at once, since they all render through here.
   if (_playerGame) {
     return `<div class="lb-detail-top">
       <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
+    </div>
+    <div class="lb-ctx">
+      ${avatarHTML(g)}
+      <span class="lb-ctx-id">
+        <span class="lb-ctx-name">${rankName(g)}${youBadge(g)}</span>
+        <span class="lb-ctx-game">${esc(labelOf(_playerGame))}</span>
+      </span>
     </div>` + screenFor(_playerGame, { games: g.games });
   }
   // No sort control on this screen, so the header always leads with wins (D1's default) - the
@@ -1425,7 +1458,7 @@ function playerDetail(list, key) {
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + gsGameListHTML(g.games);
+  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -1850,12 +1883,21 @@ function ensureCss() {
     '.lb-chipv.is-sel{box-shadow:inset 0 0 0 1px var(--lb-sel)}',
     '.lb-chipv.is-more{color:var(--lb-muted);font-weight:700}',
     // The full six, on the player detail screen only (see catGridHTML).
-    '.lb-grid6{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:8px;overflow:hidden;width:100%}',
+    // A SECTION HEADING. Both blocks on this screen (the breakdown, the game list) had none,
+    // which is most of why the screen did not say what it was showing.
+    '.lb-h4{margin:15px 0 7px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--lb-muted)}',
+    '.lb-grid6{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:10px;overflow:hidden;width:100%}',
+    '.lb-grid6.is-4{grid-template-columns:repeat(4,minmax(0,1fr))}',
+    '.lb-grid6.is-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
     '.lb-cell{display:flex;flex-direction:column;background:var(--lb-surface);padding:8px 6px 9px;min-width:0}',
     '.lb-cell.is-sel{background:var(--lb-surface-2)}',
     '.lb-cell-top{display:flex;align-items:baseline;gap:4px;min-width:0}',
     '.lb-cell-top em{font-style:normal;font-size:11px;color:var(--lb-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-cell b{font-size:15px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:3px}',
+    '.lb-cell b{font-size:18px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:4px;line-height:1}',
+    // The label wraps rather than truncating: "Wins against people" says what the number is,
+    // and an ellipsis in the middle of it would put the screen back where it started.
+    '.lb-grid6.is-2 .lb-cell-top em{overflow:visible;white-space:normal;text-overflow:clip;line-height:1.25}',
+    '.lb-grid6.is-2 .lb-cell{padding:9px 10px 10px}',
     // A game board's per-tier tiles (unchanged shape vocabulary, new chrome).
     '.lb-tiles{display:flex;flex-wrap:wrap;gap:5px;margin:0}',
     '.lb-tile2{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:var(--lb-surface-2);border:1.5px solid transparent;font-size:12px;font-weight:800;color:var(--lb-muted)}',
@@ -1928,6 +1970,13 @@ function ensureCss() {
       + 'background:var(--lb-surface-2);color:var(--lb-ink);font:inherit;font-size:19px;line-height:1;'
       + 'cursor:pointer;touch-action:manipulation}',
     '.lb-msgbtn:active{transform:translateY(1px)}',
+    // The drill-in's context strip: whose page, which game. Quiet by design - it is orientation,
+    // not a headline, and the game's own numbers start immediately under it.
+    '.lb-ctx{display:flex;align-items:center;gap:10px;margin:2px 0 12px;padding-bottom:11px;border-bottom:1px solid var(--lb-line)}',
+    '.lb-ctx .lb-av{width:34px;height:34px;font-size:18px}',
+    '.lb-ctx-id{min-width:0;display:flex;flex-direction:column;gap:1px}',
+    '.lb-ctx-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:700;color:var(--lb-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-ctx-game{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--lb-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pgame{margin-top:10px}',
     // --- skeleton + empty -------------------------------------------------------------------------
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--lb-surface-2);vertical-align:middle}',
