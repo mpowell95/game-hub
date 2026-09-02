@@ -351,5 +351,26 @@ console.log('\n-- who is allowed on the board: no test accounts, no nameless dev
     /removeEventListener\('online', _onLine\)/.test(src));
 }
 
+// ---------------------------------------------------------------------------------------------
+// A NAME TAPPED ON A GAME'S BOARD OPENS THAT GAME (2026-09-02)
+//
+// Matt: "I'm viewing skeeball only stats, I click on a name, it shows me everything, I have to
+// scroll to skeeball and click again. That middle step shouldn't be there." The drill-in carried
+// `_game` the whole way down and then ignored it. Structural, like the block above, because this
+// is DOM state in a module this suite cannot mount.
+{
+  const src = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] a player card opened from a game board drills into THAT game',
+    /if \(card\) \{ _player = card\.dataset\.pkey; _playerGame = _game \|\| null;/.test(src),
+    'landing on the every-game list answers a question the viewer already answered by picking a board');
+  ok('...and backing out of it returns to the board, not to a list they never chose',
+    /lb-pgame-back[\s\S]{0,220}?if \(_game\) \{ _player = null; _playerGame = null; \}/.test(src));
+  ok('...and the back button names where it actually goes',
+    /data-role="lb-pgame-back">\$\{_game \? t\('lb_back_game'/.test(src));
+  // From By Player there is no game in hand, so that path must still open the player's game list.
+  ok('the By Player path is unchanged (no game in hand means the list)',
+    /_playerGame = _game \|\| null/.test(src) && /\} else \{ _playerGame = null; \}/.test(src));
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);
 process.exit(fail ? 1 : 0);

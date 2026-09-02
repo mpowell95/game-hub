@@ -1428,7 +1428,7 @@ function playerDetail(list, key) {
   // name, game - fixes that for every game's screen at once, since they all render through here.
   if (_playerGame) {
     return `<div class="lb-detail-top">
-      <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
+      <button type="button" class="lb-back" data-role="lb-pgame-back">${_game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_games')}</button>
     </div>
     <div class="lb-ctx">
       ${avatarHTML(g)}
@@ -1630,7 +1630,13 @@ function onClick(e) {
     return;
   }
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
-  if (e.target.closest('[data-role="lb-pgame-back"]')) { _playerGame = null; rerender(); return; }
+  // ... AND BACK OUT THE WAY YOU CAME IN. Having skipped the every-game list on the way in, backing
+  // out onto it would drop the viewer somewhere they never chose - so from a game's board this
+  // returns to that board. From By Player (no `_game`) it still steps back to the player's list.
+  if (e.target.closest('[data-role="lb-pgame-back"]')) {
+    if (_game) { _player = null; _playerGame = null; } else { _playerGame = null; }
+    rerender(); return;
+  }
   if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
   // Leaving a board drops that board's own filters: they belong to the visit, not to the overlay.
   if (e.target.closest('[data-role="lb-back"]')) { _game = null; _tier = null; _machine = 'all'; rerender(); return; }
@@ -1642,7 +1648,13 @@ function onClick(e) {
     return;
   }
   const card = e.target.closest('.lb-pcard[data-pkey]');
-  if (card) { _player = card.dataset.pkey; _playerGame = null; rerender(); return; }
+  // A NAME TAPPED ON A GAME'S BOARD OPENS THAT GAME (2026-09-02). Matt: "I'm viewing skeeball only
+  // stats, I click on a name, it shows me everything, I have to scroll to skeeball and click again.
+  // That middle step shouldn't be there." Drilling in from a game's board carried `_game` the whole
+  // way and then ignored it, landing on the player's every-game list - a screen the viewer had
+  // already answered the question of by choosing a board. From By Player there is no game in hand,
+  // so that path is unchanged and still opens the list.
+  if (card) { _player = card.dataset.pkey; _playerGame = _game || null; rerender(); return; }
   // Player detail's own game list (shared gs-grow rows) vs. the top-level By Game list (lb-grow) -
   // only one of the two is ever on screen at once, but check player context first to be explicit.
   const gsRow = e.target.closest('.gs-grow[data-game]');
