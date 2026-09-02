@@ -402,20 +402,29 @@ function substep(st) {
       const fh = M.worldToFaceIn(M.frameAt(hDef.v), p);
       const d = Math.hypot(fh.u - hDef.u, fh.v - hDef.v);
       const rEff = hDef.r - G.ballR * 0.28;
-      // THE LIP (2026-09-02): the mouth's real edge, less a hair. rEff above is THE CLASSIC's
-      // inset for a ball CROSSING a hole at speed, and the kinematic test below is built on it.
-      // A ball that has come to rest on a collar's rim with its centre inside the mouth is a
-      // different case: gravity has it, and the only question is which way it tips. Measured
-      // (5.5 deg / power 0.80): a ball slid down the riser onto the corner 100's rim and sat on
-      // the inner edge with its centre 5.0 cm off the axis of a 5.8 cm mouth - over the opening
-      // by any reading - and was refused by rEff (4.3 cm), teetered for a second on the 14-gon's
-      // corners, and rolled off into the -10. On this face a ball resting on a lip with its
-      // centre over the opening falls in.
-      const rRest = hDef.r - G.ballR * 0.10;
-      if (d >= rRest) continue;
+      if (d >= rEff) continue;
       const lip = hDef.collarH > 0 ? hDef.collarH : 0;
-      // THE CLASSIC's 1.9 ballR, measured from THIS basket's rim (see the guard above the loop).
-      if (fh.h >= lip + G.ballR * 1.9) continue;
+      // THE CLASSIC's 1.9 ballR - measured from THIS basket's RIM for a ball that is FALLING
+      // INTO the mouth, and from the TREAD for anything else.
+      //
+      // GUARD, and the reason for the `falling` term (2026-09-02, second pass): the rim-relative
+      // gate on its own is what let a ball that had merely COME TO REST on a collar's rim be
+      // captured. A collar stands 0.116 above its tread, so raising the gate by `lip` for every
+      // ball also admits one sitting still on top of the rim - and the kinematic test below
+      // cannot refuse it, because a stationary ball trivially "falls past the lip before crossing
+      // the mouth". In Matt's three recordings every 100 came in exactly that way: the ball went
+      // up to the backboard, loitered, came down onto the top-right 100, settled on its rim, and
+      // was paid. Deleting the explicit lip-rest rule did not fix it; this is where it was really
+      // getting in.
+      //
+      // hDot is the ball's speed INTO the face (negative = descending onto it). A ball dropped
+      // onto a basket off this machine's 70-degree launch arrives at 2 to 3 m/s; a ball resting
+      // on a rim, or rolling across the tread, is at essentially zero. 0.8 m/s sits between them
+      // with room on both sides. Below that threshold the gate is the tread-relative one THE
+      // CLASSIC has always used, so a ball on top of a rim is what it looks like: on the wall,
+      // not in the basket.
+      const falling = hDot < -0.8;
+      if (fh.h >= (falling ? lip : 0) + G.ballR * 1.9) continue;
       // how much mouth is left in front of it, along its own line
       const cross = rEff + Math.sqrt(Math.max(0, rEff * rEff - d * d));
       // GUARD: ON A COLLARED CUP, "past the lip" means BELOW THE RIM, not past the face plane.
@@ -449,19 +458,23 @@ function substep(st) {
         st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
         return;
       }
-      // Resting on the lip (see rRest above): centre over the opening, sitting on the rim,
-      // without the speed to carry it anywhere else. A rolling ball is not "resting": 0.6 m/s
-      // is well under anything that arrives out of the air here (2-3 m/s), and a ball
-      // slower than that on a rim edge is balanced, not passing.
-      if (lip > 0 && fh.h < lip + G.ballR * 1.15 && ball.velocity.length() < 0.6) {
-        st.captured = id;
-        st.capturedFaceY = p.y;
-        ball.collisionFilterMask = st.restMask & ~cupBit(G, id);
-        st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
-        return;
-      }
-      // Crossing at speed: THE CLASSIC's inset and its kinematic test, unchanged.
-      if (d >= rEff) continue;
+      // REMOVED, AND IT MUST NOT COME BACK: THE LIP-REST RULE (added and reverted 2026-09-02).
+      // For a few hours this loop also captured a ball that was merely SITTING on a collar's rim
+      // - centre inside a widened radius (r - ballR*0.10 instead of rEff), slower than 0.6 m/s,
+      // anywhere under rim + ballR*1.15. It was written for one measured case (a ball sliding
+      // down the riser onto the corner 100's rim, teetering, then rolling off into the -10) and
+      // it paid for a completely different one.
+      //
+      // What it actually did, in Matt's three recordings: every single 100 in them was a ball
+      // that went UP to the top of the machine, loitered against the backboard or the right rail
+      // for half a second to a second, came back DOWN onto the top-right 100, came to rest on
+      // its rim - and was paid 100. Same basket every time. Not one was a ball thrown into the
+      // basket. His rack went 140 to 440 on it. Matt: "the machine is broken."
+      //
+      // It is also section 3b's guard, broken by the person who wrote this: A BALL THAT COMES TO
+      // REST ON THE FACE IS NOT SCORED. The only way to score a hole's value is to fall through
+      // its mouth. A ball balanced on a rim is on the wall, not in the basket, and what happens
+      // next is gravity's business - it tips in and scores, or it rolls off and does not.
       const needH = lip > 0 ? need + Math.max(0, fh.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;

@@ -97,12 +97,62 @@ ok('no throw takes more than 8s to settle', slow.length === 0, `${slow.length} d
 
 // --- 2. the rules are still in the files ------------------------------------------------------
 const phys = readFileSync(new URL('./skeeball/js/machines/brickcity/physics.js', import.meta.url), 'utf8');
-ok('physics: the capture gate is measured from the rim (st.maxLip)',
-  /f\.h < G\.ballR \* 1\.9 \+ st\.maxLip/.test(phys) && /fh\.h >= lip \+ G\.ballR \* 1\.9/.test(phys), '');
+ok('physics: the capture gate is measured from the rim, and only for a FALLING ball',
+  /f\.h < G\.ballR \* 1\.9 \+ st\.maxLip/.test(phys)
+  && /const falling = hDot < -0\.8/.test(phys)
+  && /fh\.h >= \(falling \? lip : 0\) \+ G\.ballR \* 1\.9/.test(phys), '');
 ok('physics: a captured ball stops colliding with its own collar (cupBit)',
   /collisionFilterMask = st\.restMask & ~cupBit\(G, id\)/.test(phys) && /s\.part === 'cupSeg' && s\.cup \? cupBit\(G, s\.cup\)/.test(phys), '');
-ok('physics: a ball resting on a lip with its centre over the opening falls in (rRest)',
-  /const rRest = hDef\.r - G\.ballR \* 0\.10/.test(phys) && /ball\.velocity\.length\(\) < 0\.6/.test(phys), '');
+// [KNOWN-BUG PROBE] THE PERCHED 100, 2026-09-02. For a few hours this machine also captured a
+// ball that was merely SITTING on a collar's rim: a widened radius (rRest), a "slower than
+// 0.6 m/s" branch, and the rim-relative gate applied to EVERY ball rather than only a falling
+// one. Matt filmed three racks of it - every single 100 in them was a ball that went up to the
+// backboard, loitered there, came back down onto the top-right 100, settled on its rim and was
+// paid 100. His rack went 140 to 440 on it.
+//
+// This suite's own behavioural checks above ALL PASSED while that was true, and that is the
+// lesson: a ball perched on the rim still counts as "arrived over the mouth", so only the
+// geometry AT THE MOMENT OF CAPTURE tells a real basket from a ball balanced on its edge.
+// Measured on the engine Matt filmed: 11 of 18 corner 100s were perched. Born red there.
+ok('physics: the rim-rest capture rules are gone and must not come back',
+  !/rRest/.test(phys) && !/velocity\.length\(\) < 0\.6/.test(phys), '');
+{
+  // The REAL board, not the aimMax-1 test copy above: this probe has to go through the
+  // swipe -> serve mapping a player actually gets (js/ui.js's curve, then geom.aimMax).
+  const aimOf = (sw) => {
+    const raw = Math.max(-1, Math.min(1, (sw * Math.PI / 180) / 0.38));
+    return base.geom.aimCurve === 1 ? raw : Math.sign(raw) * (raw * raw);
+  };
+  const perched = [];
+  let scored = 0;
+  for (let sw = 0; sw <= 22; sw += 1) for (let pw = 0.55; pw <= 1.001; pw += 0.05) {
+    const st = P.startThrow(base, { power: +pw.toFixed(3), aim: aimOf(sw) });
+    let n = 0;
+    const caps = [];
+    while (!st.done && n++ < 240 * 14) {
+      P.step(board, st, P.STEP);
+      for (const e of st.events) if (e.type === 'capture') caps.push(e);
+      st.events = [];
+    }
+    const o = st.outcome;
+    if (!o || (o.hole !== 'topR' && o.hole !== 'topL')) continue;
+    scored++;
+    const e = caps.filter((c) => c.hole === o.hole).pop();
+    if (!e) continue;
+    const hDef = G.holes[e.hole];
+    const fh = M.worldToFaceIn(M.frameAt(hDef.v), e.pos);
+    const d = Math.hypot(fh.u - hDef.u, fh.v - hDef.v);
+    // Over the opening, or already below the rim plane and so inside the cup. On top of the
+    // rim is neither, and is what this probe exists to catch.
+    if (!(d < hDef.r - G.ballR * 0.28 + 1e-9) && !(fh.h < hDef.collarH)) {
+      perched.push(`swipe ${sw} power ${pw.toFixed(2)}: d ${d.toFixed(4)} vs opening `
+        + `${(hDef.r - G.ballR * 0.28).toFixed(4)}, h ${fh.h.toFixed(4)} vs rim ${hDef.collarH.toFixed(4)}`);
+    }
+  }
+  ok('no corner 100 is scored by a ball perched on the rim', perched.length === 0,
+    `${perched.length} of ${scored} were. ` + perched.slice(0, 3).join('; '));
+  console.log(`        (${scored} corner 100s in the sweep, ${perched.length} perched on the rim)`);
+}
 ok('physics: the serve is forward roll only (the full rolling spin was measured and rejected)',
   /ball\.angularVelocity\.set\(-speed \/ G\.ballR, 0, 0\)/.test(phys), '');
 ok('boards: brickcity serves in proportion to the swipe (aimCurve 1) at the measured proportion',
