@@ -253,7 +253,7 @@ export const BOARDS = [
         // was slow enough to take it, finishing in the 10.
         boardFric: 0.75,
         boardRest: 0.08,
-        woodFric: 0.22,
+        woodFric: 0.30,   // 2026-09-02: back to what it always was.
         woodRest: 0.22,
         wallFric: 0,
         // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
