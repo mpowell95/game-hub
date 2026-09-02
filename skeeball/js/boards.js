@@ -248,9 +248,9 @@ export const BOARDS = [
         // slide into a roll, so the ball now skids the whole length of the lane and the face
         // keeping the spin it was served with. Capture is kinematic and does not read friction, so
         // scoring is unaffected.
-        boardFric: 0,
+        boardFric: 0.22,
         boardRest: 0.08,
-        woodFric: 0,
+        woodFric: 0.22,
         woodRest: 0.22,
         wallFric: 0,
         // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
@@ -284,7 +284,12 @@ export const BOARDS = [
         // 0.60 over 34 hard wall throws: the 100s-off-the-wall fall 6 -> 0, dead-drop 50s gone,
         // 27 of 34 end in the honest 10 or 0, and the rebound is visible. The kicker keeps
         // deadFric/deadRest above.
-        backFric: 0,
+        // 2026-09-02, Matt: 0.6 on the back wall ABOVE the scoreboard line. This is the surface
+        // the zero-grip rule was written for (DECISIONS.md, "The back wall does not lift the
+        // ball") - grip here turns the ball's serve topspin into CLIMB, and test.js's "the back
+        // wall alone never lifts a ball" is written as a rule with no tolerance, so it fails on
+        // this number. His call, made knowing that. The low half stays frictionless.
+        backFric: 0.6,
         backRest: 0.60,
         // THE BACK WALL IS TWO HALVES NOW (Matt, 2026-09-02): "the back wall bounce should
         // be 0.05 BELOW the horizontal line dividing the score section... and remain 0.60
