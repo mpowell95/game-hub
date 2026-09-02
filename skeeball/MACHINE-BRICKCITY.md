@@ -30,6 +30,54 @@ brick marquee and a different face. Nine baskets on three treads. The row neares
 | Tagline | `board_brickcity_tag`, EN and ES in `skeeball/js/strings.js`. Taglines ARE translated; the name is not. |
 | Ships as | `adminOnly: true` — Matt's call, 2026-08-24, the same as its two neighbours while he plays it. That is only the CODE DEFAULT: the in-app **Admin** page moves it between Testing / Unlockable / Open with no commit and no deploy. |
 
+## The 100 that was paid for a ball balanced on the rim (2026-09-02)
+
+Matt, with three screen recordings, hours after the corner-100 fix below went live: *"You made the
+game SIGNIFICANTLY worse."* He was right, and the cause was a rule added by that fix.
+
+**What the recordings show.** In all three, every 100 has the same shape: the ball goes UP to the
+top of the machine, loiters against the backboard or the right rail for half a second to a second,
+comes back DOWN onto the top-right 100, comes to rest ON ITS RIM, and is paid 100. Same basket
+every time. Not one was a ball thrown into a basket. One rack went from 140 to 440 on it.
+
+**The rule that did it.** The corner-100 fix added a LIP-REST capture: a ball whose centre was
+inside a widened radius (`rRest = r - ballR*0.10`, against the mouth's own `rEff = r - ballR*0.28`),
+slower than 0.6 m/s, anywhere below rim + `ballR*1.15`, was captured. It was written for one
+measured case - a ball sliding down the riser onto the rim, teetering, then rolling off into the
+-10 - and it paid for a completely different one. Traced on the engine Matt filmed, a typical
+"100" captured with the ball **5.3 cm off the basket's axis on a 4.3 cm opening, 5.4 cm above the
+rim, drifting at 0.19 m/s and moving AWAY from the face.** It was sitting on the rim.
+
+**The second half, and the one that made deleting the first rule insufficient.** That same fix
+raised the capture height gate from `ballR*1.9` above the TREAD to `lip + ballR*1.9` - above the
+RIM - for every ball. A collar stands 0.116 above its tread, so the raise also admits a ball
+sitting still on top of the rim, and the kinematic test cannot refuse it: a stationary ball
+trivially "falls past the lip before crossing the mouth". The rim-relative gate is right for the
+shot it was written for (a ball DROPPED onto the basket has to be seen before the rim gets it), so
+it is kept and **gated on the ball actually falling** - `hDot < -0.8` m/s into the face. A ball
+arriving off this machine's 70-degree launch comes in at 2 to 3 m/s; a ball resting on a rim or
+rolling across a tread is at essentially zero.
+
+**It is also section 3b's standing guard, broken by the fix that added it**: a ball that comes to
+rest on the face is never scored, and the only way to score a hole's value is to fall through its
+mouth. A ball balanced on a rim is on the wall, not in the basket.
+
+| corner 100s in a 23 x 10 swipe/power sweep | before | after |
+|---|---|---|
+| scored | 18 | 16 |
+| **of those, PERCHED on the rim** | **11** | **0** |
+| balls arriving over the mouth that score | 3 of 3 | 3 of 3 |
+| points per throw (rack-of-9 equivalent) | 6.6 (59) | 5.9 (53) |
+
+The shot the corner-100 fix existed for is untouched: `test-brickcity-corner100.mjs` still measures
+20 of 26 over-the-mouth arrivals scoring, against 25% before that fix.
+
+**The probe that would have caught it.** That suite's behavioural checks ALL PASSED while this was
+happening, because a ball perched on the rim still counts as "arrived over the mouth". Only the
+geometry AT THE MOMENT OF CAPTURE separates a basket from a ball balanced on its edge, so the suite
+now checks exactly that, over a real sweep: every corner 100 must be captured either over the
+opening or already below the rim plane. Born red against the engine Matt filmed.
+
 ## The perch, and why this machine no longer pops a parked ball (2026-08-26)
 
 Matt, on the build that had just been made smooth: *"the ball sometimes gets stuck IN the negative
