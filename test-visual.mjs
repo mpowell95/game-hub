@@ -905,9 +905,10 @@ const FIT_SIZES = [
   { w: 390, h: 664, why: 'short (with browser toolbars)' },
 ];
 
-/** Mount a game the way the HUB does, without going through the launcher: dev-only games are
- *  hidden there behind a name check this suite cannot satisfy, and the launcher is not the point
- *  anyway - the hub's chrome and CSS are. */
+/** Mount a game through the hub's OWN launch path (`initHub` + `hub.launch`), not by tapping a
+ *  launcher card: dev-only games have no card for this suite's plain profile, and the launcher is
+ *  not the point anyway - the hub's chrome and CSS are. See the comment inside mountInHub for why
+ *  a synthetic mount (hand-hiding the launcher) is wrong on any Firebase-reachable machine. */
 /** The launcher's one-time announcement popup (js/announce.js + announce-ui.js) covers the whole
  *  hub on a fresh profile, and several checks here MEASURE the hub. Left up, the number reported is
  *  the POPUP's, not the game's -- which is what happened the day the announcement shipped
@@ -928,19 +929,33 @@ async function dismissAnnouncement(page) {
 
 async function mountInHub(page, game) {
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  // Wait for the page's OWN hub instance to exist AND for its load-time async to have run,
+  // then drive THAT instance - never construct a second one. The old synthetic mount (import
+  // the game module, init it into the host, hide the launcher's nodes by hand) left
+  // `hub.current` null, and js/hub.js's admin-config subscription
+  // (`onAdminConfig(() => { if (!this.current) this.render(); })`) then rebuilt the whole
+  // launcher over the mounted game the moment the Firebase config fetch answered - so on any
+  // machine that CAN reach Firebase, this check measured the LAUNCHER's scroll height
+  // (~1390px) instead of the game's. Reproduced 2026-09-02 (skeeball read "541px TALLER" at
+  // both fit sizes). Re-calling initHub() is NOT the fix: it destroys the live instance but
+  // shares the same root element, so the destroyed instance's in-flight async empties the
+  // host ~1s after the new one mounts the game. hub.launch() is what a player's tap runs.
+  await page.waitForFunction(() => !!window.__ghHub, null, { timeout: 20000 });
   await page.waitForTimeout(700);
   await dismissAnnouncement(page);
   return page.evaluate(async (g) => {
-    const main = document.querySelector('.hub-main');
-    const host = document.querySelector('[data-role="game"]');
-    const top = document.querySelector('.hub-top');
-    if (!main || !host) return 'hub shell not found';
-    for (const el of main.children) if (el !== host) el.hidden = true;
-    main.classList.add('hub-main-immersive');
-    if (top) top.classList.add('hub-top-immersive');
-    host.hidden = false;
-    const m = await import(`/${g}/js/ui.js`);
-    m.init(host);
+    const m = await import('/js/hub.js');
+    const hub = window.__ghHub;
+    if (!hub) return 'hub instance not found (window.__ghHub)';
+    // devOnly games have no launcher card for this suite's plain profile; add the registry
+    // entry to the live instance's own list so its real launch path can mount it.
+    if (!hub.games.some((x) => x.id === g)) {
+      const entry = m.GAMES.find((x) => x.id === g);
+      if (!entry) return `no GAMES entry for "${g}"`;
+      hub.games = [...hub.games, entry];
+    }
+    await hub.launch(g);
+    if (!hub.current || hub.current.id !== g) return `hub.launch("${g}") did not mount it`;
     return null;
   }, game);
 }

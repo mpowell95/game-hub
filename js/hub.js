@@ -1264,6 +1264,13 @@ let hubInstance = null;
 export function initHub(root) {
   if (hubInstance) hubInstance.destroy();
   hubInstance = new Hub(root);
+  // Read-only hook the headless visual harness uses to drive the LIVE hub instead of
+  // constructing a second one — the games' own `window.__skTest`/`__yzTest` precedent. It
+  // matters here specifically: re-calling initHub() destroys this instance but leaves its
+  // in-flight async (afterPaint, admin-config refresh) to run against the shared root, which
+  // clobbers whatever the new instance mounted. test-visual.mjs reuses this handle so there is
+  // only ever one hub. Never used by the app itself.
+  try { if (typeof window !== 'undefined') window.__ghHub = hubInstance; } catch { /* no window */ }
   return hubInstance;
 }
 
