@@ -410,6 +410,30 @@ dropping through. Announcing there put the number on screen while the ball was s
 rattling. `capture` now only lights the rim; the `+N`, the burst and the marquee flash wait for
 `ballDone`. Measured: capture at 853ms, settle at 1178ms, popup at 1178ms.
 
+#### And on a collared board the capture can be WRONG, so the popup reads the outcome (2026-09-02)
+
+Matt, with a screen recording of HOT SHOT: *"The 100 appears when I don't get a 100."* The lane
+says MISS!, the score does not move, and a gold **+100** floats up the backboard with a burst and a
+celebration behind it.
+
+**Waiting for `ballDone` was only half the rule; the other half is WHOSE number to print.** On a
+COLLARED cup board - HOT SHOT and POPONGO - `capture` is explicitly a PREDICTION and not a score
+(the guard in `machines/classic/physics.js` says so: those mouths have walls standing above the
+face, so a ball can strike the far collar and climb back out). `ui.js` stashed the predicted value
+in `_pending` at capture and cleared it only on `returned` or `ballDone`, so a rattle-out - which
+fires `rimout`, then `gutter`, then `ballDone` with value 0 at `corner0` - arrived at the popup
+with a stale 100 still in hand, and every celebration downstream keyed off it.
+
+Two rules close it: **`gutter` drops the pending capture**, and **a popup is drawn only when the
+ball finished in the hole it was predicted for**, printing `ballDone`'s own value - the same number
+`game.js` added to the score, so the screen and the record cannot disagree about a throw.
+
+**Measured, at the real machines** (`test-skeeball-popup.mjs`, which is the regression probe):
+HOT SHOT breaks its own capture prediction on **28.8% of captures**, POPONGO on ~7%, and **THE
+CLASSIC on 0 of 248** - its capture rule commits, which is why this was never a classic bug and why
+nobody had seen it in the machine that has the most play. The suite's structural half reads the
+shipped `ui.js` and was born red on all six assertions.
+
 ## The 2026-08-14 board rebuild (batches 3a, 3b, 3f) - READ THIS BEFORE THE SECTION ABOVE
 
 Matt specified the face as a drawing plus a table of proportions, and it **supersedes several

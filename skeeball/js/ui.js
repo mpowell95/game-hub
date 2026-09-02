@@ -1167,12 +1167,15 @@ export class SkeeballUI {
         // Minimal event drain (mirrors _drainEvents): light the rim on capture, pop the score on
         // ballDone, so the demo shows the ball dropping in AND the +50.
         for (const ev of this._hpGame.takeEvents()) {
-          if (ev.type === 'capture') { this._hpRenderer.flashHole(ev.hole); this._hpPending = { pos: ev.pos, value: ev.value }; }
+          if (ev.type === 'capture') { this._hpRenderer.flashHole(ev.hole); this._hpPending = { pos: ev.pos, value: ev.value, hole: ev.hole }; }
+          else if (ev.type === 'gutter') { this._hpPending = null; }
           else if (ev.type === 'ballDone') {
             const at = this._hpPending; this._hpPending = null;
-            if (at) {
-              const gold = at.value >= 100, big = at.value >= 50;
-              this._hpRenderer.popupAt(at.pos, signedValue(at.value), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+            // Same guard as the live drain above: the popup follows the ball that actually landed.
+            if (at && at.hole === ev.hole) {
+              const v = ev.value | 0;
+              const gold = v >= 100, big = v >= 50;
+              this._hpRenderer.popupAt(at.pos, signedValue(v), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
               if (big) this._hpRenderer.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
               if (gold) this._hpRenderer.celebrate();
             }
@@ -1523,11 +1526,16 @@ export class SkeeballUI {
         // The number, the burst and the marquee wait for `ballDone`.
         case 'capture':
           Rr.flashHole(ev.hole);
-          this._pending = { pos: ev.pos, value: ev.value };
+          // The HOLE rides along because on a collared board this event is a PREDICTION, not a
+          // score, and ballDone is where the truth arrives - see the guard there.
+          this._pending = { pos: ev.pos, value: ev.value, hole: ev.hole };
           break;
         case 'gutter':
           Rr.flashHole('gutter');
           this._say(t('msg_gutter'));
+          // A ball that rattled OUT of a collar reaches here with a capture still pending. Drop it:
+          // the throw scored nothing, and the popup below must not pay out a prediction.
+          this._pending = null;
           break;
         // GUARD: a returned ball says NOTHING. It used to call "Too soft. Have it back." - a
         // scolding for a throw the player just watched fall short, and the most frequent message
@@ -1538,17 +1546,31 @@ export class SkeeballUI {
         case 'ballDone': {
           const at = this._pending;
           this._pending = null;
-          if (at && ev.eq) {
+          // GUARD: THE POPUP PAYS WHAT THE RACK SCORED, NEVER WHAT THE CAPTURE PREDICTED
+          // (2026-09-02). Matt, with a screen recording of HOT SHOT: "The 100 appears when I don't
+          // get a 100." On a COLLARED cup board (HOT SHOT, POPONGO) `capture` is explicitly a
+          // prediction - the physics comment one file over says so - and a ball can strike the far
+          // collar wall and climb back out, finishing in the trough. That path fires `gutter` and
+          // then `ballDone` with value 0, and the old code read the number off the still-pending
+          // capture: the lane said MISS!, the score stayed put, and a gold +100 floated up the
+          // backboard with a burst and a celebration behind it. Two rules close it: `gutter` above
+          // clears the prediction, and a popup is only drawn when the ball ACTUALLY finished in the
+          // hole it was predicted for. The number itself now comes from the ballDone event, which
+          // is the same value game.js added to the score - the screen and the record cannot
+          // disagree about a throw again.
+          const landed = !!at && at.hole === ev.hole;
+          const value = ev.value | 0;
+          if (landed && ev.eq) {
             // An equalizer cup (POPONGO's black): the popup says what it took, not what it paid.
             // The minus sign carries the meaning; the red is emphasis, never the signal.
             Rr.popupAt(at.pos, ev.wiped ? `−${ev.wiped}` : '0', '#ff6b5e', !!ev.wiped);
-          } else if (at) {
+          } else if (landed) {
             // The board's OWN scale decides what counts as a big deal: the classic's 50/100
             // thresholds read as literal values, so on a 1-6 cup board nothing would ever
             // celebrate. Gold = the machine's best cup, big = over half of it.
             const topValue = Math.max(...Object.values(this.game.board.geom.holes).map((h) => h.value | 0));
-            const gold = at.value > 0 && at.value >= topValue, big = at.value >= topValue / 2;
-            Rr.popupAt(at.pos, signedValue(at.value), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+            const gold = value > 0 && value >= topValue, big = value >= topValue / 2;
+            Rr.popupAt(at.pos, signedValue(value), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
             if (big) Rr.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
             if (gold) Rr.celebrate();
           }
