@@ -72,6 +72,7 @@ const SUITES = [
   { file: 'test-brickcity-stall.mjs' },
   { file: 'test-skeeball-capture-frame.mjs' },
   { file: 'test-runaway-capped.mjs' },
+  { file: 'test-skeeball-popup.mjs' },
   // The first suite here that LOOKS at the game. Needs a real browser, so it SKIPs (never
   // fails) without playwright-core/Chromium - same contract as the jsdom suites below.
   { file: 'test-visual.mjs', optionalDep: 'playwright-core' },
