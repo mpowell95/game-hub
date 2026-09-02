@@ -248,7 +248,10 @@ export const BOARDS = [
         // slide into a roll, so the ball now skids the whole length of the lane and the face
         // keeping the spin it was served with. Capture is kinematic and does not read friction, so
         // scoring is unaffected.
-        boardFric: 0.22,
+        // 2026-09-02, Matt: 0.75. The face is the only brake left (walls and rings are
+        // frictionless now), and at 0.22 a ball crossed the board for a long time before any mouth
+        // was slow enough to take it, finishing in the 10.
+        boardFric: 0.75,
         boardRest: 0.08,
         woodFric: 0.22,
         woodRest: 0.22,
