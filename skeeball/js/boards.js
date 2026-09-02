@@ -264,6 +264,10 @@ export const BOARDS = [
         // around a mouth only 4cm wider than the ball, so a miss meets a tall tube side-on and
         // leaves fast enough to read as a kick. This is the split the ring100 material exists
         // for: the 10 through 50 keep 0.18.
+        // 2026-09-02, Matt's number. NOTE the standing guard above: ring friction is kept near
+        // zero everywhere else because lateral grip can wedge a ball against a ring on the
+        // slope. 0.2 is the 100 rings ALONE, and it is deliberate.
+        ring100Fric: 0.2,
         ring100Rest: 0.0,   // 2026-09-02: dead. Matt: it bounces off with MORE energy than it came in with.
         deadFric: 0.24,
         deadRest: 0.10,
@@ -282,7 +286,12 @@ export const BOARDS = [
         // all-time, your best) and its bottom row (daily, last game). Its height is DERIVED
         // from render.js's own panel layout in machines/classic/physics.js, never typed in
         // twice, so the paint and the physics cannot drift apart.
-        backLowRest: 0.05,
+        // 2026-09-02, Matt's numbers for the low half. It is the one gripping wall on the
+        // machine: every other back-wall pair is zero grip, because a gripping wall converts
+        // the ball's serve topspin into CLIMB (DECISIONS.md, "The back wall does not lift the
+        // ball"). Below the scoreboard's line is where a ball arrives with the least spin left.
+        backLowFric: 0.2,
+        backLowRest: 0.10,
       },
     },
 

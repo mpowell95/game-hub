@@ -138,7 +138,7 @@ function buildWorld(board) {
   // HOT SHOT's engine reached the same conclusion independently (deadFric 0.06 on its
   // bank-shot wall). 'kick' and 'keep' stay on matDead: the kicker keeps its grip.
   contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
-  contact(matBall, matBackLow, pick(MAT.backFric, 0), pick(MAT.backLowRest, pick(MAT.backRest, 0.60)));
+  contact(matBall, matBackLow, pick(MAT.backLowFric, pick(MAT.backFric, 0)), pick(MAT.backLowRest, pick(MAT.backRest, 0.60)));
 
   // WHERE THE SCOREBOARD'S DIVIDING RULE SITS, as a fraction of the panel's height up from its
   // bottom. Matt, 2026-09-02: the back wall bounces 0.05 below that line and 0.60 above it. These
