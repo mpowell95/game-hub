@@ -56,6 +56,31 @@
 .sn-root .sn-dpad-options {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
 }
+/* SHORT SCREENS (2026-09-01). Measured standalone at 390x664: the setup screen stood 698px
+   against a 664px viewport, and 731px in the hub, which leaves only 526px once the hub's chrome
+   takes 138px. A settings screen that pushes the page into a scroll is the bug
+   docs/BUILDING-A-GAME.md names; this gives back ~120px of pure spacing before anything the
+   player reads or taps is touched. The swatch is the only sized thing that moves, and 44px still
+   reads as a pad. Tap targets are unaffected - .sn-dpad-option keeps its full box. */
+@media (max-height: 760px) {
+  .sn-root .sn-setup { padding: 12px 18px 16px; gap: 8px; }
+  .sn-root .sn-dpad-swatch { height: 44px; }
+}
+/* IN THE HUB, THE SCREEN IS SHORTER THAN THE VIEWPORT - and a height media query cannot see that.
+   The hub spends ~138px on its own chrome, so a game mounted there hits the same wall about 140px
+   earlier than it does standalone: measured 731px of setup against 714px of room at 393x852, a
+   viewport far too tall to trip any max-height rule. So the trim is keyed off the HOST instead. */
+.hub-main .sn-root .sn-setup { padding: 12px 18px 16px; gap: 8px; }
+.hub-main .sn-root .sn-dpad-swatch { height: 44px; }
+/* ...and on a genuinely small phone in the hub even that is not enough (657px of setup against
+   526px of room). The OPTIONS scroll rather than the page: the page never scrolls, which is the
+   actual rule, and overscroll-behavior keeps a flick that reaches the end from panning the hub
+   underneath (root CLAUDE.md's scroll rules). */
+.hub-main .sn-root .sn-setup {
+  max-height: calc(100dvh - 150px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .sn-root .sn-dpad-option {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px;
   font: inherit; font-size: 0.72rem; font-weight: 700; color: var(--sn-ink);

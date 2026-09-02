@@ -13,7 +13,12 @@
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding: 16px 0 40px;
+      /* NO DECORATIVE PADDING ON A GAME PAGE (2026-09-01). This was `16px 0 40px` - 56px of
+         chrome around a game that already lays out to fill the screen, which is exactly the 56px
+         that made chinchon 736px tall on a 664px phone. Every other game's standalone page uses
+         `padding: 0` (compare boggle/tic-tac-toe/filler); chinchon was the odd one out. The
+         home-indicator clearance it was presumably for is kept, honestly, via env(). */
+      padding: 0 0 env(safe-area-inset-bottom, 0px);
     }
   </style>
 </head>

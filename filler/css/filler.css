@@ -204,6 +204,24 @@
 
 /* --- board ---------------------------------------------------------------------- */
 
+/* FITTING ONE SCREEN (2026-09-01). Measured 724px of shell against a 664px viewport standalone,
+   and against only 526px in the hub, which spends ~138px on its own chrome. The board is 461px of
+   that 724 and is sized ENTIRELY from its width - 7 columns of square tiles, so 9 rows of height
+   it never checks against the screen.
+   The tiles are display-only <span>s: the tap targets are the .fl-cbtn colour buttons (53px), so
+   shrinking a tile costs legibility, never reach. The cap below derives the board's width from the
+   height actually left over: about 229px goes to the HUD, progress, status, colours, bar, padding
+   and gaps, and a 9-row board of tile t stands 9t+52 tall while measuring 7t+44 across.
+   A height media query cannot see the hub's chrome, so the cap is keyed off .hub-main. */
+@media (max-height: 760px) {
+  .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  /* Same derivation as the hub rule below, minus the hub's chrome: standalone the whole viewport
+     is the game's, so the board may have 100dvh less the ~281px the rest of the screen costs. */
+  .fl-board { max-width: calc((100dvh - 281px) * 0.778 + 44px); margin: 0 auto; }
+}
+.hub-main .filler .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+.hub-main .filler .fl-board { max-width: calc((100dvh - 419px) * 0.778 + 44px); margin: 0 auto; }
+
 .fl-board {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

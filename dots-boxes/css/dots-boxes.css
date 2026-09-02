@@ -52,6 +52,13 @@
   align-items: center;
   gap: 14px;
 }
+/* IN THE HUB THERE ARE 47 FEWER PIXELS THAN THE SHELL WANTS (2026-09-01). Measured at 390x664:
+   573px of shell against the 526px left once the hub spends ~138px on its own chrome. Both
+   standalone heights already fit, so this is scoped to the hub host and leaves them untouched.
+   Taken entirely from the shell's own padding and gap - NOT from .db-board's 16px padding, which
+   is load-bearing: the edge buttons deliberately overflow it to reach their 44px tap targets, and
+   that padding is what absorbs the overflow instead of the page scrolling sideways. */
+.hub-main .db-root .db-shell { padding: 6px 14px 10px; gap: 8px; }
 /* Extra width for the bigger Large board eats into narrow-phone margin, so
    the shell's own side padding gives a little of it back on small screens. */
 @media (max-width: 600px) {

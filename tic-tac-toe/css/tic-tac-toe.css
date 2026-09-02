@@ -36,6 +36,16 @@
   flex-direction: column;
   gap: 14px;
 }
+/* SHORT SCREENS GET THE SPACING BACK AS BOARD (2026-09-01). Measured in the hub at 390x664: the
+   shell stood 553px against the 526px the hub leaves once its chrome takes 98px at the top and
+   40px at the bottom - 27px of scroll on a screen that must not scroll at all
+   (docs/BUILDING-A-GAME.md, "a game screen that scrolls at all is a bug").
+   Trimmed here rather than by shrinking .ttt-uboard, because the board IS the game and it is
+   already sized from the width. Padding and gap give up 34px, which clears the 27 with slack.
+   Above this height nothing changes - a tall phone keeps the roomier rhythm. */
+@media (max-height: 720px) {
+  .ttt-root .ttt-shell { padding: 10px 14px 14px; gap: 10px; }
+}
 
 /* --- shared bits --------------------------------------------------------- */
 
@@ -286,6 +296,12 @@
   --ttt-ugap: 7px;
   --ttt-sgap: 0px;
   --ttt-ucell: 24px;
+  /* GUARD: BORDER-BOX, or the width below is a lie. `width: min(100%, 360px)` plus 10px padding
+     each side plus a 1px border rendered 382px wide against a 393px screen - 3px past the right
+     edge on an ordinary phone, which is a horizontal scroll on the one screen that must never
+     have one (docs/BUILDING-A-GAME.md: "a game screen that scrolls at all is a bug"). Measured
+     2026-09-01: .ttt-uboard right edge 396 against a 393px viewport. */
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
