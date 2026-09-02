@@ -7,6 +7,7 @@
 // the board and nobody lost plays - the exact failure mode that made a real player's Ball Run
 // history disappear in July 2026.
 
+import { readFileSync } from 'node:fs';
 import { aggregatePlayers } from './js/players-agg.js';
 import {
   record, bucketsOf, tierRows, wilsonLower, competitiveRating,
@@ -309,6 +310,45 @@ console.log('\n-- who is allowed on the board: no test accounts, no nameless dev
   eq('after naming: every previously-hidden play is now ON the board', rows[0].games.connect4.total.played, 17);
   eq('...including its wins', rows[0].games.connect4.total.won, 9);
   ok('...and the row is Ana, not a new player', rows[0].name === 'Ana' && rows[0].devices === 2);
+}
+
+// --- [KNOWN-BUG PROBE] the board must always end up SAYING something -------------------------
+//
+// Structural, over js/leaderboard-ui.js as text, because the defect lives in DOM code this suite
+// cannot mount - and because the shape of it is exact and cheap to check.
+//
+// THE INCIDENT (2026-09-01). Matt: "the leaderboard is blank or something." openLeaderboard()
+// armed its loading-fallback timer AFTER `await watchPlayers(...)`. Getting the first value costs
+// three serial cross-origin module imports from gstatic, and an import that STALLS neither
+// resolves nor rejects - so on a device where that stalls, the timer was never armed, the
+// 'online' listener was never added, and the catch never ran because nothing ever threw. The
+// loading skeleton sat there permanently: a screen with height, no text, no controls, no error.
+// Measured in a real browser at t+20s before the fix; after it, the board says "Still loading the
+// standings" at 12s.
+//
+// The invariant: NOTHING THE FALLBACK NEEDS MAY SIT BEHIND AN AWAIT THAT CAN HANG.
+{
+  // Compared over the WHOLE file rather than a carved-out function body: each of these appears
+  // exactly once, and a brace-matching regex silently truncated at the first nested block, which
+  // made this probe fail against the FIXED code. Assert the uniqueness so that stays true.
+  const src = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
+  const count = (re) => (src.match(re) || []).length;
+  ok('the three markers this probe compares each appear exactly once',
+    count(/setTimeout\(tick, GRACE_MS\)/g) === 1 && count(/_unsub = await watchPlayers/g) === 1
+    && count(/window\.addEventListener\('online'/g) === 1,
+    'loose markers matched the tick re-arm and this probe\'s own comment - keep them exact');
+  const armed = src.indexOf('setTimeout(tick, GRACE_MS)');
+  const awaited = src.indexOf('_unsub = await watchPlayers');
+  const online = src.indexOf("window.addEventListener('online'");
+  ok('[KNOWN-BUG PROBE] the loading fallback is armed BEFORE await watchPlayers',
+    armed > -1 && awaited > -1 && armed < awaited,
+    'a stalled Firebase import never resolves AND never throws, so anything behind that await '
+    + 'never runs and the board sits on its skeleton for ever');
+  ok("the 'online' listener is registered before that await too",
+    online > -1 && online < awaited);
+  // ...and it must still be removed on close, or the listener leaks (conventions rule).
+  ok("closeLeaderboard still removes the 'online' listener",
+    /removeEventListener\('online', _onLine\)/.test(src));
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);

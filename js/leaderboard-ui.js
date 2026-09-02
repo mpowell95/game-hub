@@ -1672,12 +1672,21 @@ export async function openLeaderboard() {
   document.addEventListener('keydown', onKey);
   requestAnimationFrame(() => host.classList.add('is-in'));
 
-  // Subscribe live. Offline / unconfigured -> a friendly state; never throws.
-  try {
-    _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender({ fromData: true }); });
-    if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
-
-    // DO NOT TELL A PLAYER THEY ARE OFFLINE WHEN THEY ARE NOT (2026-09-01).
+  // ARM THE FALLBACK BEFORE AWAITING ANYTHING (2026-09-01, second pass).
+  //
+  // THE BUG THIS FIXES, and it was mine from earlier the same day. All of this used to sit AFTER
+  // `await watchPlayers(...)`. That await can hang for ever rather than reject - getting the first
+  // value costs three serial cross-origin module imports from gstatic, and an import that stalls
+  // neither resolves nor throws - so on a device where the SDK load stalls, the timer was never
+  // armed, the `online` listener was never added, and the catch never ran because nothing threw.
+  // The loading skeleton then sat there permanently: a screen with height, no text and no
+  // controls. Measured: at t+20s, no message, no rows, no JS error. That is what "the leaderboard
+  // is blank" looks like from the outside.
+  //
+  // Nothing below depends on the subscription, so it belongs before it. Now the board always ends
+  // up saying something, whatever Firebase does.
+  //
+  // DO NOT TELL A PLAYER THEY ARE OFFLINE WHEN THEY ARE NOT (2026-09-01).
     //
     // Matt: "you broke the leaderboard too. it says 'The leaderboard needs a connection...' But I
     // am online and have a strong wifi connection. That I confirmed is working properly."
@@ -1694,20 +1703,25 @@ export async function openLeaderboard() {
     // Otherwise the loading skeleton stays up, the subscription stays live, and the board fills in
     // whenever the answer lands - plus an honest "still loading" note once the wait is long enough
     // to need explaining.
-    const GRACE_MS = 3500;         // long enough that a normal load never shows anything extra
-    const SLOW_MS = 12000;         // ...and past this, say so rather than leaving a dead skeleton
-    const openedAt = Date.now();
-    const tick = () => {
-      if (!_host || _connected) return;                       // gone, or the data arrived
-      if (navigator.onLine === false) { renderOffline(); return; }
-      const waited = Date.now() - openedAt;
-      if (waited >= SLOW_MS) { renderMessage('lb_slow'); return; }
-      setTimeout(tick, 500);
-    };
-    setTimeout(tick, GRACE_MS);
-    // A connection that comes back should not need the overlay reopening to notice.
-    _onLine = () => { if (_host && !_connected) { renderMessage('lb_slow'); } };
-    window.addEventListener('online', _onLine);
+  const GRACE_MS = 3500;         // long enough that a normal load never shows anything extra
+  const SLOW_MS = 12000;         // ...and past this, say so rather than leaving a dead skeleton
+  const openedAt = Date.now();
+  const tick = () => {
+    if (!_host || _connected) return;                       // gone, or the data arrived
+    if (navigator.onLine === false) { renderOffline(); return; }
+    const waited = Date.now() - openedAt;
+    if (waited >= SLOW_MS) { renderMessage('lb_slow'); return; }
+    setTimeout(tick, 500);
+  };
+  setTimeout(tick, GRACE_MS);
+  // A connection that comes back should not need the overlay reopening to notice.
+  _onLine = () => { if (_host && !_connected) { renderMessage('lb_slow'); } };
+  window.addEventListener('online', _onLine);
+
+  // Subscribe live. Offline / unconfigured -> the fallback above already covers it; never throws.
+  try {
+    _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender({ fromData: true }); });
+    if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
   } catch { renderOffline(); }
 }
 
