@@ -78,6 +78,15 @@ Course DATA can still change (a `target` move, a `fairway.width` widen) to fix r
 that is fixing the course, not the physics, and is how all five Part 2 target moves and the H3
 knife-edge note happened. See `DECISIONS.md#course-fixes-part2b`.
 
+**The one approved exception so far: Part 9B sidespin (2026-09-03).** `simulateShot` gained
+`curve01` (-1 hook … +1 slice, default 0); the spin axis is tilted about the TRAVEL direction by
+`curve01 × SIDE_TILT` (`flight.js`, **22°**, tuned to the doc's 25–45 m / 5–15 m driver band —
+the doc's 35 gave 48 / 26). `curve01 = 0` is bit-identical to the pre-9B model (test 8b proved
+it against the old fixture before it was regenerated); the fixture now carries two curved
+driver shots per hole. `GOLF-PART9.md` said "rotateAboutY" — that keeps the axis horizontal and
+cannot curve a ball; the rotation is about the travel direction, and `DECISIONS.md#part9b-sidespin`
+has the reasoning and the whole SIDE_TILT sweep. Physics is frozen again from here.
+
 ## The ui.js / game.js split
 
 `game.js` owns every round RULE: stroke counting, water/OB penalties, max strokes (`par + 4`),

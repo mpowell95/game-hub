@@ -6,7 +6,7 @@
 import * as CANNON from './vendor/cannon-es.js';
 import { S, heightAt, normalAt, surfaceAt, rng } from './terrain.js';
 import { clubById, LIE, lieSpeedMod, lieSpinMod } from './clubs.js';
-import { airForce } from './flight.js';
+import { airForce, SIDE_TILT } from './flight.js';
 
 // dt is 1/960, not the originally-specced 1/240: cannon-es has no continuous collision
 // detection, and sphere-vs-heightfield tunnels above ~10 m/s of impact speed at 1/240 (measured,
@@ -141,6 +141,10 @@ export function dropTest(terrain, x, z) {
 
 export function simulateShot(terrain, input) {
   const { from, dirDeg, clubId, lie, power01, spin01, wind, seed } = input;
+  // Part 9B: sidespin. -1 = hook (curves toward -x when travelling +z), +1 = slice (+x). Absent
+  // or 0 -> bit-identical to the pre-9B model (the tilt below multiplies by cos(0) = 1 exactly
+  // and adds sin(0) = 0 exactly). Ignored for putts, which carry no spin at all.
+  const curve01 = Math.max(-1, Math.min(1, Number(input.curve01) || 0));
   const club = clubById(clubId);
   const isPutt = clubId === 'pt';
   const gen = rng((seed >>> 0) || 0);
@@ -176,7 +180,21 @@ export function simulateShot(terrain, input) {
   // = travelDir x up, so cross(spinAxis, vr) points UP at launch (Magnus lift). The old
   // (cos, 0, -sin) was the negation of this and made backspin act as DOWNFORCE - see
   // DECISIONS.md#spinaxis-sign-bug.
-  const spinAxis = { x: -Math.cos(dirRad), y: 0, z: Math.sin(dirRad) };
+  //
+  // Part 9B: the axis is then tilted about the TRAVEL direction by curve01 x SIDE_TILT (Rodrigues:
+  // perp x cos(tilt) + up x sin(tilt), since travel x perp = -up). That gives the Magnus force a
+  // lateral component of full strength (up x vr is horizontal and |vr| long, for the whole
+  // flight) while its vertical component scales by cos(tilt). GOLF-PART9.md wrote
+  // "rotateAboutY", which would keep the axis horizontal - and a horizontal axis crossed with a
+  // near-horizontal vr gives a lateral force of only sin(launch) x that, which also flips sign
+  // on the descent; it cannot reach the 25-45 m band at any SIDE_TILT. Sign: +curve01 -> +x
+  // (slice) when travelling +z, checked by test 3c. See DECISIONS.md#part9b-sidespin.
+  const tilt = isPutt ? 0 : curve01 * SIDE_TILT * Math.PI / 180;
+  const spinAxis = {
+    x: -Math.cos(dirRad) * Math.cos(tilt),
+    y: Math.sin(tilt),
+    z: Math.sin(dirRad) * Math.cos(tilt),
+  };
 
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0) });
   world.solver.iterations = 10;
