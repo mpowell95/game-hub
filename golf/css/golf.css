@@ -19,6 +19,16 @@
   background: var(--gh-bg, #f4f6fb);
   color: var(--gh-ink, #16243a);
 }
+/* In the hub (immersive), .hub-main-immersive already pads the top by
+   max(safe-area-top, 54px) + 44px to clear its floating back pill, and the bottom by 40px
+   (css/hub.css). A 100dvh screen INSIDE that padding is taller than the viewport by ~140px,
+   which pushed the Resume / Play buttons below the screen edge (Matt's phone, 2026-09-03).
+   Subtract the hub's padding from the height, and keep only a small top pad of our own since
+   the hub's already clears the status bar. Standalone is untouched. */
+.gf-root.gf-in-hub .gf-setup {
+  min-height: calc(100dvh - max(env(safe-area-inset-top, 0px), 54px) - 44px - 40px);
+  padding-top: 8px;
+}
 .gf-root .gf-setup__title { font-size: 26px; font-weight: 800; margin: 8px 0 0; }
 .gf-root .gf-setup__section { width: 100%; max-width: 380px; }
 .gf-root .gf-course-tile {
