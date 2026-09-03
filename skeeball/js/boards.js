@@ -251,21 +251,21 @@ export const BOARDS = [
         // 2026-09-02, Matt: 0.75. The face is the only brake left (walls and rings are
         // frictionless now), and at 0.22 a ball crossed the board for a long time before any mouth
         // was slow enough to take it, finishing in the 10.
-        boardFric: 0.75,
+        boardFric: 0.62,
         boardRest: 0.08,
-        woodFric: 0.30,   // 2026-09-02: back to what it always was.
+        woodFric: 0.30,
         woodRest: 0.22,
-        wallFric: 0,
+        wallFric: 0.04,
         // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
         // pair is every 'wall' part in machines/classic/machine.js - the side rails, the lane
         // rails, the trough cheeks AND the flare - so it is also half of why a flare catch used
         // to fling the ball out of the cabinet. Kept above dead: a bank off the side rail into a
         // corner 100 is a real shot on this machine, and both 100s still land in the 861-throw
         // sweep (4 each) with the emergency path empty.
-        wallRest: 0.10,   // 2026-09-02, Matt, twice: the walls are still bouncy. Dead is what he wants.
-        ringFric: 0,
+        wallRest: 0.42,
+        ringFric: 0.06,
         // 2026-09-02, Matt: rings 10-50 come down to 0.10 as well (the 100 is already dead).
-        ringRest: 0.10,
+        ringRest: 0.18,
         // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
         // bouncy. it seems to ADD energy to the ball"). 0.18 -> 0.06. Measured, the ring does NOT
         // add energy - every contact within 16cm of a 100 LOST kinetic energy, and the few that
@@ -276,9 +276,9 @@ export const BOARDS = [
         // 2026-09-02, Matt's number. NOTE the standing guard above: ring friction is kept near
         // zero everywhere else because lateral grip can wedge a ball against a ring on the
         // slope. 0.2 is the 100 rings ALONE, and it is deliberate.
-        ring100Fric: 0,
-        ring100Rest: 0.0,   // 2026-09-02: dead. Matt: it bounces off with MORE energy than it came in with.
-        deadFric: 0,
+        ring100Fric: 0.06,
+        ring100Rest: 0.18,
+        deadFric: 0.24,
         deadRest: 0.10,
         // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall
         // must never convert serve topspin into climb (DECISIONS.md, "The back wall does not
@@ -292,7 +292,7 @@ export const BOARDS = [
         // ball") - grip here turns the ball's serve topspin into CLIMB, and test.js's "the back
         // wall alone never lifts a ball" is written as a rule with no tolerance, so it fails on
         // this number. His call, made knowing that. The low half stays frictionless.
-        backFric: 0,   // 2026-09-02: reverted to 0, its value before today.
+        backFric: 0,
         backRest: 0.60,
         // THE BACK WALL IS TWO HALVES NOW (Matt, 2026-09-02): "the back wall bounce should
         // be 0.05 BELOW the horizontal line dividing the score section... and remain 0.60
@@ -305,7 +305,7 @@ export const BOARDS = [
         // the ball's serve topspin into CLIMB (DECISIONS.md, "The back wall does not lift the
         // ball"). Below the scoreboard's line is where a ball arrives with the least spin left.
         backLowFric: 0,
-        backLowRest: 0.10,
+        backLowRest: 0.60,
       },
     },
 
