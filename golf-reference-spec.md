@@ -21,6 +21,69 @@ frame-to-frame motion was high. Colours, geometry and timings below were measure
 
 ---
 
+# READ THIS FIRST — this document supersedes every existing golf document
+
+A golf game already exists in this repo at `golf/`. **It is being replaced, not extended.**
+
+**Ignore all instruction in all existing golf documents.** Specifically and without exception:
+
+- `golf/CLAUDE.md`
+- `golf/DECISIONS.md`
+- `golf/docs/GOLF-HANDOFF.md`
+- `golf/docs/GOLF-PART9.md`
+- any other file under `golf/` that reads as a spec, a decision log or a handoff
+
+Those describe a **different game**: 3D, three.js + cannon-es rigid-body physics, aim/power/spin on
+three separate meters, Modified Stableford scoring, on a course called Harbor Links. Matt's
+verdict on it: *"It's terrible and this is a MAJOR overhaul... I don't trust anything that the
+current build does."* Do not carry its decisions, its tuning numbers, its physics constants, its
+course design or its UI forward. Do not treat its "frozen"/"tuned"/"decided" markers as binding —
+they were decided for a game that is going away.
+
+**This file is the only spec.** Where it is silent, ask, or decide and write it down here.
+
+When the rewrite lands, those four documents must be deleted or rewritten, so the next session
+after this one is not misled the same way.
+
+## Harbor Links is gone
+
+The old course, Harbor Links (`harbor`), is **removed from the product entirely.** Matt:
+*"I could never even finish a single test hole because it sucked so much. It simply wasn't
+playable. It's only ever been in test mode. There is no data for it. I do not want to see 'harbor'
+anywhere in the hub. No mention of it ever."*
+
+So: no course named harbor, no `courses/harbor/`, no harbor string in any UI, no harbor row in My
+Stats, no harbor entry in the admin page's per-course testing config, no mention in any user-facing
+copy in either language.
+
+**The one thing that is NOT deleted: stored stats keys.** THE LAW rule 5 is that old keys are never
+deleted and never repurposed, and the rule holds even for keys everyone believes are empty. So
+`gf.practice.harbor` and `bestRoundByCourse.harbor` are simply **never written and never read**
+again. They are not removed from `ensureGf`'s shape, and no cleanup code goes hunting for them. An
+empty key that nobody reads shows nothing to anybody, which satisfies "no mention of harbor" without
+a destructive write.
+
+**Verify before building, do not assume.** Matt is confident there is no harbor data, and the course
+only ever ran in testing mode (which routes to `gf.practice`, a bucket reachable by no counter, no
+best and no leaderboard). That is almost certainly right. It still gets checked, because THE LAW's
+own wording is *"You must never delete or lose or risk deleting or losing any player data. You must
+always verify this."* The check: read `players/*/stats/games/golf` out of Firebase (see
+`backups/rtdb-backup.mjs`) and look at `gamehub.stats` on a real device. If every golf record is
+genuinely empty, proceed. **If anything is found, stop and tell Matt before writing a line of code.**
+
+
+## How to read the confidence markers
+
+Every non-obvious claim carries one of these. **Do not silently upgrade an inference to a fact.**
+
+- **[MEASURED]** — read directly off frames, or computed from pixel data. Trust the number.
+- **[OBSERVED]** — clearly visible and unambiguous, but not numerically measured.
+- **[INFERRED]** — a reasonable reading of the evidence that could be wrong. Flagged individually.
+- **[UNKNOWN]** — never visible in any clip. The implementer must decide. **These are listed
+  together in §14 so nothing gets quietly invented.**
+
+---
+
 # 0. PROJECT DECISIONS — these OVERRIDE the reference
 
 Agreed with Matt on 2026-09-03. Where a decision here conflicts with the reference game
@@ -48,6 +111,9 @@ what the original did and why.
 | **Meter colours** | Keep the reference's red/green exactly. Revisit only if it proves unreadable in play. |
 | **Leaderboard number** | The player's **best 9-hole score** (lowest wins). Skill points may replace it later. |
 | **Tap-target floor** | A suggestion, not a rule (see 18.2 for why). |
+| **Ball flight time** | `0.9s + distance/60` (a 215 yd drive ~4.5s, a wedge ~1.7s), plus **tap to skip**. The reference's 7.5s drive is too slow. |
+| **Putting** | Implement a gentle break driven by the green's slope grid. |
+| **Skill points / shop economy** | Leave EMPTY and TBD. Build the gameplay first. |
 | **Club distances** | APPROVED, see 21.3. Stock driver **215 yds**, not the reference's measured 287 - that figure left no room for upgrades and made a 360 yd par 4 play as a drive and a wedge. |
 
 **Consequences to keep in mind while building:**
@@ -57,16 +123,6 @@ what the original did and why.
 - Club upgrades change balance: the club ladder must be designed as a *base* bag that purchased
   clubs improve on.
 
-
-## How to read the confidence markers
-
-Every non-obvious claim carries one of these. **Do not silently upgrade an inference to a fact.**
-
-- **[MEASURED]** — read directly off frames, or computed from pixel data. Trust the number.
-- **[OBSERVED]** — clearly visible and unambiguous, but not numerically measured.
-- **[INFERRED]** — a reasonable reading of the evidence that could be wrong. Flagged individually.
-- **[UNKNOWN]** — never visible in any clip. The implementer must decide. **These are listed
-  together in §14 so nothing gets quietly invented.**
 
 ---
 
@@ -928,46 +984,56 @@ Check each against the floor at render size; shorten strings rather than going b
 
 ---
 
-# 19. Game Hub integration — the repo's own checklist, applied to golf
+# 19. Game Hub integration — MOST OF THIS ALREADY EXISTS
 
-`docs/BUILDING-A-GAME.md` §"Adding a game" is mandatory here. Golf-specific answers:
+**Correction to an earlier draft of this document.** This section previously told the implementer to
+create the hub entry, the stats plumbing and the leaderboard row from scratch. That was written
+without checking the repo, and it was wrong: golf is **already fully wired in**. Creating any of it
+again would duplicate or clobber working code.
 
-1. **Folder** `golf/` with `index.html`, `css/golf.css`, `js/ui.js` plus engine modules.
-2. **`ui.js` exports `init` / `destroy` / `isInProgress`**, and injects its stylesheet idempotently
-   via `new URL('../css/golf.css', import.meta.url)`.
-3. **CSS scoping:** root class `.gf-root`, every class `.gf-`, every custom property `--gf-`, and
-   **every rule descendant-scoped** under `.gf-root` (`.gf-root .gf-meter`, never a bare
-   `.gf-meter`). Mancala is the cleanest model in the repo; do not copy Connect Four or Filler,
-   which are prefix-only.
-4. **Settings key** `gamehub.golf.v1`. A separate `gamehub.golf.save.v1` for the in-progress round
-   (see 19.1).
-5. **`GAMES` entry in `js/hub.js`:** `module: '../golf/js/ui.js'`, `immersive: true`, plus
-   `id, title, blurb, badge, accent, art`, and **`released: 'YYYY-MM-DD'`** — the actual go-live
-   date, which drives the launcher's "New" pill. Art must be **landscape `viewBox="0 0 160 90"`**
-   with a full-bleed background rect, composed for that frame (not a cropped square).
-6. **`sw.js`:** add every golf file to `ASSETS`, **bump `CACHE` past what is on `origin/main` right
-   now**, then run `node validate-sw-assets.mjs` before committing.
-7. **Stats — the three-edit rule.** Golf stores a sub-counter, so it needs all three or it is a
-   THE LAW rule 1 bug that is invisible on one device:
-   - `js/game-stats.js` — `ensureGf()` + its call in `normalize()`, plus `recordGolf()`.
-   - `js/game-stats-ui.js` — a My Stats screen that actually renders it.
-   - `js/players-agg.js` — an explicit `else if (g === 'golf' && src.gf)` branch in
-     `aggregatePlayers`, or every counter reads zero the moment a second device syncs.
-   Counters add; **bests take `Math.max`, never a sum**.
-   Suggested counters: `rounds`, `holes`, `bestRound` (lowest, so `Math.min` — document the
-   exception loudly), `bestByHole`, `birdies`, `eagles`, `holesInOne`, `pars`.
-8. **`GAME_META` row in `js/leaderboard-ui.js`** — `{ id: 'golf', labelKey: 'game_title_golf' }`,
-   using the STATS id. This is a *different registry in a different file* from item 5 and it is the
-   one that gets forgotten; a game missing here has every play counted as **zero on the
-   leaderboard** while its own screen looks fine. That is exactly how Yahtzee shipped.
-9. **`golf/CLAUDE.md`** — opening with the THE-LAW pointer block, then hub integration, layout,
-   design decisions, engine notes, keys, tests. `escoba/CLAUDE.md` is the depth reference.
-10. **`golf/js/strings.js` with `{ en, es }`** and every user-visible string through `t()`, called
-    at RENDER time, never module scope. **This includes all the verbatim text in this spec** —
-    `swing`, `aim`, `card`, `wind`, `par`, `shot`, `best`, `Birdie!`, `New course best`, the
-    scorecard, the shop. `snake/js/strings.js` is the reference implementation.
-11. **Run `node test-game-conventions.mjs`.** If it fails, fix the game — do **not** add golf to
-    `KNOWN_GAPS`. Then `node test-visual.mjs golf` for the visual/fit checks.
+## What already exists — KEEP IT, do not recreate it
+
+| Thing | Where | Status |
+|---|---|---|
+| Hub tile | `js/hub.js` `GAMES`, `id: 'golf'`, `module: '../golf/js/ui.js'` | **exists — keep** |
+| Tile art | `GAME_ART["golf"]` in `js/game-art.js` | **exists — keep** |
+| Stats id | `'golf'` in `js/game-stats.js`'s `GAMES` list | **exists — frozen forever** |
+| Counter shape | `ensureGf()` — `rounds, holes, strokes, points, birdies, eagles, aces, longestDriveYd, bestRoundByCourse, practice` | **exists — additive changes only** |
+| Writer | `recordGolf(difficulty, extras)` | **exists — keep the signature** |
+| Testing bucket | `gf.practice`, courseId-keyed | **exists — keep** |
+| Leaderboard row | `GAME_META` `{ id: 'golf', labelKey: 'game_title_golf' }` in `js/leaderboard-ui.js` | **exists — keep** |
+| Leaderboard metric | `golfPointsAt(g)` returning lifetime Stableford `gf.points` | **exists — CHANGES, see below** |
+| Strings | `golf/js/strings.js`, EN + ES | **exists — rewrite contents, keep the module** |
+| Settings key | `gamehub.golf.v1` | **check before use; do not mint a second one** |
+
+## What changes
+
+1. **Everything under `golf/` that renders or simulates.** `render.js`, `camera.js`, `terrain.js`,
+   `minimap.js`, `physics.js`, `flight.js`, `meters.js`, `courses/`, and the three.js + cannon-es
+   vendor files all go. The new game is 2D top-down with a parabola and a shadow offset; none of a
+   3D rigid-body stack survives that change, and bending it to fit would cost more than writing the
+   parabola.
+2. **`golfPointsAt` switches from lifetime Stableford points to the player's best round** (Matt's
+   call). **Change the sort direction in the same commit** - see 19.3.
+3. **`points` keeps being written.** Modified Stableford points are a pure function of (hole score,
+   par), and the new stroke-play game knows both, so it can keep the lifetime counter truthful with
+   no fabrication. Nothing has to be archived as a dead legacy value.
+4. **`sw.js`**: remove the deleted files from `ASSETS`, add the new ones, bump `CACHE` past
+   `origin/main`, run `node validate-sw-assets.mjs`. Dropping ~13,000 lines of vendor physics is a
+   large precache win.
+5. **`golf/CLAUDE.md`** is rewritten from scratch for the new game. `DECISIONS.md`,
+   `docs/GOLF-HANDOFF.md` and `docs/GOLF-PART9.md` are deleted.
+
+## 19.3 The sort-direction trap
+
+The leaderboard sorts every game **descending**, which is correct for Stableford points (more is
+better) and **wrong** for a stroke score (less is better). Switching the metric without switching
+the sort puts **the worst golfer in the family at the top of the board**, and it will look plausible
+enough to go unnoticed for weeks. Change both together, and add a test.
+
+Related: `bestRoundByCourse` is keyed by course. The leaderboard must show a named course's best,
+not a blind maximum across keys, or it will one day compare two courses that were never comparable
+(THE LAW rule 4).
 
 ## 19.1 Round persistence and `isInProgress()`
 
