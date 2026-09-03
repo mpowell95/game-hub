@@ -48,7 +48,7 @@ what the original did and why.
 | **Meter colours** | Keep the reference's red/green exactly. Revisit only if it proves unreadable in play. |
 | **Leaderboard number** | The player's **best 9-hole score** (lowest wins). Skill points may replace it later. |
 | **Tap-target floor** | A suggestion, not a rule (see 18.2 for why). |
-| **Club distances** | See 21.2. Stock driver **215 yds**, not the reference's measured 287 - that figure left no room for upgrades and made a 360 yd par 4 play as a drive and a wedge. |
+| **Club distances** | APPROVED, see 21.3. Stock driver **215 yds**, not the reference's measured 287 - that figure left no room for upgrades and made a 360 yd par 4 play as a drive and a wedge. |
 
 **Consequences to keep in mind while building:**
 - The scorecard screen loses its opponent scoreboard panel. Keep the grid, the totals and the avatar.
@@ -1162,10 +1162,11 @@ the one to build.)
 
 **No choice is offered** — water is automatic. **Drop at the water's edge, +1 stroke.**
 
-## 21.3 The club ladder (proposed 2026-09-03, pending final sign-off)
+## 21.3 The club ladder — APPROVED (Matt, 2026-09-03)
 
-Anchored on hole design rather than on the reference's measured 287 yd drive, which was recorded
-with an unknown - possibly upgraded - bag and left no headroom for the shop.
+**These are the numbers to build.** Anchored on hole design rather than on the reference's measured
+287 yd drive, which was recorded with an unknown - possibly upgraded - bag and left no headroom for
+the shop.
 
 | Club | Stock | Fully upgraded | Dot 5 (risk, stock) |
 |---|---|---|---|
