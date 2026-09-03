@@ -856,7 +856,7 @@ OrbitControls). No physics, no game shell. Used to eyeball a hole.
                         .gf-dist  (top-left inside view, 12 px in): shot distance during flight, "137 yd", updates each frame from the sample's straight-line distance
                         .gf-flash (centered, 70% down, 220 × 44 px box, empty most of the time): result word or surface label, 700 ms in, hold 900 ms, 300 ms out
  590 – 640  .gf-bar     club chip (left, 88 px, tap opens .gf-clubs row in the same 50 px band, replacing the bar contents; tap a chip or outside to close) · pin distance "143 yd" (center, 28 px font) · lie label "Fairway" (right)
- 640 – 773  .gf-meters  three .gf-meter rows, each 32 px tall, 10 px gap, 16 px side margins. Row = track (rounded, 8 px tall centered) + marker (4 × 24 px pill) + for power the sweet band (a lighter segment) + a 6 px triangle notch at the sweet band start
+ 640 – 773  .gf-meters  three .gf-meter rows, each 32 px tall, 10 px gap, 16 px side margins. Row = track (rounded, 8 px tall centered) + marker (4 × 24 px pill) + for power the sweet band (a lighter segment) + a 6 px triangle notch at the sweet band start + (2026-09-03) a label naming the meter (AIM / POWER / SPIN, `meter_*` strings, 11 px uppercase) in the row's top 12 px, above the track, so the row stays 32 px
 ```
 
 Height budget is exact; use `100dvh` and scale the view region to absorb any difference on

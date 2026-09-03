@@ -48,6 +48,9 @@ export const STRINGS = {
     stats_drive: 'Longest drive',
     stats_best: 'Best round',
     game_title_golf: 'Golf',
+    meter_aim: 'Aim',
+    meter_power: 'Power',
+    meter_spin: 'Spin',
   },
   es: {
     title: 'Golf',
@@ -95,6 +98,9 @@ export const STRINGS = {
     stats_drive: 'Drive mas largo',
     stats_best: 'Mejor ronda',
     game_title_golf: 'Golf',
+    meter_aim: 'Direccion',
+    meter_power: 'Fuerza',
+    meter_spin: 'Efecto',
   },
 };
 
