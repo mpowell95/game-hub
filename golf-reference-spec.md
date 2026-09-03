@@ -859,3 +859,151 @@ Modal 1's illustration shows a single orange arrow sweeping **up** the arc, whic
 earlier reading of this footage astray. The real meter **oscillates up and back down** (section 5).
 Draw the tutorial art to match the real behaviour.
 
+---
+
+# 18. Conflicts between the reference game and THIS repo's rules
+
+The reference is a commercial iOS game. This repo has its own standards, and in three places
+copying the original faithfully would **break** them. Resolve these deliberately.
+
+## 18.1 The accuracy meter is red/green — and Matt is red/green colorblind
+
+**This is the important one.** Root `CLAUDE.md`: *"Colorblind-safe (Matt is red/green colorblind):
+wherever color is a choice, pair each hue with a shape marker, never hue alone."*
+
+The reference's accuracy bar is `red | orange | GREEN | orange | red` — a pure hue-coded gauge
+with no shape cue whatsoever, and hitting the green centre is **the single most important judgement
+in the game**. The power ring has the same problem: its green "good" segment and its red over-100
+block are distinguished by hue alone.
+
+Copying this exactly would ship a core mechanic the primary player cannot reliably read.
+
+**Recommended fix — keep the shape, change the coding:**
+- Re-hue to the repo's colorblind-safe palette: **teal `#178A7A` centre, vermilion `#E0532F`
+  flanks** (blue/orange-family contrast survives red/green colorblindness; yellow `#F2B705` is
+  available for the middle band).
+- **Add a shape marker at the safe centre** — a diamond or notch drawn on the bar, so the target
+  is identifiable without any colour at all.
+- Make the safe zone **visibly wider and lighter**, so brightness alone distinguishes it.
+- On the power ring, mark 100 % with a **notch or tick**, not a colour change.
+
+This is a deliberate, documented departure from "exact clone", and it needs Matt's blessing since
+it changes how the meter looks. Everything else about the meter stays identical.
+
+## 18.2 The reference's tap targets are below this repo's 44 pt floor
+
+`docs/BUILDING-A-GAME.md` Part 0: **tap targets are 44 × 44 px minimum**, with departures allowed
+only for a real, verified, documented reason.
+
+Measured from the reference frames: every small control (`<`, `>`, `^`, `v`) is **102 × 94 device
+px**, which at 3× is **34 × 31 pt** — comfortably *under* the floor on both axes. The `card` button
+at 180 × 94 px (60 × 31 pt) is under it on height too.
+
+**Recommended fix:** keep the reference's visual box size, but extend the *hit area* to at least
+44 × 44 pt with transparent padding. The layout looks identical and the control becomes reachable.
+Do not simply shrink-copy the original's geometry.
+
+## 18.3 Minimum text size
+
+Part 0 sets an **11 px floor**. Several reference readouts are drawn very small — the `(0,0)`
+sub-line, the greyed third line of the par panel, the meter's `25`/`50`/`75`/`100` tick labels.
+Check each against the floor at render size; shorten strings rather than going below it.
+
+---
+
+# 19. Game Hub integration — the repo's own checklist, applied to golf
+
+`docs/BUILDING-A-GAME.md` §"Adding a game" is mandatory here. Golf-specific answers:
+
+1. **Folder** `golf/` with `index.html`, `css/golf.css`, `js/ui.js` plus engine modules.
+2. **`ui.js` exports `init` / `destroy` / `isInProgress`**, and injects its stylesheet idempotently
+   via `new URL('../css/golf.css', import.meta.url)`.
+3. **CSS scoping:** root class `.gf-root`, every class `.gf-`, every custom property `--gf-`, and
+   **every rule descendant-scoped** under `.gf-root` (`.gf-root .gf-meter`, never a bare
+   `.gf-meter`). Mancala is the cleanest model in the repo; do not copy Connect Four or Filler,
+   which are prefix-only.
+4. **Settings key** `gamehub.golf.v1`. A separate `gamehub.golf.save.v1` for the in-progress round
+   (see 19.1).
+5. **`GAMES` entry in `js/hub.js`:** `module: '../golf/js/ui.js'`, `immersive: true`, plus
+   `id, title, blurb, badge, accent, art`, and **`released: 'YYYY-MM-DD'`** — the actual go-live
+   date, which drives the launcher's "New" pill. Art must be **landscape `viewBox="0 0 160 90"`**
+   with a full-bleed background rect, composed for that frame (not a cropped square).
+6. **`sw.js`:** add every golf file to `ASSETS`, **bump `CACHE` past what is on `origin/main` right
+   now**, then run `node validate-sw-assets.mjs` before committing.
+7. **Stats — the three-edit rule.** Golf stores a sub-counter, so it needs all three or it is a
+   THE LAW rule 1 bug that is invisible on one device:
+   - `js/game-stats.js` — `ensureGf()` + its call in `normalize()`, plus `recordGolf()`.
+   - `js/game-stats-ui.js` — a My Stats screen that actually renders it.
+   - `js/players-agg.js` — an explicit `else if (g === 'golf' && src.gf)` branch in
+     `aggregatePlayers`, or every counter reads zero the moment a second device syncs.
+   Counters add; **bests take `Math.max`, never a sum**.
+   Suggested counters: `rounds`, `holes`, `bestRound` (lowest, so `Math.min` — document the
+   exception loudly), `bestByHole`, `birdies`, `eagles`, `holesInOne`, `pars`.
+8. **`GAME_META` row in `js/leaderboard-ui.js`** — `{ id: 'golf', labelKey: 'game_title_golf' }`,
+   using the STATS id. This is a *different registry in a different file* from item 5 and it is the
+   one that gets forgotten; a game missing here has every play counted as **zero on the
+   leaderboard** while its own screen looks fine. That is exactly how Yahtzee shipped.
+9. **`golf/CLAUDE.md`** — opening with the THE-LAW pointer block, then hub integration, layout,
+   design decisions, engine notes, keys, tests. `escoba/CLAUDE.md` is the depth reference.
+10. **`golf/js/strings.js` with `{ en, es }`** and every user-visible string through `t()`, called
+    at RENDER time, never module scope. **This includes all the verbatim text in this spec** —
+    `swing`, `aim`, `card`, `wind`, `par`, `shot`, `best`, `Birdie!`, `New course best`, the
+    scorecard, the shop. `snake/js/strings.js` is the reference implementation.
+11. **Run `node test-game-conventions.mjs`.** If it fails, fix the game — do **not** add golf to
+    `KNOWN_GAPS`. Then `node test-visual.mjs golf` for the visual/fit checks.
+
+## 19.1 Round persistence and `isInProgress()`
+
+A 9-hole round is long, so abandoning mid-round must not lose it.
+- Autosave the round (hole, shot count, ball position, per-hole scores) to
+  `gamehub.golf.save.v1` after every stroke.
+- `isInProgress()` returns true whenever a round is part-played, so the hub warns before unmounting.
+- The reference's `quit` / `restart` buttons map to: `quit` = leave, keep the save; `restart` =
+  discard and re-tee. Confirm before `restart` — it destroys progress.
+
+## 19.2 Other repo rules that bite here
+
+- **Use `onViewportResize(cb)` from `js/viewport.js`.** Never a raw `resize` /
+  `orientationchange` / `visualViewport` listener — that is a mobile scroll-jank bug, and Hill
+  Climb shipped it exactly once by not reading this rule.
+- **Never put `touchmove` on `document` or `window`** — bind it to `.gf-root`. The swipe/scroll
+  surface gets `touch-action: none`; tappable controls get `touch-action: manipulation`.
+- **`overscroll-behavior: contain`** on any fixed overlay that scrolls (the shop list, the
+  scorecard).
+- **`safe-area-inset-bottom`** on the bottom control cluster. The reference already leaves 183 px
+  (61 pt) of bottom inset — match that intent.
+- **Immersive fit:** the game must fit ONE screen at both a tall and a short phone height, checked
+  standalone *and* mounted in the hub's real chrome (~138 px of it). See `test-visual.mjs`'s `fit`
+  checks and Part 3's "Fitting a screen to available viewport space, by measurement".
+- **Animate only `transform`, `opacity`, `filter`, `box-shadow`.** Never `width`/`height`/`inset`.
+- **`prefers-reduced-motion`**: cut the sunburst rays, screen shake and particles — but **keep the
+  ball flying**. Per `pinball/CLAUDE.md`, reduced motion thins garnish, it does not freeze
+  gameplay.
+- **No em dashes in user-facing copy.** Commas, colons or parentheses.
+- **The round-complete screen gets a close (X) top-right**, per the repo's win/lose popup rule.
+- **Profile integration:** the player's name comes from `loadProfile()` (`js/profile-store.js`),
+  defaults-only — golf prefills from it and never writes back. Since the character editor is cut,
+  the golfer sprite should pick up the profile's colour rather than offering its own wardrobe.
+- **Deploying means LIVE on `main`**, not a pushed branch. Root `CLAUDE.md` is emphatic about this.
+
+---
+
+# 20. Physics model — concrete numbers to build against
+
+The reference was measured for *feel*, not for coefficients. The implementer needs actual numbers,
+so here is a starting model. **All of this is ours, not measured from the reference**, except the
+two anchors noted.
+
+- **Full-power driver carry ≈ 287 yds** [MEASURED anchor]. Design the rest of the bag beneath it.
+- **Distance = clubCarry × (power ÷ 100)**, with power over 100 adding up to +8 % and multiplying
+  the mishit angle by 1.5 (§17.9).
+- **Flight time**: the reference's drive took ≈ 7.5 s [MEASURED], which is slow. Recommend scaling
+  time with distance — roughly `0.9 s + distance / 60` seconds — giving a driver ≈ 5.7 s and a
+  wedge ≈ 2.5 s, then **let a tap skip to the landing** (flaw #7).
+- **Roll** after landing: fairway ≈ 8 % of carry, green ≈ 2 %, rough ≈ 3 %, bunker ≈ 0.
+- **Putting**: distance = `power × maxPuttFeet`, decelerating over ≈ 2.5 s [MEASURED reference
+  roll]. Whether the green's slope grid actually breaks the putt was never observable — recommend
+  implementing a gentle break, since the grid is drawn and players will expect it to mean something.
+- **Ball height** for the shadow offset: a simple parabola over the flight, peak offset scaled by
+  club loft. Nothing more elaborate is needed — the shadow gap is the only height cue.
+
