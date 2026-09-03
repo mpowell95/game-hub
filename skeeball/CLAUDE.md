@@ -2113,3 +2113,41 @@ the norms or for guides on how this kind of stuff is coded / implemented before 
 That would save us a TON of time."* The billboarded ring was invented rather than looked up, and one
 search for how impact decals are done would have produced the surface-projected quad, the
 polygonOffset recipe and the "subtle and short-lived" convention before any of it was written.
+
+## The back-wall scuff, on three machines now (2026-09-03)
+
+BRICK CITY got it first (`skeeball/MACHINE-BRICKCITY.md` has the three passes it took: a neon ring,
+then an invisible dark one, then this). **HOT SHOT and RUNAWAY now carry the same four pieces**, per
+the HARD RULE that every machine owns its own engine - copies, not a shared module.
+
+The four pieces, so the next port is mechanical:
+
+1. `physics.js` - a `wallMarked: false` flag in the throw state, and one emit in the collide
+   listener on the FIRST `backboard` contact over 0.1 m/s, carrying the ball's position. It is
+   READ-ONLY: it pushes an event and touches nothing physical, which is why porting it cannot
+   change how a machine plays.
+2. `js/ui.js` - `case 'wall'`, already shared by all five machines and already live. It asks
+   `typeof Rr.wallMarkAt === 'function'` first, so **a machine without the renderer half silently
+   ignores the event**. That is what let BRICK CITY ship this alone without touching the other four.
+3. `render.js` - `WALL_MARK_LIFE`, a `_wallMarks` array, `_scuffTexture()`, `wallMarkAt()`, the
+   fade block in `render()`, the array in the shadow-pass gate, and one line in `dispose()`.
+4. Nothing else. No geometry, no materials, no scoring.
+
+**What must be RE-MEASURED per machine, never copied: the wall's own brightness.** The mark is pale
+(`rgba(214,203,186)`) because a dark one on a dark wall is invisible - the failure that cost a whole
+round on BRICK CITY. Measured by reading the rendered framebuffer:
+
+| | back wall luminance | peak change | footprint |
+|---|---|---|---|
+| BRICK CITY | 53-68 | 88-90 | 1900-2700 px |
+| RUNAWAY | 53-54 | 88-90 | 1900-2670 px |
+| HOT SHOT | 77 | 76-78 | 1870-2640 px |
+
+**POPONGO is deliberately NOT done**, and not only because Matt said to skip it: its ball is 8.1 cm
+against these machines' 10.9 cm, and the mark's size is in metres, so a verbatim copy would look a
+third too big. Rescale before porting it.
+
+**RUNAWAY's renderer needed two edits the others did not** - it has a moving basket, so its shadow
+gate is `live.length || used !== _shadowBalls || movers !== _shadowMovers || _celebrateT` rather
+than the shared form, and its teardown disposes through a `disposeMat()` helper. Both are noted in
+the port so a future copy does not paste the wrong line.
