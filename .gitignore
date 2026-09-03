@@ -27,3 +27,7 @@ backups/*.json
 # Video clips pulled in for analysis with the claude-video-vision MCP server.
 # Screen recordings, tens of MB each, nothing the app serves - keep them local.
 *.mp4
+
+# claude-video-vision writes its extracted frames into the working directory
+# (frames-<name>/, tens of MB of PNGs). Regenerable from the source clip.
+frames-*/
