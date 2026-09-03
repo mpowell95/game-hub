@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BRICK CITY - angle and power</title>
+<!--
+  A BENCH TOOL, not a game screen. Matt, 2026-09-03: "a tool that shows the machine as is. And has
+  two sliding scales... Then the tool shows me the trajectory of the ball given those two numbers.
+  And tells me if the ball would go in or not?"
+
+  IT RUNS THE REAL ENGINE. It imports skeeball/js/machines/brickcity/physics.js and steps it exactly
+  as game.js does, so what this page says is what the game does - his words: "what would be the
+  point of seeing an answer that doesn't match what the actual game does". Nothing here models,
+  approximates or re-implements a throw. The machine you see is render.js's own scene.
+
+  Not in the hub, not linked from the game: a bench tool alongside skeeball/flick-test.html.
+-->
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #151a23; --line: #26303f; --ink: #e8eaf0; --dim: #93a0b4;
+    --hit: #37d67a; --miss: #7c8899; --pen: #e0532f; --gold: #ffce3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 17px; margin: 4px 0 2px; letter-spacing: 0.02em; }
+  .sub { color: var(--dim); font-size: 12.5px; margin: 0 0 12px; }
+  .stage { position: relative; background: #000; border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; aspect-ratio: 47 / 62; }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .verdict { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px;
+    background: linear-gradient(to top, rgba(6,8,12,0.94), rgba(6,8,12,0)); }
+  .score { font-size: 26px; font-weight: 800; letter-spacing: 0.01em; }
+  .score.in { color: var(--hit); } .score.pen { color: var(--pen); } .score.out { color: var(--miss); }
+  .detail { color: var(--dim); font-size: 12.5px; min-height: 1.3em; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; margin-top: 12px; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .row label { font-weight: 650; }
+  .val { font-variant-numeric: tabular-nums; color: var(--gold); font-weight: 700; }
+  .hint { color: var(--dim); font-size: 12px; }
+  input[type=range] { width: 100%; margin: 10px 0 2px; accent-color: var(--gold); height: 28px; }
+  .ticks { display: flex; justify-content: space-between; color: var(--dim); font-size: 11.5px;
+    font-variant-numeric: tabular-nums; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button { flex: 1 1 auto; min-height: 44px; padding: 0 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: #1d2431; color: var(--ink); font: inherit;
+    font-weight: 650; cursor: pointer; }
+  button.primary { background: var(--gold); color: #1a1405; border-color: var(--gold); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .maphead { display: flex; align-items: baseline; justify-content: space-between; }
+  #map { width: 100%; display: block; margin-top: 10px; border-radius: 8px; image-rendering: pixelated;
+    border: 1px solid var(--line); cursor: crosshair; touch-action: none; }
+  .key { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; color: var(--dim); font-size: 12px; }
+  .key i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px;
+    vertical-align: -1px; }
+  .axis { display: flex; justify-content: space-between; color: var(--dim); font-size: 11.5px;
+    font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .note { color: var(--dim); font-size: 12px; margin-top: 10px; }
+  .err { color: #ff9d3d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>HOT SHOT: BRICK CITY — angle &amp; power</h1>
+  <p class="sub">Every throw here is run through the machine's own physics. What this page says is
+    what the game does.</p>
+
+  <div class="stage">
+    <canvas id="view"></canvas>
+    <div class="verdict">
+      <div class="score out" id="score">—</div>
+      <div class="detail" id="detail">Move a slider to throw.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><label for="angle">Angle</label><span class="val" id="angleVal">0.0°</span></div>
+    <input type="range" id="angle" min="-13.5" max="13.5" step="0.1" value="0">
+    <div class="ticks"><span>13.5° left</span><span>straight</span><span>13.5° right</span></div>
+    <p class="hint" id="angleHint"></p>
+
+    <div class="row" style="margin-top:14px"><label for="power">Power</label><span class="val" id="powerVal">0.70</span></div>
+    <input type="range" id="power" min="0" max="1.2" step="0.01" value="0.7">
+    <div class="ticks"><span>0 — softest</span><span>1.00 — full swipe</span><span>1.20</span></div>
+    <p class="hint" id="powerHint"></p>
+
+    <div class="btns">
+      <button id="play" class="primary">Play the throw</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="maphead">
+      <label style="font-weight:650">Every combination</label>
+      <span class="hint" id="mapState"></span>
+    </div>
+    <canvas id="map" height="51" width="55"></canvas>
+    <div class="axis"><span>13.5° left</span><span>angle</span><span>13.5° right</span></div>
+    <div class="key">
+      <span><i style="background:#ffce3a"></i>100</span>
+      <span><i style="background:#8ad6ff"></i>50</span>
+      <span><i style="background:#37d67a"></i>40</span>
+      <span><i style="background:#2f8f57"></i>20</span>
+      <span><i style="background:#e0532f"></i>−20</span>
+      <span><i style="background:#a33427"></i>−10</span>
+      <span><i style="background:#2a3342"></i>nothing</span>
+    </div>
+    <p class="note">Power runs bottom (soft) to top (hard). Tap the map to jump the sliders there.</p>
+  </div>
+
+  <p class="note" id="foot"></p>
+</div>
+
+<script type="module">
+import { BOARDS } from './js/boards.js';
+import { buildMachine } from './js/machines/brickcity/machine.js';
+import * as PHYS from './js/machines/brickcity/physics.js';
+import { Renderer } from './js/machines/brickcity/render.js';
+import * as THREE from './js/vendor/three.module.min.js';
+
+const board = BOARDS.find((b) => b.id === 'brickcity');
+const G = board.geom;
+const M = buildMachine(G);
+const cups = board.cups, arrangement = board.arrangement;
+
+// --- the machine, drawn by its own renderer ----------------------------------------------------
+const canvas = document.getElementById('view');
+const R = new Renderer(canvas, board);
+const fit = () => {
+  const r = canvas.parentElement.getBoundingClientRect();
+  R.resize(Math.max(240, Math.round(r.width)), Math.max(320, Math.round(r.height)));
+};
+fit();
+R.setScoreboard({ record: 0, recordName: '', best: 0, today: 0, last: 0 },
+  { record: 'HUB WIDE RECORD', best: 'YOUR BEST', today: 'TODAY', last: 'LAST GAME' });
+window.addEventListener('resize', () => { fit(); draw(); });
+
+// A fake "game" so the renderer will draw a ball for us where we ask.
+const ghost = { balls: [], over: true, canThrow: () => false, thrown: 9 };
+const draw = () => R.render(ghost, 0);
+
+// --- the throw, run through the real engine ----------------------------------------------------
+// The engine takes aim as -1..1 and multiplies by geom.aimMax, so degrees convert straight back.
+const AIM_MAX_DEG = G.aimMax * 180 / Math.PI;
+const degToAim = (deg) => Math.max(-1, Math.min(1, (deg * Math.PI / 180) / G.aimMax));
+const launchSpeed = (p) => Math.sqrt(Math.max(0.4, G.minSpeed ** 2 + Math.max(-0.75, p) * (G.maxSpeed ** 2 - G.minSpeed ** 2)));
+
+function simulate(deg, power) {
+  const st = PHYS.startThrow(board, { power, aim: degToAim(deg) });
+  const path = [];
+  const touched = [];
+  let n = 0, capture = null, rimmed = false, hitWall = false;
+  while (!st.done && n++ < 240 * 14) {
+    PHYS.step(board, st, PHYS.STEP);
+    const p = st.ball.position;
+    if (n % 3 === 0) path.push(new THREE.Vector3(p.x, p.y, p.z));
+    for (const e of st.events) {
+      if (e.type === 'capture' && !capture) capture = e;
+      if (e.type === 'contact') {
+        if (e.part === 'cupSeg' || e.part === 'ringSeg') rimmed = true;
+        if (e.part === 'rail' || e.part === 'backboard') hitWall = true;
+        if (touched.length < 40) touched.push(e.part);
+      }
+    }
+    st.events.length = 0;
+  }
+  const last = st.ball.position;
+  path.push(new THREE.Vector3(last.x, last.y, last.z));
+  return { outcome: st.outcome, path, rimmed, hitWall, t: st.t, rimout: touched.length > 0 && !!capture && !st.outcome };
+}
+
+// --- the trajectory, drawn into the machine's own scene ----------------------------------------
+let line = null, endDot = null;
+function showPath(path) {
+  if (line) { R.scene.remove(line); line.geometry.dispose(); line.material.dispose(); line = null; }
+  if (endDot) { R.scene.remove(endDot); endDot.geometry.dispose(); endDot.material.dispose(); endDot = null; }
+  const geo = new THREE.BufferGeometry().setFromPoints(path);
+  line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffce3a, transparent: true, opacity: 0.95, depthTest: false }));
+  line.renderOrder = 999;
+  R.scene.add(line);
+  const p = path[path.length - 1];
+  endDot = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+  endDot.position.copy(p);
+  endDot.renderOrder = 1000;
+  R.scene.add(endDot);
+}
+
+// --- what the throw was worth ------------------------------------------------------------------
+const HOLE_NAME = {
+  topL: 'top left', topC: 'top centre', topR: 'top right',
+  midL: 'middle left', midC: 'middle centre', midR: 'middle right',
+  lowL: 'bottom left', lowC: 'bottom centre', lowR: 'bottom right',
+};
+function verdict(res) {
+  const s = document.getElementById('score');
+  const d = document.getElementById('detail');
+  const o = res.outcome;
+  const bits = [];
+  if (res.rimmed) bits.push('touched a rim');
+  if (res.hitWall) bits.push('touched a wall');
+  bits.push(`settled in ${res.t.toFixed(2)}s`);
+  if (!o) {
+    s.className = 'score out'; s.textContent = 'Came back';
+    d.textContent = `Too soft to stay up the board — the ball rolled back. ${bits.join(', ')}.`;
+    return;
+  }
+  const cup = cups && arrangement ? cups[arrangement[o.hole]] : null;
+  const val = o.value | 0;
+  if (!cup || o.hole === 'corner0' || o.hole === 'gutter') {
+    s.className = 'score out'; s.textContent = 'MISS';
+    d.textContent = `No basket — it finished in the trough. ${bits.join(', ')}.`;
+    return;
+  }
+  s.className = 'score ' + (val > 0 ? 'in' : 'pen');
+  s.textContent = (val > 0 ? '+' : '') + val;
+  d.textContent = `${HOLE_NAME[o.hole] || o.hole} basket${res.rimmed ? ', off the rim and in' : ''}. ${bits.join(', ')}.`;
+}
+
+// --- the controls ------------------------------------------------------------------------------
+const angleEl = document.getElementById('angle');
+const powerEl = document.getElementById('power');
+const angleVal = document.getElementById('angleVal');
+const powerVal = document.getElementById('powerVal');
+let lastPath = null, playing = 0;
+
+function run() {
+  const deg = +angleEl.value, pw = +powerEl.value;
+  angleVal.textContent = (deg > 0 ? '+' : '') + deg.toFixed(1) + '°';
+  powerVal.textContent = pw.toFixed(2);
+  document.getElementById('angleHint').textContent =
+    deg === 0 ? 'Straight down the middle.'
+      : `${Math.abs(deg).toFixed(1)}° to the ${deg < 0 ? 'left' : 'right'} of centre (the machine's limit is ${AIM_MAX_DEG.toFixed(1)}°).`;
+  document.getElementById('powerHint').textContent =
+    `Leaves the ramp at ${launchSpeed(pw).toFixed(2)} m/s.`;
+  const res = simulate(deg, pw);
+  lastPath = res.path;
+  showPath(res.path);
+  ghost.balls = [];
+  draw();
+  verdict(res);
+  markMap(deg, pw);
+}
+const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const runSoon = debounce(run, 90);
+angleEl.addEventListener('input', runSoon);
+powerEl.addEventListener('input', runSoon);
+document.getElementById('reset').addEventListener('click', () => { angleEl.value = 0; powerEl.value = 0.7; run(); });
+
+// --- play it -----------------------------------------------------------------------------------
+document.getElementById('play').addEventListener('click', () => {
+  if (!lastPath || !lastPath.length) return;
+  cancelAnimationFrame(playing);
+  let i = 0;
+  const fake = { ball: { position: lastPath[0].clone(), quaternion: { x: 0, y: 0, z: 0, w: 1 } } };
+  ghost.balls = [fake];
+  const step = () => {
+    if (i >= lastPath.length) { ghost.balls = []; draw(); return; }
+    fake.ball.position.copy(lastPath[i]);
+    i += 2;
+    draw();
+    playing = requestAnimationFrame(step);
+  };
+  step();
+});
+
+// --- the map of every combination --------------------------------------------------------------
+const COLOUR = { L: '#ffce3a', R: '#ffce3a', C: '#8ad6ff', l: '#37d67a', r: '#37d67a', c: '#2f8f57',
+  x: '#e0532f', z: '#e0532f', y: '#a33427', '.': '#2a3342', '-': '#1b2230' };
+const mapEl = document.getElementById('map');
+const mapState = document.getElementById('mapState');
+let GRID = null;
+
+fetch('./trajectory-map.json').then((r) => (r.ok ? r.json() : null)).then((g) => {
+  if (!g) { mapState.innerHTML = '<span class="err">map not found</span>'; return; }
+  GRID = g;
+  mapEl.width = g.cols; mapEl.height = g.rows;
+  const cx = mapEl.getContext('2d');
+  const img = cx.createImageData(g.cols, g.rows);
+  for (let r0 = 0; r0 < g.rows; r0++) {
+    for (let c0 = 0; c0 < g.cols; c0++) {
+      const ch = g.cells[r0 * g.cols + c0];
+      const hex = COLOUR[ch] || '#2a3342';
+      // rows run soft -> hard, so flip vertically: hard power at the top
+      const y = g.rows - 1 - r0;
+      const i = (y * g.cols + c0) * 4;
+      img.data[i] = parseInt(hex.slice(1, 3), 16);
+      img.data[i + 1] = parseInt(hex.slice(3, 5), 16);
+      img.data[i + 2] = parseInt(hex.slice(5, 7), 16);
+      img.data[i + 3] = 255;
+    }
+  }
+  cx.putImageData(img, 0, 0);
+  mapState.textContent = `${g.cols * g.rows} throws, real engine`;
+  markMap(+angleEl.value, +powerEl.value);
+}).catch(() => { mapState.innerHTML = '<span class="err">map not found</span>'; });
+
+let marker = null;
+function markMap(deg, pw) {
+  if (!GRID) return;
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.style.cssText = 'position:absolute;width:9px;height:9px;border:2px solid #fff;border-radius:50%;'
+      + 'transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,0.7)';
+    mapEl.parentElement.style.position = 'relative';
+    mapEl.parentElement.appendChild(marker);
+  }
+  const r = mapEl.getBoundingClientRect();
+  const pr = mapEl.parentElement.getBoundingClientRect();
+  const fx = (deg - GRID.a0) / (GRID.a1 - GRID.a0);
+  const fy = 1 - (pw - GRID.p0) / (GRID.p1 - GRID.p0);
+  marker.style.left = (r.left - pr.left + fx * r.width) + 'px';
+  marker.style.top = (r.top - pr.top + Math.max(0, Math.min(1, fy)) * r.height) + 'px';
+}
+mapEl.addEventListener('pointerdown', (e) => {
+  if (!GRID) return;
+  const r = mapEl.getBoundingClientRect();
+  const fx = (e.clientX - r.left) / r.width;
+  const fy = (e.clientY - r.top) / r.height;
+  angleEl.value = (GRID.a0 + fx * (GRID.a1 - GRID.a0)).toFixed(1);
+  powerEl.value = (GRID.p0 + (1 - fy) * (GRID.p1 - GRID.p0)).toFixed(2);
+  run();
+});
+
+document.getElementById('foot').textContent =
+  `Ball ${(G.ballR * 200).toFixed(1)} cm across. The 100s are ${(G.holes.topL.r * 200).toFixed(1)} cm wide, `
+  + `the 50 is ${(G.holes.topC.r * 200).toFixed(1)} cm, the 40s and 20 are ${(G.holes.midL.r * 200).toFixed(1)} cm, `
+  + `the penalty row is ${(G.holes.lowL.r * 200).toFixed(1)} cm. Angle limit ±${AIM_MAX_DEG.toFixed(1)}°, `
+  + `launch ${G.minSpeed}–${G.maxSpeed} m/s.`;
+
+run();
+</script>
+</body>
+</html>
