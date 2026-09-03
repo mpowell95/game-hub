@@ -5,7 +5,7 @@
 that turn it into the game we are actually building. The session that implements it will **not**
 have access to the videos.
 
-**Read READ THIS FIRST and section 0 before anything else** — a golf game already exists in this
+**Read **READ THIS FIRST** and section 0 before anything else** — a golf game already exists in this
 repo, and several of our decisions deliberately depart from the reference.
 
 **Source material** — five screen recordings in total.
@@ -98,10 +98,10 @@ what the original did and why.
 | **Scope now** | **Build holes 1-3 only.** Holes 4-9 come later, once the mechanics are settled. |
 | **Course** | Pine Valley, eventually 9 holes. The three documented holes become 1, 2, 3. |
 | **Tournament mode** | **Cut entirely.** No AI opponents, no leaderboard column, no `K Thiago` / `W Moore` / `F Everett`. |
-| **Scoring goal** | Track the player's **best 9-hole round score** (best 3-hole score until the course is complete). |
+| **Scoring goal** | Track the player's best round score. **While the course is 3 holes, that is a best-of-3; it becomes a best-of-9 when holes 4-9 ship.** A 3-hole best and a 9-hole best are NOT comparable (THE LAW rule 4), so they must be stored under **different keys** — e.g. `bestRoundByCourse['pinevalley3']` and later `['pinevalley9']` — never merged, and the leaderboard names which it is showing. |
 | **World ranking** | Renamed **skill level**. **Starts at 0 and counts UP** as the player improves (the original counted down from 20,073). |
-| **Cash** | Keep. Prize money per round, as the original. |
-| **Shop** | Keep, but **clubs only, not clothing.** Clubs have real stats: more distance, tighter accuracy. No hats, polos, skins, hair. |
+| **Cash** | Deferred. Prize money exists in the reference, but the economy is NOT in this build (see below). |
+| **Shop** | Deferred to a later phase. When it ships it sells **clubs only, not clothing** — clubs with real stats (more distance, tighter accuracy). **This build ships the STOCK bag only** (21.3, left-hand column); no shop UI, no prize money, no upgrade tiers. |
 | **Practice mode** | Keep. Single-hole practice alongside the full round. |
 | **Audio** | **None.** Do not add sound. Do not spend time on it. |
 | **Hub integration** | In-hub `module:`, `immersive: true` (full screen, hub chrome hidden), like Skeeball. |
@@ -112,11 +112,11 @@ what the original did and why.
 | Topic | Decision |
 |---|---|
 | **Meter colours** | Keep the reference's red/green exactly. Revisit only if it proves unreadable in play. |
-| **Leaderboard number** | The player's **best 9-hole score** (lowest wins). Skill points may replace it later. |
+| **Leaderboard number** | The player's **best round score, lowest wins** — best-of-3 today, best-of-9 once the course is complete, under separate keys (see Scoring goal). Skill points may replace it later. |
 | **Tap-target floor** | A suggestion, not a rule (see 18.2 for why). |
 | **Ball flight time** | `0.9s + distance/60` (a 215 yd drive ~4.5s, a wedge ~1.7s), plus **tap to skip**. The reference's 7.5s drive is too slow. |
 | **Putting** | Implement a gentle break driven by the green's slope grid. |
-| **Skill points / shop economy** | Leave EMPTY and TBD. Build the gameplay first. |
+| **Skill points / shop economy / prize money** | Leave EMPTY and TBD. Build the gameplay first. This is the single answer; the rows above defer to it. |
 | **Club distances** | APPROVED, see 21.3. Stock driver **215 yds**, not the reference's measured 287 - that figure left no room for upgrades and made a 360 yd par 4 play as a drive and a wedge. |
 
 **Consequences to keep in mind while building:**
@@ -171,6 +171,14 @@ hub tile
 ---
 
 # 2. Screen-by-screen setup flow
+
+> **REFERENCE ONLY, except 2.3 and 2.5.** Our game is launched from the Game Hub tile, so there is
+> **no title screen and no career screen** — 2.1, 2.2 and everything they contain (`merch`, `packs`,
+> `VIP`, `tournaments`, `online`, `iMessage`, `Game Center`, `WORLD RANKING`, the cross-promo strip)
+> is **NOT BUILT**. It is documented because the art direction, panel styling and button treatment
+> are worth copying. **2.3 (course card)** and **2.5 (hole select)** ARE built. On **2.4 (tutorial
+> modals)**: modals 1-3 ship, rewritten in our own words and shown once; **modal 4 is cut** with the
+> power/precision toggle (§5.4).
 
 All screens sit over **live, full-bleed background artwork** — there is no flat-colour UI screen
 anywhere in the game. Panels and buttons float on top of the painting.
@@ -231,8 +239,8 @@ Reached by tapping `career`. Same painted background, logo gone.
 - Grey pill: `Local Tournament`, with a **gold star badge overlapping its top-right corner**.
 - Light grey panel with the course name: `Pine Valley` (large pixel text, white with a dark outline).
 - **Map thumbnail** — a framed, top-down pixel rendering of the whole course (green fairways, darker
-  tree clusters, blue water, cream bunkers, mown-grass texture), inside a dark border frame. Four
-  pieces of metadata are overlaid **in the thumbnail's own corners**, not listed beneath it:
+  tree clusters, blue water, cream bunkers, mown-grass texture), inside a dark border frame. Metadata is overlaid **in the thumbnail's own corners**, not listed beneath it. Three corners carry
+  text (the fourth, bottom-right, is empty), and one of them holds two values:
 
 | Corner | Text (verbatim) |
 |---|---|
@@ -241,6 +249,8 @@ Reached by tapping `career`. Same painted background, logo gone.
 | bottom-left | `Best: -, top place: -` |
 
   The dashes are literal — they are what the game shows before you have a record on the course.
+  **For our build:** `3 hole` and `Best: -` carry over. `Ranking points` and `top place` are
+  tournament fields and are **cut**; `Prize:` belongs to the deferred economy.
 - Grey description panel: `Wide fairways and still conditions.` then `Prize: $1,000`.
 - Two buttons side by side: orange **`play`** (primary) and a smaller, darker dark-red **`practice`**.
   `practice` is visibly de-emphasised — smaller box, smaller text, muted fill.
@@ -312,6 +322,12 @@ Background is the course seen from above, darkened.
 
 ## 3.2 Measured HUD geometry
 
+**These are REFERENCE MEASUREMENTS, not a layout spec.** They record where the original put things
+on one specific 1206 x 2622 phone. **Do not hard-code them.** Our game must fit two phone heights,
+standalone and mounted inside the hub's chrome (~138 px of it) — see 19.C — so lay the HUD out in
+**proportions of the viewport** and use the table for the intent: which corner, roughly what size
+relative to the screen, and what sits next to what.
+
 All boxes below were located by pixel-scanning a native frame (`hole-1.mp4` @ 54 s). **[MEASURED]**
 
 | Element | x range | y range | Size (px) |
@@ -339,7 +355,13 @@ Derived facts worth preserving:
 - The `swing` button's bottom edge is at **y = 2439**, leaving **183 px** (61 pt) of bottom inset
   clear for the home indicator. [MEASURED]
 - Aim controls, club controls and the swing button all sit in the **bottom 25 %** of the screen —
-  the thumb zone. Nothing interactive is in the top half except `card`.
+  the thumb zone. Nothing interactive is in the top half except `card`. **This is the part to
+  reproduce**, in proportions; the absolute pixel values are documentation.
+- **Note on the two overlapping boxes:** the swing button (x 858-1139, y 2286-2439) sits inside the
+  power meter's measured bounding box (x 798-1145, y 1782-2387). The meter box was measured
+  including its `25`/`50`/`75`/`100` labels and the accuracy bar at its foot, so it over-reports;
+  the ring itself stops above the button. Treat the ring, the accuracy bar and the button as three
+  separate elements stacked bottom-right, not as one box.
 
 ## 3.3 HUD contents, corner by corner
 
@@ -394,8 +416,11 @@ Birdie!
 
 - **Two buttons only: `<` and `>`.** There is no drag-to-aim, no rotate gesture, no tap-the-map.
   [OBSERVED across all five clips]
-- Each tap rotates the aim by a small fixed increment — a few degrees. The exact per-tap angle was
-  **not** measurable from the recordings. [UNKNOWN — see §14]
+- Each tap rotates the aim by a small fixed increment. The reference's exact per-tap angle was
+  **not** measurable. **DECIDED for our build (ours, not measured): 1.5 deg per tap, press-and-hold
+  auto-repeats at 8 taps/second after a 400 ms delay, and aim is limited to +/- 60 deg from the line
+  to the hole.** 1.5 deg at 215 yds moves the landing point about 5.6 yds — fine enough to aim at a
+  pin, coarse enough that ten taps means something.
 - The aim line is drawn as a **row of small red square markers** running from the ball up the hole.
   **These are NOT decoration and NOT evenly spaced filler — they are a POWER LADDER. Read 21.1
   before building the aim line.** In short: dots at 25 / 50 / 75 / 100 % of the selected club's
@@ -435,12 +460,19 @@ thick band with:
 ## 5.2 Motion — MEASURED
 
 - A **white radial tick line** crosses the ring band and travels **up** the arc: 25 → 50 → 75 → 100.
-- It reaches the top (touching the green segment beside the red over-100 block) in **≈ 0.8 s** from
-  the bottom. [MEASURED over 17.40–18.53 s at 15 fps]
+- **The meter is STATIC until you tap.** Over a 24-second idle stretch (`Holes 1&2.mp4`, 8-32 s,
+  no swing in progress) the marker does not move at all. Tap 1 starts the sweep, exactly as the
+  tutorial says. [MEASURED — re-verified 2026-09-03]
+- It reaches the top (touching the green segment beside the red over-100 block) in **≈ 0.75 s** from
+  the bottom. [MEASURED over 17.40–18.13 s at 15 fps, which falls between tap 1 at 16.57 s and tap 2
+  at 18.13 s — see §8]
 - **It then reverses and sweeps back down.** It is a **ping-pong oscillation**, not a one-way fill
   that stops at the top. [MEASURED — the tick was tracked frame by frame at 15 fps and 20 fps
   across the full cycle]
-- Full cycle (up and back down) ≈ **1.4 s**. [MEASURED]
+- Full cycle (up and back down) ≈ **1.5 s**, assuming it comes down at the same rate it goes up.
+  **[INFERRED — the up-sweep is measured; a complete down-sweep was never timed end to end.]** An
+  earlier draft stated 1.4 s as measured, which was not supportable: 0.75 s up implies ~1.5 s
+  symmetric, and nothing in the footage establishes an asymmetric return.
 - Consequence for feel: a mistimed tap gives you a **low** power reading rather than a maximum one,
   and waiting one more cycle costs nothing. This makes the meter forgiving in a way a one-way fill
   is not.
@@ -454,12 +486,19 @@ sweep, and only fluctuates once the *camera* starts scrolling. The apparent narr
 scrolling background bleeding through the semi-transparent panel. **Do not implement it.**
 [MEASURED, and explicitly retracted]
 
+**But note:** the band DOES narrow on a bad **lie** — see 21.2. That is a different cause (the
+surface you are playing from, not how hard you are swinging) and it IS implemented.
+
 ## 5.4 The over-100 sub-mode
 
 Tutorial modal 4 states that for shots over 100 %, tapping the **top of the meter** toggles between
-**power** and **precision**. This toggle was **never exercised** in any of the five clips, so its visual
-state, its effect on ball flight, and where exactly the tap target is are all unverified.
-[UNKNOWN beyond the tutorial text — see §14]
+**power** and **precision**. This toggle was **never exercised** in any of the five clips, so its
+visual state, its effect and its tap target are all unverified. [UNKNOWN beyond the tutorial text]
+
+**DECIDED: the toggle is CUT from our build.** Over-100 % is a plain risk band — +10 % distance and
+1.5x the mishit angle (§20), nothing to toggle. Building an unverified sub-mode from one sentence of
+tutorial text would be guesswork, and the risk band already gives the over-swing its meaning. Drop
+tutorial modal 4 with it.
 
 ---
 
@@ -499,29 +538,33 @@ number, which is itself a usability flaw worth fixing in the clone (§13).
 Tap timings were recovered by sampling the swing button's mean brightness at **30 fps** — the button
 visibly darkens while held. **[MEASURED]**
 
-**Shot 1 (driver):**
-| Event | Time |
-|---|---|
-| tap 1 (begin stroke) | 19.40 s |
-| tap 2 (lock power) | 20.00 s |
-| tap 3 (stop accuracy) | 20.15 s |
-| ball launches | ≈ 20.5 s |
-| button disabled (dark) | 20.57 – 21.97 s (**1.40 s**) |
+**Shot 1 (driver) — CORRECTED 2026-09-03.** An earlier draft listed 19.40 / 20.00 / 20.15 s. That
+scan began at 17.0 s, missed the real first tap at 16.57 s, and so mislabelled taps 2 and 3 as 1
+and 2. Re-scanned from 12 s:
 
-**Shot 2 (7 iron):**
-| Event | Time |
-|---|---|
-| tap 1 | 45.50 s |
-| tap 2 | 45.60 – 45.90 s |
-| ball launches | ≈ 46.0 s |
-| button disabled | 46.00 – 47.33 s (**1.33 s**) |
+| Event | Time | Gap |
+|---|---|---|
+| tap 1 (begin stroke) | **16.57 s** | — |
+| tap 2 (lock power) | **18.13 s** | 1.56 s after tap 1 |
+| tap 3 (stop accuracy) | **19.17 s** | 1.04 s after tap 2 |
+| ball launches | ≈ 20.5 s | |
+| button disabled (dark) | 20.57 – 21.97 s (**1.40 s**) | |
 
-**Around the hole-out:** button disabled 74.43 – 75.97 s (**1.54 s**).
+Each tap darkens the button for only **33-67 ms**.
+
+**Shot 2 (7 iron):** taps detected at 45.50 s and 45.60-45.90 s, launch ≈ 46.0 s, button disabled
+46.00 - 47.33 s (**1.33 s**). **Only two taps were separable here** — the third falls inside the
+45.60-45.90 window or was missed by the scan. Shot 1 is the reliable sample.
+
+**Around the hole-out:** button disabled 74.43 - 75.97 s (**1.54 s**). Note this starts ~2.4 s after
+the ball is recorded as at rest (≈72 s in §9.2); the two were measured by different methods and the
+resting time is the rougher of the two. The ~1.4 s input lock is the figure to build to.
 
 **What this means for the clone:**
-- The entire three-tap sequence takes **well under one second** — 0.75 s on shot 1. It is a
-  **twitch input**, not a leisurely one. If your clone's meter takes three seconds to cycle, it will
-  feel nothing like the original.
+- The full sequence takes about **2.6 seconds** (16.57 → 19.17 s on shot 1). **CORRECTED** — an
+  earlier draft said "well under one second" and called it a twitch input, which came from the
+  mislabelled tap table above. It is deliberate rather than frantic: roughly one full meter cycle to
+  choose your power, then about a second to stop the accuracy slider.
 - **Input is locked for ~1.4 s after every shot** while the ball is live. Reproduce this — it stops
   double-taps from queuing a second swing.
 - The `swing` button renders a **darkened/pressed state** while held. [MEASURED — this is how the
@@ -611,16 +654,20 @@ Note that 360.7 − 251.6 ≠ 136.0. The shot finished **offline**, so the strai
 pin is not the tee distance minus the shot distance. Any clone must model position in 2-D, not as a
 scalar "distance remaining". [INFERRED, but arithmetically forced.]
 
-**Unit switching:** the readout is in **yards** off the green and **feet** on the green. `17.0 ft`
-appeared as soon as the ball was putting-length from the hole. The exact switch threshold is
-unverified. [OBSERVED; threshold UNKNOWN]
+**Unit switching:** the readout is in **yards** off the green and **feet** on the green.
+**DECIDED: switch on SURFACE, not on distance** — feet whenever the ball lies on the green, yards
+everywhere else. That matches both observations (`136.0 yds` in the fairway, `17.0 ft` on the green),
+it is what real golf apps do, and it needs no threshold constant to guess at.
 
 ## 10.4 Wind
 
-- Wind read `0` for the entire recorded hole, and the course description said
+- Wind read `0` in **every frame of all five clips**, and the course description said
   `Wide fairways and still conditions.`
-- **The effect of non-zero wind was therefore never observed.** The arrow glyph, the units of the
-  number, and how strongly wind pushes the ball are all unverified. [UNKNOWN]
+- **The effect of non-zero wind was never observed.** [UNKNOWN]
+- **DECIDED for our build: wind is always 0 on holes 1-3.** Render the panel with a calm state (no
+  arrow — see §13 flaw 4) and add no wind term to the flight model. Non-zero wind is a later feature
+  and needs its own design pass. This keeps the HUD honest instead of shipping a readout that
+  does nothing.
 
 ## 10.5 Hazards
 
@@ -669,7 +716,12 @@ On holing out:
    ≈ 0.5 s**, while the course behind it simultaneously darkens to a dim navy-green.
 3. **Nothing slides in from an edge.** It is a cross-fade. Do not implement a slide.
 
-## 12.3 The round scorecard
+## 12.3 The round scorecard — PRACTICE / single-hole version
+
+**There are TWO scorecard layouts in the reference.** This is the one seen after a single practice
+hole. The full-round version is in 17.7 and differs (a `continue` button, a round total, `best:` and
+`top place:` lines, a round restart icon). Build both, and note that `top place:` is a tournament
+field — **cut it**, along with the opponent scoreboard.
 
 - Orange `quit` (left) and orange `restart` (right) at the top.
 - Grey hatched panel: `Pine Valley`, then `PRACTICE`.
@@ -728,7 +780,7 @@ section 0, have been struck from this list.
 - Wind: units, arrow semantics, strength of effect. Wind read `0` in all five clips.
 - ~~Hazard rules~~ — **RESOLVED.** The prompt is observed and transcribed, and Matt has specified
   the drop line, the water rule, the per-lie power caps and the tree-collision model. See 21.2.
-- The yards-to-feet switch threshold (see section 12 for the recommended surface-based rule).
+
 - Score banners other than `Birdie!` and `New course best`.
 - Holes 4-9 - out of scope for now, ours to design later.
 - Whether the device scale factor is genuinely 3x (assumed for the pt conversions in section 3.1).
@@ -793,9 +845,10 @@ the flag is pure red; the accuracy bar bands are red / orange / green.
 
 ## 15.3 Feel
 
-Unhurried. Long preview scrolls, a 7.5 s ball flight, no timers, no pressure anywhere. **The only
-timed thing in the entire game is the swing meter itself** — and that is sub-second. The contrast
-between a slow, relaxed frame and one twitchy moment of input is the whole rhythm of the game.
+Unhurried. Long preview scrolls, no timers, no pressure anywhere. **The only timed thing in the
+entire game is the swing meter itself.** The reference's ball flight was 7.5 s; **ours is ~4.5 s for
+a drive with tap-to-skip** (section 20). The rhythm to keep is the contrast: a slow, relaxed frame
+around one deliberate, timed moment of input — about 2.6 s of it (§8), not a frantic one.
 
 ---
 
@@ -814,12 +867,44 @@ the hub entry, the stats plumbing and the leaderboard row are being kept.
 
 ## Phase 1 — clear the ground
 
-3. Delete the 3D stack: `render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`,
-   `flight.js`, `meters.js`, `courses/`, and `js/vendor/` (three.js + cannon-es, ~13,000 lines).
+3. Delete the 3D stack. **The full list, verified against the repo:**
+   `golf/js/render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`, `flight.js`,
+   `meters.js`, `game.js`, `clubs.js`, `test.js`, `golf/courses/`, `golf/tools/`, and
+   **`golf/js/vendor/`** (cannon-es 13,023 lines + two three.js files, ~1.1 MB).
+   `golf/css/golf.css` is rewritten, not deleted.
+   **`run-all-tests.mjs:44` registers `golf/js/test.js` and MUST be updated in the same commit**, or
+   the whole suite fails on a missing file. `golf/js/test.js` imports six of the files above, and
+   `game.js` imports two more — deleting piecemeal leaves broken imports.
 4. Delete `DECISIONS.md`, `docs/GOLF-HANDOFF.md`, `docs/GOLF-PART9.md`. They describe the old game
    and will mislead the next session if left in place.
-5. Remove every trace of **Harbor Links** from the product — course, folder, strings, My Stats row,
-   admin per-course testing entry. **Do not delete the stored stats keys** (see READ THIS FIRST).
+5. Remove every trace of **Harbor Links** from the product. **The references live in five shared
+   files outside `golf/`, verified against the repo:**
+   - **`js/game-stats.js:1405`** — `const courseId = e.courseId || 'harbor';`. **This one matters
+     most:** leave it and a testing-mode Pine Valley round writes `gf.practice.harbor`, which
+     violates this spec's own "never written again" rule. Change the default to the new course id.
+   - **`js/game-stats-ui.js:575`** — `const GOLF_COURSES = { harbor: 'Harbor Links' };`. Leave it and
+     a Pine Valley best renders as "PINE-VALLEY". Replace the entry.
+   - **`js/hub.js:388`** — a comment referencing `golf.courses.harbor`.
+   - **`js/admin-config.js:17,37`** — harbor in the config shape/comments.
+   - **`sw.js:315-316`** (ASSETS) and **`sw.js:676-677`** (REST_MANIFEST) — the harbor course files.
+   - **`test-admin-config.mjs:117-134`** uses `'harbor'` as a throwaway course id in 12 assertions.
+     **Leave this file alone** — it is a test fixture, not a product reference.
+   **Do not delete the stored stats keys** (see READ THIS FIRST).
+
+6. **Unlock the course, or the game ships padlocked.** `js/admin-config.js:200` —
+   `resolveCourseTesting` returns **testing (locked) when no override exists**, so every course
+   defaults to locked, and `golf/js/ui.js:135-141` hides the tile behind a padlock for any
+   non-dev profile. **`js/admin-ui.js` contains no golf or per-course section at all**, so there is
+   no in-app way to unlock it. Without a fix here the family taps the tile and cannot play.
+   **This needs Matt's decision** — flip the default to open for golf, add a per-course section to
+   the admin page, or write a one-off override. **Do not ship until it is resolved.**
+   (An earlier draft of this spec told the implementer to *remove* an "admin per-course testing
+   entry". No such entry exists.)
+
+7. **Decide whether golf stays visible during the rewrite.** The hub tile is **not** `devOnly`
+   (`js/hub.js:385-402`), so golf is live to every player right now. Mid-rewrite `main` would carry a
+   half-deleted module behind a tappable tile. Either add `devOnly: true` for the duration and remove
+   it at release, or keep every commit playable.
 
 ## Phase 2 — the core loop, playable as early as possible
 
@@ -846,16 +931,26 @@ the hub entry, the stats plumbing and the leaderboard row are being kept.
 
 ## Phase 3 — wiring and release
 
-22. **Stats:** keep writing `points` (Stableford is a pure function of hole score and par, 19.2),
+22. **Stats:** keep writing `points` (Stableford is a pure function of hole score and par — see "What changes" item 3 in section 19),
     write the new course's `bestRoundByCourse` key, leave harbor's keys untouched.
 23. **Leaderboard:** switch `golfPointsAt` to best round **and fix the sort direction in the same
-    commit** (19.3). Add a test that fails if the sort is wrong.
+    commit** (19.A). Add a test that fails if the sort is wrong.
 24. **`golf/js/strings.js`:** rewrite EN **and ES**, every visible string through `t()` at render time.
-25. **`golf/CLAUDE.md`:** rewrite from scratch for the new game.
+25. **`golf/CLAUDE.md`:** rewrite from scratch for the new game. **Also add a Golf row to the games
+    table in the ROOT `CLAUDE.md`** — it has none today (THE LAW rule 9: a milestone is not done
+    until CLAUDE.md reflects it). Row: in-hub `module:`, immersive · `.gf-root` / `.gf-` ·
+    `gamehub.golf.v1` · `recordGolf`.
 26. **`sw.js`:** drop the deleted files from `ASSETS`, add the new ones, bump `CACHE` past
     `origin/main`, run `node validate-sw-assets.mjs`.
-27. **Tests:** `node test-game-conventions.mjs`, then `node test-visual.mjs golf`. Fix failures in
-    the game; do not add golf to `KNOWN_GAPS`.
+27. **Tests.** `node test-game-conventions.mjs`, then `node test-visual.mjs golf`. Fix failures in
+    the game; do not add golf to `KNOWN_GAPS`. **Also run these three, which the earlier draft
+    omitted and which cover exactly what this rewrite touches:**
+    - **`players-agg.test.mjs`** — its structural probe requires every sub-counter key in
+      `game-stats.js` to have BOTH a `players-agg.js` branch and a My Stats renderer. Any change to
+      `ensureGf`'s shape trips it. (Good news: `js/players-agg.js:343-375` **already has** a golf
+      branch, including the `Math.min` merge for `bestRoundByCourse` — that gap does not exist.)
+    - **`test-admin-config.mjs`** — 12 assertions using harbor as a course id.
+    - **`test-recorder-contract.mjs`** — covers the recorder surface.
 28. **Deploy means LIVE on `main`** — merge, confirm the pages build succeeded, then say so.
 
 ## Deliberately NOT in scope
@@ -902,6 +997,9 @@ controls power, so each figure is that swing's distance, not the club's maximum 
 full-power carry is around 287 yds**. Everything else in the bag must be designed. [MEASURED
 values, explicitly NOT a ladder]
 
+**SUPERSEDED — the bag to build is the approved ladder in 21.3**, whose stock driver is 215 yds.
+The 287 figure is reference data only and is deliberately NOT our stock number.
+
 ## 17.3 The hub yardage - revised
 
 Still the **distance of the previous shot** (it changes per stroke, tracks stroke magnitude, and is
@@ -931,8 +1029,9 @@ as `Birdie!`:
 `Ranking points: 2,700` shown on that course's card. So **a completed round moves your ranking by
 the course's ranking-points value.** [MEASURED]
 
-For our version (skill level starting at 0, counting up), the equivalent is **+2,700 skill points
-for the round**, ideally scaled by how well the player scored.
+For our version (skill level starting at 0, counting up), the equivalent would be **+2,700 skill
+points for the round**, scaled by how well the player scored. **This is for a LATER PHASE** — the
+skill/economy system is deferred (section 0). Recorded here so the number is not lost.
 
 Career screen after the round: `WORLD RANKING 17,373`, `Winnings $1,000`, and
 `Current tour` / **`Amateur Tour`** (was `Local Tournament`). The tour ladder is real progression.
@@ -971,17 +1070,22 @@ Every shot in all five clips was struck cleanly, so the penalty for a bad accura
 observed. Per Matt: invent something standard. Proposed model, entirely ours:
 
 - Let `off` = the marker's distance from the bar's centre, normalised to 0.0 - 1.0.
-- **Green zone** (centre ~40% of the bar): offline angle = `off x 1.5 deg`. Effectively straight.
-- **Orange zone** (next ~30% each side): angle ramps `1.5 deg` to `4 deg`.
-- **Red zone** (outer ~15% each side): angle ramps `4 deg` to `8 deg`, and the shot also loses
-  **10% of its distance** (a mishit does not fly its full length).
+- **Green zone — the middle 40 % of the bar** (from 30 % to 70 % of its width): offline angle =
+  `off x 1.5 deg`. Effectively straight.
+- **Orange zone — the next 20 % on each side** (10-30 % and 70-90 %): angle ramps `1.5 deg` to `4 deg`.
+- **Red zone — the outer 10 % on each side** (0-10 % and 90-100 %): angle ramps `4 deg` to `8 deg`,
+  and the shot also loses **10 % of its distance**.
+
+40 + 20 + 20 + 10 + 10 = **100 %**. (An earlier draft used 40/30/15, which sums to 130 % and cannot
+be laid out.)
 - Marker **left** of centre pulls the ball left; **right** pushes it right.
 - Over 100% power multiplies the resulting angle by **1.5**, which is what makes overswinging risky
   and matches the tutorial's warning.
 - The ball should **curve** toward its miss over the flight rather than launching on a straight
   offset line - it reads far better and is how the genre does it.
 
-At 250 yds, a full red miss lands roughly 35 yds offline: punishing, recoverable, not round-ending.
+At the stock driver's 215 yds, a full red miss (8 deg) lands about **30 yds offline**: punishing,
+recoverable, not round-ending.
 
 ## 17.10 Tutorial art is misleading - do not copy it literally
 
@@ -1037,8 +1141,14 @@ Measured from the reference frames: every small control (`<`, `>`, `^`, `v`) is 
 px**, which at 3× is **34 × 31 pt** — comfortably *under* the floor on both axes. The `card` button
 at 180 × 94 px (60 × 31 pt) is under it on height too.
 
+**A note on units, because they are easy to conflate:** `docs/BUILDING-A-GAME.md:33` states the
+rule in **CSS px** ("Tap targets are 44x44px minimum, with a documented exception"), and it already
+carries a sanctioned way to depart from it — dots-boxes' `--db-tap`, which measures the alternative
+and documents why. The reference's controls are 102 x 94 **device** px, which is 34 x 31 pt at 3x.
+Compare like with like before concluding anything.
+
 **Recommended fix:** keep the reference's visual box size, but extend the *hit area* to at least
-44 × 44 pt with transparent padding. The layout looks identical and the control becomes reachable.
+44 x 44 with transparent padding. The layout looks identical and the control becomes reachable.
 Do not simply shrink-copy the original's geometry.
 
 ## 18.3 Minimum text size
@@ -1079,7 +1189,7 @@ again would duplicate or clobber working code.
    3D rigid-body stack survives that change, and bending it to fit would cost more than writing the
    parabola.
 2. **`golfPointsAt` switches from lifetime Stableford points to the player's best round** (Matt's
-   call). **Change the sort direction in the same commit** - see 19.3.
+   call). **Change the sort direction in the same commit** - see 19.A.
 3. **`points` keeps being written.** Modified Stableford points are a pure function of (hole score,
    par), and the new stroke-play game knows both, so it can keep the lifetime counter truthful with
    no fabrication. Nothing has to be archived as a dead legacy value.
@@ -1089,7 +1199,7 @@ again would duplicate or clobber working code.
 5. **`golf/CLAUDE.md`** is rewritten from scratch for the new game. `DECISIONS.md`,
    `docs/GOLF-HANDOFF.md` and `docs/GOLF-PART9.md` are deleted.
 
-## 19.3 The sort-direction trap
+## 19.A The sort-direction trap
 
 The leaderboard sorts every game **descending**, which is correct for Stableford points (more is
 better) and **wrong** for a stroke score (less is better). Switching the metric without switching
@@ -1100,16 +1210,20 @@ Related: `bestRoundByCourse` is keyed by course. The leaderboard must show a nam
 not a blind maximum across keys, or it will one day compare two courses that were never comparable
 (THE LAW rule 4).
 
-## 19.1 Round persistence and `isInProgress()`
+## 19.B Round persistence and `isInProgress()`
 
 A 9-hole round is long, so abandoning mid-round must not lose it.
-- Autosave the round (hole, shot count, ball position, per-hole scores) to
-  `gamehub.golf.save.v1` after every stroke.
+- **Do NOT mint `gamehub.golf.save.v1`.** `gamehub.golf.v1` already exists and already holds the
+  round (`golf/js/ui.js:29,53,57` — `{ difficulty, lastCourse, round }`). Keep using that one key;
+  a second store would create two sources of truth. Per THE LAW rule 5, do not repurpose the
+  existing `.round` field — write the new round shape into it, or add a sibling field beside it.
+- Autosave (hole, shot count, ball position, per-hole scores) after every stroke.
 - `isInProgress()` returns true whenever a round is part-played, so the hub warns before unmounting.
+  **It currently returns a hard `false`** (`golf/js/ui.js:977`) — that must change.
 - The reference's `quit` / `restart` buttons map to: `quit` = leave, keep the save; `restart` =
   discard and re-tee. Confirm before `restart` — it destroys progress.
 
-## 19.2 Other repo rules that bite here
+## 19.C Other repo rules that bite here
 
 - **Use `onViewportResize(cb)` from `js/viewport.js`.** Never a raw `resize` /
   `orientationchange` / `visualViewport` listener — that is a mobile scroll-jank bug, and Hill
@@ -1146,15 +1260,29 @@ two anchors noted.
   reference's measured 287. That 287 was recorded with an unknown, possibly upgraded bag and is
   deliberately not the stock number. (An earlier draft of this section told the implementer to
   design the bag beneath 287; that is superseded.)
-- **Distance = clubCarry × (power ÷ 100) × lie power cap** (21.2), with power over 100 adding up to
-  +8 % and multiplying the mishit angle by 1.5 (§17.9).
+- **Distance = clubCarry × (power ÷ 100) × lieFactor**, where `lieFactor` is the lie's percentage
+  from 21.2. **`lieFactor` SCALES THE RESULT — it does not clamp the meter.** The player can still
+  swing to 100 % (and past it) in a bunker; the ball simply travels 88 % as far. The aim-line dots
+  scale by the same factor, so they keep telling the truth.
+- **Over 100 % adds up to +10 %** distance and multiplies the mishit angle by 1.5 (§17.9). +10 % is
+  what the "Dot 5 (risk)" column in 21.3 is computed from. (An earlier draft said +8 % here, which
+  contradicted that column.)
+- **`clubCarry` is CARRY, not total.** Roll is added afterwards, per the surface below. The five aim
+  dots mark **where the ball lands**, so on a fairway the ball finishes slightly past dot 4.
 - **Flight time — DECIDED:** `0.9 s + distance / 60`. Against the approved ladder that is a **215 yd
   drive in ~4.5 s** and a **50 yd wedge in ~1.7 s**. The reference's 7.5 s drive is too slow.
   **A tap skips to the landing.**
 - **Roll** after landing: fairway ≈ 8 % of carry, green ≈ 2 %, rough ≈ 3 %, bunker ≈ 0.
-- **Putting**: distance = `power × maxPuttFeet`, decelerating over ≈ 2.5 s [MEASURED reference
-  roll]. Whether the green's slope grid breaks the putt was never observable, but **DECIDED: implement
-  a gentle break** driven by the grid, since it is drawn and players will expect it to mean something.
+- **Putting**: distance = `power ÷ 100 × maxPuttFeet`, with **`maxPuttFeet` = 60 ft** at full power
+  (ours; the reference never showed a putter's range). Decelerating over ≈ 2.5 s [MEASURED reference
+  roll]. The putter is deliberately absent from the 21.3 yardage ladder because it is measured in
+  feet, not yards.
+- **Green slope and break — DECIDED, ours.** Store the green as a coarse grid (say 8 x 8 cells over
+  the green's bounding box), each cell holding a 2-D gradient vector in the range -1..+1. Apply a
+  lateral acceleration of `k x gradient` to the rolling ball, with **k tuned so a 20 ft putt across
+  a half-strength slope breaks about one cup width (~4 in)**. That is the feel to aim for; the exact
+  constant is a tuning job, not a spec value. The drawn tick grid must match the stored gradients,
+  or the read lies to the player.
 - **Ball height** for the shadow offset: a simple parabola over the flight, peak offset scaled by
   club loft. Nothing more elaborate is needed — the shadow gap is the only height cue.
 
@@ -1319,8 +1447,10 @@ the shop.
 | s. wedge | 72 | 90 | 79 |
 | l. wedge | 50 | 63 | 55 |
 
-Roughly +25 % across four upgrade tiers (stock, pro, tour, champion), each tier also tightening the
-accuracy band. How the real holes then play for a beginner: hole 1 (360.7, par 4) is drive plus a
+**Only the STOCK column ships in this build.** The "fully upgraded" column exists to show the ladder
+has somewhere to go, and is roughly +25 % spread over four notional tiers (stock, pro, tour,
+champion) that would each also tighten the accuracy band. **The two intermediate tiers and the band
+multipliers are deliberately not specified** — they belong to the shop phase, which is deferred. How the real holes then play for a beginner: hole 1 (360.7, par 4) is drive plus a
 6 iron; hole 2 (181, par 3) is a slightly stretched 2 iron over water; hole 3 (608.6, par 5) is a
 genuine three-shot hole. Fully upgraded, hole 1 becomes drive plus a wedge - the progression is
 felt on the same ground.
