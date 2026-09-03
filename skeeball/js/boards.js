@@ -250,7 +250,9 @@ export const BOARDS = [
         // 2026-09-02: 0.42 -> 0.28. Deadening the side rails is what opened a straighter line
         // to the corner 100 (it was a hard-angle bank shot at 0.42). Every wall part shares this
         // pair: side rails, lane rails, trough cheeks and the flare.
-        wallRest: 0.28,
+        // 2026-09-03: 0.28 -> 0.15. The side walls, the lane walls, the trough cheeks and the
+        // flare all share this pair.
+        wallRest: 0.15,
         ringFric: 0.06,
         ringRest: 0.18,
         // 2026-09-02: dead, so a ball that reaches a corner mouth does not rattle back out.
@@ -268,6 +270,12 @@ export const BOARDS = [
         // deadFric/deadRest above.
         backFric: 0,
         backRest: 0.60,
+        // THE BACK WALL IS TWO HALVES, split at the scoreboard's horizontal rule - the one
+        // between the top row of records (hub all-time, your best) and the bottom row (daily,
+        // last game). 0.60 above it as always; 0.10 below it, where the corner 100s sit and a
+        // ball was coming back off the wall hard. The height is DERIVED from render.js's own
+        // panel layout in machines/classic/physics.js, never typed in twice.
+        backLowRest: 0.10,
       },
     },
 

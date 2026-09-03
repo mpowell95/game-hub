@@ -97,7 +97,10 @@ function buildWorld(board) {
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // kick + keep: padded, kills the ball
-  const matBack = new CANNON.Material('back');     // the backboard: padded AND grip-free (see its contact)
+  const matBack = new CANNON.Material('back');
+  // The back wall BELOW the scoreboard's dividing rule - see backLowRest in boards.js and
+  // SB_LINE_FRAC below. Same zero grip as the wall above it; only the bounce differs.
+  const matBackLow = new CANNON.Material('backLow');     // the backboard: padded AND grip-free (see its contact)
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
   const matRing100 = new CANNON.Material('ring100');
@@ -135,6 +138,21 @@ function buildWorld(board) {
   // HOT SHOT's engine reached the same conclusion independently (deadFric 0.06 on its
   // bank-shot wall). 'kick' and 'keep' stay on matDead: the kicker keeps its grip.
   contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
+  contact(matBall, matBackLow, pick(MAT.backFric, 0), pick(MAT.backLowRest, pick(MAT.backRest, 0.60)));
+
+  // WHERE THE SCOREBOARD'S DIVIDING RULE SITS, as a fraction of the panel's height up from its
+  // bottom. Matt, 2026-09-02: the back wall bounces 0.05 below that line and 0.60 above it. These
+  // five numbers are render.js's own (_paintArcadeBoard: a 2048-wide texture whose height keeps the
+  // panel's aspect, TOP_INSET 210 plus 3 on-screen px of padding, a 14% bottom inset, W/181 texture
+  // px per on-screen px, and a 2 x 2 grid whose rule is one cell down). Derived here rather than
+  // typed in, so repainting the panel cannot leave the physics answering to a line nobody can see.
+  const SB_LINE_FRAC = (() => {
+    const W = 2048;
+    const Hpx = Math.round(W * (G.backboardH / (G.boardW + 0.06)));
+    const usableTop = 210 + 3 * (W / 181);
+    const usableH = Hpx - usableTop - Hpx * 0.14;
+    return 1 - (usableTop + usableH / 2) / Hpx;
+  })();
 
   for (const s of M.solids) {
     // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
@@ -172,6 +190,29 @@ function buildWorld(board) {
       }
     }
     body.userData = { part: s.part, cup: s.cup || null };
+    // THE BACK WALL IS ONE SOLID IN machine.js AND TWO BODIES HERE. machine.js stays the single
+    // description render.js draws (one wall, one scoreboard, unchanged on screen); the split is a
+    // material boundary, not a shape - both halves keep part 'backboard', so every event, test and
+    // renderer sees exactly what it saw before.
+    if (s.part === 'backboard') {
+      const botY = s.pos[1] - s.half[1];
+      const yLine = botY + G.backboardH * SB_LINE_FRAC;
+      for (const half of [[botY, yLine, matBackLow], [yLine, s.pos[1] + s.half[1], matBack]]) {
+        const h = (half[1] - half[0]) / 2;
+        if (h <= 0.001) continue;
+        const part = new CANNON.Body({
+          type: CANNON.Body.STATIC,
+          shape: new CANNON.Box(new CANNON.Vec3(s.half[0], h, s.half[2])),
+          material: half[2],
+          collisionFilterGroup: GROUP_REST,
+          collisionFilterMask: GROUP_BALL,
+        });
+        part.position.set(s.pos[0], half[0] + h, s.pos[2]);
+        part.userData = { part: 'backboard', cup: null };
+        world.addBody(part);
+      }
+      continue;
+    }
     world.addBody(body);
   }
 
