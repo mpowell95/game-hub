@@ -23,3 +23,7 @@ backups/*.json
 
 # Visual-suite output (test-visual.mjs). Regenerated on every run; look at it, do not commit it.
 .visual-out/
+
+# Video clips pulled in for analysis with the claude-video-vision MCP server.
+# Screen recordings, tens of MB each, nothing the app serves - keep them local.
+*.mp4
