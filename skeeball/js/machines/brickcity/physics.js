@@ -252,6 +252,10 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     anchor: { x: 0, y: 0, z: 0, t: 0 },
     emergencyUsed: false,
     troughAt: -1,
+    // The wall contact marks (2026-09-03): how many this throw has drawn, and the last one, so a
+    // ball GRINDING along a rail leaves one mark rather than forty. See the 'wall' event below.
+    nWallMarks: 0,
+    lastWall: null,
     // `restAt` lived here until batch 3f removed the resting-position rule that read it.
   };
 
@@ -272,6 +276,39 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
       if (vn > 0.5) { st.bounces += 1; st.events.push({ type: 'bounce', speed: vn }); }
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
+    }
+    // WHERE IT HIT THE WALL (2026-09-03). Matt: "It's impossible to tell where on the back wall a
+    // ball that's overthrown bounces off. Sometimes I'll throw it and it doesn't look like it even
+    // touched the back wall, but based off how it lands I know it must have."
+    //
+    // The engine always knew; it just never said. The 'backboard' event above carries a SPEED and
+    // no position, and ui.js only counts it for telemetry, so a bounce off the back of the machine
+    // had no visual at all - the ball simply changed direction in front of a flat wall.
+    //
+    // GUARD: THE SIDE RAILS ARE IN HERE TOO, AND THEY ARE NOT AN EXTRA. Measured over 276 throws
+    // across the swipe/power range, counting what a ball touches once it is past the ramp: the
+    // RAIL is hit 510 times against the back wall's 113, and it is the FIRST thing the ball
+    // touches on 95 throws against the back wall's 88. So "it must have hit the back wall" is,
+    // as often as not, a rail - and marking only the back wall would have left half of exactly
+    // the throws Matt is describing still unexplained.
+    //
+    // The 0.4 m/s threshold on the event above was NOT the problem and is not copied here: of 113
+    // back-wall touches only ONE was under it (they land at a median 1.75 m/s). 0.1 catches that
+    // one and anything softer on a rail, and costs nothing.
+    //
+    // The cap and the dedupe are what keep this honest as FEEDBACK rather than decoration: one
+    // impact fires several solver callbacks, and a ball rolling along a rail fires them for as
+    // long as it rolls. One mark per impact, twelve per throw.
+    if ((part === 'backboard' || part === 'rail') && vn > 0.1 && st.nWallMarks < 12) {
+      const q = ball.position;
+      const last = st.lastWall;
+      const same = last && last.part === part && st.t - last.t < 0.12
+        && Math.hypot(q.x - last.x, q.y - last.y, q.z - last.z) < 0.08;
+      if (!same) {
+        st.nWallMarks += 1;
+        st.lastWall = { part, t: st.t, x: q.x, y: q.y, z: q.z };
+        st.events.push({ type: 'wall', part, speed: +vn.toFixed(3), pos: { x: q.x, y: q.y, z: q.z } });
+      }
     }
     // Every real touch against every part, with where and how hard. vn > 0.05 drops the solver's
     // per-step resting contacts while keeping a soft side-wall graze; the cap stops a jammed ball
