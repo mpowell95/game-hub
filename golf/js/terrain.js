@@ -20,7 +20,9 @@ export function rng(seed) {
 function smoothstep(t) { return t * t * (3 - 2 * t); }
 
 // Seeded value noise: lattice on a `wavelength`-metre grid, bilinear + smoothstep interpolated.
-function makeValueNoise(seed, wavelength) {
+// Exported since Part 9A so render.js can seed its ground-colour noise from the same generator
+// (a purely visual use - nothing in physics reads it).
+export function makeValueNoise(seed, wavelength) {
   const gen = rng(seed);
   const cache = new Map();
   function latticeVal(ix, iz) {
@@ -315,7 +317,36 @@ export function buildTrees(t) {
       if (Math.hypot(o.x - x, o.z - z) < 8) { nearTree = true; break; }
     }
     if (nearTree) continue;
-    out.push({ x, z, y: heightAt(t, x, z), scale: 0.8 + 0.5 * gen() });
+    out.push({ x, z, y: heightAt(t, x, z), scale: 0.9 + 0.5 * gen() });
+  }
+
+  // Fairway belt (Part 9A): walk the fairway path in 12 m steps and stand a tree on each side at
+  // a lateral offset of width/2 + 8 + rng x 6 m, so the hole reads as a corridor from the tee.
+  // Skips any spot on GREEN/FRINGE/SAND/WATER/TEE (or FAIRWAY - a dogleg's inner corner can put
+  // the offset point on the NEXT segment's fairway), and anything within 20 m of the pin. Seeded
+  // from rng(seed + 11), separate from the rough placement above, so adding the belt moved none
+  // of the existing trees. Visual only, like every tree.
+  const belt = rng(def.seed + 11);
+  const path = def.fairway.path;
+  const half = (def.fairway.width || 0) / 2;
+  const pin = def.pin;
+  for (let s = 0; s < path.length - 1; s++) {
+    const [ax, az] = path[s], [bx, bz] = path[s + 1];
+    const segLen = Math.hypot(bx - ax, bz - az);
+    if (segLen < 1e-6) continue;
+    const tx = (bx - ax) / segLen, tz = (bz - az) / segLen;   // tangent
+    const nx = tz, nz = -tx;                                  // left-hand normal
+    for (let d = 0; d <= segLen; d += 12) {
+      const px = ax + tx * d, pz = az + tz * d;
+      for (const side of [1, -1]) {
+        const off = half + 8 + belt() * 6;
+        const x = px + nx * off * side, z = pz + nz * off * side;
+        const surf = surfaceAt(t, x, z);
+        if (surf === S.GREEN || surf === S.FRINGE || surf === S.SAND || surf === S.WATER || surf === S.TEE || surf === S.FAIRWAY) continue;
+        if (Math.hypot(x - pin[0], z - pin[1]) < 20) continue;
+        out.push({ x, z, y: heightAt(t, x, z), scale: 0.9 + 0.5 * belt() });
+      }
+    }
   }
   return out;
 }

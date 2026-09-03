@@ -768,3 +768,83 @@ that is the day Harbor Links itself flips to Open, per the instruction). The cou
 `golf.courses.harbor` key is still absent from admin-config (defaults to `testing` per §14's own
 "missing key -> testing" rule), so the game-level AND course-level gates currently agree by
 construction, not by two separate writes needing to match.
+
+## part9a-layout-visuals-camera-map
+
+`GOLF-PART9.md` sub-part 9A (2026-09-03). Four areas, each with the one thing worth recording.
+
+### 9A.1 Safe area and the hub's back pill
+
+The doc puts the safe-area padding on `.gf-root`; it is on **`.gf-play`** instead. `.gf-play`
+is `position: fixed; inset: 0`, so padding on the in-flow `.gf-root` could never reach it - the
+same reason the Part 4 `.gf-root` fix exists. Band heights are measured below that padding, as
+asked. One addition beyond the doc: `padding-top` is `max(env(safe-area-inset-top), var(--gf-hub-
+pad))`, with `--gf-hub-pad: 54px` set by `ui.js` only when mounted in the hub. The hub draws its
+pill at `max(safe-area-top, 54px)` (`css/hub.css`), so with pure `env()` padding a NO-notch device
+(desktop, some Androids) would put the pill at y=54 over a scorecard that starts at y=56. Matching
+the hub's own formula keeps the pill inside the reserved 104 x 56 box everywhere; on a notch
+phone the two are identical. The game's own `.gf-back` now renders only standalone (no hub pill
+to duplicate); in the hub the slot is empty, per the doc's "remove any duplicate".
+
+Verified in the real hub at 393 x 852 with `getBoundingClientRect()`: pill 10,54-80,91, inside
+the slot 0,54-104,110; scorecard 110-154; overlaps with every game element: none. Bands below the
+54 px padding: top 56, card 44, view 515, bar 50, meters 133 = 798 + 54 = 852.
+
+### 9A.2 Sky, lighting, ground, trees
+
+As specified. The one gotcha: `.gf-root .gf-view canvas { width:100%; height:100% }` (the 3D
+canvas rule) also matched the new minimap `<canvas>` and made it fill the whole view (higher
+specificity than `.gf-root .gf-map`) - caught by the first rect measurement, fixed with
+`canvas:not(.gf-map)`. Belt trees additionally skip FAIRWAY (not in the doc's list): a dogleg's
+inner corner puts the offset point on the next segment's fairway, and a tree on the fairway
+would be a collision-less ghost standing on the mowed grass.
+
+### 9A.4 Aiming camera - the FOV is horizontal, and the pitch comes from the 30% rule
+
+The doc's table ("FOV 50", `B - 16a + 9y`, look `B + 70a`) and its sentence "the ball stays fixed
+on screen at 30% up from the bottom" only agree if that 50° is the HORIZONTAL field of view:
+three.js's `fov` is vertical, and with a vertical 50° the ball projects at ~3% from the bottom.
+With 50° horizontal at a phone's portrait aspect the ball lands at 30% - so that is what the
+author computed with. Implemented as `applyHFov(camera)` (vertical fov derived from the aspect
+on every resize) AND `_lookFor30()`: the camera's pitch is derived from "ball at 30% up" rather
+than from the nominal lookAt, so the rule holds at every aspect, including the hub's view band
+(393 x 515), where the nominal lookAt alone would have put the ball at ~14%. Position is exactly
+the doc's; only the pitch is derived. Confirmed on screen: ball at 69.5% down the view = 30.5%
+up. Address 0.6 s, aim-change orbit 0.25 s, clearance floor 1.0 m.
+
+### 9A.5 The minimap is mirrored in x, deliberately
+
+A three.js camera looking along +z has world +x on its LEFT (right = forward x up = (-1,0,0)),
+and hole 1's water at x = -60..-30 duly renders on the RIGHT of the 3D view. The first minimap
+draft mapped world +x to map-right, so the water sat on the map's LEFT - the map and the view
+were mirror images, and "tap left of the fairway" would have rotated the view RIGHT. `_rot`
+negates u (and `_unrot` un-negates it), so world +x draws to the map's left, matching the 3D.
+Verified by counting blue pixels per half of the map canvas: left 0, right 1036. The map tap
+itself: aim-line mean x went 0.495 -> 0.452 of the map width after a tap at 22% across, and the
+3D view swung left (screenshot in the 9A report).
+
+### A pre-existing tap bug, found by the harness
+
+The view's `pointercancel` handler shared `onUp`'s tap test, so a cancelled pointer that was
+short and still counted as a TAP and advanced the swing - my synthetic pointerdown/pointercancel
+pair (meant to reveal the aim line without swinging) locked the aim before the map-tap test, and
+the tap did nothing. Real fingers can trigger it too (a system edge swipe cancels the pointer).
+`pointercancel` is never a tap now. Part 4 shipped it; nobody had noticed.
+
+### Verification
+
+`node golf/js/test.js` 136/136 (trees are visual-only; the fixture is untouched). `node
+validate-sw-assets.mjs` (minimap.js added, 393 entries). In the real hub at 393 x 852, dark
+mode: no overlap between the pill and any game element; daytime sky; trees line hole 1's fairway;
+from the tee the water (right), the green and the bunkers at the far end are in the address
+view; the minimap shows the hole with the aim line; tapping the map left of the fairway rotates
+the view left; toggling every overlay (club row open/closed, flash, distance counter, map
+hidden/shown) moved no band by a pixel. Console: no golf errors (the hub's own `messages/`
+permission-denied for an unclaimed test profile is unrelated).
+
+### What 9A does NOT rewrite in `GOLF-HANDOFF.md`
+
+§10.1–10.4 and §13.1's safe-area/pill paragraph are rewritten. §2 (meters), §7.3 (launch),
+§13.2 and §13.6 (strings) are 9B's and 9C's and are left for them - the doc says "when done",
+and those sections describe what 9B/9C will change. The handoff edited is the one Matt pointed
+this build at from Part 1 (`Downloads/GOLF-HANDOFF.md`); there is no copy inside the repo.

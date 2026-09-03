@@ -15,12 +15,13 @@ import { courseMode } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
 
-import { build, S } from './terrain.js';
+import { build, S, heightAt } from './terrain.js';
 import { simulateShot } from './physics.js';
 import { pos, aimDeg as aimDegOf, power01 as power01Of, spin01 as spin01Of, DIFF } from './meters.js';
-import { CLUBS, autoSelectClub, selectableClubs, TARGET_CARRY_M } from './clubs.js';
+import { CLUBS, autoSelectClub, selectableClubs, TARGET_CARRY_M, lieSpeedMod } from './clubs.js';
 import { Renderer } from './render.js';
-import { CameraRig, createCamera } from './camera.js';
+import { CameraRig, createCamera, applyHFov } from './camera.js';
+import { Minimap, MAP_W, MAP_H } from './minimap.js';
 import { COURSES, courseById } from '../courses/registry.js';
 import { STRINGS } from './strings.js';
 import { createRound, restoreRound, applyShotResult, roundTotal } from './game.js';
@@ -65,6 +66,7 @@ function saveSettings(s) {
 function toYards(m) { return m / 0.9144; }
 function toMph(mps) { return mps * 2.23694; }
 function bearingDeg(a, b) { return Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI; }
+function heightAtBall(t, b) { return heightAt(t, b.x, b.z); }
 
 // Presentation only - which scorecard-cell shape to draw for a given strokes/par delta. Not a
 // round rule (it decides nothing about strokes or points, both owned by game.js), just a CSS
@@ -107,6 +109,16 @@ class GolfGame {
     // "A B" never matches when A and B are the same node - see DECISIONS.md#part4-scope.)
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'gf-root';
+    // Part 9A: when mounted in the hub, the hub draws its own floating back pill at
+    // max(safe-area-top, 54px) x 10px (css/hub.css .hub-top-immersive). The play screen reserves
+    // the top strip's left 104 x 56 box for it and pads its top by the same formula, so the pill
+    // always lands inside that box - on a notch phone AND on a no-notch one. Standalone
+    // (golf/index.html, no hub) the game draws its own back button in that box instead.
+    this.inHub = !!document.querySelector('.hub-top .hub-back');
+    if (this.inHub) {
+      this.rootEl.classList.add('gf-in-hub');
+      this.rootEl.style.setProperty('--gf-hub-pad', '54px');
+    }
     this.container.appendChild(this.rootEl);
 
     this._renderSetup();
@@ -223,7 +235,7 @@ class GolfGame {
     root.className = 'gf-play';
     root.innerHTML = `
       <div class="gf-top">
-        <button type="button" class="gf-back" data-role="back" aria-label="${t('back')}">&larr;</button>
+        <div class="gf-top__slot">${this.inHub ? '' : `<button type="button" class="gf-back" data-role="back" aria-label="${t('back')}">&larr;</button>`}</div>
         <div class="gf-top-info" data-role="topinfo"></div>
         <div class="gf-wind" data-role="wind">
           <svg class="gf-wind-arrow" data-role="windarrow" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2v20M12 2l-5 5M12 2l5 5"/></svg>
@@ -234,6 +246,7 @@ class GolfGame {
       <div class="gf-view" data-role="view">
         <div class="gf-dist" data-role="dist"></div>
         <div class="gf-flash" data-role="flash"></div>
+        <canvas class="gf-map" data-role="map" data-show="false" width="${MAP_W}" height="${MAP_H}" aria-hidden="true"></canvas>
       </div>
       <div class="gf-bar" data-role="bar">
         <button type="button" class="gf-club-chip" data-role="clubchip"></button>
@@ -264,9 +277,12 @@ class GolfGame {
       pindist: root.querySelector('[data-role="pindist"]'),
       lie: root.querySelector('[data-role="lie"]'),
       meters: root.querySelector('[data-role="meters"]'),
+      map: root.querySelector('[data-role="map"]'),
     };
 
-    root.querySelector('[data-role="back"]').addEventListener('click', () => this._backToSetup());
+    // Standalone only - in the hub the reserved slot is empty and the hub's own pill does this.
+    const backBtn = root.querySelector('[data-role="back"]');
+    if (backBtn) backBtn.addEventListener('click', () => this._backToSetup());
 
     const canvas = document.createElement('canvas');
     this.dom.view.insertBefore(canvas, this.dom.view.firstChild);
@@ -277,6 +293,9 @@ class GolfGame {
     this.renderer = new Renderer(canvas, this.terrain);
     if (!this.camera) this.camera = createCamera(1);
     this.camRig = new CameraRig(this.camera, this.terrain);
+    // Part 9A: the overhead map. Base raster once per hole; overlays on every aim change.
+    this.minimap = new Minimap(this.dom.map, this.terrain);
+    this._bindMap();
 
     // round.ball and round.wind are already correct for this hole - set by game.js's
     // createRound (hole 1) or applyShotResult's hole-advance (every hole after) - never
@@ -306,6 +325,7 @@ class GolfGame {
     const w = this.dom.view.clientWidth || 1;
     const h = this.dom.view.clientHeight || 1;
     this.renderer.resize(w, h, this.camera);
+    applyHFov(this.camera);   // 50 deg HORIZONTAL fov at whatever aspect the view has now (Part 9A)
   }
 
   // ---------------------------------------------------------------- HUD paint ----
@@ -382,6 +402,10 @@ class GolfGame {
     if (isPutt) this.camRig.setPutt(ball, this.targetBearingDeg);
     else this.camRig.setAddress(ball, this.targetBearingDeg);
 
+    // Part 9A: the 3D aim line + landing ring appear on the first pointerdown in the view and
+    // stay until launch; the minimap is up for the whole address/putt.
+    this._aimShown = false;
+    this.dom.map.setAttribute('data-show', 'true');
     this._updateAimTarget();
     this._startMeterSequence(isPutt);
     // Autosave here, not only after a shot resolves: without this, a save taken while the
@@ -393,10 +417,77 @@ class GolfGame {
     this._saveRound();
   }
 
-  _updateAimTarget() {
+  // Predicted carry for the landing ring: the club's target carry scaled by the lie's speed
+  // modifier (a driver from the rough carries 85% of its fairway number, §5). For a putt it is
+  // the putter's 100% roll, which is what the ring on the green should mean.
+  _predictedCarryM() {
     const club = this._currentClub();
-    const target = TARGET_CARRY_M[club.id] || 100;
-    this.renderer.setAimTarget({ x: this.round.ball.x, z: this.round.ball.z }, this.targetBearingDeg, target);
+    const lie = this.round.ball.lie;
+    if (club.id === 'pt') return 36 * lieSpeedMod(lie, 'pt');
+    return (TARGET_CARRY_M[club.id] || 100) * lieSpeedMod(lie, club.id);
+  }
+
+  _updateAimTarget() {
+    const ball = this.round.ball;
+    const carry = this._predictedCarryM();
+    if (this._aimShown) this.renderer.setAimTarget({ x: ball.x, z: ball.z }, this.targetBearingDeg, carry);
+    else this.renderer.setAimTarget(null, 0, 0);
+    if (this.minimap) this.minimap.update(ball, this.targetBearingDeg, carry, this.hole.pin);
+  }
+
+  // The one path every aim change takes (view drag, map tap, map drag): update the bearing,
+  // redraw the aim line/ring/minimap, and orbit the camera to the new a-hat (0.25 s ease, ball
+  // pinned at 30% up - camera.js). Never during a swing that has started or in flight.
+  _setAimDeg(deg) {
+    if (!this.round || (this.round.phase !== 'address' && this.round.phase !== 'putt')) return;
+    if (this._meterStage && this._meterStage !== 'aim') return;   // aim is locked once the swing starts
+    this.targetBearingDeg = deg;
+    this._updateAimTarget();
+    const ball = this.round.ball;
+    const y = heightAtBall(this.terrain, ball);
+    this.camRig.aimTo({ x: ball.x, y, z: ball.z }, this.targetBearingDeg, this._isPutt);
+  }
+
+  // Minimap input (Part 9A): a tap sets a-hat to the bearing from the ball to the tapped world
+  // point; a drag does the same continuously. Handled on the canvas itself and stopped there, so
+  // the view's own tap/drag capture never sees it (a map tap must not fire the swing).
+  _bindMap() {
+    const map = this.dom.map;
+    let active = null;
+    const aimAt = (e) => {
+      const r = map.getBoundingClientRect();
+      const mx = (e.clientX - r.left) * (MAP_W / r.width);
+      const my = (e.clientY - r.top) * (MAP_H / r.height);
+      this._setAimDeg(this.minimap.bearingFromTap(this.round.ball, mx, my));
+    };
+    const onDown = (e) => {
+      e.stopPropagation();
+      if (!this.round || (this.round.phase !== 'address' && this.round.phase !== 'putt')) return;
+      active = e.pointerId;
+      try { map.setPointerCapture(e.pointerId); } catch { /* not capturable: taps still work */ }
+      this._aimShown = true;
+      aimAt(e);
+    };
+    const onMove = (e) => {
+      if (active !== e.pointerId) return;
+      e.stopPropagation();
+      aimAt(e);
+    };
+    const onUp = (e) => {
+      if (active !== e.pointerId) return;
+      e.stopPropagation();
+      active = null;
+    };
+    map.addEventListener('pointerdown', onDown);
+    map.addEventListener('pointermove', onMove);
+    map.addEventListener('pointerup', onUp);
+    map.addEventListener('pointercancel', onUp);
+    this._unbindMap = () => {
+      map.removeEventListener('pointerdown', onDown);
+      map.removeEventListener('pointermove', onMove);
+      map.removeEventListener('pointerup', onUp);
+      map.removeEventListener('pointercancel', onUp);
+    };
   }
 
   _startMeterSequence(isPutt) {
@@ -534,6 +625,8 @@ class GolfGame {
     });
 
     this.renderer.setAimTarget(null, 0, 0);
+    this._aimShown = false;
+    this.dom.map.setAttribute('data-show', 'false');   // Part 9A: no map during flight
     this.round.phase = 'flight';
     this.camRig.setFlight(dirDeg);
     this._flightSamples = result.samples;
@@ -717,41 +810,47 @@ class GolfGame {
   // ---------------------------------------------------------------- input ----
   _bindInput() {
     const root = this.dom.root;
+    // Part 9A: a horizontal drag ANYWHERE in the view (not just its upper half) aims, at 0.12 deg
+    // per px, in both address and putt. The minimap handles its own pointer events and stops
+    // them (see _bindMap), so nothing here ever sees a map touch. The first pointerdown in the
+    // view also reveals the 3D aim line + landing ring, which then stay up until launch.
     const onDown = (e) => {
       this._pointerId = e.pointerId;
       this._pointerStart = { x: e.clientX, y: e.clientY, t: performance.now() };
       this._pointerMoved = 0;
       this._dragLastX = e.clientX;
       this._dragging = false;
+      const aiming = this.round && (this.round.phase === 'address' || this.round.phase === 'putt');
+      this._dragInView = !!(aiming && e.target.closest && e.target.closest('.gf-view'));
+      if (this._dragInView && !this._aimShown && this._meterStage === 'aim') {
+        this._aimShown = true;
+        this._updateAimTarget();
+      }
     };
     const onMove = (e) => {
       if (this._pointerId !== e.pointerId || !this._pointerStart) return;
       const dx = e.clientX - this._pointerStart.x, dy = e.clientY - this._pointerStart.y;
       this._pointerMoved = Math.max(this._pointerMoved, Math.hypot(dx, dy));
-      if (this.round && this.round.phase === 'address') {
-        const viewRect = this.dom.view.getBoundingClientRect();
-        const inUpperHalf = this._pointerStart.y < viewRect.top + viewRect.height / 2;
-        const startedInView = this._pointerStart.x >= viewRect.left && this._pointerStart.x <= viewRect.right
-          && this._pointerStart.y >= viewRect.top && this._pointerStart.y <= viewRect.bottom;
-        if (startedInView && inUpperHalf) {
-          const stepX = e.clientX - this._dragLastX;
-          this._dragLastX = e.clientX;
-          if (Math.abs(stepX) > 0.5) {
-            this._dragging = true;
-            this.targetBearingDeg += stepX * 0.15;
-            this._updateAimTarget();
-          }
+      if (this._dragInView) {
+        const stepX = e.clientX - this._dragLastX;
+        this._dragLastX = e.clientX;
+        if (Math.abs(stepX) > 0.5) {
+          this._dragging = true;
+          this._setAimDeg(this.targetBearingDeg + stepX * 0.12);
         }
       }
     };
     const onUp = (e) => {
       if (this._pointerId !== e.pointerId || !this._pointerStart) return;
       const dt = performance.now() - this._pointerStart.t;
-      const isTap = this._pointerMoved < 8 && dt < 250;
+      // A cancelled pointer (the browser took the gesture - a scroll, a system edge swipe) is
+      // never a tap, however short it was. Part 9A: this used to advance the swing.
+      const isTap = e.type !== 'pointercancel' && this._pointerMoved < 8 && dt < 250;
       this._pointerId = null; this._pointerStart = null;
+      this._dragInView = false;
       if (!isTap) return;
       const target = e.target;
-      if (target.closest && (target.closest('.gf-back') || target.closest('.gf-club-chip') || target.closest('.gf-club-item'))) return;
+      if (target.closest && (target.closest('.gf-back') || target.closest('.gf-club-chip') || target.closest('.gf-club-item') || target.closest('.gf-map'))) return;
       if (this.round.phase === 'intro') { this._skipIntro(); return; }
       if ((this.round.phase === 'address' || this.round.phase === 'putt') && !this._clubRowOpen) {
         if (target.closest && (target.closest('.gf-view') || target.closest('.gf-meters'))) {
@@ -857,6 +956,8 @@ class GolfGame {
 
   _teardownPlayDom() {
     if (this._unbindInput) { this._unbindInput(); this._unbindInput = null; }
+    if (this._unbindMap) { this._unbindMap(); this._unbindMap = null; }
+    this.minimap = null;
     if (this._outsideHandler) { document.removeEventListener('pointerdown', this._outsideHandler); this._outsideHandler = null; }
     if (this._resizeUnsub) { this._resizeUnsub(); this._resizeUnsub = null; }
     if (this.renderer) { this.renderer.dispose(); this.renderer = null; }
