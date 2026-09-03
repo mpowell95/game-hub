@@ -212,6 +212,14 @@
 .gf-root .gf-map[data-show="false"] { visibility: hidden; }
 .gf-root .gf-meter { position: relative; height: 32px; opacity: 1; }
 .gf-root .gf-meter[data-state="pending"] { opacity: .35; }
+/* Which meter is which (Matt, 2026-09-03: "no label on which meter does what"). Sits in the
+   row's top 12 px, above the track (which starts at 12 px), so the 32 px row and the 133 px
+   band are unchanged. Uppercase so nothing descends into the track. */
+.gf-root .gf-meter__label {
+  position: absolute; left: 0; top: 0; height: 12px; line-height: 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(255, 255, 255, .85); pointer-events: none;
+}
 .gf-root .gf-meter__track {
   position: absolute; top: 50%; left: 0; right: 0; height: 8px; margin-top: -4px;
   border-radius: 4px; background: rgba(255, 255, 255, .22);

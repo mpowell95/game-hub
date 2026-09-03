@@ -256,6 +256,7 @@ class GolfGame {
       <div class="gf-meters" data-role="meters">
         ${['aim', 'power', 'spin'].map((k) => `
           <div class="gf-meter" data-meter="${k}" data-state="pending">
+            <div class="gf-meter__label">${t('meter_' + k)}</div>
             <div class="gf-meter__track"></div>
             <div class="gf-meter__flash"></div>
             <div class="gf-meter__marker" style="display:none"></div>
