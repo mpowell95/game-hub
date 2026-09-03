@@ -242,41 +242,14 @@ export const BOARDS = [
       // Contact model overrides (defaults and the reasoning live in physics.js). A board the
       // ball LANDS on and rolls up has to be dead, not lively.
       mat: {
-        // 2026-09-02, Matt: "set friction = 0 everywhere except the back wall ABOVE the
-        // scoreboard" - and that one was already 0. So every pair below is frictionless. NOTE what
-        // that means: friction is the only thing that sheds the ball's serve topspin or turns a
-        // slide into a roll, so the ball now skids the whole length of the lane and the face
-        // keeping the spin it was served with. Capture is kinematic and does not read friction, so
-        // scoring is unaffected.
-        // 2026-09-02, Matt: 0.75. The face is the only brake left (walls and rings are
-        // frictionless now), and at 0.22 a ball crossed the board for a long time before any mouth
-        // was slow enough to take it, finishing in the 10.
         boardFric: 0.62,
         boardRest: 0.08,
         woodFric: 0.30,
         woodRest: 0.22,
         wallFric: 0.04,
-        // LESS BOUNCY WALLS (Matt, 2026-09-02: "make the walls less bouncy"). 0.42 -> 0.28. This
-        // pair is every 'wall' part in machines/classic/machine.js - the side rails, the lane
-        // rails, the trough cheeks AND the flare - so it is also half of why a flare catch used
-        // to fling the ball out of the cabinet. Kept above dead: a bank off the side rail into a
-        // corner 100 is a real shot on this machine, and both 100s still land in the 861-throw
-        // sweep (4 each) with the emergency path empty.
         wallRest: 0.42,
         ringFric: 0.06,
-        // 2026-09-02, Matt: rings 10-50 come down to 0.10 as well (the 100 is already dead).
         ringRest: 0.18,
-        // THE 100s ARE DEADER THAN THE REST OF THE RINGS (Matt, 2026-09-02: "the 100 is crazy
-        // bouncy. it seems to ADD energy to the ball"). 0.18 -> 0.06. Measured, the ring does NOT
-        // add energy - every contact within 16cm of a 100 LOST kinetic energy, and the few that
-        // gained SPEED gained it from spin turning into roll - but that ring is a 14.5cm wall
-        // around a mouth only 4cm wider than the ball, so a miss meets a tall tube side-on and
-        // leaves fast enough to read as a kick. This is the split the ring100 material exists
-        // for: the 10 through 50 keep 0.18.
-        // 2026-09-02, Matt's number. NOTE the standing guard above: ring friction is kept near
-        // zero everywhere else because lateral grip can wedge a ball against a ring on the
-        // slope. 0.2 is the 100 rings ALONE, and it is deliberate.
-        ring100Fric: 0.06,
         ring100Rest: 0.18,
         deadFric: 0.24,
         deadRest: 0.10,
@@ -287,25 +260,8 @@ export const BOARDS = [
         // 0.60 over 34 hard wall throws: the 100s-off-the-wall fall 6 -> 0, dead-drop 50s gone,
         // 27 of 34 end in the honest 10 or 0, and the rebound is visible. The kicker keeps
         // deadFric/deadRest above.
-        // 2026-09-02, Matt: 0.6 on the back wall ABOVE the scoreboard line. This is the surface
-        // the zero-grip rule was written for (DECISIONS.md, "The back wall does not lift the
-        // ball") - grip here turns the ball's serve topspin into CLIMB, and test.js's "the back
-        // wall alone never lifts a ball" is written as a rule with no tolerance, so it fails on
-        // this number. His call, made knowing that. The low half stays frictionless.
         backFric: 0,
         backRest: 0.60,
-        // THE BACK WALL IS TWO HALVES NOW (Matt, 2026-09-02): "the back wall bounce should
-        // be 0.05 BELOW the horizontal line dividing the score section... and remain 0.60
-        // above that line." The line is the rule between the scoreboard's top row (hub
-        // all-time, your best) and its bottom row (daily, last game). Its height is DERIVED
-        // from render.js's own panel layout in machines/classic/physics.js, never typed in
-        // twice, so the paint and the physics cannot drift apart.
-        // 2026-09-02, Matt's numbers for the low half. It is the one gripping wall on the
-        // machine: every other back-wall pair is zero grip, because a gripping wall converts
-        // the ball's serve topspin into CLIMB (DECISIONS.md, "The back wall does not lift the
-        // ball"). Below the scoreboard's line is where a ball arrives with the least spin left.
-        backLowFric: 0,
-        backLowRest: 0.60,
       },
     },
 

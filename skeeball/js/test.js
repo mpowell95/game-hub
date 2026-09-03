@@ -251,14 +251,8 @@ if (!G.reach) {
     // numbers plus headroom. They catch a REGRESSION now; they do not describe a goal.
     ok('a throw too soft to crest the ramp comes back (measured 3)',
       straightRoll <= 5, `${straightRoll} straight throws rolled back`);
-    // 58 of 451 (13%) until 2026-09-02, when Matt added two more ways a ball comes back unspent:
-    // a wild bounce off the flare, and a ball that lands outside the machine (physics.js 2b and
-    // finishAt; DECISIONS.md, "A wild flare bounce..."). Both live at the extremes of this grid -
-    // it samples |aim| 0.8 and 1.0 as heavily as a straight throw - so the measured rate went to
-    // 103 of 451 (23%). Re-measured, not loosened by feel: over the full 41 x 21 sweep, 169 of 861
-    // come back, 81 of them out of the machine and 58 off the flare.
-    ok('throws that come back with nothing stay a minority (measured 103 of 451, 23%)',
-      anyRoll <= Math.ceil(41 * 11 * 0.27), `${anyRoll} of ${41 * 11} rolled back`);
+    ok('throws that come back with nothing stay a minority (measured 58 of 451, 13%)',
+      anyRoll <= Math.ceil(41 * 11 * 0.16), `${anyRoll} of ${41 * 11} rolled back`);
   }
 
   // THE BALL MUST GET IN THE AIR. A "touched the scoring face" check alone cannot see a ramp
