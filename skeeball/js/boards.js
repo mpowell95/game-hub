@@ -292,7 +292,7 @@ export const BOARDS = [
         // ball") - grip here turns the ball's serve topspin into CLIMB, and test.js's "the back
         // wall alone never lifts a ball" is written as a rule with no tolerance, so it fails on
         // this number. His call, made knowing that. The low half stays frictionless.
-        backFric: 0.6,
+        backFric: 0,   // 2026-09-02: reverted to 0, its value before today.
         backRest: 0.60,
         // THE BACK WALL IS TWO HALVES NOW (Matt, 2026-09-02): "the back wall bounce should
         // be 0.05 BELOW the horizontal line dividing the score section... and remain 0.60
