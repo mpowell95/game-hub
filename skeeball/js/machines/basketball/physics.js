@@ -219,6 +219,9 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     nudges: 0,
     emergencyUsed: false,
     troughAt: -1,
+    // Has this throw already left its scuff on the back wall? One per throw - see the 'wall'
+    // event below.
+    wallMarked: false,
     // `restAt` lived here until batch 3f removed the resting-position rule that read it.
   };
 
@@ -239,6 +242,30 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
       if (vn > 0.5) { st.bounces += 1; st.events.push({ type: 'bounce', speed: vn }); }
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
+    }
+    // WHERE IT HIT THE BACK WALL (2026-09-03). Matt: "It's impossible to tell where on the back
+    // wall a ball that's overthrown bounces off. Sometimes I'll throw it and it doesn't look like
+    // it even touched the back wall, but based off how it lands I know it must have."
+    //
+    // The engine always knew; it just never said. The 'backboard' event above carries a SPEED and
+    // no position, and ui.js only counts it for telemetry, so a bounce off the back of the machine
+    // had no visual at all - the ball simply changed direction in front of a flat wall.
+    //
+    // THE BACK WALL ONLY, AND ONLY THE FIRST TOUCH OF A THROW. The first version of this also
+    // marked the SIDE RAILS, on the measurement that a rail is hit four times as often. That was
+    // true and it was the wrong call - Matt, with a recording: "the way it's shown on the side
+    // walls is ridiculous". A rail runs nearly edge-on to the player, so a mark lying on one is a
+    // sliver, and the version that turned to face the camera instead was worse: a perfect circle
+    // floating on a wall it is not parallel to. One mark, on the one wall that squarely faces the
+    // player, for the one contact the player is asking about.
+    //
+    // The 0.4 m/s threshold on the event above was NOT the problem and is not copied here: of 113
+    // back-wall touches measured over 276 throws, only ONE was under it (they land at a median
+    // 1.75 m/s). 0.1 catches that one and costs nothing.
+    if (part === 'backboard' && vn > 0.1 && !st.wallMarked) {
+      st.wallMarked = true;
+      const q = ball.position;
+      st.events.push({ type: 'wall', part, speed: +vn.toFixed(3), pos: { x: q.x, y: q.y, z: q.z } });
     }
     // Every real touch against every part, with where and how hard. vn > 0.05 drops the solver's
     // per-step resting contacts while keeping a soft side-wall graze; the cap stops a jammed ball

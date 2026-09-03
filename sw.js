@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v592';
+const CACHE = 'game-hub-v593';
 
 const ASSETS = [
   './',
@@ -642,15 +642,15 @@ const REST_MANIFEST = {
   './skeeball/js/machines/popongo/physics.js': 'fc54077911',
   './skeeball/js/machines/popongo/machine.js': '8d92102fe5',
   './skeeball/js/machines/popongo/render.js': 'fa6131bdd5',
-  './skeeball/js/machines/basketball/physics.js': 'd97f228edd',
+  './skeeball/js/machines/basketball/physics.js': 'fabb990af1',
   './skeeball/js/machines/basketball/machine.js': '3f7f45738b',
-  './skeeball/js/machines/basketball/render.js': 'fd1d65361b',
+  './skeeball/js/machines/basketball/render.js': '0f75e50440',
   './skeeball/js/machines/brickcity/physics.js': '06a0f566a9',
   './skeeball/js/machines/brickcity/machine.js': 'd65b93f6c8',
   './skeeball/js/machines/brickcity/render.js': 'be01d78fdf',
-  './skeeball/js/machines/runaway/physics.js': 'dffde42616',
+  './skeeball/js/machines/runaway/physics.js': '2908a61d2f',
   './skeeball/js/machines/runaway/machine.js': '5eb9e60730',
-  './skeeball/js/machines/runaway/render.js': '2da62963db',
+  './skeeball/js/machines/runaway/render.js': '5b65b6af31',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',
