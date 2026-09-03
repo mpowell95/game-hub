@@ -5,16 +5,49 @@
 implements the clone will **not** have access to the videos. Everything the implementer needs is
 here.
 
-**Source material**
+**Source material** — five screen recordings in total.
 | Clip | Length | Resolution | Frame rate | Contents |
 |---|---|---|---|---|
 | `setup-screens.mp4` | 54.50 s | 1206 × 2622 portrait | 60 fps | title → career → course card → tutorials → practice hole select |
 | `hole-1.mp4` | 79.04 s | 1206 × 2622 portrait | 60 fps | one complete par-4 hole, three shots, birdie, scorecard |
+| `Setup.mp4` | 40.73 s | 1206 × 2622 portrait | 60 fps | title → character editor → career → course card → round start (no audio track) |
+| `Holes 1&2.mp4` | 140.55 s | 1206 × 2622 portrait | 60 fps | holes 1 and 2 played, ending on the scorecard (no audio track) |
+| `Hole 3.mp4` | 151.37 s | 1206 × 2622 portrait | 60 fps | hole 3 (par 5) through the post-round banners to the career screen (no audio track) |
 
 **Method.** Frames were extracted with the `claude-video-vision` MCP server (ffmpeg under the hood)
 at 0.5–2 fps for the survey, then re-sampled at 4–30 fps over every window where measured
 frame-to-frame motion was high. Colours, geometry and timings below were measured off the native
 1206 × 2622 frames unless a line says otherwise.
+
+---
+
+# 0. PROJECT DECISIONS — these OVERRIDE the reference
+
+Agreed with Matt on 2026-09-03. Where a decision here conflicts with the reference game
+described below, **the decision wins**. The reference sections are kept so the implementer knows
+what the original did and why.
+
+| Topic | Decision |
+|---|---|
+| **Scope now** | **Build holes 1-3 only.** Holes 4-9 come later, once the mechanics are settled. |
+| **Course** | Pine Valley, eventually 9 holes. The three documented holes become 1, 2, 3. |
+| **Tournament mode** | **Cut entirely.** No AI opponents, no leaderboard column, no `K Thiago` / `W Moore` / `F Everett`. |
+| **Scoring goal** | Track the player's **best 9-hole round score** (best 3-hole score until the course is complete). |
+| **World ranking** | Renamed **skill level**. **Starts at 0 and counts UP** as the player improves (the original counted down from 20,073). |
+| **Cash** | Keep. Prize money per round, as the original. |
+| **Shop** | Keep, but **clubs only, not clothing.** Clubs have real stats: more distance, tighter accuracy. No hats, polos, skins, hair. |
+| **Practice mode** | Keep. Single-hole practice alongside the full round. |
+| **Audio** | **None.** Do not add sound. Do not spend time on it. |
+| **Hub integration** | In-hub `module:`, `immersive: true` (full screen, hub chrome hidden), like Skeeball. |
+| **Names (frozen forever — THE LAW rule 5)** | folder `golf/` · stats id `'golf'` · settings key `gamehub.golf.v1` · recorder `recordGolf` |
+
+**Consequences to keep in mind while building:**
+- The scorecard screen loses its opponent scoreboard panel. Keep the grid, the totals and the avatar.
+- The `(1,0)` mystery number is moot — it lived in the opponent scoreboard. Do not implement it.
+- `best -` (the HUD's third line in tournament mode) becomes the player's own best for that hole.
+- Club upgrades change balance: the club ladder must be designed as a *base* bag that purchased
+  clubs improve on.
+
 
 ## How to read the confidence markers
 
@@ -23,7 +56,7 @@ Every non-obvious claim carries one of these. **Do not silently upgrade an infer
 - **[MEASURED]** — read directly off frames, or computed from pixel data. Trust the number.
 - **[OBSERVED]** — clearly visible and unambiguous, but not numerically measured.
 - **[INFERRED]** — a reasonable reading of the evidence that could be wrong. Flagged individually.
-- **[UNKNOWN]** — never visible in either clip. The implementer must decide. **These are listed
+- **[UNKNOWN]** — never visible in any clip. The implementer must decide. **These are listed
   together in §14 so nothing gets quietly invented.**
 
 ---
@@ -600,27 +633,41 @@ Documented so the implementer does not faithfully reproduce a defect.
 
 # 14. Everything that is UNKNOWN
 
-The implementer **must decide** these, because neither recording shows them. Do not present a guess
-here as if it came from the reference.
+Revised after the second pass. Items resolved by clips 3-5, or removed by a project decision in
+section 0, have been struck from this list.
+
+**Still genuinely unknown, and the implementer must decide:**
 
 - Per-tap aim increment (degrees).
-- The full club list and each club's carry distance.
-- The over-100 % **power vs precision** toggle: its visual state, its tap target, its effect.
-- How much an off-centre accuracy stop pushes the ball offline.
-- Wind: units, arrow semantics, and strength of effect.
+- The full club list and each club's carry distance. The measured figures in 17.2 are individual
+  swing distances, not club maximums - only the driver's ~287 yds full-power carry is usable.
+- The over-100% **power vs precision** toggle: its visual state, its tap target, its effect.
+- Wind: units, arrow semantics, strength of effect. Wind read `0` in all five clips.
 - Hazard rules: water penalties, bunker lies, playing from trees or rough, out of bounds, drops.
-- The yards→feet switch threshold.
-- All score-name banners other than `Birdie!`.
-- The meaning of `(1,0)` on the scoreboard.
-- Holes 2 (par 3) and 3 (par 5) — layout unknown.
-- The tournament round (`play` rather than `practice`) — never entered.
-- Every progression screen: shop, packs, VIP, equipment, tournaments, online, Game Center, merch.
-- Sound and music entirely — audio was skipped during analysis and is not documented at all.
-- Multiplayer, if any.
-- The golfer swing animation's frame count.
-- Whether the device scale factor is genuinely 3× (assumed for the pt conversions in §3.1).
+  No ball entered a hazard in any clip.
+- The yards-to-feet switch threshold (see section 12 for the recommended surface-based rule).
+- Score banners other than `Birdie!` and `New course best`.
+- The club shop's contents - ours to design (17.8).
+- The mishit penalty - designed by us in 17.9, never observed.
+- Holes 4-9 - out of scope for now, ours to design later.
+- Whether the device scale factor is genuinely 3x (assumed for the pt conversions in section 3.1).
 
----
+**Resolved since v1:**
+
+- Holes 2 and 3 - documented in 17.1.
+- Tournament mode - documented in 17.5, then cut by decision.
+- Progression and economy - documented in 17.5 and 17.8.
+- The "rocket" - it was the wind arrow (17.4).
+- Sound - out of scope by decision; the three newer clips have no audio track at all.
+- Golfer swing animation - a real multi-pose animation; exact frame count still uncounted but
+  4 poses is a fine default.
+
+**No longer applicable:**
+
+- The meaning of `(1,0)` - it lived in the opponent scoreboard, which is cut. It stayed ambiguous
+  to the end anyway: after three birdies it read `(3,0)`, which fits both "birdies, eagles" and
+  "holes under par, holes over par".
+- Multiplayer - not being built.
 
 # 15. Art direction
 
@@ -691,3 +738,124 @@ Ordered so that each step is playable before the next begins.
 Measured values are marked [MEASURED]; inferences and gaps are marked and listed in §14. Where this
 document says a value is unknown, it is genuinely unknown — please decide it deliberately rather
 than assuming it was omitted by accident.*
+
+---
+
+# 17. Second-pass findings (clips 3-5)
+
+Three further recordings were analysed: `Setup.mp4` (0:41), `Holes 1&2.mp4` (2:20), `Hole 3.mp4`
+(2:31), all 1206 x 2622 @ 60 fps. **All three have no audio track at all** (`has_audio: false`),
+which is one reason audio is out of scope.
+
+## 17.1 Holes 2 and 3 — now documented
+
+| Hole | Par | Tee yardage | Character |
+|---|---|---|---|
+| 1 | 4 | **360.7 yds** | Gentle double dogleg, water left of the tee, bunker short-left of the green, water left and behind the green. |
+| 2 | 3 | **181.0 yds** | **Island green.** The entire hole is water; a kidney-shaped green with one large bunker on its left sits in the middle. No fairway at all. |
+| 3 | 5 | **608.6 yds** | Long dogleg. Trees pinch the tee shot, a **large lake crosses the fairway** as a mid-hole carry, bunkers guard the green right. |
+
+Hole 3's 608.6 yds appears to be measured **along the dogleg centreline**, not straight to the pin -
+the straight-line distances in the readout do not reconcile with a 608.6 straight hole. [INFERRED]
+
+## 17.2 Clubs — bigger bag than first documented
+
+Now seen: `driver`, `3 wood`, `2 iron`, `3 iron`, `4 iron`, `6 iron`, `7 iron`, `8 iron`, `9 iron`,
+`p. wedge`, `putter`. Still no full-bag screen, so the list may be incomplete. [OBSERVED]
+
+**Measured shot distances (hub readout):** driver 251.6 / 246.3 / **287.0**; 4 iron 174.3;
+7 iron 149.1; 2 iron 144.8.
+
+**These do NOT give a club ladder, and the implementer must not treat them as one.** The player
+controls power, so each figure is that swing's distance, not the club's maximum - which is why the
+2 iron's 144.8 sits *below* the 4 iron's 174.3. The only defensible reading is that **the driver's
+full-power carry is around 287 yds**. Everything else in the bag must be designed. [MEASURED
+values, explicitly NOT a ladder]
+
+## 17.3 The hub yardage - revised
+
+Still the **distance of the previous shot** (it changes per stroke, tracks stroke magnitude, and is
+not the selected club's fixed range). But the arithmetic does **not** close cleanly: on hole 3 a
+232.4 yds approach that travelled 144.8 yds left 60.7 yds, which is geometrically impossible for
+straight-line distances. Most likely the hole yardage follows a dogleg centreline and/or the hub
+reports carry while the ball also rolls. [INFERRED, with the discrepancy stated rather than
+smoothed over.] For the clone: label it plainly, e.g. `last shot: 251.6 yds`.
+
+## 17.4 The wind indicator - correction
+
+Earlier I described a "rocket icon" appearing in hole 3. **It is the wind direction arrow**, the
+same indicator as always; the panel simply renders in a light state there rather than dark. There
+is no rocket and no boost mechanic. Wind still read `0` in every frame of all five clips, so wind's
+actual effect remains unobserved.
+
+## 17.5 The post-round sequence - fully documented
+
+On completing the round, three full-screen sunburst banners play in sequence, same visual treatment
+as `Birdie!`:
+
+1. `Prize money:` / **`$1,000`**
+2. `Your ranking jumped` / `2,700` / `to` / **`17,373`**
+3. `You have been invited to` / `play in the` / **`Amateur Tour`**
+
+**The ranking maths is exact and measured:** 20,073 - 2,700 = 17,373, and 2,700 is precisely the
+`Ranking points: 2,700` shown on that course's card. So **a completed round moves your ranking by
+the course's ranking-points value.** [MEASURED]
+
+For our version (skill level starting at 0, counting up), the equivalent is **+2,700 skill points
+for the round**, ideally scaled by how well the player scored.
+
+Career screen after the round: `WORLD RANKING 17,373`, `Winnings $1,000`, and
+`Current tour` / **`Amateur Tour`** (was `Local Tournament`). The tour ladder is real progression.
+
+## 17.6 New result banner
+
+**`New course best`** - three lines, same rotating sunburst, fires mid-hole the moment the score
+becomes a personal best. Also seen: the HUD's third line switching from `best -` to `best 4` once a
+best exists. [OBSERVED]
+
+## 17.7 Scorecard screen - fuller picture
+
+Header panel reads `Pine Valley` with the round total right-aligned (`-3`), then `best: -3` and
+`top place: 1` beneath, and the word `SCORECARD` bottom-left of that panel. A small round **orange
+restart icon button** (circular arrow) sits at the panel's right edge, and a wide orange
+**`continue`** button sits below. Grid rows: holes `1 2 3`, pars `4 3 5`, scores `3 2 4` with every
+under-par cell filled **green**. [OBSERVED]
+
+## 17.8 Shop - structure and price scale
+
+Categories: `physique`, `skin`, `hair`, `top`, `bottoms`, `hat`, `club`. Each opens a scrolling list
+with a thumbnail, a name, a price, and an orange `buy` button; owned items show a flat `owned` chip.
+
+Prices seen: `No hat` Free, `White cap` Free, `Red cap` $100, `Blue cap` $1,000; `Red polo` Free,
+`Black polo` $1,000, `Gray polo` $1,500, `Blue polo` $1,750, `White polo` $2,000, `Orange polo`
+$4,500. Physique offers `Male` / `Female`; skin offers `Skin 1` - `Skin 6`.
+
+**The `club` tab was never opened**, so the original's club items, their prices and their stats are
+unseen. Since we are keeping clubs and dropping clothing, **the entire club shop is ours to
+design.** Useful takeaway: the original's price range runs roughly **$100 to $4,500**, against
+$1,000 prize money per round - so a good item costs several rounds' winnings.
+
+## 17.9 Mishit model - DESIGNED, not observed
+
+Every shot in all five clips was struck cleanly, so the penalty for a bad accuracy stop was never
+observed. Per Matt: invent something standard. Proposed model, entirely ours:
+
+- Let `off` = the marker's distance from the bar's centre, normalised to 0.0 - 1.0.
+- **Green zone** (centre ~40% of the bar): offline angle = `off x 1.5 deg`. Effectively straight.
+- **Orange zone** (next ~30% each side): angle ramps `1.5 deg` to `4 deg`.
+- **Red zone** (outer ~15% each side): angle ramps `4 deg` to `8 deg`, and the shot also loses
+  **10% of its distance** (a mishit does not fly its full length).
+- Marker **left** of centre pulls the ball left; **right** pushes it right.
+- Over 100% power multiplies the resulting angle by **1.5**, which is what makes overswinging risky
+  and matches the tutorial's warning.
+- The ball should **curve** toward its miss over the flight rather than launching on a straight
+  offset line - it reads far better and is how the genre does it.
+
+At 250 yds, a full red miss lands roughly 35 yds offline: punishing, recoverable, not round-ending.
+
+## 17.10 Tutorial art is misleading - do not copy it literally
+
+Modal 1's illustration shows a single orange arrow sweeping **up** the arc, which is what led an
+earlier reading of this footage astray. The real meter **oscillates up and back down** (section 5).
+Draw the tutorial art to match the real behaviour.
+
