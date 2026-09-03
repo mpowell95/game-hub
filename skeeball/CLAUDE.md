@@ -2014,3 +2014,44 @@ browser throttles the whole hub.
 - `window.__skTest` (set in `init()`) is the read-only hook the headless drivers use to
   sequence real-touch play; the `__yzTest` precedent. Never used by the game itself.
 - Machine names (`THE CLASSIC`) are proper nouns and stay untranslated, like STARHUB.
+
+## No Resume, and the carousel lands centred (2026-09-03)
+
+Two setup-screen changes, both Matt's.
+
+**There is no Resume button.** *"I do not like the resume button. We don't need that at all. You
+never need to resume a skeeball game. you either finish or quit."* The gallery now offers one
+button and it starts a rack; `_paintSetupActions` no longer flips Play to "New game" either.
+
+- The mid-rack snapshot is still WRITTEN and still restores itself silently on a reload (`_mount`).
+  That is the rack surviving an accidental refresh, which is not a thing the player ever chooses,
+  and it is why `skeeball/js/test.js`'s `_startGame`-picks-its-board-from-the-snapshot probe still
+  applies.
+- **The pause card's Resume is a different button and stays**: there it means un-pause, close the
+  card and carry on with the ball you are holding. Do not remove it with the other one.
+
+**The carousel steps by the slide's own resting place, not by one viewport.** Matt: the `>` arrow
+*"does not scroll enough"*, a manual scroll *"goes too much"*, and it *"should snap them into place
+perfectly centered"*.
+
+Every index-to-scroll sum was a multiple of `car.clientWidth`, and that is not the step: the row is
+a flex strip with a 12px gap and each slide carries a 1px border. **Measured live on a 375px
+phone - the slides rest at 0 / 355 / 710 / 1065 / 1420 against a `clientWidth` of 343.** So
+`scrollBy(clientWidth)` asked for 343 when the next slide was 355 away: twelve pixels short, every
+press. Desktop Chromium hides it (CSS mandatory snap pulls the last 12px in on its own - measured,
+the arrows land dead on there); iOS Safari does not re-snap a programmatic smooth scroll, which is
+the arrow that does not scroll enough.
+
+- Positions come from `offsetLeft` now, which is exact whatever the gap, the border or the padding
+  do next, plus a centring term for a future slide narrower than the viewport.
+- **A settle handler re-snaps** if scrolling stops between two slides: 140ms of quiet, more than a
+  pixel out, and not while the carousel is scrolling itself. CSS `scroll-snap-type` still does the
+  work on engines that honour it; this is the belt for the one that does not.
+- **The arrows also move the selection directly** (`applyIndex`), instead of waiting for a scroll
+  event to tell them where they landed - the card, the dots and the saved machine change on the tap.
+
+Verified in a real browser at 375px: the arrows land on 355 / 710 / 1065 / 1420 exactly in both
+directions, and the dots and the selected machine follow every step. **The settle re-snap itself
+could not be exercised there** - that container dispatches no scroll events for a programmatic
+scrollLeft (a fresh probe listener saw zero), so it is the one piece resting on reading rather than
+running.

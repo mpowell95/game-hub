@@ -751,12 +751,12 @@ export class SkeeballUI {
             <button type="button" class="sk-car-chev r" data-role="next" aria-label="${esc(t('next_machine'))}">&#8250;</button>` : ''}
           </div>
           ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
-          <!-- RESUME BELONGS TO ONE MACHINE. It is always in the DOM and shown/hidden by
-               _paintSetupActions, because the carousel changes the selected machine without
-               re-rendering this screen - and a Resume button that survives the swipe takes you
-               to a machine you are not looking at (Matt, 2026-08-24: "it's confusing being taken
-               to a different machine"). -->
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume" style="display:none"></button>
+          <!-- THERE IS NO RESUME BUTTON, and there must not be one again. Matt, 2026-09-03: "I
+               do not like the resume button. We don't need that at all. You never need to resume
+               a skeeball game. you either finish or quit." One button here, and it starts a rack.
+               A mid-rack snapshot is still WRITTEN and still restores itself silently on a
+               reload (see _mount) - that is the rack surviving an accidental refresh, which is
+               not a thing the player ever has to choose. -->
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/><path d="M12 6.5V18.6"/></svg>
             ${esc(t('howto'))}</button>
@@ -794,52 +794,100 @@ export class SkeeballUI {
     // pins the selection and the active dot. No-op with one machine (nothing scrolls).
     const car = this.root.querySelector('[data-role="car"]');
     if (car && multi) {
-      requestAnimationFrame(() => { car.scrollLeft = idx * car.clientWidth; });
+      // WHERE A SLIDE RESTS, MEASURED, NOT ASSUMED (2026-09-03). Matt: the > arrow "does not
+      // scroll enough" and a manual scroll "goes too much"; it "should snap them into place
+      // perfectly centered".
+      //
+      // Every index-to-scroll sum here used to be a multiple of car.clientWidth, and that is not
+      // the step. The row is a flex strip with a 12px gap and each slide carries a 1px border, so
+      // the distance from one slide's origin to the next is clientWidth + gap + borders. Measured
+      // live on a 375px phone: the slides sit at 0 / 355 / 710 / 1065 / 1420 against a clientWidth
+      // of 343. So scrollBy(clientWidth) asks for 343 when the next slide is 355 away - TWELVE
+      // PIXELS SHORT, every press. Desktop Chromium hides it, because CSS mandatory snap pulls
+      // that last 12px in by itself (measured: the arrows land dead on there); iOS Safari does not
+      // re-snap a programmatic smooth scroll, and that is the arrow that "does not scroll enough".
+      //
+      // So positions come from the slides themselves. offsetLeft is exact whatever the gap, the
+      // border or the padding do next, and the centring term covers a future slide narrower than
+      // the viewport (today they match, so it is zero).
+      const restFor = (i) => {
+        const el = car.children[i];
+        return el ? Math.max(0, el.offsetLeft - (car.clientWidth - el.offsetWidth) / 2) : 0;
+      };
+      const nearestIndex = () => {
+        let best = 0;
+        let bestD = Infinity;
+        for (let i = 0; i < BOARDS.length; i++) {
+          const d = Math.abs(car.scrollLeft - restFor(i));
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+      };
+      let settleT = 0;
+      let selfScroll = 0;
+      const goTo = (i) => {
+        selfScroll = Date.now();
+        car.scrollTo({ left: restFor(i), behavior: 'smooth' });
+        applyIndex(i);
+      };
+      requestAnimationFrame(() => { car.scrollLeft = restFor(idx); });
+      // WHAT IT MEANS TO BE ON SLIDE i. Called from the scroll settle AND straight from the
+      // arrows, because an arrow already knows where it is going and should not have to wait for
+      // a scroll event to find out: the card, the dots and the selection move on the tap.
+      const applyIndex = (i) => {
+        const b = BOARDS[i];
+        const bOpen = !!b && this._slideState(b, sk, devAll).open;
+        // Whatever just came to rest under the player's thumb is what gets drawn (and, if it
+        // is playable, warmed). This is the other half of painting one slide instead of five.
+        if (b) {
+          const slideImg = this._slideImgFor(b, sk, devAll);
+          if (slideImg) this._ensureMachineImg(b, slideImg);
+        }
+        if (bOpen && b.id !== this.settings.board) {
+          this.settings = saveSettings({ board: b.id });
+          // The selection moved, so Play has to move with it. This screen is not re-rendered on a
+          // swipe (the carousel owns its own scroll position), so repaint just the button.
+          this._paintSetupActions();
+          this._warmSelected();
+          // The neighbours moved with it: draw the two either side of where the player now is.
+          this._prewarmNeighbours();
+        }
+        this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
+      };
       let rafId = 0;
       car.addEventListener('scroll', () => {
+        // AND IT LANDS PERFECTLY CENTRED EVEN WHEN THE BROWSER LEAVES IT BETWEEN TWO SLIDES.
+        // CSS scroll-snap-type does the work on every engine that honours it; this is the belt for
+        // the one that does not, and for a flick whose momentum dies mid-slide. It fires only once
+        // scrolling has been quiet for 140ms AND the rest position is more than a pixel away, and
+        // never while we are the ones scrolling - so it cannot fight the browser's own snap or
+        // chase its own tail.
+        clearTimeout(settleT);
+        settleT = setTimeout(() => {
+          if (Date.now() - selfScroll < 700) return;
+          const i = nearestIndex();
+          if (Math.abs(car.scrollLeft - restFor(i)) > 1) goTo(i);
+        }, 140);
         if (rafId) return;
         rafId = requestAnimationFrame(() => {
           rafId = 0;
-          const w = car.clientWidth || 1;
-          const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
-          const b = BOARDS[i];
-          const bOpen = !!b && this._slideState(b, sk, devAll).open;
-          // Whatever just came to rest under the player's thumb is what gets drawn (and, if it
-          // is playable, warmed). This is the other half of painting one slide instead of five.
-          if (b) {
-            const slideImg = this._slideImgFor(b, sk, devAll);
-            if (slideImg) this._ensureMachineImg(b, slideImg);
-          }
-          if (bOpen && b.id !== this.settings.board) {
-            this.settings = saveSettings({ board: b.id });
-            // The selection moved, so Resume/Play have to move with it. This screen is not
-            // re-rendered on a swipe (the carousel owns its own scroll position), so repaint
-            // just the two buttons.
-            this._paintSetupActions();
-            this._warmSelected();
-            // The neighbours moved with it: draw the two either side of where the player now is.
-            this._prewarmNeighbours();
-          }
-          this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
+          applyIndex(nearestIndex());
         });
       }, { passive: true });
       const prev = this.root.querySelector('[data-role="prev"]');
       const next = this.root.querySelector('[data-role="next"]');
-      if (prev) prev.addEventListener('click', () => car.scrollBy({ left: -car.clientWidth, behavior: 'smooth' }));
-      if (next) next.addEventListener('click', () => car.scrollBy({ left: car.clientWidth, behavior: 'smooth' }));
+      // A step to the NEXT SLIDE'S OWN RESTING PLACE, never a relative nudge of one viewport.
+      if (prev) prev.addEventListener('click', () => goTo(Math.max(0, nearestIndex() - 1)));
+      if (next) next.addEventListener('click', () => goTo(Math.min(BOARDS.length - 1, nearestIndex() + 1)));
     }
 
     // Bound ONCE - neither button is ever recreated, only repainted, so there is nothing here to
     // rebind on a swipe. Both re-read the save at click time rather than closing over the one
     // this render saw.
-    this.root.querySelector('[data-role="resume"]').addEventListener('click', () => {
-      const snap = loadSave();
-      if (snap && snap.board === this.settings.board) this._startGame(snap);
-    });
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
-      // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
-      // is a resume convenience, not earned history; the Resume button sits directly above).
+      // Play DISCARDS a banked mid-rack snapshot for this machine. Since 2026-09-03 that is the
+      // only thing this button can mean - there is no Resume beside it to choose instead.
       // GUARD: only when the snapshot is THIS machine's. Pressing Play on a machine you have no
       // round going on must not throw away the round you have going somewhere else.
       const snap = loadSave();
@@ -849,23 +897,17 @@ export class SkeeballUI {
     this._paintSetupActions();
   }
 
-  /** Resume and Play, against the machine the carousel is currently showing. Resume appears only
-   *  on the machine its snapshot belongs to; every other machine offers a plain Play, because a
-   *  Resume that follows you across the gallery starts a game on a board you are not looking at.
+  /** The Play button, against the machine the carousel is currently showing. Kept as its own
+   *  call because the carousel changes the selected machine WITHOUT re-rendering this screen (it
+   *  owns its own scroll position), so the button is repainted rather than rebuilt.
+   *
+   *  It used to paint a Resume beside it and flip Play to "New game". Both are gone - Matt,
+   *  2026-09-03: "You never need to resume a skeeball game. you either finish or quit."
    *  Called on render and on every carousel settle. */
   _paintSetupActions() {
-    const resume = this.root.querySelector('[data-role="resume"]');
     const play = this.root.querySelector('[data-role="play"]');
-    if (!resume || !play) return;
-    const snap = loadSave();
-    const mine = !!snap && snap.board === this.settings.board;
-    resume.style.display = mine ? '' : 'none';
-    if (mine) {
-      resume.innerHTML = `${esc(t('resume'))} &middot; ${(snap.ballsUsed | 0) + 1}/${BALLS_PER_GAME}`;
-    }
-    play.textContent = t(mine ? 'new_game' : 'play');
-    play.classList.toggle('gh-btn--ghost', mine);
-    play.classList.toggle('gh-btn--primary', !mine);
+    if (!play) return;
+    play.textContent = t('play');
   }
 
   /** The machines whose picture is worth drawing right now: the selected one, plus any already
@@ -1078,7 +1120,11 @@ export class SkeeballUI {
     // GUARD: this DISCARDS the live rack, exactly as the gallery's New game does with a banked
     // one. Same rule in both places, so the word means one thing wherever a player meets it.
     el.querySelector('[data-role="new"]').addEventListener('click', () => { close(); clearSave(); this._startGame(null); });
-    // Leaving is lossless: the gallery's button will say Resume.
+    // GUARD: this Resume is UN-PAUSE - close the card and carry on with the ball you are
+    // holding. It is not the gallery Resume, which was removed 2026-09-03; do not remove this one
+    // with it.
+    // Leaving drops you on the gallery. The rack is still banked and still restores itself on a
+    // reload, but there is no longer a button offering it back to you.
     el.querySelector('[data-role="gallery"]').addEventListener('click', () => { close(); this._renderSetup(); });
     el.addEventListener('click', (e) => { if (e.target === el) close(); });
   }
