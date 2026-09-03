@@ -277,6 +277,9 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     captured: null,           // hole id once the mouth has the ball
     capturedFaceY: 0,
     touchedBoard: false,
+    // Has this throw already left its scuff on the back wall? One per throw - see the 'wall'
+    // event below.
+    wallMarked: false,
     // Armed by a hard flare contact (see FLARE_WILD). It only ARMS the return - a ball that goes
     // on to fall through a mouth keeps its score; see finishAt.
     flareWild: false,
@@ -312,6 +315,29 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
       if (vn > 0.5) { st.bounces += 1; st.events.push({ type: 'bounce', speed: vn }); }
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
+    }
+    // THE WALL SCUFF (ported from BRICK CITY, where it was built and tuned - see
+    // HANDOFF-CLASSIC-WALL-SCUFF.md). Matt: "It's impossible to tell where on the back wall a ball
+    // that's overthrown bounces off. Sometimes I'll throw it and it doesn't look like it even
+    // touched the back wall, but based off how it lands I know it must have."
+    //
+    // THE BACK WALL ONLY, AND ONLY THE FIRST TOUCH OF A THROW. The first version of this also
+    // marked the SIDE WALLS, on the measurement that one is hit four times as often. That was true
+    // and it was the wrong call - Matt, with a recording: "the way it's shown on the side walls is
+    // ridiculous". A side wall runs nearly edge-on to the player, so a mark lying on one is a
+    // sliver. One mark, on the one wall that squarely faces the player, for the one contact the
+    // player is asking about.
+    //
+    // The 0.4 m/s threshold on the event above was NOT the problem and is not copied here: on
+    // BRICK CITY, of 113 back-wall touches over 276 throws only ONE was under it (they land at a
+    // median 1.75 m/s). 0.1 catches that one and costs nothing.
+    //
+    // READ-ONLY: this sets a flag and pushes an event. It moves nothing, changes no material and
+    // touches no score.
+    if (part === 'backboard' && vn > 0.1 && !st.wallMarked) {
+      st.wallMarked = true;
+      const q = ball.position;
+      st.events.push({ type: 'wall', part, speed: +vn.toFixed(3), pos: { x: q.x, y: q.y, z: q.z } });
     }
     // Every real touch against every part, with where and how hard. vn > 0.05 drops the solver's
     // per-step resting contacts while keeping a soft side-wall graze; the cap stops a jammed ball
