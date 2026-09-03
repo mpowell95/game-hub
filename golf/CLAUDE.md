@@ -12,7 +12,9 @@ A 3D physics golf game (cannon-es + three.js), built to `GOLF-HANDOFF.md` across
 tapping a "stop the bar" meter mid-sweep; the ball's flight runs through a real rigid-body
 simulation, not a lookup table. Modified Stableford scoring. Solo — no opponent.
 
-Full build history, every physics-tuning number and why it landed there, every course-target
+The spec this game is built to is **`golf/docs/GOLF-HANDOFF.md`** (moved into the repo 2026-09-03;
+it and `golf/docs/GOLF-PART9.md` are the copies to read and update). Full build history, every
+physics-tuning number and why it landed there, every course-target
 move, and the Part-by-part reports live in **`golf/DECISIONS.md`** — this file is the standing
 reference for a session working in this folder, not a rebuild of that log. Read `DECISIONS.md`
 before changing anything the sections below flag as tuned/frozen/decided.
