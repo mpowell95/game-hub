@@ -43,21 +43,37 @@
 
 /* ---------------------------------------------------------------- play screen ---- */
 
+/* Part 9A: the play screen carries the safe-area padding (it is position: fixed, so padding on
+   the in-flow .gf-root could never reach it). Every band height below is measured BELOW this
+   padding. --gf-hub-pad is set by ui.js to 54px when mounted in the hub: the hub's floating back
+   pill sits at max(safe-area-top, 54px) (css/hub.css .hub-top-immersive), so matching that
+   formula here keeps the pill inside the top strip's reserved box on a no-notch device too. */
+.gf-root { --gf-hub-pad: 0px; }
 .gf-root .gf-play {
   position: fixed; inset: 0;
   display: flex; flex-direction: column;
   height: 100dvh;
+  padding-top: max(env(safe-area-inset-top, 0px), var(--gf-hub-pad, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
   background: #16324a;
   color: #ffffff;
   overflow: hidden;
   touch-action: manipulation;
 }
 
-/* 0-56: back affordance, hole/par/yardage, wind */
+/* 0-56: [104 px reserved for the hub's floating back pill] hole/par/yardage, wind */
 .gf-root .gf-top {
   flex: 0 0 56px; height: 56px;
-  padding: env(safe-area-inset-top, 0px) 12px 0;
+  padding: 0 12px 0 0;
   display: flex; align-items: center;
+  box-sizing: border-box;
+}
+/* The reserved 104 x 56 box. Empty when mounted in the hub (the hub draws its own pill there);
+   standalone, the game's own back button sits inside it. Nothing else of the game draws here. */
+.gf-root .gf-top__slot {
+  flex: 0 0 104px; width: 104px; height: 56px;
+  display: flex; align-items: center; justify-content: flex-start; padding-left: 10px;
   box-sizing: border-box;
 }
 .gf-root .gf-back {
@@ -66,7 +82,7 @@
   background: rgba(0, 0, 0, .3); border-radius: 50%; border: none; color: #fff;
   touch-action: manipulation;
 }
-.gf-root .gf-top-info { flex: 1 1 auto; text-align: center; font-size: 14px; font-weight: 700; }
+.gf-root .gf-top-info { flex: 1 1 auto; min-width: 0; text-align: center; font-size: 14px; font-weight: 700; }
 .gf-root .gf-wind {
   flex: 0 0 auto; display: flex; align-items: center; gap: 4px; font-size: 12px; min-width: 44px;
   justify-content: flex-end;
@@ -102,7 +118,8 @@
 
 /* 100-590: the canvas + overlays */
 .gf-root .gf-view { flex: 1 1 auto; position: relative; touch-action: none; overflow: hidden; }
-.gf-root .gf-view canvas { display: block; width: 100%; height: 100%; }
+/* The 3D canvas only - the minimap is also a <canvas> inside .gf-view and keeps its own size. */
+.gf-root .gf-view canvas:not(.gf-map) { display: block; width: 100%; height: 100%; }
 .gf-root .gf-dist {
   position: absolute; top: 12px; left: 12px;
   font-size: 12px; font-weight: 700; color: #fff;
@@ -167,10 +184,22 @@
 /* 640-773: three stop-the-bar meters */
 .gf-root .gf-meters {
   flex: 0 0 133px; height: 133px;
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 16px 8px;   /* safe-area bottom is on .gf-play since Part 9A */
   box-sizing: border-box;
   display: flex; flex-direction: column; justify-content: center; gap: 10px;
 }
+
+/* Part 9A: the overhead map inset. Fixed size, absolutely positioned inside .gf-view so it can
+   never shift a band; visibility (not display) toggles it during flight so nothing reflows. */
+.gf-root .gf-map {
+  position: absolute; top: 8px; right: 8px;
+  width: 116px; height: 156px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .55);
+  touch-action: none;
+  display: block;
+}
+.gf-root .gf-map[data-show="false"] { visibility: hidden; }
 .gf-root .gf-meter { position: relative; height: 32px; opacity: 1; }
 .gf-root .gf-meter[data-state="pending"] { opacity: .35; }
 .gf-root .gf-meter__track {

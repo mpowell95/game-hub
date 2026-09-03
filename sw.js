@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v579';
+const CACHE = 'game-hub-v583';
 
 const ASSETS = [
   './',
@@ -306,6 +306,7 @@ const ASSETS = [
   './golf/js/clubs.js',
   './golf/js/camera.js',
   './golf/js/render.js',
+  './golf/js/minimap.js',
   './golf/js/strings.js',
   './golf/js/vendor/cannon-es.js',
   './golf/js/vendor/three.module.min.js',
@@ -656,16 +657,17 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': '676f050f01',
-  './golf/js/ui.js': 'd50283dd98',
+  './golf/css/golf.css': '1a46954e1f',
+  './golf/js/ui.js': '011524a423',
   './golf/js/game.js': 'b5a99fbe20',
   './golf/js/physics.js': 'f59a199b23',
   './golf/js/flight.js': '2584619ff0',
-  './golf/js/terrain.js': 'f65d2184e0',
+  './golf/js/terrain.js': 'aa4ea40989',
   './golf/js/meters.js': '9df658d215',
   './golf/js/clubs.js': 'a93c143ae1',
-  './golf/js/camera.js': '854a669893',
-  './golf/js/render.js': '0ea071c07c',
+  './golf/js/camera.js': '4ab1e5dd98',
+  './golf/js/render.js': '510738bff7',
+  './golf/js/minimap.js': '7bb78db7b3',
   './golf/js/strings.js': 'cb9bc379f9',
   './golf/js/vendor/cannon-es.js': 'f0700cbd3a',
   './golf/js/vendor/three.module.min.js': '86bcee248b',

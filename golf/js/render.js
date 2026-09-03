@@ -7,14 +7,22 @@
 // render.js teardown.
 
 import * as THREE from './vendor/three.module.min.js';
-import { S, heightAt, buildTrees } from './terrain.js';
-import { onThemeChange } from '../../js/theme.js';
+import { S, heightAt, buildTrees, makeValueNoise } from './terrain.js';
 
 const BALL_R = 0.02134;
 const CUP_R = 0.054;
 const TRAIL_MAX = 45;
 
-const COL = { 0: '#5e7a45', 1: '#4f7a3a', 2: '#66a83f', 3: '#79b34a', 4: '#8fcf5a', 5: '#e6d3a0', 6: '#3d7fc6', 7: '#66a83f' };
+// Surface colours, by terrain.js's S code. Exported for minimap.js (Part 9A) so the map and the
+// 3D ground can never disagree about what a surface looks like. ROUGH darkened to #3f6a2e in
+// 9A so the fairway reads as the lighter corridor it is.
+export const COL = { 0: '#5e7a45', 1: '#3f6a2e', 2: '#66a83f', 3: '#79b34a', 4: '#8fcf5a', 5: '#e6d3a0', 6: '#3d7fc6', 7: '#66a83f' };
+
+// Sky (Part 9A): always daytime. Dark mode governs the HUD bands only - the course itself never
+// goes night-blue, which is what made hole 1 read as "black sky over green paint" on a phone.
+const SKY_TOP = '#7fb8ff';
+const SKY_HORIZON = '#dceeff';
+const SUN_DIR = new THREE.Vector3(-0.4, 1, 0.3).normalize();
 
 // Same pattern as skeeball/js/machines/*/render.js: memoised once per page, never per Renderer,
 // so probing does not itself leak a WebGL context.
@@ -35,10 +43,6 @@ function isSoftGL() {
   } catch { /* nothing to give back */ }
   SOFT_GL = soft;
   return soft;
-}
-
-function isDarkMode() {
-  return typeof document !== 'undefined' && document.documentElement.classList.contains('gh-dark');
 }
 
 export class Renderer {
@@ -63,26 +67,28 @@ export class Renderer {
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
 
+    // Part 9A: distance reads through fog to the horizon colour; the sky sphere's own shader has
+    // no fog chunk, so it is untouched.
+    this.scene.fog = new THREE.Fog(0xdceeff, 180, 700);
+
     this._buildSky();
+    this._buildSun();
     this._buildLights();
     this._buildTerrain();
     this._buildTrees();
     this._buildBall();
     this._buildTrail();
     this._buildFlag();
-
-    this._offTheme = onThemeChange(() => this._updateSkyColors());
   }
 
   _track(x) { this._disposables.push(x); return x; }
 
   _buildSky() {
     const geo = this._track(new THREE.SphereGeometry(900, 24, 16));
-    const dark = isDarkMode();
     const mat = this._track(new THREE.ShaderMaterial({
       uniforms: {
-        top: { value: new THREE.Color(dark ? '#0b1a33' : '#9fd0ff') },
-        bottom: { value: new THREE.Color(dark ? '#243b66' : '#e9f3ff') },
+        top: { value: new THREE.Color(SKY_TOP) },
+        bottom: { value: new THREE.Color(SKY_HORIZON) },
       },
       vertexShader: `
         varying vec3 vPos;
@@ -108,17 +114,37 @@ export class Renderer {
     this.scene.add(this.sky);
   }
 
-  _updateSkyColors() {
-    const dark = isDarkMode();
-    this.sky.material.uniforms.top.value.set(dark ? '#0b1a33' : '#9fd0ff');
-    this.sky.material.uniforms.bottom.value.set(dark ? '#243b66' : '#e9f3ff');
+  // A soft sun disc: white radial-gradient sprite, radius 6 m at 400 m along the light
+  // direction, additive so it glows into the sky rather than sitting on it. Sprites are always
+  // camera-facing, so the disc reads round from every pose.
+  _buildSun() {
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    const tex = this._track(new THREE.CanvasTexture(c));
+    const mat = this._track(new THREE.SpriteMaterial({
+      map: tex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, fog: false,
+    }));
+    const sun = new THREE.Sprite(mat);
+    sun.position.copy(SUN_DIR).multiplyScalar(400);
+    sun.scale.set(12, 12, 1);   // 6 m radius
+    sun.renderOrder = -1;
+    this.scene.add(sun);
+    this.sunDisc = sun;
   }
 
   _buildLights() {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x556644, 0.55);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x556644, 0.7);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
-    const d = new THREE.Vector3(-0.4, 1, 0.3).normalize().multiplyScalar(300);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.3);
+    const d = SUN_DIR.clone().multiplyScalar(300);
     dir.position.copy(d);
     dir.target.position.set(0, 0, 0);
     dir.castShadow = true;
@@ -143,6 +169,10 @@ export class Renderer {
     const colors = new Float32Array(pos.count * 3);
     const waterIdx = [];
     const tmp = new THREE.Color();
+    // Part 9A: a low-frequency brightness noise (+-4%, 9 m wavelength, seeded) on rough and
+    // fairway so the ground stops reading as flat paint. Seed offset 13 keeps it independent of
+    // the height noise (seed, seed+1) and the tree draws (seed+7, seed+11).
+    const groundNoise = makeValueNoise(t.def.seed + 13, 9);
     for (let j = 0; j < t.nz; j++) {
       for (let i = 0; i < t.nx; i++) {
         const idx = i + j * t.nx;
@@ -152,7 +182,10 @@ export class Renderer {
         if (s === S.GREEN) {
           tmp.multiplyScalar((Math.floor(j / 2) % 2 === 0) ? 1.06 : 0.94);
         } else if (s === S.FAIRWAY) {
-          tmp.multiplyScalar((Math.floor((i + j) / 4) % 2 === 0) ? 1.03 : 0.97);
+          tmp.multiplyScalar((Math.floor((i + j) / 4) % 2 === 0) ? 1.06 : 0.94);
+          tmp.multiplyScalar(1 + 0.04 * groundNoise(t.x0 + i, t.z0 + j));
+        } else if (s === S.ROUGH) {
+          tmp.multiplyScalar(1 + 0.04 * groundNoise(t.x0 + i, t.z0 + j));
         }
         colors[idx * 3] = tmp.r; colors[idx * 3 + 1] = tmp.g; colors[idx * 3 + 2] = tmp.b;
         if (s === S.WATER) waterIdx.push(idx);
@@ -202,9 +235,11 @@ export class Renderer {
   _buildTrees() {
     const trees = buildTrees(this.terrain);
     if (!trees.length) return;
-    const coneGeo = new THREE.ConeGeometry(2.2, 6, 6);
+    // Part 9A: bigger trees (cone r 3.2 x h 9 on a 0.35 x 2.2 trunk, scale 0.9-1.4) so the
+    // fairway belt terrain.js now plants reads as a tree line from the tee, not shrubs.
+    const coneGeo = new THREE.ConeGeometry(3.2, 9, 6);
     const coneMat = new THREE.MeshLambertMaterial({ color: '#2f6b32' });
-    const trunkGeo = new THREE.CylinderGeometry(0.25, 0.3, 1.6, 5);
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 5);
     const trunkMat = new THREE.MeshLambertMaterial({ color: '#5c4326' });
     const coneMesh = new THREE.InstancedMesh(coneGeo, coneMat, trees.length);
     const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
@@ -214,9 +249,9 @@ export class Renderer {
     const q = new THREE.Quaternion();
     trees.forEach((tr, idx) => {
       const s = tr.scale;
-      m.compose(new THREE.Vector3(tr.x, tr.y + 0.8 * s, tr.z), q, new THREE.Vector3(s, s, s));
+      m.compose(new THREE.Vector3(tr.x, tr.y + 1.1 * s, tr.z), q, new THREE.Vector3(s, s, s));
       trunkMesh.setMatrixAt(idx, m);
-      m.compose(new THREE.Vector3(tr.x, tr.y + 1.6 * s + 3 * s, tr.z), q, new THREE.Vector3(s, s, s));
+      m.compose(new THREE.Vector3(tr.x, tr.y + 2.2 * s + 4.5 * s, tr.z), q, new THREE.Vector3(s, s, s));
       coneMesh.setMatrixAt(idx, m);
     });
     this.scene.add(trunkMesh, coneMesh);
@@ -295,29 +330,47 @@ export class Renderer {
     this._track(cupGeo); this._track(cupMat);
   }
 
-  // Dashed target line + landing ring for the address view. from: {x,z}, aimDeg: degrees
-  // (0 = +z), distanceM: predicted carry along that bearing. Pass null to hide both.
+  // Aim line + landing ring for the address view (Part 9A). from: {x,z}, aimDeg: degrees
+  // (0 = +z), distanceM: predicted carry along that bearing (the ring sits there); the line runs
+  // 200 m regardless. Pass null to hide both.
+  //
+  // The line is a RIBBON quad strip hugging the terrain, not a THREE.Line: WebGL ignores
+  // lineWidth on every mobile GPU, so a Line is always one hairline pixel. A ribbon has real
+  // width in the world (0.14 m, ~2 px where it matters, near the ball) and thins with distance,
+  // which is what the eye expects of a line on the ground.
   setAimTarget(from, aimDeg, distanceM) {
     this._clearAimTarget();
     if (from == null) return;
     const rad = aimDeg * Math.PI / 180;
     const dirX = Math.sin(rad), dirZ = Math.cos(rad);
-    const toX = from.x + dirX * distanceM, toZ = from.z + dirZ * distanceM;
-    const y0 = heightAt(this.terrain, from.x, from.z) + 0.05;
-    const y1 = heightAt(this.terrain, toX, toZ) + 0.05;
-
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(from.x, y0, from.z), new THREE.Vector3(toX, y1, toZ),
-    ]);
-    const lineMat = new THREE.LineDashedMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, dashSize: 1, gapSize: 0.6 });
-    const line = new THREE.Line(lineGeo, lineMat);
-    line.computeLineDistances();
+    const LINE_M = 200, STEP = 2, HALF_W = 0.07, LIFT = 0.06;
+    const nx = -dirZ, nz = dirX;   // lateral unit
+    const positions = [];
+    const indices = [];
+    const n = Math.floor(LINE_M / STEP) + 1;
+    for (let k = 0; k < n; k++) {
+      const d = k * STEP;
+      const px = from.x + dirX * d, pz = from.z + dirZ * d;
+      const py = heightAt(this.terrain, px, pz) + LIFT;
+      positions.push(px + nx * HALF_W, py, pz + nz * HALF_W, px - nx * HALF_W, py, pz - nz * HALF_W);
+      if (k > 0) {
+        const b = k * 2;
+        indices.push(b - 2, b - 1, b, b - 1, b + 1, b);
+      }
+    }
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    lineGeo.setIndex(indices);
+    const lineMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+    const line = new THREE.Mesh(lineGeo, lineMat);
     this.scene.add(line);
     this._aimLine = { obj: line, geo: lineGeo, mat: lineMat };
 
-    const ringGeo = new THREE.RingGeometry(1.5, 1.9, 32);
+    const toX = from.x + dirX * distanceM, toZ = from.z + dirZ * distanceM;
+    const y1 = heightAt(this.terrain, toX, toZ) + 0.05;
+    const ringGeo = new THREE.RingGeometry(2.0, 2.6, 40);
     ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+    const ringMat = new THREE.MeshBasicMaterial({ color: '#ffce3a', transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.set(toX, y1 + 0.01, toZ);
     this.scene.add(ring);
@@ -359,7 +412,6 @@ export class Renderer {
   // Frees every geometry/material/texture this Renderer created, then hands back the WebGL
   // context. Does NOT cancel a rAF handle or remove the canvas - the caller owns both.
   dispose() {
-    if (this._offTheme) { this._offTheme(); this._offTheme = null; }
     this._clearAimTarget();
     for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }
     this._disposables.length = 0;
