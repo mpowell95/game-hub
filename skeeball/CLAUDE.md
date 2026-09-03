@@ -2055,3 +2055,61 @@ directions, and the dots and the selected machine follow every step. **The settl
 could not be exercised there** - that container dispatches no scroll events for a programmatic
 scrollLeft (a fresh probe listener saw zero), so it is the one piece resting on reading rather than
 running.
+
+## The rack ends when you leave, and the wall scuff got quiet (2026-09-03, second pass)
+
+**There is no mid-rack snapshot.** Matt, after the Resume button came off: *"If I leave a game mid
+game, go back to the hub or leave the app or whatever, the next time i open skeeball, it auto
+resumes the game... the game should be terminated. Make sure all the stats are counted (points
+scored, games played, 100s, etc). And clicking into skeeball should just land you on the machine
+selection page."*
+
+- `loadSave`/`writeSave` are gone. Nothing is banked on a settled ball and nothing is restored on
+  mount - opening Skeeball always lands on the machines.
+- **A rack you walk out of is RECORDED, then over.** `_abandonRack()` is `_rackOver`'s recording
+  half with none of its theatre (no card, no fireworks, no count-up - nobody is looking): the same
+  `recordSkeeball` call on the same `game.result()` payload, so the score, the play, the 100s and
+  any earned unlock all land exactly as a finished rack's do. It runs from the pause card's **Quit**,
+  from the pause card's **New game**, and from **`destroy()`** (the hub's back button, a swipe to
+  another game, an unmount).
+- **`this.recorded` is the one-shot both paths share.** Every write in `js/game-stats.js` is
+  additive, so recording twice inflates the play count silently rather than failing loudly.
+- **A rack with nothing thrown records nothing.** Opening a machine and changing your mind is not a
+  game, and it must not put an empty 0 in anybody's history.
+- `clearSave()` is KEPT as a sweep: it still runs at the end of every rack, so a snapshot already
+  sitting on a device from the old build is cleared the first time that player finishes or leaves
+  one. The key itself is never repurposed (THE LAW rule 5).
+- `isInProgress()` still returns false, for a new reason: leaving IS the end of the rack and it
+  costs the player nothing, so there is nothing to confirm.
+
+**The wall mark is a scuff now, on the back wall only.** The first version was wrong three ways and
+Matt named all three: *"a big, solid, neon ring that's super distracting... it's gotta be tampered
+down significantly... maybe it's just a semi dark scuff mark that fades away after a couple
+seconds"*, *"We also DO NOT need this on the side walls"*, and *"to have the ring appear face on to
+the user as a perfect circle when it hits a wall that's almost perpendicular to the player is
+crazy. That's not the norm for stuff like this."*
+
+He is right about the norm, and it has a name: a **decal** - a texture projected onto the surface,
+which foreshortens with it (three.js ships `DecalGeometry` for exactly this; these walls are flat,
+so a quad in the wall's own plane IS the decal, at one draw call). The standard material recipe
+comes with it: `transparent`, `depthWrite: false`, and `polygonOffset` rather than shoving the mesh
+bodily forward off the wall.
+
+| | before | after |
+|---|---|---|
+| shape | two rings, gold on dark, billboarded to the camera | one soft radial smudge lying IN the wall |
+| colour | `#ffd977` at 0.95 opacity | near-black at 0.6 falling to 0 |
+| size | 11.6-23 cm, growing 55% as it faded | 11.5-17 cm, no growth |
+| life | 0.55s | 2.0s, full for the first third |
+| surfaces | back wall AND both side rails | **back wall only** |
+| per throw | up to 12 | **the first contact, once** |
+
+Measured on the rendered frame: a scuff darkens the wall by up to ~50 levels at its core over a few
+hundred pixels, and averages 6-7% across a 29x29 box - present when you look for it, gone when you
+are not.
+
+**The lesson worth keeping is the process one.** Matt: *"Isn't there a way you can look online for
+the norms or for guides on how this kind of stuff is coded / implemented before you just add stuff?
+That would save us a TON of time."* The billboarded ring was invented rather than looked up, and one
+search for how impact decals are done would have produced the surface-projected quad, the
+polygonOffset recipe and the "subtle and short-lived" convention before any of it was written.
