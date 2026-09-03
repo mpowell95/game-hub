@@ -1,4 +1,4 @@
-# Pixel Pro Golf — reference spec for an exact clone
+# Pixel Pro Golf — reference spec, and the build spec for our version
 
 **Purpose.** This document is the complete written record of a commercial mobile golf game
 ("Pixel Pro Golf"), reconstructed frame by frame from two screen recordings. The session that
@@ -569,8 +569,8 @@ There is **no rotation and no 3-D at any point**. The view is pure top-down, nor
 
 ## 10.1 Clubs seen
 
-`driver`, `9 iron`, `6 iron`, `7 iron`, `putter`. The full bag contents were never shown.
-[UNKNOWN — see §14]
+In the first two clips: `driver`, `9 iron`, `6 iron`, `7 iron`, `putter`. **Superseded** — the full
+list across all five clips is in 17.2, and **the bag to build is the approved ladder in 21.3.**
 
 ## 10.2 Auto-selection
 
@@ -625,7 +625,8 @@ still never entered in any clip.
 - Fairway is mown in **vertical stripes** of two alternating greens; rough is a darker, flatter green
   with sparse tuft glyphs; the cart path is a dark grey-green ribbon.
 
-Holes 2 and 3 exist (par 3 and par 5 per the scorecard) but were never played. [UNKNOWN]
+**Superseded** — holes 2 and 3 were played in the later clips and are documented in 17.1: hole 2 is
+a 181.0 yd par 3 with an island green, hole 3 a 608.6 yd par 5.
 
 ---
 
@@ -661,14 +662,15 @@ On holing out:
 - White scoreboard row: `1` `You`, right-aligned `-1`, with `(1,0)` in small grey beneath it.
 - The **full-size player avatar** stands to the left, overlapping the card.
 
-The meaning of `(1,0)` is **not** explained anywhere on screen. Most likely holes played and
-something else. [UNKNOWN]
+`(1,0)` is never explained on screen and stayed ambiguous to the end. **It is CUT** — it lived in
+the opponent scoreboard, and there are no opponents. Do not implement it.
 
 ## 12.4 Progression systems glimpsed but never used
 
 `WORLD RANKING 20,073`, `Winnings $0`, `update equipment`, `Ranking points: 2,700`, `Prize: $1,000`,
-`packs`, `VIP`, `shop`, `merch`, `tournaments`, `online`, `iMessage`, `Game Center`. None of these
-screens were opened. [UNKNOWN]
+`packs`, `VIP`, `shop`, `merch`, `tournaments`, `online`, `iMessage`, `Game Center`.
+**Partly superseded** — the character/shop editor and the full post-round economy were captured in
+the later clips; see 17.5 and 17.8. The rest were never opened, and are cut by decision anyway.
 
 ---
 
@@ -686,8 +688,8 @@ Documented so the implementer does not faithfully reproduce a defect.
 5. **The hub yardage is unlabelled**, so the number reads as stale or wrong. Label it
    (`last shot: 251.6 yds`).
 6. **Low-contrast grey-on-grey text** — `Current tour`, `(0,0)`, the `practice` mode line.
-7. **A ~7.5 s ball flight with no skip.** Add tap-to-speed-up or shorten the flight; over nine holes
-   this is minutes of watching a dot.
+7. **A ~7.5 s ball flight with no skip.** **DECIDED:** flight time is `0.9s + distance/60` (a 215 yd
+   drive ~4.5 s, a wedge ~1.7 s) **plus tap to skip.** See section 20.
 8. ~~**No landing marker.**~~ **STRUCK - this was my error, not the game's.** The aim line's five
    red dots ARE the landing markers, calibrated to the power meter. See section 21.1.
 9. **Tap-only aiming.** A drag on the map would be faster and more mobile-native.
@@ -704,18 +706,21 @@ section 0, have been struck from this list.
 **Still genuinely unknown, and the implementer must decide:**
 
 - Per-tap aim increment (degrees).
-- The full club list and each club's carry distance. The measured figures in 17.2 are individual
-  swing distances, not club maximums - only the driver's ~287 yds full-power carry is usable.
 - The over-100% **power vs precision** toggle: its visual state, its tap target, its effect.
 - Wind: units, arrow semantics, strength of effect. Wind read `0` in all five clips.
 - ~~Hazard rules~~ — **RESOLVED.** The prompt is observed and transcribed, and Matt has specified
   the drop line, the water rule, the per-lie power caps and the tree-collision model. See 21.2.
 - The yards-to-feet switch threshold (see section 12 for the recommended surface-based rule).
 - Score banners other than `Birdie!` and `New course best`.
-- The club shop's contents - ours to design (17.8).
-- The mishit penalty - designed by us in 17.9, never observed.
 - Holes 4-9 - out of scope for now, ours to design later.
 - Whether the device scale factor is genuinely 3x (assumed for the pt conversions in section 3.1).
+
+**Decided, so no longer open:**
+
+- The club ladder — approved, 21.3.
+- The mishit penalty — designed, 17.9.
+- Lies, drops, water and tree collisions — specified, 21.2.
+- Flight time, putting break, skill/shop economy — see the decisions table in section 0.
 
 **Resolved since v1:**
 
@@ -776,33 +781,75 @@ between a slow, relaxed frame and one twitchy moment of input is the whole rhyth
 
 ---
 
-# 16. Implementation checklist
+# 16. Build order
 
-Ordered so that each step is playable before the next begins.
+**This is a REWRITE of an existing game, not a new one.** Read section 19 first for what already
+exists and must be kept. Everything under `golf/` that renders or simulates is being replaced;
+the hub entry, the stats plumbing and the leaderboard row are being kept.
 
-1. Portrait canvas, 402 × 874 pt logical, top-down scrolling tilemap, north-up, no rotation.
-2. Hole data: fairway polygon, rough, green, bunkers, water, trees, tee position, pin position.
-3. Ball as one white pixel + offset dark shadow pixel. Height drives the offset. Nothing else.
-4. HUD at the measured geometry in §3.2. Corner-anchored, floating over the art.
-5. Aim: `<` / `>` buttons, red square marker line, red star target.
-6. Club tile with club-head sprites, `^` / `v`, and auto-selection by lie and distance.
-7. **Power ring: ping-pong oscillation, 0.8 s bottom-to-top, ~1.4 s full cycle.**
-8. **Accuracy bar: ping-pong slider, red/orange/green/orange/red, stop in the green for straight.**
-9. **Three-tap input, sub-second total, button darkens on press, input locked ~1.4 s after the shot.**
-10. Ball flight with camera tracking; landing, roll, rest.
-11. Putting on the same controls, static camera, ~2.5 s decelerating roll, feet not yards.
-12. Result banner: `Birdie!`, rotating sunburst, ~2.5 s, self-clearing.
-13. Cross-fade (~0.5 s) to the scorecard with the course dimming behind it.
-14. Scorecard: nine-column grid, par row, score row, green cell for under par, avatar overlapping.
-15. Pre-shot free scroll with the lie tile and yardage fading to ~40 %.
-16. Only then: menus, course card, tutorials, progression.
+## Phase 0 — before writing any code
+
+1. **Verify there is no player golf data.** Read `players/*/stats/games/golf` from Firebase (see
+   `backups/rtdb-backup.mjs`) and check `gamehub.stats` on a real device. Expected: empty, because
+   Harbor Links only ever ran in testing mode. **If anything is found, stop and tell Matt.**
+2. **Take a backup** (`node backups/rtdb-backup.mjs`) regardless of what step 1 finds.
+
+## Phase 1 — clear the ground
+
+3. Delete the 3D stack: `render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`,
+   `flight.js`, `meters.js`, `courses/`, and `js/vendor/` (three.js + cannon-es, ~13,000 lines).
+4. Delete `DECISIONS.md`, `docs/GOLF-HANDOFF.md`, `docs/GOLF-PART9.md`. They describe the old game
+   and will mislead the next session if left in place.
+5. Remove every trace of **Harbor Links** from the product — course, folder, strings, My Stats row,
+   admin per-course testing entry. **Do not delete the stored stats keys** (see READ THIS FIRST).
+
+## Phase 2 — the core loop, playable as early as possible
+
+6. Portrait canvas, top-down scrolling tilemap, north-up, no rotation.
+7. Hole data for Pine Valley 1-3 (17.1): fairway, rough, green, bunkers, water, trees, tee, pin.
+8. Ball as one white pixel plus an offset dark shadow pixel. Height drives the offset. Nothing else.
+9. HUD at the measured geometry in 3.2, corner-anchored, floating over the art.
+10. Aim: `<` / `>`, and **the five-dot power ladder on the aim line** (21.1) — 25/50/75/100 % plus
+    the red risk dot past 100.
+11. Club tile with club-head sprites, `^` / `v`, auto-selection by lie and distance, using the
+    approved ladder (21.3).
+12. **Power ring: ping-pong oscillation, 0.8 s bottom to top, ~1.4 s full cycle.**
+13. **Accuracy bar: ping-pong slider, red/orange/green/orange/red, stop in the green for straight.**
+14. **Three-tap input, sub-second total, button darkens on press, input locked ~1.4 s after the shot.**
+15. Ball flight (`0.9s + distance/60`, tap to skip), camera tracking, landing, roll, rest.
+16. Lies: power caps **and** the visibly narrowed accuracy band (21.2), with the two-line readout.
+17. Hazards: the `In the trees` prompt, drop-along-the-line for +1, water dropped at the edge,
+    and tree trunks/canopies that actually block the ball (21.2).
+18. Putting on the same controls, static camera, ~2.5 s decelerating roll, feet not yards, gentle
+    break from the slope grid.
+19. Result banner, rotating sunburst, ~2.5 s, self-clearing; cross-fade (~0.5 s) to the scorecard.
+20. Scorecard: nine-column grid, par row, score row, green cell for under par, avatar overlapping.
+21. Pre-shot free scroll with the lie tile and yardage fading to ~40 %.
+
+## Phase 3 — wiring and release
+
+22. **Stats:** keep writing `points` (Stableford is a pure function of hole score and par, 19.2),
+    write the new course's `bestRoundByCourse` key, leave harbor's keys untouched.
+23. **Leaderboard:** switch `golfPointsAt` to best round **and fix the sort direction in the same
+    commit** (19.3). Add a test that fails if the sort is wrong.
+24. **`golf/js/strings.js`:** rewrite EN **and ES**, every visible string through `t()` at render time.
+25. **`golf/CLAUDE.md`:** rewrite from scratch for the new game.
+26. **`sw.js`:** drop the deleted files from `ASSETS`, add the new ones, bump `CACHE` past
+    `origin/main`, run `node validate-sw-assets.mjs`.
+27. **Tests:** `node test-game-conventions.mjs`, then `node test-visual.mjs golf`. Fix failures in
+    the game; do not add golf to `KNOWN_GAPS`.
+28. **Deploy means LIVE on `main`** — merge, confirm the pages build succeeded, then say so.
+
+## Deliberately NOT in scope
+
+Skill points, the club shop economy, prize money, holes 4-9. Left empty and TBD by decision until
+the gameplay is right.
 
 ---
 
-*Compiled from `setup-screens.mp4` and `hole-1.mp4` via frame extraction and pixel measurement.
-Measured values are marked [MEASURED]; inferences and gaps are marked and listed in §14. Where this
-document says a value is unknown, it is genuinely unknown — please decide it deliberately rather
-than assuming it was omitted by accident.*
+*(Sections 17 onwards were added after later clips and later decisions. Where an earlier section
+disagrees with a later one, the later one wins — the conflicts found on review are now marked
+"superseded" in place.)*
 
 ---
 
@@ -1077,16 +1124,19 @@ The reference was measured for *feel*, not for coefficients. The implementer nee
 so here is a starting model. **All of this is ours, not measured from the reference**, except the
 two anchors noted.
 
-- **Full-power driver carry ≈ 287 yds** [MEASURED anchor]. Design the rest of the bag beneath it.
-- **Distance = clubCarry × (power ÷ 100)**, with power over 100 adding up to +8 % and multiplying
-  the mishit angle by 1.5 (§17.9).
-- **Flight time**: the reference's drive took ≈ 7.5 s [MEASURED], which is slow. Recommend scaling
-  time with distance — roughly `0.9 s + distance / 60` seconds — giving a driver ≈ 5.7 s and a
-  wedge ≈ 2.5 s, then **let a tap skip to the landing** (flaw #7).
+- **Club distances: use the APPROVED ladder in 21.3** — stock driver **215 yds**, not the
+  reference's measured 287. That 287 was recorded with an unknown, possibly upgraded bag and is
+  deliberately not the stock number. (An earlier draft of this section told the implementer to
+  design the bag beneath 287; that is superseded.)
+- **Distance = clubCarry × (power ÷ 100) × lie power cap** (21.2), with power over 100 adding up to
+  +8 % and multiplying the mishit angle by 1.5 (§17.9).
+- **Flight time — DECIDED:** `0.9 s + distance / 60`. Against the approved ladder that is a **215 yd
+  drive in ~4.5 s** and a **50 yd wedge in ~1.7 s**. The reference's 7.5 s drive is too slow.
+  **A tap skips to the landing.**
 - **Roll** after landing: fairway ≈ 8 % of carry, green ≈ 2 %, rough ≈ 3 %, bunker ≈ 0.
 - **Putting**: distance = `power × maxPuttFeet`, decelerating over ≈ 2.5 s [MEASURED reference
-  roll]. Whether the green's slope grid actually breaks the putt was never observable — recommend
-  implementing a gentle break, since the grid is drawn and players will expect it to mean something.
+  roll]. Whether the green's slope grid breaks the putt was never observable, but **DECIDED: implement
+  a gentle break** driven by the grid, since it is drawn and players will expect it to mean something.
 - **Ball height** for the shadow offset: a simple parabola over the flight, peak offset scaled by
   club loft. Nothing more elaborate is needed — the shadow gap is the only height cue.
 
