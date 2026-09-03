@@ -891,15 +891,15 @@ the hub entry, the stats plumbing and the leaderboard row are being kept.
      **Leave this file alone** — it is a test fixture, not a product reference.
    **Do not delete the stored stats keys** (see READ THIS FIRST).
 
-6. **Unlock the course, or the game ships padlocked.** `js/admin-config.js:200` —
-   `resolveCourseTesting` returns **testing (locked) when no override exists**, so every course
-   defaults to locked, and `golf/js/ui.js:135-141` hides the tile behind a padlock for any
-   non-dev profile. **`js/admin-ui.js` contains no golf or per-course section at all**, so there is
-   no in-app way to unlock it. Without a fix here the family taps the tile and cannot play.
-   **This needs Matt's decision** — flip the default to open for golf, add a per-course section to
-   the admin page, or write a one-off override. **Do not ship until it is resolved.**
-   (An earlier draft of this spec told the implementer to *remove* an "admin per-course testing
-   entry". No such entry exists.)
+6. **The course stays LOCKED, and that is deliberate.** `js/admin-config.js:200` —
+   `resolveCourseTesting` returns testing (locked) when no override exists, and
+   `golf/js/ui.js:135-141` hides the tile behind a padlock for any non-dev profile.
+   **DECIDED (Matt, 2026-09-03): keep it.** *"The default should be testing mode. So only I can see
+   or play it."* During the rewrite and through playtesting, only Matt's dev profile can open golf.
+   Do not change the default, and do not add an unlock.
+   **This becomes a RELEASE-TIME step, not a build step.** When the game is ready for the family,
+   golf needs unlocking — and `js/admin-ui.js` has no per-course section, so at that point it takes
+   either a code change or a new admin control. Flagged here so release day is not a surprise.
 
 7. **Decide whether golf stays visible during the rewrite.** The hub tile is **not** `devOnly`
    (`js/hub.js:385-402`), so golf is live to every player right now. Mid-rewrite `main` would carry a
