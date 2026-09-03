@@ -2457,11 +2457,18 @@ export class Renderer {
     const c = this._canvas(N, N);
     const x = c.getContext('2d');
     // Soft in the middle, nothing at the edge - the shape of a smudge rather than a stamp.
+    // PALE, NOT DARK, and that is the whole reason it was invisible. Matt, on the first quiet
+    // version: "I can't tell if you've added anything... now it's too subtle. I don't see
+    // anything." Measured on the rendered frame, the wall it lands on sits at luminance 53-68 of
+    // 255 - near-black cabinet above, dim scoreboard below - so a BLACK smudge on it has almost
+    // nowhere to go: full opacity could only take 53 down to 0, and the soft edge meant it took it
+    // to about 45. A pale mark has the whole range instead, which is also what a real scuff on a
+    // dark painted panel looks like: dust and paint lifted off, lighter than what it is on.
     const g = x.createRadialGradient(N / 2, N / 2, N * 0.04, N / 2, N / 2, N * 0.48);
-    g.addColorStop(0, 'rgba(8,7,6,0.60)');
-    g.addColorStop(0.45, 'rgba(8,7,6,0.30)');
-    g.addColorStop(0.78, 'rgba(8,7,6,0.10)');
-    g.addColorStop(1, 'rgba(8,7,6,0)');
+    g.addColorStop(0, 'rgba(214,203,186,0.55)');
+    g.addColorStop(0.42, 'rgba(214,203,186,0.30)');
+    g.addColorStop(0.75, 'rgba(214,203,186,0.10)');
+    g.addColorStop(1, 'rgba(214,203,186,0)');
     x.fillStyle = g;
     x.fillRect(0, 0, N, N);
     this._scuffTex = this._track(new THREE.CanvasTexture(c));
@@ -2491,7 +2498,8 @@ export class Renderer {
     m.position.set(pos.x, pos.y, bb.pos[2] + bb.half[2] + 0.002);
     // A ball is 10.9 cm across. A scuff runs about one ball wide, a little wider off a hard hit -
     // the gradient means the dark core is smaller again than the quad it is drawn on.
-    const r = 0.115 + 0.055 * Math.min(1, (speed || 0) / 2.0);
+    // Two ball widths at a hard hit. One was the size that could not be found.
+    const r = 0.175 + 0.075 * Math.min(1, (speed || 0) / 2.0);
     m.scale.set(r, r, 1);
     m.userData = { t: 0, o0: 0.9 };
     this.scene.add(m);

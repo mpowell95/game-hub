@@ -624,3 +624,26 @@ made knowingly: big penalty baskets stop more balls short, and a ball stopped sh
 more chances to park in the riser corner. It buys the ladder Matt asked for, and it is still less
 than half the parent machine's rate. If it ever needs to come down, the lever is the **riser-1
 corner**, which is HOT SHOT's geometry — not these mouths.
+
+## The scuff had to be PALE, not dark (2026-09-03, third pass)
+
+Matt, on the quiet version: *"I can't tell if you've added anything. If you did, now it's too
+subtle. I don't see anything."*
+
+Measured on the rendered frame, the back wall the mark lands on sits at **luminance 53-68 of 255** -
+near-black cabinet above, dim scoreboard below. A BLACK smudge on that has almost nowhere to go:
+at full opacity it could only take 53 down to 0, and with a soft edge it reached about 45. Eight
+levels of change is not a mark, it is a rounding error.
+
+So the scuff is pale (`rgba(214,203,186)`) and about two ball widths at a hard hit, which is also
+what a real scuff on a dark painted panel is - dust and lifted paint, LIGHTER than the thing it is
+on.
+
+| | dark version | pale version |
+|---|---|---|
+| peak change against the wall | ~50 levels | **90 levels** |
+| footprint over 4 levels | 190-400 px | **1900-2700 px** |
+| size | 11.5-17 cm | 17.5-25 cm |
+
+Everything else is unchanged: it still lies IN the wall (no billboard), still the back wall only,
+still the first contact of a throw only, still two seconds.
