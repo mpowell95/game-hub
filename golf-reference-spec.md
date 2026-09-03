@@ -552,9 +552,9 @@ unverified. [OBSERVED; threshold UNKNOWN]
 
 Visible on the hole: **water** (left of the tee, and along the green's left and back edges),
 **bunkers** (one short-left of the green, one right of it), **trees** lining both sides and pinching
-the landing area, and **rough** outside the fairway. **No ball ever entered a hazard in either
-recording**, so penalty strokes, drop rules, and the "in the trees" lie were never seen.
-[UNKNOWN — see §14]
+the landing area, and **rough** outside the fairway. A ball DOES finish in the trees on hole 3 (`Hole 3.mp4`, 49-51 s) and the game prompts for a drop —
+see 21.2 for the full rule, the verbatim text and the per-lie power model. Bunker and water lies are
+still never entered in any clip.
 
 ---
 
@@ -652,12 +652,8 @@ section 0, have been struck from this list.
   swing distances, not club maximums - only the driver's ~287 yds full-power carry is usable.
 - The over-100% **power vs precision** toggle: its visual state, its tap target, its effect.
 - Wind: units, arrow semantics, strength of effect. Wind read `0` in all five clips.
-- Hazard rules. The SHAPE is now known (section 21.2: obstructed lies offer drop-for-+1 or
-  play-it-as-it-lies; water offers no choice), but three details are still needed:
-  **(a)** where a drop places the ball - back at the previous spot, or beside where it lies;
-  **(b)** what water costs and where it replays from - previous spot, or the water's edge;
-  **(c)** whether playing from the trees caps power (a punch-out) or allows full power with the
-  trees as real obstacles. Bunker and rough lies are also still unobserved.
+- ~~Hazard rules~~ — **RESOLVED.** The prompt is observed and transcribed, and Matt has specified
+  the drop line, the water rule, the per-lie power caps and the tree-collision model. See 21.2.
 - The yards-to-feet switch threshold (see section 12 for the recommended surface-based rule).
 - Score banners other than `Birdie!` and `New course best`.
 - The club shop's contents - ours to design (17.8).
@@ -1064,21 +1060,89 @@ ground**. This is what makes club choice legible.
 selected club will actually land, so club choice is guesswork." **That was wrong** - the dots are
 precisely that marker; I misread them as decoration. The flaw is struck.
 
-## 21.2 Obstacles, drops and water
+## 21.2 Obstacles, drops and lies — OBSERVED, and fully specified
 
-Never observed - every shot in all five clips finished on the tee, the fairway or the green, and no
-ball entered a hazard. Recorded here from Matt's description:
+**Correction to an earlier claim in this document.** A previous pass asserted that no ball ever
+entered a hazard and that the drop prompt "never happens on screen". **Both were wrong.** It happens
+in `Hole 3.mp4` at **49-51 s**: the tee shot finishes behind a lone tree in the fairway and the game
+prompts. The earlier sampling ran at 0.5-2 fps with samples at 0:30 and 1:00, and the prompt sits in
+the gap — so the honest statement was always "I did not see it", never "it did not happen".
 
-- **Ball behind a tree / in the woods / otherwise obstructed** - the player is offered a **choice**:
-  - **take a drop**, at a **+1 stroke penalty**, or
-  - **play it as it lies**, risking the obstacle: hit the tree, or deliberately play out sideways
-    or around it.
-- **Water gives no choice.** It is an automatic penalty.
+### The prompt, verbatim [MEASURED from frames at 49-51 s]
 
-Three details still needed before this can be built, listed in section 14: where a drop places the
-ball, what exactly water costs and where it replays from, and whether "play it as it lies" from
-trees caps the available power (a punch-out) or allows full power with the trees as real physical
-obstacles.
+Full-screen banner, large white pixel text over the standard rotating sunburst:
+
+```
+In the trees
+```
+
+Then a modal — a **dark navy hatched panel**, distinct from the grey hatched tutorial modals — with
+centred white pixel text:
+
+```
+In the trees, would you like to take a drop or play from your lie?
+```
+
+Two orange buttons, **stacked vertically**, full width of the panel:
+
+```
+Take a drop
+Play from lie
+```
+
+### The lie is communicated by ART, not by numbers [OBSERVED]
+
+After choosing `Play from lie`, the top-centre lie tile redraws: the ball sits **nestled in tall
+grass tufts** instead of on its tee peg. That tile is the reference's ONLY indication of a bad lie —
+there is no percentage, no label, no warning text anywhere on screen.
+
+### Rules for the clone (Matt's design; the reference only supplied the prompt)
+
+**Every bad lie reduces how far a club can hit, and says so plainly.** Show it as a two-line readout:
+
+```
+Bunker
+Power: 75%
+```
+
+**The swing visuals do not change.** The aim line, its five dots and the power meter all render
+exactly as normal — the dots simply describe the reduced distances. A perfect strike travels the
+capped fraction of the club's normal distance.
+
+| Lie | Power cap | Notes |
+|---|---|---|
+| Tee / fairway | **100 %** | baseline |
+| Light rough | **85 %** | |
+| Heavy rough | **70 %** | |
+| Fairway bunker | **75 %** | |
+| Greenside bunker | **60 %** | short, high shots only |
+| Trees / woods | **65 %** | plus the collision risk below |
+
+*(Proposed values, not measured — tune by feel.)*
+
+### Trees also physically block the ball
+
+Being in the woods is not only a power cap: **the ball can hit a trunk or a branch and not get out.**
+Model it with the height system that already exists for the ball's shadow:
+
+- Each tree has a **trunk** — narrow, blocks the ball at any height — and a **canopy** — wider,
+  blocks only balls travelling below canopy height.
+- The ball's height at the tree comes from the club's loft.
+- So the player faces the real dilemma with no extra UI: **punch low with a long iron** for distance
+  while risking the trunk, or **loft a wedge** over the canopy and give up most of the yardage.
+
+### Taking a drop
+
+- Draw a line from **where the ball was struck** to **where it now lies**.
+- The player may drop **anywhere along that line**.
+- Cost is **+1 stroke regardless of where** on the line they drop.
+
+(Real golf draws that line from the flag; this version is simpler to reason about on a phone and is
+the one to build.)
+
+### Water
+
+**No choice is offered** — water is automatic. **Drop at the water's edge, +1 stroke.**
 
 ## 21.3 The club ladder (proposed 2026-09-03, pending final sign-off)
 
