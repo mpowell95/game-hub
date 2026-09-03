@@ -4,11 +4,16 @@
 // Run: node test-admin-config.mjs   (also wired into run-all-tests.mjs)
 //
 // WHAT IS AND IS NOT COVERED, plainly: everything here is the part that runs without a DOM or a
-// network - the shape normalizer, the two resolvers (is this game live, is this machine released),
-// the override readers, and the localStorage cache. The Firebase write path (setGameLive /
-// setBoardReleased, their dev-origin guard and their verify-by-re-read) and the whole of
-// js/admin-ui.js are NOT covered by any node suite; they need a browser and a real database, the
-// same honest caveat test-bug-report.mjs carries about the bug-report form.
+// network - the shape normalizer, the resolvers (is this game live, is this machine released, is
+// this Golf course released), the override readers, and the localStorage cache. The Firebase
+// write path (setGameLive / setBoardMode / setCourseMode, their dev-origin guard and their
+// verify-by-re-read) and the whole of js/admin-ui.js are NOT covered by any node suite; they need
+// a browser and a real database, the same honest caveat test-bug-report.mjs carries about the
+// bug-report form. **Golf's course resolvers (added Part 7 of GOLF-HANDOFF.md) are covered at
+// this same level only** - "the wiring" block below has no golf equivalent because golf/js/ui.js
+// does not read course mode at setup yet (out of Part 7's file scope); a resolver with no reader
+// is the same kind of gap the wiring block below exists to catch for Skeeball, so this is a real,
+// stated hole, not an oversight.
 //
 // THE LAW angle this suite exists to pin (rules 1 and 2):
 //   - An ABSENT or malformed config must resolve to the CODE DEFAULT, never to hidden. A config
@@ -48,13 +53,13 @@ const A = await import('./js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} } });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} } });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} } });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {} } });
+  { games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {} }, golf: { courses: {} } });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -105,6 +110,29 @@ eq('mode: testing (an ordinary machine pulled back)',
 eq('testing wins over open, so a contradiction is never playable',
   A.resolveBoardMode(cfgOf({ open: true, testing: true }), 'popongo', false), 'testing');
 
+// --- resolveCourseReleased/Testing/Mode: Golf's courses, same three states, no codeDefault ------
+// (§14 of GOLF-HANDOFF.md, Part 7: "Missing key -> testing" unconditionally - a course has no
+// code-side adminOnly flag to fall back to the way a Skeeball machine has boards.js's.)
+console.log('\n--- the golf course state ---');
+const golfCfgOf = (row) => ({ golf: { courses: { harbor: row } } });
+ok('no config: nothing is released', A.resolveCourseReleased(null, 'harbor') === false);
+ok('open: true releases it', A.resolveCourseReleased(golfCfgOf({ open: true }), 'harbor') === true);
+ok('open: false is not released', A.resolveCourseReleased(golfCfgOf({ open: false }), 'harbor') === false);
+ok('a truthy non-true value does not release a course', A.resolveCourseReleased(golfCfgOf({ open: 1 }), 'harbor') === false);
+ok('no config: every course defaults to testing (no codeDefault, unlike a machine)',
+  A.resolveCourseTesting(null, 'harbor') === true);
+ok('testing: false takes a course OUT of testing', A.resolveCourseTesting(golfCfgOf({ testing: false }), 'harbor') === false);
+eq('courseOverride reports null when nothing is set', A.courseOverride({}, 'harbor'), null);
+eq('courseOverride reports the set value', A.courseOverride(golfCfgOf({ open: true }), 'harbor'), true);
+eq('courseTestingOverride reports null when nothing is set', A.courseTestingOverride({}, 'harbor'), null);
+eq('courseTestingOverride reports the set value', A.courseTestingOverride(golfCfgOf({ testing: false }), 'harbor'), false);
+eq('mode with no config: testing (the default, unconditionally)', A.resolveCourseMode(null, 'harbor'), 'testing');
+eq('mode: open', A.resolveCourseMode(golfCfgOf({ open: true, testing: false }), 'harbor'), 'open');
+eq('mode: unlockable (opened out of the testing default)',
+  A.resolveCourseMode(golfCfgOf({ open: false, testing: false }), 'harbor'), 'unlockable');
+eq('testing wins over open, so a contradiction is never playable',
+  A.resolveCourseMode(golfCfgOf({ open: true, testing: true }), 'harbor'), 'testing');
+
 // --- the local cache ----------------------------------------------------------------------------
 console.log('\n--- the local cache ---');
 // The cache is read ONCE per page load and memoized, so this block has to plant its value before
@@ -112,7 +140,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} } });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('pinball', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);

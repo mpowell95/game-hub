@@ -41,6 +41,7 @@ const SUITES = [
   { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
+  { file: 'golf/js/test.js' },
   // Monopoly Deal had NO automated coverage at all until 2026-09-01 - it is excluded from
   // test-game-conventions.mjs as a documented non-ESM exception, and its own self-test was
   // never wired up anywhere. It runs in ~5s and carries the difficulty-ladder probe, which is

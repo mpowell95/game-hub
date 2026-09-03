@@ -62,6 +62,11 @@ const TABS = [
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
   // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
+  // NOT devOnly - the hub tile ships visible to everyone from Part 7/8. What actually gates play
+  // is admin-config.js's per-COURSE 'testing' state (golf.courses.harbor, default 'testing'),
+  // not this game-wide switch: a non-dev player can open Golf and see Harbor Links locked on the
+  // setup screen, same shape as Skeeball's machine-release gate one level down from the game.
+  { id: 'golf', labelKey: 'game_title_golf' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -75,7 +80,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -562,6 +567,65 @@ function battleshipScreen(rec) {
     ${diffTable(rec && rec.byDiff)}`;
 }
 
+// Course id -> display name, hand-maintained like SK_MACHINES below (this file stays out of
+// golf/'s own folder, same reason SK_MACHINES doesn't import skeeball/'s board list). Harbor
+// Links' name is identical in both languages (golf/courses/harbor/course.js), so no i18n
+// needed; an unknown id falls back to its own id in caps rather than disappearing a player's
+// history (THE LAW rule 1), same fallback shape as skMachineMeta below.
+const GOLF_COURSES = { harbor: 'Harbor Links' };
+function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
+
+/** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in
+ *  gf.practice and counted by nothing above (no rounds/strokes/points/bests/leaderboard).
+ *  SHOWN, because a stored number no screen shows reads as deleted (THE LAW rule 1); shown below
+ *  the real table, dashed, muted, under its own "not counted" label, mirroring skPracticeHTML
+ *  exactly (same CSS classes - the box shape isn't Skeeball-specific, just named after its first
+ *  user). Do not fold these into the lifetime tallies or the bestRoundByCourse table above. */
+function golfPracticeHTML(gf) {
+  const prac = (gf || {}).practice || {};
+  const ids = Object.keys(prac).filter((id) => ((prac[id] || {}).rounds | 0) > 0);
+  if (!ids.length) return '';
+  return `<div class="gs-sk-practice">
+    <div class="gs-sk-practice-h">${esc(t('gs_golf_practice'))}</div>
+    ${ids.map((id) => `<div class="gs-sk-prow">
+      <span class="gs-sk-nm">${esc(golfCourseName(id))}</span>
+      <span><b>${prac[id].rounds | 0}</b> ${esc(t('gs_golf_rounds'))}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+/** Golf: solo (no wins/losses/win-rate - see js/players-agg.js's SOLO set). Skill level is the
+ *  lifetime Modified Stableford total and the only SIGNED number this file shows (it can go
+ *  negative); everything else here is a plain running total. Avg strokes/round divides safely
+ *  since hasPlays() already gates rounds > 0 before this screen is ever reached. One row per
+ *  course actually played, best (lowest) strokes only - this repo's first per-key Math.min stat,
+ *  see js/game-stats.js's ensureGf and js/players-agg.js's merge branch. */
+function golfScreen(rec) {
+  const gf = (rec && rec.gf) || { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {} };
+  if (!(gf.rounds | 0)) return emptyState('Golf');
+  const pts = gf.points | 0;
+  const skill = pts >= 0 ? `+${pts}` : String(pts);
+  const avg = gf.rounds > 0 ? (gf.strokes / gf.rounds).toFixed(1) : '–';
+  const courseIds = Object.keys(gf.bestRoundByCourse || {}).sort((a, b) => golfCourseName(a).localeCompare(golfCourseName(b)));
+  const rows = courseIds.map((id) => `<tr><th scope="row">${esc(golfCourseName(id))}</th><td>${gf.bestRoundByCourse[id] | 0}</td></tr>`).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${esc(skill)}</b><span>${t('gs_golf_skill')}</span></div>
+      <div class="gs-tally"><b>${gf.rounds | 0}</b><span>${t('gs_golf_rounds')}</span></div>
+      <div class="gs-tally"><b>${avg}</b><span>${t('gs_golf_avg')}</span></div>
+      <div class="gs-tally"><b>${gf.birdies | 0}</b><span>${t('gs_golf_birdies')}</span></div>
+      <div class="gs-tally"><b>${gf.eagles | 0}</b><span>${t('gs_golf_eagles')}</span></div>
+      <div class="gs-tally"><b>${gf.aces | 0}</b><span>${t('gs_golf_aces')}</span></div>
+      <div class="gs-tally"><b>${Math.round(gf.longestDriveYd | 0)}</b><span>${t('gs_golf_drive')}</span></div>
+    </div>
+    ${rows ? `<h4 class="gs-tbl-h">${t('gs_golf_courses_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_golf_best')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>` : ''}
+    ${golfPracticeHTML(gf)}`;
+}
+
 // --- Skeeball (screen 5, Archetype C: the machine dimension) -----------------
 // Rebuilt 2026-08-25 from the "Leaderboard and My Stats" design handoff. Skeeball is the only game
 // in the hub with a level the others do not have: every number exists both LIFETIME and PER
@@ -835,6 +899,7 @@ function hasPlays(id, rec) {
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
+  if (id === 'golf') return !!(rec.gf && rec.gf.rounds);
   return ((rec.total || {}).played | 0) > 0;
 }
 
@@ -852,6 +917,16 @@ function headlineOf(id, rec) {
   // the leaderboard player detail's shared game list) still read bestGame under a "POINTS"
   // label until 2026-09-02 - a player with 101 games and one 730 rack read "730 POINTS".
   if (id === 'skeeball') return { n: (rec.sk && rec.sk.points) | 0, unitKey: unitKeyOf(id) };
+  // Lifetime Modified Stableford total (golfScreen's "Skill level") - SIGNED, the one metric in
+  // this function that can go negative, so it needs its own "+"/"-" formatting rather than the
+  // bare number every other branch prints. Missing this branch until caught by a real My Stats
+  // check (Part 8) meant golf fell through to the generic `record(rec.total).wins` default,
+  // which reads 0 for any round with a negative point total (bumpTotals's "won" flag is
+  // `points >= 0`) - a player's actual points invisible on the one screen that lists every game.
+  if (id === 'golf') {
+    const pts = (rec.gf && rec.gf.points) | 0;
+    return { n: pts >= 0 ? `+${pts}` : String(pts), unitKey: unitKeyOf(id) };
+  }
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
@@ -981,6 +1056,7 @@ function screenFor(id, st) {
   if (id === 'battleship') return battleshipScreen(rec);
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'pinball') return pinballScreen(rec);
+  if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

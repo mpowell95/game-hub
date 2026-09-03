@@ -382,6 +382,24 @@ export const GAMES = [
     art: GAME_ART["pinball"],
     devOnly: true,
   },
+  {
+    // NOT devOnly: the tile ships visible to everyone from Part 7 on (GOLF-HANDOFF.md §14's own
+    // GAMES snippet carries no devOnly field). What actually gates play is admin-config.js's
+    // per-COURSE 'testing' state (golf.courses.harbor, default 'testing') - a non-dev player can
+    // open Golf and see Harbor Links locked on the setup screen, same shape one level down as
+    // Skeeball's machine-release gate. `released` is deliberately left unset here - Part 8 ("Ship")
+    // owns that date.
+    id: 'golf',
+    title: { en: 'Golf', es: 'Golf' },
+    blurb: { en: 'Nine holes. Stop the bar for aim, power and spin.',
+      es: 'Nueve hoyos. Para la barra para apuntar, potencia y efecto.' },
+    module: '../golf/js/ui.js',
+    // Its own full-bleed chrome (the 3D course view plus the HUD bands), so the hub's header
+    // collapses to the floating back button - same call as Skeeball, Pinball and Hill Climb.
+    immersive: true,
+    accent: '#2E7D4F',
+    art: GAME_ART["golf"],
+  },
 ];
 
 class Hub {

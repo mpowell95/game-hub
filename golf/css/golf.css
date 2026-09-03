@@ -1,0 +1,214 @@
+/* golf/css/golf.css - see §13 of GOLF-HANDOFF.md. Root class .gf-root, every rule prefixed
+   .gf-, every custom property --gf-. Two skins, same split as Ball Run/Skeeball/Pinball: the
+   SETUP screen is a standard hub boxed card (light/dark via the hub's --gh-* tokens); the PLAY
+   screen is immersive and stays a fixed dark-chrome overlay on the 3D scene in both hub themes
+   (the scene itself already reads .gh-dark for its own sky gradient in render.js - the HUD text
+   needs to stay legible over either sky, not follow it). */
+
+.gf-root { font-family: var(--gh-font, system-ui, sans-serif); }
+
+/* ---------------------------------------------------------------- setup screen ---- */
+
+.gf-root .gf-setup {
+  min-height: 100dvh;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: var(--gh-bg, #f4f6fb);
+  color: var(--gh-ink, #16243a);
+}
+.gf-root .gf-setup__title { font-size: 26px; font-weight: 800; margin: 8px 0 0; }
+.gf-root .gf-setup__section { width: 100%; max-width: 380px; }
+.gf-root .gf-course-tile {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px; border-radius: var(--gh-r-md, 12px);
+  background: var(--gh-surface, #fff); border: 1px solid var(--gh-border, rgba(16,36,58,.14));
+  text-align: left; touch-action: manipulation;
+}
+.gf-root .gf-course-tile[data-locked="true"] { opacity: .55; }
+.gf-root .gf-course-tile__name { font-weight: 700; font-size: 16px; }
+.gf-root .gf-course-tile__meta { font-size: 13px; color: var(--gh-muted, #5b6b82); margin-top: 2px; }
+.gf-root .gf-course-tile__lock { margin-left: auto; width: 20px; height: 20px; flex: 0 0 auto; }
+.gf-root .gf-diff-label {
+  font-size: 13px; font-weight: 600; color: var(--gh-muted, #5b6b82);
+  margin-bottom: 8px; display: block;
+}
+.gf-root .gf-diff-item { display: flex; align-items: center; gap: 6px; }
+.gf-root .gf-diff-item svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.gf-root .gf-setup__actions {
+  width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; margin-top: auto;
+}
+
+/* ---------------------------------------------------------------- play screen ---- */
+
+.gf-root .gf-play {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  height: 100dvh;
+  background: #16324a;
+  color: #ffffff;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+/* 0-56: back affordance, hole/par/yardage, wind */
+.gf-root .gf-top {
+  flex: 0 0 56px; height: 56px;
+  padding: env(safe-area-inset-top, 0px) 12px 0;
+  display: flex; align-items: center;
+  box-sizing: border-box;
+}
+.gf-root .gf-back {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .3); border-radius: 50%; border: none; color: #fff;
+  touch-action: manipulation;
+}
+.gf-root .gf-top-info { flex: 1 1 auto; text-align: center; font-size: 14px; font-weight: 700; }
+.gf-root .gf-wind {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 4px; font-size: 12px; min-width: 44px;
+  justify-content: flex-end;
+}
+.gf-root .gf-wind-arrow { width: 16px; height: 16px; }
+
+/* 56-100: nine-hole scorecard strip + points cell */
+.gf-root .gf-card {
+  flex: 0 0 44px; height: 44px;
+  display: flex; align-items: center; gap: 3px;
+  padding: 0 8px; overflow-x: auto;
+  background: rgba(0, 0, 0, .18);
+}
+.gf-root .gf-cell {
+  flex: 0 0 36px; width: 36px; height: 36px;
+  border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative;
+  background: rgba(255, 255, 255, .06);
+}
+.gf-root .gf-cell[data-current="true"] { background: rgba(255, 255, 255, .22); }
+.gf-root .gf-cell__num { font-size: 11px; opacity: .75; line-height: 1; }
+.gf-root .gf-cell__strokes { font-size: 13px; font-weight: 700; line-height: 1.3; }
+.gf-root .gf-cell__mark { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; }
+.gf-root .gf-cell__mark--circle-fill { border-radius: 50%; background: #ffce3a; }
+.gf-root .gf-cell__mark--circle-hollow { border-radius: 50%; border: 1.5px solid #ffce3a; }
+.gf-root .gf-cell__mark--square-hollow { border: 1.5px solid #e0e6f0; }
+.gf-root .gf-cell__mark--square-fill { background: #e0e6f0; }
+.gf-root .gf-cell--pts {
+  flex: 0 0 40px; width: 40px; margin-left: 4px;
+  font-weight: 700; font-size: 14px;
+}
+
+/* 100-590: the canvas + overlays */
+.gf-root .gf-view { flex: 1 1 auto; position: relative; touch-action: none; overflow: hidden; }
+.gf-root .gf-view canvas { display: block; width: 100%; height: 100%; }
+.gf-root .gf-dist {
+  position: absolute; top: 12px; left: 12px;
+  font-size: 12px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  opacity: 0; pointer-events: none;
+}
+.gf-root .gf-dist[data-show="true"] { opacity: 1; }
+.gf-root .gf-flash {
+  position: absolute; left: 50%; top: 70%; width: 220px; height: 44px;
+  margin-left: -110px; margin-top: -22px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 19px; color: #fff; letter-spacing: .01em;
+  background: rgba(0, 0, 0, .6); border-radius: 10px;
+  opacity: 0; pointer-events: none;
+}
+.gf-root .gf-flash.gf-flash-show { animation: gf-flash-inout 1900ms ease forwards; }
+@keyframes gf-flash-inout {
+  0%    { opacity: 0; transform: translateY(6px) scale(.96); }
+  36.8% { opacity: 1; transform: translateY(0) scale(1); }
+  84.2% { opacity: 1; transform: translateY(0) scale(1); }
+  100%  { opacity: 0; transform: translateY(-4px) scale(.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-root .gf-flash.gf-flash-show { animation: gf-flash-inout-reduced 1900ms steps(1) forwards; }
+}
+@keyframes gf-flash-inout-reduced {
+  0%     { opacity: 0; transform: none; }
+  1%     { opacity: 1; transform: none; }
+  99%    { opacity: 1; transform: none; }
+  100%   { opacity: 0; transform: none; }
+}
+
+/* 590-640: club chip / pin distance / lie label, or the open club row */
+.gf-root .gf-bar {
+  flex: 0 0 50px; height: 50px; position: relative;
+  display: flex; align-items: center; padding: 0 12px;
+  background: rgba(0, 0, 0, .28);
+}
+.gf-root .gf-club-chip {
+  flex: 0 0 88px; width: 88px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: rgba(255, 255, 255, .16);
+  color: #fff; font-weight: 700; font-size: 14px; border: none;
+  touch-action: manipulation;
+}
+.gf-root .gf-pin-dist { flex: 1 1 auto; text-align: center; font-size: 28px; font-weight: 800; }
+.gf-root .gf-lie { flex: 0 0 88px; width: 88px; text-align: right; font-size: 13px; opacity: .85; }
+.gf-root .gf-clubs-row {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; gap: 6px; padding: 0 10px;
+  background: rgba(10, 12, 16, .96); overflow-x: auto;
+}
+.gf-root .gf-club-item {
+  flex: 0 0 auto; min-width: 44px; height: 44px; padding: 0 12px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: rgba(255, 255, 255, .12);
+  color: #fff; font-weight: 700; font-size: 13px; border: none;
+  touch-action: manipulation;
+}
+.gf-root .gf-club-item[aria-selected="true"] { background: #ffce3a; color: #1c2430; }
+
+/* 640-773: three stop-the-bar meters */
+.gf-root .gf-meters {
+  flex: 0 0 133px; height: 133px;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center; gap: 10px;
+}
+.gf-root .gf-meter { position: relative; height: 32px; opacity: 1; }
+.gf-root .gf-meter[data-state="pending"] { opacity: .35; }
+.gf-root .gf-meter__track {
+  position: absolute; top: 50%; left: 0; right: 0; height: 8px; margin-top: -4px;
+  border-radius: 4px; background: rgba(255, 255, 255, .22);
+}
+.gf-root .gf-meter__sweet {
+  position: absolute; top: 50%; height: 8px; margin-top: -4px;
+  border-radius: 4px; background: rgba(255, 255, 255, .5);
+}
+.gf-root .gf-meter__flash {
+  position: absolute; top: 50%; height: 8px; margin-top: -4px;
+  border-radius: 4px; background: #ffce3a; opacity: 0; pointer-events: none;
+}
+.gf-root .gf-meter__flash.gf-flash-on { animation: gf-track-flash 200ms ease-out forwards; }
+@keyframes gf-track-flash { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .gf-root .gf-meter__flash.gf-flash-on { animation: none; opacity: 0; }
+}
+.gf-root .gf-meter__notch {
+  position: absolute; top: 50%; margin-top: -14px; width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-bottom: 6px solid #ffffff;
+}
+.gf-root .gf-meter__marker {
+  position: absolute; top: 50%; width: 4px; height: 24px; margin-top: -12px; margin-left: -2px;
+  border-radius: 2px; background: #ffffff;
+}
+.gf-root .gf-meter[data-state="pending"] .gf-meter__marker { display: none; }
+
+/* ---------------------------------------------------------------- round summary ---- */
+/* Built for §13.5's shape now so it is not a second pass later; not reachable in Part 4's
+   single-hole flow (no 9-hole round data exists yet - see golf/DECISIONS.md#part-4-scope). */
+.gf-root .gf-summary { padding: 20px 16px; max-width: 420px; margin: 0 auto; color: var(--gh-ink, #16243a); }
+.gf-root .gf-summary-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; }
+.gf-root .gf-summary-table th,
+.gf-root .gf-summary-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--gh-border, rgba(16,36,58,.14)); }
+.gf-root .gf-summary-table th:first-child,
+.gf-root .gf-summary-table td:first-child { text-align: left; }
+.gf-root .gf-summary-skill { margin-top: 16px; font-size: 16px; font-weight: 700; }
+.gf-root .gf-summary-actions { display: flex; gap: 10px; margin-top: 20px; }

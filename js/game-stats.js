@@ -170,7 +170,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -621,6 +621,28 @@ function ensureSk(g) {
   if (!g.sk.practice.boards || typeof g.sk.practice.boards !== 'object') g.sk.practice.boards = {};
 }
 
+/** Golf: rounds/holes/strokes are lifetime counters and only ever add; `points` is the lifetime
+ *  Modified Stableford total (can go negative, so it is never clamped to Math.max like a "best").
+ *  `birdies`/`eagles`/`aces` add. `longestDriveYd` is Math.max only (THE LAW rule 2).
+ *  `bestRoundByCourse` is a `{courseId: strokes}` map, Math.min per key (fewer strokes is
+ *  better) - this repo's first per-key-Math.min map; see js/players-agg.js's merge branch for
+ *  why a naive Math.min needs the same non-zero-sentinel guard js/game-stats.js already uses
+ *  for Battleship's fewestShotsWin (a course never played has no entry at all, never a 0). */
+function ensureGf(g) {
+  if (!g.gf || typeof g.gf !== 'object') g.gf = {
+    rounds: 0, holes: 0, strokes: 0, points: 0,
+    birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {}
+  };
+  for (const k of ['rounds', 'holes', 'strokes', 'points', 'birdies', 'eagles', 'aces', 'longestDriveYd'])
+    if (!Number.isFinite(g.gf[k])) g.gf[k] = 0;
+  if (!g.gf.bestRoundByCourse || typeof g.gf.bestRoundByCourse !== 'object') g.gf.bestRoundByCourse = {};
+  // Added Part 8 (§14): rounds played on a course the admin page has set to TESTING. Mirrors
+  // sk.practice exactly - a parallel, courseId-keyed bucket, additive, kept, reachable by no
+  // counter/best/leaderboard/GAME_META row. Absent on any device that has not played a testing
+  // course since, defaulted to {} here, same as sk.practice's own arrival.
+  if (!g.gf.practice || typeof g.gf.practice !== 'object') g.gf.practice = {};
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -647,6 +669,7 @@ function normalize(raw) {
   ensureHc(st.games.hillclimb);
   ensureBs(st.games.battleship);
   ensureSk(st.games.skeeball);
+  ensureGf(st.games.golf);
   return st;
 }
 
@@ -1352,6 +1375,61 @@ export function recordBattleship(difficulty, won, extras) {
   g.bs.bestAccuracy = Math.max(g.bs.bestAccuracy | 0, e.accuracy | 0);
   if (won === true && (e.shots | 0) > 0) {
     g.bs.fewestShotsWin = g.bs.fewestShotsWin ? Math.min(g.bs.fewestShotsWin, e.shots | 0) : (e.shots | 0);
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Golf: record one finished ROUND (9 holes). Solo, like Ball Run/Snake/Hill Climb - `bumpTotals`
+ *  is fed `(e.points || 0) >= 0` as its "won" flag, the same "every solo attempt counts toward
+ *  the generic total/byDiff bucket, non-negative Modified Stableford reads as the win side" rule
+ *  those games use (js/leaderboard-ui.js's SOLO set is what turns this into "N rounds" rather
+ *  than a wins/losses display - nothing here decides that, this is only the write side).
+ *  `extras` = { holes, strokes, points, birdies, eagles, aces, longestDriveYd, courseId,
+ *  practice } for THIS round: holes/strokes/points/birdies/eagles/aces add; longestDriveYd is
+ *  Math.max only; bestRoundByCourse[courseId] takes the lower of strokes, keyed per course.
+ *  Additive; never overwrites.
+ *
+ *  `practice: true` (Part 8, §14) - a round played on a course the admin page has set to
+ *  TESTING. Stored in gf.practice, keyed by courseId, and RETURNS HERE: no totals, no lifetime
+ *  counters, no bests, no unlock, and nothing for js/players-agg.js or the leaderboard to find.
+ *  Mirrors recordSkeeball's own `e.practice` branch exactly. */
+export function recordGolf(difficulty, extras) {
+  const st = loadStats();
+  if (!st.games.golf) st.games.golf = {};
+  const g = st.games.golf;
+  const e = extras || {};
+  ensureGf(g);
+  if (e.practice) {
+    const courseId = e.courseId || 'harbor';
+    const p = g.gf.practice[courseId] || (g.gf.practice[courseId] = {
+      rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0,
+    });
+    p.rounds += 1;
+    p.holes += e.holes || 0;
+    p.strokes += e.strokes || 0;
+    p.points += e.points || 0;
+    p.birdies += e.birdies || 0;
+    p.eagles += e.eagles || 0;
+    p.aces += e.aces || 0;
+    p.longestDriveYd = Math.max(p.longestDriveYd, e.longestDriveYd || 0);
+    st.updatedAt = new Date().toISOString();
+    persist(st);
+    return st;
+  }
+  bumpTotals(g, normDiff(difficulty), (e.points || 0) >= 0);
+  g.gf.rounds += 1;
+  g.gf.holes += e.holes || 0;
+  g.gf.strokes += e.strokes || 0;
+  g.gf.points += e.points || 0;
+  g.gf.birdies += e.birdies || 0;
+  g.gf.eagles += e.eagles || 0;
+  g.gf.aces += e.aces || 0;
+  g.gf.longestDriveYd = Math.max(g.gf.longestDriveYd, e.longestDriveYd || 0);
+  if (e.courseId && Number.isFinite(e.strokes)) {
+    const prev = g.gf.bestRoundByCourse[e.courseId];
+    g.gf.bestRoundByCourse[e.courseId] = Number.isFinite(prev) ? Math.min(prev, e.strokes) : e.strokes;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

@@ -216,6 +216,12 @@ const GAME_META = [
   // rule 1, and exactly how Yahtzee shipped. The row costs nothing while the game is hidden -
   // gameListHTML only renders a game somebody has actually played.
   { id: 'pinball', labelKey: 'game_title_pinball' },
+  // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
+  // Skeeball/Pinball - see golfPointsAt below. The row exists from Part 7 even though the one
+  // course starts admin-gated to 'testing' (js/admin-config.js): same reasoning as Pinball above,
+  // the row costs nothing while nobody but the dev profile can play, and a row added later (after
+  // someone already has plays) is exactly the Yahtzee bug this comment chain keeps citing.
+  { id: 'golf', labelKey: 'game_title_golf' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
@@ -499,11 +505,20 @@ function skPlaysAt(g, machine) {
   if (!machine || machine === 'all') return sk.played | 0;
   return ((sk.boards || {})[machine] || {}).plays | 0;
 }
+/** LIFETIME points - Golf's Modified Stableford total across every round ever played (can be
+ *  negative, unlike every other lifetime "points" number here). Mirrors skPointsAt's lifetime
+ *  branch, minus the machine argument: golf has only one course so far and no tier axis this
+ *  screen slices by. Adds across a person's devices in players-agg.js, same as Skeeball's. */
+function golfPointsAt(g) {
+  const gf = g.games.golf && g.games.golf.gf;
+  return gf ? (gf.points | 0) : 0;
+}
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
+  if (id === 'golf') return golfPointsAt(g);
   return winsAtTier(g, [id], tier);
 }
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
