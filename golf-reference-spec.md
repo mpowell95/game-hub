@@ -1098,27 +1098,45 @@ there is no percentage, no label, no warning text anywhere on screen.
 
 ### Rules for the clone (Matt's design; the reference only supplied the prompt)
 
-**Every bad lie reduces how far a club can hit, and says so plainly.** Show it as a two-line readout:
+**Every bad lie does two things: it caps distance, and it narrows the margin for error.** Both are
+shown to the player before they swing. Readout in the HUD:
 
 ```
 Bunker
-Power: 75%
+Power: 88%
 ```
 
-**The swing visuals do not change.** The aim line, its five dots and the power meter all render
-exactly as normal — the dots simply describe the reduced distances. A perfect strike travels the
-capped fraction of the club's normal distance.
+| Lie | Power cap | Straight-zone width | Intent |
+|---|---|---|---|
+| Tee / fairway | **100 %** | **100 %** | baseline |
+| Light rough | **92 %** | **85 %** | barely costs distance, slightly twitchy |
+| Heavy rough | **82 %** | **65 %** | real distance loss, hard to control |
+| Fairway bunker | **88 %** | **55 %** | nearly full distance, half the margin for error |
+| Greenside bunker | **75 %** | **50 %** | short and fiddly by design |
+| Trees / woods | **85 %** | **80 %** | the trunk is the real penalty, not the numbers |
 
-| Lie | Power cap | Notes |
-|---|---|---|
-| Tee / fairway | **100 %** | baseline |
-| Light rough | **85 %** | |
-| Heavy rough | **70 %** | |
-| Fairway bunker | **75 %** | |
-| Greenside bunker | **60 %** | short, high shots only |
-| Trees / woods | **65 %** | plus the collision risk below |
+*(Proposed values, not measured. Tune by feel — the shape matters more than the exact numbers.)*
 
-*(Proposed values, not measured — tune by feel.)*
+**The design principle here: sand costs you CONTROL, not distance.** A real bunker shot is not
+short, it is unpredictable, and the table is built to feel that way. Heavy rough is the opposite -
+it genuinely eats distance.
+
+### What changes on screen, and what does not
+
+**The accuracy meter's green band visibly narrows** by the "straight-zone width" above. The marker
+still sweeps at the same speed, so a smaller target is simply harder to hit. No new widget, no new
+mechanic, and the player can see the shot is hard *before* committing to it.
+
+**Everything else is unchanged.** The power ring's sweep speed and its 1.4 s cycle, the aim line,
+and its five dots all render exactly as normal. The dots simply describe the reduced distances -
+they always tell the truth about where a perfect strike lands.
+
+**Decided (Matt, 2026-09-03): SHOW the narrowed band; do not hide it.** The alternative - leaving
+the band looking normal while secretly punishing the same stop position harder - was considered and
+rejected, because it reads as the game cheating: the player stops the marker in the green and the
+ball goes sideways anyway. A visibly smaller green band communicates the difficulty with no text at
+all. This is a deliberate, narrow exception to the "do not change the swing visuals" rule, which
+governs the POWER cap specifically.
 
 ### Trees also physically block the ball
 
