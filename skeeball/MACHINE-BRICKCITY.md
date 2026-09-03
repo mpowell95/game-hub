@@ -30,6 +30,63 @@ brick marquee and a different face. Nine baskets on three treads. The row neares
 | Tagline | `board_brickcity_tag`, EN and ES in `skeeball/js/strings.js`. Taglines ARE translated; the name is not. |
 | Ships as | `adminOnly: true` — Matt's call, 2026-08-24, the same as its two neighbours while he plays it. That is only the CODE DEFAULT: the in-app **Admin** page moves it between Testing / Unlockable / Open with no commit and no deploy. |
 
+## You could not tell where the ball hit the wall (2026-09-03)
+
+Matt: *"It's impossible to tell where on the back wall a ball that's overthrown bounces off.
+Sometimes I'll throw it and it doesn't look like it even touched the back wall, but based off how
+it lands I know it must have."*
+
+The engine always knew and never said. `physics.js` fires a `backboard` event on contact, but it
+carries a SPEED and no position, and `ui.js` only counts it for telemetry - so a bounce off the
+back of the machine had no visual at all, and the ball simply changed direction in front of a flat
+wall for no visible reason.
+
+**Measured first, over 276 throws across the swipe/power range, counting what a ball touches once
+it is past the ramp:**
+
+| | contacts | times it was the FIRST thing touched |
+|---|---|---|
+| side rail | 510 | 95 |
+| back wall | 113 | 88 |
+| riser | 320 | 45 |
+| basket collar | 1782 | 26 |
+
+**So the side rails are in this, and they are not an extra.** "It must have hit the back wall" is,
+as often as not, a rail: the rail is hit four and a half times as often, and it is the first thing
+the ball meets more often than the back wall is. Marking only the back wall would have left half
+of exactly the throws Matt is describing still unexplained. 41% of throws touch the back wall at
+all.
+
+**What the fix is not.** The `backboard` event's 0.4 m/s threshold looked like the cause of "it
+didn't look like it even touched" and was not: of 113 back-wall touches exactly ONE was under it,
+and they land at a median 1.75 m/s. The mark's own threshold is 0.1 m/s, which catches that one
+and anything softer on a rail, and costs nothing.
+
+**The mark.** `physics.js` emits a `wall` event (part, point, impact speed); `ui.js` hands it to
+the renderer if that machine's renderer has a `wallMarkAt` - feature-tested, not machine-tested, so
+the other four machines ignore an event they never emit and the next machine opts in by adding the
+method. `render.js` draws a ring at the point, for 0.55s.
+
+- **Two rings, dark behind bright**, for the same reason `popupAt` strokes its text before filling
+  it: the lower wall is the cream-and-gold scoreboard and the upper is near-black cabinet, and a
+  single-colour ring is invisible on one or the other.
+- **Size is the impact speed** - 11.6 cm to 23 cm, one to two ball widths - so a graze and a
+  hammer do not look alike. At one ball width it was legible on the back wall and too small to
+  find on a rail, which is further away and a smaller target on screen.
+- **It sits on the SURFACE, not where the ball was.** The event carries the ball's centre, which
+  at contact stands a full ball radius (5.45 cm) off the wall; drawn there the mark floats in
+  mid-air. Only the two coordinates along the wall come from the ball, and the third is the wall's
+  own plane, read from `machine.js`.
+- **And it faces the player.** Laid flat on a side rail the ring is seen almost edge-on and reads
+  as a thin sliver. A mark is an annotation, not a sticker on the scenery.
+- One mark per impact (the solver fires several callbacks per hit) and twelve per throw, so a ball
+  grinding along a rail leaves a mark rather than forty.
+
+**Verified by reading the pixels**, not by eye: with a mark placed at each of four real measured
+contact points, the rendered frame carries the ring's gold at all four - 4605 gold pixels on the
+back wall, 2058 and 291 on the right rail, 368 on the left. The eye missed the rail ones on a
+scaled screenshot; the framebuffer did not.
+
 ## The 100 that was paid for a ball balanced on the rim (2026-09-02)
 
 Matt, with three screen recordings, hours after the corner-100 fix below went live: *"You made the

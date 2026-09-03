@@ -1628,6 +1628,19 @@ export class SkeeballUI {
           }
           break;
         }
+        // WHERE THE BALL HIT THE WALL. Matt, 2026-09-03: "It's impossible to tell where on the
+        // back wall a ball that's overthrown bounces off. Sometimes I'll throw it and it doesn't
+        // look like it even touched the back wall, but based off how it lands I know it must
+        // have." The engine knew and never said; this is the saying.
+        //
+        // GUARD: FEATURE-TESTED, NOT MACHINE-TESTED. Only BRICK CITY's engine emits 'wall'
+        // today and only its renderer draws one, and this file is shared by all five machines
+        // (skeeball/CLAUDE.md, "every machine owns its own engine"). Asking the renderer
+        // whether it can do this is what lets the other four ignore the event instead of
+        // throwing on it, and what lets the next machine opt in by adding the method.
+        case 'wall':
+          if (Rr && typeof Rr.wallMarkAt === 'function' && ev.pos) Rr.wallMarkAt(ev.pos, ev.part, ev.speed);
+          break;
         case 'rackOver':
           this._rackOver(ev.result);
           break;
