@@ -276,7 +276,8 @@ export function simulateShot(terrain, input) -> {
   outcome: 'stop' | 'hole' | 'water' | 'ob',
   carryM, totalM                    // straight-line from start to first land, and to rest
 }
-// input = { from: {x,z}, dirDeg, clubId, lie, power01, spin01, wind: {x, z}, seed }
+// input = { from: {x,z}, dirDeg, clubId, lie, power01, spin01, wind: {x, z}, seed, curve01 }
+//   curve01 (Part 9B): -1..+1, default 0. See §7.3 "Sidespin".
 ```
 
 ### 7.2 World
@@ -353,8 +354,29 @@ spin axis = horizontal, perpendicular to dir (pure backspin); positive = backspi
   (cos(dirRad), 0, -sin(dirRad)) was this negated, which made backspin lift act as downforce.
   Caught 2026-09-02 when Matt asked for a real 70 m/s driver trajectory trace against known real
   driver numbers; see DECISIONS.md#spinaxis-sign-bug.
+
+Sidespin (Part 9B, 2026-09-03 - the one approved edit to frozen physics):
+  input gains curve01 in -1..+1 (default 0; -1 = hook, curves toward -x when travelling +z;
+  +1 = slice, toward +x). tilt = curve01 x SIDE_TILT (flight.js, 22 deg, tuned - see below).
+  spin axis = rotate(travelDir x up, about travelDir, by -tilt)
+            = perp x cos(tilt) + up x sin(tilt)
+            = { x: -cos(dirRad) x cos(tilt), y: sin(tilt), z: sin(dirRad) x cos(tilt) }
+  so the Magnus force spinAxis x vr gains a LATERAL component (up x vr, horizontal, full |vr|,
+  for the whole flight) and its vertical component scales by cos(tilt): a strongly curved shot
+  flies lower and shorter. curve01 = 0 multiplies by cos(0) = 1 and adds sin(0) = 0 exactly, so
+  every straight shot is bit-identical to the pre-9B model (test 8b). Putts ignore it.
+  NOTE: GOLF-PART9.md wrote "rotateAboutY". A rotation about Y keeps the axis horizontal, and a
+  horizontal axis crossed with a near-horizontal vr gives a lateral force of only sin(launch) x
+  that size, which also flips sign on the descent - it cannot reach the 25-45 m band at any
+  SIDE_TILT. The rotation is about the travel direction (the launch-monitor "spin axis tilt"),
+  which is what the band was written for. See DECISIONS.md#part9b-sidespin.
 ```
 Putter: `launch 0`, spin 0, `speed = 6.5 × power01`, and the ball starts grounded.
+
+`SIDE_TILT` **(tune, Part 9B - DONE: 22)**. Band: driver at `curve01 = 1`, flat, power 1, no
+wind, lands 25-45 m right of and 5-15 m shorter than the straight shot. The doc's starting 35
+gave 48.0 / 26.2 (outside both); the sweep over 20-50 passes only from 20 to 26; 22 is the
+centre of both bands (35.6 m right, 10.7 m short; the hook mirrors at 35.6 / 10.8).
 
 Aim direction 0 is the target line; `ui.js` passes `dirDeg = targetBearingDeg + aimDeg`.
 
@@ -782,11 +804,18 @@ leaderboard's per-game sort key for golf, if the file supports one, is `gf.point
    WATER/OB.
 5. **Putt sweep, per hole**: from 8 points on a 4 m circle around the pin, sweep power 0.05
    to 0.6 in 0.05 steps aimed straight at the cup: at least one holes out.
+3c. **Sidespin** (Part 9B): flat hole, driver, fairway, power 1, no wind. `curve01 = +1` lands
+   25-45 m right (+x) of the straight shot and 5-15 m shorter; `-1` mirrors within the same
+   bands; a putt is bit-identical at `curve01` 0 and 1.
 6. **Points table**: `holePoints` for `d = -3..3` → `8,5,2,0,-1,-3,-3`.
 7. **Meters**: `pos(0,T)=0`, `pos(T,T)=1`, `pos(2T,T)=0` within 1e-9.
 8. **Fixture replay**: for every course, for every shot in `fixture.json`, simulate and assert
    `rest` within 0.02 m of the recorded value. Any failure prints the hole, shot index, expected
    and actual.
+8b. **Bit identity** (Part 9B): every fixture shot WITHOUT `curve01`, re-simulated with an explicit
+   `curve01: 0`, must reproduce its recorded `rest` exactly (`===` on x, y, z). This is the guard
+   that the sidespin edit left every straight shot untouched; it ran green against the pre-9B
+   fixture BEFORE that fixture was regenerated.
 
 Fixture format:
 
@@ -794,10 +823,12 @@ Fixture format:
 { "courseId": "harbor", "engine": 1,
   "shots": [ { "hole": 1, "input": { ...simulateShot input... }, "rest": [x, y, z], "outcome": "stop" } ] }
 ```
-`refixture.mjs <courseId>` generates 6 shots per hole (tee shot with driver/3w/5i at power 1,
-0.8, 0.6 at aim 0; one from `target` with the auto club; two putts from 3 m and 8 m) and writes
-the file. **Regenerating a fixture is a deliberate act**; the commit that does it must say what
-physics change caused it and which holes' outcomes changed.
+`refixture.mjs <courseId>` generates 8 shots per hole (tee shot with driver/3w/5i at power 1,
+0.8, 0.6 at aim 0; one from `target` with the auto club; two putts from 3 m and 8 m; and, since
+Part 9B, two curved driver tee shots at `curve01 = +0.6` and `-0.6`, appended after the six
+straight ones so their indices never move) and writes the file. **Regenerating a fixture is a
+deliberate act**; the commit that does it must say what physics change caused it and which
+holes' outcomes changed.
 
 ### 12.2 `golf/tools/sweep-carry.mjs`
 

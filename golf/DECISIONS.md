@@ -842,6 +842,92 @@ the view left; toggling every overlay (club row open/closed, flash, distance cou
 hidden/shown) moved no band by a pixel. Console: no golf errors (the hub's own `messages/`
 permission-denied for an unclaimed test profile is unrelated).
 
+## part9b-sidespin
+
+`GOLF-PART9.md` sub-part 9B (2026-09-03): the one approved edit to frozen physics. `simulateShot`
+gains `curve01` (-1 hook, +1 slice, default 0, ignored for putts); the spin axis is tilted by
+`curve01 x SIDE_TILT` so the Magnus force gains a lateral component.
+
+### The rotation is about the travel direction, not about Y
+
+The doc's formula, `rotateAboutY(travelDir x up, -curve01 x SIDE_TILT)`, was not implemented
+literally, and the reason is arithmetic, not taste. `travelDir x up` is horizontal and
+perpendicular to travel. Rotating it about Y keeps it horizontal: the axis becomes
+`perp cos(t) + travel sin(t)`, and its cross product with `vr` is `cos(t) (perp x vr) + sin(t)
+(travel x vr)`. The second term is `vr.y x (a horizontal vector)` - proportional to `sin(launch)`
+(0.21 for the driver's 12 deg), and it changes SIGN when the ball starts descending, so the
+curve reverses mid-flight and the net lateral offset is close to zero. No `SIDE_TILT` in the
+doc's 20-50 range can reach a 25-45 m offset that way; the band the doc wrote down is
+unreachable under its own formula.
+
+What the band describes is the launch-monitor quantity the doc actually names - "spin axis
+tilt" - which is a rotation of the axis ABOUT THE TRAVEL DIRECTION, out of the horizontal:
+`perp cos(t) + up sin(t)` (Rodrigues, using `travel x perp = -up`). Then `axis x vr =
+cos(t) (perp x vr) + sin(t) (up x vr)`: the second term is horizontal, perpendicular to travel,
+full `|vr|` strength, for the whole flight - a real hook or slice - and the first is the old
+lift scaled by `cos(t)`, which is exactly the doc's "backspin magnitude uses cos(tilt)". The
+doc's minus sign carries over: with dir = 0, `curve01 = +1` gives axis `(-cos t, +sin t, 0)` and
+a lateral force toward +x - a slice - with no sign flip needed (the doc's "if it comes out
+reversed, flip once" clause was not exercised). The grounded brake and the spin bite still read
+the full scalar `omega`; the doc only asked for the vertical (lift) component to scale, and
+scaling those two as well would have been an invention with no band behind it.
+
+### Bit identity first
+
+`curve01 = 0` multiplies the old axis by `Math.cos(0) = 1` and adds `Math.sin(0) = 0`, both
+exact in IEEE 754, so a straight shot is bit-identical to the pre-9B engine. Test 8b checks
+that against the fixture with `===` on rest x/y/z (stronger than test 8's 0.02 m). Order of
+operations, as instructed: the suite ran against the UNTOUCHED Part 6 fixture with the new
+physics in place - **142 passed, 0 failed** (test 8b: 54/54 straight shots exact) - and only
+then was the fixture regenerated. The regeneration diff is **468 insertions, 0 deletions**:
+every one of the 54 straight shots' recorded rests survived byte-for-byte, and the 18 curved
+shots (driver, `curve01 = +/-0.6`, two per hole) are appended after them so no straight shot's
+index moved.
+
+### SIDE_TILT: 35 -> 22
+
+The doc's starting value of 35 landed the driver **48.0 m right and 26.2 m short** (band: 25-45
+and 5-15) - the lateral offset over by 3 m and the shortening over by nearly 2x, because
+`cos(35 deg) = 0.82` takes 18% off the lift. Swept 20-50 in 1 deg steps through the real
+engine (flat hole, fairway, power 1, spin 0, no wind, seed 7; landing point from the `land`
+event):
+
+| tilt | right | short (slice) | left | short (hook) | |
+|---|---|---|---|---|---|
+| 20 | 33.0 | 8.7 | 32.9 | 9.0 | in band |
+| 21 | 34.3 | 9.7 | 34.3 | 9.9 | in band |
+| **22** | **35.6** | **10.7** | **35.6** | **10.8** | **in band - chosen** |
+| 23 | 36.9 | 11.7 | 36.9 | 11.8 | in band |
+| 24 | 38.1 | 12.7 | 38.1 | 12.7 | in band |
+| 25 | 39.3 | 13.8 | 39.3 | 13.8 | in band |
+| 26 | 40.4 | 14.9 | 40.4 | 14.8 | in band (0.1 m of margin on short) |
+| 27 | 41.5 | 16.0 | 41.5 | 15.8 | short over |
+| 30 | 44.3 | 19.6 | 44.5 | 19.3 | |
+| 35 | 48.0 | 26.2 | 48.1 | 25.8 | the doc's default |
+| 40 | 50.1 | 33.4 | 50.1 | 33.2 | |
+| 50 | 50.1 | 48.8 | 49.8 | 49.3 | lateral saturates ~50 m |
+
+Only 20-26 pass both halves of the band. **22** is the centre of both: 35.6 m against a 25-45
+band (mid 35) and 10.7 m against 5-15 (mid 10), with 9 m and 4 m of margin either side - not a
+value that passes by less than the model's own jitter (Part 2's lesson). The hook mirrors the
+slice to within 0.1 m at every tilt, which is the symmetry check the sign convention needed.
+
+(A first sweep printed 33.0 / 8.7 for every tilt: the scratch script rewrote a temp copy of
+flight.js under the SAME filename each iteration, and Node's ES-module cache served the first
+one thirty-one times. Rewritten with one file per tilt. Worth knowing for any future sweep that
+swaps a constant by module rewrite.)
+
+### Five runs
+
+After regeneration, `node golf/js/test.js` five times in a row: **160 passed, 0 failed** every
+time, and the five complete outputs hash to **one distinct SHA-256** - byte-identical, not
+merely "all green". (142 -> 160 = 18 new curved fixture shots in test 8.)
+
+### Handoff
+
+`golf/docs/GOLF-HANDOFF.md` §7.1 (input signature), §7.3 (the sidespin block and SIDE_TILT
+tuning record) and §12.1 (tests 3c, 8b; eight-shot fixture) updated. §2/§13 are 9C's.
+
 ### What 9A does NOT rewrite in `GOLF-HANDOFF.md`
 
 §10.1–10.4 and §13.1's safe-area/pill paragraph are rewritten. §2 (meters), §7.3 (launch),

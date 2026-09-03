@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v583';
+const CACHE = 'game-hub-v584';
 
 const ASSETS = [
   './',
@@ -660,8 +660,8 @@ const REST_MANIFEST = {
   './golf/css/golf.css': '1a46954e1f',
   './golf/js/ui.js': '011524a423',
   './golf/js/game.js': 'b5a99fbe20',
-  './golf/js/physics.js': 'f59a199b23',
-  './golf/js/flight.js': '2584619ff0',
+  './golf/js/physics.js': '894f7fb4a6',
+  './golf/js/flight.js': '12e06cc01f',
   './golf/js/terrain.js': 'aa4ea40989',
   './golf/js/meters.js': '9df658d215',
   './golf/js/clubs.js': 'a93c143ae1',
@@ -674,7 +674,7 @@ const REST_MANIFEST = {
   './golf/js/vendor/three.core.min.js': '05b2609338',
   './golf/courses/registry.js': '2c07e8b4d9',
   './golf/courses/harbor/course.js': 'f19141defb',
-  './golf/courses/harbor/fixture.json': 'e2caadf86d',
+  './golf/courses/harbor/fixture.json': '5118e24694',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

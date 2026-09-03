@@ -1,9 +1,10 @@
 // golf/tools/refixture.mjs - generates golf/courses/<courseId>/fixture.json. See §12.1 of
 // GOLF-HANDOFF.md. Run: `node golf/tools/refixture.mjs harbor`.
 //
-// Six shots per hole, fixed inputs chosen for reproducibility (NOT for "does this shot score
-// well" - this is a regression fixture, not a tuning table; test8 only checks that physics.js
-// still produces the SAME rest for the SAME input, not that the input is a good golf shot):
+// Eight shots per hole (six straight since Part 6, two curved since Part 9B), fixed inputs
+// chosen for reproducibility (NOT for "does this shot score well" - this is a regression
+// fixture, not a tuning table; test8 only checks that physics.js still produces the SAME rest
+// for the SAME input, not that the input is a good golf shot):
 //   1-3. Tee shot, driver/3w/5i, power 1.0/0.8/0.6, aim 0 (dirDeg = bearing from tee to the
 //        hole's own `target` - "aim 0" throughout this codebase means straight at the natural
 //        aim point, e.g. ui.js's targetBearingDeg + aimOffset with aimOffset 0).
@@ -74,13 +75,25 @@ async function main() {
       const r = simulateShot(terrain, input);
       shots.push({ hole: hole.n, input, rest: [r.rest.x, r.rest.y, r.rest.z], outcome: r.outcome });
     });
+
+    // 7-8 (Part 9B): two curved driver tee shots, curve01 = +0.6 (slice) and -0.6 (hook), power
+    // 1.0, aim 0. Appended AFTER the six straight shots so the straight ones keep their indices
+    // (test 8b's bit-identity check walks them by position and skips anything with curve01).
+    [0.6, -0.6].forEach((curve01, i) => {
+      const input = {
+        from: { x: hole.tee[0], z: hole.tee[1] }, dirDeg: dirTee, clubId: 'dr', lie: 'tee',
+        power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7007 + hi * 10 + i, curve01,
+      };
+      const r = simulateShot(terrain, input);
+      shots.push({ hole: hole.n, input, rest: [r.rest.x, r.rest.y, r.rest.z], outcome: r.outcome });
+    });
   });
 
   const fixture = { courseId, engine: 1, shots };
   const outPath = new URL(`../courses/${courseId}/fixture.json`, import.meta.url);
   const fs = await import('node:fs');
   fs.writeFileSync(outPath, JSON.stringify(fixture, null, 2) + '\n');
-  console.log(`Wrote ${shots.length} shots (${course.holes.length} holes x 6) to ${outPath.pathname}`);
+  console.log(`Wrote ${shots.length} shots (${course.holes.length} holes x 8) to ${outPath.pathname}`);
 }
 
 main();

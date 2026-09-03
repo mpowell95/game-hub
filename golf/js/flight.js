@@ -5,6 +5,16 @@ export const AIR = { rho: 1.225, Cd: 0.24, ClMax: 0.25, spinDecayTau: 25 };
 // 0.62 - re-tuned after fixing physics.js's spinAxis sign bug (lift was acting as downforce).
 // See DECISIONS.md#spinaxis-sign-bug.
 export const CL_COEF = 1.55;
+// (Part 9B, the one approved edit to frozen physics): how far the spin axis tilts out of pure
+// backspin at |curve01| = 1, in degrees. physics.js rotates the axis about the TRAVEL direction
+// by curve01 x SIDE_TILT, so the Magnus force gains a lateral component (a hook or slice) and
+// its vertical component shrinks by cos(tilt) - a strongly curved shot flies lower and shorter.
+// Tuned so a full-power driver at curve01 = 1 lands 25-45 m right of and 5-15 m short of the
+// straight shot (test 3c). GOLF-PART9.md's starting value of 35 gave 48.0 m right / 26.2 m short
+// (outside both bands); the sweep over its 20-50 range passes only from 20 to 26, and 22 sits
+// at the centre of both bands: 35.6 m right, 10.7 m short (hook mirrors: 35.6 / 10.8). See
+// DECISIONS.md#part9b-sidespin for the whole table.
+export const SIDE_TILT = 22;
 const A = 0.001432; // ball cross-section area, m^2
 const R = 0.02134;  // ball radius, m
 

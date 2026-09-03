@@ -195,6 +195,53 @@ function test3b() {
   approx(putt2.totalM, TARGET_PUTT_ROLL_M, TARGET_PUTT_ROLL_M * 0.05, 'putt/green total unaffected by rollout tuning');
 }
 
+// ---- Test 3c: sidespin (Part 9B) ----
+// Flat test hole, driver, fairway, power 1.0, spin 0, no wind. curve01 = +1 must land 25-45 m
+// RIGHT (+x, travelling +z) of the straight shot and 5-15 m SHORTER along the line; -1 mirrors.
+function landOf(r) {
+  const e = r.events.find((ev) => ev.kind === 'land');
+  return e ? { x: e.x, z: e.z } : { x: r.rest.x, z: r.rest.z };
+}
+function test3c() {
+  const t = build(flatHoleDef());
+  const shot = (curve01) => simulateShot(t, {
+    from: { x: 0, z: 0 }, dirDeg: 0, clubId: 'dr', lie: 'fairway',
+    power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7, curve01,
+  });
+  const s = landOf(shot(0)), r = landOf(shot(1)), l = landOf(shot(-1));
+  const right = r.x - s.x, shortR = s.z - r.z;
+  const left = s.x - l.x, shortL = s.z - l.z;
+  assert(right >= 25 && right <= 45, `sidespin: driver at curve01=+1 lands 25-45m right of straight (got ${right.toFixed(1)})`);
+  assert(shortR >= 5 && shortR <= 15, `sidespin: driver at curve01=+1 lands 5-15m shorter (got ${shortR.toFixed(1)})`);
+  assert(left >= 25 && left <= 45, `sidespin: driver at curve01=-1 lands 25-45m LEFT of straight (got ${left.toFixed(1)})`);
+  assert(shortL >= 5 && shortL <= 15, `sidespin: driver at curve01=-1 lands 5-15m shorter (got ${shortL.toFixed(1)})`);
+  // a putt ignores curve01 entirely
+  const pin = [1000, 400];
+  const tP = build(flatHoleDef({ pin, green: { center: [0, 400], radius: 80, tilt: [0, 0] } }));
+  const putt = (curve01) => simulateShot(tP, { from: { x: 0, z: 400 }, dirDeg: 180, clubId: 'pt', lie: 'green', power01: 0.5, spin01: 0, wind: { x: 0, z: 0 }, seed: 7, curve01 });
+  const p0 = putt(0), p1 = putt(1);
+  assert(p0.rest.x === p1.rest.x && p0.rest.z === p1.rest.z, 'sidespin: a putt is bit-identical at curve01 = 0 and 1');
+}
+
+// ---- Test 8b: curve01 = 0 is bit-identical to the pre-sidespin fixture (Part 9B) ----
+// Stronger than test 8's 0.02 m tolerance: the recorded fixture was generated BEFORE sidespin
+// existed, and a curve01 of 0 (explicit or absent) must reproduce every rest EXACTLY (===).
+function test8b() {
+  const terrainByHole = new Map();
+  let exact = 0, total = 0;
+  for (const shot of harborFixture.shots) {
+    if (shot.input.curve01) continue;   // curved shots (added after this test was born) are test 8's
+    let terrain = terrainByHole.get(shot.hole);
+    if (!terrain) { terrain = build(harborCourse.holes.find((h) => h.n === shot.hole)); terrainByHole.set(shot.hole, terrain); }
+    const r = simulateShot(terrain, Object.assign({}, shot.input, { curve01: 0 }));
+    const [ex, ey, ez] = shot.rest;
+    total++;
+    if (r.rest.x === ex && r.rest.y === ey && r.rest.z === ez) exact++;
+    else console.error(`FAIL: bit-identity hole ${shot.hole} shot ${harborFixture.shots.indexOf(shot)}: [${ex},${ey},${ez}] vs [${r.rest.x},${r.rest.y},${r.rest.z}]`);
+  }
+  assert(exact === total && total > 0, `curve01 = 0 bit-identical to the fixture on every straight shot (${exact}/${total})`);
+}
+
 // ---- Test 4: reachability, per Harbor hole ----
 function test4() {
   for (const hole of harborCourse.holes) {
@@ -298,11 +345,13 @@ test1b();
 test2();
 test3();
 test3b();
+test3c();
 test4();
 test5();
 test6();
 test7();
 test8();
+test8b();
 
 console.log(`${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
