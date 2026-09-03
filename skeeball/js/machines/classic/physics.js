@@ -16,14 +16,6 @@ import { buildMachine } from './machine.js';
 
 const H = 1 / 240;               // fixed physics step; flight and thin collars need the rate
 const MAX_T = 12;                // emergency settle cap; the tests assert it never fires
-// A FLARE HIT THIS HARD IS A WILD ONE, in m/s along the contact normal. The flare is the taper
-// from the lane out to the board (machine.js) - two thin walls across the trough gap - and a ball
-// that catches one hard is thrown somewhere nobody aimed, often clean out of the cabinet. Matt,
-// 2026-09-02: "if the ball hits the flare and bounces wildly, you get the ball back." A GRAZE MUST
-// NOT PAY: a ball rolling back down into the trough brushes the flare all the time. Measured over a
-// 169-throw sweep of the whole dial, flare touches run 0.8 m/s at the 10th percentile, 1.62 at the
-// median and 2.66 at the hardest, so this sits in the middle of the hard half.
-const FLARE_WILD = 1.2;
 export const STEP = H;           // exposed for the headless tests' update loops
 
 const GROUP_BALL = 1;
@@ -97,10 +89,7 @@ function buildWorld(board) {
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // kick + keep: padded, kills the ball
-  const matBack = new CANNON.Material('back');
-  // The back wall BELOW the scoreboard's dividing rule - see backLowRest in boards.js and
-  // SB_LINE_FRAC below. Same zero grip as the wall above it; only the bounce differs.
-  const matBackLow = new CANNON.Material('backLow');     // the backboard: padded AND grip-free (see its contact)
+  const matBack = new CANNON.Material('back');     // the backboard: padded AND grip-free (see its contact)
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
   const matRing100 = new CANNON.Material('ring100');
@@ -138,21 +127,6 @@ function buildWorld(board) {
   // HOT SHOT's engine reached the same conclusion independently (deadFric 0.06 on its
   // bank-shot wall). 'kick' and 'keep' stay on matDead: the kicker keeps its grip.
   contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
-  contact(matBall, matBackLow, pick(MAT.backLowFric, pick(MAT.backFric, 0)), pick(MAT.backLowRest, pick(MAT.backRest, 0.60)));
-
-  // WHERE THE SCOREBOARD'S DIVIDING RULE SITS, as a fraction of the panel's height up from its
-  // bottom. Matt, 2026-09-02: the back wall bounces 0.05 below that line and 0.60 above it. These
-  // five numbers are render.js's own (_paintArcadeBoard: a 2048-wide texture whose height keeps the
-  // panel's aspect, TOP_INSET 210 plus 3 on-screen px of padding, a 14% bottom inset, W/181 texture
-  // px per on-screen px, and a 2 x 2 grid whose rule is one cell down). Derived here rather than
-  // typed in, so repainting the panel cannot leave the physics answering to a line nobody can see.
-  const SB_LINE_FRAC = (() => {
-    const W = 2048;
-    const Hpx = Math.round(W * (G.backboardH / (G.boardW + 0.06)));
-    const usableTop = 210 + 3 * (W / 181);
-    const usableH = Hpx - usableTop - Hpx * 0.14;
-    return 1 - (usableTop + usableH / 2) / Hpx;
-  })();
 
   for (const s of M.solids) {
     // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
@@ -190,29 +164,6 @@ function buildWorld(board) {
       }
     }
     body.userData = { part: s.part, cup: s.cup || null };
-    // THE BACK WALL IS ONE SOLID IN machine.js AND TWO BODIES HERE. machine.js stays the single
-    // description render.js draws (one wall, one scoreboard, unchanged on screen); the split is a
-    // material boundary, not a shape - both halves keep part 'backboard', so every event, test and
-    // renderer sees exactly what it saw before.
-    if (s.part === 'backboard') {
-      const botY = s.pos[1] - s.half[1];
-      const yLine = botY + G.backboardH * SB_LINE_FRAC;
-      for (const half of [[botY, yLine, matBackLow], [yLine, s.pos[1] + s.half[1], matBack]]) {
-        const h = (half[1] - half[0]) / 2;
-        if (h <= 0.001) continue;
-        const part = new CANNON.Body({
-          type: CANNON.Body.STATIC,
-          shape: new CANNON.Box(new CANNON.Vec3(s.half[0], h, s.half[2])),
-          material: half[2],
-          collisionFilterGroup: GROUP_REST,
-          collisionFilterMask: GROUP_BALL,
-        });
-        part.position.set(s.pos[0], half[0] + h, s.pos[2]);
-        part.userData = { part: 'backboard', cup: null };
-        world.addBody(part);
-      }
-      continue;
-    }
     world.addBody(body);
   }
 
@@ -277,9 +228,6 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     captured: null,           // hole id once the mouth has the ball
     capturedFaceY: 0,
     touchedBoard: false,
-    // Armed by a hard flare contact (see FLARE_WILD). It only ARMS the return - a ball that goes
-    // on to fall through a mouth keeps its score; see finishAt.
-    flareWild: false,
     bounces: 0,
     nContacts: 0,             // contact events emitted so far, so the cap below can bite
     airborne: false,
@@ -302,9 +250,6 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     // GUARD: the lane and the hump do not count. The ball is touching those from the moment it is
     // served, so counting them would arm the next throw before this one had gone anywhere.
     if (!st.arrived && part && part !== 'lane' && part !== 'hump') st.arrived = true;
-    // WILD OFF THE FLARE: arms the ball-back rule in finishAt. Nothing else changes here - the
-    // ball plays on exactly as it did, and if it lands in a hole it scores it.
-    if (part === 'flare' && vn > FLARE_WILD) st.flareWild = true;
     // Game-feel events (UNCHANGED): the scoring face (H) registers first-touch and hard bounces,
     // the backboard (M) its own knocks. render/rules and the tests key off exactly these.
     if (part === 'board') {
@@ -328,19 +273,7 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   return st;
 }
 
-/** The ball is not spent: game.js puts it back on the count and the player throws it again
- *  (its `_settle`, on a null outcome). The one way any rule here hands a ball back. */
-function returnBall(st) {
-  st.outcome = null;
-  st.done = true;
-  st.events.push({ type: 'returned' });
-}
-
 function finishAt(st, hole, value, kind) {
-  // A WILD FLARE BOUNCE THAT SCORED NOTHING COSTS NO BALL (Matt, 2026-09-02). It is not a scoring
-  // rule: a ball that hit the flare hard and still fell through a mouth is paid in full below, and
-  // nothing that scored is ever turned into a return.
-  if (!(value | 0) && st.flareWild) { returnBall(st); return; }
   st.outcome = { hole, value: value | 0 };
   st.done = true;
   if (kind === 'gutter') st.events.push({ type: 'gutter' });
@@ -460,24 +393,18 @@ function substep(st) {
     }
   }
 
-  // 2b. LEFT THE MACHINE -> THE PLAYER GETS THE BALL BACK (Matt, 2026-09-02: "If the ball lands
-  //     outside of the machine, you get the ball back"). There is no lid (machine.js's 'keep'
-  //     walls are four sides, 1.6 m, no ceiling) and there must not be one - a ball thrown hard
-  //     enough still leaves. What changed is what leaving COSTS: it used to fall past y -0.3 and
-  //     be scored as a gutter zero, which spent a ball on a throw the machine never resolved.
-  //     Below the machine (nothing inside it reaches -0.3: the trough floor sits at -0.15) or
-  //     wide of the containment (0.80 against keep walls at 0.56) means it is out and gone.
-  if (p.y < -0.3 || Math.abs(p.x) > G.boardW / 2 + 0.30) { returnBall(st); return; }
-
   // 3. The trough: where a short throw dies, and where the board's bottom edge feeds every ball
   //    that ran out of steam and came back down. GUARD: IT IS WORTH NOTHING - the 10 is a real
   //    hole on the face now, so a ball down here has missed every hole there is, including the
   //    10, and must not be paid the 10's value. See DECISIONS.md#trough-and-lip.
+  //
+  //    (p.y < -0.3 is the belt-and-braces catch: geometry should make it unreachable, but a ball
+  //    that somehow leaves the world must still resolve, not fall forever.)
   const inTrough = p.z > st.M.troughZ[0] - 0.24 && p.z < st.M.troughZ[1] + 0.02 && p.y < M.troughY + G.ballR + 0.03;
-  if (inTrough) {
+  if (inTrough || p.y < -0.3) {
     if (st.troughAt < 0) st.troughAt = st.t;
     const speed = ball.velocity.length();
-    if (speed < 0.55 || st.t - st.troughAt > 1.6) {
+    if (speed < 0.55 || st.t - st.troughAt > 1.6 || p.y < -0.3) {
       // `corner0` is kept as the id, not renamed: it is written into the mid-rack autosave and
       // old keys are never repurposed (THE LAW rule 5). It now covers the whole trough, not just
       // its corners.
@@ -501,7 +428,9 @@ function substep(st) {
   //    nobody asked for, and Matt reverted it the same day. If a returned ball needs to stop
   //    reading as the game ignoring you, that is a FEEDBACK problem, not a scoring one.
   if (p.z > -0.04 && ball.velocity.z > 0.05 && st.t > 0.4) {
-    returnBall(st);
+    st.outcome = null;
+    st.done = true;
+    st.events.push({ type: 'returned' });
     return;
   }
 
@@ -515,7 +444,9 @@ function substep(st) {
   //     hard it was thrown - the rule in section 4's guard already decided this.
   if (p.z > -(G.laneLen + G.humpLen) && p.z < -0.04 && p.y < G.ballR * 2.4
     && st.t > 1.0 && ball.velocity.length() < 0.35) {
-    returnBall(st);
+    st.outcome = null;
+    st.done = true;
+    st.events.push({ type: 'returned' });
     return;
   }
 
