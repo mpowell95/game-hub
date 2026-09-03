@@ -14,9 +14,10 @@ import * as THREE from '../../vendor/three.module.min.js';
 import { buildMachine } from './machine.js';
 import { BALLS_PER_GAME } from '../../boards.js';
 
-// How long a wall contact mark lives (wallMarkAt). Long enough to SEE on a phone at arm's
-// length, short enough that the next throw is not competing with the last one's marks.
-const WALL_MARK_LIFE = 0.55;
+// How long a wall scuff lives (wallMarkAt). Matt asked for one that "fades away after a couple
+// seconds"; two is long enough to find after the ball has moved on, and short enough that the next
+// throw is not competing with the last one's marks.
+const WALL_MARK_LIFE = 2.0;
 const REDUCED = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -2348,17 +2349,19 @@ export class Renderer {
       // a rack, never freed, which is why a long session got choppier than a fresh one (2026-08-26).
       if (s.userData.t > 1.1) { this.scene.remove(s); if (s.material.map) s.material.map.dispose(); s.material.dispose(); this._popups.splice(i, 1); }
     }
-    // THE WALL MARKS: expand a little and fade. A mark is TWO rings (see wallMarkAt) held in one
-    // group, so the group carries the clock and the two materials are faded together.
+    // THE WALL SCUFFS: hold, then fade out. No growth - a scuff is a mark left behind, not a
+    // shockwave, and the pulse the first version had is most of what made it read as an effect
+    // rather than as dirt on a wall.
     for (let i = this._wallMarks.length - 1; i >= 0; i--) {
-      const g = this._wallMarks[i];
-      g.userData.t += dt;
-      const k = g.userData.t / WALL_MARK_LIFE;
-      if (!REDUCED) { const sc = g.userData.r * (1 + k * 0.55); g.scale.set(sc, sc, sc); }
-      for (const m of g.children) m.material.opacity = Math.max(0, m.userData.o0 * (1 - k));
+      const m = this._wallMarks[i];
+      m.userData.t += dt;
+      const k = m.userData.t / WALL_MARK_LIFE;
+      // Full for the first third, then out. Fading from the first frame makes the mark look like
+      // it is already leaving before the player has found it.
+      m.material.opacity = m.userData.o0 * Math.max(0, Math.min(1, (1 - k) / 0.67));
       if (k >= 1) {
-        this.scene.remove(g);
-        for (const m of g.children) m.material.dispose();
+        this.scene.remove(m);
+        m.material.dispose();
         this._wallMarks.splice(i, 1);
       }
     }
@@ -2420,73 +2423,84 @@ export class Renderer {
     this._popups.push(s);
   }
 
-  /** WHERE THE BALL STRUCK A WALL - a ring on the surface it hit, at the point it hit it.
+  /** THE SCUFF THE BALL LEAVES ON THE BACK WALL - a soft dark mark, lying IN the wall, at the
+   *  point it was struck.
    *
-   *  Matt, 2026-09-03: "It's impossible to tell where on the back wall a ball that's overthrown
-   *  bounces off. Sometimes I'll throw it and it doesn't look like it even touched the back wall,
-   *  but based off how it lands I know it must have." The engine always knew - physics.js's
-   *  'wall' event carries the part, the point and the impact speed - and nothing drew it, so a
-   *  bounce read as the ball changing direction in front of a flat wall for no reason.
+   *  Matt asked for this because a bounce off the back of the machine had no visual at all
+   *  ("It's impossible to tell where on the back wall a ball that's overthrown bounces off").
+   *  The FIRST version of it was wrong in three ways he then had to point out - a bright gold
+   *  ring, drawn on the side rails as well, and BILLBOARDED to face the player. All three are
+   *  corrected here, and the reasons are worth keeping:
    *
-   *  TWO RINGS, dark behind bright, for the same reason popupAt strokes its text before filling
-   *  it: this wall is not one colour. The lower half is the scoreboard (cream panels, gold
-   *  numbers) and the upper half is near-black cabinet, and a single-colour ring is invisible on
-   *  one or the other. The pair reads on both.
+   *  1. IT LIES IN THE SURFACE, it does not turn to face the camera. Matt: "to have the ring
+   *     appear face on to the user as a perfect circle when it hits a wall that's almost
+   *     perpendicular to the player is crazy. That's not the norm for stuff like this." He is
+   *     right, and the norm has a name: a DECAL - a texture projected onto the surface, which
+   *     foreshortens with it (three.js ships DecalGeometry for exactly this). This wall is flat,
+   *     so it needs no projection machinery: a quad in the wall's own plane IS the decal, and it
+   *     costs one draw call. polygonOffset is the standard way to keep it off the wall's z rather
+   *     than shoving it bodily forward.
+   *  2. IT IS A SCUFF, NOT A SIGN. Matt: "a big, solid, neon ring that's super distracting... it's
+   *     gotta be tampered down significantly... maybe it's just a semi dark scuff mark that fades
+   *     away after a couple seconds." So: a soft dark radial smudge, no rim, no glow, about one
+   *     ball across, gone in two seconds.
+   *  3. THE BACK WALL ONLY (see physics.js's 'wall' event, which no longer fires for a rail), and
+   *     only the FIRST wall contact of a throw. A ball that rattles between the wall and the
+   *     baskets leaves one mark, not six.
    *
-   *  SIZE IS THE IMPACT SPEED, so a graze and a hammer do not look alike - the second half of
-   *  what Matt was asking for. The ball is 10.9 cm across; a mark runs 8 to 16 cm, so it reads at
-   *  the ball's own scale rather than as a decal on the scenery.
-   *
-   *  GUARD: geometry is SHARED and tracked once (a ring per impact would leak one per bounce, the
-   *  mistake popupAt's textures made - see the .map note in render()); the two materials are
-   *  per-mark and disposed when it expires. */
+   *  GUARD: the texture and the quad are built ONCE and shared. A canvas texture per impact is
+   *  the leak popupAt was caught making (see the .map note in render()); only the per-mark
+   *  material is disposable, and it is disposed when the mark expires. */
+  _scuffTexture() {
+    if (this._scuffTex) return this._scuffTex;
+    const N = 128;
+    const c = this._canvas(N, N);
+    const x = c.getContext('2d');
+    // Soft in the middle, nothing at the edge - the shape of a smudge rather than a stamp.
+    const g = x.createRadialGradient(N / 2, N / 2, N * 0.04, N / 2, N / 2, N * 0.48);
+    g.addColorStop(0, 'rgba(8,7,6,0.60)');
+    g.addColorStop(0.45, 'rgba(8,7,6,0.30)');
+    g.addColorStop(0.78, 'rgba(8,7,6,0.10)');
+    g.addColorStop(1, 'rgba(8,7,6,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, N, N);
+    this._scuffTex = this._track(new THREE.CanvasTexture(c));
+    return this._scuffTex;
+  }
+
   wallMarkAt(pos, part, speed) {
-    if (!this._markGeo) {
-      // A unit ring: scaled per mark, so nothing is allocated per impact.
-      this._markGeo = this._track(new THREE.RingGeometry(0.62, 1.0, 28));
-      this._markGeoOuter = this._track(new THREE.RingGeometry(0.52, 1.12, 28));
-    }
-    const g = new THREE.Group();
-    // DOUBLE-SIDED, and that is not belt and braces: a ring faces +z by its own geometry, so
-    // the one turned onto a side rail ends up facing OUTBOARD, away from a camera standing on the
-    // machine centreline - single-sided, every rail mark was culled and simply never appeared.
-    const halo = new THREE.Mesh(this._markGeoOuter,
-      new THREE.MeshBasicMaterial({ color: 0x14161b, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
-    halo.userData.o0 = 0.55;
-    const ring = new THREE.Mesh(this._markGeo,
-      new THREE.MeshBasicMaterial({ color: 0xffd977, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
-    ring.userData.o0 = 0.95;
-    g.add(halo, ring);
-    // ON THE SURFACE, NOT WHERE THE BALL WAS. The event carries the ball's CENTRE, which at
-    // the moment of contact stands a whole ball radius (5.45 cm) off the wall - drawn there the
-    // mark floats in mid-air in front of the machine, and on a side rail it is turned edge-on to
-    // the camera and all but invisible. So only the two coordinates ALONG the wall come from the
-    // ball; the third is the wall's own plane, taken from machine.js so it cannot drift from the
-    // surface the ball actually hit. OFF stands it 14 mm proud so it cannot z-fight.
-    const OFF = 0.014;
-    if (part === 'rail') {
-      // A side rail's face is x-constant, at railInnerX.
-      g.position.set(Math.sign(pos.x || 1) * (this.M.railInnerX - OFF), pos.y, pos.z);
-    } else {
-      const bb = this.M.solids.find((sd) => sd.part === 'backboard');
-      const faceZ = bb ? bb.pos[2] + bb.half[2] : pos.z;
-      g.position.set(pos.x, pos.y, faceZ + OFF);
-    }
-    // AND IT FACES THE PLAYER, on every surface. Laid FLAT on a side rail the ring is seen almost
-    // edge-on from where the player stands and reads as a thin sliver - measured by looking at it,
-    // which is the only way this kind of thing is ever measured. A mark is an annotation, not a
-    // sticker on the scenery: it sits WHERE the ball hit and turns to be read. The camera does not
-    // move during a rack, so aiming it once at creation is enough.
-    g.lookAt(this.camera.position);
-    g.userData = { t: 0, r: 0.058 + 0.058 * Math.min(1, (speed || 0) / 2.0) };
-    g.scale.setScalar(g.userData.r);
-    this.scene.add(g);
-    this._wallMarks.push(g);
-    // Nine balls of rail-grinding must never outlive their welcome on screen.
-    if (this._wallMarks.length > 14) {
+    const bb = this.M.solids.find((sd) => sd.part === 'backboard');
+    if (!bb) return;
+    if (!this._markGeo) this._markGeo = this._track(new THREE.PlaneGeometry(1, 1));
+    const mat = new THREE.MeshBasicMaterial({
+      map: this._scuffTexture(),
+      transparent: true,
+      depthWrite: false,
+      // The decal convention: let the depth test run, but bias this surface toward the camera so
+      // it cannot z-fight the wall it is lying on.
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
+      opacity: 0.9,
+    });
+    const m = new THREE.Mesh(this._markGeo, mat);
+    // The back wall faces the player down +z, which is the quad's own resting orientation - no
+    // rotation, and no lookAt. Only the two coordinates ALONG the wall come from the ball; the
+    // third is the wall's own face, because the event carries the ball's CENTRE and that stands a
+    // full ball radius off the wall.
+    m.position.set(pos.x, pos.y, bb.pos[2] + bb.half[2] + 0.002);
+    // A ball is 10.9 cm across. A scuff runs about one ball wide, a little wider off a hard hit -
+    // the gradient means the dark core is smaller again than the quad it is drawn on.
+    const r = 0.115 + 0.055 * Math.min(1, (speed || 0) / 2.0);
+    m.scale.set(r, r, 1);
+    m.userData = { t: 0, o0: 0.9 };
+    this.scene.add(m);
+    this._wallMarks.push(m);
+    // A rack is nine balls; nothing needs more marks on screen than that.
+    if (this._wallMarks.length > 9) {
       const old = this._wallMarks.shift();
       this.scene.remove(old);
-      for (const m of old.children) m.material.dispose();
+      old.material.dispose();
     }
   }
 
@@ -2510,7 +2524,7 @@ export class Renderer {
   dispose() {
     for (const p of this._popups) { this.scene.remove(p); if (p.material.map) p.material.map.dispose(); p.material.dispose(); }
     for (const p of this._particles) { this.scene.remove(p); p.material.dispose(); }
-    for (const g of this._wallMarks) { this.scene.remove(g); for (const m of g.children) m.material.dispose(); }
+    for (const m of this._wallMarks) { this.scene.remove(m); m.material.dispose(); }
     this._popups = [];
     this._particles = [];
     this._wallMarks = [];

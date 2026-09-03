@@ -130,17 +130,11 @@ function saveSettings(patch) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* a preference, not history */ }
   return s;
 }
-function loadSave() {
-  try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (!s || s.v !== 1) return null;
-    const used = s.ballsUsed | 0;
-    return used > 0 && used < BALLS_PER_GAME ? s : null;
-  } catch { return null; }
-}
-function writeSave(snap) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap)); } catch (err) { console.error('[skeeball] autosave failed', err); }
-}
+// GUARD: THERE IS NO loadSave/writeSave ANY MORE (2026-09-03). The mid-rack snapshot is gone -
+// "you either finish or quit" - and clearSave is kept as the SWEEP: it runs at the end of every
+// rack so a snapshot already sitting on a device from the old build is cleared the first time
+// that player finishes or leaves one, instead of lingering for ever. The KEY itself is never
+// repurposed (THE LAW rule 5).
 function clearSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to lose - the rack is recorded */ }
 }
@@ -449,11 +443,11 @@ export class SkeeballUI {
 
     this._refreshTopRecords();
     this._ensureGoalUnlocks();
-    // A RELOAD MID-RACK PUTS YOU BACK ON THE LANE, not on the gallery. The rack always survived
-    // a refresh, but you landed on the machine screen and had to find Resume - two taps back to
-    // a game you never left (playtest, 2026-08-21).
-    const resume = loadSave();
-    if (resume) this._startGame(resume); else this._renderSetup();
+    // OPENING SKEEBALL LANDS ON THE MACHINES, ALWAYS. There is no mid-rack snapshot to come back
+    // to since 2026-09-03 - Matt: "we should also change this so the game just ends when you
+    // leave... And clicking into skeeball should just land you on the machine selection page."
+    // A rack you walk out of is RECORDED and then over (see _abandonRack).
+    this._renderSetup();
   }
 
   // --- unlocks ---------------------------------------------------------------------------------
@@ -886,12 +880,8 @@ export class SkeeballUI {
     // this render saw.
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
-      // Play DISCARDS a banked mid-rack snapshot for this machine. Since 2026-09-03 that is the
-      // only thing this button can mean - there is no Resume beside it to choose instead.
-      // GUARD: only when the snapshot is THIS machine's. Pressing Play on a machine you have no
-      // round going on must not throw away the round you have going somewhere else.
-      const snap = loadSave();
-      if (snap && snap.board === this.settings.board) clearSave();
+      // One button, one meaning: start a rack. There is nothing banked to choose between since
+      // the mid-rack snapshot was removed (2026-09-03).
       this._startGame(null);
     });
     this._paintSetupActions();
@@ -1119,13 +1109,27 @@ export class SkeeballUI {
     el.querySelector('[data-role="resume"]').addEventListener('click', close);
     // GUARD: this DISCARDS the live rack, exactly as the gallery's New game does with a banked
     // one. Same rule in both places, so the word means one thing wherever a player meets it.
-    el.querySelector('[data-role="new"]').addEventListener('click', () => { close(); clearSave(); this._startGame(null); });
+    el.querySelector('[data-role="new"]').addEventListener('click', () => {
+      close();
+      // The live rack is ABANDONED, not binned: it counts, exactly as walking out counts.
+      this._abandonRack();
+      clearSave();
+      this._startGame(null);
+    });
     // GUARD: this Resume is UN-PAUSE - close the card and carry on with the ball you are
     // holding. It is not the gallery Resume, which was removed 2026-09-03; do not remove this one
     // with it.
     // Leaving drops you on the gallery. The rack is still banked and still restores itself on a
     // reload, but there is no longer a button offering it back to you.
-    el.querySelector('[data-role="gallery"]').addEventListener('click', () => { close(); this._renderSetup(); });
+    // QUIT ENDS THE RACK. Matt, 2026-09-03: "you either finish or quit" - so this records what
+    // was thrown (score, play, 100s, unlocks) and the rack is over. It does not bank anything to
+    // come back to; there is nothing to come back to any more.
+    el.querySelector('[data-role="gallery"]').addEventListener('click', () => {
+      close();
+      this._abandonRack();
+      this.game = null;
+      this._renderSetup();
+    });
     el.addEventListener('click', (e) => { if (e.target === el) close(); });
   }
 
@@ -1658,9 +1662,6 @@ export class SkeeballUI {
             if (gold) Rr.celebrate();
           }
           this._paintHud();
-          // GUARD: only with NOTHING in the air. A snapshot has no room for a ball in flight,
-          // so saving mid-flight would quietly drop it and hand the player a free re-throw.
-          if (!this.game.balls.length) writeSave(this.game.snapshot());
           if (this._lastThrow) {
             const ts = this._throwStats || {};
             const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -2110,6 +2111,40 @@ export class SkeeballUI {
 
   // --- the finished rack -----------------------------------------------------------------------
 
+  /** LEAVING MID-RACK ENDS THE RACK, AND THE RACK STILL COUNTS (2026-09-03). Matt: "If I leave a
+   *  game mid game, go back to the hub or leave the app or whatever... the game should be
+   *  terminated. Make sure all the stats are counted (points scored, games played, 100s, etc)."
+   *
+   *  So this is _rackOver's recording half with none of its theatre - no card, no fireworks, no
+   *  count-up, because nobody is looking at the screen. It runs the SAME recordSkeeball call on
+   *  the SAME game.result() payload, so a walked-out rack lands in the store exactly as a finished
+   *  one does: its score, its play, its 100s, its unlocks.
+   *
+   *  GUARD: this.recorded is the one-shot both paths share. Every write in js/game-stats.js is
+   *  additive, so recording twice would inflate the play count silently rather than fail loudly -
+   *  which is why _rackOver checks the same flag and why this sets it. */
+  _abandonRack() {
+    if (!this.game || this.game.over || this.recorded) return;
+    // Nothing thrown yet is not a rack. Recording it would put an empty 0 in the player's history
+    // for opening a machine and changing their mind.
+    if (!this.game.thrown) { this.recorded = true; return; }
+    this.recorded = true;
+    const board = this.game.board;
+    try {
+      const practice = isBoardTesting(board.id, !!board.adminOnly);
+      recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice });
+    } catch (err) {
+      console.error('[skeeball] could not record the abandoned rack', err);
+    }
+    try {
+      for (const id of this._earnedUnlocks(board.id, this.game.score)) unlockSkeeballBoard(id);
+    } catch (err) {
+      console.error('[skeeball] could not store an earned unlock', err);
+    }
+    try { syncMyStats(); } catch (err) { console.error('[skeeball] stats sync could not start', err); }
+    clearSave();
+  }
+
   _rackOver(result) {
     const board = this.game.board;
     // What stood BEFORE this rack lands in the store - that is what "NEW BEST" means.
@@ -2266,6 +2301,12 @@ export class SkeeballUI {
     this.disposed = true;
     this._stopLoop();
     this._cancelPrewarm();
+    // WALKING OUT IS QUITTING (2026-09-03). The hub's back button, a swipe to another game and an
+    // unmount all arrive here, and none of them bank a rack to resume any more - so the rack is
+    // recorded on the way past. No-op if it was already recorded or if nothing was thrown, and it
+    // runs AFTER the loop and the prewarm are stopped (nothing should still be rendering) but
+    // BEFORE this.game is dropped below, which is what it reads.
+    try { this._abandonRack(); } catch (err) { console.error('[skeeball] could not record on leave', err); }
     this._stopHpDemo();
     this._closeOverlay();
     this.root.removeEventListener('click', this._onDefTap);
@@ -2304,9 +2345,11 @@ export function destroy() {
   instance = null;
 }
 
-/** FALSE even mid-rack: this game is in the autosave/resume class of the contract (root
- *  CLAUDE.md, "The module contract"). Every settled ball snapshots to gamehub.skeeball.save.v1
- *  and the gallery's Play button becomes Resume, so leaving loses nothing worth confirming. */
+/** FALSE even mid-rack, and for a different reason since 2026-09-03: there is nothing to confirm
+ *  because leaving IS the end of the rack. The mid-rack snapshot is gone (Matt: "you either finish
+ *  or quit"), and destroy() records what was thrown on the way out - the score, the play, the 100s
+ *  and any unlock all land in the store - so walking away costs the player nothing and needs no
+ *  "are you sure". */
 export function isInProgress() {
   return false;
 }
