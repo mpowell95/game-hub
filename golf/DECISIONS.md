@@ -680,3 +680,91 @@ signed and merged, including a negative total), birdies/eagles/aces summed, `lon
 took the max of 260/271, `bestRoundByCourse.harbor` took the min of 39/44 = 39 - exactly
 matching §11's spec example format ("Harbor Links: 39"). Confirms the whole pipeline is wired
 correctly end to end, not just structurally.
+
+## part8-scope
+
+Closed the two gaps Part 7's report flagged (`golf/js/ui.js` was out of that part's file list):
+`recordGolf` is now called exactly once, from `_showRoundSummary()`; the setup screen now reads
+`courseMode()` per course and gates Play/Resume/New round accordingly. Also: `golf/CLAUDE.md`
+(this game's first, `test-game-conventions.mjs` now fully green for golf), and the actual ship -
+commit, PR, merge, verified Pages deploy, and the admin-config write that puts the shipped game
+into "testing."
+
+### The practice bucket (`gf.practice`)
+
+§14 says a TESTING course's rounds are "recorded under the same practice bucket Skeeball uses
+for testing machines" - Skeeball's `sk.practice` has no golf equivalent yet, so this part added
+one, mirroring it exactly: `ensureGf` grew a `practice: {}` field (courseId-keyed), `recordGolf`
+gained an `extras.practice` branch that writes into it and returns before touching any real
+counter (`js/game-stats.js`), `js/players-agg.js` merges it across devices the same way
+`sk.practice.boards` merges, and `js/game-stats-ui.js`'s `golfScreen` shows it on its own dashed
+"Practice (not counted)" row (THE LAW rule 1 - stored is not enough). This required editing
+`js/game-stats.js`, `js/players-agg.js`, `js/game-stats-ui.js` and `js/strings.js` again, beyond
+Part 8's literal instruction (`golf/js/ui.js` + `golf/CLAUDE.md` + the deploy) - judged
+necessary because "recorded under the practice bucket" cannot be satisfied without one existing,
+the same way Part 7's admin-config wiring needed `normalizeConfig()` extended to parse `golf`.
+
+`round.practice` is decided ONCE, in `_startNewRound()`, and frozen on the round for its whole
+life (persisted by `game.js`, same field-freeze pattern as `difficulty`/`seed`) - re-checking
+mid-round would let an admin's later flip retarget where an in-progress round's numbers land.
+
+### `longestDriveYd`, tracked live
+
+§11's rule (driver/3-wood off the tee, landing fairway/green/fringe/tee) needs the FROM lie and
+club of the specific shot that just resolved, which `game.js`'s round-state does not carry (only
+cumulative per-hole strokes). Rather than extend the round-state contract for one cosmetic stat,
+`ui.js` captures `_lastShotClub`/`_lastShotFromTee` in `_fireShot()` and updates a UI-transient
+`_roundLongestDriveYd` in `_applyResult()`, reading `result.carryM`/`result.lie` directly (BEFORE
+`applyShotResult` can overwrite `round.ball` with the next hole's tee position on a
+hole-advancing shot). Reset to 0 on every `_startNewRound()`/`_resumeRound()` - the one accepted
+cost is that a resumed round cannot recover a drive hit before the app closed. See
+`golf/CLAUDE.md`'s "Two accepted, documented limitations" for this and the second one (a narrow
+close-during-the-final-flash window that can skip recording a round, never double-record one).
+
+### Course-mode gating on the setup screen
+
+`_courseLockInfo(course)` resolves `courseMode(course.id)` plus (for `unlockable`) whether the
+PREVIOUS course in `COURSES` order has a `bestRoundByCourse` entry - vacuously true for index 0,
+so Harbor Links needs no prerequisite. A locked tile greys (`data-locked="true"`, CSS already
+built in Part 4) and shows the same lock glyph `gs_sk_locked`'s screen uses. **Resuming an
+already-saved round is never blocked by the CURRENT lock state** - only starting a NEW round is;
+verified live (see below) with a real saved round on a course an admin had since locked back to
+testing, where the setup screen showed "Locked" for the tile but Resume still worked.
+
+### A real bug, found only by the browser + My Stats check the instruction asked for
+
+`js/game-stats-ui.js`'s `headlineOf(id, rec)` - the function behind the game-LIST row's headline
+number (`gameListHTML`, separate from `golfScreen`'s own detail-screen tallies) - had no `golf`
+branch. It fell through to the generic default, `record(rec.total).wins`, which reads 0 for any
+round with a negative Modified Stableford total (golf's `bumpTotals` "won" flag is `points >=
+0`). A round that scored -3 showed "0 points" in the game list while `golfScreen`'s own detail
+screen (drilled into from the same row) correctly showed "-3". Part 7's headless smoke test never
+exercised `gameListHTML`/`headlineOf` at all - it called `screenFor` directly - so this survived
+until a real round was played in a real browser and the actual My Stats screen was checked, per
+this part's own instruction. Fixed: `headlineOf` now has a `golf` branch reading `gf.points`,
+signed the same way `golfScreen` already formats it. Verified live, before/after, in the same
+browser session (screenshots in the session transcript, not reproduced here).
+
+### The deploy
+
+Committed to `claude/leaderboard-skeeball-points-headline` (golf/ plus the ten shared-file edits
+across Parts 6-8; every other file in a shared, concurrently-edited working tree was left
+untouched - `git add` by explicit path, never `-A`). Pushed, PR #343 opened. The PR conflicted
+with `origin/main` in exactly `sw.js`/`version.json` (a concurrent Skeeball session's own
+already-merged CACHE-adjacent edits) - resolved in an ISOLATED worktree on a throwaway branch
+(never touching the shared working tree's other uncommitted, unrelated changes), by keeping this
+branch's `CACHE` bump and re-running `node validate-sw-assets.mjs` against the merged file set to
+regenerate `REST_MANIFEST`/`version.json` correctly. Pushed the resolution to update the PR
+branch, merged #343, and watched the `pages-build-deployment` run for the merge commit
+(`263651c`) to `status:completed`/`conclusion:success` before calling anything live.
+
+**Shipped in TESTING state, per the instruction**: `setGameLive('golf', false)` written from the
+real deployed origin (not localhost - dev-origin writes are blocked entirely, opt-in or not,
+this is why the write happened from `mpowell95.github.io`, never from a dev server), verified by
+the write's own fresh-re-read AND by a second independent `isGameLive('golf', true) === false`
+check AND by reloading the real launcher and confirming the Golf tile is gone for a non-dev
+profile. `released` stays unset in `js/hub.js` (Part 8 owns the field, but not the value yet -
+that is the day Harbor Links itself flips to Open, per the instruction). The course-level
+`golf.courses.harbor` key is still absent from admin-config (defaults to `testing` per §14's own
+"missing key -> testing" rule), so the game-level AND course-level gates currently agree by
+construction, not by two separate writes needing to match.
