@@ -916,9 +916,9 @@ the hub entry, the stats plumbing and the leaderboard row are being kept.
     the red risk dot past 100.
 11. Club tile with club-head sprites, `^` / `v`, auto-selection by lie and distance, using the
     approved ladder (21.3).
-12. **Power ring: ping-pong oscillation, 0.8 s bottom to top, ~1.4 s full cycle.**
+12. **Power ring: ping-pong oscillation, ~0.75 s bottom to top, ~1.5 s full cycle. Static until tap 1.**
 13. **Accuracy bar: ping-pong slider, red/orange/green/orange/red, stop in the green for straight.**
-14. **Three-tap input, sub-second total, button darkens on press, input locked ~1.4 s after the shot.**
+14. **Three-tap input (~2.6 s total, NOT sub-second), button darkens 33-67 ms on press, input locked ~1.4 s after the shot.**
 15. Ball flight (`0.9s + distance/60`, tap to skip), camera tracking, landing, roll, rest.
 16. Lies: power caps **and** the visibly narrowed accuracy band (21.2), with the two-line readout.
 17. Hazards: the `In the trees` prompt, drop-along-the-line for +1, water dropped at the edge,
