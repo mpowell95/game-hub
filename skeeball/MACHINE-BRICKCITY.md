@@ -30,6 +30,54 @@ brick marquee and a different face. Nine baskets on three treads. The row neares
 | Tagline | `board_brickcity_tag`, EN and ES in `skeeball/js/strings.js`. Taglines ARE translated; the name is not. |
 | Ships as | `adminOnly: true` — Matt's call, 2026-08-24, the same as its two neighbours while he plays it. That is only the CODE DEFAULT: the in-app **Admin** page moves it between Testing / Unlockable / Open with no commit and no deploy. |
 
+## The 100 that was paid for a ball balanced on the rim (2026-09-02)
+
+Matt, with three screen recordings, hours after the corner-100 fix below went live: *"You made the
+game SIGNIFICANTLY worse."* He was right, and the cause was a rule added by that fix.
+
+**What the recordings show.** In all three, every 100 has the same shape: the ball goes UP to the
+top of the machine, loiters against the backboard or the right rail for half a second to a second,
+comes back DOWN onto the top-right 100, comes to rest ON ITS RIM, and is paid 100. Same basket
+every time. Not one was a ball thrown into a basket. One rack went from 140 to 440 on it.
+
+**The rule that did it.** The corner-100 fix added a LIP-REST capture: a ball whose centre was
+inside a widened radius (`rRest = r - ballR*0.10`, against the mouth's own `rEff = r - ballR*0.28`),
+slower than 0.6 m/s, anywhere below rim + `ballR*1.15`, was captured. It was written for one
+measured case - a ball sliding down the riser onto the rim, teetering, then rolling off into the
+-10 - and it paid for a completely different one. Traced on the engine Matt filmed, a typical
+"100" captured with the ball **5.3 cm off the basket's axis on a 4.3 cm opening, 5.4 cm above the
+rim, drifting at 0.19 m/s and moving AWAY from the face.** It was sitting on the rim.
+
+**The second half, and the one that made deleting the first rule insufficient.** That same fix
+raised the capture height gate from `ballR*1.9` above the TREAD to `lip + ballR*1.9` - above the
+RIM - for every ball. A collar stands 0.116 above its tread, so the raise also admits a ball
+sitting still on top of the rim, and the kinematic test cannot refuse it: a stationary ball
+trivially "falls past the lip before crossing the mouth". The rim-relative gate is right for the
+shot it was written for (a ball DROPPED onto the basket has to be seen before the rim gets it), so
+it is kept and **gated on the ball actually falling** - `hDot < -0.8` m/s into the face. A ball
+arriving off this machine's 70-degree launch comes in at 2 to 3 m/s; a ball resting on a rim or
+rolling across a tread is at essentially zero.
+
+**It is also section 3b's standing guard, broken by the fix that added it**: a ball that comes to
+rest on the face is never scored, and the only way to score a hole's value is to fall through its
+mouth. A ball balanced on a rim is on the wall, not in the basket.
+
+| corner 100s in a 23 x 10 swipe/power sweep | before | after |
+|---|---|---|
+| scored | 18 | 16 |
+| **of those, PERCHED on the rim** | **11** | **0** |
+| balls arriving over the mouth that score | 3 of 3 | 3 of 3 |
+| points per throw (rack-of-9 equivalent) | 6.6 (59) | 5.9 (53) |
+
+The shot the corner-100 fix existed for is untouched: `test-brickcity-corner100.mjs` still measures
+20 of 26 over-the-mouth arrivals scoring, against 25% before that fix.
+
+**The probe that would have caught it.** That suite's behavioural checks ALL PASSED while this was
+happening, because a ball perched on the rim still counts as "arrived over the mouth". Only the
+geometry AT THE MOMENT OF CAPTURE separates a basket from a ball balanced on its edge, so the suite
+now checks exactly that, over a real sweep: every corner 100 must be captured either over the
+opening or already below the rim plane. Born red against the engine Matt filmed.
+
 ## The perch, and why this machine no longer pops a parked ball (2026-08-26)
 
 Matt, on the build that had just been made smooth: *"the ball sometimes gets stuck IN the negative
@@ -403,6 +451,74 @@ face rather than of luck. Goal 2 is the sharp one: the penalty row is the easies
 to hit, by design. If either plays wrong once there are real racks behind it, **change it in
 `goals.js` — do not resize a mouth**, which is what makes the face mean something. POPONGO can also
 be opened for everyone from the in-app Admin page in the meantime.
+
+## The corner 100s: a well-aimed ball goes in (2026-09-02)
+
+Matt, with two screen recordings: a swipe that visually looks aimed at a corner 100 *"sometimes
+scores, sometimes misses completely"*, and a degree of angle or a hair of power flips it. A first
+fix capped `aimMax` to 0.12 rad (`a5ec37d`), which he rejected on sight: *"why would we move the
+physical basket around instead of simply correcting that physics issue? ... Just fix that."* He
+was right on both counts: the cap made a basket drawn 8.9 deg off the ball need a 20.8 deg swipe,
+and it fixed nothing about what happened when the ball got there. **Neither the basket nor its
+3.20 in mouth moved for this.** Every number below was measured with the real engine in node
+(`simulateThrow` / `startThrow` + `step`, no browser).
+
+### Where the basket is on screen is not where it is in the world
+
+Projected through the play camera (render.js, eye (0, 0.50, 1.20), aimed at 20% up the face), the
+corner 100 sits **8.9 deg** off the ball's own screen position (the 40 below it 11.3 deg, the -20
+15.3 deg - perspective spreads the near rows). Its serve bearing is 6.3 deg, and the serve that
+actually lands on its axis is **about 5.5 deg**: the lane's friction bleeds a serve's sideways skid
+off in the first 40 cm (a 5 deg serve is rolling at 3 deg by z -0.2), then the 70-degree hump kicks
+what is left, so the ball FLIES at ~8.4 deg. That flight angle is the "10-plus degrees" a swipe at
+that basket looks like; the serve angle is an internal number.
+
+`ui.js`'s swipe curve was `aim = raw^2`, `raw = swipe angle / 0.38` - forgiving near straight,
+steep at the corners, and the corner 100 IS a corner. At the old `aimMax` 0.45 an 8.9 deg swipe
+served at 4.3 deg (short) and 12 deg served at 7.8 deg (the side wall), so the whole window was
+about two degrees of swipe with the sensitivity climbing the further out you aimed. **The curve is
+per board now: `geom.aimCurve` is the exponent (unset = 2, every other machine byte-identical), and
+this machine sets 1** - serve angle proportional to swipe angle - **with `aimMax` 0.235**, the
+proportion (0.38 / 0.235 = 1.62) that puts an 8.9 deg swipe on a 5.5 deg serve. Measured end to
+end (screen angle -> the ui.js curve -> the engine), the 100's hits form one contiguous band at
+8.5-10.5 deg of swipe for powers 0.70-0.78, on the drawn basket, where before they were scattered
+clumps at 12-13 deg.
+
+### The engine threw well-aimed balls back out
+
+The bigger half. Over the serve grid that reaches this basket (4.5-7.5 deg x power 0.62-0.92, 403
+throws), **balls that arrived over the mouth scored 9 times in 36.** Stepped through at 5.5 deg /
+power 0.70 the ball arrives 2 cm off the axis, dead centre, descending at 2.4 m/s - and
+capture cannot see it: section 2's gate was `f.h < ballR * 1.9` (10.4 cm above the TREAD, THE
+CLASSIC's number for flush holes a ball rolls over) and this rim stands 11.6 cm above its tread. So
+the ball's underside grazes the rim's inner top EDGE, whose 45-degree contact normal turns the
+descent into a 1.5 m/s kick across the mouth; the far edge turns that into 1.6 m/s straight UP; and
+capture finally fires on the way out, as a rim-out. A 3.00 in ball into a 3.20 in rigid tube has
+3.7 mm of clearance and no net - any off-axis entry meets an edge, and an edge meets it back.
+
+Four rules in `machines/brickcity/physics.js`, this machine only:
+
+| rule | what it does | the case it was measured on |
+|---|---|---|
+| **the gate is measured from the rim** (`st.maxLip`, and per hole `fh.h < lip + 1.9 ballR`) | a ball dropping toward a basket is seen while it is still above it | the 2 cm-off arrival above |
+| **the net** (`cupBit`: each collar has its own collision group; a captured ball drops the one it was captured by) | capture already means "the floor is gone and gravity takes it through" - on a collar board the collar has to let go with the floor or the rule pays nothing. The other eight collars, the riser and the wall stay solid | same ball, which now drops straight through |
+| **the lip-rest rule** (`rRest = r - 0.10 ballR`, speed < 0.6 m/s) | a ball resting on a rim with its centre over the opening falls in | a riser slide that sat on the inner edge 5.0 cm off the axis of a 5.8 cm mouth, was refused by the 4.3 cm crossing inset, teetered and rolled into the -10 |
+| **a rim-out must be moving away from the face** | a captured ball still descending has not bounced out | forward momentum carried a captured centre 2 mm past the mouth radius toward the riser while still going down; the collar came back solid, kicked it 2.6 m/s up, and it rolled off the rim top in the crack against the riser |
+
+After: **22 of 28 over-the-mouth arrivals score** (79%); 82 of the 403 throws are 100s (was 61). The
+crossing inset (`rEff = r - 0.28 ballR`) and its kinematic test are THE CLASSIC's and unchanged, so
+a ball never over the mouth is never captured and rattles the rim as it always did.
+
+**Tried and rejected, so nobody tries them again:** rim restitution (`ringRest` 0.30 -> 0.05 on
+every collar: 25% -> 28%; and `ring100Rest` is a dead knob on this machine, see physics.js's
+material note), and the full rolling serve spin (`omega = (up x v) / R` instead of forward roll
+only - the hump turned the sideways spin into a lateral kick and a 4.5 deg serve landed 6-11 cm
+right of the axis instead of 1-2). The perspective ratio does differ by row (1.41 top, 1.59 middle,
+1.89 bottom); one proportion cannot serve all three, and it is set for the row that has to be aimed.
+
+`test-brickcity-corner100.mjs` pins all of it: 90 throws over the band, at least 70% of
+over-the-mouth arrivals must score (born red at 25%), plus structural checks that the four rules
+and the two aim numbers are still in the files.
 
 ## Spec waivers
 

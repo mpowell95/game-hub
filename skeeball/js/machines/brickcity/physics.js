@@ -26,7 +26,13 @@ export const STEP = H;           // exposed for the headless tests' update loops
 
 const GROUP_BALL = 1;
 const GROUP_FLOOR = 2;           // the board slab only - what capture removes from under the ball
-const GROUP_REST = 4;            // everything else: lane, hump, trough, collars, band, walls
+const GROUP_REST = 4;            // everything else: lane, hump, trough, band, walls
+// EVERY BASKET'S COLLAR GETS ITS OWN GROUP BIT (2026-09-02). A captured ball stops colliding with
+// the collar it was captured BY - and only that one; the other eight stay solid - because on this
+// machine the collar was what threw a well-aimed ball back out. See section 2's "THE NET" note.
+const CUP_BIT0 = 8;
+const cupBit = (G, id) => CUP_BIT0 << Math.max(0, Object.keys(G.holes).indexOf(id));
+const restMask = (G) => Object.keys(G.holes).reduce((m, id) => m | cupBit(G, id), GROUP_REST);
 
 // Machine descriptions are pure per-board data; build each once.
 const machines = new Map();
@@ -95,6 +101,14 @@ function buildWorld(board) {
   const matBack = new CANNON.Material('back');
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
+  //
+  // GUARD (2026-09-02): ON THIS MACHINE THAT MATERIAL IS NEVER USED. It is handed to 'ringSeg'
+  // parts whose ring id starts with '100' - THE CLASSIC's rings. Every basket here is a 'cupSeg'
+  // collar and takes matRing, so `ring100Rest` in this board's mat block is a dead knob: a sweep
+  // with it overridden to 0.05 was bit-for-bit identical to the baseline (403 throws). If a 100's
+  // rim ever needs its own bounce, route it by `G.holes[s.cup].value === 100` below - and know
+  // that restitution was NOT what made the corner 100 unreliable (ringRest 0.05 on every collar
+  // moved over-the-mouth scoring from 25% to 28%); the capture rules in section 2 were.
   const matRing100 = new CANNON.Material('ring100');
 
   // The feel lives HERE and in boards.js's geom - nowhere else. Every number below is a DEFAULT
@@ -140,7 +154,8 @@ function buildWorld(board) {
               : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
-      collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
+      collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR
+        : s.part === 'cupSeg' && s.cup ? cupBit(G, s.cup) : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
     if (s.shape !== 'prism') {
@@ -163,7 +178,7 @@ function buildWorld(board) {
     linearDamping: 0.006,
     angularDamping: 0.015,
     collisionFilterGroup: GROUP_BALL,
-    collisionFilterMask: GROUP_FLOOR | GROUP_REST,
+    collisionFilterMask: GROUP_FLOOR | restMask(G),
     // Never let the engine put the ball to sleep: a slope roll can dip under the sleep speed
     // limit at its apex, and a sleeping body ignores gravity AND the watchdog's velocity pops.
     allowSleep: false,
@@ -202,6 +217,13 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   ball.position.set(0, G.ballR, -0.12);
   ball.velocity.set(Math.sin(a) * speed, 0, -Math.cos(a) * speed);
   // Served rolling, not skidding: contact-point velocity zero on the lane bed.
+  //
+  // GUARD (2026-09-02): FORWARD ROLL ONLY, ON PURPOSE - do not "correct" this to the full rolling
+  // spin for an aimed serve, omega = (up x v) / R. That was tried and measured: with a z-spin on
+  // the ball the 70-degree hump turns it into a LATERAL KICK, and a 4.5 deg serve landed 6-11 cm
+  // right of the corner 100's axis (was 1-2 cm), against the side wall at 5 deg and off the wall
+  // by 7. The forward-only serve lets the lane's friction bleed the sideways skid off in the first
+  // 40 cm, which is what keeps an aimed ball close to the line it was rolled on.
   ball.angularVelocity.set(-speed / G.ballR, 0, 0);
 
   const st = {
@@ -214,6 +236,10 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     // A CUP BOARD (any hole wearing a collar - POPONGO) resolves its emergencies differently:
     // see the watchdog and the cap below. Decided once per throw, here.
     cupBoard: Object.values(G.holes).some((h) => h && h.collarH > 0),
+    // The tallest collar on the face: section 2's capture gate is measured from the RIM, not the
+    // tread, so a ball dropping toward a basket is seen while it is still above it.
+    maxLip: Object.values(G.holes).reduce((m, h) => Math.max(m, (h && h.collarH) || 0), 0),
+    restMask: restMask(G),
     captured: null,           // hole id once the mouth has the ball
     capturedFaceY: 0,
     touchedBoard: false,
@@ -314,12 +340,22 @@ function substep(st) {
       // else (a bounce-out that slid under the intangible floor before escaping) = a miss.
       if (d < hDef.r + G.ballR) finishAt(st, st.captured, hDef.value, 'hole');
       else finishAt(st, 'corner0', 0, 'gutter');
-    } else if (fc.h > G.ballR * 1.05 && d > hDef.r) {
-      // Clear of the slab's surface and outside the mouth: it bounced out. Give the floor
-      // back and let it play on - this ball has scored nothing yet.
+    } else if (fc.h > G.ballR * 1.05 && d > hDef.r
+      && ball.velocity.y * Math.cos(fc.tilt) + ball.velocity.z * Math.sin(fc.tilt) > 0) {
+      // Clear of the slab's surface, outside the mouth AND MOVING AWAY FROM THE FACE: it bounced
+      // out. Give the floor back and let it play on - this ball has scored nothing yet.
+      //
+      // GUARD (2026-09-02): the "moving away" term is not optional here. A ball captured over
+      // the corner 100 with 1.5 m/s of forward speed drifts to 6.0 cm off the axis of a 5.8 cm
+      // mouth while it is STILL DESCENDING at 2.7 m/s toward the riser 2 cm behind the rim -
+      // the riser is solid and is about to push it forward into the basket. Without this term
+      // that instant read as a rim-out: the collar came back solid under a ball that was
+      // already overlapping it, the ball was kicked 2.6 m/s straight up off the rim top, came
+      // down ON the rim in the crack against the riser, and rolled off along it into a 0
+      // (5.5 deg / power 0.75, stepped). A ball that is still going down has not bounced out.
       st.events.push({ type: 'rimout', hole: st.captured });
       st.captured = null;
-      ball.collisionFilterMask = GROUP_FLOOR | GROUP_REST;
+      ball.collisionFilterMask = GROUP_FLOOR | st.restMask;
     }
     return;
   }
@@ -343,7 +379,20 @@ function substep(st) {
   const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
   const gPerp = 9.82 * cosT;                          // gravity's pull perpendicular to the face
   const need = G.ballR * (typeof G.captureDrop === 'number' ? G.captureDrop : 0.55);
-  if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9) {
+  // GUARD (2026-09-02): THE GATE IS MEASURED FROM EACH BASKET'S RIM, NOT FROM THE TREAD. It used
+  // to be `f.h < ballR * 1.9` (0.104) alone - THE CLASSIC's number, written for flush holes a ball
+  // ROLLS over. The corner 100s' rims stand 0.116 above their tread, so a ball dropping onto one
+  // out of the air was invisible to capture until its centre was already INSIDE the collar - by
+  // which time the rim had had it. Measured (5.5 deg / power 0.70, stepped): the ball arrives
+  // 2 cm off the basket's axis, dead centre by any standard, and descending at 2.4 m/s; at
+  // h 0.179 the gate refuses it; at h 0.155 its underside grazes the rim's inner top EDGE, whose
+  // 45-degree normal turns the descent into a 1.5 m/s kick ACROSS the mouth; the far edge turns
+  // that into 1.6 m/s straight UP, and the ball leaves the basket it was dropped into. Over the
+  // whole 4.5-7.5 deg x 0.62-0.92 grid, balls that arrived over the mouth scored 9 times in 36.
+  // Matt: "a swipe that looks aimed at the basket sometimes scores, sometimes misses completely."
+  // The outer test only has to let a ball NEAR a tall collar through; each hole applies its own
+  // rim-relative gate below.
+  if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9 + st.maxLip) {
     for (const id of Object.keys(G.holes)) {
       const hDef = G.holes[id];
       // GUARD: THIS HOLE'S OWN FRAME. f above is the nearest segment's, which on a staircase is
@@ -354,6 +403,28 @@ function substep(st) {
       const d = Math.hypot(fh.u - hDef.u, fh.v - hDef.v);
       const rEff = hDef.r - G.ballR * 0.28;
       if (d >= rEff) continue;
+      const lip = hDef.collarH > 0 ? hDef.collarH : 0;
+      // THE CLASSIC's 1.9 ballR - measured from THIS basket's RIM for a ball that is FALLING
+      // INTO the mouth, and from the TREAD for anything else.
+      //
+      // GUARD, and the reason for the `falling` term (2026-09-02, second pass): the rim-relative
+      // gate on its own is what let a ball that had merely COME TO REST on a collar's rim be
+      // captured. A collar stands 0.116 above its tread, so raising the gate by `lip` for every
+      // ball also admits one sitting still on top of the rim - and the kinematic test below
+      // cannot refuse it, because a stationary ball trivially "falls past the lip before crossing
+      // the mouth". In Matt's three recordings every 100 came in exactly that way: the ball went
+      // up to the backboard, loitered, came down onto the top-right 100, settled on its rim, and
+      // was paid. Deleting the explicit lip-rest rule did not fix it; this is where it was really
+      // getting in.
+      //
+      // hDot is the ball's speed INTO the face (negative = descending onto it). A ball dropped
+      // onto a basket off this machine's 70-degree launch arrives at 2 to 3 m/s; a ball resting
+      // on a rim, or rolling across the tread, is at essentially zero. 0.8 m/s sits between them
+      // with room on both sides. Below that threshold the gate is the tread-relative one THE
+      // CLASSIC has always used, so a ball on top of a rim is what it looks like: on the wall,
+      // not in the basket.
+      const falling = hDot < -0.8;
+      if (fh.h >= (falling ? lip : 0) + G.ballR * 1.9) continue;
       // how much mouth is left in front of it, along its own line
       const cross = rEff + Math.sqrt(Math.max(0, rEff * rEff - d * d));
       // GUARD: ON A COLLARED CUP, "past the lip" means BELOW THE RIM, not past the face plane.
@@ -362,7 +433,18 @@ function substep(st) {
       // clipping the far rim and bouncing OUT - and it used to be scored anyway, which read as
       // points for merely hitting a cup (Matt, 2026-08-22). Pure kinematics per hole; a hole
       // with no collar (every hole on THE CLASSIC) keeps the original number exactly.
-      const lip = hDef.collarH > 0 ? hDef.collarH : 0;
+      //
+      // THE NET (2026-09-02): ONCE CAPTURED, THE BALL NO LONGER COLLIDES WITH THIS BASKET'S OWN
+      // COLLAR. A real basket has a net; this engine has a rigid 12 mm ring with 3.7 mm of
+      // clearance around a 3.00 in ball, and that ring is what kicked captured balls back out
+      // (the edge-graze mechanism in the guard above). Capture already means "the floor is gone
+      // and gravity takes it through the mouth" - on a collar board the collar has to let go
+      // with the floor, or the rule pays nothing. The other eight collars, the riser behind the
+      // basket and everything else stay solid, so a captured ball still cannot leave the
+      // basket sideways or through the wall; and the pass-through commit at the top of this
+      // function still decides the score, so nothing pays without falling through the tread
+      // inside the mouth. No magnetism, no steering: a ball that was never over the mouth is
+      // never captured, and rattles the rim exactly as it always did.
       // A ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's
       // VOLUME - a real basket has it at any rattle speed. Without this, a fast arrival that
       // failed the kinematic test below ended up sitting on the still-solid slab INSIDE the
@@ -372,17 +454,34 @@ function substep(st) {
       if (lip > 0 && fh.h < lip) {
         st.captured = id;
         st.capturedFaceY = p.y;
-        ball.collisionFilterMask = GROUP_REST;
+        ball.collisionFilterMask = st.restMask & ~cupBit(G, id);
         st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
         return;
       }
+      // REMOVED, AND IT MUST NOT COME BACK: THE LIP-REST RULE (added and reverted 2026-09-02).
+      // For a few hours this loop also captured a ball that was merely SITTING on a collar's rim
+      // - centre inside a widened radius (r - ballR*0.10 instead of rEff), slower than 0.6 m/s,
+      // anywhere under rim + ballR*1.15. It was written for one measured case (a ball sliding
+      // down the riser onto the corner 100's rim, teetering, then rolling off into the -10) and
+      // it paid for a completely different one.
+      //
+      // What it actually did, in Matt's three recordings: every single 100 in them was a ball
+      // that went UP to the top of the machine, loitered against the backboard or the right rail
+      // for half a second to a second, came back DOWN onto the top-right 100, came to rest on
+      // its rim - and was paid 100. Same basket every time. Not one was a ball thrown into the
+      // basket. His rack went 140 to 440 on it. Matt: "the machine is broken."
+      //
+      // It is also section 3b's guard, broken by the person who wrote this: A BALL THAT COMES TO
+      // REST ON THE FACE IS NOT SCORED. The only way to score a hole's value is to fall through
+      // its mouth. A ball balanced on a rim is on the wall, not in the basket, and what happens
+      // next is gravity's business - it tips in and scores, or it rolls off and does not.
       const needH = lip > 0 ? need + Math.max(0, fh.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
       if (vFace * tDrop > cross) continue;            // too fast for this mouth: it rolls on
       st.captured = id;
       st.capturedFaceY = p.y;
-      ball.collisionFilterMask = GROUP_REST;   // the slab lets go; gravity does the rest
+      ball.collisionFilterMask = st.restMask & ~cupBit(G, id);   // the slab and this collar let go
       st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
       return;
     }

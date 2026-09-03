@@ -772,22 +772,37 @@ export const BOARDS = [
 
       minSpeed: 2.60,
       maxSpeed: 6.60,
-      // NARROWED FROM 0.45 (2026-09-02, Matt: a corner-100 swipe that visually looks aimed at the
-      // basket was landing the ball on the side wall instead). Measured with the real engine
-      // (simulateThrow, full power x aim grid): at 0.45 rad (25.8 deg) max aim, a throw aimed
-      // between roughly 7 and 21 degrees flies past the basket's own u before it falls low enough
-      // to score, clips the RIGHT SIDE WALL, and then rides that wall for up to 2 seconds before
-      // landing somewhere unpredictable - a single power/angle step off gives a totally different
-      // outcome. Only two narrow bands were clean (bounces=0, never touched the wall or board):
-      // roughly 4-6.75 deg, and roughly 22-25.5 deg. The 4-6.75 deg band is a genuine straight-line
-      // shot at the corner 100 - it is the hole's real geometric bearing from the serve point,
-      // reachable across a wide power range (0.645-0.925 measured) with zero contact.
+      // THE CORNER 100s' AIM (2026-09-02). Matt, on the build before this one: a swipe that
+      // visually looks aimed at the corner basket "sometimes scores, sometimes misses completely",
+      // and a degree of angle flips it. Two things were wrong, and neither was the basket.
       //
-      // 0.12 rad = 6.9 deg caps EVERY possible swipe inside that clean band, so a full-strength
-      // "aimed at the corner" swipe can no longer reach the wall-clip zone at all. Re-swept after:
-      // all nine holes on this board still reachable at this aimMax. This board's own geom only -
-      // no other machine's aimMax changed.
-      aimMax: 0.12,
+      // 1. WHERE THE BASKET IS ON SCREEN IS NOT WHERE IT IS IN THE WORLD. Projected through the
+      //    play camera (render.js, eye (0, 0.50, 1.20)), the corner 100 sits 8.9 deg off the
+      //    ball's own screen position; its serve bearing is 6.3 deg, and the serve that actually
+      //    lands on its axis is ~5.5 deg (the lane bleeds a serve's sideways skid off and the
+      //    70-degree hump kicks what is left, so a 5 deg serve FLIES at ~8.4 deg - which is the
+      //    "10+ degrees" a swipe at that basket looks like). ui.js's default curve is
+      //    aim = raw^2 with raw = swipe angle / 0.38: at the old 0.45 it sent an 8.9 deg swipe
+      //    to 4.3 deg (short, inside the basket) and a 12 deg swipe to 7.8 deg (the wall), so the
+      //    whole window for that shot was about two degrees of swipe, with the sensitivity
+      //    growing the further out you aimed. The 0.12 cap that shipped for one build did the
+      //    reverse: it needed a 20.8 deg swipe to reach a basket drawn at 8.9 deg.
+      //
+      //    aimCurve 1 makes serve angle PROPORTIONAL to swipe angle on this machine, and aimMax
+      //    is the proportion: 0.38 rad of swipe / 0.235 rad of serve = 1.62, which puts an
+      //    8.9 deg swipe on a 5.5 deg serve. Measured end to end (screen angle -> ui.js's curve
+      //    -> the engine): the corner 100 scores across a band of swipe angles instead of a line.
+      //    Every other machine leaves aimCurve unset and keeps the old line exactly.
+      //
+      // 2. THE ENGINE THREW WELL-AIMED BALLS BACK OUT. The bigger half; see the 2026-09-02 guards
+      //    in machines/brickcity/physics.js section 2 (the rim-relative capture gate, "the net",
+      //    and the lip-rest rule). Over the serve grid that actually reaches this basket, balls
+      //    that arrived OVER THE MOUTH scored 9 times in 36 before and 23 in 29 after.
+      //
+      // The basket did not move and its 3.20 in mouth did not change. Matt: "why would we move
+      // the physical basket around instead of simply correcting that physics issue?"
+      aimMax: 0.235,
+      aimCurve: 1,
 
       // HOT SHOT's materials, verbatim and for its reasons: slick treads so a miss rolls off the
       // front edge, a near-frictionless back wall (a fast ball sliding down a GRIPPING wall gets

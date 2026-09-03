@@ -114,7 +114,9 @@ below), and **HOT SHOT: BRICK CITY** (2026-08-24, board id `brickcity`, HOT SHOT
 same cabinet and ramp, a brick marquee, and a face whose bottom row TAKES points - **its own
 documentation is `skeeball/MACHINE-BRICKCITY.md`**, and nothing about it is written up here). The
 player swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
-a rack.
+a rack. **The swipe-to-aim curve is per board since 2026-09-02**: `ui.js` reads `geom.aimCurve` as the
+exponent on the swipe angle (unset = 2, the square every machine has always had); only BRICK CITY sets
+it (1, with its `aimMax` re-measured to match) - the why and the numbers are in its own file.
 
 **The board was rebuilt to the REAL classic layout on 2026-08-13** against reference photos Matt
 provided, after the first version shipped a wrong "bullseye" board invented from memory — the
