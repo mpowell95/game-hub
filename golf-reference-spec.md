@@ -41,6 +41,15 @@ what the original did and why.
 | **Hub integration** | In-hub `module:`, `immersive: true` (full screen, hub chrome hidden), like Skeeball. |
 | **Names (frozen forever — THE LAW rule 5)** | folder `golf/` · stats id `'golf'` · settings key `gamehub.golf.v1` · recorder `recordGolf` |
 
+**Later additions to these decisions (2026-09-03):**
+
+| Topic | Decision |
+|---|---|
+| **Meter colours** | Keep the reference's red/green exactly. Revisit only if it proves unreadable in play. |
+| **Leaderboard number** | The player's **best 9-hole score** (lowest wins). Skill points may replace it later. |
+| **Tap-target floor** | A suggestion, not a rule (see 18.2 for why). |
+| **Club distances** | See 21.2. Stock driver **215 yds**, not the reference's measured 287 - that figure left no room for upgrades and made a 360 yd par 4 play as a drive and a wedge. |
+
 **Consequences to keep in mind while building:**
 - The scorecard screen loses its opponent scoreboard panel. Keep the grid, the totals and the avatar.
 - The `(1,0)` mystery number is moot — it lived in the opponent scoreboard. Do not implement it.
@@ -623,8 +632,8 @@ Documented so the implementer does not faithfully reproduce a defect.
 6. **Low-contrast grey-on-grey text** — `Current tour`, `(0,0)`, the `practice` mode line.
 7. **A ~7.5 s ball flight with no skip.** Add tap-to-speed-up or shorten the flight; over nine holes
    this is minutes of watching a dot.
-8. **No landing marker.** Nothing shows where the selected club will actually land, so club choice
-   is guesswork until the bag is memorised. A target ring at the club's carry distance would fix it.
+8. ~~**No landing marker.**~~ **STRUCK - this was my error, not the game's.** The aim line's five
+   red dots ARE the landing markers, calibrated to the power meter. See section 21.1.
 9. **Tap-only aiming.** A drag on the map would be faster and more mobile-native.
 10. **Dashed debug rectangles** around the meter and swing button appear to be left-in debug
     outlines. Do not reproduce.
@@ -643,8 +652,12 @@ section 0, have been struck from this list.
   swing distances, not club maximums - only the driver's ~287 yds full-power carry is usable.
 - The over-100% **power vs precision** toggle: its visual state, its tap target, its effect.
 - Wind: units, arrow semantics, strength of effect. Wind read `0` in all five clips.
-- Hazard rules: water penalties, bunker lies, playing from trees or rough, out of bounds, drops.
-  No ball entered a hazard in any clip.
+- Hazard rules. The SHAPE is now known (section 21.2: obstructed lies offer drop-for-+1 or
+  play-it-as-it-lies; water offers no choice), but three details are still needed:
+  **(a)** where a drop places the ball - back at the previous spot, or beside where it lies;
+  **(b)** what water costs and where it replays from - previous spot, or the water's edge;
+  **(c)** whether playing from the trees caps power (a punch-out) or allows full power with the
+  trees as real obstacles. Bunker and rough lies are also still unobserved.
 - The yards-to-feet switch threshold (see section 12 for the recommended surface-based rule).
 - Score banners other than `Birdie!` and `New course best`.
 - The club shop's contents - ours to design (17.8).
@@ -878,7 +891,11 @@ block are distinguished by hue alone.
 
 Copying this exactly would ship a core mechanic the primary player cannot reliably read.
 
-**Recommended fix — keep the shape, change the coding:**
+**DECIDED (Matt, 2026-09-03): keep the original red/green colours.** Build the meter exactly as
+the reference draws it. The concern below is recorded only so it can be revisited quickly if the
+meter turns out to be hard to read in play — do not act on it unless asked.
+
+~~Recommended fix — keep the shape, change the coding:~~ (held, not being built)
 - Re-hue to the repo's colorblind-safe palette: **teal `#178A7A` centre, vermilion `#E0532F`
   flanks** (blue/orange-family contrast survives red/green colorblindness; yellow `#F2B705` is
   available for the middle band).
@@ -890,10 +907,14 @@ Copying this exactly would ship a core mechanic the primary player cannot reliab
 This is a deliberate, documented departure from "exact clone", and it needs Matt's blessing since
 it changes how the meter looks. Everything else about the meter stays identical.
 
-## 18.2 The reference's tap targets are below this repo's 44 pt floor
+## 18.2 The reference's tap targets are small — treat this as a SUGGESTION, not a rule
 
-`docs/BUILDING-A-GAME.md` Part 0: **tap targets are 44 × 44 px minimum**, with departures allowed
-only for a real, verified, documented reason.
+**Provenance, because it matters (checked 2026-09-03):** `docs/BUILDING-A-GAME.md`'s "tap targets
+are 44 x 44 px minimum" rule entered this repo on **2026-08-31 via PR #292, branch
+`claude/pipes-game-visuals-q04as2`** - written into the standards doc by a Claude session doing
+unrelated work on Pipes, and never agreed with Matt. He has since downgraded it: **it is a
+suggestion here, not a binding rule.** (The number itself is Apple's published HIG minimum, so it
+is not invented - but its status as repo law was never sanctioned.)
 
 Measured from the reference frames: every small control (`<`, `>`, `^`, `v`) is **102 × 94 device
 px**, which at 3× is **34 × 31 pt** — comfortably *under* the floor on both axes. The `card` button
@@ -1006,4 +1027,87 @@ two anchors noted.
   implementing a gentle break, since the grid is drawn and players will expect it to mean something.
 - **Ball height** for the shadow offset: a simple parabola over the flight, peak offset scaled by
   club loft. Nothing more elaborate is needed — the shadow gap is the only height cue.
+
+---
+
+# 21. Mechanics learned from Matt, not from the footage
+
+Both of these come from Matt having actually played the game. Neither was visible in the
+recordings, and one of them corrects a flaw I wrongly reported.
+
+## 21.1 The aim line is a POWER LADDER — five dots, calibrated to the meter
+
+**This is a core mechanic and it must be implemented.**
+
+The red markers running up the aim line are not decoration and not merely a direction indicator.
+They are **distance markers calibrated to the power meter**:
+
+| Dot | Meaning |
+|---|---|
+| 1 | where the ball lands at **25 %** power |
+| 2 | **50 %** |
+| 3 | **75 %** |
+| 4 | **100 %** - the selected club's full distance |
+| 5 | the **risk zone**: past 100 %, where the meter's over-swing band reaches |
+
+Past dot 4 **the line itself turns red** and continues to dot 5. None of the dots are labelled -
+their spacing is the label.
+
+**Each dot shows where the ball would land if struck perfectly at that power, with no wind.** It is
+a *starting point*, not a promise: a mishit or wind moves the ball off it. That is exactly the
+right contract - the player gets an honest plan and then has to execute it.
+
+The dots update whenever the club changes, so **cycling clubs visibly re-scales the ladder on the
+ground**. This is what makes club choice legible.
+
+**CORRECTION.** Section 13 flaw #8 previously said "No landing marker. Nothing shows where the
+selected club will actually land, so club choice is guesswork." **That was wrong** - the dots are
+precisely that marker; I misread them as decoration. The flaw is struck.
+
+## 21.2 Obstacles, drops and water
+
+Never observed - every shot in all five clips finished on the tee, the fairway or the green, and no
+ball entered a hazard. Recorded here from Matt's description:
+
+- **Ball behind a tree / in the woods / otherwise obstructed** - the player is offered a **choice**:
+  - **take a drop**, at a **+1 stroke penalty**, or
+  - **play it as it lies**, risking the obstacle: hit the tree, or deliberately play out sideways
+    or around it.
+- **Water gives no choice.** It is an automatic penalty.
+
+Three details still needed before this can be built, listed in section 14: where a drop places the
+ball, what exactly water costs and where it replays from, and whether "play it as it lies" from
+trees caps the available power (a punch-out) or allows full power with the trees as real physical
+obstacles.
+
+## 21.3 The club ladder (proposed 2026-09-03, pending final sign-off)
+
+Anchored on hole design rather than on the reference's measured 287 yd drive, which was recorded
+with an unknown - possibly upgraded - bag and left no headroom for the shop.
+
+| Club | Stock | Fully upgraded | Dot 5 (risk, stock) |
+|---|---|---|---|
+| driver | 215 | 269 | 237 |
+| 3 wood | 195 | 244 | 215 |
+| 5 wood | 182 | 228 | 200 |
+| 2 iron | 175 | 219 | 193 |
+| 3 iron | 166 | 208 | 183 |
+| 4 iron | 157 | 196 | 173 |
+| 5 iron | 148 | 185 | 163 |
+| 6 iron | 139 | 174 | 153 |
+| 7 iron | 130 | 163 | 143 |
+| 8 iron | 120 | 150 | 132 |
+| 9 iron | 110 | 138 | 121 |
+| p. wedge | 95 | 119 | 105 |
+| s. wedge | 72 | 90 | 79 |
+| l. wedge | 50 | 63 | 55 |
+
+Roughly +25 % across four upgrade tiers (stock, pro, tour, champion), each tier also tightening the
+accuracy band. How the real holes then play for a beginner: hole 1 (360.7, par 4) is drive plus a
+6 iron; hole 2 (181, par 3) is a slightly stretched 2 iron over water; hole 3 (608.6, par 5) is a
+genuine three-shot hole. Fully upgraded, hole 1 becomes drive plus a wedge - the progression is
+felt on the same ground.
+
+**These are design values, not measurements.** Only the reference's ~287 yd drive was measured, and
+it is deliberately NOT used as the stock number.
 
