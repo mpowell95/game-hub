@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Golf</title>
+  <link rel="stylesheet" href="css/golf.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #eaeff7; }
+    html.gh-dark, html.gh-dark body { background: #0d1420; }
+    #golf { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="golf"></div>
+  <script type="module">
+    import { requireName } from '../js/name-gate.js';
+    import { init } from './js/ui.js';
+    await requireName();
+    init(document.getElementById('golf'));
+  </script>
+</body>
+</html>

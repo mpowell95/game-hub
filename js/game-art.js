@@ -657,6 +657,18 @@ export const GAME_ART = {
              <circle cx="80" cy="76" r="5.2" fill="#f6ecda"/>
              <circle cx="78.3" cy="74.3" r="1.7" fill="#fffdf5"/>
            </svg>`,
+  // §14 of GOLF-HANDOFF.md: full-bleed fairway green, a lighter fairway curving bottom-left to
+  // a green circle upper-right, a flag on the green, a white ball bottom-left. ~7 elements,
+  // deliberately plain next to Skeeball's - the brief asked for ~12 max, not a second machine.
+  golf: `<svg viewBox="0 0 160 90" aria-hidden="true">
+           <rect width="160" height="90" fill="#2E7D4F"/>
+           <path d="M0 90 C 20 68, 30 55, 55 40 C 85 22, 105 14, 128 8 L 150 8 C 150 30, 140 46, 118 46 C 90 46, 70 60, 45 78 C 30 88, 12 90, 0 90 Z" fill="#4FAE72"/>
+           <circle cx="128" cy="24" r="17" fill="#7FCB9A"/>
+           <rect x="127" y="4" width="1.6" height="22" fill="#3a2416"/>
+           <path d="M128.6 5 L140 9 L128.6 13 Z" fill="#ffce3a"/>
+           <circle cx="18" cy="78" r="6" fill="#ffffff"/>
+           <circle cx="16" cy="76" r="1.6" fill="#f4f4f4"/>
+         </svg>`,
 };
 
 export default GAME_ART;

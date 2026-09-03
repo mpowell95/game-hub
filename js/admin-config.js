@@ -13,7 +13,8 @@
 // THE SHAPE, at `adminConfig/v1` in the shared 'stats' Firebase app:
 //
 //   { games:    { pinball:  { live: true, at: <ms>, by: '<deviceId>' } },
-//     skeeball: { boards: { popongo: { open: false, testing: false, at: <ms>, by: '<deviceId>' } } } }
+//     skeeball: { boards: { popongo: { open: false, testing: false, at: <ms>, by: '<deviceId>' } } },
+//     golf:     { courses: { harbor:  { open: false, testing: true,  at: <ms>, by: '<deviceId>' } } } }
 //
 // A Skeeball machine has THREE states, not two (Matt, 2026-08-24, on the first version of this
 // page: "this doesn't allow me to select which skeeball machines are live and can be unlocked and
@@ -26,6 +27,15 @@
 // `testing` overrides boards.js's `adminOnly` flag, the same way `live` overrides a game's
 // `devOnly` - and it is the field the first version was missing, which is why "Earn it" could not
 // actually make an adminOnly machine earnable.
+//
+// A GOLF COURSE (Part 7 of GOLF-HANDOFF.md) is the exact same three-field shape and the exact
+// same three states, added under `golf.courses` rather than a new mechanism. The one difference:
+// a course has no code-side "adminOnly" default the way a machine has `boards.js`'s `adminOnly` -
+// every course defaults to TESTING when its key is absent (§14: "Missing key -> testing"), full
+// stop, so `resolveCourseTesting` takes no `codeDefault` argument at all. `unlockable` for a
+// course means "earned the normal way" too, but golf's own earn rule (the PREVIOUS course in
+// COURSES order has a completed round, i.e. a `bestRoundByCourse` entry) lives in golf/js/ui.js,
+// not here - same division of labor as Skeeball's `isUnlocked()` living in skeeball/js/ui.js.
 //
 // A THIRD branch, `corrections`, holds the admin's "those scores were thrown on a broken board and
 // do not count" overlays, per player-device per machine:
@@ -89,7 +99,9 @@ export function normalizeConfig(raw) {
   const boards = (sk.boards && typeof sk.boards === 'object') ? sk.boards : {};
   const corr = (src.corrections && typeof src.corrections === 'object') ? src.corrections : {};
   const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr } };
+  const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
+  const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr }, golf: { courses } };
 }
 
 /**
@@ -164,6 +176,46 @@ export function resolveBoardMode(cfg, boardId, codeAdminOnly) {
   return resolveBoardReleased(cfg, boardId) ? 'open' : 'unlockable';
 }
 
+/**
+ * Has this Golf course been released to everyone by the admin? §14 of GOLF-HANDOFF.md: read by
+ * ui.js at setup, ORed with its own "the previous course has a bestRoundByCourse entry" earned-
+ * unlock rule the same way Skeeball ORs this with isUnlocked() - never replaces it.
+ */
+export function resolveCourseReleased(cfg, courseId) {
+  const row = normalizeConfig(cfg).golf.courses[courseId];
+  return !!(row && row.open === true);
+}
+
+/** The override on a course's "open to everyone" field, or null when nothing has been set. */
+export function courseOverride(cfg, courseId) {
+  const row = normalizeConfig(cfg).golf.courses[courseId];
+  return row && typeof row.open === 'boolean' ? row.open : null;
+}
+
+/**
+ * Is this Golf course still in testing - not playable by anybody but a dev profile? Unlike a
+ * Skeeball machine, a course has no code-side "adminOnly" default to sit on top of: every course
+ * defaults to testing until Matt writes an override (§14: "Missing key -> testing").
+ */
+export function resolveCourseTesting(cfg, courseId) {
+  const row = normalizeConfig(cfg).golf.courses[courseId];
+  if (row && typeof row.testing === 'boolean') return row.testing;
+  return true;
+}
+
+/** The override on a course's testing field, or null when nothing has been set. */
+export function courseTestingOverride(cfg, courseId) {
+  const row = normalizeConfig(cfg).golf.courses[courseId];
+  return row && typeof row.testing === 'boolean' ? row.testing : null;
+}
+
+/** The one answer ui.js's setup screen works from: 'open' | 'unlockable' | 'testing'. Same
+ *  testing-wins-over-open rule as resolveBoardMode, for the same reason. */
+export function resolveCourseMode(cfg, courseId) {
+  if (resolveCourseTesting(cfg, courseId)) return 'testing';
+  return resolveCourseReleased(cfg, courseId) ? 'open' : 'unlockable';
+}
+
 // --- the local cache ---------------------------------------------------------------------------
 
 let _mem = null;   // last value read/written this page load, so repeated reads cost nothing
@@ -201,6 +253,15 @@ export function isBoardTesting(boardId, codeDefault) {
 export function boardMode(boardId, codeAdminOnly) {
   return resolveBoardMode(readCachedConfig(), boardId, codeAdminOnly);
 }
+
+/** Has this Golf course been released to everyone? OR it with the earned unlock, never replace. */
+export function isCourseReleased(courseId) { return resolveCourseReleased(readCachedConfig(), courseId); }
+
+/** Is this Golf course still in testing (nobody but a dev profile may open it)? */
+export function isCourseTesting(courseId) { return resolveCourseTesting(readCachedConfig(), courseId); }
+
+/** 'open' | 'unlockable' | 'testing' for this course, from the cache. */
+export function courseMode(courseId) { return resolveCourseMode(readCachedConfig(), courseId); }
 
 /** Every score correction, from the cache. Synchronous, so a screen can apply it while painting. */
 export function corrections() { return resolveCorrections(readCachedConfig()); }
@@ -405,6 +466,22 @@ export function setBoardMode(boardId, mode) {
 }
 
 /**
+ * Set a Golf course's state - same three-way choice as setBoardMode, same MODE_FIELDS table:
+ *   'open'        playable by everyone right now, no unlock needed
+ *   'unlockable'  live, earned the normal way (the previous course has a completed round)
+ *   'testing'     not playable yet; only a dev profile can open it
+ *   null          clear the override; the code default ('testing', §14) is in force again
+ */
+export function setCourseMode(courseId, mode) {
+  const fields = mode === null ? { open: null, testing: null } : MODE_FIELDS[mode];
+  if (!fields) return Promise.resolve(fail(`unknown course mode "${mode}"`));
+  return writeNode(`golf/courses/${courseId}`, fields, (cfg) => {
+    if (mode === null) return courseOverride(cfg, courseId) === null && courseTestingOverride(cfg, courseId) === null;
+    return courseOverride(cfg, courseId) === fields.open && courseTestingOverride(cfg, courseId) === fields.testing;
+  });
+}
+
+/**
  * Void (or un-void) one player-device's scores on one machine.
  * @param {string} statsIdOf  the players/<id> key - a device+player, not a person
  * @param {string} boardId
@@ -433,4 +510,6 @@ export default {
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
   setGameLive, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
   myBoardCorrections, setSkeeballCorrection,
+  resolveCourseReleased, courseOverride, resolveCourseTesting, courseTestingOverride,
+  resolveCourseMode, isCourseReleased, isCourseTesting, courseMode, setCourseMode,
 };

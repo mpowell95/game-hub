@@ -13,7 +13,7 @@ import { GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -340,6 +340,42 @@ export function aggregatePlayers(all, corrections) {
         dst.bs.bestAccuracy = Math.max(dst.bs.bestAccuracy | 0, src.bs.bestAccuracy | 0);
         const srcFsw = src.bs.fewestShotsWin | 0;
         if (srcFsw > 0) dst.bs.fewestShotsWin = dst.bs.fewestShotsWin ? Math.min(dst.bs.fewestShotsWin, srcFsw) : srcFsw;
+      } else if (g === 'golf' && src.gf) {
+        // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (rounds/holes/strokes/
+        // birdies/eagles/aces) ADD; `points` is a SIGNED Modified Stableford total (can go
+        // negative), not a count, and still just adds like any other running total.
+        // longestDriveYd takes Math.max. bestRoundByCourse is keyed per course, Math.min per key
+        // (fewer strokes is better) - this repo's first per-key Math.min map. Unlike Battleship's
+        // fewestShotsWin, no zero-sentinel guard is needed: a course simply ABSENT from
+        // bestRoundByCourse means "never played there" (the lowest possible 9-hole score is 9,
+        // never 0), so a plain per-key existence check is enough.
+        if (!dst.gf) dst.gf = { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {} };
+        dst.gf.rounds += src.gf.rounds | 0; dst.gf.holes += src.gf.holes | 0; dst.gf.strokes += src.gf.strokes | 0;
+        dst.gf.points += src.gf.points | 0;
+        dst.gf.birdies += src.gf.birdies | 0; dst.gf.eagles += src.gf.eagles | 0; dst.gf.aces += src.gf.aces | 0;
+        dst.gf.longestDriveYd = Math.max(dst.gf.longestDriveYd | 0, src.gf.longestDriveYd | 0);
+        const srcBest = src.gf.bestRoundByCourse || {};
+        if (!dst.gf.bestRoundByCourse) dst.gf.bestRoundByCourse = {};
+        for (const k of Object.keys(srcBest)) {
+          const v = srcBest[k] | 0;
+          const cur = dst.gf.bestRoundByCourse[k];
+          dst.gf.bestRoundByCourse[k] = Number.isFinite(cur) ? Math.min(cur, v) : v;
+        }
+        // practice (Part 8): kept and carried, same as Skeeball's sk.practice.boards - reachable
+        // by nothing above (rule 1: never dropped; rule 2: never counted).
+        if (src.gf.practice) {
+          if (!dst.gf.practice) dst.gf.practice = {};
+          for (const cid of Object.keys(src.gf.practice)) {
+            const sp = src.gf.practice[cid] || {};
+            const dp = dst.gf.practice[cid] || (dst.gf.practice[cid] = {
+              rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0,
+            });
+            dp.rounds += sp.rounds | 0; dp.holes += sp.holes | 0; dp.strokes += sp.strokes | 0;
+            dp.points += sp.points | 0;
+            dp.birdies += sp.birdies | 0; dp.eagles += sp.eagles | 0; dp.aces += sp.aces | 0;
+            dp.longestDriveYd = Math.max(dp.longestDriveYd | 0, sp.longestDriveYd | 0);
+          }
+        }
       } else if (g === 'skeeball' && src.sk) {
         // Root CLAUDE.md "Adding a game" item 7's third edit, present from this game's first day.
         // Counters (played/won/lost/tied, balls thrown, lifetime points, 100s and 50s) ADD; the two
