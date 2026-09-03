@@ -1,9 +1,12 @@
 # Pixel Pro Golf — reference spec, and the build spec for our version
 
 **Purpose.** This document is the complete written record of a commercial mobile golf game
-("Pixel Pro Golf"), reconstructed frame by frame from two screen recordings. The session that
-implements the clone will **not** have access to the videos. Everything the implementer needs is
-here.
+("Pixel Pro Golf"), reconstructed frame by frame from five screen recordings, PLUS the decisions
+that turn it into the game we are actually building. The session that implements it will **not**
+have access to the videos.
+
+**Read READ THIS FIRST and section 0 before anything else** — a golf game already exists in this
+repo, and several of our decisions deliberately depart from the reference.
 
 **Source material** — five screen recordings in total.
 | Clip | Length | Resolution | Frame rate | Contents |
@@ -132,16 +135,25 @@ A single-player, top-down, pixel-art golf game for portrait phones. The player a
 buttons, picks a club, and hits the ball with a **three-tap swing** against a circular meter. The
 camera follows the ball, the ball comes to rest, and the loop repeats until the ball is holed.
 
+**The reference's flow** (tournament mode is CUT in ours — see section 0):
+
 ```
 title
   └─ career (player home: ranking, tour, winnings, equipment)
        └─ play  →  course card (Pine Valley, 3 holes)
-            ├─ play      →  the tournament round      [not shown in either clip]
+            ├─ play      →  the tournament round, vs 3 AI opponents        [CUT in ours]
             └─ practice  →  tutorial modals  →  practice hole select  →  play a single hole
                                                                             └─ hole complete
                                                                                  └─ round scorecard
-                                                                                      ├─ quit
-                                                                                      └─ restart
+```
+
+**Ours:**
+
+```
+hub tile
+  └─ course card (Pine Valley, 3 holes)
+       ├─ play      →  full round of 3 holes  →  round scorecard  →  quit / restart
+       └─ practice  →  hole select  →  play a single hole  →  scorecard
 ```
 
 **The per-shot loop, which is the heart of the game:**
@@ -317,8 +329,11 @@ All boxes below were located by pixel-scanning a native frame (`hole-1.mp4` @ 54
 | power meter incl. its `25`/`50`/`75`/`100` labels and accuracy bar | 798 – 1145 | 1782 – 2387 | 348 × 606 |
 
 Derived facts worth preserving:
-- Every small square control is **102 × 94 px** (34 × 31 pt) — comfortably above a 44 pt tap target
-  once padding is included. [MEASURED]
+- Every small square control is **102 × 94 px**, which at 3x is **34 × 31 pt** — **BELOW** the
+  44 pt guideline on both axes. [MEASURED] (An earlier draft of this line said "comfortably above",
+  which was simply wrong and contradicted 18.2.) The guideline is a suggestion here, not a rule
+  (18.2), but if you want the taps to feel right, keep the visual box at this size and extend the
+  hit area with transparent padding.
 - The top HUD starts at **y = 246–252**, i.e. roughly 250 px (83 pt) of top inset is left clear for
   the status bar / notch. [MEASURED]
 - The `swing` button's bottom edge is at **y = 2439**, leaving **183 px** (61 pt) of bottom inset
@@ -378,11 +393,14 @@ Birdie!
 # 4. Aiming
 
 - **Two buttons only: `<` and `>`.** There is no drag-to-aim, no rotate gesture, no tap-the-map.
-  [OBSERVED across both clips]
+  [OBSERVED across all five clips]
 - Each tap rotates the aim by a small fixed increment — a few degrees. The exact per-tap angle was
   **not** measurable from the recordings. [UNKNOWN — see §14]
-- The aim line is drawn as a **row of small red square markers** running from the ball up the hole,
-  spaced at regular intervals and thinning with distance. On the green they become smaller red dots.
+- The aim line is drawn as a **row of small red square markers** running from the ball up the hole.
+  **These are NOT decoration and NOT evenly spaced filler — they are a POWER LADDER. Read 21.1
+  before building the aim line.** In short: dots at 25 / 50 / 75 / 100 % of the selected club's
+  distance, the line turning red past the fourth, and a fifth dot marking the over-100 risk zone.
+  On the green they become smaller red dots.
 - A **red asterisk / star** marks the aim target point. It was seen sitting beside the pin while the
   player previewed the green.
 - Faint grey `>` chevrons are scattered over the fairway — slope / roll direction indicators.
@@ -439,7 +457,7 @@ scrolling background bleeding through the semi-transparent panel. **Do not imple
 ## 5.4 The over-100 sub-mode
 
 Tutorial modal 4 states that for shots over 100 %, tapping the **top of the meter** toggles between
-**power** and **precision**. This toggle was **never exercised** in either recording, so its visual
+**power** and **precision**. This toggle was **never exercised** in any of the five clips, so its visual
 state, its effect on ball flight, and where exactly the tap target is are all unverified.
 [UNKNOWN beyond the tutorial text — see §14]
 
