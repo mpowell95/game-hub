@@ -25,6 +25,11 @@
   html, body { margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); }
+  .stage { position: sticky; top: 12px; aspect-ratio: auto;
+      height: calc(100vh - 132px); min-height: 440px; }
+    .side { min-width: 0; }
+    .side .card:first-child { margin-top: 0; }
+  }
   h1 { font-size: 17px; margin: 4px 0 2px; letter-spacing: 0.02em; }
   .sub { color: var(--dim); font-size: 12.5px; margin: 0 0 12px; }
   .stage { position: relative; background: #000; border: 1px solid var(--line); border-radius: 12px;
@@ -60,6 +65,26 @@
     font-variant-numeric: tabular-nums; margin-top: 3px; }
   .note { color: var(--dim); font-size: 12px; margin-top: 10px; }
   .err { color: #ff9d3d; }
+  /* WIDE SCREENS PUT THE MACHINE BESIDE THE CONTROLS. Matt, 2026-09-03: "Please utilize
+     horizontal space or something so i can set the angle/power, click play, and see the machine
+     at the same time." Stacked, the machine is as tall as the window and the sliders sit below
+     the fold, so every adjustment costs a scroll down and a scroll back.
+
+     LAST IN THE SHEET ON PURPOSE: it overrides .stage's portrait aspect-ratio, and an equally
+     specific rule only wins if it comes after. */
+  @media (min-width: 900px) {
+    .wrap { max-width: 1400px; }
+    /* auto, not 1fr: the machine keeps its own shape, and the column is sized to it - a 1fr
+       column left a 330px hole between the cabinet and the controls. */
+    .layout { display: grid; grid-template-columns: auto minmax(360px, 440px); gap: 20px;
+      align-items: start; justify-content: center; }
+    /* The machine holds still while the right column scrolls, so pressing Play never moves the
+       thing you are watching. */
+    .stage { position: sticky; top: 12px; height: calc(100vh - 132px); min-height: 440px;
+      aspect-ratio: 47 / 62; width: auto; }
+    .side { min-width: 0; }
+    .side .card:first-child { margin-top: 0; }
+  }
 </style>
 </head>
 <body>
@@ -68,6 +93,7 @@
   <p class="sub">Every throw here is run through the machine's own physics. What this page says is
     what the game does.</p>
 
+  <div class="layout">
   <div class="stage">
     <canvas id="view"></canvas>
     <div class="verdict">
@@ -76,6 +102,7 @@
     </div>
   </div>
 
+  <div class="side">
   <div class="card">
     <div class="row"><label for="angle">Angle</label><span class="val" id="angleVal">0.0°</span></div>
     <input type="range" id="angle" min="-13.5" max="13.5" step="0.1" value="0">
@@ -113,6 +140,8 @@
   </div>
 
   <p class="note" id="foot"></p>
+  </div>
+  </div>
 </div>
 
 <script type="module">
