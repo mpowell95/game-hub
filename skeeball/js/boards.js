@@ -247,10 +247,16 @@ export const BOARDS = [
         woodFric: 0.30,
         woodRest: 0.22,
         wallFric: 0.04,
-        wallRest: 0.42,
+        // 2026-09-02: 0.42 -> 0.28. Deadening the side rails is what opened a straighter line
+        // to the corner 100 (it was a hard-angle bank shot at 0.42). Every wall part shares this
+        // pair: side rails, lane rails, trough cheeks and the flare.
+        wallRest: 0.28,
         ringFric: 0.06,
         ringRest: 0.18,
-        ring100Rest: 0.18,
+        // 2026-09-02: dead, so a ball that reaches a corner mouth does not rattle back out.
+        // The 10 through 50 keep 0.18; ring100Fric is left at its 0.06 default on purpose - grip
+        // there fires arrivals back out, which is the one thing that made the 100 HARDER.
+        ring100Rest: 0.0,
         deadFric: 0.24,
         deadRest: 0.10,
         // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall

@@ -454,6 +454,18 @@ Wall and ring friction are both deliberately near zero. This is a guard, not a t
 appreciable lateral grip is enough to physically wedge a ball against a ring on the slope,
 locking it in place instead of letting it slide off and continue.
 
+**The walls came down from 0.42 to 0.28, and the 100 rings from 0.18 to 0.06 (2026-09-02, THE
+CLASSIC only).** Matt: *"make the walls less bouncy"*, and *"the 100 is crazy bouncy. it seems to
+ADD energy to the ball."* The wall pair covers every `wall` part in machine.js - the side rails,
+the lane rails, the trough cheeks and the flare - so it is also half of why a flare catch used to
+fling a ball out of the cabinet; it stays well above dead because a bank off the side rail into a
+corner 100 is a real shot here. On the 100s, the measurement said the ring does NOT add energy:
+every contact within 16 cm of either 100 lost kinetic energy, and the handful that gained SPEED
+gained it from spin turning into roll. What is real is the shape - a 14.5 cm ring wall around a
+mouth only 4 cm wider than the ball - so a miss meets a tall tube side-on and leaves fast enough
+to read as a kick. `ring100Rest` exists exactly so those two can be deadened alone; the 10
+through 50 keep 0.18.
+
 The board's own bounciness was tuned down substantially from an earlier, livelier value. A board
 that bounces the ball around before it settles turns "how hard did I throw it" into noise, since
 a bounce can send an otherwise well-aimed throw into a different hole than a slightly harder or
@@ -498,6 +510,31 @@ The finding underneath it still stands. A ball that silently reappears is a **fe
 not a scoring one, and it is open. Whatever fixes it must not spend the ball. Note that the
 obvious answer is already ruled out: "Too soft, have it back" was deleted days earlier for being
 noise, so it cannot simply come back as it was.
+
+### A wild flare bounce, and a ball that leaves the machine, are given back too (2026-09-02)
+
+THE CLASSIC ONLY. Matt: *"if the ball hits the flare and bounces wildly, you get the ball back. If
+the ball lands outside of the machine, you get the ball back."* Two more ways a ball comes back
+unspent, both built on the same `returnBall` the rollback rule above uses:
+
+- **A hard flare hit that scores nothing.** The flare is machine.js's taper from the lane out to
+  the wider board: two thin walls across the trough gap. A ball that catches one hard is thrown
+  somewhere nobody aimed, often clean out of the cabinet. A contact over `FLARE_WILD` (1.2 m/s
+  along the normal) ARMS the return; `finishAt` honours it only when the throw ends up worth zero.
+  **It is not a scoring rule** - a ball that hit the flare hard and still fell through a mouth is
+  paid in full, and nothing that scored is ever turned into a return.
+- **A ball outside the cabinet**, i.e. below y -0.3 (nothing inside reaches it; the trough floor
+  sits at -0.15) or wider than 0.80 m against containment walls at 0.56. It used to fall past -0.3
+  and be scored as a gutter zero, which spent a ball on a throw the machine never resolved.
+
+**The threshold is measured, not chosen.** Over a 169-throw sweep of the whole dial, flare touches
+run 0.8 m/s at the 10th percentile, 1.62 at the median and 2.66 at the hardest - a ball rolling
+back down into the trough brushes the flare constantly, so a graze must not pay. 1.2 sits in the
+middle of the hard half.
+
+**Neither of these is a lid.** There is still no ceiling and no canopy, and a ball thrown hard
+enough still leaves the machine - see the removed features below. What changed is what leaving
+costs.
 
 ### Removed features and why they stay removed
 
