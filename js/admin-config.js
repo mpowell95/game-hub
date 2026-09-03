@@ -14,7 +14,7 @@
 //
 //   { games:    { pinball:  { live: true, at: <ms>, by: '<deviceId>' } },
 //     skeeball: { boards: { popongo: { open: false, testing: false, at: <ms>, by: '<deviceId>' } } },
-//     golf:     { courses: { harbor:  { open: false, testing: true,  at: <ms>, by: '<deviceId>' } } } }
+//     golf:     { courses: { <courseId>: { open: false, testing: true, at: <ms>, by: '<deviceId>' } } } }
 //
 // A Skeeball machine has THREE states, not two (Matt, 2026-08-24, on the first version of this
 // page: "this doesn't allow me to select which skeeball machines are live and can be unlocked and
@@ -28,14 +28,18 @@
 // `devOnly` - and it is the field the first version was missing, which is why "Earn it" could not
 // actually make an adminOnly machine earnable.
 //
-// A GOLF COURSE (Part 7 of GOLF-HANDOFF.md) is the exact same three-field shape and the exact
-// same three states, added under `golf.courses` rather than a new mechanism. The one difference:
-// a course has no code-side "adminOnly" default the way a machine has `boards.js`'s `adminOnly` -
-// every course defaults to TESTING when its key is absent (§14: "Missing key -> testing"), full
-// stop, so `resolveCourseTesting` takes no `codeDefault` argument at all. `unlockable` for a
-// course means "earned the normal way" too, but golf's own earn rule (the PREVIOUS course in
-// COURSES order has a completed round, i.e. a `bestRoundByCourse` entry) lives in golf/js/ui.js,
-// not here - same division of labor as Skeeball's `isUnlocked()` living in skeeball/js/ui.js.
+// A GOLF COURSE is the exact same three-field shape and the exact same three states, added under
+// `golf.courses` rather than a new mechanism. The one difference: a course has no code-side
+// "adminOnly" default the way a machine has `boards.js`'s `adminOnly` - every course defaults to
+// TESTING when its key is absent, full stop, so `resolveCourseTesting` takes no `codeDefault`
+// argument at all. `unlockable` for a course means "earned the normal way" too, but golf's own
+// earn rule lives in golf/js/ui.js, not here - same division of labor as Skeeball's
+// `isUnlocked()` living in skeeball/js/ui.js.
+//
+// NOTE (2026-09-03): these course resolvers have no caller while golf is rebuilt - the game's own
+// UI was replaced by a placeholder and js/admin-ui.js has never had a per-course section at all.
+// They are kept, not deleted: the rebuilt game re-adopts them, and their tests still pin the
+// shape. Releasing a course to the family will need that admin section written.
 //
 // A THIRD branch, `corrections`, holds the admin's "those scores were thrown on a broken board and
 // do not count" overlays, per player-device per machine:

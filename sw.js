@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v596';
+const CACHE = 'game-hub-v597';
 
 const ASSETS = [
   './',
@@ -289,33 +289,16 @@ const ASSETS = [
   './skeeball/js/vendor/three.module.min.js',
   './skeeball/js/vendor/three.core.min.js',
   './skeeball/js/strings.js',
-  // Part 7 (GOLF-HANDOFF.md §14): every path under golf/ except tools/ (dev-only: preview.html,
-  // refixture.mjs, sweep-carry.mjs) and js/test.js (Node-only headless suite) - neither is ever
-  // fetched by a running client. golf/DECISIONS.md is likewise left out, matching the unbroken
-  // convention every other game folder already sets (no game's CLAUDE.md/handoff prose is
-  // precached anywhere in this list either) - the spec's own wording ("every path... except
-  // tools/ and test.js") did not anticipate a docs file needing its own exception, but caching a
-  // markdown file the app never fetches would be pure waste with no offline benefit.
+  // Golf is being REBUILT (golf-reference-spec.md). The 3D stack - three.js, cannon-es, and the
+  // nine modules around them, ~1.1 MB of the old precache - is deleted, along with the Harbor
+  // Links course. What is left is the placeholder screen; the 2D game's files are added here as
+  // they are written. golf/CLAUDE.md and golf-reference-spec.md are documentation, never fetched
+  // by a running client, and stay out of this list.
   './golf/',
   './golf/index.html',
   './golf/css/golf.css',
   './golf/js/ui.js',
-  './golf/js/game.js',
-  './golf/js/physics.js',
-  './golf/js/flight.js',
-  './golf/js/terrain.js',
-  './golf/js/meters.js',
-  './golf/js/clubs.js',
-  './golf/js/camera.js',
-  './golf/js/render.js',
-  './golf/js/minimap.js',
   './golf/js/strings.js',
-  './golf/js/vendor/cannon-es.js',
-  './golf/js/vendor/three.module.min.js',
-  './golf/js/vendor/three.core.min.js',
-  './golf/courses/registry.js',
-  './golf/courses/harbor/course.js',
-  './golf/courses/harbor/fixture.json',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -661,24 +644,9 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': 'c65f896671',
-  './golf/js/ui.js': 'bb82feb689',
-  './golf/js/game.js': 'b5a99fbe20',
-  './golf/js/physics.js': '894f7fb4a6',
-  './golf/js/flight.js': '12e06cc01f',
-  './golf/js/terrain.js': 'aa4ea40989',
-  './golf/js/meters.js': '9df658d215',
-  './golf/js/clubs.js': 'a93c143ae1',
-  './golf/js/camera.js': '4ab1e5dd98',
-  './golf/js/render.js': '510738bff7',
-  './golf/js/minimap.js': '7bb78db7b3',
-  './golf/js/strings.js': '45ef131657',
-  './golf/js/vendor/cannon-es.js': 'f0700cbd3a',
-  './golf/js/vendor/three.module.min.js': '86bcee248b',
-  './golf/js/vendor/three.core.min.js': '05b2609338',
-  './golf/courses/registry.js': '2c07e8b4d9',
-  './golf/courses/harbor/course.js': 'f19141defb',
-  './golf/courses/harbor/fixture.json': '5118e24694',
+  './golf/css/golf.css': '35d052c5fa',
+  './golf/js/ui.js': '388a66eea0',
+  './golf/js/strings.js': '17eda54aeb',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

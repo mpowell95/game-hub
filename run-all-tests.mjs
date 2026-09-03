@@ -41,7 +41,10 @@ const SUITES = [
   { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
-  { file: 'golf/js/test.js' },
+  // Golf has no engine suite while it is rebuilt (golf-reference-spec.md, Stage A): the 3D
+  // stack this pointed at - three.js + cannon-es and the eight modules around them - is
+  // deleted, and the 2D game replaces it in Stage B. Re-register the new suite here the day
+  // it is written; a file named in this list that does not exist fails the WHOLE run.
   // Monopoly Deal had NO automated coverage at all until 2026-09-01 - it is excluded from
   // test-game-conventions.mjs as a documented non-ESM exception, and its own self-test was
   // never wired up anywhere. It runs in ~5s and carries the difficulty-ladder probe, which is
