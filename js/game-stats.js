@@ -1402,7 +1402,13 @@ export function recordGolf(difficulty, extras) {
   const e = extras || {};
   ensureGf(g);
   if (e.practice) {
-    const courseId = e.courseId || 'harbor';
+    // Default course id. This MUST NOT be a course that no longer exists: a testing-mode round
+    // recorded with no courseId would write gf.practice.<that id> for ever. Harbor Links is
+    // gone from the product (golf-reference-spec.md, "Harbor Links is gone"), and its stored
+    // keys - gf.practice.harbor, bestRoundByCourse.harbor - are never written and never read
+    // again. They are NOT removed from this shape (THE LAW rule 5: old keys are never deleted
+    // and never repurposed), they are simply left alone.
+    const courseId = e.courseId || 'pinevalley3';
     const p = g.gf.practice[courseId] || (g.gf.practice[courseId] = {
       rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0,
     });

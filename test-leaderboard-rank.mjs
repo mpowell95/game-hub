@@ -12,6 +12,8 @@ import { aggregatePlayers } from './js/players-agg.js';
 import {
   record, bucketsOf, tierRows, wilsonLower, competitiveRating,
   soloRating, fieldMaxOf, ratePlayer, rankPlayers,
+  golfBestAt, hasBoardMetric, compareBoardMetric, formatBoardMetric,
+  GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 } from './js/leaderboard-rank.js';
 import { tierOf, TIER_WEIGHT } from './js/difficulty-tiers.js';
 
@@ -370,6 +372,109 @@ console.log('\n-- who is allowed on the board: no test accounts, no nameless dev
   // From By Player there is no game in hand, so that path must still open the player's game list.
   ok('the By Player path is unchanged (no game in hand means the list)',
     /_playerGame = _game \|\| null/.test(src) && /\} else \{ _playerGame = null; \}/.test(src));
+}
+
+
+// ---------------------------------------------------------------------------
+console.log('\n-- golf: LOWER WINS, and the good scores are <= 0 --');
+//
+// Golf's board number changed on 2026-09-03 from the lifetime Stableford total to the best round
+// on one named course, as a score to par. It is the only metric on this leaderboard where fewer
+// is better and where 0 and negatives are real, GOOD values, so three things had to change in one
+// commit and each is pinned below: the extractor, the SORT DIRECTION, and the leader filter.
+//
+// The two failure shapes these exist to catch are both silent. A descending sort puts the worst
+// golfer in the family on top of the board and looks entirely plausible. A `metric > 0` filter
+// drops exactly the best rounds ever played, which is THE LAW rule 1 (a stored best no screen
+// shows reads as deleted) aimed at the players who earned the most.
+
+const golfRec = (strokes, name = 'G') => one(
+  { golf: { gf: { rounds: 1, points: 0, bestRoundByCourse: strokes === null ? {} : { [GOLF_BOARD_COURSE]: strokes } } } },
+  name);
+
+const PAR3 = GOLF_COURSE_PAR[GOLF_BOARD_COURSE];
+eq('Pine Valley (3 holes) is par 12 - holes 1-3 are par 4 + 3 + 5', PAR3, 12);
+
+// The stored value is STROKES; par is subtracted on the way out. 9 strokes on a par 12 is -3.
+eq('a 9-stroke round on par 12 reads as -3', golfBestAt(golfRec(9)), -3);
+eq('a 12-stroke round reads as level par, which is 0 and NOT null', golfBestAt(golfRec(12)), 0);
+eq('a 15-stroke round reads as +3', golfBestAt(golfRec(15)), 3);
+eq('no round on this course reads as null, never as 0', golfBestAt(golfRec(null)), null);
+
+// A best on a DIFFERENT course must never be borrowed for this one: a 3-hole best and a 9-hole
+// best are not comparable (THE LAW rule 4), so they are separate keys and separate boards.
+{
+  const g = one({ golf: { gf: { rounds: 1, bestRoundByCourse: { pinevalley9: 34 } } } }, 'Nine');
+  eq('a best on another course is not shown on this board', golfBestAt(g), null);
+}
+
+// --- the filter -----------------------------------------------------------
+// [KNOWN-BUG PROBE] The old gate was `gameMetricAt(...) > 0`. Against a to-par score it drops
+// level par AND every under-par round - the better the player, the more certainly they vanish.
+ok('[KNOWN-BUG PROBE] an under-par round is ON the board (the old `> 0` filter dropped it)',
+  hasBoardMetric(golfBestAt(golfRec(9)), 'golf') === true);
+ok('[KNOWN-BUG PROBE] a level-par round is ON the board (the old `> 0` filter dropped it too)',
+  hasBoardMetric(golfBestAt(golfRec(12)), 'golf') === true);
+ok('an over-par round is on the board', hasBoardMetric(golfBestAt(golfRec(15)), 'golf') === true);
+ok('a player with no recorded round is NOT on the board',
+  hasBoardMetric(golfBestAt(golfRec(null)), 'golf') === false);
+// Every other game keeps the old rule exactly: more is better, and 0 means nothing to show.
+ok('a more-is-better metric still needs a positive value', hasBoardMetric(0, 'skeeball') === false);
+ok('...and a positive one still counts', hasBoardMetric(1, 'skeeball') === true);
+
+// --- the sort -------------------------------------------------------------
+const golfCmp = (a, b) => compareBoardMetric(golfBestAt(a), golfBestAt(b), 'golf');
+{
+  const under = golfRec(9, 'Under');    // -3
+  const even = golfRec(12, 'Even');     //  E
+  const over = golfRec(15, 'Over');     // +3
+  const none = golfRec(null, 'None');
+
+  ok('[KNOWN-BUG PROBE] a -3 round sorts ABOVE an even round (descending put it below)',
+    golfCmp(under, even) < 0);
+  ok('an even round sorts above a +3 round', golfCmp(even, over) < 0);
+  ok('a +3 round sorts above a player with no round', golfCmp(over, none) < 0);
+  ok('the comparison is antisymmetric', golfCmp(even, under) > 0 && golfCmp(over, even) > 0);
+  ok('two equal rounds tie', golfCmp(golfRec(12, 'A'), golfRec(12, 'B')) === 0);
+
+  // The whole board, sorted the way the UI sorts it. This is the assertion that would have caught
+  // the bug on a real family board: the best golfer must be row 1.
+  const board = [over, none, even, under].sort(golfCmp).map((g) => g.name);
+  eq('a whole board sorts best round first, no-round last', board, ['Under', 'Even', 'Over', 'None']);
+}
+// A more-is-better board is untouched by any of this.
+eq('a points board still sorts descending',
+  [3, 9, 1].sort((a, b) => compareBoardMetric(a, b, 'skeeball')), [9, 3, 1]);
+
+// --- how it prints --------------------------------------------------------
+eq('under par prints with its sign', formatBoardMetric(-3, 'golf', 'E'), '-3');
+eq('level par prints as E, never as 0', formatBoardMetric(0, 'golf', 'E'), 'E');
+eq('over par prints with a plus', formatBoardMetric(3, 'golf', 'E'), '+3');
+eq('no round prints as nothing for the caller to substitute', formatBoardMetric(null, 'golf', 'E'), null);
+eq('every other board prints the bare number it always did', formatBoardMetric(730, 'skeeball'), '730');
+
+// --- the callers are actually wired to it ---------------------------------
+// The maths above is worth nothing if leaderboard-ui.js still compares `b - a` somewhere. There
+// are six metric sort sites and one filter; a single missed one re-ranks a whole board.
+{
+  const src = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
+  ok('golf\'s board metric is the best round, not the lifetime points total',
+    /if \(id === 'golf'\) return golfBestAt\(g\);/.test(src));
+  ok('[KNOWN-BUG PROBE] no metric sort site compares `b - a` any more',
+    !/gameMetricAt\(b, (?:id|meta\.id), [^)]*\) - gameMetricAt\(a,/.test(src),
+    'a descending metric sort puts the worst golfer on top of the board');
+  eq('all six metric sort sites go through compareBoardMetric',
+    (src.match(/compareBoardMetric\(gameMetricAt\(a,/g) || []).length, 6);
+  ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',
+    /\.filter\(\(g\) => hasBoardMetric\(gameMetricAt\(g, meta\.id, null\), meta\.id\)\)/.test(src)
+    && !/gameMetricAt\(g, meta\.id, null\) > 0/.test(src));
+  ok('rankMap can take a comparator, so the rank badges follow the sort',
+    /function rankMap\(list, valueOf, cmp\)/.test(src) && /sort\(cmp \|\| \(\(a, b\)/.test(src));
+  ok('the metric is printed through the formatter, so a to-par score keeps its sign',
+    /metricText\(gameMetricAt\(lead, meta\.id, null\), meta\.id\)/.test(src)
+    && /const metricStr = metricText\(metric, id\);/.test(src));
+  ok('golf gets its own unit label, so My Stats keeps saying "points"',
+    /id === 'golf' \? 'lb_unit_golf_best' : unitKeyOf\(id\)/.test(src));
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);

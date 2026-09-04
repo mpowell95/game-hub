@@ -1,421 +1,279 @@
-// golf/js/render.js - three.js scene: terrain mesh, props, ball, flag, trail. See §10.1 of
-// GOLF-HANDOFF.md. This module owns scene construction and one render(camera) call per frame;
-// it does NOT own the requestAnimationFrame loop, the canvas element, or camera state - those
-// belong to the caller (ui.js in Part 4, tools/preview.html here). The caller must: cancel its
-// own rAF handle, call dispose() (which frees every geometry/material/texture and the WebGL
-// context), then remove the canvas from the DOM - in that order, copied from Skeeball's
-// render.js teardown.
+// golf/js/render.js - the top-down course view: the tilemap, the ball and its shadow, the aim
+// ladder, and the camera. Canvas only; every readout is DOM (see ui.js).
+//
+// THE MAP IS PAINTED ONCE, not per frame. buildMap() rasterises the whole hole into an offscreen
+// canvas at MAP_PPY pixels per yard; each frame blits the visible rectangle of it. That is what
+// makes a course of arbitrary polygon complexity cost the same as one drawImage, and it is why
+// point-in-polygon per shot (holes.js) is affordable - it happens once per stroke, never per frame.
+//
+// The chunky 16-bit look is free from the same decision: the map is rasterised at a LOW resolution
+// and blitted with smoothing off, so every course pixel is several screen pixels and nothing
+// tweens smoothly (golf-reference-spec.md §15.2, "everything animates in whole pixels").
 
-import * as THREE from './vendor/three.module.min.js';
-import { S, heightAt, buildTrees, makeValueNoise } from './terrain.js';
+import { polyOf, treesOf, greenBox, bboxOf } from './holes.js';
 
-const BALL_R = 0.02134;
-const CUP_R = 0.054;
-const TRAIL_MAX = 45;
+/** Course pixels per yard in the offscreen map. Low on purpose: this IS the pixel size. */
+export const MAP_PPY = 2.4;
 
-// Surface colours, by terrain.js's S code. Exported for minimap.js (Part 9A) so the map and the
-// 3D ground can never disagree about what a surface looks like. ROUGH darkened to #3f6a2e in
-// 9A so the fairway reads as the lighter corridor it is.
-export const COL = { 0: '#5e7a45', 1: '#3f6a2e', 2: '#66a83f', 3: '#79b34a', 4: '#8fcf5a', 5: '#e6d3a0', 6: '#3d7fc6', 7: '#66a83f' };
+/** How wide a slice of the hole the player sees, in yards. A fairway is ~30 yds across, so 70
+ *  frames the corridor plus its rough with room to see a ball pushed offline. */
+export const VIEW_W_YDS = 70;
 
-// Sky (Part 9A): always daytime. Dark mode governs the HUD bands only - the course itself never
-// goes night-blue, which is what made hole 1 read as "black sky over green paint" on a phone.
-const SKY_TOP = '#7fb8ff';
-const SKY_HORIZON = '#dceeff';
-const SUN_DIR = new THREE.Vector3(-0.4, 1, 0.3).normalize();
+// Measured off a native reference frame (§15.1) where the source says so; the rest are ours,
+// chosen to sit in the same 16-bit family.
+export const PALETTE = {
+  water: '#248cef',            // [MEASURED] 9.5 % of the frame
+  waterEdge: '#4aa3f2',        // the lighter shoreline band
+  fairwayA: '#b0cb46',         // [MEASURED]
+  fairwayB: '#a0bd3c',         // the mow stripe. The measured pair (#aec944 / #b0cb46) is two
+                               // values apart and reads as flat at this pixel size, so the darker
+                               // stripe is widened deliberately. Narrow it back if it reads busy.
+  lightRough: '#85a330',       // [MEASURED]
+  heavyRough: '#6e812b',       // [MEASURED] deep shadow green
+  green: '#a8d95e',
+  greenEdge: '#93c74e',
+  tee: '#bcd76a',
+  sand: '#f0e4c8',             // [OBSERVED]
+  sandDot: '#e2d2ae',
+  treeCanopy: '#2c4718',
+  treeRim: '#1d3110',
+  path: '#6b7a63',
+  tick: '#5c8038',             // the green's slope read
+  aim: '#e02424',
+  aimRisk: '#ff5a1f',
+  ball: '#ffffff',
+  shadow: '#3b4a2a',
+  pin: '#e01b1b',
+  pinPole: '#f4f4f4',
+};
 
-// Same pattern as skeeball/js/machines/*/render.js: memoised once per page, never per Renderer,
-// so probing does not itself leak a WebGL context.
-let SOFT_GL = null;
-function isSoftGL() {
-  if (SOFT_GL !== null) return SOFT_GL;
-  let soft = false;
-  let probe = null;
-  try {
-    probe = document.createElement('canvas').getContext('webgl');
-    const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
-    const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
-    soft = /swiftshader|software|llvmpipe/i.test(String(name));
-  } catch { soft = false; }
-  try {
-    const lose = probe && probe.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
-  } catch { /* nothing to give back */ }
-  SOFT_GL = soft;
-  return soft;
+const FILL = {
+  fairway: PALETTE.fairwayA,
+  lightRough: PALETTE.lightRough,
+  heavyRough: PALETTE.heavyRough,
+  green: PALETTE.green,
+  tee: PALETTE.tee,
+  water: PALETTE.water,
+  fairwayBunker: PALETTE.sand,
+  greensideBunker: PALETTE.sand,
+  trees: '#4a6b28',            // the woods FLOOR; the canopies are drawn on top of it
+};
+
+function tracePoly(ctx, poly, toPx) {
+  ctx.beginPath();
+  poly.forEach((p, i) => {
+    const [x, y] = toPx(p[0], p[1]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
 }
 
-export class Renderer {
-  constructor(canvas, terrain) {
-    this.terrain = terrain;
-    this.scene = new THREE.Scene();
-    this._disposables = [];
-    this._lastBallPos = null;
-    this._lastCamPos = null;
-    this._aimLine = null;
-    this._landingRing = null;
+/** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
+export function buildMap(hole) {
+  const b = hole.bounds;
+  const w = Math.ceil((b.maxX - b.minX) * MAP_PPY);
+  const h = Math.ceil((b.maxY - b.minY) * MAP_PPY);
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const ctx = cv.getContext('2d');
+  // World y runs UP the hole; canvas y runs down. The flip lives here and nowhere else.
+  const toPx = (x, y) => [(x - b.minX) * MAP_PPY, (b.maxY - y) * MAP_PPY];
 
-    const soft = isSoftGL();
-    this.softGL = soft;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Shadow pass on demand, not every frame - the machine (course) is a still life for most of
-    // a shot while the player lines up. render() below sets needsUpdate only when the ball or
-    // camera moved.
-    this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;
+  ctx.fillStyle = FILL[hole.base] || PALETTE.heavyRough;
+  ctx.fillRect(0, 0, w, h);
 
-    // Part 9A: distance reads through fog to the horizon colour; the sky sphere's own shader has
-    // no fog chunk, so it is untouched.
-    this.scene.fog = new THREE.Fog(0xdceeff, 180, 700);
+  for (const s of hole.surfaces) {
+    const poly = polyOf(s, hole);
+    ctx.save();
+    tracePoly(ctx, poly, toPx);
+    ctx.fillStyle = FILL[s.kind] || PALETTE.heavyRough;
+    ctx.fill();
 
-    this._buildSky();
-    this._buildSun();
-    this._buildLights();
-    this._buildTerrain();
-    this._buildTrees();
-    this._buildBall();
-    this._buildTrail();
-    this._buildFlag();
-  }
-
-  _track(x) { this._disposables.push(x); return x; }
-
-  _buildSky() {
-    const geo = this._track(new THREE.SphereGeometry(900, 24, 16));
-    const mat = this._track(new THREE.ShaderMaterial({
-      uniforms: {
-        top: { value: new THREE.Color(SKY_TOP) },
-        bottom: { value: new THREE.Color(SKY_HORIZON) },
-      },
-      vertexShader: `
-        varying vec3 vPos;
-        void main() {
-          vPos = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    if (s.kind === 'fairway') {
+      // Mown in vertical stripes of two alternating greens (§11). Clipped to the fairway so the
+      // stripes end where the mower did.
+      ctx.clip();
+      const bb = bboxOf(poly);
+      const stripe = 7 * MAP_PPY;                      // ~7 yards, a mower's width
+      ctx.fillStyle = PALETTE.fairwayB;
+      const [x0] = toPx(bb.minX, 0);
+      const [x1] = toPx(bb.maxX, 0);
+      for (let x = x0, i = 0; x < x1; x += stripe, i++) if (i % 2) ctx.fillRect(x, 0, stripe, h);
+    } else if (s.kind === 'water') {
+      // Flat two-tone water with a lighter shoreline band.
+      ctx.save(); ctx.clip();
+      ctx.strokeStyle = PALETTE.waterEdge;
+      ctx.lineWidth = 3 * MAP_PPY * 0.6;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
+      ctx.restore();
+    } else if (s.kind === 'fairwayBunker' || s.kind === 'greensideBunker') {
+      // Dithered speckle in the sand.
+      ctx.clip();
+      const bb = bboxOf(poly);
+      ctx.fillStyle = PALETTE.sandDot;
+      for (let yy = bb.minY; yy < bb.maxY; yy += 1.4) {
+        for (let xx = bb.minX; xx < bb.maxX; xx += 1.4) {
+          if (((Math.round(xx) + Math.round(yy)) & 3) !== 0) continue;
+          const [px, py] = toPx(xx, yy);
+          ctx.fillRect(px, py, MAP_PPY, MAP_PPY);
         }
-      `,
-      fragmentShader: `
-        uniform vec3 top;
-        uniform vec3 bottom;
-        varying vec3 vPos;
-        void main() {
-          float h = clamp(normalize(vPos).y * 0.5 + 0.5, 0.0, 1.0);
-          gl_FragColor = vec4(mix(bottom, top, h), 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-      depthWrite: false,
-    }));
-    this.sky = new THREE.Mesh(geo, mat);
-    this.sky.renderOrder = -1;
-    this.scene.add(this.sky);
-  }
-
-  // A soft sun disc: white radial-gradient sprite, radius 6 m at 400 m along the light
-  // direction, additive so it glows into the sky rather than sitting on it. Sprites are always
-  // camera-facing, so the disc reads round from every pose.
-  _buildSun() {
-    const size = 64;
-    const c = document.createElement('canvas');
-    c.width = size; c.height = size;
-    const g = c.getContext('2d');
-    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.45, 'rgba(255,255,255,0.85)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, size, size);
-    const tex = this._track(new THREE.CanvasTexture(c));
-    const mat = this._track(new THREE.SpriteMaterial({
-      map: tex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, fog: false,
-    }));
-    const sun = new THREE.Sprite(mat);
-    sun.position.copy(SUN_DIR).multiplyScalar(400);
-    sun.scale.set(12, 12, 1);   // 6 m radius
-    sun.renderOrder = -1;
-    this.scene.add(sun);
-    this.sunDisc = sun;
-  }
-
-  _buildLights() {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x556644, 0.7);
-    this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.3);
-    const d = SUN_DIR.clone().multiplyScalar(300);
-    dir.position.copy(d);
-    dir.target.position.set(0, 0, 0);
-    dir.castShadow = true;
-    dir.shadow.mapSize.set(2048, 2048);
-    const c = dir.shadow.camera;
-    c.left = -260; c.right = 260; c.top = 260; c.bottom = -260; c.near = 1; c.far = 800;
-    c.updateProjectionMatrix();
-    this.scene.add(dir, dir.target);
-    this.sun = dir;
-  }
-
-  // PlaneGeometry(nx-1, nz-1, nx-1, nz-1) rotated -PI/2 about x gives vertex index i+j*nx
-  // (verified directly: local x is untouched by an x-rotation, and local y - which runs from
-  // +height/2 at row 0 down to -height/2 at the last row - maps to world z = -local_y, so row
-  // index increases monotonically with world z). Mesh position offsets the grid's local origin
-  // (its own center) back to (x0, z0). Matches terrain.js's height[i + j*nx] convention exactly.
-  _buildTerrain() {
-    const t = this.terrain;
-    const geo = new THREE.PlaneGeometry(t.nx - 1, t.nz - 1, t.nx - 1, t.nz - 1);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position;
-    const colors = new Float32Array(pos.count * 3);
-    const waterIdx = [];
-    const tmp = new THREE.Color();
-    // Part 9A: a low-frequency brightness noise (+-4%, 9 m wavelength, seeded) on rough and
-    // fairway so the ground stops reading as flat paint. Seed offset 13 keeps it independent of
-    // the height noise (seed, seed+1) and the tree draws (seed+7, seed+11).
-    const groundNoise = makeValueNoise(t.def.seed + 13, 9);
-    for (let j = 0; j < t.nz; j++) {
-      for (let i = 0; i < t.nx; i++) {
-        const idx = i + j * t.nx;
-        pos.setY(idx, t.height[idx]);
-        const s = t.surface[idx];
-        tmp.set(COL[s] || COL[1]);
-        if (s === S.GREEN) {
-          tmp.multiplyScalar((Math.floor(j / 2) % 2 === 0) ? 1.06 : 0.94);
-        } else if (s === S.FAIRWAY) {
-          tmp.multiplyScalar((Math.floor((i + j) / 4) % 2 === 0) ? 1.06 : 0.94);
-          tmp.multiplyScalar(1 + 0.04 * groundNoise(t.x0 + i, t.z0 + j));
-        } else if (s === S.ROUGH) {
-          tmp.multiplyScalar(1 + 0.04 * groundNoise(t.x0 + i, t.z0 + j));
-        }
-        colors[idx * 3] = tmp.r; colors[idx * 3 + 1] = tmp.g; colors[idx * 3 + 2] = tmp.b;
-        if (s === S.WATER) waterIdx.push(idx);
       }
+    } else if (s.kind === 'green') {
+      ctx.strokeStyle = PALETTE.greenEdge;
+      ctx.lineWidth = MAP_PPY * 1.2;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(t.x0 + (t.nx - 1) / 2, 0, t.z0 + (t.nz - 1) / 2);
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this._track(geo); this._track(mat);
-    this.terrainMesh = mesh;
-
-    this._buildWater(waterIdx);
+    ctx.restore();
   }
 
-  // One flat blue plane per water CELL (not per polygon - the hole's water[] entries are
-  // arbitrary polygons, but the grid already rasterized them into cells, so building from the
-  // grid is exact and needs no re-triangulation), merged into one draw call.
-  _buildWater(waterIdx) {
-    if (!waterIdx.length) return;
-    const t = this.terrain;
-    const positions = [];
-    const indices = [];
-    let vi = 0;
-    const h = 0.5;
-    for (const idx of waterIdx) {
-      const i = idx % t.nx, j = Math.floor(idx / t.nx);
-      const wx = t.x0 + i, wz = t.z0 + j, wy = t.height[idx] + 1.0;
-      positions.push(wx - h, wy, wz - h, wx + h, wy, wz - h, wx + h, wy, wz + h, wx - h, wy, wz + h);
-      indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
-      vi += 4;
+  for (const d of hole.decor || []) {
+    tracePoly(ctx, d.poly, toPx);
+    ctx.fillStyle = PALETTE.path;
+    ctx.fill();
+  }
+
+  // THE SLOPE TICKS ARE GENERATED FROM `green.slope`, never hand-drawn. If the art and the grid
+  // can disagree, the read lies to the player, and a putting green that lies is worse than one
+  // with no read at all (golf/CLAUDE.md, "The green and its slope grid").
+  const gb = greenBox(hole);
+  const sl = hole.green.slope;
+  ctx.strokeStyle = PALETTE.tick;
+  ctx.lineWidth = Math.max(1, MAP_PPY * 0.5);
+  ctx.save();
+  tracePoly(ctx, hole.green.poly, toPx);
+  ctx.clip();
+  for (let r = 0; r < sl.rows; r++) {
+    for (let c = 0; c < sl.cols; c++) {
+      const g = sl.cells[r * sl.cols + c];
+      const cx = gb.minX + ((c + 0.5) * (gb.maxX - gb.minX)) / sl.cols;
+      const cy = gb.minY + ((r + 0.5) * (gb.maxY - gb.minY)) / sl.rows;
+      const [ax, ay] = toPx(cx, cy);
+      const [bx, by] = toPx(cx + g[0] * 3.2, cy + g[1] * 3.2);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshLambertMaterial({ color: 0x3d7fc6, transparent: true, opacity: 0.85 });
-    const mesh = new THREE.Mesh(geo, mat);
-    this.scene.add(mesh);
-    this._track(geo); this._track(mat);
-    this.waterMesh = mesh;
+  }
+  ctx.restore();
+
+  // Trees last: chunky dark canopies with a darker rim, drawn over whatever they stand on.
+  for (const t of treesOf(hole)) {
+    const type = hole.treeTypes[t.type];
+    const [px, py] = toPx(t.x, t.y);
+    ctx.beginPath(); ctx.arc(px, py, type.canopy * MAP_PPY, 0, Math.PI * 2);
+    ctx.fillStyle = PALETTE.treeCanopy; ctx.fill();
+    ctx.lineWidth = Math.max(1, MAP_PPY * 0.7); ctx.strokeStyle = PALETTE.treeRim; ctx.stroke();
   }
 
-  _buildTrees() {
-    const trees = buildTrees(this.terrain);
-    if (!trees.length) return;
-    // Part 9A: bigger trees (cone r 3.2 x h 9 on a 0.35 x 2.2 trunk, scale 0.9-1.4) so the
-    // fairway belt terrain.js now plants reads as a tree line from the tee, not shrubs.
-    const coneGeo = new THREE.ConeGeometry(3.2, 9, 6);
-    const coneMat = new THREE.MeshLambertMaterial({ color: '#2f6b32' });
-    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 5);
-    const trunkMat = new THREE.MeshLambertMaterial({ color: '#5c4326' });
-    const coneMesh = new THREE.InstancedMesh(coneGeo, coneMat, trees.length);
-    const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
-    coneMesh.castShadow = true;
-    trunkMesh.castShadow = true;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    trees.forEach((tr, idx) => {
-      const s = tr.scale;
-      m.compose(new THREE.Vector3(tr.x, tr.y + 1.1 * s, tr.z), q, new THREE.Vector3(s, s, s));
-      trunkMesh.setMatrixAt(idx, m);
-      m.compose(new THREE.Vector3(tr.x, tr.y + 2.2 * s + 4.5 * s, tr.z), q, new THREE.Vector3(s, s, s));
-      coneMesh.setMatrixAt(idx, m);
-    });
-    this.scene.add(trunkMesh, coneMesh);
-    this._track(coneGeo); this._track(coneMat); this._track(trunkGeo); this._track(trunkMat);
+  return { canvas: cv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h };
+}
+
+/** The camera: what world point sits at the centre of the view, and how many px a yard is. */
+export function makeCamera(hole, viewW, viewH) {
+  const ppy = viewW / VIEW_W_YDS;
+  const halfW = viewW / 2 / ppy;
+  const halfH = viewH / 2 / ppy;
+  const b = hole.bounds;
+  return {
+    ppy, halfW, halfH,
+    x: hole.tee[0], y: hole.tee[1],
+    clamp() {
+      const spanX = b.maxX - b.minX;
+      this.x = spanX <= halfW * 2 ? (b.minX + b.maxX) / 2
+        : Math.min(b.maxX - halfW, Math.max(b.minX + halfW, this.x));
+      this.y = Math.min(b.maxY - halfH, Math.max(b.minY + halfH, this.y));
+    },
+  };
+}
+
+/** Draw one frame. `st` is the whole view state; this function reads it and never writes it. */
+export function drawFrame(ctx, map, hole, cam, st) {
+  const { width: W, height: H } = ctx.canvas;
+  const dpr = st.dpr || 1;
+  const viewW = W / dpr;
+  const viewH = H / dpr;
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.imageSmoothingEnabled = false;
+
+  // World -> screen. One place, used by everything below.
+  const sx = (x) => (x - cam.x) * cam.ppy + viewW / 2;
+  const sy = (y) => (cam.y - y) * cam.ppy + viewH / 2;
+
+  const srcX = (cam.x - cam.halfW - map.minX) * map.ppy;
+  const srcY = (map.maxY - (cam.y + cam.halfH)) * map.ppy;
+  const srcW = cam.halfW * 2 * map.ppy;
+  const srcH = cam.halfH * 2 * map.ppy;
+  ctx.fillStyle = PALETTE.heavyRough;
+  ctx.fillRect(0, 0, viewW, viewH);
+  ctx.drawImage(map.canvas, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
+
+  // --- the pin ---------------------------------------------------------------
+  const px = sx(hole.pin[0]);
+  const py = sy(hole.pin[1]);
+  if (!st.holed) {
+    ctx.fillStyle = PALETTE.pinPole;
+    ctx.fillRect(Math.round(px) - 1, Math.round(py) - 22, 2, 22);
+    ctx.fillStyle = PALETTE.pin;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(px) + 1, Math.round(py) - 22);
+    ctx.lineTo(Math.round(px) + 13, Math.round(py) - 17);
+    ctx.lineTo(Math.round(px) + 1, Math.round(py) - 12);
+    ctx.closePath(); ctx.fill();
   }
+  // The cup is always drawn: it is where the ball has to go, and it must not vanish with the flag.
+  ctx.fillStyle = '#2c3a1e';
+  ctx.beginPath(); ctx.arc(px, py, Math.max(2.5, 0.12 * cam.ppy * 2), 0, Math.PI * 2); ctx.fill();
 
-  _buildBall() {
-    const geo = new THREE.SphereGeometry(BALL_R * 3, 12, 12); // 3x true size so it's visible
-    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff' });
-    this.ball = new THREE.Mesh(geo, mat);
-    this.ball.castShadow = true;
-    this.scene.add(this.ball);
-    this._track(geo); this._track(mat);
-  }
-
-  setBallPosition(x, y, z) { this.ball.position.set(x, y, z); }
-
-  _buildTrail() {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3));
-    geo.setDrawRange(0, 0);
-    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
-    this.trail = new THREE.Line(geo, mat);
-    this.scene.add(this.trail);
-    this._track(geo); this._track(mat);
-  }
-
-  // points: samples in flight order (oldest first); only the last TRAIL_MAX are drawn, fading
-  // from grey (oldest) to white (newest) since LineBasicMaterial's vertexColors affects RGB
-  // only, not per-vertex alpha - color fade is the "opacity fades along the line" the handoff
-  // asks for.
-  setTrail(points) {
-    const geo = this.trail.geometry;
-    const posAttr = geo.attributes.position;
-    const colAttr = geo.attributes.color;
-    const n = Math.min(points.length, TRAIL_MAX);
-    const start = points.length - n;
-    for (let k = 0; k < n; k++) {
-      const p = points[start + k];
-      posAttr.setXYZ(k, p.x, p.y, p.z);
-      const f = n > 1 ? k / (n - 1) : 1;
-      const c = 0.35 + 0.65 * f;
-      colAttr.setXYZ(k, c, c, c);
+  // --- the aim ladder (§21.1) ------------------------------------------------
+  // Dot N is where the ball LANDS at 25/50/75/100 % of the club's distance from this lie; dot 5
+  // marks the over-swing risk band, and the line turns red past dot 4. Their spacing is the
+  // label - nothing on screen names them.
+  if (st.aimDots && st.aimDots.length && !st.hideAim) {
+    const cos = Math.cos(st.aimRad);
+    const sin = Math.sin(st.aimRad);
+    const at = (d) => [sx(st.ball[0] + sin * d), sy(st.ball[1] + cos * d)];
+    const last = st.aimDots[st.aimDots.length - 2];
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = PALETTE.aim;
+    ctx.beginPath();
+    let [lx, ly] = at(0); ctx.moveTo(lx, ly);
+    [lx, ly] = at(last.at); ctx.lineTo(lx, ly); ctx.stroke();
+    ctx.strokeStyle = PALETTE.aimRisk;
+    ctx.beginPath();
+    [lx, ly] = at(last.at); ctx.moveTo(lx, ly);
+    [lx, ly] = at(st.aimDots[st.aimDots.length - 1].at); ctx.lineTo(lx, ly); ctx.stroke();
+    for (const d of st.aimDots) {
+      const [dx, dy] = at(d.at);
+      ctx.fillStyle = d.risk ? PALETTE.aimRisk : PALETTE.aim;
+      const s = d.risk ? 5 : 6;
+      ctx.fillRect(Math.round(dx) - s / 2, Math.round(dy) - s / 2, s, s);
     }
-    posAttr.needsUpdate = true;
-    colAttr.needsUpdate = true;
-    geo.setDrawRange(0, n);
-  }
-
-  _buildFlag() {
-    const pin = this.terrain.def.pin;
-    const y = heightAt(this.terrain, pin[0], pin[1]);
-
-    const poleGeo = new THREE.CylinderGeometry(0.02, 0.02, 2.1);
-    const poleMat = new THREE.MeshStandardMaterial({ color: '#ffffff' });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(pin[0], y + 1.05, pin[1]);
-    pole.castShadow = true;
-    this.scene.add(pole);
-    this._track(poleGeo); this._track(poleMat);
-
-    const flagGeo = new THREE.PlaneGeometry(0.6, 0.4);
-    const flagMat = new THREE.MeshStandardMaterial({ color: '#ffce3a', side: THREE.DoubleSide });
-    const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(pin[0] + 0.3, y + 1.9, pin[1]);
-    this.scene.add(flag);
-    this._track(flagGeo); this._track(flagMat);
-
-    const cupGeo = new THREE.CircleGeometry(CUP_R);
-    cupGeo.rotateX(-Math.PI / 2);
-    const cupMat = new THREE.MeshBasicMaterial({ color: '#111111' });
-    const cup = new THREE.Mesh(cupGeo, cupMat);
-    cup.position.set(pin[0], y + 0.002, pin[1]);
-    this.scene.add(cup);
-    this._track(cupGeo); this._track(cupMat);
-  }
-
-  // Aim line + landing ring for the address view (Part 9A). from: {x,z}, aimDeg: degrees
-  // (0 = +z), distanceM: predicted carry along that bearing (the ring sits there); the line runs
-  // 200 m regardless. Pass null to hide both.
-  //
-  // The line is a RIBBON quad strip hugging the terrain, not a THREE.Line: WebGL ignores
-  // lineWidth on every mobile GPU, so a Line is always one hairline pixel. A ribbon has real
-  // width in the world (0.14 m, ~2 px where it matters, near the ball) and thins with distance,
-  // which is what the eye expects of a line on the ground.
-  setAimTarget(from, aimDeg, distanceM) {
-    this._clearAimTarget();
-    if (from == null) return;
-    const rad = aimDeg * Math.PI / 180;
-    const dirX = Math.sin(rad), dirZ = Math.cos(rad);
-    const LINE_M = 200, STEP = 2, HALF_W = 0.07, LIFT = 0.06;
-    const nx = -dirZ, nz = dirX;   // lateral unit
-    const positions = [];
-    const indices = [];
-    const n = Math.floor(LINE_M / STEP) + 1;
-    for (let k = 0; k < n; k++) {
-      const d = k * STEP;
-      const px = from.x + dirX * d, pz = from.z + dirZ * d;
-      const py = heightAt(this.terrain, px, pz) + LIFT;
-      positions.push(px + nx * HALF_W, py, pz + nz * HALF_W, px - nx * HALF_W, py, pz - nz * HALF_W);
-      if (k > 0) {
-        const b = k * 2;
-        indices.push(b - 2, b - 1, b, b - 1, b + 1, b);
-      }
-    }
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    lineGeo.setIndex(indices);
-    const lineMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
-    const line = new THREE.Mesh(lineGeo, lineMat);
-    this.scene.add(line);
-    this._aimLine = { obj: line, geo: lineGeo, mat: lineMat };
-
-    const toX = from.x + dirX * distanceM, toZ = from.z + dirZ * distanceM;
-    const y1 = heightAt(this.terrain, toX, toZ) + 0.05;
-    const ringGeo = new THREE.RingGeometry(2.0, 2.6, 40);
-    ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({ color: '#ffce3a', transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.set(toX, y1 + 0.01, toZ);
-    this.scene.add(ring);
-    this._landingRing = { obj: ring, geo: ringGeo, mat: ringMat };
-  }
-
-  _clearAimTarget() {
-    if (this._aimLine) {
-      this.scene.remove(this._aimLine.obj);
-      this._aimLine.geo.dispose(); this._aimLine.mat.dispose();
-      this._aimLine = null;
-    }
-    if (this._landingRing) {
-      this.scene.remove(this._landingRing.obj);
-      this._landingRing.geo.dispose(); this._landingRing.mat.dispose();
-      this._landingRing = null;
+  } else if (st.puttLine && !st.hideAim) {
+    // On the green the ladder becomes smaller dots along the putt's line (§4).
+    const cos = Math.cos(st.aimRad);
+    const sin = Math.sin(st.aimRad);
+    ctx.fillStyle = PALETTE.aim;
+    for (let d = 0.6; d <= st.puttLine; d += 0.7) {
+      const dx = sx(st.ball[0] + sin * d);
+      const dy = sy(st.ball[1] + cos * d);
+      ctx.fillRect(Math.round(dx) - 1.5, Math.round(dy) - 1.5, 3, 3);
     }
   }
 
-  resize(w, h, camera) {
-    this.renderer.setSize(w, h, true);
-    if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  // --- the ball, and its shadow ---------------------------------------------
+  // ONE white pixel, with a separate dark pixel for its shadow offset below it. The GAP BETWEEN
+  // THEM IS THE ENTIRE HEIGHT MODEL - there is no arc line, no trail, no dotted trajectory and no
+  // height bar (§9.1). It is cheap, it reads perfectly, and it is the single most transferable
+  // trick in the reference.
+  if (!st.holed) {
+    const bx = Math.round(sx(st.ball[0]));
+    const by = Math.round(sy(st.ball[1]));
+    const lift = Math.round((st.height || 0) * cam.ppy * 0.55);
+    if (lift > 1) {
+      ctx.fillStyle = PALETTE.shadow;
+      ctx.fillRect(bx - 2, by - 2, 4, 4);
+    }
+    ctx.fillStyle = PALETTE.ball;
+    ctx.fillRect(bx - 3, by - lift - 3, 6, 6);
   }
 
-  // Draws one frame. Shadow pass only re-runs when the ball or camera moved > 0.01m since the
-  // last call, per §10.1.
-  render(camera) {
-    const bp = this.ball.position;
-    const cp = camera.position;
-    let moved = false;
-    if (!this._lastBallPos || bp.distanceTo(this._lastBallPos) > 0.01) moved = true;
-    if (!this._lastCamPos || cp.distanceTo(this._lastCamPos) > 0.01) moved = true;
-    if (moved) this.renderer.shadowMap.needsUpdate = true;
-    this._lastBallPos = bp.clone();
-    this._lastCamPos = cp.clone();
-    this.renderer.render(this.scene, camera);
-  }
-
-  // Frees every geometry/material/texture this Renderer created, then hands back the WebGL
-  // context. Does NOT cancel a rAF handle or remove the canvas - the caller owns both.
-  dispose() {
-    this._clearAimTarget();
-    for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }
-    this._disposables.length = 0;
-    this.renderer.forceContextLoss();
-    this.renderer.dispose();
-  }
+  ctx.restore();
 }

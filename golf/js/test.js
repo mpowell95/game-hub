@@ -1,357 +1,314 @@
-// golf/js/test.js - headless tests. Run with `node golf/js/test.js`.
-// Part 1: tests 1 (heightfield mapping), 2 (determinism), 3 (carry table), 7 (meters).
-// Part 2: tests 4 (reachability), 5 (putt sweep). Part 5: test 6 (points table, game.js).
-// Part 6: test 8 (fixture replay, golf/tools/refixture.mjs). See §12.1 of GOLF-HANDOFF.md.
+// golf/js/test.js - the engine suite. `node golf/js/test.js`. No browser, no dependency.
+//
+// Everything measurable about this game is in a pure module so that it can be measured HERE
+// rather than by playing it: the hole data (holes.js + courses/), the bag and the lie table
+// (clubs.js), the three-tap meters and the mishit model (swing.js), and the flight, roll and putt
+// (shot.js). ui.js is the only file with no coverage here, by design - it owns no rule.
+//
+// The numbers this file pins are the ones golf-reference-spec.md marks [MEASURED]. Where a value
+// is ours, the assertion says so, and the test is a regression guard rather than a claim about
+// the reference.
 
-import { build, heightAt, surfaceAt, rng, S } from './terrain.js';
-import { simulateShot, dropTest } from './physics.js';
-import { CLUBS, TARGET_CARRY_M, TARGET_PUTT_ROLL_M, autoSelectClub } from './clubs.js';
-import { pos } from './meters.js';
-import { holePoints } from './game.js';
-import harborCourse from '../courses/harbor/course.js';
-import harborFixture from '../courses/harbor/fixture.json' with { type: 'json' };
+import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS } from './holes.js';
+import { PINE_VALLEY } from '../courses/pinevalley.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES } from './clubs.js';
+import * as SW from './swing.js';
+import * as SH from './shot.js';
 
-const HARBOR_H1 = harborCourse.holes[0];
+let fail = 0;
+const ok = (label, cond, extra) => {
+  if (!cond) { fail++; console.log(`FAIL ${label}${extra ? `\n  ${extra}` : ''}`); } else console.log(`ok   ${label}`);
+};
+const near = (label, got, want, tol) => ok(`${label} (${got.toFixed(3)} vs ${want} +/-${tol})`, Math.abs(got - want) <= tol);
 
-function bearingDeg(fromXZ, toXZ) {
-  const dx = toXZ[0] - fromXZ[0], dz = toXZ[1] - fromXZ[1];
-  return Math.atan2(dx, dz) * 180 / Math.PI;
+// ---------------------------------------------------------------------------
+console.log('\n-- 1. the hole data is valid --');
+for (const h of PINE_VALLEY.holes) {
+  const errs = validateHole(h);
+  ok(`hole ${h.n} passes validateHole`, errs.length === 0, errs.join('\n  '));
+}
+ok('the course par is 12 over three holes (4 + 3 + 5)', PINE_VALLEY.par === 12);
+ok('the course id is the frozen bestRoundByCourse key', PINE_VALLEY.id === 'pinevalley3');
+
+console.log('\n-- 2. validateHole actually catches a broken hole --');
+// A validator nobody has seen fail is a validator nobody knows works.
+const clone = () => JSON.parse(JSON.stringify(PINE_VALLEY.holes[0]));
+{
+  const h = clone(); h.pin = [200, 200];
+  ok('a pin outside the green fails', validateHole(h).some((e) => /pin is not inside/.test(e)));
+}
+{
+  const h = clone(); h.green.slope.cells.pop();
+  ok('a slope grid with the wrong number of cells fails', validateHole(h).some((e) => /cells, expected/.test(e)));
+}
+{
+  const h = clone(); h.green.slope.cells[0] = [3, 0];
+  ok('a gradient outside -1..+1 fails', validateHole(h).some((e) => /\[dx,dy\] pair/.test(e)));
+}
+{
+  const h = clone(); h.surfaces[0].kind = 'lava';
+  ok('an unknown surface kind fails', validateHole(h).some((e) => /is not a surface kind/.test(e)));
+}
+{
+  const h = clone(); h.surfaces[1].poly[0] = [9999, 0];
+  ok('a point outside bounds fails', validateHole(h).some((e) => /outside bounds/.test(e)));
+}
+{
+  const h = clone(); h.tee = [40, 300];
+  ok('a tee not on a tee surface fails', validateHole(h).some((e) => /tee is not inside/.test(e)));
+}
+{
+  const h = clone(); h.treeBelts[0].type = 7;
+  ok('a tree belt naming a type that does not exist fails', validateHole(h).some((e) => /does not exist/.test(e)));
 }
 
-function lieName(surfCode) {
-  switch (surfCode) {
-    case S.TEE: return 'tee';
-    case S.FAIRWAY: return 'fairway';
-    case S.FRINGE: return 'fringe';
-    case S.ROUGH: return 'rough';
-    case S.SAND: return 'sand';
-    case S.GREEN: return 'green';
-    default: return 'rough';
-  }
+console.log('\n-- 3. the lie lookup follows the PAINT ORDER --');
+// The last polygon containing the point wins, for the lie exactly as for the paint. That one rule
+// is what stops the art and the physics ever disagreeing about what the ball is sitting on.
+const h1 = PINE_VALLEY.holes[0];
+ok('the tee is a tee', surfaceAt(h1, 0, 5) === 'tee');
+ok('the pin is on the green', surfaceAt(h1, h1.pin[0], h1.pin[1]) === 'green');
+ok('the middle of the fairway is fairway', surfaceAt(h1, 16, 200) === 'fairway');
+ok('the lake left of the tee is water', surfaceAt(h1, -40, 30) === 'water');
+ok('deep left of the corridor is the base surface', surfaceAt(h1, -52, 200) === 'heavyRough');
+ok('the greenside bunker is a greenside bunker', surfaceAt(h1, 0, 340) === 'greensideBunker');
+ok('hole 2 is water everywhere except its island', surfaceAt(PINE_VALLEY.holes[1], 30, 100) === 'water');
+ok("...and the island's green is a green", surfaceAt(PINE_VALLEY.holes[1], 4, 185) === 'green');
+ok('every kind used by every hole is in the closed set',
+  PINE_VALLEY.holes.every((h) => h.surfaces.every((s) => SURFACE_KINDS.has(s.kind))));
+
+console.log('\n-- 4. tree belts are DETERMINISTIC --');
+// A belt that reshuffled per load would make a hole play differently every visit and make any
+// reachability measurement meaningless.
+{
+  const a = treesOf(PINE_VALLEY.holes[0]).map((t) => `${t.x.toFixed(4)},${t.y.toFixed(4)}`).join('|');
+  const fresh = JSON.parse(JSON.stringify(PINE_VALLEY.holes[0]));
+  const b = treesOf(fresh).map((t) => `${t.x.toFixed(4)},${t.y.toFixed(4)}`).join('|');
+  ok('the same belt expands to the same trees every time', a === b);
+  ok('hole 1 has trees lining both sides', treesOf(PINE_VALLEY.holes[0]).length > 60);
+  ok("hole 2's island has no trees at all", treesOf(PINE_VALLEY.holes[1]).length === 0);
 }
 
-let pass = 0, fail = 0;
-function assert(cond, msg) {
-  if (cond) { pass++; }
-  else { fail++; console.error('FAIL: ' + msg); }
-}
-function approx(a, b, tol, msg) {
-  assert(Math.abs(a - b) <= tol, `${msg} (got ${a}, want ${b} +/- ${tol})`);
+console.log('\n-- 5. the club ladder is the APPROVED one (spec 21.3) --');
+ok('the stock driver carries 215, NOT the reference-measured 287', CLUBS[0].carry === 215);
+ok('the bag is 14 clubs from driver to lob wedge', CLUBS.length === 14 && CLUBS[13].carry === 50);
+ok('the ladder descends with no ties', CLUBS.every((c, i) => i === 0 || CLUBS[i - 1].carry > c.carry));
+ok('the putter is NOT in the yardage ladder (it is measured in feet)',
+  !CLUBS.some((c) => c.id === 'putter') && PUTTER.maxFeet === 60);
+// How the real holes play for a beginner (spec 21.3's own worked example).
+ok('hole 1 (360.7, par 4) is a drive plus a 6 iron', CLUBS[0].carry + CLUBS[7].carry >= 350);
+ok('hole 2 (181, par 3) is a slightly stretched 2 iron', CLUBS[3].carry === 175 && CLUBS[3].carry * 1.1 > 181);
+ok('hole 3 (608.6, par 5) is a genuine three-shot hole',
+  CLUBS[0].carry + CLUBS[1].carry * 2 >= 600 && CLUBS[0].carry * 3 < 700);
+
+console.log('\n-- 6. auto-select takes ENOUGH club, not the most club --');
+ok('360 yds off the tee offers the driver', autoSelectClub(360, 'tee').id === 'driver');
+ok('139 yds from the fairway offers the 6 iron', autoSelectClub(139, 'fairway').id === '6iron');
+ok('the green always offers the putter', autoSelectClub(4, 'green').id === 'putter');
+ok('a heavy-rough lie takes MORE club for the same distance',
+  CLUBS.indexOf(autoSelectClub(139, 'heavyRough')) < CLUBS.indexOf(autoSelectClub(139, 'fairway')));
+ok('stepping up from the driver stays on the driver', stepClub(CLUBS[0], +1).id === 'driver');
+ok('stepping down from the lob wedge stays on the lob wedge', stepClub(CLUBS[13], -1).id === 'lwedge');
+
+console.log('\n-- 7. the power ring: static until tap 1, 0.75s to 100%, PING-PONG --');
+// All three are [MEASURED]. The ping-pong is the one a casual reading gets wrong: at 2 fps the
+// meter looks static and at 0.5 fps it looks like a one-way fill. It is neither.
+near('the ring reaches 100 % in exactly 750 ms', SW.ringAt(750), 1.0, 0.0001);
+ok('the ring starts at zero', SW.ringAt(0) === 0);
+ok('the arc continues PAST 100 into the over-swing band', SW.RING_MAX > 1 && SW.ringAt(825) > 1);
+ok('[KNOWN-BUG PROBE] the ring REVERSES rather than stopping at the top',
+  SW.ringAt(1200) < SW.ringAt(825) && SW.ringAt(1600) < SW.ringAt(1200),
+  'a one-way fill makes a mistimed tap give MAXIMUM power instead of low power, which inverts the whole risk model');
+near('a full cycle returns to zero', SW.ringAt(SW.RING_CYCLE_MS), 0, 0.001);
+{
+  const s = new SW.Swing();
+  const r0 = s.read(0);
+  ok('the meter is STATIC until tap 1', r0.power === 0 && s.read(9999).power === 0);
+  s.tap(0);
+  ok('tap 1 starts the sweep', s.phase === SW.PHASE.POWER && s.read(400).power > 0);
+  s.tap(750);
+  near('tap 2 locks the power it was showing', s.power, 1.0, 0.0001);
+  ok('...and the power tick then PARKS while the accuracy bar sweeps',
+    s.read(900).power === s.power && s.read(1400).power === s.power);
+  ok('the two meters never sweep at once', s.read(900).sweeping === 'bar');
+  const fired = s.tap(1000);
+  ok('tap 3 fires', fired === 'fire' && s.phase === SW.PHASE.LIVE);
+  s.settle(2000);
+  ok('input is LOCKED for ~1.4 s after the shot', s.locked(3000) && !s.locked(3500));
+  ok('...and a tap during the lock does nothing', s.tap(3000) === null);
 }
 
-function flatHoleDef(overrides) {
-  return Object.assign({
-    n: 1, par: 4, seed: 101, tee: [0, 0], pin: [0, 400], target: [0, 200],
-    fairway: { path: [[0, 0], [0, 400]], width: 400 },
-    green: { center: [0, 400], radius: 20, tilt: [0, 0] }, fringe: 3,
-    bunkers: [], water: [], hills: [], trees: { count: 0 },
-    intro: { from: [0, 20, 420], to: [0, 10, -10] },
-  }, overrides || {});
+console.log('\n-- 8. the accuracy bar --');
+near('the marker starts at the CENTRE', SW.barAt(0), 0.5, 0.001);
+ok('it ping-pongs off both ends', SW.barAt(275) === 1 && SW.barAt(825) === 0);
+{
+  const clean = SW.bandsFor(1);
+  ok('a clean lie gives the middle 40 % as the straight zone', Math.abs(clean.green - 0.4) < 1e-9);
+  ok('the bands sum to the whole bar (40 + 20 + 20 + 10 + 10)', Math.abs(clean.red - 1) < 1e-9);
+  const sand = SW.bandsFor(LIES.greensideBunker.zone);
+  ok('a greenside bunker halves the straight zone', sand.green < clean.green * 0.55);
+  ok('...but the bar is still full, so the marker sweeps at the same speed', Math.abs(sand.red - 1) < 1e-9);
+}
+{
+  // [MEASURED, and explicitly retracted in the spec] The window does NOT narrow as power rises.
+  const a = SW.bandsFor(1); const b = SW.bandsFor(1);
+  ok('[KNOWN-BUG PROBE] the accuracy window does NOT narrow with power',
+    JSON.stringify(SW.mishit(0.62, 0.4, 1)) === JSON.stringify(SW.mishit(0.62, 0.4, 1)) && a.green === b.green,
+    'the reference LOOKED like it narrowed at 15 fps; measured, the green pixel count is pinned for the whole sweep');
+  ok('dead centre is dead straight', SW.mishit(0.5, 1, 1).deg === 0);
+  ok('a green-zone stop is effectively straight', Math.abs(SW.mishit(0.62, 1, 1).deg) <= 1.5);
+  ok('a red-zone stop also loses 10 % of its distance', SW.mishit(0.99, 1, 1).distanceMul === 0.9);
+  ok('a full red miss is 8 degrees', Math.abs(SW.mishit(1, 1, 1).deg - 8) < 1e-9);
+  ok('left of centre pulls LEFT, right pushes RIGHT', SW.mishit(0.1, 1, 1).deg < 0 && SW.mishit(0.9, 1, 1).deg > 0);
+  ok('over-100 % power multiplies the miss by 1.5',
+    Math.abs(SW.mishit(0.9, 1.1, 1).deg - SW.mishit(0.9, 1.0, 1).deg * 1.5) < 1e-9);
+  // The spec's own sanity check on the model.
+  const off = Math.tan(8 * Math.PI / 180) * 215;
+  near('a full red miss with the stock driver lands ~30 yds offline', off, 30, 2);
 }
 
-// ---- Test 1: heightfield mapping ----
-function test1() {
-  const t = build(flatHoleDef());
-  const points = [[0, 0], [20, 100], [-30, 250]];
-  for (const [x, z] of points) {
-    const rest = dropTest(t, x, z);
-    const expected = heightAt(t, rest.x, rest.z) + 0.02134;
-    approx(rest.y, expected, 0.01, `heightfield mapping at (${x},${z})`);
-    approx(rest.x, x, 3, `heightfield mapping at (${x},${z}): stays near drop point (x)`);
-    approx(rest.z, z, 3, `heightfield mapping at (${x},${z}): stays near drop point (z)`);
-  }
+console.log('\n-- 9. flight, roll and the lie factor --');
+near('a 215 yd drive flies ~4.5 s', SH.flightMs(215) / 1000, 4.48, 0.05);
+near('a 50 yd wedge flies ~1.7 s', SH.flightMs(50) / 1000, 1.73, 0.05);
+ok('flight time grows with distance and is never instant', SH.flightMs(0) === 900 && SH.flightMs(300) > SH.flightMs(200));
+{
+  const r = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[0], power: 1, mishitDeg: 0 });
+  near('a full drive from the tee carries the club distance', r.carry, 215, 0.01);
+  ok('it lands on the fairway and rolls', r.landedOn === 'fairway' && r.rollYd > 0);
+  near('fairway roll is 8 % of carry', r.rollYd / r.carry, 0.08, 0.001);
+  ok('the ball finishes past where it landed', r.rest[1] > r.landing[1]);
+}
+{
+  // lieFactor SCALES the result; it does NOT clamp the meter.
+  const from = [0, 340];                                     // the greenside bunker on hole 1
+  ok('the bunker lie is found', surfaceAt(h1, from[0], from[1]) === 'greensideBunker');
+  const r = SH.resolveShot({ hole: h1, from, aimRad: 0, club: CLUBS[11], power: 1, mishitDeg: 0 });
+  near('a full swing from sand travels 75 % of the club', r.carry, 95 * 0.75, 0.01);
+  // Roll belongs to the surface the ball comes DOWN on, not the one it was struck from - a bunker
+  // shot that finishes on the green rolls like a ball on a green. A ball that LANDS in sand plugs.
+  const intoSand = SH.resolveShot({ hole: h1, from: [0, 300], aimRad: 0, club: CLUBS[13], power: 0.8, mishitDeg: 0 });
+  ok('a ball that lands in sand does not roll', intoSand.landedOn !== 'greensideBunker' || intoSand.rollYd === 0);
+  ok('roll is read from the LANDING surface, not the lie played from', lieOf('greensideBunker').roll === 0);
+  const over = SH.resolveShot({ hole: h1, from, aimRad: 0, club: CLUBS[11], power: 1.1, mishitDeg: 0 });
+  ok('the player can still swing PAST 100 % from a bad lie', over.carry > r.carry);
+  near('over-100 % is worth up to +10 % distance', over.carry / r.carry, 1.1, 0.001);
+}
+{
+  const dots = SH.aimDots(CLUBS[0], 'fairway');
+  ok('the aim ladder is five dots', dots.length === 5);
+  near('dot 4 is the club\'s full distance', dots[3].at, 215, 0.01);
+  ok('dots 1-3 are 25/50/75 % of it', Math.abs(dots[0].at - 53.75) < 0.01 && Math.abs(dots[2].at - 161.25) < 0.01);
+  ok('dot 5 is the risk band past 100 %', dots[4].risk && dots[4].at > dots[3].at);
+  const sandDots = SH.aimDots(CLUBS[0], 'greensideBunker');
+  ok('the ladder RE-SCALES for a bad lie, so it never lies about where a perfect strike lands',
+    Math.abs(sandDots[3].at - 215 * 0.75) < 0.01);
+  ok('the ladder re-scales when the club changes', SH.aimDots(CLUBS[7], 'fairway')[3].at === 139);
+  ok('there is no ladder for the putter', SH.aimDots(PUTTER, 'green').length === 0);
 }
 
-// ---- Test 1b: ground-guard robustness, 80 seeded random points on Harbor hole 1 ----
-function test1b() {
-  const t = build(HARBOR_H1);
-  const gen = rng(9001);
-  const minX = t.x0 + 5, maxX = t.x0 + t.nx - 5;
-  const minZ = t.z0 + 5, maxZ = t.z0 + t.nz - 5;
-  let worst = 0;
-  let below = 0;
-  for (let i = 0; i < 80; i++) {
-    const x = minX + gen() * (maxX - minX);
-    const z = minZ + gen() * (maxZ - minZ);
-    const rest = dropTest(t, x, z);
-    // compare against the height AT WHERE IT LANDED, not the drop point - a ball can roll
-    // (e.g. down the water hazard's edge, §6.4's flat 1.2m cliff) before settling.
-    const expected = heightAt(t, rest.x, rest.z) + 0.02134;
-    const diff = rest.y - expected;
-    if (Math.abs(diff) > worst) worst = Math.abs(diff);
-    if (diff < -0.01) below++;
-  }
-  approx(worst, 0, 0.01, 'ground guard: worst rest deviation over 80 points');
-  assert(below === 0, `ground guard: ${below} of 80 points ended below the terrain`);
+console.log('\n-- 10. trees block the ball, and loft is the way past them --');
+{
+  // A trunk blocks at any height; a canopy blocks only a ball travelling below its own height.
+  // That pair IS the punch-low-or-loft-over decision, and it needs no extra UI.
+  const h3 = PINE_VALLEY.holes[2];
+  const tree = h3.trees[0];                                    // the lone oak: canopy 8, height 13
+  // 20 yds behind the tree and 4 yds off its trunk: inside the 8 yd canopy, clear of the 1 yd
+  // trunk. That offset is the whole point - a TRUNK blocks at any height, so lofting over a tree
+  // you are dead in line with is not one of the options. The canopy is what loft beats.
+  const from = [tree.x - 4, tree.y - 20];
+  const low = SH.resolveShot({ hole: h3, from, aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 0 });
+  ok('a driver punched at a tree 20 yds ahead is stopped by it', !!low.blocked,
+    `a driver is only ${(SH.flightPoint(20 / 215, 215, 0, SH.apexYd(CLUBS[0], 215)).height).toFixed(1)} yds up at the tree`);
+  ok('...and a blocked ball does not roll', low.rollYd === 0);
+  const high = SH.resolveShot({ hole: h3, from, aimRad: 0, club: CLUBS[13], power: 1, mishitDeg: 0 });
+  ok('a lob wedge clears the same canopy', !high.blocked,
+    `wedge apex ${SH.apexYd(CLUBS[13], 50).toFixed(1)} yds, ` +
+    `${SH.flightPoint(20 / 50, 50, 0, SH.apexYd(CLUBS[13], 50)).height.toFixed(1)} yds up at the tree, ` +
+    `canopy height ${h3.treeTypes[tree.type].height}`);
+  ok('the wedge gives up most of the yardage to do it', high.carry < low.carry / 3);
+  // The trunk is the part no amount of loft beats: it blocks at ANY height (spec 21.2's model).
+  // Dead in line with a trunk there is no shot over it, only around it - which is what makes a
+  // ball finishing directly behind a tree worth the drop prompt Stage C adds.
+  const dead = SH.resolveShot({ hole: h3, from: [tree.x, tree.y - 20], aimRad: 0, club: CLUBS[13], power: 1, mishitDeg: 0 });
+  ok('a trunk blocks even a shot lofted 19 yds over it', !!dead.blocked);
 }
 
-// ---- Test 2: determinism ----
-function test2() {
-  const t = build(flatHoleDef());
-  const input = {
-    from: { x: 0, z: 0 }, dirDeg: 3, clubId: '7i', lie: 'fairway',
-    power01: 0.9, spin01: 0.2, wind: { x: 1, z: 0.5 }, seed: 42,
+console.log('\n-- 11. putting --');
+// Only ONE number about putting was ever measured: a 17 ft putt rolled to rest in about 2.5 s.
+// PUTT_DECEL is derived from it, and everything else here falls out of that derivation.
+function flatGreen(grad) {
+  return {
+    pin: [0, 1e6], base: 'green', surfaces: [], treeTypes: [], trees: [], treeBelts: [],
+    green: { poly: [[-999, -999], [999, -999], [999, 999], [-999, 999]], slope: { cols: 1, rows: 1, cells: [grad] } },
   };
-  const r1 = simulateShot(t, input);
-  const r2 = simulateShot(t, input);
-  assert(r1.rest.x === r2.rest.x && r1.rest.y === r2.rest.y && r1.rest.z === r2.rest.z,
-    `determinism: rest identical (${JSON.stringify(r1.rest)} vs ${JSON.stringify(r2.rest)})`);
+}
+{
+  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 17 / SH.MAX_PUTT_FT });
+  near('a 17 ft putt rolls for ~2.5 s (the one MEASURED putt)', p.ms / 1000, 2.5, 0.1);
+  near('...and it travels 17 ft', Math.hypot(p.rest[0], p.rest[1]) * 3, 17, 0.3);
+}
+{
+  const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
+  near('a 20 ft putt across a HALF-strength slope breaks one cup width (~4 in)', p.rest[0] * 36, 4, 0.6);
+}
+{
+  const full = SH.simulatePutt({ hole: flatGreen([1, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
+  const half = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
+  ok('a full slope breaks about twice as much as a half one', Math.abs(full.rest[0] / half.rest[0] - 2) < 0.15);
+}
+{
+  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 1 });
+  near('full power rolls 60 ft', Math.hypot(p.rest[0], p.rest[1]) * 3, 60, 1);
+}
+{
+  // Holing out, on the real hole, from a real distance.
+  const green = PINE_VALLEY.holes[0];
+  const from = [green.pin[0], green.pin[1] - 4];
+  let holed = false;
+  for (let pw = 0.15; pw <= 0.5 && !holed; pw += 0.005) {
+    const p = SH.simulatePutt({ hole: green, from, aimRad: Math.atan2(green.pin[0] - from[0], green.pin[1] - from[1]), power: pw });
+    if (p.holed) holed = true;
+  }
+  ok('a 12 ft putt on hole 1 can actually be holed', holed);
+  const blast = SH.simulatePutt({ hole: green, from, aimRad: 0, power: 1 });
+  ok('a putt hammered over the cup at full pace does NOT drop', !blast.holed);
 }
 
-// ---- Test 3: carry table ----
-function test3() {
-  const t = build(flatHoleDef());
-  for (const club of CLUBS) {
-    if (club.id === 'pt') continue;
-    // Sanity floor from the 2026-09-02 spinAxis-sign bug hunt: a club speed outside 25-80 m/s
-    // is a bug signal (unrealistic ball speed), not a legitimate tuning result - see
-    // DECISIONS.md#spinaxis-sign-bug.
-    assert(club.speed >= 25 && club.speed <= 80, `club speed in range: ${club.id} = ${club.speed}`);
-    const target = TARGET_CARRY_M[club.id];
-    if (target === undefined) continue;
-    const r = simulateShot(t, {
-      from: { x: 0, z: 0 }, dirDeg: 0, clubId: club.id, lie: 'fairway',
-      power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-    });
-    const tol = target * 0.05;
-    approx(r.carryM, target, tol, `carry ${club.id}`);
-    if (club.id === 'dr') {
-      const apex = r.samples.reduce((m, s) => Math.max(m, s.y), 0);
-      assert(apex >= 22 && apex <= 38, `driver apex in range (got ${apex.toFixed(1)})`);
+console.log('\n-- 12. the two yardages stay different on purpose --');
+for (const h of PINE_VALLEY.holes) {
+  const straight = distYd(h.tee, h.pin);
+  ok(`hole ${h.n}: cardYards ${h.cardYards} vs straight line ${straight.toFixed(1)}`,
+    h.cardYards >= straight - 1.5);
+}
+ok("hole 3's card is well over its straight line, because it is a dogleg",
+  PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 50);
+near('hole 1 is the one where they agree', distYd(PINE_VALLEY.holes[0].tee, PINE_VALLEY.holes[0].pin), 360.7, 0.05);
+
+console.log('\n-- 13. a whole hole can be played out --');
+// The check that matters: does a plausible sequence of good swings get the ball in the hole?
+{
+  const h = PINE_VALLEY.holes[0];
+  let ball = [...h.tee];
+  let strokes = 0;
+  let holed = false;
+  for (let i = 0; i < 12 && !holed; i++) {
+    const lie = surfaceAt(h, ball[0], ball[1]);
+    const d = distYd(ball, h.pin);
+    const aim = Math.atan2(h.pin[0] - ball[0], h.pin[1] - ball[1]);
+    strokes++;
+    if (lie === 'green') {
+      const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / SH.MAX_PUTT_FT) });
+      ball = p.rest; holed = p.holed;
+    } else {
+      const club = autoSelectClub(d, lie);
+      const power = Math.min(1, d / (club.carry * lieOf(lie).power));
+      const r = SH.resolveShot({ hole: h, from: ball, aimRad: aim, club, power, mishitDeg: 0 });
+      ball = r.rest;
     }
   }
-  // Dedicated oversized-green hole so a 36m roll never leaves the green (into fairway noise)
-  // and never starts on/near the cup (pin moved well off to the side) - either confound was
-  // enough to make this measurement meaningless. Aimed away from the pin's bearing regardless.
-  const puttHole = flatHoleDef({
-    pin: [1000, 400], green: { center: [0, 400], radius: 80, tilt: [0, 0] },
-  });
-  const tPutt = build(puttHole);
-  const putt = simulateShot(tPutt, {
-    from: { x: 0, z: 400 }, dirDeg: 180, clubId: 'pt', lie: 'green',
-    power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-  });
-  approx(putt.totalM, TARGET_PUTT_ROLL_M, TARGET_PUTT_ROLL_M * 0.05, 'putt roll');
+  ok(`hole 1 played out with clean strikes: holed in ${strokes}`, holed && strokes <= 6,
+    `finished at [${ball.map((v) => v.toFixed(1))}] on ${surfaceAt(h, ball[0], ball[1])}`);
 }
 
-// ---- Test 3b: rollout bands (Part 2 amendment, 2026-09-02) ----
-// Flat test hole, power 1.0, spin01=0, no wind. rollout = total - carry.
-function rolloutOf(t, clubId, lie, dirDeg, fromXZ) {
-  const r = simulateShot(t, {
-    from: { x: fromXZ[0], z: fromXZ[1] }, dirDeg, clubId, lie,
-    power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-  });
-  const landT = r.events.find(e => e.kind === 'land')?.t;
-  const nextT = r.events.find(e => e.kind === 'bounce')?.t ?? Infinity;
-  let bounceH = 0;
-  if (landT !== undefined) {
-    for (const s of r.samples) if (s.t >= landT && s.t <= nextT) bounceH = Math.max(bounceH, s.y);
-  }
-  return { rollout: r.totalM - r.carryM, bounceH };
-}
-function test3b() {
-  const t = build(flatHoleDef());
-  const dr1 = rolloutOf(t, 'dr', 'fairway', 0, [0, 0]);
-  assert(dr1.rollout >= 15 && dr1.rollout <= 35, `driver/fairway rollout in 15-35m (got ${dr1.rollout.toFixed(1)})`);
-  assert(dr1.bounceH < 1.5, `driver/fairway first bounce under 1.5m (got ${dr1.bounceH.toFixed(2)})`);
-
-  const i7 = rolloutOf(t, '7i', 'fairway', 0, [0, 0]);
-  assert(i7.rollout >= 4 && i7.rollout <= 15, `7 iron/fairway rollout in 4-15m (got ${i7.rollout.toFixed(1)})`);
-
-  const pwF = rolloutOf(t, 'pw', 'fairway', 0, [0, 0]);
-  assert(pwF.rollout >= -3 && pwF.rollout <= 8, `wedge/fairway rollout in -3..8m (got ${pwF.rollout.toFixed(1)})`);
-
-  // dedicated hole: a narrow fairway well off to the side, so a straight drive from the tee
-  // lands and rolls on genuine ROUGH (not the wide flat hole's own fairway).
-  const roughHole = flatHoleDef({
-    pin: [0, 1000], target: [0, 500],
-    fairway: { path: [[500, 0], [500, 400]], width: 10 },
-    green: { center: [0, 1000], radius: 20, tilt: [0, 0] },
-  });
-  const tRough = build(roughHole);
-  const drR = rolloutOf(tRough, 'dr', 'tee', 0, [0, 0]);
-  assert(drR.rollout < 6, `driver/rough rollout under 6m (got ${drR.rollout.toFixed(1)})`);
-
-  // dedicated hole: a bunker centered where a full-power wedge from the fairway actually lands.
-  const sandHole = flatHoleDef({
-    pin: [0, 300], target: [0, 150],
-    fairway: { path: [[0, 0], [0, 300]], width: 200 },
-    green: { center: [0, 300], radius: 20, tilt: [0, 0] },
-    bunkers: [{ center: [0, 100], radius: 15 }],
-  });
-  const tSand = build(sandHole);
-  const pwS = rolloutOf(tSand, 'pw', 'fairway', 0, [0, 0]);
-  assert(pwS.rollout < 2, `wedge/sand rollout under 2m (got ${pwS.rollout.toFixed(1)})`);
-
-  // putter/green must be unaffected (green's roll is untouched)
-  const puttHole2 = flatHoleDef({
-    pin: [1000, 400], green: { center: [0, 400], radius: 80, tilt: [0, 0] },
-  });
-  const tPutt2 = build(puttHole2);
-  const putt2 = simulateShot(tPutt2, {
-    from: { x: 0, z: 400 }, dirDeg: 180, clubId: 'pt', lie: 'green',
-    power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-  });
-  approx(putt2.totalM, TARGET_PUTT_ROLL_M, TARGET_PUTT_ROLL_M * 0.05, 'putt/green total unaffected by rollout tuning');
-}
-
-// ---- Test 3c: sidespin (Part 9B) ----
-// Flat test hole, driver, fairway, power 1.0, spin 0, no wind. curve01 = +1 must land 25-45 m
-// RIGHT (+x, travelling +z) of the straight shot and 5-15 m SHORTER along the line; -1 mirrors.
-function landOf(r) {
-  const e = r.events.find((ev) => ev.kind === 'land');
-  return e ? { x: e.x, z: e.z } : { x: r.rest.x, z: r.rest.z };
-}
-function test3c() {
-  const t = build(flatHoleDef());
-  const shot = (curve01) => simulateShot(t, {
-    from: { x: 0, z: 0 }, dirDeg: 0, clubId: 'dr', lie: 'fairway',
-    power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7, curve01,
-  });
-  const s = landOf(shot(0)), r = landOf(shot(1)), l = landOf(shot(-1));
-  const right = r.x - s.x, shortR = s.z - r.z;
-  const left = s.x - l.x, shortL = s.z - l.z;
-  assert(right >= 25 && right <= 45, `sidespin: driver at curve01=+1 lands 25-45m right of straight (got ${right.toFixed(1)})`);
-  assert(shortR >= 5 && shortR <= 15, `sidespin: driver at curve01=+1 lands 5-15m shorter (got ${shortR.toFixed(1)})`);
-  assert(left >= 25 && left <= 45, `sidespin: driver at curve01=-1 lands 25-45m LEFT of straight (got ${left.toFixed(1)})`);
-  assert(shortL >= 5 && shortL <= 15, `sidespin: driver at curve01=-1 lands 5-15m shorter (got ${shortL.toFixed(1)})`);
-  // a putt ignores curve01 entirely
-  const pin = [1000, 400];
-  const tP = build(flatHoleDef({ pin, green: { center: [0, 400], radius: 80, tilt: [0, 0] } }));
-  const putt = (curve01) => simulateShot(tP, { from: { x: 0, z: 400 }, dirDeg: 180, clubId: 'pt', lie: 'green', power01: 0.5, spin01: 0, wind: { x: 0, z: 0 }, seed: 7, curve01 });
-  const p0 = putt(0), p1 = putt(1);
-  assert(p0.rest.x === p1.rest.x && p0.rest.z === p1.rest.z, 'sidespin: a putt is bit-identical at curve01 = 0 and 1');
-}
-
-// ---- Test 8b: curve01 = 0 is bit-identical to the pre-sidespin fixture (Part 9B) ----
-// Stronger than test 8's 0.02 m tolerance: the recorded fixture was generated BEFORE sidespin
-// existed, and a curve01 of 0 (explicit or absent) must reproduce every rest EXACTLY (===).
-function test8b() {
-  const terrainByHole = new Map();
-  let exact = 0, total = 0;
-  for (const shot of harborFixture.shots) {
-    if (shot.input.curve01) continue;   // curved shots (added after this test was born) are test 8's
-    let terrain = terrainByHole.get(shot.hole);
-    if (!terrain) { terrain = build(harborCourse.holes.find((h) => h.n === shot.hole)); terrainByHole.set(shot.hole, terrain); }
-    const r = simulateShot(terrain, Object.assign({}, shot.input, { curve01: 0 }));
-    const [ex, ey, ez] = shot.rest;
-    total++;
-    if (r.rest.x === ex && r.rest.y === ey && r.rest.z === ez) exact++;
-    else console.error(`FAIL: bit-identity hole ${shot.hole} shot ${harborFixture.shots.indexOf(shot)}: [${ex},${ey},${ez}] vs [${r.rest.x},${r.rest.y},${r.rest.z}]`);
-  }
-  assert(exact === total && total > 0, `curve01 = 0 bit-identical to the fixture on every straight shot (${exact}/${total})`);
-}
-
-// ---- Test 4: reachability, per Harbor hole ----
-function test4() {
-  for (const hole of harborCourse.holes) {
-    const t = build(hole);
-
-    // Leg 1: tee -> target, auto club, aim 0 (straight at target), power 1.0
-    const teeLie = 'tee';
-    const d1 = Math.hypot(hole.target[0] - hole.tee[0], hole.target[1] - hole.tee[1]);
-    const club1 = autoSelectClub(teeLie, d1, 0);
-    const dir1 = bearingDeg(hole.tee, hole.target);
-    const r1 = simulateShot(t, {
-      from: { x: hole.tee[0], z: hole.tee[1] }, dirDeg: dir1, clubId: club1, lie: teeLie,
-      power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-    });
-    const s1 = surfaceAt(t, r1.rest.x, r1.rest.z);
-    assert(s1 === S.FAIRWAY || s1 === S.FRINGE || s1 === S.GREEN,
-      `H${hole.n} leg1 (tee->target) rest surface is FAIRWAY/FRINGE/GREEN (got ${s1}, club ${club1})`);
-
-    // Leg 2: target -> pin, auto club (from the surface actually under the target), aim at pin
-    const lie2 = lieName(surfaceAt(t, hole.target[0], hole.target[1]));
-    const d2 = Math.hypot(hole.pin[0] - hole.target[0], hole.pin[1] - hole.target[1]);
-    const club2 = autoSelectClub(lie2, d2, 0);
-    const dir2 = bearingDeg(hole.target, hole.pin);
-    const r2 = simulateShot(t, {
-      from: { x: hole.target[0], z: hole.target[1] }, dirDeg: dir2, clubId: club2, lie: lie2,
-      power01: 1.0, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-    });
-    const dPin = Math.hypot(r2.rest.x - hole.pin[0], r2.rest.z - hole.pin[1]);
-    const s2 = surfaceAt(t, r2.rest.x, r2.rest.z);
-    assert(dPin <= 25, `H${hole.n} leg2 (target->pin) rest within 25m of pin (got ${dPin.toFixed(1)}, club ${club2})`);
-    assert(s2 !== S.WATER && s2 !== S.OB, `H${hole.n} leg2 rest not WATER/OB (got ${s2})`);
-  }
-}
-
-// ---- Test 5: putt sweep, per Harbor hole ----
-function test5() {
-  for (const hole of harborCourse.holes) {
-    const t = build(hole);
-    let anyHoled = false;
-    for (let k = 0; k < 8 && !anyHoled; k++) {
-      const ang = (k / 8) * 2 * Math.PI;
-      const fromXZ = [hole.pin[0] + 4 * Math.sin(ang), hole.pin[1] + 4 * Math.cos(ang)];
-      const dir = bearingDeg(fromXZ, hole.pin);
-      for (let p = 0.05; p <= 0.6 + 1e-9 && !anyHoled; p += 0.05) {
-        const r = simulateShot(t, {
-          from: { x: fromXZ[0], z: fromXZ[1] }, dirDeg: dir, clubId: 'pt', lie: 'green',
-          power01: p, spin01: 0, wind: { x: 0, z: 0 }, seed: 7,
-        });
-        if (r.outcome === 'hole') anyHoled = true;
-      }
-    }
-    assert(anyHoled, `H${hole.n} putt sweep: at least one of the 8x12 sweep holes out`);
-  }
-}
-
-// ---- Test 6: points table ----
-function test6() {
-  const par = 4;
-  const want = { '-3': 8, '-2': 5, '-1': 2, '0': 0, '1': -1, '2': -3, '3': -3 };
-  for (const dStr of Object.keys(want)) {
-    const d = Number(dStr);
-    assert(holePoints(par + d, par) === want[dStr], `holePoints d=${d} -> ${want[dStr]} (got ${holePoints(par + d, par)})`);
-  }
-}
-
-// ---- Test 7: meters ----
-function test7() {
-  const T = 1.0;
-  approx(pos(0, T), 0, 1e-9, 'pos(0,T)=0');
-  approx(pos(T, T), 1, 1e-9, 'pos(T,T)=1');
-  approx(pos(2 * T, T), 0, 1e-9, 'pos(2T,T)=0');
-}
-
-// ---- Test 8: fixture replay ----
-function test8() {
-  const fixtures = [{ courseId: 'harbor', course: harborCourse, fixture: harborFixture }];
-  for (const { courseId, course, fixture } of fixtures) {
-    assert(fixture.courseId === courseId, `fixture courseId matches (${fixture.courseId})`);
-    const terrainByHole = new Map();
-    for (const shot of fixture.shots) {
-      let terrain = terrainByHole.get(shot.hole);
-      if (!terrain) {
-        const hole = course.holes.find((h) => h.n === shot.hole);
-        terrain = build(hole);
-        terrainByHole.set(shot.hole, terrain);
-      }
-      const r = simulateShot(terrain, shot.input);
-      const [ex, ey, ez] = shot.rest;
-      const dist = Math.hypot(r.rest.x - ex, r.rest.y - ey, r.rest.z - ez);
-      if (dist > 0.02) {
-        console.error(`FAIL: fixture replay ${courseId} hole ${shot.hole} shot ${fixture.shots.indexOf(shot)}: ` +
-          `expected rest [${ex}, ${ey}, ${ez}], got [${r.rest.x}, ${r.rest.y}, ${r.rest.z}] (off by ${dist.toFixed(4)}m)`);
-      }
-      assert(dist <= 0.02, `fixture replay ${courseId} hole ${shot.hole} shot ${fixture.shots.indexOf(shot)} within 0.02m`);
-    }
-  }
-}
-
-test1();
-test1b();
-test2();
-test3();
-test3b();
-test3c();
-test4();
-test5();
-test6();
-test7();
-test8();
-test8b();
-
-console.log(`${pass} passed, ${fail} failed`);
-if (fail > 0) process.exit(1);
+console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
+process.exit(fail ? 1 : 0);

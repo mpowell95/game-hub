@@ -1,71 +1,96 @@
-// golf/js/clubs.js - pure club table, lie modifiers, auto-select. No DOM.
-// See §5 of GOLF-HANDOFF.md for the constants and their tuning procedure.
+// golf/js/clubs.js - the bag, the lie table, and the auto-pick. Pure and DOM-free.
+//
+// Every number here is from golf-reference-spec.md: the ladder is §21.3 (APPROVED by Matt), the
+// lie table is §21.2. The reference's own MEASURED 287 yd drive is deliberately NOT the stock
+// number - it was recorded with an unknown, possibly upgraded bag and left no headroom for the
+// club shop, and it made a 360 yd par 4 play as a drive and a wedge.
 
-// speed values tuned Part 1, second pass (bisection against sweep-carry's targets, spin01=0),
-// AFTER fixing the spinAxis sign bug and re-tuning CL_COEF (flight.js) to 1.55 - see
-// DECISIONS.md#spinaxis-sign-bug. All land in realistic 25-80 m/s golf ball speeds; the first
-// pass's >120 m/s values were the bug's symptom, not a real tuning result.
+/** THE STOCK BAG. `upgraded` is the fully-upgraded figure from §21.3, carried here so the ladder
+ *  visibly has somewhere to go; NOTHING in this build reads it. The shop is deferred, and the two
+ *  intermediate tiers are deliberately unspecified.
+ *
+ *  `carry` is CARRY, not total: roll is added afterwards per surface (see shot.js). The five aim
+ *  dots mark where the ball LANDS, so on a fairway the ball finishes slightly past dot 4.
+ *
+ *  `loft` (0..1) drives the flight's peak height, which is what decides whether a ball clears a
+ *  tree canopy or meets its trunk. It is ours, not measured: a driver is the flattest thing in the
+ *  bag and a lob wedge the steepest. */
 export const CLUBS = [
-  { id: 'dr',  name: { en: 'Driver',  es: 'Driver' },   speed: 71.93, launch: 12, spin: 2600 },
-  { id: '3w',  name: { en: '3 Wood',  es: 'Madera 3' }, speed: 60.09, launch: 14, spin: 3200 },
-  { id: '5i',  name: { en: '5 Iron',  es: 'Hierro 5' }, speed: 51.07, launch: 18, spin: 5000 },
-  { id: '7i',  name: { en: '7 Iron',  es: 'Hierro 7' }, speed: 45.39, launch: 21, spin: 6500 },
-  { id: '9i',  name: { en: '9 Iron',  es: 'Hierro 9' }, speed: 40.37, launch: 25, spin: 8000 },
-  { id: 'pw',  name: { en: 'Wedge',   es: 'Wedge' },    speed: 35.10, launch: 30, spin: 9500 },
-  { id: 'sw',  name: { en: 'Sand W',  es: 'Sand W' },   speed: 29.01, launch: 38, spin: 10000 },
-  { id: 'pt',  name: { en: 'Putter',  es: 'Putter' },   speed: 6.5,   launch: 0,  spin: 0 },
+  { id: 'driver', carry: 215, upgraded: 269, loft: 0.30 },
+  { id: '3wood', carry: 195, upgraded: 244, loft: 0.36 },
+  { id: '5wood', carry: 182, upgraded: 228, loft: 0.41 },
+  { id: '2iron', carry: 175, upgraded: 219, loft: 0.45 },
+  { id: '3iron', carry: 166, upgraded: 208, loft: 0.50 },
+  { id: '4iron', carry: 157, upgraded: 196, loft: 0.55 },
+  { id: '5iron', carry: 148, upgraded: 185, loft: 0.60 },
+  { id: '6iron', carry: 139, upgraded: 174, loft: 0.65 },
+  { id: '7iron', carry: 130, upgraded: 163, loft: 0.70 },
+  { id: '8iron', carry: 120, upgraded: 150, loft: 0.75 },
+  { id: '9iron', carry: 110, upgraded: 138, loft: 0.80 },
+  { id: 'pwedge', carry: 95, upgraded: 119, loft: 0.86 },
+  { id: 'swedge', carry: 72, upgraded: 90, loft: 0.92 },
+  { id: 'lwedge', carry: 50, upgraded: 63, loft: 1.00 },
 ];
 
-// Target carries after tuning, §5: flat ground, no wind, power 1.0, spin bar centered.
-export const TARGET_CARRY_M = {
-  dr: 240, '3w': 205, '5i': 170, '7i': 145, '9i': 123, pw: 100, sw: 73,
-};
-export const TARGET_PUTT_ROLL_M = 36; // putter 100% roll on flat green
+/** The putter is deliberately absent from the ladder above: it is measured in FEET, not yards, and
+ *  a club with a yardage would sort into a bag it does not belong in. 60 ft at full power is ours;
+ *  the reference never showed a putter's range. */
+export const PUTTER = { id: 'putter', maxFeet: 60 };
 
 export function clubById(id) {
-  return CLUBS.find(c => c.id === id) || null;
+  return id === 'putter' ? PUTTER : CLUBS.find((c) => c.id === id);
 }
 
-export const LIE = {
-  tee:     { speed: 1.00, spin: 1.00 },
-  fairway: { speed: 1.00, spin: 1.00 },
-  fringe:  { speed: 1.00, spin: 0.90 },
-  rough:   { speed: 0.85, spin: 0.60 },
-  sand:    { speed: 0.70, spin: 0.50 },   // if club is not 'sw' or 'pw', speed 0.55 instead
-  green:   { speed: 1.00, spin: 1.00 },   // putter only
+/** THE LIE TABLE (§21.2). Every bad lie does two things: it caps distance, and it narrows the
+ *  margin for error. Both are shown to the player before they swing.
+ *
+ *  `power` SCALES THE RESULT - it does not clamp the meter. The player can still swing to 100 %
+ *  and past it from a bunker; the ball simply travels 88 % as far, and the aim dots scale by the
+ *  same factor so they keep telling the truth.
+ *
+ *  `zone` is the straight-zone WIDTH as a multiplier on the accuracy bar's green band. The band
+ *  visibly narrows (Matt's call): the alternative - leaving it looking normal while secretly
+ *  punishing the same stop position harder - reads as the game cheating.
+ *
+ *  The design principle: SAND COSTS CONTROL, NOT DISTANCE. A real bunker shot is not short, it is
+ *  unpredictable. Heavy rough is the opposite - it genuinely eats distance. */
+export const LIES = {
+  tee: { power: 1.00, zone: 1.00, roll: 0.08 },
+  fairway: { power: 1.00, zone: 1.00, roll: 0.08 },
+  lightRough: { power: 0.92, zone: 0.85, roll: 0.03 },
+  heavyRough: { power: 0.82, zone: 0.65, roll: 0.03 },
+  fairwayBunker: { power: 0.88, zone: 0.55, roll: 0.00 },
+  greensideBunker: { power: 0.75, zone: 0.50, roll: 0.00 },
+  trees: { power: 0.85, zone: 0.80, roll: 0.03 },
+  green: { power: 1.00, zone: 1.00, roll: 0.02 },
+  water: { power: 1.00, zone: 1.00, roll: 0.00 },   // never actually played from; see Stage C
 };
 
-// lie modifier for a given club on a given surface (handles the sand exception)
-export function lieSpeedMod(lie, clubId) {
-  const l = LIE[lie] || LIE.fairway;
-  if (lie === 'sand' && clubId !== 'sw' && clubId !== 'pw') return 0.55;
-  return l.speed;
-}
-export function lieSpinMod(lie) {
-  const l = LIE[lie] || LIE.fairway;
-  return l.spin;
-}
+export function lieOf(kind) { return LIES[kind] || LIES.fairway; }
 
-// Auto-select: on green -> putter. Otherwise smallest club whose target carry >= d
-// (adjusted distance); if none reaches (d > driver), driver.
-// headwindComponent: m/s of wind blowing FROM the pin TO the tee (positive = headwind).
-export function autoSelectClub(lie, distanceToPinM, headwindComponent) {
-  if (lie === 'green') return 'pt';
-  const d = distanceToPinM + (headwindComponent || 0) * 1.5;
-  let best = null;
-  for (const c of CLUBS) {
-    if (c.id === 'pt') continue;
-    const carry = TARGET_CARRY_M[c.id];
-    if (carry === undefined) continue;
-    if (carry >= d) {
-      if (best === null || carry < TARGET_CARRY_M[best]) best = c.id;
-    }
+/** ROLL after landing, by the surface the ball comes down ON, as a fraction of carry (§20). */
+export function rollFactor(kind) { return lieOf(kind).roll; }
+
+/** Auto-pick a club for the shot in hand (§10.2: the game offers one after every shot, and the
+ *  player overrides with ^ / v). On the green it is always the putter - no other club is offered,
+ *  because no other club is the right answer.
+ *
+ *  Off the green it picks the shortest club that can still REACH at full power from this lie,
+ *  which is what a golfer does: take enough club, not the most club. If nothing reaches, it hands
+ *  over the driver and the player swings for as much as they can get. */
+export function autoSelectClub(distanceYd, lieKind) {
+  if (lieKind === 'green') return PUTTER;
+  const reach = lieOf(lieKind).power;
+  for (let i = CLUBS.length - 1; i >= 0; i--) {
+    if (CLUBS[i].carry * reach >= distanceYd) return CLUBS[i];
   }
-  return best || 'dr';
+  return CLUBS[0];
 }
 
-// Player override chip cycle: driver..sand wedge always available; putter only on green/fringe.
-export function selectableClubs(lie) {
-  const allowPutter = lie === 'green' || lie === 'fringe';
-  return CLUBS.filter(c => c.id !== 'pt' || allowPutter).map(c => c.id);
+/** Cycle the bag. `dir` +1 is MORE club (further), -1 is less. The putter is not in the cycle: it
+ *  is on the green and nowhere else. */
+export function stepClub(club, dir) {
+  if (club.id === 'putter') return PUTTER;
+  const i = CLUBS.findIndex((c) => c.id === club.id);
+  return CLUBS[Math.min(CLUBS.length - 1, Math.max(0, i - dir))];
 }

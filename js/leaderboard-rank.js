@@ -258,7 +258,79 @@ export function rankPlayers(list) {
     .sort(cmp((r) => (r.rating == null ? -1 : r.rating), (r) => r.plays, (r) => r.group.updatedAt));
 }
 
+
+// --- golf: the one board metric where LOWER WINS -----------------------------------------------
+//
+// Every other number on this leaderboard is "more is better" - wins, points, obstacles, metres -
+// and the whole file was written on that assumption: rankMap and every sortRows branch in
+// leaderboard-ui.js compare `b - a`, and gameListHTML filtered leaders with `metric > 0`.
+//
+// Golf breaks BOTH halves of that assumption, which is why this lives here, pure and tested,
+// rather than as a special case scattered through the DOM file:
+//
+//  1. LOWER IS BETTER. A stroke score sorted descending puts the WORST golfer in the family on
+//     top of the board, and it looks plausible enough to go unnoticed for weeks.
+//  2. THE GOOD SCORES ARE <= 0. The number shown is a score to PAR, so level par is 0 and every
+//     under-par round is negative. A `> 0` filter therefore drops exactly the best rounds ever
+//     played - a stored best that no screen shows reads as deleted (THE LAW rule 1).
+//
+// The board shows ONE NAMED COURSE, never a blind minimum across bestRoundByCourse's keys. A
+// 3-hole best and a 9-hole best are not comparable, so they are stored under different keys and
+// only ever displayed apart (THE LAW rule 4). When holes 4-9 ship, `pinevalley9` becomes a
+// SECOND entry here and the board names which one it is showing; `pinevalley3` is not repurposed
+// and not merged into it (rule 5).
+export const GOLF_BOARD_COURSE = 'pinevalley3';
+
+/** Total par of each course, for turning a stored STROKE count into a score to par. The stored
+ *  value stays strokes - that is the frozen recorder shape (js/game-stats.js's bestRoundByCourse,
+ *  Math.min per key) - and par is subtracted at DISPLAY time only. Since par is a constant per
+ *  course, ordering by strokes and ordering by to-par are identical, so nothing about the stored
+ *  Math.min merge has to change. Pine Valley holes 1-3 are par 4 + 3 + 5. */
+export const GOLF_COURSE_PAR = { pinevalley3: 12 };
+
+/** Golf's board number: the player's best round on the named course, as a score to par.
+ *  Returns null - NOT 0 - when they have no recorded round there, because 0 is a real, good
+ *  score (level par) and the two must never collide. */
+export function golfBestAt(group, courseId = GOLF_BOARD_COURSE) {
+  const gf = group && group.games && group.games.golf && group.games.golf.gf;
+  const best = gf && gf.bestRoundByCourse ? gf.bestRoundByCourse[courseId] : undefined;
+  if (!Number.isFinite(best)) return null;
+  return best - (GOLF_COURSE_PAR[courseId] || 0);
+}
+
+/** Board metrics where a SMALLER number is the better result. */
+export const LOWER_IS_BETTER = new Set(['golf']);
+
+/** Does this player have a number on this board at all? For a lower-is-better metric that is
+ *  "is there a value", never "is it positive" - see reason 2 in the header. */
+export function hasBoardMetric(value, id) {
+  if (value === null || value === undefined || Number.isNaN(value)) return false;
+  return LOWER_IS_BETTER.has(id) ? true : value > 0;
+}
+
+/** Sort-ready comparator over two already-extracted metric values. Descending for every
+ *  more-is-better metric, ASCENDING for golf. A player with no number sinks in both directions,
+ *  so an absent value can never outrank a real one. */
+export function compareBoardMetric(va, vb, id) {
+  const na = !hasBoardMetric(va, id) && (va === null || va === undefined || Number.isNaN(va));
+  const nb = !hasBoardMetric(vb, id) && (vb === null || vb === undefined || Number.isNaN(vb));
+  if (na || nb) return na === nb ? 0 : (na ? 1 : -1);
+  return LOWER_IS_BETTER.has(id) ? va - vb : vb - va;
+}
+
+/** How a board metric is PRINTED. Golf's is a score to par, so it takes a sign, and 0 is level
+ *  par - which reads as "E" on every scorecard there has ever been, never as "0". `evenLabel` is
+ *  passed in already translated: this module stays free of i18n. */
+export function formatBoardMetric(value, id, evenLabel = 'E') {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  if (!LOWER_IS_BETTER.has(id)) return String(value);
+  if (value === 0) return evenLabel;
+  return value > 0 ? `+${value}` : String(value);
+}
+
 export default {
   record, bucketsOf, tierMix, tierRows, wilsonLower, competitiveRating,
   fieldMaxOf, soloRating, ratePlayer, rankPlayers, cmp, PROVISIONAL_PLAYS,
+  golfBestAt, hasBoardMetric, compareBoardMetric, formatBoardMetric,
+  LOWER_IS_BETTER, GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 };

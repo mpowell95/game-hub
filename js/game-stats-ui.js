@@ -62,10 +62,9 @@ const TABS = [
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
   // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
-  // NOT devOnly - the hub tile ships visible to everyone from Part 7/8. What actually gates play
-  // is admin-config.js's per-COURSE 'testing' state (golf.courses.harbor, default 'testing'),
-  // not this game-wide switch: a non-dev player can open Golf and see Harbor Links locked on the
-  // setup screen, same shape as Skeeball's machine-release gate one level down from the game.
+  // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
+  // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
+  // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
   { id: 'golf', labelKey: 'game_title_golf' },
 ];
 
@@ -568,11 +567,20 @@ function battleshipScreen(rec) {
 }
 
 // Course id -> display name, hand-maintained like SK_MACHINES below (this file stays out of
-// golf/'s own folder, same reason SK_MACHINES doesn't import skeeball/'s board list). Harbor
-// Links' name is identical in both languages (golf/courses/harbor/course.js), so no i18n
-// needed; an unknown id falls back to its own id in caps rather than disappearing a player's
-// history (THE LAW rule 1), same fallback shape as skMachineMeta below.
-const GOLF_COURSES = { harbor: 'Harbor Links' };
+// golf/'s own folder, same reason SK_MACHINES doesn't import skeeball/'s board list; a second,
+// deliberate copy carrying each course's PAR lives in js/leaderboard-rank.js). Pine Valley's
+// name is identical in both languages, so no i18n needed; an unknown id falls back to its own
+// id in caps rather than disappearing a player's history (THE LAW rule 1), same fallback shape
+// as skMachineMeta below.
+//
+// The hole count is IN the name because a 3-hole best and a 9-hole best are not comparable and
+// are stored under separate keys (THE LAW rule 4). When holes 4-9 ship, 'pinevalley9' becomes a
+// SECOND row here and both are listed; 'pinevalley3' is never repurposed (rule 5).
+//
+// `harbor` is deliberately absent. Harbor Links is gone from the product, its stored keys are
+// never written and never read again, and no device has a Harbor record to render - the caps
+// fallback covers the impossible case without naming a course that no longer exists.
+const GOLF_COURSES = { pinevalley3: 'Pine Valley (3 holes)' };
 function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
 
 /** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in

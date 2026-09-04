@@ -303,6 +303,83 @@ const MOTION = {
 // A game with no probe is listed at the end of every run under "NEVER PLAYED BY ANYTHING". That
 // list is the honest state of this repo's coverage, and it should shrink.
 const PLAY = {
+  golf: {
+    what: 'tee off, then hole out - the whole three-tap swing, tee to cup',
+    async run(page, cdp, tap) {
+      // The three-tap swing is this game's whole interface, and the failure it guards against is
+      // specific: any one of the three taps landing in the wrong PHASE leaves the meter parked and
+      // the ball never leaves the tee, with nothing on screen saying so. Driving it through the
+      // real button is the only way to find that out.
+      const practice = await page.$('[data-role="practice"]');
+      if (!practice) return { ok: false, why: 'no "practice" button on the course card' };
+      await tap(practice);
+      const hole1 = await page.waitForSelector('[data-hole="1"]', { timeout: 8000 }).catch(() => null);
+      if (!hole1) return { ok: false, why: 'the practice hole select never appeared' };
+      await tap(hole1);
+      await page.waitForSelector('[data-role="swing"]', { timeout: 8000 });
+      await page.waitForTimeout(500);
+
+      const read = () => page.evaluate(() => {
+        const g = window.__gfTest;
+        return g ? { ball: g.ball.slice(), shot: g.shotN, holed: g.holed, anim: !!g.anim, phase: g.swing.phase } : null;
+      });
+      const before = await read();
+      if (!before) return { ok: false, why: 'the game exposed no state to drive (window.__gfTest)' };
+      if (before.shot !== 1) return { ok: false, why: `mounted mid-hole: shot ${before.shot}` };
+
+      // One full swing: tap to start the ring, tap to lock power, tap to stop the accuracy bar.
+      // The gaps are deliberate - the ring must have moved off zero before tap 2, or this proves
+      // nothing about the sweep.
+      const swing = async () => {
+        const b = await page.$('[data-role="swing"]');
+        for (const wait of [260, 220, 0]) {
+          const box = await b.boundingBox();
+          await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+          if (wait) await page.waitForTimeout(wait);
+        }
+      };
+      await swing();
+      await page.waitForTimeout(300);
+      const struck = await read();
+      if (!struck.anim && struck.shot === 1) {
+        return { ok: false, why: 'three taps on "swing" and the ball never left the tee (the meter never fired)' };
+      }
+      // Let the flight land and the post-shot input lock expire.
+      await page.waitForTimeout(6500);
+      const after = await read();
+      const moved = Math.hypot(after.ball[0] - before.ball[0], after.ball[1] - before.ball[1]);
+      if (moved < 50) return { ok: false, why: `the tee shot moved the ball only ${moved.toFixed(1)} yds` };
+      if (after.shot !== 2) return { ok: false, why: `the shot counter did not advance (still ${after.shot})` };
+
+      // Now hole out: drop the ball beside the cup through the real state and putt it in, so the
+      // putt path, the cup capture and the holed flag are all exercised, not just the full swing.
+      await page.evaluate(() => {
+        const g = window.__gfTest;
+        g.ball = [g.hole.pin[0], g.hole.pin[1] - 2.2];
+        g.aimRad = Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
+        g._paintHud();
+      });
+      const onGreen = await page.evaluate(() => window.__gfTest._onGreen());
+      if (!onGreen) return { ok: false, why: 'placed beside the cup and the lie lookup did not say "green"' };
+      const unit = await page.$eval('[data-role="dist"]', (el) => el.textContent);
+      if (!/ft/.test(unit)) return { ok: false, why: `on the green the distance still reads in yards: "${unit}"` };
+
+      let holed = false;
+      for (let attempt = 0; attempt < 14 && !holed; attempt++) {
+        await page.evaluate(() => {
+          const g = window.__gfTest;
+          g.ball = [g.hole.pin[0], g.hole.pin[1] - 2.2];
+          g.aimRad = Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
+          g.swing.reset();
+        });
+        await swing();
+        await page.waitForTimeout(3800);
+        holed = (await read()).holed;
+      }
+      if (!holed) return { ok: false, why: 'fourteen putts from 6 ft and not one of them dropped' };
+      return { ok: true, note: `drove ${moved.toFixed(0)} yds off the tee, then holed out` };
+    },
+  },
   pool: {
     what: 'break the rack, then get a shot back from the computer',
     async run(page, cdp, tap) {

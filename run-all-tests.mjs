@@ -41,6 +41,10 @@ const SUITES = [
   { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
+  // Golf's engine suite, rewritten for the 2D game (Stage B). It covers everything measurable
+  // about this game - the hole data and its validator, the bag, the three-tap meters, the mishit
+  // model, flight and roll, and putting - because all of it lives in a pure module. ui.js has no
+  // coverage here on purpose: it owns no rule.
   { file: 'golf/js/test.js' },
   // Monopoly Deal had NO automated coverage at all until 2026-09-01 - it is excluded from
   // test-game-conventions.mjs as a documented non-ESM exception, and its own self-test was

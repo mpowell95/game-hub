@@ -1,980 +1,642 @@
-// golf/js/ui.js - DOM shell: HUD, tap capture, playback, autosave, module contract. The ONLY
-// file that touches the DOM except render.js/camera.js (three.js). See §13 of GOLF-HANDOFF.md.
+// golf/js/ui.js - the DOM shell: the setup screens, the HUD, tap capture, the render loop, and the
+// module contract. The ONLY file here that touches the DOM.
 //
-// game.js owns every round RULE (strokes, penalties, max-strokes, wind roll, points, hole
-// advance, serialize/restore) - this file only calls it and paints. It never mutates
-// round.strokes/points/ball/wind/phase/hole itself; round.club is the one field it DOES write
-// directly, and only as the player's own override (the club-row tap), which is a choice being
-// recorded, not a rule being applied. See DECISIONS.md#part5-scope.
+// Everything it paints comes from modules that are pure and headless-testable: holes.js (geometry
+// and the lie lookup), clubs.js (the bag and the lie table), swing.js (the three-tap meters and
+// the mishit model), shot.js (flight, roll and the putt), render.js (the tilemap and the camera).
+// This file owns no rule; it reads them and paints.
+//
+// STAGE B: one hole, tee to holed putt. Hazards, the drop prompt, the result banner and the
+// scorecard are Stage C, and the stats write is Stage D - so a holed putt here reports and stops
+// rather than scoring a round. See golf/CLAUDE.md.
 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { loadStats, recordGolf } from '../../js/game-stats.js';
-import { courseMode } from '../../js/admin-config.js';
-import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
-
-import { build, S, heightAt } from './terrain.js';
-import { simulateShot } from './physics.js';
-import { pos, aimDeg as aimDegOf, power01 as power01Of, spin01 as spin01Of, DIFF } from './meters.js';
-import { CLUBS, autoSelectClub, selectableClubs, TARGET_CARRY_M, lieSpeedMod } from './clubs.js';
-import { Renderer } from './render.js';
-import { CameraRig, createCamera, applyHFov } from './camera.js';
-import { Minimap, MAP_W, MAP_H } from './minimap.js';
-import { COURSES, courseById } from '../courses/registry.js';
+import PINE_VALLEY from '../courses/pinevalley.js';
+import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf } from './clubs.js';
+import { Swing, PHASE, bandsFor, mishit, RING_MAX } from './swing.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, MAX_PUTT_FT, FT_PER_YD } from './shot.js';
+import { buildMap, makeCamera, drawFrame, PALETTE } from './render.js';
 import { STRINGS } from './strings.js';
-import { createRound, restoreRound, applyShotResult, roundTotal } from './game.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
 const t = makeT(STRINGS);
 
+const AIM_STEP_DEG = 1.5;        // §4, ours: 1.5 deg at 215 yds moves the landing about 5.6 yds
+const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line to the hole
+const HOLD_DELAY_MS = 400;       // press-and-hold before auto-repeat
+const HOLD_RATE_MS = 125;        // then 8 taps a second
+const DEG = Math.PI / 180;
+
 function ensureCSS() {
-  const uiHref = new URL('../../css/ui.css', import.meta.url).href;
-  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = uiHref;
-    link.setAttribute('data-gh-ui-css', '1');
-    document.head.appendChild(link);
-  }
-  const golfHref = new URL('../css/golf.css', import.meta.url).href;
-  if (!document.querySelector(`link[href="${golfHref}"]`)) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = golfHref;
-    document.head.appendChild(link);
-  }
+  const href = new URL('../css/golf.css', import.meta.url).href;
+  if (document.querySelector(`link[href="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  document.head.appendChild(link);
 }
 
 function loadSettings() {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { difficulty: 'standard', lastCourse: 'harbor', round: null };
-    const s = JSON.parse(raw);
-    return {
-      difficulty: s.difficulty || 'standard',
-      lastCourse: s.lastCourse || 'harbor',
-      round: s.round || null,
-    };
-  } catch { return { difficulty: 'standard', lastCourse: 'harbor', round: null }; }
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {};
+    return { lastCourse: s.lastCourse || PINE_VALLEY.id, round: s.round || null, ...s };
+  } catch { return { lastCourse: PINE_VALLEY.id, round: null }; }
 }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* best effort */ }
 }
 
-function toYards(m) { return m / 0.9144; }
-function toMph(mps) { return mps * 2.23694; }
-function bearingDeg(a, b) { return Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI; }
-function heightAtBall(t, b) { return heightAt(t, b.x, b.z); }
-
-// Presentation only - which scorecard-cell shape to draw for a given strokes/par delta. Not a
-// round rule (it decides nothing about strokes or points, both owned by game.js), just a CSS
-// class choice; see §13.3's colorblind shape table.
-function cellMarkClass(strokes, par) {
-  const d = strokes - par;
-  if (d <= -2) return 'gf-cell__mark--circle-fill';
-  if (d === -1) return 'gf-cell__mark--circle-hollow';
-  if (d === 0) return null;
-  if (d === 1) return 'gf-cell__mark--square-hollow';
-  return 'gf-cell__mark--square-fill';
+/** Club-head art: a driver's big wood, an iron's angled blade, a wedge's steeper one, the putter's
+ *  flat blade. Drawn rather than named so the tile reads at a glance, same as the reference. */
+function clubArt(id) {
+  const c = '#d8dee6'; const d = '#5c6672';
+  if (id === 'putter') return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><rect x="3" y="9" width="24" height="6" fill="${c}" stroke="${d}"/><rect x="25" y="2" width="3" height="13" fill="${d}"/></svg>`;
+  if (id === 'driver' || id.endsWith('wood')) return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><ellipse cx="13" cy="13" rx="11" ry="7" fill="${c}" stroke="${d}"/><rect x="22" y="1" width="3" height="12" fill="${d}"/></svg>`;
+  const wedge = id.endsWith('wedge');
+  return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><path d="${wedge ? 'M5 18 L11 6 L20 8 L16 19 Z' : 'M6 18 L10 7 L19 9 L16 19 Z'}" fill="${c}" stroke="${d}"/><rect x="18" y="1" width="3" height="10" fill="${d}"/></svg>`;
 }
 
 class GolfGame {
   constructor(container) {
     this.container = container;
     this.settings = loadSettings();
-    this.course = courseById(this.settings.lastCourse) || COURSES[0];
-    // Validate/normalize whatever was saved through game.js's own restore rule (§13.7's shape),
-    // never trusting raw localStorage - see restoreRound's header. An unusable save reads as no
-    // save (§13.4's Play button).
-    this.settings.round = restoreRound(this.settings.round, this.course);
+    this.course = PINE_VALLEY;
     this.destroyed = false;
-    this._resizeUnsub = null;
-    this.raf = null;
-    this._lastFrame = 0;
-    this._pointerId = null;
-    this._pointerStart = null;
-    this._pointerMoved = 0;
-    this._dragLastX = null;
-    // Longest qualifying drive so far THIS round (§11: driver/3-wood off the tee, landing on
-    // fairway/green/fringe/tee). UI-transient, not part of game.js's round-state contract - see
-    // DECISIONS.md#part8-scope for why, and the one accepted limitation that comes with it.
-    this._roundLongestDriveYd = 0;
+    this.listeners = [];
+    this.raf = 0;
 
-    // ONE persistent .gf-root for the life of this instance - every other class (.gf-setup,
-    // .gf-play, .gf-top, .gf-view, ...) is a genuine DESCENDANT of it, matching the
-    // .gf-root .gf-x descendant-scoping convention every CSS rule in golf.css relies on.
-    // (Putting .gf-root and a screen class on the SAME element was tried first and is wrong -
-    // "A B" never matches when A and B are the same node - see DECISIONS.md#part4-scope.)
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'gf-root';
-    // Part 9A: when mounted in the hub, the hub draws its own floating back pill at
-    // max(safe-area-top, 54px) x 10px (css/hub.css .hub-top-immersive). The play screen reserves
-    // the top strip's left 104 x 56 box for it and pads its top by the same formula, so the pill
-    // always lands inside that box - on a notch phone AND on a no-notch one. Standalone
-    // (golf/index.html, no hub) the game draws its own back button in that box instead.
-    this.inHub = !!document.querySelector('.hub-top .hub-back');
-    if (this.inHub) {
-      this.rootEl.classList.add('gf-in-hub');
-      this.rootEl.style.setProperty('--gf-hub-pad', '54px');
+    this.inHub = !!container.closest('.hub-game');
+    // The hub's floating back button lives in the top-left, so the HUD's own top row moves down
+    // out from under it. Standalone there is nothing there and no pad is needed.
+    if (this.inHub) this.rootEl.style.setProperty('--gf-top-pad', '46px');
+    container.appendChild(this.rootEl);
+
+    this.offViewport = onViewportResize(() => this._fit());
+    // A ResizeObserver, not just the viewport hook: the hub mounts this element and THEN applies
+    // its own chrome, so the first measurement in this constructor is taken before the game has
+    // been pushed down the page and is wrong by exactly the height of that chrome. Nothing
+    // resizes the window afterwards, so without a real correction path the game stays 136px too
+    // tall with its whole control cluster below the fold - measured, in the hub, at both phone
+    // heights, before this was here. The observer is that path (docs/BUILDING-A-GAME.md: "if you
+    // paint before the data has arrived, name the path back to the truth").
+    if (typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver(() => this._fit());
+      this.ro.observe(container);
+      if (container.parentElement) this.ro.observe(container.parentElement);
     }
-    this.container.appendChild(this.rootEl);
-
     this._renderSetup();
+    this._fit();
+    requestAnimationFrame(() => this._fit());
   }
 
-  // ---------------------------------------------------------------- setup screen ----
-  // Course release state (§14 of GOLF-HANDOFF.md, Part 8): open -> playable; unlockable ->
-  // playable if the PREVIOUS course in COURSES order has a bestRoundByCourse entry (the first
-  // course has no previous course, so it needs no prerequisite); testing -> locked for everyone
-  // but the dev profile, and (in _startNewRound) recorded to the practice bucket instead of the
-  // real counters. Resuming an already-saved round is never blocked by a course's CURRENT mode -
-  // locking only stops a NEW round from starting, it never takes back one already in progress.
-  _courseLockInfo(course) {
-    const mode = courseMode(course.id);
-    const dev = isDevProfile((loadProfile() || {}).name);
-    let gf = null;
-    try { const st = loadStats(); gf = st && st.games && st.games.golf && st.games.golf.gf; } catch { /* best effort */ }
-    const idx = COURSES.indexOf(course);
-    const prevOk = idx <= 0 || !!(gf && gf.bestRoundByCourse && gf.bestRoundByCourse[COURSES[idx - 1].id] !== undefined);
-    const locked = mode === 'testing' ? !dev : (mode === 'unlockable' ? !prevOk : false);
-    const best = gf && gf.bestRoundByCourse ? gf.bestRoundByCourse[course.id] : undefined;
-    return { mode, locked, best };
+  // ---------------------------------------------------------------- listeners ----
+  _on(el, type, fn, opts) {
+    el.addEventListener(type, fn, opts);
+    this.listeners.push([el, type, fn, opts]);
+  }
+  _offAll() {
+    for (const [el, type, fn, opts] of this.listeners) el.removeEventListener(type, fn, opts);
+    this.listeners.length = 0;
   }
 
+  // ---------------------------------------------------------------- fit ----
+  /** Size the root to the space it actually has, BY MEASUREMENT, never a bare 100dvh.
+   *
+   *  The hub wraps an immersive game in ~98px of top chrome for its floating back button plus a
+   *  gap below, so a game that asks for the whole viewport is that much too tall the moment it is
+   *  mounted - the exact way Pool shipped 138px over with its controls below the fold
+   *  (docs/BUILDING-A-GAME.md, Part 3). Measuring the host covers standalone and the hub with one
+   *  rule and no host-specific constant.
+   *
+   *  THE PROBE IS THE POINT. The root is collapsed to 1px first, so what is read back is the
+   *  space everything ELSE occupies rather than a number this game's own height is already
+   *  polluting - and the gap BELOW is measured the same way rather than by guessing which
+   *  ancestor owns the padding (it is not `parentElement`; in the hub it belongs to `.hub-main`).
+   *  With the page collapsed it also cannot be scrolled, which is what makes the viewport-relative
+   *  `rect.top` trustworthy - it moves when the page is scrolled, and the page is scrolled BECAUSE
+   *  of the overflow being removed. */
+  _fit() {
+    if (this.destroyed || !this.rootEl) return;
+    const el = this.rootEl;
+    const prev = el.style.height;
+    const vh = window.innerHeight || 720;
+
+    // Pass 1: collapse ourselves and read where our top actually sits. With the game at zero the
+    // page cannot be scrolled by our own overflow, which is what makes this viewport-relative
+    // reading trustworthy.
+    el.style.height = '0px';
+    const top = el.getBoundingClientRect().top;
+
+    // Pass 2: take everything from there to the bottom of the viewport, then measure how far the
+    // PAGE overflows and give exactly that much back. This is the only formulation that does not
+    // have to know who owns the gap underneath - in the hub it belongs to `.hub-main`, two levels
+    // up, and a standalone page's own `min-height: 100vh` wrapper makes "how tall is the document
+    // with the game collapsed" answer the wrong question entirely (it reads as a full viewport of
+    // chrome and collapses the game to its floor).
+    let h = Math.max(320, Math.round(vh - top));
+    el.style.height = `${h}px`;
+    const over = Math.round(document.documentElement.scrollHeight - vh);
+    if (over > 0) { h = Math.max(320, h - over); el.style.height = `${h}px`; }
+
+    // Setting our own height resizes us, and the ResizeObserver watches for exactly that - so a
+    // no-op must stay a no-op or the two chase each other for ever.
+    if (`${h}px` === prev) return;
+    if (this.canvas) this._sizeCanvas();
+  }
+
+  _sizeCanvas() {
+    const r = this.rootEl.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    // A zero-size canvas means the flex/layout has not settled: retry next frame rather than
+    // building a camera against a 0x0 view (docs/BUILDING-A-GAME.md, "the .hub-game height trap").
+    if (r.width < 8 || r.height < 8) { requestAnimationFrame(() => this._sizeCanvas()); return; }
+    this.canvas.width = Math.round(r.width * dpr);
+    this.canvas.height = Math.round(r.height * dpr);
+    this.dpr = dpr;
+    if (this.hole) {
+      this.cam = makeCamera(this.hole, r.width, r.height);
+      this._aimCamera(true);
+    }
+  }
+
+  // ---------------------------------------------------------------- setup ----
   _renderSetup() {
     this._stopLoop();
-    this._teardownPlayDom();
+    this.hole = null;
     this.rootEl.innerHTML = '';
-    const root = document.createElement('div');
-    root.className = 'gf-setup';
-    const hasSave = !!this.settings.round;
-    const { locked, best } = this._courseLockInfo(this.course);
-    // Starting a NEW round needs the course unlocked; resuming one already saved never does.
-    const canStartNew = !locked;
+    const best = this._bestText();
+    const el = document.createElement('div');
+    el.className = 'gf-setup';
+    el.innerHTML = `
+      <h1>${t('course')}</h1>
+      <div class="gf-card gf-panel">
+        <div class="gf-card-meta"><span>${t('holes_n')}</span><span>${best}</span></div>
+        <div class="gf-card-blurb">${t('blurb')}</div>
+      </div>
+      <div class="gf-card gf-actions">
+        <button type="button" class="gf-btn" data-role="play"><span>${t('play')}</span></button>
+        <button type="button" class="gf-btn" data-role="practice"><span>${t('practice')}</span></button>
+      </div>`;
+    this.rootEl.appendChild(el);
+    this._on(el.querySelector('[data-role="play"]'), 'click', () => this._startRound('round', 0));
+    this._on(el.querySelector('[data-role="practice"]'), 'click', () => this._renderHoleSelect());
+  }
 
-    const tierOfDiff = { casual: 1, standard: 2, pro: 3 };
-    const diffKeys = ['casual', 'standard', 'pro'];
+  _bestText() {
+    // Stage D wires the real bestRoundByCourse read. Until a round can be completed there is
+    // nothing true to show, and the reference's own literal dash is the honest placeholder.
+    return t('best_none');
+  }
 
-    root.innerHTML = `
-      <div class="gf-setup__title">${t('title')}</div>
-      <div class="gf-setup__section">
-        <button type="button" class="gf-course-tile" data-role="course" data-locked="${locked}" ${locked ? 'disabled' : ''}>
-          <div>
-            <div class="gf-course-tile__name">${t('course_harbor')}</div>
-            <div class="gf-course-tile__meta">${locked ? t('locked') : `${t('par')} ${this.course.par}${best !== undefined ? ' · ' + best : ''}`}</div>
+  _renderHoleSelect() {
+    this.rootEl.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'gf-setup';
+    el.innerHTML = `
+      <h1>${t('course')}</h1>
+      <div class="gf-card gf-panel"><div class="gf-card-blurb">${t('select_hole')}</div>
+        <div class="gf-holes">${this.course.holes.map((h) => `
+          <button type="button" class="gf-btn gf-hole-btn" data-hole="${h.n}"><span>${h.n}</span></button>`).join('')}</div>
+        <div class="gf-card-meta"><span>${this.course.holes.map((h) => `${t('par_n', { n: h.par })}`).join('  ')}</span></div>
+      </div>
+      <button type="button" class="gf-btn" data-role="back"><span>${t('back')}</span></button>`;
+    this.rootEl.appendChild(el);
+    for (const b of el.querySelectorAll('[data-hole]')) {
+      this._on(b, 'click', () => this._startRound('practice', Number(b.dataset.hole) - 1));
+    }
+    this._on(el.querySelector('[data-role="back"]'), 'click', () => this._renderSetup());
+  }
+
+  // ---------------------------------------------------------------- play ----
+  _startRound(kind, holeIdx) {
+    this.roundKind = kind;
+    this.holeIdx = holeIdx;
+    this.scores = [];
+    this._enterHole();
+  }
+
+  _enterHole() {
+    const hole = this.course.holes[this.holeIdx];
+    // A hole that fails validation must fail LOUDLY rather than half-render: a malformed green
+    // silently flattens the break, and that gets diagnosed as "putting feels wrong" for a week.
+    const errs = validateHole(hole);
+    if (errs.length) { console.error('[golf] invalid hole data:', errs); }
+
+    this.hole = hole;
+    this.map = buildMap(hole);
+    this.ball = [...hole.tee];
+    this.shotN = 1;
+    this.holed = false;
+    this.lastShotYd = null;
+    this.anim = null;
+    this.previewDy = 0;
+    this.swing = new Swing();
+    this.aimRad = this._bearingToPin();
+    this.club = autoSelectClub(this._distToPin(), this._lie());
+    this._renderPlay();
+  }
+
+  _bearingToPin() {
+    const dx = this.hole.pin[0] - this.ball[0];
+    const dy = this.hole.pin[1] - this.ball[1];
+    return Math.atan2(dx, dy);
+  }
+  _distToPin() { return distYd(this.ball, this.hole.pin); }
+  _lie() { return surfaceAt(this.hole, this.ball[0], this.ball[1]); }
+  _onGreen() { return this._lie() === 'green'; }
+
+  _renderPlay() {
+    this.rootEl.innerHTML = '';
+    this.rootEl.innerHTML = `
+      <canvas class="gf-canvas" data-role="canvas" aria-label="${t('a11y_view')}"></canvas>
+      <div class="gf-hud">
+        <div class="gf-tl">
+          <div class="gf-tl-col">
+            <div class="gf-tl-row">
+              <button type="button" class="gf-btn" data-role="quit"><span>${t('quit')}</span></button>
+              <div class="gf-flag"><span style="color:${PALETTE.pin}">&#9873;</span><span data-role="holeno"></span></div>
+            </div>
+            <div class="gf-panel gf-info">
+              <b data-role="par"></b>
+              <b data-role="shot"></b>
+              <span class="gf-mode" data-role="mode"></span>
+            </div>
           </div>
-          ${locked ? `<svg class="gf-course-tile__lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="1.5"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>` : ''}
-        </button>
-      </div>
-      <div class="gf-setup__section">
-        <div class="gh-seg" role="radiogroup">
-          ${diffKeys.map(k => `
-            <button type="button" class="gh-seg__item gf-diff-item" data-diff="${k}"
-              aria-pressed="${this.settings.difficulty === k}">
-              ${diffShapeSVG(tierOfDiff[k])}<span>${t('diff_' + k)}</span>
-            </button>`).join('')}
         </div>
-      </div>
-      <div class="gf-setup__actions">
-        ${hasSave ? `
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
-          ${canStartNew ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('new_round')}</button>` : ''}
-        ` : (canStartNew ? `
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play">${t('play')}</button>
-        ` : '')}
-      </div>
-    `;
-    this.rootEl.appendChild(root);
 
-    root.querySelectorAll('[data-diff]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.settings.difficulty = btn.getAttribute('data-diff');
-        saveSettings(this.settings);
-        root.querySelectorAll('[data-diff]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
-      });
-    });
-    const playBtn = root.querySelector('[data-role="play"]');
-    if (playBtn) playBtn.addEventListener('click', () => this._startNewRound());
-    const resumeBtn = root.querySelector('[data-role="resume"]');
-    if (resumeBtn) resumeBtn.addEventListener('click', () => this._resumeRound());
-    const newBtn = root.querySelector('[data-role="new"]');
-    if (newBtn) newBtn.addEventListener('click', () => this._startNewRound());
-  }
-
-  _startNewRound() {
-    // The one piece of round setup that is genuinely random rather than a rule - game.js must
-    // never call Math.random (§15), so a fresh round's seed is rolled here and handed in.
-    const seed = Math.floor(Math.random() * 1e9);
-    // Practice is decided ONCE, here, and frozen for the round's whole lifetime (persisted by
-    // game.js, same as difficulty/seed) - re-checking mid-round would let an admin's later flip
-    // change what an in-progress round records to, which is exactly the contamination the
-    // practice bucket exists to prevent. See DECISIONS.md#part8-scope.
-    const practice = courseMode(this.course.id) === 'testing';
-    this._roundLongestDriveYd = 0;
-    this.round = createRound(this.course, this.settings.difficulty, seed, practice);
-    this._enterPlay(true);
-  }
-
-  _resumeRound() {
-    this.round = this.settings.round;
-    // Not persisted (see the constructor's note) - a resume starts this at 0, so a drive hit
-    // before the app was closed cannot be credited on this session's eventual recordGolf call.
-    // Accepted: the worst case is an undercounted longestDriveYd on the rare round that gets
-    // closed and reopened, never a lost or wrong STROKE/POINTS number.
-    this._roundLongestDriveYd = 0;
-    this._enterPlay(false);
-  }
-
-  // ---------------------------------------------------------------- play mount ----
-  _enterPlay(isFreshHole) {
-    this._teardownPlayDom();
-    this.rootEl.innerHTML = '';
-    const root = document.createElement('div');
-    root.className = 'gf-play';
-    root.innerHTML = `
-      <div class="gf-top">
-        <div class="gf-top__slot">${this.inHub ? '' : `<button type="button" class="gf-back" data-role="back" aria-label="${t('back')}">&larr;</button>`}</div>
-        <div class="gf-top-info" data-role="topinfo"></div>
-        <div class="gf-wind" data-role="wind">
-          <svg class="gf-wind-arrow" data-role="windarrow" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2v20M12 2l-5 5M12 2l5 5"/></svg>
-          <span data-role="windmph"></span>
+        <div class="gf-tc" data-role="tc">
+          <div class="gf-panel gf-lie"><b data-role="lie"></b><span data-role="power"></span></div>
+          <div class="gf-dist" data-role="dist"></div>
         </div>
-      </div>
-      <div class="gf-card" data-role="card"></div>
-      <div class="gf-view" data-role="view">
-        <div class="gf-dist" data-role="dist"></div>
-        <div class="gf-flash" data-role="flash"></div>
-        <canvas class="gf-map" data-role="map" data-show="false" width="${MAP_W}" height="${MAP_H}" aria-hidden="true"></canvas>
-      </div>
-      <div class="gf-bar" data-role="bar">
-        <button type="button" class="gf-club-chip" data-role="clubchip"></button>
-        <div class="gf-pin-dist" data-role="pindist"></div>
-        <div class="gf-lie" data-role="lie"></div>
-      </div>
-      <div class="gf-meters" data-role="meters">
-        ${['aim', 'power', 'spin'].map((k) => `
-          <div class="gf-meter" data-meter="${k}" data-state="pending">
-            <div class="gf-meter__label">${t('meter_' + k)}</div>
-            <div class="gf-meter__track"></div>
-            <div class="gf-meter__flash"></div>
-            <div class="gf-meter__marker" style="display:none"></div>
-          </div>`).join('')}
-      </div>
-    `;
-    this.rootEl.appendChild(root);
-    this.dom = {
-      root,
-      topinfo: root.querySelector('[data-role="topinfo"]'),
-      windarrow: root.querySelector('[data-role="windarrow"]'),
-      windmph: root.querySelector('[data-role="windmph"]'),
-      card: root.querySelector('[data-role="card"]'),
-      view: root.querySelector('[data-role="view"]'),
-      dist: root.querySelector('[data-role="dist"]'),
-      flash: root.querySelector('[data-role="flash"]'),
-      bar: root.querySelector('[data-role="bar"]'),
-      clubchip: root.querySelector('[data-role="clubchip"]'),
-      pindist: root.querySelector('[data-role="pindist"]'),
-      lie: root.querySelector('[data-role="lie"]'),
-      meters: root.querySelector('[data-role="meters"]'),
-      map: root.querySelector('[data-role="map"]'),
-    };
 
-    // Standalone only - in the hub the reserved slot is empty and the hub's own pill does this.
-    const backBtn = root.querySelector('[data-role="back"]');
-    if (backBtn) backBtn.addEventListener('click', () => this._backToSetup());
+        <div class="gf-tr gf-panel">
+          <span>${t('wind')}</span>
+          <b data-role="wind">${t('calm')}</b>
+        </div>
 
-    const canvas = document.createElement('canvas');
-    this.dom.view.insertBefore(canvas, this.dom.view.firstChild);
-    this.canvas = canvas;
+        <div class="gf-bl">
+          <div class="gf-aimrow">
+            <button type="button" class="gf-btn" data-role="aim-l" aria-label="${t('a11y_aim_left')}"><span>&lt;</span></button>
+            <div class="gf-panel gf-aimlabel">${t('aim')}</div>
+            <button type="button" class="gf-btn" data-role="aim-r" aria-label="${t('a11y_aim_right')}"><span>&gt;</span></button>
+          </div>
+          <div class="gf-clubrow">
+            <div class="gf-panel gf-clubtile">
+              <span data-role="clubart"></span>
+              <span class="gf-clubname" data-role="clubname"></span>
+            </div>
+            <div class="gf-clubcol">
+              <button type="button" class="gf-btn" data-role="club-up" aria-label="${t('a11y_club_up')}"><span>&and;</span></button>
+              <button type="button" class="gf-btn" data-role="club-dn" aria-label="${t('a11y_club_down')}"><span>&or;</span></button>
+            </div>
+          </div>
+        </div>
 
-    this.hole = this.course.holes[this.round.hole - 1];
-    this.terrain = build(this.hole);
-    this.renderer = new Renderer(canvas, this.terrain);
-    if (!this.camera) this.camera = createCamera(1);
-    this.camRig = new CameraRig(this.camera, this.terrain);
-    // Part 9A: the overhead map. Base raster once per hole; overlays on every aim change.
-    this.minimap = new Minimap(this.dom.map, this.terrain);
-    this._bindMap();
+        <div class="gf-br">
+          <canvas class="gf-meter" data-role="meter" width="150" height="156" aria-hidden="true"></canvas>
+          <button type="button" class="gf-btn gf-swing" data-role="swing" aria-label="${t('a11y_swing')}"><span>${t('swing')}</span></button>
+        </div>
+      </div>`;
 
-    // round.ball and round.wind are already correct for this hole - set by game.js's
-    // createRound (hole 1) or applyShotResult's hole-advance (every hole after) - never
-    // recomputed here.
-    this._resizeUnsub = onViewportResize(() => this._resize(), { immediate: true });
-
-    this._bindInput();
-    this._paintTop();
-    this._paintCard();
-    this._paintWind();
-
-    this._saveRound();
-
-    if (isFreshHole || this.round.phase === 'intro') {
-      this.round.phase = 'intro';
-      this.camRig.setIntro(this.hole);
-      this._introSkippable = true;
-    } else {
-      this._beginAddress();
+    this.canvas = this.rootEl.querySelector('[data-role="canvas"]');
+    this.ctx = this.canvas.getContext('2d');
+    this.meter = this.rootEl.querySelector('[data-role="meter"]');
+    this.mctx = this.meter.getContext('2d');
+    this.el = {};
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'swing']) {
+      this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
 
+    this._bindPlay();
+    this._sizeCanvas();
+    this._paintHud();
     this._startLoop();
   }
 
-  _resize() {
-    if (!this.renderer || !this.camera) return;
-    const w = this.dom.view.clientWidth || 1;
-    const h = this.dom.view.clientHeight || 1;
-    this.renderer.resize(w, h, this.camera);
-    applyHFov(this.camera);   // 50 deg HORIZONTAL fov at whatever aspect the view has now (Part 9A)
-  }
+  _bindPlay() {
+    const q = (r) => this.rootEl.querySelector(`[data-role="${r}"]`);
+    this._on(q('quit'), 'click', () => this._renderSetup());
 
-  // ---------------------------------------------------------------- HUD paint ----
-  _paintTop() {
-    const par = this.hole.par;
-    const yd = Math.round(toYards(Math.hypot(this.hole.pin[0] - this.hole.tee[0], this.hole.pin[1] - this.hole.tee[1])));
-    this.dom.topinfo.textContent = `${t('hole')} ${this.hole.n} · ${t('par')} ${par} · ${yd} ${t('yd')}`;
-  }
-  _paintWind() {
-    const w = this.round.wind;
-    const mph = Math.round(toMph(Math.hypot(w.x, w.z)));
-    const bearing = Math.atan2(w.x, w.z) * 180 / Math.PI;
-    this.dom.windarrow.style.transform = `rotate(${bearing}deg)`;
-    this.dom.windmph.textContent = `${mph} ${t('mph')}`;
-  }
-  _paintCard() {
-    const n = this.course.holes.length;
-    let html = '';
-    for (let i = 0; i < n; i++) {
-      const strokes = this.round.strokes[i];
-      const par = this.course.holes[i].par;
-      const current = (i + 1) === this.round.hole;
-      const markCls = strokes > 0 ? cellMarkClass(strokes, par) : null;
-      html += `<div class="gf-cell" data-current="${current}">
-        <div class="gf-cell__num">${i + 1}</div>
-        <div class="gf-cell__strokes">${strokes > 0 ? strokes : ''}</div>
-        ${markCls ? `<div class="gf-cell__mark ${markCls}"></div>` : ''}
-      </div>`;
-    }
-    const total = this.round.points.reduce((a, p) => a + (p || 0), 0);
-    const anyPts = this.round.points.some((p) => p !== null);
-    html += `<div class="gf-cell gf-cell--pts">${anyPts ? (total >= 0 ? '+' + total : total) : '–'}</div>`;
-    this.dom.card.innerHTML = html;
-  }
-  _paintBar() {
-    const ball = this.round.ball;
-    const lieKey = ball.lie;
-    const club = this._currentClub();
-    this.dom.clubchip.textContent = club ? club.name.en : '';
-    const distYd = Math.round(toYards(Math.hypot(this.hole.pin[0] - ball.x, this.hole.pin[1] - ball.z)));
-    this.dom.pindist.textContent = `${distYd} ${t('yd')}`;
-    this.dom.lie.textContent = t('lie_' + lieKey);
-  }
-
-  _currentClub() {
-    const id = this.round.club || autoSelectClub(this.round.ball.lie, Math.hypot(this.hole.pin[0] - this.round.ball.x, this.hole.pin[1] - this.round.ball.z), this._headwindComponent());
-    return CLUBS.find((c) => c.id === id);
-  }
-  _headwindComponent() {
-    // wind component opposing the ball->pin direction, positive = headwind
-    const ball = this.round.ball;
-    const dx = this.hole.pin[0] - ball.x, dz = this.hole.pin[1] - ball.z;
-    const len = Math.hypot(dx, dz) || 1;
-    const dirX = dx / len, dirZ = dz / len;
-    const w = this.round.wind;
-    return -(w.x * dirX + w.z * dirZ);
-  }
-
-  // ---------------------------------------------------------------- shot state machine ----
-  _beginAddress() {
-    const ball = this.round.ball;
-    const isPutt = ball.lie === 'green';
-    const distToTarget = Math.hypot(this.hole.target[0] - ball.x, this.hole.target[1] - ball.z);
-    const distToPin = Math.hypot(this.hole.pin[0] - ball.x, this.hole.pin[1] - ball.z);
-    this.targetBearingDeg = distToTarget > 30 ? bearingDeg([ball.x, ball.z], this.hole.target) : bearingDeg([ball.x, ball.z], this.hole.pin);
-
-    // round.club stays whatever it is (null = auto, or the player's own override from the club
-    // row) - _currentClub() already ORs in autoSelectClub() at read time, so writing a concrete
-    // id back here would collapse "auto" into "override" for no reason. See DECISIONS.md#part5-scope.
-    this.round.phase = isPutt ? 'putt' : 'address';
-    this._paintBar();
-    this._paintCard();
-
-    if (isPutt) this.camRig.setPutt(ball, this.targetBearingDeg);
-    else this.camRig.setAddress(ball, this.targetBearingDeg);
-
-    // Part 9A: the 3D aim line + landing ring appear on the first pointerdown in the view and
-    // stay until launch; the minimap is up for the whole address/putt.
-    this._aimShown = false;
-    this.dom.map.setAttribute('data-show', 'true');
-    this._updateAimTarget();
-    this._startMeterSequence(isPutt);
-    // Autosave here, not only after a shot resolves: without this, a save taken while the
-    // player is standing at address (the common "close the app mid-shot" moment) still carried
-    // phase:'flight' from the PREVIOUS shot's _fireShot(), which _applyResult never corrected
-    // once the ball was back at rest. Resuming worked by coincidence (('flight' !== 'intro') took
-    // the same _beginAddress() branch as a genuine 'address'/'putt' save), but the persisted
-    // phase was lying. See DECISIONS.md#part5-scope.
-    this._saveRound();
-  }
-
-  // Predicted carry for the landing ring: the club's target carry scaled by the lie's speed
-  // modifier (a driver from the rough carries 85% of its fairway number, §5). For a putt it is
-  // the putter's 100% roll, which is what the ring on the green should mean.
-  _predictedCarryM() {
-    const club = this._currentClub();
-    const lie = this.round.ball.lie;
-    if (club.id === 'pt') return 36 * lieSpeedMod(lie, 'pt');
-    return (TARGET_CARRY_M[club.id] || 100) * lieSpeedMod(lie, club.id);
-  }
-
-  _updateAimTarget() {
-    const ball = this.round.ball;
-    const carry = this._predictedCarryM();
-    if (this._aimShown) this.renderer.setAimTarget({ x: ball.x, z: ball.z }, this.targetBearingDeg, carry);
-    else this.renderer.setAimTarget(null, 0, 0);
-    if (this.minimap) this.minimap.update(ball, this.targetBearingDeg, carry, this.hole.pin);
-  }
-
-  // The one path every aim change takes (view drag, map tap, map drag): update the bearing,
-  // redraw the aim line/ring/minimap, and orbit the camera to the new a-hat (0.25 s ease, ball
-  // pinned at 30% up - camera.js). Never during a swing that has started or in flight.
-  _setAimDeg(deg) {
-    if (!this.round || (this.round.phase !== 'address' && this.round.phase !== 'putt')) return;
-    if (this._meterStage && this._meterStage !== 'aim') return;   // aim is locked once the swing starts
-    this.targetBearingDeg = deg;
-    this._updateAimTarget();
-    const ball = this.round.ball;
-    const y = heightAtBall(this.terrain, ball);
-    this.camRig.aimTo({ x: ball.x, y, z: ball.z }, this.targetBearingDeg, this._isPutt);
-  }
-
-  // Minimap input (Part 9A): a tap sets a-hat to the bearing from the ball to the tapped world
-  // point; a drag does the same continuously. Handled on the canvas itself and stopped there, so
-  // the view's own tap/drag capture never sees it (a map tap must not fire the swing).
-  _bindMap() {
-    const map = this.dom.map;
-    let active = null;
-    const aimAt = (e) => {
-      const r = map.getBoundingClientRect();
-      const mx = (e.clientX - r.left) * (MAP_W / r.width);
-      const my = (e.clientY - r.top) * (MAP_H / r.height);
-      this._setAimDeg(this.minimap.bearingFromTap(this.round.ball, mx, my));
-    };
-    const onDown = (e) => {
-      e.stopPropagation();
-      if (!this.round || (this.round.phase !== 'address' && this.round.phase !== 'putt')) return;
-      active = e.pointerId;
-      try { map.setPointerCapture(e.pointerId); } catch { /* not capturable: taps still work */ }
-      this._aimShown = true;
-      aimAt(e);
-    };
-    const onMove = (e) => {
-      if (active !== e.pointerId) return;
-      e.stopPropagation();
-      aimAt(e);
-    };
-    const onUp = (e) => {
-      if (active !== e.pointerId) return;
-      e.stopPropagation();
-      active = null;
-    };
-    map.addEventListener('pointerdown', onDown);
-    map.addEventListener('pointermove', onMove);
-    map.addEventListener('pointerup', onUp);
-    map.addEventListener('pointercancel', onUp);
-    this._unbindMap = () => {
-      map.removeEventListener('pointerdown', onDown);
-      map.removeEventListener('pointermove', onMove);
-      map.removeEventListener('pointerup', onUp);
-      map.removeEventListener('pointercancel', onUp);
-    };
-  }
-
-  _startMeterSequence(isPutt) {
-    this._isPutt = isPutt;
-    this._aimP = null; this._powerP = null; this._spinP = null;
-    this._meterStage = 'aim';
-    this._meterStartT = performance.now();
-    this._paintMeterStates();
-  }
-
-  _paintMeterStates() {
-    const rows = this.dom.meters.querySelectorAll('.gf-meter');
-    rows.forEach((row) => {
-      const kind = row.getAttribute('data-meter');
-      let state = 'pending';
-      if (kind === 'aim') state = this._meterStage === 'aim' ? 'live' : (this._aimP !== null ? 'done' : 'pending');
-      if (kind === 'power') state = this._meterStage === 'power' ? 'live' : (this._powerP !== null ? 'done' : 'pending');
-      if (kind === 'spin') {
-        if (this._isPutt) state = 'pending';
-        else state = this._meterStage === 'spin' ? 'live' : (this._spinP !== null ? 'done' : 'pending');
-      }
-      row.setAttribute('data-state', state);
-      const marker = row.querySelector('.gf-meter__marker');
-      if (state === 'pending') { marker.style.display = 'none'; }
-      else { marker.style.display = ''; }
-      if (kind === 'power') this._paintSweetBand(row);
-    });
-  }
-  _paintSweetBand(row) {
-    let sweet = row.querySelector('.gf-meter__sweet');
-    let notch = row.querySelector('.gf-meter__notch');
-    const [lo, hi] = DIFF[this.round.difficulty].sweet;
-    if (!sweet) {
-      sweet = document.createElement('div'); sweet.className = 'gf-meter__sweet';
-      row.insertBefore(sweet, row.querySelector('.gf-meter__flash'));
-    }
-    if (!notch) {
-      notch = document.createElement('div'); notch.className = 'gf-meter__notch';
-      row.appendChild(notch);
-    }
-    sweet.style.left = (lo * 100) + '%';
-    sweet.style.width = ((hi - lo) * 100) + '%';
-    notch.style.left = `calc(${lo * 100}% - 5px)`;
-  }
-
-  _tickMeters() {
-    if (this._meterStage !== 'aim' && this._meterStage !== 'power' && this._meterStage !== 'spin') return;
-    const diff = DIFF[this.round.difficulty];
-    const T = this._meterStage === 'aim' ? diff.aimT : this._meterStage === 'power' ? diff.powerT : diff.spinT;
-    const elapsed = (performance.now() - this._meterStartT) / 1000;
-    const p = pos(elapsed, T);
-    const row = this.dom.meters.querySelector(`[data-meter="${this._meterStage}"]`);
-    const marker = row.querySelector('.gf-meter__marker');
-    marker.style.left = `calc(${p * 100}% - 2px)`;
-  }
-
-  _handleShotTap() {
-    if (this._meterStage === 'aim') {
-      const diff = DIFF[this.round.difficulty];
-      const T = diff.aimT;
-      const elapsed = (performance.now() - this._meterStartT) / 1000;
-      this._aimP = pos(elapsed, T);
-      this._freezeMarker('aim', this._aimP);
-      this._meterStage = 'gap1';
-      this._paintMeterStates();
-      setTimeout(() => {
-        if (this.destroyed || this.round.phase === 'flight') return;
-        this._meterStage = 'power';
-        this._meterStartT = performance.now();
-        this._paintMeterStates();
-      }, 150);
-    } else if (this._meterStage === 'power') {
-      const diff = DIFF[this.round.difficulty];
-      const T = diff.powerT;
-      const elapsed = (performance.now() - this._meterStartT) / 1000;
-      this._powerP = pos(elapsed, T);
-      this._freezeMarker('power', this._powerP);
-      const [lo, hi] = diff.sweet;
-      if (this._powerP >= lo && this._powerP <= hi) this._flashSweet();
-      if (this._isPutt) {
-        this._meterStage = 'fired';
-        this._fireShot();
-      } else {
-        this._meterStage = 'gap2';
-        this._paintMeterStates();
-        setTimeout(() => {
-          if (this.destroyed || this.round.phase === 'flight') return;
-          this._meterStage = 'spin';
-          this._meterStartT = performance.now();
-          this._paintMeterStates();
-        }, 150);
-      }
-    } else if (this._meterStage === 'spin') {
-      const diff = DIFF[this.round.difficulty];
-      const T = diff.spinT;
-      const elapsed = (performance.now() - this._meterStartT) / 1000;
-      this._spinP = pos(elapsed, T);
-      this._freezeMarker('spin', this._spinP);
-      this._meterStage = 'fired';
-      this._fireShot();
-    }
-    // taps during 'gap1'/'gap2'/'fired' are ignored
-  }
-  _freezeMarker(kind, p) {
-    const row = this.dom.meters.querySelector(`[data-meter="${kind}"]`);
-    const marker = row.querySelector('.gf-meter__marker');
-    marker.style.left = `calc(${p * 100}% - 2px)`;
-  }
-  _flashSweet() {
-    const row = this.dom.meters.querySelector('[data-meter="power"]');
-    const flash = row.querySelector('.gf-meter__flash');
-    flash.classList.remove('gf-flash-on');
-    void flash.offsetWidth;
-    flash.classList.add('gf-flash-on');
-  }
-
-  _fireShot() {
-    this._paintMeterStates();
-    const ball = this.round.ball;
-    const club = this._currentClub();
-    // Captured here, before this shot's outcome can change round.ball.lie: §11's longest-drive
-    // rule needs the FROM lie and club of THIS shot, read in _applyResult once the result exists.
-    this._lastShotClub = club.id;
-    this._lastShotFromTee = ball.lie === 'tee';
-    const aimOffset = this._isPutt ? aimDegOf(this._aimP, DIFF[this.round.difficulty].puttRange) : aimDegOf(this._aimP, DIFF[this.round.difficulty].aimRange);
-    const dirDeg = this.targetBearingDeg + aimOffset;
-    const power = power01Of(this._powerP);
-    const spin = this._isPutt ? 0 : spin01Of(this._spinP);
-    const seed = this.round.hole * 1000 + this.round.strokes.reduce((a, s) => a + s, 0) + 1;
-
-    const result = simulateShot(this.terrain, {
-      from: { x: ball.x, z: ball.z },
-      dirDeg, clubId: club.id, lie: ball.lie,
-      power01: power, spin01: spin, wind: this.round.wind, seed,
-    });
-
-    this.renderer.setAimTarget(null, 0, 0);
-    this._aimShown = false;
-    this.dom.map.setAttribute('data-show', 'false');   // Part 9A: no map during flight
-    this.round.phase = 'flight';
-    this.camRig.setFlight(dirDeg);
-    this._flightSamples = result.samples;
-    this._flightResult = result;
-    this._flightStartMs = performance.now();
-    this._flightFrom = { x: ball.x, z: ball.z };
-    this._flightTrail = [];
-    this.dom.dist.setAttribute('data-show', 'true');
-  }
-
-  _stepFlight() {
-    const elapsed = (performance.now() - this._flightStartMs) / 1000;
-    const samples = this._flightSamples;
-    if (!this._flightIdx) this._flightIdx = 0;
-    while (this._flightIdx < samples.length - 1 && samples[this._flightIdx].t < elapsed) this._flightIdx++;
-    const s = samples[this._flightIdx];
-    this.renderer.setBallPosition(s.x, s.y, s.z);
-    this._flightTrail.push({ x: s.x, y: s.y, z: s.z });
-    this.renderer.setTrail(this._flightTrail);
-    this.camRig.update(1 / 60, s);
-    const distM = Math.hypot(s.x - this._flightFrom.x, s.z - this._flightFrom.z);
-    this.dom.dist.textContent = `${Math.round(toYards(distM))} ${t('yd')}`;
-
-    if (this._flightIdx >= samples.length - 1) {
-      this._flightIdx = 0;
-      this.dom.dist.setAttribute('data-show', 'false');
-      this._applyResult(this._flightResult);
-    }
-  }
-
-  _applyResult(result) {
-    // §11: longest drive counts a tee shot with driver/3-wood that finishes on FAIRWAY/GREEN/
-    // FRINGE/TEE (holing out counts too - it is a fairway-or-better finish by definition). Read
-    // directly off `result` (untouched by applyShotResult's mutation below), never off
-    // round.ball - on a hole-advancing shot, round.ball is about to be overwritten with the NEXT
-    // hole's tee position before this function returns. See DECISIONS.md#part8-scope.
-    if (this._lastShotFromTee && (this._lastShotClub === 'dr' || this._lastShotClub === '3w')
-      && result.outcome !== 'water' && result.outcome !== 'ob') {
-      const goodSurf = result.outcome === 'hole'
-        || result.lie === S.FAIRWAY || result.lie === S.GREEN || result.lie === S.FRINGE || result.lie === S.TEE;
-      if (goodSurf) {
-        const yd = result.carryM / 0.9144;
-        if (yd > this._roundLongestDriveYd) this._roundLongestDriveYd = yd;
-      }
-    }
-
-    // game.js owns every rule this used to apply inline: stroke +1, water/OB penalty, max
-    // strokes, the points table, and (new in Part 5) hole-to-hole advance - rolling the next
-    // hole's wind and ball placement, or ending the round on hole 9. This function only paints
-    // and animates what `outcome` reports happened. See DECISIONS.md#part5-scope.
-    const outcome = applyShotResult(this.round, this.course, result);
-    this._saveRound();
-    this._paintCard();
-
-    if (outcome.penaltyKey) this._showFlash(t(outcome.penaltyKey));
-
-    const afterFlash = () => {
-      if (outcome.roundOver) {
-        this._showRoundSummary();
-      } else if (outcome.holeAdvanced) {
-        this._enterPlay(true);
-      } else {
-        this.camRig.setRest(this.round.ball, this.hole.pin);
-        this._beginAddress();
-      }
-    };
-
-    if (outcome.holed || outcome.maxed) {
-      // Use result.rest (has y) rather than round.ball - by this point round.ball may already
-      // have been overwritten with the NEXT hole's tee position (applyShotResult's hole-advance
-      // branch), but `this.hole` (ui.js's cached hole-def) still correctly refers to the hole
-      // that was just finished, same as `this.hole.pin` below.
-      this.camRig.setRest(result.rest, this.hole.pin);
-      setTimeout(() => this._showFlash(t(outcome.resultKey), afterFlash), outcome.penaltyKey ? 2000 : 0);
-    } else if (outcome.penaltyKey) {
-      setTimeout(afterFlash, 2000);
-    } else {
-      afterFlash();
-    }
-  }
-
-  _showFlash(text, onDone) {
-    this.dom.flash.textContent = text;
-    this.dom.flash.classList.remove('gf-flash-show');
-    void this.dom.flash.offsetWidth;
-    this.dom.flash.classList.add('gf-flash-show');
-    if (onDone) setTimeout(onDone, 1900);
-  }
-
-  // ---------------------------------------------------------------- round summary ----
-  _showRoundSummary() {
-    this._stopLoop();
-    this._teardownPlayDom();
-    this.rootEl.innerHTML = '';
-    const root = document.createElement('div');
-    root.className = 'gf-summary';
-
-    const holes = this.course.holes;
-    const strokes = this.round.strokes;
-    const points = this.round.points;
-    const totalStrokes = strokes.reduce((a, s) => a + s, 0);
-    const totalPoints = roundTotal(this.round);
-    const fmtPts = (n) => (n >= 0 ? '+' + n : String(n));
-
-    // Ace/eagle/birdie counts for recordGolf's extras (§11). No separate "albatross" bucket
-    // exists in ensureGf's shape, so d <= -2 (eagle-or-better) folds into eagles, same precedence
-    // game.js's own resultKey() uses (ace first - strokes===1 - then eagle-or-better, then birdie).
-    let birdies = 0, eagles = 0, aces = 0;
-    holes.forEach((h, i) => {
-      const s = strokes[i];
-      if (!s) return;
-      if (s === 1) { aces++; return; }
-      const d = s - h.par;
-      if (d <= -2) eagles++;
-      else if (d === -1) birdies++;
-    });
-
-    let rows = holes.map((h, i) => `
-      <tr>
-        <td>${h.n}</td>
-        <td>${h.par}</td>
-        <td>${strokes[i] || ''}</td>
-        <td>${points[i] !== null ? fmtPts(points[i]) : ''}</td>
-      </tr>`).join('');
-    rows += `
-      <tr>
-        <td>${t('total')}</td>
-        <td>${this.course.par}</td>
-        <td>${totalStrokes}</td>
-        <td>${fmtPts(totalPoints)}</td>
-      </tr>`;
-
-    // "Skill level before -> after": before is read BEFORE recordGolf writes this round, so it
-    // is genuinely the player's history up to (not including) the round just finished.
-    let before = 0;
-    try {
-      const st = loadStats();
-      const gf = st && st.games && st.games.golf && st.games.golf.gf;
-      if (gf && Number.isFinite(gf.points)) before = gf.points;
-    } catch { /* best effort read */ }
-    const after = before + totalPoints;
-
-    // Record exactly once, here - the only place a finished round is ever reachable. `practice`
-    // was decided once at _startNewRound and is frozen on the round for its whole lifetime
-    // (game.js's round.practice), so an admin flip mid-round can never retarget where THIS
-    // round's numbers land. See DECISIONS.md#part8-scope.
-    try {
-      recordGolf(this.round.difficulty, {
-        holes: holes.length,
-        strokes: totalStrokes,
-        points: totalPoints,
-        birdies, eagles, aces,
-        longestDriveYd: Math.round(this._roundLongestDriveYd || 0),
-        courseId: this.round.courseId,
-        practice: !!this.round.practice,
-      });
-    } catch (err) { console.error('[golf] recordGolf failed', err); }
-
-    root.innerHTML = `
-      <table class="gf-summary-table">
-        <thead><tr><th>${t('hole')}</th><th>${t('par')}</th><th>${t('strokes')}</th><th>${t('pts')}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="gf-summary-skill">${t('skill')} ${fmtPts(before)} &rarr; ${fmtPts(after)}</div>
-      <div class="gf-summary-actions">
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('again')}</button>
-        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="back">${t('back')}</button>
-      </div>
-    `;
-    this.rootEl.appendChild(root);
-
-    // §8: "clear the autosaved round" on finishing hole 9.
-    this.settings.round = null;
-    this.round = null;
-    saveSettings(this.settings);
-
-    root.querySelector('[data-role="again"]').addEventListener('click', () => this._startNewRound());
-    root.querySelector('[data-role="back"]').addEventListener('click', () => this._renderSetup());
-  }
-
-  // ---------------------------------------------------------------- input ----
-  _bindInput() {
-    const root = this.dom.root;
-    // Part 9A: a horizontal drag ANYWHERE in the view (not just its upper half) aims, at 0.12 deg
-    // per px, in both address and putt. The minimap handles its own pointer events and stops
-    // them (see _bindMap), so nothing here ever sees a map touch. The first pointerdown in the
-    // view also reveals the 3D aim line + landing ring, which then stay up until launch.
-    const onDown = (e) => {
-      this._pointerId = e.pointerId;
-      this._pointerStart = { x: e.clientX, y: e.clientY, t: performance.now() };
-      this._pointerMoved = 0;
-      this._dragLastX = e.clientX;
-      this._dragging = false;
-      const aiming = this.round && (this.round.phase === 'address' || this.round.phase === 'putt');
-      this._dragInView = !!(aiming && e.target.closest && e.target.closest('.gf-view'));
-      if (this._dragInView && !this._aimShown && this._meterStage === 'aim') {
-        this._aimShown = true;
-        this._updateAimTarget();
-      }
-    };
-    const onMove = (e) => {
-      if (this._pointerId !== e.pointerId || !this._pointerStart) return;
-      const dx = e.clientX - this._pointerStart.x, dy = e.clientY - this._pointerStart.y;
-      this._pointerMoved = Math.max(this._pointerMoved, Math.hypot(dx, dy));
-      if (this._dragInView) {
-        const stepX = e.clientX - this._dragLastX;
-        this._dragLastX = e.clientX;
-        if (Math.abs(stepX) > 0.5) {
-          this._dragging = true;
-          this._setAimDeg(this.targetBearingDeg + stepX * 0.12);
-        }
-      }
-    };
-    const onUp = (e) => {
-      if (this._pointerId !== e.pointerId || !this._pointerStart) return;
-      const dt = performance.now() - this._pointerStart.t;
-      // A cancelled pointer (the browser took the gesture - a scroll, a system edge swipe) is
-      // never a tap, however short it was. Part 9A: this used to advance the swing.
-      const isTap = e.type !== 'pointercancel' && this._pointerMoved < 8 && dt < 250;
-      this._pointerId = null; this._pointerStart = null;
-      this._dragInView = false;
-      if (!isTap) return;
-      const target = e.target;
-      if (target.closest && (target.closest('.gf-back') || target.closest('.gf-club-chip') || target.closest('.gf-club-item') || target.closest('.gf-map'))) return;
-      if (this.round.phase === 'intro') { this._skipIntro(); return; }
-      if ((this.round.phase === 'address' || this.round.phase === 'putt') && !this._clubRowOpen) {
-        if (target.closest && (target.closest('.gf-view') || target.closest('.gf-meters'))) {
-          this._handleShotTap();
-        }
-      }
-    };
-    root.addEventListener('pointerdown', onDown);
-    root.addEventListener('pointermove', onMove);
-    root.addEventListener('pointerup', onUp);
-    root.addEventListener('pointercancel', onUp);
-    this._unbindInput = () => {
-      root.removeEventListener('pointerdown', onDown);
-      root.removeEventListener('pointermove', onMove);
-      root.removeEventListener('pointerup', onUp);
-      root.removeEventListener('pointercancel', onUp);
-    };
-
-    this.dom.clubchip.addEventListener('click', () => this._toggleClubRow());
-  }
-
-  _skipIntro() {
-    if (!this._introSkippable) return;
-    this._introSkippable = false;
-    this.camRig.skip();
-    this._beginAddress();
-  }
-
-  _toggleClubRow() {
-    if (this._clubRowOpen) { this._closeClubRow(); return; }
-    this._clubRowOpen = true;
-    const ids = selectableClubs(this.round.ball.lie);
-    const row = document.createElement('div');
-    row.className = 'gf-clubs-row';
-    row.innerHTML = ids.map((id) => {
-      const c = CLUBS.find((x) => x.id === id);
-      const selected = this._currentClub().id === id;
-      return `<button type="button" class="gf-club-item" data-club="${id}" aria-selected="${selected}">${c.name.en}</button>`;
-    }).join('');
-    this.dom.bar.appendChild(row);
-    row.querySelectorAll('[data-club]').forEach((btn) => {
-      btn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        this.round.club = btn.getAttribute('data-club');
-        this._closeClubRow();
-        this._paintBar();
-        this._updateAimTarget();
-      });
-    });
-    this._clubRowEl = row;
-    setTimeout(() => {
-      const onOutside = (ev) => {
-        if (this._clubRowEl && !this._clubRowEl.contains(ev.target) && ev.target !== this.dom.clubchip) {
-          this._closeClubRow();
-        }
+    // Press-and-hold auto-repeat for the four nudge controls, after a 400 ms delay (§4).
+    const hold = (el, fn) => {
+      let timer = 0; let rep = 0;
+      const stop = () => { clearTimeout(timer); clearInterval(rep); timer = 0; rep = 0; el.removeAttribute('data-down'); };
+      const start = (ev) => {
+        ev.preventDefault();
+        el.setAttribute('data-down', '1');
+        fn();
+        timer = setTimeout(() => { rep = setInterval(fn, HOLD_RATE_MS); }, HOLD_DELAY_MS);
       };
-      this._outsideHandler = onOutside;
-      document.addEventListener('pointerdown', onOutside, { once: true });
-    }, 0);
-  }
-  _closeClubRow() {
-    this._clubRowOpen = false;
-    if (this._clubRowEl) { this._clubRowEl.remove(); this._clubRowEl = null; }
-  }
-
-  _backToSetup() {
-    this.round = null;
-    this._renderSetup();
-  }
-
-  // ---------------------------------------------------------------- loop ----
-  _startLoop() {
-    if (this.raf) return;
-    this._lastFrame = performance.now();
-    const frame = (now) => {
-      if (this.destroyed) return;
-      this.raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (now - this._lastFrame) / 1000);
-      this._lastFrame = now;
-      if (!this.round) return;
-      if (this.round.phase === 'intro') {
-        this.camRig.update(dt, null);
-        if (this.camRig.idle) { this._introSkippable = false; this._beginAddress(); }
-      } else if (this.round.phase === 'flight') {
-        this._stepFlight();
-      } else {
-        this._tickMeters();
-        this.camRig.update(dt, null);
-      }
-      if (this.renderer && this.camera) this.renderer.render(this.camera);
+      this._on(el, 'pointerdown', start);
+      this._on(el, 'pointerup', stop);
+      this._on(el, 'pointercancel', stop);
+      this._on(el, 'pointerleave', stop);
+      this.listeners.push([{ removeEventListener: stop }, '', () => {}, undefined]);
     };
-    this.raf = requestAnimationFrame(frame);
-  }
-  _stopLoop() {
-    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+    hold(q('aim-l'), () => this._nudgeAim(-1));
+    hold(q('aim-r'), () => this._nudgeAim(+1));
+    hold(q('club-up'), () => this._stepClub(+1));
+    hold(q('club-dn'), () => this._stepClub(-1));
+
+    // The swing button darkens while held (33-67 ms in the reference - that is literally how the
+    // taps were detected at all), then fires on release.
+    const sw = q('swing');
+    this._on(sw, 'pointerdown', (ev) => { ev.preventDefault(); sw.setAttribute('data-down', '1'); });
+    this._on(sw, 'pointerup', (ev) => { ev.preventDefault(); sw.removeAttribute('data-down'); this._tap(); });
+    this._on(sw, 'pointercancel', () => sw.removeAttribute('data-down'));
+
+    // Free-scroll preview: drag the course up to look at the green, release to snap back to the
+    // ball. Bound to the game's own root, NEVER to document - a non-passive touchmove on document
+    // turns off compositor scrolling for the whole page while this game is mounted.
+    let dragging = false; let startY = 0; let startPreview = 0;
+    this._on(this.canvas, 'pointerdown', (ev) => {
+      if (this.anim) { this._skipAnim(); return; }
+      dragging = true; startY = ev.clientY; startPreview = this.previewDy;
+      this.canvas.setPointerCapture?.(ev.pointerId);
+    });
+    this._on(this.canvas, 'pointermove', (ev) => {
+      if (!dragging || !this.cam) return;
+      this.previewDy = startPreview + (ev.clientY - startY) / this.cam.ppy;
+      this.el.tc.setAttribute('data-faded', Math.abs(this.previewDy) > 4 ? '1' : '0');
+    });
+    const release = () => {
+      if (!dragging) return;
+      dragging = false; this.previewDy = 0;
+      this.el.tc.setAttribute('data-faded', '0');
+    };
+    this._on(this.canvas, 'pointerup', release);
+    this._on(this.canvas, 'pointercancel', release);
+    this._on(this.canvas, 'pointerleave', release);
   }
 
-  _saveRound() {
-    this.settings.round = this.round;
-    this.settings.lastCourse = this.course.id;
-    saveSettings(this.settings);
+  _nudgeAim(dir) {
+    if (this.anim || this.swing.phase !== PHASE.IDLE) return;
+    const base = this._bearingToPin();
+    let next = this.aimRad + dir * AIM_STEP_DEG * DEG;
+    const limit = AIM_LIMIT_DEG * DEG;
+    // Aim is limited to +/- 60 deg from the line to the hole, so the player can never lose the
+    // hole entirely by leaning on one arrow.
+    let rel = next - base;
+    while (rel > Math.PI) rel -= Math.PI * 2;
+    while (rel < -Math.PI) rel += Math.PI * 2;
+    rel = Math.max(-limit, Math.min(limit, rel));
+    next = base + rel;
+    this.aimRad = next;
+    this._paintHud();
   }
 
-  _teardownPlayDom() {
-    if (this._unbindInput) { this._unbindInput(); this._unbindInput = null; }
-    if (this._unbindMap) { this._unbindMap(); this._unbindMap = null; }
-    this.minimap = null;
-    if (this._outsideHandler) { document.removeEventListener('pointerdown', this._outsideHandler); this._outsideHandler = null; }
-    if (this._resizeUnsub) { this._resizeUnsub(); this._resizeUnsub = null; }
-    if (this.renderer) { this.renderer.dispose(); this.renderer = null; }
-    this.canvas = null;
-    this.terrain = null;
-    this.camRig = null;
+  _stepClub(dir) {
+    if (this.anim || this.swing.phase !== PHASE.IDLE) return;
+    if (this._onGreen()) return;                    // the putter is the only club on the green
+    this.club = stepClub(this.club, dir);
+    this._paintHud();
   }
+
+  // ---------------------------------------------------------------- the swing ----
+  _tap() {
+    if (this.anim) { this._skipAnim(); return; }
+    if (this.holed) { this._renderSetup(); return; }
+    const now = performance.now();
+    const r = this.swing.tap(now);
+    if (r === 'fire') this._fire();
+    this._paintHud();
+  }
+
+  _fire() {
+    const lie = this._lie();
+    const zone = lieOf(lie).zone;
+    const { power, bar } = this.swing.read(performance.now());
+    const m = mishit(bar, power, zone);
+
+    if (this._onGreen()) {
+      const res = simulatePutt({ hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power });
+      this.anim = { type: 'putt', t0: performance.now(), dur: res.ms, res };
+      this.lastShotYd = distYd(this.ball, res.rest);
+    } else {
+      const res = resolveShot({
+        hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
+        club: this.club, power, mishitDeg: 0, distanceMul: m.distanceMul,
+      });
+      this.anim = { type: 'flight', t0: performance.now(), dur: res.flightMs, res };
+      this.lastShotYd = res.travelledYd;
+    }
+  }
+
+  /** Tap to skip: the reference's 7.5 s drive with no way past it is the main thing worth
+   *  changing about it (§13 flaw 7). Ours is ~4.5 s and skippable. */
+  _skipAnim() {
+    if (!this.anim) return;
+    this.anim.t0 = performance.now() - this.anim.dur - 1;
+  }
+
+  _settleShot() {
+    const a = this.anim;
+    this.anim = null;
+    if (a.type === 'putt') {
+      this.ball = [...a.res.rest];
+      if (a.res.holed) { this.holed = true; this.swing.settle(performance.now()); this._paintHud(); return; }
+    } else {
+      this.ball = [...a.res.rest];
+    }
+    this.shotN += 1;
+    this.swing.settle(performance.now());
+    this.aimRad = this._bearingToPin();
+    this.club = autoSelectClub(this._distToPin(), this._lie());
+    this._paintHud();
+  }
+
+  // ---------------------------------------------------------------- painting ----
+  _paintHud() {
+    if (!this.el || !this.hole) return;
+    const lie = this._lie();
+    const L = lieOf(lie);
+    this.el.par.textContent = t('par_n', { n: this.hole.par });
+    this.el.shot.textContent = t('shot_n', { n: this.shotN });
+    this.el.mode.textContent = this.roundKind === 'practice' ? t('mode_practice') : t('mode_round');
+    this.el.holeno.textContent = String(this.hole.n);
+    this.el.lie.textContent = t(`lie_${lie}`);
+    // Every bad lie does two things and BOTH are shown before the swing: it caps distance, and it
+    // narrows the accuracy band. The percentage is the cap; the band is drawn narrower.
+    this.el.power.textContent = L.power < 1 ? ` ${t('power_pct', { n: Math.round(L.power * 100) })}` : '';
+
+    // Yards off the green, FEET on it. The switch is on the SURFACE, not on a distance threshold:
+    // that matches both of the reference's observations and needs no constant to guess at.
+    const d = this._distToPin();
+    this.el.dist.textContent = this._onGreen()
+      ? `${(d * FT_PER_YD).toFixed(1)} ${t('ft')}`
+      : `${d.toFixed(1)} ${t('yds')}`;
+
+    const club = this._onGreen() ? PUTTER : (this.club || autoSelectClub(d, lie));
+    this.el.clubart.innerHTML = clubArt(club.id);
+    this.el.clubname.textContent = t(`club_${club.id}`);
+    this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
+  }
+
+  _aimCamera(snap) {
+    if (!this.cam) return;
+    // The ball sits LOW in the frame so the player sees up the hole toward the green. 0.5 puts it
+    // about a quarter of the way up the screen, which is what makes the aim ladder's far dots
+    // reachable by eye rather than only by scrolling the preview.
+    const want = this.ball[1] + this.cam.halfH * 0.5;
+    this.cam.x = this.ball[0];
+    this.cam.y = snap ? want : this.cam.y + (want - this.cam.y) * 0.18;
+    this.cam.clamp();
+  }
+
+  _frame = () => {
+    if (this.destroyed || !this.ctx || !this.cam) return;
+    const now = performance.now();
+    let height = 0;
+    let ballPos = this.ball;
+
+    if (this.anim) {
+      const p = Math.min(1, (now - this.anim.t0) / Math.max(1, this.anim.dur));
+      if (this.anim.type === 'flight') {
+        const r = this.anim.res;
+        const f = flightPoint(p, r.carry * (r.blocked ? r.blocked.p : 1), r.sideYd * (r.blocked ? r.blocked.p : 1), r.apex);
+        const cos = Math.cos(r.aimRad); const sin = Math.sin(r.aimRad);
+        ballPos = [this.ball[0] + sin * f.along + cos * f.side, this.ball[1] + cos * f.along - sin * f.side];
+        height = f.height;
+        // The camera TRACKS the ball in flight, scrolling the course past at flight speed.
+        this.cam.x = ballPos[0];
+        this.cam.y = ballPos[1] + this.cam.halfH * 0.2;
+        this.cam.clamp();
+      } else {
+        // The camera does NOT move during a putt. Confirmed frame by frame in the reference, and
+        // it is right: a static frame is what lets the player read the break they just played.
+        const path = this.anim.res.path;
+        ballPos = path[Math.min(path.length - 1, Math.floor(p * (path.length - 1)))];
+      }
+      if (p >= 1) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
+    } else {
+      this._aimCamera(false);
+    }
+
+    const previewing = Math.abs(this.previewDy) > 0.5;
+    const camY = this.cam.y + this.previewDy;
+    const drawCam = { ...this.cam, y: camY, clamp: this.cam.clamp };
+
+    const onGreen = this._onGreen();
+    drawFrame(this.ctx, this.map, this.hole, drawCam, {
+      dpr: this.dpr,
+      ball: ballPos,
+      height,
+      holed: this.holed,
+      aimRad: this.aimRad,
+      hideAim: !!this.anim || this.holed,
+      aimDots: onGreen ? null : aimDots(this.club, this._lie()),
+      puttLine: onGreen ? Math.min(this._distToPin(), (MAX_PUTT_FT / FT_PER_YD)) : 0,
+    });
+    this._drawMeter(now, previewing);
+    this.raf = requestAnimationFrame(this._frame);
+  };
+
+  /** The C-ring and the accuracy bar. The ring opens to the RIGHT with its ticks OUTSIDE the arc:
+   *  25 at the bottom, 50 left, 75 upper-left, 100 top-right, a short green segment just before
+   *  100 and the orange-to-red over-swing block beyond it (§5.1). */
+  _drawMeter(now, faded) {
+    const c = this.mctx;
+    const W = this.meter.width; const H = this.meter.height;
+    c.clearRect(0, 0, W, H);
+    c.globalAlpha = faded ? 0.4 : 1;
+
+    // The ring is centred on 80, not on the canvas midpoint: the tick labels sit OUTSIDE the arc
+    // and the "50" at the far left needs the room. Laid out so every label clears the edge by
+    // about 10px at the sizes below - check all four if any of them changes.
+    const cx = 80; const cy = 68; const R = 46; const band = 13;
+    const A0 = 90 * DEG; const A1 = 315 * DEG;
+    const ang = (v) => A0 + (Math.min(RING_MAX, Math.max(0, v)) / RING_MAX) * (A1 - A0);
+
+    // The band itself: dark, semi-transparent, white 1px outline, the course showing through.
+    c.lineWidth = band;
+    c.strokeStyle = 'rgba(16,20,12,0.72)';
+    c.beginPath(); c.arc(cx, cy, R, A0, A1); c.stroke();
+    // The green "good" segment just under 100, then the over-swing block past it.
+    c.strokeStyle = '#37a13c';
+    c.beginPath(); c.arc(cx, cy, R, ang(0.93), ang(1.0)); c.stroke();
+    c.strokeStyle = '#e54e00';
+    c.beginPath(); c.arc(cx, cy, R, ang(1.0), ang(1.05)); c.stroke();
+    c.strokeStyle = '#c81f10';
+    c.beginPath(); c.arc(cx, cy, R, ang(1.05), ang(RING_MAX)); c.stroke();
+    c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,0.9)';
+    c.beginPath(); c.arc(cx, cy, R + band / 2, A0, A1); c.stroke();
+    c.beginPath(); c.arc(cx, cy, R - band / 2, A0, A1); c.stroke();
+
+    // Tick labels, OUTSIDE the arc. 11px is the repo's text-size floor and this is exactly it.
+    c.fillStyle = '#fff';
+    c.font = '700 11px system-ui, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const v of [0.25, 0.5, 0.75, 1.0]) {
+      const a = ang(v);
+      c.fillText(String(v * 100), cx + Math.cos(a) * (R + band / 2 + 11), cy + Math.sin(a) * (R + band / 2 + 11));
+    }
+
+    const read = this.swing.read(now);
+    // The white radial tick crossing the band.
+    const a = ang(read.power);
+    c.strokeStyle = '#fff'; c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(cx + Math.cos(a) * (R - band / 2), cy + Math.sin(a) * (R - band / 2));
+    c.lineTo(cx + Math.cos(a) * (R + band / 2), cy + Math.sin(a) * (R + band / 2));
+    c.stroke();
+
+    // The hub readout: the distance the PREVIOUS shot travelled. Labelled, unlike the reference,
+    // whose unlabelled number reads as stale or wrong (§13 flaw 5).
+    if (this.lastShotYd != null) {
+      c.font = '600 10px system-ui, sans-serif';
+      c.fillStyle = '#cfd8c2';
+      const txt = this._onGreen() && this.lastShotYd * FT_PER_YD < 100
+        ? `${(this.lastShotYd * FT_PER_YD).toFixed(1)} ${t('ft')}`
+        : `${this.lastShotYd.toFixed(1)} ${t('yds')}`;
+      c.fillText(txt, cx, cy + 4);
+    }
+
+    // The accuracy bar at the foot of the ring: red | orange | GREEN | orange | red, with a white
+    // vertical marker. The green band NARROWS on a bad lie (clubs.js's LIES.zone) - shown, not
+    // hidden: leaving it looking normal while punishing the same stop harder reads as cheating.
+    const bx = 8; const bw = W - 16; const by = 128; const bh = 16;
+    const zone = lieOf(this._lie()).zone;
+    const b = bandsFor(zone);
+    const seg = (from, to, fill) => {
+      c.fillStyle = fill;
+      c.fillRect(bx + bw * from, by, bw * (to - from), bh);
+    };
+    seg(0, (1 - b.orange) / 2, '#c81f10');
+    seg((1 - b.orange) / 2, (1 - b.green) / 2, '#e54e00');
+    seg((1 - b.green) / 2, (1 + b.green) / 2, '#37a13c');
+    seg((1 + b.green) / 2, (1 + b.orange) / 2, '#e54e00');
+    seg((1 + b.orange) / 2, 1, '#c81f10');
+    c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 1;
+    c.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    if (this.swing.phase === PHASE.ACCURACY || this.swing.phase === PHASE.LIVE) {
+      c.fillStyle = '#fff';
+      c.fillRect(bx + bw * read.bar - 1.5, by - 3, 3, bh + 6);
+    }
+    c.globalAlpha = 1;
+  }
+
+  _startLoop() { if (!this.raf) this.raf = requestAnimationFrame(this._frame); }
+  _stopLoop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   destroy() {
     this.destroyed = true;
     this._stopLoop();
-    this._teardownPlayDom();
+    this._offAll();
+    if (this.offViewport) { this.offViewport(); this.offViewport = null; }
+    if (this.ro) { this.ro.disconnect(); this.ro = null; }
     this.container.innerHTML = '';
+    this.rootEl = null; this.canvas = null; this.ctx = null; this.map = null;
   }
 
-  isInProgress() { return false; } // autosave/resume meaning: leaving is lossless (§13.7)
+  /** Autosave/resume meaning (docs/BUILDING-A-GAME.md): golf will snapshot after every stroke in
+   *  Stage C, so leaving is lossless and this returns false for ordinary play. Until that save
+   *  exists there is nothing to resume and nothing to warn about either way. */
+  isInProgress() { return false; }
 }
 
 let instance = null;
@@ -983,11 +645,11 @@ export function init(container) {
   ensureCSS();
   if (instance) instance.destroy();
   instance = new GolfGame(container);
+  if (typeof window !== 'undefined') window.__gfTest = instance;   // test-visual.mjs's PLAY probe
 }
 export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
+  if (typeof window !== 'undefined') delete window.__gfTest;
 }
-export function isInProgress() {
-  return instance ? instance.isInProgress() : false;
-}
+export function isInProgress() { return instance ? instance.isInProgress() : false; }
 export default { init, destroy, isInProgress };

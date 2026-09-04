@@ -52,7 +52,8 @@ import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
-import { bucketsOf, tierMix } from './leaderboard-rank.js';
+import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric,
+  formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { loadFavorites } from './favorites.js';
@@ -505,22 +506,40 @@ function skPlaysAt(g, machine) {
   if (!machine || machine === 'all') return sk.played | 0;
   return ((sk.boards || {})[machine] || {}).plays | 0;
 }
-/** LIFETIME points - Golf's Modified Stableford total across every round ever played (can be
- *  negative, unlike every other lifetime "points" number here). Mirrors skPointsAt's lifetime
- *  branch, minus the machine argument: golf has only one course so far and no tier axis this
- *  screen slices by. Adds across a person's devices in players-agg.js, same as Skeeball's. */
-function golfPointsAt(g) {
-  const gf = g.games.golf && g.games.golf.gf;
-  return gf ? (gf.points | 0) : 0;
-}
+// Golf's board number changed on 2026-09-03 (Matt): from the LIFETIME Modified Stableford total
+// to the player's BEST ROUND on one named course, shown as a score to par, lowest wins. The
+// lifetime `gf.points` counter is still written and still shown - it is My Stats' "Skill level"
+// (js/game-stats-ui.js) - so nothing was hidden by this change, only re-ranked.
+//
+// It is the ONLY metric on this board where lower wins and where the good values are <= 0, so
+// three things had to move together in one commit, and a test guards each: this extractor, the
+// SORT DIRECTION at every one of its six call sites, and gameListHTML's `metric > 0` leader
+// filter (which dropped every under-par and every level-par round). See js/leaderboard-rank.js.
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
-  if (id === 'golf') return golfPointsAt(g);
+  if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   return winsAtTier(g, [id], tier);
 }
+/** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
+ *  always did; golf takes a sign and shows level par as "E" (js/leaderboard-rank.js does the
+ *  maths, this supplies the translated word). A player with no number gets the same em-dash
+ *  glyph the empty leader cell already uses, never a literal "null". */
+function metricText(value, id) {
+  const s = formatBoardMetric(value, id, t('lb_golf_even'));
+  return s === null ? '\u2014' : s;
+}
+
+/** The metric's UNIT LABEL on this board only. It is deliberately not unitKeyOf(): that map is
+ *  shared with My Stats, where golf's number is still the lifetime points total and "points" is
+ *  still the right word. This board's golf number is a best round, so it needs its own label and
+ *  My Stats must not inherit it. */
+function lbUnitKeyOf(id) {
+  return id === 'golf' ? 'lb_unit_golf_best' : unitKeyOf(id);
+}
+
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
 function boardPlaysOf(g, id) {
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
@@ -560,9 +579,11 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_meters: 'lb_sort_meters',
   // Skeeball and Pinball both rank on points; without this row both sort menus said "Wins".
   lb_unit_points: 'lb_sort_points',
+  // Golf ranks on a best round, not on wins or points.
+  lb_unit_golf_best: 'lb_sort_golf_best',
 };
 function sortItemsFor(id) {
-  const labelKey = UNIT_TO_SORT_LABEL[unitKeyOf(id)] || 'lb_sort_wins';
+  const labelKey = UNIT_TO_SORT_LABEL[lbUnitKeyOf(id)] || 'lb_sort_wins';
   return [
     { sort: 'wins', labelKey },
     // SKEEBALL ONLY, and only since Points started meaning a lifetime (2026-09-01). Matt: "Another
@@ -899,8 +920,11 @@ function rankChipHTML(rank, tie) {
 /** Standard competition ranking over `list` by `valueOf`, with ties sharing a rank and the next
  *  rank skipping. Returns { rankOf, tiedAt } keyed by group key, so a row's chip never depends on
  *  which order the list happens to be SORTED in - re-sorting by name cannot renumber the podium. */
-function rankMap(list, valueOf) {
-  const ranked = list.slice().sort((a, b) => valueOf(b) - valueOf(a));
+// `cmp` overrides the default more-is-better order. It exists for golf, where the badge numbers
+// are the sort direction made visible: rank the rows descending and the #1 chip lands on the
+// worst golfer even when sortRows has the list the right way up.
+function rankMap(list, valueOf, cmp) {
+  const ranked = list.slice().sort(cmp || ((a, b) => valueOf(b) - valueOf(a)));
   const rankOf = {};
   const countAt = {};
   let prev = null;
@@ -1061,8 +1085,9 @@ function gameListHTML(list) {
   const isFav = (id) => favs.includes(hubIdOf(id));
   const rows = gameMetaSorted().map((meta) => {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
-    const leaders = list.filter((g) => gameMetricAt(g, meta.id, null) > 0)
-      .sort((a, b) => gameMetricAt(b, meta.id, null) - gameMetricAt(a, meta.id, null) || (b.updatedAt || 0) - (a.updatedAt || 0));
+    const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
+      .sort((a, b) => compareBoardMetric(gameMetricAt(a, meta.id, null), gameMetricAt(b, meta.id, null), meta.id)
+        || (b.updatedAt || 0) - (a.updatedAt || 0));
     return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
   });
   rows.sort((a, b) => {
@@ -1078,7 +1103,7 @@ function gameListHTML(list) {
       ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span></span>`
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
-      ? `<span class="lb-gnum"><b>${gameMetricAt(lead, meta.id, null)}</b><span>${esc(t(unitKeyOf(meta.id)))}</span></span>`
+      ? `<span class="lb-gnum"><b>${esc(metricText(gameMetricAt(lead, meta.id, null), meta.id))}</b><span>${esc(t(lbUnitKeyOf(meta.id)))}</span></span>`
       : `<span class="lb-gnum is-empty"><b>&mdash;</b><span>${esc(t('lb_no_games_yet'))}</span></span>`;
     return `<button type="button" class="lb-grow${lead ? '' : ' is-empty'}" data-game="${meta.id}">
       <span class="lb-gart">${art}</span>
@@ -1295,7 +1320,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const n = (a.name || '').localeCompare(b.name || '');
       if (n) return n;
-      const m = gameMetricAt(b, id, _tier) - gameMetricAt(a, id, _tier);
+      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1305,7 +1330,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const p = boardPlaysOf(b, id) - boardPlaysOf(a, id);
       if (p) return p;
-      const m = gameMetricAt(b, id, _tier) - gameMetricAt(a, id, _tier);
+      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1315,7 +1340,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const h = skBestAt(b, _machine) - skBestAt(a, _machine);
       if (h) return h;
-      const m = gameMetricAt(b, id, _tier) - gameMetricAt(a, id, _tier);   // lifetime points breaks a tie
+      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);   // the game's own metric breaks a tie
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1333,7 +1358,7 @@ function sortRows(rows, id, sort) {
     });
   } else {
     rows.sort((a, b) => {
-      const m = gameMetricAt(b, id, _tier) - gameMetricAt(a, id, _tier);
+      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
       if (m) return m;
       const p = boardPlaysOf(a, id) - boardPlaysOf(b, id);
       if (p) return p;
@@ -1380,11 +1405,13 @@ function gameDetail(list, id) {
   // The badge follows the sort whenever the sort is a MEASURE (By Player above has the same rule):
   // ranking by lifetime points and then numbering the rows by best rack reads as a broken board.
   const bSort = effectiveSort(id);
+  const byMetric = bSort !== 'played' && bSort !== 'high';
   const { rankOf, tiedAt } = rankMap(rows, bSort === 'played'
     ? (g) => boardPlaysOf(g, id)
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
-      : (g) => gameMetricAt(g, id, _tier));
+      : (g) => gameMetricAt(g, id, _tier),
+    byMetric ? (a, b) => compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id) : null);
   sortRows(rows, id, bSort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
@@ -1395,7 +1422,8 @@ function gameDetail(list, id) {
         const played = boardPlaysOf(g, id);
         const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null))
           + (showMp ? mpTileHTML(g, id) : '');
-        const metricUnit = t(unitKeyOf(id));
+        const metricUnit = t(lbUnitKeyOf(id));
+        const metricStr = metricText(metric, id);
         // THE HEADLINE IS WHAT YOU SORTED BY, the rule this file already keeps for By Player and
         // for Games Played. Skeeball's 'high' sort leads with the best single rack and keeps the
         // lifetime total on the subline, so the two are never confusable and neither is hidden.
@@ -1403,12 +1431,12 @@ function gameDetail(list, id) {
         let subText;
         if (bSort === 'played') {
           big = { val: played, unit: unitWord('lb_played_count') };
-          subText = `${metric} ${metricUnit}`;
+          subText = `${metricStr} ${metricUnit}`;
         } else if (bSort === 'high') {
           big = { val: skBestAt(g, _machine), unit: t('lb_unit_high') };
-          subText = `${metric} ${metricUnit}`;
+          subText = `${metricStr} ${metricUnit}`;
         } else {
-          big = { val: metric, unit: metricUnit };
+          big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
         }
         return playerCardHTML(g, chip, big, subText, tiles);

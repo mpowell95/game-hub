@@ -1,245 +1,471 @@
-# Golf — game documentation
+# Golf — CLAUDE.md
 
-> **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
-> and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
-> alongside this file; the full rules with rationale are in `js/CLAUDE.md`. Nothing below
-> overrides them. The field this game actually touches is `gf`/`gf.practice` inside
-> `js/game-stats.js`'s per-player store — read "Stats and the practice bucket" below before
-> changing `recordGolf` or `ensureGf`.
+> **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. The law
+> and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
+> file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-A 3D physics golf game (cannon-es + three.js), built to `GOLF-HANDOFF.md` across eight parts
-(2026-09-02). Nine holes, one course so far (Harbor Links). Aim, power and spin are each set by
-tapping a "stop the bar" meter mid-sweep; the ball's flight runs through a real rigid-body
-simulation, not a lookup table. Modified Stableford scoring. Solo — no opponent.
+## Status: BEING REBUILT (Stage B complete - one hole plays, tee to holed putt, 2026-09-04)
 
-The spec this game is built to is **`golf/docs/GOLF-HANDOFF.md`** (moved into the repo 2026-09-03;
-it and `golf/docs/GOLF-PART9.md` are the copies to read and update). Full build history, every
-physics-tuning number and why it landed there, every course-target
-move, and the Part-by-part reports live in **`golf/DECISIONS.md`** — this file is the standing
-reference for a session working in this folder, not a rebuild of that log. Read `DECISIONS.md`
-before changing anything the sections below flag as tuned/frozen/decided.
+**`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
+anything here. It is the written record of a commercial mobile golf game reconstructed from five
+screen recordings, plus the decisions that turn it into the game we are actually building. Where
+it is silent, ask, or decide and write it down there.
 
-## Hub integration
+The 3D game that used to live in this folder — three.js + cannon-es rigid bodies, aim/power/spin
+on three separate meters, Modified Stableford scoring, a course called Harbor Links — **is gone.**
+Matt's verdict on it: *"It's terrible and this is a MAJOR overhaul... I don't trust anything that
+the current build does."* Do not carry its decisions, tuning numbers, physics constants, course
+design or UI forward, and do not go looking for them in git history to "restore" something.
+
+Deleted in Stage A: `js/render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`,
+`flight.js`, `meters.js`, `game.js`, `clubs.js`, `test.js`, `js/vendor/` (cannon-es + two three.js
+bundles, ~1.1 MB), `courses/`, `tools/`, `DECISIONS.md`, `docs/GOLF-HANDOFF.md`,
+`docs/GOLF-PART9.md`. **The three deleted documents were specs for the old game and would mislead
+the next session; that is why they went rather than being left "for reference".**
+
+What is here now is a placeholder: `js/ui.js` renders one screen saying the game is being rebuilt,
+and keeps the three module-contract exports so nothing in the repo carries a broken import.
+
+### Where the rebuild is
+
+| Stage | Contents | State |
+|---|---|---|
+| A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
+| — | The hole-data format, written down before anything is built against it | **done** |
+| B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
+| C | Hazards and the drop prompt, the result banner, the scorecard, the round | not started |
+| D | Stats wiring, this file, `sw.js`, the full test sweep, release | not started |
+
+**Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
+the flight before Stage C is built on top of them. Expect the numbers below to move.
+
+The stages map onto `golf-reference-spec.md` §16's phases, with three approved changes: the
+leaderboard metric change moved forward into Stage A, the `test-visual.mjs` entry gets written at
+the start of Stage B, and the hole-data format is decided before Stage B rather than during it.
+
+## Harbor Links is gone from the product, but its keys are not
+
+Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course
+named harbor, no `courses/harbor/`, no harbor string in any UI, no harbor row in My Stats, no
+harbor entry in the admin page's per-course config, no mention in user-facing copy in either
+language.
+
+**The one thing that is NOT deleted: the stored stats keys.** THE LAW rule 5 is that old keys are
+never deleted and never repurposed, and it holds even for keys everyone believes are empty. So
+`gf.practice.harbor` and `bestRoundByCourse.harbor` are simply **never written and never read**
+again. They are not removed from `ensureGf`'s shape, and no cleanup code goes hunting for them. An
+empty key nobody reads shows nothing to anybody, which satisfies "no mention of harbor" with no
+destructive write.
+
+**This was verified, not assumed** (2026-09-03, `golf-reference-spec.md` §16 Phase 0). A full RTDB
+backup was taken and read: of 218 player device records, 11 carry a `stats.games.golf` key and all
+11 are the all-zero skeleton `ensureGf` writes on first sync. Zero non-zero values, zero
+`bestRoundByCourse` entries, zero `gf.practice` entries, zero occurrences of the string "harbor"
+anywhere in the database, and nothing in `archive/players`. Matt confirmed the same on his own
+phone's My Stats. **There is no golf history in existence to lose.**
+
+## Names — frozen forever (THE LAW rule 5)
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../golf/js/ui.js'`, `immersive: true`, hub id `golf` (§14 of the handoff) |
-| Stats id | `golf` (recorder `recordGolf`, sub-counter `gf`) |
+| Folder | `golf/` |
+| Stats id | `'golf'` |
+| Settings key | `gamehub.golf.v1` |
+| Recorder | `recordGolf(difficulty, extras)` |
 | CSS root / prefix | `.gf-root` / `.gf-` |
-| Settings key | `gamehub.golf.v1` — `{ difficulty, lastCourse, round }` |
-| Strings | `golf/js/strings.js` (EN/ES, `makeT`); shared-file `gs_golf_*`/`lb_unit_points`/`game_title_golf` keys are in `js/strings.js`, not here |
-| `released` | **unset on purpose.** Part 8 ships with the GAME LIVE but the one course in admin-config's TESTING state (see below) — `released` gets a real date the day Matt flips Harbor Links to Open, not before. Setting it now would badge a game nobody but the dev profile can actually play. |
+| Hub integration | in-hub `module: '../golf/js/ui.js'`, `immersive: true` |
 
-**`.gf-root` is ONE persistent wrapper**, created once in `GolfGame`'s constructor and never
-recreated — `_renderSetup()`/`_enterPlay()`/`_showRoundSummary()` each clear and rebuild its
-CHILD content only. Putting `.gf-root` and a screen class (`.gf-setup`/`.gf-play`) on the SAME
-element was tried first and is wrong: `golf.css` uses the repo's descendant-scoping convention
-(`.gf-root .gf-setup`), which never matches two classes on one node. See
-`DECISIONS.md#part4-scope`.
+**Do not mint `gamehub.golf.save.v1`.** `gamehub.golf.v1` already exists and already holds the
+round. A second store would create two sources of truth.
 
-**`isInProgress()` always returns `false`.** Leaving mid-round is lossless: the round autosaves
-after every resolved shot and every hole change (§13.7), and the setup screen offers Resume.
-Never change this to the "literal in-progress" meaning other immersive games use without also
-checking whether that breaks the resume flow's own assumptions.
+## Stored shape
 
-## Layout: who owns what
+`ensureGf()` in `js/game-stats.js` owns it, and it is unchanged by the rewrite:
+`rounds, holes, strokes, points, birdies, eagles, aces, longestDriveYd, bestRoundByCourse, practice`.
+Changes are **additive only**. `js/players-agg.js` already has the matching merge branch, including
+the per-key `Math.min` for `bestRoundByCourse`.
 
-The split is load-bearing, same reason it is in every other physics game here: the first eight
-files are pure and DOM-free, which is what lets `golf/js/test.js` drive real shots — and, since
-Part 6, a full fixture replay — headless under Node.
+- **`points` keeps being written.** Modified Stableford points are a pure function of (hole score,
+  par), and the new stroke-play game knows both, so the lifetime counter stays truthful with no
+  fabrication and nothing has to be archived as a dead legacy value. It is My Stats' "Skill level".
+- **`bestRoundByCourse` stores STROKES**, keyed by course, `Math.min` per key. The leaderboard
+  subtracts par at display time; the stored value is never a to-par number.
+- **Course keys are frozen the moment one round is recorded.** `pinevalley3` today.
+  `pinevalley9` when holes 4-9 ship. **They are never merged and never compared** - a 3-hole best
+  and a 9-hole best are not the same measurement (rule 4) - and `pinevalley3` is never repurposed
+  into the 9-hole key (rule 5). Every screen that shows one names which it is showing.
 
-| File | Owns |
-|---|---|
-| `js/terrain.js` | hole JSON → height grid + surface grid (rasterizer) + samplers. Seeded `rng` (mulberry32), `S` (surface enum), `build`/`heightAt`/`surfaceAt`. |
-| `js/flight.js` | pure aerodynamics helpers `physics.js` calls into (lift/drag coefficients). |
-| `js/physics.js` | `simulateShot(terrain, input) → { samples, events, rest, lie, outcome, carryM, totalM }`. **Frozen since Part 2 — see below.** |
-| `js/clubs.js` | the club table, lie speed/spin modifiers, `autoSelectClub`, `selectableClubs`, target-carry constants. |
-| `js/meters.js` | the stop-the-bar maths (`pos(t,T)`), input mapping (`aimDeg`/`power01`/`spin01`), and `DIFF` (per-difficulty meter timings + sweet band + wind max). |
-| `js/game.js` | **every round RULE** — strokes, water/OB penalties, max strokes, the wind roll, the points table, hole-to-hole advance, round create/restore. Pure, no DOM, no `Math.random`. See "The ui.js / game.js split" below. |
-| `js/render.js` | three.js scene: terrain mesh, water, trees, ball, trail, flag, aim-target overlay, theme-aware sky. `Renderer` class; one fresh `<canvas>` per mount (see "WebGL canvas lifetime" below). |
-| `js/camera.js` | `CameraRig` — the intro/address/putt/flight/rest state machine, cubic-ease tweens. Pure THREE.Camera math, no DOM. **Part 9A**: 50° HORIZONTAL fov (`applyHFov`, re-derived per aspect on resize), high poses (`B - 16â + 9ŷ` for a full shot, `B - 5â + 3ŷ` for a putt), the ball pinned at 30% up from the bottom of the view by deriving the PITCH from that rule (`_lookFor30`) rather than from the nominal lookAt, and `aimTo()` - a 0.25 s orbit whenever â changes. Clearance floor `heightAt + 1.0`. |
-| `js/minimap.js` | **Part 9A.** The overhead map inset: a 2D canvas, hole surface grid rotated so tee→pin is vertical (pin at top), fitted to 116 × 156, colours from `render.js`'s exported `COL`, OB as the panel background; ball / pin / aim line / landing ring overlays; tap or drag → bearing from the ball through the inverse of the same transform. **Its x axis is mirrored relative to world x on purpose** - a three.js camera looking along +z has world +x on its LEFT, so drawing +x to the map's left is what makes "tap left of the fairway" rotate the 3D view left. Base raster built once per hole; overlays redraw only when `(ball, aimDeg, carryM, pin)` change. |
-| `js/ui.js` | the DOM shell: HUD paint, tap capture, the shot-loop state machine, autosave, the module contract, and (Part 8) the `recordGolf`/course-mode call sites. The ONLY file besides `render.js`/`camera.js` that touches three.js, and the only one that touches the DOM at all. |
-| `courses/registry.js`, `courses/harbor/course.js` | `COURSES` array; Harbor Links' nine hole definitions (tee/pin/target/fairway/green/bunkers/water/hills/trees, all metres in the hole's own frame). |
-| `courses/harbor/fixture.json` | generated by `tools/refixture.mjs`; test 8's replay data. Regenerating it is a deliberate act (§15) — the commit that does it must say what physics change caused it. |
+**Queued for Stage D (Matt, 2026-09-03):** My Stats' "Best rounds" table shows raw STROKES while
+the leaderboard shows the same round as a score to par. Make My Stats show to-par too, so the two
+screens agree, and keep lifetime points as its separate "Skill level" line. Not done yet.
 
-## Physics is frozen (Part 2 onward)
+## The leaderboard number changed in Stage A
 
-**Do not touch `js/physics.js` or `js/flight.js` without stopping to ask first.** Every constant
-in both files has a test behind it (`test3`, `test3b`, `test4`, `test5` in `js/test.js`). The
-handoff's own exception clause (retuning allowed with measured evidence against a stated sanity
-band) was for Parts 1–2's tuning work specifically and does not carry forward. If a later change
-seems to need a physics edit, that is a stop-and-ask, not something to decide alone — see
-`DECISIONS.md#rollout-tuning-part2` for the full reasoning and `DECISIONS.md#spinaxis-sign-bug`
-for the club-speed sanity floor (25–80 m/s) that exists because of a real bug once caught it
-outside that band.
+Matt, 2026-09-03: golf's board number is the player's **best round on a named course, as a score
+to par, lowest wins** - not the lifetime Stableford total it used to be. `gf.points` is still
+written and still shown on My Stats, so nothing was hidden by this; it was re-ranked.
 
-Course DATA can still change (a `target` move, a `fairway.width` widen) to fix reachability —
-that is fixing the course, not the physics, and is how all five Part 2 target moves and the H3
-knife-edge note happened. See `DECISIONS.md#course-fixes-part2b`.
+It is the only metric on the whole leaderboard where **lower wins** and where **good values are
+<= 0**, which broke two assumptions baked in everywhere:
 
-**The one approved exception so far: Part 9B sidespin (2026-09-03).** `simulateShot` gained
-`curve01` (-1 hook … +1 slice, default 0); the spin axis is tilted about the TRAVEL direction by
-`curve01 × SIDE_TILT` (`flight.js`, **22°**, tuned to the doc's 25–45 m / 5–15 m driver band —
-the doc's 35 gave 48 / 26). `curve01 = 0` is bit-identical to the pre-9B model (test 8b proved
-it against the old fixture before it was regenerated); the fixture now carries two curved
-driver shots per hole. `GOLF-PART9.md` said "rotateAboutY" — that keeps the axis horizontal and
-cannot curve a ball; the rotation is about the travel direction, and `DECISIONS.md#part9b-sidespin`
-has the reasoning and the whole SIDE_TILT sweep. Physics is frozen again from here.
+- Every sort site compared `b - a`. Sorted that way, a stroke score puts the WORST golfer in the
+  family on top, and it looks plausible enough to go unnoticed for weeks.
+- `gameListHTML` filtered leaders with `metric > 0`, which drops level par (0) and every
+  under-par round - a stored best that no screen shows reads as deleted (rule 1).
 
-## The ui.js / game.js split
+So the extractor, the sort direction at all six of its call sites (four in `sortRows`, the game
+list, and `rankMap`, which numbers the rank badges) and the filter changed **in one commit** with a
+test. The maths is in `js/leaderboard-rank.js` - pure and headless-testable, which is why it lives
+there rather than in the DOM file - and `test-leaderboard-rank.mjs` covers it.
 
-`game.js` owns every round RULE: stroke counting, water/OB penalties, max strokes (`par + 4`),
-the wind roll, the Modified Stableford points table and result words, hole-to-hole advance
-(rolling the next hole's wind, placing the ball at its tee, resetting phase), and round
-create/restore (`createRound`/`restoreRound`, validated same as `profile-store.js`'s reads).
-`ui.js` calls it and paints; it never mutates `round.strokes/points/ball/wind/phase/hole` itself.
+## Who can play it right now
 
-**What stays in `ui.js` on purpose, and is not a bug:** the moment-to-moment `round.phase`
-choreography WITHIN a hole (`'intro' → 'address'/'putt'` on the camera tween ending or a skip
-tap, `→ 'flight'` on `_fireShot()`, back on landing) is driven by camera-tween and meter-tap
-TIMING that has no meaning without a renderer or a clock a human is tapping against — it cannot
-run headlessly regardless of which file it lives in. `round.club`'s one direct write outside
-`game.js` (`_toggleClubRow`'s manual pick) is the player's own choice being recorded, not a rule.
+**Nobody but a dev profile, and that is deliberate.** The adminConfig override
+`adminConfig/v1/games/golf` is `live: false` (set 2026-09-03), and `js/hub.js` filters the launcher
+on `isGameLive(g.id, !g.devOnly) || dev`. Matt: *"The default should be testing mode. So only I can
+see or play it."*
 
-Full rationale and the two bugs found while doing the split (a stale persisted `phase:'flight'`
-after a resolved shot; `round.club` being overwritten with the auto-selected id instead of
-staying `null`): `DECISIONS.md#part5-scope`.
+**No `devOnly` flag was added on top of this, on purpose.** Two switches for one decision is how a
+game ends up shipped hidden by accident. Releasing golf to the family is a tap on the admin page,
+not a deploy.
 
-## Round-state shape (`gamehub.golf.v1`'s `round` field)
+`js/admin-config.js`'s per-COURSE resolvers (`resolveCourseMode` and friends) still exist and are
+still tested, but have **no caller** while the game is rebuilt, and `js/admin-ui.js` has never had a
+per-course section at all. Releasing an individual course will need that section written.
+
+## The hole-data format
+
+**Decided before Stage B, deliberately.** Nothing is built against this until it is written down:
+the renderer, the lie lookup, the collision test and the putting break all read the same objects,
+and discovering the shape while writing the first of them is how four files end up disagreeing.
+
+**Where it lives:** `golf/courses/pinevalley.js`, one module exporting one course object with its
+holes. (`golf/courses/` was deleted in Stage A - that was the HARBOR content and the old registry.
+The directory coming back with new contents is fine and is not a partial revert.) It splits into a
+file per hole only if one file becomes unwieldy.
+
+### Units and axes, stated once
+
+- **Everything is in YARDS**, including tree heights and ball height. One unit throughout, so no
+  call site ever converts. (The deleted 3D game used metres. This does not.)
+- **`x` runs across the hole, positive RIGHT. `y` runs up the hole, positive AWAY FROM THE TEE.**
+  The tee sits near `y = 0`; the pin has the largest `y`. The view is top-down and north-up with no
+  rotation, so screen-up is `+y` always, and the camera only ever pans.
+- **Positions are `[x, y]` pairs.** Polygons are arrays of those, simple (never self-intersecting),
+  winding order irrelevant (containment is a ray cast, so either direction works).
+
+### The hole object
+
+| Field | Type | What it is |
+|---|---|---|
+| `n` | int | Hole number, 1-3 today |
+| `par` | int | 4, 3, 5 |
+| `cardYards` | float | The number on the scorecard and the course card. **Authored, not derived** - see "Two different yardages" below |
+| `tee` | `[x,y]` | Where the ball is teed |
+| `pin` | `[x,y]` | The hole. Must lie inside `green.poly` |
+| `bounds` | `{minX,maxX,minY,maxY}` | The camera's limits and the render extent. Explicit, not derived from the polygons, so the camera can stop with a margin rather than exactly on the last edge |
+| `base` | surface kind | What the ground is anywhere no polygon covers |
+| `surfaces` | ordered array | The polygons, painted and tested in order (below) |
+| `green` | `{poly, slope}` | The putting surface and its break grid (below) |
+| `treeTypes` | array | The specimen table for this course |
+| `trees` | array | Individually placed trees |
+| `treeBelts` | array | Polygons filled with trees procedurally |
+| `decor` | array | Art only, never consulted for anything (below) |
+
+### Surfaces: one ordered list, painted and tested the same way
+
+`surfaces` is an ordered array of `{kind, poly}`. **Later entries paint over earlier ones AND win
+the lie lookup.** That is one rule serving both, and it is the point: what the player sees is what
+they are standing on. A separate collision map that could drift from the art is exactly how a game
+starts lying about a lie.
+
+Anything covered by no polygon is `base`. That is what makes hole 2 nearly free: `base: 'water'`
+plus a green and a bunker IS an island green.
+
+`kind` is a **closed set**, and each value is a row in the lie table (`golf-reference-spec.md`
+§21.2). The table itself lives in code, not in hole data, so tuning it never touches a course:
+
+| `kind` | Power cap | Straight-zone width |
+|---|---|---|
+| `tee` | 100 % | 100 % |
+| `fairway` | 100 % | 100 % |
+| `lightRough` | 92 % | 85 % |
+| `heavyRough` | 82 % | 65 % |
+| `fairwayBunker` | 88 % | 55 % |
+| `greensideBunker` | 75 % | 50 % |
+| `trees` | 85 % | 80 % |
+| `green` | putting | - |
+| `water` | penalty: drop at the edge, +1 | - |
+
+**The two bunker kinds are authored, never derived from distance to the pin.** Deriving them would
+hide a rule that changes how a shot plays inside a threshold nobody can see.
+
+### Trees are TWO separate things, and both are needed
+
+1. **The `trees` SURFACE** - a polygon, in `surfaces`, giving the 85 % / 80 % lie. This is what
+   "the ball is in the woods" means for the swing.
+2. **Tree OBJECTS** - `trees` and `treeBelts`, which physically block a ball in flight.
+
+A ball can be on the trees surface and have a clear swing, or be on the fairway and still have a
+trunk in the way. Conflating them would lose the dilemma the spec is built around.
+
+An object is `{x, y, type}` where `type` indexes `treeTypes`. A type is
+`{name, trunk, canopy, height}`, all yards:
+
+- **`trunk`** - radius. Blocks the ball at **any** height.
+- **`canopy`** - radius, wider. Blocks a ball travelling **below `height`**.
+- **`height`** - where the canopy stops. Ball height comes from the club's loft, so a long iron
+  punched low risks the trunk while a wedge clears the canopy and gives up the yardage. That is the
+  whole mechanic, with no extra UI.
+
+`treeBelts` is `{poly, type, spacing, seed}` - the belts lining a hole are hundreds of trees and
+must not be hundreds of hand-written entries. **At load a belt expands into ordinary tree objects**
+using a stated PRNG seeded by `seed`, so it is deterministic: the same belt is the same trees on
+every device and in every test run. After expansion there is one flat tree list and one collision
+path; the two authoring forms are a convenience, never two behaviours. **A belt does not imply the
+`trees` surface** - paint that polygon too if the lie should be woods.
+
+### The green and its slope grid
+
+`green` is `{poly, slope}`. `slope` is `{cols, rows, cells}`:
+
+- The grid covers the **axis-aligned bounding box of `poly`**, divided `cols` x `rows`.
+- **`cells[0]` is the cell at the LOWEST x and the LOWEST y** - the front-left corner, front being
+  the side nearest the tee. Row-major: index `r * cols + c`. Getting this flipped puts every break
+  backwards while looking entirely plausible, so it is written down rather than inferred.
+- Each cell is `[dx, dy]`, each in **-1..+1**, pointing **DOWNHILL** - the direction a ball at rest
+  would roll. Magnitude is steepness, 0 dead flat.
+- A rolling ball takes a lateral acceleration of `k * gradient`, with `k` tuned so a 20 ft putt
+  across a half-strength slope breaks about one cup width (~4 in). `k` is a tuning constant in
+  code, not hole data.
+
+**The tick marks drawn on the green are GENERATED FROM `cells`, never hand-drawn.** If the art and
+the grid can disagree, the read lies to the player, and a putting game whose green lies is worse
+than one with no read at all.
+
+8 x 8 is the default. A bigger green may use a finer grid; the format does not care.
+
+### Two different yardages, on purpose
+
+- **`cardYards`** is the hole's length as a scorecard states it, measured along the playing
+  centreline. Hole 3's 608.6 is a dogleg measurement and does not reconcile with any straight line.
+- **The HUD's "distance to the hole" is straight-line 2-D from the ball to the pin**, recomputed
+  every shot. §10.3's arithmetic forces this: 360.7 − 251.6 ≠ 136.0, because the shot finished
+  offline.
+
+On hole 1 they happen to agree (the tee and pin below are exactly 360.70 apart). **On hole 3 they
+will differ by a lot, and that is correct** - every real scorecard differs from every real
+rangefinder. Do not "fix" it by deriving one from the other.
+
+### `decor` never affects play
+
+Art-only polygons: the cart path, a flower bed, a mown pattern. `{kind, poly}`, painted after the
+surfaces, consulted by nothing. A path that changed the lie would have to be a surface with a lie
+row; keeping decor incapable of it means art can be added freely without a physics review.
+
+### What the validator asserts
+
+`validateHole()` in `golf/js/holes.js` (written at the start of Stage B, run by the engine test and
+at load in dev):
+
+- `pin` lies inside `green.poly`; `tee` lies inside a `tee` surface polygon.
+- Every polygon has >= 3 points; every point is inside `bounds`.
+- Every `surfaces[].kind` is in the closed set above; `base` is too.
+- `slope.cells.length === cols * rows`, and every component is within -1..+1.
+- `cardYards > 0`, `par` in 3..5.
+- Every `trees[].type` and `treeBelts[].type` indexes a real `treeTypes` entry.
+- The pin is reachable: `cardYards` is within the ladder's three-shot reach for the par.
+
+A hole that fails validation must fail loudly at load. A malformed green silently flattens the
+break, which is the kind of bug that gets diagnosed as "putting feels wrong" for a week.
+
+### Worked example: Pine Valley hole 1
+
+Par 4, 360.7 yds. Gentle double dogleg (right, then back left), water left of the tee, tree belts
+pinching the drive landing area, a bunker short-left of the green and another to its right, water
+hard along the green's left and back edges. The stock ladder plays it as a drive (215) plus a
+6 iron (139), landing 359 up the hole against a pin at 365.5 - a good pair of shots leaves a putt,
+not a tap-in.
 
 ```js
-{
-  v: 1, courseId: 'harbor', difficulty: 'standard', seed: 0,
-  hole: 1,                        // 1..9
-  strokes: [0,0,0,0,0,0,0,0,0],   // per hole
-  points:  [null,...],            // per hole, null until holed
-  ball: { x, z, lie },            // current ball, in the hole's frame
-  wind: { x, z },                 // m/s, rolled once per hole
-  club: null,                     // player override for THIS shot, null = auto
-  phase: 'intro' | 'address' | 'putt' | 'flight' | 'summary',
-  practice: false,                // Part 8: frozen for the round's whole life - see below
-}
+export const HOLE_1 = {
+  n: 1,
+  par: 4,
+  cardYards: 360.7,          // tee -> pin here is exactly 360.70, so card and HUD agree on THIS hole
+  tee: [0, 5],
+  pin: [12, 365.5],
+  bounds: { minX: -55, maxX: 55, minY: -15, maxY: 395 },
+  base: 'heavyRough',
+
+  surfaces: [
+    // Painted and tested in this order; the last polygon containing the ball wins the lie.
+    { kind: 'lightRough', poly: [
+      [-27,10], [-23,60], [-19,110], [-13,160], [-11,200], [-15,250], [-23,300], [-20,340],
+      [34,340], [31,300], [39,250], [43,200], [41,160], [35,110], [31,60], [27,10] ] },
+
+    { kind: 'fairway', poly: [
+      [-15,15], [-11,60], [-7,110], [-1,160], [1,200], [-3,250], [-11,300], [-8,335],
+      [22,335], [19,300], [27,250], [31,200], [29,160], [23,110], [19,60], [15,15] ] },
+
+    { kind: 'trees', poly: [
+      [-30,20], [-26,120], [-16,190], [-14,230], [-22,300], [-23,340], [-48,340], [-48,20] ] },
+    { kind: 'trees', poly: [
+      [30,20], [33,80], [37,150], [38,210], [40,240], [45,300], [36,340], [48,340], [48,20] ] },
+
+    // The lake left of the tee.
+    { kind: 'water', poly: [ [-55,-10], [-24,-10], [-24,75], [-40,90], [-55,90] ] },
+
+    // Water hard along the green's left edge and across its back.
+    { kind: 'water', poly: [
+      [-30,320], [-10,326], [-8,352], [-9,378], [-2,384], [16,386], [30,383], [40,378],
+      [50,378], [50,395], [-30,395] ] },
+
+    { kind: 'greensideBunker', poly: [
+      [-7,340], [-5,345], [0,347], [5,345], [7,340], [5,335], [0,333], [-5,335] ] },
+    { kind: 'greensideBunker', poly: [
+      [26,358], [28,362], [32,364], [36,362], [38,358], [36,354], [32,352], [28,354] ] },
+
+    // The green is a surface too, so the lie lookup needs no special case for it. Its polygon is
+    // the same one `green.poly` names - written once, below, and referenced here at load.
+    { kind: 'green', poly: 'green' },
+
+    { kind: 'tee', poly: [ [-6,0], [6,0], [6,10], [-6,10] ] },
+  ],
+
+  green: {
+    // 12-gon, centre [10, 362], radius 14. Bounding box x -4..24, y 348..376.
+    poly: [
+      [24,362], [22.1,369], [17,374.1], [10,376], [3,374.1], [-2.1,369],
+      [-4,362], [-2.1,355], [3,349.9], [10,348], [17,349.9], [22.1,355] ],
+
+    // Downhill vectors, back-to-front with a soft spine down the middle so each half sheds to its
+    // own side, steepening toward the back where the water is. cells[0] is front-left; row-major.
+    slope: { cols: 8, rows: 8, cells: [
+      /* r0 y 348.0-351.5 */ [-0.12,-0.15], [-0.08,-0.15], [-0.05,-0.15], [-0.02,-0.15], [0.02,-0.15], [0.05,-0.15], [0.08,-0.15], [0.12,-0.15],
+      /* r1 y 351.5-355.0 */ [-0.13,-0.20], [-0.09,-0.20], [-0.06,-0.20], [-0.02,-0.20], [0.02,-0.20], [0.06,-0.20], [0.09,-0.20], [0.13,-0.20],
+      /* r2 y 355.0-358.5 */ [-0.15,-0.26], [-0.11,-0.26], [-0.06,-0.26], [-0.02,-0.26], [0.02,-0.26], [0.06,-0.26], [0.11,-0.26], [0.15,-0.26],
+      /* r3 y 358.5-362.0 */ [-0.17,-0.32], [-0.12,-0.32], [-0.07,-0.32], [-0.02,-0.32], [0.02,-0.32], [0.07,-0.32], [0.12,-0.32], [0.17,-0.32],
+      /* r4 y 362.0-365.5 */ [-0.18,-0.37], [-0.13,-0.37], [-0.08,-0.37], [-0.03,-0.37], [0.03,-0.37], [0.08,-0.37], [0.13,-0.37], [0.18,-0.37],
+      /* r5 y 365.5-369.0 */ [-0.20,-0.43], [-0.14,-0.43], [-0.09,-0.43], [-0.03,-0.43], [0.03,-0.43], [0.09,-0.43], [0.14,-0.43], [0.20,-0.43],
+      /* r6 y 369.0-372.5 */ [-0.22,-0.48], [-0.16,-0.48], [-0.09,-0.48], [-0.03,-0.48], [0.03,-0.48], [0.09,-0.48], [0.16,-0.48], [0.22,-0.48],
+      /* r7 y 372.5-376.0 */ [-0.24,-0.54], [-0.17,-0.54], [-0.10,-0.54], [-0.03,-0.54], [0.03,-0.54], [0.10,-0.54], [0.17,-0.54], [0.24,-0.54],
+    ] },
+  },
+
+  // Course-level in practice (every hole shares it); repeated per hole here for clarity.
+  treeTypes: [
+    { name: 'pine', trunk: 0.6, canopy: 4.5, height: 18 },   // tall and narrow: clearing it costs a club
+    { name: 'oak',  trunk: 1.0, canopy: 8.0, height: 13 },   // wide and low: easier over, harder around
+  ],
+
+  // Individually placed specimens. Hole 1 has none that matter on their own; hole 3's lone fairway
+  // tree - the one that triggers the drop prompt - is an entry in this same list.
+  trees: [],
+
+  treeBelts: [
+    { poly: [ [-30,20], [-26,120], [-16,190], [-14,230], [-22,300], [-23,340], [-48,340], [-48,20] ],
+      type: 0, spacing: 9, seed: 101 },
+    { poly: [ [30,20], [33,80], [37,150], [38,210], [40,240], [45,300], [36,340], [48,340], [48,20] ],
+      type: 0, spacing: 9, seed: 102 },
+  ],
+
+  decor: [
+    // The cart path. Art only: it is not a surface, so it can never change how a shot plays.
+    { kind: 'path', poly: [ [-34,10], [-31,10], [-27,120], [-19,200], [-27,300], [-30,340], [-33,340], [-30,300], [-22,200], [-30,120] ] },
+  ],
+};
 ```
 
-`restoreRound` treats an unusable save as no save at all (§13.4's Play button, not Resume) —
-never throws, never crashes a load. A save from before Part 8 has no `practice` field; it
-defaults to `false`, never `true`, so an old save can never retroactively stop counting.
+**Two things in that example are worth calling out, because they are decisions rather than data:**
 
-## Course release state and the practice bucket (Part 8, §14)
+1. **`{ kind: 'green', poly: 'green' }`** - the green appears in `surfaces` so the lie lookup has no
+   special case, but its polygon is written once, in `green.poly`, and referenced by name at load.
+   Two copies of the same outline would eventually drift, and a green whose lie boundary differs
+   from its drawn edge is the yards/feet readout flickering on the fringe.
+2. **The tee polygon is painted LAST** even though it is at the bottom of the hole. Order is paint
+   order, not geography: the tee box sits on top of whatever surrounds it.
 
-`js/admin-config.js`'s `golf.courses` map (added Part 8, mirrors `skeeball.boards` exactly)
-gives each course three states, resolved by `courseMode(courseId)`:
-
-| stored | mode | what a player sees |
-|---|---|---|
-| `open: true` | `open` | playable now, no unlock needed |
-| `open: false, testing: false` | `unlockable` | playable if the PREVIOUS course in `COURSES` order has a `bestRoundByCourse` entry (any completed round) — the first course has no previous course, so it needs no prerequisite |
-| `testing: true`, or the key is simply absent | `testing` | locked on the setup screen for everyone but the dev profile (`isDevProfile`); **rounds are recorded to the practice bucket, not the real counters** |
-
-Unlike a Skeeball machine, a course has **no code-side `adminOnly` default** to fall back to —
-`resolveCourseTesting` takes no `codeDefault` argument at all, because §14 says "missing key →
-testing" unconditionally. Do not "fix" this to match `resolveBoardTesting`'s signature; it is a
-deliberate difference, stated in `js/admin-config.js`'s own header comment.
-
-**`practice` is decided ONCE, in `_startNewRound()`, and frozen on the round for its whole
-lifetime** (persisted, same as difficulty/seed). Re-checking mid-round would let an admin's later
-flip retarget where an in-progress round's numbers land, which is exactly the contamination this
-mechanism exists to prevent. `recordGolf(difficulty, { ..., practice: true })` writes into
-`gf.practice[courseId]` (mirrors `sk.practice.boards` exactly) and returns before touching
-`total`/`byDiff`/any real `gf` counter — no rounds, no strokes, no points, no bests, no
-leaderboard, nothing for `js/players-agg.js` to find outside its own dedicated merge branch.
-Practice rounds are still SHOWN (THE LAW rule 1): `js/game-stats-ui.js`'s `golfScreen` renders
-them on their own dashed, labelled "Practice (not counted)" row, below the real table, never
-folded into it.
-
-**Resuming an already-saved round is never blocked by the course's CURRENT lock state** —
-locking only stops a NEW round from starting; it never takes back one already in progress. The
-setup screen still shows the lock glyph and greys the tile, but a Resume button appears
-regardless.
-
-**Known gap, stated plainly:** `js/admin-ui.js` (the admin control page) needs no code change —
-it imports `GAMES` from `js/hub.js` generically, so Golf's game-level live/testing toggle
-appeared for free the moment its `GAMES` entry existed (Part 7). But there is **no button yet for
-the per-COURSE open/unlockable/testing switch** — `setCourseMode` exists and is tested
-(`test-admin-config.mjs`'s "the golf course state" block), but nothing in `js/admin-ui.js` calls
-it. Today the only way to move Harbor Links out of `testing` is a direct call to
-`setCourseMode('harbor', 'open')` from a signed-in browser (or a future admin-ui.js section,
-mirroring its existing Skeeball-machine accordion).
-
-## Two accepted, documented limitations
-
-Neither is a THE LAW violation (no stroke or points number is ever wrong or lost); both are
-narrow enough that fixing them was judged not worth the added state.
-
-1. **`longestDriveYd` is UI-transient, not part of `game.js`'s round-state contract.** It is
-   tracked in `GolfGame._roundLongestDriveYd`, reset to 0 at the start of every `_startNewRound()`
-   and every `_resumeRound()`. Resuming a round therefore cannot recover a qualifying drive hit
-   before the app was closed — the worst case is an undercounted `longestDriveYd` on the rare
-   round that gets closed and reopened, never a wrong stroke or points number. See
-   `DECISIONS.md#part8-scope`.
-2. **A round that finishes hole 9 in the ~2–4 second window between the flash animation starting
-   and the summary screen rendering can be closed before `recordGolf` ever runs**, because
-   `applyShotResult` sets `phase: 'summary'` (and `_applyResult` autosaves it) synchronously,
-   before the flash even plays — but `recordGolf` itself only runs once `_showRoundSummary()`
-   is actually reached. A resume that lands on `phase === 'summary'` today falls through to
-   `_beginAddress()` on an already-finished hole rather than re-entering the summary screen (and,
-   deliberately, `_showRoundSummary()` was NOT given a resume entry point, to avoid the opposite
-   bug — a resumed 'summary' phase double-calling `recordGolf`). Net effect: a round finished
-   inside that narrow window can fail to ever record, never double-record. Pre-existing since
-   Part 5; not fixed in Part 8 to keep that part's scope to what was asked.
-
-## Part 9A: layout, visuals, aiming camera, overhead map (2026-09-03)
-
-Matt's playtest fixes, from `GOLF-PART9.md` (9B sidespin and 9C the 3-click swing follow).
-The full numbers are in `GOLF-HANDOFF.md` §10.1–10.4 and §13.1; what a session must not undo:
-
-- **The sky is always daytime.** `#7fb8ff` → `#dceeff` plus an additive sun sprite, fog
-  `0xdceeff, 180, 700`. There is no dark-mode sky palette and `render.js` no longer touches
-  `js/theme.js` - dark mode governs the HUD bands only. Do not "restore" a night sky.
-- **Safe area + the hub's back pill.** `.gf-play` (fixed) carries the safe-area padding;
-  `ui.js` sets `--gf-hub-pad: 54px` when mounted in the hub so the pill (drawn by the hub at
-  `max(safe-area-top, 54px)`) always lands inside the top strip's reserved left 104 × 56 box.
-  The game's own back button renders ONLY standalone; in the hub the box is empty. Verified with
-  `getBoundingClientRect()`: the pill at 10,54–80,91 overlaps no game element at 393 × 852.
-- **Trees line the fairway** (`terrain.js` `buildTrees`, the belt from `rng(seed + 11)`), on
-  bigger geometry (cone 3.2 × 9). Visual only; the fixture and every physics test are untouched.
-- **Drag-to-aim works anywhere in the view**, address AND putt, 0.12°/px, and locks once the
-  swing starts. The 3D aim line (a terrain-hugging ribbon, not a `THREE.Line` - line width never
-  renders on mobile) and the `#ffce3a` landing ring appear on the first `pointerdown` and stay
-  until launch; the minimap is up for the whole address. A `pointercancel` is never a tap (it
-  used to advance the swing).
-- **Every aim change goes through `_setAimDeg`** (view drag, map tap, map drag): bearing, then
-  aim line/ring/minimap redraw, then `camRig.aimTo()`. Add a fourth aim input there, nowhere else.
-
-## Tests and tools (`golf/`)
+## What Stage B built, and the shape of it
 
 | File | Role |
 |---|---|
-| `js/test.js` | `node golf/js/test.js`. Tests 1–2 (heightfield, determinism), 3/3b (carry + rollout tables), 4/5 (reachability, putt sweep, per Harbor hole), 6 (points table, `game.js`), 7 (meter maths), 8 (fixture replay, ±0.02m). Wired into the repo-root `run-all-tests.mjs`. |
-| `tools/refixture.mjs` | `node golf/tools/refixture.mjs harbor` — regenerates `courses/harbor/fixture.json`. 6 shots/hole, fixed inputs chosen for REPRODUCIBILITY, not for being good golf shots. |
-| `tools/preview.html` | standalone hole viewer, no game shell — drag-orbit camera, "Fly demo shot" button. Mints a fresh `<canvas>` per hole switch (see below). |
-| `tools/sweep-carry.mjs` | prints a carry/total/hang-time/apex table per club × power, ± spin at driver/7i/PW. Header line prints `SPIN_BRAKE` so a table is self-describing about which tuning pass produced it. |
+| `js/holes.js` | geometry: containment, the lie lookup, deterministic belt expansion, slope sampling, `validateHole()` |
+| `courses/pinevalley.js` | holes 1-3 in the documented format |
+| `js/clubs.js` | the approved stock ladder (spec 21.3), the lie table (21.2), the auto-pick |
+| `js/swing.js` | the power ring, the accuracy bar, the mishit model, the three-tap state machine |
+| `js/shot.js` | flight, the tree test, roll, and the putt with its slope break |
+| `js/render.js` | the tilemap, the camera, the ball and its shadow, the aim ladder |
+| `js/ui.js` | the DOM shell. **It owns no rule** - everything above is pure, which is why `js/test.js` can measure all of it headless |
 
-`node run-all-tests.mjs` runs everything including golf's suite (~4.5 min total, mostly other
-games) — per root `CLAUDE.md`, run it only when asked by name, not on your own initiative.
+**Every number that can be measured is measured, not eyeballed.** `node golf/js/test.js` is 102
+assertions over the hole data, the bag, the meters, the mishit model, flight, roll and putting. Two
+of them are marked `[KNOWN-BUG PROBE]` because they pin things a casual reading of the reference
+gets backwards: the ring PING-PONGS rather than filling one way (a one-way fill makes a mistimed
+tap give MAXIMUM power instead of low power, which inverts the whole risk model), and the accuracy
+window does NOT narrow as power rises (it only looked that way at 15 fps; measured, the green pixel
+count is pinned for the whole sweep).
 
-## WebGL canvas lifetime
+### Three things Stage B decided that are worth not re-deriving
 
-`forceContextLoss()` (called by `Renderer.dispose()`) PERMANENTLY poisons the `<canvas>` element
-it was called on — a second `new Renderer(canvas, ...)` on that same element throws "Canvas has
-an existing context of a different type." `_enterPlay()` and `preview.html`'s `loadHole()` both
-mint a FRESH `<canvas>` per mount/hole-switch for this reason, matching Skeeball's established
-pattern. Never reuse a canvas across a dispose/recreate boundary. Full incident and verification:
-`DECISIONS.md#webgl-canvas-reuse-part3`.
+- **`apexYd` is quadratic in loft, not linear.** The first draft was `distance * (0.06 + loft*0.20)`,
+  which reads fine until you try to hit a wedge over a tree: a wedge's distance is short, so its
+  apex came out short too, and the one club that should climb steeply could not clear a canopy the
+  driver could not get under either. That collapses the punch-low-or-loft-over choice into no choice
+  at all. The engine test now throws a driver and a lob wedge at the same tree from the same spot.
+- **`PUTT_DECEL` is DERIVED from the one measured putt, not guessed.** The reference's 17 ft putt
+  rolled to rest in ~2.5 s, and constant deceleration gives `2 * (17/3) / 2.5^2 = 1.81 yd/s^2`.
+  Everything else about putting falls out of it, including a 60 ft putt taking 4.7 s. `BREAK_K` is
+  then tuned so a 20 ft putt across a half-strength slope breaks one cup width; the test measures
+  exactly that.
+- **`bounds` runs 45 yds BEHIND each tee.** The camera clamps itself inside bounds, so a hole that
+  stopped at its own tee pinned the ball to the bottom edge of the screen, underneath the club tile
+  and the aim row, for the whole tee shot.
 
-## Not yet done (deliberately, in scope order)
+### The fit bug, and why the probe went first
 
-- **A second course.** `COURSES` and every course-relative resolver (`courseMode`'s prerequisite
-  check, `bestRoundByCourse`, `GOLF_COURSES` name maps in `js/game-stats-ui.js`) are already
-  written generically over `COURSES.length > 1`; only `courses/harbor/course.js`'s sibling data
-  file and a `GOLF_COURSES` entry are missing.
-- **The admin-ui.js course-mode button** (see "Known gap" above).
-- **Round-summary polish**: no "this was practice" indicator on the summary screen itself for a
-  dev profile testing a locked course (the practice/real split is answerable from My Stats
-  instead — see the practice bucket section above).
+Matt asked for the `test-visual.mjs` fit probe at the START of this stage rather than the end. It
+earned that immediately: measured in the hub, the game was **136px too tall at both phone heights**,
+with the entire bottom control cluster - the club tile, the aim row, the meter and the swing button
+- below the fold. Standalone it was clean, which is exactly the shape that shipped in Pool.
+
+The cause was not the CSS. `_fit()` ran once in the constructor, and **the hub mounts the element
+and THEN applies its own chrome**, so the first measurement was taken before the game had been
+pushed 98px down the page. Nothing resizes the window afterwards, so there was no path back to the
+truth. A `ResizeObserver` on the container is that path.
+
+The measurement itself took two attempts, and the failed one is worth recording: collapsing the
+game and reading `document.documentElement.scrollHeight` to find the gap below **does not work**,
+because a standalone page's own `min-height: 100vh` wrapper makes that read as a full viewport of
+chrome and collapses the game to its floor. What works is to take everything from the root's top to
+the bottom of the viewport, then measure how far the PAGE overflows and give exactly that much
+back - it never has to know which ancestor owns the gap (in the hub it is `.hub-main`, two levels
+up). Measured after: 852/714/664/526 px of root across the four host-and-height combinations, with
+nothing offscreen, no tap target under 44px and no text under 11px.
+
+### Open for the playtest
+
+- **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds
+  wide, which puts about 120 yds of hole ahead of the ball; the driver's dot 4 is at 215. The
+  preview scroll reaches them. Whether that is right, or the view should pull back, is a feel call.
+- Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
+- The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
+
+## Repo rules that bite in this game specifically
+
+Read `docs/BUILDING-A-GAME.md` Part 0 (the UX floor) before touching any UI, and the game-ui skill's
+guidance. The ones this game is most likely to get wrong:
+
+- **`onViewportResize(cb)` from `js/viewport.js`**, never a raw `resize`/`orientationchange`/
+  `visualViewport` listener. Hill Climb shipped that bug exactly once.
+- **`touchmove` binds to `.gf-root`**, never to `document` or `window`. The swipe surface gets
+  `touch-action: none`; tappable controls get `touch-action: manipulation`.
+- **`overscroll-behavior: contain`** on any fixed overlay that scrolls (the scorecard).
+- **Immersive fit:** one screen at a tall AND a short phone height, standalone AND mounted in the
+  hub's real chrome (~138 px of it). `test-visual.mjs`'s `fit` checks. Golf has no entry in that
+  suite yet - writing one is the first task of Stage B.
+- **`prefers-reduced-motion`** thins garnish (sunburst rays, shake) and never freezes gameplay: the
+  ball still flies.
+- **No em dashes in user-facing copy.** The round-complete screen gets a close (X) top-right.
+- **The player's name comes from `loadProfile()`, defaults-only.** Golf prefills from it and never
+  writes back.
+- **Every visible string goes through `t()` at RENDER time**, EN and ES, in `js/strings.js`.
