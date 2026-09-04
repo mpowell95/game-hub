@@ -1,73 +1,105 @@
-// golf/js/swing.js - the three-tap swing: the power ring, the accuracy bar, and the mishit model.
-// PURE and DOM-free (it is driven by a clock the caller owns), so golf/js/test.js can step it.
+// golf/js/swing.js - THE SWING: one needle, three taps. PURE and DOM-free (it is driven by a
+// clock the caller owns), so golf/js/test.js can step it.
 //
-// This is the single most important mechanic in the game and the one a coarse reading of the
-// reference gets wrong, so the measured facts are written down beside the code that implements
-// them (golf-reference-spec.md §5, §6, §8, §17.9):
+// ============================================================================================
+// THIS IS A REWRITE (2026-09-04). The old build had TWO meters - a power ring, then a separate
+// accuracy bar with its own independent ping-pong - and that is not what the reference does.
+// Matt filmed the reference's meter and ours side by side; both clips were measured frame by
+// frame at 60 fps (201 and 203 frames), tracking the needle's angle and the bar's marker in
+// every single frame. What came back:
 //
-//  - The meter is STATIC until tap 1. Over a 24 s idle stretch the marker does not move. [MEASURED]
-//  - It reaches 100 % in ~0.75 s. [MEASURED]
-//  - It then REVERSES and sweeps back down: a ping-pong, not a one-way fill that stops at the top.
-//    [MEASURED, frame by frame at 15 and 20 fps] A mistimed tap therefore gives you a LOW reading
-//    rather than a maximum one, and waiting one more cycle costs nothing - which is what makes the
-//    meter forgiving in a way a one-way fill is not.
-//  - The accuracy window does NOT narrow as power rises. Measured directly: the green pixel count
-//    is pinned for the entire power sweep. Do not implement it. (The band DOES narrow on a bad
-//    LIE - a different cause, and that one is real: clubs.js's LIES.zone.)
-//  - The two meters run in SEPARATE PHASES: while the accuracy line sweeps, the power tick sits
-//    parked where it was locked. [MEASURED]
-//  - Input is locked for ~1.4 s after every shot, which stops a double-tap queuing a second swing.
+//   frames   0-33    the needle is parked DEAD CENTRE IN THE ACCURACY BAR, at 89-90 deg
+//   frames  33-127   it climbs the arc at 2.22 deg/frame - the backswing
+//   frame  127       A MARKER IS PLANTED AT 297 deg AND STAYS THERE for the rest of the clip,
+//                    and the needle REVERSES
+//   frames 130-188   it runs back down at 3.24 deg/frame - 1.46x faster - the downswing
+//   frames 188-201   it STOPS at 96 deg and holds: a small miss, right of centre
+//
+// And the clincher: the accuracy bar's marker position is a LINEAR FUNCTION of the needle's
+// angle, with the same slope (-0.0175 per degree) on the way up and on the way down. It is not
+// a second meter. IT IS THE SAME NEEDLE, and the bar is a MAGNIFIED VIEW of the last ~12 % of
+// arc either side of zero, so the final tap can be judged finely. That is why the bar has to sit
+// in the ring's mouth: it is the same scale, unrolled.
+//
+// So the mechanic is the classic three-click swing:
+//   tap 1  start the backswing
+//   tap 2  set POWER - a marker is planted where you stopped it, and the needle reverses
+//   tap 3  set ACCURACY - stop the needle as close to zero as you can on the way back down
+//
+// Everything below is on ONE scale, `pos`, in power units:
+//   pos =  0      the accuracy point: the bar's centre, zero power, a perfect strike
+//   pos =  1      100 % power
+//   pos =  SWING_MAX   the top of the over-swing block
+//   pos in +/- BAR_HALF   the magnified window the accuracy bar shows
+// ============================================================================================
 
-/** The arc runs 0 to 110 %, not 0 to 100: the tick's travel continues past the green segment into
- *  the over-swing block, which is what makes over-100 reachable at all. RING_UP_MS is set so that
- *  reaching 100 % takes exactly the MEASURED 750 ms; the full sweep and the 1.65 s cycle fall out
- *  of that. (An earlier draft of the spec called the cycle 1.4 s and a later one 1.5 s, both
- *  INFERRED from the same 0.75 s. The measured number is the one that is honoured here.) */
-export const RING_MAX = 1.10;
-export const RING_UP_MS = 825;                     // 825 ms to the top; exactly 750 ms to 100 %
-export const RING_CYCLE_MS = 1650;                 // up and back
+/** The top of the arc. MEASURED: the over-swing block spans 311-337 deg on a 0-100 % scale of
+ *  89-311 deg, so it is 26/222 = 11.7 % of full power. */
+export const SWING_MAX = 1.12;
 
-/** The accuracy marker's own ping-pong. Not separately measured; the reference's tap 2 -> tap 3 gap
- *  was 1.04 s, so a cycle a shade longer than that gives a player about one full pass to read. */
-export const BAR_CYCLE_MS = 1100;
+/** Half the accuracy window, in power units. MEASURED: the bar spans 61-115 deg against zero at
+ *  89 deg, so -0.126 to +0.117. Symmetric here, because a miss either way should cost the same. */
+export const BAR_HALF = 0.12;
+
+/** Milliseconds for the needle to travel one full power unit.
+ *
+ *  MEASURED: the backswing ran 0.036 -> 0.937 pos in 90 frames (1.500 s) = 1665 ms per unit; the
+ *  downswing ran 0.865 -> 0.063 in 55 frames (0.917 s) = 1143 ms per unit. The downswing is
+ *  1.46x FASTER than the backswing, which is a real part of the feel: you get time to pick your
+ *  power and much less time to save the strike.
+ *
+ *  The old build's ring reached 100 % in 750 ms and came back at the same speed. That is more
+ *  than twice as fast as the reference on the way up, and symmetric where the reference is not. */
+export const UP_MS = 1650;
+export const DOWN_MS = 1150;
 
 /** Input is dead for this long after the ball is struck. [MEASURED: 1.33-1.54 s across three shots] */
 export const LOCK_MS = 1400;
 
-export const PHASE = { IDLE: 'idle', POWER: 'power', ACCURACY: 'accuracy', LIVE: 'live', LOCKED: 'locked' };
+export const PHASE = {
+  IDLE: 'idle',        // needle parked at zero, waiting for tap 1
+  BACK: 'back',        // the backswing: needle climbing
+  DOWN: 'down',        // the downswing: power locked, needle falling
+  LIVE: 'live',        // struck; the ball is away
+};
 
-/** Where the power tick sits, 0..RING_MAX, `ms` after tap 1. Ping-pong. */
-export function ringAt(ms) {
-  const t = ((ms % RING_CYCLE_MS) + RING_CYCLE_MS) % RING_CYCLE_MS;
-  const up = t <= RING_UP_MS;
-  return (up ? t / RING_UP_MS : (RING_CYCLE_MS - t) / RING_UP_MS) * RING_MAX;
+/** How long the backswing takes to reach the very top. Past this the swing has auto-topped out. */
+export const TOP_MS = SWING_MAX * UP_MS;
+
+/** Where the needle sits during the BACKSWING, `ms` after tap 1.
+ *
+ *  Past the top it does NOT ping-pong forever: the power is spent at SWING_MAX and the needle is
+ *  already on its way back down. Holding too long is therefore a real decision with a real cost
+ *  (a full over-swing, and its 1.5x mishit multiplier) rather than a free second lap. */
+export function backswingAt(ms) {
+  if (ms <= TOP_MS) return { pos: ms / UP_MS, power: null, topped: false };
+  return { pos: SWING_MAX - (ms - TOP_MS) / DOWN_MS, power: SWING_MAX, topped: true };
 }
 
-/** Where the accuracy marker sits, 0..1 across the bar, `ms` after tap 2. Ping-pong off both ends.
- *  It starts at the CENTRE and moves right: starting at an end would make the first pass through
- *  the green band arrive at a moment the player has not been given time to read. */
-export function barAt(ms) {
-  // The quarter-cycle offset is what puts the marker at the CENTRE at ms = 0, moving right:
-  // centre -> right -> centre -> left -> centre. Starting it at an end instead would send it
-  // through the green band before the player has had a moment to read the bar.
-  const u = ((ms / BAR_CYCLE_MS + 0.25) % 1 + 1) % 1;
-  return u < 0.5 ? u * 2 : (1 - u) * 2;
+/** Where the needle sits during the DOWNSWING, `ms` after the power was locked at `power`. */
+export function downswingAt(ms, power) { return power - ms / DOWN_MS; }
+
+/** The needle's position mapped onto the accuracy bar, 0 (left) .. 1 (right), 0.5 dead centre.
+ *
+ *  The needle enters the bar from the LEFT on the way down and travels right, so stopping it EARLY
+ *  leaves it left of centre and stopping it LATE leaves it right. */
+export function barPosOf(pos) {
+  return Math.min(1, Math.max(0, 0.5 - pos / (2 * BAR_HALF)));
 }
 
 /** THE ACCURACY BANDS, as distance from the centre normalised to 0..1 (`off`).
  *
- *  At a clean lie: green is the middle 40 % of the bar, orange the next 20 % each side, red the
- *  outer 10 % each side - which is 40 + 20 + 20 + 10 + 10 = 100 % (an earlier draft of the spec
- *  used 40/30/15, summing to 130 %, which cannot be laid out).
+ *  MEASURED off the reference's bar, by angle: green is the middle 54 % of the bar, orange 11 %
+ *  each side, red 10 % each side. The old build used 40 % green and 20 % orange each side, which
+ *  made the target noticeably smaller than the original's.
  *
  *  A bad lie narrows the GREEN band by `zone`; orange and red then split what is left in the same
- *  2:1 ratio they have at baseline, so the bar is always full and the marker always sweeps at the
- *  same speed. A smaller target is simply harder to hit, and the player can SEE that before
- *  committing to the shot. */
+ *  ratio they have at baseline, so the bar is always full and the needle always sweeps at the same
+ *  speed. A smaller target is simply harder to hit, and the player can SEE that before committing. */
 export function bandsFor(zone = 1) {
-  const green = 0.4 * zone;
+  const green = 0.54 * zone;
   const rest = 1 - green;
-  return { green, orange: green + (rest * 2) / 3, red: 1 };
+  return { green, orange: green + rest * 0.52, red: 1 };
 }
 
 /** The mishit (§17.9, ours - every shot in all five clips was struck cleanly, so the penalty was
@@ -96,7 +128,11 @@ export function mishit(barPos, power, zone = 1) {
 }
 
 /** The three-tap state machine. The caller supplies `now` (ms) so this is testable without a
- *  clock and cannot drift from whatever the render loop is doing. */
+ *  clock and cannot drift from whatever the render loop is doing.
+ *
+ *  There is no `tick()` and nothing mutates on a timer: every intermediate state is a pure
+ *  function of (phase, t0, now), including "the player never took tap 2 and the swing topped
+ *  out". Only a tap or a settle changes state. */
 export class Swing {
   constructor() { this.reset(); }
 
@@ -104,7 +140,7 @@ export class Swing {
     this.phase = PHASE.IDLE;
     this.t0 = 0;
     this.power = 0;
-    this.bar = 0.5;
+    this.pos = 0;
     this.lockUntil = 0;
   }
 
@@ -114,29 +150,47 @@ export class Swing {
   /** One tap. Returns 'begin' | 'power' | 'fire' | null (null = the tap did nothing). */
   tap(now) {
     if (this.locked(now)) return null;
-    if (this.phase === PHASE.IDLE) { this.phase = PHASE.POWER; this.t0 = now; return 'begin'; }
-    if (this.phase === PHASE.POWER) {
-      this.power = ringAt(now - this.t0);
-      this.phase = PHASE.ACCURACY; this.t0 = now;
+    if (this.phase === PHASE.IDLE) { this.phase = PHASE.BACK; this.t0 = now; return 'begin'; }
+    if (this.phase === PHASE.BACK) {
+      const b = backswingAt(now - this.t0);
+      if (b.topped) {
+        // The backswing already ran out of arc: power is spent at the maximum and THIS tap is the
+        // accuracy tap, not a second power tap. Anything else would give a free extra tap to a
+        // player who mistimed the first one.
+        this.power = SWING_MAX; this.pos = b.pos; this.phase = PHASE.LIVE; return 'fire';
+      }
+      this.power = b.pos; this.phase = PHASE.DOWN; this.t0 = now;
       return 'power';
     }
-    if (this.phase === PHASE.ACCURACY) {
-      this.bar = barAt(now - this.t0);
+    if (this.phase === PHASE.DOWN) {
+      this.pos = downswingAt(now - this.t0, this.power);
       this.phase = PHASE.LIVE;
       return 'fire';
     }
     return null;
   }
 
-  /** What the meter should DRAW right now. The power tick parks where it was locked once the
-   *  accuracy phase starts - the two meters never sweep at the same time. */
+  /** What the meter should DRAW right now, and whether the swing has run out of window.
+   *
+   *  `power` is the PLANTED MARKER - null until tap 2, then the locked value, which stays on the
+   *  arc for the whole downswing exactly as the reference's does.
+   *  `expired` means the needle has run off the bottom of the bar with no third tap; the caller
+   *  fires the shot at that worst-case accuracy rather than leaving the swing stuck. */
   read(now) {
-    if (this.phase === PHASE.POWER) return { power: ringAt(now - this.t0), bar: 0.5, sweeping: 'power' };
-    if (this.phase === PHASE.ACCURACY) return { power: this.power, bar: barAt(now - this.t0), sweeping: 'bar' };
-    if (this.phase === PHASE.IDLE) return { power: 0, bar: 0.5, sweeping: null };
-    return { power: this.power, bar: this.bar, sweeping: null };
+    if (this.phase === PHASE.BACK) {
+      const b = backswingAt(now - this.t0);
+      return { pos: b.pos, power: b.power, phase: this.phase, expired: b.pos < -BAR_HALF };
+    }
+    if (this.phase === PHASE.DOWN) {
+      const pos = downswingAt(now - this.t0, this.power);
+      return { pos, power: this.power, phase: this.phase, expired: pos < -BAR_HALF };
+    }
+    if (this.phase === PHASE.IDLE) return { pos: 0, power: null, phase: this.phase, expired: false };
+    return { pos: this.pos, power: this.power, phase: this.phase, expired: false };
   }
 
   /** Called when the ball comes to rest: the input lock runs from here. */
-  settle(now) { this.phase = PHASE.IDLE; this.lockUntil = now + LOCK_MS; this.power = 0; this.bar = 0.5; }
+  settle(now) {
+    this.phase = PHASE.IDLE; this.lockUntil = now + LOCK_MS; this.power = 0; this.pos = 0;
+  }
 }
