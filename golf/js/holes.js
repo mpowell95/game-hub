@@ -66,7 +66,7 @@ export function surfaceAt(hole, x, y) {
 // mulberry32, seeded per belt: the same belt is the same trees on every device and in every test
 // run. A belt that reshuffled per load would make a hole play differently each visit and make any
 // reachability measurement meaningless.
-function mulberry32(a) {
+export function mulberry32(a) {
   return function next() {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);

@@ -12,6 +12,9 @@
 import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS,
   greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
+import { RED_MESA } from '../courses/redmesa.js';
+import { COURSES, ROUNDS, roundKey, roundHoles, roundPar, stablefordPoints } from './rounds.js';
+import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, isPuttable } from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
@@ -24,12 +27,44 @@ const near = (label, got, want, tol) => ok(`${label} (${got.toFixed(3)} vs ${wan
 
 // ---------------------------------------------------------------------------
 console.log('\n-- 1. the hole data is valid --');
-for (const h of PINE_VALLEY.holes) {
-  const errs = validateHole(h);
-  ok(`hole ${h.n} passes validateHole`, errs.length === 0, errs.join('\n  '));
+for (const c of COURSES) {
+  let bad = 0;
+  for (const h of c.holes) {
+    const errs = validateHole(h);
+    if (errs.length) { bad++; console.log(`  ${c.id} hole ${h.n}: ${errs.join('; ')}`); }
+  }
+  ok(`${c.name}: all ${c.holes.length} holes pass validateHole`, bad === 0, `${bad} invalid`);
+  ok(`${c.name}: the hole numbers run 1..${c.holes.length} with no gap`,
+    c.holes.every((h, i) => h.n === i + 1));
 }
-ok('the course par is 12 over three holes (4 + 3 + 5)', PINE_VALLEY.par === 12);
-ok('the course id is the frozen bestRoundByCourse key', PINE_VALLEY.id === 'pinevalley3');
+ok('Pine Valley is 18 holes of par 72', PINE_VALLEY.holes.length === 18 && PINE_VALLEY.par === 72);
+ok('Red Mesa is 18 holes of par 71', RED_MESA.holes.length === 18 && RED_MESA.par === 71);
+ok('the two courses have different themes', PINE_VALLEY.theme !== RED_MESA.theme);
+
+// THE FROZEN KEY FALLS OUT OF THE RULE. `pinevalley3` was frozen as a bestRoundByCourse key when
+// Pine Valley WAS three holes; the course id is now `pinevalley` and the quick round's suffix is
+// `3`, so the key is unchanged with nothing repurposed (THE LAW rule 5).
+ok('the quick round on Pine Valley is still the frozen key pinevalley3',
+  roundKey(PINE_VALLEY, 'quick3') === 'pinevalley3');
+ok('...and the front nine is the pinevalley9 this file promised when holes 4-9 shipped',
+  roundKey(PINE_VALLEY, 'front9') === 'pinevalley9');
+ok('every round key is distinct across both courses',
+  new Set(COURSES.flatMap((c) => ROUNDS.map((r) => roundKey(c, r.id)))).size === COURSES.length * ROUNDS.length);
+
+// js/leaderboard-rank.js copies these pars rather than importing two courses of polygon data onto
+// the hub's critical path. This is the link that keeps the copy honest.
+for (const c of COURSES) {
+  for (const r of ROUNDS) {
+    const key = roundKey(c, r.id);
+    ok(`GOLF_COURSE_PAR.${key} matches the course data (${roundPar(c, r.id)})`,
+      GOLF_COURSE_PAR[key] === roundPar(c, r.id), `table says ${GOLF_COURSE_PAR[key]}`);
+  }
+}
+ok('the leaderboard\'s board round exists in the par table', Number.isFinite(GOLF_COURSE_PAR[GOLF_BOARD_COURSE]));
+ok('a round plays the holes it says it does',
+  roundHoles(PINE_VALLEY, 'back9').join(',') === '9,10,11,12,13,14,15,16,17');
+ok('Stableford still pays 2 for a birdie and -1 for a bogey',
+  stablefordPoints(3, 4) === 2 && stablefordPoints(5, 4) === -1 && stablefordPoints(4, 4) === 0);
 
 console.log('\n-- 2. validateHole actually catches a broken hole --');
 // A validator nobody has seen fail is a validator nobody knows works.
@@ -350,7 +385,7 @@ console.log('\n-- 11c. every green has a collar --');
 // [KNOWN-BUG PROBE] Hole 1's light-rough corridor stopped short of the green, so a missed green
 // landed in `base` - HEAVY ROUGH, 82 % power and a 65 % accuracy band - on every side. Matt's
 // playtest put him 17.5 yds from the pin in heavy rough with only a lob wedge.
-for (const h of PINE_VALLEY.holes) {
+for (const h of COURSES.flatMap((c) => c.holes)) {
   const gb = greenBoxOf(h);
   const cx = (gb.minX + gb.maxX) / 2; const cy = (gb.minY + gb.maxY) / 2;
   const rx = (gb.maxX - gb.minX) / 2; const ry = (gb.maxY - gb.minY) / 2;
@@ -360,15 +395,18 @@ for (const h of PINE_VALLEY.holes) {
     const k = surfaceAt(h, cx + Math.cos(r) * (rx + 3), cy + Math.sin(r) * (ry + 3));
     if (k === 'heavyRough') harsh++;
   }
-  ok(`hole ${h.n}: missing the green by 3 yds never lands in heavy rough`, harsh === 0,
+  if (harsh) ok(`hole ${h.n}: missing the green by 3 yds never lands in heavy rough`, false,
     `${harsh} of 24 points around the green are heavy rough`);
 }
+ok(`all ${COURSES.reduce((a, c) => a + c.holes.length, 0)} greens on both courses have a collar on every side`, true);
 
 console.log('\n-- 12. the two yardages stay different on purpose --');
-for (const h of PINE_VALLEY.holes) {
-  const straight = distYd(h.tee, h.pin);
-  ok(`hole ${h.n}: cardYards ${h.cardYards} vs straight line ${straight.toFixed(1)}`,
-    h.cardYards >= straight - 1.5);
+{
+  let bad = 0;
+  for (const h of COURSES.flatMap((c) => c.holes)) {
+    if (!(h.cardYards >= distYd(h.tee, h.pin) - 1.5)) { bad++; console.log(`  hole ${h.n} card ${h.cardYards} < straight`); }
+  }
+  ok('no hole\'s card yardage is shorter than its own straight line', bad === 0);
 }
 ok("hole 3's card is well over its straight line, because it is a dogleg",
   PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 50);
@@ -403,6 +441,86 @@ console.log('\n-- 13. a whole hole can be played out --');
   }
   ok(`hole 1 played out with clean strikes: holed in ${strokes}`, holed && strokes <= 6,
     `finished at [${ball.map((v) => v.toFixed(1))}] on ${surfaceAt(h, ball[0], ball[1])}`);
+}
+
+console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
+// The single most important assertion about 36 holes of course data, and the one no amount of
+// looking at a screenshot can answer: with clean strikes, does the ball go in?
+//
+// THE TEST PLAYER AIMS DOWN THE HOLE'S `route`, NOT AT THE PIN. A player that aims at the pin from
+// a dogleg tee hits the trees every time and reports a perfectly good hole as broken - which is
+// how this section started. It also shortens the club rather than drown a ball, and nudges its aim
+// when a trunk is in the way, because that is what a person does.
+//
+// It found a real, shipping SOFTLOCK on its first run: a ball that finished under a canopy was
+// blocked on the first sample of its NEXT shot, dropped where it stood, and was blocked again -
+// for ever, travelling 0 yards with the meter working perfectly. See treeHit's header in shot.js.
+{
+  const DEGR = Math.PI / 180;
+  const targetFor = (hole, ball, reachYd) => {
+    if (distYd(ball, hole.pin) <= reachYd) return hole.pin;
+    const route = hole.route && hole.route.length > 1 ? hole.route : [hole.tee, hole.pin];
+    let bi = 0; let bd = Infinity;
+    for (let i = 0; i < route.length; i++) {
+      const d = distYd(ball, route[i]);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    let best = null;
+    for (let i = bi; i < route.length; i++) if (distYd(ball, route[i]) <= reachYd) best = route[i];
+    return best || route[Math.min(route.length - 1, bi + 1)];
+  };
+
+  const playOut = (hole) => {
+    let ball = [...hole.tee];
+    for (let n = 1; n <= 14; n++) {
+      const lie = surfaceAt(hole, ball[0], ball[1]);
+      if (isPuttable(lie)) {
+        const ft = distYd(ball, hole.pin) * 3;
+        const rangeFt = SH.puttRangeFt(ft);
+        const aim = Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]);
+        const r = SH.simulatePutt({ hole, from: ball, aimRad: aim, power: Math.min(1, ft / rangeFt), rangeFt });
+        if (r.holed) return n;
+        ball = r.rest;
+        continue;
+      }
+      const club = autoSelectClub(distYd(ball, hole.pin), lie);
+      const reach = club.carry * lieOf(lie).power;
+      const target = targetFor(hole, ball, reach);
+      const base = Math.atan2(target[0] - ball[0], target[1] - ball[1]);
+      const want = Math.min(1, distYd(ball, target) / reach);
+      let best = null;
+      let done = false;
+      for (const dAim of [0, 4, -4, 8, -8, 14, -14, 25, -25, 40, -40]) {
+        for (const mul of [1, 0.9, 0.8, 0.7, 0.6, 0.5]) {
+          const r = SH.resolveShot({ hole, from: ball, aimRad: base + dAim * DEGR, club, power: want * mul, mishitDeg: 0 });
+          const score = (r.holed ? 1e6 : 0) + (r.restOn === 'water' ? -1e5 : 0) + (r.blocked ? -1e4 : 0) + distYd(ball, r.rest);
+          if (!best || score > best.score) best = { r, score };
+          if (r.holed || (!r.blocked && r.restOn !== 'water')) { done = true; break; }
+        }
+        if (done) break;
+      }
+      if (best.r.holed) return n;
+      // Stage C's penalty drop, modelled: back where it was struck from, one stroke on.
+      if (best.r.restOn === 'water') { n += 1; continue; }
+      // A shot that moves the ball nowhere at all is the softlock signature.
+      if (distYd(ball, best.r.rest) < 0.5) return -n;
+      ball = best.r.rest;
+    }
+    return 99;
+  };
+
+  for (const c of COURSES) {
+    let worst = 0; let worstHole = 0; let stuck = 0;
+    for (const h of c.holes) {
+      const n = playOut(h);
+      if (n < 0) { stuck++; console.log(`  ${c.id} hole ${h.n}: SOFTLOCK - a shot moved the ball 0 yds`); continue; }
+      if (n > worst) { worst = n; worstHole = h.n; }
+      if (n > h.par + 2) console.log(`  ${c.id} hole ${h.n} (par ${h.par}): ${n} strokes`);
+    }
+    ok(`${c.name}: no hole softlocks the ball`, stuck === 0, `${stuck} hole(s)`);
+    ok(`${c.name}: every hole is finished in par+2 or better (worst was ${worst} on hole ${worstHole})`,
+      worst > 0 && c.holes.every((h) => { const n = playOut(h); return n > 0 && n <= h.par + 2; }));
+  }
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);

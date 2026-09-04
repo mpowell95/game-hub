@@ -313,7 +313,10 @@ const PLAY = {
       const practice = await page.$('[data-role="practice"]');
       if (!practice) return { ok: false, why: 'no "practice" button on the course card' };
       await tap(practice);
-      const hole1 = await page.waitForSelector('[data-hole="1"]', { timeout: 8000 }).catch(() => null);
+      // data-hole is the INDEX into the course's holes, not the hole number: "0" is hole 1. It
+      // became an index when the courses grew to eighteen holes and the practice grid started
+      // showing every one of them.
+      const hole1 = await page.waitForSelector('[data-hole="0"]', { timeout: 8000 }).catch(() => null);
       if (!hole1) return { ok: false, why: 'the practice hole select never appeared' };
       await tap(hole1);
       await page.waitForSelector('[data-role="swing"]', { timeout: 8000 });

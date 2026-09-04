@@ -163,12 +163,12 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.gf-root .gf-setup h1 { margin: 0; font-size: 32px; font-weight: 800; letter-spacing: .01em; text-shadow: var(--gf-shadow); }
+.gf-root .gf-setup h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: .01em; text-shadow: var(--gf-shadow); }
 /* The card used to float in a large empty void on a real phone. It now fills the width it has and
    the screen carries a course strip behind it, so the space reads as art rather than as nothing. */
 .gf-root .gf-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
 .gf-root .gf-setup__art {
-  width: 100%; max-width: 360px; height: 34vh; min-height: 150px;
+  width: 100%; max-width: 360px; height: 22vh; min-height: 108px;
   border: 1px solid rgba(255,255,255,.85); box-shadow: var(--gf-shadow);
   background: #6e812b; display: block;
 }
@@ -176,8 +176,33 @@
 .gf-root .gf-card-blurb { font-size: 13px; }
 .gf-root .gf-actions { display: flex; gap: 10px; }
 .gf-root .gf-actions .gf-btn { flex: 1; }
-.gf-root .gf-holes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.gf-root .gf-hole-btn { min-width: 52px; }
+.gf-root .gf-holes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; width: 100%; }
+.gf-root .gf-hole-btn {
+  min-width: 0; min-height: 46px; padding: 4px 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+}
+.gf-root .gf-hole-btn small { font-size: 11px; opacity: .8; font-weight: 600; }
+
+/* --- the course picker and the round picker ------------------------------------------------
+   ONE screen, not three. Two courses of eighteen holes could have become course list -> round
+   list -> hole list, three taps deep before a ball is struck; the chips swap the picture and the
+   numbers in place instead, so the whole choice is visible at once. */
+.gf-root .gf-coursepick { display: flex; gap: 8px; width: 100%; max-width: 360px; }
+.gf-root .gf-chip { flex: 1; font-size: 15px; opacity: .72; }
+.gf-root .gf-chip.is-on {
+  opacity: 1;
+  /* Selected state is never colour alone (root CLAUDE.md, accessibility): the accent border and
+     the raised weight carry it too, and Matt is red/green colorblind. */
+  border-color: #ffce3a; box-shadow: 0 0 0 2px rgba(255,206,58,.45), var(--gf-shadow);
+}
+.gf-root .gf-pickhead { text-align: center; opacity: .85; }
+.gf-root .gf-rounds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gf-root .gf-roundbtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 8px 6px; min-height: 60px;
+}
+.gf-root .gf-roundbtn small { font-size: 11px; font-weight: 600; opacity: .78; }
+.gf-root .gf-roundbtn .gf-best { opacity: 1; color: #ffce3a; }
 
 /* --- the "ball is live" veil --------------------------------------------------------------- */
 .gf-root .gf-skip {
@@ -212,7 +237,8 @@
   font-size: 24px; line-height: 1; padding: 6px 10px; cursor: pointer;
   min-width: 44px; min-height: 44px;
 }
-.gf-root .gf-result__name { font-size: 30px; font-weight: 800; text-shadow: var(--gf-shadow); }
+/* Padded on the right so a long heading ("Round complete") cannot run under the close X. */
+.gf-root .gf-result__name { font-size: 30px; font-weight: 800; text-shadow: var(--gf-shadow); padding-right: 26px; }
 .gf-root .gf-result__sub { font-size: 13px; color: var(--gf-dim); margin-top: 3px; }
 .gf-root .gf-result__card-grid { display: flex; gap: 5px; justify-content: center; margin: 14px 0 8px; }
 .gf-root .gf-cell {
@@ -224,3 +250,9 @@
 .gf-root .gf-cell.is-now { background: rgba(255,255,255,.14); border-color: #fff; }
 .gf-root .gf-result__total { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
 .gf-root .gf-result .gf-actions { justify-content: center; }
+
+/* The "new best round" line on the round-complete card. Gold, and it only ever appears when the
+   stored best actually moved - it is read back out of storage, never inferred from the score. */
+.gf-root .gf-result__best {
+  font-size: 13px; font-weight: 800; color: #ffce3a; text-align: center;
+}

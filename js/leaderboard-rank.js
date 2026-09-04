@@ -279,14 +279,31 @@ export function rankPlayers(list) {
 // only ever displayed apart (THE LAW rule 4). When holes 4-9 ship, `pinevalley9` becomes a
 // SECOND entry here and the board names which one it is showing; `pinevalley3` is not repurposed
 // and not merged into it (rule 5).
+/** WHICH ROUND THE LEADERBOARD RANKS. Pine Valley's three-hole round, and deliberately so: it is
+ *  the round a person on a phone actually finishes, everyone has the course, and it was already
+ *  the frozen key before holes 4-18 existed. Every other round is still stored, still shown on My
+ *  Stats and still reachable from a player's own leaderboard detail screen (THE LAW rule 1) - it
+ *  is only the single number on the board that this names. Changing which round the board shows is
+ *  one line here plus its row in GOLF_COURSE_PAR below. */
 export const GOLF_BOARD_COURSE = 'pinevalley3';
 
 /** Total par of each course, for turning a stored STROKE count into a score to par. The stored
  *  value stays strokes - that is the frozen recorder shape (js/game-stats.js's bestRoundByCourse,
  *  Math.min per key) - and par is subtracted at DISPLAY time only. Since par is a constant per
  *  course, ordering by strokes and ordering by to-par are identical, so nothing about the stored
- *  Math.min merge has to change. Pine Valley holes 1-3 are par 4 + 3 + 5. */
-export const GOLF_COURSE_PAR = { pinevalley3: 12 };
+ *  Math.min merge has to change.
+ *
+ *  THESE NUMBERS ARE DUPLICATED FROM THE COURSE DATA ON PURPOSE, and golf/js/test.js fails if they
+ *  ever disagree with it. This module is in the service worker's NETWORK-FIRST shell tier and is
+ *  imported by the hub's launcher path; importing golf/courses/ to derive them would drag two
+ *  courses' worth of polygon data (~60 KB) onto the critical path of every hub load, for eight
+ *  integers. The test is the link that keeps the copy honest. */
+export const GOLF_COURSE_PAR = {
+  // Pine Valley (par 72 over 18): 4 3 5 4 4 3 5 4 4 | 4 5 3 4 4 5 3 4 4
+  pinevalley3: 12, pinevalley9: 36, pinevalley9b: 36, pinevalley18: 72,
+  // Red Mesa (par 71 over 18):    4 4 3 5 4 3 4 5 4 | 4 3 4 5 4 4 3 4 4
+  redmesa3: 11, redmesa9: 36, redmesa9b: 35, redmesa18: 71,
+};
 
 /** Golf's board number: the player's best round on the named course, as a score to par.
  *  Returns null - NOT 0 - when they have no recorded round there, because 0 is a real, good

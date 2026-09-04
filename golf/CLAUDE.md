@@ -4,7 +4,7 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-## Status: BEING REBUILT (Stage B + the first playtest fixes, 2026-09-04)
+## Status: BEING REBUILT (Stage B + two courses of eighteen holes, 2026-09-04)
 
 **`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
 anything here. It is the written record of a commercial mobile golf game reconstructed from five
@@ -33,8 +33,9 @@ and keeps the three module-contract exports so nothing in the repo carries a bro
 | A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
 | — | The hole-data format, written down before anything is built against it | **done** |
 | B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
-| C | Hazards and the drop prompt, the result banner, the scorecard, the round | not started |
-| D | Stats wiring, this file, `sw.js`, the full test sweep, release | not started |
+| C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round is done**; the drop prompt and the sunburst banner are not |
+| D | Stats wiring, this file, `sw.js`, the full test sweep, release | **stats are wired**; My Stats' to-par display is not |
+| — | Thirty-three more holes: Pine Valley 4-18, and Red Mesa, a whole second course | **done** |
 
 **Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
 the flight before Stage C is built on top of them. Expect the numbers below to move.
@@ -90,14 +91,30 @@ the per-key `Math.min` for `bestRoundByCourse`.
   fabrication and nothing has to be archived as a dead legacy value. It is My Stats' "Skill level".
 - **`bestRoundByCourse` stores STROKES**, keyed by course, `Math.min` per key. The leaderboard
   subtracts par at display time; the stored value is never a to-par number.
-- **Course keys are frozen the moment one round is recorded.** `pinevalley3` today.
-  `pinevalley9` when holes 4-9 ship. **They are never merged and never compared** - a 3-hole best
-  and a 9-hole best are not the same measurement (rule 4) - and `pinevalley3` is never repurposed
-  into the 9-hole key (rule 5). Every screen that shows one names which it is showing.
+- **Course keys are frozen the moment one round is recorded**, and there are eight of them now:
+  `pinevalley3` / `pinevalley9` / `pinevalley9b` / `pinevalley18`, and the same four for
+  `redmesa`. **They are never merged and never compared** - a 3-hole best and an 18-hole best are
+  not the same measurement (rule 4) - and `pinevalley3` was never repurposed into anything (rule
+  5). Every screen that shows one names which it is showing.
+
+  **The frozen key falls out of the rule rather than out of a lookup table.** `roundKey()` in
+  `golf/js/rounds.js` is `` `${course.id}${round.suffix}` ``; the course id is `pinevalley` and the
+  quick round's suffix is `3`, so `pinevalley3` - frozen back when Pine Valley WAS three holes -
+  comes out unchanged with no special case to remember. `golf/js/test.js` asserts it.
 
 **Queued for Stage D (Matt, 2026-09-03):** My Stats' "Best rounds" table shows raw STROKES while
 the leaderboard shows the same round as a score to par. Make My Stats show to-par too, so the two
-screens agree, and keep lifetime points as its separate "Skill level" line. Not done yet.
+screens agree, and keep lifetime points as its separate "Skill level" line. Not done yet. (The
+game's OWN setup screen already shows to-par, so it and the leaderboard agree; My Stats is the
+odd one out.)
+
+**Also noted, not changed:** `recordGolf` sets its win/loss flag from `points >= 0`, a leftover
+from the Modified Stableford era, so an over-par round records a `lost`. Golf is in
+`players-agg.js`'s `SOLO` set and no screen shows a golf W/L record - the board number is the best
+round and My Stats shows rounds/average/birdies - so nothing displays it. It became visible only
+now, because this is the first build that ever CALLS the recorder. Left alone deliberately: it is
+a shared recorder, the value is stored and shown by nothing, and rule 5 says an old field is not
+repurposed on a whim.
 
 ## The leaderboard number changed in Stage A
 
@@ -390,7 +407,10 @@ export const HOLE_1 = {
 | File | Role |
 |---|---|
 | `js/holes.js` | geometry: containment, the lie lookup, deterministic belt expansion, slope sampling, `validateHole()` |
-| `courses/pinevalley.js` | holes 1-3 in the documented format |
+| `js/holegen.js` | the hole CONSTRUCTOR: a design spec in, the documented hole object out |
+| `js/rounds.js` | the course list, the four round shapes, the frozen `bestRoundByCourse` keys, Stableford points |
+| `courses/pinevalley.js` | holes 1-3 hand-authored, 4-18 from specs; par 72 |
+| `courses/redmesa.js` | eighteen holes of high desert; par 71 |
 | `js/clubs.js` | the approved stock ladder (spec 21.3), the lie table (21.2), the auto-pick |
 | `js/swing.js` | the power ring, the accuracy bar, the mishit model, the three-tap state machine |
 | `js/shot.js` | flight, the tree test, roll, and the putt with its slope break |
@@ -604,6 +624,129 @@ for weeks because it returned `note` where `checkPlay` reads `why`.
 - The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
+
+## Two courses, thirty-six holes (2026-09-04)
+
+Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
+brand new 18 hole course with a completely different theme than the woodsy one we have now."*
+
+**Pine Valley is eighteen holes of par 72 over 6,489 yards; Red Mesa is eighteen of par 71 over
+6,140.** Holes 1-3 of Pine Valley are the hand-authored ones the reference footage documents and
+are untouched. The other thirty-three are new.
+
+### Holes are DESIGNED, not typed: `golf/js/holegen.js`
+
+Each hand-authored hole is about sixty coordinate pairs, every one of which has to be re-checked
+against the green's slope grid, the tree belts and the bounds whenever anything moves. That is
+fine for three holes and impossible for thirty-six - and worse, it is impossible to REVIEW: a
+corridor that pinches to nothing at the dogleg looks exactly like one that does not, in a wall of
+numbers.
+
+So a hole is now written as a design spec - a centreline, a fairway width profile, and hazards
+placed as *"at 0.55 of the way round, 18 yards left"* - and `makeHole()` expands it:
+
+- The centreline is a **Catmull-Rom spline resampled by arc length**, so `at: 0.9` really is 90 %
+  of the way round the hole and a dogleg has no corner in its fairway edge.
+- Corridors are **offset polygons** with a **backward-point guard**. That guard is load-bearing:
+  on the inside of a bend the offsets crowd together and eventually march backwards, which turns
+  the polygon into a bow tie - and a self-intersecting polygon makes the ray-cast lie lookup report
+  "outside" for a ball plainly standing on the fairway.
+- **`cardYards` is the measured centreline length** and `bounds` is measured from what was actually
+  built, then padded (45 yds behind the tee, as before). Neither is authored, so neither can go
+  stale when a bunker moves.
+- **The collar is 6 yards on BOTH axes**, not a scaled-up copy of the green. Scaling proportionally
+  looks equivalent and is not: Red Mesa 3's green is 18 x 10, which came out with 6 yards of collar
+  across and 3.3 up the hole - so missing it long landed in the desert, a hazard the player was
+  never shown.
+
+**It emits the documented shape and nothing else.** A generated hole is an ordinary hole object;
+`validateHole()` checks it like any other, and holes 1-3 stay perfectly valid beside it. This is
+the trick `treeBelts` already plays - a compact authoring form expanding into the one runtime form
+- one level up.
+
+**One new field: `route`**, the playing line coarsened to a point every ~25 yards. Art and tests
+only; no rule reads it, exactly like `decor`. It exists because "can this hole be finished?" is a
+question a test can only answer by PLAYING the hole, and a test player that aims at the pin from a
+dogleg tee walks straight into the trees and reports a good hole as broken. Holes 1-3 got one by
+hand, taken off their own fairway midpoints.
+
+### The softlock the 36-hole test found on its first run
+
+`golf/js/test.js` section 14 plays every hole on both courses with clean strikes. It immediately
+found a **shipping softlock**: a ball that finished under a tree canopy was blocked on the very
+first sample of its next shot, dropped where it stood, and was blocked again - **for ever, with the
+meter working perfectly and the ball travelling 0 yards every time.** Fourteen shots, zero yards,
+on Pine Valley 3 and 10, where a hand-placed oak sits in the fairway. Hole 3 has had that oak since
+Stage B.
+
+`treeHit` now says that **where the ball already is cannot be an obstacle to leaving it**: a tree
+the ball is basically touching (inside `trunk + 1.2` yds) is ignored outright, and a tree the ball
+is merely UNDER still blocks with its trunk but not with its canopy. A blocked ball also drops two
+yards SHORT of the contact point rather than on it, because a ball resting exactly on a trunk is a
+ball whose next shot starts inside that trunk. The tree you are ten yards short of - the whole
+point of hole 10 - is unchanged.
+
+### Red Mesa is the opposite of Pine Valley on every axis the engine can express
+
+Not a repaint. A second course only earns its place if it plays differently:
+
+- **The ground is the hazard.** `base` is the desert floor and the turf is a narrow ribbon laid on
+  top of it. On Pine Valley the fairway sits inside rough inside woods; here it simply stops.
+- **The obstacles are not trees.** A **saguaro** (trunk 0.9, canopy 1.8, height 15) cannot be flown
+  by anything in the bag, so it is a pillar to go round. A **palo verde** (0.7 / 6.5 / 8) is the
+  reverse - trivial to fly with a wedge, impossible with a long iron. A **boulder** (3.2 / 3.2 /
+  30) blocks at any height at all. Three genuinely different behaviours out of the same
+  `{trunk, canopy, height}` triple the pines already used, with **no engine change**.
+- **Shorter and tighter**: par 71 over 6,140 against par 72 over 6,489, with narrower corridors and
+  far less rough between the turf and trouble.
+
+**A theme is a PALETTE OVERLAY and nothing else** (`THEMES` in `render.js`) - no new surface kinds,
+no new lie rows, no second renderer. A theme that needed its own surface kind would need its own
+row in the lie table, its own validator entry and its own line in every test, for a colour. Tree
+art is keyed by the TYPE'S NAME, which is why the type tables name their species; an unknown name
+falls back to the theme's canopy, so adding a specimen is a data change.
+
+### Yardages are cut to THE STOCK BAG, not to a real scorecard
+
+Driver 215 + 3 wood 195 is the whole of a two-shot hole, so a par 4 over about 400 yards could not
+be reached in regulation by anyone, ever - it would be a par 5 wearing a 4. Every hole on both
+courses is reachable in regulation with clean strikes, and section 14 asserts it over all 36.
+
+### The round, and what gets written
+
+`golf/js/rounds.js` owns it. Four ways to play each course - **3 holes / front 9 / back 9 /
+18 holes** - plus an unscored **practice hole**. One setup screen does the whole choice: course
+chips swap the picture and the numbers in place, then a 2 x 2 of round buttons each showing that
+round's par, yardage and the player's own best. Two courses of eighteen could have become course
+list -> round list -> hole list, three taps deep before a ball is struck, and on a phone that is
+where a game gets closed.
+
+**The stats write is guarded three ways, and each guard is THE LAW:**
+
+1. **Only a COMPLETE round is recorded.** Every hole in it must carry a score. Recording a round
+   abandoned after three of eighteen holes would store 12 strokes as an EIGHTEEN-hole best, and
+   because bests only ever improve (rule 2) that wrong number could never be corrected by playing
+   better - it would sit at the top of the leaderboard for ever.
+2. **A practice hole never touches `bestRoundByCourse`.** One hole is not a round.
+3. **It runs once**, and **verifies by fresh re-read** (rule 6), logging loudly if the best did not
+   land.
+
+The difficulty bucket is the COURSE ID, following Skeeball's board-as-difficulty precedent: golf
+has no computer opponent and no difficulty setting, so the course is the only honest axis.
+
+### The leaderboard still ranks the three-hole round
+
+`GOLF_BOARD_COURSE` stays `pinevalley3`, deliberately: it is the round a person on a phone actually
+finishes, everyone has the course, and it was already the frozen key. Every other round is still
+stored, still shown on My Stats and still reachable from a player's own leaderboard detail screen
+(rule 1) - it is only the single number on the board that this names. Changing it is one line in
+`js/leaderboard-rank.js`.
+
+`GOLF_COURSE_PAR` there duplicates the eight round pars rather than importing the courses:
+`js/leaderboard-rank.js` is in the service worker's network-first shell tier and is imported by the
+hub's launcher path, so deriving them would drag ~60 KB of polygon data onto the critical path of
+every hub load for eight integers. **`golf/js/test.js` fails if the copy ever disagrees with the
+course data** - that test is the link that keeps it honest.
 
 ## Repo rules that bite in this game specifically
 

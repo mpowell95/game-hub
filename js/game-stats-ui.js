@@ -580,7 +580,21 @@ function battleshipScreen(rec) {
 // `harbor` is deliberately absent. Harbor Links is gone from the product, its stored keys are
 // never written and never read again, and no device has a Harbor record to render - the caps
 // fallback covers the impossible case without naming a course that no longer exists.
-const GOLF_COURSES = { pinevalley3: 'Pine Valley (3 holes)' };
+// The bestRoundByCourse keys, named for a person. A key with no entry here still SHOWS (rule 1) -
+// `golfCourseName` upper-cases it rather than hiding the row - but it shows as gibberish, so a new
+// round key belongs here the day it ships. These are `<course.id><suffix>` (golf/js/rounds.js).
+const GOLF_COURSES = {
+  pinevalley3: 'Pine Valley (3 holes)',
+  pinevalley9: 'Pine Valley (front 9)',
+  pinevalley9b: 'Pine Valley (back 9)',
+  pinevalley18: 'Pine Valley (18 holes)',
+  redmesa3: 'Red Mesa (3 holes)',
+  redmesa9: 'Red Mesa (front 9)',
+  redmesa9b: 'Red Mesa (back 9)',
+  redmesa18: 'Red Mesa (18 holes)',
+  pinevalley: 'Pine Valley',
+  redmesa: 'Red Mesa',
+};
 function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
 
 /** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in

@@ -47,20 +47,73 @@ export const PALETTE = {
   shadow: '#3b4a2a',
   pin: '#e01b1b',
   pinPole: '#f4f4f4',
+  // The two ends of the setup screen's backdrop. It is chrome rather than course, but it belongs
+  // to the theme: a desert course behind a forest-green wash reads as the wrong game.
+  setupA: '#33501d',
+  setupB: '#4a6b28',
 };
 
-const FILL = {
-  fairway: PALETTE.fairwayA,
-  fringe: PALETTE.fringe,
-  lightRough: PALETTE.lightRough,
-  heavyRough: PALETTE.heavyRough,
-  green: PALETTE.green,
-  tee: PALETTE.tee,
-  water: PALETTE.water,
-  fairwayBunker: PALETTE.sand,
-  greensideBunker: PALETTE.sand,
-  trees: '#4a6b28',            // the woods FLOOR; the canopies are drawn on top of it
+/** THE COURSE THEME. `PALETTE` above is Pine Valley's, and it stays the module's default so
+ *  nothing that only wants `PALETTE.pin` has to know a theme exists.
+ *
+ *  A theme is a PALETTE OVERLAY and nothing else - no new surface kinds, no new lie rows, no
+ *  second renderer. That is deliberate and it is what makes a second course cheap: Red Mesa's
+ *  desert is the same nine surfaces Pine Valley uses, painted in sun-bleached tan and terracotta
+ *  with the base surface reading as desert floor rather than as deep rough. A theme that needed
+ *  its own surface kind would need its own row in the lie table, its own validator entry and its
+ *  own line in every test - for a colour.
+ *
+ *  `treeFill` is keyed by the TREE TYPE'S NAME, which is why the type tables name their species.
+ *  An unknown name falls back to the theme's default canopy, so adding a specimen is a data
+ *  change, not a renderer change. */
+export const THEMES = {
+  pine: PALETTE,
+  desert: {
+    ...PALETTE,
+    water: '#2ba3dc',
+    waterEdge: '#63c1ea',
+    fairwayA: '#a3bd57',         // irrigated turf, yellower than parkland grass
+    fairwayB: '#95b04b',
+    lightRough: '#87954a',
+    heavyRough: '#b06a35',       // THE DESERT FLOOR. This is `base` on every hole out here.
+    green: '#a6d861',
+    greenEdge: '#8fc44e',
+    fringe: '#93bd50',
+    tee: '#bcd76a',
+    sand: '#f7efdc',             // whiter than the desert, so a bunker still reads as a bunker
+    sandDot: '#e8dcc0',
+    treeCanopy: '#3f6b34',
+    treeRim: '#26431f',
+    path: '#8a7a63',
+    treesFloor: '#a4642f',       // scrub: the desert floor, a shade deeper
+    setupA: '#8a4a24',
+    setupB: '#b06a35',
+  },
 };
+
+const TREE_FILL = {
+  saguaro: ['#3f7a3a', '#22421f'],
+  paloverde: ['#7f9a3f', '#4c6224'],
+  boulder: ['#8b7f72', '#4d453d'],
+};
+
+/** The paint colour for every surface kind, in one theme. */
+function fillsFor(pal) {
+  return {
+    fairway: pal.fairwayA,
+    fringe: pal.fringe,
+    lightRough: pal.lightRough,
+    heavyRough: pal.heavyRough,
+    green: pal.green,
+    tee: pal.tee,
+    water: pal.water,
+    fairwayBunker: pal.sand,
+    greensideBunker: pal.sand,
+    trees: pal.treesFloor || '#4a6b28',   // the woods FLOOR; canopies are drawn on top of it
+  };
+}
+
+export function paletteFor(theme) { return THEMES[theme] || PALETTE; }
 
 function tracePoly(ctx, poly, toPx) {
   ctx.beginPath();
@@ -72,7 +125,9 @@ function tracePoly(ctx, poly, toPx) {
 }
 
 /** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
-export function buildMap(hole) {
+export function buildMap(hole, theme) {
+  const pal = paletteFor(theme);
+  const FILL = fillsFor(pal);
   const b = hole.bounds;
   const w = Math.ceil((b.maxX - b.minX) * MAP_PPY);
   const h = Math.ceil((b.maxY - b.minY) * MAP_PPY);
@@ -81,14 +136,14 @@ export function buildMap(hole) {
   // World y runs UP the hole; canvas y runs down. The flip lives here and nowhere else.
   const toPx = (x, y) => [(x - b.minX) * MAP_PPY, (b.maxY - y) * MAP_PPY];
 
-  ctx.fillStyle = FILL[hole.base] || PALETTE.heavyRough;
+  ctx.fillStyle = FILL[hole.base] || pal.heavyRough;
   ctx.fillRect(0, 0, w, h);
 
   for (const s of hole.surfaces) {
     const poly = polyOf(s, hole);
     ctx.save();
     tracePoly(ctx, poly, toPx);
-    ctx.fillStyle = FILL[s.kind] || PALETTE.heavyRough;
+    ctx.fillStyle = FILL[s.kind] || pal.heavyRough;
     ctx.fill();
 
     if (s.kind === 'fairway') {
@@ -97,14 +152,14 @@ export function buildMap(hole) {
       ctx.clip();
       const bb = bboxOf(poly);
       const stripe = 7 * MAP_PPY;                      // ~7 yards, a mower's width
-      ctx.fillStyle = PALETTE.fairwayB;
+      ctx.fillStyle = pal.fairwayB;
       const [x0] = toPx(bb.minX, 0);
       const [x1] = toPx(bb.maxX, 0);
       for (let x = x0, i = 0; x < x1; x += stripe, i++) if (i % 2) ctx.fillRect(x, 0, stripe, h);
     } else if (s.kind === 'water') {
       // Flat two-tone water with a lighter shoreline band.
       ctx.save(); ctx.clip();
-      ctx.strokeStyle = PALETTE.waterEdge;
+      ctx.strokeStyle = pal.waterEdge;
       ctx.lineWidth = 3 * MAP_PPY * 0.6;
       tracePoly(ctx, poly, toPx); ctx.stroke();
       ctx.restore();
@@ -112,7 +167,7 @@ export function buildMap(hole) {
       // Dithered speckle in the sand.
       ctx.clip();
       const bb = bboxOf(poly);
-      ctx.fillStyle = PALETTE.sandDot;
+      ctx.fillStyle = pal.sandDot;
       for (let yy = bb.minY; yy < bb.maxY; yy += 1.4) {
         for (let xx = bb.minX; xx < bb.maxX; xx += 1.4) {
           if (((Math.round(xx) + Math.round(yy)) & 3) !== 0) continue;
@@ -121,7 +176,7 @@ export function buildMap(hole) {
         }
       }
     } else if (s.kind === 'green') {
-      ctx.strokeStyle = PALETTE.greenEdge;
+      ctx.strokeStyle = pal.greenEdge;
       ctx.lineWidth = MAP_PPY * 1.2;
       tracePoly(ctx, poly, toPx); ctx.stroke();
     }
@@ -130,7 +185,7 @@ export function buildMap(hole) {
 
   for (const d of hole.decor || []) {
     tracePoly(ctx, d.poly, toPx);
-    ctx.fillStyle = PALETTE.path;
+    ctx.fillStyle = pal.path;
     ctx.fill();
   }
 
@@ -139,7 +194,7 @@ export function buildMap(hole) {
   // with no read at all (golf/CLAUDE.md, "The green and its slope grid").
   const gb = greenBox(hole);
   const sl = hole.green.slope;
-  ctx.strokeStyle = PALETTE.tick;
+  ctx.strokeStyle = pal.tick;
   ctx.lineWidth = Math.max(1, MAP_PPY * 0.5);
   ctx.save();
   tracePoly(ctx, hole.green.poly, toPx);
@@ -159,13 +214,23 @@ export function buildMap(hole) {
   // Trees last: chunky dark canopies with a darker rim, drawn over whatever they stand on.
   for (const t of treesOf(hole)) {
     const type = hole.treeTypes[t.type];
+    const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
     const [px, py] = toPx(t.x, t.y);
-    ctx.beginPath(); ctx.arc(px, py, type.canopy * MAP_PPY, 0, Math.PI * 2);
-    ctx.fillStyle = PALETTE.treeCanopy; ctx.fill();
-    ctx.lineWidth = Math.max(1, MAP_PPY * 0.7); ctx.strokeStyle = PALETTE.treeRim; ctx.stroke();
+    // A saguaro is drawn at its TRUNK, not its canopy: it is a pillar, and a 1.8 yd disc is what
+    // the ball actually has to miss. Everything else is drawn at the canopy it blocks with, so
+    // what is painted is what stops the ball.
+    const r = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.lineWidth = Math.max(1, MAP_PPY * 0.7); ctx.strokeStyle = rim; ctx.stroke();
+    if (type.name === 'saguaro') {                       // two arms, so it reads as a cactus
+      ctx.fillStyle = fill;
+      ctx.fillRect(px - r * 2.1, py - r * 0.4, r * 1.3, r * 0.8);
+      ctx.fillRect(px + r * 0.8, py - r * 1.4, r * 0.8, r * 1.3);
+    }
   }
 
-  return { canvas: cv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h };
+  return { canvas: cv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }
 
 /** The camera: what world point sits at the centre of the view, and how many px a yard is. */
@@ -188,6 +253,7 @@ export function makeCamera(hole, viewW, viewH) {
 
 /** Draw one frame. `st` is the whole view state; this function reads it and never writes it. */
 export function drawFrame(ctx, map, hole, cam, st) {
+  const pal = map.pal || PALETTE;
   const { width: W, height: H } = ctx.canvas;
   const dpr = st.dpr || 1;
   const viewW = W / dpr;
@@ -204,7 +270,7 @@ export function drawFrame(ctx, map, hole, cam, st) {
   const srcY = (map.maxY - (cam.y + cam.halfH)) * map.ppy;
   const srcW = cam.halfW * 2 * map.ppy;
   const srcH = cam.halfH * 2 * map.ppy;
-  ctx.fillStyle = PALETTE.heavyRough;
+  ctx.fillStyle = pal.heavyRough;
   ctx.fillRect(0, 0, viewW, viewH);
   ctx.drawImage(map.canvas, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
 
@@ -212,9 +278,9 @@ export function drawFrame(ctx, map, hole, cam, st) {
   const px = sx(hole.pin[0]);
   const py = sy(hole.pin[1]);
   if (!st.holed) {
-    ctx.fillStyle = PALETTE.pinPole;
+    ctx.fillStyle = pal.pinPole;
     ctx.fillRect(Math.round(px) - 1, Math.round(py) - 22, 2, 22);
-    ctx.fillStyle = PALETTE.pin;
+    ctx.fillStyle = pal.pin;
     ctx.beginPath();
     ctx.moveTo(Math.round(px) + 1, Math.round(py) - 22);
     ctx.lineTo(Math.round(px) + 13, Math.round(py) - 17);
@@ -245,11 +311,11 @@ export function drawFrame(ctx, map, hole, cam, st) {
 
     // THE LINE IS BLUE UP TO THE 100 % DOT AND RED PAST IT. Matt's call, 2026-09-04.
     ctx.lineWidth = 2;
-    ctx.strokeStyle = PALETTE.aimLine;
+    ctx.strokeStyle = pal.aimLine;
     let [lx, ly] = at(0); ctx.beginPath(); ctx.moveTo(lx, ly);
     [lx, ly] = at(fullAt); ctx.lineTo(lx, ly); ctx.stroke();
     if (endAt > fullAt) {
-      ctx.strokeStyle = PALETTE.aimRisk;
+      ctx.strokeStyle = pal.aimRisk;
       ctx.beginPath();
       [lx, ly] = at(fullAt); ctx.moveTo(lx, ly);
       [lx, ly] = at(endAt); ctx.lineTo(lx, ly); ctx.stroke();
@@ -260,7 +326,7 @@ export function drawFrame(ctx, map, hole, cam, st) {
       const sz = d.risk ? 5 : 7;
       ctx.fillStyle = '#5c0d0d';
       ctx.fillRect(Math.round(dx) - sz / 2 - 1, Math.round(dy) - sz / 2 - 1, sz + 2, sz + 2);
-      ctx.fillStyle = PALETTE.aim;
+      ctx.fillStyle = pal.aim;
       ctx.fillRect(Math.round(dx) - sz / 2, Math.round(dy) - sz / 2, sz, sz);
     }
   }
@@ -285,10 +351,10 @@ export function drawFrame(ctx, map, hole, cam, st) {
     const by = Math.round(sy(st.ball[1]));
     const lift = Math.round((st.height || 0) * cam.ppy * 0.55);
     if (lift > 1) {
-      ctx.fillStyle = PALETTE.shadow;
+      ctx.fillStyle = pal.shadow;
       ctx.fillRect(bx - 2, by - 2, 4, 4);
     }
-    ctx.fillStyle = PALETTE.ball;
+    ctx.fillStyle = pal.ball;
     ctx.fillRect(bx - 3, by - lift - 3, 6, 6);
   }
 
