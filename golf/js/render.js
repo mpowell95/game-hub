@@ -15,9 +15,24 @@ import { polyOf, treesOf, greenBox, bboxOf } from './holes.js';
 /** Course pixels per yard in the offscreen map. Low on purpose: this IS the pixel size. */
 export const MAP_PPY = 2.4;
 
-/** How wide a slice of the hole the player sees, in yards. A fairway is ~30 yds across, so 70
- *  frames the corridor plus its rough with room to see a ball pushed offline. */
-export const VIEW_W_YDS = 70;
+/** How wide a slice of the hole the player sees, in yards.
+ *
+ *  95 (Matt, 2026-09-04: "make the default view a little more zoomed out"). It was 70, which
+ *  framed the fairway and its rough and almost nothing else - measured on Pine Valley 1 at
+ *  393 x 852, the view was 152 yds deep, so a driver's landing area was off the top of the screen
+ *  and two of the five aim dots had nowhere to be drawn. At 95 the view is 206 yds deep, the tree
+ *  belts and the water down the left are both visible from the tee, and the map is still upscaled
+ *  1.7x on screen (MAP_PPY is 2.4 px/yd) so the pixel-art look is untouched. Past about 164 the
+ *  map would be DOWNscaled and start to shimmer; that is the real ceiling, not taste. */
+export const VIEW_W_YDS = 95;
+
+/** ...and how wide the view is ON THE GREEN.
+ *
+ *  A putt is measured in FEET. Reading a 6 ft putt across 95 yards of screen is reading it across
+ *  2 % of the frame, and the break - one cup width over 20 ft - is then sub-pixel. The view has
+ *  never tightened for putting; zooming the full-shot view out without this would have made every
+ *  putt harder to read in exchange for a better tee shot. */
+export const VIEW_W_GREEN_YDS = 34;
 
 // Measured off a native reference frame (§15.1) where the source says so; the rest are ours,
 // chosen to sit in the same 16-bit family.
@@ -233,20 +248,36 @@ export function buildMap(hole, theme) {
   return { canvas: cv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }
 
-/** The camera: what world point sits at the centre of the view, and how many px a yard is. */
-export function makeCamera(hole, viewW, viewH) {
-  const ppy = viewW / VIEW_W_YDS;
+/** The camera: what world point sits at the centre of the view, and how many px a yard is.
+ *
+ *  It keeps the ELEMENT's pixel size so it can re-derive its own scale: `setWidth(yds)` is how the
+ *  view tightens on the green and opens back up for a full shot, without ui.js having to know the
+ *  arithmetic or re-measure the canvas. */
+export function makeCamera(hole, viewW, viewH, widthYds = VIEW_W_YDS) {
+  const b = hole.bounds;
+  const ppy = viewW / widthYds;
   const halfW = viewW / 2 / ppy;
   const halfH = viewH / 2 / ppy;
-  const b = hole.bounds;
   return {
+    viewW, viewH, widthYds,
     ppy, halfW, halfH,
     x: hole.tee[0], y: hole.tee[1],
+    setWidth(yds) {
+      this.widthYds = yds;
+      this.ppy = this.viewW / yds;
+      this.halfW = this.viewW / 2 / this.ppy;
+      this.halfH = this.viewH / 2 / this.ppy;
+    },
+    // READS `this.halfW` / `this.halfH`, NOT THE CAPTURED LOCALS. It used to close over the
+      // constructor's values, which was invisible while the camera's scale could never change -
+      // and wrong the instant `setWidth` existed: tightening to 30 yds on the green left the clamp
+      // still enforcing a 95-yd frame, so it dragged the view 30 yds off the ball and pinned the
+      // pin off the top of the screen. Measured: cam.y clamped to 332 against a ball at 363.5.
     clamp() {
       const spanX = b.maxX - b.minX;
-      this.x = spanX <= halfW * 2 ? (b.minX + b.maxX) / 2
-        : Math.min(b.maxX - halfW, Math.max(b.minX + halfW, this.x));
-      this.y = Math.min(b.maxY - halfH, Math.max(b.minY + halfH, this.y));
+      this.x = spanX <= this.halfW * 2 ? (b.minX + b.maxX) / 2
+        : Math.min(b.maxX - this.halfW, Math.max(b.minX + this.halfW, this.x));
+      this.y = Math.min(b.maxY - this.halfH, Math.max(b.minY + this.halfH, this.y));
     },
   };
 }
