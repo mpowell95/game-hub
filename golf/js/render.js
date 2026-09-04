@@ -41,7 +41,8 @@ export const PALETTE = {
   path: '#6b7a63',
   tick: '#5c8038',             // the green's slope read
   aim: '#e02424',
-  aimRisk: '#ff5a1f',
+  aimLine: '#2f6fe0',          // the line is BLUE up to the 100 % dot (Matt, 2026-09-04)
+  aimRisk: '#e02424',          // ...and RED past it. Every DOT is red, whatever the line is doing.
   ball: '#ffffff',
   shadow: '#3b4a2a',
   pin: '#e01b1b',
@@ -228,36 +229,50 @@ export function drawFrame(ctx, map, hole, cam, st) {
   // Dot N is where the ball LANDS at 25/50/75/100 % of the club's distance from this lie; dot 5
   // marks the over-swing risk band, and the line turns red past dot 4. Their spacing is the
   // label - nothing on screen names them.
-  if (st.aimDots && st.aimDots.length && !st.hideAim) {
+  if (!st.hideAim && ((st.aimDots && st.aimDots.length) || st.puttLine)) {
     const cos = Math.cos(st.aimRad);
     const sin = Math.sin(st.aimRad);
     const at = (d) => [sx(st.ball[0] + sin * d), sy(st.ball[1] + cos * d)];
-    const last = st.aimDots[st.aimDots.length - 2];
+    // On the green the ladder is the PUTTER's range, and like the reference's it runs straight
+    // past the cup - the dots are what you gauge power against, so stopping them at the hole left
+    // nothing to read.
+    const dots = (st.aimDots && st.aimDots.length)
+      ? st.aimDots
+      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * f, risk: false }));
+    const full = dots.find((d) => !d.risk && d.at === Math.max(...dots.filter((x) => !x.risk).map((x) => x.at)));
+    const fullAt = full ? full.at : dots[dots.length - 1].at;
+    const endAt = dots[dots.length - 1].at;
+
+    // THE LINE IS BLUE UP TO THE 100 % DOT AND RED PAST IT. Matt's call, 2026-09-04.
     ctx.lineWidth = 2;
-    ctx.strokeStyle = PALETTE.aim;
-    ctx.beginPath();
-    let [lx, ly] = at(0); ctx.moveTo(lx, ly);
-    [lx, ly] = at(last.at); ctx.lineTo(lx, ly); ctx.stroke();
-    ctx.strokeStyle = PALETTE.aimRisk;
-    ctx.beginPath();
-    [lx, ly] = at(last.at); ctx.moveTo(lx, ly);
-    [lx, ly] = at(st.aimDots[st.aimDots.length - 1].at); ctx.lineTo(lx, ly); ctx.stroke();
-    for (const d of st.aimDots) {
+    ctx.strokeStyle = PALETTE.aimLine;
+    let [lx, ly] = at(0); ctx.beginPath(); ctx.moveTo(lx, ly);
+    [lx, ly] = at(fullAt); ctx.lineTo(lx, ly); ctx.stroke();
+    if (endAt > fullAt) {
+      ctx.strokeStyle = PALETTE.aimRisk;
+      ctx.beginPath();
+      [lx, ly] = at(fullAt); ctx.moveTo(lx, ly);
+      [lx, ly] = at(endAt); ctx.lineTo(lx, ly); ctx.stroke();
+    }
+    // EVERY dot is red, on either side of 100 %.
+    for (const d of dots) {
       const [dx, dy] = at(d.at);
-      ctx.fillStyle = d.risk ? PALETTE.aimRisk : PALETTE.aim;
-      const s = d.risk ? 5 : 6;
-      ctx.fillRect(Math.round(dx) - s / 2, Math.round(dy) - s / 2, s, s);
+      const sz = d.risk ? 5 : 7;
+      ctx.fillStyle = '#5c0d0d';
+      ctx.fillRect(Math.round(dx) - sz / 2 - 1, Math.round(dy) - sz / 2 - 1, sz + 2, sz + 2);
+      ctx.fillStyle = PALETTE.aim;
+      ctx.fillRect(Math.round(dx) - sz / 2, Math.round(dy) - sz / 2, sz, sz);
     }
-  } else if (st.puttLine && !st.hideAim) {
-    // On the green the ladder becomes smaller dots along the putt's line (§4).
-    const cos = Math.cos(st.aimRad);
-    const sin = Math.sin(st.aimRad);
-    ctx.fillStyle = PALETTE.aim;
-    for (let d = 0.6; d <= st.puttLine; d += 0.7) {
-      const dx = sx(st.ball[0] + sin * d);
-      const dy = sy(st.ball[1] + cos * d);
-      ctx.fillRect(Math.round(dx) - 1.5, Math.round(dy) - 1.5, 3, 3);
-    }
+  }
+
+  // --- the golfer -----------------------------------------------------------
+  // A small pixel figure stands at the ball: white cap with a black outline, skin-tone face, grey
+  // polo and trousers, a dark club down to its head. Measured off the reference at ~75x100 of a
+  // 1206-wide frame, so about 6 % of the screen's width. It is hidden while the ball is away.
+  if (st.golfer && !st.holed) {
+    const gx = Math.round(sx(st.ball[0]));
+    const gy = Math.round(sy(st.ball[1]));
+    drawGolfer(ctx, gx, gy, Math.max(18, Math.min(34, viewW * 0.07)), st.swingPose || 0);
   }
 
   // --- the ball, and its shadow ---------------------------------------------
@@ -278,4 +293,34 @@ export function drawFrame(ctx, map, hole, cam, st) {
   }
 
   ctx.restore();
+}
+
+/** The golfer, in whole pixels. `w` is the sprite's width; it is drawn standing to the LEFT of the
+ *  ball with its feet on the ball's own ground line, so the ball is never hidden by it.
+ *
+ *  `pose` 0 is address; 1 and 2 are the backswing and the through-swing. The reference plays a
+ *  real multi-pose animation as the camera starts to scroll - it is not a static sprite that
+ *  vanishes - and the whole thing is four rectangles and a line, so there is no reason not to. */
+export function drawGolfer(ctx, bx, by, w, pose) {
+  const u = Math.max(1, Math.round(w / 8));          // one "pixel" of the sprite
+  const x = bx - u * 6;                              // stand clear of the ball
+  const y = by;
+  const px = (cx, cy, cw, ch, fill) => { ctx.fillStyle = fill; ctx.fillRect(x + cx * u, y + cy * u, cw * u, ch * u); };
+
+  // club: swings through three poses
+  ctx.strokeStyle = '#1b1f14';
+  ctx.lineWidth = Math.max(1.5, u * 0.7);
+  ctx.beginPath();
+  ctx.moveTo(x + 4 * u, y - 5 * u);
+  if (pose === 1) ctx.lineTo(x - 1 * u, y - 11 * u);       // backswing, club up and behind
+  else if (pose === 2) ctx.lineTo(x + 10 * u, y - 9 * u);  // through-swing, club up and ahead
+  else ctx.lineTo(x + 7 * u, y - 0.2 * u);                 // address, club head at the ball
+  ctx.stroke();
+
+  px(1, -3, 4, 3, '#8e969e');        // trousers
+  px(1, -7, 4, 4, '#e7ebef');        // polo
+  px(1.5, -9.5, 3, 2.5, '#d9a06a');  // face
+  px(0.5, -12, 5, 2.5, '#ffffff');   // cap
+  px(0.5, -12, 5, 0.6, '#1b1f14');   // cap outline
+  px(4.6, -11, 2, 0.9, '#ffffff');   // cap brim
 }

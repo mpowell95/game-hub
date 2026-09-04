@@ -112,9 +112,12 @@
   position: absolute;
   right: max(10px, env(safe-area-inset-right));
   top: calc(8px + var(--gf-top-pad, 0px));
-  text-align: center; font-size: 12px; min-width: 56px;
+  text-align: center; font-size: 12px; min-width: 62px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
 }
-.gf-root .gf-tr b { display: block; font-size: 13px; }
+.gf-root .gf-tr b { display: block; font-size: 15px; font-weight: 800; }
+.gf-root .gf-windarrow { display: block; line-height: 0; }
+.gf-root .gf-windarrow svg { display: block; }
 
 /* Bottom cluster: everything interactive lives in the thumb zone (§3.2). */
 .gf-root .gf-bl {
@@ -129,9 +132,16 @@
   min-width: 74px; font-size: 13px; font-weight: 700;
 }
 .gf-root .gf-clubrow { display: flex; align-items: stretch; gap: 6px; }
-.gf-root .gf-clubtile { min-width: 104px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.gf-root .gf-clubname { font-size: 14px; font-weight: 700; }
-.gf-root .gf-clubart { display: block; }
+/* The tile is mostly PICTURE, like the reference: the club head spans the tile and the name sits
+   under it in big type. It used to be a thumbnail in a box twice its size. */
+.gf-root .gf-clubtile {
+  min-width: 118px; width: 118px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 5px 6px 6px;
+}
+.gf-root .gf-clubartwrap { display: block; width: 100%; height: 42px; }
+.gf-root .gf-clubart { display: block; width: 100%; height: 100%; }
+.gf-root .gf-clubname { font-size: 16px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
 .gf-root .gf-clubcol { display: flex; flex-direction: column; gap: 6px; }
 
 .gf-root .gf-br {
@@ -184,3 +194,33 @@
 @media (prefers-reduced-motion: reduce) {
   .gf-root .gf-tc { transition: none; }
 }
+
+/* --- the hole result ------------------------------------------------------------------------
+   Holing out used to do nothing at all: no score, no card, no way on to the next hole. The full
+   sunburst banner and nine-column scorecard are Stage C; this is the honest minimum until then. */
+.gf-root .gf-result {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 12, 4, 0.62);
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.gf-root .gf-result__card { position: relative; width: 100%; max-width: 320px; text-align: center; padding: 18px 16px 16px; }
+.gf-root .gf-result__x {
+  position: absolute; top: 4px; right: 6px;
+  background: none; border: 0; color: var(--gf-ink);
+  font-size: 24px; line-height: 1; padding: 6px 10px; cursor: pointer;
+  min-width: 44px; min-height: 44px;
+}
+.gf-root .gf-result__name { font-size: 30px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-result__sub { font-size: 13px; color: var(--gf-dim); margin-top: 3px; }
+.gf-root .gf-result__card-grid { display: flex; gap: 5px; justify-content: center; margin: 14px 0 8px; }
+.gf-root .gf-cell {
+  flex: 1; max-width: 56px; border: 1px solid rgba(255,255,255,.7);
+  display: flex; flex-direction: column; padding: 4px 0;
+}
+.gf-root .gf-cell span { font-size: 11px; color: var(--gf-dim); }
+.gf-root .gf-cell b { font-size: 17px; font-weight: 800; }
+.gf-root .gf-cell.is-now { background: rgba(255,255,255,.14); border-color: #fff; }
+.gf-root .gf-result__total { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.gf-root .gf-result .gf-actions { justify-content: center; }
