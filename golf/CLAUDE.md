@@ -509,6 +509,50 @@ Fixing the HUD's club display gave it its own auto-pick fallback while `_fire` s
 field, so the tile could name one club while the shot swung another. `_activeClub()` is the single
 resolver both use.
 
+## The second playtest, and going back to the REFERENCE footage (2026-09-04)
+
+Matt played again and listed ten problems. The important part is WHY most of them existed: the
+first playtest analysis sampled at **1 frame per second**, which cannot contain a ball bouncing, a
+meter sweeping, or a line's colour - and worse, the two clips watched were **Matt playing our
+build**, not the reference. Answers about "how should it work" were inherited from a spec another
+session wrote rather than measured. This pass went to the original recordings and measured them.
+
+**How to watch these clips properly**: they are in Dropbox under `/Claude Code Refs/`. There is no
+video skill and no ffmpeg in the container - fetch a static ffmpeg build, pull the clip, and
+extract. **1 fps is only a survey.** Anything about motion needs 15-30 fps over a named window, and
+anything about colour or a small glyph needs a FULL-RESOLUTION crop, not a downscaled contact
+sheet.
+
+### What the reference actually does
+
+- **The ball spends half the shot ON THE GROUND.** Measured at 30 fps across the whole drive in
+  `Pixel golf - hole 1.mp4`: swing animation 19.5-20.6 s, still to 21.5, ball climbing to 22.3,
+  camera tracking the flight 22.3-25.0 (2.7 s), then **bounce and roll 25.0-28.4 (3.4 s)** with the
+  motion decaying in stages, at rest 28.4. Ours stopped dead on touchdown. `ROLL_DECEL` (4.3 yd/s²)
+  and `groundPoint()` in `shot.js` are that phase; `rollMs()` gives a driver's 17 yd rollout 2.8 s.
+- **The putt's aim line runs PAST the cup.** At 67.0 s, a 17 ft putt shows dots continuing off the
+  green and into the trees. They are a power ladder like any other shot's. Ours stopped the line at
+  the hole, which left nothing to gauge power against.
+- **Wind reads `wind` / an arrow glyph / a NUMBER.** Never the word "calm", which we invented.
+- **The club tile is mostly picture** - a large club head across the tile with a big name beneath.
+- **There IS a golfer**: white cap with a black outline, skin face, grey polo and trousers, a dark
+  club. About 6 % of the screen's width, present at address and on the green.
+- **The two numbers are both in the reference and both unlabelled**: top centre is distance to the
+  hole, the ring's hub is the LAST SHOT. That is the spec's own flaw 5, and it is why Matt asked
+  "42.2 feet... 6.7 ft. Which is it?". Ours now labels the hub one.
+- **The meter's geometry was already right; its WEIGHT was not.** The original has a thick banded
+  arc with a bold white outline and a diagonal hatch, chunky pixel tick numbers, a thin green
+  stripe just before 100, a striped over-swing tab that juts past the arc's end, and the accuracy
+  bar nested in the ring's own bottom opening.
+- **At address the reference draws NO connecting line**, only discrete markers. The blue-to-100-
+  then-red line with all-red dots is Matt's own design call, not a reference behaviour.
+
+### And free look had to HOLD
+
+It eased back the instant the finger lifted, giving about half a second to look at a green 200 yds
+away. The reference player scrolls up and studies the hole for twelve seconds. It now holds where
+you leave it and returns on a TAP or when a swing begins.
+
 ### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds

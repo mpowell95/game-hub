@@ -17,11 +17,25 @@ import PINE_VALLEY from '../courses/pinevalley.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, RING_MAX } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, puttRangeFt, FT_PER_YD } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE } from './render.js';
 import { STRINGS } from './strings.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
+
+function esc(v) {
+  return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** The wind indicator, drawn the way the reference draws it: a chunky arrow glyph plus the speed
+ *  as a bare number. It shows the arrow AT ZERO too - the reference does, and Matt's note was that
+ *  ours said "Wind Calm", which is a phrase the original never uses. The arrow is greyed and
+ *  points up while there is no wind; when wind ships, it rotates and brightens. */
+function windArrow(deg, calm = true) {
+  return `<svg width="26" height="26" viewBox="0 0 16 16" aria-hidden="true" style="transform:rotate(${deg}deg)">
+    <path d="M8 1 L13 9 L9 9 L9 15 L7 15 L7 9 L3 9 Z" fill="${calm ? '#7d8a6d' : '#e8f0dc'}" stroke="#0d1208" stroke-width="1"/>
+  </svg>`;
+}
 const t = makeT(STRINGS);
 
 const AIM_STEP_DEG = 1.5;        // §4, ours: 1.5 deg at 215 yds moves the landing about 5.6 yds
@@ -49,14 +63,28 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* best effort */ }
 }
 
-/** Club-head art: a driver's big wood, an iron's angled blade, a wedge's steeper one, the putter's
- *  flat blade. Drawn rather than named so the tile reads at a glance, same as the reference. */
+/** Club-head art, drawn BIG enough to fill its tile.
+ *
+ *  The reference's club tile is mostly picture: a large club head across most of the tile's width
+ *  with the name in big type beneath it. Ours was a 34x22 thumbnail floating in a box more than
+ *  twice its size - Matt: "the club image and the club name 'driver' take up less than half of the
+ *  space the box takes up. fix it by filling the box." */
 function clubArt(id) {
-  const c = '#d8dee6'; const d = '#5c6672';
-  if (id === 'putter') return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><rect x="3" y="9" width="24" height="6" fill="${c}" stroke="${d}"/><rect x="25" y="2" width="3" height="13" fill="${d}"/></svg>`;
-  if (id === 'driver' || id.endsWith('wood')) return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><ellipse cx="13" cy="13" rx="11" ry="7" fill="${c}" stroke="${d}"/><rect x="22" y="1" width="3" height="12" fill="${d}"/></svg>`;
+  const metal = '#d8dee6'; const dark = '#5c6672'; const shaft = '#2b3138';
+  const wrap = (inner) => `<svg class="gf-clubart" viewBox="0 0 80 46" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${inner}</svg>`;
+  if (id === 'putter') {
+    return wrap(`<rect x="6" y="24" width="52" height="12" fill="${metal}" stroke="${dark}" stroke-width="2"/>
+      <rect x="52" y="4" width="6" height="24" fill="${shaft}"/>`);
+  }
+  if (id === 'driver' || id.endsWith('wood')) {
+    return wrap(`<ellipse cx="28" cy="30" rx="24" ry="14" fill="${metal}" stroke="${dark}" stroke-width="2"/>
+      <ellipse cx="22" cy="27" rx="9" ry="5" fill="#eef2f6"/>
+      <rect x="46" y="2" width="6" height="26" fill="${shaft}"/>`);
+  }
   const wedge = id.endsWith('wedge');
-  return `<svg class="gf-clubart" width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><path d="${wedge ? 'M5 18 L11 6 L20 8 L16 19 Z' : 'M6 18 L10 7 L19 9 L16 19 Z'}" fill="${c}" stroke="${d}"/><rect x="18" y="1" width="3" height="10" fill="${d}"/></svg>`;
+  return wrap(`<path d="${wedge ? 'M10 40 L24 12 L46 17 L36 42 Z' : 'M12 40 L22 14 L44 19 L36 42 Z'}"
+      fill="${metal}" stroke="${dark}" stroke-width="2"/>
+    <rect x="40" y="2" width="6" height="20" fill="${shaft}"/>`);
 }
 
 class GolfGame {
@@ -263,6 +291,7 @@ class GolfGame {
     this.previewDx = 0;
     this.previewDy = 0;
     this.dragging = false;
+    this.returning = false;
     this.swing = new Swing();
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
@@ -315,7 +344,8 @@ class GolfGame {
 
         <div class="gf-tr gf-panel">
           <span>${t('wind')}</span>
-          <b data-role="wind">${t('calm')}</b>
+          <span class="gf-windarrow" data-role="windarrow">${windArrow(0)}</span>
+          <b data-role="wind">0</b>
         </div>
 
         <div class="gf-bl">
@@ -326,7 +356,7 @@ class GolfGame {
           </div>
           <div class="gf-clubrow">
             <div class="gf-panel gf-clubtile">
-              <span data-role="clubart"></span>
+              <span class="gf-clubartwrap" data-role="clubart"></span>
               <span class="gf-clubname" data-role="clubname"></span>
             </div>
             <div class="gf-clubcol">
@@ -337,7 +367,7 @@ class GolfGame {
         </div>
 
         <div class="gf-br">
-          <canvas class="gf-meter" data-role="meter" width="150" height="156" aria-hidden="true"></canvas>
+          <canvas class="gf-meter" data-role="meter" width="164" height="182" aria-hidden="true"></canvas>
           <button type="button" class="gf-btn gf-swing" data-role="swing" aria-label="${t('a11y_swing')}"><span>${t('swing')}</span></button>
         </div>
       </div>`;
@@ -405,30 +435,32 @@ class GolfGame {
     //      mid-look. Pointer capture makes that unnecessary.
     // `this.dragging`, not a closure local: the render loop reads it to know whether to ease the
     // free look back to the ball, and a local here would leave it easing back UNDER the finger.
-    let startX = 0; let startY = 0; let baseX = 0; let baseY = 0;
+    let startX = 0; let startY = 0; let baseX = 0; let baseY = 0; let moved = 0;
     this.dragging = false;
     this._on(this.canvas, 'pointerdown', (ev) => {
       if (this.anim) { this._skipAnim(); return; }
-      this.dragging = true;
+      this.dragging = true; moved = 0; this.returning = false;
       startX = ev.clientX; startY = ev.clientY;
       baseX = this.previewDx; baseY = this.previewDy;
       this.canvas.setPointerCapture?.(ev.pointerId);
     });
     this._on(this.canvas, 'pointermove', (ev) => {
       if (!this.dragging || !this.cam) return;
+      moved = Math.max(moved, Math.hypot(ev.clientX - startX, ev.clientY - startY));
       this.previewDx = baseX - (ev.clientX - startX) / this.cam.ppy;
       this.previewDy = baseY + (ev.clientY - startY) / this.cam.ppy;
       this._clampPreview();
-      const moved = Math.hypot(this.previewDx, this.previewDy);
       // The lie tile and the yardage fade while the view is away from the ball, and snap back when
       // it returns - the reference's own idea, and a good one: it says "this is not your shot".
-      this.el.tc.setAttribute('data-faded', moved > 4 ? '1' : '0');
+      this.el.tc.setAttribute('data-faded', Math.hypot(this.previewDx, this.previewDy) > 4 ? '1' : '0');
     });
     const release = (ev) => {
       if (!this.dragging) return;
       this.dragging = false;
       this.canvas.releasePointerCapture?.(ev && ev.pointerId);
-      this.el.tc.setAttribute('data-faded', '0');
+      // A TAP (no real drag) snaps the view back to the ball. A drag HOLDS, so the player can
+      // study the green for as long as they like.
+      if (moved < 8) { this.returning = true; this.el.tc.setAttribute('data-faded', '0'); }
     };
     this._on(this.canvas, 'pointerup', release);
     this._on(this.canvas, 'pointercancel', release);
@@ -463,6 +495,7 @@ class GolfGame {
     if (this.holed) { this._renderSetup(); return; }
     const now = performance.now();
     const r = this.swing.tap(now);
+    if (r === 'begin') this.returning = true;      // the view comes home when the stroke starts
     if (r === 'fire') this._fire();
     this._paintHud();
   }
@@ -493,7 +526,68 @@ class GolfGame {
    *  changing about it (§13 flaw 7). Ours is ~4.5 s and skippable. */
   _skipAnim() {
     if (!this.anim) return;
-    this.anim.t0 = performance.now() - this.anim.dur - 1;
+    const total = this.anim.dur + (this.anim.res && this.anim.res.rollMs ? this.anim.res.rollMs : 0);
+    this.anim.t0 = performance.now() - total - 1;
+  }
+
+  /** Score name for a hole, the way a scorecard says it. */
+  _scoreName(strokes, par) {
+    if (strokes === 1) return t('score_ace');
+    const d = strokes - par;
+    if (d <= -3) return t('score_albatross');
+    if (d === -2) return t('score_eagle');
+    if (d === -1) return t('score_birdie');
+    if (d === 0) return t('score_par');
+    if (d === 1) return t('score_bogey');
+    if (d === 2) return t('score_double');
+    return t('score_over', { n: d });
+  }
+
+  /** THE HOLE IS OVER, AND THE GAME SAYS SO. Matt: "I just holed out and nothing at all happened.
+   *  Nothing saying my score, nothing asking if i wanted to play the next hole... It didn't even
+   *  indicate that i had finished the hole."
+   *
+   *  The full sunburst banner and the nine-column scorecard are Stage C; this is the honest
+   *  minimum in the meantime - it names the score, shows the card so far, and offers the next
+   *  hole. It gets a close (X) top-right, per the repo's win/lose popup rule. */
+  _showHoleResult() {
+    const hole = this.hole;
+    const strokes = this.shotN - 1;
+    this.scores[this.holeIdx] = strokes;
+    const last = this.holeIdx >= this.course.holes.length - 1 || this.roundKind === 'practice';
+    const played = this.scores.filter((v) => Number.isFinite(v));
+    const parSoFar = this.course.holes.slice(0, this.holeIdx + 1)
+      .filter((h, i) => Number.isFinite(this.scores[i])).reduce((a, h) => a + h.par, 0);
+    const toPar = played.reduce((a, v) => a + v, 0) - parSoFar;
+    const toParTxt = toPar === 0 ? t('to_par_even')
+      : toPar < 0 ? t('to_par_under', { n: -toPar }) : t('to_par_over', { n: toPar });
+
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel">
+        <button type="button" class="gf-result__x" data-role="res-close" aria-label="${t('back')}">&times;</button>
+        <div class="gf-result__name">${esc(this._scoreName(strokes, hole.par))}</div>
+        <div class="gf-result__sub">${esc(t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
+        <div class="gf-result__card-grid">
+          ${this.course.holes.map((h, i) => `<div class="gf-cell${i === this.holeIdx ? ' is-now' : ''}">
+            <span>${h.n}</span><b>${Number.isFinite(this.scores[i]) ? this.scores[i] : '-'}</b></div>`).join('')}
+        </div>
+        <div class="gf-result__total">${esc(toParTxt)}</div>
+        <div class="gf-actions">
+          ${last ? `<button type="button" class="gf-btn" data-role="res-done"><span>${t('finish')}</span></button>`
+    : `<button type="button" class="gf-btn" data-role="res-next"><span>${t('next_hole')}</span></button>`}
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    const close = () => { el.remove(); this._renderSetup(); };
+    this._on(el.querySelector('[data-role="res-close"]'), 'click', close);
+    const done = el.querySelector('[data-role="res-done"]');
+    if (done) this._on(done, 'click', close);
+    const next = el.querySelector('[data-role="res-next"]');
+    if (next) {
+      this._on(next, 'click', () => { el.remove(); this.holeIdx += 1; this._enterHole(); });
+    }
   }
 
   _settleShot() {
@@ -507,7 +601,13 @@ class GolfGame {
     // were still watching the flight (Matt's playtest, 2026-09-04).
     this.lastShotYd = distYd(from, a.res.rest);
     // Any shot can be holed, not just a putt: a pitch that drops, a wood that rolls in.
-    if (a.res.holed) { this.holed = true; this.swing.settle(performance.now()); this._paintHud(); return; }
+    if (a.res.holed) {
+      this.holed = true;
+      this.swing.settle(performance.now());
+      this._paintHud();
+      setTimeout(() => { if (!this.destroyed) this._showHoleResult(); }, 700);
+      return;
+    }
     this.shotN += 1;
     this.swing.settle(performance.now());
     this.aimRad = this._bearingToPin();
@@ -581,130 +681,196 @@ class GolfGame {
       const p = Math.min(1, (now - this.anim.t0) / Math.max(1, this.anim.dur));
       if (this.anim.type === 'flight') {
         const r = this.anim.res;
-        const f = flightPoint(p, r.carry * (r.blocked ? r.blocked.p : 1), r.sideYd * (r.blocked ? r.blocked.p : 1), r.apex);
-        const cos = Math.cos(r.aimRad); const sin = Math.sin(r.aimRad);
-        ballPos = [this.ball[0] + sin * f.along + cos * f.side, this.ball[1] + cos * f.along - sin * f.side];
-        height = f.height;
-        // The camera TRACKS the ball in flight, scrolling the course past at flight speed.
+        const el = now - this.anim.t0;
+        const roll = r.rollMs || 0;
+        if (el < this.anim.dur) {
+          const f = flightPoint(p, r.carry * (r.blocked ? r.blocked.p : 1), r.sideYd * (r.blocked ? r.blocked.p : 1), r.apex);
+          const cos = Math.cos(r.aimRad); const sin = Math.sin(r.aimRad);
+          ballPos = [this.ball[0] + sin * f.along + cos * f.side, this.ball[1] + cos * f.along - sin * f.side];
+          height = f.height;
+        } else {
+          // THE GROUND PHASE. Measured off the reference at 30 fps: the ball spends 3.4 s bouncing
+          // and rolling against 2.7 s in the air, decaying in stages rather than stopping. Ours
+          // used to jump straight to the rest position the instant it touched down, which is
+          // exactly what Matt reported.
+          const q = roll > 0 ? Math.min(1, (el - this.anim.dur) / roll) : 1;
+          const dx = r.rest[0] - r.landing[0];
+          const dy = r.rest[1] - r.landing[1];
+          const len = Math.hypot(dx, dy);
+          const g = groundPoint(q, len, r.apex);
+          const u = len > 0 ? g.along / len : 0;
+          ballPos = [r.landing[0] + dx * u, r.landing[1] + dy * u];
+          height = g.height;
+        }
+        // The camera TRACKS the ball, through the flight AND the rollout, scrolling the course past.
         this.cam.x = ballPos[0];
         this.cam.y = ballPos[1] + this.cam.halfH * 0.2;
         this.cam.clamp();
+        if (el >= this.anim.dur + roll) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
       } else {
         // The camera does NOT move during a putt. Confirmed frame by frame in the reference, and
         // it is right: a static frame is what lets the player read the break they just played.
         const path = this.anim.res.path;
         ballPos = path[Math.min(path.length - 1, Math.floor(p * (path.length - 1)))];
       }
-      if (p >= 1) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
+      if (this.anim && this.anim.type === 'putt' && p >= 1) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
     } else {
       this._aimCamera(false);
     }
 
-    // Ease the free look back to the ball rather than snapping: a hard jump loses the player's
-    // sense of where the view just went.
-    if (!this.dragging) {
-      this.previewDx *= 0.84; this.previewDy *= 0.84;
+    // THE FREE LOOK HOLDS WHERE YOU LEAVE IT. It used to ease back the instant the finger lifted,
+    // which gave about half a second to look at a green 200 yds away - Matt: "it still does not
+    // let me move around the map of the hole. It doesn't let me see where the driver will land."
+    // The reference player scrolls up to the green and studies it for twelve seconds.
+    //
+    // It returns to the ball on a TAP (a press that did not drag), or when a swing begins.
+    if (!this.dragging && this.returning) {
+      this.previewDx *= 0.78; this.previewDy *= 0.78;
       if (Math.abs(this.previewDx) < 0.08) this.previewDx = 0;
       if (Math.abs(this.previewDy) < 0.08) this.previewDy = 0;
+      if (this.previewDx === 0 && this.previewDy === 0) this.returning = false;
     }
     const previewing = Math.hypot(this.previewDx, this.previewDy) > 0.5;
     const drawCam = { ...this.cam, x: this.cam.x + this.previewDx, y: this.cam.y + this.previewDy };
 
     const onGreen = this._onGreen();
+    // The golfer stands at the ball whenever the ball is at rest, and plays its swing poses
+    // through the stroke. It is hidden while the ball is in the air or rolling.
+    let swingPose = 0;
+    if (this.swing.phase === PHASE.ACCURACY) swingPose = 1;
+    else if (this.anim && this.anim.type === 'flight' && now - this.anim.t0 < 260) swingPose = 2;
+
     drawFrame(this.ctx, this.map, this.hole, drawCam, {
       dpr: this.dpr,
       ball: ballPos,
       height,
       holed: this.holed,
+      golfer: !this.anim || (now - this.anim.t0) < 260,
+      swingPose,
       aimRad: this.aimRad,
       hideAim: !!this.anim || this.holed,
       aimDots: onGreen ? null : aimDots(this._activeClub(), this._lie()),
-      puttLine: onGreen ? Math.min(this._distToPin(), puttRangeFt(this._distToPin() * FT_PER_YD) / FT_PER_YD) : 0,
+      // MEASURED FROM THE REFERENCE: on the green the dots run WELL PAST the cup - at 67.0 s of
+      // hole 1, a 17 ft putt shows dots continuing off the green and into the trees. They are a
+      // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
+      // at the pin, which left nothing to gauge power against.
+      puttLine: onGreen ? puttRangeFt(this._distToPin() * FT_PER_YD) / FT_PER_YD : 0,
     });
     this._drawMeter(now, previewing);
     this.raf = requestAnimationFrame(this._frame);
   };
 
-  /** The C-ring and the accuracy bar. The ring opens to the RIGHT with its ticks OUTSIDE the arc:
-   *  25 at the bottom, 50 left, 75 upper-left, 100 top-right, a short green segment just before
-   *  100 and the orange-to-red over-swing block beyond it (§5.1). */
+  /**
+   * The C-ring and the accuracy bar, drawn with the reference's own weight.
+   *
+   * The GEOMETRY was already right (arc from the bottom, 90deg, round to the upper right, 315deg;
+   * ticks 25 bottom-left, 50 left, 75 upper-left, 100 top-right). What was wrong was the WEIGHT:
+   * measured against a full-resolution reference frame, the original draws a thick band with a
+   * bold white outline and a diagonal hatch, CHUNKY pixel tick numbers, a THIN green stripe just
+   * before 100, an orange-and-red striped over-swing tab that juts PAST the end of the arc, and
+   * the accuracy bar nested in the ring's own bottom opening with flared ends. Ours was thin,
+   * flat and pale next to it - Matt: "The power and accuracy meters need major work."
+   */
   _drawMeter(now, faded) {
     const c = this.mctx;
     const W = this.meter.width; const H = this.meter.height;
     c.clearRect(0, 0, W, H);
     c.globalAlpha = faded ? 0.4 : 1;
+    c.lineCap = 'butt';
 
-    // The ring is centred on 80, not on the canvas midpoint: the tick labels sit OUTSIDE the arc
-    // and the "50" at the far left needs the room. Laid out so every label clears the edge by
-    // about 10px at the sizes below - check all four if any of them changes.
-    const cx = 80; const cy = 68; const R = 46; const band = 13;
+    const cx = 82; const cy = 70; const R = 48; const band = 19;
     const A0 = 90 * DEG; const A1 = 315 * DEG;
     const ang = (v) => A0 + (Math.min(RING_MAX, Math.max(0, v)) / RING_MAX) * (A1 - A0);
+    const arc = (from, to, style, width) => {
+      c.lineWidth = width; c.strokeStyle = style;
+      c.beginPath(); c.arc(cx, cy, R, ang(from), ang(to)); c.stroke();
+    };
 
-    // The band itself: dark, semi-transparent, white 1px outline, the course showing through.
-    c.lineWidth = band;
-    c.strokeStyle = 'rgba(16,20,12,0.72)';
-    c.beginPath(); c.arc(cx, cy, R, A0, A1); c.stroke();
-    // The green "good" segment just under 100, then the over-swing block past it.
-    c.strokeStyle = '#37a13c';
-    c.beginPath(); c.arc(cx, cy, R, ang(0.93), ang(1.0)); c.stroke();
-    c.strokeStyle = '#e54e00';
-    c.beginPath(); c.arc(cx, cy, R, ang(1.0), ang(1.05)); c.stroke();
-    c.strokeStyle = '#c81f10';
-    c.beginPath(); c.arc(cx, cy, R, ang(1.05), ang(RING_MAX)); c.stroke();
-    c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,0.9)';
+    // The band: dark, semi-transparent, the course showing through, with a diagonal hatch.
+    arc(0, RING_MAX, 'rgba(14,18,10,0.78)', band);
+    c.save();
+    c.beginPath(); c.arc(cx, cy, R, A0, A1); c.lineWidth = band; c.stroke();
+    c.clip();
+    c.strokeStyle = 'rgba(255,255,255,0.10)'; c.lineWidth = 3;
+    for (let i = -H; i < W + H; i += 9) {
+      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + H, H); c.stroke();
+    }
+    c.restore();
+
+    // A THIN green stripe just under 100, then the striped over-swing tab beyond it.
+    arc(0.955, 1.0, '#3ad13f', band);
+    arc(1.0, 1.035, '#f07a1e', band);
+    arc(1.035, 1.07, '#d81f14', band);
+    arc(1.07, RING_MAX, '#f07a1e', band);
+
+    // The bold white outline, inside and out. This is most of what makes it read as pixel art.
+    c.lineWidth = 2.5; c.strokeStyle = '#ffffff';
     c.beginPath(); c.arc(cx, cy, R + band / 2, A0, A1); c.stroke();
     c.beginPath(); c.arc(cx, cy, R - band / 2, A0, A1); c.stroke();
+    for (const e of [A0, A1]) {
+      c.beginPath();
+      c.moveTo(cx + Math.cos(e) * (R - band / 2), cy + Math.sin(e) * (R - band / 2));
+      c.lineTo(cx + Math.cos(e) * (R + band / 2), cy + Math.sin(e) * (R + band / 2));
+      c.stroke();
+    }
 
-    // Tick labels, OUTSIDE the arc. 11px is the repo's text-size floor and this is exactly it.
-    c.fillStyle = '#fff';
-    c.font = '700 11px system-ui, sans-serif';
+    // Chunky tick labels OUTSIDE the arc, white on a hard dark shadow - 11px is the repo floor.
+    c.font = '800 12px ui-monospace, "SF Mono", Menlo, monospace';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const v of [0.25, 0.5, 0.75, 1.0]) {
       const a = ang(v);
-      c.fillText(String(v * 100), cx + Math.cos(a) * (R + band / 2 + 11), cy + Math.sin(a) * (R + band / 2 + 11));
+      const lx = cx + Math.cos(a) * (R + band / 2 + 13);
+      const ly = cy + Math.sin(a) * (R + band / 2 + 13);
+      c.fillStyle = '#0d1208'; c.fillText(String(v * 100), lx + 1.5, ly + 1.5);
+      c.fillStyle = '#ffffff'; c.fillText(String(v * 100), lx, ly);
     }
 
     const read = this.swing.read(now);
-    // The white radial tick crossing the band.
+    // The white radial tick crossing the band, with a dark edge so it reads on any colour.
     const a = ang(read.power);
-    c.strokeStyle = '#fff'; c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(cx + Math.cos(a) * (R - band / 2), cy + Math.sin(a) * (R - band / 2));
-    c.lineTo(cx + Math.cos(a) * (R + band / 2), cy + Math.sin(a) * (R + band / 2));
-    c.stroke();
+    const x0 = cx + Math.cos(a) * (R - band / 2); const y0 = cy + Math.sin(a) * (R - band / 2);
+    const x1 = cx + Math.cos(a) * (R + band / 2); const y1 = cy + Math.sin(a) * (R + band / 2);
+    c.lineWidth = 6; c.strokeStyle = '#0d1208';
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+    c.lineWidth = 3.5; c.strokeStyle = '#ffffff';
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
 
-    // The hub readout: the distance the PREVIOUS shot travelled. Labelled, unlike the reference,
-    // whose unlabelled number reads as stale or wrong (§13 flaw 5).
+    // The hub readout: the distance the PREVIOUS shot travelled, LABELLED.
     if (this.lastShotYd != null) {
-      c.font = '600 10px system-ui, sans-serif';
-      c.fillStyle = '#cfd8c2';
+      c.font = '600 9px system-ui, sans-serif';
+      c.fillStyle = '#9fb08c';
+      c.fillText(t('last_shot_lbl'), cx, cy - 7);
+      c.font = '800 12px system-ui, sans-serif';
+      c.fillStyle = '#e8f0dc';
       const txt = this.lastShotYd * FT_PER_YD < 90
         ? `${(this.lastShotYd * FT_PER_YD).toFixed(1)} ${t('ft')}`
         : `${this.lastShotYd.toFixed(1)} ${t('yds')}`;
-      c.fillText(txt, cx, cy + 4);
+      c.fillText(txt, cx, cy + 7);
     }
 
-    // The accuracy bar at the foot of the ring: red | orange | GREEN | orange | red, with a white
-    // vertical marker. The green band NARROWS on a bad lie (clubs.js's LIES.zone) - shown, not
-    // hidden: leaving it looking normal while punishing the same stop harder reads as cheating.
-    const bx = 8; const bw = W - 16; const by = 128; const bh = 16;
+    // THE ACCURACY BAR, nested in the ring's bottom opening exactly as the reference has it:
+    // red | orange | GREEN | orange | red, bold white outline, white centre marker. The green band
+    // NARROWS on a bad lie (clubs.js's LIES.zone) - shown, not hidden.
+    const bw = 104; const bh = 22;
+    const bx = cx - bw / 2; const by = cy + R + band / 2 - 8;   // nested in the ring's bottom opening
     const zone = lieOf(this._lie()).zone;
     const b = bandsFor(zone);
-    const seg = (from, to, fill) => {
-      c.fillStyle = fill;
-      c.fillRect(bx + bw * from, by, bw * (to - from), bh);
-    };
-    seg(0, (1 - b.orange) / 2, '#c81f10');
-    seg((1 - b.orange) / 2, (1 - b.green) / 2, '#e54e00');
-    seg((1 - b.green) / 2, (1 + b.green) / 2, '#37a13c');
-    seg((1 + b.green) / 2, (1 + b.orange) / 2, '#e54e00');
-    seg((1 + b.orange) / 2, 1, '#c81f10');
-    c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 1;
-    c.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    const seg = (from, to, fill) => { c.fillStyle = fill; c.fillRect(bx + bw * from, by, bw * (to - from), bh); };
+    seg(0, (1 - b.orange) / 2, '#d81f14');
+    seg((1 - b.orange) / 2, (1 - b.green) / 2, '#f07a1e');
+    seg((1 - b.green) / 2, (1 + b.green) / 2, '#3ad13f');
+    seg((1 + b.green) / 2, (1 + b.orange) / 2, '#f07a1e');
+    seg((1 + b.orange) / 2, 1, '#d81f14');
+    c.strokeStyle = '#ffffff'; c.lineWidth = 2.5;
+    c.strokeRect(bx + 1.25, by + 1.25, bw - 2.5, bh - 2.5);
+    // The centre notch: a shape marker at the safe centre, so the target is findable without
+    // relying on the red/green alone.
+    c.fillStyle = 'rgba(255,255,255,0.55)';
+    c.fillRect(cx - 1, by, 2, 4); c.fillRect(cx - 1, by + bh - 4, 2, 4);
     if (this.swing.phase === PHASE.ACCURACY || this.swing.phase === PHASE.LIVE) {
-      c.fillStyle = '#fff';
-      c.fillRect(bx + bw * read.bar - 1.5, by - 3, 3, bh + 6);
+      const mx = bx + bw * read.bar;
+      c.fillStyle = '#0d1208'; c.fillRect(mx - 3, by - 4, 6, bh + 8);
+      c.fillStyle = '#ffffff'; c.fillRect(mx - 1.5, by - 3, 3, bh + 6);
     }
     c.globalAlpha = 1;
   }

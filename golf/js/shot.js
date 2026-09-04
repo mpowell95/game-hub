@@ -13,6 +13,42 @@ import { surfaceAt, slopeAt, treesOf, distYd } from './holes.js';
 
 const DEG = Math.PI / 180;
 
+/** Deceleration of a struck ball ROLLING OUT after it lands, yd/s^2.
+ *
+ *  MEASURED FROM THE REFERENCE (2026-09-04). The drive on `Pixel golf - hole 1.mp4` was sampled at
+ *  30 fps across its whole life: the camera tracks the flight from 22.3 s to 25.0 s, and then keeps
+ *  tracking a ball that is STILL MOVING until 28.4 s - the frame-to-frame motion decays in stages
+ *  (4.5 -> 1.9 -> 0.66 -> 0) rather than stopping. So the ball spends 3.4 s on the ground against
+ *  2.7 s in the air: HALF the shot is the bounce and roll.
+ *
+ *  Ours stopped dead the instant it landed, which is what Matt reported: "The ball doesn't bounce
+ *  or roll out at all. The instant it first lands, it stops." 4.3 yd/s^2 puts a driver's 17 yd
+ *  rollout at 2.8 s, which lands in the reference's range. */
+export const ROLL_DECEL = 4.3;
+
+/** How long a rollout of `rollYd` takes, in ms. Constant deceleration: t = sqrt(2d/a). */
+export function rollMs(rollYd) {
+  return rollYd > 0 ? Math.sqrt((2 * rollYd) / ROLL_DECEL) * 1000 : 0;
+}
+
+/** Where the ball is, `p` (0..1) through its ROLLOUT: how far along, and how high it is hopping.
+ *
+ *  Distance eases out (it is decelerating), and the first part of the rollout carries two or three
+ *  visible BOUNCES whose height decays - the reference's ball clearly hops before it settles into a
+ *  roll. The hop is small: this is a top-down view and the only height cue is the shadow gap. */
+export function groundPoint(p, rollYd, apex) {
+  const eased = 1 - (1 - p) * (1 - p);            // constant deceleration
+  const HOPS = 3;
+  const hopZone = 0.45;                            // bouncing is over by 45 % of the rollout
+  let height = 0;
+  if (p < hopZone) {
+    const q = p / hopZone;                         // 0..1 across the bouncing part
+    const decay = (1 - q) * (1 - q);
+    height = Math.abs(Math.sin(q * Math.PI * HOPS)) * apex * 0.10 * decay;
+  }
+  return { along: rollYd * eased, height };
+}
+
 /** Flight time, DECIDED: 0.9 s + distance/60. A 215 yd drive is ~4.5 s, a 50 yd wedge ~1.7 s. The
  *  reference's own 7.5 s drive is too slow for a phone game, and its lack of a skip was the single
  *  worst thing about watching it (§13 flaw 7). A tap skips to the landing. */
@@ -129,6 +165,8 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     holed: rolled.holed,
     travelledYd: distYd(from, rest),
     flightMs: flightMs(carry) * (blocked ? p : 1),
+    // The ground phase is a real, watchable part of the shot, not a jump to the rest position.
+    rollMs: rollMs(rolled.holed ? distYd(landing, rest) : rollYd),
     lieKind,
   };
 }
