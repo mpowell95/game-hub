@@ -85,6 +85,9 @@ export const HOLE_1 = {
     { kind: 'water', poly: [
       [-30, 320], [-10, 326], [-8, 352], [-9, 378], [-2, 384], [16, 386], [30, 383], [40, 378],
       [50, 378], [50, 435], [-30, 435]] },
+    // The collar. Painted BEFORE the green so the green sits on top of it, and before the bunkers
+    // so sand still wins where they overlap.
+    { kind: 'fringe', poly: greenPoly(10, 362, 20) },
     { kind: 'greensideBunker', poly: [[-7, 340], [-5, 345], [0, 347], [5, 345], [7, 340], [5, 335], [0, 333], [-5, 335]] },
     { kind: 'greensideBunker', poly: [[26, 358], [28, 362], [32, 364], [36, 362], [38, 358], [36, 354], [32, 352], [28, 354]] },
     { kind: 'green', poly: 'green' },
@@ -127,6 +130,7 @@ export const HOLE_2 = {
     { kind: 'lightRough', poly: [
       [-24, 176], [-20, 200], [-8, 212], [8, 214], [22, 206], [28, 190],
       [26, 172], [14, 158], [-2, 154], [-16, 160]] },
+    { kind: 'fringe', poly: greenPoly(4, 185, 20, 16) },
     { kind: 'greensideBunker', poly: [[-19, 182], [-17, 190], [-12, 196], [-6, 195], [-4, 188], [-7, 179], [-13, 176], [-17, 177]] },
     { kind: 'green', poly: 'green' },
     { kind: 'tee', poly: [[-7, 0], [7, 0], [7, 11], [-7, 11]] },
@@ -174,6 +178,7 @@ export const HOLE_3 = {
     // The lake crossing the fairway: the mid-hole carry.
     { kind: 'water', poly: [[-14, 246], [16, 256], [42, 282], [58, 316], [46, 330], [22, 302], [-4, 280], [-20, 268]] },
     { kind: 'fairwayBunker', poly: [[16, 176], [20, 184], [26, 186], [30, 180], [28, 170], [22, 166], [17, 169]] },
+    { kind: 'fringe', poly: greenPoly(58, 538, 20, 21) },
     { kind: 'greensideBunker', poly: [[74, 512], [78, 520], [84, 522], [88, 515], [86, 505], [80, 501], [75, 505]] },
     { kind: 'greensideBunker', poly: [[68, 552], [72, 560], [78, 562], [83, 556], [81, 546], [75, 543], [69, 546]] },
     { kind: 'green', poly: 'green' },

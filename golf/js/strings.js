@@ -37,6 +37,7 @@ export const STRINGS = {
     // lies
     lie_tee: 'Tee',
     lie_fairway: 'Fairway',
+    lie_fringe: 'Fringe',
     lie_lightRough: 'Light rough',
     lie_heavyRough: 'Heavy rough',
     lie_fairwayBunker: 'Bunker',
@@ -97,6 +98,7 @@ export const STRINGS = {
     tap_to_skip: 'toca para saltar',
     lie_tee: 'Tee',
     lie_fairway: 'Calle',
+    lie_fringe: 'Antegreen',
     lie_lightRough: 'Rough ligero',
     lie_heavyRough: 'Rough alto',
     lie_fairwayBunker: 'Búnker',

@@ -57,6 +57,11 @@ export function clubById(id) {
 export const LIES = {
   tee: { power: 1.00, zone: 1.00, roll: 0.08 },
   fairway: { power: 1.00, zone: 1.00, roll: 0.08 },
+  // The collar around every green. Added 2026-09-04 after Matt's playtest: hole 1's light-rough
+  // corridor stopped short of the green, so a missed green landed in `base` - HEAVY ROUGH, the
+  // harshest lie in the game (82 % power, 65 % band) - on all four sides. Every real course has a
+  // collar, and missing a green by a yard should not be the same as being in the trees.
+  fringe: { power: 0.97, zone: 0.94, roll: 0.04 },
   lightRough: { power: 0.92, zone: 0.85, roll: 0.03 },
   heavyRough: { power: 0.82, zone: 0.65, roll: 0.03 },
   fairwayBunker: { power: 0.88, zone: 0.55, roll: 0.00 },
@@ -67,6 +72,9 @@ export const LIES = {
 };
 
 export function lieOf(kind) { return LIES[kind] || LIES.fairway; }
+
+/** Surfaces you putt from. The green and its collar. */
+export function isPuttable(kind) { return kind === 'green' || kind === 'fringe'; }
 
 /** ROLL after landing, by the surface the ball comes down ON, as a fraction of carry (§20). */
 export function rollFactor(kind) { return lieOf(kind).roll; }
@@ -79,7 +87,10 @@ export function rollFactor(kind) { return lieOf(kind).roll; }
  *  which is what a golfer does: take enough club, not the most club. If nothing reaches, it hands
  *  over the driver and the player swings for as much as they can get. */
 export function autoSelectClub(distanceYd, lieKind) {
-  if (lieKind === 'green') return PUTTER;
+  // THE PUTTER IS OFFERED FROM THE COLLAR TOO, not only from the putting surface. Without this a
+  // ball two feet off the green is handed the shortest club in the bag - a lob wedge, 50 yds - and
+  // blasted clean over the green. Real golfers putt from the fringe; so does this.
+  if (isPuttable(lieKind)) return PUTTER;
   const reach = lieOf(lieKind).power;
   for (let i = CLUBS.length - 1; i >= 0; i--) {
     if (CLUBS[i].carry * reach >= distanceYd) return CLUBS[i];

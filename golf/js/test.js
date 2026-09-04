@@ -9,9 +9,10 @@
 // is ours, the assertion says so, and the test is a regression guard rather than a claim about
 // the reference.
 
-import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS } from './holes.js';
+import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS,
+  greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, isPuttable } from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
 
@@ -233,6 +234,39 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
   ok('a trunk blocks even a shot lofted 19 yds over it', !!dead.blocked);
 }
 
+console.log('\n-- 10b. THE CUP IS THE SAME RULE FOR EVERY SHOT --');
+// Matt, 2026-09-04: "Anything can be holed. a 1 ft putt, a 30 ft putt, a 200 yard 3 wood shot.
+// Anything. as long as it goes over the hole at a reasonable speed (you can go over it if the ball
+// is moving too fast)."
+//
+// [KNOWN-BUG PROBE] resolveShot did not look at the cup AT ALL until this landed - only
+// simulatePutt did - so a full swing could roll straight over the hole and carry on. Every shot
+// that was not a putt was physically incapable of going in.
+{
+  const h = PINE_VALLEY.holes[0];
+  ok('a ball rolling over the cup slowly DROPS', SH.cupCheck(h, h.pin[0], h.pin[1], 1.0));
+  ok('...and one going over it too fast does NOT', !SH.cupCheck(h, h.pin[0], h.pin[1], 9));
+  ok('a ball passing a yard wide is not holed', !SH.cupCheck(h, h.pin[0] + 1, h.pin[1], 0.5));
+
+  // Roll a ball from short of the hole so its roll dies right at the cup.
+  const start = [h.pin[0], h.pin[1] - 6];
+  const rolled = SH.rollWatchingCup(h, start, 0, 6.05);
+  ok('[KNOWN-BUG PROBE] a ROLL that reaches the cup at dying pace is holed', rolled.holed,
+    `finished at [${rolled.rest.map((v) => v.toFixed(2))}]`);
+  const past = SH.rollWatchingCup(h, start, 0, 40);
+  ok('...and a roll flying over it at pace is not', !past.holed);
+
+  // The whole point: a real club, struck from off the green, can hole out.
+  let holedWithAClub = false;
+  for (let pw = 0.30; pw <= 1.05 && !holedWithAClub; pw += 0.002) {
+    const from = [h.pin[0], h.pin[1] - 60];
+    const r = SH.resolveShot({ hole: h, from, aimRad: 0, club: CLUBS[12], power: pw, mishitDeg: 0 });
+    if (r.holed) holedWithAClub = true;
+  }
+  ok('[KNOWN-BUG PROBE] a WEDGE from 60 yds can hole out', holedWithAClub,
+    'before this, resolveShot never consulted the cup, so no full swing could ever go in');
+}
+
 console.log('\n-- 11. putting --');
 // Only ONE number about putting was ever measured: a 17 ft putt rolled to rest in about 2.5 s.
 // PUTT_DECEL is derived from it, and everything else here falls out of that derivation.
@@ -243,9 +277,46 @@ function flatGreen(grad) {
   };
 }
 {
-  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 17 / SH.MAX_PUTT_FT });
+  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 17 / SH.MAX_PUTT_FT, rangeFt: SH.MAX_PUTT_FT });
   near('a 17 ft putt rolls for ~2.5 s (the one MEASURED putt)', p.ms / 1000, 2.5, 0.1);
   near('...and it travels 17 ft', Math.hypot(p.rest[0], p.rest[1]) * 3, 17, 0.3);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was missing) --');
+//
+// THE FAILURE THIS EXISTS FOR, stated plainly. The old suite asserted "a 12 ft putt on hole 1 can
+// actually be holed" by SWEEPING power values in a loop until one dropped. That proved the physics
+// could hole a putt. It never asked whether a HUMAN can stop the meter at that value - and they
+// could not: with a fixed 60 ft at full power, the tap window for +/- 1.5 ft was a constant
+// +/- 19 ms, about ONE FRAME at 60fps, at every distance. 102 assertions were green and the game
+// was unplayable. Matt took 24 shots on a par 4 and quit.
+//
+// So the rule now is: a distance the player is EXPECTED to face must be reachable with a tap
+// window a person can actually hit. Anything else is a test of the engine, not of the game.
+{
+  const windowMs = (ft) => {
+    const range = SH.puttRangeFt(ft);
+    const need = ft / range;
+    const tol = Math.max(1.0, ft * 0.10) / range;      // within a foot, or 10 % on a long putt
+    const t = (p) => (p / SW.RING_MAX) * SW.RING_UP_MS;
+    return t(need + tol) - t(need);
+  };
+  const FRAME = 1000 / 60;
+  for (const ft of [1, 2.2, 4, 6.9, 10, 15.8, 25, 40]) {
+    const w = windowMs(ft);
+    ok(`a ${ft} ft putt gives the player ${w.toFixed(0)} ms (${(w / FRAME).toFixed(1)} frames) to stop the meter`,
+      w >= 3 * FRAME, 'under 3 frames is not a skill, it is a coin flip');
+  }
+  ok('[KNOWN-BUG PROBE] a 2 ft tap-in is not a one-frame stop', windowMs(2) >= 3 * FRAME,
+    'the shipped build needed 3.7 % power, reached 28 ms after tap 1: Matt putted 2.2 ft to 12.6 ft');
+  ok('the hole is reachable at less than full power for anything inside the putter\'s range',
+    [1, 5, 20, 50, 60].every((ft) => ft / SH.puttRangeFt(ft) <= 1));
+  ok('...and BEYOND the putter\'s 60 ft range it honestly cannot be reached',
+    120 / SH.puttRangeFt(120) > 1);
+  ok('a very long putt is still capped by the putter, not scaled forever',
+    SH.puttRangeFt(500) === SH.MAX_PUTT_FT);
+  ok('a tiny putt does not scale down to nothing', SH.puttRangeFt(0.2) === SH.MIN_PUTT_FT);
 }
 {
   const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
@@ -269,9 +340,28 @@ function flatGreen(grad) {
     const p = SH.simulatePutt({ hole: green, from, aimRad: Math.atan2(green.pin[0] - from[0], green.pin[1] - from[1]), power: pw });
     if (p.holed) holed = true;
   }
-  ok('a 12 ft putt on hole 1 can actually be holed', holed);
+  ok('a 12 ft putt on hole 1 can be holed BY THE PHYSICS', holed,
+    'this proves the simulation only - whether a PERSON can stop the meter there is section 11b');
   const blast = SH.simulatePutt({ hole: green, from, aimRad: 0, power: 1 });
   ok('a putt hammered over the cup at full pace does NOT drop', !blast.holed);
+}
+
+console.log('\n-- 11c. every green has a collar --');
+// [KNOWN-BUG PROBE] Hole 1's light-rough corridor stopped short of the green, so a missed green
+// landed in `base` - HEAVY ROUGH, 82 % power and a 65 % accuracy band - on every side. Matt's
+// playtest put him 17.5 yds from the pin in heavy rough with only a lob wedge.
+for (const h of PINE_VALLEY.holes) {
+  const gb = greenBoxOf(h);
+  const cx = (gb.minX + gb.maxX) / 2; const cy = (gb.minY + gb.maxY) / 2;
+  const rx = (gb.maxX - gb.minX) / 2; const ry = (gb.maxY - gb.minY) / 2;
+  let harsh = 0;
+  for (let a = 0; a < 360; a += 15) {
+    const r = (a * Math.PI) / 180;
+    const k = surfaceAt(h, cx + Math.cos(r) * (rx + 3), cy + Math.sin(r) * (ry + 3));
+    if (k === 'heavyRough') harsh++;
+  }
+  ok(`hole ${h.n}: missing the green by 3 yds never lands in heavy rough`, harsh === 0,
+    `${harsh} of 24 points around the green are heavy rough`);
 }
 
 console.log('\n-- 12. the two yardages stay different on purpose --');
@@ -296,14 +386,19 @@ console.log('\n-- 13. a whole hole can be played out --');
     const d = distYd(ball, h.pin);
     const aim = Math.atan2(h.pin[0] - ball[0], h.pin[1] - ball[1]);
     strokes++;
-    if (lie === 'green') {
-      const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / SH.MAX_PUTT_FT) });
+    if (isPuttable(lie)) {
+      const rangeFt = SH.puttRangeFt(d * 3);
+      const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / rangeFt), rangeFt });
       ball = p.rest; holed = p.holed;
     } else {
       const club = autoSelectClub(d, lie);
       const power = Math.min(1, d / (club.carry * lieOf(lie).power));
       const r = SH.resolveShot({ hole: h, from: ball, aimRad: aim, club, power, mishitDeg: 0 });
       ball = r.rest;
+      // A full swing can hole out now, and this loop must NOTICE - reading only `rest` left the
+      // ball sitting in the cup while the loop kept "putting" from zero feet, which is exactly how
+      // this assertion first reported 12 strokes for a hole that had already been holed in 2.
+      holed = r.holed;
     }
   }
   ok(`hole 1 played out with clean strikes: holed in ${strokes}`, holed && strokes <= 6,
