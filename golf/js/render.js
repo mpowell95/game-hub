@@ -32,6 +32,7 @@ export const PALETTE = {
   heavyRough: '#6e812b',       // [MEASURED] deep shadow green
   green: '#a8d95e',
   greenEdge: '#93c74e',
+  fringe: '#96c04a',
   tee: '#bcd76a',
   sand: '#f0e4c8',             // [OBSERVED]
   sandDot: '#e2d2ae',
@@ -49,6 +50,7 @@ export const PALETTE = {
 
 const FILL = {
   fairway: PALETTE.fairwayA,
+  fringe: PALETTE.fringe,
   lightRough: PALETTE.lightRough,
   heavyRough: PALETTE.heavyRough,
   green: PALETTE.green,

@@ -11,7 +11,7 @@
 
 /** Every surface kind, and the only ones a hole may name. Each is a row in LIES (clubs.js). */
 export const SURFACE_KINDS = new Set([
-  'tee', 'fairway', 'lightRough', 'heavyRough',
+  'tee', 'fairway', 'fringe', 'lightRough', 'heavyRough',
   'fairwayBunker', 'greensideBunker', 'trees', 'green', 'water',
 ]);
 

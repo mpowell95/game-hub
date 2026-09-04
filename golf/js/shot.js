@@ -114,12 +114,19 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
 
   const landedOn = surfaceAt(hole, landing[0], landing[1]);
   const rollYd = blocked ? 0 : carry * rollFactor(landedOn);
-  const rest = [landing[0] + sin * rollYd, landing[1] + cos * rollYd];
+
+  // A ball pitching straight into the cup is in, whatever club sent it.
+  const holedOnTheFly = !blocked && cupCheck(hole, landing[0], landing[1], 0);
+  const rolled = holedOnTheFly
+    ? { rest: [...landing], holed: true }
+    : rollWatchingCup(hole, landing, aimRad, rollYd);
+  const rest = rolled.rest;
   const restOn = surfaceAt(hole, rest[0], rest[1]);
 
   return {
     carry, apex, sideYd, aimRad, blocked,
     landing, landedOn, rollYd, rest, restOn,
+    holed: rolled.holed,
     travelledYd: distYd(from, rest),
     flightMs: flightMs(carry) * (blocked ? p : 1),
     lieKind,
@@ -129,8 +136,31 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
 // --- putting -------------------------------------------------------------------------------------
 
 export const FT_PER_YD = 3;
-/** Full power rolls 60 ft. Ours: the reference never showed a putter's range. */
+
+/** The putter's ABSOLUTE ceiling, in feet. Ours; the reference never showed a putter's range. */
 export const MAX_PUTT_FT = 60;
+/** The shortest full-power putt the meter will ever be scaled to. */
+export const MIN_PUTT_FT = 6;
+/** Full power overruns the hole by this much, so the hole is reachable well inside full power. */
+export const PUTT_HEADROOM = 1.4;
+
+/**
+ * How far a FULL-POWER putt goes, for the putt in hand.
+ *
+ * THE BUG THIS EXISTS FOR (Matt's playtest, 2026-09-04, filmed): with a fixed 60 ft at full power,
+ * required power was linear in distance against an 825 ms sweep, so the tap window for +/- 1.5 ft
+ * was a CONSTANT +/- 19 ms - about ONE FRAME at 60fps - at every length. A 2.2 ft putt needed 3.7 %
+ * power, reached 28 ms after tap 1. Measured consequences on his phone: 2.2 ft -> 12.6 ft,
+ * 2.6 ft -> 10.7 ft, and a 7.9 ft putt struck clean off the green into heavy rough. He took 24
+ * shots on a par 4 and quit without holing out.
+ *
+ * Scaling the range to the putt fixes it with no new UI: every putt now uses the whole meter, so
+ * the hole always sits near 1/1.4 = 71 % power and the tolerance is proportional to the putt
+ * rather than fixed. A 10 ft putt goes from +/- 19 ms to about +/- 80 ms (5 frames).
+ */
+export function puttRangeFt(distToPinFt) {
+  return Math.max(MIN_PUTT_FT, Math.min(MAX_PUTT_FT, distToPinFt * PUTT_HEADROOM));
+}
 
 /** Constant rolling deceleration, in yards per second squared.
  *
@@ -152,10 +182,45 @@ export const PUTT_DECEL = 1.81;
 export const BREAK_K = 0.12;
 
 /** The cup. A real hole is 4.25 in across; the capture radius here is a little wider and speed
- *  limited, so a ball that rattles the rim at pace lips out instead of vanishing. */
+ *  limited, so a ball that rattles the rim at pace lips out instead of vanishing.
+ *
+ *  ANYTHING CAN BE HOLED (Matt, 2026-09-04): "a 1 ft putt, a 30 ft putt, a 200 yard 3 wood shot.
+ *  Anything. as long as it goes over the hole at a reasonable speed (you can go over it if the
+ *  ball is moving too fast)." That is the rule, and until this landed the game did not implement
+ *  it: only simulatePutt ever looked at the cup, so a wedge or a wood could pass straight over the
+ *  hole and roll on regardless. `cupCheck` below is now the ONE rule, used by both paths. */
 export const CUP_RADIUS_YD = 0.12;
 export const CUP_CAPTURE_YD = 0.30;
 export const CUP_MAX_SPEED = 2.2;                    // yd/s past which the ball runs over the top
+
+/** Does a ball passing this point, at this speed, drop? Close enough AND slow enough. */
+export function cupCheck(hole, x, y, speed) {
+  return Math.hypot(x - hole.pin[0], y - hole.pin[1]) <= CUP_CAPTURE_YD && speed <= CUP_MAX_SPEED;
+}
+
+/** Roll a ball from `start` along `dirRad` for `rollYd`, watching the cup the whole way.
+ *  Returns { rest, holed }. Deceleration is the same constant a putt uses, so a ball trickling
+ *  the last few feet of its roll behaves exactly like a putt of that length - which is what makes
+ *  "a 3 wood can go in" true without a second physics model. */
+export function rollWatchingCup(hole, start, dirRad, rollYd) {
+  if (!(rollYd > 0)) {
+    return { rest: [...start], holed: cupCheck(hole, start[0], start[1], 0) };
+  }
+  const v0 = Math.sqrt(2 * PUTT_DECEL * rollYd);
+  const sin = Math.sin(dirRad);
+  const cos = Math.cos(dirRad);
+  const STEP = 0.05;                                  // yards; well under the cup's own radius
+  const steps = Math.ceil(rollYd / STEP);
+  for (let i = 1; i <= steps; i++) {
+    const d = Math.min(rollYd, i * STEP);
+    const x = start[0] + sin * d;
+    const y = start[1] + cos * d;
+    // Speed remaining after rolling `d` of a total `rollYd`, under constant deceleration.
+    const speed = Math.sqrt(Math.max(0, v0 * v0 - 2 * PUTT_DECEL * d));
+    if (cupCheck(hole, x, y, speed)) return { rest: [x, y], holed: true };
+  }
+  return { rest: [start[0] + sin * rollYd, start[1] + cos * rollYd], holed: false };
+}
 
 /**
  * Roll a putt. Returns { path, rest, holed, ms }.
@@ -164,8 +229,11 @@ export const CUP_MAX_SPEED = 2.2;                    // yd/s past which the ball
  * formula applied at the end, it is integrated the whole way down, which is why a putt that dies
  * near the hole bends more than one struck firm. That is the correct behaviour and it is free.
  */
-export function simulatePutt({ hole, from, aimRad, power }) {
-  const distYdWanted = ((MAX_PUTT_FT * power) / FT_PER_YD);
+export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
+  // `rangeFt` is what a full-power putt covers. The caller passes puttRangeFt(distance to the pin);
+  // it falls back to the old fixed ceiling only so a bare call still runs.
+  const full = rangeFt || MAX_PUTT_FT;
+  const distYdWanted = ((full * power) / FT_PER_YD);
   let v = Math.sqrt(Math.max(0, 2 * PUTT_DECEL * distYdWanted));
   let x = from[0];
   let y = from[1];
@@ -178,8 +246,15 @@ export function simulatePutt({ hole, from, aimRad, power }) {
   let t = 0;
   const MAX_T = 12;
 
+  // A ball already sitting over the cup is in. Checked BEFORE the speed break below, because a
+  // putt with exactly enough pace to reach the hole and die there would otherwise stop on the lip
+  // and be recorded as a miss - "as long as it goes over the hole at a reasonable speed" includes
+  // stopping on it.
+  if (cupCheck(hole, x, y, 0)) return { path, rest: [x, y], holed: true, ms: 0, restOn: 'green' };
+
   while (t < MAX_T) {
     v = Math.hypot(vx, vy);
+    if (cupCheck(hole, x, y, v)) { holed = true; break; }
     if (v <= 0.02) break;
     const g = slopeAt(hole, x, y);
     // The gradient points DOWNHILL, so the ball is pulled along it. Both components apply: a putt

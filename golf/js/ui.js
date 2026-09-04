@@ -15,9 +15,9 @@ import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
 import PINE_VALLEY from '../courses/pinevalley.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, RING_MAX } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, MAX_PUTT_FT, FT_PER_YD } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, puttRangeFt, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE } from './render.js';
 import { STRINGS } from './strings.js';
 
@@ -174,6 +174,7 @@ class GolfGame {
     el.className = 'gf-setup';
     el.innerHTML = `
       <h1>${t('course')}</h1>
+      <canvas class="gf-setup__art" data-role="art" aria-hidden="true"></canvas>
       <div class="gf-card gf-panel">
         <div class="gf-card-meta"><span>${t('holes_n')}</span><span>${best}</span></div>
         <div class="gf-card-blurb">${t('blurb')}</div>
@@ -183,8 +184,33 @@ class GolfGame {
         <button type="button" class="gf-btn" data-role="practice"><span>${t('practice')}</span></button>
       </div>`;
     this.rootEl.appendChild(el);
+    this._paintSetupArt(el.querySelector('[data-role="art"]'));
     this._on(el.querySelector('[data-role="play"]'), 'click', () => this._startRound('round', 0));
     this._on(el.querySelector('[data-role="practice"]'), 'click', () => this._renderHoleSelect());
+  }
+
+  /** The course card's picture: hole 1 rendered whole, from the same map builder the game plays
+   *  on, so it can never show a course the game does not have. Cheap - one buildMap, drawn once. */
+  _paintSetupArt(cv) {
+    if (!cv) return;
+    requestAnimationFrame(() => {
+      if (this.destroyed || !cv.isConnected) return;
+      const r = cv.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) return;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.height * dpr);
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      const map = buildMap(this.course.holes[0]);
+      // Fit the whole hole in, letterboxed on whichever axis has room to spare.
+      const sc = Math.min(cv.width / map.w, cv.height / map.h);
+      const w = map.w * sc;
+      const h = map.h * sc;
+      ctx.fillStyle = PALETTE.heavyRough;
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(map.canvas, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
+    });
   }
 
   _bestText() {
@@ -234,7 +260,9 @@ class GolfGame {
     this.holed = false;
     this.lastShotYd = null;
     this.anim = null;
+    this.previewDx = 0;
     this.previewDy = 0;
+    this.dragging = false;
     this.swing = new Swing();
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
@@ -248,7 +276,18 @@ class GolfGame {
   }
   _distToPin() { return distYd(this.ball, this.hole.pin); }
   _lie() { return surfaceAt(this.hole, this.ball[0], this.ball[1]); }
-  _onGreen() { return this._lie() === 'green'; }
+  /** Putting range: the green AND its collar (clubs.js's isPuttable). Named for what it gates -
+   *  the putter, the feet readout and the putt simulation - rather than for the green alone. */
+  _onGreen() { return isPuttable(this._lie()); }
+
+  /** THE club in hand, resolved in ONE place. The HUD paints this and _fire swings it, so the tile
+   *  can never name one club while the shot uses another - which is exactly what happened when the
+   *  HUD grew its own auto-pick fallback and _fire kept reading the raw field. */
+  _activeClub() {
+    if (this._onGreen()) return PUTTER;
+    if (!this.club || this.club.id === 'putter') this.club = autoSelectClub(this._distToPin(), this._lie());
+    return this.club;
+  }
 
   _renderPlay() {
     this.rootEl.innerHTML = '';
@@ -270,7 +309,7 @@ class GolfGame {
         </div>
 
         <div class="gf-tc" data-role="tc">
-          <div class="gf-panel gf-lie"><b data-role="lie"></b><span data-role="power"></span></div>
+          <div class="gf-panel gf-lie"><b data-role="lie"></b><span class="gf-power" data-role="power"></span></div>
           <div class="gf-dist" data-role="dist"></div>
         </div>
 
@@ -350,28 +389,49 @@ class GolfGame {
     this._on(sw, 'pointerup', (ev) => { ev.preventDefault(); sw.removeAttribute('data-down'); this._tap(); });
     this._on(sw, 'pointercancel', () => sw.removeAttribute('data-down'));
 
-    // Free-scroll preview: drag the course up to look at the green, release to snap back to the
-    // ball. Bound to the game's own root, NEVER to document - a non-passive touchmove on document
-    // turns off compositor scrolling for the whole page while this game is mounted.
-    let dragging = false; let startY = 0; let startPreview = 0;
+    // FREE LOOK. Drag the course around to study the hole, let go and it eases back to the ball.
+    // Bound to the game's own root, NEVER to document - a non-passive touchmove on document turns
+    // off compositor scrolling for the whole page while this game is mounted.
+    //
+    // Matt's playtest (2026-09-04): "in the real game, i can move the map around to check it out,
+    // but when i tried in our game things got messed up instantly." Three things were wrong and
+    // all three are fixed here:
+    //   1. The preview camera was NEVER CLAMPED. `drawFrame` was handed a camera carrying a
+    //      clamp() it never called, so a short drag scrolled straight off the map into blank
+    //      colour with no way to tell which way was back. That is the "messed up instantly".
+    //   2. It only panned VERTICALLY, so a dogleg (hole 3 bends 60 yds right) could not be looked
+    //      at along its own line at all.
+    //   3. `pointerleave` ended the drag, so sliding a thumb near the screen edge dropped it
+    //      mid-look. Pointer capture makes that unnecessary.
+    // `this.dragging`, not a closure local: the render loop reads it to know whether to ease the
+    // free look back to the ball, and a local here would leave it easing back UNDER the finger.
+    let startX = 0; let startY = 0; let baseX = 0; let baseY = 0;
+    this.dragging = false;
     this._on(this.canvas, 'pointerdown', (ev) => {
       if (this.anim) { this._skipAnim(); return; }
-      dragging = true; startY = ev.clientY; startPreview = this.previewDy;
+      this.dragging = true;
+      startX = ev.clientX; startY = ev.clientY;
+      baseX = this.previewDx; baseY = this.previewDy;
       this.canvas.setPointerCapture?.(ev.pointerId);
     });
     this._on(this.canvas, 'pointermove', (ev) => {
-      if (!dragging || !this.cam) return;
-      this.previewDy = startPreview + (ev.clientY - startY) / this.cam.ppy;
-      this.el.tc.setAttribute('data-faded', Math.abs(this.previewDy) > 4 ? '1' : '0');
+      if (!this.dragging || !this.cam) return;
+      this.previewDx = baseX - (ev.clientX - startX) / this.cam.ppy;
+      this.previewDy = baseY + (ev.clientY - startY) / this.cam.ppy;
+      this._clampPreview();
+      const moved = Math.hypot(this.previewDx, this.previewDy);
+      // The lie tile and the yardage fade while the view is away from the ball, and snap back when
+      // it returns - the reference's own idea, and a good one: it says "this is not your shot".
+      this.el.tc.setAttribute('data-faded', moved > 4 ? '1' : '0');
     });
-    const release = () => {
-      if (!dragging) return;
-      dragging = false; this.previewDy = 0;
+    const release = (ev) => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      this.canvas.releasePointerCapture?.(ev && ev.pointerId);
       this.el.tc.setAttribute('data-faded', '0');
     };
     this._on(this.canvas, 'pointerup', release);
     this._on(this.canvas, 'pointercancel', release);
-    this._on(this.canvas, 'pointerleave', release);
   }
 
   _nudgeAim(dir) {
@@ -414,17 +474,19 @@ class GolfGame {
     const m = mishit(bar, power, zone);
 
     if (this._onGreen()) {
-      const res = simulatePutt({ hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power });
+      const res = simulatePutt({
+        hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power,
+        rangeFt: puttRangeFt(this._distToPin() * FT_PER_YD),
+      });
       this.anim = { type: 'putt', t0: performance.now(), dur: res.ms, res };
-      this.lastShotYd = distYd(this.ball, res.rest);
     } else {
       const res = resolveShot({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
-        club: this.club, power, mishitDeg: 0, distanceMul: m.distanceMul,
+        club: this._activeClub(), power, mishitDeg: 0, distanceMul: m.distanceMul,
       });
       this.anim = { type: 'flight', t0: performance.now(), dur: res.flightMs, res };
-      this.lastShotYd = res.travelledYd;
     }
+    // The hub readout is set when the ball STOPS, never here - see _settleShot.
   }
 
   /** Tap to skip: the reference's 7.5 s drive with no way past it is the main thing worth
@@ -437,12 +499,15 @@ class GolfGame {
   _settleShot() {
     const a = this.anim;
     this.anim = null;
-    if (a.type === 'putt') {
-      this.ball = [...a.res.rest];
-      if (a.res.holed) { this.holed = true; this.swing.settle(performance.now()); this._paintHud(); return; }
-    } else {
-      this.ball = [...a.res.rest];
-    }
+    const from = this.ball;
+    this.ball = [...a.res.rest];
+    // THE HUB READOUT IS THE DISTANCE THE LAST SHOT TRAVELLED, and it is set HERE, when the ball
+    // comes to rest. It used to be set in _fire(), which meant the third tap printed how far the
+    // ball was ABOUT to go before it had gone anywhere - the ring told you the outcome while you
+    // were still watching the flight (Matt's playtest, 2026-09-04).
+    this.lastShotYd = distYd(from, a.res.rest);
+    // Any shot can be holed, not just a putt: a pitch that drops, a wood that rolls in.
+    if (a.res.holed) { this.holed = true; this.swing.settle(performance.now()); this._paintHud(); return; }
     this.shotN += 1;
     this.swing.settle(performance.now());
     this.aimRad = this._bearingToPin();
@@ -462,7 +527,11 @@ class GolfGame {
     this.el.lie.textContent = t(`lie_${lie}`);
     // Every bad lie does two things and BOTH are shown before the swing: it caps distance, and it
     // narrows the accuracy band. The percentage is the cap; the band is drawn narrower.
-    this.el.power.textContent = L.power < 1 ? ` ${t('power_pct', { n: Math.round(L.power * 100) })}` : '';
+    // TWO LINES, which is what the spec specified all along (§21.2: `Bunker` / `Power: 88%`).
+    // On one line "Heavy rough Power: 82%" grew wide enough to run into the flag and the quit
+    // button - visible in Matt's playtest footage.
+    this.el.power.textContent = L.power < 1 ? t('power_pct', { n: Math.round(L.power * 100) }) : '';
+    this.el.power.hidden = !(L.power < 1);
 
     // Yards off the green, FEET on it. The switch is on the SURFACE, not on a distance threshold:
     // that matches both of the reference's observations and needs no constant to guess at.
@@ -471,10 +540,24 @@ class GolfGame {
       ? `${(d * FT_PER_YD).toFixed(1)} ${t('ft')}`
       : `${d.toFixed(1)} ${t('yds')}`;
 
-    const club = this._onGreen() ? PUTTER : (this.club || autoSelectClub(d, lie));
+    const club = this._activeClub();
     this.el.clubart.innerHTML = clubArt(club.id);
     this.el.clubname.textContent = t(`club_${club.id}`);
     this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
+  }
+
+  /** Hold the free-look camera inside the hole. Without this the view scrolls off the map into
+   *  flat colour, which is disorienting and offers no way back. */
+  _clampPreview() {
+    if (!this.cam) return;
+    const b = this.hole.bounds;
+    const spanX = b.maxX - b.minX;
+    const minX = spanX <= this.cam.halfW * 2 ? (b.minX + b.maxX) / 2 : b.minX + this.cam.halfW;
+    const maxX = spanX <= this.cam.halfW * 2 ? (b.minX + b.maxX) / 2 : b.maxX - this.cam.halfW;
+    const minY = b.minY + this.cam.halfH;
+    const maxY = b.maxY - this.cam.halfH;
+    this.previewDx = Math.min(maxX, Math.max(minX, this.cam.x + this.previewDx)) - this.cam.x;
+    this.previewDy = Math.min(maxY, Math.max(minY, this.cam.y + this.previewDy)) - this.cam.y;
   }
 
   _aimCamera(snap) {
@@ -517,9 +600,15 @@ class GolfGame {
       this._aimCamera(false);
     }
 
-    const previewing = Math.abs(this.previewDy) > 0.5;
-    const camY = this.cam.y + this.previewDy;
-    const drawCam = { ...this.cam, y: camY, clamp: this.cam.clamp };
+    // Ease the free look back to the ball rather than snapping: a hard jump loses the player's
+    // sense of where the view just went.
+    if (!this.dragging) {
+      this.previewDx *= 0.84; this.previewDy *= 0.84;
+      if (Math.abs(this.previewDx) < 0.08) this.previewDx = 0;
+      if (Math.abs(this.previewDy) < 0.08) this.previewDy = 0;
+    }
+    const previewing = Math.hypot(this.previewDx, this.previewDy) > 0.5;
+    const drawCam = { ...this.cam, x: this.cam.x + this.previewDx, y: this.cam.y + this.previewDy };
 
     const onGreen = this._onGreen();
     drawFrame(this.ctx, this.map, this.hole, drawCam, {
@@ -529,8 +618,8 @@ class GolfGame {
       holed: this.holed,
       aimRad: this.aimRad,
       hideAim: !!this.anim || this.holed,
-      aimDots: onGreen ? null : aimDots(this.club, this._lie()),
-      puttLine: onGreen ? Math.min(this._distToPin(), (MAX_PUTT_FT / FT_PER_YD)) : 0,
+      aimDots: onGreen ? null : aimDots(this._activeClub(), this._lie()),
+      puttLine: onGreen ? Math.min(this._distToPin(), puttRangeFt(this._distToPin() * FT_PER_YD) / FT_PER_YD) : 0,
     });
     this._drawMeter(now, previewing);
     this.raf = requestAnimationFrame(this._frame);
@@ -590,7 +679,7 @@ class GolfGame {
     if (this.lastShotYd != null) {
       c.font = '600 10px system-ui, sans-serif';
       c.fillStyle = '#cfd8c2';
-      const txt = this._onGreen() && this.lastShotYd * FT_PER_YD < 100
+      const txt = this.lastShotYd * FT_PER_YD < 90
         ? `${(this.lastShotYd * FT_PER_YD).toFixed(1)} ${t('ft')}`
         : `${this.lastShotYd.toFixed(1)} ${t('yds')}`;
       c.fillText(txt, cx, cy + 4);

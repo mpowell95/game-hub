@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v598';
+const CACHE = 'game-hub-v599';
 
 const ASSETS = [
   './',
@@ -649,15 +649,15 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': '1f81295e2c',
-  './golf/js/ui.js': '697235c9ec',
-  './golf/js/strings.js': '47f32b9f7f',
-  './golf/js/holes.js': '446236a395',
-  './golf/js/clubs.js': '840c67d68a',
+  './golf/css/golf.css': 'f89f55f18b',
+  './golf/js/ui.js': '6bc7e006bf',
+  './golf/js/strings.js': '3a6661ed9b',
+  './golf/js/holes.js': 'd78fad412c',
+  './golf/js/clubs.js': '97f77a23a8',
   './golf/js/swing.js': '1468833c65',
-  './golf/js/shot.js': 'b129ac8c1f',
-  './golf/js/render.js': '3aa077ae64',
-  './golf/courses/pinevalley.js': '5dd2e7aa8a',
+  './golf/js/shot.js': '863e91b83e',
+  './golf/js/render.js': 'a6d2ff599e',
+  './golf/courses/pinevalley.js': '4778164e7e',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

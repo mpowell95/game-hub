@@ -4,7 +4,7 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-## Status: BEING REBUILT (Stage B complete - one hole plays, tee to holed putt, 2026-09-04)
+## Status: BEING REBUILT (Stage B + the first playtest fixes, 2026-09-04)
 
 **`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
 anything here. It is the written record of a commercial mobile golf game reconstructed from five
@@ -442,13 +442,82 @@ back - it never has to know which ancestor owns the gap (in the hub it is `.hub-
 up). Measured after: 852/714/664/526 px of root across the four host-and-height combinations, with
 nothing offscreen, no tap target under 44px and no text under 11px.
 
-### Open for the playtest
+## The first playtest, and what it broke (2026-09-04)
+
+Matt played Stage B on his phone and filmed it. **He took 24 shots on a par 4 and quit without
+holing out.** Two screen recordings, watched frame by frame at 1 fps. The shot ledger:
+
+`360.7 yds tee -> 149.0 fairway -> 17.5 HEAVY ROUGH -> 18.2 -> 15.8 ft -> 48.9 ft -> ... ->
+2.6 ft -> 10.7 ft -> ... -> 7.9 ft -> putted OFF THE GREEN, 11.8 yds -> 2.2 ft -> 12.6 ft -> quit`
+
+### 1. Putting had about ONE FRAME of tolerance, at every distance
+
+`MAX_PUTT_FT` was a fixed 60 ft at full power. Required power was therefore LINEAR in distance
+against an 825 ms sweep, which makes the tap window for +/- 1.5 ft a **constant +/- 19 ms - 1.1
+frames at 60fps - whether the putt is 2 ft or 50 ft.** A 2.2 ft putt needed 3.7 % power, reached
+28 ms after tap 1. It is not a hard shot, it is an impossible one.
+
+**Fixed by scaling the range to the putt in hand**: `puttRangeFt()` = distance x 1.4, floored at
+6 ft and capped at the putter's 60 ft. The hole now always sits near 71 % power, so every putt uses
+the whole meter and the tolerance is proportional to the putt rather than fixed. Measured after:
+2.2 ft went from 1.1 frames to **7.5 frames**, 6.9 ft to 4.7, 15.8 ft to 3.2.
+
+### 2. THE TEST SUITE ASSERTED THE WRONG THING, and that is the lesson
+
+`test.js` had asserted *"a 12 ft putt on hole 1 can actually be holed"* - by sweeping power values
+in a loop until one dropped. **That proved the physics could hole a putt. It never asked whether a
+person can stop the meter there.** 102 assertions were green and the game was unplayable.
+
+Section 11b now measures the TAP WINDOW for every distance a player is expected to face and fails
+under 3 frames. **When a mechanic is a timed input, test the input, not just the simulation.**
+
+### 3. Only a putt could ever be holed
+
+`resolveShot` never looked at the cup at all - only `simulatePutt` did - so a wedge, an iron or a
+wood could roll straight over the hole and carry on. Matt: *"Anything can be holed. a 1 ft putt, a
+30 ft putt, a 200 yard 3 wood shot. Anything. as long as it goes over the hole at a reasonable
+speed (you can go over it if the ball is moving too fast)."* `cupCheck` and `rollWatchingCup` are
+now the one rule both paths use, and a ball that DIES over the cup drops (the speed break used to
+happen before the cup was ever tested, so a putt with exactly enough pace stopped on the lip).
+
+### 4. Every green was ringed by heavy rough
+
+Hole 1's light-rough corridor stopped at y=340 and the green starts at 348, so a missed green
+landed in `base` - heavy rough, 82 % power and a 65 % accuracy band - on all four sides. There was
+no collar anywhere on the course. A `fringe` surface (97 % / 94 %) now rings every green, and
+**the putter is offered from it**: without that, a ball two feet off the green was handed the
+shortest club in the bag, a 50 yd lob wedge. Section 11c fails if any green has heavy rough within
+3 yds of its edge.
+
+### 5. Free look could not be used at all
+
+Matt: *"in the real game, i can move the map around to check it out, but when i tried in our game
+things got messed up instantly."* Three causes: the preview camera was **never clamped** (a short
+drag scrolled off the map into flat colour with no way to tell which way was back), it panned only
+**vertically** (so a dogleg could not be followed), and `pointerleave` ended the drag when a thumb
+neared the screen edge. Now two-axis, clamped to `bounds`, pointer-captured, and it eases back to
+the ball instead of snapping.
+
+### 6. The ring readout spoiled the shot
+
+`lastShotYd` was set in `_fire()`, so the third tap printed how far the ball was ABOUT to go before
+it had gone anywhere. It is set in `_settleShot()` now.
+
+### 7. One club in hand, resolved in one place
+
+Fixing the HUD's club display gave it its own auto-pick fallback while `_fire` still read the raw
+field, so the tile could name one club while the shot swung another. `_activeClub()` is the single
+resolver both use.
+
+### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds
-  wide, which puts about 120 yds of hole ahead of the ball; the driver's dot 4 is at 215. The
-  preview scroll reaches them. Whether that is right, or the view should pull back, is a feel call.
+  wide, which puts about 120 yds of hole ahead of the ball; the driver's dot 4 is at 215. Free look
+  reaches them. Whether that is right, or the view should pull back, is still a feel call.
 - Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
 - The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
+- There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
+  the other stuff is fixed."* Revisit only if the short game still feels thin.
 
 ## Repo rules that bite in this game specifically
 
