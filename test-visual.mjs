@@ -330,9 +330,16 @@ const PLAY = {
       // One full swing: tap to start the ring, tap to lock power, tap to stop the accuracy bar.
       // The gaps are deliberate - the ring must have moved off zero before tap 2, or this proves
       // nothing about the sweep.
-      const swing = async () => {
+      //
+      // The three taps are: start the ring, lock the power, stop the accuracy bar. The gap before
+      // tap 2 IS the power, so it is a parameter - a probe that always waits the same 260 ms can
+      // only ever hit one power, and once putting scaled its range to the putt in hand (so the cup
+      // sits near 71 % rather than at whatever fraction of a fixed 60 ft) that one power was short
+      // of every putt, fourteen times in a row. Tap 3 follows tap 2 as fast as the harness can
+      // manage, which leaves the accuracy bar near its centre.
+      const swing = async (powerMs = 260, accMs = 220) => {
         const b = await page.$('[data-role="swing"]');
-        for (const wait of [260, 220, 0]) {
+        for (const wait of [powerMs, accMs, 0]) {
           const box = await b.boundingBox();
           await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
           if (wait) await page.waitForTimeout(wait);
@@ -364,20 +371,41 @@ const PLAY = {
       const unit = await page.$eval('[data-role="dist"]', (el) => el.textContent);
       if (!/ft/.test(unit)) return { ok: false, why: `on the green the distance still reads in yards: "${unit}"` };
 
+      // How long to hold the ring for THIS putt, read the way a player reads the meter: the power
+      // that reaches the cup, converted to milliseconds through the ring's own sweep. The attempts
+      // then walk either side of it, because the harness's tap round-trip is worth tens of ms and
+      // the point of the probe is "a putt can drop", not "the harness has perfect hands".
+      const pin = await page.evaluate(() => window.__gfTest.hole.pin.slice());
+      const targetMs = await page.evaluate(async () => {
+        const g = window.__gfTest;
+        const S = await import('./js/shot.js');
+        const W = await import('./js/swing.js');
+        const ft = g._distToPin() * 3;
+        const need = ft / S.puttRangeFt(ft);
+        return (need / W.RING_MAX) * 825;
+      });
+      const tries = [0, -50, 50, -100, 100, -150, 150, -25, 25, -75, 75, -125, 125, -175]
+        .map((d) => Math.max(20, Math.round(targetMs + d)));
       let holed = false;
-      for (let attempt = 0; attempt < 14 && !holed; attempt++) {
+      let closest = Infinity;
+      for (const powerMs of tries) {
+        if (holed) break;
         await page.evaluate(() => {
           const g = window.__gfTest;
           g.ball = [g.hole.pin[0], g.hole.pin[1] - 2.2];
           g.aimRad = Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
           g.swing.reset();
         });
-        await swing();
+        await swing(powerMs, 0);
         await page.waitForTimeout(3800);
-        holed = (await read()).holed;
+        const st = await read();
+        holed = st.holed;
+        closest = Math.min(closest, Math.hypot(st.ball[0] - pin[0], st.ball[1] - pin[1]) * 3);
       }
-      if (!holed) return { ok: false, why: 'fourteen putts from 6 ft and not one of them dropped' };
-      return { ok: true, note: `drove ${moved.toFixed(0)} yds off the tee, then holed out` };
+      if (!holed) {
+        return { ok: false, why: `${tries.length} putts from 6 ft around the ${Math.round(targetMs)} ms the meter says it needs, and not one of them dropped (closest ${closest.toFixed(1)} ft)` };
+      }
+      return { ok: true, why: `drove ${moved.toFixed(0)} yds off the tee, then holed out` };
     },
   },
   pool: {
