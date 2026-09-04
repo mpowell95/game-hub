@@ -350,7 +350,9 @@ function splitText(atMs) {
   const n = Number(atMs) || 0;
   if (!n) return '';
   const d = new Date(n), loc = getLang() === 'es' ? 'es-ES' : 'en-GB';
-  const time = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' });
+  // 12-hour clock everywhere (Matt, 2026-09-04). en-GB/es-ES both default to a 24-hour clock,
+  // so hour12 has to be asked for by hand; the locale still decides the separator and the am/pm form.
+  const time = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit', hour12: true });
   if (d.toDateString() === new Date().toDateString()) return time;
   return `${d.toLocaleDateString(loc, { day: 'numeric', month: 'short' })} · ${time}`;
 }
