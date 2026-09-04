@@ -928,6 +928,85 @@ found the result screen, which this one had stopped 20 frames short of.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
 
+## The measuring pass (2026-09-04) - and the meter's scale was wrong
+
+Six things were built from guesses rather than from the footage. This pass measured all six before
+any of them got implemented a second time. **One of the answers invalidates a number this file has
+asserted since the one-needle rewrite.**
+
+### THE ARC IS ~206 DEGREES, NOT 221, AND THE GREEN STRIPE IS THE 100 % MARK
+
+Matt: *"We need line indicators of where the 25% 50% 75% and 100% powers are. The 100 has the green
+line, which is good."* He is describing tick marks - and he is right that they exist, which is how
+this was caught.
+
+The band carries **short tick marks at 25 / 50 / 75**, in a light tint rather than white, which is
+why an earlier scan with a `> 225` white threshold found nothing. Scanned by LUMINANCE across the
+band on the putt frame (the only one with clean green behind the meter rather than a sand bunker),
+the profile has three sharp peaks against flat noise:
+
+```
+139 deg  ###########################################  <- 25 %
+191 deg  ##################################           <- 50 %
+243 deg  ############################################ <- 75 %
+   everything else sits at 40-55 with no structure
+```
+
+Spacing 52.6 and 51.4 deg per 25 %. **That puts zero at ~87 deg and 100 % at ~295 deg: a 206-degree
+arc.** Ours draws 90 -> 311, a 221-degree arc, so **our meter is about 7 % too long in angle**.
+
+The consequences are not cosmetic:
+
+| | this file used to say | measured |
+|---|---|---|
+| 100 % | 311 deg | **~295 deg** |
+| the thin green stripe (292-296 deg) | a 91-93 % "sweet spot" short of full | **the 100 % LINE itself** |
+| the over-swing block (311-338 deg) | 100-112 % | **107-120 %** |
+| `SWING_MAX` | 1.12 | **~1.21** |
+
+And every power in the four-clip shot ledger shifts up about 7 %, which makes the ledger read far
+more sensibly - the player is aiming AT the green 100 % line and landing just either side of it:
+
+| shot | marker | old reading | measured |
+|---|---|---|---|
+| 1 driver | 292 deg | 91.4 % | **98 %** |
+| 2 3 wood | 299 deg | 94.6 % | **102 %** |
+| 3 7 iron | 193 deg | 46.6 % | **50 %** |
+| 4 putter | 149 deg | 26.7 % | **29 %** |
+
+**Where the old number came from:** 311 deg was assumed to be 100 % because that is where the
+over-swing block starts, and "the block starts at 100 %" felt obvious. It is not what the ticks
+say. The block starts at about 107 %, with a plain buffer between the 100 % line and the danger.
+
+### The other five
+
+- **THE GOLFER DOES NOT MOVE.** Matt: *"the little guy runs forward. it's very strange."* Measured
+  across the whole swing animation in clip 3 (frames 800-860): **the sprite's head sits on the same
+  pixel in every frame.** Only the club swings. Ours draws the golfer at the BALL's position and
+  keeps drawing it for 260 ms after the ball leaves, so it chases the ball down the fairway. The
+  sprite itself: about 12 x 20 art pixels - white cap with a dark brim, tan face, light shirt with a
+  gold band at the waist, grey trousers, and a club that sweeps through in front of it.
+- **THE SLOPE MARKERS ARE ARROWHEADS, AND THEY ARE A DARKER TINT OF THE GREEN.** Two strokes making
+  a chevron - a `V` pointing downhill, or the same glyph rotated onto a diagonal. **Fixed size**,
+  laid on a regular grid, each glyph about a fifth of the grid spacing, and drawn in a darker shade
+  of the putting surface rather than in white. Ours draws a line segment whose LENGTH is the slope
+  magnitude, which on real hole data is 1 to 4 pixels - so it renders as the field of dots Matt
+  reported, with no readable direction. The fix is a fixed-size arrowhead oriented downhill.
+- **THE LIE READOUT IS A PICTURE, NOT A WORD.** An isometric block of the surface itself - a top
+  face in that surface's own colour and speckle, a brown soil face beneath it, a black outline -
+  with a large dimpled ball sitting on top, overhanging the front edge and casting a small shadow.
+  About 60 x 49 CSS px with a 37 px ball. Ours prints the word "Green" in a panel.
+- **FLIGHT.** Clip 1's drive: the ball is in motion for **4.53 s** in total (frames 585 to ~857) for
+  a 247 yd carry. The split between air and run-out is derived from the camera's pan rate falling
+  off around frame 788, which is suggestive but not solid - the camera can ease independently of the
+  ball - so only the total is quoted as measured. Ours gives that shot 5.02 s of flight alone.
+- **WIND.** The panel reads `wind`, an arrow glyph, and a bare number, and it is **0.9 with the arrow
+  pointing down-left in all four clips, unchanged for the whole hole**. Its EFFECT could not be
+  isolated: the only shot with a clean before/after is shot 1, which finished essentially on line,
+  so the footage gives a magnitude of "not enough to matter at 0.9". Building wind needs either a
+  clip with a strong wind or a decision from Matt about how much it should move a ball. Ours
+  currently has no wind at all - not in `resolveShot`, not anywhere; the HUD prints a hardcoded 0.
+
 ## Two bugs that were ruining every game (2026-09-04)
 
 Both found from one screenshot and one sentence, and both were one line.
