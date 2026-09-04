@@ -348,8 +348,19 @@ const PLAY = {
       // to zero for a clean strike, and the downswing runs DOWN_MS per power unit against the
       // backswing's UP_MS - so the wait is the power times that ratio, computed rather than
       // guessed. Waiting a fixed 0 ms, as the two-meter probe did, now fires at maximum miss.
-      const RATIO = 1150 / 1650;
+      //
+      // THE TEMPO IS PER CLUB SINCE 2026-09-04 (clubs.js's `swingTempo`, measured off the
+      // reference): a driver sweeps at 1685/1140 and a putter at 2410/1865, so a probe carrying a
+      // hardcoded ratio fires at the wrong point on every club but one. It is read off the live
+      // game instead, for whatever club is actually in hand.
+      const tempo = async () => page.evaluate(async () => {
+        const g = window.__gfTest;
+        const CL = await import('./js/clubs.js');
+        return CL.swingTempo(g._activeClub());
+      });
       const swing = async (powerMs = 700, accMs = null) => {
+        const t = await tempo();
+        const RATIO = t.downMs / t.upMs;
         const b = await page.$('[data-role="swing"]');
         for (const wait of [powerMs, accMs == null ? Math.round(powerMs * RATIO) : accMs, 0]) {
           const box = await b.boundingBox();
@@ -363,8 +374,10 @@ const PLAY = {
       if (!struck.anim && struck.shot === 1) {
         return { ok: false, why: 'three taps on "swing" and the ball never left the tee (the meter never fired)' };
       }
-      // Let the flight land and the post-shot input lock expire.
-      await page.waitForTimeout(6500);
+      // Let the windup, the flight, the run-out and the post-shot input lock all finish. A driver
+      // is now 0.85 s of windup + ~4.5 s of flight + ~4.2 s of run-out + a 1.4 s lock: the old
+      // 6.5 s was written before the windup existed and before the roll nearly doubled.
+      await page.waitForTimeout(12000);
       const after = await read();
       const moved = Math.hypot(after.ball[0] - before.ball[0], after.ball[1] - before.ball[1]);
       if (moved < 50) return { ok: false, why: `the tee shot moved the ball only ${moved.toFixed(1)} yds` };
@@ -391,12 +404,13 @@ const PLAY = {
       const targetMs = await page.evaluate(async () => {
         const g = window.__gfTest;
         const S = await import('./js/shot.js');
-        const W = await import('./js/swing.js');
         const ft = g._distToPin() * 3;
         const need = ft / S.puttRangeFt();
-        // The power is set on the BACKSWING: one power unit takes UP_MS. (This used to divide by
-        // RING_MAX and multiply by the old ring's 825 ms - both gone with the two-meter build.)
-        return need * W.UP_MS;
+        // The power is set on the BACKSWING: one power unit takes the CLUB'S OWN upMs. (This used
+        // to divide by RING_MAX and multiply by the old ring's 825 ms - both gone with the
+        // two-meter build - and then to use a single global UP_MS, gone with the per-club tempo.)
+        const CL = await import('./js/clubs.js');
+        return need * CL.swingTempo(g._activeClub()).upMs;
       });
       const tries = [0, -50, 50, -100, 100, -150, 150, -25, 25, -75, 75, -125, 125, -175]
         .map((d) => Math.max(20, Math.round(targetMs + d)));
@@ -411,7 +425,7 @@ const PLAY = {
           g.swing.reset();
         });
         await swing(powerMs);
-        await page.waitForTimeout(3800);
+        await page.waitForTimeout(4800);            // + the 0.85 s windup before the ball moves
         const st = await read();
         holed = st.holed;
         closest = Math.min(closest, Math.hypot(st.ball[0] - pin[0], st.ball[1] - pin[1]) * 3);

@@ -41,17 +41,18 @@ export const SWING_MAX = 1.12;
  *  89 deg, so -0.126 to +0.117. Symmetric here, because a miss either way should cost the same. */
 export const BAR_HALF = 0.12;
 
-/** Milliseconds for the needle to travel one full power unit.
+/** THE DEFAULT TEMPO: milliseconds for the needle to travel one full power unit.
  *
- *  MEASURED: the backswing ran 0.036 -> 0.937 pos in 90 frames (1.500 s) = 1665 ms per unit; the
- *  downswing ran 0.865 -> 0.063 in 55 frames (0.917 s) = 1143 ms per unit. The downswing is
- *  1.46x FASTER than the backswing, which is a real part of the feel: you get time to pick your
- *  power and much less time to save the strike.
+ *  THIS IS NOW ONLY A DEFAULT. Measured 2026-09-04 across four shots at 60 fps, the reference's
+ *  meter runs at a DIFFERENT SPEED FOR DIFFERENT CLUBS - driver and 3 wood at 1685/1140, a 7 iron
+ *  at 2070/1530, the putter at 2410/1923. The per-club figures and the fit that produces them live
+ *  in `clubs.js`'s `swingTempo()`, because they are a property of the club; these two constants are
+ *  what a `Swing` uses when nobody has told it otherwise, and they are the top of the bag.
  *
- *  The old build's ring reached 100 % in 750 ms and came back at the same speed. That is more
- *  than twice as fast as the reference on the way up, and symmetric where the reference is not. */
-export const UP_MS = 1650;
-export const DOWN_MS = 1150;
+ *  The downswing is FASTER than the backswing in every sample, which is a real part of the feel:
+ *  you get time to pick your power and much less time to save the strike. */
+export const UP_MS = 1685;
+export const DOWN_MS = 1140;
 
 /** Input is dead for this long after the ball is struck. [MEASURED: 1.33-1.54 s across three shots] */
 export const LOCK_MS = 1400;
@@ -66,18 +67,26 @@ export const PHASE = {
 /** How long the backswing takes to reach the very top. Past this the swing has auto-topped out. */
 export const TOP_MS = SWING_MAX * UP_MS;
 
+/** How long the backswing takes to reach the top at a given tempo. */
+export function topMsOf(upMs = UP_MS) { return SWING_MAX * upMs; }
+
 /** Where the needle sits during the BACKSWING, `ms` after tap 1.
  *
  *  Past the top it does NOT ping-pong forever: the power is spent at SWING_MAX and the needle is
  *  already on its way back down. Holding too long is therefore a real decision with a real cost
  *  (a full over-swing, and its 1.5x mishit multiplier) rather than a free second lap. */
-export function backswingAt(ms) {
-  if (ms <= TOP_MS) return { pos: ms / UP_MS, power: null, topped: false };
-  return { pos: SWING_MAX - (ms - TOP_MS) / DOWN_MS, power: SWING_MAX, topped: true };
+export function backswingAt(ms, tempo) {
+  const up = tempo && tempo.upMs ? tempo.upMs : UP_MS;
+  const down = tempo && tempo.downMs ? tempo.downMs : DOWN_MS;
+  const top = SWING_MAX * up;
+  if (ms <= top) return { pos: ms / up, power: null, topped: false };
+  return { pos: SWING_MAX - (ms - top) / down, power: SWING_MAX, topped: true };
 }
 
 /** Where the needle sits during the DOWNSWING, `ms` after the power was locked at `power`. */
-export function downswingAt(ms, power) { return power - ms / DOWN_MS; }
+export function downswingAt(ms, power, tempo) {
+  return power - ms / (tempo && tempo.downMs ? tempo.downMs : DOWN_MS);
+}
 
 /** The needle's position mapped onto the accuracy bar, 0 (left) .. 1 (right), 0.5 dead centre.
  *
@@ -89,26 +98,48 @@ export function barPosOf(pos) {
 
 /** THE ACCURACY BANDS, as distance from the centre normalised to 0..1 (`off`).
  *
- *  MEASURED off the reference's bar, by angle: green is the middle 54 % of the bar, orange 11 %
- *  each side, red 10 % each side. The old build used 40 % green and 20 % orange each side, which
- *  made the target noticeably smaller than the original's.
+ *  MEASURED 2026-09-04 by counting pixels across the reference's own accuracy bar at address, on
+ *  four different lies. The bar runs 66 px from the centre line to either end:
  *
- *  A bad lie narrows the GREEN band by `zone`; orange and red then split what is left in the same
- *  ratio they have at baseline, so the bar is always full and the needle always sweeps at the same
- *  speed. A smaller target is simply harder to hit, and the player can SEE that before committing. */
+ *      good lie (tee, green)     red 18   orange 12   green 36   ->  green 54.5 %, orange 18.2 %
+ *      bad lie (rough, bunker)   red 42   orange 18   green  6   ->  green  9.1 %, orange 27.3 %
+ *
+ *  So the green band is scaled by the lie's `zone` (see clubs.js, where the two measured values
+ *  live), and the ORANGE band widens as green shrinks rather than staying a fixed share of what is
+ *  left: it takes 40 % of the remainder at a clean lie and 30 % at the worst one. That is the
+ *  difference between a bad lie being merely harder and a bad lie being a coin flip - orange is
+ *  where a player from the rough is actually aiming, and it has to stay hittable.
+ *
+ *  The bar is always full and the needle always sweeps at the same speed for a given club, so a
+ *  smaller target is simply a smaller target, and the player can SEE it before committing. */
 export function bandsFor(zone = 1) {
-  const green = 0.54 * zone;
+  const green = 0.545 * zone;
   const rest = 1 - green;
-  return { green, orange: green + rest * 0.52, red: 1 };
+  const orangeShare = 0.30 + 0.10 * Math.min(1, Math.max(0, zone));
+  return { green, orange: green + rest * orangeShare, red: 1 };
 }
 
-/** The mishit (§17.9, ours - every shot in all five clips was struck cleanly, so the penalty was
- *  never observed). Returns { deg, distanceMul }.
+/** The mishit. Returns { deg, distanceMul }.
  *
  *  Marker LEFT of centre pulls the ball left; right pushes it right. Over-100 % power multiplies
  *  the resulting angle by 1.5, which is what makes over-swinging risky and matches the tutorial's
- *  own warning. At the stock driver's 215 yds a full red miss (8 deg) lands about 30 yds offline:
- *  punishing, recoverable, not round-ending. */
+ *  own warning.
+ *
+ *  THE DISTANCE PENALTY WAS A FLAT 10 % IN THE RED BAND AND IS NOW A RAMP (2026-09-04). The
+ *  reference's third shot is the evidence: a 7 iron from a greenside bunker, power locked at
+ *  46.6 %, needle stopped 45 % out of the half-window - which on that lie's 9 % green band is
+ *  RED - travelled 21.1 yds. Our numbers for the same swing gave about 41. A flat 0.9 cannot
+ *  close a gap that size, and the direction is unambiguous: in the reference a red strike costs
+ *  a LOT of distance, not a token amount.
+ *
+ *  IT IS A RAMP RATHER THAN THE MEASURED NUMBER, DELIBERATELY. Closing the gap entirely would
+ *  need a multiplier near 0.45, but that single sample confounds three unknowns - the mishit
+ *  penalty, the greenside bunker's own distance factor, and the club's rating in a bag that
+ *  (see clubs.js) is plainly upgraded. Attributing all of it to the mishit would be fabricating
+ *  a number from an equation with three unknowns and one measurement. So: green costs nothing,
+ *  orange shades to 0.92, and red ramps 0.92 -> 0.60 across its own width, which is punishing,
+ *  recoverable, and defensible on its own terms. If Matt wants the reference's full severity, the
+ *  honest way to get there is to measure the bunker's distance factor separately. */
 export function mishit(barPos, power, zone = 1) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
@@ -118,10 +149,13 @@ export function mishit(barPos, power, zone = 1) {
   if (off <= b.green) {
     deg = (off / b.green) * 1.5;
   } else if (off <= b.orange) {
-    deg = 1.5 + ((off - b.green) / (b.orange - b.green)) * 2.5;
+    const q = (off - b.green) / Math.max(1e-6, b.orange - b.green);
+    deg = 1.5 + q * 2.5;
+    distanceMul = 1 - 0.08 * q;                      // 1.00 at the green edge -> 0.92 at red
   } else {
-    deg = 4 + ((off - b.orange) / Math.max(1e-6, b.red - b.orange)) * 4;
-    distanceMul = 0.9;                               // a red miss also loses 10 % of its distance
+    const q = (off - b.orange) / Math.max(1e-6, b.red - b.orange);
+    deg = 4 + q * 4;
+    distanceMul = 0.92 - 0.32 * q;                   // 0.92 just into red -> 0.60 at a full miss
   }
   if (power > 1) deg *= 1.5;
   return { deg: deg * Math.sign(signed || 1), distanceMul };
@@ -134,7 +168,15 @@ export function mishit(barPos, power, zone = 1) {
  *  function of (phase, t0, now), including "the player never took tap 2 and the swing topped
  *  out". Only a tap or a settle changes state. */
 export class Swing {
-  constructor() { this.reset(); }
+  constructor() { this.tempo = { upMs: UP_MS, downMs: DOWN_MS }; this.reset(); }
+
+  /** Set the tempo for the NEXT swing. The caller passes the club's own figures (clubs.js's
+   *  `swingTempo`); a swing already in progress keeps the tempo it started with, because changing
+   *  the needle's speed mid-stroke would move the target under the player's thumb. */
+  setTempo(tempo) {
+    if (this.phase !== PHASE.IDLE) return;
+    if (tempo && tempo.upMs > 0 && tempo.downMs > 0) this.tempo = { upMs: tempo.upMs, downMs: tempo.downMs };
+  }
 
   reset() {
     this.phase = PHASE.IDLE;
@@ -152,7 +194,7 @@ export class Swing {
     if (this.locked(now)) return null;
     if (this.phase === PHASE.IDLE) { this.phase = PHASE.BACK; this.t0 = now; return 'begin'; }
     if (this.phase === PHASE.BACK) {
-      const b = backswingAt(now - this.t0);
+      const b = backswingAt(now - this.t0, this.tempo);
       if (b.topped) {
         // The backswing already ran out of arc: power is spent at the maximum and THIS tap is the
         // accuracy tap, not a second power tap. Anything else would give a free extra tap to a
@@ -163,7 +205,7 @@ export class Swing {
       return 'power';
     }
     if (this.phase === PHASE.DOWN) {
-      this.pos = downswingAt(now - this.t0, this.power);
+      this.pos = downswingAt(now - this.t0, this.power, this.tempo);
       this.phase = PHASE.LIVE;
       return 'fire';
     }
@@ -178,11 +220,11 @@ export class Swing {
    *  fires the shot at that worst-case accuracy rather than leaving the swing stuck. */
   read(now) {
     if (this.phase === PHASE.BACK) {
-      const b = backswingAt(now - this.t0);
+      const b = backswingAt(now - this.t0, this.tempo);
       return { pos: b.pos, power: b.power, phase: this.phase, expired: b.pos < -BAR_HALF };
     }
     if (this.phase === PHASE.DOWN) {
-      const pos = downswingAt(now - this.t0, this.power);
+      const pos = downswingAt(now - this.t0, this.power, this.tempo);
       return { pos, power: this.power, phase: this.phase, expired: pos < -BAR_HALF };
     }
     if (this.phase === PHASE.IDLE) return { pos: 0, power: null, phase: this.phase, expired: false };
