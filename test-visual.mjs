@@ -340,9 +340,18 @@ const PLAY = {
       // sits near 71 % rather than at whatever fraction of a fixed 60 ft) that one power was short
       // of every putt, fourteen times in a row. Tap 3 follows tap 2 as fast as the harness can
       // manage, which leaves the accuracy bar near its centre.
-      const swing = async (powerMs = 260, accMs = 220) => {
+      // tap 1 starts the backswing, tap 2 sets the power `powerMs` into it, tap 3 sets the
+      // accuracy `accMs` into the downswing. On the reference's timings a full-power drive is
+      // about 1650 ms of backswing, so these gaps are much longer than the old build's.
+      // tap 1 starts the backswing; tap 2 `powerMs` into it sets the power; tap 3 sets the
+      // accuracy. The gap before tap 3 is NOT free: the needle has to come all the way back down
+      // to zero for a clean strike, and the downswing runs DOWN_MS per power unit against the
+      // backswing's UP_MS - so the wait is the power times that ratio, computed rather than
+      // guessed. Waiting a fixed 0 ms, as the two-meter probe did, now fires at maximum miss.
+      const RATIO = 1150 / 1650;
+      const swing = async (powerMs = 700, accMs = null) => {
         const b = await page.$('[data-role="swing"]');
-        for (const wait of [powerMs, accMs, 0]) {
+        for (const wait of [powerMs, accMs == null ? Math.round(powerMs * RATIO) : accMs, 0]) {
           const box = await b.boundingBox();
           await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
           if (wait) await page.waitForTimeout(wait);
@@ -385,7 +394,9 @@ const PLAY = {
         const W = await import('./js/swing.js');
         const ft = g._distToPin() * 3;
         const need = ft / S.puttRangeFt(ft);
-        return (need / W.RING_MAX) * 825;
+        // The power is set on the BACKSWING: one power unit takes UP_MS. (This used to divide by
+        // RING_MAX and multiply by the old ring's 825 ms - both gone with the two-meter build.)
+        return need * W.UP_MS;
       });
       const tries = [0, -50, 50, -100, 100, -150, 150, -25, 25, -75, 75, -125, 125, -175]
         .map((d) => Math.max(20, Math.round(targetMs + d)));
@@ -399,7 +410,7 @@ const PLAY = {
           g.aimRad = Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
           g.swing.reset();
         });
-        await swing(powerMs, 0);
+        await swing(powerMs);
         await page.waitForTimeout(3800);
         const st = await read();
         holed = st.holed;

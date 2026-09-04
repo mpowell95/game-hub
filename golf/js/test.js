@@ -146,44 +146,86 @@ ok('a heavy-rough lie takes MORE club for the same distance',
 ok('stepping up from the driver stays on the driver', stepClub(CLUBS[0], +1).id === 'driver');
 ok('stepping down from the lob wedge stays on the lob wedge', stepClub(CLUBS[13], -1).id === 'lwedge');
 
-console.log('\n-- 7. the power ring: static until tap 1, 0.75s to 100%, PING-PONG --');
-// All three are [MEASURED]. The ping-pong is the one a casual reading gets wrong: at 2 fps the
-// meter looks static and at 0.5 fps it looks like a one-way fill. It is neither.
-near('the ring reaches 100 % in exactly 750 ms', SW.ringAt(750), 1.0, 0.0001);
-ok('the ring starts at zero', SW.ringAt(0) === 0);
-ok('the arc continues PAST 100 into the over-swing band', SW.RING_MAX > 1 && SW.ringAt(825) > 1);
-ok('[KNOWN-BUG PROBE] the ring REVERSES rather than stopping at the top',
-  SW.ringAt(1200) < SW.ringAt(825) && SW.ringAt(1600) < SW.ringAt(1200),
-  'a one-way fill makes a mistimed tap give MAXIMUM power instead of low power, which inverts the whole risk model');
-near('a full cycle returns to zero', SW.ringAt(SW.RING_CYCLE_MS), 0, 0.001);
+console.log('\n-- 7. ONE NEEDLE, THREE TAPS: the three-click swing --');
+// MEASURED off the reference at 60 fps, every frame of a 203-frame clip (swing.js's header has
+// the trace). The old build had two meters that never moved together; this has one needle on one
+// scale, and these assertions are what separate the two.
+near('zero power is the accuracy point, dead centre', SW.backswingAt(0).pos, 0, 1e-9);
+near('the backswing reaches 100 % in 1.65 s, not 0.75', SW.backswingAt(SW.UP_MS).pos, 1.0, 1e-9);
+ok('the arc continues PAST 100 into the over-swing block', SW.SWING_MAX > 1);
+{
+  // [KNOWN-BUG PROBE] The downswing is measurably FASTER than the backswing (1.46x). A symmetric
+  // sweep - which is what the old build had - gives the player as long to save the strike as to
+  // pick the power, and that is not the shape of the original at all.
+  const upRate = 1 / SW.UP_MS;
+  const downRate = 1 / SW.DOWN_MS;
+  ok('[KNOWN-BUG PROBE] the downswing runs ~1.45x faster than the backswing',
+    downRate / upRate > 1.35 && downRate / upRate < 1.55,
+    `measured 1665 ms/unit up against 1143 ms/unit down; this build is ${(downRate / upRate).toFixed(2)}x`);
+}
+{
+  // Holding past the top is not a free extra lap: the power is spent and the needle is already
+  // coming back down.
+  const past = SW.backswingAt(SW.TOP_MS + 200);
+  ok('holding past the top spends the power at maximum and starts the downswing',
+    past.topped && past.power === SW.SWING_MAX && past.pos < SW.SWING_MAX);
+}
+near('the downswing falls from wherever the power was locked',
+  SW.downswingAt(SW.DOWN_MS, 1.0), 0, 1e-9);
 {
   const s = new SW.Swing();
-  const r0 = s.read(0);
-  ok('the meter is STATIC until tap 1', r0.power === 0 && s.read(9999).power === 0);
+  ok('the meter is STATIC until tap 1', s.read(0).pos === 0 && s.read(9999).pos === 0);
+  ok('...and nothing is planted on the arc yet', s.read(500).power === null);
   s.tap(0);
-  ok('tap 1 starts the sweep', s.phase === SW.PHASE.POWER && s.read(400).power > 0);
-  s.tap(750);
-  near('tap 2 locks the power it was showing', s.power, 1.0, 0.0001);
-  ok('...and the power tick then PARKS while the accuracy bar sweeps',
-    s.read(900).power === s.power && s.read(1400).power === s.power);
-  ok('the two meters never sweep at once', s.read(900).sweeping === 'bar');
-  const fired = s.tap(1000);
+  ok('tap 1 starts the backswing', s.phase === SW.PHASE.BACK && s.read(400).pos > 0);
+  ok('the marker is still unplanted during the backswing', s.read(400).power === null);
+  s.tap(SW.UP_MS);
+  near('tap 2 locks the power the needle was showing', s.power, 1.0, 1e-9);
+  ok('...and PLANTS it on the arc for the whole downswing',
+    s.read(SW.UP_MS + 100).power === 1 && s.read(SW.UP_MS + 800).power === 1);
+  ok('[KNOWN-BUG PROBE] the needle KEEPS MOVING after the power is locked',
+    s.read(SW.UP_MS + 600).pos < s.read(SW.UP_MS + 100).pos,
+    'the old build parked the needle and started a SECOND, independent meter; the reference plants a marker and runs the same needle back down');
+  near('it arrives back at zero one downswing later',
+    s.read(SW.UP_MS + SW.DOWN_MS).pos, 0, 1e-9);
+  const fired = s.tap(SW.UP_MS + SW.DOWN_MS);
   ok('tap 3 fires', fired === 'fire' && s.phase === SW.PHASE.LIVE);
-  s.settle(2000);
-  ok('input is LOCKED for ~1.4 s after the shot', s.locked(3000) && !s.locked(3500));
-  ok('...and a tap during the lock does nothing', s.tap(3000) === null);
+  near('...and a needle stopped exactly on zero is a perfect strike', SW.barPosOf(s.pos), 0.5, 1e-9);
+  s.settle(9000);
+  ok('input is LOCKED for ~1.4 s after the shot', s.locked(10000) && !s.locked(10500));
+  ok('...and a tap during the lock does nothing', s.tap(10000) === null);
+}
+{
+  // The swing must not be able to hang waiting for a tap the player never makes.
+  const s = new SW.Swing();
+  s.tap(0); s.tap(SW.UP_MS);
+  const late = s.read(SW.UP_MS + SW.DOWN_MS * 1.5);
+  ok('running the needle off the bottom of the bar EXPIRES the swing', late.expired && late.pos < -SW.BAR_HALF);
+  ok('...and that reads as the worst accuracy the bar can express', SW.barPosOf(late.pos) === 1);
+}
+{
+  // A tap after the swing has already topped out is the ACCURACY tap, not a second power tap.
+  const s = new SW.Swing();
+  s.tap(0);
+  const r = s.tap(SW.TOP_MS + 300);
+  ok('a tap after the top fires instead of re-locking the power',
+    r === 'fire' && s.power === SW.SWING_MAX && s.phase === SW.PHASE.LIVE);
 }
 
-console.log('\n-- 8. the accuracy bar --');
-near('the marker starts at the CENTRE', SW.barAt(0), 0.5, 0.001);
-ok('it ping-pongs off both ends', SW.barAt(275) === 1 && SW.barAt(825) === 0);
+console.log('\n-- 8. the accuracy bar is the same needle, magnified --');
+near('the bar covers +/- 12 % of power around zero', SW.BAR_HALF, 0.12, 1e-9);
+near('dead centre of the bar is zero on the arc', SW.barPosOf(0), 0.5, 1e-9);
+ok('the needle enters the bar from the LEFT on the way down and travels right',
+  SW.barPosOf(SW.BAR_HALF) === 0 && SW.barPosOf(-SW.BAR_HALF) === 1);
+ok('the bar position is LINEAR in the needle position, the way the reference measured',
+  Math.abs((SW.barPosOf(0.06) - SW.barPosOf(0)) - (SW.barPosOf(0) - SW.barPosOf(-0.06))) < 1e-9);
 {
   const clean = SW.bandsFor(1);
-  ok('a clean lie gives the middle 40 % as the straight zone', Math.abs(clean.green - 0.4) < 1e-9);
-  ok('the bands sum to the whole bar (40 + 20 + 20 + 10 + 10)', Math.abs(clean.red - 1) < 1e-9);
+  ok('a clean lie gives the middle 54 % as the straight zone (MEASURED)', Math.abs(clean.green - 0.54) < 1e-9);
+  ok('the bands fill the whole bar', Math.abs(clean.red - 1) < 1e-9);
   const sand = SW.bandsFor(LIES.greensideBunker.zone);
   ok('a greenside bunker halves the straight zone', sand.green < clean.green * 0.55);
-  ok('...but the bar is still full, so the marker sweeps at the same speed', Math.abs(sand.red - 1) < 1e-9);
+  ok('...but the bar is still full, so the needle sweeps at the same speed', Math.abs(sand.red - 1) < 1e-9);
 }
 {
   // [MEASURED, and explicitly retracted in the spec] The window does NOT narrow as power rises.
@@ -334,8 +376,10 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
     const range = SH.puttRangeFt(ft);
     const need = ft / range;
     const tol = Math.max(1.0, ft * 0.10) / range;      // within a foot, or 10 % on a long putt
-    const t = (p) => (p / SW.RING_MAX) * SW.RING_UP_MS;
-    return t(need + tol) - t(need);
+    // The power is set on the BACKSWING now, so the window is that sweep's own rate: UP_MS per
+    // power unit. The slower backswing the reference measures makes every putt more forgiving
+    // than the old build's 750 ms ring did, which is the opposite of a regression.
+    return tol * SW.UP_MS;
   };
   const FRAME = 1000 / 60;
   for (const ft of [1, 2.2, 4, 6.9, 10, 15.8, 25, 40]) {

@@ -646,6 +646,88 @@ minimum hole width went 76 -> 104 to match. Sideways pan is now small on every h
 at 95 yards across you can already see both edges of the corridor - while the vertical pan, which
 is the one that answers "where will this drive land", is untouched.
 
+## THE SWING IS ONE NEEDLE, NOT TWO METERS (2026-09-04)
+
+Matt filmed the reference's meter and ours and asked what was different. Both clips were measured
+frame by frame at 60 fps - 201 and 203 frames, tracking the needle's angle and the accuracy bar's
+marker in **every single frame**. The answer was not cosmetic:
+
+```
+frames   0-33    the needle is parked DEAD CENTRE IN THE ACCURACY BAR, at 89-90 deg
+frames  33-127   it climbs the arc at 2.22 deg/frame - the backswing
+frame  127       A MARKER IS PLANTED AT 297 deg AND STAYS THERE for the rest of the clip,
+                 and the needle REVERSES
+frames 130-188   it runs back down at 3.24 deg/frame - 1.46x faster - the downswing
+frames 188-201   it STOPS at 96 deg and holds: a small miss, right of centre
+```
+
+And the clincher: **the accuracy bar's marker position is a linear function of the needle's angle**,
+same slope (-0.0175 per degree) on the way up and on the way down. The bar is not a second meter.
+**It is the same needle**, and the bar is a MAGNIFIED VIEW of the last ~12 % of arc either side of
+zero. That is why it has to sit in the ring's mouth: it is the same scale, unrolled.
+
+So the reference is the classic three-click swing, and ours now is too:
+
+| tap | what it does |
+|---|---|
+| 1 | start the backswing |
+| 2 | set POWER: a marker is planted where you stopped it, and the needle reverses |
+| 3 | set ACCURACY: stop the needle as near zero as you can on the way back down |
+
+**Everything is on ONE scale, `pos`, in power units** (`golf/js/swing.js`): `0` is the accuracy
+point (the bar's centre, a perfect strike), `1` is 100 % power, `SWING_MAX` (1.12) is the top of the
+over-swing block, and `+/- BAR_HALF` (0.12) is the window the bar magnifies. The needle is drawn at
+`ang(pos)` and lands inside the bar or on the band from the same expression, with no special case.
+
+### What that changed, measured against measured
+
+| | reference | old build | now |
+|---|---|---|---|
+| backswing 0 -> 100 % | 1.56 s | 0.75 s | **1.65 s** |
+| downswing 100 % -> 0 | 1.07 s | 0.75 s | **1.15 s** |
+| downswing vs backswing | 1.46x faster | identical | **1.43x faster** |
+| over-swing zone | +11.7 % | +10 % | **+12 %** |
+| accuracy green band | 54 % of the bar | 40 % | **54 %** |
+
+**Holding past the top is not a free extra lap.** The old ring ping-ponged for ever, so a mistimed
+tap cost nothing. Now the power is spent at `SWING_MAX` and the needle is already coming back down;
+the next tap is the ACCURACY tap, not a second power tap. And if the needle runs off the bottom of
+the bar with no third tap the shot fires anyway, at the worst accuracy the bar can express - a swing
+that hangs waiting for a tap the player already failed to make is worse than a bad shot.
+
+**Putting got easier, not harder.** The tap window for a putt is now the backswing's own rate, and
+the backswing is more than twice as slow as the old ring: 2.2 ft went from 7.5 frames of tolerance
+to 16.5, and a 40 ft putt from 3.2 to 7.1.
+
+### The meter's look, measured rather than eyeballed
+
+Every proportion in `_drawMeter` now comes off the reference:
+
+- **band thickness / outer radius = 0.345** (measured 51/148 by radial cross-section).
+- **Zero at 90 deg, 100 % at 311 deg, over-swing block 311-337 deg.**
+- **The over-swing block does NOT jut outside the arc.** Measured radially at 324 deg its colour
+  runs r90-r142, exactly the plain band's radii, with the outer white outline at 143-148 in both
+  places. **The previous build drew it as a fan sticking a third of a radius past the edge, and
+  this file said that was what the reference did. It was wrong** - read off a downscaled contact
+  sheet instead of a cross-section.
+- **The outline is BLACK OUTSIDE WHITE, on both edges.** Ours had no black at all, and that key is
+  most of why the original stays crisp over grass.
+- **The band is genuinely see-through**: it measures `#616736` over fairway green and `#474d32`
+  over a dark patch. `rgba(75,75,50,0.78)` composites to exactly the first. It has to be punched
+  through its own white rim with `destination-out` first, or it lands on 255 and comes out light
+  grey - which is what the first attempt looked like.
+- **The green stripe is at 91-93 % power and thin**, NOT adjacent to 100 %: the target is a shade
+  under full, with the over-swing beyond it.
+- **The bar's trapezoid is not decoration.** Its four corners are the band's inner and outer radii
+  at the two ends of the accuracy window, so it really is the arc's first 12 % straightened out -
+  which is also why the needle inside it is a radial line, exactly vertical only at dead centre.
+- Colours, sampled: green `#01da04`, red `#fd0001`, orange `#f07c03`/`#fb8f20`, white `#fffdfc`.
+
+**How to measure a clip like this**: dump every frame with ffmpeg, fit the ring's circle by scoring
+candidate circles against white pixels, then per frame cluster the angles whose radial segment is
+mostly white. That separates the sweeping needle from the arc's end caps and from the bar's own
+outline - the first three attempts all mistook one for another and produced confident nonsense.
+
 ### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver**, still. The view is
