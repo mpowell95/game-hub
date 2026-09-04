@@ -928,6 +928,85 @@ found the result screen, which this one had stopped 20 frames short of.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
 
+## The measuring pass (2026-09-04) - and the meter's scale was wrong
+
+Six things were built from guesses rather than from the footage. This pass measured all six before
+any of them got implemented a second time. **One of the answers invalidates a number this file has
+asserted since the one-needle rewrite.**
+
+### THE ARC IS ~206 DEGREES, NOT 221, AND THE GREEN STRIPE IS THE 100 % MARK
+
+Matt: *"We need line indicators of where the 25% 50% 75% and 100% powers are. The 100 has the green
+line, which is good."* He is describing tick marks - and he is right that they exist, which is how
+this was caught.
+
+The band carries **short tick marks at 25 / 50 / 75**, in a light tint rather than white, which is
+why an earlier scan with a `> 225` white threshold found nothing. Scanned by LUMINANCE across the
+band on the putt frame (the only one with clean green behind the meter rather than a sand bunker),
+the profile has three sharp peaks against flat noise:
+
+```
+139 deg  ###########################################  <- 25 %
+191 deg  ##################################           <- 50 %
+243 deg  ############################################ <- 75 %
+   everything else sits at 40-55 with no structure
+```
+
+Spacing 52.6 and 51.4 deg per 25 %. **That puts zero at ~87 deg and 100 % at ~295 deg: a 206-degree
+arc.** Ours draws 90 -> 311, a 221-degree arc, so **our meter is about 7 % too long in angle**.
+
+The consequences are not cosmetic:
+
+| | this file used to say | measured |
+|---|---|---|
+| 100 % | 311 deg | **~295 deg** |
+| the thin green stripe (292-296 deg) | a 91-93 % "sweet spot" short of full | **the 100 % LINE itself** |
+| the over-swing block (311-338 deg) | 100-112 % | **107-120 %** |
+| `SWING_MAX` | 1.12 | **~1.21** |
+
+And every power in the four-clip shot ledger shifts up about 7 %, which makes the ledger read far
+more sensibly - the player is aiming AT the green 100 % line and landing just either side of it:
+
+| shot | marker | old reading | measured |
+|---|---|---|---|
+| 1 driver | 292 deg | 91.4 % | **98 %** |
+| 2 3 wood | 299 deg | 94.6 % | **102 %** |
+| 3 7 iron | 193 deg | 46.6 % | **50 %** |
+| 4 putter | 149 deg | 26.7 % | **29 %** |
+
+**Where the old number came from:** 311 deg was assumed to be 100 % because that is where the
+over-swing block starts, and "the block starts at 100 %" felt obvious. It is not what the ticks
+say. The block starts at about 107 %, with a plain buffer between the 100 % line and the danger.
+
+### The other five
+
+- **THE GOLFER DOES NOT MOVE.** Matt: *"the little guy runs forward. it's very strange."* Measured
+  across the whole swing animation in clip 3 (frames 800-860): **the sprite's head sits on the same
+  pixel in every frame.** Only the club swings. Ours draws the golfer at the BALL's position and
+  keeps drawing it for 260 ms after the ball leaves, so it chases the ball down the fairway. The
+  sprite itself: about 12 x 20 art pixels - white cap with a dark brim, tan face, light shirt with a
+  gold band at the waist, grey trousers, and a club that sweeps through in front of it.
+- **THE SLOPE MARKERS ARE ARROWHEADS, AND THEY ARE A DARKER TINT OF THE GREEN.** Two strokes making
+  a chevron - a `V` pointing downhill, or the same glyph rotated onto a diagonal. **Fixed size**,
+  laid on a regular grid, each glyph about a fifth of the grid spacing, and drawn in a darker shade
+  of the putting surface rather than in white. Ours draws a line segment whose LENGTH is the slope
+  magnitude, which on real hole data is 1 to 4 pixels - so it renders as the field of dots Matt
+  reported, with no readable direction. The fix is a fixed-size arrowhead oriented downhill.
+- **THE LIE READOUT IS A PICTURE, NOT A WORD.** An isometric block of the surface itself - a top
+  face in that surface's own colour and speckle, a brown soil face beneath it, a black outline -
+  with a large dimpled ball sitting on top, overhanging the front edge and casting a small shadow.
+  About 60 x 49 CSS px with a 37 px ball. Ours prints the word "Green" in a panel.
+- **FLIGHT.** Clip 1's drive: the ball is in motion for **4.53 s** in total (frames 585 to ~857) for
+  a 247 yd carry. The split between air and run-out is derived from the camera's pan rate falling
+  off around frame 788, which is suggestive but not solid - the camera can ease independently of the
+  ball - so only the total is quoted as measured. Ours gives that shot 5.02 s of flight alone.
+- **WIND.** The panel reads `wind`, an arrow glyph, and a bare number, and it is **0.9 with the arrow
+  pointing down-left in all four clips, unchanged for the whole hole**. Its EFFECT could not be
+  isolated: the only shot with a clean before/after is shot 1, which finished essentially on line,
+  so the footage gives a magnitude of "not enough to matter at 0.9". Building wind needs either a
+  clip with a strong wind or a decision from Matt about how much it should move a ball. Ours
+  currently has no wind at all - not in `resolveShot`, not anywhere; the HUD prints a hardcoded 0.
+
 ## Two bugs that were ruining every game (2026-09-04)
 
 Both found from one screenshot and one sentence, and both were one line.
@@ -975,6 +1054,72 @@ The cup is now drawn at `CUP_CAPTURE_YD * cam.ppy`, **imported from `shot.js` ra
 so the hole you see and the hole that captures are the same number and cannot drift. It is bigger,
 it scales with the zoom, and a ball that looks like it went in did. The floor stays only so the cup
 is still visible at the 95-yard fairway view.
+
+## The bag and the HUD (2026-09-04)
+
+Batch 3 of the playtest list. Six changes, all of them about the controls rather than the physics.
+
+**The wedges are spelled out.** `pitch wedge` / `sand wedge` / `lob wedge`, not `p wedge`. In
+Spanish the first one is `pitching wedge`, which is what it is actually called there.
+
+**The club ladder WRAPS.** Matt: *"if I press up all the way to driver, it should cycle back to the
+Lob Wedge. same for the other direction."* It used to CLAMP at both ends, so the only way back from
+the driver was thirteen taps the other way, and holding the button just sat there doing nothing -
+which reads as a broken control, not as a limit. `stepClub` is a modulo now.
+
+**THE PUTTER CAN BE TAKEN FROM THE FAIRWAY AND THE TEE.** Matt: *"You should make the putter
+available when on the fairway and fringe. Not the rough. But long putts from off the green (from
+the fairway or fringe) should be possible."*
+
+This needed one predicate split into three, because `isPuttable` was gating five different things
+at once - the auto-pick, the club lock, how the shot resolves, whether the distance reads in feet,
+and the camera's zoom - and the new rule pulls them apart:
+
+| question | answer | what it drives |
+|---|---|---|
+| `mustPutt(lie)` | green, fringe | the auto-pick, the locked ladder, the camera zoom |
+| `canPutt(lie)` | + fairway, tee | whether the putter is IN the ladder at all |
+| `_putting()` (ui) | the club in hand IS the putter | how the shot resolves, the aim ladder, feet vs yards |
+
+`isPuttable` is still exported as an alias for `mustPutt` so nothing breaks silently. The putter
+sits at the SHORT end of a fairway ladder - one step down from the lob wedge - and the wrap past it
+comes back to the driver. A putter carried onto a lie that cannot hold one (the ball ran into
+rough) hands the bag back rather than swinging a putter out of the cabbage.
+
+**And a putt now knows what it is rolling over.** `PUTT_DRAG` in `shot.js` is a per-surface
+multiple of `PUTT_DECEL`: green 1.00, fringe 1.55, fairway and tee 1.90, worse for everything else.
+**DECIDED, NOT MEASURED, and labelled as such in the file** - the reference is never once seen
+putting from off the green, so there is no footage to measure; the ORDERING is real golf's and that
+is the part that matters.
+
+The pace a stroke needs is normalised against `avgPuttDrag` - the drag averaged over the ground the
+ball is ABOUT to cross, sampled along the aim line - not against the lie it sits on. Normalising
+against the lie alone was measurably wrong in both directions: a full-power putt from the collar was
+given enough pace for 60 ft of collar, reached the green after 6 yds and ran **85 ft**; one from the
+fairway came up short. With the path averaged, a full-power putt covers 59-60 ft from the green, the
+fringe, and the fairway alike, which is what makes the meter mean one thing everywhere.
+
+**The club tile carries a yardage.** `driver / 215 yds`, `putter / 60 ft`. It is the LIE-ADJUSTED
+full-power carry, so it drops as the lie worsens - which turns the `Power: 82%` line above it into
+something the player can act on rather than just read. The reference's tile has a number; ours had
+none, so the only way to learn what a 6 iron was worth from here was to swing it.
+
+**Aim is 1.0 deg a tap, and holding accelerates.** It was 1.5 deg, which at 215 yds moves the
+landing 5.6 yds - too coarse to place a drive between two trees. 1.0 deg is 3.8 yds at driver range
+and about nine INCHES at wedge range. Holding used to auto-repeat at a flat 8 a second, which is the
+worst of both: too fast to place the aim by holding, too slow to cross the arc. It now starts at 4 a
+second and ramps to 16 over a second of holding (`HOLD_SLOW_MS` / `HOLD_FAST_MS` / `HOLD_RAMP_MS`),
+so a full sweep of the +/-60 deg arc takes about 5 s and a walk from the driver to the lob wedge
+about 1.5 s. The repeat is a self-rescheduling `setTimeout`, not a `setInterval`, because the gap
+changes on every tick.
+
+**How far the last shot went was already there** and stays where the reference puts it: the hub of
+the swing ring. What was wrong with it was WHEN - it used to be written in `_fire`, so the third tap
+printed the outcome while the ball was still in the air. It is written in `_settleShot` now.
+
+Covered by `golf/js/test.js` section 6b (twelve assertions on the three predicates, the ladder in
+all three lie classes, and the drag ordering) and by `test-visual.mjs`'s play probe, which drives
+the real DOM tee-to-cup.
 
 ## Two courses, thirty-six holes (2026-09-04)
 

@@ -391,7 +391,10 @@ const PLAY = {
         g.aimRad = Math.atan2(g.hole.pin[0] - g.ball[0], g.hole.pin[1] - g.ball[1]);
         g._paintHud();
       });
-      const onGreen = await page.evaluate(() => window.__gfTest._onGreen());
+      // `_mustPutt` (was `_onGreen` until 2026-09-04): the lie where the putter is the only club.
+      // The game now also has `_putting()` - the putter actually in hand, which is true on a
+      // fairway too - and these two must not be confused when driving it from here.
+      const onGreen = await page.evaluate(() => window.__gfTest._mustPutt());
       if (!onGreen) return { ok: false, why: 'placed beside the cup and the lie lookup did not say "green"' };
       const unit = await page.$eval('[data-role="dist"]', (el) => el.textContent);
       if (!/ft/.test(unit)) return { ok: false, why: `on the green the distance still reads in yards: "${unit}"` };
