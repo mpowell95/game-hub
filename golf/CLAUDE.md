@@ -1055,6 +1055,72 @@ so the hole you see and the hole that captures are the same number and cannot dr
 it scales with the zoom, and a ball that looks like it went in did. The floor stays only so the cup
 is still visible at the 95-yard fairway view.
 
+## The bag and the HUD (2026-09-04)
+
+Batch 3 of the playtest list. Six changes, all of them about the controls rather than the physics.
+
+**The wedges are spelled out.** `pitch wedge` / `sand wedge` / `lob wedge`, not `p wedge`. In
+Spanish the first one is `pitching wedge`, which is what it is actually called there.
+
+**The club ladder WRAPS.** Matt: *"if I press up all the way to driver, it should cycle back to the
+Lob Wedge. same for the other direction."* It used to CLAMP at both ends, so the only way back from
+the driver was thirteen taps the other way, and holding the button just sat there doing nothing -
+which reads as a broken control, not as a limit. `stepClub` is a modulo now.
+
+**THE PUTTER CAN BE TAKEN FROM THE FAIRWAY AND THE TEE.** Matt: *"You should make the putter
+available when on the fairway and fringe. Not the rough. But long putts from off the green (from
+the fairway or fringe) should be possible."*
+
+This needed one predicate split into three, because `isPuttable` was gating five different things
+at once - the auto-pick, the club lock, how the shot resolves, whether the distance reads in feet,
+and the camera's zoom - and the new rule pulls them apart:
+
+| question | answer | what it drives |
+|---|---|---|
+| `mustPutt(lie)` | green, fringe | the auto-pick, the locked ladder, the camera zoom |
+| `canPutt(lie)` | + fairway, tee | whether the putter is IN the ladder at all |
+| `_putting()` (ui) | the club in hand IS the putter | how the shot resolves, the aim ladder, feet vs yards |
+
+`isPuttable` is still exported as an alias for `mustPutt` so nothing breaks silently. The putter
+sits at the SHORT end of a fairway ladder - one step down from the lob wedge - and the wrap past it
+comes back to the driver. A putter carried onto a lie that cannot hold one (the ball ran into
+rough) hands the bag back rather than swinging a putter out of the cabbage.
+
+**And a putt now knows what it is rolling over.** `PUTT_DRAG` in `shot.js` is a per-surface
+multiple of `PUTT_DECEL`: green 1.00, fringe 1.55, fairway and tee 1.90, worse for everything else.
+**DECIDED, NOT MEASURED, and labelled as such in the file** - the reference is never once seen
+putting from off the green, so there is no footage to measure; the ORDERING is real golf's and that
+is the part that matters.
+
+The pace a stroke needs is normalised against `avgPuttDrag` - the drag averaged over the ground the
+ball is ABOUT to cross, sampled along the aim line - not against the lie it sits on. Normalising
+against the lie alone was measurably wrong in both directions: a full-power putt from the collar was
+given enough pace for 60 ft of collar, reached the green after 6 yds and ran **85 ft**; one from the
+fairway came up short. With the path averaged, a full-power putt covers 59-60 ft from the green, the
+fringe, and the fairway alike, which is what makes the meter mean one thing everywhere.
+
+**The club tile carries a yardage.** `driver / 215 yds`, `putter / 60 ft`. It is the LIE-ADJUSTED
+full-power carry, so it drops as the lie worsens - which turns the `Power: 82%` line above it into
+something the player can act on rather than just read. The reference's tile has a number; ours had
+none, so the only way to learn what a 6 iron was worth from here was to swing it.
+
+**Aim is 1.0 deg a tap, and holding accelerates.** It was 1.5 deg, which at 215 yds moves the
+landing 5.6 yds - too coarse to place a drive between two trees. 1.0 deg is 3.8 yds at driver range
+and about nine INCHES at wedge range. Holding used to auto-repeat at a flat 8 a second, which is the
+worst of both: too fast to place the aim by holding, too slow to cross the arc. It now starts at 4 a
+second and ramps to 16 over a second of holding (`HOLD_SLOW_MS` / `HOLD_FAST_MS` / `HOLD_RAMP_MS`),
+so a full sweep of the +/-60 deg arc takes about 5 s and a walk from the driver to the lob wedge
+about 1.5 s. The repeat is a self-rescheduling `setTimeout`, not a `setInterval`, because the gap
+changes on every tick.
+
+**How far the last shot went was already there** and stays where the reference puts it: the hub of
+the swing ring. What was wrong with it was WHEN - it used to be written in `_fire`, so the third tap
+printed the outcome while the ball was still in the air. It is written in `_settleShot` now.
+
+Covered by `golf/js/test.js` section 6b (twelve assertions on the three predicates, the ladder in
+all three lie classes, and the drag ordering) and by `test-visual.mjs`'s play probe, which drives
+the real DOM tee-to-cup.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a

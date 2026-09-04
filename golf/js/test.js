@@ -15,7 +15,7 @@ import { PINE_VALLEY } from '../courses/pinevalley.js';
 import { RED_MESA } from '../courses/redmesa.js';
 import { COURSES, ROUNDS, roundKey, roundHoles, roundPar, stablefordPoints } from './rounds.js';
 import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, isPuttable } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, mustPutt, canPutt } from './clubs.js';
 import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
@@ -145,8 +145,63 @@ ok('139 yds from the fairway offers the 6 iron', autoSelectClub(139, 'fairway').
 ok('the green always offers the putter', autoSelectClub(4, 'green').id === 'putter');
 ok('a heavy-rough lie takes MORE club for the same distance',
   CLUBS.indexOf(autoSelectClub(139, 'heavyRough')) < CLUBS.indexOf(autoSelectClub(139, 'fairway')));
-ok('stepping up from the driver stays on the driver', stepClub(CLUBS[0], +1).id === 'driver');
-ok('stepping down from the lob wedge stays on the lob wedge', stepClub(CLUBS[13], -1).id === 'lwedge');
+// THE LADDER WRAPS AT BOTH ENDS. Matt, 2026-09-04: "if I press up all the way to driver, it
+// should cycle back to the Lob Wedge. same for the other direction." It used to CLAMP, so the only
+// way back from the driver was thirteen taps the other way and holding the button did nothing at
+// all - which reads as a broken control, not as a limit.
+const LAST = CLUBS[CLUBS.length - 1];
+ok('stepping up from the driver wraps round to the lob wedge',
+  stepClub(CLUBS[0], +1, 'heavyRough').id === LAST.id);
+ok('stepping down from the lob wedge wraps round to the driver',
+  stepClub(LAST, -1, 'heavyRough').id === 'driver');
+ok('one step down from the driver is the 3 wood', stepClub(CLUBS[0], -1, 'fairway').id === CLUBS[1].id);
+
+console.log('\n-- 6b. the putter is OFFERED off the green, and FORCED on it --');
+// Matt, 2026-09-04: "You should make the putter available when on the fairway and fringe. Not the
+// rough. But long putts from off the green (from the fairway or fringe) should be possible."
+// Two questions, two predicates: `mustPutt` is the lie where nothing else is offered, `canPutt` is
+// the lie where it may be CHOSEN. They used to be one function gating both, which is why the
+// putter could not exist on a fairway without also taking every other club away there.
+ok('the green and the fringe force the putter', mustPutt('green') && mustPutt('fringe'));
+ok('the fairway and the tee do NOT force it', !mustPutt('fairway') && !mustPutt('tee'));
+ok('but they DO offer it', canPutt('fairway') && canPutt('tee'));
+ok('rough, sand and trees never offer it',
+  !canPutt('lightRough') && !canPutt('heavyRough') && !canPutt('greensideBunker')
+  && !canPutt('fairwayBunker') && !canPutt('trees'));
+ok('the auto-pick still hands over the putter only where it is forced',
+  autoSelectClub(8, 'fringe').id === 'putter' && autoSelectClub(8, 'fairway').id !== 'putter');
+// `dir` +1 is MORE club, so the putter - the shortest thing in the bag - sits one step DOWN from
+// the lob wedge, and the wrap past it comes back to the driver.
+ok('the putter sits at the short end of a fairway ladder',
+  stepClub(LAST, -1, 'fairway').id === 'putter');
+ok('one more step down wraps back to the driver',
+  stepClub(PUTTER, -1, 'fairway').id === 'driver');
+ok('and one step UP from the putter is the lob wedge again',
+  stepClub(PUTTER, +1, 'fairway').id === LAST.id);
+ok('but the putter is absent from a rough ladder',
+  stepClub(LAST, -1, 'heavyRough').id === 'driver');
+ok('the ladder does not move at all on the green',
+  stepClub(PUTTER, +1, 'green').id === 'putter' && stepClub(CLUBS[0], -1, 'green').id === 'putter');
+{
+  // A putter carried onto a lie that cannot hold one must not simply stay in hand.
+  let seen = PUTTER;
+  seen = stepClub(seen, +1, 'heavyRough');
+  ok('a putter stepped from an unputtable lie lands on a real club', seen.id !== 'putter');
+}
+{
+  // A putt FROM THE FAIRWAY must not run as far as the same stroke on the green, or the green
+  // stops meaning anything. `PUTT_DRAG` is what makes that true; this is the assertion on it.
+  const h = PINE_VALLEY.holes[0];
+  const pin = h.pin;
+  const onGreen = [pin[0], pin[1] - 12];
+  const aim = Math.atan2(pin[0] - onGreen[0], pin[1] - onGreen[1]);
+  const a = SH.simulatePutt({ hole: h, from: onGreen, aimRad: aim + 0.5, power: 1, rangeFt: SH.puttRangeFt() });
+  ok('a full-power putt on the green covers most of the putt range',
+    distYd(onGreen, a.rest) > (SH.MAX_PUTT_FT / 3) * 0.6,
+    `covered ${distYd(onGreen, a.rest).toFixed(1)} yds`);
+  ok('fairway drags a rolling ball harder than the green does',
+    SH.puttDrag('fairway') > SH.puttDrag('fringe') && SH.puttDrag('fringe') > SH.puttDrag('green'));
+}
 
 console.log('\n-- 7. ONE NEEDLE, THREE TAPS: the three-click swing --');
 // MEASURED off the reference at 60 fps, every frame of a 203-frame clip (swing.js's header has
@@ -631,7 +686,7 @@ console.log('\n-- 13. a whole hole can be played out --');
     const d = distYd(ball, h.pin);
     const aim = Math.atan2(h.pin[0] - ball[0], h.pin[1] - ball[1]);
     strokes++;
-    if (isPuttable(lie)) {
+    if (mustPutt(lie)) {
       const rangeFt = SH.puttRangeFt();
       const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / rangeFt), rangeFt });
       ball = p.rest; holed = p.holed;
@@ -681,7 +736,7 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
     let ball = [...hole.tee];
     for (let n = 1; n <= 14; n++) {
       const lie = surfaceAt(hole, ball[0], ball[1]);
-      if (isPuttable(lie)) {
+      if (mustPutt(lie)) {
         const ft = distYd(ball, hole.pin) * 3;
         const rangeFt = SH.puttRangeFt();
         const aim = Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]);

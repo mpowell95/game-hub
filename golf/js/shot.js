@@ -269,6 +269,59 @@ export const PUTT_DECEL = 1.81;
  *  nothing to get right. */
 export const BREAK_K = 0.12;
 
+/** HOW MUCH A ROLLING BALL IS SLOWED BY WHAT IT IS ROLLING ON, as a multiple of `PUTT_DECEL`
+ *  (which is the green, and so is 1.00 by definition).
+ *
+ *  This exists because the putter can be taken from the fairway and the collar (Matt, 2026-09-04:
+ *  "long putts from off the green (from the fairway or fringe) should be possible"), and a ball
+ *  putted across a fairway that ran exactly as far as one putted across the green would make the
+ *  green mean nothing.
+ *
+ *  DECIDED, NOT MEASURED, and said so plainly: the reference is never once seen putting from off
+ *  the green, so there is no footage to measure. The ordering is the part that matters and it is
+ *  the ordering of real golf - collar a little slower than the putting surface, mown fairway
+ *  slower again. Anything the putter cannot legally be taken from gets a large number rather than
+ *  no entry, so a ball that RUNS onto rough at the end of a putt still stops in it.
+ *
+ *  The full-power distance is normalised against the lie the ball STARTS on (see `simulatePutt`),
+ *  so the power meter still means "60 ft at 100 %" wherever it is swung - what changes is what
+ *  happens to the ball once it is rolling, including speeding up as it runs onto the green. */
+export const PUTT_DRAG = {
+  green: 1.00,
+  fringe: 1.55,
+  tee: 1.90,
+  fairway: 1.90,
+  lightRough: 3.40,
+  heavyRough: 5.00,
+  fairwayBunker: 6.00,
+  greensideBunker: 6.00,
+  trees: 3.40,
+  water: 8.00,
+};
+export function puttDrag(kind) { return PUTT_DRAG[kind] || PUTT_DRAG.fairway; }
+
+/** The average drag over the ground a putt is ABOUT to cross, sampled along the aim line.
+ *
+ *  This is what makes "full power covers `rangeFt`" hold on a MIXED path. Normalising against the
+ *  lie the ball sits on alone is wrong in both directions and measurably so: a putt struck from the
+ *  collar was given enough pace for 60 ft of collar, then reached the green after 6 yds and ran
+ *  85 ft; a putt from the fairway to a green mostly on the fairway came up short. Weighting the
+ *  whole path fixes both, and it is what a player is doing by eye anyway - looking at what the ball
+ *  has to travel over, not at what it is sitting on. */
+export function avgPuttDrag(hole, from, aimRad, distanceYd) {
+  if (!(distanceYd > 0)) return puttDrag(surfaceAt(hole, from[0], from[1]));
+  const N = 24;
+  const sin = Math.sin(aimRad);
+  const cos = Math.cos(aimRad);
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const d = ((i + 0.5) / N) * distanceYd;
+    sum += puttDrag(surfaceAt(hole, from[0] + sin * d, from[1] + cos * d));
+  }
+  return sum / N;
+}
+
+
 /** The cup. A real hole is 4.25 in across; the capture radius here is a little wider and speed
  *  limited, so a ball that rattles the rim at pace lips out instead of vanishing.
  *
@@ -322,9 +375,13 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
   // it falls back to the old fixed ceiling only so a bare call still runs.
   const full = rangeFt || MAX_PUTT_FT;
   const distYdWanted = ((full * power) / FT_PER_YD);
-  let v = Math.sqrt(Math.max(0, 2 * PUTT_DECEL * distYdWanted));
   let x = from[0];
   let y = from[1];
+  // Full power covers `rangeFt` OVER THE GROUND THE BALL IS ABOUT TO CROSS - so the meter reads the
+  // same whether the ball is on the green or 15 yds short of it, and the surface shows up in the
+  // pace the stroke needs rather than in a power scale that silently changes under the player.
+  const dec0 = PUTT_DECEL * avgPuttDrag(hole, [x, y], aimRad, distYdWanted);
+  let v = Math.sqrt(Math.max(0, 2 * dec0 * distYdWanted));
   let vx = Math.sin(aimRad) * v;
   let vy = Math.cos(aimRad) * v;
 
@@ -350,8 +407,9 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
     // more power without any separate rule for it.
     vx += g[0] * BREAK_K * DT;
     vy += g[1] * BREAK_K * DT;
-    // Rolling friction, opposing the direction of travel.
-    const dec = PUTT_DECEL * DT;
+    // Rolling friction, opposing the direction of travel - sampled at the ball's CURRENT position,
+    // so a putt from the fairway drags until it reaches the green and then runs out on it.
+    const dec = PUTT_DECEL * puttDrag(surfaceAt(hole, x, y)) * DT;
     if (v > dec) { vx -= (vx / v) * dec; vy -= (vy / v) * dec; } else { vx = 0; vy = 0; }
 
     x += vx * DT;

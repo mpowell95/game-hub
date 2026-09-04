@@ -105,8 +105,26 @@ export const LIES = {
 
 export function lieOf(kind) { return LIES[kind] || LIES.fairway; }
 
-/** Surfaces you putt from. The green and its collar. */
-export function isPuttable(kind) { return kind === 'green' || kind === 'fringe'; }
+/** Surfaces where the putter is the ONLY club offered: the green and its collar. This is the
+ *  strong form - it drives the auto-pick, it locks the club ladder, and it is what the camera
+ *  zooms for.
+ *
+ *  It used to be called `isPuttable` and it gated all of that AND "may the player select a
+ *  putter at all", which conflated two different questions. Matt, 2026-09-04: "You should make
+ *  the putter available when on the fairway and fringe. Not the rough. But long putts from off
+ *  the green (from the fairway or fringe) should be possible." A fairway lie must OFFER the
+ *  putter without FORCING it, so the two questions are now two functions. */
+export function mustPutt(kind) { return kind === 'green' || kind === 'fringe'; }
+
+/** Surfaces the putter may be CHOSEN from: the above, plus the fairway and the tee. Grass short
+ *  enough that a putt rolls. Never from rough, sand or trees - the ball would not go anywhere,
+ *  and offering a club that cannot work is worse than not offering it. */
+export function canPutt(kind) {
+  return mustPutt(kind) || kind === 'fairway' || kind === 'tee';
+}
+
+/** @deprecated the old name for `mustPutt`, kept so nothing outside this file breaks silently. */
+export const isPuttable = mustPutt;
 
 /** ROLL after landing, as a fraction of carry: the surface the ball comes down ON, times how
  *  FLAT the club sends it in.
@@ -192,7 +210,7 @@ export function autoSelectClub(distanceYd, lieKind) {
   // THE PUTTER IS OFFERED FROM THE COLLAR TOO, not only from the putting surface. Without this a
   // ball two feet off the green is handed the shortest club in the bag - a lob wedge, 50 yds - and
   // blasted clean over the green. Real golfers putt from the fringe; so does this.
-  if (isPuttable(lieKind)) return PUTTER;
+  if (mustPutt(lieKind)) return PUTTER;
   const reach = lieOf(lieKind).power;
   for (let i = CLUBS.length - 1; i >= 0; i--) {
     if (CLUBS[i].carry * reach >= distanceYd) return CLUBS[i];
@@ -200,10 +218,23 @@ export function autoSelectClub(distanceYd, lieKind) {
   return CLUBS[0];
 }
 
-/** Cycle the bag. `dir` +1 is MORE club (further), -1 is less. The putter is not in the cycle: it
- *  is on the green and nowhere else. */
-export function stepClub(club, dir) {
-  if (club.id === 'putter') return PUTTER;
-  const i = CLUBS.findIndex((c) => c.id === club.id);
-  return CLUBS[Math.min(CLUBS.length - 1, Math.max(0, i - dir))];
+/** Cycle the bag. `dir` +1 is MORE club (further), -1 is less.
+ *
+ *  `lieKind` decides whether the putter is IN the ladder. Where `mustPutt` holds it is the only
+ *  club and the ladder does not move at all; where `canPutt` holds but `mustPutt` does not (the
+ *  fairway, the tee) the putter sits at the SHORT end, one step past the lob wedge, so a long
+ *  putt from the fairway is reachable by the same two buttons as every other club. Anywhere
+ *  else it is absent.
+ *
+ *  THE LADDER WRAPS. Matt: "if I press up all the way to driver, it should cycle back to the Lob
+ *  Wedge. same for the other direction." It used to CLAMP at both ends, so the only way back from
+ *  the driver was thirteen taps the other way - and holding the button just sat there doing
+ *  nothing, which reads as broken rather than as a limit. */
+export function stepClub(club, dir, lieKind) {
+  if (mustPutt(lieKind)) return PUTTER;
+  const ladder = canPutt(lieKind) ? [...CLUBS, PUTTER] : CLUBS;
+  const n = ladder.length;
+  let i = ladder.findIndex((c) => c.id === club.id);
+  if (i < 0) i = n - 1;                       // holding a putter on a lie that just lost it
+  return ladder[(((i - dir) % n) + n) % n];
 }

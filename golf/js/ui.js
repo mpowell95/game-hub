@@ -15,7 +15,7 @@ import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable, swingTempo } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BAR_HALF } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -40,10 +40,22 @@ function windArrow(deg, calm = true) {
 }
 const t = makeT(STRINGS);
 
-const AIM_STEP_DEG = 1.5;        // §4, ours: 1.5 deg at 215 yds moves the landing about 5.6 yds
+// AIM, PER TAP. Was 1.5 deg, which at 215 yds moves the landing 5.6 yds - too coarse to place a
+// drive between two trees, and the only fix available to the player was to stop leaning on the
+// button at exactly the right moment. 1.0 deg is 3.8 yds at driver range and about 9 INCHES at
+// wedge range, which is the resolution the short game actually needs. Holding still crosses the
+// full +/- 60 deg quickly, because the repeat below now accelerates.
+const AIM_STEP_DEG = 1.0;
 const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line to the hole
+// PRESS-AND-HOLD, ACCELERATING. It used to be a flat 8 taps a second after a 400 ms delay, which
+// is the worst of both: too fast to place the aim by holding, too slow to cross the arc. It now
+// starts at 4 a second - slow enough that letting go on the step you want is easy - and ramps to
+// 16 a second over a second of holding, so a full sweep of the aim arc still takes about 5 s and
+// a walk from the driver to the lob wedge about 1.5 s.
 const HOLD_DELAY_MS = 400;       // press-and-hold before auto-repeat
-const HOLD_RATE_MS = 125;        // then 8 taps a second
+const HOLD_SLOW_MS = 250;        // the first repeats: 4 a second
+const HOLD_FAST_MS = 62;         // the fastest it gets: 16 a second
+const HOLD_RAMP_MS = 1000;       // how long it takes to get there
 const DEG = Math.PI / 180;
 
 /** THE GAP BETWEEN THE THIRD TAP AND THE BALL LEAVING THE CLUB, ms. MEASURED off the reference at
@@ -393,16 +405,33 @@ class GolfGame {
   }
   _distToPin() { return distYd(this.ball, this.hole.pin); }
   _lie() { return surfaceAt(this.hole, this.ball[0], this.ball[1]); }
-  /** Putting range: the green AND its collar (clubs.js's isPuttable). Named for what it gates -
-   *  the putter, the feet readout and the putt simulation - rather than for the green alone. */
-  _onGreen() { return isPuttable(this._lie()); }
+  /** THE LIE FORCES THE PUTTER: the green and its collar. This gates the auto-pick, the club
+   *  ladder (there is nothing else to take) and the camera's zoom.
+   *
+   *  It used to be one predicate called `_onGreen` gating five separate things, including "may
+   *  the player choose a putter". Matt, 2026-09-04: "You should make the putter available when on
+   *  the fairway and fringe. Not the rough." A fairway lie must OFFER the putter without FORCING
+   *  it, so the question is now three questions with three answers. */
+  _mustPutt() { return mustPutt(this._lie()); }
+
+  /** THE PUTTER MAY BE CHOSEN here: the above, plus the fairway and the tee. */
+  _canPutt() { return canPutt(this._lie()); }
+
+  /** THE PUTTER IS ACTUALLY IN HAND. This - not the lie - is what decides how the shot resolves,
+   *  what the aim ladder draws, and whether the distance reads in feet. The LIE still decides the
+   *  camera, because a putt from 15 yds out needs to see where it is going. */
+  _putting() { return this._activeClub().id === 'putter'; }
 
   /** THE club in hand, resolved in ONE place. The HUD paints this and _fire swings it, so the tile
    *  can never name one club while the shot uses another - which is exactly what happened when the
    *  HUD grew its own auto-pick fallback and _fire kept reading the raw field. */
   _activeClub() {
-    if (this._onGreen()) return PUTTER;
-    if (!this.club || this.club.id === 'putter') this.club = autoSelectClub(this._distToPin(), this._lie());
+    const lie = this._lie();
+    if (mustPutt(lie)) return PUTTER;
+    // A putter carried onto a lie that cannot hold one (the ball ran into rough) hands the bag
+    // back rather than swinging a putter out of the cabbage.
+    if (!this.club) this.club = autoSelectClub(this._distToPin(), lie);
+    else if (this.club.id === 'putter' && !canPutt(lie)) this.club = autoSelectClub(this._distToPin(), lie);
     return this.club;
   }
 
@@ -451,6 +480,7 @@ class GolfGame {
             <div class="gf-panel gf-clubtile">
               <span class="gf-clubartwrap" data-role="clubart"></span>
               <span class="gf-clubname" data-role="clubname"></span>
+              <span class="gf-clubyds" data-role="clubyds"></span>
             </div>
             <div class="gf-clubcol">
               <button type="button" class="gf-btn" data-role="club-up" aria-label="${t('a11y_club_up')}"><span>&and;</span></button>
@@ -470,7 +500,7 @@ class GolfGame {
     this.meter = this.rootEl.querySelector('[data-role="meter"]');
     this.mctx = this.meter.getContext('2d');
     this.el = {};
-    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'swing']) {
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
 
@@ -486,13 +516,22 @@ class GolfGame {
 
     // Press-and-hold auto-repeat for the four nudge controls, after a 400 ms delay (§4).
     const hold = (el, fn) => {
-      let timer = 0; let rep = 0;
-      const stop = () => { clearTimeout(timer); clearInterval(rep); timer = 0; rep = 0; el.removeAttribute('data-down'); };
+      let timer = 0; let heldSince = 0;
+      const stop = () => { clearTimeout(timer); timer = 0; heldSince = 0; el.removeAttribute('data-down'); };
+      // A self-rescheduling timeout rather than a setInterval, because the gap CHANGES on every
+      // repeat: `k` is how far into the ramp we are, so the delay eases from HOLD_SLOW_MS down to
+      // HOLD_FAST_MS and then stays there for as long as the finger is down.
+      const tick = () => {
+        fn();
+        const k = Math.min(1, (performance.now() - heldSince - HOLD_DELAY_MS) / HOLD_RAMP_MS);
+        timer = setTimeout(tick, HOLD_SLOW_MS + (HOLD_FAST_MS - HOLD_SLOW_MS) * k);
+      };
       const start = (ev) => {
         ev.preventDefault();
         el.setAttribute('data-down', '1');
+        heldSince = performance.now();
         fn();
-        timer = setTimeout(() => { rep = setInterval(fn, HOLD_RATE_MS); }, HOLD_DELAY_MS);
+        timer = setTimeout(tick, HOLD_DELAY_MS);
       };
       this._on(el, 'pointerdown', start);
       this._on(el, 'pointerup', stop);
@@ -597,8 +636,8 @@ class GolfGame {
 
   _stepClub(dir) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
-    if (this._onGreen()) return;                    // the putter is the only club on the green
-    this.club = stepClub(this.club, dir);
+    if (this._mustPutt()) return;                   // the putter is the only club on the green
+    this.club = stepClub(this._activeClub(), dir, this._lie());
     this._syncTempo();
     this._paintHud();
   }
@@ -636,7 +675,9 @@ class GolfGame {
     const { pos, power } = { pos: this.swing.pos, power: this.swing.power };
     const m = mishit(barPosOf(pos), power, zone);
 
-    if (this._onGreen()) {
+    // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
+    // fairway and the tee, which is exactly the case this split exists for.
+    if (this._putting()) {
       const res = simulatePutt({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power,
         rangeFt: puttRangeFt(),
@@ -858,13 +899,21 @@ class GolfGame {
     // Yards off the green, FEET on it. The switch is on the SURFACE, not on a distance threshold:
     // that matches both of the reference's observations and needs no constant to guess at.
     const d = this._distToPin();
-    this.el.dist.textContent = this._onGreen()
+    const club = this._activeClub();
+    const putting = club.id === 'putter';
+    this.el.dist.textContent = putting
       ? `${(d * FT_PER_YD).toFixed(1)} ${t('ft')}`
       : `${d.toFixed(1)} ${t('yds')}`;
 
-    const club = this._activeClub();
     this.el.clubart.innerHTML = clubArt(club.id);
     this.el.clubname.textContent = t(`club_${club.id}`);
+    // HOW FAR THIS CLUB GOES, ON THIS LIE, printed under its name. The reference's tile carries a
+    // number and ours did not, so the only way to know what a 6 iron was worth here was to swing
+    // it. It is the LIE-ADJUSTED full-power carry, so it drops as the lie worsens - which makes
+    // the "Power: 82%" line above it something the player can act on rather than just read.
+    this.el.clubyds.textContent = putting
+      ? `${puttRangeFt().toFixed(0)} ${t('ft')}`
+      : `${Math.round(club.carry * L.power)} ${t('yds')}`;
     this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
   }
 
@@ -889,7 +938,7 @@ class GolfGame {
     // 95 yds of screen puts it in 2 % of the frame with a sub-pixel break. It eases between the
     // two rather than snapping, except on the first frame of a hole, so walking onto the green
     // reads as the camera coming down to you.
-    const wantW = this._onGreen() ? VIEW_W_GREEN_YDS : VIEW_W_YDS;
+    const wantW = this._mustPutt() ? VIEW_W_GREEN_YDS : VIEW_W_YDS;
     this.cam.setWidth(snap ? wantW : this.cam.widthYds + (wantW - this.cam.widthYds) * 0.18);
     // The ball sits LOW in the frame so the player sees up the hole toward the green. 0.5 puts it
     // about a quarter of the way up the screen, which is what makes the aim ladder's far dots
@@ -898,7 +947,7 @@ class GolfGame {
     // ON THE GREEN IT IS ALMOST CENTRED. That offset exists to show a fairway the ball is about to
     // fly up; a putt's target is a few feet away, so pushing the ball to the bottom of the frame
     // just spends the top half of the screen on whatever is behind the green.
-    const want = this.ball[1] + this.cam.halfH * (this._onGreen() ? 0.12 : 0.5);
+    const want = this.ball[1] + this.cam.halfH * (this._mustPutt() ? 0.12 : 0.5);
     this.cam.x = this.ball[0];
     this.cam.y = snap ? want : this.cam.y + (want - this.cam.y) * 0.18;
     this.cam.clamp();
@@ -997,7 +1046,7 @@ class GolfGame {
     }
     const drawCam = { ...this.cam, x: this.cam.x + this.previewDx, y: this.cam.y + this.previewDy };
 
-    const onGreen = this._onGreen();
+    const putting = this._putting();
     // The golfer stands at the ball whenever the ball is at rest, and plays its swing poses
     // through the stroke. It is hidden while the ball is in the air or rolling.
     // The windup (WINDUP_MS before `anim.t0`) is where the swing pose earns its keep: it is the
@@ -1016,12 +1065,12 @@ class GolfGame {
       swingPose,
       aimRad: this.aimRad,
       hideAim: !!this.anim || this.holed,
-      aimDots: onGreen ? null : aimDots(this._activeClub(), this._lie()),
+      aimDots: putting ? null : aimDots(this._activeClub(), this._lie()),
       // MEASURED FROM THE REFERENCE: on the green the dots run WELL PAST the cup - at 67.0 s of
       // hole 1, a 17 ft putt shows dots continuing off the green and into the trees. They are a
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
-      puttLine: onGreen ? puttRangeFt() / FT_PER_YD : 0,
+      puttLine: putting ? puttRangeFt() / FT_PER_YD : 0,
     });
     this._drawMeter(now);
     this.raf = requestAnimationFrame(this._frame);
