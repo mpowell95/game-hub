@@ -393,7 +393,7 @@ const PLAY = {
         const S = await import('./js/shot.js');
         const W = await import('./js/swing.js');
         const ft = g._distToPin() * 3;
-        const need = ft / S.puttRangeFt(ft);
+        const need = ft / S.puttRangeFt();
         // The power is set on the BACKSWING: one power unit takes UP_MS. (This used to divide by
         // RING_MAX and multiply by the old ring's 825 ms - both gone with the two-meter build.)
         return need * W.UP_MS;

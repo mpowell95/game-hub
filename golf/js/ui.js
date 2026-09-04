@@ -620,7 +620,7 @@ class GolfGame {
     if (this._onGreen()) {
       const res = simulatePutt({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power,
-        rangeFt: puttRangeFt(this._distToPin() * FT_PER_YD),
+        rangeFt: puttRangeFt(),
       });
       this.anim = { type: 'putt', t0: performance.now(), dur: res.ms, res };
     } else {
@@ -970,7 +970,7 @@ class GolfGame {
       // hole 1, a 17 ft putt shows dots continuing off the green and into the trees. They are a
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
-      puttLine: onGreen ? puttRangeFt(this._distToPin() * FT_PER_YD) / FT_PER_YD : 0,
+      puttLine: onGreen ? puttRangeFt() / FT_PER_YD : 0,
     });
     this._drawMeter(now);
     this.raf = requestAnimationFrame(this._frame);
