@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v597';
+const CACHE = 'game-hub-v598';
 
 const ASSETS = [
   './',
@@ -289,16 +289,21 @@ const ASSETS = [
   './skeeball/js/vendor/three.module.min.js',
   './skeeball/js/vendor/three.core.min.js',
   './skeeball/js/strings.js',
-  // Golf is being REBUILT (golf-reference-spec.md). The 3D stack - three.js, cannon-es, and the
-  // nine modules around them, ~1.1 MB of the old precache - is deleted, along with the Harbor
-  // Links course. What is left is the placeholder screen; the 2D game's files are added here as
-  // they are written. golf/CLAUDE.md and golf-reference-spec.md are documentation, never fetched
-  // by a running client, and stay out of this list.
+  // Golf. The 3D stack it used to carry - three.js, cannon-es and the nine modules around them,
+  // ~1.1 MB of this precache - is gone; what is here is the 2D game. golf/js/test.js is the
+  // engine suite and golf/CLAUDE.md is documentation: neither is fetched by a running client, so
+  // neither belongs in this list.
   './golf/',
   './golf/index.html',
   './golf/css/golf.css',
   './golf/js/ui.js',
   './golf/js/strings.js',
+  './golf/js/holes.js',
+  './golf/js/clubs.js',
+  './golf/js/swing.js',
+  './golf/js/shot.js',
+  './golf/js/render.js',
+  './golf/courses/pinevalley.js',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -644,9 +649,15 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': '35d052c5fa',
-  './golf/js/ui.js': '388a66eea0',
-  './golf/js/strings.js': '17eda54aeb',
+  './golf/css/golf.css': '1f81295e2c',
+  './golf/js/ui.js': '697235c9ec',
+  './golf/js/strings.js': '47f32b9f7f',
+  './golf/js/holes.js': '446236a395',
+  './golf/js/clubs.js': '840c67d68a',
+  './golf/js/swing.js': '1468833c65',
+  './golf/js/shot.js': 'b129ac8c1f',
+  './golf/js/render.js': '3aa077ae64',
+  './golf/courses/pinevalley.js': '5dd2e7aa8a',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

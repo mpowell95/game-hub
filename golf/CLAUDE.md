@@ -4,7 +4,7 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-## Status: BEING REBUILT (Stage A complete, 2026-09-03)
+## Status: BEING REBUILT (Stage B complete - one hole plays, tee to holed putt, 2026-09-04)
 
 **`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
 anything here. It is the written record of a commercial mobile golf game reconstructed from five
@@ -31,10 +31,13 @@ and keeps the three module-contract exports so nothing in the repo carries a bro
 | Stage | Contents | State |
 |---|---|---|
 | A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
-| — | The hole-data format, written down before anything is built against it | next |
-| B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight | not started |
-| C | Lies, hazards and drops, putting with break, result banner, scorecard, preview scroll | not started |
-| D | Stats wiring, strings EN/ES, this file, `sw.js`, the test suites, release | not started |
+| — | The hole-data format, written down before anything is built against it | **done** |
+| B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
+| C | Hazards and the drop prompt, the result banner, the scorecard, the round | not started |
+| D | Stats wiring, this file, `sw.js`, the full test sweep, release | not started |
+
+**Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
+the flight before Stage C is built on top of them. Expect the numbers below to move.
 
 The stages map onto `golf-reference-spec.md` §16's phases, with three approved changes: the
 leaderboard metric change moved forward into Stage A, the `test-visual.mjs` entry gets written at
@@ -381,6 +384,71 @@ export const HOLE_1 = {
    from its drawn edge is the yards/feet readout flickering on the fringe.
 2. **The tee polygon is painted LAST** even though it is at the bottom of the hole. Order is paint
    order, not geography: the tee box sits on top of whatever surrounds it.
+
+## What Stage B built, and the shape of it
+
+| File | Role |
+|---|---|
+| `js/holes.js` | geometry: containment, the lie lookup, deterministic belt expansion, slope sampling, `validateHole()` |
+| `courses/pinevalley.js` | holes 1-3 in the documented format |
+| `js/clubs.js` | the approved stock ladder (spec 21.3), the lie table (21.2), the auto-pick |
+| `js/swing.js` | the power ring, the accuracy bar, the mishit model, the three-tap state machine |
+| `js/shot.js` | flight, the tree test, roll, and the putt with its slope break |
+| `js/render.js` | the tilemap, the camera, the ball and its shadow, the aim ladder |
+| `js/ui.js` | the DOM shell. **It owns no rule** - everything above is pure, which is why `js/test.js` can measure all of it headless |
+
+**Every number that can be measured is measured, not eyeballed.** `node golf/js/test.js` is 102
+assertions over the hole data, the bag, the meters, the mishit model, flight, roll and putting. Two
+of them are marked `[KNOWN-BUG PROBE]` because they pin things a casual reading of the reference
+gets backwards: the ring PING-PONGS rather than filling one way (a one-way fill makes a mistimed
+tap give MAXIMUM power instead of low power, which inverts the whole risk model), and the accuracy
+window does NOT narrow as power rises (it only looked that way at 15 fps; measured, the green pixel
+count is pinned for the whole sweep).
+
+### Three things Stage B decided that are worth not re-deriving
+
+- **`apexYd` is quadratic in loft, not linear.** The first draft was `distance * (0.06 + loft*0.20)`,
+  which reads fine until you try to hit a wedge over a tree: a wedge's distance is short, so its
+  apex came out short too, and the one club that should climb steeply could not clear a canopy the
+  driver could not get under either. That collapses the punch-low-or-loft-over choice into no choice
+  at all. The engine test now throws a driver and a lob wedge at the same tree from the same spot.
+- **`PUTT_DECEL` is DERIVED from the one measured putt, not guessed.** The reference's 17 ft putt
+  rolled to rest in ~2.5 s, and constant deceleration gives `2 * (17/3) / 2.5^2 = 1.81 yd/s^2`.
+  Everything else about putting falls out of it, including a 60 ft putt taking 4.7 s. `BREAK_K` is
+  then tuned so a 20 ft putt across a half-strength slope breaks one cup width; the test measures
+  exactly that.
+- **`bounds` runs 45 yds BEHIND each tee.** The camera clamps itself inside bounds, so a hole that
+  stopped at its own tee pinned the ball to the bottom edge of the screen, underneath the club tile
+  and the aim row, for the whole tee shot.
+
+### The fit bug, and why the probe went first
+
+Matt asked for the `test-visual.mjs` fit probe at the START of this stage rather than the end. It
+earned that immediately: measured in the hub, the game was **136px too tall at both phone heights**,
+with the entire bottom control cluster - the club tile, the aim row, the meter and the swing button
+- below the fold. Standalone it was clean, which is exactly the shape that shipped in Pool.
+
+The cause was not the CSS. `_fit()` ran once in the constructor, and **the hub mounts the element
+and THEN applies its own chrome**, so the first measurement was taken before the game had been
+pushed 98px down the page. Nothing resizes the window afterwards, so there was no path back to the
+truth. A `ResizeObserver` on the container is that path.
+
+The measurement itself took two attempts, and the failed one is worth recording: collapsing the
+game and reading `document.documentElement.scrollHeight` to find the gap below **does not work**,
+because a standalone page's own `min-height: 100vh` wrapper makes that read as a full viewport of
+chrome and collapses the game to its floor. What works is to take everything from the root's top to
+the bottom of the viewport, then measure how far the PAGE overflows and give exactly that much
+back - it never has to know which ancestor owns the gap (in the hub it is `.hub-main`, two levels
+up). Measured after: 852/714/664/526 px of root across the four host-and-height combinations, with
+nothing offscreen, no tap target under 44px and no text under 11px.
+
+### Open for the playtest
+
+- **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds
+  wide, which puts about 120 yds of hole ahead of the ball; the driver's dot 4 is at 215. The
+  preview scroll reaches them. Whether that is right, or the view should pull back, is a feel call.
+- Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
+- The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
 
 ## Repo rules that bite in this game specifically
 
