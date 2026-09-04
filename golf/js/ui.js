@@ -43,6 +43,10 @@ const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line t
 const HOLD_DELAY_MS = 400;       // press-and-hold before auto-repeat
 const HOLD_RATE_MS = 125;        // then 8 taps a second
 const DEG = Math.PI / 180;
+// The meter's logical drawing box, in CSS pixels. The canvas itself is backed at devicePixelRatio
+// so the 3px band outline and the 13px tick numbers stay crisp on a phone.
+const METER_W = 184;
+const METER_H = 152;
 
 function ensureCSS() {
   const href = new URL('../css/golf.css', import.meta.url).href;
@@ -186,6 +190,11 @@ class GolfGame {
     this.canvas.width = Math.round(r.width * dpr);
     this.canvas.height = Math.round(r.height * dpr);
     this.dpr = dpr;
+    this.meter.width = Math.round(METER_W * dpr);
+    this.meter.height = Math.round(METER_H * dpr);
+    this.meter.style.width = `${METER_W}px`;
+    this.meter.style.height = `${METER_H}px`;
+    this.mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (this.hole) {
       this.cam = makeCamera(this.hole, r.width, r.height);
       this._aimCamera(true);
@@ -367,7 +376,7 @@ class GolfGame {
         </div>
 
         <div class="gf-br">
-          <canvas class="gf-meter" data-role="meter" width="164" height="182" aria-hidden="true"></canvas>
+          <canvas class="gf-meter" data-role="meter" width="184" height="152" aria-hidden="true"></canvas>
           <button type="button" class="gf-btn gf-swing" data-role="swing" aria-label="${t('a11y_swing')}"><span>${t('swing')}</span></button>
         </div>
       </div>`;
@@ -730,7 +739,6 @@ class GolfGame {
       if (Math.abs(this.previewDy) < 0.08) this.previewDy = 0;
       if (this.previewDx === 0 && this.previewDy === 0) this.returning = false;
     }
-    const previewing = Math.hypot(this.previewDx, this.previewDy) > 0.5;
     const drawCam = { ...this.cam, x: this.cam.x + this.previewDx, y: this.cam.y + this.previewDy };
 
     const onGreen = this._onGreen();
@@ -756,29 +764,39 @@ class GolfGame {
       // at the pin, which left nothing to gauge power against.
       puttLine: onGreen ? puttRangeFt(this._distToPin() * FT_PER_YD) / FT_PER_YD : 0,
     });
-    this._drawMeter(now, previewing);
+    this._drawMeter(now);
     this.raf = requestAnimationFrame(this._frame);
   };
 
   /**
-   * The C-ring and the accuracy bar, drawn with the reference's own weight.
+   * The C-ring and the accuracy bar.
    *
-   * The GEOMETRY was already right (arc from the bottom, 90deg, round to the upper right, 315deg;
-   * ticks 25 bottom-left, 50 left, 75 upper-left, 100 top-right). What was wrong was the WEIGHT:
-   * measured against a full-resolution reference frame, the original draws a thick band with a
-   * bold white outline and a diagonal hatch, CHUNKY pixel tick numbers, a THIN green stripe just
-   * before 100, an orange-and-red striped over-swing tab that juts PAST the end of the arc, and
-   * the accuracy bar nested in the ring's own bottom opening with flared ends. Ours was thin,
-   * flat and pale next to it - Matt: "The power and accuracy meters need major work."
+   * TWO REAL BUGS lived here, and neither was cosmetic:
+   *
+   *  1. THE WHOLE METER RENDERED AT 40 % OPACITY while the free look was off the ball
+   *     (`globalAlpha = faded ? 0.4 : 1`). Once free look started HOLDING its position, that meant
+   *     the meter stayed dimmed for as long as the player studied the hole - so the green target
+   *     band, the over-swing block and the 25/50/75/100 labels were all washed out at exactly the
+   *     moment they were about to be used. The reference fades the top-centre lie tile and yardage
+   *     ONLY; it never touches the meter. The fade is gone from here entirely.
+   *
+   *  2. THE HATCH WAS PAINTED OVER A PIE, NOT THE BAND. `ctx.clip()` clips to the region ENCLOSED
+   *     by the current path, and the path was an arc - so clipping to it gave the whole chord/pie
+   *     behind the ring, and the hatch lightened a large wedge of course behind the meter. That is
+   *     the pale patch. It is a repeating PATTERN used as the band's strokeStyle now, which is
+   *     confined to the band by construction.
+   *
+   * Geometry is the reference's: 0 at the bottom (90 deg) sweeping round to the upper right
+   * (315 deg), ticks OUTSIDE the arc, a thin bright green stripe just under 100, a striped
+   * over-swing tab that JUTS PAST the end of the arc, and the accuracy bar nested in the ring's
+   * own bottom opening rather than floating below it.
    */
-  _drawMeter(now, faded) {
+  _drawMeter(now) {
     const c = this.mctx;
-    const W = this.meter.width; const H = this.meter.height;
-    c.clearRect(0, 0, W, H);
-    c.globalAlpha = faded ? 0.4 : 1;
+    c.clearRect(0, 0, METER_W, METER_H);
     c.lineCap = 'butt';
 
-    const cx = 82; const cy = 70; const R = 48; const band = 19;
+    const cx = 88; const cy = 74; const R = 46; const band = 24;
     const A0 = 90 * DEG; const A1 = 315 * DEG;
     const ang = (v) => A0 + (Math.min(RING_MAX, Math.max(0, v)) / RING_MAX) * (A1 - A0);
     const arc = (from, to, style, width) => {
@@ -786,93 +804,123 @@ class GolfGame {
       c.beginPath(); c.arc(cx, cy, R, ang(from), ang(to)); c.stroke();
     };
 
-    // The band: dark, semi-transparent, the course showing through, with a diagonal hatch.
-    arc(0, RING_MAX, 'rgba(14,18,10,0.78)', band);
-    c.save();
-    c.beginPath(); c.arc(cx, cy, R, A0, A1); c.lineWidth = band; c.stroke();
-    c.clip();
-    c.strokeStyle = 'rgba(255,255,255,0.10)'; c.lineWidth = 3;
-    for (let i = -H; i < W + H; i += 9) {
-      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + H, H); c.stroke();
+    // The band: dark and semi-transparent so the course shows through, with a diagonal hatch that
+    // is a PATTERN on the stroke - it cannot bleed outside the band the way a clipped fill did.
+    if (!this._hatchPat) {
+      const hc = document.createElement('canvas'); hc.width = 8; hc.height = 8;
+      const hx = hc.getContext('2d');
+      hx.strokeStyle = 'rgba(255,255,255,0.16)'; hx.lineWidth = 2.5;
+      hx.beginPath(); hx.moveTo(-3, 11); hx.lineTo(11, -3); hx.stroke();
+      this._hatchPat = c.createPattern(hc, 'repeat');
     }
-    c.restore();
+    arc(0, RING_MAX, 'rgba(16,22,12,0.80)', band);
+    arc(0, RING_MAX, this._hatchPat, band);
 
-    // A THIN green stripe just under 100, then the striped over-swing tab beyond it.
-    arc(0.955, 1.0, '#3ad13f', band);
-    arc(1.0, 1.035, '#f07a1e', band);
-    arc(1.035, 1.07, '#d81f14', band);
-    arc(1.07, RING_MAX, '#f07a1e', band);
+    // The THIN BRIGHT GREEN stripe just under 100: this is the target for a full-power swing, so
+    // it is the one thing on the ring that must never be ambiguous.
+    arc(0.945, 1.0, '#3fe04a', band);
 
-    // The bold white outline, inside and out. This is most of what makes it read as pixel art.
-    c.lineWidth = 2.5; c.strokeStyle = '#ffffff';
-    c.beginPath(); c.arc(cx, cy, R + band / 2, A0, A1); c.stroke();
-    c.beginPath(); c.arc(cx, cy, R - band / 2, A0, A1); c.stroke();
-    for (const e of [A0, A1]) {
-      c.beginPath();
-      c.moveTo(cx + Math.cos(e) * (R - band / 2), cy + Math.sin(e) * (R - band / 2));
-      c.lineTo(cx + Math.cos(e) * (R + band / 2), cy + Math.sin(e) * (R + band / 2));
-      c.stroke();
+    // THE OVER-SWING TAB. Drawn WIDER than the band so it juts out past the arc, exactly as the
+    // reference does - it marks where the risk starts (over 100 % multiplies the mishit angle by
+    // 1.5) and a sliver contained inside the band cannot say that.
+    const tabW = band + 12;
+    c.lineWidth = tabW + 5; c.strokeStyle = '#ffffff';
+    c.beginPath(); c.arc(cx, cy, R, ang(1.0), ang(RING_MAX)); c.stroke();
+    c.lineWidth = tabW; c.strokeStyle = '#f2801f';
+    c.beginPath(); c.arc(cx, cy, R, ang(1.0), ang(RING_MAX)); c.stroke();
+    // red stripes across the tab
+    c.lineWidth = tabW; c.strokeStyle = '#e01d10';
+    for (let v = 1.008; v < RING_MAX; v += 0.032) {
+      c.beginPath(); c.arc(cx, cy, R, ang(v), ang(Math.min(RING_MAX, v + 0.016))); c.stroke();
     }
 
-    // Chunky tick labels OUTSIDE the arc, white on a hard dark shadow - 11px is the repo floor.
-    c.font = '800 12px ui-monospace, "SF Mono", Menlo, monospace';
+    // The bold white outline, inside and out, plus capped ends.
+    c.lineWidth = 3; c.strokeStyle = '#ffffff';
+    c.beginPath(); c.arc(cx, cy, R + band / 2, A0, ang(1.0)); c.stroke();
+    c.beginPath(); c.arc(cx, cy, R - band / 2, A0, ang(1.0)); c.stroke();
+    c.beginPath();
+    c.moveTo(cx + Math.cos(A0) * (R - band / 2), cy + Math.sin(A0) * (R - band / 2));
+    c.lineTo(cx + Math.cos(A0) * (R + band / 2), cy + Math.sin(A0) * (R + band / 2));
+    c.stroke();
+
+    // Tick labels OUTSIDE the arc: bright white on a hard dark shadow, at full opacity. These are
+    // the scale the sweeping tick is read against.
+    c.font = '800 13px ui-monospace, "SF Mono", Menlo, monospace';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const v of [0.25, 0.5, 0.75, 1.0]) {
       const a = ang(v);
-      const lx = cx + Math.cos(a) * (R + band / 2 + 13);
-      const ly = cy + Math.sin(a) * (R + band / 2 + 13);
-      c.fillStyle = '#0d1208'; c.fillText(String(v * 100), lx + 1.5, ly + 1.5);
-      c.fillStyle = '#ffffff'; c.fillText(String(v * 100), lx, ly);
+      const lx = cx + Math.cos(a) * (R + band / 2 + 12);
+      const ly = cy + Math.sin(a) * (R + band / 2 + 12);
+      c.fillStyle = '#0b1006';
+      c.fillText(String(v * 100), lx + 2, ly + 2);
+      c.fillStyle = '#ffffff';
+      c.fillText(String(v * 100), lx, ly);
     }
 
     const read = this.swing.read(now);
-    // The white radial tick crossing the band, with a dark edge so it reads on any colour.
+    // The white radial tick crossing the band, dark-edged so it reads on any colour under it.
     const a = ang(read.power);
-    const x0 = cx + Math.cos(a) * (R - band / 2); const y0 = cy + Math.sin(a) * (R - band / 2);
-    const x1 = cx + Math.cos(a) * (R + band / 2); const y1 = cy + Math.sin(a) * (R + band / 2);
-    c.lineWidth = 6; c.strokeStyle = '#0d1208';
+    const x0 = cx + Math.cos(a) * (R - band / 2 - 1); const y0 = cy + Math.sin(a) * (R - band / 2 - 1);
+    const x1 = cx + Math.cos(a) * (R + band / 2 + 1); const y1 = cy + Math.sin(a) * (R + band / 2 + 1);
+    c.lineWidth = 7; c.strokeStyle = '#0b1006';
     c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
-    c.lineWidth = 3.5; c.strokeStyle = '#ffffff';
+    c.lineWidth = 4; c.strokeStyle = '#ffffff';
     c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
 
-    // The hub readout: the distance the PREVIOUS shot travelled, LABELLED.
+    // The hub readout: the distance the PREVIOUS shot travelled, labelled.
     if (this.lastShotYd != null) {
       c.font = '600 9px system-ui, sans-serif';
-      c.fillStyle = '#9fb08c';
-      c.fillText(t('last_shot_lbl'), cx, cy - 7);
+      c.fillStyle = '#a8b895';
+      c.fillText(t('last_shot_lbl'), cx, cy - 8);
       c.font = '800 12px system-ui, sans-serif';
-      c.fillStyle = '#e8f0dc';
+      c.fillStyle = '#f2f7ea';
       const txt = this.lastShotYd * FT_PER_YD < 90
         ? `${(this.lastShotYd * FT_PER_YD).toFixed(1)} ${t('ft')}`
         : `${this.lastShotYd.toFixed(1)} ${t('yds')}`;
-      c.fillText(txt, cx, cy + 7);
+      c.fillText(txt, cx, cy + 6);
     }
 
-    // THE ACCURACY BAR, nested in the ring's bottom opening exactly as the reference has it:
-    // red | orange | GREEN | orange | red, bold white outline, white centre marker. The green band
-    // NARROWS on a bad lie (clubs.js's LIES.zone) - shown, not hidden.
-    const bw = 104; const bh = 22;
-    const bx = cx - bw / 2; const by = cy + R + band / 2 - 8;   // nested in the ring's bottom opening
+    // THE ACCURACY BAR, NESTED IN THE RING'S BOTTOM OPENING, not floating below it. Saturated, so
+    // the green centre - the most important judgement in the game - is unmistakable. Flared ends
+    // and a hard black outline, as the reference draws it. The green band NARROWS on a bad lie.
+    const bw = 96; const bh = 24;
+    const bx = cx - bw / 2 + 10; const by = cy + R - band / 2 + 12;
     const zone = lieOf(this._lie()).zone;
     const b = bandsFor(zone);
-    const seg = (from, to, fill) => { c.fillStyle = fill; c.fillRect(bx + bw * from, by, bw * (to - from), bh); };
-    seg(0, (1 - b.orange) / 2, '#d81f14');
-    seg((1 - b.orange) / 2, (1 - b.green) / 2, '#f07a1e');
-    seg((1 - b.green) / 2, (1 + b.green) / 2, '#3ad13f');
-    seg((1 + b.green) / 2, (1 + b.orange) / 2, '#f07a1e');
-    seg((1 + b.orange) / 2, 1, '#d81f14');
-    c.strokeStyle = '#ffffff'; c.lineWidth = 2.5;
-    c.strokeRect(bx + 1.25, by + 1.25, bw - 2.5, bh - 2.5);
-    // The centre notch: a shape marker at the safe centre, so the target is findable without
-    // relying on the red/green alone.
-    c.fillStyle = 'rgba(255,255,255,0.55)';
-    c.fillRect(cx - 1, by, 2, 4); c.fillRect(cx - 1, by + bh - 4, 2, 4);
+    const flare = 5;
+    const seg = (from, to, fill) => {
+      const x0s = bx + bw * from; const x1s = bx + bw * to;
+      c.fillStyle = fill;
+      c.beginPath();
+      // ends flare outward at the bottom, giving the bar the reference's trapezoid silhouette
+      const lf = from === 0 ? flare : 0; const rf = to === 1 ? flare : 0;
+      c.moveTo(x0s, by); c.lineTo(x1s, by);
+      c.lineTo(x1s + rf, by + bh); c.lineTo(x0s - lf, by + bh);
+      c.closePath(); c.fill();
+    };
+    seg(0, (1 - b.orange) / 2, '#e01d10');
+    seg((1 - b.orange) / 2, (1 - b.green) / 2, '#f2801f');
+    seg((1 - b.green) / 2, (1 + b.green) / 2, '#3fe04a');
+    seg((1 + b.green) / 2, (1 + b.orange) / 2, '#f2801f');
+    seg((1 + b.orange) / 2, 1, '#e01d10');
+    c.strokeStyle = '#0b1006'; c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(bx, by); c.lineTo(bx + bw, by);
+    c.lineTo(bx + bw + flare, by + bh); c.lineTo(bx - flare, by + bh);
+    c.closePath(); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(bx + 1.5, by + 1.5); c.lineTo(bx + bw - 1.5, by + 1.5);
+    c.lineTo(bx + bw + flare - 2, by + bh - 1.5); c.lineTo(bx - flare + 2, by + bh - 1.5);
+    c.closePath(); c.stroke();
+    // A shape marker at the safe centre, so the target is findable without relying on hue alone.
+    c.fillStyle = 'rgba(255,255,255,0.7)';
+    c.fillRect(bx + bw / 2 - 1, by, 2, 5); c.fillRect(bx + bw / 2 - 1, by + bh - 5, 2, 5);
     if (this.swing.phase === PHASE.ACCURACY || this.swing.phase === PHASE.LIVE) {
       const mx = bx + bw * read.bar;
-      c.fillStyle = '#0d1208'; c.fillRect(mx - 3, by - 4, 6, bh + 8);
-      c.fillStyle = '#ffffff'; c.fillRect(mx - 1.5, by - 3, 3, bh + 6);
+      c.fillStyle = '#0b1006'; c.fillRect(mx - 3.5, by - 5, 7, bh + 10);
+      c.fillStyle = '#ffffff'; c.fillRect(mx - 2, by - 4, 4, bh + 8);
     }
-    c.globalAlpha = 1;
   }
 
   _startLoop() { if (!this.raf) this.raf = requestAnimationFrame(this._frame); }

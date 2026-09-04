@@ -553,6 +553,48 @@ It eased back the instant the finger lifted, giving about half a second to look 
 away. The reference player scrolls up and studies the hole for twelve seconds. It now holds where
 you leave it and returns on a TAP or when a swing begins.
 
+### The meter's two real bugs (2026-09-04, "batch 1")
+
+Matt put our screen beside the reference and listed every difference. The seven most
+gameplay-affecting were all in the swing meter, and **six of them were two bugs wearing seven
+faces**, not seven cosmetic misses:
+
+1. **THE WHOLE METER RENDERED AT 40 % OPACITY** whenever the free look was more than half a yard
+   off the ball (`globalAlpha = faded ? 0.4 : 1`). That was harmless while free look snapped back
+   after half a second. The moment it started HOLDING where you leave it, the meter stayed dimmed
+   for as long as the player studied the hole - so the green target band, the over-swing block and
+   the 25/50/75/100 labels were washed out at exactly the moment they were about to be used. The
+   reference fades the top-centre lie tile and yardage only, and never the meter. **The fade is
+   gone from `_drawMeter` entirely.** This one bug is the washed-out accuracy bar, the dim tick
+   numbers and most of "the whole thing looks faded".
+2. **THE HATCH WAS PAINTED OVER A PIE, NOT THE BAND.** `ctx.clip()` clips to the region ENCLOSED by
+   the current path, and the path was an arc - so clipping "to the ring" actually clipped to the
+   whole chord behind it, and the hatch lightened a big wedge of course. That is the pale
+   rectangle. It is a repeating `createPattern` used as the band's `strokeStyle` now, which is
+   confined to the band by construction and cannot escape it.
+
+The rest of the batch is weight, and each number is the reference's: band 19 -> 24 px, a thin
+bright `#3fe04a` stripe at 94.5-100 %, the striped over-swing tab drawn `band + 12` wide so it
+JUTS PAST the arc's end (a sliver inside the band cannot say "this is where the risk starts"),
+tick labels at `800 13px` mono in white on a hard dark shadow, and the accuracy bar nested in the
+ring's own bottom opening with saturated `#e01d10 / #f2801f / #3fe04a` and flared trapezoid ends.
+
+**The meter canvas is also backed at `devicePixelRatio` now** (`METER_W` x `METER_H` logical, the
+canvas element sized `* dpr` with a matching `setTransform`). It had been drawing at 1x into a
+184x152 element, so a 3 px outline and 13 px tick numbers went to mush on a phone - which reads as
+"washed out" too, and no amount of colour would have fixed it.
+
+### The play probe could not hole a putt, and had not been able to since putting was fixed
+
+`test-visual.mjs`'s golf PLAY probe tapped a fixed 260 ms for power on every swing. That was fine
+when the putter's range was a fixed 60 ft; once `puttRangeFt()` scaled the range to the putt in
+hand, the cup always sat near 71 % power and 260 ms is 34.7 %, so all fourteen attempts came up
+short in exactly the same way. The probe now **computes the milliseconds the meter itself says the
+putt needs** (`ft / puttRangeFt(ft) / RING_MAX * 825`) and walks either side of it, because the
+harness's tap round-trip is worth tens of ms. It also taps 3 immediately after tap 2, which leaves
+the accuracy bar near its centre instead of near its edge. Its success line reported `undefined`
+for weeks because it returned `note` where `checkPlay` reads `why`.
+
 ### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds
