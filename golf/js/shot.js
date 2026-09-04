@@ -178,7 +178,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   const landing = [from[0] + sin * along + cos * f.side, from[1] + cos * along - sin * f.side];
 
   const landedOn = surfaceAt(hole, landing[0], landing[1]);
-  const rollYd = blocked ? 0 : carry * rollFactor(landedOn);
+  const rollYd = blocked ? 0 : carry * rollFactor(landedOn, club);
 
   // A ball pitching straight into the cup is in, whatever club sent it.
   const holedOnTheFly = !blocked && cupCheck(hole, landing[0], landing[1], 0);

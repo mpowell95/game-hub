@@ -728,6 +728,42 @@ candidate circles against white pixels, then per frame cluster the angles whose 
 mostly white. That separates the sweeping needle from the arc's end caps and from the bar's own
 outline - the first three attempts all mistook one for another and produced confident nonsense.
 
+### The swing fired on RELEASE, and the camera hid the rollout (2026-09-04)
+
+Matt, playing the one-needle build: *"the ball rolls a tiny bit after landing, but still not much.
+It stops unnaturally short. And the power/aim meter feels delayed. I don't think it stops when i
+click the swing button."* Three causes, all measured:
+
+**1. THE SWING FIRED ON `pointerup`.** So the needle kept travelling for the whole duration of the
+press. Measured against this build's own numbers: an ordinary 120 ms press is 0.104 power units on
+the downswing against a `BAR_HALF` of 0.12 - **87 % of the accuracy half-window spent between
+seeing the needle and the game reading it.** The player was aiming at where the needle would be.
+It fires on `pointerdown` now, and it is timed by **`ev.timeStamp`** - the moment the input
+actually happened - rather than by a `performance.now()` read inside the handler, which also
+charges however long the event sat in the queue. Measured after: the gap between what the needle
+showed and what the swing locked went from ~0.104 to **0.0015** power units.
+
+**2. THE CAMERA TRACKED THE BALL THROUGH THE ROLLOUT**, so a 21 yd run-out moved the ball ZERO
+pixels - the course slid past underneath it and the ball sat pinned to the middle of the screen.
+The camera now stops dead at touchdown and the ball rolls across the frame. That is what the
+reference does: its rollout was measured as frame-to-frame BALL movement decaying 4.5 -> 1.9 ->
+0.66 -> 0, which is only possible with a stopped camera. A rollout is at most ~25 yds against a
+95 yd view, so the ball cannot leave the frame.
+
+**3. ROLL IGNORED THE CLUB.** `rollFactor` was the landing surface alone, so every club ran the
+same 8 % of its carry: a driver 17 yds (real: 20-25) and a lob wedge 4 (real: about 1). Nothing in
+the bag behaved like itself. Descent angle was the missing half, and `loft` already carries it, so
+the multiplier `1.6 - 1.2 * loft` needed no new field and no new tuning surface. Measured totals on
+a fairway now, against real golf:
+
+| club | ours | real |
+|---|---|---|
+| driver | 236 | ~240 |
+| 3 wood | 213 | ~213 |
+| 5 iron | 158 | ~158 |
+| 9 iron | 116 | ~114 |
+| lob wedge | 52 | ~51 |
+
 ### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver**, still. The view is

@@ -76,8 +76,23 @@ export function lieOf(kind) { return LIES[kind] || LIES.fairway; }
 /** Surfaces you putt from. The green and its collar. */
 export function isPuttable(kind) { return kind === 'green' || kind === 'fringe'; }
 
-/** ROLL after landing, by the surface the ball comes down ON, as a fraction of carry (§20). */
-export function rollFactor(kind) { return lieOf(kind).roll; }
+/** ROLL after landing, as a fraction of carry: the surface the ball comes down ON, times how
+ *  FLAT the club sends it in.
+ *
+ *  Matt, 2026-09-04: "the ball rolls a tiny bit after landing, but still not much. It stops
+ *  unnaturally short." The surface term alone gave every club the same 8 % of its carry, so a
+ *  driver ran 17 yds (real: 20-25) while a lob wedge ran 4 (real: about 1) - nothing in the bag
+ *  behaved like itself. Descent angle is the missing half: a driver arrives shallow and runs, a
+ *  wedge drops almost vertically and sits. `loft` is already the flight's steepness parameter, so
+ *  the multiplier falls straight out of it - no new field, no new tuning surface.
+ *
+ *  Sighting shots on a fairway: driver 21 yds (total 236), 5 iron 10 (158), 9 iron 6 (116),
+ *  lob wedge 1.6 (52). Those are real golf's numbers to within a yard or two. */
+export function rollFactor(kind, club) {
+  const surface = lieOf(kind).roll;
+  if (!club || !Number.isFinite(club.loft)) return surface;
+  return surface * (1.6 - 1.2 * club.loft);
+}
 
 /** Auto-pick a club for the shot in hand (§10.2: the game offers one after every shot, and the
  *  player overrides with ^ / v). On the green it is always the putter - no other club is offered,

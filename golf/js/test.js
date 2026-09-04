@@ -253,7 +253,22 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   const r = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[0], power: 1, mishitDeg: 0 });
   near('a full drive from the tee carries the club distance', r.carry, 215, 0.01);
   ok('it lands on the fairway and rolls', r.landedOn === 'fairway' && r.rollYd > 0);
-  near('fairway roll is 8 % of carry', r.rollYd / r.carry, 0.08, 0.001);
+  // Roll is the surface times HOW FLAT THE CLUB SENDS IT IN, not the surface alone: a driver
+  // arrives shallow and runs, a wedge drops almost vertically and sits. The old model gave every
+  // club the same 8 % - Matt: "it stops unnaturally short."
+  near('a driver runs out about 10 % of its carry on a fairway', r.rollYd / r.carry, 0.099, 0.002);
+  {
+    const wedge = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
+    ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs 21 yds',
+      wedge.rollYd < 2 && r.rollYd > 20,
+      'the surface-only model rolled the wedge 4 yds and the driver 17, so nothing in the bag behaved like itself');
+    const totals = CLUBS.map((c) => {
+      const s2 = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: c, power: 1, mishitDeg: 0 });
+      return s2.rollYd;
+    });
+    ok('...and roll falls monotonically as loft rises, right through the bag',
+      totals.every((v, i) => i === 0 || v <= totals[i - 1] + 1e-9));
+  }
   ok('the ball finishes past where it landed', r.rest[1] > r.landing[1]);
 }
 {
