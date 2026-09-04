@@ -16,6 +16,7 @@ import { RED_MESA } from '../courses/redmesa.js';
 import { COURSES, ROUNDS, roundKey, roundHoles, roundPar, stablefordPoints } from './rounds.js';
 import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, isPuttable } from './clubs.js';
+import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
 
@@ -151,7 +152,7 @@ console.log('\n-- 7. ONE NEEDLE, THREE TAPS: the three-click swing --');
 // the trace). The old build had two meters that never moved together; this has one needle on one
 // scale, and these assertions are what separate the two.
 near('zero power is the accuracy point, dead centre', SW.backswingAt(0).pos, 0, 1e-9);
-near('the backswing reaches 100 % in 1.65 s, not 0.75', SW.backswingAt(SW.UP_MS).pos, 1.0, 1e-9);
+near('the backswing reaches 100 % at the default tempo', SW.backswingAt(SW.UP_MS).pos, 1.0, 1e-9);
 ok('the arc continues PAST 100 into the over-swing block', SW.SWING_MAX > 1);
 {
   // [KNOWN-BUG PROBE] The downswing is measurably FASTER than the backswing (1.46x). A symmetric
@@ -221,10 +222,23 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   Math.abs((SW.barPosOf(0.06) - SW.barPosOf(0)) - (SW.barPosOf(0) - SW.barPosOf(-0.06))) < 1e-9);
 {
   const clean = SW.bandsFor(1);
-  ok('a clean lie gives the middle 54 % as the straight zone (MEASURED)', Math.abs(clean.green - 0.54) < 1e-9);
+  ok('a clean lie gives the middle 54.5 % as the straight zone (MEASURED: 36 px of 66)',
+    Math.abs(clean.green - 0.545) < 1e-9);
+  near('...and its orange band is 18.2 % of the half (MEASURED: 12 px of 66)',
+    clean.orange - clean.green, 0.182, 0.002);
   ok('the bands fill the whole bar', Math.abs(clean.red - 1) < 1e-9);
   const sand = SW.bandsFor(LIES.greensideBunker.zone);
-  ok('a greenside bunker halves the straight zone', sand.green < clean.green * 0.55);
+  // MEASURED 2026-09-04 off four whole-hole clips: the reference's bar from a bunker is red 42 /
+  // orange 18 / green 6 out of 66 px per half. Verified visually too - the green band really is a
+  // sliver either side of the centre line. From a bad lie you are not striking it pure, you are
+  // avoiding red, and the orange band is what has to stay hittable.
+  near('a greenside bunker cuts the straight zone to 9.1 % (MEASURED: 6 px of 66)',
+    sand.green, 0.091, 0.002);
+  near('...and widens orange to about 27 % so ORANGE is still a real target (MEASURED: 18 of 66)',
+    sand.orange - sand.green, 0.288, 0.03);
+  ok('[KNOWN-BUG PROBE] a bad lie is about SIX times harsher than a clean one, not twice',
+    clean.green / sand.green > 5.0,
+    'ours gave the worst lie 27 % of the half as green; the reference gives 9 %');
   ok('...but the bar is still full, so the needle sweeps at the same speed', Math.abs(sand.red - 1) < 1e-9);
 }
 {
@@ -235,7 +249,15 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
     'the reference LOOKED like it narrowed at 15 fps; measured, the green pixel count is pinned for the whole sweep');
   ok('dead centre is dead straight', SW.mishit(0.5, 1, 1).deg === 0);
   ok('a green-zone stop is effectively straight', Math.abs(SW.mishit(0.62, 1, 1).deg) <= 1.5);
-  ok('a red-zone stop also loses 10 % of its distance', SW.mishit(0.99, 1, 1).distanceMul === 0.9);
+  // The flat 10 % became a RAMP (2026-09-04): the reference's bunker 7 iron stopped in red and
+  // went 21.1 yds where ours gave ~41, so a red strike there costs real distance, not a token cut.
+  ok('a green-zone stop costs no distance at all', SW.mishit(0.6, 1, 1).distanceMul === 1);
+  ok('an orange stop shades distance down toward 0.92',
+    SW.mishit(0.82, 1, 1).distanceMul < 1 && SW.mishit(0.82, 1, 1).distanceMul >= 0.92);
+  ok('a full red miss costs 40 % of the distance', Math.abs(SW.mishit(1, 1, 1).distanceMul - 0.6) < 1e-9);
+  ok('...and the penalty rises monotonically the further out you stop',
+    [0.5, 0.62, 0.75, 0.88, 1].map((b) => SW.mishit(b, 1, 1).distanceMul)
+      .every((v, i, a) => i === 0 || v <= a[i - 1] + 1e-9));
   ok('a full red miss is 8 degrees', Math.abs(SW.mishit(1, 1, 1).deg - 8) < 1e-9);
   ok('left of centre pulls LEFT, right pushes RIGHT', SW.mishit(0.1, 1, 1).deg < 0 && SW.mishit(0.9, 1, 1).deg > 0);
   ok('over-100 % power multiplies the miss by 1.5',
@@ -243,6 +265,70 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   // The spec's own sanity check on the model.
   const off = Math.tan(8 * Math.PI / 180) * 215;
   near('a full red miss with the stock driver lands ~30 yds offline', off, 30, 2);
+}
+
+console.log('\n-- 8b. THE METER IS NOT ONE SPEED, and a bad lie must still be playable --');
+{
+  // MEASURED 2026-09-04 by tracking the needle in every frame of four reference shots at 60 fps.
+  // The arc is 221 deg wide, so deg/frame converts straight to ms per power unit.
+  const cases = [
+    ['driver', CLUBS[0], 1693, 1144],
+    ['3 wood', CLUBS[1], 1678, 1126],
+    ['7 iron', CLUBS[8], 2070, 1530],
+  ];
+  for (const [name, club, upMeas, downMeas] of cases) {
+    const t = CL.swingTempo(club);
+    near(`${name}: the backswing matches the reference within 5 %`, t.upMs, upMeas, upMeas * 0.05);
+    near(`${name}: the downswing matches the reference within 6 %`, t.downMs, downMeas, downMeas * 0.06);
+  }
+  const putt = CL.swingTempo(PUTTER);
+  near('putter: the backswing matches the reference within 5 %', putt.upMs, 2410, 120);
+
+  ok('the meter slows monotonically as the bag gets shorter',
+    CLUBS.map((c) => CL.swingTempo(c).upMs).every((v, i, a) => i === 0 || v >= a[i - 1] - 1e-9));
+  ok('...and the putter is the slowest thing in the bag',
+    putt.upMs >= CL.swingTempo(CLUBS[CLUBS.length - 1]).upMs);
+  ok('the downswing is always faster than the backswing',
+    CLUBS.every((c) => { const t = CL.swingTempo(c); return t.downMs < t.upMs; }));
+
+  // A `Swing` timed with a club's tempo really does take that long, and is not re-timed mid-stroke.
+  {
+    const sw = new SW.Swing();
+    sw.setTempo(CL.swingTempo(CLUBS[8]));
+    const t = CL.swingTempo(CLUBS[8]);
+    sw.tap(0);
+    near('a Swing set to a 7 iron reaches 100 % at the 7 iron\'s own tempo',
+      sw.read(t.upMs).pos, 1.0, 1e-9);
+    sw.tap(t.upMs);                                   // lock power at 100 %
+    sw.setTempo(CL.swingTempo(CLUBS[0]));             // ...and try to re-time it mid-stroke
+    near('the tempo cannot change once the stroke has started',
+      sw.read(t.upMs + t.downMs).pos, 0, 1e-9);
+  }
+
+  // THE LESSON FROM THE FIRST PLAYTEST, APPLIED TO THE NEW BANDS: when a mechanic is a timed
+  // input, TEST THE INPUT. The reference's bad-lie green band is about ONE FRAME wide, which is
+  // deliberate - from a bad lie you are not striking it pure, you are avoiding red - so the band
+  // that has to stay hittable is ORANGE. This fails if any lie in the game makes ORANGE a
+  // sub-3-frame stop with the club a player would actually have in hand there.
+  const FRAME = 1000 / 60;
+  const rows = [];
+  for (const [kind, lie] of Object.entries(LIES)) {
+    if (kind === 'water') continue;                   // never played from; see Stage C
+    const club = kind === 'green' || kind === 'fringe' ? PUTTER : CLUBS[8];
+    const t = CL.swingTempo(club);
+    const b = SW.bandsFor(lie.zone);
+    const green = b.green * SW.BAR_HALF * t.downMs;
+    const orange = b.orange * SW.BAR_HALF * t.downMs;
+    rows.push(`${kind} ${(green / FRAME).toFixed(1)}/${(orange / FRAME).toFixed(1)}`);
+    ok(`${kind}: ORANGE is at least 3 frames wide (${(orange / FRAME).toFixed(1)})`, orange >= 3 * FRAME);
+  }
+  console.log(`     green/orange half-windows in frames: ${rows.join('  ')}`);
+  {
+    const t = CL.swingTempo(CLUBS[0]);
+    const b = SW.bandsFor(1);
+    near('from a clean lie GREEN itself is about 4.5 frames, as the reference measured',
+      b.green * SW.BAR_HALF * t.downMs / FRAME, 4.5, 0.6);
+  }
 }
 
 console.log('\n-- 9. flight, roll and the lie factor --');
@@ -256,11 +342,20 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   // Roll is the surface times HOW FLAT THE CLUB SENDS IT IN, not the surface alone: a driver
   // arrives shallow and runs, a wedge drops almost vertically and sits. The old model gave every
   // club the same 8 % - Matt: "it stops unnaturally short."
-  near('a driver runs out about 10 % of its carry on a fairway', r.rollYd / r.carry, 0.099, 0.002);
+  // MEASURED 2026-09-04 (clubs.js's rollFactor has the arithmetic): the reference's 3 wood carried
+  // 196 and MUST have run at least 32 more, because the ball started 253.2 from the pin and
+  // finished 25.0 from it. That is >= 16.4 % of carry; ours was 9.3 %.
+  near('a driver runs out about 18 % of its carry on a fairway', r.rollYd / r.carry, 0.180, 0.003);
+  {
+    const w3 = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[1], power: 1, mishitDeg: 0 });
+    ok('[KNOWN-BUG PROBE] a 3 wood clears the reference\'s 16.4 % run-out floor',
+      w3.rollYd / w3.carry >= 0.164,
+      'shot 2 of the reference footage travelled >= 228.2 yds against a 196.0 carry readout');
+  }
   {
     const wedge = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
-    ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs 21 yds',
-      wedge.rollYd < 2 && r.rollYd > 20,
+    ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs 38 yds',
+      wedge.rollYd < 4 && r.rollYd > 35,
       'the surface-only model rolled the wedge 4 yds and the driver 17, so nothing in the bag behaved like itself');
     const totals = CLUBS.map((c) => {
       const s2 = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: c, power: 1, mishitDeg: 0 });

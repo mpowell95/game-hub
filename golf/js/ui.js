@@ -15,7 +15,7 @@ import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable, swingTempo } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BAR_HALF } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -45,6 +45,11 @@ const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line t
 const HOLD_DELAY_MS = 400;       // press-and-hold before auto-repeat
 const HOLD_RATE_MS = 125;        // then 8 taps a second
 const DEG = Math.PI / 180;
+
+/** THE GAP BETWEEN THE THIRD TAP AND THE BALL LEAVING THE CLUB, ms. MEASURED off the reference at
+ *  60 fps: tap, ~0.25 s of stillness, a ~0.6 s golfer swing animation, then the ball moves. Clip 3
+ *  is the clean sample (no camera move in the way): tap at frame 799, ball away at 850 = 0.85 s. */
+const WINDUP_MS = 850;
 // The meter's logical drawing box, in CSS pixels. The canvas itself is backed at devicePixelRatio
 // so the 3px band outline and the 13px tick numbers stay crisp on a phone.
 const METER_W = 176;
@@ -377,6 +382,7 @@ class GolfGame {
     this.swing = new Swing();
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
+    this._syncTempo();
     this._renderPlay();
   }
 
@@ -399,6 +405,11 @@ class GolfGame {
     if (!this.club || this.club.id === 'putter') this.club = autoSelectClub(this._distToPin(), this._lie());
     return this.club;
   }
+
+  /** Keep the needle's speed in step with the club in hand. Called wherever the club can change
+   *  (the club nudges, a settled shot, a new hole) rather than inside `_activeClub`, because that
+   *  runs from the render loop too and a `Swing` mid-stroke must never be re-timed. */
+  _syncTempo() { this.swing.setTempo(swingTempo(this._activeClub())); }
 
   _renderPlay() {
     this.rootEl.innerHTML = '';
@@ -588,6 +599,7 @@ class GolfGame {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
     if (this._onGreen()) return;                    // the putter is the only club on the green
     this.club = stepClub(this.club, dir);
+    this._syncTempo();
     this._paintHud();
   }
 
@@ -607,6 +619,13 @@ class GolfGame {
 
   _fire() {
     const lie = this._lie();
+    // THE BALL DOES NOT LEAVE ON THE THIRD TAP. Measured across all four reference clips: the tap
+    // is followed by about a quarter-second of stillness and then a ~0.6 s golfer swing animation,
+    // and only then does the ball move. Clip 3 is the clean one, because the player had not moved
+    // the camera: tap at frame 799, dead still to 814, the golfer swinging 815-849, ball away at
+    // 850 - 0.85 s. Ours fired the instant the finger landed, which is why the swing had no weight
+    // to it. `WINDUP_MS` is that gap; `_frame` holds the ball at address and plays the pose until
+    // it has passed, and a tap still skips the whole thing.
     const zone = lieOf(lie).zone;
     // ONE needle: the power is the marker planted at tap 2, the accuracy is where the needle was
     // stopped on the way back down. `barPosOf` maps that position onto the accuracy bar's 0..1,
@@ -622,14 +641,14 @@ class GolfGame {
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power,
         rangeFt: puttRangeFt(),
       });
-      this.anim = { type: 'putt', t0: performance.now(), dur: res.ms, res };
+      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res };
     } else {
       const club = this._activeClub();
       const res = resolveShot({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
         club, power, mishitDeg: 0, distanceMul: m.distanceMul,
       });
-      this.anim = { type: 'flight', t0: performance.now(), dur: res.flightMs, res, club };
+      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: res.flightMs, res, club };
     }
     // The hub readout is set when the ball STOPS, never here - see _settleShot.
   }
@@ -639,7 +658,7 @@ class GolfGame {
   _skipAnim() {
     if (!this.anim) return;
     const total = this.anim.dur + (this.anim.res && this.anim.res.rollMs ? this.anim.res.rollMs : 0);
-    this.anim.t0 = performance.now() - total - 1;
+    this.anim.t0 = performance.now() - total - 1;   // also skips any windup still to run
   }
 
   /** Score name for a hole, the way a scorecard says it. */
@@ -802,6 +821,7 @@ class GolfGame {
     this.swing.settle(performance.now());
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
+    this._syncTempo();
     this._paintHud();
   }
 
@@ -881,10 +901,14 @@ class GolfGame {
     let ballPos = this.ball;
 
     if (this.anim) {
-      const p = Math.min(1, (now - this.anim.t0) / Math.max(1, this.anim.dur));
+      const el = now - this.anim.t0;
+      // THE WINDUP. `t0` is when the BALL LEAVES, which is WINDUP_MS after the third tap, so `el`
+      // is negative for the whole swing animation. Everything below reads `el` clamped at zero, so
+      // the ball simply sits at address until the club actually reaches it.
+      const winding = el < 0;
+      const p = Math.min(1, Math.max(0, el) / Math.max(1, this.anim.dur));
       if (this.anim.type === 'flight') {
         const r = this.anim.res;
-        const el = now - this.anim.t0;
         const roll = r.rollMs || 0;
         if (el < this.anim.dur) {
           const f = flightPoint(p, r.carry * (r.blocked ? r.blocked.p : 1), r.sideYd * (r.blocked ? r.blocked.p : 1), r.apex);
@@ -905,17 +929,31 @@ class GolfGame {
           ballPos = [r.landing[0] + dx * u, r.landing[1] + dy * u];
           height = g.height;
         }
-        // THE CAMERA TRACKS THE FLIGHT AND THEN STOPS DEAD AT TOUCHDOWN, so the ball ROLLS ACROSS
-        // THE FRAME instead of sitting pinned to the middle of it while the course slides past.
+        // THE CAMERA LOCKS ON IN FLIGHT AND THEN TRAILS THE BALL THROUGH THE RUN-OUT.
         //
-        // This is half of "the ball rolls a tiny bit... it stops unnaturally short": with the
-        // camera glued to the ball, a 21 yd run-out moves the BALL zero pixels. The reference's
-        // own rollout was measured as frame-to-frame BALL movement decaying 4.5 -> 1.9 -> 0.66 -> 0,
-        // which is only possible if its camera has stopped. A rollout is at most ~25 yds against a
-        // 95 yd view, so there is no risk of the ball leaving the frame.
-        if (el < this.anim.dur) {
+        // It used to stop DEAD at touchdown. That was the fix for "the ball rolls a tiny bit...
+        // it stops unnaturally short" - with the camera glued to the ball, a run-out moves the
+        // BALL zero pixels - and the diagnosis was right but the remedy overshot. Measured across
+        // the four whole-hole clips (2026-09-04): the reference's camera keeps moving after the
+        // ball lands and DECELERATES WITH IT, the changed-pixel count per frame decaying 75k ->
+        // 36k -> 18k -> 0 over the last 1.7 s of a drive. It does not stop and it does not stay
+        // glued either.
+        //
+        // A trailing lerp is both at once: the ball pulls ahead in the frame, so the run-out is
+        // plainly visible, and the camera closes the gap as the ball slows, so it finishes
+        // centred and never leaves the ball behind. The ball also runs a good deal further than
+        // it used to (clubs.js's roll went 0.08 -> 0.145 from the same footage), which is the
+        // other half of what Matt was reporting.
+        const camY = ballPos[1] + this.cam.halfH * 0.2;
+        if (winding) {
+          /* the camera holds on the ball through the swing animation */
+        } else if (el < this.anim.dur) {
           this.cam.x = ballPos[0];
-          this.cam.y = ballPos[1] + this.cam.halfH * 0.2;
+          this.cam.y = camY;
+          this.cam.clamp();
+        } else {
+          this.cam.x += (ballPos[0] - this.cam.x) * 0.055;
+          this.cam.y += (camY - this.cam.y) * 0.055;
           this.cam.clamp();
         }
         if (el >= this.anim.dur + roll) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
@@ -923,7 +961,7 @@ class GolfGame {
         // The camera does NOT move during a putt. Confirmed frame by frame in the reference, and
         // it is right: a static frame is what lets the player read the break they just played.
         const path = this.anim.res.path;
-        ballPos = path[Math.min(path.length - 1, Math.floor(p * (path.length - 1)))];
+        ballPos = winding ? this.ball : path[Math.min(path.length - 1, Math.floor(p * (path.length - 1)))];
       }
       if (this.anim && this.anim.type === 'putt' && p >= 1) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
     } else {
@@ -952,16 +990,19 @@ class GolfGame {
     const onGreen = this._onGreen();
     // The golfer stands at the ball whenever the ball is at rest, and plays its swing poses
     // through the stroke. It is hidden while the ball is in the air or rolling.
+    // The windup (WINDUP_MS before `anim.t0`) is where the swing pose earns its keep: it is the
+    // 0.85 s the reference spends between the third tap and the ball leaving, so the golfer plays
+    // through it on BOTH a full shot and a putt rather than the ball simply teleporting.
     let swingPose = 0;
     if (this.swing.phase === PHASE.BACK) swingPose = 1;
-    else if (this.anim && this.anim.type === 'flight' && now - this.anim.t0 < 260) swingPose = 2;
+    else if (this.anim && now - this.anim.t0 < 260) swingPose = 2;
 
     drawFrame(this.ctx, this.map, this.hole, drawCam, {
       dpr: this.dpr,
       ball: ballPos,
       height,
       holed: this.holed,
-      golfer: !this.anim || (now - this.anim.t0) < 260,
+      golfer: !this.anim || (now - this.anim.t0) < 260,   // stays up through the whole windup
       swingPose,
       aimRad: this.aimRad,
       hideAim: !!this.anim || this.holed,

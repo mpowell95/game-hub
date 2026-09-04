@@ -53,21 +53,53 @@ export function clubById(id) {
  *  punishing the same stop position harder - reads as the game cheating.
  *
  *  The design principle: SAND COSTS CONTROL, NOT DISTANCE. A real bunker shot is not short, it is
- *  unpredictable. Heavy rough is the opposite - it genuinely eats distance. */
+ *  unpredictable. Heavy rough is the opposite - it genuinely eats distance.
+ *
+ *  ============================================================================================
+ *  `zone` WAS RESCALED HARD ON 2026-09-04, and only TWO of these numbers are measured.
+ *
+ *  Four clips of one whole hole of the reference were read frame by frame at 60 fps and the
+ *  accuracy bar's colour bands counted in pixels, at the moment of address, on four different
+ *  lies. The bar is 66 px per half either side of the needle. What came back:
+ *
+ *      tee / green     red 18   orange 12   green 36     ->  green = 54.5 % of the half
+ *      rough / bunker  red 42   orange 18   green  6     ->  green =  9.1 % of the half
+ *
+ *  Rough and greenside bunker measured BYTE-IDENTICAL, and the same bar was still there while the
+ *  player cycled s. wedge -> p. wedge -> 9 iron -> 8 iron -> 7 iron, so the bands are set by the
+ *  LIE and not by the club. (The one exception found: switching to the PUTTER from the rough
+ *  widened green to 22 %.) Verified visually as well as numerically - from the bunker the green
+ *  band really is a two-pixel sliver either side of the centre line, with red filling the bar.
+ *
+ *  So the reference's bad lie is roughly SIX TIMES harsher than ours was: our worst lie gave 27 %
+ *  of the half as green, its rough gives 9 %. The design that falls out of it is real and worth
+ *  having: FROM A BAD LIE YOU ARE NOT TRYING TO STRIKE IT PURE, YOU ARE TRYING TO AVOID RED.
+ *  Measured on the reference's own shots, the green band from a bad lie is about one frame wide
+ *  and the orange band about four - and the player duly took orange from the rough (a fine 196 yd
+ *  3 wood) and red from the bunker (a 7 iron that went 21 yds).
+ *
+ *  `greensideBunker: 0.167` is the measured value: 0.545 x 0.167 = 9.1 %.
+ *  `tee` / `fairway` / `green` = 1.00 is the other measured value.
+ *  EVERYTHING BETWEEN THEM IS OURS. The reference's rough measured the same as its bunker, and
+ *  four shots could not tell light rough from heavy, so the gradient our seven lies need was kept
+ *  rather than flattened - it just now lives between 0.167 and 0.80 instead of 0.50 and 0.94.
+ *  If this proves too punishing in a playtest, these are the numbers to raise; nothing else needs
+ *  to move with them.
+ *  ============================================================================================ */
 export const LIES = {
-  tee: { power: 1.00, zone: 1.00, roll: 0.08 },
-  fairway: { power: 1.00, zone: 1.00, roll: 0.08 },
+  tee: { power: 1.00, zone: 1.00, roll: 0.145 },
+  fairway: { power: 1.00, zone: 1.00, roll: 0.145 },
   // The collar around every green. Added 2026-09-04 after Matt's playtest: hole 1's light-rough
   // corridor stopped short of the green, so a missed green landed in `base` - HEAVY ROUGH, the
   // harshest lie in the game (82 % power, 65 % band) - on all four sides. Every real course has a
   // collar, and missing a green by a yard should not be the same as being in the trees.
-  fringe: { power: 0.97, zone: 0.94, roll: 0.04 },
-  lightRough: { power: 0.92, zone: 0.85, roll: 0.03 },
-  heavyRough: { power: 0.82, zone: 0.65, roll: 0.03 },
-  fairwayBunker: { power: 0.88, zone: 0.55, roll: 0.00 },
-  greensideBunker: { power: 0.75, zone: 0.50, roll: 0.00 },
-  trees: { power: 0.85, zone: 0.80, roll: 0.03 },
-  green: { power: 1.00, zone: 1.00, roll: 0.02 },
+  fringe: { power: 0.97, zone: 0.80, roll: 0.072 },
+  lightRough: { power: 0.92, zone: 0.22, roll: 0.054 },
+  heavyRough: { power: 0.82, zone: 0.17, roll: 0.054 },
+  fairwayBunker: { power: 0.88, zone: 0.19, roll: 0.00 },
+  greensideBunker: { power: 0.75, zone: 0.167, roll: 0.00 },   // zone MEASURED
+  trees: { power: 0.85, zone: 0.20, roll: 0.054 },
+  green: { power: 1.00, zone: 1.00, roll: 0.036 },
   water: { power: 1.00, zone: 1.00, roll: 0.00 },   // never actually played from; see Stage C
 };
 
@@ -86,12 +118,67 @@ export function isPuttable(kind) { return kind === 'green' || kind === 'fringe';
  *  wedge drops almost vertically and sits. `loft` is already the flight's steepness parameter, so
  *  the multiplier falls straight out of it - no new field, no new tuning surface.
  *
- *  Sighting shots on a fairway: driver 21 yds (total 236), 5 iron 10 (158), 9 iron 6 (116),
- *  lob wedge 1.6 (52). Those are real golf's numbers to within a yard or two. */
+ *  THE SURFACE TERM WAS RAISED 0.08 -> 0.145 ON 2026-09-04, from a measurement.
+ *
+ *  Four clips of one whole hole of the reference give a shot whose arithmetic is decisive. Shot 2
+ *  was a 3 wood from 253.2 yds out; the ring's hub read 196.0 for it; the ball finished 25.0 yds
+ *  from the pin. A ball that ends 25.0 from the pin having started 253.2 from it MUST have
+ *  travelled at least 253.2 - 25.0 = 228.2 yds, whatever direction it took. 196.0 is less than
+ *  that, so 196.0 cannot be the ball's total travel - it is the CARRY, and the ball ran at least
+ *  228.2 - 196.0 = 32.2 yds after it came down. That is >= 16.4 % of carry against our 9.3 %.
+ *
+ *  (The clip is called "Shot 2 - bounce into sand", and that run-out is exactly what it shows:
+ *  the ball pitches on grass, bounces, and finishes in a greenside bunker.)
+ *
+ *  Sighting shots on a fairway now: driver 38.7 yds (total 254), 3 wood 33 (228), 5 iron 19 (167),
+ *  9 iron 11 (121), lob wedge 2.9 (53). Longer than real golf, which is correct - the reference is
+ *  not simulating real golf, and this is the number its own footage gives.
+ *
+ *  ONE THING PULLS THE OTHER WAY AND IS RECORDED HERE RATHER THAN AVERAGED AWAY: shot 1 (driver,
+ *  hub 247.0) moved the player 246.0 yds closer to the pin, which leaves no room for a run-out
+ *  unless the hole doglegs enough for the path to differ from the straight line. It plainly does
+ *  dogleg, but that cannot be measured from the footage, so shot 2 - whose arithmetic needs no
+ *  assumption at all - is the one this number comes from. */
 export function rollFactor(kind, club) {
   const surface = lieOf(kind).roll;
   if (!club || !Number.isFinite(club.loft)) return surface;
   return surface * (1.6 - 1.2 * club.loft);
+}
+
+/** THE SWING'S TEMPO, PER CLUB: how long the needle takes to cross one full power unit.
+ *
+ *  MEASURED (2026-09-04), by tracking the needle's angle in every frame of four shots at 60 fps.
+ *  The arc is 221 degrees wide from zero to 100 %, so a rate in degrees per frame converts
+ *  straight into milliseconds per power unit:
+ *
+ *      club              backswing        downswing       0 -> 100 %     100 % -> 0
+ *      driver (tee)      2.176 deg/f      3.220 deg/f     1693 ms        1144 ms
+ *      3 wood (rough)    2.195            3.271           1678           1126
+ *      7 iron (bunker)   1.782            2.432           2070           1530
+ *      putter (green)    1.528            1.923           2410           1923
+ *
+ *  THE METER IS NOT ONE SPEED. Ours was a fixed 1650 / 1150 for everything, which is right for the
+ *  woods and roughly 20 % too fast for the short game - the half of the bag where a player most
+ *  needs the control. The driver and the 3 wood measured IDENTICAL despite one being off a tee and
+ *  the other out of rough, which is what rules the LIE out as the cause and leaves the CLUB.
+ *
+ *  Two regularities carry the fit, and both hold across all four samples:
+ *    - the downswing is the backswing MINUS ABOUT 545 ms, not a fixed multiple of it
+ *      (measured offsets: 549, 552, 540, 487);
+ *    - the backswing is flat across the top of the bag and then slows one step at a time.
+ *
+ *  So: `1685 + max(0, index - 1) * 55`, which reproduces driver 1685 (meas 1693), 3 wood 1685
+ *  (1678) and 7 iron 2070 (2070 exactly), and extrapolates to 2345 for the lob wedge. The putter
+ *  is its own constant, 2410, straight off the one putt in the footage. */
+export const TEMPO_BASE_MS = 1685;
+export const TEMPO_STEP_MS = 55;
+export const TEMPO_PUTTER_MS = 2410;
+export const TEMPO_LAG_MS = 545;
+
+export function swingTempo(club) {
+  const i = club && club.id ? CLUBS.findIndex((c) => c.id === club.id) : 0;
+  const upMs = i < 0 ? TEMPO_PUTTER_MS : TEMPO_BASE_MS + Math.max(0, i - 1) * TEMPO_STEP_MS;
+  return { upMs, downMs: upMs - TEMPO_LAG_MS };
 }
 
 /** Auto-pick a club for the shot in hand (§10.2: the game offers one after every shot, and the

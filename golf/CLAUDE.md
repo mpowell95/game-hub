@@ -804,6 +804,118 @@ putt dots run off the green and into the trees on a short putt.
 `golf/js/test.js` section 11b measures the window by sweeping rather than modelling it, and carries
 a `[KNOWN-BUG PROBE]` that the window must be the SAME at every distance.
 
+## Four clips, one whole hole, measured at 60 fps (2026-09-04)
+
+Matt filmed hole 2 of the reference - a 499.2 yd par 5 - in four clips that together are one
+continuous hole, and asked what the rollout, the bounce, the sand and the putting actually do. All
+4,243 frames were read: the needle's angle in every frame, the accuracy bar's colour bands counted
+in pixels, the ball tracked by frame differencing, and the HUD read at full resolution.
+
+**The shot ledger.** Power is the marker planted at tap 2, read off the arc (zero at 90 deg,
+100 % at 311 deg); accuracy is where the needle stopped.
+
+| # | club | lie | to pin | power | needle stopped | ring hub | result |
+|---|---|---|---|---|---|---|---|
+| 1 | driver | tee | 499.2 yd | 91.4 % | 9 deg early | 247.0 yd | -> 253.2 yd |
+| 2 | 3 wood | rough | 253.2 yd | 94.6 % | 9 deg early | 196.0 yd | -> bunker, 25.0 yd |
+| 3 | 7 iron | greenside bunker | 25.0 yd | 46.6 % | 12 deg early | 21.1 yd | -> 15.0 ft |
+| 4 | putter | green | 15.0 ft | 26.7 % | 5 deg early | holed | **Birdie** |
+
+**The ring's hub number is the CARRY, not the total, and shot 2 proves it with arithmetic that
+needs no assumption.** A ball that starts 253.2 yds from the pin and finishes 25.0 from it must
+have travelled at least 228.2 yds. The hub read 196.0. So 196.0 is not the total, and the ball ran
+at least 32.2 yds after it came down - **>= 16.4 % of carry, against our 9.3 %.** (Shot 1 pulls the
+other way: hub 247.0 against 246.0 yds of progress, which leaves no room for a run-out unless the
+hole doglegs enough for the path to differ from the straight line. It plainly does dogleg, and that
+cannot be measured from the footage, so shot 2 - the one that needs no assumption - is what the
+roll number comes from.)
+
+**The putter's range is a constant and 60 ft is right.** 15.0 ft holed at 26.7 % implies a full
+range of 56 ft. An earlier read of that number as 19.0 ft (and so ~71 ft) was wrong - it came off a
+downscaled crop; rendered at 6x the glyphs are unambiguous. `MAX_PUTT_FT` did not move.
+
+### What changed, and the measurement behind each
+
+| change | was | now | measured from |
+|---|---|---|---|
+| bad-lie accuracy band | worst lie 27 % green | **9.1 %** | 6 px of 66, bunker + rough, identical |
+| the orange band | fixed 52 % of the remainder | **40 % clean, 30 % worst** | 12 px and 18 px of 66 |
+| meter tempo | one speed, 1650/1150 | **per club, 1685/1140 to 2410/1865** | needle angle, 4 clubs |
+| red-miss distance | flat 0.90 | **ramp 0.92 -> 0.60** | a red bunker 7 iron went 21.1 yds |
+| roll (surface term) | 0.08 | **0.145** | shot 2's >= 32.2 yd run-out |
+| tap 3 -> ball moves | instant | **850 ms** | clip 3: tap f799, ball away f850 |
+| camera in the run-out | stopped dead at touchdown | **trails the ball** | pan decays 75k -> 36k -> 18k -> 0 px/frame |
+
+**THE BANDS ARE SET BY THE LIE, NOT THE CLUB.** The player cycled s. wedge -> p. wedge -> 9 iron ->
+8 iron -> 7 iron in the bunker and the bar never changed by a pixel. The one exception found:
+switching to the PUTTER from the rough widened green from 9 % to 22 %.
+
+**THE ARC NEVER CHANGES AT ALL.** Green stripe 292-296 deg (91.4-93.2 % power), over-swing block
+311-338 deg (100-112.2 %), byte-identical on all four lies and every club. **No power cap is ever
+shown** - the lie's distance penalty is invisible until the ball lands, exactly as ours works.
+
+**FROM A BAD LIE YOU ARE NOT STRIKING IT PURE, YOU ARE AVOIDING RED.** That is what a 9 % green
+band means, and it is the point rather than a cruelty: measured through our own numbers, the green
+half-window from a bunker is **1.0 frame** and the orange half-window **4.2 frames** - which is the
+reference's own geometry, and matches what its player did (orange from the rough, a fine 196 yd
+3 wood; red from the bunker, a 7 iron that went 21). `test.js` section 8b prints the green/orange
+window in frames for every lie in the game and **fails if ORANGE ever drops under 3 frames.** That
+is the first-playtest lesson applied to the new bands: when a mechanic is a timed input, test the
+input. If this proves too punishing, `LIES[].zone` in `clubs.js` is the only thing to raise.
+
+**The meter is not one speed**, and the lie is not what changes it - the driver off a tee and the
+3 wood out of rough measured identical, which rules the lie out and leaves the club. Two
+regularities carry the fit across all four samples: the downswing is the backswing **minus about
+545 ms** (not a fixed multiple), and the backswing is flat across the top of the bag then slows one
+step at a time. `swingTempo()` in `clubs.js` is `1685 + max(0, index - 1) * 55`, which reproduces
+driver 1685 (measured 1693), 3 wood 1685 (1678) and 7 iron 2070 (2070 exactly), with the putter its
+own constant at 2410.
+
+**The red-miss distance penalty is a ramp, not the measured number, and that is deliberate.**
+Closing the reference's gap entirely would need about 0.45, but that single sample confounds three
+unknowns - the mishit penalty, the greenside bunker's own distance factor, and the club's rating in
+a bag that is plainly upgraded (see below). Attributing all of it to the mishit would be inventing a
+number from one equation with three unknowns.
+
+### The reference is playing an UPGRADED bag, and our stock ladder is the bottom of it
+
+Converted to like-for-like (carry at 100 %, lie cap removed):
+
+| club | implied 100 % carry | ours (stock) | ours (`upgraded`) |
+|---|---|---|---|
+| driver | 270.2 | 215 | **269** |
+| 3 wood | 244 (at a 0.85 rough cap) | 195 | **244** |
+
+That is not a coincidence, and `clubs.js`'s header already suspected it: the reference's earlier
+measured 287 yd drive "was recorded with an unknown, possibly upgraded bag". **So the distances do
+not conflict with ours - they are the top of a ladder whose bottom we already ship.** Two separate
+jobs live here and they must not be confused: matching the reference's MECHANICS (done above, bag
+and courses untouched) and matching its DISTANCES, which would mean shipping the club shop and
+re-cutting all 36 holes, since every yardage is deliberately cut to the stock bag.
+
+### Still unbuilt from this footage
+
+- **The result screen.** The reference's hole-out popup shows the course name, the round's score,
+  a scorecard (3 holes, par 3/5/4 - the same par 12 as our frozen `pinevalley3`), and **a
+  leaderboard of named AI opponents playing the same round** (You -1, U Jett -1, D Clark -1,
+  D Marcus even). We have no in-round opponents at all. Whole feature, not a tuning change.
+- **The putter switches the distance readout to feet** while it is merely SELECTED, off the green
+  (measured: "759.5 Ft" for a 253.2 yd shot). Ours only switches when the ball is on the green.
+- **The auto-pick opens on a club that cannot reach** (a 2 iron for 253 yds). Ours picks the
+  shortest club that CAN reach.
+- **No driver appears in the list off the fairway**, only from the tee. Worth confirming.
+- A golfer sprite that WALKS to the ball between shots.
+
+### Two things a second, frame-sampled analysis got wrong, and why
+
+A parallel pass over sampled key frames (about 1 sample per 25 real frames) reported that "the
+power meter needle never moves, in any sequence, at any point" and that "no frame shows the ball
+travelling". Both are sampling artifacts: the needle's whole sweep is ~2.8 s and the ball's flight
+1.5-3 s, so at 2.5 fps every sample can land outside them. **Anything about motion in this game
+needs 30-60 fps over a named window; a survey rate can only be trusted for layout.** That same pass
+was right about two things this one had wrong (the 15.0 ft putt and the 253.2 yd readout), and it
+found the result screen, which this one had stopped 20 frames short of.
+
 ### Still open for the next playtest
 
 - **Only 2 of the 5 aim-ladder dots are on screen at address with a driver**, still. The view is
