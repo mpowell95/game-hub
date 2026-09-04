@@ -18,7 +18,7 @@ import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, RING_MAX } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
-import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor } from './render.js';
+import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
@@ -825,10 +825,21 @@ class GolfGame {
 
   _aimCamera(snap) {
     if (!this.cam) return;
+    // THE VIEW TIGHTENS ON THE GREEN. A full shot is framed 95 yds across so the landing area and
+    // both tree lines are visible; a putt is measured in FEET, and reading a 6 ft putt across
+    // 95 yds of screen puts it in 2 % of the frame with a sub-pixel break. It eases between the
+    // two rather than snapping, except on the first frame of a hole, so walking onto the green
+    // reads as the camera coming down to you.
+    const wantW = this._onGreen() ? VIEW_W_GREEN_YDS : VIEW_W_YDS;
+    this.cam.setWidth(snap ? wantW : this.cam.widthYds + (wantW - this.cam.widthYds) * 0.18);
     // The ball sits LOW in the frame so the player sees up the hole toward the green. 0.5 puts it
     // about a quarter of the way up the screen, which is what makes the aim ladder's far dots
     // reachable by eye rather than only by scrolling the preview.
-    const want = this.ball[1] + this.cam.halfH * 0.5;
+    //
+    // ON THE GREEN IT IS ALMOST CENTRED. That offset exists to show a fairway the ball is about to
+    // fly up; a putt's target is a few feet away, so pushing the ball to the bottom of the frame
+    // just spends the top half of the screen on whatever is behind the green.
+    const want = this.ball[1] + this.cam.halfH * (this._onGreen() ? 0.12 : 0.5);
     this.cam.x = this.ball[0];
     this.cam.y = snap ? want : this.cam.y + (want - this.cam.y) * 0.18;
     this.cam.clamp();

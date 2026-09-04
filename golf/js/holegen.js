@@ -309,12 +309,13 @@ export function makeHole(spec) {
     minY: Math.floor(Math.min(minY - 8, tee[1] - 45)),
     maxY: Math.ceil(Math.max(maxY + 8, pin[1] + 55)),
   };
-  // The camera frames VIEW_W_YDS (70) across; a hole narrower than that gets centred rather than
-  // clamped, which is correct but makes a narrow hole feel like it is drifting. Give every hole at
-  // least that much width so the pan is honest.
-  if (bounds.maxX - bounds.minX < 76) {
+  // The camera frames VIEW_W_YDS (95) across; a hole NARROWER than the view gets centred rather
+  // than clamped, which is correct - there is nothing to pan to - but it means the free look does
+  // nothing sideways on that hole. Give every hole a little more than a viewport of width so the
+  // pan is always honest. This tracks VIEW_W_YDS: if the view opens up again, raise it.
+  if (bounds.maxX - bounds.minX < 104) {
     const mid = (bounds.maxX + bounds.minX) / 2;
-    bounds.minX = Math.floor(mid - 38); bounds.maxX = Math.ceil(mid + 38);
+    bounds.minX = Math.floor(mid - 52); bounds.maxX = Math.ceil(mid + 52);
   }
 
   // THE ROUTE: the playing line, coarsened to a point every ~25 yards. Art and tests only - no

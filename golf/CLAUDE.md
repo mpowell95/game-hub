@@ -615,11 +615,44 @@ harness's tap round-trip is worth tens of ms. It also taps 3 immediately after t
 the accuracy bar near its centre instead of near its edge. Its success line reported `undefined`
 for weeks because it returned `note` where `checkPlay` reads `why`.
 
+### The view: 95 yards wide, and 34 on the green (2026-09-04)
+
+Matt: *"Can you make the default view a little more zoomed out?"* `VIEW_W_YDS` 70 -> **95**.
+
+70 framed the fairway and its rough and almost nothing else - measured on Pine Valley 1 at
+393 x 852, the view was 152 yds deep, so a driver's landing area was off the top of the screen and
+two of the five aim dots had nowhere to be drawn. At 95 the view is 206 yds deep and the tree belts
+and the water down the left are both visible from the tee. **The ceiling is not taste, it is
+`MAP_PPY`**: the map is rasterised at 2.4 px/yd, so past about 164 yds across it would be
+DOWNscaled and start to shimmer. 95 leaves it upscaled 1.7x and the pixel-art look untouched.
+
+**The green needed its own width, or this would have been a straight trade.** A putt is measured in
+FEET; reading a 6 ft putt across 95 yards of screen is reading it across 2 % of the frame, with the
+break (one cup width over 20 ft) sub-pixel. `VIEW_W_GREEN_YDS` is 34, eased in over about fifteen
+frames as the ball settles, and on the green the camera also nearly CENTRES the ball (0.12 of a
+half-height instead of 0.5) - the low framing exists to show a fairway the ball is about to fly up,
+and on a putt it just spends the top half of the screen on whatever is behind the green.
+
+**And it exposed a real bug in `makeCamera`.** `clamp()` closed over the CONSTRUCTOR's `halfW` and
+`halfH` rather than reading `this.` - invisible for as long as the camera's scale could never
+change, and wrong the instant `setWidth` existed. Tightening to the green left the clamp still
+enforcing a 95-yard frame, so it dragged the view 30 yards off the ball and pinned the flag off the
+top of the screen: measured, `cam.y` clamped to 332 against a ball at 363.5. If a future change
+adds another camera scale, this is the line it will trip over.
+
+One knock-on: a hole narrower than the view gets CENTRED rather than clamped, which is correct
+(there is nothing to pan to) but leaves the free look with no sideways travel. `holegen.js`'s
+minimum hole width went 76 -> 104 to match. Sideways pan is now small on every hole by design -
+at 95 yards across you can already see both edges of the corridor - while the vertical pan, which
+is the one that answers "where will this drive land", is untouched.
+
 ### Still open for the next playtest
 
-- **Only 2 of the 5 aim-ladder dots are on screen at address with a driver.** The view is 70 yds
-  wide, which puts about 120 yds of hole ahead of the ball; the driver's dot 4 is at 215. Free look
-  reaches them. Whether that is right, or the view should pull back, is still a feel call.
+- **Only 2 of the 5 aim-ladder dots are on screen at address with a driver**, still. The view is
+  95 yds wide now, which puts about 155 yds of hole ahead of the ball; the driver's dot 4 is at 215,
+  so it takes 110+ yds of free look to reach. Zooming out far enough to show it would cost the
+  pixel-art scale (see "The view" above). Probably wants the ball framed lower on a tee shot rather
+  than a wider view, but that is a feel call.
 - Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
 - The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
