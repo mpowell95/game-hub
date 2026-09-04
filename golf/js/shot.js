@@ -204,30 +204,51 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
 
 export const FT_PER_YD = 3;
 
-/** The putter's ABSOLUTE ceiling, in feet. Ours; the reference never showed a putter's range. */
-export const MAX_PUTT_FT = 60;
-/** The shortest full-power putt the meter will ever be scaled to. */
-export const MIN_PUTT_FT = 6;
-/** Full power overruns the hole by this much, so the hole is reachable well inside full power. */
-export const PUTT_HEADROOM = 1.4;
-
-/**
- * How far a FULL-POWER putt goes, for the putt in hand.
+/** THE PUTTER'S RANGE. A full-power putt goes this far, from anywhere, always.
  *
- * THE BUG THIS EXISTS FOR (Matt's playtest, 2026-09-04, filmed): with a fixed 60 ft at full power,
- * required power was linear in distance against an 825 ms sweep, so the tap window for +/- 1.5 ft
- * was a CONSTANT +/- 19 ms - about ONE FRAME at 60fps - at every length. A 2.2 ft putt needed 3.7 %
- * power, reached 28 ms after tap 1. Measured consequences on his phone: 2.2 ft -> 12.6 ft,
- * 2.6 ft -> 10.7 ft, and a 7.9 ft putt struck clean off the green into heavy rough. He took 24
- * shots on a par 4 and quit without holing out.
+ *  It is the club's own stat, exactly like every other club's `carry` in clubs.js. That is the
+ *  whole point, and it was briefly not true.
  *
- * Scaling the range to the putt fixes it with no new UI: every putt now uses the whole meter, so
- * the hole always sits near 1/1.4 = 71 % power and the tolerance is proportional to the putt
- * rather than fixed. A 10 ft putt goes from +/- 19 ms to about +/- 80 ms (5 frames).
+ *  WHAT WENT WRONG, AND WHY THE FIX WAS WORSE THAN THE BUG. The first playtest found putting
+ *  unplayable: against the old 825 ms power ring, the tap window for +/- 1.5 ft was a constant
+ *  +/- 19 ms - about ONE FRAME at 60fps - at every length, because required power was linear in
+ *  distance over a fixed 60 ft. A 2.2 ft putt needed 3.7 % power, reached 28 ms after tap 1. On
+ *  Matt's phone: 2.2 ft -> 12.6 ft, and a 7.9 ft putt struck clean off the green.
+ *
+ *  The fix then was to SCALE the range to the putt in hand (distance x 1.4, floored at 6 ft), so
+ *  every putt used the whole meter. It worked, and it was the wrong thing. Matt, playing it:
+ *  "regardless of how far the putt is, it changes the max distance i can hit the putter so that
+ *  100% is equal to the hole. If i'm 30 feet away, a 100% power putt will go exactly 30 feet. If
+ *  i'm 2 feet away, a 100% power putt will go 2 feet." A meter whose scale moves under you means
+ *  nothing: no feel transfers from one putt to the next, because 60 % power is a different putt
+ *  every time. That is a rubber band, not a skill.
+ *
+ *  IT IS FIXED AGAIN NOW, AND THE ORIGINAL PROBLEM IS GONE ON ITS OWN. The two-meter ring that
+ *  made short putts a one-frame stop is gone; power is set on the three-click BACKSWING, which is
+ *  1650 ms per power unit against the old ring's 750 ms. Measured, by sweeping real putts through
+ *  `simulatePutt` and counting the powers that drop:
+ *
+ *      fixed 60 ft   1 ft: 9.5 frames   4 ft: 9.3   10 ft: 9.3   25 ft: 9.5   40 ft: 9.3
+ *      scaled (old)  1 ft: 95.8         4 ft: 46.5  10 ft: 33.3  25 ft: 16.2  40 ft: 10.1
+ *
+ *  The window is now CONSTANT at every distance - which is exactly what a fixed scale should give
+ *  you, and it is what makes the meter learnable. It is also BETTER than the scaled version at the
+ *  long end, where putts are actually hard; the scaled version only looked generous because it was
+ *  spending the entire meter on a tap-in.
+ *
+ *  A putt longer than this cannot be holed in one, and the aim ladder shows that honestly by
+ *  putting its 100 % dot short of the cup. Lagging it close is the right play, as in real golf.
+ *  (The usable maximum is a yard or so under the nominal: the ball has to still be moving when it
+ *  reaches the cup to be captured.)
  */
-export function puttRangeFt(distToPinFt) {
-  return Math.max(MIN_PUTT_FT, Math.min(MAX_PUTT_FT, distToPinFt * PUTT_HEADROOM));
-}
+export const MAX_PUTT_FT = 60;
+
+/** How far a FULL-POWER putt goes. A constant - see MAX_PUTT_FT above for why it must be.
+ *
+ *  Kept as a function because the aim ladder, the shot resolver and the tests all ask the same
+ *  question, and a single place to answer it is what stops the ladder and the physics disagreeing
+ *  about where full power lands. */
+export function puttRangeFt() { return MAX_PUTT_FT; }
 
 /** Constant rolling deceleration, in yards per second squared.
  *

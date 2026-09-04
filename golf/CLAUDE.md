@@ -477,10 +477,9 @@ against an 825 ms sweep, which makes the tap window for +/- 1.5 ft a **constant 
 frames at 60fps - whether the putt is 2 ft or 50 ft.** A 2.2 ft putt needed 3.7 % power, reached
 28 ms after tap 1. It is not a hard shot, it is an impossible one.
 
-**Fixed by scaling the range to the putt in hand**: `puttRangeFt()` = distance x 1.4, floored at
-6 ft and capped at the putter's 60 ft. The hole now always sits near 71 % power, so every putt uses
-the whole meter and the tolerance is proportional to the putt rather than fixed. Measured after:
-2.2 ft went from 1.1 frames to **7.5 frames**, 6.9 ft to 4.7, 15.8 ft to 3.2.
+It was first fixed by SCALING the range to the putt in hand (distance x 1.4, floored at 6 ft), so
+every putt used the whole meter. **That worked and it was the wrong thing - see "The putter's range
+is a constant" below.** The real cause was the 825 ms power ring, and that ring no longer exists.
 
 ### 2. THE TEST SUITE ASSERTED THE WRONG THING, and that is the lesson
 
@@ -763,6 +762,47 @@ a fairway now, against real golf:
 | 5 iron | 158 | ~158 |
 | 9 iron | 116 | ~114 |
 | lob wedge | 52 | ~51 |
+
+### The putter's range is a CONSTANT, and briefly was not (2026-09-04)
+
+Matt: *"when i'm putting, regardless of how far the putt is, it changes the max distance i can hit
+the putter so that 100% is equal to the hole. If i'm 30 feet away, a 100% power putt will go
+exactly 30 feet. If i'm 2 feet away, a 100% power putt will go 2 feet."*
+
+Substantively right. (Precisely it was `distance x 1.4` floored at 6 ft, so 30 ft gave a 42 ft range
+with the hole at 71 % and 2 ft gave 6 ft with the hole at 33 %.) Either way **the scale moved under
+the player**, so nothing learned on one putt transferred to the next: 60 % power was a different
+putt every time. That is a rubber band, not a skill.
+
+It was introduced to widen the tap window when a 2 ft putt needed 3.7 % of an 825 ms ring and could
+only be stopped inside about one frame. **That cause is gone**: power is set on the three-click
+BACKSWING now, at 1650 ms per power unit. So the range went back to being what it always should
+have been - the putter's own stat, exactly like every other club's `carry`.
+
+**Measured, by sweeping real putts through `simulatePutt` and counting the powers that actually
+drop** (not by a stopping-distance proxy - the cup captures a ball ROLLING THROUGH it over a range
+of speeds, so a proxy under-reports the window badly):
+
+| putt | fixed 60 ft | scaled (old) |
+|---|---|---|
+| 1 ft | 9.5 frames | 95.8 |
+| 4 ft | 9.3 | 46.5 |
+| 10 ft | 9.3 | 33.3 |
+| 25 ft | 9.5 | 16.2 |
+| 40 ft | 9.3 | 10.1 |
+
+**The window is now the same at every distance**, which is exactly what a fixed scale should buy,
+and it is BETTER than the scaled version at the long end where putts are actually hard. The scaled
+version only looked generous because it was spending the entire meter on a tap-in. Power is now
+simply linear in distance: 2 ft = 3.3 %, 15 ft = 25 %, 30 ft = 50 %, 45 ft = 75 %.
+
+A putt longer than 60 ft cannot be holed in one, and the aim ladder says so honestly by putting its
+100 % dot short of the cup. Lagging it close is the right play, as in real golf. The ladder is also
+now a fixed 60 ft, so its four dots always mean 15/30/45/60 ft - which is why the reference's own
+putt dots run off the green and into the trees on a short putt.
+
+`golf/js/test.js` section 11b measures the window by sweeping rather than modelling it, and carries
+a `[KNOWN-BUG PROBE]` that the window must be the SAME at every distance.
 
 ### Still open for the next playtest
 

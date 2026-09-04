@@ -387,30 +387,47 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
 // So the rule now is: a distance the player is EXPECTED to face must be reachable with a tap
 // window a person can actually hit. Anything else is a test of the engine, not of the game.
 {
+  // THE WINDOW IS MEASURED, NOT MODELLED. An earlier version of this block estimated it from
+  // "how much power is +/- 1 ft of stopping distance", which is a proxy and a bad one: the cup
+  // captures a ball ROLLING THROUGH it over a range of speeds, so the real window is far wider
+  // than the stopping-distance one. Sweeping real putts through simulatePutt and counting the
+  // powers that actually drop is the only version of this that can be trusted.
   const windowMs = (ft) => {
-    const range = SH.puttRangeFt(ft);
-    const need = ft / range;
-    const tol = Math.max(1.0, ft * 0.10) / range;      // within a foot, or 10 % on a long putt
-    // The power is set on the BACKSWING now, so the window is that sweep's own rate: UP_MS per
-    // power unit. The slower backswing the reference measures makes every putt more forgiving
-    // than the old build's 750 ms ring did, which is the opposite of a regression.
-    return tol * SW.UP_MS;
+    const from = [h1.pin[0], h1.pin[1] - ft / 3];
+    const aim = Math.atan2(h1.pin[0] - from[0], h1.pin[1] - from[1]);
+    let lo = null; let hi = null;
+    for (let pw = 0.002; pw <= 1.0; pw += 0.002) {
+      if (SH.simulatePutt({ hole: h1, from, aimRad: aim, power: pw, rangeFt: SH.puttRangeFt() }).holed) {
+        if (lo === null) lo = pw;
+        hi = pw;
+      }
+    }
+    return lo === null ? 0 : (hi - lo) * SW.UP_MS;
   };
   const FRAME = 1000 / 60;
+  const windows = [];
   for (const ft of [1, 2.2, 4, 6.9, 10, 15.8, 25, 40]) {
     const w = windowMs(ft);
+    windows.push(w);
     ok(`a ${ft} ft putt gives the player ${w.toFixed(0)} ms (${(w / FRAME).toFixed(1)} frames) to stop the meter`,
       w >= 3 * FRAME, 'under 3 frames is not a skill, it is a coin flip');
   }
   ok('[KNOWN-BUG PROBE] a 2 ft tap-in is not a one-frame stop', windowMs(2) >= 3 * FRAME,
     'the shipped build needed 3.7 % power, reached 28 ms after tap 1: Matt putted 2.2 ft to 12.6 ft');
+  // [KNOWN-BUG PROBE] ...and the window is the SAME at every distance, which is what a fixed
+  // scale buys. The range was briefly scaled to the putt in hand to widen the short-putt window;
+  // Matt caught it - "if i'm 2 feet away, a 100% power putt will go 2 feet" - and a meter whose
+  // scale moves under you teaches nothing, because 60 % power is a different putt every time.
+  ok(`[KNOWN-BUG PROBE] the window is the SAME at every distance (${windows.map((w) => (w / FRAME).toFixed(1)).join(', ')} frames)`,
+    Math.max(...windows) - Math.min(...windows) < 1.5 * FRAME,
+    'a range that rescales per putt gives 96 frames on a tap-in and 10 on a long putt: no feel transfers between them');
   ok('the hole is reachable at less than full power for anything inside the putter\'s range',
-    [1, 5, 20, 50, 60].every((ft) => ft / SH.puttRangeFt(ft) <= 1));
+    [1, 5, 20, 50].every((ft) => ft / SH.puttRangeFt() <= 1));
   ok('...and BEYOND the putter\'s 60 ft range it honestly cannot be reached',
-    120 / SH.puttRangeFt(120) > 1);
-  ok('a very long putt is still capped by the putter, not scaled forever',
-    SH.puttRangeFt(500) === SH.MAX_PUTT_FT);
-  ok('a tiny putt does not scale down to nothing', SH.puttRangeFt(0.2) === SH.MIN_PUTT_FT);
+    120 / SH.puttRangeFt() > 1);
+  ok('full power means the SAME distance from every putt, and it is the putter\'s own stat',
+    new Set([0.2, 2, 10, 30, 60, 500].map((ft) => SH.puttRangeFt(ft))).size === 1
+    && SH.puttRangeFt() === PUTTER.maxFeet);
 }
 {
   const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
@@ -484,7 +501,7 @@ console.log('\n-- 13. a whole hole can be played out --');
     const aim = Math.atan2(h.pin[0] - ball[0], h.pin[1] - ball[1]);
     strokes++;
     if (isPuttable(lie)) {
-      const rangeFt = SH.puttRangeFt(d * 3);
+      const rangeFt = SH.puttRangeFt();
       const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / rangeFt), rangeFt });
       ball = p.rest; holed = p.holed;
     } else {
@@ -535,7 +552,7 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
       const lie = surfaceAt(hole, ball[0], ball[1]);
       if (isPuttable(lie)) {
         const ft = distYd(ball, hole.pin) * 3;
-        const rangeFt = SH.puttRangeFt(ft);
+        const rangeFt = SH.puttRangeFt();
         const aim = Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]);
         const r = SH.simulatePutt({ hole, from: ball, aimRad: aim, power: Math.min(1, ft / rangeFt), rangeFt });
         if (r.holed) return n;
