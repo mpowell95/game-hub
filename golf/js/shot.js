@@ -104,17 +104,42 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const sin = Math.sin(dirRad);
   const STEP = 0.4;                                  // yards; the narrowest trunk is 0.6 across
   const steps = Math.max(2, Math.ceil(distanceYd / STEP));
+
+  // WHERE THE BALL ALREADY IS CANNOT BE AN OBSTACLE TO LEAVING IT. Without this the game
+  // SOFTLOCKS, and it did: a ball that finished under a canopy was blocked on the very first
+  // sample of its next shot, dropped where it stood, and was blocked again - for ever, with the
+  // meter working perfectly and the ball travelling 0 yards every time. Measured on Pine Valley
+  // 3 and 10, where a hand-placed oak sits in the fairway: fourteen shots, zero yards.
+  //
+  //  - A tree the ball is basically TOUCHING (inside trunk + 1.2 yds) is ignored outright. You are
+  //    against it; in this game you get to play it, rather than be permanently stuck.
+  //  - A tree the ball is merely UNDER (inside the canopy) still blocks with its TRUNK, but its
+  //    canopy no longer stops a low ball: the ball is already beneath it and exits in the first
+  //    yard. Punching out from under a tree is real golf; being unable to move is not.
+  //
+  // Everything else - the tree you are 10 yards short of, which is the whole point of the hole -
+  // is unchanged.
+  const state = trees.map((t) => {
+    const type = hole.treeTypes[t.type];
+    const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
+    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy };
+  });
+
+  // ...and the walk starts clear of the ball for the same reason.
+  const startAt = Math.min(0.35, 1.2 / Math.max(1, distanceYd));
   for (let i = 1; i <= steps; i++) {
     const p = i / steps;
+    if (p < startAt) continue;
     const f = flightPoint(p, distanceYd, sideYd, apex);
     const x = from[0] + sin * f.along + cos * f.side;
     const y = from[1] + cos * f.along - sin * f.side;
-    for (const t of trees) {
-      const type = hole.treeTypes[t.type];
+    for (const st of state) {
+      if (st.ignore) continue;
+      const { t, type } = st;
       const d = Math.hypot(x - t.x, y - t.y);
       if (d > type.canopy) continue;
       if (d <= type.trunk) return { tree: t, type, at: [x, y], p };
-      if (f.height < type.height) return { tree: t, type, at: [x, y], p };
+      if (!st.canopyOff && f.height < type.height) return { tree: t, type, at: [x, y], p };
     }
   }
   return null;
@@ -143,10 +168,14 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   const cos = Math.cos(aimRad);
   const sin = Math.sin(aimRad);
 
-  // A blocked ball drops where it met the tree, killed - the trunk IS the penalty (§21.2).
+  // A blocked ball drops where it met the tree, killed - the trunk IS the penalty (§21.2). It
+  // drops a couple of yards SHORT of the contact point rather than on it, because a ball resting
+  // exactly on a trunk is a ball whose next shot starts inside that trunk. It never comes back
+  // behind where it was struck from.
   const p = blocked ? blocked.p : 1;
   const f = flightPoint(p, carry, sideYd, apex);
-  const landing = [from[0] + sin * f.along + cos * f.side, from[1] + cos * f.along - sin * f.side];
+  const along = blocked ? Math.max(0, f.along - 2) : f.along;
+  const landing = [from[0] + sin * along + cos * f.side, from[1] + cos * along - sin * f.side];
 
   const landedOn = surfaceAt(hole, landing[0], landing[1]);
   const rollYd = blocked ? 0 : carry * rollFactor(landedOn);

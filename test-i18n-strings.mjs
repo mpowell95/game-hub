@@ -28,6 +28,7 @@ const DICTS = [
   { name: 'yahtzee/js/strings.js', path: './yahtzee/js/strings.js' },
   { name: 'skeeball/js/strings.js', path: './skeeball/js/strings.js' },
   { name: 'pinball/js/strings.js', path: './pinball/js/strings.js' },
+  { name: 'golf/js/strings.js', path: './golf/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

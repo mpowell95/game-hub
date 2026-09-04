@@ -13,12 +13,14 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import PINE_VALLEY from '../courses/pinevalley.js';
+import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, isPuttable } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, RING_MAX } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
-import { buildMap, makeCamera, drawFrame, PALETTE } from './render.js';
+import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor } from './render.js';
+import { recordGolf } from '../../js/game-stats.js';
+import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
@@ -60,8 +62,8 @@ function ensureCSS() {
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {};
-    return { lastCourse: s.lastCourse || PINE_VALLEY.id, round: s.round || null, ...s };
-  } catch { return { lastCourse: PINE_VALLEY.id, round: null }; }
+    return { lastCourse: COURSES[0].id, lastRound: 'quick3', ...s };
+  } catch { return { lastCourse: COURSES[0].id, lastRound: 'quick3' }; }
 }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* best effort */ }
@@ -95,7 +97,7 @@ class GolfGame {
   constructor(container) {
     this.container = container;
     this.settings = loadSettings();
-    this.course = PINE_VALLEY;
+    this.course = courseById(this.settings.lastCourse);
     this.destroyed = false;
     this.listeners = [];
     this.raf = 0;
@@ -202,28 +204,65 @@ class GolfGame {
   }
 
   // ---------------------------------------------------------------- setup ----
+  /** ONE setup screen: pick the course, pick how much of it to play, go.
+   *
+   *  It was a course card and a "play" button when there was one course of three holes. Two
+   *  courses of eighteen could have become course list -> round list -> hole list, three taps deep
+   *  before a ball is struck, and on a phone that is where a game gets closed. The course chips
+   *  swap the picture and the numbers in place, so the whole choice is visible at once. */
   _renderSetup() {
     this._stopLoop();
     this.hole = null;
     this.rootEl.innerHTML = '';
-    const best = this._bestText();
+    const c = this.course;
     const el = document.createElement('div');
     el.className = 'gf-setup';
+    this._themeSetup(el);
     el.innerHTML = `
-      <h1>${t('course')}</h1>
+      <h1>${esc(t(`course_${c.id}`))}</h1>
+      <div class="gf-coursepick">
+        ${COURSES.map((k) => `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}"
+          data-course="${esc(k.id)}"><span>${esc(t(`course_${k.id}`))}</span></button>`).join('')}
+      </div>
       <canvas class="gf-setup__art" data-role="art" aria-hidden="true"></canvas>
       <div class="gf-card gf-panel">
-        <div class="gf-card-meta"><span>${t('holes_n')}</span><span>${best}</span></div>
-        <div class="gf-card-blurb">${t('blurb')}</div>
+        <div class="gf-card-meta">
+          <span>${esc(t('course_meta', { holes: c.holes.length, par: c.par, yds: Math.round(c.holes.reduce((a, h) => a + h.cardYards, 0)) }))}</span>
+        </div>
+        <div class="gf-card-blurb">${esc(t(c.blurbKey))}</div>
       </div>
-      <div class="gf-card gf-actions">
-        <button type="button" class="gf-btn" data-role="play"><span>${t('play')}</span></button>
-        <button type="button" class="gf-btn" data-role="practice"><span>${t('practice')}</span></button>
-      </div>`;
+      <div class="gf-card">
+        <div class="gf-card-blurb gf-pickhead">${esc(t('pick_round'))}</div>
+        <div class="gf-rounds">
+          ${ROUNDS.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}">
+            <span>${esc(t(r.labelKey))}</span>
+            <small>${esc(t('round_meta', { par: roundPar(c, r.id), yds: Math.round(roundYards(c, r.id)) }))}</small>
+            <small class="gf-best">${esc(this._bestText(roundKey(c, r.id), roundPar(c, r.id)))}</small>
+          </button>`).join('')}
+        </div>
+      </div>
+      <button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`;
     this.rootEl.appendChild(el);
     this._paintSetupArt(el.querySelector('[data-role="art"]'));
-    this._on(el.querySelector('[data-role="play"]'), 'click', () => this._startRound('round', 0));
+    for (const b of el.querySelectorAll('[data-course]')) {
+      this._on(b, 'click', () => {
+        this.course = courseById(b.dataset.course);
+        this.settings.lastCourse = this.course.id;
+        saveSettings(this.settings);
+        this._renderSetup();
+      });
+    }
+    for (const b of el.querySelectorAll('[data-round]')) {
+      this._on(b, 'click', () => this._startRound(b.dataset.round));
+    }
     this._on(el.querySelector('[data-role="practice"]'), 'click', () => this._renderHoleSelect());
+  }
+
+  /** The setup screen's backdrop follows the course. It is chrome rather than course art, but a
+   *  desert course behind a forest-green wash reads as the wrong game entirely. */
+  _themeSetup(el) {
+    const pal = paletteFor(this.course.theme);
+    el.style.background = `linear-gradient(180deg, ${pal.setupA} 0%, ${pal.setupB} 100%)`;
   }
 
   /** The course card's picture: hole 1 rendered whole, from the same map builder the game plays
@@ -239,59 +278,93 @@ class GolfGame {
       cv.height = Math.round(r.height * dpr);
       const ctx = cv.getContext('2d');
       ctx.imageSmoothingEnabled = false;
-      const map = buildMap(this.course.holes[0]);
+      const pal = paletteFor(this.course.theme);
+      const map = buildMap(this.course.holes[0], this.course.theme);
       // Fit the whole hole in, letterboxed on whichever axis has room to spare.
       const sc = Math.min(cv.width / map.w, cv.height / map.h);
       const w = map.w * sc;
       const h = map.h * sc;
-      ctx.fillStyle = PALETTE.heavyRough;
+      ctx.fillStyle = pal.heavyRough;
       ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.drawImage(map.canvas, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
     });
   }
 
-  _bestText() {
-    // Stage D wires the real bestRoundByCourse read. Until a round can be completed there is
-    // nothing true to show, and the reference's own literal dash is the honest placeholder.
-    return t('best_none');
+  /** The stored best for one round, as a score TO PAR - the same number the leaderboard shows, so
+   *  the two screens can never disagree. The stored value itself is always STROKES (golf/CLAUDE.md,
+   *  "Stored shape"); par is subtracted here, at display time, and never on the way in. */
+  _bestText(key, par) {
+    let strokes = null;
+    try {
+      const st = loadStats();
+      const v = ((((st.games || {}).golf || {}).gf || {}).bestRoundByCourse || {})[key];
+      if (Number.isFinite(v)) strokes = v;
+    } catch { /* no stats is not an error: it means nobody has played it */ }
+    if (strokes == null) return t('best_none');
+    const d = strokes - par;
+    return t('best_is', { n: d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}` });
   }
 
   _renderHoleSelect() {
     this.rootEl.innerHTML = '';
+    const c = this.course;
     const el = document.createElement('div');
     el.className = 'gf-setup';
+    this._themeSetup(el);
     el.innerHTML = `
-      <h1>${t('course')}</h1>
-      <div class="gf-card gf-panel"><div class="gf-card-blurb">${t('select_hole')}</div>
-        <div class="gf-holes">${this.course.holes.map((h) => `
-          <button type="button" class="gf-btn gf-hole-btn" data-hole="${h.n}"><span>${h.n}</span></button>`).join('')}</div>
-        <div class="gf-card-meta"><span>${this.course.holes.map((h) => `${t('par_n', { n: h.par })}`).join('  ')}</span></div>
+      <h1>${esc(t(`course_${c.id}`))}</h1>
+      <div class="gf-card gf-panel"><div class="gf-card-blurb">${esc(t('select_hole'))}</div>
+        <div class="gf-holes">${c.holes.map((h, i) => `
+          <button type="button" class="gf-btn gf-hole-btn" data-hole="${i}"
+            aria-label="${esc(`${t('hole_abbr')} ${h.n}, ${t('par_n', { n: h.par })}`)}">
+            <span>${h.n}</span><small>${h.par}</small></button>`).join('')}</div>
+        <div class="gf-card-meta"><span>${esc(t('not_counted'))}</span></div>
       </div>
-      <button type="button" class="gf-btn" data-role="back"><span>${t('back')}</span></button>`;
+      <button type="button" class="gf-btn" data-role="back"><span>${esc(t('back'))}</span></button>`;
     this.rootEl.appendChild(el);
     for (const b of el.querySelectorAll('[data-hole]')) {
-      this._on(b, 'click', () => this._startRound('practice', Number(b.dataset.hole) - 1));
+      this._on(b, 'click', () => this._startPractice(Number(b.dataset.hole)));
     }
     this._on(el.querySelector('[data-role="back"]'), 'click', () => this._renderSetup());
   }
 
   // ---------------------------------------------------------------- play ----
-  _startRound(kind, holeIdx) {
-    this.roundKind = kind;
-    this.holeIdx = holeIdx;
+  /** Start a scored round: a course plus the slice of its holes this round plays. */
+  _startRound(roundId) {
+    this.roundId = roundId;
+    this.holeIdxs = roundHoles(this.course, roundId);
+    this.pos = 0;
     this.scores = [];
+    this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 };
+    this.recorded = false;
+    this.settings.lastRound = roundId;
+    saveSettings(this.settings);
+    this._enterHole();
+  }
+
+  /** Start ONE hole, unscored. A practice hole never touches bestRoundByCourse - a single hole's
+   *  stroke count is not a round, and writing it as one would put a 3 where an 18-hole best goes
+   *  and stand there for ever (THE LAW rule 2: bests only ever improve, so a wrong low one can
+   *  never be corrected). */
+  _startPractice(holeIdx) {
+    this.roundId = 'practice';
+    this.holeIdxs = [holeIdx];
+    this.pos = 0;
+    this.scores = [];
+    this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 };
+    this.recorded = false;
     this._enterHole();
   }
 
   _enterHole() {
-    const hole = this.course.holes[this.holeIdx];
+    const hole = this.course.holes[this.holeIdxs[this.pos]];
     // A hole that fails validation must fail LOUDLY rather than half-render: a malformed green
     // silently flattens the break, and that gets diagnosed as "putting feels wrong" for a week.
     const errs = validateHole(hole);
     if (errs.length) { console.error('[golf] invalid hole data:', errs); }
 
     this.hole = hole;
-    this.map = buildMap(hole);
+    this.map = buildMap(hole, this.course.theme);
     this.ball = [...hole.tee];
     this.shotN = 1;
     this.holed = false;
@@ -522,11 +595,12 @@ class GolfGame {
       });
       this.anim = { type: 'putt', t0: performance.now(), dur: res.ms, res };
     } else {
+      const club = this._activeClub();
       const res = resolveShot({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
-        club: this._activeClub(), power, mishitDeg: 0, distanceMul: m.distanceMul,
+        club, power, mishitDeg: 0, distanceMul: m.distanceMul,
       });
-      this.anim = { type: 'flight', t0: performance.now(), dur: res.flightMs, res };
+      this.anim = { type: 'flight', t0: performance.now(), dur: res.flightMs, res, club };
     }
     // The hub readout is set when the ball STOPS, never here - see _settleShot.
   }
@@ -559,14 +633,29 @@ class GolfGame {
    *  The full sunburst banner and the nine-column scorecard are Stage C; this is the honest
    *  minimum in the meantime - it names the score, shows the card so far, and offers the next
    *  hole. It gets a close (X) top-right, per the repo's win/lose popup rule. */
+  /** The hole is over. Show what it cost, the card so far, and the way onward.
+   *
+   *  On the LAST hole of a scored round this is also where the round is written to the player's
+   *  stats - once, and only if every hole in it has a score. See `_recordRound`. */
   _showHoleResult() {
     const hole = this.hole;
     const strokes = this.shotN - 1;
-    this.scores[this.holeIdx] = strokes;
-    const last = this.holeIdx >= this.course.holes.length - 1 || this.roundKind === 'practice';
+    this.scores[this.pos] = strokes;
+
+    const d = strokes - hole.par;
+    if (strokes === 1) this.roundStats.aces += 1;
+    else if (d === -2) this.roundStats.eagles += 1;
+    else if (d === -1) this.roundStats.birdies += 1;
+    this.roundStats.points += stablefordPoints(strokes, hole.par);
+
+    const practice = this.roundId === 'practice';
+    const last = practice || this.pos >= this.holeIdxs.length - 1;
+    if (last && !practice) this._recordRound();
+
     const played = this.scores.filter((v) => Number.isFinite(v));
-    const parSoFar = this.course.holes.slice(0, this.holeIdx + 1)
-      .filter((h, i) => Number.isFinite(this.scores[i])).reduce((a, h) => a + h.par, 0);
+    const parSoFar = this.holeIdxs
+      .filter((_, i) => Number.isFinite(this.scores[i]))
+      .reduce((a, i) => a + this.course.holes[i].par, 0);
     const toPar = played.reduce((a, v) => a + v, 0) - parSoFar;
     const toParTxt = toPar === 0 ? t('to_par_even')
       : toPar < 0 ? t('to_par_under', { n: -toPar }) : t('to_par_over', { n: toPar });
@@ -575,17 +664,18 @@ class GolfGame {
     el.className = 'gf-result';
     el.innerHTML = `
       <div class="gf-result__card gf-panel">
-        <button type="button" class="gf-result__x" data-role="res-close" aria-label="${t('back')}">&times;</button>
-        <div class="gf-result__name">${esc(this._scoreName(strokes, hole.par))}</div>
+        <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
+        <div class="gf-result__name">${esc(last && !practice ? t('round_done') : this._scoreName(strokes, hole.par))}</div>
         <div class="gf-result__sub">${esc(t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
-        <div class="gf-result__card-grid">
-          ${this.course.holes.map((h, i) => `<div class="gf-cell${i === this.holeIdx ? ' is-now' : ''}">
-            <span>${h.n}</span><b>${Number.isFinite(this.scores[i]) ? this.scores[i] : '-'}</b></div>`).join('')}
-        </div>
+        ${practice ? '' : `<div class="gf-result__card-grid">
+          ${this.holeIdxs.map((hi, i) => `<div class="gf-cell${i === this.pos ? ' is-now' : ''}">
+            <span>${this.course.holes[hi].n}</span><b>${Number.isFinite(this.scores[i]) ? this.scores[i] : '-'}</b></div>`).join('')}
+        </div>`}
         <div class="gf-result__total">${esc(toParTxt)}</div>
+        ${this.newBest ? `<div class="gf-result__best">${esc(t('saved_best'))}</div>` : ''}
         <div class="gf-actions">
-          ${last ? `<button type="button" class="gf-btn" data-role="res-done"><span>${t('finish')}</span></button>`
-    : `<button type="button" class="gf-btn" data-role="res-next"><span>${t('next_hole')}</span></button>`}
+          ${last ? `<button type="button" class="gf-btn" data-role="res-done"><span>${esc(t('finish'))}</span></button>`
+    : `<button type="button" class="gf-btn" data-role="res-next"><span>${esc(t('next_hole'))}</span></button>`}
         </div>
       </div>`;
     this.rootEl.appendChild(el);
@@ -595,8 +685,64 @@ class GolfGame {
     if (done) this._on(done, 'click', close);
     const next = el.querySelector('[data-role="res-next"]');
     if (next) {
-      this._on(next, 'click', () => { el.remove(); this.holeIdx += 1; this._enterHole(); });
+      this._on(next, 'click', () => { el.remove(); this.pos += 1; this._enterHole(); });
     }
+  }
+
+  /**
+   * Write ONE finished round to the player's stats. THE LAW governs every line of this.
+   *
+   *  - IT ONLY RUNS ON A COMPLETE ROUND. Every hole in the round must carry a score. Recording a
+   *    round abandoned after three of eighteen holes would store 12 strokes as an EIGHTEEN-hole
+   *    best, and because bests only ever improve (rule 2) that wrong number could never be
+   *    corrected by playing better - it would sit at the top of the leaderboard for ever.
+   *  - IT ONLY RUNS ONCE. `recorded` guards a re-entry through the close button or a re-shown card.
+   *  - THE KEY IS THE ROUND, NOT THE COURSE. `pinevalley9` and `pinevalley18` are different
+   *    measurements and are never merged or compared (rule 4).
+   *  - IT WRITES STROKES. The leaderboard and My Stats subtract par at DISPLAY time; a to-par
+   *    number in the store would be a fabricated conversion the moment par ever changed (rule 4).
+   *  - THE DIFFICULTY BUCKET IS THE COURSE ID, following Skeeball's board-as-difficulty precedent
+   *    (js/game-stats.js). Golf has no computer opponent and no difficulty setting, so the course
+   *    is the only honest axis; `js/difficulty-tiers.js` maps it to no tier and weights it 1.0,
+   *    exactly as it does a Skeeball machine.
+   *  - A FAILED WRITE IS NOT SILENT (rule 6): the recorder itself queues and replays, and this
+   *    verifies by fresh re-read and logs loudly if the best did not land.
+   */
+  _recordRound() {
+    if (this.recorded || this.roundId === 'practice') return;
+    if (this.holeIdxs.some((_, i) => !Number.isFinite(this.scores[i]))) return;
+    this.recorded = true;
+    const key = roundKey(this.course, this.roundId);
+    const strokes = this.scores.reduce((a, v) => a + v, 0);
+    const before = this._storedBest(key);
+    try {
+      recordGolf(this.course.id, {
+        courseId: key,
+        holes: this.holeIdxs.length,
+        strokes,
+        points: this.roundStats.points,
+        birdies: this.roundStats.birdies,
+        eagles: this.roundStats.eagles,
+        aces: this.roundStats.aces,
+        longestDriveYd: Math.round(this.roundStats.longestDriveYd),
+      });
+    } catch (e) {
+      console.error('[golf] recording the round FAILED', e);
+      return;
+    }
+    const after = this._storedBest(key);
+    if (!Number.isFinite(after) || after > strokes) {
+      console.error(`[golf] the round did not land: ${key} reads ${after} after writing ${strokes}`);
+    }
+    this.newBest = Number.isFinite(after) && (!Number.isFinite(before) || after < before);
+  }
+
+  _storedBest(key) {
+    try {
+      const st = loadStats();
+      const v = ((((st.games || {}).golf || {}).gf || {}).bestRoundByCourse || {})[key];
+      return Number.isFinite(v) ? v : null;
+    } catch { return null; }
   }
 
   _settleShot() {
@@ -609,6 +755,12 @@ class GolfGame {
     // ball was ABOUT to go before it had gone anywhere - the ring told you the outcome while you
     // were still watching the flight (Matt's playtest, 2026-09-04).
     this.lastShotYd = distYd(from, a.res.rest);
+    // LONGEST DRIVE is a lifetime best in the stored shape, so it is measured where a golfer
+    // measures one: the TEE SHOT, and only when it was actually a driver. A holed 4 iron from the
+    // fairway is not a drive, however far it went.
+    if (this.roundStats && this.shotN === 1 && a.type === 'flight' && a.club && a.club.id === 'driver') {
+      this.roundStats.longestDriveYd = Math.max(this.roundStats.longestDriveYd, this.lastShotYd);
+    }
     // Any shot can be holed, not just a putt: a pitch that drops, a wood that rolls in.
     if (a.res.holed) {
       this.holed = true;
@@ -631,7 +783,9 @@ class GolfGame {
     const L = lieOf(lie);
     this.el.par.textContent = t('par_n', { n: this.hole.par });
     this.el.shot.textContent = t('shot_n', { n: this.shotN });
-    this.el.mode.textContent = this.roundKind === 'practice' ? t('mode_practice') : t('mode_round');
+    this.el.mode.textContent = this.roundId === 'practice'
+      ? t('mode_practice')
+      : `${t(roundById(this.roundId).labelKey)} ${this.pos + 1}/${this.holeIdxs.length}`;
     this.el.holeno.textContent = String(this.hole.n);
     this.el.lie.textContent = t(`lie_${lie}`);
     // Every bad lie does two things and BOTH are shown before the swing: it caps distance, and it
