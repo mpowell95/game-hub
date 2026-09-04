@@ -390,8 +390,11 @@ export function drawFrame(ctx, map, hole, cam, st) {
   // polo and trousers, a dark club down to its head. Measured off the reference at ~75x100 of a
   // 1206-wide frame, so about 6 % of the screen's width. It is hidden while the ball is away.
   if (st.golfer && !st.holed) {
-    const gx = Math.round(sx(st.ball[0]));
-    const gy = Math.round(sy(st.ball[1]));
+    // `golferAt` is where the ball was AT ADDRESS, not where it is now. Drawing him at `st.ball`
+    // made him slide down the fairway behind his own shot - see ui.js's _frame for the report.
+    const anchor = st.golferAt || st.ball;
+    const gx = Math.round(sx(anchor[0]));
+    const gy = Math.round(sy(anchor[1]));
     drawGolfer(ctx, gx, gy, Math.max(18, Math.min(34, viewW * 0.07)), st.swingPose || 0);
   }
 
@@ -418,22 +421,29 @@ export function drawFrame(ctx, map, hole, cam, st) {
 /** The golfer, in whole pixels. `w` is the sprite's width; it is drawn standing to the LEFT of the
  *  ball with its feet on the ball's own ground line, so the ball is never hidden by it.
  *
- *  `pose` 0 is address; 1 and 2 are the backswing and the through-swing. The reference plays a
- *  real multi-pose animation as the camera starts to scroll - it is not a static sprite that
- *  vanishes - and the whole thing is four rectangles and a line, so there is no reason not to. */
+ *  `pose` 0 is address, 1 the top of the backswing, 2 through impact, 3 THE FINISH - which is the
+ *  one that is on screen longest. Measured off the reference (ui.js's _frame carries the trace):
+ *  the sprite is completely still for 265 ms after the third tap, the swing itself is four frames
+ *  over about 100 ms, and the finish is then HELD for ~440 ms before the ball leaves. So the
+ *  animation is a quick flourish and a long hold, not a smooth arc.
+ *
+ *  He does not move. Not one pixel of him, in any pose - the cap centroid was identical to two
+ *  decimal places across all 45 frames of the address hold - so every pose keeps the head, torso
+ *  and legs where they are and moves only the club and the arms. */
 export function drawGolfer(ctx, bx, by, w, pose) {
   const u = Math.max(1, Math.round(w / 8));          // one "pixel" of the sprite
   const x = bx - u * 6;                              // stand clear of the ball
   const y = by;
   const px = (cx, cy, cw, ch, fill) => { ctx.fillStyle = fill; ctx.fillRect(x + cx * u, y + cy * u, cw * u, ch * u); };
 
-  // club: swings through three poses
+  // The club, and the club ONLY. Four poses, one line each.
   ctx.strokeStyle = '#1b1f14';
   ctx.lineWidth = Math.max(1.5, u * 0.7);
   ctx.beginPath();
   ctx.moveTo(x + 4 * u, y - 5 * u);
-  if (pose === 1) ctx.lineTo(x - 1 * u, y - 11 * u);       // backswing, club up and behind
-  else if (pose === 2) ctx.lineTo(x + 10 * u, y - 9 * u);  // through-swing, club up and ahead
+  if (pose === 1) ctx.lineTo(x - 1 * u, y - 11 * u);       // top of the backswing, up and behind
+  else if (pose === 2) ctx.lineTo(x + 9 * u, y - 2 * u);   // through impact, low and ahead
+  else if (pose === 3) ctx.lineTo(x + 8 * u, y - 12 * u);  // the finish, up over the front shoulder
   else ctx.lineTo(x + 7 * u, y - 0.2 * u);                 // address, club head at the ball
   ctx.stroke();
 

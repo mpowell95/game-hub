@@ -674,6 +674,63 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
     cupPx > BALL_R_PX);
 }
 
+console.log('\n-- 12c. THE GOLFER STANDS STILL, AND THE VIEW DOES NOT SLIDE --');
+// Both read the shipped files as text, because both defects are about WHICH VALUE a line uses -
+// there is no engine call that can be wrong here, and both were invisible to every other suite.
+{
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const rn = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+
+  // [KNOWN-BUG PROBE] Matt: "when i swing, then the cartoon golfer animation swing thing happens,
+  // the little guy runs forward. it's very strange. He shouldn't move location on the screen."
+  // He was drawn at `st.ball` - the LIVE ball - so once the shot was away he was re-drawn at the
+  // flying ball's position every frame and slid down the fairway behind his own shot. Measured in
+  // the reference: the cap's centroid is identical to two decimal places across all 45 frames of
+  // the address hold, and once the camera pans it tracks off screen at a steady 1.9 px a frame -
+  // he never moves in the world at all.
+  ok('[KNOWN-BUG PROBE] the golfer is drawn where the ball WAS, not where it is',
+    /st\.golferAt \|\| st\.ball/.test(rn) && /golferAt: this\.ball/.test(ui),
+    'ui passes the address position and render.js draws the anchor, never the live ball');
+  ok('...and the sprite is not hidden the moment the ball is away',
+    /golfer: !this\.holed/.test(ui) && !/golfer: !this\.anim/.test(ui),
+    'the reference keeps drawing him as the camera pans off; ours used to blink out after 260 ms');
+
+  // [KNOWN-BUG PROBE] Matt: "when I first press Swing, the entire screen moves to show the
+  // golfer... It's [too] much to focus on the power/aim task when you're moving the whole screen
+  // around." The free look HOLDS where you leave it, so a player who had scrolled up the fairway
+  // got half a second of the course sliding sideways starting on the same frame as the backswing.
+  ok('[KNOWN-BUG PROBE] the view snaps home when the stroke begins, it does not glide',
+    /if \(r === 'begin'\) \{ this\.previewDx = 0; this\.previewDy = 0;/.test(ui)
+    && !/if \(r === 'begin'\) this\.returning = true;/.test(ui),
+    'the eased return is still right for a TAP on the course, which is a deliberate come-back gesture');
+  ok('...and the tap-on-the-course return still eases',
+    /this\.returning = true;/.test(ui),
+    'both behaviours must exist; only the swing one snaps');
+
+  // The pose timeline, against what was measured. Read the constants out of the file so the test
+  // fails if they are retuned without a new measurement rather than silently tracking them.
+  const num = (name) => {
+    const m = ui.match(new RegExp(`const ${name} = (\\d+);`));
+    return m ? Number(m[1]) : NaN;
+  };
+  const still = num('POSE_STILL_MS');
+  const back = num('POSE_BACK_MS');
+  const thru = num('POSE_THRU_MS');
+  const windup = num('WINDUP_MS');
+  ok(`the golfer is dead still for the first ${still} ms after the third tap`, still >= 240 && still <= 290,
+    'measured 265 ms: 45 frames with 4-6 px of noise and an identical cap centroid');
+  ok(`the swing itself is ${back + thru} ms of animation`, back + thru >= 70 && back + thru <= 120,
+    'measured ~100 ms: four big-change frames with near-static frames between them');
+  ok(`the finish is then HELD for ${windup - still - back - thru} ms`,
+    windup - still - back - thru >= 400,
+    'measured ~440 ms of a completely static new pose before the ball leaves');
+  ok('the golfer does NOT animate during the swing meter',
+    !/PHASE\.BACK\) swingPose/.test(ui),
+    'the reference sprite does not move until 265 ms AFTER the third tap; ours played the backswing on tap 1');
+  ok('there are four poses, and the finish is one of them',
+    /pose === 3/.test(rn), 'address, top, through, finish');
+}
+
 console.log('\n-- 13. a whole hole can be played out --');
 // The check that matters: does a plausible sequence of good swings get the ball in the hole?
 {

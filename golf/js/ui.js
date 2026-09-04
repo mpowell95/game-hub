@@ -61,6 +61,12 @@ const DEG = Math.PI / 180;
 /** THE GAP BETWEEN THE THIRD TAP AND THE BALL LEAVING THE CLUB, ms. MEASURED off the reference at
  *  60 fps: tap, ~0.25 s of stillness, a ~0.6 s golfer swing animation, then the ball moves. Clip 3
  *  is the clean sample (no camera move in the way): tap at frame 799, ball away at 850 = 0.85 s. */
+// THE GOLFER'S SWING, MEASURED (see _frame for the frame-by-frame trace). Relative to the third
+// tap: nothing moves at all for 265 ms, then four sprites over ~85 ms, then the finish pose held
+// for the remaining ~500 ms until the ball leaves.
+const POSE_STILL_MS = 265;
+const POSE_BACK_MS = 40;
+const POSE_THRU_MS = 45;
 const WINDUP_MS = 850;
 // The meter's logical drawing box, in CSS pixels. The canvas itself is backed at devicePixelRatio
 // so the 3px band outline and the 13px tick numbers stay crisp on a phone.
@@ -651,7 +657,20 @@ class GolfGame {
     // the instant the player's finger landed rather than the instant this handler ran.
     const now = Number.isFinite(atMs) ? atMs : performance.now();
     const r = this.swing.tap(now);
-    if (r === 'begin') this.returning = true;      // the view comes home when the stroke starts
+    // THE VIEW COMES HOME INSTANTLY WHEN THE STROKE STARTS, it does not glide.
+    //
+    // Matt, 2026-09-04: "when I first press Swing, the entire screen moves to show the golfer.
+    // That's not what the reference clips do either. It's [too] much to focus on the power/aim
+    // task when you're moving the whole screen around." The free look HOLDS where you leave it
+    // (that was a fix in its own right), so a player who has scrolled 110 yds up the fairway to
+    // look at the green was then given half a second of the whole course sliding sideways -
+    // starting on the same frame as the backswing, which is the one moment in the game that
+    // needs a still screen. Snapping costs nothing: the player is looking at the meter.
+    //
+    // A TAP ON THE COURSE still eases home (see the pointerup handler). That one is a deliberate
+    // "bring me back" gesture with nothing else happening, and the glide is what makes it read as
+    // the camera travelling rather than as the hole teleporting.
+    if (r === 'begin') { this.previewDx = 0; this.previewDy = 0; this.returning = false; }
     if (r === 'fire') this._fire();
     this._paintHud();
   }
@@ -1052,16 +1071,49 @@ class GolfGame {
     // The windup (WINDUP_MS before `anim.t0`) is where the swing pose earns its keep: it is the
     // 0.85 s the reference spends between the third tap and the ball leaving, so the golfer plays
     // through it on BOTH a full shot and a putt rather than the ball simply teleporting.
+    // THE GOLFER'S ANIMATION, MEASURED FRAME BY FRAME (2026-09-04, clip 3 at 60 fps, tracking
+    // both the cap's centroid and the changed-pixel count over a 130x190 crop around him):
+    //
+    //   frames 770-814   IDENTICAL. 4-6 px of noise a frame, cap centroid to two decimals the
+    //                    same in all 45. The golfer is a STATIC SPRITE through the entire swing
+    //                    meter and for 265 ms after the third tap.
+    //   frames 815-820   the swing: four big-change frames (924, 747, 1192, 953 px) with
+    //                    near-static frames between them, so it is four sprites over ~100 ms.
+    //   frames 821-846   STATIC AGAIN, at a new pose, held for ~440 ms.
+    //   frame  847       the camera starts panning; the ball is away at 850.
+    //
+    // Two things ours got wrong and both are fixed here. It played the backswing pose during the
+    // METER (the reference golfer does not move at all until 265 ms after the third tap), and it
+    // then held the through-swing for the whole windup with no still period and no backswing at
+    // all - so there was no swing to watch, just a pose change.
+    const tRel = this.anim ? now - this.anim.t0 : null;   // negative through the windup
     let swingPose = 0;
-    if (this.swing.phase === PHASE.BACK) swingPose = 1;
-    else if (this.anim && now - this.anim.t0 < 260) swingPose = 2;
+    if (tRel !== null) {
+      const intoWindup = WINDUP_MS + tRel;                // 0 at the third tap, WINDUP_MS at impact
+      if (intoWindup < POSE_STILL_MS) swingPose = 0;
+      else if (intoWindup < POSE_STILL_MS + POSE_BACK_MS) swingPose = 1;
+      else if (intoWindup < POSE_STILL_MS + POSE_BACK_MS + POSE_THRU_MS) swingPose = 2;
+      else swingPose = 3;                                 // the finish, held
+    }
 
     drawFrame(this.ctx, this.map, this.hole, drawCam, {
       dpr: this.dpr,
       ball: ballPos,
       height,
       holed: this.holed,
-      golfer: !this.anim || (now - this.anim.t0) < 260,   // stays up through the whole windup
+      // THE GOLFER STANDS WHERE THE BALL WAS, NOT WHERE THE BALL IS. Matt: "when i swing, then
+      // the cartoon golfer animation swing thing happens, the little guy runs forward. it's very
+      // strange. He shouldn't move location on the screen." He was drawn at `st.ball`, which is
+      // the LIVE ball - so for the 260 ms after impact he was re-drawn at the flying ball's
+      // position every frame and slid down the fairway with it. `this.ball` is not touched until
+      // _settleShot, so it IS the address position for the whole animation.
+      //
+      // He is not hidden any more either. The reference keeps drawing him as the camera pans away
+      // (measured: at frame 847+ the cap tracks steadily off screen at ~1.9 px a frame while the
+      // camera follows the ball), which is what a golfer watching his own shot looks like. Ours
+      // used to blink out 260 ms after impact.
+      golfer: !this.holed,
+      golferAt: this.ball,
       swingPose,
       aimRad: this.aimRad,
       hideAim: !!this.anim || this.holed,

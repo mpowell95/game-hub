@@ -986,6 +986,8 @@ say. The block starts at about 107 %, with a plain buffer between the 100 % line
   keeps drawing it for 260 ms after the ball leaves, so it chases the ball down the fairway. The
   sprite itself: about 12 x 20 art pixels - white cap with a dark brim, tan face, light shirt with a
   gold band at the waist, grey trousers, and a club that sweeps through in front of it.
+  (Implemented in Batch 4 - see "The golfer stands still" below, which re-measured the TIMING at
+  the frame level and corrected one number this bullet got wrong.)
 - **THE SLOPE MARKERS ARE ARROWHEADS, AND THEY ARE A DARKER TINT OF THE GREEN.** Two strokes making
   a chevron - a `V` pointing downhill, or the same glyph rotated onto a diagonal. **Fixed size**,
   laid on a regular grid, each glyph about a fifth of the grid spacing, and drawn in a darker shade
@@ -1120,6 +1122,64 @@ printed the outcome while the ball was still in the air. It is written in `_sett
 Covered by `golf/js/test.js` section 6b (twelve assertions on the three predicates, the ladder in
 all three lie classes, and the drag ordering) and by `test-visual.mjs`'s play probe, which drives
 the real DOM tee-to-cup.
+
+## The golfer stands still, and the view does not slide (2026-09-04)
+
+Batch 4. Two complaints, both about motion the player did not ask for.
+
+**"When I first press Swing, the entire screen moves to show the golfer."** Matt's full sentence:
+*"That's not what the reference clips do either. It's [too] much to focus on the power/aim task
+when you're moving the whole screen around."*
+
+This was a side effect of a fix. The free look used to snap back the moment the finger lifted,
+which was its own bug (*"it still does not let me move around the map of the hole"*), so it was
+changed to HOLD where you leave it and return on a tap or when a swing begins. Returning "when a
+swing begins" was an eased glide - `previewDx *= 0.78` a frame, about half a second from a
+110-yard look - and it starts on the same frame as the backswing. So the one moment in the game
+that needs a still screen got the whole course sliding across it.
+
+The swing now SNAPS the view home; a tap on the course still eases, because that one is a
+deliberate come-back gesture with nothing else happening and the glide is what makes it read as
+the camera travelling rather than as the hole teleporting.
+
+**"The little guy runs forward."** He was drawn at `st.ball` - the LIVE ball - and kept on screen
+for 260 ms after impact, so for a quarter of a second he was re-drawn at the flying ball's position
+every frame and slid down the fairway behind his own shot. He is drawn at `golferAt` now, which is
+the ball's ADDRESS position (`this.ball` is not touched until `_settleShot`, so it already held the
+right value). He is also no longer hidden: the reference keeps drawing him and lets the camera pan
+off, which is what a golfer watching his own shot looks like.
+
+### The swing animation, re-measured - and one number in Batch 2 was wrong
+
+Batch 2 recorded *"the golfer swinging 815-849"* from a whole-frame motion measure. That is the
+window in which SOMETHING changed, not the animation. Re-measured two ways at once over a 130x190
+crop around him in clip 3 - the cap's centroid, and the changed-pixel count frame to frame:
+
+| frames | changed px/frame | what it is |
+|---|---|---|
+| 770-814 | 4-6 (noise) | **completely static.** Identical cap centroid to two decimal places in all 45 frames |
+| 815, 816, 819, 820 | 924, 747, 1192, 953 | the swing: **four sprites over ~100 ms** |
+| 817, 818, 821-846 | 6-19 | static again, at a new pose, **held ~440 ms** |
+| 847+ | 1200-2700 | the camera pans; the cap tracks off screen at a steady 1.9 px a frame |
+
+So relative to the third tap (frame 799), and against `WINDUP_MS` of 850:
+
+- **265 ms of nothing at all.** Not the club, not the body.
+- **~85 ms of animation**, four frames.
+- **~500 ms holding the finish**, then the ball leaves.
+
+It is a quick flourish and a long hold, not a smooth arc. `POSE_STILL_MS` / `POSE_BACK_MS` /
+`POSE_THRU_MS` in `ui.js` are those numbers, and `drawGolfer` gained a fourth pose (the finish) for
+the half-second it is actually on screen.
+
+**And the golfer must not animate during the SWING METER.** Ours played the backswing pose from the
+first tap. The reference sprite is byte-identical for the whole meter and for 265 ms after the third
+tap - the 45-frame static run above starts well before tap 3 and runs straight through it.
+
+`golf/js/test.js` section 12c pins all of it: both KNOWN-BUG PROBEs read the shipped `ui.js` and
+`render.js` as text, because both defects are about WHICH VALUE a line uses and no engine call could
+have caught either. It also reads the three pose constants out of the file and fails if they drift
+outside the measured windows, so a retune needs a new measurement rather than a guess.
 
 ## Two courses, thirty-six holes (2026-09-04)
 
