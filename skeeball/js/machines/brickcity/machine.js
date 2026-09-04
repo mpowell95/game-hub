@@ -286,6 +286,58 @@ export function buildMachine(G) {
     }
   }
 
+  // --- the throats: what holds a captured ball inside the basket it fell into --------------------
+  // (2026-09-04) A THROAT IS THE INSIDE OF THE BASKET, CONTINUED DOWN THROUGH THE TREAD. Capture
+  // takes the floor out from under the ball AND - since "THE NET", physics.js section 2 - that
+  // basket's own collar with it, so between the rim and the score there was NOTHING left holding
+  // the ball in and it simply carried its arrival speed sideways out of the basket. Measured on
+  // the build before this, over a 41x41 power/aim grid: 284 of 793 captured balls did not pay the
+  // hole that captured them (the corner 100s 25% and 27%, the -20s about half), and a captured
+  // ball wandered up to 48 cm from its own mouth. Matt, 2026-09-04, with a clip and 25 frames of
+  // the top-right 100: made 100s "glitch and move through the basket."
+  //
+  // GUARD: THE RADIUS IS r + ballR, NOT r. A wall at the mouth radius would be violently wrong -
+  // this machine's 100 is a 5.82 cm mouth against a 5.45 cm ball, 3.7 mm of clearance, while
+  // capture fires with the ball's CENTRE up to rRest (5.28 cm) off the axis. r + ballR is the
+  // wall a ball whose centre is over the mouth can never pass, which is the same thing capture's
+  // own rEff/rRest measure. It confines a captured ball to d <= r, so the pass-through commit at
+  // the top of physics.js's substep (d < r + ballR) can no longer fail: a ball that fell in gets
+  // paid for the hole it fell into.
+  //
+  // GUARD: NOTHING COLLIDES WITH A THROAT UNLESS IT HAS BEEN CAPTURED BY THAT HOLE. Each throat
+  // is on its own collision bit (physics.js `throatBit`), added to the ball's mask by capture and
+  // dropped again by a rimout, so no throw that is not already captured can be changed by one -
+  // including a throw over the low row, where a neighbour's throat would otherwise be in reach.
+  // render.js skips the part for the same reason it skips 'cupSeg': the basket you see is drawn,
+  // and this is underneath the tread inside the cabinet.
+  //
+  // It runs from the rim top down, not from the tread down, because a ball is captured while it
+  // is still ABOVE the face (the lip-rest branch allows collarH + 1.15 ballR) and everything
+  // between there and the tread is exactly where it used to escape.
+  for (const id of Object.keys(G.holes)) {
+    const H = G.holes[id];
+    if (!H.collarH) continue;
+    const N = G.cupSegments;
+    const rr = H.r + G.ballR + G.collarThick / 2;
+    // Deep enough that the commit test (ballR * 1.2 below the face) fires while the ball is still
+    // inside the tube; open at the bottom, so nothing can come to rest in it.
+    const top = H.collarH;
+    const bot = -G.ballR * 2.6;
+    const cupFrame = frameAt(H.v);
+    for (let i = 0; i < N; i++) {
+      const phi = (i / N) * Math.PI * 2;
+      const pu = H.u + rr * Math.cos(phi);
+      const pv = H.v + rr * Math.sin(phi);
+      solids.push({
+        part: 'throat',
+        cup: id,
+        pos: faceToWorldIn(cupFrame, pu, pv, (top + bot) / 2),
+        half: [rr * Math.tan(Math.PI / N), (top - bot) / 2, G.collarThick / 2],
+        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+      });
+    }
+  }
+
   // --- rails and the backboard ------------------------------------------------------------------
   const railT = 0.03;
   const topPt = faceToWorld(0, G.boardLen, 0);
