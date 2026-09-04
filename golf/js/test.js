@@ -19,6 +19,7 @@ import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, isPuttable } from
 import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
+import fs from 'node:fs';   // section 12b reads the shipped ui.js/render.js as text
 
 let fail = 0;
 const ok = (label, cond, extra) => {
@@ -582,6 +583,41 @@ console.log('\n-- 12. the two yardages stay different on purpose --');
 ok("hole 3's card is well over its straight line, because it is a dogleg",
   PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 50);
 near('hole 1 is the one where they agree', distYd(PINE_VALLEY.holes[0].tee, PINE_VALLEY.holes[0].pin), 360.7, 0.05);
+
+console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
+{
+  // [KNOWN-BUG PROBE] Matt, with a screenshot: HUD "shot 4" on a par 5, card "Eagle! Holed in 3".
+  // ui.js's `_settleShot` returns EARLY when the ball drops, above its own `shotN += 1`, so the
+  // shot that goes in is never counted - and `_showHoleResult` then subtracted one MORE. Every
+  // score was a stroke too low and an ace would have reported 0. This reads the shipped file: the
+  // result screen must take `shotN` as it stands, never `shotN - 1`.
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] the result screen counts the shot that holed it',
+    /const strokes = this\.shotN;/.test(ui) && !/const strokes = this\.shotN - 1;/.test(ui),
+    'shotN is already the shot just played, because the holed path returns before it is incremented');
+  ok('...and `_showHoleResult` is still only reachable from the holed path',
+    (ui.match(/this\._showHoleResult\(\)/g) || []).length === 1,
+    'if it ever gets a second caller, "the shot just played" stops meaning "the shot that holed it"');
+
+  // [KNOWN-BUG PROBE] Matt: "the ball rolls over the hole without going in - and leaves a 1-3 ft
+  // putt after", and "the hole ... is a tiny tiny dot ... that does not get bigger when you zoom
+  // into the green". One bug. The cup was drawn at 0.24 yd and floored at 2.5 px while capture is
+  // 0.30 yd, so the BALL WAS BIGGER THAN THE HOLE and could cover it on screen without dropping.
+  const rn = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] the cup is drawn at the radius that actually captures',
+    /CUP_CAPTURE_YD \* cam\.ppy/.test(rn) && /import \{ CUP_CAPTURE_YD \}/.test(rn),
+    'the drawn hole and the capture test must be the same number, not two copies that can drift');
+  ok('...and it therefore scales with the zoom instead of sticking at a floor',
+    !/0\.12 \* cam\.ppy \* 2/.test(rn));
+
+  // The number itself: at the green view the cup must out-measure the ball sprite, or a ball can
+  // still sit on top of a hole it cannot fall into.
+  const BALL_R_PX = 3;                       // render.js draws a 6 px ball
+  const greenPpy = 393 / 34;                 // VIEW_W_GREEN_YDS across a 393 px phone
+  const cupPx = SH.CUP_CAPTURE_YD * greenPpy;
+  ok(`the cup out-measures the ball on the green (${cupPx.toFixed(1)} px vs ${BALL_R_PX} px)`,
+    cupPx > BALL_R_PX);
+}
 
 console.log('\n-- 13. a whole hole can be played out --');
 // The check that matters: does a plausible sequence of good swings get the ball in the hole?

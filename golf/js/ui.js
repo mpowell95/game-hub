@@ -687,7 +687,17 @@ class GolfGame {
    *  stats - once, and only if every hole in it has a score. See `_recordRound`. */
   _showHoleResult() {
     const hole = this.hole;
-    const strokes = this.shotN - 1;
+    // THE STROKE COUNT IS `shotN`, NOT `shotN - 1`, AND THE OFF-BY-ONE WAS REAL.
+    //
+    // Matt, with a screenshot: the HUD read "shot 4" on a par 5 and the card said "Eagle! Holed
+    // in 3". `_settleShot` returns EARLY when the ball drops - it has to, so the hole ends - and
+    // that early return is above the `shotN += 1`, so the shot that goes in is never counted.
+    // `shotN` is therefore already the number of the shot just played, and subtracting one threw
+    // it away. Every score in the game was a stroke too low; an ace would have reported 0.
+    //
+    // This function is only ever called from the holed path (`_settleShot`'s setTimeout), so
+    // "the shot just played" and "the shot that holed it" are the same shot, always.
+    const strokes = this.shotN;
     this.scores[this.pos] = strokes;
 
     const d = strokes - hole.par;

@@ -11,6 +11,9 @@
 // tweens smoothly (golf-reference-spec.md §15.2, "everything animates in whole pixels").
 
 import { polyOf, treesOf, greenBox, bboxOf } from './holes.js';
+// The cup's DRAWN size comes from the physics constant, never a copy of it: the whole point of the
+// fix below is that the hole you see and the hole that captures are the same hole.
+import { CUP_CAPTURE_YD } from './shot.js';
 
 /** Course pixels per yard in the offscreen map. Low on purpose: this IS the pixel size. */
 export const MAP_PPY = 2.4;
@@ -318,9 +321,29 @@ export function drawFrame(ctx, map, hole, cam, st) {
     ctx.lineTo(Math.round(px) + 1, Math.round(py) - 12);
     ctx.closePath(); ctx.fill();
   }
-  // The cup is always drawn: it is where the ball has to go, and it must not vanish with the flag.
+  // THE CUP IS DRAWN AT THE RADIUS THAT ACTUALLY CAPTURES, so what you see is what goes in.
+  //
+  // Matt: "the ball rolls over the hole without going in - and leaves a 1-3 ft putt after", and
+  // separately "the hole needs to be a little larger. it's a tiny tiny dot right now that does not
+  // get bigger when you zoom into the green". Those are one bug. Measured at the green view
+  // (34 yds across a 393 px screen, 11.6 px/yd):
+  //
+  //     cup drawn      radius 2.8 px   (0.24 yd, and floored at 2.5 px so it did not scale)
+  //     ball sprite    radius 3.0 px
+  //     capture        radius 3.5 px   (CUP_CAPTURE_YD = 0.30 yd)
+  //
+  // The ball was BIGGER THAN THE HOLE. Two sprites that size visibly overlap out to about 0.52 yd
+  // of centre separation, but capture needs 0.30 - so between those two numbers the ball plainly
+  // covers the hole on screen, does not drop, and finishes one to three feet away. Exactly the
+  // report. Drawing the cup at CUP_CAPTURE_YD closes the gap from the honest side: the hole is
+  // bigger, it scales with the zoom, and a ball that looks like it went in did.
+  //
+  // A rim, because a flat disc at this size reads as a dot rather than a hole.
+  const cupR = Math.max(2.5, CUP_CAPTURE_YD * cam.ppy);
+  ctx.fillStyle = '#0f1508';
+  ctx.beginPath(); ctx.arc(px, py, cupR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#2c3a1e';
-  ctx.beginPath(); ctx.arc(px, py, Math.max(2.5, 0.12 * cam.ppy * 2), 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, Math.max(1.5, cupR - 1.5), 0, Math.PI * 2); ctx.fill();
 
   // --- the aim ladder (§21.1) ------------------------------------------------
   // Dot N is where the ball LANDS at 25/50/75/100 % of the club's distance from this lie; dot 5

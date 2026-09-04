@@ -928,6 +928,54 @@ found the result screen, which this one had stopped 20 frames short of.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
 
+## Two bugs that were ruining every game (2026-09-04)
+
+Both found from one screenshot and one sentence, and both were one line.
+
+### Every score was a stroke too low
+
+Matt's screenshot: the HUD reads **"par 5 / shot 4"** and the result card reads **"Eagle! Holed in
+3"**. Not hole-specific and not intermittent - **every score in the game was one stroke low**, and
+an ace would have reported 0.
+
+`_settleShot` has to return EARLY when the ball drops, so the hole can end. That early return sits
+above its own `shotN += 1`, so the shot that goes in is never counted - which is correct, because
+`shotN` is then already the number of the shot just played. `_showHoleResult` then subtracted one
+MORE. It is `const strokes = this.shotN;` now.
+
+**The stored bests were checked, not assumed** (THE LAW rule 1). A fresh RTDB read: 228 player
+device records, 25 carrying a golf key, and **`bestRoundByCourse` empty on every one of them** -
+no non-zero golf record exists anywhere. Golf is admin-only and Matt had only played practice
+holes, which never touch the best. Nothing needed correcting. Had a scored round landed, the
+too-good value could never have been fixed by playing better (rule 2), so this check is the one
+that has to happen before the fix ships, not after.
+
+`test.js` section 12b reads the shipped `ui.js` as text and fails if the `- 1` returns, and fails
+if `_showHoleResult` ever gets a second caller - because "the shot just played" only means "the
+shot that holed it" while the holed path is its only entry.
+
+### The ball was bigger than the hole
+
+Matt: *"the ball rolls over the hole without going in - and leaves a 1-3 ft putt after"*, and
+separately *"the hole needs to be a little larger. it's a tiny tiny dot right now that does not get
+bigger when you zoom into the green"*. **Those are one bug.** Measured at the green view (34 yds
+across a 393 px screen, 11.6 px/yd):
+
+| | radius |
+|---|---|
+| cup, as drawn | **2.8 px** (0.24 yd, and floored at 2.5 px so it never scaled) |
+| ball sprite | **3.0 px** |
+| capture (`CUP_CAPTURE_YD`) | **3.5 px** (0.30 yd) |
+
+Two sprites that size visibly overlap out to about **0.52 yd** of centre separation, but capture
+needs 0.30. Between those two numbers the ball plainly covers the hole on screen, does not drop,
+and finishes one to three feet away - exactly the report.
+
+The cup is now drawn at `CUP_CAPTURE_YD * cam.ppy`, **imported from `shot.js` rather than copied**,
+so the hole you see and the hole that captures are the same number and cannot drift. It is bigger,
+it scales with the zoom, and a ball that looks like it went in did. The floor stays only so the cup
+is still visible at the 95-yard fairway view.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
