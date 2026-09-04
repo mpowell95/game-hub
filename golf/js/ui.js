@@ -494,11 +494,31 @@ class GolfGame {
     hold(q('club-up'), () => this._stepClub(+1));
     hold(q('club-dn'), () => this._stepClub(-1));
 
-    // The swing button darkens while held (33-67 ms in the reference - that is literally how the
-    // taps were detected at all), then fires on release.
+    // THE SWING FIRES ON PRESS, NOT ON RELEASE, AND IT IS TIMED BY THE EVENT ITSELF.
+    //
+    // Matt: "the power/aim meter feels delayed. I don't think it stops when i click the swing
+    // button." It did not. It fired on `pointerup`, so the needle kept travelling for the whole
+    // duration of the press - and MEASURED against this build's own numbers, a perfectly ordinary
+    // 120 ms press is 0.104 power units on the downswing against a BAR_HALF of 0.12. That is
+    // EIGHTY-SEVEN PER CENT of the accuracy half-window spent between seeing the needle and the
+    // game reading it. The player was aiming at where the needle would be, not where it was.
+    //
+    // `ev.timeStamp` is the moment the input actually happened, on the same time origin as
+    // performance.now(); reading the clock in the handler instead adds however long the event sat
+    // in the queue. Guarded, because a hostile or exotic timeStamp must not send the swing
+    // backwards in time.
     const sw = q('swing');
-    this._on(sw, 'pointerdown', (ev) => { ev.preventDefault(); sw.setAttribute('data-down', '1'); });
-    this._on(sw, 'pointerup', (ev) => { ev.preventDefault(); sw.removeAttribute('data-down'); this._tap(); });
+    const evNow = (ev) => {
+      const now = performance.now();
+      const ts = ev && ev.timeStamp;
+      return (Number.isFinite(ts) && ts > 0 && now - ts >= 0 && now - ts < 2000) ? ts : now;
+    };
+    this._on(sw, 'pointerdown', (ev) => {
+      ev.preventDefault();
+      sw.setAttribute('data-down', '1');
+      this._tap(evNow(ev));
+    });
+    this._on(sw, 'pointerup', (ev) => { ev.preventDefault(); sw.removeAttribute('data-down'); });
     this._on(sw, 'pointercancel', () => sw.removeAttribute('data-down'));
 
     // FREE LOOK. Drag the course around to study the hole, let go and it eases back to the ball.
@@ -572,10 +592,13 @@ class GolfGame {
   }
 
   // ---------------------------------------------------------------- the swing ----
-  _tap() {
+  _tap(atMs) {
     if (this.anim) { this._skipAnim(); return; }
     if (this.holed) { this._renderSetup(); return; }
-    const now = performance.now();
+    // `atMs` is the input event's own timestamp when the caller has one - see the swing button's
+    // binding. Everything downstream is a pure function of it, so the shot is resolved against
+    // the instant the player's finger landed rather than the instant this handler ran.
+    const now = Number.isFinite(atMs) ? atMs : performance.now();
     const r = this.swing.tap(now);
     if (r === 'begin') this.returning = true;      // the view comes home when the stroke starts
     if (r === 'fire') this._fire();
@@ -588,7 +611,10 @@ class GolfGame {
     // ONE needle: the power is the marker planted at tap 2, the accuracy is where the needle was
     // stopped on the way back down. `barPosOf` maps that position onto the accuracy bar's 0..1,
     // which is the only form the mishit model has ever taken.
-    const { pos, power } = this.swing.read(performance.now());
+    // The third tap has already LOCKED both values on the Swing, so these are read straight off
+    // it rather than re-derived from a clock: re-reading `performance.now()` here would resolve
+    // the shot a few milliseconds after the finger landed, which is the whole bug this fixes.
+    const { pos, power } = { pos: this.swing.pos, power: this.swing.power };
     const m = mishit(barPosOf(pos), power, zone);
 
     if (this._onGreen()) {
@@ -879,10 +905,19 @@ class GolfGame {
           ballPos = [r.landing[0] + dx * u, r.landing[1] + dy * u];
           height = g.height;
         }
-        // The camera TRACKS the ball, through the flight AND the rollout, scrolling the course past.
-        this.cam.x = ballPos[0];
-        this.cam.y = ballPos[1] + this.cam.halfH * 0.2;
-        this.cam.clamp();
+        // THE CAMERA TRACKS THE FLIGHT AND THEN STOPS DEAD AT TOUCHDOWN, so the ball ROLLS ACROSS
+        // THE FRAME instead of sitting pinned to the middle of it while the course slides past.
+        //
+        // This is half of "the ball rolls a tiny bit... it stops unnaturally short": with the
+        // camera glued to the ball, a 21 yd run-out moves the BALL zero pixels. The reference's
+        // own rollout was measured as frame-to-frame BALL movement decaying 4.5 -> 1.9 -> 0.66 -> 0,
+        // which is only possible if its camera has stopped. A rollout is at most ~25 yds against a
+        // 95 yd view, so there is no risk of the ball leaving the frame.
+        if (el < this.anim.dur) {
+          this.cam.x = ballPos[0];
+          this.cam.y = ballPos[1] + this.cam.halfH * 0.2;
+          this.cam.clamp();
+        }
         if (el >= this.anim.dur + roll) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
       } else {
         // The camera does NOT move during a putt. Confirmed frame by frame in the reference, and
