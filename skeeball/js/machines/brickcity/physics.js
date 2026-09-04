@@ -32,7 +32,18 @@ const GROUP_REST = 4;            // everything else: lane, hump, trough, band, w
 // machine the collar was what threw a well-aimed ball back out. See section 2's "THE NET" note.
 const CUP_BIT0 = 8;
 const cupBit = (G, id) => CUP_BIT0 << Math.max(0, Object.keys(G.holes).indexOf(id));
+// AND EVERY BASKET'S THROAT GETS ONE TOO (2026-09-04) - see machine.js's throat block. The throat
+// is the mouth continued down through the tread; it is solid ONLY to a ball that hole has already
+// captured, so it is invisible to every other throw on the machine and cannot change one. The bits
+// sit immediately above the cup bits and are sized from the hole count, so the two can never
+// overlap however many baskets a face grows.
+const throatBit = (G, id) => {
+  const ids = Object.keys(G.holes);
+  return CUP_BIT0 << (ids.length + Math.max(0, ids.indexOf(id)));
+};
 const restMask = (G) => Object.keys(G.holes).reduce((m, id) => m | cupBit(G, id), GROUP_REST);
+/** The ball's mask while hole `id` has it: the floor and that collar let go, its throat takes over. */
+const capturedMask = (G, st, id) => (st.restMask & ~cupBit(G, id)) | throatBit(G, id);
 
 // Machine descriptions are pure per-board data; build each once.
 const machines = new Map();
@@ -149,13 +160,14 @@ function buildWorld(board) {
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
-            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
+            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'splitter' ? matRing
             : s.part === 'backboard' ? matBack
               : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR
-        : s.part === 'cupSeg' && s.cup ? cupBit(G, s.cup) : GROUP_REST,
+        : s.part === 'throat' && s.cup ? throatBit(G, s.cup)
+          : s.part === 'cupSeg' && s.cup ? cupBit(G, s.cup) : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
     if (s.shape !== 'prism') {
@@ -249,8 +261,11 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
     // lesson survives the engine swap). `nudges` lived here until 2026-08-26; this machine no
     // longer pops a parked ball, it ends it - see section 6.
-    anchor: { x: 0, y: 0, z: 0, t: 0 },
+    // `t0` is when the ball entered the CURRENT 3cm bubble; `t` is when it was last seen moving
+    // inside it. The jam window is measured from `t`, the veto's rope from `t0` - see section 6.
+    anchor: { x: 0, y: 0, z: 0, t: 0, t0: 0 },
     emergencyUsed: false,
+    clamped: 0,
     troughAt: -1,
     // Has this throw already left its scuff on the back wall? One per throw - see the 'wall'
     // event below.
@@ -326,6 +341,24 @@ function substep(st) {
   const { world, ball, M, G } = st;
   world.step(H);
   st.t += H;
+
+  // 0. THE SOLVER-ARTEFACT CEILING (2026-09-04). NOT a gameplay rule and NOT a brake: this
+  //    machine cannot produce a ball this fast, so nothing a player throws can ever meet it. The
+  //    hardest serve leaves at `maxSpeed` (6.60) and only loses energy after that - measured over
+  //    a 21x41 grid, the fastest any ball ever goes is 7.04 m/s and not one of 861 throws passes
+  //    9.90. What CAN produce it is cannon-es resolving a deep overlap with a position
+  //    correction, which is what the rimout branch used to cause (see its guard in section 1):
+  //    0.397 m/s to 10.807 m/s in one 1/240 s step, with no impact behind it. The condition up
+  //    there is the fix; this is the floor under it, so a future overlap is a hard bounce rather
+  //    than a ball fired through the cabinet. `st.clamped` is inert - nothing reads it but the
+  //    bench tools, and it should stay zero.
+  const vMax = (typeof G.maxSpeed === 'number' ? G.maxSpeed : 8) * 1.5;
+  const vNow = ball.velocity.length();
+  if (vNow > vMax) {
+    ball.velocity.scale(vMax / vNow, ball.velocity);
+    st.clamped = (st.clamped | 0) + 1;
+  }
+
   const p = ball.position;
 
   // 1. Captured: the floor is gone under the mouth; ride gravity down through it.
@@ -367,19 +400,33 @@ function substep(st) {
       // else (a bounce-out that slid under the intangible floor before escaping) = a miss.
       if (d < hDef.r + G.ballR) finishAt(st, st.captured, hDef.value, 'hole');
       else finishAt(st, 'corner0', 0, 'gutter');
-    } else if (fc.h > G.ballR * 1.05 && d > hDef.r
+    } else if (fc.h > (hDef.collarH || 0) + G.ballR * 1.05
       && ball.velocity.y * Math.cos(fc.tilt) + ball.velocity.z * Math.sin(fc.tilt) > 0) {
-      // Clear of the slab's surface, outside the mouth AND MOVING AWAY FROM THE FACE: it bounced
-      // out. Give the floor back and let it play on - this ball has scored nothing yet.
+      // WHOLLY ABOVE THE RIM AND MOVING AWAY FROM THE FACE: it bounced out over the top, which is
+      // the only way out of a throated basket. Give the floor and the collar back and let it play
+      // on - this ball has scored nothing yet.
       //
-      // GUARD (2026-09-02): the "moving away" term is not optional here. A ball captured over
-      // the corner 100 with 1.5 m/s of forward speed drifts to 6.0 cm off the axis of a 5.8 cm
-      // mouth while it is STILL DESCENDING at 2.7 m/s toward the riser 2 cm behind the rim -
-      // the riser is solid and is about to push it forward into the basket. Without this term
-      // that instant read as a rim-out: the collar came back solid under a ball that was
-      // already overlapping it, the ball was kicked 2.6 m/s straight up off the rim top, came
-      // down ON the rim in the crack against the riser, and rolled off along it into a 0
-      // (5.5 deg / power 0.75, stepped). A ball that is still going down has not bounced out.
+      // GUARD (2026-09-04): THE HEIGHT IS MEASURED FROM THE RIM, AND THE `d > hDef.r` TERM IS
+      // GONE, because between them they made this branch hand the geometry back UNDERNEATH A BALL
+      // THAT WAS ALREADY INSIDE IT. `d > hDef.r` is the RIM radius: the ball's centre could be
+      // 5.9 cm out on a 5.82 cm mouth while its surface was still 5 cm deep in the collar wall,
+      // and `fc.h > ballR * 1.05` (5.7 cm above the TREAD) is met at half the depth of an 11.6 cm
+      // collar. cannon-es then resolved that overlap the only way it can, with a position
+      // correction. Traced step by step (power 0.50 / aim -0.45, midL): the ball is doing
+      // 0.397 m/s at t 1.0417, this branch fires, and at t 1.0458 it is doing 10.807 m/s - a
+      // 10.4 m/s jump in one 1/240 s step, against contact impacts the solver logged at 0.10 to
+      // 0.37 m/s. It was not hit by anything; it was pushed out of a wall. It then re-captured,
+      // flew through the treads and struck a riser at 6.37 m/s. Matt, 2026-09-04, on a machine
+      // that has no throw faster than maxSpeed 6.60: the ball "hits something INSIDE the basket,
+      // and Ricochets to the right super fast, then slow." 34 throws of 1,681 did this, worst
+      // 10.4 m/s. Above the rim by a full ball radius, NOTHING can be overlapping: the collar's
+      // top face is at collarH and the tread is another 11.6 cm below that.
+      //
+      // GUARD (2026-09-02), still load-bearing: the "moving away" term is not optional. A ball
+      // captured over the corner 100 with 1.5 m/s of forward speed drifts off the mouth's axis
+      // while it is STILL DESCENDING toward the riser 2 cm behind the rim - and that riser is
+      // solid and about to push it forward into the basket. A ball that is still going down has
+      // not bounced out.
       st.events.push({ type: 'rimout', hole: st.captured });
       st.captured = null;
       ball.collisionFilterMask = GROUP_FLOOR | st.restMask;
@@ -481,7 +528,7 @@ function substep(st) {
       if (lip > 0 && fh.h < lip) {
         st.captured = id;
         st.capturedFaceY = p.y;
-        ball.collisionFilterMask = st.restMask & ~cupBit(G, id);
+        ball.collisionFilterMask = capturedMask(G, st, id);
         st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
         return;
       }
@@ -508,7 +555,7 @@ function substep(st) {
       if (vFace * tDrop > cross) continue;            // too fast for this mouth: it rolls on
       st.captured = id;
       st.capturedFaceY = p.y;
-      ball.collisionFilterMask = st.restMask & ~cupBit(G, id);   // the slab and this collar let go
+      ball.collisionFilterMask = capturedMask(G, st, id);   // the slab and this collar let go
       st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
       return;
     }
@@ -600,9 +647,33 @@ function substep(st) {
   //
   //    BRICK CITY ONLY, per the HARD RULE in skeeball/CLAUDE.md. The other four machines keep
   //    their pops; THE CLASSIC in particular has the slope that makes them harmless.
+  //
+  //    AND SPEED IS A VETO ON IT (2026-09-04). Matt, with a clip and the frames either side of
+  //    it: a ball on the top step "vanishes and is counted as a MISS while it's still moving. It
+  //    could have rolled down into another basket."
+  //
+  //    He is describing the anchor exactly. The clock only restarts once the ball has covered
+  //    3 cm FROM THE ANCHOR POINT, so a ball that settles for half a second and then starts
+  //    rolling is killed at 0.6 s having not yet earned a reset - while rolling. Measured over a
+  //    21x41 grid: the watchdog fired on 77 of 861 throws, and 63 of those balls were moving
+  //    faster than 10 cm/s at the instant it fired (median 0.19 m/s, still spinning at 4.4 rad/s,
+  //    a median 7.4 cm of PATH travelled inside a 3 cm bubble). Half of them died at u ~ 0.44 on
+  //    the top tread - the channel between an outer 100's collar (outer edge 0.371) and the side
+  //    rail (0.500), 12.9 cm against a 10.9 cm ball - rolling home at 0.22 m/s in almost pure +z.
+  //
+  //    THE DISPLACEMENT ANCHOR IS STILL THE PRIMARY TEST and must stay that way: it is the only
+  //    thing that catches a ball JITTERING in a cradle, which is what the 2026-08-26 rewrite was
+  //    written for, and speed alone is jitter-blind (the pinball lesson). Speed only VETOES it.
+  //    The case the rule exists for is untouched, and that is measured too, not argued: the
+  //    -20 cradle kills read a median 0.00 to 0.01 m/s, three orders of magnitude under this
+  //    threshold. `t0` bounds the veto - a ball that oscillates inside the bubble without ever
+  //    leaving it still dies, at 2.0 s instead of never.
   const moved = Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z);
-  if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
-  else if (st.t - st.anchor.t > 0.6) {
+  const stillish = ball.velocity.length() < 0.05 && ball.angularVelocity.length() < 1.0;
+  if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t, t0: st.t };
+  else if (!stillish && st.t - (st.anchor.t0 != null ? st.anchor.t0 : st.anchor.t) <= 2.0) {
+    st.anchor.t = st.t;                     // moving, and not yet out of rope: the clock restarts
+  } else if (st.t - st.anchor.t > 0.6) {
     st.emergencyUsed = true;
     finishAt(st, 'corner0', 0, 'gutter');
     return;

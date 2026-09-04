@@ -101,8 +101,10 @@ ok('physics: the capture gate is measured from the rim, and only for a FALLING b
   /f\.h < G\.ballR \* 1\.9 \+ st\.maxLip/.test(phys)
   && /const falling = hDot < -0\.8/.test(phys)
   && /fh\.h >= \(falling \? lip : 0\) \+ G\.ballR \* 1\.9/.test(phys), '');
+// The rule is unchanged; only its spelling moved, into `capturedMask` (2026-09-04), when capture
+// also had to switch that basket's THROAT on - see test-brickcity-throat.mjs.
 ok('physics: a captured ball stops colliding with its own collar (cupBit)',
-  /collisionFilterMask = st\.restMask & ~cupBit\(G, id\)/.test(phys) && /s\.part === 'cupSeg' && s\.cup \? cupBit\(G, s\.cup\)/.test(phys), '');
+  /st\.restMask & ~cupBit\(G, id\)/.test(phys) && /s\.part === 'cupSeg' && s\.cup \? cupBit\(G, s\.cup\)/.test(phys), '');
 // [KNOWN-BUG PROBE] THE PERCHED 100, 2026-09-02. For a few hours this machine also captured a
 // ball that was merely SITTING on a collar's rim: a widened radius (rRest), a "slower than
 // 0.6 m/s" branch, and the rim-relative gate applied to EVERY ball rather than only a falling

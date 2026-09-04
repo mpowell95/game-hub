@@ -220,7 +220,11 @@ export class Renderer {
       // 'hump' and 'rail' are skipped here: both are drawn as ONE smooth solid instead (by
       // _rampSkin() and _sideWalls() respectively) built from the same corner points, because
       // the individual angled/stepped physics boxes read as a visible staircase.
-      if (s.part === 'keep' || s.part === 'ringSeg' || s.part === 'cupSeg'
+      // 'throat' is skipped for a different reason: it is the mouth continued down inside the
+      // cabinet, under the tread, and it is solid only to a ball the basket above it has already
+      // captured (machine.js's throat block). There is nothing to draw - the basket you see is
+      // _wireBasket's, exactly as before.
+      if (s.part === 'keep' || s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat'
         || s.part === 'hump' || s.part === 'rail' || s.part === 'splitter') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card and the SCOREBOARD. Its material is kept on

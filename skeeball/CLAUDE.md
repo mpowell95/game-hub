@@ -1544,6 +1544,105 @@ engine: a STRUCTURAL one that rebuilds every collar segment in its hole's own fr
 sweep at all (it would have caught this the day the staircase shipped), and a behavioural one that
 asks, in world coordinates only, whether any parked ball is inside a basket's cylinder.
 
+## BRICK CITY: nothing held a ball in the basket it fell into (2026-09-04)
+
+Matt, with three clips and 25 frame-by-frame screenshots of the top-right 100, reported three
+things. They are one defect and two of its consequences, all in `machines/brickcity/physics.js`.
+
+1. *"Some made 100 shots in the top right basket glitch and move through the basket."*
+2. *"This one goes in the basket but through the rim, hits something INSIDE the basket, and
+   Ricochets to the right super fast, then slow."*
+3. *"A ball on the top step vanishes and is counted as a MISS while it's still moving. It could
+   have rolled down into another basket."*
+
+### 1. Capture took the whole basket away, not just the floor
+
+Capture takes the floor out from under the ball - and since **THE NET** (2026-09-02) it takes that
+basket's own collar with it, so the rim edge cannot kick a well-aimed ball back out. Between them
+there was **nothing left holding the ball in**, and it simply carried the speed it arrived with
+sideways through a rim and a net that were still drawn but no longer solid.
+
+Measured on the shipped build, 21 powers x 41 aims:
+
+| | before | after |
+|---|---|---|
+| worst distance a captured ball travelled past its own rim | **31.3 cm** (47.7 cm on a finer grid) | **1.2 cm** |
+| captures paid the hole that captured them | 259 of 321 (**81%**) | 321 of 328 (**98%**) |
+
+**It is not one basket.** topL loses as often as topR (25% against 27% on the finer grid), the 40s
+and the 20 about a fifth, and the penalty row **about half** - a ball that fell into a -20 and was
+not charged for it.
+
+**THE FIX IS A THROAT**: the mouth continued down through the tread, `machine.js`, one per basket.
+
+- **Its radius is `r + ballR`, and that is the whole design.** A wall at the mouth radius would be
+  violently wrong - the 100 is a 5.82 cm mouth against a 5.45 cm ball, 3.7 mm of clearance, while
+  capture fires with the ball's CENTRE up to 5.28 cm off the axis. `r + ballR` is the wall a ball
+  whose centre is over the mouth can never pass, which is the same thing capture's own `rEff`
+  measures. It confines a captured ball to `d <= r`, so the pass-through commit (`d < r + ballR`)
+  can no longer fail.
+- **Each throat is on its OWN collision bit** (`throatBit`), switched on by capture and off by a
+  rimout. Nothing that has not been captured by that basket can touch one, so no throw that was
+  not already captured can be changed by this - including over the penalty row, where a
+  neighbour's throat is within reach.
+- It runs from the RIM DOWN, not from the tread down, because a ball is captured while it is
+  still above the face and everything between there and the tread is where it used to escape.
+- `render.js` skips the part. It is inside the cabinet, under the tread; the basket you see is
+  still `_wireBasket`'s.
+
+### 2. The ricochet was the solver pushing the ball out of a wall
+
+The rimout branch handed the floor and the collar back **underneath a ball that was still inside
+them**: its test was `d > hDef.r` (the RIM radius, so the ball's surface could still be 5 cm deep
+in the collar wall) at `fc.h > ballR * 1.05` (5.7 cm above the TREAD, half way down an 11.6 cm
+collar). cannon-es resolved that overlap the only way it can. Traced step by step, power 0.50 /
+aim -0.45, midL:
+
+```
+t 1.0417  v  0.397 m/s   <- rimout fires; collar and tread become solid again
+t 1.0458  v 10.807 m/s   <- +10.4 m/s in ONE 1/240 s step
+t 1.0625  v 10.934 m/s   <- re-captured, so it flies through the treads unimpeded
+t 1.0667  contact riser, 6.37 m/s     <- "hits something INSIDE the basket"
+```
+
+The contact events the solver logged at that instant read **0.10 to 0.37 m/s**. Nothing hit it.
+34 of 1,681 throws did this, worst 10.4 m/s, **on a machine whose hardest serve leaves at 6.60**.
+
+Now a rimout needs the ball **wholly above the rim** (`fc.h > collarH + ballR * 1.05`), and the
+radial term is gone: above the rim by a full radius, nothing can be overlapping. Plus a
+**solver-artefact ceiling** at `1.5 x maxSpeed` in section 0 - not a brake and not a gameplay
+rule, since the fastest any ball legitimately goes here is 7.04 m/s and no throw in 861 passes
+9.90. `st.clamped` should stay zero; the probe asserts it does.
+
+### 3. The watchdog killed balls that were rolling
+
+The stall watchdog restarts its clock only once the ball has covered 3 cm **from its anchor
+point**, so a ball that settles for half a second and then starts rolling is killed at 0.6 s
+having not yet earned the reset. Measured: it fired on **77 of 861** throws and **63 of those
+balls were moving faster than 10 cm/s** at that instant - median 0.19 m/s, still spinning at
+4.4 rad/s, a median 7.4 cm of PATH travelled inside a 3 cm bubble. Half died at `u ~ 0.44` on the
+top tread: the 12.9 cm channel between an outer 100's collar and the side rail, rolling home at
+0.22 m/s in almost pure +z. Exactly what Matt filmed.
+
+**The displacement anchor stays the primary test** - it is the only thing that catches a ball
+jittering in a cradle, which is what the 2026-08-26 rewrite was written for, and speed alone is
+jitter-blind (the pinball lesson). Speed is only a **veto**, and the case the rule exists for is
+untouched, measured rather than argued: the -20 cradle kills read **0.00 to 0.01 m/s**, three
+orders of magnitude under the 0.05 threshold. `anchor.t0` bounds the veto, so a ball oscillating
+inside the bubble without ever leaving it still dies, at 2.0 s instead of never. Kills went from
+**77 of 861 to 8**, and none of the 8 was moving.
+
+### Scope, and what it costs
+
+BRICK CITY only, per the HARD RULE. **No basket moved and no mouth changed size.** The score
+effect is real and is the point: more 100s land, and so do more -20s - a ball that fell into a
+penalty basket is now charged for it. `test-brickcity-corner100.mjs` (11), `test-brickcity-stall.mjs`
+(9) and `test-skeeball-capture-frame.mjs` (5) all stay green.
+
+`node test-brickcity-throat.mjs` is the regression probe, born red on **13 of its 16 assertions**
+against the build Matt filmed. It is deliberately NOT in `run-all-tests.mjs` (~3.5 min), the same
+call `test-brickcity-corner100.mjs` got.
+
 ## The capture blind spot, closed on every machine (2026-08-26)
 
 The second half of BRICK CITY's stuck ball (the section above) turned out not to be BRICK CITY's
