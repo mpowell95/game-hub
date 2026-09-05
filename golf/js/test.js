@@ -334,75 +334,65 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   near('a full red miss with the stock driver lands ~30 yds offline', off, 30, 2);
 }
 
-console.log('\n-- 8b. THE METER IS NOT ONE SPEED, and a bad lie must still be playable --');
+console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --');
 {
-  // MEASURED 2026-09-04 by tracking the needle in every frame of four reference shots at 60 fps.
-  //
-  // THESE ASSERT DEGREES PER FRAME, NOT MILLISECONDS, since 2026-09-05. Degrees per frame is what
-  // the footage actually contains; milliseconds per power unit is that number divided by the arc's
-  // width, and the arc turned out to be 208 deg rather than the 221 this section first assumed - so
-  // an assertion in ms would have to be restated every time the scale is re-measured, while this
-  // one holds whatever the convention is. Every ms figure moved about 6 %; not one of these did.
-  const degPerFrame = (ms) => SW.ARC_DEG_PER_UNIT / ((ms / 1000) * 60);
-  const cases = [
-    ['driver', CLUBS[0], 2.176, 3.220],
-    ['3 wood', CLUBS[1], 2.195, 3.271],
-    ['7 iron', CLUBS[8], 1.782, 2.432],
-  ];
-  for (const [name, club, upMeas, downMeas] of cases) {
-    const t = CL.swingTempo(club);
-    near(`${name}: the backswing climbs ${upMeas} deg a frame, as measured`, degPerFrame(t.upMs), upMeas, upMeas * 0.05);
-    near(`${name}: the downswing runs ${downMeas} deg a frame`, degPerFrame(t.downMs), downMeas, downMeas * 0.06);
-  }
-  const putt = CL.swingTempo(PUTTER);
-  near('putter: the backswing climbs 1.528 deg a frame', degPerFrame(putt.upMs), 1.528, 0.08);
+  // THE METER IS ONE SPEED AGAIN (2026-09-05, on Matt's instruction). It briefly ran at a different
+  // speed per club, which came out of the measuring pass rather than out of the playtest list -
+  // "I did NOT instruct you to change anything about tempo." The measurement stands and is recorded
+  // in clubs.js's swingTempo header; shipping it was the mistake, not measuring it.
+  const speeds = new Set([...CLUBS, PUTTER].map((c) => {
+    const t = CL.swingTempo(c);
+    return `${t.upMs}/${t.downMs}`;
+  }));
+  ok('every club in the bag swings at the same speed', speeds.size === 1, [...speeds].join(', '));
+  ok('...and that speed is the Swing\'s own default',
+    CL.swingTempo().upMs === SW.UP_MS && CL.swingTempo().downMs === SW.DOWN_MS);
+  ok('the downswing is still faster than the backswing', SW.DOWN_MS < SW.UP_MS,
+    'measured in every reference sample, and it is what gives you time to pick a power and less to save the strike');
 
-  ok('the meter slows monotonically as the bag gets shorter',
-    CLUBS.map((c) => CL.swingTempo(c).upMs).every((v, i, a) => i === 0 || v >= a[i - 1] - 1e-9));
-  ok('...and the putter is the slowest thing in the bag',
-    putt.upMs >= CL.swingTempo(CLUBS[CLUBS.length - 1]).upMs);
-  ok('the downswing is always faster than the backswing',
-    CLUBS.every((c) => { const t = CL.swingTempo(c); return t.downMs < t.upMs; }));
-
-  // A `Swing` timed with a club's tempo really does take that long, and is not re-timed mid-stroke.
+  // THE GREEN BAND NARROWS WITH THE CLUB. Matt: "You haven't paid attention to how the power/aim
+  // bars change size depending on the club. Driver off the fairway shouldn't be super easy to hit."
+  ok('a driver has a narrower green band than a lob wedge',
+    CL.swingZone(CLUBS[0]) < CL.swingZone(CLUBS[13]));
+  ok('...and it tightens monotonically the longer the club',
+    CLUBS.map((c) => CL.swingZone(c)).every((v, i, a) => i === 0 || v >= a[i - 1] - 1e-9));
+  ok('the lob wedge and the putter get the full band',
+    Math.abs(CL.swingZone(CLUBS[13]) - 1) < 1e-9 && CL.swingZone(PUTTER) === 1);
   {
-    const sw = new SW.Swing();
-    sw.setTempo(CL.swingTempo(CLUBS[8]));
-    const t = CL.swingTempo(CLUBS[8]);
-    sw.tap(0);
-    near('a Swing set to a 7 iron reaches 100 % at the 7 iron\'s own tempo',
-      sw.read(t.upMs).pos, 1.0, 1e-9);
-    sw.tap(t.upMs);                                   // lock power at 100 %
-    sw.setTempo(CL.swingTempo(CLUBS[0]));             // ...and try to re-time it mid-stroke
-    near('the tempo cannot change once the stroke has started',
-      sw.read(t.upMs + t.downMs).pos, 0, 1e-9);
+    const fw = LIES.fairway.zone;
+    const drv = SW.bandsFor(fw, CL.swingZone(CLUBS[0]));
+    const wdg = SW.bandsFor(fw, CL.swingZone(CLUBS[13]));
+    ok(`a driver off the fairway is ${(100 * drv.green).toFixed(1)} % green against a wedge's ${(100 * wdg.green).toFixed(1)} %`,
+      drv.green < wdg.green * 0.85);
+    // THE CLUB MUST NOT TOUCH ORANGE. Orange's job is that a bad lie stays hittable, which is a
+    // property of where the ball is sitting, not of what is being swung at it.
+    const bad = LIES.greensideBunker.zone;
+    ok('the club narrows GREEN and leaves the orange share alone',
+      Math.abs((SW.bandsFor(bad, 0.72).orange - SW.bandsFor(bad, 0.72).green)
+        - (SW.bandsFor(bad, 1).orange - SW.bandsFor(bad, 1).green)) < 0.03);
   }
 
-  // THE LESSON FROM THE FIRST PLAYTEST, APPLIED TO THE NEW BANDS: when a mechanic is a timed
-  // input, TEST THE INPUT. The reference's bad-lie green band is about ONE FRAME wide, which is
-  // deliberate - from a bad lie you are not striking it pure, you are avoiding red - so the band
-  // that has to stay hittable is ORANGE. This fails if any lie in the game makes ORANGE a
-  // sub-3-frame stop with the club a player would actually have in hand there.
+  // THE FIRST PLAYTEST'S LESSON, APPLIED TO THE BANDS: a target the player cannot physically stop
+  // the needle inside is not a hard shot, it is a broken one. Measured in FRAMES at 60 fps, for the
+  // WORST case now available - the longest club from each lie.
   const FRAME = 1000 / 60;
   const rows = [];
   for (const [kind, lie] of Object.entries(LIES)) {
-    if (kind === 'water') continue;                   // never played from; see Stage C
-    const club = kind === 'green' || kind === 'fringe' ? PUTTER : CLUBS[8];
-    const t = CL.swingTempo(club);
-    const b = SW.bandsFor(lie.zone);
+    if (kind === 'water') continue;
+    const t = CL.swingTempo();
+    const b = SW.bandsFor(lie.zone, CL.swingZone(CLUBS[0]));
     const green = b.green * SW.BAR_HALF * t.downMs;
     const orange = b.orange * SW.BAR_HALF * t.downMs;
     rows.push(`${kind} ${(green / FRAME).toFixed(1)}/${(orange / FRAME).toFixed(1)}`);
-    ok(`${kind}: ORANGE is at least 3 frames wide (${(orange / FRAME).toFixed(1)})`, orange >= 3 * FRAME);
+    ok(`${kind}: with a DRIVER, ORANGE is at least 3 frames wide (${(orange / FRAME).toFixed(1)})`, orange >= 3 * FRAME);
   }
-  console.log(`     green/orange half-windows in frames: ${rows.join('  ')}`);
+  console.log(`     driver green/orange half-windows in frames: ${rows.join('  ')}`);
   {
-    const t = CL.swingTempo(CLUBS[0]);
+    // 4.84 frames, derivable from ANGLES alone, which is what makes it a good check on the whole
+    // power-unit convention: the driver's downswing measured 3.220 deg/frame, the bar is 28.6 deg
+    // either side of zero, and green is 54.5 % of that - 0.545 * 28.6 / 3.220 = 4.84.
+    const t = CL.swingTempo();
     const b = SW.bandsFor(1);
-    // 4.84 frames, and it can be derived from ANGLES alone, which is what makes it a good check on
-    // the whole power-unit convention: the driver's downswing measured 3.220 deg/frame, the bar is
-    // 28.6 deg either side of zero, and green is 54.5 % of that - 0.545 * 28.6 / 3.220 = 4.84.
-    // It read 4.5 against the wrong 221 deg arc.
     near('from a clean lie GREEN itself is about 4.8 frames, as the reference measured',
       b.green * SW.BAR_HALF * t.downMs / FRAME, 4.84, 0.35);
   }

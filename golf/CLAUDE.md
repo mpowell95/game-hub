@@ -899,8 +899,9 @@ re-cutting all 36 holes, since every yardage is deliberately cut to the stock ba
   a scorecard (3 holes, par 3/5/4 - the same par 12 as our frozen `pinevalley3`), and **a
   leaderboard of named AI opponents playing the same round** (You -1, U Jett -1, D Clark -1,
   D Marcus even). We have no in-round opponents at all. Whole feature, not a tuning change.
-- **The putter switches the distance readout to feet** while it is merely SELECTED, off the green
-  (measured: "759.5 Ft" for a 253.2 yd shot). Ours only switches when the ball is on the green.
+- ~~**The putter switches the distance readout to feet** while it is merely SELECTED, off the green
+  (measured: "759.5 Ft" for a 253.2 yd shot). Ours only switches when the ball is on the green.~~
+  FIXED 2026-09-04: the readout follows the CLUB, the camera zoom still follows the LIE.
 - **The auto-pick opens on a club that cannot reach** (a 2 iron for 253 yds). Ours picks the
   shortest club that CAN reach.
 - **No driver appears in the list off the fairway**, only from the tee. Worth confirming.
@@ -924,7 +925,8 @@ found the result screen, which this one had stopped 20 frames short of.
   pixel-art scale (see "The view" above). Probably wants the ball framed lower on a tee shot rather
   than a wider view, but that is a feel call.
 - Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
-- The aim step is 1.5 deg a tap, auto-repeating at 8/s after 400ms, capped at +/- 60 deg.
+- The aim step is 1.0 deg a tap since 2026-09-04, auto-repeating on a ramp from 4/s to 16/s after
+  400 ms, capped at +/- 60 deg.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
 
@@ -1300,14 +1302,12 @@ meter rather than a sand bunker): three sharp peaks against flat noise at **139.
 function of the needle's angle at -0.0175 per degree, so the bar is 57.1 deg of arc; at 2.08 deg per
 1 % that is +/- 0.137, and the old 0.12 was that same 57.1 deg divided by the wrong 2.21.
 
-**THE PER-CLUB TEMPO MOVED TOO, AND THE FEEL DID NOT.** `clubs.js`'s milliseconds per power unit
-were derived by dividing the measured degrees-per-frame by the arc's width, so all of them shrank
-about 6 % (`TEMPO_BASE_MS` 1685 -> 1585, `TEMPO_STEP_MS` 55 -> 51, `TEMPO_PUTTER_MS` 2410 -> 2268,
-`TEMPO_LAG_MS` 545 -> 505). The needle's speed ON SCREEN is exactly what it always was; a power unit
-is simply 6 % less arc than we thought. **`test.js` section 8b now asserts DEGREES PER FRAME rather
-than milliseconds**, because degrees per frame is what the footage contains and it holds whatever
-the convention is - the ms assertions would have had to be restated by hand, which is the same trap
-that let the arc be wrong for a week.
+**THE TEMPO CONSTANTS MOVED TOO, AND THE FEEL DID NOT.** Milliseconds per power unit are the
+measured degrees-per-frame divided by the arc's width, so they all shrank about 6 %. The needle's
+speed ON SCREEN is exactly what it always was; a power unit is simply 6 % less arc than we thought.
+`UP_MS` / `DOWN_MS` are 1585 / 1080. (The per-club constants this paragraph used to list -
+`TEMPO_BASE_MS` and friends - were removed the next day when the per-club tempo was reverted; see
+"The tempo was never asked for" below.)
 
 **The over-swing penalty is a ramp now, not a step.** It was a flat 1.5x on the miss angle for
 anything past 100 %, which was fine while the top of the arc was 112 %; at 120.6 % a flat multiplier
@@ -1465,6 +1465,61 @@ the belt came out looking like a row of mushrooms. `test.js` carries that as a K
 Covered by `golf/js/test.js` section **12e**, including a check that BOTH themes define every new
 palette key - a missing one paints `undefined`, which canvas silently ignores, so a desert hole
 would simply lose its water.
+
+## The tempo was never asked for, and the green zone was (2026-09-05)
+
+Matt, on being told the per-club meter tempo had shipped: *"I did NOT instruct you to change
+anything about tempo. I specifically stated to fix the width of the green zone in the aim/power
+meter."*
+
+He is right, and this is worth writing down as a process failure rather than as a tuning note.
+
+### What happened
+
+The per-club tempo came out of the **measuring pass**, not out of the playtest list. The needle was
+tracked frame by frame across four reference shots and it plainly runs at different speeds for
+different clubs - 2.18 deg/frame for a driver, 2.20 for a 3 wood, 1.78 for a 7 iron, 1.53 for the
+putter, against our one fixed speed for the whole bag. Under the standing "measure everything and
+reproduce it exactly" instruction that looked like a finding to ship.
+
+**THE MEASUREMENT WAS RIGHT AND SHIPPING IT WAS STILL WRONG.** A measurement is a fact about the
+reference; a change to how the game plays is a decision, and that decision was not on the list.
+Worse, it was later offered as the answer to a request it does not answer:
+
+- The complaint on the list is *"Driver off the fairway shouldn't be super easy to hit."*
+- What the tempo change actually did was leave the driver about where it was and make the SHORT
+  clubs and the putter SLOWER - so the half of the bag that was already easiest got easier.
+
+**The rule: a measurement that nobody asked to act on goes in the docs, not in the build.** The
+degrees-per-frame figures are kept in `clubs.js`'s `swingTempo` header for exactly that reason - the
+next session to watch that footage will find them again and needs to know it was a decision not to
+ship them, not an oversight.
+
+### What the request actually was, and what it now does
+
+`swingZone(club)` in `clubs.js`: a multiplier on the GREEN band that runs from `ZONE_DRIVER` (0.72)
+at the top of the bag to 1.00 at the bottom, linearly by index. The putter gets the full band.
+
+    driver off a fairway    39.2 % green
+    lob wedge, same lie     54.5 %
+
+It multiplies the LIE's zone rather than replacing it, and it **deliberately does not touch the
+orange band** - orange's job is that a bad lie stays hittable, which is a property of where the ball
+is sitting, not of what is being swung at it. Letting the club shrink orange too would make a driver
+out of a bunker a coin flip. `test.js` section 8b asserts that separation, and still measures the
+orange half-window in frames for every lie **with a driver in hand** - the worst case now available -
+against the 3-frame floor the first playtest established.
+
+### And the measurement points the other way, which is recorded rather than buried
+
+Four reference shots at 60 fps: a driver off a tee and a putter on a green both measured **54.5 %**
+green; a 3 wood from rough and a 7 iron from a bunker both measured **9.1 %** - byte-identical within
+each pair, across very different clubs. On that evidence the reference's band tracks the LIE and not
+the club at all.
+
+Matt was told this and asked for it anyway. It is his game and it is a better rule than the
+reference's - a driver that is exactly as forgiving as a wedge is the thing he noticed. Written down
+so the next session does not "fix" it back to match the footage.
 
 ## Two courses, thirty-six holes (2026-09-04)
 
