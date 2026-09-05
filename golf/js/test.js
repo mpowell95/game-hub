@@ -325,8 +325,9 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   ok('over-100 % power multiplies the miss, and more the further past you go',
     SW.mishit(0.9, 1.05, 1).deg > SW.mishit(0.9, 1.0, 1).deg
     && SW.mishit(0.9, 1.15, 1).deg > SW.mishit(0.9, 1.05, 1).deg);
-  ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x`,
-    Math.abs(SW.mishit(0.9, SW.SWING_MAX, 1).deg - SW.mishit(0.9, 1.0, 1).deg * SW.OVER_SWING_MAX_MUL) < 1e-9);
+  ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x, before the spray is added`,
+    Math.abs((SW.mishit(0.9, SW.SWING_MAX, 1, 1, 0).deg - SW.blockSpray(SW.SWING_MAX, 0))
+      - SW.mishit(0.9, 1.0, 1).deg * SW.OVER_SWING_MAX_MUL) < 1e-9);
   ok('and exactly 100 % costs nothing extra',
     Math.abs(SW.mishit(0.9, 1.0, 1).deg - SW.mishit(0.9, 0.999999, 1).deg) < 1e-4);
   // The spec's own sanity check on the model.
@@ -398,6 +399,57 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
   }
 }
 
+console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
+// Matt, after playing with the numbers: "The max carry at the farthest past 100% and spot on should
+// only be 240-245. I want it to go 20-30 yards offline. high risk."
+//
+// The multiplier alone could never deliver that, and this is the assertion that says why: power is
+// locked at tap 2 and the accuracy attempt happens at tap 3, so a multiplier is set in advance and
+// applied to whatever miss follows - and a PERFECT strike has no miss to multiply. Two times zero
+// is zero. So the best play on every full shot used to be: tap, wait, tap, never use tap 2.
+{
+  const drv = CLUBS[0];
+  const cz = CL.swingZone(drv);
+  const carryAt = (p) => 215 * SW.payingPower(p);
+
+  ok('below the block, every unit of power still pays in full',
+    Math.abs(SW.payingPower(1.0) - 1.0) < 1e-9 && Math.abs(SW.payingPower(SW.BLOCK_FROM) - SW.BLOCK_FROM) < 1e-9);
+  near(`a driver held to the top carries ${carryAt(SW.SWING_MAX).toFixed(1)} yds`,
+    carryAt(SW.SWING_MAX), 242.5, 2.5, 'Matt asked for 240-245; the old value was 259');
+  ok('...which is still more than a clean 100 % swing', carryAt(SW.SWING_MAX) > 215);
+
+  // [KNOWN-BUG PROBE] THE PERFECT STRIKE MUST NOW COST SOMETHING. This is the whole fix: `mishit`
+  // at dead centre used to return exactly 0 degrees at any power.
+  let mn = Infinity; let mx = 0; let left = 0; let right = 0;
+  for (let i = 0; i < 500; i++) {
+    const m = SW.mishit(0.5, SW.SWING_MAX, 1, cz, i * 7919);
+    const off = Math.abs(Math.tan(m.deg * Math.PI / 180) * carryAt(SW.SWING_MAX));
+    mn = Math.min(mn, off); mx = Math.max(mx, off);
+    if (m.deg < 0) left++; else right++;
+  }
+  ok(`[KNOWN-BUG PROBE] a PERFECT strike at the top still goes ${mn.toFixed(1)}-${mx.toFixed(1)} yds offline`,
+    mn >= 19 && mx <= 31 && mn > 0, 'Matt asked for 20-30; it used to be exactly 0.0 at any power');
+  ok('...and it goes either way', left > 100 && right > 100,
+    'a spray that always pushed the same side would be a known cost, not a risk');
+  ok('the spray is zero right up to the block\'s edge',
+    SW.blockSpray(1.0, 5) === 0 && SW.blockSpray(SW.BLOCK_FROM, 5) === 0
+    && SW.blockSpray(SW.BLOCK_FROM + 0.01, 5) !== 0);
+  ok('and it grows the deeper into the block the swing goes',
+    Math.abs(SW.blockSpray(1.12, 3)) < Math.abs(SW.blockSpray(SW.SWING_MAX, 3)));
+
+  // SEEDED, NOT RANDOM. `resolveShot` has to stay a pure function of its inputs or section 14 -
+  // every hole on both courses played out - stops being reproducible.
+  ok('the same shot sprays the same way every time',
+    SW.blockSpray(1.18, 42) === SW.blockSpray(1.18, 42));
+  ok('...and different shots do not', SW.blockSpray(1.18, 42) !== SW.blockSpray(1.18, 43));
+  {
+    const h = { ...h1, wind: { speed: 0, bearing: 0 } };
+    const a = SH.resolveShot({ hole: h, from: h1.tee, aimRad: 0, club: drv, power: 1, mishitDeg: 0 });
+    const b = SH.resolveShot({ hole: h, from: h1.tee, aimRad: 0, club: drv, power: 1, mishitDeg: 0 });
+    ok('resolveShot is still pure', a.rest[0] === b.rest[0] && a.rest[1] === b.rest[1]);
+  }
+}
+
 console.log('\n-- 9. flight, roll and the lie factor --');
 // A CALM COPY OF HOLE 1. Every assertion in this section is about the CLUB and the LIE, and since
 // 2026-09-05 every hole has a wind that would otherwise be silently folded into each number - hole
@@ -451,7 +503,11 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   ok('roll is read from the LANDING surface, not the lie played from', lieOf('greensideBunker').roll === 0);
   const over = SH.resolveShot({ hole: CALM, from, aimRad: 0, club: CLUBS[11], power: 1.1, mishitDeg: 0 });
   ok('the player can still swing PAST 100 % from a bad lie', over.carry > r.carry);
-  near('over-100 % is worth up to +10 % distance', over.carry / r.carry, 1.1, 0.001);
+  // Past the block's edge only BLOCK_KEEPS_DIST of each extra unit pays, so 110 % of the meter is
+  // NOT 110 % of the distance any more - that is the point of it.
+  near('over-100 % pays less distance than the meter reads',
+    over.carry / r.carry, SW.payingPower(1.1) / 1.0, 0.001);
+  ok('...and the shortfall is real', over.carry / r.carry < 1.09);
 }
 {
   const dots = SH.aimDots(CLUBS[0], 'fairway');

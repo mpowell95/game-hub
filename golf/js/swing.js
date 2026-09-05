@@ -230,7 +230,64 @@ export function bandsFor(zone = 1, clubZone = 1) {
  *  honest way to get there is to measure the bunker's distance factor separately. */
 export const OVER_SWING_MAX_MUL = 2.0;
 
-export function mishit(barPos, power, zone = 1, clubZone = 1) {
+// ============================================================================================
+// THE OVER-SWING IS A GAMBLE NOW, NOT FREE MONEY (2026-09-05, Matt's numbers).
+//
+// It used to be worth +44 yds for NOTHING on a clean strike. The multiplier above cannot fix that
+// on its own and never could: the power is locked at tap 2 and the accuracy attempt happens at tap
+// 3, so the multiplier is set in advance and applied to whatever miss follows - and if the player
+// stops the needle dead centre there is no miss to multiply. Two times zero is zero. So the best
+// play on every full shot was: tap, wait, tap, and never use tap 2 at all.
+//
+// Matt, having played with the numbers: *"The max carry at the farthest past 100% and spot on
+// should only be 240-245. I want it to go 20-30 yards offline. high risk."* Two new rules, both
+// active only past BLOCK_FROM and both scaling with how far into the block the swing went:
+//
+//   BLOCK_KEEPS_DIST  how much of the over-swing's extra power becomes yards. 0.40 puts a
+//                     top-of-the-arc driver at 242 yds against 215 for a clean 100 % - inside the
+//                     240-245 he asked for, where the old value of 1.00 gave 259.
+//   BLOCK_SPRAY_DEG   a push offline that DOES NOT CARE how well the ball was struck. 5.9 deg at
+//                     the top works out at 25 yds on that 242 yd carry.
+//
+// THE SPRAY IS THE HALF THAT MATTERS, because it is the only one a good player cannot simply
+// out-skill. It is jittered +/- 20 % and takes a random side, so the top of the arc costs 20 to 30
+// yards left or right - Matt's range - rather than a fixed, learnable 25.
+//
+// ITS RANDOMNESS IS SEEDED FROM THE SHOT ITSELF, not from Math.random. The player cannot predict
+// it, and `resolveShot` stays a pure function of its inputs - which is what lets golf/js/test.js
+// play out all 36 holes and get the same answer every run.
+export const BLOCK_KEEPS_DIST = 0.40;
+export const BLOCK_SPRAY_DEG = 5.9;
+export const BLOCK_SPRAY_JITTER = 0.20;
+
+/** How far into the over-swing block a swing went, 0 at its edge to 1 at the top of the arc. */
+export function blockDepth(power) {
+  if (power <= BLOCK_FROM) return 0;
+  return Math.min(1, (power - BLOCK_FROM) / Math.max(1e-6, SWING_MAX - BLOCK_FROM));
+}
+
+/** The power that actually becomes DISTANCE. Below the block it is the power itself; inside it,
+ *  only `BLOCK_KEEPS_DIST` of every extra unit pays. */
+export function payingPower(power) {
+  if (power <= BLOCK_FROM) return power;
+  return BLOCK_FROM + (power - BLOCK_FROM) * BLOCK_KEEPS_DIST;
+}
+
+/** The spray, in degrees, signed. `seed` makes it unpredictable to the player and reproducible to
+ *  the tests; pass the shot's own numbers. */
+export function blockSpray(power, seed) {
+  const d = blockDepth(power);
+  if (d <= 0) return 0;
+  let a = (seed | 0) + 0x9E3779B9;
+  a = Math.imul(a ^ (a >>> 16), 2246822507);
+  a = Math.imul(a ^ (a >>> 13), 3266489909);
+  const r = ((a ^ (a >>> 16)) >>> 0) / 4294967296;      // 0..1
+  const mag = 1 - BLOCK_SPRAY_JITTER + r * (2 * BLOCK_SPRAY_JITTER);
+  const side = r < 0.5 ? -1 : 1;
+  return BLOCK_SPRAY_DEG * d * mag * side;
+}
+
+export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
   const b = bandsFor(zone, clubZone);
@@ -251,7 +308,10 @@ export function mishit(barPos, power, zone = 1, clubZone = 1) {
     const q = Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
     deg *= 1 + (OVER_SWING_MAX_MUL - 1) * q;
   }
-  return { deg: deg * Math.sign(signed || 1), distanceMul };
+  // The spray is ADDED, not multiplied, and it keeps its own side - that is the whole point of it:
+  // a perfect strike has no miss to multiply, so a multiplier can never make one dangerous.
+  const signedDeg = deg * Math.sign(signed || 1) + blockSpray(power, seed);
+  return { deg: signedDeg, distanceMul };
 }
 
 /** The three-tap state machine. The caller supplies `now` (ms) so this is testable without a
