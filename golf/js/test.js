@@ -730,7 +730,7 @@ function flatGreen(grad) {
   };
 }
 {
-  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 17 / SH.MAX_PUTT_FT, rangeFt: SH.MAX_PUTT_FT });
+  const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(17, SH.MAX_PUTT_FT), rangeFt: SH.MAX_PUTT_FT });
   near('a 17 ft putt rolls for ~2.5 s (the one MEASURED putt)', p.ms / 1000, 2.5, 0.1);
   near('...and it travels 17 ft', Math.hypot(p.rest[0], p.rest[1]) * 3, 17, 0.3);
 }
@@ -775,13 +775,29 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
   }
   ok('[KNOWN-BUG PROBE] a 2 ft tap-in is not a one-frame stop', windowMs(2) >= 3 * FRAME,
     'the shipped build needed 3.7 % power, reached 28 ms after tap 1: Matt putted 2.2 ft to 12.6 ft');
-  // [KNOWN-BUG PROBE] ...and the window is the SAME at every distance, which is what a fixed
-  // scale buys. The range was briefly scaled to the putt in hand to widen the short-putt window;
-  // Matt caught it - "if i'm 2 feet away, a 100% power putt will go 2 feet" - and a meter whose
-  // scale moves under you teaches nothing, because 60 % power is a different putt every time.
-  ok(`[KNOWN-BUG PROBE] the window is the SAME at every distance (${windows.map((w) => (w / FRAME).toFixed(1)).join(', ')} frames)`,
-    Math.max(...windows) - Math.min(...windows) < 1.5 * FRAME,
-    'a range that rescales per putt gives 96 frames on a tap-in and 10 on a long putt: no feel transfers between them');
+  // [KNOWN-BUG PROBE] THE SCALE DOES NOT MOVE UNDER THE PLAYER. The range was briefly scaled to the
+  // putt in hand to widen the short-putt window; Matt caught it - "if i'm 2 feet away, a 100 %
+  // power putt will go 2 feet" - and a meter whose scale moves teaches nothing, because 60 % power
+  // is a different putt every time.
+  //
+  // This used to assert the WINDOW was identical at every distance, as a proxy for the same thing.
+  // That stopped being true on 2026-09-05 when the putter's power curve was bent (`PUTT_GAMMA` in
+  // shot.js), so the invariant it exists to protect is now asserted directly instead: a given power
+  // goes the same distance whatever putt you happen to be facing.
+  ok('[KNOWN-BUG PROBE] a given power goes the same distance whatever the putt in hand',
+    [0.1, 0.25, 0.5, 0.75, 1].every((p2) =>
+      SH.puttDistanceFt(p2, SH.puttRangeFt()) === SH.puttDistanceFt(p2, SH.puttRangeFt(2))
+      && SH.puttDistanceFt(p2, SH.puttRangeFt(50)) === SH.puttDistanceFt(p2, SH.puttRangeFt())),
+    'a scale that follows the putt is a rubber band, not a skill');
+  ok('...and full power is still the putter\'s own stated range',
+    Math.abs(SH.puttDistanceFt(1, SH.puttRangeFt()) - SH.MAX_PUTT_FT) < 1e-9);
+  // ...and the CURVE's own point. Matt, 2026-09-05: "Short putts are impossible to make. It goes
+  // over the hole." Measured on the linear scale a 2 ft putt's whole make window ran from 32 ms to
+  // 181 ms after the first tap: 8.9 frames wide, but sitting in the first fifth of a second of the
+  // backswing, before the needle has visibly moved. The window is widest at the short end now.
+  ok(`[KNOWN-BUG PROBE] a tap-in has the WIDEST window, not the tightest (${(windows[0] / FRAME).toFixed(1)} vs ${(windows[windows.length - 1] / FRAME).toFixed(1)} frames)`,
+    windows[0] > windows[windows.length - 1],
+    'a linear scale put the whole tap-in window in the first 180 ms of the meter');
   ok('the hole is reachable at less than full power for anything inside the putter\'s range',
     [1, 5, 20, 50].every((ft) => ft / SH.puttRangeFt() <= 1));
   ok('...and BEYOND the putter\'s 60 ft range it honestly cannot be reached',
@@ -791,12 +807,12 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
     && SH.puttRangeFt() === PUTTER.maxFeet);
 }
 {
-  const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
+  const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
   near('a 20 ft putt across a HALF-strength slope breaks one cup width (~4 in)', p.rest[0] * 36, 4, 0.6);
 }
 {
-  const full = SH.simulatePutt({ hole: flatGreen([1, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
-  const half = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: 20 / SH.MAX_PUTT_FT });
+  const full = SH.simulatePutt({ hole: flatGreen([1, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
+  const half = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
   ok('a full slope breaks about twice as much as a half one', Math.abs(full.rest[0] / half.rest[0] - 2) < 0.15);
 }
 {
@@ -870,7 +886,7 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
   // 0.30 yd, so the BALL WAS BIGGER THAN THE HOLE and could cover it on screen without dropping.
   const rn = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
   ok('[KNOWN-BUG PROBE] the cup is drawn at the radius that actually captures',
-    /CUP_CAPTURE_YD \* cam\.ppy/.test(rn) && /import \{ CUP_CAPTURE_YD \}/.test(rn),
+    /CUP_CAPTURE_YD \* cam\.ppy/.test(rn) && /import \{ CUP_CAPTURE_YD\s*[,}]/.test(rn),
     'the drawn hole and the capture test must be the same number, not two copies that can drift');
   ok('...and it therefore scales with the zoom instead of sticking at a floor',
     !/0\.12 \* cam\.ppy \* 2/.test(rn));
@@ -1120,7 +1136,7 @@ console.log('\n-- 13. a whole hole can be played out --');
     strokes++;
     if (mustPutt(lie)) {
       const rangeFt = SH.puttRangeFt();
-      const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: Math.min(1, (d * 3) / rangeFt), rangeFt });
+      const p = SH.simulatePutt({ hole: h, from: ball, aimRad: aim, power: SH.puttPowerFor(d * 3, rangeFt), rangeFt });
       ball = p.rest; holed = p.holed;
     } else {
       const club = autoSelectClub(d, lie);
@@ -1172,7 +1188,7 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
         const ft = distYd(ball, hole.pin) * 3;
         const rangeFt = SH.puttRangeFt();
         const aim = Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]);
-        const r = SH.simulatePutt({ hole, from: ball, aimRad: aim, power: Math.min(1, ft / rangeFt), rangeFt });
+        const r = SH.simulatePutt({ hole, from: ball, aimRad: aim, power: SH.puttPowerFor(ft, rangeFt), rangeFt });
         if (r.holed) return n;
         ball = r.rest;
         continue;
@@ -1279,7 +1295,7 @@ console.log('\n-- 15b. the putter can miss --');
       const rangeFt = SH.puttRangeFt();
       const aim = Math.atan2(h.pin[0] - from[0], h.pin[1] - from[1]) + (pm.deg * Math.PI) / 180;
       const r = SH.simulatePutt({ hole: h, from, aimRad: aim,
-        power: Math.max(0, Math.min(1, (ft / rangeFt) * pm.paceMul)), rangeFt });
+        power: Math.max(0, Math.min(1, SH.puttPowerFor(ft, rangeFt) * pm.paceMul)), rangeFt });
       if (r.holed) made++;
     }
     return made / N;
@@ -1327,7 +1343,7 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
         const rangeFt = SH.puttRangeFt();
         const pm = SW.puttMishit(0.5 + tapSigned(r, SW.bandsFor(1, 1)) / 2, 1);
         const res = SH.simulatePutt({ hole, from: ball, aimRad: Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]) + pm.deg * DEGR,
-          power: Math.max(0, Math.min(1, (ft / rangeFt) * pm.paceMul)), rangeFt });
+          power: Math.max(0, Math.min(1, SH.puttPowerFor(ft, rangeFt) * pm.paceMul)), rangeFt });
         if (res.holed) return n + pen;
         ball = res.rest; continue;
       }

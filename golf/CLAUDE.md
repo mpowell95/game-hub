@@ -2152,3 +2152,68 @@ exists to prevent (*"EVERYTHING in the reference clips and images should be meas
 as EXACT clones... If you skipped anything else and just made stuff up or guessed, go back and redo
 it now"*). So it is not started. **Commit and push the folder and it can be measured the same way
 Pine Valley 1 was.**
+
+## Short putts ran past the hole, and the scale was linear (2026-09-05)
+
+Matt, within minutes of v625 going live: *"Short putts are impossible to make. It goes over the
+hole."*
+
+**Measured, and it was never about the line.** Sweeping every power a 2 ft putt can be struck with:
+
+```
+a 2 ft putt drops for any power between 2.0 % and 11.4 %
+at 1585 ms per power unit that is 32 ms to 181 ms after the first tap
+```
+
+So the entire makeable window for a tap-in sat in the **first fifth of a second of the backswing**,
+before the needle has visibly moved. The window itself was a respectable 8.9 frames wide - it was
+in the wrong PLACE. Late by a fraction and the ball runs past the hole, which is exactly what he
+described.
+
+**This was not new**, and that is worth recording: the physics had not changed. What changed is
+that he now FACES short putts. Before the putting fix earlier the same day, a 20 ft putt went in
+90 % of the time and a 30-footer 77 %, so a tap-in was rare enough never to be noticed. Making the
+first putt miss surfaced a flaw that had been shipping the whole time.
+
+### The fix is a CURVE, not a shorter range
+
+A linear scale cannot fix this: distance is proportional to power, so a 2 ft putt on a 60 ft range
+needs 3.3 % of the meter however the meter is timed, and the first 3 % of anything is unhittable.
+Making the range follow the putt in hand DOES fix it, and it is what an earlier build did - and it
+was reverted on purpose, because a scale that moves under the player is a rubber band (Matt: *"if
+i'm 2 feet away, a 100 % power putt will go 2 feet"*), so nothing learned on one putt transfers to
+the next.
+
+So the scale stays **fixed** and gets a **curve**: `distance = range * power ** PUTT_GAMMA`, with
+`PUTT_GAMMA` 1.6. 100 % is still 60 ft on every green in the game.
+
+| putt | linear power / when | curved power / when | make window |
+|---|---|---|---|
+| 2 ft | 3.3 % / 53 ms | **11.9 % / 189 ms** | 8.9 -> **16.5 frames** |
+| 3 ft | 5.0 % / 79 ms | 15.4 % / 244 ms | 9.1 -> 14.8 |
+| 10 ft | 16.7 % / 264 ms | 32.7 % / 518 ms | 8.9 -> 10.3 |
+| 30 ft | 50.0 % / 793 ms | 64.8 % / 1027 ms | ~9 -> ~8 |
+| 60 ft | 100 % / 1585 ms | 100 % / 1585 ms | - |
+
+**The conversion rates barely moved** (3 ft 94 %, 10 ft 63 %, 20 ft 29 %, 30 ft 20 %), which is the
+point: this is a timing fix, not a difficulty change.
+
+**THE AIM LADDER USES THE SAME CURVE.** `render.js` draws the putt dots at `f ** PUTT_GAMMA` of the
+range, because the dots are what a player gauges power against - dots at even distances over a
+curved meter would put the "50 %" dot at 30 ft when 50 % power goes 20, and a putting read that
+lies is worse than no read at all.
+
+**`puttPowerFor(ft, rangeFt)` is the inverse, and it exists for the tests.** Nothing in the game
+calls it - the player sets power by stopping the needle - but every test and probe that plays a
+putt was computing `ft / rangeFt` by hand, and each of those was silently a different (much
+shorter) putt once the curve landed. Four suites and `test-visual.mjs`'s play probe were wrong in
+exactly that way until they were moved onto it.
+
+### And one KNOWN-BUG PROBE had to be rewritten rather than deleted
+
+Section 11b asserted *"the window is the SAME at every distance"*, which was a proxy for the real
+invariant - the scale must not move under the player - and the curve makes it false by design. The
+invariant is now asserted **directly** instead (a given power goes the same distance whatever putt
+you are facing, and full power is still the putter's stated range), plus a new probe that the
+tap-in has the WIDEST window rather than the tightest. The rubber-band incident it was written for
+is still guarded; only the proxy changed.

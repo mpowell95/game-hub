@@ -408,7 +408,10 @@ const PLAY = {
         const g = window.__gfTest;
         const S = await import('./js/shot.js');
         const ft = g._distToPin() * 3;
-        const need = ft / S.puttRangeFt();
+        // THE PUTTER'S SCALE IS CURVED (shot.js PUTT_GAMMA, 2026-09-05). `ft / range` is the power
+        // a LINEAR putter would need and is a different, much shorter putt on the real one - which
+        // on a tap-in is the whole difference between dropping it and running 20 ft past.
+        const need = S.puttPowerFor(ft, S.puttRangeFt());
         // The power is set on the BACKSWING: one power unit takes the CLUB'S OWN upMs. (This used
         // to divide by RING_MAX and multiply by the old ring's 825 ms - both gone with the
         // two-meter build - and then to use a single global UP_MS, gone with the per-club tempo.)
