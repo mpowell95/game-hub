@@ -1640,6 +1640,19 @@ throws the bag's proportions away, and that was the complaint that started this.
 and so on, which would sooner or later collide with another game's markup in the hub's single
 document - and an SVG id collision is silent. It just paints the wrong thing.
 
+**A CLUB CAN ALSO CARRY ITS OWN SIZE, and the two woods do.** Matt: *"make the 3 wood a little
+bigger than the 5 wood. it's ok if you have to make the driver bigger as well so there's a clear
+step down."* They share one drawing, so without `CLUB_SCALE` a 3 wood and a 5 wood were the same
+picture with a different name. Driver 1.06, 3 wood 0.98, 5 wood 0.82, taken ABOUT THE ART'S CENTRE
+so a club grows in place rather than drifting into a corner - rendered heights of 53.6 / 39.0 /
+32.6 px in the 54 px tile, which reads as a ladder.
+
+**The driver's 1.06 is the largest that still fits the viewBox**: scaled about the centre it lands
+at x 4.2-179.6, y 7.0-183.7 against a box of x 4-180, y 6-184. Anything larger needs the viewBox
+widened, which shrinks every OTHER club in the tile. Check that arithmetic before raising it. The
+irons and wedges are deliberately all one size - there are eight irons and no sensible ladder to
+draw between a 4 and a 5.
+
 The defs are injected ONCE per play screen into a zero-size `<svg class="gf-artdefs">`; a tile is
 then one `<use href="#gf-driverArt">`, so changing club costs a reference rather than re-parsing
 19 KB of markup. The art area grew 42px -> 54px because the heads are near-square and the reference's
