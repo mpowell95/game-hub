@@ -160,7 +160,7 @@ function buildWorld(board) {
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
-            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'splitter' ? matRing
+            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'cupWall' || s.part === 'throat' || s.part === 'splitter' ? matRing
             : s.part === 'backboard' ? matBack
               : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A

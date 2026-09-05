@@ -224,7 +224,7 @@ export class Renderer {
       // cabinet, under the tread, and it is solid only to a ball the basket above it has already
       // captured (machine.js's throat block). There is nothing to draw - the basket you see is
       // _wireBasket's, exactly as before.
-      if (s.part === 'keep' || s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat'
+      if (s.part === 'keep' || s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'cupWall' || s.part === 'throat'
         || s.part === 'hump' || s.part === 'rail' || s.part === 'splitter') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card and the SCOREBOARD. Its material is kept on

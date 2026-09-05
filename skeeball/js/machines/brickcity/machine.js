@@ -275,13 +275,43 @@ export function buildMachine(G) {
       const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
       let h = H.collarH;
       if (H.lipLow) h = H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
+      // A COLLAR IS TWO PIECES NOW: A RIM AND A WALL (2026-09-05). Matt: the ball goes "through
+      // the basket... It used to work. It's only in the last few days."
+      //
+      // He is describing a REGRESSION and the commit is `bfb068e` (2026-09-02). Before it, capture
+      // set the ball's mask to plain `GROUP_REST` and the collar STAYED SOLID, so a captured ball
+      // was held by its own wall - on the corner 100 that pins its centre within 0.37 cm of the
+      // axis, and it falls straight down the middle. That commit deleted the whole collar for the
+      // captured ball ("THE NET") to stop the rim throwing well-aimed balls back out. It fixed
+      // the 100 and, in the same stroke, removed the only thing holding a scored ball in the
+      // basket - which is when balls started travelling sideways out through the drawn net.
+      //
+      // The two jobs live in different parts of the same wall, so they are different boxes now:
+      //   'cupSeg'  - the top ballR of the collar. THE RIM, and the thing that does the kicking:
+      //               its inner top EDGE is what a descending ball grazes, and that 45-degree
+      //               normal is what turns a drop into a 1.5 m/s shove across the mouth
+      //               (test-brickcity-corner100.mjs's header measures it). Still on `cupBit`, so
+      //               capture still deletes it and the 100 keeps the fix bfb068e was written for.
+      //   'cupWall' - everything below that. THE CAGE, and it is never deleted by anything, so a
+      //               captured ball is held on the axis exactly as it was before 2026-09-02.
+      // A ball too low to be kicked is a ball already in the basket; a ball high enough to be
+      // kicked is one the rim should have let go of. Splitting them is the whole fix.
+      const rim = Math.min(G.ballR, h * 0.5);
       solids.push({
         part: 'cupSeg',
         cup: id,
-        pos: faceToWorldIn(cupFrame, pu, pv, h / 2),
-        half: [rr * Math.tan(Math.PI / N), h / 2, G.collarThick / 2],
+        pos: faceToWorldIn(cupFrame, pu, pv, h - rim / 2),
+        half: [rr * Math.tan(Math.PI / N), rim / 2, G.collarThick / 2],
         faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
         segH: h,
+      });
+      solids.push({
+        part: 'cupWall',
+        cup: id,
+        pos: faceToWorldIn(cupFrame, pu, pv, (h - rim) / 2),
+        half: [rr * Math.tan(Math.PI / N), (h - rim) / 2, G.collarThick / 2],
+        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+        segH: h - rim,
       });
     }
   }
@@ -318,7 +348,13 @@ export function buildMachine(G) {
     const H = G.holes[id];
     if (!H.collarH) continue;
     const N = G.cupSegments;
-    const rr = H.r + G.ballR + G.collarThick / 2;
+    // IT IS A STRAIGHT CONTINUATION OF THE WALL NOW (2026-09-05), not a wide catch-tube. It was
+    // H.r + ballR - wide enough to hold a ball whose CENTRE was over the mouth, which is what
+    // capture measures - and that width was the daylight the ball was drawn travelling out
+    // through. With the collar split, the WALL above holds a captured ball on the axis all the
+    // way down to the tread, so the throat only has to carry that same line on below it: same
+    // radius, same inner face, no step for the ball to catch on where one becomes the other.
+    const rr = H.r + G.collarThick / 2;
     // Deep enough that the commit test (ballR * 1.2 below the face) fires while the ball is still
     // inside the tube; open at the bottom, so nothing can come to rest in it.
     const top = H.collarH;
