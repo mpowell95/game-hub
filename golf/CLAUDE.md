@@ -1272,6 +1272,120 @@ surface). Section 9's club-distance assertions now run against a **calm clone of
 every one of them is about the club and the lie and hole 1's own 1.4 wind is worth about 6 yds on a
 drive.
 
+## Reading the course - and the meter's scale was wrong (2026-09-05)
+
+Batch 6. Three items off the playtest list, plus the correction the Batch 2 measuring pass found and
+parked.
+
+### The arc is 208 degrees, not 221 - and everything on that page moved with it
+
+The one-needle rewrite ASSUMED 100 % sat where the over-swing block starts (311 deg), because that
+felt obvious. Matt pointed out the reference has tick marks at 25/50/75 and that *"the 100 has the
+green line"*, and finding those ticks is what caught it: they are a LIGHT TINT rather than white, so
+an earlier scan thresholded at >225 missed them entirely.
+
+MEASURED by luminance across the band on the putt frame (the only one with clean green behind the
+meter rather than a sand bunker): three sharp peaks against flat noise at **139.0 / 191.6 /
+243.0 deg**, spaced 52.6 and 51.4 per 25 %. So the scale is **208 deg per 100 % with zero at 87**.
+
+| | assumed | MEASURED |
+|---|---|---|
+| 100 % power | 311 deg | **295 deg** |
+| the green stripe | 91-93 % power | **98.5-100.4 % - it IS the 100 % line** |
+| the over-swing block | 100-112 % | **107.6-120.6 %, with a plain buffer before it** |
+| `SWING_MAX` | 1.12 | **1.206** |
+| the accuracy window | +/- 0.12 | **+/- 0.137** |
+
+`BAR_HALF` fell out of the same regression: the 60 fps trace gives the bar marker as a linear
+function of the needle's angle at -0.0175 per degree, so the bar is 57.1 deg of arc; at 2.08 deg per
+1 % that is +/- 0.137, and the old 0.12 was that same 57.1 deg divided by the wrong 2.21.
+
+**THE PER-CLUB TEMPO MOVED TOO, AND THE FEEL DID NOT.** `clubs.js`'s milliseconds per power unit
+were derived by dividing the measured degrees-per-frame by the arc's width, so all of them shrank
+about 6 % (`TEMPO_BASE_MS` 1685 -> 1585, `TEMPO_STEP_MS` 55 -> 51, `TEMPO_PUTTER_MS` 2410 -> 2268,
+`TEMPO_LAG_MS` 545 -> 505). The needle's speed ON SCREEN is exactly what it always was; a power unit
+is simply 6 % less arc than we thought. **`test.js` section 8b now asserts DEGREES PER FRAME rather
+than milliseconds**, because degrees per frame is what the footage contains and it holds whatever
+the convention is - the ms assertions would have had to be restated by hand, which is the same trap
+that let the arc be wrong for a week.
+
+**The over-swing penalty is a ramp now, not a step.** It was a flat 1.5x on the miss angle for
+anything past 100 %, which was fine while the top of the arc was 112 %; at 120.6 % a flat multiplier
+makes "hold it to the top" worth 21 % more distance for a fixed price. It runs 1.0x at exactly 100 %
+to `OVER_SWING_MAX_MUL` (2.0) at the top. **The ramp's endpoints are DECIDED, not measured** - the
+footage shows where the danger band is drawn but never shows a shot struck inside it - and starting
+the ramp at 100 rather than at the block's edge is the deliberately conservative reading, because
+marking the buffer as free would make 107 % the obvious swing on every shot in the game.
+
+> **STILL OPEN, and it is Matt's call:** even with the ramp, over-swinging is probably the dominant
+> strategy. The mishit angle inside the green band is at most 1.5 deg and distance is linear in
+> power, so 21 % more yards beats a few yards of miss on almost every shot. Making the block cost
+> DISTANCE as well as accuracy is the obvious lever. It is not a thing to slip in under a rendering
+> change, so it has not been.
+
+### The tick lines exist
+
+Matt: *"We need line indicators of where the 25% 50% 75% and 100% powers are. The 100 has the green
+line, which is good. but the others need lines as well."* Three light-tint lines across the band at
+the measured angles; the 100 % one is the green stripe. The tint is chosen to match "a light tint,
+not white" rather than sampled - the meter sits over a sand bunker in three of the four clips, and
+the fourth is the putt frame the angles came from, where the line's colour is mixed with the band.
+
+`ARC_A0_DEG` and `ARC_DEG_PER_UNIT` live in **`swing.js`**, not in the painter: the scale is what
+converts the needle's measured speed into power units, and two copies is how the meter and the model
+drift apart while both look perfectly reasonable.
+
+### The green's slope read is chevrons, and it is not in the map any more
+
+Matt: *"all of the greens you've created have dots all over them. I think you mistook the arrows
+indicating slope from the example game for decoration."*
+
+Two separate mistakes:
+
+1. **The glyph's LENGTH was the slope magnitude.** On real hole data that is 1 to 4 px, so it
+   rendered as a field of dots with no readable direction. MEASURED off the reference's putt frame
+   at 1:1: the glyph is a **FIXED 18-30 device px on a 96 x 96 px grid** (0.19 to 0.31 of the
+   spacing, depending which way the chevron is turned) and the DIRECTION is the whole of what it
+   encodes. Its colour is **(94,114,48) against a green of (174,199,82) - about 57 % of the
+   surface's own brightness**, so it is derived from the palette rather than being a fourth green
+   somebody has to keep in step.
+2. **It was rasterised into the map** at `MAP_PPY` (2.4 px/yd), where a 3.5 yd slope cell is 8.4 px
+   and a faithful glyph would be 1.6 px. There is no drawing that survives that. It is a
+   **screen-space overlay** now (`drawSlope`), so it grows with the zoom - which is when it is used,
+   since the camera tightens to 34 yds for a putt - and it is skipped entirely below 3.5 px.
+
+A cell with no meaningful gradient gets no glyph: an arrow has to point somewhere, and "flat" is a
+real thing for the read to say.
+
+**`slopeGlyphAngle` is a named pure function with a test, not an expression inside a draw loop**,
+because the screen y axis is flipped (`sy` is `cam.y - y`) and building the chevron straight from
+the world gradient points every arrow UPHILL while looking entirely plausible - the exact failure
+`holes.js` warns about for the grid itself.
+
+### The lie readout is a picture
+
+Ours printed the word "Green" in a panel. MEASURED off the reference at full resolution: an
+**isometric block of the surface itself** - a top face in that surface's own colour with a lighter
+speckle, a brown soil band across the bottom, a hard black outline with rounded corners - and a
+large dimpled ball sitting on it, overhanging the top edge, with a soft shadow beneath it.
+
+Proportions are measured off its own tile: the block is 1070 x 920 device px, the ball is 620 across
+(0.58 of the width, 0.67 of the height), it overhangs the top by 26 % of itself, and the soil band is
+the bottom 16 %. A first pass made the ball too big and there was almost no surface left to look at,
+which is the whole point of the tile.
+
+The colours are **not a second palette**: `fillsFor` is the same map the GROUND is painted from, so
+the tile cannot show a green the course does not have, and a theme change carries it automatically.
+The speckle, the shadow and the chevrons are all tints of that same colour. The lie's NAME survives
+on the element's `aria-label` - a picture is the right readout for a glance and the wrong one for a
+screen reader.
+
+Covered by `golf/js/test.js` section **12d**: the chevron's flip (a KNOWN-BUG PROBE, since nothing
+at runtime would notice), that the glyph is fixed-size and drawn per frame, the measured tick angles
+against `ARC_A0_DEG`/`ARC_DEG_PER_UNIT`, the buffer before the block, that the meter reads the scale
+from `swing.js` rather than keeping a copy, and that the lie tile is a picture painted from
+`fillsFor`.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a

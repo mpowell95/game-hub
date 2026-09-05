@@ -33,13 +33,58 @@
 //   pos in +/- BAR_HALF   the magnified window the accuracy bar shows
 // ============================================================================================
 
-/** The top of the arc. MEASURED: the over-swing block spans 311-337 deg on a 0-100 % scale of
- *  89-311 deg, so it is 26/222 = 11.7 % of full power. */
-export const SWING_MAX = 1.12;
+// ============================================================================================
+// THE ARC'S SCALE WAS WRONG UNTIL 2026-09-05, AND EVERY NUMBER ON THIS PAGE MOVED WITH IT.
+//
+// The one-needle rewrite ASSUMED 100 % sat where the over-swing block starts (311 deg), because
+// that felt obvious. It is not what the meter says. Matt pointed out the reference has tick marks
+// at 25/50/75 and that "the 100 has the green line", and finding those ticks is what caught it -
+// they are a LIGHT TINT rather than white, so an earlier scan thresholded at >225 missed them
+// entirely.
+//
+// MEASURED by luminance across the band on the putt frame (the only one with clean green behind
+// the meter rather than a sand bunker): three sharp peaks against flat noise, at
+//
+//      25 %  139.0 deg      50 %  191.6 deg      75 %  243.0 deg
+//
+// spaced 52.6 and 51.4 deg per 25 %. So the scale is 208 deg per 100 % with zero at 87 deg, and:
+//
+//      what                     was assumed          MEASURED
+//      100 % power              311 deg              295 deg
+//      the green stripe         91-93 % power        98.5-100.4 % - it IS the 100 % line
+//      the over-swing block     100-112 %            107.6-120.6 %, with a plain buffer before it
+//      SWING_MAX                1.12                 1.206
+//      the accuracy window      +/- 0.12             +/- 0.137 (see BAR_HALF)
+//
+// The arc is about 7 % shorter in ANGLE than we drew it and every power in the four-clip shot
+// ledger shifts UP about 7 %, which reads far more sensibly: the player aims AT the green line and
+// lands 98 % and 102 % either side of it.
+// ============================================================================================
 
-/** Half the accuracy window, in power units. MEASURED: the bar spans 61-115 deg against zero at
- *  89 deg, so -0.126 to +0.117. Symmetric here, because a miss either way should cost the same. */
-export const BAR_HALF = 0.12;
+/** The top of the arc. MEASURED: the block's far end is at 338 deg, which on the 87 deg + 2.08
+ *  deg/% scale above is 120.6 % of full power. */
+export const SWING_MAX = 1.206;
+
+/** THE ARC'S GEOMETRY, in degrees, MEASURED (see the block above). It lives here rather than in the
+ *  painter because it is not a drawing choice: it is the scale that converts the needle's measured
+ *  speed in degrees per frame into this file's milliseconds per power unit, and having two copies
+ *  is how the meter and the model drift apart. */
+export const ARC_A0_DEG = 87;
+export const ARC_DEG_PER_UNIT = 208;
+
+/** Where the over-swing BLOCK begins - 311 deg, which is 107.6 % on the measured scale. Between
+ *  100 % and here the reference draws PLAIN BAND: a buffer between the target and the danger. */
+export const BLOCK_FROM = 1.076;
+
+/** Half the accuracy window, in power units.
+ *
+ *  DERIVED FROM THE SAME REGRESSION as the arc, and it moved with it. The 60 fps trace gives the
+ *  accuracy bar's marker position as a linear function of the needle's angle at -0.0175 per degree,
+ *  so the full bar is 1/0.0175 = 57.1 deg of arc, or +/- 28.6 deg either side of zero. At the
+ *  measured 2.08 deg per 1 % that is +/- 0.137 power units; against the wrong 2.21 it came out as
+ *  +/- 0.129, which is where the old 0.12 came from. Symmetric, because a miss either way should
+ *  cost the same. */
+export const BAR_HALF = 0.137;
 
 /** THE DEFAULT TEMPO: milliseconds for the needle to travel one full power unit.
  *
@@ -51,8 +96,8 @@ export const BAR_HALF = 0.12;
  *
  *  The downswing is FASTER than the backswing in every sample, which is a real part of the feel:
  *  you get time to pick your power and much less time to save the strike. */
-export const UP_MS = 1685;
-export const DOWN_MS = 1140;
+export const UP_MS = 1585;
+export const DOWN_MS = 1080;
 
 /** Input is dead for this long after the ball is struck. [MEASURED: 1.33-1.54 s across three shots] */
 export const LOCK_MS = 1400;
@@ -122,8 +167,25 @@ export function bandsFor(zone = 1) {
 /** The mishit. Returns { deg, distanceMul }.
  *
  *  Marker LEFT of centre pulls the ball left; right pushes it right. Over-100 % power multiplies
- *  the resulting angle by 1.5, which is what makes over-swinging risky and matches the tutorial's
- *  own warning.
+ *  the resulting angle, which is what makes over-swinging risky and matches the tutorial's own
+ *  warning.
+ *
+ *  THE OVER-SWING MULTIPLIER IS A RAMP, NOT A STEP (2026-09-05). It used to be a flat 1.5x for
+ *  anything past 100 %, which was fine while the top of the arc was 112 %. The measured scale puts
+ *  it at 120.6 %, so a flat multiplier would make "hold it to the top" worth 21 % more distance
+ *  for a fixed price. It now runs 1.0x at exactly 100 % to `OVER_SWING_MAX_MUL` at the top.
+ *
+ *  THE RAMP'S ENDPOINTS ARE DECIDED, NOT MEASURED, and this is the honest place to say so: the
+ *  footage shows WHERE the danger band is drawn (107.6-120.6 %, with a plain buffer from 100) but
+ *  never shows a shot struck inside it, so there is nothing to measure the cost against. A ramp
+ *  from 100 rather than from the block's edge is the deliberately conservative reading - marking
+ *  the buffer as free would make 107 % the obvious swing on every shot in the game, with no
+ *  downside at all, which is a worse mistake than being slightly too harsh.
+ *
+ *  NOTE FOR A FUTURE PASS: even with this ramp, over-swinging is probably still the dominant
+ *  strategy, because the mishit angle inside the green band is at most 1.5 deg and distance is
+ *  linear in power. Making the block cost DISTANCE as well as accuracy is the obvious lever and it
+ *  is Matt's call, not a thing to slip in under a rendering change.
  *
  *  THE DISTANCE PENALTY WAS A FLAT 10 % IN THE RED BAND AND IS NOW A RAMP (2026-09-04). The
  *  reference's third shot is the evidence: a 7 iron from a greenside bunker, power locked at
@@ -140,6 +202,8 @@ export function bandsFor(zone = 1) {
  *  orange shades to 0.92, and red ramps 0.92 -> 0.60 across its own width, which is punishing,
  *  recoverable, and defensible on its own terms. If Matt wants the reference's full severity, the
  *  honest way to get there is to measure the bunker's distance factor separately. */
+export const OVER_SWING_MAX_MUL = 2.0;
+
 export function mishit(barPos, power, zone = 1) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
@@ -157,7 +221,10 @@ export function mishit(barPos, power, zone = 1) {
     deg = 4 + q * 4;
     distanceMul = 0.92 - 0.32 * q;                   // 0.92 just into red -> 0.60 at a full miss
   }
-  if (power > 1) deg *= 1.5;
+  if (power > 1) {
+    const q = Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
+    deg *= 1 + (OVER_SWING_MAX_MUL - 1) * q;
+  }
   return { deg: deg * Math.sign(signed || 1), distanceMul };
 }
 

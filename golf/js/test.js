@@ -270,7 +270,10 @@ near('the downswing falls from wherever the power was locked',
 }
 
 console.log('\n-- 8. the accuracy bar is the same needle, magnified --');
-near('the bar covers +/- 12 % of power around zero', SW.BAR_HALF, 0.12, 1e-9);
+// +/- 13.7 %, not 12: the 60 fps trace gives the bar marker as a linear function of the needle's
+// angle at -0.0175 per degree, so the bar is 57.1 deg of arc, and at the CORRECTED 2.08 deg per 1 %
+// that is +/- 0.137. The old 0.12 came from dividing the same 57.1 deg by the wrong 2.21.
+near('the bar covers +/- 13.7 % of power around zero', SW.BAR_HALF, 0.137, 1e-9);
 near('dead centre of the bar is zero on the arc', SW.barPosOf(0), 0.5, 1e-9);
 ok('the needle enters the bar from the LEFT on the way down and travels right',
   SW.barPosOf(SW.BAR_HALF) === 0 && SW.barPosOf(-SW.BAR_HALF) === 1);
@@ -316,8 +319,16 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
       .every((v, i, a) => i === 0 || v <= a[i - 1] + 1e-9));
   ok('a full red miss is 8 degrees', Math.abs(SW.mishit(1, 1, 1).deg - 8) < 1e-9);
   ok('left of centre pulls LEFT, right pushes RIGHT', SW.mishit(0.1, 1, 1).deg < 0 && SW.mishit(0.9, 1, 1).deg > 0);
-  ok('over-100 % power multiplies the miss by 1.5',
-    Math.abs(SW.mishit(0.9, 1.1, 1).deg - SW.mishit(0.9, 1.0, 1).deg * 1.5) < 1e-9);
+  // THE OVER-SWING MULTIPLIER IS A RAMP, NOT A STEP. It was a flat 1.5x, which was fine while the
+  // top of the arc was 112 %; the measured scale puts it at 120.6 %, so a flat multiplier would
+  // make "hold it to the top" worth 21 % more distance for a fixed price.
+  ok('over-100 % power multiplies the miss, and more the further past you go',
+    SW.mishit(0.9, 1.05, 1).deg > SW.mishit(0.9, 1.0, 1).deg
+    && SW.mishit(0.9, 1.15, 1).deg > SW.mishit(0.9, 1.05, 1).deg);
+  ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x`,
+    Math.abs(SW.mishit(0.9, SW.SWING_MAX, 1).deg - SW.mishit(0.9, 1.0, 1).deg * SW.OVER_SWING_MAX_MUL) < 1e-9);
+  ok('and exactly 100 % costs nothing extra',
+    Math.abs(SW.mishit(0.9, 1.0, 1).deg - SW.mishit(0.9, 0.999999, 1).deg) < 1e-4);
   // The spec's own sanity check on the model.
   const off = Math.tan(8 * Math.PI / 180) * 215;
   near('a full red miss with the stock driver lands ~30 yds offline', off, 30, 2);
@@ -326,19 +337,25 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
 console.log('\n-- 8b. THE METER IS NOT ONE SPEED, and a bad lie must still be playable --');
 {
   // MEASURED 2026-09-04 by tracking the needle in every frame of four reference shots at 60 fps.
-  // The arc is 221 deg wide, so deg/frame converts straight to ms per power unit.
+  //
+  // THESE ASSERT DEGREES PER FRAME, NOT MILLISECONDS, since 2026-09-05. Degrees per frame is what
+  // the footage actually contains; milliseconds per power unit is that number divided by the arc's
+  // width, and the arc turned out to be 208 deg rather than the 221 this section first assumed - so
+  // an assertion in ms would have to be restated every time the scale is re-measured, while this
+  // one holds whatever the convention is. Every ms figure moved about 6 %; not one of these did.
+  const degPerFrame = (ms) => SW.ARC_DEG_PER_UNIT / ((ms / 1000) * 60);
   const cases = [
-    ['driver', CLUBS[0], 1693, 1144],
-    ['3 wood', CLUBS[1], 1678, 1126],
-    ['7 iron', CLUBS[8], 2070, 1530],
+    ['driver', CLUBS[0], 2.176, 3.220],
+    ['3 wood', CLUBS[1], 2.195, 3.271],
+    ['7 iron', CLUBS[8], 1.782, 2.432],
   ];
   for (const [name, club, upMeas, downMeas] of cases) {
     const t = CL.swingTempo(club);
-    near(`${name}: the backswing matches the reference within 5 %`, t.upMs, upMeas, upMeas * 0.05);
-    near(`${name}: the downswing matches the reference within 6 %`, t.downMs, downMeas, downMeas * 0.06);
+    near(`${name}: the backswing climbs ${upMeas} deg a frame, as measured`, degPerFrame(t.upMs), upMeas, upMeas * 0.05);
+    near(`${name}: the downswing runs ${downMeas} deg a frame`, degPerFrame(t.downMs), downMeas, downMeas * 0.06);
   }
   const putt = CL.swingTempo(PUTTER);
-  near('putter: the backswing matches the reference within 5 %', putt.upMs, 2410, 120);
+  near('putter: the backswing climbs 1.528 deg a frame', degPerFrame(putt.upMs), 1.528, 0.08);
 
   ok('the meter slows monotonically as the bag gets shorter',
     CLUBS.map((c) => CL.swingTempo(c).upMs).every((v, i, a) => i === 0 || v >= a[i - 1] - 1e-9));
@@ -382,8 +399,12 @@ console.log('\n-- 8b. THE METER IS NOT ONE SPEED, and a bad lie must still be pl
   {
     const t = CL.swingTempo(CLUBS[0]);
     const b = SW.bandsFor(1);
-    near('from a clean lie GREEN itself is about 4.5 frames, as the reference measured',
-      b.green * SW.BAR_HALF * t.downMs / FRAME, 4.5, 0.6);
+    // 4.84 frames, and it can be derived from ANGLES alone, which is what makes it a good check on
+    // the whole power-unit convention: the driver's downswing measured 3.220 deg/frame, the bar is
+    // 28.6 deg either side of zero, and green is 54.5 % of that - 0.545 * 28.6 / 3.220 = 4.84.
+    // It read 4.5 against the wrong 221 deg arc.
+    near('from a clean lie GREEN itself is about 4.8 frames, as the reference measured',
+      b.green * SW.BAR_HALF * t.downMs / FRAME, 4.84, 0.35);
   }
 }
 
@@ -861,6 +882,64 @@ console.log('\n-- 12c. THE GOLFER STANDS STILL, AND THE VIEW DOES NOT SLIDE --')
     'the reference sprite does not move until 265 ms AFTER the third tap; ours played the backswing on tap 1');
   ok('there are four poses, and the finish is one of them',
     /pose === 3/.test(rn), 'address, top, through, finish');
+}
+
+console.log('\n-- 12d. THE GREEN SLOPE READ, AND THE METER SCALE --');
+{
+  const RN = await import('./render.js');
+  const D = 180 / Math.PI;
+  // [KNOWN-BUG PROBE] The screen y axis is flipped (`sy` is `cam.y - y`), so a chevron built
+  // straight from the world gradient points UPHILL - every read backwards, and entirely plausible
+  // on screen. holes.js warns about exactly this for the grid; the glyph has the same trap.
+  ok('[KNOWN-BUG PROBE] a downhill-away gradient points UP the screen',
+    Math.abs(RN.slopeGlyphAngle([0, 1]) * D + 90) < 1e-9,
+    'canvas y grows downward, so -90 deg is up');
+  ok('...and downhill-toward-the-tee points down it',
+    Math.abs(RN.slopeGlyphAngle([0, -1]) * D - 90) < 1e-9);
+  ok('left and right are not flipped',
+    Math.abs(RN.slopeGlyphAngle([1, 0])) < 1e-9 && Math.abs(Math.abs(RN.slopeGlyphAngle([-1, 0]) * D) - 180) < 1e-9);
+
+  const rn = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+  // [KNOWN-BUG PROBE] Matt: "all of the greens you've created have dots all over them. I think you
+  // mistook the arrows indicating slope from the example game for decoration." Two bugs: the glyph
+  // was a line segment whose LENGTH was the slope magnitude (1-4 px on real data), and it was
+  // rasterised into the map at MAP_PPY, where a 3.5 yd cell is 8.4 px and a faithful glyph is 1.6.
+  ok('[KNOWN-BUG PROBE] the slope glyph is a FIXED size, not the slope magnitude',
+    !/cx \+ g\[0\] \* 3\.2/.test(rn) && /SLOPE_GLYPH_FRAC/.test(rn),
+    'the direction is the whole of what the reference encodes; 18 x 18 px on a 96 px grid');
+  ok('...and it is drawn per FRAME, not baked into the map raster',
+    /export function drawSlope/.test(rn) && /drawSlope\(ctx, hole, cam/.test(rn),
+    'a screen-space overlay grows with the zoom, which is when the read is actually used');
+  near('the glyph is about 0.30 of the grid spacing, as measured', RN.SLOPE_GLYPH_FRAC, 0.30, 0.02);
+  near('and it is drawn at about 57 % of the surface\'s own brightness', RN.SLOPE_TINT, 0.57, 0.02);
+
+  // THE ARC'S SCALE. Measured tick angles, straight from the footage.
+  for (const [pct, deg] of [[0.25, 139.0], [0.5, 191.6], [0.75, 243.0]]) {
+    near(`${pct * 100} % sits at ${deg} deg on the arc`,
+      SW.ARC_A0_DEG + pct * SW.ARC_DEG_PER_UNIT, deg, 1.2);
+  }
+  near('100 % is at 295 deg', SW.ARC_A0_DEG + SW.ARC_DEG_PER_UNIT, 295, 1.5);
+  near('the over-swing block starts at 311 deg', SW.ARC_A0_DEG + SW.BLOCK_FROM * SW.ARC_DEG_PER_UNIT, 311, 1.5);
+  near('and the arc ends at 338 deg', SW.ARC_A0_DEG + SW.SWING_MAX * SW.ARC_DEG_PER_UNIT, 338, 1.5);
+  ok('there is a plain buffer between the 100 % line and the danger', SW.BLOCK_FROM > 1.03);
+
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('the meter reads the scale from swing.js instead of keeping its own copy',
+    /ARC_A0_DEG \* DEG/.test(ui) && !/221 \* DEG/.test(ui),
+    'two copies of the scale is how the meter and the model drift apart while both look fine');
+  ok('[KNOWN-BUG PROBE] there are tick LINES at 25/50/75, not just labels',
+    /for \(const v of \[0\.25, 0\.5, 0\.75\]\) \{[\s\S]{0,400}?c\.beginPath\(\); c\.moveTo/.test(ui),
+    'Matt: "The 100 has the green line, which is good. but the others need lines as well."');
+  ok('the green stripe IS the 100 % line', /arc\(0\.985, 1\.004/.test(ui));
+
+  // The lie readout is a picture of the surface, not the word.
+  ok('[KNOWN-BUG PROBE] the lie readout is a PICTURE of the surface',
+    /function lieArt\(kind, pal\)/.test(ui) && /data-role="lieart"/.test(ui) && !/data-role="lie"/.test(ui));
+  ok('...and it paints from the SAME map the ground is painted from',
+    /fillsFor\(pal\)\[kind\]/.test(ui),
+    'a second colour table would let the tile show a green the course does not have');
+  ok('...and the lie name survives for a screen reader',
+    /setAttribute\('aria-label', t\(`lie_\$\{lie\}`\)\)/.test(ui));
 }
 
 console.log('\n-- 13. a whole hole can be played out --');

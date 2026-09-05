@@ -57,7 +57,6 @@ export const PALETTE = {
   treeCanopy: '#2c4718',
   treeRim: '#1d3110',
   path: '#6b7a63',
-  tick: '#5c8038',             // the green's slope read
   aim: '#e02424',
   aimLine: '#2f6fe0',          // the line is BLUE up to the 100 % dot (Matt, 2026-09-04)
   aimRisk: '#e02424',          // ...and RED past it. Every DOT is red, whatever the line is doing.
@@ -115,8 +114,9 @@ const TREE_FILL = {
   boulder: ['#8b7f72', '#4d453d'],
 };
 
-/** The paint colour for every surface kind, in one theme. */
-function fillsFor(pal) {
+/** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
+ *  lie tile paints the surface itself and must use the same colour the ground is drawn in. */
+export function fillsFor(pal) {
   return {
     fairway: pal.fairwayA,
     fringe: pal.fringe,
@@ -207,27 +207,8 @@ export function buildMap(hole, theme) {
     ctx.fill();
   }
 
-  // THE SLOPE TICKS ARE GENERATED FROM `green.slope`, never hand-drawn. If the art and the grid
-  // can disagree, the read lies to the player, and a putting green that lies is worse than one
-  // with no read at all (golf/CLAUDE.md, "The green and its slope grid").
-  const gb = greenBox(hole);
-  const sl = hole.green.slope;
-  ctx.strokeStyle = pal.tick;
-  ctx.lineWidth = Math.max(1, MAP_PPY * 0.5);
-  ctx.save();
-  tracePoly(ctx, hole.green.poly, toPx);
-  ctx.clip();
-  for (let r = 0; r < sl.rows; r++) {
-    for (let c = 0; c < sl.cols; c++) {
-      const g = sl.cells[r * sl.cols + c];
-      const cx = gb.minX + ((c + 0.5) * (gb.maxX - gb.minX)) / sl.cols;
-      const cy = gb.minY + ((r + 0.5) * (gb.maxY - gb.minY)) / sl.rows;
-      const [ax, ay] = toPx(cx, cy);
-      const [bx, by] = toPx(cx + g[0] * 3.2, cy + g[1] * 3.2);
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    }
-  }
-  ctx.restore();
+  // THE SLOPE READ IS NOT IN THE MAP ANY MORE. It is drawn per frame, at screen resolution, by
+  // `drawSlope` below - see its header for why a raster at MAP_PPY could not carry it.
 
   // Trees last: chunky dark canopies with a darker rim, drawn over whatever they stand on.
   for (const t of treesOf(hole)) {
@@ -385,6 +366,9 @@ export function drawFrame(ctx, map, hole, cam, st) {
     }
   }
 
+  // --- the green's slope read -----------------------------------------------
+  drawSlope(ctx, hole, cam, sx, sy, pal);
+
   // --- the golfer -----------------------------------------------------------
   // A small pixel figure stands at the ball: white cap with a black outline, skin-tone face, grey
   // polo and trousers, a dark club down to its head. Measured off the reference at ~75x100 of a
@@ -415,6 +399,98 @@ export function drawFrame(ctx, map, hole, cam, st) {
     ctx.fillRect(bx - 3, by - lift - 3, 6, 6);
   }
 
+  ctx.restore();
+}
+
+/** A darker shade of a colour, as a fraction of its own brightness. */
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
+/** THE GREEN'S SLOPE READ: one fixed-size CHEVRON per slope cell, pointing DOWNHILL, in a darker
+ *  tint of the putting surface.
+ *
+ *  Matt: "all of the greens you've created have dots all over them. I think you mistook the arrows
+ *  indicating slope from the example game for decoration."
+ *
+ *  He was right, and it was two separate mistakes:
+ *
+ *  1. OURS DREW A LINE SEGMENT WHOSE LENGTH WAS THE SLOPE MAGNITUDE. On real hole data that is 1 to
+ *     4 px, so it rendered as a field of dots with no readable direction. MEASURED off the
+ *     reference's putt frame at 1:1: the glyph is a FIXED 18 x 18 device px on a 96 x 96 px grid -
+ *     0.19 of the spacing - and the direction is the whole of what it encodes.
+ *  2. IT WAS RASTERISED INTO THE MAP at MAP_PPY (2.4 px/yd), where a 3.5 yd slope cell is 8.4 px and
+ *     a faithful 0.19 glyph would be 1.6 px. There is no drawing that survives that. It is a screen
+ *     -space overlay now, so it grows with the zoom - which is also when it is USED, since the
+ *     camera tightens to 34 yds for a putt.
+ *
+ *  MEASURED COLOUR: the chevron is (94,114,48) against a green of (174,199,82) - about 57 % of the
+ *  surface's own brightness in every channel. So it is derived from the palette rather than being a
+ *  fourth green somebody has to keep in step.
+ *
+ *  A cell with no meaningful gradient gets NO glyph. An arrow has to point somewhere, and "flat" is
+ *  a real thing for the read to say. */
+export const SLOPE_TINT = 0.57;
+/** The glyph's full width as a fraction of the grid spacing. MEASURED at 18-30 device px on a
+ *  96 px grid - 0.19 to 0.31 depending on which way the chevron is turned, since a V spans wider
+ *  than an L. Ours is one size, at the top of that range. */
+export const SLOPE_GLYPH_FRAC = 0.30;
+const SLOPE_MIN_PX = 3.5;                 // below this a chevron is a smudge; draw nothing
+const SLOPE_FLAT = 0.06;                  // gradients under this have no direction worth drawing
+
+/** The screen angle a cell's chevron points, from its world gradient.
+ *
+ *  THE SCREEN Y AXIS IS FLIPPED (`sy` is `cam.y - y`), so the world gradient has to be flipped with
+ *  it. Getting this wrong points every arrow UPHILL while looking entirely plausible, which is the
+ *  exact failure `holes.js` warns about for the grid itself - and it is why this is a named pure
+ *  function with a test rather than an expression inside a draw loop. */
+export function slopeGlyphAngle(g) { return Math.atan2(-g[1], g[0]); }
+
+export function drawSlope(ctx, hole, cam, sx, sy, pal) {
+  const sl = hole.green && hole.green.slope;
+  if (!sl || !sl.cells) return;
+  const gb = greenBox(hole);
+  const cellYd = Math.min((gb.maxX - gb.minX) / sl.cols, (gb.maxY - gb.minY) / sl.rows);
+  const cellPx = cellYd * cam.ppy;
+  const size = cellPx * SLOPE_GLYPH_FRAC;         // the glyph's full width, in screen px
+  if (size < SLOPE_MIN_PX) return;
+
+  ctx.save();
+  ctx.beginPath();
+  const poly = hole.green.poly;
+  ctx.moveTo(sx(poly[0][0]), sy(poly[0][1]));
+  for (let i = 1; i < poly.length; i++) ctx.lineTo(sx(poly[i][0]), sy(poly[i][1]));
+  ctx.closePath();
+  ctx.clip();
+
+  ctx.strokeStyle = shade(pal.green, SLOPE_TINT);
+  ctx.lineWidth = Math.max(1.5, size * 0.28);
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+  const arm = size / 2;
+  for (let r = 0; r < sl.rows; r++) {
+    for (let c = 0; c < sl.cols; c++) {
+      const g = sl.cells[r * sl.cols + c] || [0, 0];
+      const mag = Math.hypot(g[0], g[1]);
+      if (mag < SLOPE_FLAT) continue;
+      const cxw = gb.minX + ((c + 0.5) * (gb.maxX - gb.minX)) / sl.cols;
+      const cyw = gb.minY + ((r + 0.5) * (gb.maxY - gb.minY)) / sl.rows;
+      const px = sx(cxw); const py = sy(cyw);
+      // The chevron points DOWNHILL. `a` is the screen angle of the gradient; the two arms come
+      // back from the point at +/- 135 deg, which is the V in the reference.
+      const a = slopeGlyphAngle(g);
+      const tipX = px + Math.cos(a) * arm * 0.55;
+      const tipY = py + Math.sin(a) * arm * 0.55;
+      ctx.beginPath();
+      for (const d of [2.356, -2.356]) {
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
+      }
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
