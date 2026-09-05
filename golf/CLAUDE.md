@@ -1292,7 +1292,7 @@ meter rather than a sand bunker): three sharp peaks against flat noise at **139.
 
 | | assumed | MEASURED |
 |---|---|---|
-| 100 % power | 311 deg | **295 deg** |
+| 100 % power | 311 deg | **298 deg** (see the A0 correction below) |
 | the green stripe | 91-93 % power | **98.5-100.4 % - it IS the 100 % line** |
 | the over-swing block | 100-112 % | **107.6-120.6 %, with a plain buffer before it** |
 | `SWING_MAX` | 1.12 | **1.206** |
@@ -1520,6 +1520,48 @@ the club at all.
 Matt was told this and asked for it anyway. It is his game and it is a better rule than the
 reference's - a driver that is exactly as forgiving as a wedge is the thing he noticed. Written down
 so the next session does not "fix" it back to match the footage.
+
+## Zero is 90 degrees, and the tick scan was 3 degrees out (2026-09-05)
+
+Matt, the day the corrected arc shipped: *"whoa wait - go in and look at the power/aim meter. You
+moved it up and to the left and rotated it in an odd way."*
+
+He was right, and the cause is one constant. The tick scan put zero at **87 deg**, and the accuracy
+bar's corners are `ang(+/- BAR_HALF)` - so anything other than 90 TILTS THE WHOLE BAR. Measured on
+our own render: the two ends came out 1.8 px apart in height, **3 degrees off level**, on a
+horizontal pixel-art bar. It reads as broken.
+
+**THE REFERENCE'S OWN BAR SETTLES IT.** Cropped at 1:1, the white line along the top of its
+red/orange/green stripes runs **dead horizontal**. That is a far more robust observable than a
+luminance scan around an annulus, because **it needs no estimate of where the ring's centre is** -
+and an estimated centre is exactly what was wrong.
+
+Against a 90-degree zero, every angle the scan produced is about 3 degrees low:
+
+| | scan | expected at A0 = 90 |
+|---|---|---|
+| 25 % | 139.0 | 142 |
+| 50 % | 191.6 | 194 |
+| 75 % | 243.0 | 246 |
+| the block's start | 311 | 314 |
+| the arc's end | 338 | 341 |
+
+**A CONSTANT offset across all five** - a rotated centre estimate, not a different scale.
+
+**So the correction is `ARC_A0_DEG` alone, and nothing else moves.** Every percentage in the section
+above is a DIFFERENCE of two angles that shared the same bias, so it cancels: `SWING_MAX` is still
+120.6 % ((341-90)/2.08), `BLOCK_FROM` still 107.6 %, the green stripe still 98.6-100.5 % - the 100 %
+line, which is what Matt said it was. And `ARC_DEG_PER_UNIT` is set by the tick SPACING (52.6 and
+51.4 deg per 25 %), which a centre error of this size does not disturb at all.
+
+**The tick labels did genuinely move**, and that part is the measurement, not the bug: on a 208-degree
+arc the 100 sits at 298 deg where the old 221-degree build drew it at 311. What was wrong was the
+tilt.
+
+`golf/js/test.js` section 12d now carries a KNOWN-BUG PROBE on the geometry rather than only on the
+angles: the bar's two ends must be at the same height and its midpoint must be under the ring's
+centre, which is true if and only if zero is straight down. The scan's raw angles are still asserted,
+with the +3 correction applied and named.
 
 ## Two courses, thirty-six holes (2026-09-04)
 

@@ -1248,8 +1248,8 @@ class GolfGame {
     // per frame into power units, so a copy here that drifted would put the meter and the model on
     // two different scales while both looked perfectly reasonable. See swing.js's header for the
     // tick measurement that corrected it from 90/221 to 87/208 on 2026-09-05.
-    const A0 = ARC_A0_DEG * DEG;           // pos 0: the bar's centre
-    const DEG_PER_UNIT = ARC_DEG_PER_UNIT * DEG;   // 87 deg -> 295 deg is 100 % power
+    const A0 = ARC_A0_DEG * DEG;           // pos 0: STRAIGHT DOWN, the bar's centre - see swing.js
+    const DEG_PER_UNIT = ARC_DEG_PER_UNIT * DEG;   // 90 deg -> 298 deg is 100 % power
     const ang = (v) => A0 + v * DEG_PER_UNIT;
     const polar = (r, a) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     const arc = (from, to, style, width) => {

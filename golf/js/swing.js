@@ -68,8 +68,26 @@ export const SWING_MAX = 1.206;
 /** THE ARC'S GEOMETRY, in degrees, MEASURED (see the block above). It lives here rather than in the
  *  painter because it is not a drawing choice: it is the scale that converts the needle's measured
  *  speed in degrees per frame into this file's milliseconds per power unit, and having two copies
- *  is how the meter and the model drift apart. */
-export const ARC_A0_DEG = 87;
+ *  is how the meter and the model drift apart.
+ *
+ *  ZERO IS 90 DEGREES - STRAIGHT DOWN - AND THAT IS NOT NEGOTIABLE. It was briefly 87, taken from
+ *  the tick scan, and Matt spotted the result immediately: *"You moved it up and to the left and
+ *  rotated it in an odd way."* He was right. The accuracy bar's corners are `ang(+/- BAR_HALF)`, so
+ *  anything but 90 tilts the whole bar - measured at 3 degrees off level, which on a horizontal
+ *  pixel-art bar reads as broken.
+ *
+ *  THE REFERENCE'S BAR PROVES IT: cropped at 1:1, the white line along the top of its red/orange/
+ *  green stripes runs DEAD HORIZONTAL. That is a far more robust observable than a luminance scan
+ *  around an annulus, because it needs no estimate of where the ring's centre is - and an estimated
+ *  centre is exactly what was wrong. All three ticks came out about 3 degrees low against a 90-deg
+ *  zero (139 / 191.6 / 243 where 142 / 194 / 246 was expected), which is a CONSTANT offset across
+ *  all three: a rotated centre estimate, not a different scale.
+ *
+ *  So the correction is A0 alone. Every percentage below is a DIFFERENCE of two angles that shared
+ *  that same 3-degree bias, so the bias cancels and none of them move: SWING_MAX is still 120.6 %
+ *  ((341-90)/2.08), the block still starts at 107.6 %, and the green stripe is still 98.6-100.5 % -
+ *  the 100 % line, which is what Matt said it was. */
+export const ARC_A0_DEG = 90;
 export const ARC_DEG_PER_UNIT = 208;
 
 /** Where the over-swing BLOCK begins - 311 deg, which is 107.6 % on the measured scale. Between
