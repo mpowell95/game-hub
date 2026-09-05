@@ -209,6 +209,11 @@ export function flightPoint(p, distanceYd, sideYd, apex) {
  *  is both simpler to read and impossible to get subtly wrong for one particular geometry. The
  *  step is well under the narrowest trunk, which is how a fast ball is stopped from tunnelling
  *  straight through one (docs/BUILDING-A-GAME.md, Part 3). */
+/** How far around a ball lying IN the trees the stand stops blocking it overhead. Roughly two
+ *  crowns of a parkland pine: far enough that the ring of trunks you are standing among cannot
+ *  wall a ball in, close enough that the wood twenty yards ahead is still a wood. */
+export const ESCAPE_YD = 11;
+
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
   if (!trees.length) return null;
@@ -231,10 +236,23 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   //
   // Everything else - the tree you are 10 yards short of, which is the whole point of the hole -
   // is unchanged.
+  //  - AND A BALL STANDING IN THE WOOD PLAYS OUT OF IT. Once tree belts were closed up to the
+  //    density the reference's woodland actually has (holes.js's BELT_PITCH, 2026-09-05), the two
+  //    rules above stopped being enough: a ball inside a belt is under one crown and surrounded by
+  //    the next ring of them, so every low escape was blocked by a neighbour it was standing among.
+  //    Pine Valley 15 softlocked on the 36-hole test the day the belts closed. Which hole broke
+  //    depended on the seed, so a pitch that happened to pass was luck rather than a fix.
+  //
+  //    So: when the ball's own lie is the trees, the CANOPIES of the stand immediately around it
+  //    (inside ESCAPE_YD) do not stop the shot. Trunks still do, every tree beyond the stand still
+  //    does, and a ball on the fairway is completely unaffected - this reads only on a ball that is
+  //    already in the wood. It is the punch-out that the rule above already grants from under one
+  //    tree, granted from under the stand, which is what playing out of trees is.
+  const inWood = surfaceAt(hole, from[0], from[1]) === 'trees';
   const state = trees.map((t) => {
     const type = hole.treeTypes[t.type];
     const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
-    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy };
+    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy || (inWood && d0 <= ESCAPE_YD) };
   });
 
   // ...and the walk starts clear of the ball for the same reason.

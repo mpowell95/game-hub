@@ -27,6 +27,25 @@ export const MAP_PPY = 2.4;
  *  belts and the water down the left are both visible from the tee, and the map is still upscaled
  *  1.7x on screen (MAP_PPY is 2.4 px/yd) so the pixel-art look is untouched. Past about 164 the
  *  map would be DOWNscaled and start to shimmer; that is the real ceiling, not taste. */
+/** The mow stripes, MEASURED off s1-tee frame 30: a 48 device px period at ~12.7 px/yd, split
+ *  16 px dark to 32 px light. See PALETTE's fairway block for the colour half of the measurement. */
+export const MOW_PERIOD_YD = 3.8;
+/** Tree shadows, MEASURED off the same frame - see the block above the shadow pass in `buildMap`
+ *  for the canopy/patch pairs these come from. The offset is a multiple of the tree's own HEIGHT;
+ *  the radii are multiples of its canopy. */
+export const SHADOW_LEN = 0.92;      // [MEASURED] yards left, per yard of tree height
+export const SHADOW_DROP = 0.16;     // [MEASURED] yards down the hole, per yard of height
+// The measured patches (180-241 x 102-123 px against a ~155 px crown) are each one or two trees'
+// shadows already MERGED. Drawing every tree at the merged size and then merging them again turns
+// a belt's shade into one flat haze across the fairway, which is not what the frame shows: the
+// reference's band is a row of separate lumps with clean fairway between them. So the per-tree
+// ellipse is a shade UNDER the crown, and the merge does the rest.
+export const SHADOW_RX = 1.02;
+export const SHADOW_RY = 0.62;
+export const SHADOW_ALPHA = 0.15;    // [MEASURED] (124,151,63) / (155,177,92) = 0.85x
+
+export const MOW_DARK_SHARE = 1 / 3;
+
 export const VIEW_W_YDS = 95;
 
 /** ...and how wide the view is ON THE GREEN.
@@ -52,12 +71,20 @@ export const PALETTE = {
   bank: '#6b3330',             // [MEASURED] the red-brown dirt shoreline, a shade off the raw
                                // (117,58,56): at our scale the measured value reads hot against blue
   bankMud: '#38291f',          // [MEASURED] the near-black mud line at the water's lip
-  fairwayA: '#b0cb46',         // [MEASURED]
-  fairwayB: '#a0bd3c',         // the mow stripe. The measured pair (#aec944 / #b0cb46) is two
-                               // values apart and reads as flat at this pixel size, so the darker
-                               // stripe is widened deliberately. Narrow it back if it reads busy.
-  lightRough: '#85a330',       // [MEASURED]
-  heavyRough: '#6e812b',       // [MEASURED] deep shadow green
+  // THE MOW STRIPES, RE-MEASURED 2026-09-05 off s1-tee frame 30 at 1:1, because Matt's read was
+  // "too wide and too contrasty" and both halves of that measured true.
+  //   the pair            (155,177,92) light / (148,171,83) dark - SEVEN levels apart, ~4 %
+  //   the period          48 device px: 16 px of dark against 32 px of light
+  // An earlier pass recorded #b0cb46/#a0bd3c as measured and then WIDENED the darker stripe on
+  // purpose, reasoning that the real pair "reads as flat at this pixel size". It does not read as
+  // flat, it reads as mown - and the widened pair was 16 levels apart on a 14 yd period, which is
+  // 2.3x the contrast on 3.7x the width. Where the two readings disagree this one wins: it comes
+  // off the same frame as the fairway geometry, the water column and the seam, so the whole course
+  // is now sampled from one image rather than from three.
+  fairwayA: '#9bb15c',         // [MEASURED] (155,177,92)
+  fairwayB: '#94ab53',         // [MEASURED] (148,171,83) - the mow stripe
+  lightRough: '#8aa348',       // [MEASURED] (138,163,72), the step outside the seam
+  heavyRough: '#6e812c',       // [MEASURED] (110,129,44) deep shadow green
   green: '#a8d95e',
   greenEdge: '#93c74e',
   fringe: '#96c04a',
@@ -265,13 +292,17 @@ export function buildMap(hole, theme) {
     if (s.kind === 'fairway') {
       // Mown in vertical stripes of two alternating greens (§11). Clipped to the fairway so the
       // stripes end where the mower did.
+      // MEASURED: a 48 device px period on the reference, 16 px dark against 32 px light. At its
+      // 12.7 px/yd that is a 3.8 yd period - one narrow dark band every two and a half light ones,
+      // not the even 7-on-7-off this used to draw.
       ctx.clip();
       const bb = bboxOf(poly);
-      const stripe = 7 * MAP_PPY;                      // ~7 yards, a mower's width
+      const period = MOW_PERIOD_YD * MAP_PPY;
+      const dark = period * MOW_DARK_SHARE;
       ctx.fillStyle = pal.fairwayB;
       const [x0] = toPx(bb.minX, 0);
       const [x1] = toPx(bb.maxX, 0);
-      for (let x = x0, i = 0; x < x1; x += stripe, i++) if (i % 2) ctx.fillRect(x, 0, stripe, h);
+      for (let x = x0; x < x1; x += period) ctx.fillRect(x, 0, dark, h);
     } else if (s.kind === 'lightRough' || s.kind === 'heavyRough' || s.kind === 'trees') {
       ctx.clip();
       scatterTufts(ctx, bboxOf(poly), toPx, tintOf(FILL[s.kind] || pal.heavyRough, 1.18),
@@ -355,6 +386,48 @@ export function buildMap(hole, theme) {
   // THE SLOPE READ IS NOT IN THE MAP ANY MORE. It is drawn per frame, at screen resolution, by
   // `drawSlope` below - see its header for why a raster at MAP_PPY could not carry it.
 
+  // TREE SHADOWS, MEASURED 2026-09-05 off s1-tee frame 30 by pairing isolated canopies against the
+  // dark patches lying on the fairway beside them:
+  //
+  //   canopy (909,1221) -> patch (668,1244)     -241 px across, +23 down
+  //   canopy (912,1409) -> patch (705,1450)     -207 px,        +41
+  //   canopy (877,1510) -> patch (680,1558)     -197 px,        +48
+  //
+  // So the sun is low and off to the RIGHT and the shadow is thrown LEFT and a little DOWN the
+  // hole. The patches measure 180-241 px wide by 102-123 tall against a ~155 px canopy, and their
+  // average colour is (124,151,63) against the fairway's (155,177,92): 0.85x its brightness, a
+  // flat darkening rather than a colour of its own. Ours had none at all, which is most of why a
+  // belt read as stickers laid on grass rather than as trees standing in it.
+  //
+  // THE OFFSET FOLLOWS THE TREE'S OWN HEIGHT, not a fixed number of yards. ~210 px at 12.7 px/yd
+  // is 16.5 yds, which is 0.92 of a pine's 18 yd `height` - and a shadow whose length ignores the
+  // thing casting it makes a belt of mixed specimens look pasted on. It needs no new field:
+  // `height` is already there, doing the canopy-clearance job.
+  //
+  // IT IS COMPOSITED IN ONE PASS at SHADOW_ALPHA, not drawn per tree. Two overlapping shadows at
+  // 0.15 each would stack to 0.28 and a wood would come out blotched with its own darker seams;
+  // the measurement says a flat 15 %, so the ellipses are drawn opaque onto their own layer and
+  // that layer is laid down once.
+  {
+    const sh = document.createElement('canvas');
+    sh.width = w; sh.height = h;
+    const sc = sh.getContext('2d');
+    sc.fillStyle = '#000';
+    for (const t of treesOf(hole)) {
+      const type = hole.treeTypes[t.type];
+      const rr = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+      const [tx, ty] = toPx(t.x, t.y);
+      sc.beginPath();
+      sc.ellipse(tx - type.height * SHADOW_LEN * MAP_PPY, ty + type.height * SHADOW_DROP * MAP_PPY,
+        rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
+      sc.fill();
+    }
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA;
+    ctx.drawImage(sh, 0, 0);
+    ctx.restore();
+  }
+
   // (see `treeShapes` above for the silhouette)
   // TREES LAST, drawn over whatever they stand on.
   //
@@ -371,15 +444,42 @@ export function buildMap(hole, theme) {
   //
   // The clumps are seeded from the tree's own position, so a belt is the same wood every load (the
   // same reason `expandBelt` is seeded) and two trees standing side by side are not identical.
-  for (const t of treesOf(hole)) {
+  //
+  // THE WHOLE WOOD IS DRAWN IN THREE PASSES, not tree by tree. Once belts overlap - which they now
+  // do, because the reference's belt is one continuous mass rather than a row of crowns - a
+  // per-tree loop paints tree B's black key straight over tree A's finished canopy, and the
+  // mushroom ring this file already warns about comes back at every seam. Keys first, then every
+  // canopy over all of them, then the clumps: one wood, one outline.
+  const stand = treesOf(hole).map((t) => {
     const type = hole.treeTypes[t.type];
-    const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
+    const cactus = type.name === 'saguaro';
     const [px, py] = toPx(t.x, t.y);
+    const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+    return { t, type, cactus, px, py, r, shapes: treeShapes(px, py, r, cactus) };
+  });
+  {
+    const key = Math.max(1.2, MAP_PPY * 0.75);
+    for (const s of stand) {
+      const [, rim] = TREE_FILL[s.type.name] || [pal.treeCanopy, pal.treeRim];
+      ctx.fillStyle = tintOf(rim, 0.45);
+      for (const [cx, cy, cr] of s.shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr + key, 0, Math.PI * 2); ctx.fill(); }
+    }
+    for (const s of stand) {
+      const [fill] = TREE_FILL[s.type.name] || [pal.treeCanopy, pal.treeRim];
+      ctx.fillStyle = fill;
+      for (const [cx, cy, cr] of s.shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill(); }
+    }
+  }
+  for (const st of stand) {
+    const t = st.t;
+    const type = st.type;
+    const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
+    const px = st.px, py = st.py;
     // A saguaro is drawn at its TRUNK, not its canopy: it is a pillar, and a 1.8 yd disc is what
     // the ball actually has to miss. Everything else is drawn at the canopy it blocks with, so
     // what is painted is what stops the ball.
-    const cactus = type.name === 'saguaro';
-    const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+    const cactus = st.cactus;
+    const r = st.r;
     const rnd = mulberry32(Math.round(t.x * 977) ^ Math.round(t.y * 31));
 
     // THE SILHOUETTE IS A UNION OF CIRCLES, and the black key is drawn UNDER it at a slightly
@@ -387,14 +487,8 @@ export function buildMap(hole, theme) {
     // sub-path, so the first attempt drew a black ring around each bump and the belt came out
     // looking like a row of mushrooms - visible in the very first screenshot of this pass.
     // The bumps stay INSIDE `r`, because what is painted has to be what stops the ball.
-    const key = Math.max(1.2, MAP_PPY * 0.75);
-    const shapes = treeShapes(px, py, r, cactus);
+    const shapes = st.shapes;
     ctx.save();
-    ctx.fillStyle = tintOf(rim, 0.45);
-    for (const [cx, cy, cr] of shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr + key, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = fill;
-    for (const [cx, cy, cr] of shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill(); }
-
     if (!cactus) {
       // The clumps, clipped to the canopy so nothing spills onto the grass.
       ctx.beginPath();
