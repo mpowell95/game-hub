@@ -13,7 +13,7 @@
 import { polyOf, treesOf, greenBox, bboxOf, mulberry32 } from './holes.js';
 // The cup's DRAWN size comes from the physics constant, never a copy of it: the whole point of the
 // fix below is that the hole you see and the hole that captures are the same hole.
-import { CUP_CAPTURE_YD } from './shot.js';
+import { CUP_CAPTURE_YD , PUTT_GAMMA } from './shot.js';
 
 /** Course pixels per yard in the offscreen map. Low on purpose: this IS the pixel size. */
 export const MAP_PPY = 2.4;
@@ -625,7 +625,10 @@ export function drawFrame(ctx, map, hole, cam, st) {
     // nothing to read.
     const dots = (st.aimDots && st.aimDots.length)
       ? st.aimDots
-      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * f, risk: false }));
+      // THE DOTS ARE A POWER LADDER, so on a curved putter scale they sit at f ** PUTT_GAMMA of the
+      // range, not at even fractions of it. Even spacing would put the 50 % dot at 30 ft when 50 %
+      // power actually goes 20, and a read that lies is worse than no read.
+      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * Math.pow(f, PUTT_GAMMA), risk: false }));
     const full = dots.find((d) => !d.risk && d.at === Math.max(...dots.filter((x) => !x.risk).map((x) => x.at)));
     const fullAt = full ? full.at : dots[dots.length - 1].at;
     const endAt = dots[dots.length - 1].at;

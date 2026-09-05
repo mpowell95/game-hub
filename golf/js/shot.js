@@ -421,6 +421,57 @@ export const MAX_PUTT_FT = 60;
  *  about where full power lands. */
 export function puttRangeFt() { return MAX_PUTT_FT; }
 
+/** THE PUTTER'S POWER CURVE IS NOT LINEAR, and that is the whole reason short putts are makeable.
+ *
+ *  Matt, 2026-09-05: *"Short putts are impossible to make. It goes over the hole."* Measured, and
+ *  he is exactly right - it was never about the line:
+ *
+ *      a 2 ft putt drops for any power between 2.0 % and 11.4 %
+ *      at 1585 ms per power unit that window is 32 ms to 181 ms after the first tap
+ *
+ *  So the entire makeable window for a tap-in sat in the first fifth of a second of the backswing,
+ *  before the needle has visibly moved. Late by a fraction and the ball runs past the hole - which
+ *  is precisely what he described. The window was a perfectly respectable 8.9 frames wide; it was
+ *  in the wrong PLACE.
+ *
+ *  A LINEAR scale cannot fix that. Distance is proportional to power, so a 2 ft putt on a 60 ft
+ *  range needs 3.3 % of the meter no matter how the meter is timed, and the first 3 % of anything
+ *  is unhittable. Making the range follow the putt in hand does fix it and is what an earlier build
+ *  did - and it was reverted on purpose, because a scale that moves under the player is a rubber
+ *  band: 60 % power meant a different putt every time and nothing learned on one transferred to the
+ *  next.
+ *
+ *  So the scale stays FIXED and gets a curve. `distance = range * power^PUTT_GAMMA` spends more of
+ *  the meter on the short end while 100 % is still 60 ft on every green in the game:
+ *
+ *      putt     linear power / when      curved power / when
+ *       2 ft      3.3 %  /  53 ms         11.9 %  /  189 ms
+ *       3 ft      5.0 %  /  79 ms         15.4 %  /  244 ms
+ *      10 ft     16.7 %  / 264 ms         32.7 %  /  518 ms
+ *      30 ft     50.0 %  / 793 ms         64.8 %  / 1027 ms
+ *      60 ft    100.0 %  /1585 ms        100.0 %  / 1585 ms
+ *
+ *  The tap for a tap-in moves from 53 ms to 189 ms after the first tap, and its make window widens
+ *  from 149 ms to about 400. Long putts barely move, because that end of the curve is nearly
+ *  straight - which is what makes this a fix rather than a trade.
+ *
+ *  THE AIM LADDER USES THE SAME CURVE (`render.js` draws its dots at `f ** PUTT_GAMMA`), because
+ *  the dots are what a player gauges power against. Dots at even distances over a curved meter
+ *  would lie about where 50 % goes, and a putting read that lies is worse than none. */
+export const PUTT_GAMMA = 1.6;
+export function puttDistanceFt(power, rangeFt) {
+  return (rangeFt || MAX_PUTT_FT) * Math.pow(Math.max(0, Math.min(1, power)), PUTT_GAMMA);
+}
+
+/** The inverse: what power the meter needs for a putt of `ft`. Nothing in the GAME calls this - the
+ *  player sets the power by stopping the needle - but every test and probe that has to play a putt
+ *  does, and each one that computed `ft / rangeFt` by hand was silently a different putt from the
+ *  one the meter would give. */
+export function puttPowerFor(ft, rangeFt) {
+  const full = rangeFt || MAX_PUTT_FT;
+  return Math.min(1, Math.pow(Math.max(0, ft) / full, 1 / PUTT_GAMMA));
+}
+
 /** Constant rolling deceleration, in yards per second squared.
  *
  *  DERIVED FROM THE ONE MEASURED PUTT, not guessed: the reference's 17 ft putt decelerated to rest
@@ -545,7 +596,7 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
   // `rangeFt` is what a full-power putt covers. The caller passes puttRangeFt(distance to the pin);
   // it falls back to the old fixed ceiling only so a bare call still runs.
   const full = rangeFt || MAX_PUTT_FT;
-  const distYdWanted = ((full * power) / FT_PER_YD);
+  const distYdWanted = puttDistanceFt(power, full) / FT_PER_YD;
   let x = from[0];
   let y = from[1];
   // Full power covers `rangeFt` OVER THE GROUND THE BALL IS ABOUT TO CROSS - so the meter reads the
