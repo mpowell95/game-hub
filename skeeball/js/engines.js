@@ -76,16 +76,6 @@ const LOADERS = {
     machine: () => import('./machines/brickcity/machine.js'),
     render: () => import('./machines/brickcity/render.js'),
   },
-  // THE TUNING TWIN (2026-09-05) shares BRICK CITY's engine on purpose - see boards.js. It is the
-  // same machine with one control-curve number changed, so giving it its own folder would be a
-  // second copy of an engine to keep in step, which is the exact drift the HARD RULE is about.
-  // A board id with no row here falls back to THE CLASSIC's engine, which would silently be the
-  // wrong machine; this row is what stops that.
-  'brickcity-tune': {
-    physics: () => import('./machines/brickcity/physics.js'),
-    machine: () => import('./machines/brickcity/machine.js'),
-    render: () => import('./machines/brickcity/render.js'),
-  },
   runaway: {
     physics: () => import('./machines/runaway/physics.js'),
     machine: () => import('./machines/runaway/machine.js'),

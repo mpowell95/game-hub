@@ -76,11 +76,18 @@ function landing(angleDeg, power) {
 }
 
 // --- 1. a ball dropped over the mouth goes in -------------------------------------------------
-// 5.0-6.25 deg is the serve band that lands on this basket's axis (boards.js, the aim note);
-// 0.66-0.80 is the power band that lands on its tread. 6 x 15 = 90 throws.
+// 5.0-6.50 deg is the serve band that lands on this basket's axis (boards.js, the aim note);
+// 0.78-0.88 is the power band that lands on its tread. 7 x 11 = 77 throws.
+//
+// THE POWER BAND IS TIED TO maxSpeed AND MUST BE RE-MEASURED WHEN IT MOVES (2026-09-05). It was
+// 0.66-0.80 against maxSpeed 6.60; at 6.20 that band lands SHORT and only 5 of 90 throws still
+// arrived over the mouth, so every number below it measured nothing. The first assertion exists
+// to catch exactly that, and it did. Re-measured, the same 70% bar reads 74% (23 of 31) - so the
+// corner 100 is genuinely less forgiving on the shallower dial than the 93% it managed at 6.60,
+// which is the price of that change and is recorded in boards.js beside the number itself.
 const rows = [];
-for (let a = 5.0; a <= 6.26; a += 0.25) {
-  for (let p = 0.66; p <= 0.801; p += 0.01) rows.push({ a, p: +p.toFixed(3), ...landing(a, +p.toFixed(3)) });
+for (let a = 5.0; a <= 6.51; a += 0.25) {
+  for (let p = 0.78; p <= 0.881; p += 0.01) rows.push({ a, p: +p.toFixed(3), ...landing(a, +p.toFixed(3)) });
 }
 const over = rows.filter((r) => r.first && Math.abs(r.first.du) < 0.03 && Math.abs(r.first.dv) < 0.06);
 const overHit = over.filter((r) => r.hit);
