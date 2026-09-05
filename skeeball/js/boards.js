@@ -785,7 +785,26 @@ export const BOARDS = [
       },
 
       minSpeed: 2.60,
-      maxSpeed: 6.60,
+      // THE POWER DIAL, 6.60 -> 6.20 (2026-09-05, Matt: "The power thing we just updated is
+      // better. implement this", after playing the admin-only tuning twin that carried it).
+      //
+      // At 6.60 the dial was 12 bands with a FOLD-BACK at the top: dead 0-14%, the -10 to 42%,
+      // the 20 to 58%, the 50 to 80%, and then the last 12% went BACK DOWN to the 20 - throw
+      // harder, score less, with no way to read that off the machine. At 6.20 it is a clean,
+      // monotonic four - dead 0-20%, then the penalty row, the 20 and the 50 at about a quarter
+      // of the dial each - and the top of the dial stays at the top. Measured on 51 straight
+      // throws; on the 861-throw power x aim grid every basket is still reachable, the corner
+      // 100s keep their cells (8 + 9 -> 8 + 7), the 50 gains (7 -> 12) and the grid total goes
+      // UP, 760 -> 800.
+      //
+      // GUARD: THE CURVE'S SHAPE IS NOT THE LEVER, and that was measured before this landed, not
+      // assumed. Power is spent as ENERGY (physics.js interpolates v^2), and the obvious "make it
+      // linear" is linear in SPEED, which is worse on every count - the dead zone at the bottom
+      // grows 16% -> 24% and throws scoring nothing go 10/51 -> 15/51. Nor is the answer to raise
+      // minSpeed and delete the dead zone: that swings the grid from 760 to -550, because every
+      // weak throw that used to die harmlessly in the trough lands in a PENALTY basket instead.
+      // The dead zone is doing work. Only the top of the range wanted trimming.
+      maxSpeed: 6.20,
       // THE CORNER 100s' AIM (2026-09-02). Matt, on the build before this one: a swipe that
       // visually looks aimed at the corner basket "sometimes scores, sometimes misses completely",
       // and a degree of angle flips it. Two things were wrong, and neither was the basket.
@@ -1413,55 +1432,6 @@ export const BOARDS = [
     },
   },
 ];
-
-// --- THE TUNING TWIN (2026-09-05, Matt) ----------------------------------------------------------
-// A second BRICK CITY that differs by ONE NUMBER, so a control-curve change can be felt side by
-// side against the real machine instead of argued about. Matt asked for it as a "test/admin only
-// version... to test without interfering with anyone who might be playing".
-//
-// WHAT IT CHANGES: `maxSpeed` 6.60 -> 6.20, and nothing else. Measured on 51 straight throws, that
-// turns the power dial from 12 bands with a fold-back at the top (dead 0-14%, -10, 20, 50, then
-// BACK DOWN to the 20 for the last 12%) into a clean, monotonic four: dead 0-20%, then the penalty
-// row, the 20 and the 50 at about a quarter of the dial each. On the 861-throw power x aim grid
-// every basket stays reachable, the corner 100s keep their cells, and the grid total goes UP
-// (760 -> 800). The dial's SHAPE was not the lever and was measured before this: linear-in-speed
-// grows the dead zone from 16% to 24% and is worse on every count.
-//
-// GUARD: IT IS DERIVED FROM THE REAL ENTRY, NEVER COPY-PASTED. A pasted 280-line duplicate would
-// drift the moment anyone touches BRICK CITY's face, and then the two machines would no longer
-// differ by one number - which is the entire point of the comparison.
-//
-// WHY IT IS SAFE, and none of this is new machinery:
-//   - `adminOnly: true` makes its DEFAULT state Testing, so only a dev profile can see or play it
-//     (js/admin-config.js's isBoardTesting, read by ui.js's three gallery gates).
-//   - A Testing board records with `practice: true`, and recordSkeeball's practice branch writes
-//     ONLY sk.practice.boards.<id> and returns - no totals, no lifetime counters, no bests, no
-//     unlock, no goal, no leaderboard, no app-wide record. Nothing thrown here can reach anyone's
-//     history, including Matt's own real BRICK CITY records.
-//   - It shares BRICK CITY's ENGINE (one row in engines.js). No new physics, machine or render
-//     file exists, so the real machine cannot be changed by anything done for this one.
-// It is a bench instrument. Delete the block, its engines.js row and its goals.js row to remove it.
-{
-  const bc = BOARDS.find((b) => b.id === 'brickcity');
-  if (bc) {
-    BOARDS.push({
-      ...bc,
-      id: 'brickcity-tune',
-      name: 'BRICK CITY (TUNING)',
-      adminOnly: true,
-      geom: { ...bc.geom, maxSpeed: 6.20 },
-      specWaivers: {
-        ...(bc.specWaivers || {}),
-        'throw.range': 'This machine exists to TRY a speed range, so the rule it is measured '
-          + 'against is the thing under test. maxSpeed 6.20 is the candidate; aimMax 0.235 is '
-          + 'inherited unchanged from BRICK CITY, where it is the measured proportion that puts a '
-          + 'swipe at the corner 100\'s on-screen bearing onto its real serve bearing '
-          + '(test-brickcity-corner100.mjs pins it). BRICK CITY breaks this same rule today and '
-          + 'is NOT waived here - that is its own pre-existing gap, not this twin\'s to close.',
-      },
-    });
-  }
-}
 
 // THE STAMPING LOOP: on a cup board, a hole's value IS the value of the cup sitting in its slot.
 // Stamped once at module load so physics.js, the tests and every reader see ordinary valued
