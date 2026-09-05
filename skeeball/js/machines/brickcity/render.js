@@ -11,7 +11,7 @@
 // driven by the physics body's position AND quaternion, so it visibly rolls.
 
 import * as THREE from '../../vendor/three.module.min.js';
-import { buildMachine } from './machine.js';
+import { buildMachine, basketProfile } from './machine.js';
 import { BALLS_PER_GAME } from '../../boards.js';
 
 // How long a wall scuff lives (wallMarkAt). Matt asked for one that "fades away after a couple
@@ -1382,7 +1382,7 @@ export class Renderer {
 
   _wireBasket(H, color) {
     const G = this.G;
-    const R = H.r + G.collarThick / 2;
+    const { rTop: R, rBot: Rbot } = basketProfile(G, H);
     const col = new THREE.Color(color || 0xe8541f);
     // The emissive floor is the collar walls' lesson (_scallopedRim): a wall perpendicular to
     // the face gets no key light, and a thin wire even less.
@@ -1392,7 +1392,12 @@ export class Renderer {
     const hAt = (phi) => (H.lipLow
       ? H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2)
       : H.collarH);
-    const Rbot = R * 0.58;                           // the reference basket's taper
+    // `Rbot` COMES FROM basketProfile() NOW (2026-09-05), not from a taper written here. It used
+    // to be `R * 0.58` - the reference basket's taper, drawn with no reference to the ball or to
+    // the wall the ball actually hits, which is how the net came to be drawn 2.1 cm inside the
+    // basket the ball was falling through. Where the ball is too wide for that taper (every
+    // basket on this face except the -20s) the profile opens the net back out to what the ball
+    // can pass, so the net is drawn where the ball can really be.
     const yBot = 0.005;
     const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
 

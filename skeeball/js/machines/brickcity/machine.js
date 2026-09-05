@@ -16,6 +16,45 @@
 // Curved furniture is approximated with short box segments; the renderer draws the smooth
 // cylinder at the same radius, a sub-centimetre difference that keeps contacts exact.
 
+/** THE BASKET'S PROFILE - ONE SHAPE, USED BY THE WALL AND BY THE ART (2026-09-05).
+ *
+ *  Matt, on three clips: the ball "goes through the basket... sometimes when it counts and
+ *  sometimes when it doesn't." It was not a physics bug and no amount of fixing the physics
+ *  touched it. The basket he SEES and the basket the ball HITS were different shapes:
+ *  render.js's `_wireBasket` drew a funnel tapering to 58% of the rim, while machine.js built a
+ *  straight tube at full width all the way down. On the corner 100 that is a 2.1 cm disagreement
+ *  - a ball perfectly inside the real basket, drawn 2.1 cm outside the net it is falling through.
+ *
+ *  Matt's rule, and the acceptance test for all of it: "If a ball goes in, it must look like it
+ *  goes in. If a ball didn't go in, it must not look like it did." So there is now ONE profile
+ *  and both halves read it, which is the same guard the top of this file already makes about
+ *  every other solid: the wall you see IS the wall the ball hits.
+ *
+ *  GUARD: THE TAPER IS CLAMPED BY THE BALL, AND ON MOST OF THIS FACE THE CLAMP IS WHAT BINDS.
+ *  A basket must never narrow past what the ball can fall through - that is the BOWL failure this
+ *  machine has already paid for once (see the closed-basket note in skeeball/CLAUDE.md: build the
+ *  cup without letting the ball out and it becomes a trap). Measured on this board, ball radius
+ *  5.45 cm against a 1.20 cm wall:
+ *
+ *      basket   rim      net as drawn      what the ball can pass      binding
+ *      topR     6.42cm   3.72cm            6.33cm                      the BALL
+ *      topC     6.96cm   4.04cm            6.33cm                      the BALL
+ *      midR     7.65cm   4.44cm            6.33cm                      the BALL
+ *      lowR    11.51cm   6.68cm            6.33cm                      the drawing
+ *
+ *  So the -20s get a real funnel and the 100s, the 50 and the 40 come out very nearly straight -
+ *  because those mouths are barely wider than the ball and a net that narrowed there would be a
+ *  net the ball could not go through. The art follows this, not the other way round: the drawn
+ *  net stops pretending to close to 3.72 cm, which is precisely why the ball stops appearing
+ *  outside it. */
+export function basketProfile(G, H) {
+  const rTop = H.r + G.collarThick / 2;              // the rim, unchanged - Matt's mouth widths
+  const drawn = rTop * 0.58;                         // the reference basket's taper
+  const floor = G.ballR * 1.05 + G.collarThick / 2;  // narrowest a ball can still fall through
+  const rBot = Math.max(drawn, floor);
+  return { rTop, rBot, lean: Math.atan2(rTop - rBot, H.collarH || 1e-6) };
+}
+
 /** Build the whole machine description for one board's `geom` block. */
 export function buildMachine(G) {
   const t = G.boardTilt;
@@ -263,6 +302,14 @@ export function buildMachine(G) {
     // boxes were mis-oriented for a tread they were no longer standing on, too. (Matt,
     // 2026-08-26: "the ball sometimes gets stuck IN the negative baskets... There's nothing for
     // them to get stuck on." There was, and only render.js's smooth basket hid it.)
+    // THE COLLAR STAYS A STRAIGHT TUBE, and that is a measured decision, not an oversight. The
+    // obvious move once basketProfile() exists is to lean this wall in too, so the collar and the
+    // drawn net are the same funnel - and it was tried and reverted the same hour. On THIS face
+    // the top three rows have no room to taper (the ball is 5.45 cm against a 5.82 cm mouth), so
+    // their "funnel" comes out at 0.4 degrees: a straight tube by another name, but now SOLID for
+    // a captured ball, which is exactly the rim that "THE NET" was added to delete. Measured, the
+    // corner 100 fell from 74% to 19% of over-the-mouth arrivals - worse than the bug that rule
+    // was written for. The shape belongs in the THROAT, which only a captured ball ever meets.
     const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
@@ -318,21 +365,62 @@ export function buildMachine(G) {
     const H = G.holes[id];
     if (!H.collarH) continue;
     const N = G.cupSegments;
-    const rr = H.r + G.ballR + G.collarThick / 2;
-    // Deep enough that the commit test (ballR * 1.2 below the face) fires while the ball is still
-    // inside the tube; open at the bottom, so nothing can come to rest in it.
-    const top = H.collarH;
-    const bot = -G.ballR * 2.6;
+    // IT CONTINUES THE BASKET'S OWN PROFILE STRAIGHT DOWN (2026-09-05). It used to stand at
+    // `H.r + ballR` - a tube wide enough to hold a ball whose CENTRE was over the mouth, which is
+    // what capture measures - and that is exactly the 2.1 cm of daylight between the ball and the
+    // net Matt filmed. The collar above is a funnel now, so the throat is its foot: one radius,
+    // the profile's base, carried below the tread until the ball is committed.
+    // THE THROAT IS THE FUNNEL (2026-09-05). It used to be a straight tube at `H.r + ballR` - wide
+    // enough to hold a ball whose CENTRE was over the mouth, which is what capture measures, and
+    // that width is exactly the daylight Matt watched balls travel out through. It is a CONE now:
+    // wide at the rim so a ball can never be captured already overlapping it, closing to the drawn
+    // net's base by the time it reaches the tread, so a captured ball is guided to the middle of
+    // the basket instead of being merely contained somewhere inside it.
+    //
+    // GUARD: THE MOUTH OF THE CONE IS `H.r + ballR`, NOT the net's rim, and that is what makes it
+    // safe. Capture can fire with the ball's centre up to rEff off the axis while it is still
+    // ABOVE the face; a cone that started at the drawn rim would be inside the ball at that
+    // instant, and cannon-es answers an overlap with a position correction - the 10.8 m/s
+    // ricochet this machine has already been fixed for once.
+    //
+    // GUARD: IT IS ONLY EVER SOLID TO A BALL THIS BASKET HAS CAPTURED (physics.js `throatBit`),
+    // so it cannot deflect a throw that has not already gone in. That is what lets it be a funnel
+    // at all: a funnel in the COLLAR would be a solid rim on an uncaptured ball, which is the
+    // thing "THE NET" exists to remove - measured at 19% of over-the-mouth corner 100s when tried.
+    const prof = basketProfile(G, H);
+    const rMouth = H.r + G.ballR + G.collarThick / 2;
     const cupFrame = frameAt(H.v);
+    const bot = -G.ballR * 2.6;
+    // 1. the cone: the rim down to the tread.
+    {
+      const lean = Math.atan2(rMouth - prof.rBot, H.collarH);
+      const rMid = (rMouth + prof.rBot) / 2;
+      const span = Math.hypot(H.collarH, rMouth - prof.rBot);
+      for (let i = 0; i < N; i++) {
+        const phi = (i / N) * Math.PI * 2;
+        solids.push({
+          part: 'throat',
+          cup: id,
+          pos: faceToWorldIn(cupFrame, H.u + rMid * Math.cos(phi), H.v + rMid * Math.sin(phi), H.collarH / 2),
+          // GUARD: the width is sized at the CONE'S WIDE END, not its mid-radius. A ring of leaning
+          // flat boxes sized at rMid leaves a wedge-shaped GAP between neighbours at the wide end,
+          // and a captured ball slips straight through it - measured, 13.4 cm outside its own rim
+          // against 1.2 cm for the straight tube this replaced. Sizing to the mouth makes the
+          // segments OVERLAP at the narrow end instead, which costs nothing: they are static.
+          half: [rMouth * Math.tan(Math.PI / N), span / 2, G.collarThick / 2],
+          faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v), lean },
+        });
+      }
+    }
+    // 2. the neck: straight on down, deep enough that the commit test (ballR * 1.2 below the face)
+    //    fires while the ball is still inside it. Open at the bottom, so nothing can rest in it.
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
-      const pu = H.u + rr * Math.cos(phi);
-      const pv = H.v + rr * Math.sin(phi);
       solids.push({
         part: 'throat',
         cup: id,
-        pos: faceToWorldIn(cupFrame, pu, pv, (top + bot) / 2),
-        half: [rr * Math.tan(Math.PI / N), (top - bot) / 2, G.collarThick / 2],
+        pos: faceToWorldIn(cupFrame, H.u + prof.rBot * Math.cos(phi), H.v + prof.rBot * Math.sin(phi), bot / 2),
+        half: [prof.rBot * Math.tan(Math.PI / N), -bot / 2, G.collarThick / 2],
         faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
       });
     }

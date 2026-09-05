@@ -176,7 +176,13 @@ function buildWorld(board) {
       else if (s.faceRot) {
         const qx = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), s.faceRot.tilt);
         const qy = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), s.faceRot.phi);
-        body.quaternion = qx.mult(qy);
+        // `lean` (2026-09-05) tips a wall inward about its OWN tangent, AFTER phi has aimed it,
+        // which is what turns a ring of upright boxes into a funnel. Only the THROAT leans - see
+        // machine.js's throat block for why the collar above it deliberately does not.
+        const ql = s.faceRot.lean
+          ? new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), s.faceRot.lean)
+          : null;
+        body.quaternion = ql ? qx.mult(qy).mult(ql) : qx.mult(qy);
       }
     }
     body.userData = { part: s.part, cup: s.cup || null };

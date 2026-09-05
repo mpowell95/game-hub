@@ -41,6 +41,7 @@
 import { readFileSync } from 'node:fs';
 import { boardById } from './skeeball/js/boards.js';
 import { engineFor, loadEngine } from './skeeball/js/engines.js';
+import { basketProfile } from './skeeball/js/machines/brickcity/machine.js';
 
 const BOARD = 'brickcity';
 let passed = 0;
@@ -144,30 +145,41 @@ const mach = readFileSync(new URL('./skeeball/js/machines/brickcity/machine.js',
 const phys = readFileSync(new URL('./skeeball/js/machines/brickcity/physics.js', import.meta.url), 'utf8');
 const rend = readFileSync(new URL('./skeeball/js/machines/brickcity/render.js', import.meta.url), 'utf8');
 
-// The throat is real geometry, one tube per collared basket, and its radius is the derived one.
+// THE THROAT IS A CONE SINCE 2026-09-05, not the straight tube this probe was written against.
+// It was `H.r + ballR` all the way down - wide enough to hold a ball whose CENTRE was over the
+// mouth - and that width turned out to be the thing Matt was filming all along: a ball contained
+// by the physics but drawn 2.1 cm outside the net it was falling through. It now closes from that
+// same safe mouth to the drawn net's base, so a captured ball is guided to the MIDDLE of the
+// basket rather than merely held somewhere inside it. test-brickcity-basket-lie.mjs is the probe
+// for the picture; this one still owns the scoring and the containment.
 {
   const th = M.solids.filter((s) => s.part === 'throat');
   const collared = Object.keys(G.holes).filter((id) => G.holes[id].collarH > 0);
-  ok('machine: every collared basket has a throat',
-    collared.every((id) => th.filter((s) => s.cup === id).length === G.cupSegments),
-    `${th.length} boxes for ${collared.length} baskets at ${G.cupSegments} segments`);
-  ok('machine: the throat radius is r + ballR, not r',
-    /const rr = H\.r \+ G\.ballR \+ G\.collarThick \/ 2;/.test(mach), '');
+  ok('machine: every collared basket has a throat - a cone, then a neck',
+    collared.every((id) => th.filter((s) => s.cup === id).length === G.cupSegments * 2),
+    `${th.length} boxes for ${collared.length} baskets at ${G.cupSegments} segments x 2`);
+  ok('machine: the cone opens at r + ballR (so capture can never overlap it) and closes on the net',
+    /const rMouth = H\.r \+ G\.ballR \+ G\.collarThick \/ 2;/.test(mach)
+    && /Math\.atan2\(rMouth - prof\.rBot, H\.collarH\)/.test(mach), '');
   // Asked in THE HOLE'S OWN frame, never the nearest one - the mistake that cost two sessions on
-  // this machine's collars (test-brickcity-stall.mjs's header). Every box's centreline stands one
-  // ball radius outside the mouth, so a ball whose centre is over the mouth cannot pass it.
+  // this machine's collars (test-brickcity-stall.mjs's header). Every box sits on the cone's own
+  // mid-radius, or on the neck's, and nowhere else.
   const strays = [];
   for (const id of collared) {
     const H2 = G.holes[id];
     const fr = M.frameAt(H2.v);
-    const want = H2.r + G.ballR + G.collarThick / 2;
+    const prof = basketProfile(G, H2);
+    const rMouth = H2.r + G.ballR + G.collarThick / 2;
+    const wantCone = (rMouth + prof.rBot) / 2;
     for (const s of th.filter((x) => x.cup === id)) {
       const fh = M.worldToFaceIn(fr, { x: s.pos[0], y: s.pos[1], z: s.pos[2] });
       const d = Math.hypot(fh.u - H2.u, fh.v - H2.v);
-      if (Math.abs(d - want) > 1e-6) strays.push(`${id} box at ${(d * 100).toFixed(2)}cm, wanted ${(want * 100).toFixed(2)}cm`);
+      if (Math.abs(d - wantCone) > 1e-6 && Math.abs(d - prof.rBot) > 1e-6) {
+        strays.push(`${id} box at ${(d * 100).toFixed(2)}cm, wanted ${(wantCone * 100).toFixed(2)} or ${(prof.rBot * 100).toFixed(2)}cm`);
+      }
     }
   }
-  ok('machine: every throat box stands r + ballR from its own basket\'s axis', strays.length === 0,
+  ok('machine: every throat box sits on the cone\'s mid-radius or on the neck', strays.length === 0,
     strays.slice(0, 3).join('; '));
 }
 ok('physics: each throat is on its OWN collision bit, above the cup bits',
