@@ -1035,8 +1035,37 @@ console.log('\n-- 12e. THE COURSE ART PASS --');
   // multi-arc path outlines every SUB-path, so the first attempt put a black ring around each bump
   // and a tree belt came out looking like a row of mushrooms.
   ok('[KNOWN-BUG PROBE] the tree key is filled under the canopy, never stroked over it',
-    /for \(const \[cx, cy, cr\] of shapes\) \{ ctx\.beginPath\(\); ctx\.arc\(cx, cy, cr \+ key/.test(rn)
+    /ctx\.arc\(cx, cy, cr \+ key, 0, Math\.PI \* 2\); ctx\.fill\(\)/.test(rn)
     && !/ctx\.lineWidth = Math\.max\(1\.2, MAP_PPY \* 0\.75\);\s*\n\s*ctx\.strokeStyle = tintOf\(rim/.test(rn));
+
+  // [KNOWN-BUG PROBE] ...and EVERY key before ANY canopy. Belts overlap now (BELT_PITCH), so a
+  // per-tree draw paints the next tree's black key straight over the last tree's finished canopy
+  // and the mushroom ring comes back at every seam inside the wood, where no probe on a single
+  // tree's shapes could ever see it.
+  {
+    const keyAt = rn.indexOf('cr + key, 0, Math.PI * 2); ctx.fill()');
+    const fillAt = rn.indexOf('for (const [cx, cy, cr] of s.shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr, 0');
+    ok('[KNOWN-BUG PROBE] every tree key is laid down before any canopy',
+      keyAt > 0 && fillAt > keyAt && /const stand = treesOf\(hole\)\.map/.test(rn));
+  }
+
+  // Tree shadows: measured off the reference, offset by the tree's own HEIGHT and composited in
+  // ONE pass - stacking them per tree would blotch a wood with its own darker seams.
+  ok('trees cast a shadow, offset by their own height',
+    /SHADOW_LEN/.test(rn) && /type\.height \* SHADOW_LEN/.test(rn) && /type\.height \* SHADOW_DROP/.test(rn));
+  ok('...composited once at SHADOW_ALPHA, not drawn per tree',
+    /ctx\.globalAlpha = SHADOW_ALPHA;\s*\n\s*ctx\.drawImage\(sh, 0, 0\)/.test(rn));
+
+  // The mow stripes, re-measured: a 3.8 yd period at a third dark, against a pair seven levels
+  // apart. The old build drew 7-on-7-off at sixteen levels - 3.7x the width, 2.3x the contrast.
+  {
+    const a = RN.PALETTE.fairwayA, b2 = RN.PALETTE.fairwayB;
+    const lum = (h2) => parseInt(h2.slice(1, 3), 16) + parseInt(h2.slice(3, 5), 16) + parseInt(h2.slice(5, 7), 16);
+    ok(`the mow stripe period is the measured 3.8 yds (${RN.MOW_PERIOD_YD})`, Math.abs(RN.MOW_PERIOD_YD - 3.8) < 0.01);
+    ok(`...one third of it dark (${RN.MOW_DARK_SHARE.toFixed(2)})`, Math.abs(RN.MOW_DARK_SHARE - 1 / 3) < 0.01);
+    ok(`...and the pair is under 6 % apart (${(100 * (lum(a) - lum(b2)) / lum(a)).toFixed(1)} %)`,
+      lum(a) > lum(b2) && (lum(a) - lum(b2)) / lum(a) < 0.06);
+  }
 
   // The seam is a DARKENING, not a colour: measured at 0.87x the darker surface's own brightness,
   // which is why one rule covers sand-on-grass, water-on-grass and green-on-collar alike.

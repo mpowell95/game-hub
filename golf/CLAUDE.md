@@ -1801,3 +1801,133 @@ guidance. The ones this game is most likely to get wrong:
 - **The player's name comes from `loadProfile()`, defaults-only.** Golf prefills from it and never
   writes back.
 - **Every visible string goes through `t()` at RENDER time**, EN and ES, in `js/strings.js`.
+
+## The fairways were rectangles, and the woods were ribbons (2026-09-05)
+
+Matt: *"fix everything. AND the stuff you haven't mentioned yet. Your fairways and stuff are almost
+perfect rectangles. So it's not challenging or fun. Look at the real holes. The fairways look more
+natural. There are actual obstacles. It's challenging and fun."*
+
+Two jobs, and the second is the bigger one. Everything below was MEASURED off s1-tee frame 30
+(1206 x 2622, read at 1:1) before a line was changed, because the standing instruction on this
+clone is that nothing gets guessed at twice.
+
+### What the reference's ground actually does
+
+Scanned every 8 rows across the fairway's own colour, from y=940 to y=2116:
+
+| | reference | ours, before |
+|---|---|---|
+| fairway width along ONE hole | **106 -> 563 px, a 5.3 : 1 range** | <= 1.9 : 1 |
+| how far the LEFT edge wandered | **sd 40 px** - a near-straight wall for 776 px | symmetric by construction |
+| how far the RIGHT edge wandered | **sd 77 px** over the same run | identical to the left, always |
+| mow stripe period | **48 px** = 16 dark / 32 light, ~3.8 yds | 14 yds |
+| the mow pair | (155,177,92) / (148,171,83) - **7 levels, ~4 %** | 16 levels, ~9 % |
+| a tree canopy | ~155 px, and the belt is **one mass 246 x 1040 px** | 9 yds at 9 yd spacing: touching at best |
+| a tree's shadow | **1.2x the crown wide, 0.7x tall, 0.85x the ground's brightness** | none at all |
+| chevrons on the FAIRWAY | **there are none.** Two mow tones plus shadows, nothing else | n/a |
+
+That last row is a correction to my own earlier note, which listed fairway chevrons as an
+unmeasured item. The fairway carries no glyphs; the chevrons are the GREEN's slope read and
+nothing else.
+
+### The corridor
+
+`fwAt` fed BOTH sides of `corridor()`, so every fairway on the property was exactly symmetric about
+its centreline, and the authored profiles ran 11-19 yds of half-width. A wavy line offset equally
+both ways is a rectangle with a bend in it, which is precisely what Matt was looking at.
+
+Three things fix it, and **only the first is a measurement** - the other two are design, said out
+loud here so a later session does not go hunting for footage that supports them:
+
+1. **`EDGE_WOBBLE`** - each side gets two sine waves at unrelated wavelengths, phases and
+   amplitudes from the hole's own seed. Amplitude is a FRACTION of the corridor's width, so a 9 yd
+   neck does not get a 6 yd wobble and close itself.
+2. **`CURVE_ASYM`** - a bend is wider on the OUTSIDE. Real architecture: the outside is where the
+   safe line finishes and the inside is the corner you are being tempted to cut. It also produces
+   the measured signature directly, because a centreline that bends while one edge holds station IS
+   an asymmetric corridor.
+3. **`PINCH` at the LANDING ZONES** - the stock ladder says a drive carries 215 and a 3 wood 195, so
+   a hole knows its own landing zones from its par and its length, and that is where the fairway is
+   squeezed (Gaussian, not a step, so it necks and reopens rather than stepping through a doorway).
+   **This is the whole of "challenging and fun": the shot you actually hit is the one defended.**
+
+`fwL` / `fwR` override one side outright for a hole that wants a specific shape. Measured after:
+the median hole's width now ranges **2.4 : 1** and the widest **5.4 : 1**, against <= 1.9 before.
+
+### Hole 1 was hand-authored, and it was the worst one
+
+Eight points a side at a **dead constant 15 yd half-width** - a 1.0 : 1 corridor, on the first hole
+anybody plays. Its two corridor rings were re-cut against the same rule (neck to 9-10 at 215,
+opening to 19-21 either side, the left edge swinging while the right holds), and it gained the
+fairway bunker the generated holes now get automatically. Its centreline, water, green, slope grid
+and greenside bunkers are untouched.
+
+### And then three MORE offsets showed up behind it
+
+The first overview render after the corridor fix made them obvious, and each is a rectangle one
+step further out:
+
+- **The rough was a perfect halo.** A constant `roughPad` added to a wandering fairway just traces
+  it. It wanders on its own wavelengths now, per side.
+- **A wood was a ribbon.** Both belt edges were a fixed offset from the rough, so however much the
+  hole breathed the trees were a band of unvarying depth tracking it. The inner edge noses in and
+  out on one wave and the depth swells on another - but the nose **stays outside the rough**,
+  because letting it go negative put trees in the light rough on Pine Valley 15 and softlocked the
+  ball there.
+- **Every green was the same circle at a different size.** `greenPoly` drew a perfect 12-gon. It
+  takes a seed now and `greenShape` returns twelve smoothed radius factors; **a green and its own
+  fringe must share that seed**, or the collar crosses the putting surface and the lie lookup
+  flickers along the seam.
+
+### Obstacles where the ball goes
+
+A hole that pinches at the landing zone and puts nothing in the pinch is asking the player to avoid
+a colour. Every landing zone with no authored hazard within `DEFEND_NEAR` (38 yds) now gets a
+fairway bunker dug into the OUTSIDE of the bend. It only ever ADDS, only where the author left a
+gap, and `defend: false` opts out. Pine Valley went 13 fairway bunkers -> 17, Red Mesa 10 -> 23, and
+all 36 holes are still finished in par+2 or better - which is what keeps "challenging" from quietly
+becoming "unfair".
+
+### Three bugs this pass found, all of which looked like the fix rather than a bug
+
+- **2,812 cacti.** `BELT_PITCH` clamps a belt's spacing to its canopy so a wood closes into a wall.
+  A saguaro's "canopy" is 1.8 yds - it is a pillar, not a crown - so the bare clamp turned Red Mesa
+  10's two belts into a thicket at 2 yd centres that softlocked the ball. A belt may be closed up,
+  **never past 55 % of the spacing its author chose**.
+- **A ball standing in a wood could not play out of it.** `treeHit` already ignored the tree you are
+  touching and the canopy you are under; once belts were closed up that stopped being enough,
+  because a ball inside a belt is under one crown and ringed by the next. Which hole broke depended
+  on the seed, so a pitch that happened to pass was luck. **`ESCAPE_YD`**: when the ball's own lie is
+  `trees`, the canopies of the stand within 11 yds do not stop the shot. Trunks still do, the wood
+  twenty yards ahead still does, and a ball on the fairway is completely unaffected. It is the
+  punch-out the file already granted from under one tree, granted from under the stand.
+- **`route` was the CENTRELINE, and the fairway had moved off it.** They were the same thing while
+  every corridor was symmetric. Once the two edges got their own widths the centreline could sit
+  well over toward one edge - invisible to a player, who aims at what they can see, but section
+  14's test player aims down `route`, so Pine Valley 15 read as a hole that took ten shots with a
+  perfectly playable corridor beside it. `route` is the MIDPOINT of the two edges now.
+
+### The art half
+
+- **The mow stripes**: 3.8 yd period, a third of it dark, on the measured pair. An earlier pass
+  recorded the real pair and then widened the darker stripe on purpose, reasoning that seven levels
+  "reads as flat at this pixel size". It does not read as flat, it reads as mown - and the widened
+  version was 2.3x the contrast on 3.7x the width. Where two readings of the fairway's colour
+  disagree, **this frame wins**: the geometry, the water column and the seam all came off it too, so
+  the course is now sampled from one image rather than three.
+- **Tree shadows**, which did not exist. Offset **by the tree's own `height`** (0.92 across, 0.16
+  down) rather than by a fixed number of yards - a shadow that ignores the thing casting it makes a
+  belt of mixed specimens look pasted on, and `height` is already there doing the canopy-clearance
+  job. **Composited in ONE pass at `SHADOW_ALPHA`**: two overlapping shadows at 0.15 each would
+  stack to 0.28 and a wood would come out blotched with its own darker seams.
+- **The wood is drawn in three passes, not tree by tree.** Every black key, then every canopy over
+  all of them, then the clumps. A per-tree loop paints the next tree's key over the last tree's
+  finished canopy, which is the mushroom-ring bug this file already carries a probe for - reborn at
+  every seam INSIDE the wood, where a probe on one tree's shapes could never see it. There is a
+  second probe on the ordering now.
+- **No trunks.** The view is straight down and the reference's canopies are a solid mass with no
+  dark core; there is nothing to draw.
+
+Covered by `golf/js/test.js` section 12e (the second key-ordering probe, the shadow offset and its
+single composite, and the three stripe numbers) and section 14, which plays all 36 holes.

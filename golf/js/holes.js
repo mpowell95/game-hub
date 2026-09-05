@@ -75,11 +75,33 @@ export function mulberry32(a) {
   };
 }
 
-export function expandBelt(belt) {
+/** How far apart belt trees stand, as a multiple of their canopy RADIUS, when the authored spacing
+ *  would leave them apart. [MEASURED] the reference's belt runs ~87 px between crowns against a
+ *  ~155 px crown - a pitch of 0.56 diameters, so 1.12 radii. */
+export const BELT_PITCH = 1.15;
+
+export function expandBelt(belt, type) {
   const rnd = mulberry32(belt.seed);
   const { minX, minY, maxX, maxY } = bboxOf(belt.poly);
   const out = [];
-  const step = belt.spacing;
+  // A BELT HAS TO CLOSE UP INTO A WALL. Measured on the reference (s1-tee frame 30): a single
+  // canopy is ~155 device px across and the belt beside the fairway is one continuous mass 246 px
+  // wide by 1040 tall - individual crowns are only readable as bumps along its edge. Ours were
+  // authored at 7-11 yds against a 9 yd pine canopy, so they touched at best and left daylight at
+  // worst, which is what made a belt read as a row of buttons.
+  //
+  // The authored `spacing` is kept as a CEILING rather than replaced, so a deliberately sparse
+  // belt (Red Mesa's palo verdes at 15 yds against a 13 yd canopy) still thins out; it is only
+  // clamped down when the trees would not otherwise meet. BELT_PITCH is off the reference's own
+  // pitch-to-diameter ratio.
+  //
+  // THE FLOOR IS NOT OPTIONAL. A saguaro's "canopy" is 1.8 yds - it is a pillar, not a crown - so
+  // a bare canopy*PITCH clamp turned Red Mesa 10's two belts of 13 yd spacing into 2,812 cacti at
+  // 2 yd centres: an impassable thicket that softlocked the ball on the first run of the 36-hole
+  // test, and a rendering cost to match. A belt may be closed up, never past 55 % of the spacing
+  // its author chose - so a wood becomes a wall and a stand of cactus stays a stand of cactus.
+  const step = Math.max(belt.spacing * 0.55,
+    Math.min(belt.spacing, (type && type.canopy ? type.canopy : belt.spacing) * BELT_PITCH));
   for (let y = minY; y < maxY; y += step) {
     for (let x = minX; x < maxX; x += step) {
       const jx = x + (rnd() - 0.5) * step;
@@ -95,7 +117,7 @@ export function expandBelt(belt) {
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
   const all = [...(hole.trees || [])];
-  for (const belt of hole.treeBelts || []) all.push(...expandBelt(belt));
+  for (const belt of hole.treeBelts || []) all.push(...expandBelt(belt, (hole.treeTypes || [])[belt.type]));
   Object.defineProperty(hole, '_trees', { value: all, enumerable: false });
   return all;
 }
