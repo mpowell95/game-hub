@@ -28,9 +28,37 @@ export function clubSymbol(id) {
   return 'ironArt';
 }
 
+/** The art's own centre, from the union of the five bounding boxes. Every per-club scale below is
+ *  taken ABOUT THIS POINT, so a club grows or shrinks in place instead of drifting toward a corner
+ *  of the tile. */
+const ART_CX = 92;
+const ART_CY = 95;
+
+/** PER-CLUB SIZE, on top of the drawing it shares.
+ *
+ *  Matt: *"make the 3 wood a little bigger than the 5 wood. it's ok if you have to make the driver
+ *  bigger as well so there's a clear step down."* The two woods share one drawing, so without this
+ *  they rendered identically - a 3 wood and a 5 wood were the same picture with a different name.
+ *
+ *  Rendered heights in the 54 px tile: driver 53.6, 3 wood 39.0, 5 wood 32.6. Steps of about 15 px
+ *  and 6 px, which reads as a ladder rather than as three sizes of the same thing.
+ *
+ *  THE DRIVER'S 1.06 IS THE LARGEST THAT STILL FITS `CLUB_ART_VIEWBOX`. Scaled about the centre
+ *  above it lands at x 4.2-179.6 and y 7.0-183.7 against a box of x 4-180, y 6-184 - so it fills
+ *  the frame and does not clip, and anything larger would need the viewBox widened, which shrinks
+ *  every OTHER club in the tile. Check that arithmetic before raising it.
+ *
+ *  Anything absent is 1: the irons and wedges all share one size on purpose, because there are
+ *  eight irons and no sensible ladder to draw between a 4 and a 5. */
+const CLUB_SCALE = { driver: 1.06, '3wood': 0.98, '5wood': 0.82 };
+
+export function clubScale(id) { return CLUB_SCALE[id] || 1; }
+
 /** One `<svg>` for a club tile. The symbol lives in the defs block injected once per screen. */
 export function clubArtSVG(id) {
-  return `<svg class="gf-clubart" viewBox="${CLUB_ART_VIEWBOX}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><use href="#gf-${clubSymbol(id)}"/></svg>`;
+  const k = clubScale(id);
+  const g = k === 1 ? '' : ` transform="translate(${(ART_CX * (1 - k)).toFixed(2)},${(ART_CY * (1 - k)).toFixed(2)}) scale(${k})"`;
+  return `<svg class="gf-clubart" viewBox="${CLUB_ART_VIEWBOX}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><use href="#gf-${clubSymbol(id)}"${g}/></svg>`;
 }
 
 /** The gradients, clips and paths themselves. Injected ONCE into a zero-size svg on the play
