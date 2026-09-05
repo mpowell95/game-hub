@@ -46,6 +46,12 @@
   .row label { font-weight: 650; }
   .val { font-variant-numeric: tabular-nums; color: var(--gold); font-weight: 700; }
   .hint { color: var(--dim); font-size: 12px; }
+  /* Where the two 100s actually APPEAR, marked on the slider itself. */
+  .marks { position: relative; height: 15px; margin: 1px 0 2px; }
+  .marks span { position: absolute; transform: translateX(-50%); color: #ffce3a;
+    font-size: 10.5px; white-space: nowrap; top: 0; }
+  .marks span::before { content: ''; position: absolute; left: 50%; top: -5px; width: 1px;
+    height: 5px; background: #ffce3a; opacity: 0.75; }
   input[type=range] { width: 100%; margin: 10px 0 2px; accent-color: var(--gold); height: 28px; }
   .ticks { display: flex; justify-content: space-between; color: var(--dim); font-size: 11.5px;
     font-variant-numeric: tabular-nums; }
@@ -107,6 +113,7 @@
     <div class="row"><label for="angle">Angle</label><span class="val" id="angleVal">0.0°</span></div>
     <input type="range" id="angle" min="-13.5" max="13.5" step="0.1" value="0">
     <div class="ticks"><span>13.5° left</span><span>straight</span><span>13.5° right</span></div>
+    <div class="marks" id="angleMarks"></div>
     <p class="hint" id="angleHint"></p>
 
     <div class="row" style="margin-top:14px"><label for="power">Power</label><span class="val" id="powerVal">0.70</span></div>
@@ -135,8 +142,12 @@
       <span><i style="background:#e0532f"></i>−20</span>
       <span><i style="background:#a33427"></i>−10</span>
       <span><i style="background:#2a3342"></i>nothing</span>
+      <span><i style="background:#6b5a20"></i>dimmed = off a wall first</span>
     </div>
-    <p class="note">Power runs bottom (soft) to top (hard). Tap the map to jump the sliders there.</p>
+    <p class="note">Power runs bottom (soft) to top (hard). Tap the map to jump the sliders there.
+      A dimmed cell scored off a side rail or the back wall before it dropped in — a bank, not an
+      aimed shot. On this machine 51% of the 100s are banks; the clean ones sit in a band at
+      +1.0° to +6.5° on the right and −6.5° to −1.5° on the left.</p>
   </div>
 
   <p class="note" id="foot"></p>
@@ -176,6 +187,31 @@ const draw = () => R.render(ghost, 0);
 // The engine takes aim as -1..1 and multiplies by geom.aimMax, so degrees convert straight back.
 const AIM_MAX_DEG = G.aimMax * 180 / Math.PI;
 const degToAim = (deg) => Math.max(-1, Math.min(1, (deg * Math.PI / 180) / G.aimMax));
+
+// THE SLIDER IS THE SERVE ANGLE. YOUR THUMB IS NOT. js/ui.js turns a swipe into a serve through
+// raw = swipeAngle / 0.38, then aim = sign * |raw|^aimCurve, then serve = aim * geom.aimMax - so
+// on this machine (aimCurve 1, aimMax 0.235) a swipe reads out at 0.62x on this slider. Without
+// both numbers on screen the page quietly tells you to aim NARROWER than you really do: the right
+// 100 APPEARS 8.9 deg off centre, and 8.9 on this slider is a far wider throw than that swipe.
+const SWIPE_DIV = 0.38;                        // ui.js's divisor: the widest diagonal a thumb reaches
+const CURVE = G.aimCurve > 0 ? G.aimCurve : 2; // brickcity is 1 (proportional); the default is square
+const serveFromSwipe = (sw) => {
+  const raw = Math.max(-1, Math.min(1, (sw * Math.PI / 180) / SWIPE_DIV));
+  return Math.sign(raw) * Math.pow(Math.abs(raw), CURVE) * G.aimMax * 180 / Math.PI;
+};
+const swipeFromServe = (sv) => {
+  const a = Math.min(1, Math.abs(sv * Math.PI / 180) / G.aimMax);
+  return Math.sign(sv) * Math.pow(a, 1 / CURVE) * SWIPE_DIV * 180 / Math.PI;
+};
+/** How far off centre a basket LOOKS from the ball, through the real play camera. */
+function screenBearing(id) {
+  const h = G.holes[id];
+  const w = M.faceToWorld(h.u, h.v, 0);
+  const a = new THREE.Vector3(w[0], w[1], w[2]).project(R.camera);
+  const b = new THREE.Vector3(0, G.ballR, -0.12).project(R.camera);
+  const asp = R.camera.aspect || 1;
+  return Math.atan2((a.x - b.x) * asp, a.y - b.y) * 180 / Math.PI;
+}
 const launchSpeed = (p) => Math.sqrt(Math.max(0.4, G.minSpeed ** 2 + Math.max(-0.75, p) * (G.maxSpeed ** 2 - G.minSpeed ** 2)));
 
 function simulate(deg, power) {
@@ -259,11 +295,15 @@ let lastPath = null, playing = 0;
 
 function run() {
   const deg = +angleEl.value, pw = +powerEl.value;
-  angleVal.textContent = (deg > 0 ? '+' : '') + deg.toFixed(1) + '°';
+  angleVal.textContent = (deg > 0 ? '+' : '') + deg.toFixed(1) + '° · swipe '
+    + (deg > 0 ? '+' : '') + swipeFromServe(deg).toFixed(1) + '°';
   powerVal.textContent = pw.toFixed(2);
+  const sw = swipeFromServe(deg);
   document.getElementById('angleHint').textContent =
-    deg === 0 ? 'Straight down the middle.'
-      : `${Math.abs(deg).toFixed(1)}° to the ${deg < 0 ? 'left' : 'right'} of centre (the machine's limit is ${AIM_MAX_DEG.toFixed(1)}°).`;
+    deg === 0 ? 'Straight down the middle — no swipe angle at all.'
+      : `${Math.abs(deg).toFixed(1)}° of serve to the ${deg < 0 ? 'left' : 'right'} — which is a `
+        + `${Math.abs(sw).toFixed(1)}° swipe on screen. The limit is ${AIM_MAX_DEG.toFixed(1)}° `
+        + `(a ${Math.abs(swipeFromServe(AIM_MAX_DEG)).toFixed(1)}° swipe).`;
   document.getElementById('powerHint').textContent =
     `Leaves the ramp at ${launchSpeed(pw).toFixed(2)} m/s.`;
   const res = simulate(deg, pw);
@@ -274,10 +314,29 @@ function run() {
   verdict(res);
   markMap(deg, pw);
 }
+// The two corner 100s, marked on the slider at the serve angle their ON-SCREEN bearing implies.
+function drawAngleMarks() {
+  const el = document.getElementById('angleMarks');
+  if (!el) return;
+  el.innerHTML = '';
+  for (const id of ['topL', 'topR']) {
+    const swipe = screenBearing(id);             // where it looks, in swipe degrees
+    const serve = serveFromSwipe(swipe);         // where that swipe actually serves
+    const f = (serve + AIM_MAX_DEG) / (2 * AIM_MAX_DEG);
+    if (!(f >= 0 && f <= 1)) continue;
+    const m = document.createElement('span');
+    m.style.left = (f * 100).toFixed(2) + '%';
+    m.textContent = `100 (looks ${Math.abs(swipe).toFixed(1)}°)`;
+    el.appendChild(m);
+  }
+}
+
 const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const runSoon = debounce(run, 90);
 angleEl.addEventListener('input', runSoon);
 powerEl.addEventListener('input', runSoon);
+drawAngleMarks();
+window.addEventListener('resize', debounce(drawAngleMarks, 200));
 document.getElementById('reset').addEventListener('click', () => { angleEl.value = 0; powerEl.value = 0.7; run(); });
 
 // --- play it -----------------------------------------------------------------------------------
@@ -312,19 +371,29 @@ fetch('./trajectory-map.json').then((r) => (r.ok ? r.json() : null)).then((g) =>
   const img = cx.createImageData(g.cols, g.rows);
   for (let r0 = 0; r0 < g.rows; r0++) {
     for (let c0 = 0; c0 < g.cols; c0++) {
-      const ch = g.cells[r0 * g.cols + c0];
+      const idx = r0 * g.cols + c0;
+      const ch = g.cells[idx];
       const hex = COLOUR[ch] || '#2a3342';
+      // BANKED CELLS ARE DIMMED. 51% of every 100 on this machine is a bounce off a side rail
+      // or the back wall rather than an aimed shot, which is most of why the 100 read as
+      // scattered luck - the aimed shot under it is a clean band. Full colour = straight in.
+      const banked = g.banks && g.banks[idx] === '1';
       // rows run soft -> hard, so flip vertically: hard power at the top
       const y = g.rows - 1 - r0;
       const i = (y * g.cols + c0) * 4;
-      img.data[i] = parseInt(hex.slice(1, 3), 16);
-      img.data[i + 1] = parseInt(hex.slice(3, 5), 16);
-      img.data[i + 2] = parseInt(hex.slice(5, 7), 16);
+      const mix = (v) => (banked ? Math.round(v * 0.38 + 0x1b * 0.62) : v);
+      img.data[i] = mix(parseInt(hex.slice(1, 3), 16));
+      img.data[i + 1] = mix(parseInt(hex.slice(3, 5), 16));
+      img.data[i + 2] = mix(parseInt(hex.slice(5, 7), 16));
       img.data[i + 3] = 255;
     }
   }
   cx.putImageData(img, 0, 0);
-  mapState.textContent = `${g.cols * g.rows} throws, real engine`;
+  const scoring = [...g.cells].filter((c) => c !== '.' && c !== '-').length;
+  const nb = g.banks ? [...g.banks].filter((b) => b === '1').length : 0;
+  mapState.textContent = g.banks
+    ? `${g.cols * g.rows} throws · ${Math.round(100 * nb / scoring)}% of scores are banks`
+    : `${g.cols * g.rows} throws, real engine`;
   markMap(+angleEl.value, +powerEl.value);
 }).catch(() => { mapState.innerHTML = '<span class="err">map not found</span>'; });
 
