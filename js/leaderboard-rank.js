@@ -301,8 +301,12 @@ export const GOLF_BOARD_COURSE = 'pinevalley3';
 export const GOLF_COURSE_PAR = {
   // Pine Valley (par 72 over 18): 4 3 5 4 4 3 5 4 4 | 4 5 3 4 4 5 3 4 4
   pinevalley3: 12, pinevalley9: 36, pinevalley9b: 36, pinevalley18: 72,
+  // ...and the five three-hole sets added 2026-09-05 when the round menu became length-first.
+  // `pinevalley3` above is set 1 (holes 1-3), unchanged and still the frozen key.
+  pinevalley3b: 11, pinevalley3c: 13, pinevalley3d: 12, pinevalley3e: 13, pinevalley3f: 11,
   // Red Mesa (par 71 over 18):    4 4 3 5 4 3 4 5 4 | 4 3 4 5 4 4 3 4 4
   redmesa3: 11, redmesa9: 36, redmesa9b: 35, redmesa18: 71,
+  redmesa3b: 12, redmesa3c: 13, redmesa3d: 11, redmesa3e: 13, redmesa3f: 11,
 };
 
 /** Golf's board number: the player's best round on the named course, as a score to par.

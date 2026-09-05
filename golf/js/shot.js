@@ -211,8 +211,13 @@ export function flightPoint(p, distanceYd, sideYd, apex) {
  *  straight through one (docs/BUILDING-A-GAME.md, Part 3). */
 /** How far around a ball lying IN the trees the stand stops blocking it overhead. Roughly two
  *  crowns of a parkland pine: far enough that the ring of trunks you are standing among cannot
- *  wall a ball in, close enough that the wood twenty yards ahead is still a wood. */
-export const ESCAPE_YD = 11;
+ *  wall a ball in, close enough that the wood twenty yards ahead is still a wood.
+ *
+ *  IT SCALES WITH THE CANOPY DOING THE WALLING. A fixed 11 yds is two crowns of a pine and barely
+ *  one and a half of a sentinel (canopy 9), so a ball standing in a stand of the big ones was
+ *  still walled in - measured as a run of dead ends on Pine Valley 10 and 17 after the sentinels
+ *  went in. The escape has to be a property of the stand, not a constant. */
+export const ESCAPE_YD = 13;
 
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
@@ -252,7 +257,7 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const state = trees.map((t) => {
     const type = hole.treeTypes[t.type];
     const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
-    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy || (inWood && d0 <= ESCAPE_YD) };
+    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy || (inWood && d0 <= Math.max(ESCAPE_YD, type.canopy * 1.6)) };
   });
 
   // ...and the walk starts clear of the ball for the same reason.
@@ -324,11 +329,38 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   const rolled = holedOnTheFly
     ? { rest: [...landing], holed: true }
     : rollWatchingCup(hole, landing, aimRad, rollYd);
-  const rest = rolled.rest;
-  const restOn = surfaceAt(hole, rest[0], rest[1]);
+  let rest = rolled.rest;
+  let restOn = surfaceAt(hole, rest[0], rest[1]);
+
+  // THE PENALTY DROP. Until now a ball that finished in water simply STAYED there and was played
+  // from a water lie, because the drop prompt was left for Stage C. Once the courses gained real
+  // water that became a shipping loop: measured on Pine Valley 3, 10 and 17, a ball in a pocket
+  // beside a lake had no dry shot at all, so every attempt went back in and the hole ran to 16, 17
+  // and 24 strokes. A player cannot get out of that by playing better, which is the definition of
+  // a stuck ball.
+  //
+  // The rule is real golf's and it needs no UI: the ball is dropped WHERE IT LAST CROSSED DRY
+  // GROUND on its own flight line, one stroke on. Walking the path backwards is what makes it the
+  // crossing point rather than an arbitrary spot, and the tee is the floor, so a drop can never
+  // finish behind where the shot was struck from. `penalty` is returned rather than applied here,
+  // because strokes are the caller's business - `resolveShot` stays a pure function of its inputs.
+  let penalty = 0;
+  if (restOn === 'water' && !rolled.holed) {
+    penalty = 1;
+    let found = null;
+    for (let k = 40; k >= 0; k--) {
+      const q = k / 40;
+      const fp = flightPoint(q * p, carry, sideYd, apex);
+      const cand = [from[0] + sin * fp.along + cos * fp.side, from[1] + cos * fp.along - sin * fp.side];
+      const on = surfaceAt(hole, cand[0], cand[1]);
+      if (on !== 'water') { found = { cand, on }; break; }
+    }
+    if (found) { rest = found.cand; restOn = found.on; }
+    else { rest = [...from]; restOn = lieKind; }
+  }
 
   return {
-    carry, apex, sideYd, aimRad, blocked, wind,
+    carry, apex, sideYd, aimRad, blocked, wind, penalty,
     landing, landedOn, rollYd, rest, restOn,
     holed: rolled.holed,
     travelledYd: distYd(from, rest),

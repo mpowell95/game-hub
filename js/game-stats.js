@@ -641,6 +641,24 @@ function ensureGf(g) {
   // counter/best/leaderboard/GAME_META row. Absent on any device that has not played a testing
   // course since, defaulted to {} here, same as sk.practice's own arrival.
   if (!g.gf.practice || typeof g.gf.practice !== 'object') g.gf.practice = {};
+  // Added 2026-09-05 (Matt: "we'll have individual hole records"). Keyed `<courseId>:<holeNumber>`
+  // by golf/js/rounds.js's `holeKey`, value = fewest strokes ever taken on that hole, Math.min.
+  // ADDITIVE and never merged with bestRoundByCourse: a hole score and a round score are not the
+  // same measurement (THE LAW rule 4), and they sit in separate keys so nothing can compare them.
+  // Absent on any device that has not played golf since, defaulted to {} here, exactly as
+  // gf.practice arrived.
+  if (!g.gf.bestHole || typeof g.gf.bestHole !== 'object') g.gf.bestHole = {};
+}
+
+/** Fold a `{ '<courseId>:<n>': strokes }` map into gf.bestHole, keeping the lower of each. */
+function bumpHoleBests(g, map) {
+  if (!map || typeof map !== 'object') return;
+  ensureGf(g);
+  for (const [k, v] of Object.entries(map)) {
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const prev = g.gf.bestHole[k];
+    g.gf.bestHole[k] = Number.isFinite(prev) ? Math.min(prev, v) : v;
+  }
 }
 
 /** Fill any missing structure so the rest of the code can assume a full shape. */
@@ -1401,6 +1419,16 @@ export function recordGolf(difficulty, extras) {
   const g = st.games.golf;
   const e = extras || {};
   ensureGf(g);
+  // A HOLE-ONLY WRITE. `{ holeOnly: true, holeScores }` records per-hole bests and touches nothing
+  // else - not rounds, not strokes, not points, not the practice bucket. It has its own path
+  // because a hole is finished eighteen times in a round: routing it through the practice branch
+  // would count each one as a practice ROUND and invent a course row in My Stats for it.
+  if (e.holeOnly) {
+    bumpHoleBests(g, e.holeScores);
+    st.updatedAt = new Date().toISOString();
+    persist(st);
+    return st;
+  }
   if (e.practice) {
     // Default course id. This MUST NOT be a course that no longer exists: a testing-mode round
     // recorded with no courseId would write gf.practice.<that id> for ever. Harbor Links is
@@ -1420,6 +1448,12 @@ export function recordGolf(difficulty, extras) {
     p.eagles += e.eagles || 0;
     p.aces += e.aces || 0;
     p.longestDriveYd = Math.max(p.longestDriveYd, e.longestDriveYd || 0);
+    // A PRACTICE HOLE STILL SETS A HOLE RECORD. Matt: *"You should still be able to practice any
+    // hole on any course"* and *"we'll have individual hole records"* - the score on a hole is the
+    // score on that hole however you came to play it, and a record you made and cannot see reads
+    // as deleted (rule 1). What practice does NOT do is touch a ROUND best, because one hole is
+    // not a round; that guard is unchanged and lives above.
+    bumpHoleBests(g, e.holeScores);
     st.updatedAt = new Date().toISOString();
     persist(st);
     return st;
@@ -1437,6 +1471,10 @@ export function recordGolf(difficulty, extras) {
     const prev = g.gf.bestRoundByCourse[e.courseId];
     g.gf.bestRoundByCourse[e.courseId] = Number.isFinite(prev) ? Math.min(prev, e.strokes) : e.strokes;
   }
+  // PER-HOLE BESTS. `e.holeScores` is `{ '<courseId>:<n>': strokes }` for the holes just played.
+  // Bests only ever improve (rule 2), and a hole recorded here is NEVER also folded into
+  // bestRoundByCourse - they are two different measurements in two different keys (rule 4).
+  bumpHoleBests(g, e.holeScores);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

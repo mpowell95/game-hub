@@ -77,6 +77,98 @@ export function slopeGrid({ fall, spine = 0.055, back = 0.09, cols = 8, rows = 8
   return { cols, rows, cells };
 }
 
+/** THE GREEN'S BREAK, as a named character rather than three tuning numbers.
+ *
+ *  Matt, 2026-09-05: *"Some should be flat, some should have slight breaks, some should have crazy
+ *  breaks and some should have multiple different directional breaks."* `slopeGrid` below can only
+ *  express ONE fall with a spine spread across it, so every green on both courses broke the same
+ *  way at a different strength - and a putting game whose greens all read alike has one green.
+ *
+ *  A preset is a function of the cell's position in the green (u, v each 0..1, v being front to
+ *  back), returning the DOWNHILL vector there. That is what lets a saddle shed two ways and a
+ *  crown shed four; a single `fall` vector cannot, whatever you scale it by.
+ *
+ *  Every one of these is DESIGNED, not measured - the reference footage shows exactly one green.
+ *  The `severe` ceiling is set by what the putter can still hold: BREAK_K in shot.js turns a 1.0
+ *  gradient into about four cup widths over a 20 ft putt, which is a hard read, not an impossible
+ *  one. Anything past that stops being a green and becomes a slide.
+ */
+export const SLOPE_PRESETS = {
+  // Nearly dead flat. The whole point is that it EXISTS: an opening green a player can two-putt
+  // without reading anything is what makes hole 16's read feel like a wall.
+  flat: () => [0, -0.05],
+
+  // Standard back-to-front, gentle. Ball feeds to the front, breaks are small.
+  gentle: (u, v) => [(u - 0.5) * 0.10, -0.14 - v * 0.10],
+
+  // The classic: back-to-front with a soft spine, each half shedding to its own side.
+  spine: (u, v) => [(u - 0.5) * 0.42 * (0.6 + v * 0.6), -0.22 - v * 0.20],
+
+  // Hard back-to-front. Above the hole is a genuine mistake.
+  steep: (u, v) => [(u - 0.5) * 0.22, -0.46 - v * 0.34],
+
+  // SADDLE: two lobes shedding OPPOSITE ways, with a low channel between them. A putt across it
+  // breaks one way then the other, which is the "multiple different directional breaks" ask.
+  saddle: (u, v) => [Math.sin((u - 0.5) * Math.PI * 2) * 0.60, -0.10 - Math.cos(v * Math.PI) * 0.28],
+
+  // CROWN: sheds outward in every direction from the middle. Miss the plateau and it runs away.
+  crown: (u, v) => {
+    const dx = u - 0.5; const dy = v - 0.5;
+    const m = Math.hypot(dx, dy) || 1e-6;
+    const k = Math.min(1, m * 2.4);
+    return [(dx / m) * 0.62 * k, (dy / m) * 0.62 * k - 0.08];
+  },
+
+  // BOWL: the opposite - everything feeds to the middle. Generous, and the right thing behind a
+  // green that is otherwise brutal to hit.
+  bowl: (u, v) => {
+    const dx = u - 0.5; const dy = v - 0.5;
+    const m = Math.hypot(dx, dy) || 1e-6;
+    const k = Math.min(1, m * 2.2);
+    return [-(dx / m) * 0.46 * k, -(dy / m) * 0.46 * k - 0.06];
+  },
+
+  // TIER: a shelf. The front third is quiet, then a step, then the back is quiet again. A putt
+  // ACROSS the step is a different putt from one on either side of it.
+  tier: (u, v) => {
+    const d = (v - 0.52) / 0.13;
+    const step = Math.exp(-(d * d));
+    return [(u - 0.5) * 0.14, -0.10 - step * 0.78];
+  },
+
+  // Strong lateral sheds. A ball above the hole on these does not come back to you.
+  leftShed: (u, v) => [-0.52 - (1 - u) * 0.22, -0.14 - v * 0.10],
+  rightShed: (u, v) => [0.52 + u * 0.22, -0.14 - v * 0.10],
+
+  // QUARTERS: each corner falls its own way. The read changes completely depending on which part
+  // of the green you are on, which is the hardest thing a flat picture can ask of a player.
+  quarters: (u, v) => [(u < 0.5 ? -1 : 1) * (0.30 + v * 0.34), (v < 0.5 ? -1 : 1) * (0.30 + u * 0.30)],
+};
+
+/** Build a green's slope grid from a preset name, an explicit `{fall, spine, back}` (the original
+ *  form, still used by the hand-authored holes), or a raw grid. `strength` scales the whole thing,
+ *  which is how the difficulty ramp makes hole 17's green a harder version of hole 3's. */
+export function slopeFrom(spec, strength = 1, cols = 8, rows = 8) {
+  if (!spec) return slopeGrid({ fall: [0, -0.15] });
+  if (spec.cells) return spec;
+  if (typeof spec === 'object') return slopeGrid(spec);
+  const fn = SLOPE_PRESETS[spec];
+  if (!fn) throw new Error(`golf: unknown slope preset "${spec}"`);
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const u = cols === 1 ? 0.5 : c / (cols - 1);
+      const v = rows === 1 ? 0.5 : r / (rows - 1);
+      const g = fn(u, v);
+      cells.push([
+        +Math.max(-1, Math.min(1, g[0] * strength)).toFixed(2),
+        +Math.max(-1, Math.min(1, g[1] * strength)).toFixed(2),
+      ]);
+    }
+  }
+  return { cols, rows, cells };
+}
+
 /** An irregular closed blob: bunkers, lakes, waste areas. Seeded, so it is the same blob every
  *  time - a bunker that reshuffled per load would move under a ball already lying in it. */
 export function blob(cx, cy, rx, ry, seed, n = 10) {
@@ -221,6 +313,22 @@ export const CURVE_ASYM = 0.42;
  *  fairway is squeezed. This is the whole of "challenging and fun" - the shot you actually hit is
  *  the one being defended. */
 export const PINCH = 0.62;          // the corridor at a landing zone, as a fraction of its width
+
+/** THE DIFFICULTY RAMP. Matt, 2026-09-05: *"The holes should progressively get more difficult on
+ *  every course. so if you're playing rounds of 3 holes, 1-3 is the easiest, 4-6 is more
+ *  challenging... until 18 - the most challenging. If people begin playing and are able to birdie
+ *  every hole, there's no where to go from there."*
+ *
+ *  `hard` runs 0 at the opening hole to 1 at the last, and it moves FOUR things at once, because
+ *  moving any one of them alone just makes eighteen copies of the same hole at different settings:
+ *  how far the corridor necks at the landing zone, how much rough there is before trouble, how big
+ *  the green is, and how hard it breaks. Each hole's own spec overrides any of them - the ramp is
+ *  the floor a hole is designed on top of, not the design.
+ *
+ *  It is deliberately a property of WHERE THE HOLE SITS IN THE ROUND, not of the hole number: a
+ *  3-hole round is one block of the ramp, so every block opens easier than it closes and the 16-18
+ *  set is the hardest golf on the property whichever way you get to it. */
+export function hardnessOf(n, holes = 18) { return holes <= 1 ? 0 : (n - 1) / (holes - 1); }
 export const PINCH_SPAN = 26;       // yards either side of the zone that the squeeze reaches
 
 /** How close an authored hazard has to be to a landing zone for that zone to count as defended
@@ -240,11 +348,11 @@ export function landingZones(par, length) {
 
 /** Multiply a width profile by the squeeze at each landing zone. Gaussian rather than a step, so
  *  the fairway necks down and opens back out instead of stepping through a doorway. */
-function pinchAt(zones, s) {
+function pinchOne(zones, s, to = PINCH) {
   let m = 1;
   for (const z of zones) {
     const d = (s - z) / PINCH_SPAN;
-    m *= 1 - (1 - PINCH) * Math.exp(-d * d);
+    m *= 1 - (1 - to) * Math.exp(-d * d);
   }
   return m;
 }
@@ -288,15 +396,24 @@ export function makeHole(spec) {
   const { stations, length } = spline(spec.path, 4);
   const tee = spec.path[0];
   const pin = spec.path[spec.path.length - 1];
-  const greenR = spec.greenR || (spec.par === 3 ? 15 : 14);
+  const greenR = spec.greenR || Math.round((spec.par === 3 ? 18 : 17) - 7 * (spec.hard == null ? hardnessOf(spec.n) : spec.hard));
   const greenRy = spec.greenRy || greenR;
   // THE COLLAR IS 6 YARDS ON BOTH AXES, not a scaled-up copy of the green. Scaling it
   // proportionally looks equivalent and is not: a wide, shallow green (Red Mesa 3 is 18 x 10)
   // comes out with 6 yards of collar across and 3.3 up the hole, so missing it long lands in the
   // desert - THE LAW rule 1's cousin, a hazard the player was never shown. Per-axis padding gives
   // every green the same collar in every direction.
-  const roughPad = spec.rough == null ? 11 : spec.rough;
+  // The ramp. Every default below is a straight line in `hard`, and every one is overridable.
+  const hard = spec.hard == null ? hardnessOf(spec.n) : spec.hard;
+  const roughPad = spec.rough == null ? 14 - 8 * hard : spec.rough;
   const greenSeed = spec.greenSeed || (spec.n * 6151 + 991);
+  // A PAR 5 GETS THE PINCH BACK OFF. Three accurate swings compound: measured, Pine Valley 15 at
+  // the full ramp necked to 12 yds of fairway and played to +1.36 with 78 % bogey-or-worse, which
+  // is not a hard hole, it is an unfair one. A par 3 gets the same relief for the opposite reason
+  // - it has no landing zone to defend and its corridor is decoration.
+  const parRelief = spec.par >= 5 ? 0.12 : (spec.par <= 3 ? 0.10 : 0);
+  const pinchTo = spec.pinchTo == null ? 0.74 - 0.32 * hard + parRelief : spec.pinchTo;
+  const slopeK = spec.slopeK == null ? 0.60 + 0.85 * hard : spec.slopeK;
   const seed0 = spec.seed || (spec.n * 977 + 13);
 
   // Fairway half-width along the hole. A single number is a constant corridor; a list of {at, w}
@@ -341,6 +458,7 @@ export function makeHole(spec) {
   };
 
   const zones = spec.pinch === false ? [] : landingZones(spec.par, length);
+  const pinchNow = (ss) => pinchOne(zones, ss, pinchTo);
   const wr = mulberry32(seed0 + 311);
   const wob = [-1, +1].map(() => ({
     a1: 0.55 + wr() * 0.9, l1: 34 + wr() * 40, p1: wr() * 6.283,
@@ -350,7 +468,7 @@ export function makeHole(spec) {
   /** The half-width of the fairway on one side, at one station: the authored profile, squeezed at
    *  the landing zones, tilted by the bend, then wandered. `side` is -1 left / +1 right. */
   const fwAt = (t, s, side = 1, st = null) => {
-    const w = sideBase[side < 0 ? '-1' : 1](t) * pinchAt(zones, s == null ? t * length : s);
+    const w = sideBase[side < 0 ? '-1' : 1](t) * pinchNow(s == null ? t * length : s);
     if (!st) return w;
     // The bend: `curvAt` is +ve when the hole turns LEFT, and the left side (-1) is then the inside.
     const k = curvAt(st) * (side < 0 ? 1 : -1);          // +1 when THIS side is the inside
@@ -417,6 +535,145 @@ export function makeHole(spec) {
 
   const specBunkers = [...(spec.bunkers || [])];
   const specWater = spec.water || [];
+  const extraTrees = [];
+
+  // ---- THE GREEN COMPLEX -------------------------------------------------------------------
+  //
+  // Matt, 2026-09-05: *"all the greens are still too similar. They're all circles and they're all
+  // perfectly open. Some should have tree obstacles in front of it. some should be over water.
+  // some should have a bunch of sand around, and some should obviously have combinations."*
+  //
+  // He is right and it was structural: `guard` did not exist, so the only defence a green could
+  // have was whatever bunkers the author happened to place by hand at an arbitrary `at`/`side`,
+  // and in practice that meant one or two bunkers vaguely beside it on every hole of both courses.
+  //
+  // A guard token is placed in the GREEN'S OWN FRAME rather than in world coordinates: `f` points
+  // back down the approach (so "front" is the side the ball comes from, on a dogleg too) and `r`
+  // is right of that line. Authoring a front bunker as a world polygon means re-deriving it every
+  // time the centreline moves, which is how a hazard ends up behind the green nobody notices.
+  const gTan = stations[stations.length - 1];
+  const f = [-gTan.tx, -gTan.ty];                       // toward the tee, along the approach
+  const rr = [-f[1], f[0]];                             // right of the approach
+  const gp = (fwd, side) => [pin[0] + f[0] * fwd + rr[0] * side, pin[1] + f[1] * fwd + rr[1] * side];
+  const gR = (a) => (a === 'x' ? greenR : greenRy);
+  const near = greenR + 6;                              // just outside the fringe
+
+  let gseed = greenSeed;
+  const guard = spec.guard || [];
+  for (const g of guard) {
+    gseed += 37;
+    switch (g) {
+      // A wide bunker across the FRONT. There is no running one in from here.
+      case 'frontSand':
+        specBunkers.push({ poly: blob(...gp(near + 4, 0), greenR * 0.95, 6.5, gseed, 11), kind: 'greensideBunker' });
+        break;
+      // Two bunkers pinching the front, with a lane between them: harder than open, easier than
+      // frontSand, and it rewards the player who finds the lane.
+      case 'frontJaws':
+        specBunkers.push({ poly: blob(...gp(near + 2, -greenR * 0.78), 6.5, 5, gseed, 9), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gp(near + 2, greenR * 0.78), 6.5, 5, gseed + 1, 9), kind: 'greensideBunker' });
+        break;
+      // WATER ACROSS THE FRONT. The approach is all carry - there is no bail-out short.
+      case 'frontWater':
+        specWater.push({ poly: blob(...gp(near + 8, 0), greenR * 1.5, 10, gseed, 14) });
+        break;
+      // TREES SHORT OF THE GREEN. They do not block the shot that is high enough; they block the
+      // low one, which is exactly the punch-out an over-cooked drive leaves you with.
+      case 'frontTrees':
+        for (let i = 0; i < 5; i++) {
+          const p2 = gp(near + 10 + (i % 2) * 5, (i - 2) * 7.5);
+          extraTrees.push({ x: +p2[0].toFixed(1), y: +p2[1].toFixed(1), type: spec.guardTree == null ? 0 : spec.guardTree });
+        }
+        break;
+      case 'leftSand':
+        specBunkers.push({ poly: blob(...gp(0, -(near + 3)), 7.5, greenRy * 0.7, gseed, 10), kind: 'greensideBunker' });
+        break;
+      case 'rightSand':
+        specBunkers.push({ poly: blob(...gp(0, near + 3), 7.5, greenRy * 0.7, gseed, 10), kind: 'greensideBunker' });
+        break;
+      case 'backSand':
+        specBunkers.push({ poly: blob(...gp(-(near + 3), 0), greenR * 0.7, 6, gseed, 10), kind: 'greensideBunker' });
+        break;
+      // SAND ALL THE WAY ROUND. Miss the green in any direction and you are in it.
+      case 'ringSand':
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + 0.4;
+          specBunkers.push({ poly: blob(...gp(Math.cos(a) * (near + 4), Math.sin(a) * (near + 4)), 6.5, 5, gseed + i, 9), kind: 'greensideBunker' });
+        }
+        break;
+      case 'leftWater':
+        specWater.push({ poly: blob(...gp(0, -(near + 12)), 11, greenRy * 1.5, gseed, 13) });
+        break;
+      case 'rightWater':
+        specWater.push({ poly: blob(...gp(0, near + 12), 11, greenRy * 1.5, gseed, 13) });
+        break;
+      // WATER BEHIND. It never comes into play on a good shot, and it is the whole reason "one
+      // more club" is a decision rather than free.
+      case 'backWater':
+        specWater.push({ poly: blob(...gp(-(near + 13), 0), greenR * 1.5, 11, gseed, 13) });
+        break;
+      // A stand tight to one shoulder: the pin on that side is simply not attackable.
+      case 'leftTrees': case 'rightTrees': {
+        const sgn = g === 'leftTrees' ? -1 : 1;
+        for (let i = 0; i < 4; i++) {
+          const p2 = gp((i - 1.5) * 8, sgn * (near + 6 + (i % 2) * 4));
+          extraTrees.push({ x: +p2[0].toFixed(1), y: +p2[1].toFixed(1), type: spec.guardTree == null ? 0 : spec.guardTree });
+        }
+        break;
+      }
+      default: throw new Error(`golf: unknown green guard "${g}"`);
+    }
+  }
+
+  // ---- CROSS HAZARDS: the thing that forces a LAYUP ------------------------------------------
+  //
+  // Matt: *"Holes must force layups."* Nothing in the old generator could: every hazard was a blob
+  // BESIDE the corridor, so the answer to all 36 holes was hit it as far as you can, straight. A
+  // cross hazard spans the whole corridor at one point, so the only choices are carry it or stop
+  // short of it - and "stop short" is a layup, decided before the swing rather than after it.
+  //
+  // It is built from the same stations the corridor is, at the same offsets, so it really does
+  // reach both edges however much the fairway wanders there.
+  for (const [ci, cx] of (spec.cross || []).entries()) {
+    // PLACED IN YARDS FROM THE TEE, not as a fraction of the hole - and that distinction is the
+    // whole mechanic. A cross at 0.60 of a 396 yd par 4 sits at 238 yds, which is PAST a 215 yd
+    // drive: measured, it never came into play once and the hole played as if it were not there.
+    // A hazard only forces a lay-up if it sits where the shot would otherwise finish, so it is
+    // authored against the ladder (drive 215, 3 wood 195) rather than against the hole's length.
+    const at = cx.yd != null ? cx.yd : cx.at * length;
+    const depth = cx.depth == null ? 22 : cx.depth;
+    const inner = [];
+    const outer = [];
+    for (const st of stations) {
+      if (st.s < at - depth / 2 || st.s > at + depth / 2) continue;
+      const wl = roughAt(st.t, st.s, -1, st) + (cx.over == null ? 8 : cx.over);
+      const wr = roughAt(st.t, st.s, +1, st) + (cx.over == null ? 8 : cx.over);
+      inner.push([+(st.x + st.nx * wr).toFixed(1), +(st.y + st.ny * wr).toFixed(1)]);
+      outer.push([+(st.x - st.nx * wl).toFixed(1), +(st.y - st.ny * wl).toFixed(1)]);
+    }
+    if (inner.length < 2) continue;
+    const poly = [...inner, ...outer.reverse()];
+    if ((cx.kind || 'water') === 'water') specWater.push({ poly });
+    else specBunkers.push({ poly, kind: cx.kind === 'waste' ? 'fairwayBunker' : cx.kind });
+  }
+
+  // ---- SENTINELS: trees too tall to fly ------------------------------------------------------
+  //
+  // Matt: *"They must change directions with trees too tall to hit over."* MEASURED against the
+  // stock bag: the highest-peaking club in it is the 8 iron at 32.3 yds of apex over its full
+  // 120 yds, and that peak is reached halfway. A stand whose `height` is over ~34 yds cannot be
+  // flown by anything, from anywhere - so a corner planted with one has to be gone AROUND, and the
+  // dogleg becomes a real change of direction instead of a suggestion.
+  for (const sn of spec.sentinels || []) {
+    const cnt = sn.n == null ? 5 : sn.n;
+    const spread = sn.spread == null ? 7 : sn.spread;
+    for (let i = 0; i < cnt; i++) {
+      const at = sn.at + ((i - (cnt - 1) / 2) * spread) / length;
+      const [x, y] = place(stations, Math.max(0, Math.min(1, at)), sn.side == null ? 1 : sn.side,
+        sn.off + (i % 2) * 3);
+      extraTrees.push({ x: +x.toFixed(1), y: +y.toFixed(1), type: sn.type });
+    }
+  }
 
   // Water. Placed like everything else - "at 0.55 of the way round, 14 yards left" - or handed a
   // polygon outright for a shape a blob cannot be (hole 1's shoreline behind the green).
@@ -468,14 +725,14 @@ export function makeHole(spec) {
 
   const green = {
     poly: greenPoly(pin[0], pin[1], greenR, greenRy, greenSeed),
-    slope: slopeGrid(spec.slope || { fall: [0, -0.15] }),
+    slope: slopeFrom(spec.slope || { fall: [0, -0.15] }, slopeK),
   };
 
   const trees = (spec.trees || []).map((tr) => {
     if (tr.x != null) return { x: tr.x, y: tr.y, type: tr.type || 0 };
     const [x, y] = place(stations, tr.at, tr.side == null ? 0 : tr.side, tr.off || 0);
     return { x: +x.toFixed(1), y: +y.toFixed(1), type: tr.type || 0 };
-  });
+  }).concat(extraTrees);
 
   const decor = spec.decor || [];
 

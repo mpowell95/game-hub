@@ -349,7 +349,7 @@ export function aggregatePlayers(all, corrections) {
         // fewestShotsWin, no zero-sentinel guard is needed: a course simply ABSENT from
         // bestRoundByCourse means "never played there" (the lowest possible 9-hole score is 9,
         // never 0), so a plain per-key existence check is enough.
-        if (!dst.gf) dst.gf = { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {} };
+        if (!dst.gf) dst.gf = { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {}, bestHole: {} };
         dst.gf.rounds += src.gf.rounds | 0; dst.gf.holes += src.gf.holes | 0; dst.gf.strokes += src.gf.strokes | 0;
         dst.gf.points += src.gf.points | 0;
         dst.gf.birdies += src.gf.birdies | 0; dst.gf.eagles += src.gf.eagles | 0; dst.gf.aces += src.gf.aces | 0;
@@ -360,6 +360,18 @@ export function aggregatePlayers(all, corrections) {
           const v = srcBest[k] | 0;
           const cur = dst.gf.bestRoundByCourse[k];
           dst.gf.bestRoundByCourse[k] = Number.isFinite(cur) ? Math.min(cur, v) : v;
+        }
+        // PER-HOLE BESTS merge exactly like bestRoundByCourse: per key, Math.min, and 0 is not a
+        // sentinel - the lowest possible score on a hole is 1, so a missing key is the only way to
+        // say "never played it". Without this branch every hole record a person set on their other
+        // phone would read as zero the moment the two devices synced, with both local stores
+        // perfectly intact (THE LAW rule 1, and the reason players-agg.test.mjs guards it).
+        const srcHole = src.gf.bestHole || {};
+        if (!dst.gf.bestHole) dst.gf.bestHole = {};
+        for (const [k, v] of Object.entries(srcHole)) {
+          if (!Number.isFinite(v) || v <= 0) continue;
+          const cur = dst.gf.bestHole[k];
+          dst.gf.bestHole[k] = Number.isFinite(cur) ? Math.min(cur, v) : v;
         }
         // practice (Part 8): kept and carried, same as Skeeball's sk.practice.boards - reachable
         // by nothing above (rule 1: never dropped; rule 2: never counted).

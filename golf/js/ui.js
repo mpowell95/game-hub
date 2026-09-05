@@ -14,10 +14,10 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone } from './clubs.js';
-import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
+import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
@@ -276,22 +276,34 @@ class GolfGame {
   }
 
   // ---------------------------------------------------------------- setup ----
-  /** ONE setup screen: pick the course, pick how much of it to play, go.
+  /** ONE setup screen, and it now asks in Matt's own order (2026-09-05): *"I want 3 modes: 3 hole,
+   *  9 hole, and 18 hole. That's the first selection. Then the second selection should be the
+   *  course. If I chose 3 holes, each course should be broken into 6 options of 3 holes."*
    *
-   *  It was a course card and a "play" button when there was one course of three holes. Two
-   *  courses of eighteen could have become course list -> round list -> hole list, three taps deep
-   *  before a ball is struck, and on a phone that is where a game gets closed. The course chips
-   *  swap the picture and the numbers in place, so the whole choice is visible at once. */
+   *  It is still ONE screen rather than three, which is the constraint that has held since there
+   *  were two courses of eighteen: length chips, then course chips, then the sets - each row swaps
+   *  what is under it in place, so the whole choice is visible at once and nothing is a tap deeper
+   *  than it needs to be. On a phone, three screens before a ball is struck is where a game gets
+   *  closed.
+   *
+   *  With 18 selected there is exactly one set, so its row is a single wide button rather than a
+   *  grid of one - a chooser with one option is not a choice and should not look like one. */
   _renderSetup() {
     this._stopLoop();
     this.hole = null;
     this.rootEl.innerHTML = '';
     const c = this.course;
+    const mode = this.settings.lastMode || 3;
+    const rounds = roundsOfMode(mode);
     const el = document.createElement('div');
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
       <h1>${esc(t(`course_${c.id}`))}</h1>
+      <div class="gf-coursepick gf-modepick">
+        ${MODES.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}"
+          data-mode="${m}"><span>${esc(t('mode_holes', { n: m }))}</span></button>`).join('')}
+      </div>
       <div class="gf-coursepick">
         ${COURSES.map((k) => `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}"
           data-course="${esc(k.id)}"><span>${esc(t(`course_${k.id}`))}</span></button>`).join('')}
@@ -304,10 +316,10 @@ class GolfGame {
         <div class="gf-card-blurb">${esc(t(c.blurbKey))}</div>
       </div>
       <div class="gf-card">
-        <div class="gf-card-blurb gf-pickhead">${esc(t('pick_round'))}</div>
-        <div class="gf-rounds">
-          ${ROUNDS.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}">
-            <span>${esc(t(r.labelKey))}</span>
+        <div class="gf-card-blurb gf-pickhead">${esc(rounds.length > 1 ? t('pick_set') : t('pick_round'))}</div>
+        <div class="gf-rounds${rounds.length === 1 ? ' is-one' : ''}">
+          ${rounds.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}">
+            <span>${esc(t('holes_range', { range: roundRange(r) }))}</span>
             <small>${esc(t('round_meta', { par: roundPar(c, r.id), yds: Math.round(roundYards(c, r.id)) }))}</small>
             <small class="gf-best">${esc(this._bestText(roundKey(c, r.id), roundPar(c, r.id)))}</small>
           </button>`).join('')}
@@ -316,6 +328,13 @@ class GolfGame {
       <button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`;
     this.rootEl.appendChild(el);
     this._paintSetupArt(el.querySelector('[data-role="art"]'));
+    for (const b of el.querySelectorAll('[data-mode]')) {
+      this._on(b, 'click', () => {
+        this.settings.lastMode = +b.dataset.mode;
+        saveSettings(this.settings);
+        this._renderSetup();
+      });
+    }
     for (const b of el.querySelectorAll('[data-course]')) {
       this._on(b, 'click', () => {
         this.course = courseById(b.dataset.course);
@@ -756,8 +775,13 @@ class GolfGame {
     // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
     // fairway and the tee, which is exactly the case this split exists for.
     if (this._putting()) {
+      // THE PUTTER HAS ITS OWN ACCURACY. See puttMishit's header in swing.js: the old
+      // `m.deg * 0.25` could not miss a cup that captures at a fixed 0.30 yds, and the green band
+      // carried no pace error at all, so every putt inside 30 ft went in.
+      const pm = puttMishit(barPosOf(pos), zone);
       const res = simulatePutt({
-        hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG * 0.25, power,
+        hole: this.hole, from: this.ball, aimRad: this.aimRad + pm.deg * DEG,
+        power: Math.max(0, Math.min(1, power * pm.paceMul)),
         rangeFt: puttRangeFt(),
       });
       this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res };
@@ -827,6 +851,13 @@ class GolfGame {
 
     const practice = this.roundId === 'practice';
     const last = practice || this.pos >= this.holeIdxs.length - 1;
+    // THE HOLE RECORD IS WRITTEN AS THE HOLE FINISHES, not with the round. Matt, 2026-09-05:
+    // *"we'll have individual hole records"*. Writing it here rather than in `_recordRound` is what
+    // makes a hole record survive a round that is ABANDONED - you played the hole, you made the
+    // score, and it would read as deleted if quitting on the twelfth threw away the ace you made
+    // on the third (THE LAW rule 1). It is also why a PRACTICE hole sets one: a hole is a hole.
+    // The round best is a separate, stricter thing and keeps its complete-round guard below.
+    this._recordHole(hole, strokes);
     if (last && !practice) this._recordRound();
 
     const played = this.scores.filter((v) => Number.isFinite(v));
@@ -914,6 +945,19 @@ class GolfGame {
     this.newBest = Number.isFinite(after) && (!Number.isFinite(before) || after < before);
   }
 
+  /** One hole's own record. Additive and Math.min inside the recorder; a failed write is queued
+   *  and replayed by `recordGolf` itself, exactly as a round's is. */
+  _recordHole(hole, strokes) {
+    if (!Number.isFinite(strokes) || strokes <= 0) return;
+    try {
+      recordGolf(this.course.id, {
+        holeOnly: true, holeScores: { [holeKey(this.course, hole.n)]: strokes },
+      });
+    } catch (e) {
+      console.error('[golf] recording the hole record FAILED', e);
+    }
+  }
+
   _storedBest(key) {
     try {
       const st = loadStats();
@@ -946,7 +990,7 @@ class GolfGame {
       setTimeout(() => { if (!this.destroyed) this._showHoleResult(); }, 700);
       return;
     }
-    this.shotN += 1;
+    this.shotN += 1 + ((a.res && a.res.penalty) || 0);
     this.swing.settle(performance.now());
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
