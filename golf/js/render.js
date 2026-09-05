@@ -10,7 +10,7 @@
 // and blitted with smoothing off, so every course pixel is several screen pixels and nothing
 // tweens smoothly (golf-reference-spec.md §15.2, "everything animates in whole pixels").
 
-import { polyOf, treesOf, greenBox, bboxOf } from './holes.js';
+import { polyOf, treesOf, greenBox, bboxOf, mulberry32 } from './holes.js';
 // The cup's DRAWN size comes from the physics constant, never a copy of it: the whole point of the
 // fix below is that the hole you see and the hole that captures are the same hole.
 import { CUP_CAPTURE_YD } from './shot.js';
@@ -40,8 +40,18 @@ export const VIEW_W_GREEN_YDS = 34;
 // Measured off a native reference frame (§15.1) where the source says so; the rest are ours,
 // chosen to sit in the same 16-bit family.
 export const PALETTE = {
-  water: '#248cef',            // [MEASURED] 9.5 % of the frame
-  waterEdge: '#4aa3f2',        // the lighter shoreline band
+  // WATER, MEASURED DOWN A COLUMN THROUGH A SHORELINE (2026-09-05, s1-tee frame 30, x=560). It is
+  // not one blue and it does not meet the grass directly:
+  //   the grass lip     (158,179,73) -> (175,177,103)   ~6 device px of pale grass
+  //   the DIRT BANK     (117,58,56) -> (153,82,100)     ~12 px of red-brown
+  //   the mud line      (56,42,33) -> (51,46,72)        ~6 px, nearly black
+  //   then the water    (14,77,119) deep, (25,144,231) bright, (17,109,188) mid, in BANDS
+  water: '#1990e7',            // [MEASURED] the bright ripple band
+  waterBand: '#116cbc',        // [MEASURED] the mid band between ripples
+  waterEdge: '#0e4d77',        // [MEASURED] the deep water hugging the shore
+  bank: '#6b3330',             // [MEASURED] the red-brown dirt shoreline, a shade off the raw
+                               // (117,58,56): at our scale the measured value reads hot against blue
+  bankMud: '#38291f',          // [MEASURED] the near-black mud line at the water's lip
   fairwayA: '#b0cb46',         // [MEASURED]
   fairwayB: '#a0bd3c',         // the mow stripe. The measured pair (#aec944 / #b0cb46) is two
                                // values apart and reads as flat at this pixel size, so the darker
@@ -103,6 +113,9 @@ export const THEMES = {
     treeRim: '#26431f',
     path: '#8a7a63',
     treesFloor: '#a4642f',       // scrub: the desert floor, a shade deeper
+    waterBand: '#1a86bc',
+    bank: '#8a4a24',             // the arroyo's own banks are the desert floor, cut
+    bankMud: '#4a3020',
     setupA: '#8a4a24',
     setupB: '#b06a35',
   },
@@ -142,6 +155,85 @@ function tracePoly(ctx, poly, toPx) {
   ctx.closePath();
 }
 
+/** THE DARK SEAM WHERE TWO SURFACES MEET.
+ *
+ *  MEASURED (2026-09-05) by scanning a row straight across a fairway edge on the reference
+ *  (s1-tee frame 30, y=1150, left to right out of the rough):
+ *
+ *      x 230-250   (110,129,44)   heavy rough
+ *      x 252-256   (98,119,41)    A DARKER LINE, about 5 device px - darker than BOTH sides
+ *      x 258-274   (117,144,58)   a step lighter
+ *      x 276-280   (134,161,72)   another step
+ *      x 282+      (154,177,92)   fairway
+ *
+ *  The line measures about 0.87x the rough's own brightness, so it is a DARKENING rather than a
+ *  colour: that is why it is drawn as translucent black and not as a fourth green. One rule then
+ *  covers every pair - sand against grass, water against grass, green against its collar - and it
+ *  cannot be a shade that disagrees with the surfaces either side of it, because it is made of
+ *  them. */
+const SEAM_ALPHA = 0.16;                    // 0.84x, against the measured 0.87x
+const SEAM_PX = 0.7;                        // in MAP_PPY units, so ~1.7 map px
+
+/** Scattered grass tufts, the rough's own texture.
+ *
+ *  MEASURED off the reference at 1:1: the rough is a flat mid-olive with small `V`/`Y` tuft glyphs
+ *  in a LIGHTER tint scattered sparsely across it - roughly one every 3.4 yards, each about
+ *  0.65 yd across. They are not noise dots; they read as grass.
+ *
+ *  Seeded per surface, so the same hole grows the same grass on every device and in every test run
+ *  - the same reason `expandBelt` is seeded. A pattern that reshuffled per load would make the
+ *  course look subtly different every visit for no gain at all. */
+function scatterTufts(ctx, bb, toPx, colour, seed) {
+  const rnd = mulberry32(seed);
+  const STEP = 3.4;                          // yards between tufts, before jitter
+  const SIZE = 0.65;                         // the glyph's width in yards
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = Math.max(1, MAP_PPY * 0.32);
+  ctx.lineCap = 'butt';
+  for (let y = bb.minY; y < bb.maxY; y += STEP) {
+    for (let x = bb.minX; x < bb.maxX; x += STEP) {
+      if (rnd() < 0.35) continue;            // not every cell, or it reads as a grid
+      const jx = x + (rnd() - 0.5) * STEP;
+      const jy = y + (rnd() - 0.5) * STEP;
+      const [px, py] = toPx(jx, jy);
+      const a = SIZE * MAP_PPY;
+      // A `V`: two short strokes meeting at the bottom. Leaning a little, at random, so a field of
+      // them does not read as a printed character.
+      const lean = (rnd() - 0.5) * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(px - a * 0.5 + lean * a, py - a);
+      ctx.lineTo(px, py);
+      ctx.lineTo(px + a * 0.5 + lean * a, py - a);
+      ctx.stroke();
+    }
+  }
+}
+
+/** THE CANOPY'S SILHOUETTE: a union of circles, as [x, y, r] triples.
+ *
+ *  EVERY CIRCLE MUST FIT INSIDE `r` OF THE CENTRE. `shot.js`'s `treeHit` tests the ball against
+ *  `type.canopy`, and the whole contract of this renderer is that what is painted is what stops the
+ *  ball - a bump that stuck out past `r` would be a tree the ball flies straight through. That is
+ *  why this is an exported pure function with a test rather than four literals inside a draw loop.
+ *
+ *  A cactus is one circle: it is a pillar, drawn at its trunk. */
+export function treeShapes(px, py, r, cactus) {
+  if (cactus) return [[px, py, r]];
+  return [
+    [px, py, r * 0.94],
+    [px - r * 0.50, py + r * 0.32, r * 0.40],
+    [px, py + r * 0.45, r * 0.42],
+    [px + r * 0.50, py + r * 0.32, r * 0.40],
+  ];
+}
+
+/** A lighter or darker version of a hex colour, as a fraction of its own brightness. */
+function tintOf(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
 /** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
 export function buildMap(hole, theme) {
   const pal = paletteFor(theme);
@@ -156,6 +248,12 @@ export function buildMap(hole, theme) {
 
   ctx.fillStyle = FILL[hole.base] || pal.heavyRough;
   ctx.fillRect(0, 0, w, h);
+
+  // The base's own texture, laid down before any surface is painted over it - which is what makes
+  // this cheap: a tuft that lands where the fairway will be is simply covered up.
+  if (hole.base === 'lightRough' || hole.base === 'heavyRough' || hole.base === 'trees') {
+    scatterTufts(ctx, b, toPx, tintOf(FILL[hole.base] || pal.heavyRough, 1.18), (hole.n | 0) * 733 + 11);
+  }
 
   for (const s of hole.surfaces) {
     const poly = polyOf(s, hole);
@@ -174,15 +272,51 @@ export function buildMap(hole, theme) {
       const [x0] = toPx(bb.minX, 0);
       const [x1] = toPx(bb.maxX, 0);
       for (let x = x0, i = 0; x < x1; x += stripe, i++) if (i % 2) ctx.fillRect(x, 0, stripe, h);
+    } else if (s.kind === 'lightRough' || s.kind === 'heavyRough' || s.kind === 'trees') {
+      ctx.clip();
+      scatterTufts(ctx, bboxOf(poly), toPx, tintOf(FILL[s.kind] || pal.heavyRough, 1.18),
+        (hole.n | 0) * 733 + s.kind.length * 97 + Math.round(bboxOf(poly).minX));
     } else if (s.kind === 'water') {
-      // Flat two-tone water with a lighter shoreline band.
-      ctx.save(); ctx.clip();
-      ctx.strokeStyle = pal.waterEdge;
-      ctx.lineWidth = 3 * MAP_PPY * 0.6;
-      tracePoly(ctx, poly, toPx); ctx.stroke();
+      // WATER IS BANDED, AND IT DOES NOT MEET THE GRASS DIRECTLY. See PALETTE's water block for the
+      // column that was measured. Painted from the outside in: the dirt bank first, wide, so the
+      // fill covers its inner half and leaves a shoreline; then the mud line; then the ripples.
       ctx.restore();
+      ctx.strokeStyle = pal.bank;
+      ctx.lineWidth = MAP_PPY * 2.4;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
+      ctx.save();
+      tracePoly(ctx, poly, toPx);
+      // The BODY of the water is the mid band; the bright one is the ripple laid over it. Doing it
+      // the other way round - which the first attempt did - turns a pond into a barcode, because
+      // the bright tone then covers most of the surface.
+      ctx.fillStyle = pal.waterBand; ctx.fill();
+      ctx.clip();
+      ctx.strokeStyle = pal.bankMud;
+      ctx.lineWidth = MAP_PPY * 1.0;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
+      ctx.strokeStyle = pal.waterEdge;
+      ctx.lineWidth = MAP_PPY * 1.4;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
+      // The ripples: wide, soft horizontal bands. Horizontal on purpose - it is a top-down view,
+      // and a band that followed the shoreline would read as a contour map.
+      //
+      // THEY ARE DELIBERATELY FAINT. The measured column (bright / mid / bright, 6-18 px each)
+      // was taken in SHALLOW water right at the shore, where the contrast is at its highest; a
+      // band drawn at that strength across a whole pond reads as a barcode, which is exactly what
+      // the first attempt looked like. Half alpha over a 10 yd period is the same rhythm without
+      // the shout.
+      const wb = bboxOf(poly);
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = pal.water;
+      for (let yy = wb.minY; yy < wb.maxY; yy += 10) {
+        const [, py] = toPx(0, yy);
+        ctx.fillRect(0, py - 3.4 * MAP_PPY, w, 3.4 * MAP_PPY);
+      }
+      ctx.globalAlpha = 1;
     } else if (s.kind === 'fairwayBunker' || s.kind === 'greensideBunker') {
-      // Dithered speckle in the sand.
+      // Dithered speckle in the sand, and a BANK: the reference's bunkers have a stepped darker
+      // rim a couple of art pixels wide inside their edge, which is what makes them read as a dish
+      // rather than as a puddle of cream.
       ctx.clip();
       const bb = bboxOf(poly);
       ctx.fillStyle = pal.sandDot;
@@ -193,12 +327,23 @@ export function buildMap(hole, theme) {
           ctx.fillRect(px, py, MAP_PPY, MAP_PPY);
         }
       }
+      ctx.strokeStyle = tintOf(pal.sandDot, 0.9);
+      ctx.lineWidth = MAP_PPY * 1.6;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
     } else if (s.kind === 'green') {
       ctx.strokeStyle = pal.greenEdge;
       ctx.lineWidth = MAP_PPY * 1.2;
       tracePoly(ctx, poly, toPx); ctx.stroke();
     }
     ctx.restore();
+
+    // THE SEAM, outside the clip so it lands on BOTH surfaces (see SEAM_ALPHA above). Water paints
+    // its own dirt bank and does not want a black line on top of it.
+    if (s.kind !== 'water') {
+      ctx.strokeStyle = `rgba(0,0,0,${SEAM_ALPHA})`;
+      ctx.lineWidth = MAP_PPY * SEAM_PX;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
+    }
   }
 
   for (const d of hole.decor || []) {
@@ -210,7 +355,22 @@ export function buildMap(hole, theme) {
   // THE SLOPE READ IS NOT IN THE MAP ANY MORE. It is drawn per frame, at screen resolution, by
   // `drawSlope` below - see its header for why a raster at MAP_PPY could not carry it.
 
-  // Trees last: chunky dark canopies with a darker rim, drawn over whatever they stand on.
+  // (see `treeShapes` above for the silhouette)
+  // TREES LAST, drawn over whatever they stand on.
+  //
+  // REBUILT 2026-09-05 FROM A 1:1 CROP OF THE REFERENCE. Ours was a flat disc with a slightly
+  // darker rim; the original's canopy is four things at once, and all four are what make a tree
+  // belt read as woodland rather than as a row of buttons:
+  //
+  //   - a HARD BLACK OUTLINE, not a dark-green rim. That key line is what holds a canopy together
+  //     against grass at this pixel size, and it is the same trick the swing meter needs.
+  //   - a MOTTLED two-tone canopy: measured (104,105,22) as the body against (146,152,18)
+  //     highlights, scattered in clumps rather than dithered.
+  //   - a highlight biased to the UPPER LEFT, so the whole belt is lit from one direction.
+  //   - a SCALLOPED underside - the bottom of the canopy is a row of bumps, not an arc.
+  //
+  // The clumps are seeded from the tree's own position, so a belt is the same wood every load (the
+  // same reason `expandBelt` is seeded) and two trees standing side by side are not identical.
   for (const t of treesOf(hole)) {
     const type = hole.treeTypes[t.type];
     const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
@@ -218,11 +378,43 @@ export function buildMap(hole, theme) {
     // A saguaro is drawn at its TRUNK, not its canopy: it is a pillar, and a 1.8 yd disc is what
     // the ball actually has to miss. Everything else is drawn at the canopy it blocks with, so
     // what is painted is what stops the ball.
-    const r = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fillStyle = fill; ctx.fill();
-    ctx.lineWidth = Math.max(1, MAP_PPY * 0.7); ctx.strokeStyle = rim; ctx.stroke();
-    if (type.name === 'saguaro') {                       // two arms, so it reads as a cactus
+    const cactus = type.name === 'saguaro';
+    const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+    const rnd = mulberry32(Math.round(t.x * 977) ^ Math.round(t.y * 31));
+
+    // THE SILHOUETTE IS A UNION OF CIRCLES, and the black key is drawn UNDER it at a slightly
+    // larger radius rather than stroked over it. Stroking a multi-arc path outlines every
+    // sub-path, so the first attempt drew a black ring around each bump and the belt came out
+    // looking like a row of mushrooms - visible in the very first screenshot of this pass.
+    // The bumps stay INSIDE `r`, because what is painted has to be what stops the ball.
+    const key = Math.max(1.2, MAP_PPY * 0.75);
+    const shapes = treeShapes(px, py, r, cactus);
+    ctx.save();
+    ctx.fillStyle = tintOf(rim, 0.45);
+    for (const [cx, cy, cr] of shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr + key, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = fill;
+    for (const [cx, cy, cr] of shapes) { ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill(); }
+
+    if (!cactus) {
+      // The clumps, clipped to the canopy so nothing spills onto the grass.
+      ctx.beginPath();
+      for (const [cx, cy, cr] of shapes) { ctx.moveTo(cx + cr, cy); ctx.arc(cx, cy, cr, 0, Math.PI * 2); }
+      ctx.clip();
+      const hi = tintOf(fill, 1.35);
+      const lo = tintOf(fill, 0.82);
+      for (let i = 0; i < 8; i++) {
+        // Biased upper-left: the light comes from there, so the highlights cluster there.
+        const a = rnd() * Math.PI * 2;
+        const d = Math.sqrt(rnd()) * r * 0.8;
+        const cx = px + Math.cos(a) * d - r * 0.1;
+        const cy = py + Math.sin(a) * d - r * 0.1;
+        ctx.fillStyle = (cx - px) + (cy - py) < 0 ? hi : lo;
+        ctx.beginPath(); ctx.arc(cx, cy, r * (0.2 + rnd() * 0.16), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    if (cactus) {                                        // two arms, so it reads as a cactus
       ctx.fillStyle = fill;
       ctx.fillRect(px - r * 2.1, py - r * 0.4, r * 1.3, r * 0.8);
       ctx.fillRect(px + r * 0.8, py - r * 1.4, r * 0.8, r * 1.3);

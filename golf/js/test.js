@@ -942,6 +942,57 @@ console.log('\n-- 12d. THE GREEN SLOPE READ, AND THE METER SCALE --');
     /setAttribute\('aria-label', t\(`lie_\$\{lie\}`\)\)/.test(ui));
 }
 
+console.log('\n-- 12e. THE COURSE ART PASS --');
+{
+  const RN = await import('./render.js');
+  const rn = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+
+  // THE TREE SILHOUETTE MUST FIT INSIDE ITS OWN COLLISION RADIUS. shot.js's treeHit tests the ball
+  // against `type.canopy`, and this renderer's whole contract is that what is painted is what stops
+  // the ball - a bump sticking out past `r` is a tree the ball flies straight through.
+  {
+    let worst = 0;
+    for (const [x, y, rr] of RN.treeShapes(0, 0, 10, false)) worst = Math.max(worst, Math.hypot(x, y) + rr);
+    ok(`the canopy's bumps stay inside the collision radius (${worst.toFixed(2)} of 10)`, worst <= 10 + 1e-9);
+    ok('a cactus is one circle, drawn at its trunk', RN.treeShapes(0, 0, 10, true).length === 1);
+    ok('a tree is a union of circles, not a disc', RN.treeShapes(0, 0, 10, false).length > 1);
+  }
+
+  // [KNOWN-BUG PROBE] The black key has to be drawn UNDER the fill at a larger radius. Stroking a
+  // multi-arc path outlines every SUB-path, so the first attempt put a black ring around each bump
+  // and a tree belt came out looking like a row of mushrooms.
+  ok('[KNOWN-BUG PROBE] the tree key is filled under the canopy, never stroked over it',
+    /for \(const \[cx, cy, cr\] of shapes\) \{ ctx\.beginPath\(\); ctx\.arc\(cx, cy, cr \+ key/.test(rn)
+    && !/ctx\.lineWidth = Math\.max\(1\.2, MAP_PPY \* 0\.75\);\s*\n\s*ctx\.strokeStyle = tintOf\(rim/.test(rn));
+
+  // The seam is a DARKENING, not a colour: measured at 0.87x the darker surface's own brightness,
+  // which is why one rule covers sand-on-grass, water-on-grass and green-on-collar alike.
+  ok('the surface seam is translucent black, not a fourth green',
+    /rgba\(0,0,0,\$\{SEAM_ALPHA\}\)/.test(rn) && /const SEAM_ALPHA = 0\.1/.test(rn));
+  ok('...and it is drawn OUTSIDE the clip, so it lands on both surfaces',
+    /ctx\.restore\(\);\s*\n\s*\n\s*\/\/ THE SEAM, outside the clip/.test(rn));
+  ok('water paints its own dirt bank instead of taking the seam',
+    /if \(s\.kind !== 'water'\) \{/.test(rn) && /ctx\.strokeStyle = pal\.bank;/.test(rn));
+
+  // The rough's texture is seeded, like every other generated thing on a hole: a pattern that
+  // reshuffled per load would make the same hole look different every visit for no gain.
+  ok('the rough grows tufts, and they are seeded', /function scatterTufts/.test(rn) && /mulberry32\(seed\)/.test(rn));
+  ok('...and the tuft colour is a tint of the surface, not a new palette entry',
+    /scatterTufts\(ctx, b, toPx, tintOf\(/.test(rn));
+
+  // Water and sand each got the thing that makes them read as a dish rather than a puddle.
+  ok('water is banded and has a mud line at its lip',
+    /pal\.bankMud/.test(rn) && /ctx\.globalAlpha = 0\.45;/.test(rn));
+  ok('bunkers have a bank inside their edge', /ctx\.strokeStyle = tintOf\(pal\.sandDot, 0\.9\);/.test(rn));
+
+  // Both themes must carry every new palette key, or a desert hole paints `undefined`.
+  for (const key of ['water', 'waterBand', 'waterEdge', 'bank', 'bankMud', 'sandDot']) {
+    ok(`both themes define ${key}`,
+      typeof RN.THEMES.pine[key] === 'string' && typeof RN.THEMES.desert[key] === 'string',
+      'a missing key paints `undefined`, which canvas silently ignores');
+  }
+}
+
 console.log('\n-- 13. a whole hole can be played out --');
 // The check that matters: does a plausible sequence of good swings get the ball in the hole?
 {

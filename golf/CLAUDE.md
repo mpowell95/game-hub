@@ -1386,6 +1386,86 @@ against `ARC_A0_DEG`/`ARC_DEG_PER_UNIT`, the buffer before the block, that the m
 from `swing.js` rather than keeping a copy, and that the lie tile is a picture painted from
 `fillsFor`.
 
+## The course art pass (2026-09-05)
+
+Batch 8, and every number in it is measured off the reference at 1:1 rather than eyeballed.
+
+### The dark seam where two surfaces meet
+
+Scanning a row straight across a fairway edge (s1-tee frame 30, y=1150, left to right out of the
+rough):
+
+| x | colour | what |
+|---|---|---|
+| 230-250 | (110,129,44) | heavy rough |
+| **252-256** | **(98,119,41)** | **a darker line, ~5 device px - darker than BOTH sides** |
+| 258-274 | (117,144,58) | a step lighter |
+| 276-280 | (134,161,72) | another step |
+| 282+ | (154,177,92) | fairway |
+
+The line measures **0.87x the rough's own brightness**, so it is a DARKENING rather than a colour.
+That is why it ships as translucent black (`SEAM_ALPHA`) and not as a fourth green: one rule then
+covers every pair - sand on grass, water on grass, green on its collar - and the seam cannot be a
+shade that disagrees with the surfaces either side of it, because it is made of them. It is stroked
+OUTSIDE the clip so it lands on both.
+
+### The rough has grass in it
+
+Small `V` tuft glyphs in a lighter tint, roughly one every 3.4 yards and about 0.65 yd across.
+Seeded per surface (`mulberry32`, the same reason `expandBelt` is seeded) so a hole grows the same
+grass on every device and in every test run. The base's tufts are laid down BEFORE any surface is
+painted over them, which is what makes it cheap: a tuft where the fairway will be is simply covered.
+
+### Water does not meet the grass directly
+
+Measured down a column through a shoreline (frame 30, x=560):
+
+| device px | colour | what |
+|---|---|---|
+| ~6 | (158,179,73) -> (175,177,103) | a pale grass lip |
+| ~12 | (117,58,56) -> (153,82,100) | **a red-brown DIRT BANK** |
+| ~6 | (56,42,33) -> (51,46,72) | a near-black mud line |
+| then | (14,77,119) / (25,144,231) / (17,109,188) | water, in horizontal BANDS |
+
+So: `bank`, `bankMud`, `waterEdge` (the deep water hugging the shore) and `waterBand` are all new,
+and `water` is now the BRIGHT ripple rather than the body.
+
+**The ripples are deliberately fainter than the measurement.** That column was taken in shallow
+water right at the shore, where the contrast is at its highest; drawn at that strength across a
+whole pond it reads as a barcode - which is exactly what the first attempt looked like. Half alpha
+over a 10 yd period is the same rhythm without the shout.
+
+### Bunkers have a bank
+
+A stepped darker-cream rim inside the sand's edge, which is what makes one read as a dish rather
+than as a puddle of cream.
+
+### Trees, rebuilt
+
+Ours was a flat disc with a slightly darker rim. A 1:1 crop of the original shows four things, and
+all four are what make a belt read as woodland rather than as a row of buttons:
+
+- **a hard BLACK outline**, not a dark-green rim - that key line is what holds a canopy together
+  against grass at this pixel size, the same trick the swing meter needs;
+- **a mottled two-tone canopy** - measured (104,105,22) as the body against (146,152,18) highlights,
+  in clumps rather than dithered;
+- **the highlight biased upper-left**, so a whole belt is lit from one direction;
+- **a lumpy underside** rather than a clean arc.
+
+**THE SILHOUETTE IS A UNION OF CIRCLES AND EVERY ONE FITS INSIDE `type.canopy`.** `shot.js`'s
+`treeHit` tests the ball against that radius, and this renderer's whole contract is that what is
+painted is what stops the ball - a bump sticking out past `r` would be a tree the ball flies through.
+`treeShapes` is an exported pure function with a test on exactly that (measured 9.94 of 10), not four
+literals inside a draw loop.
+
+**And the key line is FILLED UNDER the canopy at a larger radius, never stroked over it.** Stroking a
+multi-arc path outlines every SUB-path, so the first attempt drew a black ring around each bump and
+the belt came out looking like a row of mushrooms. `test.js` carries that as a KNOWN-BUG PROBE.
+
+Covered by `golf/js/test.js` section **12e**, including a check that BOTH themes define every new
+palette key - a missing one paints `undefined`, which canvas silently ignores, so a desert hole
+would simply lose its water.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
