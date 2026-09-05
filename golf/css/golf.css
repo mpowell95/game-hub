@@ -152,7 +152,11 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px; padding: 5px 6px 6px;
 }
-.gf-root .gf-clubartwrap { display: block; width: 100%; height: 42px; }
+/* The defs block is markup, not a picture: it must take no space and paint nothing. */
+.gf-root .gf-artdefs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+/* Taller than it was (42px), because the drawn heads are near-square and the tile is mostly
+   PICTURE in the reference. The fit checks in test-visual.mjs are what hold this honest. */
+.gf-root .gf-clubartwrap { display: block; width: 100%; height: 54px; }
 .gf-root .gf-clubart { display: block; width: 100%; height: 100%; }
 .gf-root .gf-clubname { font-size: 16px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
 /* How far this club goes from THIS lie. Secondary to the name, so it is smaller and dimmer -

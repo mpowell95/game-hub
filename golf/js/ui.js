@@ -12,6 +12,7 @@
 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
+import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
@@ -163,23 +164,6 @@ function saveSettings(s) {
  *  with the name in big type beneath it. Ours was a 34x22 thumbnail floating in a box more than
  *  twice its size - Matt: "the club image and the club name 'driver' take up less than half of the
  *  space the box takes up. fix it by filling the box." */
-function clubArt(id) {
-  const metal = '#d8dee6'; const dark = '#5c6672'; const shaft = '#2b3138';
-  const wrap = (inner) => `<svg class="gf-clubart" viewBox="0 0 80 46" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${inner}</svg>`;
-  if (id === 'putter') {
-    return wrap(`<rect x="6" y="24" width="52" height="12" fill="${metal}" stroke="${dark}" stroke-width="2"/>
-      <rect x="52" y="4" width="6" height="24" fill="${shaft}"/>`);
-  }
-  if (id === 'driver' || id.endsWith('wood')) {
-    return wrap(`<ellipse cx="28" cy="30" rx="24" ry="14" fill="${metal}" stroke="${dark}" stroke-width="2"/>
-      <ellipse cx="22" cy="27" rx="9" ry="5" fill="#eef2f6"/>
-      <rect x="46" y="2" width="6" height="26" fill="${shaft}"/>`);
-  }
-  const wedge = id.endsWith('wedge');
-  return wrap(`<path d="${wedge ? 'M10 40 L24 12 L46 17 L36 42 Z' : 'M12 40 L22 14 L44 19 L36 42 Z'}"
-      fill="${metal}" stroke="${dark}" stroke-width="2"/>
-    <rect x="40" y="2" width="6" height="20" fill="${shaft}"/>`);
-}
 
 class GolfGame {
   constructor(container) {
@@ -515,6 +499,9 @@ class GolfGame {
     this.rootEl.innerHTML = '';
     this.rootEl.innerHTML = `
       <canvas class="gf-canvas" data-role="canvas" aria-label="${t('a11y_view')}"></canvas>
+      <!-- The club artwork's gradients and clips, injected ONCE. Every tile then references a
+           symbol out of this, so changing club costs one <use> instead of re-parsing 19 KB. -->
+      <svg class="gf-artdefs" aria-hidden="true" focusable="false">${CLUB_ART_DEFS}</svg>
       <div class="gf-hud">
         <div class="gf-tl">
           <div class="gf-tl-col">
@@ -1001,7 +988,7 @@ class GolfGame {
       ? `${(d * FT_PER_YD).toFixed(1)} ${t('ft')}`
       : `${d.toFixed(1)} ${t('yds')}`;
 
-    this.el.clubart.innerHTML = clubArt(club.id);
+    this.el.clubart.innerHTML = clubArtSVG(club.id);
     this.el.clubname.textContent = t(`club_${club.id}`);
     // HOW FAR THIS CLUB GOES, ON THIS LIE, printed under its name. The reference's tile carries a
     // number and ours did not, so the only way to know what a 6 iron was worth here was to swing

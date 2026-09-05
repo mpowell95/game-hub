@@ -1614,6 +1614,38 @@ its inputs, which is what lets section 14 play out all 36 holes and get the same
 Covered by `golf/js/test.js` section **8c**, including a KNOWN-BUG PROBE that a perfect strike at the
 top goes 20-30 yds offline - it used to return exactly 0.0 at any power, which was the bug.
 
+## The club art is Matt's, and it comes as ONE canvas (2026-09-05)
+
+Three rounds of my own attempts came back wrong - *"None of the clubs are even shaped right, and the
+putter has the club shaft coming out of the center of the club - which the example does NOT"*, then
+*"Why did you guess at the shapes of the clubs and invent shapes?"*. Matt drew them himself in
+Claude Design instead. Five heads for fourteen clubs, in `golf/js/club-art.js`:
+
+| symbol | clubs |
+|---|---|
+| `driverArt` | driver |
+| `woodArt` | 3 wood, 5 wood |
+| `ironArt` | 2-9 iron |
+| `wedgeArt` | pitch, sand, lob |
+| `putterArt` | putter |
+
+**THEY ARE DRAWN ON ONE SHARED CANVAS AND MUST STAY ON IT.** Measured bounding boxes: driver
+165x167, wood 129x131, iron 125x127, wedge 132x135, putter 147x111. The driver's head really is
+bigger than the 3 wood's and the wedge really is more lofted than the iron - but only if every
+symbol renders through the SAME viewBox, which is why `CLUB_ART_VIEWBOX` (`4 6 176 178`, the union
+of all five plus a margin) is one constant and not five. Giving a club its own box to "make it fit"
+throws the bag's proportions away, and that was the complaint that started this.
+
+**Every id in the defs is prefixed `gf-`.** They arrived named `steelFace`, `headClip`, `faceGlow`
+and so on, which would sooner or later collide with another game's markup in the hub's single
+document - and an SVG id collision is silent. It just paints the wrong thing.
+
+The defs are injected ONCE per play screen into a zero-size `<svg class="gf-artdefs">`; a tile is
+then one `<use href="#gf-driverArt">`, so changing club costs a reference rather than re-parsing
+19 KB of markup. The art area grew 42px -> 54px because the heads are near-square and the reference's
+tile is mostly picture; `test-visual.mjs`'s fit checks at both phone heights and in both hosts are
+what keep that honest.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
