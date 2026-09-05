@@ -1181,6 +1181,97 @@ tap - the 45-frame static run above starts well before tap 3 and runs straight t
 have caught either. It also reads the three pose constants out of the file and fails if they drift
 outside the measured windows, so a retune needs a new measurement rather than a guess.
 
+## What the ball does when it lands, and the wind (2026-09-05)
+
+Batch 5. Three items, and one of them is a whole missing force.
+
+### It bounces, then it rolls
+
+Matt: *"the roll looks unnatural... it lands then slides. it doesn't look like it's rolling, and it
+almost never bounces."*
+
+Both halves of that were ONE mistake. `groundPoint` was a single smooth deceleration curve for the
+whole run-out (`1 - (1-p)^2`) with a sine wave laid on top for height. So the ball's forward speed
+never changed abruptly at any point, which is exactly what sliding looks like, and the wave's peaks
+did not line up with anything the distance was doing.
+
+A real ball does two different things one after the other, and they have to be two different curves:
+
+- **While it is in the air it does not slow down.** Each hop is now LINEAR in distance and a
+  parabola in height. The step change in speed at each landing is the whole reason a bounce reads
+  as a bounce from directly overhead, where the only height cue is the shadow gap.
+- **Once it is rolling it decelerates smoothly** to a stop.
+
+Three hops with geometrically decaying length (`HOP_DECAY` 0.55) carry `HOP_SHARE` (55 %) of the
+run-out in `HOP_TIME` (35 %) of its duration; the roll carries the rest.
+
+**The hop was also too small to SEE.** It was `apex * 0.10` decayed - about 4 px on a 393 px phone
+against a 6 px ball, under the renderer's own `lift > 1` shadow gate for most of its arc. It is
+`apex * 0.14 + 0.8` yd now, **measured at 14.3 px for a driver**, and capped at a third of the
+run-out so a lob wedge that runs 2.9 yds does not leap 4 yds into the air (its hop measures
+0.96 yd).
+
+`landedOn` kills the hops where a ball does not bounce: sand swallows it and heavy rough traps it,
+so those roll from a standing start.
+
+### Roll SPEED by surface, not just roll distance
+
+Matt: *"the roll speed and distance should also depend on the surface type it's on."* The distance
+already did (`clubs.js`'s `rollFactor`); the speed did not, so a ball running out on a green and one
+dying in heavy rough took the same time to cover their different distances.
+
+`rollMs(rollYd, kind)` now reuses **`PUTT_DRAG`** - the table Batch 3 added for putting off the
+green - normalised so the FAIRWAY is 1.00 (the putting table is normalised on the green, because
+that is where putts happen). One table for both, so a surface cannot be fast for a putt and slow for
+a run-out. The same 20 yds: **green 4.20 s, fairway 3.05 s, heavy rough 1.88 s.**
+
+### Wind, which did not exist at all
+
+Matt: *"Do you have wind blow on any hole? I haven't seen it yet."* The panel was there, wired to a
+hardcoded `0`. There was no wind term anywhere in `shot.js`.
+
+**MEASURED off all four reference clips at full resolution:** the panel reads `wind`, then a CHUNKY
+white arrow, then the speed as a bare number to one decimal - `0.9`, **identical in every frame of
+every clip**, with no unit named. So the wind is a **constant for the hole**. The arrow is fat: a
+broad head about two-thirds the glyph's width over a short stubby tail, pointing down-right in this
+hole's footage. The stepped edges are the diagonal's own pixel stair-stepping, not a serration.
+
+**The STRENGTH is decided, not measured, and `shot.js` says so in its own header.** The effect could
+not be isolated from one clean shot at 0.9, which the Batch 2 pass already recorded. So it is
+calibrated against what the PLAYER can do about it instead: full wind (2.0) straight across moves a
+driver **12.0 yds**, which is 3.2 degrees at 215 yds - three taps of the aim arrow now that a tap is
+1.0 degree. A correction, not a wall. Along the shot it is worth **5.6 %** either way on a driver.
+
+- `windFor(hole)` is **deterministic per hole** and deliberately not per round: the reference's wind
+  does not change during a hole, a hole that plays differently every visit cannot be learned, and a
+  test that has to stub the weather is a test that stops covering the weather. Seeded from the hole
+  number and its card yardage, which differ between the two courses, so **no hole data changed**.
+  A hole may state its own `wind` field and that wins - nothing shipped does, but it is what lets a
+  test assert a club's distance without the weather in the way.
+- Speeds are 0.0-2.0 in tenths; **6 of the 36 holes are dead calm**, which is what makes a windy one
+  register as windy. Eight compass points, all eight used.
+- It is folded into the carry and the lateral offset **before** the tree test, not added to the
+  landing point afterwards - a ball blown into a tree has to hit the tree.
+- **Putts are unaffected.** Wind does not move a rolling ball meaningfully and it would make putting
+  unreadable.
+
+Every hole on both courses still finishes in par+2 or better with the weather on.
+
+### And the HUD panels are hatched
+
+Measured off the same wind-panel crop: the reference's panels are **translucent dark with fine
+diagonal stripes** running the same way as the swing meter's band, plus a black outer edge and a
+light inner rule. Ours were flat boxes, which is most of why the HUD sat ON the course rather than
+over it. One CSS variable (`--gf-hatch`) on `.gf-panel`, so every panel matches at once.
+
+Covered by `golf/js/test.js` sections **9b** (wind: determinism, range, the eight bearings, the
+calm count, that a hole's own field wins, and the four calibration numbers), **9c** (the run-out:
+monotonic, faster in the hops than in the roll, three decaying peaks, the hop measured in PIXELS
+against the ball's own size, and no bounce out of sand or heavy rough) and **9d** (roll time by
+surface). Section 9's club-distance assertions now run against a **calm clone of hole 1**, because
+every one of them is about the club and the lie and hole 1's own 1.4 wind is worth about 6 yds on a
+drive.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a

@@ -9,7 +9,7 @@
 // ours (golf-reference-spec.md §20). The two numbers that are not are marked.
 
 import { CLUBS, lieOf, rollFactor } from './clubs.js';
-import { surfaceAt, slopeAt, treesOf, distYd } from './holes.js';
+import { surfaceAt, slopeAt, treesOf, distYd, mulberry32 } from './holes.js';
 
 const DEG = Math.PI / 180;
 
@@ -26,32 +26,143 @@ const DEG = Math.PI / 180;
  *  rollout at 2.8 s, which lands in the reference's range. */
 export const ROLL_DECEL = 4.3;
 
-/** How long a rollout of `rollYd` takes, in ms. Constant deceleration: t = sqrt(2d/a). */
-export function rollMs(rollYd) {
-  return rollYd > 0 ? Math.sqrt((2 * rollYd) / ROLL_DECEL) * 1000 : 0;
+/** How long a rollout of `rollYd` takes, in ms. Constant deceleration: t = sqrt(2d/a).
+ *
+ *  `kind` is the surface it comes down ON, and it changes the deceleration. Matt, 2026-09-04:
+ *  "the roll speed and distance should also depend on the surface type it's on." The DISTANCE
+ *  already did (clubs.js's `rollFactor`); the SPEED did not, so a ball running out on a green and
+ *  one dying in heavy rough took the same time to cover their different distances - which reads as
+ *  the ball sliding to a scripted stop rather than being slowed by anything.
+ *
+ *  It reuses `PUTT_DRAG`, normalised so the FAIRWAY is 1.00 (the putting table is normalised on
+ *  the green, because that is where putts happen). One table for both, so a surface cannot be
+ *  fast for a putt and slow for a run-out. A green is about half the fairway's drag, so a ball
+ *  running onto one keeps going; heavy rough is about 2.6x, so it stops dead. */
+export function rollMs(rollYd, kind) {
+  const a = ROLL_DECEL * (kind ? puttDrag(kind) / puttDrag('fairway') : 1);
+  return rollYd > 0 ? Math.sqrt((2 * rollYd) / a) * 1000 : 0;
 }
+
+/** THE HOPS, AND HOW MUCH OF THE RUN-OUT THEY CARRY.
+ *
+ *  Three hops with geometrically decaying length, together covering `HOP_SHARE` of the run-out in
+ *  `HOP_TIME` of its duration - so the ball is plainly FASTER while it is bouncing and then settles
+ *  into a long, slowing roll. */
+const HOP_DECAY = 0.55;
+const HOP_SHARE = 0.55;
+const HOP_TIME = 0.35;
+const HOP_LENS = [1, HOP_DECAY, HOP_DECAY * HOP_DECAY];
 
 /** Where the ball is, `p` (0..1) through its ROLLOUT: how far along, and how high it is hopping.
  *
- *  Distance eases out (it is decelerating), and the first part of the rollout carries two or three
- *  visible BOUNCES whose height decays - the reference's ball clearly hops before it settles into a
- *  roll. The hop is small: this is a top-down view and the only height cue is the shadow gap. */
-export function groundPoint(p, rollYd, apex) {
-  const eased = 1 - (1 - p) * (1 - p);            // constant deceleration
-  const HOPS = 3;
-  const hopZone = 0.45;                            // bouncing is over by 45 % of the rollout
-  let height = 0;
-  if (p < hopZone) {
-    const q = p / hopZone;                         // 0..1 across the bouncing part
-    const decay = (1 - q) * (1 - q);
-    height = Math.abs(Math.sin(q * Math.PI * HOPS)) * apex * 0.10 * decay;
+ *  REWRITTEN 2026-09-05. Matt: "the roll looks unnatural... it lands then slides. it doesn't look
+ *  like it's rolling, and it almost never bounces."
+ *
+ *  Both halves of that were one mistake. The old model was a SINGLE smooth deceleration curve for
+ *  the whole run-out with a small sine wave laid on top for height - so the ball's forward speed
+ *  never changed abruptly at any point, which is precisely what "sliding" looks like, and the
+ *  wave's peaks did not line up with anything the distance was doing. A real ball does two
+ *  different things one after the other, and they have to be two different curves:
+ *
+ *    - WHILE IT IS IN THE AIR IT DOES NOT SLOW DOWN. Each hop is LINEAR in distance and a parabola
+ *      in height. The step change in speed at each landing is the whole reason a bounce reads as a
+ *      bounce from directly overhead, where the only height cue is the shadow gap.
+ *    - ONCE IT IS ROLLING IT DECELERATES SMOOTHLY to a stop.
+ *
+ *  The hop was also too small to SEE. It was `apex * 0.10` decayed, which for a driver is about
+ *  4 px on a 393 px phone against a 6 px ball - under the renderer's own `lift > 1` shadow gate for
+ *  most of its arc. It is now `apex * 0.14 + 0.8` yd, about 10 px for a driver, and it is capped at
+ *  a third of the run-out so a lob wedge that runs 3 yds does not leap 4 yds into the air.
+ *
+ *  `landedOn` kills the hops where a ball does not bounce: sand swallows it, and deep rough traps
+ *  it. Those surfaces roll from a standing start instead. */
+export function groundPoint(p, rollYd, apex, landedOn) {
+  const noHop = landedOn === 'greensideBunker' || landedOn === 'fairwayBunker'
+    || landedOn === 'heavyRough' || landedOn === 'water';
+  const hopH = noHop ? 0 : Math.min(apex * 0.14 + 0.8, rollYd * 0.33);
+  const share = noHop ? 0 : HOP_SHARE;
+  const tHop = noHop ? 0 : HOP_TIME;
+
+  if (p >= tHop) {
+    // The roll: from `share` of the way along to all of it, decelerating to a stop.
+    const q = tHop >= 1 ? 1 : (p - tHop) / (1 - tHop);
+    const eased = 1 - (1 - q) * (1 - q);
+    return { along: rollYd * (share + (1 - share) * eased), height: 0 };
   }
-  return { along: rollYd * eased, height };
+
+  // The hops. Each is linear in distance and a parabola in height; the lengths decay geometrically
+  // and so does the time each one takes, so later hops are shorter AND quicker.
+  const total = HOP_LENS[0] + HOP_LENS[1] + HOP_LENS[2];
+  let t0 = 0;
+  let d0 = 0;
+  for (let i = 0; i < HOP_LENS.length; i++) {
+    const frac = HOP_LENS[i] / total;
+    const t1 = t0 + tHop * frac;
+    const d1 = d0 + share * frac;
+    if (p < t1 || i === HOP_LENS.length - 1) {
+      const q = (p - t0) / Math.max(1e-6, t1 - t0);
+      return {
+        along: rollYd * (d0 + (d1 - d0) * Math.min(1, q)),
+        height: hopH * Math.pow(HOP_DECAY, i) * 4 * q * (1 - q),
+      };
+    }
+    t0 = t1; d0 = d1;
+  }
+  return { along: rollYd * share, height: 0 };
 }
 
 /** Flight time, DECIDED: 0.9 s + distance/60. A 215 yd drive is ~4.5 s, a 50 yd wedge ~1.7 s. The
  *  reference's own 7.5 s drive is too slow for a phone game, and its lack of a skip was the single
  *  worst thing about watching it (§13 flaw 7). A tap skips to the landing. */
+// --- wind ----------------------------------------------------------------------------------------
+//
+// MEASURED off all four reference clips: the panel reads `wind`, a chunky white arrow, and `0.9` -
+// IDENTICAL in every frame of every clip, so the wind is a CONSTANT FOR THE HOLE, one decimal
+// place, with no unit named. That is the whole of what the footage can tell us. Its EFFECT could
+// not be isolated (one clean shot, and 0.9 is a small number), which was already recorded in the
+// batch 2 measuring pass.
+//
+// SO THE STRENGTH BELOW IS DECIDED, NOT MEASURED, and it is calibrated against what the PLAYER can
+// do about it rather than against the footage: full wind (2.0) straight across moves a driver about
+// 12 yds, which is 3.2 degrees at 215 yds - three taps of the aim arrow, now that a tap is 1.0
+// degree. Small enough to be a correction, big enough to be worth making.
+export const WIND_MAX = 2.0;
+export const WIND_YD_PER_UNIT_SEC = 1.34;
+
+/** The wind on a hole: `{ speed, bearing }`, speed 0.0-2.0 in tenths, bearing in radians measured
+ *  the way `aimRad` is (0 = up the hole, clockwise positive), snapped to the eight compass points.
+ *
+ *  DETERMINISTIC PER HOLE, and deliberately not per round: the reference's wind does not change
+ *  during a hole, a hole that plays differently every visit cannot be learned, and a test that has
+ *  to stub the weather is a test that stops covering the weather. The seed is the hole number and
+ *  its card yardage, which differ between the two courses, so no hole data had to change. */
+export function windFor(hole) {
+  if (!hole) return { speed: 0, bearing: 0 };
+  // A hole may state its own wind. Nothing in the shipped course data does - the derivation below
+  // is what every hole actually uses - but it is the honest default rather than the only rule, and
+  // it is what lets a test assert a club's distance without the weather in the way.
+  if (hole.wind) return hole.wind;
+  const rnd = mulberry32((hole.n | 0) * 7919 + Math.round(hole.cardYards || 0));
+  rnd();                                            // discard the first draw; mulberry32's is weak
+  const r = rnd();
+  // One hole in six is dead calm, which is what makes a windy one register as windy.
+  const speed = r < 0.167 ? 0 : Math.round((0.3 + rnd() * (WIND_MAX - 0.3)) * 10) / 10;
+  const bearing = Math.floor(rnd() * 8) * (Math.PI / 4);
+  return { speed, bearing };
+}
+
+/** What the wind does to one shot, as an ALONG and a SIDE displacement in yards.
+ *
+ *  It is folded into the carry and the lateral offset BEFORE the tree test, not added to the
+ *  landing point afterwards - a ball blown into a tree has to hit the tree. */
+export function windEffect(hole, aimRad, flightSeconds) {
+  const w = windFor(hole);
+  if (!(w.speed > 0)) return { alongYd: 0, sideYd: 0 };
+  const rel = w.bearing - aimRad;                   // wind direction relative to the shot
+  const push = w.speed * WIND_YD_PER_UNIT_SEC * flightSeconds;
+  return { alongYd: push * Math.cos(rel), sideYd: push * Math.sin(rel) };
+}
+
 export function flightMs(distanceYd) { return (0.9 + distanceYd / 60) * 1000; }
 
 /** Peak height in yards, for the shadow gap.
@@ -158,11 +269,17 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
 export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distanceMul = 1 }) {
   const lieKind = surfaceAt(hole, from[0], from[1]);
   const lie = lieOf(lieKind);
-  const carry = club.carry * power * lie.power * distanceMul;
+  const struck = club.carry * power * lie.power * distanceMul;
+  // THE WIND, folded in before anything else looks at where the ball goes. The flight time is taken
+  // from the UNWINDED carry: a headwind that shortens the shot also shortens the time it has to act
+  // over, and solving that properly would need an iteration to buy a fraction of a yard.
+  const wind = windEffect(hole, aimRad, flightMs(struck) / 1000);
+  const carry = Math.max(1, struck + wind.alongYd);
   const apex = apexYd(club, carry);
   // The miss is expressed as a lateral offset at the landing point, so the curve above and the
-  // straight-line geometry agree on where the ball ends up.
-  const sideYd = Math.tan(mishitDeg * DEG) * carry;
+  // straight-line geometry agree on where the ball ends up. The wind's cross component joins it,
+  // for the same reason: one number for "how far off the aim line did it finish".
+  const sideYd = Math.tan(mishitDeg * DEG) * carry + wind.sideYd;
 
   const blocked = treeHit(hole, from, aimRad, carry, sideYd, apex);
   const cos = Math.cos(aimRad);
@@ -189,13 +306,13 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   const restOn = surfaceAt(hole, rest[0], rest[1]);
 
   return {
-    carry, apex, sideYd, aimRad, blocked,
+    carry, apex, sideYd, aimRad, blocked, wind,
     landing, landedOn, rollYd, rest, restOn,
     holed: rolled.holed,
     travelledYd: distYd(from, rest),
     flightMs: flightMs(carry) * (blocked ? p : 1),
     // The ground phase is a real, watchable part of the shot, not a jump to the rest position.
-    rollMs: rollMs(rolled.holed ? distYd(landing, rest) : rollYd),
+    rollMs: rollMs(rolled.holed ? distYd(landing, rest) : rollYd, landedOn),
     lieKind,
   };
 }

@@ -17,7 +17,7 @@ import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar,
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BAR_HALF } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, FT_PER_YD } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
@@ -29,13 +29,20 @@ function esc(v) {
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/** The wind indicator, drawn the way the reference draws it: a chunky arrow glyph plus the speed
- *  as a bare number. It shows the arrow AT ZERO too - the reference does, and Matt's note was that
- *  ours said "Wind Calm", which is a phrase the original never uses. The arrow is greyed and
- *  points up while there is no wind; when wind ships, it rotates and brightens. */
+/** The wind indicator. MEASURED off all four reference clips at full resolution: the panel reads
+ *  `wind`, then a CHUNKY white arrow, then the speed as a bare number to one decimal - `0.9`, with
+ *  no unit named, identical in every frame of every clip.
+ *
+ *  The arrow is FAT: a broad head about two-thirds the glyph's width over a short stubby tail, not
+ *  the thin stemmed arrow this used to draw. The stepped edges in the original are the diagonal's
+ *  own pixel stair-stepping, not a serration to reproduce.
+ *
+ *  It shows the arrow AT ZERO too - the reference does, and Matt's note was that ours said "Wind
+ *  Calm", which is a phrase the original never uses. Calm is greyed and points up; wind rotates it
+ *  to its bearing and brightens it. */
 function windArrow(deg, calm = true) {
   return `<svg width="26" height="26" viewBox="0 0 16 16" aria-hidden="true" style="transform:rotate(${deg}deg)">
-    <path d="M8 1 L13 9 L9 9 L9 15 L7 15 L7 9 L3 9 Z" fill="${calm ? '#7d8a6d' : '#e8f0dc'}" stroke="#0d1208" stroke-width="1"/>
+    <path d="M8 1 L14.5 8.5 L10.5 8.5 L10.5 15 L5.5 15 L5.5 8.5 L1.5 8.5 Z" fill="${calm ? '#7d8a6d' : '#f2f7ea'}" stroke="#0d1208" stroke-width="1.2" stroke-linejoin="round"/>
   </svg>`;
 }
 const t = makeT(STRINGS);
@@ -473,7 +480,7 @@ class GolfGame {
         <div class="gf-tr gf-panel">
           <span>${t('wind')}</span>
           <span class="gf-windarrow" data-role="windarrow">${windArrow(0)}</span>
-          <b data-role="wind">0</b>
+          <b data-role="wind">0.0</b>
         </div>
 
         <div class="gf-bl">
@@ -506,7 +513,7 @@ class GolfGame {
     this.meter = this.rootEl.querySelector('[data-role="meter"]');
     this.mctx = this.meter.getContext('2d');
     this.el = {};
-    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'swing']) {
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
 
@@ -933,6 +940,14 @@ class GolfGame {
     this.el.clubyds.textContent = putting
       ? `${puttRangeFt().toFixed(0)} ${t('ft')}`
       : `${Math.round(club.carry * L.power)} ${t('yds')}`;
+
+    // THE WIND. It is a constant for the hole (see shot.js's windFor), so this only has to be
+    // painted when the hole changes - but it is painted here with everything else because a HUD
+    // whose parts refresh on different schedules is how a panel ends up showing the last hole's
+    // number. The arrow points where the wind BLOWS, which is the direction the ball is pushed.
+    const w = windFor(this.hole);
+    this.el.wind.textContent = w.speed.toFixed(1);
+    this.el.windarrow.innerHTML = windArrow(w.bearing * (180 / Math.PI), !(w.speed > 0));
     this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
   }
 
@@ -1002,7 +1017,7 @@ class GolfGame {
           const dx = r.rest[0] - r.landing[0];
           const dy = r.rest[1] - r.landing[1];
           const len = Math.hypot(dx, dy);
-          const g = groundPoint(q, len, r.apex);
+          const g = groundPoint(q, len, r.apex, r.landedOn);
           const u = len > 0 ? g.along / len : 0;
           ballPos = [r.landing[0] + dx * u, r.landing[1] + dy * u];
           height = g.height;

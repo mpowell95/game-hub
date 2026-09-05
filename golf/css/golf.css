@@ -14,7 +14,14 @@
 .gf-root {
   --gf-orange: #e54e00;
   --gf-orange-lit: #ff6a1c;
-  --gf-panel: rgba(16, 20, 12, 0.82);
+  --gf-panel: rgba(16, 20, 12, 0.72);
+  /* THE PANELS ARE HATCHED, and see-through enough that the course reads behind them. Measured off
+     the reference's wind panel at full resolution: a translucent dark ground with fine diagonal
+     stripes running the same way as the swing meter's band, and a black outer edge with a light
+     inner rule. Ours were flat boxes, which is most of why the HUD sat ON the course rather than
+     over it. */
+  --gf-hatch: repeating-linear-gradient(135deg,
+    rgba(255, 255, 255, 0.055) 0 2px, rgba(255, 255, 255, 0) 2px 5px);
   --gf-ink: #ffffff;
   --gf-dim: #b9c4a8;
   --gf-red: #e02424;
@@ -45,8 +52,10 @@
 
 /* --- shared chrome ------------------------------------------------------------------------- */
 .gf-root .gf-panel {
-  background: var(--gf-panel);
+  background: var(--gf-hatch), var(--gf-panel);
   border: 1px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid rgba(0, 0, 0, 0.75);
+  outline-offset: 0;
   box-shadow: var(--gf-shadow);
   padding: 6px 9px;
   line-height: 1.25;
