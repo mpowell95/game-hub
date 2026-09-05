@@ -388,11 +388,16 @@ console.log('\n-- 8b. THE METER IS NOT ONE SPEED, and a bad lie must still be pl
 }
 
 console.log('\n-- 9. flight, roll and the lie factor --');
+// A CALM COPY OF HOLE 1. Every assertion in this section is about the CLUB and the LIE, and since
+// 2026-09-05 every hole has a wind that would otherwise be silently folded into each number - hole
+// 1's own is 1.4, worth about 6 yds on a drive. `windFor` honours a hole's own `wind` field, so a
+// calm clone takes the weather out of the club's distance without stubbing anything.
+const CALM = { ...h1, wind: { speed: 0, bearing: 0 } };
 near('a 215 yd drive flies ~4.5 s', SH.flightMs(215) / 1000, 4.48, 0.05);
 near('a 50 yd wedge flies ~1.7 s', SH.flightMs(50) / 1000, 1.73, 0.05);
 ok('flight time grows with distance and is never instant', SH.flightMs(0) === 900 && SH.flightMs(300) > SH.flightMs(200));
 {
-  const r = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[0], power: 1, mishitDeg: 0 });
+  const r = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[0], power: 1, mishitDeg: 0 });
   near('a full drive from the tee carries the club distance', r.carry, 215, 0.01);
   ok('it lands on the fairway and rolls', r.landedOn === 'fairway' && r.rollYd > 0);
   // Roll is the surface times HOW FLAT THE CLUB SENDS IT IN, not the surface alone: a driver
@@ -403,18 +408,18 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   // finished 25.0 from it. That is >= 16.4 % of carry; ours was 9.3 %.
   near('a driver runs out about 18 % of its carry on a fairway', r.rollYd / r.carry, 0.180, 0.003);
   {
-    const w3 = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[1], power: 1, mishitDeg: 0 });
+    const w3 = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[1], power: 1, mishitDeg: 0 });
     ok('[KNOWN-BUG PROBE] a 3 wood clears the reference\'s 16.4 % run-out floor',
       w3.rollYd / w3.carry >= 0.164,
       'shot 2 of the reference footage travelled >= 228.2 yds against a 196.0 carry readout');
   }
   {
-    const wedge = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
+    const wedge = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
     ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs 38 yds',
       wedge.rollYd < 4 && r.rollYd > 35,
       'the surface-only model rolled the wedge 4 yds and the driver 17, so nothing in the bag behaved like itself');
     const totals = CLUBS.map((c) => {
-      const s2 = SH.resolveShot({ hole: h1, from: h1.tee, aimRad: 0.04, club: c, power: 1, mishitDeg: 0 });
+      const s2 = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: c, power: 1, mishitDeg: 0 });
       return s2.rollYd;
     });
     ok('...and roll falls monotonically as loft rises, right through the bag',
@@ -426,14 +431,14 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   // lieFactor SCALES the result; it does NOT clamp the meter.
   const from = [0, 340];                                     // the greenside bunker on hole 1
   ok('the bunker lie is found', surfaceAt(h1, from[0], from[1]) === 'greensideBunker');
-  const r = SH.resolveShot({ hole: h1, from, aimRad: 0, club: CLUBS[11], power: 1, mishitDeg: 0 });
+  const r = SH.resolveShot({ hole: CALM, from, aimRad: 0, club: CLUBS[11], power: 1, mishitDeg: 0 });
   near('a full swing from sand travels 75 % of the club', r.carry, 95 * 0.75, 0.01);
   // Roll belongs to the surface the ball comes DOWN on, not the one it was struck from - a bunker
   // shot that finishes on the green rolls like a ball on a green. A ball that LANDS in sand plugs.
-  const intoSand = SH.resolveShot({ hole: h1, from: [0, 300], aimRad: 0, club: CLUBS[13], power: 0.8, mishitDeg: 0 });
+  const intoSand = SH.resolveShot({ hole: CALM, from: [0, 300], aimRad: 0, club: CLUBS[13], power: 0.8, mishitDeg: 0 });
   ok('a ball that lands in sand does not roll', intoSand.landedOn !== 'greensideBunker' || intoSand.rollYd === 0);
   ok('roll is read from the LANDING surface, not the lie played from', lieOf('greensideBunker').roll === 0);
-  const over = SH.resolveShot({ hole: h1, from, aimRad: 0, club: CLUBS[11], power: 1.1, mishitDeg: 0 });
+  const over = SH.resolveShot({ hole: CALM, from, aimRad: 0, club: CLUBS[11], power: 1.1, mishitDeg: 0 });
   ok('the player can still swing PAST 100 % from a bad lie', over.carry > r.carry);
   near('over-100 % is worth up to +10 % distance', over.carry / r.carry, 1.1, 0.001);
 }
@@ -448,6 +453,132 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
     Math.abs(sandDots[3].at - 215 * 0.75) < 0.01);
   ok('the ladder re-scales when the club changes', SH.aimDots(CLUBS[7], 'fairway')[3].at === 139);
   ok('there is no ladder for the putter', SH.aimDots(PUTTER, 'green').length === 0);
+}
+
+console.log('\n-- 9b. THE WIND --');
+// MEASURED off all four reference clips: the panel reads `wind`, a chunky white arrow, and `0.9`,
+// IDENTICAL in every frame of every clip - so it is a constant for the hole, one decimal place, no
+// unit named. That is all the footage can say. The STRENGTH is decided (shot.js says so in its own
+// header) and calibrated against what the player can do about it, so these assertions pin the
+// SHAPE - determinism, range, and that it pushes the ball the way the arrow points - plus the one
+// number the calibration turns on.
+{
+  const holes = [...PINE_VALLEY.holes, ...RED_MESA.holes];
+  ok('the wind on a hole is the same every time it is asked',
+    holes.every((h) => {
+      const a = SH.windFor(h); const b = SH.windFor(h);
+      return a.speed === b.speed && a.bearing === b.bearing;
+    }), 'a hole that plays differently every visit cannot be learned');
+  ok('every speed is 0 to 2.0 in tenths',
+    holes.every((h) => {
+      const w = SH.windFor(h);
+      return w.speed >= 0 && w.speed <= SH.WIND_MAX && Math.abs(w.speed * 10 - Math.round(w.speed * 10)) < 1e-9;
+    }));
+  ok('every bearing is one of the eight compass points',
+    holes.every((h) => {
+      const k = SH.windFor(h).bearing / (Math.PI / 4);
+      return Math.abs(k - Math.round(k)) < 1e-9 && k >= 0 && k < 8;
+    }));
+  const calm = holes.filter((h) => SH.windFor(h).speed === 0).length;
+  ok(`some holes are dead calm and most are not (${calm} of ${holes.length})`,
+    calm >= 2 && calm <= holes.length / 3,
+    'a calm hole is what makes a windy one register as windy');
+  const spread = new Set(holes.map((h) => SH.windFor(h).bearing)).size;
+  ok(`the wind does not blow the same way on every hole (${spread} of 8 bearings used)`, spread >= 6);
+  ok("a hole's own `wind` field beats the derivation",
+    SH.windFor({ ...h1, wind: { speed: 0, bearing: 0 } }).speed === 0 && SH.windFor(h1).speed > 0);
+
+  // What it does to a shot. Aim straight up the hole; put the wind straight across it.
+  const cross = { ...h1, wind: { speed: SH.WIND_MAX, bearing: Math.PI / 2 } };
+  const head = { ...h1, wind: { speed: SH.WIND_MAX, bearing: Math.PI } };
+  const tail = { ...h1, wind: { speed: SH.WIND_MAX, bearing: 0 } };
+  const shot = (hole) => SH.resolveShot({ hole, from: h1.tee, aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 0 });
+  const c = shot(cross); const hd = shot(head); const tl = shot(tail); const cm = shot(CALM);
+  near('a full crosswind moves a driver about 12 yds off line', Math.abs(c.sideYd), 12, 1.5,
+    'three taps of the 1.0 deg aim arrow at 215 yds - a correction, not a wall');
+  ok('and it pushes it the way the arrow points', c.sideYd > 0,
+    'bearing +90 deg is to the right of the shot, so the ball goes right');
+  ok('a headwind shortens the carry and a tailwind lengthens it',
+    hd.carry < cm.carry - 8 && tl.carry > cm.carry + 8,
+    `head ${hd.carry.toFixed(1)}, calm ${cm.carry.toFixed(1)}, tail ${tl.carry.toFixed(1)}`);
+  near('and it is worth about 6 % either way on a driver', tl.carry / cm.carry, 1.055, 0.02);
+  ok('calm changes nothing at all', cm.sideYd === 0 && Math.abs(cm.carry - 215) < 1e-9);
+  ok('the wind reaches a shot through the SIDE offset, so a blown ball still hits trees',
+    Math.abs(c.sideYd) > 0 && typeof c.wind === 'object',
+    'it is folded in before treeHit, not added to the landing point afterwards');
+}
+
+console.log('\n-- 9c. IT BOUNCES, THEN IT ROLLS --');
+// Matt: "the roll looks unnatural... it lands then slides. it doesn't look like it's rolling, and
+// it almost never bounces." Both halves were one mistake - a SINGLE smooth deceleration curve for
+// the whole run-out with a sine wave laid on top for height, so the ball's forward speed never
+// changed abruptly anywhere, which is exactly what sliding looks like.
+{
+  const drive = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[0], power: 1, mishitDeg: 0 });
+  const at = (p) => SH.groundPoint(p, drive.rollYd, drive.apex, 'fairway');
+  ok('the run-out starts at the landing point and finishes at the rest point',
+    Math.abs(at(0).along) < 1e-9 && Math.abs(at(1).along - drive.rollYd) < 1e-6);
+  let mono = true;
+  for (let i = 1; i <= 200; i++) if (at(i / 200).along < at((i - 1) / 200).along - 1e-9) mono = false;
+  ok('it never goes backwards', mono);
+
+  // [KNOWN-BUG PROBE] The ball must be FASTER while it is bouncing than while it is rolling. A ball
+  // in the air does not decelerate, and that step change at each landing is the whole reason a
+  // bounce reads as a bounce from directly overhead.
+  const speed = (p) => (at(p + 0.005).along - at(p).along) / 0.005;
+  ok('[KNOWN-BUG PROBE] the ball is faster in the hops than in the roll',
+    speed(0.10) > speed(0.60) * 1.5,
+    `hop ${speed(0.10).toFixed(1)} vs roll ${speed(0.60).toFixed(1)} yd per unit of run-out time`);
+
+  // [KNOWN-BUG PROBE] ...and the hop must be big enough to SEE. render.js draws the ball 6 px and
+  // lifts it `height * ppy * 0.55`, and only draws the shadow at all past 1 px.
+  const PPY = 393 / 70;                       // VIEW_W_YDS across a 393 px phone at the play view
+  let peak = 0; let peaks = 0; let prev = 0; let rising = false;
+  for (let i = 0; i <= 400; i++) {
+    const hgt = at(i / 400).height;
+    if (hgt > peak) peak = hgt;
+    if (hgt > prev + 1e-9) rising = true;
+    else if (rising && hgt < prev - 1e-9) { peaks++; rising = false; }
+    prev = hgt;
+  }
+  const liftPx = peak * PPY * 0.55;
+  ok(`[KNOWN-BUG PROBE] the first hop lifts the ball ${liftPx.toFixed(1)} px, which is visible`,
+    liftPx >= 8, 'the old model peaked around 4 px against a 6 px ball - under the shadow gate for most of its arc');
+  ok(`there are three hops, decaying (${peaks} peaks)`, peaks === 3);
+  ok('and the ball is on the ground at both ends of the run-out',
+    at(0).height < 1e-9 && at(1).height < 1e-9);
+
+  // A ball does not bounce out of sand or out of deep rough.
+  ok('sand and heavy rough swallow the bounce',
+    SH.groundPoint(0.1, 20, 25, 'greensideBunker').height === 0
+    && SH.groundPoint(0.1, 20, 25, 'heavyRough').height === 0
+    && SH.groundPoint(0.1, 20, 25, 'fairway').height > 0);
+  ok('...and they still roll the whole way',
+    Math.abs(SH.groundPoint(1, 20, 25, 'heavyRough').along - 20) < 1e-6);
+
+  // A lob wedge that runs 3 yds must not leap 4 yds into the air.
+  const wedge = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
+  let wpeak = 0;
+  for (let i = 0; i <= 200; i++) wpeak = Math.max(wpeak, SH.groundPoint(i / 200, wedge.rollYd, wedge.apex, 'fairway').height);
+  ok(`a lob wedge's hop is a third of its ${wedge.rollYd.toFixed(1)} yd run-out at most (${wpeak.toFixed(2)} yd)`,
+    wpeak <= wedge.rollYd * 0.34 + 1e-9);
+}
+
+console.log('\n-- 9d. ROLL SPEED BY SURFACE --');
+// Matt: "the roll speed and distance should also depend on the surface type it's on." The DISTANCE
+// already did (clubs.js's rollFactor); the SPEED did not, so a ball running out on a green and one
+// dying in heavy rough took the same time to cover their different distances.
+{
+  const D = 20;
+  const green = SH.rollMs(D, 'green');
+  const fairway = SH.rollMs(D, 'fairway');
+  const rough = SH.rollMs(D, 'heavyRough');
+  ok(`the same 20 yds takes longer on a green than a fairway, and least in rough (${(green / 1000).toFixed(2)} / ${(fairway / 1000).toFixed(2)} / ${(rough / 1000).toFixed(2)} s)`,
+    green > fairway && fairway > rough);
+  near('the fairway is the baseline and is unchanged', fairway, SH.rollMs(D), 1e-6,
+    'the putting table is normalised on the GREEN; a run-out is normalised on the fairway');
+  ok('a green is about half the fairway\'s drag', SH.puttDrag('fairway') / SH.puttDrag('green') > 1.6);
+  ok('nothing rolls for zero time unless it did not roll', SH.rollMs(0, 'fairway') === 0 && SH.rollMs(5, 'fairway') > 0);
 }
 
 console.log('\n-- 10. trees block the ball, and loft is the way past them --');
@@ -503,7 +634,8 @@ console.log('\n-- 10b. THE CUP IS THE SAME RULE FOR EVERY SHOT --');
   let holedWithAClub = false;
   for (let pw = 0.30; pw <= 1.05 && !holedWithAClub; pw += 0.002) {
     const from = [h.pin[0], h.pin[1] - 60];
-    const r = SH.resolveShot({ hole: h, from, aimRad: 0, club: CLUBS[12], power: pw, mishitDeg: 0 });
+    // Calm: this is about whether the CUP can take a pitched ball, not about aiming off a crosswind.
+    const r = SH.resolveShot({ hole: { ...h, wind: { speed: 0, bearing: 0 } }, from, aimRad: 0, club: CLUBS[12], power: pw, mishitDeg: 0 });
     if (r.holed) holedWithAClub = true;
   }
   ok('[KNOWN-BUG PROBE] a WEDGE from 60 yds can hole out', holedWithAClub,
