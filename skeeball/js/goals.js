@@ -294,6 +294,14 @@ const GOALS = {
       { id: 'net', labelKey: 'g_net', defKey: 'd_bc_net', now: Math.min(net, BC_NET), target: BC_NET, met: net >= BC_NET },
     ];
   },
+  // THE TUNING TWIN (2026-09-05) reads BRICK CITY's objectives against ITS OWN board record, which
+  // is `sk.practice.boards['brickcity-tune']` and is reachable by no counter, so every rail sits at
+  // zero and stays there. That is correct for a bench instrument: it has nothing to earn and
+  // unlocks nothing. Without this row `readGoals` falls back to GOALS.classic and the machine would
+  // display THE CLASSIC's three objectives, which would simply be a lie on screen.
+  'brickcity-tune'(s, r) {
+    return GOALS.brickcity({ ...s, boards: { brickcity: (s.boards || {})['brickcity-tune'] || {} } }, r);
+  },
 };
 
 /** The three goals for one machine, from the RECORDED store - what the unlock trusts. */

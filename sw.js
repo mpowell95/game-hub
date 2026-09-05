@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v619';
+const CACHE = 'game-hub-v620';
 
 const ASSETS = [
   './',
@@ -627,9 +627,9 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': '47f5932aaf',
-  './skeeball/js/goals.js': '3289090081',
-  './skeeball/js/boards.js': '839f2257c6',
-  './skeeball/js/engines.js': '9d1dd1cf73',
+  './skeeball/js/goals.js': '98aee53780',
+  './skeeball/js/boards.js': '87f89f4b70',
+  './skeeball/js/engines.js': '5043fd8499',
   './skeeball/js/picstore.js': 'cf57e56755',
   './skeeball/js/machines/classic/physics.js': '37765edb4e',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',

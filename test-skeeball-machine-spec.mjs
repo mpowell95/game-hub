@@ -25,14 +25,31 @@ const SRC = readFileSync(new URL('./skeeball/js/boards.js', import.meta.url), 'u
  *  contract engines.js's "ADDING A MACHINE" note describes. A machine whose folder is missing
  *  fails loudly rather than silently passing every rule below. */
 function engineSrc(id) {
+  const folder = ENGINE_FOLDER[id] || id;
   const out = {};
   for (const f of ['render', 'physics', 'machine']) {
     try {
-      out[f] = readFileSync(new URL(`./skeeball/js/machines/${id}/${f}.js`, import.meta.url), 'utf8');
+      out[f] = readFileSync(new URL(`./skeeball/js/machines/${folder}/${f}.js`, import.meta.url), 'utf8');
     } catch { out[f] = null; }
   }
   return out;
 }
+
+/** WHICH FOLDER EACH BOARD'S ENGINE ACTUALLY LIVES IN, read out of engines.js rather than assumed
+ *  from the board id (2026-09-05). Board id and folder name are the same thing for every REAL
+ *  machine and the perf.files rule below still enforces that. What broke the assumption is a board
+ *  that deliberately SHARES another's engine - the BRICK CITY tuning twin, which is that machine
+ *  with one control-curve number changed and no engine of its own. Against the old assumption it
+ *  reported five failures for files that are present and correct, one folder over. Parsed from the
+ *  import paths, so a new sharer is picked up with no edit here. */
+const ENGINE_FOLDER = (() => {
+  const src = readFileSync(new URL('./skeeball/js/engines.js', import.meta.url), 'utf8');
+  const map = {};
+  const re = /['"]?([\w-]+)['"]?:\s*\{\s*physics:\s*\(\)\s*=>\s*import\(['"]\.\/machines\/([\w-]+)\//g;
+  let m;
+  while ((m = re.exec(src))) map[m[1]] = m[2];
+  return map;
+})();
 
 const MIN_REASON = 40;
 const EPS = 1e-6;
@@ -300,7 +317,7 @@ for (const board of BOARDS) {
   // --- 21 perf.files ---------------------------------------------------------------------
   const missing = ['render', 'physics', 'machine'].filter((f) => src[f] === null);
   rule(board, 'perf.files', missing.length === 0,
-    `skeeball/js/machines/${board.id}/ is missing ${missing.join('.js, ')}.js - `
+    `skeeball/js/machines/${ENGINE_FOLDER[board.id] || board.id}/ is missing ${missing.join('.js, ')}.js - `
     + 'board id and engine folder name must match (engines.js, "ADDING A MACHINE")');
   const R = src.render || '';
   const PH = src.physics || '';
