@@ -157,8 +157,16 @@ export function barPosOf(pos) {
  *
  *  The bar is always full and the needle always sweeps at the same speed for a given club, so a
  *  smaller target is simply a smaller target, and the player can SEE it before committing. */
-export function bandsFor(zone = 1) {
-  const green = 0.545 * zone;
+export function bandsFor(zone = 1, clubZone = 1) {
+  // `clubZone` is the CLUB's own difficulty (clubs.js's `swingZone`): a driver's green band is
+  // narrower than a lob wedge's from the very same lie. Matt: "Driver off the fairway shouldn't be
+  // super easy to hit."
+  //
+  // IT MULTIPLIES THE GREEN BAND AND NOTHING ELSE. `orangeShare` stays keyed on the LIE alone,
+  // because orange's whole job is that a bad lie stays hittable - that is a property of where the
+  // ball is sitting, not of what is being swung at it, and letting the club shrink it too would
+  // make a driver out of a bunker a coin flip.
+  const green = 0.545 * zone * clubZone;
   const rest = 1 - green;
   const orangeShare = 0.30 + 0.10 * Math.min(1, Math.max(0, zone));
   return { green, orange: green + rest * orangeShare, red: 1 };
@@ -204,10 +212,10 @@ export function bandsFor(zone = 1) {
  *  honest way to get there is to measure the bunker's distance factor separately. */
 export const OVER_SWING_MAX_MUL = 2.0;
 
-export function mishit(barPos, power, zone = 1) {
+export function mishit(barPos, power, zone = 1, clubZone = 1) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
-  const b = bandsFor(zone);
+  const b = bandsFor(zone, clubZone);
   let deg;
   let distanceMul = 1;
   if (off <= b.green) {

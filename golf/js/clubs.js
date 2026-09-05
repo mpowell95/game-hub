@@ -5,6 +5,9 @@
 // number - it was recorded with an unknown, possibly upgraded bag and left no headroom for the
 // club shop, and it made a 360 yd par 4 play as a drive and a wedge.
 
+// The swing's ONE tempo lives in swing.js; `swingTempo` below hands it to every club alike.
+import { UP_MS, DOWN_MS } from './swing.js';
+
 /** THE STOCK BAG. `upgraded` is the fully-upgraded figure from §21.3, carried here so the ladder
  *  visibly has somewhere to go; NOTHING in this build reads it. The shop is deferred, and the two
  *  intermediate tiers are deliberately unspecified.
@@ -163,46 +166,59 @@ export function rollFactor(kind, club) {
   return surface * (1.6 - 1.2 * club.loft);
 }
 
-/** THE SWING'S TEMPO, PER CLUB: how long the needle takes to cross one full power unit.
+/** THE SWING'S TEMPO. ONE SPEED FOR THE WHOLE BAG.
  *
- *  MEASURED (2026-09-04), by tracking the needle's angle in every frame of four shots at 60 fps.
- *  A rate in degrees per frame converts into milliseconds per power unit through the arc's width.
+ *  REVERTED 2026-09-05, ON MATT'S INSTRUCTION. Between 2026-09-04 and now this returned a
+ *  DIFFERENT speed per club, and that was a change nobody asked for: *"I did NOT instruct you to
+ *  change anything about tempo. I specifically stated to fix the width of the green zone in the
+ *  aim/power meter."*
  *
- *  THE FIGURES BELOW WERE RESTATED ON 2026-09-05 AGAINST THE CORRECTED ARC. The measurement that
- *  matters - degrees per frame - is unchanged and is what the footage actually shows; only the
- *  conversion moved, because the arc turned out to be 208 degrees wide from zero to 100 % rather
- *  than 221 (swing.js's header has the tick measurement that caught it). So the needle's speed ON
- *  SCREEN is exactly what it always was; the numbers here shrank about 6 % because a power unit is
- *  6 % less arc than we thought.
+ *  It came out of the measuring pass rather than out of the playtest list. The needle was tracked
+ *  frame by frame across four reference shots and it ran at 2.18 deg/frame for a driver, 2.20 for a
+ *  3 wood, 1.78 for a 7 iron and 1.53 for the putter - so the reference's meter really is not one
+ *  speed, and that measurement stands. It is recorded here rather than deleted, because the next
+ *  session to watch that footage will find it again and should know it was a deliberate decision
+ *  not to ship it.
  *
- *      club              backswing        downswing       0 -> 100 %     100 % -> 0
- *      driver (tee)      2.176 deg/f      3.220 deg/f     1593 ms        1077 ms
- *      3 wood (rough)    2.195            3.271           1578           1059
- *      7 iron (bunker)   1.782            2.432           1945           1425
- *      putter (green)    1.528            1.923           2268           1802
+ *  WHAT IT ACTUALLY DID IN PLAY, which is the part that made it the wrong change to make
+ *  unprompted: the driver's meter stayed about where it was and the SHORT clubs and the PUTTER got
+ *  slower. So the half of the bag that was already easiest got easier, which is the opposite end
+ *  from the complaint on the list ("Driver off the fairway shouldn't be super easy to hit"). That
+ *  complaint is about the GREEN ZONE'S WIDTH, and it is answered by `swingZone` below.
  *
- *  THE METER IS NOT ONE SPEED. Ours was a fixed 1650 / 1150 for everything, which is right for the
- *  woods and roughly 20 % too fast for the short game - the half of the bag where a player most
- *  needs the control. The driver and the 3 wood measured IDENTICAL despite one being off a tee and
- *  the other out of rough, which is what rules the LIE out as the cause and leaves the CLUB.
- *
- *  Two regularities carry the fit, and both hold across all four samples:
- *    - the downswing is the backswing MINUS ABOUT 505 ms, not a fixed multiple of it
- *      (measured offsets: 516, 519, 520, 466);
- *    - the backswing is flat across the top of the bag and then slows one step at a time.
- *
- *  So: `1585 + max(0, index - 1) * 51`, which reproduces driver 1585 (meas 1593), 3 wood 1585
- *  (1578) and 7 iron 1942 (1945), and extrapolates to 2197 for the lob wedge. The putter is its own
- *  constant, 2268, straight off the one putt in the footage. */
-export const TEMPO_BASE_MS = 1585;
-export const TEMPO_STEP_MS = 51;
-export const TEMPO_PUTTER_MS = 2268;
-export const TEMPO_LAG_MS = 505;
+ *  The single speed is `swing.js`'s UP_MS / DOWN_MS. */
+export function swingTempo() {
+  return { upMs: UP_MS, downMs: DOWN_MS };
+}
 
-export function swingTempo(club) {
-  const i = club && club.id ? CLUBS.findIndex((c) => c.id === club.id) : 0;
-  const upMs = i < 0 ? TEMPO_PUTTER_MS : TEMPO_BASE_MS + Math.max(0, i - 1) * TEMPO_STEP_MS;
-  return { upMs, downMs: upMs - TEMPO_LAG_MS };
+/** HOW WIDE THE GREEN ZONE IS FOR THIS CLUB, as a multiplier on the accuracy band.
+ *
+ *  Matt, from the playtest list: *"You haven't paid attention to how the power/aim bars change size
+ *  depending on the club. Driver off the fairway shouldn't be super easy to hit."*
+ *
+ *  A longer club is harder to strike cleanly, and until now nothing in the game said so: the band
+ *  was a function of the LIE alone, so a driver off a fairway was exactly as forgiving as a lob
+ *  wedge off the same fairway. It runs from `ZONE_DRIVER` at the top of the bag to 1.00 at the
+ *  bottom, linearly by index, and the putter gets the full band.
+ *
+ *  THE NUMBERS ARE DECIDED, NOT MEASURED, AND THE MEASUREMENT POINTS THE OTHER WAY - which is worth
+ *  writing down rather than burying. Four reference shots were read at 60 fps: a driver off a tee
+ *  and a putter on a green both measured 54.5 % green, and a 3 wood from rough and a 7 iron from a
+ *  bunker both measured 9.1 % - byte-identical within each pair, across very different clubs. On
+ *  that evidence the reference's band tracks the lie and not the club. Matt asked for it anyway,
+ *  having been told; it is his game and this is a better rule than the reference's. Recorded so the
+ *  next session does not "fix" it back.
+ *
+ *  It multiplies the LIE's zone rather than replacing it, and it deliberately does NOT touch the
+ *  orange band - orange's job is that a bad lie stays hittable, which is a property of the lie. */
+export const ZONE_DRIVER = 0.72;
+
+export function swingZone(club) {
+  if (!club || club.id === 'putter') return 1;
+  const i = CLUBS.findIndex((c) => c.id === club.id);
+  if (i < 0) return 1;
+  const n = CLUBS.length - 1;
+  return ZONE_DRIVER + (1 - ZONE_DRIVER) * (i / n);
 }
 
 /** Auto-pick a club for the shot in hand (§10.2: the game offers one after every shot, and the

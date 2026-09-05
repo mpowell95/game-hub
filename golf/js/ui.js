@@ -15,7 +15,7 @@ import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -509,7 +509,7 @@ class GolfGame {
   /** Keep the needle's speed in step with the club in hand. Called wherever the club can change
    *  (the club nudges, a settled shot, a new hole) rather than inside `_activeClub`, because that
    *  runs from the render loop too and a `Swing` mid-stroke must never be re-timed. */
-  _syncTempo() { this.swing.setTempo(swingTempo(this._activeClub())); }
+  _syncTempo() { this.swing.setTempo(swingTempo()); }
 
   _renderPlay() {
     this.rootEl.innerHTML = '';
@@ -751,6 +751,9 @@ class GolfGame {
     // to it. `WINDUP_MS` is that gap; `_frame` holds the ball at address and plays the pose until
     // it has passed, and a tap still skips the whole thing.
     const zone = lieOf(lie).zone;
+    // The CLUB narrows the green band on top of the lie - a driver is harder to strike clean than a
+    // wedge from the same spot (clubs.js's swingZone).
+    const clubZone = swingZone(this._activeClub());
     // ONE needle: the power is the marker planted at tap 2, the accuracy is where the needle was
     // stopped on the way back down. `barPosOf` maps that position onto the accuracy bar's 0..1,
     // which is the only form the mishit model has ever taken.
@@ -758,7 +761,7 @@ class GolfGame {
     // it rather than re-derived from a clock: re-reading `performance.now()` here would resolve
     // the shot a few milliseconds after the finger landed, which is the whole bug this fixes.
     const { pos, power } = { pos: this.swing.pos, power: this.swing.power };
-    const m = mishit(barPosOf(pos), power, zone);
+    const m = mishit(barPosOf(pos), power, zone, clubZone);
 
     // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
     // fairway and the tee, which is exactly the case this split exists for.
@@ -1356,7 +1359,7 @@ class GolfGame {
       c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx2, by2); c.lineTo(dx2, dy2); c.lineTo(ex, ey);
       c.closePath(); c.stroke();
     };
-    const b = bandsFor(lieOf(this._lie()).zone);
+    const b = bandsFor(lieOf(this._lie()).zone, swingZone(this._activeClub()));
     outline(7, '#0b0f07');
     outline(3.5, '#fffdfc');
     quad(0, (1 - b.orange) / 2, '#fd0001');
