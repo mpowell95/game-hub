@@ -37,11 +37,11 @@ function engineSrc(id) {
 
 /** WHICH FOLDER EACH BOARD'S ENGINE ACTUALLY LIVES IN, read out of engines.js rather than assumed
  *  from the board id (2026-09-05). Board id and folder name are the same thing for every REAL
- *  machine and the perf.files rule below still enforces that. What broke the assumption is a board
- *  that deliberately SHARES another's engine - the BRICK CITY tuning twin, which is that machine
- *  with one control-curve number changed and no engine of its own. Against the old assumption it
- *  reported five failures for files that are present and correct, one folder over. Parsed from the
- *  import paths, so a new sharer is picked up with no edit here. */
+ *  machine and the perf.files rule below still enforces that. What broke the assumption was a board
+ *  that deliberately SHARED another's engine - a BRICK CITY tuning twin, that machine
+ *  with one control-curve number changed and no engine of its own (shipped and removed the same day,
+ *  once its number became BRICK CITY's own). It reported five failures for files that are present
+ *  and correct one folder over. Parsed from the import paths, so the next sharer needs no edit. */
 const ENGINE_FOLDER = (() => {
   const src = readFileSync(new URL('./skeeball/js/engines.js', import.meta.url), 'utf8');
   const map = {};
