@@ -166,14 +166,20 @@ export function rollFactor(kind, club) {
 /** THE SWING'S TEMPO, PER CLUB: how long the needle takes to cross one full power unit.
  *
  *  MEASURED (2026-09-04), by tracking the needle's angle in every frame of four shots at 60 fps.
- *  The arc is 221 degrees wide from zero to 100 %, so a rate in degrees per frame converts
- *  straight into milliseconds per power unit:
+ *  A rate in degrees per frame converts into milliseconds per power unit through the arc's width.
+ *
+ *  THE FIGURES BELOW WERE RESTATED ON 2026-09-05 AGAINST THE CORRECTED ARC. The measurement that
+ *  matters - degrees per frame - is unchanged and is what the footage actually shows; only the
+ *  conversion moved, because the arc turned out to be 208 degrees wide from zero to 100 % rather
+ *  than 221 (swing.js's header has the tick measurement that caught it). So the needle's speed ON
+ *  SCREEN is exactly what it always was; the numbers here shrank about 6 % because a power unit is
+ *  6 % less arc than we thought.
  *
  *      club              backswing        downswing       0 -> 100 %     100 % -> 0
- *      driver (tee)      2.176 deg/f      3.220 deg/f     1693 ms        1144 ms
- *      3 wood (rough)    2.195            3.271           1678           1126
- *      7 iron (bunker)   1.782            2.432           2070           1530
- *      putter (green)    1.528            1.923           2410           1923
+ *      driver (tee)      2.176 deg/f      3.220 deg/f     1593 ms        1077 ms
+ *      3 wood (rough)    2.195            3.271           1578           1059
+ *      7 iron (bunker)   1.782            2.432           1945           1425
+ *      putter (green)    1.528            1.923           2268           1802
  *
  *  THE METER IS NOT ONE SPEED. Ours was a fixed 1650 / 1150 for everything, which is right for the
  *  woods and roughly 20 % too fast for the short game - the half of the bag where a player most
@@ -181,17 +187,17 @@ export function rollFactor(kind, club) {
  *  the other out of rough, which is what rules the LIE out as the cause and leaves the CLUB.
  *
  *  Two regularities carry the fit, and both hold across all four samples:
- *    - the downswing is the backswing MINUS ABOUT 545 ms, not a fixed multiple of it
- *      (measured offsets: 549, 552, 540, 487);
+ *    - the downswing is the backswing MINUS ABOUT 505 ms, not a fixed multiple of it
+ *      (measured offsets: 516, 519, 520, 466);
  *    - the backswing is flat across the top of the bag and then slows one step at a time.
  *
- *  So: `1685 + max(0, index - 1) * 55`, which reproduces driver 1685 (meas 1693), 3 wood 1685
- *  (1678) and 7 iron 2070 (2070 exactly), and extrapolates to 2345 for the lob wedge. The putter
- *  is its own constant, 2410, straight off the one putt in the footage. */
-export const TEMPO_BASE_MS = 1685;
-export const TEMPO_STEP_MS = 55;
-export const TEMPO_PUTTER_MS = 2410;
-export const TEMPO_LAG_MS = 545;
+ *  So: `1585 + max(0, index - 1) * 51`, which reproduces driver 1585 (meas 1593), 3 wood 1585
+ *  (1578) and 7 iron 1942 (1945), and extrapolates to 2197 for the lob wedge. The putter is its own
+ *  constant, 2268, straight off the one putt in the footage. */
+export const TEMPO_BASE_MS = 1585;
+export const TEMPO_STEP_MS = 51;
+export const TEMPO_PUTTER_MS = 2268;
+export const TEMPO_LAG_MS = 505;
 
 export function swingTempo(club) {
   const i = club && club.id ? CLUBS.findIndex((c) => c.id === club.id) : 0;

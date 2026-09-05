@@ -110,11 +110,15 @@
 /* Previewing the green fades the readouts to ~40% and snaps them back on release (§9.4). A
    genuinely good idea in the reference and nearly free here. */
 .gf-root .gf-tc[data-faded="1"] { opacity: .4; }
-.gf-root .gf-lie { font-size: 12px; max-width: 40vw; }
-.gf-root .gf-lie b { display: block; font-size: 13px; }
-/* Two lines, never one: "Heavy rough Power: 82%" on a single line grew wide enough to collide
-   with the flag and the quit button on a real phone. */
-.gf-root .gf-lie .gf-power { display: block; color: var(--gf-dim); font-size: 11px; }
+/* THE LIE IS A PICTURE OF THE SURFACE, not the word (ui.js's lieArt has the measurement). It is a
+   free-standing block, not a panel: the reference draws it sitting on the course with nothing
+   behind it, and the drop shadow is what lifts it off the grass. */
+.gf-root .gf-lieart { display: block; line-height: 0; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, 0.45)); }
+.gf-root .gf-lieart svg { display: block; }
+/* The power cap is OURS, not the reference's, and it keeps its own line so it can never collide
+   with the flag and the quit button the way "Heavy rough Power: 82%" once did. */
+.gf-root .gf-power { margin-top: 3px; color: var(--gf-dim); font-size: 11px; padding: 2px 7px; }
+.gf-root .gf-power[hidden] { display: none; }
 .gf-root .gf-dist { margin-top: 4px; font-size: 22px; font-weight: 800; text-shadow: var(--gf-shadow); }
 
 .gf-root .gf-tr {

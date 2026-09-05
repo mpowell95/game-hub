@@ -16,9 +16,9 @@ import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo } from './clubs.js';
-import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BAR_HALF } from './swing.js';
+import { Swing, PHASE, bandsFor, mishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD } from './shot.js';
-import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
+import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
@@ -40,6 +40,64 @@ function esc(v) {
  *  It shows the arrow AT ZERO too - the reference does, and Matt's note was that ours said "Wind
  *  Calm", which is a phrase the original never uses. Calm is greyed and points up; wind rotates it
  *  to its bearing and brightens it. */
+/** THE LIE READOUT IS A PICTURE, NOT A WORD.
+ *
+ *  Matt's list, from putting our screen beside the reference: ours printed the word "Green" in a
+ *  panel. MEASURED off the reference at full resolution: it is an ISOMETRIC BLOCK of the surface
+ *  itself - a top face in that surface's own colour with a lighter speckle, a brown SOIL band
+ *  across the bottom, a hard black outline with rounded corners - and a large dimpled golf ball
+ *  sitting on it, OVERHANGING THE TOP EDGE by about a third of itself, with a soft shadow on the
+ *  surface beneath it. About 60 x 49 CSS px with a 37 px ball.
+ *
+ *  The colours are not a second palette. `fillsFor` is the same map the GROUND is painted from, so
+ *  the tile cannot show a green that is a different green from the one under the ball, and a theme
+ *  change carries it automatically. The speckle and the shadow are tints of that same colour.
+ *
+ *  The lie's NAME is still there, on the element's aria-label - a picture is the right readout for
+ *  a glance and the wrong one for a screen reader. */
+function lieArt(kind, pal) {
+  const base = fillsFor(pal)[kind] || pal.fairwayA;
+  const tint = (f) => {
+    const n = parseInt(base.slice(1), 16);
+    const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+    return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+  };
+  const soil = kind === 'water' ? '#1a5c9e' : '#8a5a28';
+  const speck = tint(kind === 'water' ? 1.18 : 0.93);
+  // A FIXED speckle, not a random one: the tile is rebuilt whenever the lie changes and a pattern
+  // that reshuffled would shimmer as the player walked up the hole.
+  const dots = [[8, 20], [25, 15], [44, 23], [13, 36], [37, 40], [49, 34], [20, 46], [42, 47]]
+    .map(([x, y]) => `<rect x="${x}" y="${y}" width="5" height="5" fill="${speck}"/>`).join('');
+  const dimples = [];
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      const dx = 30 + (c - 2) * 6.2;
+      const dy = 18.5 + (r - 2) * 6.2;
+      if (Math.hypot(dx - 30, dy - 18.5) > 13) continue;
+      // A dimple is an INDENT, so it is always darker than the half it sits on - which means the
+      // split has to be the same diagonal the shading uses, not a separate guess. Below-left of
+      // the line from (17.7,6.2) to (42.3,30.8) is the shaded half.
+      const onShade = (dy - 18.5) > (dx - 30);
+      dimples.push(`<rect x="${dx - 1.3}" y="${dy - 1.3}" width="2.6" height="2.6" fill="${onShade ? '#9aa2a9' : '#cdd3d8'}"/>`);
+    }
+  }
+  // THE PROPORTIONS ARE THE REFERENCE'S, measured off its own tile: the block is 1070 x 920 device
+  // px, the ball is 620 across (0.58 of the width, 0.67 of the height), it overhangs the top edge by
+  // 26 % of itself, and the brown soil band is the bottom 16 %. A first pass made the ball too big
+  // for the tile and there was almost no surface left to look at, which is the whole point of it.
+  return `<svg viewBox="0 0 60 63" width="60" height="63" aria-hidden="true">
+    <rect x="2" y="10" width="56" height="51" rx="3" fill="${soil}" stroke="#0b0f07" stroke-width="2.5"/>
+    <path d="M4.5 12.5 h51 v39.5 h-51 z" fill="${base}"/>
+    ${dots}
+    <ellipse cx="30" cy="35" rx="15" ry="4.2" fill="${tint(0.78)}"/>
+    <circle cx="30" cy="18.5" r="17.4" fill="#ffffff" stroke="#0b0f07" stroke-width="2.5"/>
+    <!-- The ball is lit from the upper right, so the lower-LEFT half is in shade. Split along the
+         diagonal rather than vertically: that is where the reference's own shading line runs. -->
+    <path d="M17.7 6.2 A17.4 17.4 0 0 0 42.3 30.8 Z" fill="#c7ced4"/>
+    ${dimples.join('')}
+  </svg>`;
+}
+
 function windArrow(deg, calm = true) {
   return `<svg width="26" height="26" viewBox="0 0 16 16" aria-hidden="true" style="transform:rotate(${deg}deg)">
     <path d="M8 1 L14.5 8.5 L10.5 8.5 L10.5 15 L5.5 15 L5.5 8.5 L1.5 8.5 Z" fill="${calm ? '#7d8a6d' : '#f2f7ea'}" stroke="#0d1208" stroke-width="1.2" stroke-linejoin="round"/>
@@ -473,7 +531,8 @@ class GolfGame {
         </div>
 
         <div class="gf-tc" data-role="tc">
-          <div class="gf-panel gf-lie"><b data-role="lie"></b><span class="gf-power" data-role="power"></span></div>
+          <span class="gf-lieart" data-role="lieart"></span>
+          <div class="gf-panel gf-power" data-role="power"></div>
           <div class="gf-dist" data-role="dist"></div>
         </div>
 
@@ -513,7 +572,7 @@ class GolfGame {
     this.meter = this.rootEl.querySelector('[data-role="meter"]');
     this.mctx = this.meter.getContext('2d');
     this.el = {};
-    for (const k of ['par', 'shot', 'mode', 'holeno', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'swing']) {
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
 
@@ -913,7 +972,12 @@ class GolfGame {
       ? t('mode_practice')
       : `${t(roundById(this.roundId).labelKey)} ${this.pos + 1}/${this.holeIdxs.length}`;
     this.el.holeno.textContent = String(this.hole.n);
-    this.el.lie.textContent = t(`lie_${lie}`);
+    // The lie is a PICTURE of the surface now, not the word. The name stays on the aria-label.
+    if (this._lieArtFor !== lie) {
+      this.el.lieart.innerHTML = lieArt(lie, paletteFor(this.course && this.course.theme));
+      this._lieArtFor = lie;
+    }
+    this.el.lieart.setAttribute('aria-label', t(`lie_${lie}`));
     // Every bad lie does two things and BOTH are shown before the swing: it caps distance, and it
     // narrows the accuracy band. The percentage is the cap; the band is drawn narrower.
     // TWO LINES, which is what the spec specified all along (§21.2: `Bunker` / `Power: 88%`).
@@ -1156,8 +1220,9 @@ class GolfGame {
    *
    * Every proportion below is measured off the reference:
    *   band thickness / outer radius   0.345   (measured 51/148; ours 19/54 = 0.35)
-   *   zero at 90 deg, 100 % at 311 deg, over-swing block 311-337 deg
-   *   green stripe at 91-93 % power, thin - it is NOT adjacent to 100 %
+   *   zero at 87 deg, 100 % at 295 deg, over-swing block 311-338 deg
+   *   TICK LINES ACROSS THE BAND at 139.0 / 191.6 / 243.0 deg = 25 / 50 / 75 %
+   *   the green stripe at 292-296 deg IS the 100 % line
    *   accuracy bar 54 % green, 11 % orange each side, 10 % red each side
    *   outline: BLACK outside WHITE, on both edges - that black key is most of why the original
    *            stays crisp over grass, and ours had no black at all
@@ -1176,8 +1241,12 @@ class GolfGame {
     const OUT_R = 54; const BAND = 19;
     const R = OUT_R - BAND / 2;            // the band's centre radius
     const IN_R = OUT_R - BAND;
-    const A0 = 90 * DEG;                   // pos 0: straight down, the bar's centre
-    const DEG_PER_UNIT = 221 * DEG;        // 90 deg -> 311 deg is 100 % power
+    // THE SCALE IS swing.js's, NOT THIS FILE'S. It converts the needle's measured speed in degrees
+    // per frame into power units, so a copy here that drifted would put the meter and the model on
+    // two different scales while both looked perfectly reasonable. See swing.js's header for the
+    // tick measurement that corrected it from 90/221 to 87/208 on 2026-09-05.
+    const A0 = ARC_A0_DEG * DEG;           // pos 0: the bar's centre
+    const DEG_PER_UNIT = ARC_DEG_PER_UNIT * DEG;   // 87 deg -> 295 deg is 100 % power
     const ang = (v) => A0 + v * DEG_PER_UNIT;
     const polar = (r, a) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
     const arc = (from, to, style, width) => {
@@ -1203,13 +1272,18 @@ class GolfGame {
     // 75,75,50 at 78 % composites to exactly the measured #616736 over fairway green.
     arc(BAR_HALF, SWING_MAX, 'rgba(75,75,50,0.78)', BAND);
 
-    // The over-swing block: flush with the band, orange at both ends, red through the middle.
-    arc(1.0, SWING_MAX, '#f07c03', BAND);
-    arc(1.023, 1.09, '#fd0001', BAND);
+    // THE OVER-SWING BLOCK STARTS AT 107.6 %, NOT AT 100 %. Measured at 311-338 deg, which on the
+    // corrected 87 + 2.08 deg/% scale is 107.6 % to 120.6 %. Between the 100 % line and here the
+    // reference draws PLAIN BAND: a buffer between the target and the danger, which is a better
+    // design than ours and was invisible while the scale was wrong.
+    arc(BLOCK_FROM, SWING_MAX, '#f07c03', BAND);
+    arc(BLOCK_FROM + 0.022, SWING_MAX - 0.035, '#fd0001', BAND);
 
-    // The green stripe. MEASURED at 292-296 deg = 91-93 % power, and thin. It is deliberately NOT
-    // touching 100 %: the target is a shade under full, with the over-swing beyond it.
-    arc(0.912, 0.932, '#01da04', BAND);
+    // THE GREEN STRIPE IS THE 100 % LINE. Measured at 292-296 deg = 98.5-100.4 % on the corrected
+    // scale. The old build put it at 91-93 % and called it "a shade under full" - that was an
+    // artefact of assuming 100 % sat where the block starts. Matt said it plainly and was right:
+    // "The 100 has the green line."
+    arc(0.985, 1.004, '#01da04', BAND);
 
     // The hatch, over everything. MEASURED contrast is tiny - #616736 band against #656938 hatch,
     // four values apart - so this is a whisper, not the stripes the previous build drew.
@@ -1227,6 +1301,22 @@ class GolfGame {
       const a = ang(SWING_MAX);
       c.lineWidth = 3; c.strokeStyle = col;
       const [x0, y0] = polar(R - w / 2, a); const [x1, y1] = polar(R + w / 2, a);
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+    }
+
+    // --- THE TICK LINES, ACROSS THE BAND -------------------------------------------------------
+    // Matt: "We need line indicators of where the 25% 50% 75% and 100% powers are. The 100 has the
+    // green line, which is good. but the others need lines as well. Just like all the example
+    // images and clips show." They do, and finding them is what caught the arc's scale being wrong
+    // - they are a LIGHT TINT rather than white, which is why a scan thresholded at >225 had missed
+    // them entirely. MEASURED at 139.0 / 191.6 / 243.0 deg; the 100 % one is the green stripe
+    // above. The tint itself is chosen to match "a light tint, not white" rather than sampled - the
+    // meter sits over a sand bunker in three of the four clips and the fourth is the putt frame the
+    // angles came from, where the line's own colour is mixed with the band under it.
+    for (const v of [0.25, 0.5, 0.75]) {
+      const a = ang(v);
+      c.lineWidth = 2; c.strokeStyle = 'rgba(255,255,255,0.42)';
+      const [x0, y0] = polar(IN_R + 1, a); const [x1, y1] = polar(OUT_R - 1, a);
       c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
     }
 
