@@ -287,6 +287,54 @@ export function blockSpray(power, seed) {
   return BLOCK_SPRAY_DEG * d * mag * side;
 }
 
+/** THE PUTTER'S OWN ACCURACY, and why it needs its own two numbers.
+ *
+ *  MEASURED 2026-09-05, after Matt played both courses: *"There's not a single hole I can imagine
+ *  myself ever getting worse than a par on... I don't even know if there's a single hole here I
+ *  wouldn't birdie."* He was right, and the courses were not the main reason. Sweeping real putts
+ *  through `simulatePutt` with a decent player's third tap:
+ *
+ *      3 ft 100 %   6 ft 100 %   10 ft 100 %   15 ft 98 %   20 ft 90 %   30 ft 77 %   40 ft 63 %
+ *
+ *  Every green was a make. Two structural reasons, both in how the bar reached the putt:
+ *
+ *   1. `ui.js` damped the miss angle to a QUARTER (`m.deg * 0.25`). The green band tops out at
+ *      1.5 deg, so a well-struck putt was off line by at most 0.4 deg - and the cup captures at a
+ *      FIXED 0.30 yds, which is 1.7 deg wide from 30 ft. The bar could not miss the hole.
+ *   2. `distanceMul` is 1.000 across the whole green band, so pace was PERFECT on every decent
+ *      strike. In real golf most missed putts are missed on speed, and ours had no speed error at
+ *      all until the strike was bad enough to be orange.
+ *
+ *  So the putter gets its own line multiplier and its own pace term, swept against real one-putt
+ *  rates rather than picked. Measured after, same player:
+ *
+ *      3 ft ~95 %   6 ft ~80 %   10 ft ~65 %   15 ft ~44 %   20 ft ~31 %   30 ft ~20 %   40 ft ~15 %
+ *
+ *  DELIBERATELY KINDER THAN REAL GOLF (a tour pro is ~40 % from 10 ft and ~9 % from 40). This is a
+ *  family game, and the first playtest's lesson was that a putt has to stay makeable. These two
+ *  constants are the whole dial: raise them to make putting harder, and nothing else moves.
+ *
+ *  The BAND SHAPE is `mishit`'s, not a new one - that is why this takes its `deg` and scales it
+ *  rather than computing an angle from scratch. A linear angle in bar position was tried first and
+ *  produced 100 % from 10 ft at any multiplier, because the green band is the flat part of that
+ *  ramp and a putt lives almost entirely inside it. */
+/** How much distance a strike at the very EDGE of the green band gives up. See `mishit`. */
+export const GREEN_DIST_LOSS = 0.09;
+
+export const PUTT_LINE_K = 3.6;
+export const PUTT_PACE = 0.06;
+
+/** One putt's line error (radians' worth of degrees) and its pace multiplier, from the same bar
+ *  position every other shot uses. `paceMul` is signed by which SIDE of the bar was hit, so a
+ *  stroke missed one way runs long and the other way leaves it short - which is what makes a lag
+ *  putt a real stroke rather than a formality. */
+export function puttMishit(barPos, zone = 1) {
+  const m = mishit(barPos, 1, zone, 1, 0);
+  const signed = (barPos - 0.5) * 2;
+  const off = Math.min(1, Math.abs(signed));
+  return { deg: m.deg * PUTT_LINE_K * Math.sign(signed || 1), paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
+}
+
 export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
@@ -295,6 +343,23 @@ export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0) {
   let distanceMul = 1;
   if (off <= b.green) {
     deg = (off / b.green) * 1.5;
+    // DISTANCE VARIES INSIDE THE GREEN BAND TOO. It used to be exactly 1.000 anywhere in green,
+    // which meant a decent strike had PERFECT distance control - and that, not the courses, is
+    // most of why Matt could birdie every hole on both of them. Measured before this: a 130 yd
+    // approach finished within 13 yds of its target 94 % of the time and a 100 yd approach 95 %,
+    // against a scratch golfer's real 78 % and 88 %. Every green was hittable, so every hole was
+    // two shots and a putt.
+    //
+    // A dead-centre strike is still exactly 1.000 - that is what keeps the over-swing calibration
+    // (240-245 yds of carry at the top of the arc, measured with Matt) untouched, and it is what
+    // makes the middle of the bar worth aiming at. The penalty grows across the band and meets the
+    // orange ramp continuously at its edge.
+    // TWO-SIDED, and that matters. A one-sided shortfall is not dispersion, it is a bias: every
+    // decent strike lands the same amount short, so a player simply clubs up once and it is gone.
+    // Measured, it even made the game EASIER, because it cancelled the roll that used to carry an
+    // approach past the pin. Which SIDE of the bar you stop on decides whether the strike is heavy
+    // or thin, so the miss is short one way and long the other and cannot be clubbed out.
+    distanceMul = 1 - GREEN_DIST_LOSS * (off / Math.max(1e-6, b.green)) * Math.sign(signed || 1);
   } else if (off <= b.orange) {
     const q = (off - b.green) / Math.max(1e-6, b.orange - b.green);
     deg = 1.5 + q * 2.5;

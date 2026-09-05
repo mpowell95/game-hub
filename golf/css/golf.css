@@ -217,6 +217,14 @@
 }
 .gf-root .gf-pickhead { text-align: center; opacity: .85; }
 .gf-root .gf-rounds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* Three sets a row for the six three-hole options; one wide button when 18 is the only choice -
+   a chooser with a single option should not look like a grid waiting for more. */
+.gf-root .gf-rounds:has(> :nth-child(5)) { grid-template-columns: 1fr 1fr 1fr; }
+.gf-root .gf-rounds.is-one { grid-template-columns: 1fr; }
+/* The length chips sit above the course chips and read as the first question, so they carry a
+   little more weight than the row under them. */
+.gf-root .gf-modepick { margin-bottom: 6px; }
+.gf-root .gf-modepick .gf-chip { font-weight: 800; }
 .gf-root .gf-roundbtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px; padding: 8px 6px; min-height: 60px;

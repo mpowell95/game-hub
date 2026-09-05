@@ -1931,3 +1931,224 @@ becoming "unfair".
 
 Covered by `golf/js/test.js` section 12e (the second key-ordering probe, the shadow offset and its
 single composite, and the three stripe numbers) and section 14, which plays all 36 holes.
+
+## Birdie-every-hole was the PUTTER, not the courses (2026-09-05)
+
+Matt, after playing both courses hole by hole: *"There's not a single hole I can imagine myself
+ever getting worse than a par on"* and *"I don't even know if there's a single hole here I wouldn't
+birdie."* He listed twenty-four of the thirty-six holes as not challenging at all.
+
+He was right about the symptom and the courses were not the main cause. **Measured first, before
+anything was designed**: sweeping real putts through `simulatePutt` with a decent player's third
+tap gave 3 ft 100 %, 10 ft 100 %, 20 ft 90 %, 30 ft 77 %, 40 ft 63 %. **Every green was a make**, so
+any approach that finished on the putting surface was a birdie and no hole design could have
+mattered. Two structural reasons, both in how the accuracy bar reached the ball:
+
+1. **`ui.js` damped the putt's miss angle to a QUARTER** (`m.deg * 0.25`). The green band tops out
+   at 1.5 deg, so a well-struck putt was off line by at most 0.4 deg - against a cup that captures
+   at a FIXED 0.30 yds, which is 1.7 deg wide from 30 ft. The bar could not miss the hole.
+2. **`distanceMul` was exactly 1.000 across the whole green band**, on putts AND full shots. Pace
+   was perfect on every decent strike, and in real golf most missed putts are missed on speed.
+
+The same flaw ran the approach game: a 130 yd shot finished within 13 yds of its target **94 % of
+the time** and a 100 yd shot 95 %, against a scratch golfer's real 78 % and 88 %.
+
+| | before | after |
+|---|---|---|
+| one-putt from 10 ft | 100 % | ~65 % |
+| from 20 ft | 90 % | ~31 % |
+| from 30 ft | 77 % | ~20 % |
+| a hole's birdie rate | 90-100 % | 6-45 % |
+| Pine Valley, a decent player | about **-18** vs par | about **level** |
+
+Three constants, all named and all in `swing.js`, are the whole dial:
+
+- **`PUTT_LINE_K` (3.6)** and **`PUTT_PACE` (0.06)**, applied by `puttMishit()`. Deliberately
+  kinder than real golf (a tour pro is ~40 % from 10 ft); this is a family game and the first
+  playtest's lesson was that a putt has to stay makeable.
+- **`GREEN_DIST_LOSS` (0.09)** - how much distance a strike at the EDGE of the green band gives up.
+
+**Two things that are load-bearing about how those work:**
+
+- **A DEAD-CENTRE STRIKE IS STILL EXACTLY 1.000.** That is what keeps the over-swing calibration
+  (240-245 yds of carry at the top of the arc, measured with Matt) untouched, and what keeps the
+  middle of the bar worth aiming at.
+- **THE DISTANCE ERROR IS TWO-SIDED.** A one-sided shortfall is a bias, not dispersion: a player
+  clubs up once and it is gone. Measured, the first (one-sided) attempt made the game EASIER,
+  because it cancelled the roll that used to carry an approach past the pin. Which SIDE of the bar
+  you stop on now decides whether the strike is heavy or thin.
+
+`golf/js/test.js` section 15b pins the conversion curve from both ends, and the `mishit` assertion
+that used to read *"a green-zone stop costs no distance at all"* is now the dead-centre one.
+
+## What a hole is allowed to do to you now (2026-09-05)
+
+Matt: *"Holes must force layups. They must change directions with trees too tall to hit over, etc.
+Like real courses. Each hole should be different."* Four things were added to `holegen.js`, and
+each closes a gap that made every hole play the same way.
+
+### Green complexes: `guard`
+
+*"all the greens are still too similar. They're all circles and they're all perfectly open."* There
+was no way to defend a green at all: the only hazards a hole could have were blobs the author
+placed by hand at an arbitrary `at`/`side`, which in practice meant one or two bunkers vaguely
+beside it on all thirty-six.
+
+`guard` is a list of tokens placed **in the green's own frame** - `f` points back down the approach
+so "front" is the side the ball comes from even on a dogleg, and `r` is right of that line.
+Authoring a front bunker in world coordinates means re-deriving it every time the centreline moves,
+which is how a hazard ends up behind a green and nobody notices.
+
+`frontSand` · `frontJaws` (two bunkers with a lane between them) · `frontWater` · `frontTrees` ·
+`leftSand` / `rightSand` / `backSand` · `ringSand` · `leftWater` / `rightWater` / `backWater` ·
+`leftTrees` / `rightTrees`. They combine: hole 18 is `frontWater` + `backWater` + `ringSand`.
+
+### Slope: named characters, not three numbers
+
+*"Some should be flat, some should have slight breaks, some should have crazy breaks and some
+should have multiple different directional breaks."* `slopeGrid` could only express ONE fall with a
+spine spread across it, so every green broke the same way at a different strength.
+
+`SLOPE_PRESETS` is a function of position IN the green, which is what lets a saddle shed two ways
+and a crown shed four - a single `fall` vector cannot, whatever you scale it by:
+`flat` · `gentle` · `spine` · `steep` · `saddle` · `crown` · `bowl` · `tier` · `leftShed` /
+`rightShed` · `quarters`. All DESIGNED, not measured - the reference footage shows exactly one
+green - and the `severe` ceiling is set by what the putter can still hold.
+
+### `cross`: the thing that forces a lay-up
+
+Every hazard used to be BESIDE the corridor, so the answer to all thirty-six holes was hit it as
+far as you can, straight. A cross hazard spans the whole corridor, built from the same stations the
+fairway is, so it reaches both edges however much the fairway wanders there.
+
+**IT IS PLACED IN YARDS FROM THE TEE, NOT AS A FRACTION OF THE HOLE, and that distinction is the
+mechanic.** A cross at 0.60 of a 396 yd par 4 sits at 238 yds - PAST a 215 yd drive. Measured, it
+never came into play once and the hole played as if it were not there. **And a band a driver can
+CARRY is not a lay-up either**: bands centred at 188-205 did almost nothing. They sit near 220 with
+34 yds of depth now, so a drive lands in them and the choice is to stop short.
+
+### `sentinels`: trees too tall to fly
+
+MEASURED against the stock bag: the highest-peaking club in it is the **8 iron at 32.3 yds of apex**,
+reached halfway through a 120 yd shot. So a canopy over ~34 yds is above every ball in the game from
+every distance. Pine Valley gained a `sentinel` pine (canopy 9, height 40) and Red Mesa's boulder
+went from height 30 to 40 - at 30 it could be flown at the top of an 8 iron's arc, which quietly
+undid the one thing that obstacle exists to say. Used only at corners: a hole walled with them is
+not a hole.
+
+### And a difficulty ramp under all of it
+
+`hardnessOf(n)` runs 0 at the opening hole to 1 at the last and moves four things at once - the
+landing-zone pinch, the depth of rough before trouble, the green's size and how hard it breaks -
+because moving any one alone just makes eighteen copies of one hole at different settings. Every
+default is overridable; the ramp is the floor a hole is designed on top of, not the design.
+
+**Two relief rules fell out of measuring it.** A **par 5** gets the pinch backed off, because three
+accurate swings compound: at the full ramp Pine Valley 15 necked to 12 yds of fairway and played to
++1.36 with 78 % bogey-or-worse, which is not a hard hole, it is an unfair one. A **par 3** gets the
+same relief for the opposite reason - it has no landing zone to defend and its corridor is
+decoration.
+
+### Measured, per block of three holes (24 rounds a hole, strokes vs par)
+
+```
+pinevalley   1-3 +0.4   4-6 +0.3   7-9 -0.5   10-12 +1.6   13-15 +2.4   16-18 +3.3
+redmesa      1-3 -0.6   4-6 -0.3   7-9 +0.1   10-12 +1.2   13-15 -0.5   16-18 +0.6
+```
+
+`golf/js/test.js` section **15c** plays every hole rather than reading its spec, because difficulty
+is an outcome of the whole design and no single field carries it. **It does not assert monotonicity**
+and the reason is written into the test: at 24 rounds a block carries about +/-0.3 of noise, a hole
+with water swings further than that on its own, and the probe FLATTERS hard holes because it
+searches 45 shot options and always finds an escape a person would not. What it asserts is what the
+design actually claims - the closing nine is harder than the opening nine, the closing block is
+harder than the opening block, the back nine is harder than the front - plus a `[KNOWN-BUG PROBE]`
+that **no hole plays a full shot under par**, which is the floor Matt complained about.
+
+**Red Mesa's 13-15 is still a dip and is not fixed.** Green guarding was tried there and moved it
+by less than the noise: in this engine what actually costs strokes is DRIVING difficulty, because a
+missed fairway costs power and accuracy band on the next shot, while a smaller green mostly costs a
+putt. Narrower corridors and more trees are the lever if it is worth another pass.
+
+## The penalty drop, which finally exists (2026-09-05)
+
+A ball that finished in water simply STAYED there and was played from a water lie - the drop prompt
+was left for Stage C. Once the courses gained real water that became a **shipping loop**: measured
+on Pine Valley 3, 10 and 17, a ball in a pocket beside a lake had no dry shot at all, so every
+attempt went back in and the hole ran to 16, 17 and **24** strokes. A player cannot get out of that
+by playing better, which is the definition of a stuck ball.
+
+`resolveShot` now drops the ball **where it last crossed dry ground on its own flight line** and
+returns `penalty: 1`. Walking the flight backwards is what makes that the crossing point rather
+than an arbitrary spot, and the shot's origin is the floor, so a drop can never finish behind where
+it was struck from. The stroke is added by the caller (`ui.js`'s `_settleShot`), which keeps
+`resolveShot` a pure function of its inputs - the property section 14 depends on.
+
+**Pine Valley 3's lake also moved.** It is the hole's documented feature and it stays, but it began
+at y=246, which once distance started to scatter left only ~30 yds of dry ground between a 215 yd
+drive and the water: the hole measured **+2.98 with 48 % bogey-or-worse, on the third hole of the
+course**, which is meant to be the gentlest golf on the property. Pulled back 16 yds and narrowed.
+
+## Three lengths, then a course, then which holes (2026-09-05)
+
+Matt: *"I want 3 modes: 3 hole, 9 hole, and 18 hole. That's the first selection. Then the second
+selection should be the course. If I chose 3 holes, each course should be broken into 6 options of
+3 holes. if 9 holes is chosen, 2 options, and 18 holes, just 1."*
+
+**THE FROZEN KEYS SURVIVE THIS UNTOUCHED, and that is why the suffixes look the way they do.**
+`roundKey` is `<course.id><suffix>`, so the four keys already in players' stores are exactly the
+four rounds that already existed:
+
+| holes | suffix | was |
+|---|---|---|
+| 1-3 | `3` | "Quick 3", now three-hole SET 1 - the same three holes, so the stored best still means precisely what it meant |
+| 1-9 | `9` | the front nine, unchanged |
+| 10-18 | `9b` | the back nine, unchanged |
+| all 18 | `18` | unchanged |
+
+The five new three-hole sets take new suffixes (`3b`..`3f`). Nothing renamed, nothing repurposed,
+nothing compared across lengths (rules 4 and 5). `js/leaderboard-rank.js`'s `GOLF_COURSE_PAR` gained
+their ten par rows, and `golf/js/test.js` fails if that copy ever disagrees with the course data.
+
+It is still **ONE screen**, not three: length chips, then course chips, then the sets, each row
+swapping what is under it in place. On a phone, three screens before a ball is struck is where a
+game gets closed. With 18 selected there is one set, so its row is a single wide button - a chooser
+with one option is not a choice and should not look like one.
+
+**Practice on any hole of any course is unchanged**, and every hole is on that screen.
+
+### Per-hole records
+
+`gf.bestHole`, keyed `<courseId>:<holeNumber>` by `rounds.js`'s `holeKey`, `Math.min` per key.
+Additive, with the matching merge branch in `js/players-agg.js` and a row on My Stats ("Best on each
+hole" - one strip per course, eighteen numbers, a dash for a hole never played because the lowest
+possible score is 1 and a zero would be a fabricated record).
+
+Three decisions in it are THE LAW rather than taste:
+
+- **It is keyed by course and hole, never by round.** The same hole played in a 3-hole set, a nine
+  and an eighteen is one record; folding the round into the key would split it into nine and make a
+  player's best on a hole depend on how they happened to be playing that day (rule 4).
+- **It is written as the HOLE finishes, not with the round.** That is what makes it survive an
+  abandoned round: quitting on the twelfth must not throw away the ace you made on the third
+  (rule 1). The round best keeps its stricter complete-round guard.
+- **A practice hole sets one too**, and it does it through a dedicated `holeOnly` path in
+  `recordGolf` that touches nothing else. Routing it through the practice branch would have counted
+  each of eighteen holes as a practice ROUND and invented a course row in My Stats for it.
+
+## Oasis Sands is NOT built, and why
+
+Matt: *"the folder golf/reference/oasis-sands has screenshots of every hole. Clone these holes.
+EXACTLY. and add it to the hub."*
+
+**That folder does not exist in this repository** - not on this branch, not on `main`, not in any
+branch, and not anywhere in the commit history (checked with `git log --all`). The only golf
+reference committed is `reference/golf/`, which holds the five club-art PNGs and a README. The
+screenshots are still local on Matt's PC.
+
+Cloning a course from screenshots nobody in the session can see would mean inventing eighteen holes
+and calling them a clone, which is the exact failure the standing instruction on this rebuild
+exists to prevent (*"EVERYTHING in the reference clips and images should be measured and reproduced
+as EXACT clones... If you skipped anything else and just made stuff up or guessed, go back and redo
+it now"*). So it is not started. **Commit and push the folder and it can be measured the same way
+Pine Valley 1 was.**

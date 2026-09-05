@@ -23,6 +23,13 @@ import { makeHole, greenPoly, slopeGrid } from '../js/holegen.js';
 const TREE_TYPES = [
   { name: 'pine', trunk: 0.6, canopy: 4.5, height: 18 },   // tall and narrow: clearing it costs a club
   { name: 'oak', trunk: 1.0, canopy: 8.0, height: 13 },    // wide and low: easier over, harder around
+  // THE SENTINEL PINE CANNOT BE FLOWN BY ANYTHING. Matt, 2026-09-05: holes *"must change
+  // directions with trees too tall to hit over."* MEASURED against the stock bag: the
+  // highest-peaking club in it is the 8 iron at 32.3 yds of apex, reached halfway through a
+  // 120 yd shot - so a 40 yd canopy is over every ball in the game from every distance. A corner
+  // planted with these has to be gone AROUND, which is what turns a dogleg from a suggestion into
+  // a decision. Used sparingly and only at corners: a hole walled with them is not a hole.
+  { name: 'sentinel', trunk: 1.2, canopy: 9.0, height: 40 },
 ];
 
 // -------------------------------------------------------------------- hole 1 ----
@@ -214,7 +221,13 @@ export const HOLE_3 = {
     { kind: 'trees', poly: [[-28, 10], [-26, 120], [-20, 220], [-10, 300], [-44, 300], [-48, 160], [-46, 10]] },
     { kind: 'trees', poly: [[26, 10], [22, 100], [22, 180], [30, 250], [58, 250], [54, 140], [52, 10]] },
     // The lake crossing the fairway: the mid-hole carry.
-    { kind: 'water', poly: [[-14, 246], [16, 256], [42, 282], [58, 316], [46, 330], [22, 302], [-4, 280], [-20, 268]] },
+    // MOVED AND THINNED 2026-09-05. The diagonal lake is this hole's documented feature and it
+    // stays, but it used to start at y=246 - which, once distance began to scatter inside the green
+    // band, left only ~30 yds of dry ground between a 215 yd drive and the water. Measured, the
+    // hole played to +2.98 with 48 % bogey-or-worse, on the THIRD hole of the course, which is
+    // meant to be the gentlest golf on the property. Pulled back 16 yds and narrowed, so the lay-up
+    // band is ~55 yds wide and the carry is a decision rather than a coin toss.
+    { kind: 'water', poly: [[-14, 262], [16, 272], [42, 296], [58, 326], [48, 337], [24, 313], [-2, 292], [-18, 283]] },
     { kind: 'fairwayBunker', poly: [[16, 176], [20, 184], [26, 186], [30, 180], [28, 170], [22, 166], [17, 169]] },
     { kind: 'fringe', poly: greenPoly(58, 538, 20, 21, 19444) },
     { kind: 'greensideBunker', poly: [[74, 512], [78, 520], [84, 522], [88, 515], [86, 505], [80, 501], [75, 505]] },
@@ -265,229 +278,206 @@ const pv = (spec) => makeHole({ treeTypes: TREE_TYPES, ...spec });
 
 export const HOLE_4 = pv({
   n: 4, par: 4, nickname: 'The Chute',
-  // Dead straight, and that is the trick: the tree belts squeeze the corridor to 9 yards exactly
-  // where a drive lands, so the safe play is a 3 wood short of the gate.
+  // Dead straight, and that is the trick: the belts squeeze the corridor to 9 yards exactly where
+  // a drive lands, so the safe play is a 3 wood short of the gate. The green is the first one on
+  // the property with sand across its front, so the lay-back still has to be flown in.
   path: [[0, 5], [2, 120], [7, 250], [5, 372]],
   fw: [{ at: 0, w: 17 }, { at: 0.45, w: 9 }, { at: 0.7, w: 11 }, { at: 1, w: 15 }],
   belts: { left: { depth: 26, spacing: 8, seed: 401 }, right: { depth: 26, spacing: 8, seed: 402 } },
-  bunkers: [
-    { at: 0.5, side: 1, off: 15, r: 6, kind: 'fairwayBunker' },
-    { at: 0.97, side: -1, off: 19, r: 6 },
-  ],
+  bunkers: [{ at: 0.5, side: 1, off: 15, r: 6, kind: 'fairwayBunker' }],
   water: [{ at: 1, side: -1, off: 36, rx: 17, ry: 24, seed: 403 }],
-  slope: { fall: [0.05, -0.15] },
+  guard: ['frontJaws', 'rightSand'],
+  slope: 'spine',
 });
 
 export const HOLE_5 = pv({
   n: 5, par: 4, nickname: 'Bell Ridge',
-  // Dogleg right around a stand of oaks. Cutting the corner is 20 yards nearer the green and
-  // brings the fairway bunker on the inside of the bend into play.
+  // Bends hard right round a stand of oaks. The green sits on a shelf that steps up halfway
+  // through it, so the pin position decides whether the approach is a 6 iron or a 5.
   path: [[0, 5], [-4, 110], [22, 240], [54, 330], [62, 398]],
-  fw: [{ at: 0, w: 16 }, { at: 0.4, w: 13 }, { at: 0.75, w: 12 }, { at: 1, w: 15 }],
+  fw: [{ at: 0, w: 16 }, { at: 0.4, w: 13 }, { at: 0.75, w: 11 }, { at: 1, w: 14 }],
   belts: { left: { depth: 24, spacing: 9, seed: 501 }, right: { depth: 24, spacing: 9, type: 1, seed: 502 } },
-  bunkers: [
-    { at: 0.55, side: 1, off: 17, r: 8, ry: 5, kind: 'fairwayBunker' },
-    { at: 0.96, side: -1, off: 18, r: 6 },
-    { at: 1, side: 1, off: 21, r: 6 },
-  ],
-  slope: { fall: [-0.06, -0.14], back: 0.11 },
+  bunkers: [{ at: 0.55, side: -1, off: 17, r: 8, kind: 'fairwayBunker' }],
+  guard: ['leftSand', 'backSand'],
+  slope: 'tier',
 });
 
 export const HOLE_6 = pv({
   n: 6, par: 3, nickname: 'Cathedral',
-  // Short, straight, and framed by pines the whole way. The green is small and falls hard from
-  // back to front, so anything long comes back down to you - or past you.
+  // Straight down an avenue of pines to a green in a bowl. Everything that lands on it feeds
+  // toward the middle, which is why this is the last genuinely kind green out here.
   path: [[0, 5], [0, 80], [2, 152]],
   fw: [{ at: 0, w: 13 }, { at: 1, w: 12 }],
-  greenR: 12,
   belts: { left: { depth: 28, spacing: 7, seed: 601 }, right: { depth: 28, spacing: 7, seed: 602 } },
-  bunkers: [
-    { at: 0.98, side: -1, off: 17, r: 6 },
-    { at: 0.98, side: 1, off: 17, r: 6 },
-  ],
-  slope: { fall: [0, -0.34], spine: 0.05, back: 0.14 },
+  guard: ['leftSand', 'rightSand'],
+  slope: 'bowl',
 });
 
 export const HOLE_7 = pv({
   n: 7, par: 5, nickname: 'Long Meadow',
-  // A gentle S with a creek across it at the lay-up. Three-shot for most people; two for anyone
-  // who takes the carry on. The green is open in front, so a running third is a real option.
+  // THE FIRST FORCED LAY-UP ON THE PROPERTY. A creek crosses the whole corridor at 340 yards, so
+  // the second shot is a decision rather than a swing: a 3 wood is in the water, and the club that
+  // stops short of it leaves a full wedge rather than a chip.
   path: [[0, 5], [-8, 130], [14, 280], [4, 400], [10, 505]],
-  fw: [{ at: 0, w: 17 }, { at: 0.5, w: 14 }, { at: 0.78, w: 11 }, { at: 1, w: 16 }],
+  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 12 }, { at: 0.78, w: 10 }, { at: 1, w: 14 }],
   belts: { left: { depth: 22, spacing: 10, seed: 701 }, right: { depth: 22, spacing: 10, seed: 702 } },
-  water: [{ at: 0.63, side: 0, off: 0, rx: 26, ry: 9, seed: 703, n: 14 }],
-  bunkers: [
-    { at: 0.42, side: -1, off: 16, r: 7, kind: 'fairwayBunker' },
-    { at: 0.99, side: 1, off: 19, r: 6 },
-  ],
-  slope: { fall: [0.03, -0.13] },
+  // A CROSS HAZARD ONLY FORCES A LAY-UP IF A DRIVER CANNOT CARRY IT. Measured: bands centred at
+  // 188-205 yds did almost nothing, because the drive carries 215 and simply flew them. The band
+  // has to sit WHERE THE DRIVE LANDS - centred near 220, deep enough that clearing it needs more
+  // than the bag has - so the choice is lay up short of 200 or be in it.
+  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  guard: ['frontSand', 'rightSand', 'backSand'],
+  slope: 'saddle',
+  greenR: 13,
 });
 
 export const HOLE_8 = pv({
   n: 8, par: 4, nickname: 'Short Straw',
-  // 298 yards: a driver gets there. So does the water, which runs the whole left side from the tee
-  // to the green, and the green is ringed with sand. The bail-out is a 7 iron and a wedge.
+  // 293 yards, so a driver reaches - and the green is ringed with sand, so a driver that does not
+  // finish ON it is in a bunker every time. The lay-up to a wedge is genuinely the better play,
+  // which is the whole idea of a short par 4.
   path: [[0, 5], [6, 110], [12, 210], [10, 298]],
-  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 12 }, { at: 1, w: 13 }],
-  belts: { left: false, right: { depth: 26, spacing: 8, seed: 802 } },
-  water: [{ at: 0.5, side: -1, off: 30, rx: 15, ry: 100, seed: 803, n: 16 }],
-  bunkers: [
-    { at: 0.98, side: 1, off: 19, r: 6 },
-    { at: 1, side: 0, off: 0, r: 0.1, poly: null, kind: 'greensideBunker', at2: 0 },
-    { at: 0.93, side: 0, off: -20, r: 6 },
-  ],
-  slope: { fall: [-0.04, -0.19], back: 0.12 },
+  fw: [{ at: 0, w: 13 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
+  belts: { left: { depth: 22, spacing: 9, seed: 801 }, right: { depth: 26, spacing: 8, seed: 802 } },
+  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  guard: ['ringSand'],
+  slope: 'crown',
+  greenR: 11,
 });
 
 export const HOLE_9 = pv({
   n: 9, par: 4, nickname: 'Homeward',
-  // Dogleg left, uphill in feel: a big bunker sits on the corner where a drawn drive wants to
-  // finish, and the green has a false front that rejects anything short.
+  // Doglegs left round a stand of SENTINELS - forty yards tall, so there is no flying the corner
+  // with anything in the bag. Take the long way round or take your medicine. The green sheds two
+  // ways off a spine down the middle, so the putt depends on which half you finish in.
   path: [[0, 5], [8, 120], [-14, 250], [-34, 330], [-38, 386]],
-  fw: [{ at: 0, w: 16 }, { at: 0.45, w: 12 }, { at: 1, w: 14 }],
+  fw: [{ at: 0, w: 14 }, { at: 0.45, w: 9 }, { at: 1, w: 12 }],
   belts: { left: { depth: 24, spacing: 9, type: 1, seed: 901 }, right: { depth: 24, spacing: 9, seed: 902 } },
-  bunkers: [
-    { at: 0.52, side: -1, off: 16, r: 9, ry: 5, kind: 'fairwayBunker' },
-    { at: 0.95, side: 1, off: 19, r: 6 },
-  ],
-  slope: { fall: [0.05, -0.28], spine: 0.06, back: 0.16 },
+  sentinels: [{ at: 0.52, side: -1, off: 20, n: 6, spread: 9, type: 2 }],
+  guard: ['leftSand', 'backSand'],
+  slope: 'saddle',
 });
 
 export const HOLE_10 = pv({
   n: 10, par: 4, nickname: 'Split Oak',
-  // One oak, alone in the middle of the fairway at driving distance. Left of it is 8 yards wider;
-  // right of it is the shorter way in. This is the hole the tree-object model exists for.
+  // The lone oak in the middle of the fairway, and now a second stand short of the green: a low
+  // punch out from under the first one runs straight into the second. Fly them, or go round.
   path: [[0, 5], [-2, 120], [6, 240], [2, 348]],
-  fw: [{ at: 0, w: 18 }, { at: 0.55, w: 17 }, { at: 1, w: 15 }],
+  fw: [{ at: 0, w: 18 }, { at: 0.55, w: 13 }, { at: 1, w: 14 }],
   belts: { left: { depth: 22, spacing: 10, seed: 1001 }, right: { depth: 22, spacing: 10, seed: 1002 } },
-  trees: [{ at: 0.56, side: 1, off: 3, type: 1 }, { at: 0.62, side: -1, off: 7, type: 1 }],
-  bunkers: [
-    { at: 0.97, side: -1, off: 18, r: 6 },
-    { at: 0.99, side: 1, off: 20, r: 5 },
-  ],
-  slope: { fall: [0.02, -0.15] },
+  trees: [{ at: 0.62, side: 1, off: 3, type: 1 }],
+  guard: ['frontTrees', 'rightSand'],
+  guardTree: 1,
+  slope: 'tier',
 });
 
 export const HOLE_11 = pv({
   n: 11, par: 5, nickname: 'The Quarry',
-  // Wide off the tee and then it narrows twice. A chain of sand runs up the right; water sits
-  // short-right of the green exactly where a laid-up third wants to be.
+  // An old quarry floor crosses at 300 yards and there is water behind the green, so both the
+  // second shot and the third are played to a number rather than as hard as you can. The green
+  // itself runs hard from back to front: above the hole is a mistake you cannot putt out of.
   path: [[0, 5], [10, 140], [-6, 300], [10, 430], [26, 545]],
-  fw: [{ at: 0, w: 19 }, { at: 0.4, w: 14 }, { at: 0.72, w: 11 }, { at: 1, w: 15 }],
+  fw: [{ at: 0, w: 19 }, { at: 0.4, w: 13 }, { at: 0.72, w: 10 }, { at: 1, w: 14 }],
   belts: { left: { depth: 22, spacing: 10, seed: 1101 }, right: { depth: 20, spacing: 11, seed: 1102 } },
-  bunkers: [
-    { at: 0.36, side: 1, off: 17, r: 8, ry: 5, kind: 'fairwayBunker' },
-    { at: 0.5, side: 1, off: 19, r: 7, ry: 5, kind: 'fairwayBunker' },
-    { at: 0.68, side: 1, off: 18, r: 7, ry: 5, kind: 'fairwayBunker' },
-    { at: 0.98, side: -1, off: 19, r: 6 },
-  ],
-  water: [{ at: 0.93, side: 1, off: 26, rx: 15, ry: 18, seed: 1103 }],
-  slope: { fall: [-0.05, -0.15] },
+  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  guard: ['frontJaws', 'backWater'],
+  slope: 'steep',
 });
 
 export const HOLE_12 = pv({
   n: 12, par: 3, nickname: 'Pulpit',
-  // The long par 3. A pond fills the front-right and the only bail-out is left, which leaves the
-  // hardest chip on the course back down the slope.
+  // All carry, all the way, to a green that sheds in every direction from a plateau in the middle.
+  // Hit the plateau or it runs off, and everything it runs into is sand or water.
   path: [[0, 5], [4, 100], [8, 192]],
   fw: [{ at: 0, w: 12 }, { at: 0.6, w: 10 }, { at: 1, w: 14 }],
-  greenR: 13, greenRy: 16,
   belts: { left: { depth: 24, spacing: 9, seed: 1201 }, right: false },
-  water: [{ at: 0.86, side: 1, off: 12, rx: 22, ry: 26, seed: 1202 }],
-  bunkers: [{ at: 0.98, side: -1, off: 17, r: 6 }],
-  slope: { fall: [-0.08, -0.2], spine: 0.05 },
+  guard: ['frontWater', 'ringSand'],
+  slope: 'crown',
+  greenR: 13,
 });
 
 export const HOLE_13 = pv({
   n: 13, par: 4, nickname: 'Fox Run',
-  // Short and sharp: a hard dogleg right through the pines to a small green. There is no room to
-  // miss on either side, and the tee shot is deliberately a 5 iron for most people.
+  // Bends right, and a pond crosses the corridor at 240 - which on a 308 yard hole means the drive
+  // is a lay-up and the approach is a wedge over water. The green falls a different way in every
+  // quarter, so the read changes with the pin.
   path: [[0, 5], [0, 95], [22, 180], [50, 232], [70, 300]],
-  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 11 }, { at: 1, w: 13 }],
-  greenR: 12,
+  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 10 }, { at: 1, w: 12 }],
   belts: { left: { depth: 26, spacing: 8, seed: 1301 }, right: { depth: 26, spacing: 8, seed: 1302 } },
-  bunkers: [
-    { at: 0.55, side: 1, off: 15, r: 6, kind: 'fairwayBunker' },
-    { at: 0.98, side: 1, off: 17, r: 6 },
-    { at: 0.94, side: -1, off: 17, r: 5 },
-  ],
-  slope: { fall: [0.06, -0.18], back: 0.12 },
+  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  guard: ['leftSand', 'rightSand'],
+  slope: 'quarters',
 });
 
 export const HOLE_14 = pv({
   n: 14, par: 4, nickname: 'Highwater',
-  // Water down the entire right side, and the green is a peninsula out into it. The fairway tilts
-  // that way too, so the safe line is further left than it looks.
+  // Water down the entire right side, and a green that sheds hard toward it. The safe line is
+  // left, and the safe line leaves the longest approach on the course.
   path: [[0, 5], [-6, 130], [-2, 260], [4, 394]],
-  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 13 }, { at: 1, w: 14 }],
+  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 12 }, { at: 1, w: 13 }],
   belts: { left: { depth: 26, spacing: 9, seed: 1401 }, right: false },
-  water: [{ at: 0.55, side: 1, off: 34, rx: 18, ry: 130, seed: 1402, n: 18 }],
-  bunkers: [{ at: 0.96, side: -1, off: 18, r: 7 }],
-  slope: { fall: [0.1, -0.13], spine: 0.04 },
+  water: [{ at: 0.5, side: 1, off: 30, rx: 15, ry: 90, seed: 1403 }],
+  guard: ['rightWater', 'frontSand'],
+  slope: 'rightShed',
 });
 
 export const HOLE_15 = pv({
   n: 15, par: 5, nickname: 'The Marathon',
-  // The longest hole on the property. Double dogleg, sand staged at every landing area, and a
-  // green sitting in a bowl so a long third funnels back toward the middle.
+  // The longest hole on the property. Waste sand crosses at 205, so the tee shot is a lay-up and
+  // the hole becomes four honest swings rather than three heroic ones. It carried a SECOND cross
+  // at 400 for one build and measured +1.11 with 80 % bogey-or-worse - which is not a hard hole,
+  // it is an unfair one, and is exactly what the difficulty probe exists to catch.
   path: [[0, 5], [-14, 150], [16, 300], [-6, 440], [8, 572]],
-  fw: [{ at: 0, w: 18 }, { at: 0.35, w: 13 }, { at: 0.65, w: 12 }, { at: 1, w: 16 }],
-  belts: { left: { depth: 22, spacing: 10, seed: 1501 }, right: { depth: 22, spacing: 10, seed: 1502 } },
-  bunkers: [
-    { at: 0.33, side: -1, off: 16, r: 7, kind: 'fairwayBunker' },
-    { at: 0.62, side: 1, off: 16, r: 7, kind: 'fairwayBunker' },
-    { at: 0.97, side: -1, off: 19, r: 6 },
-    { at: 0.99, side: 1, off: 19, r: 6 },
-  ],
-  greenR: 16,
-  slope: { fall: [0, -0.08], spine: 0.09, back: 0.04 },
+  fw: [{ at: 0, w: 19 }, { at: 0.35, w: 16 }, { at: 0.65, w: 15 }, { at: 1, w: 17 }],
+  belts: { left: { depth: 18, spacing: 12, seed: 1501 }, right: { depth: 18, spacing: 12, seed: 1502 } },
+  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  guard: ['frontJaws', 'backSand'],
+  slope: 'saddle',
 });
 
 export const HOLE_16 = pv({
   n: 16, par: 3, nickname: 'Postage',
-  // 138 yards to a green you could park a car on, ringed by sand on three sides and falling away
-  // on the fourth. A wedge, and nowhere to miss it.
+  // 135 yards to the smallest green on the course, sand the whole way round it, and a crown in the
+  // middle that throws a ball off in whichever direction it arrived from. A wedge and a nerve.
   path: [[0, 5], [-2, 70], [0, 140]],
-  fw: [{ at: 0, w: 11 }, { at: 1, w: 10 }],
-  greenR: 10,
+  fw: [{ at: 0, w: 10 }, { at: 1, w: 9 }],
   belts: { left: { depth: 26, spacing: 8, seed: 1601 }, right: { depth: 26, spacing: 8, seed: 1602 } },
-  bunkers: [
-    { at: 0.97, side: -1, off: 15, r: 6 },
-    { at: 0.97, side: 1, off: 15, r: 6 },
-    { at: 0.9, side: 0, off: 0, r: 6, ry: 4 },
-  ],
-  slope: { fall: [0.05, -0.36], spine: 0.08, back: 0.15 },
+  guard: ['ringSand'],
+  slope: 'crown',
+  greenR: 10,
 });
 
 export const HOLE_17 = pv({
   n: 17, par: 4, nickname: 'Gallery',
-  // Straight, narrow, and walled with pines both sides for its whole length. The green is two
-  // tiers - the spine down the middle is strong enough to send a putt to the wrong half.
+  // A double dogleg with SENTINELS on both corners, so the hole genuinely changes direction twice
+  // and neither corner can be flown. Trees short of the green as well: the approach has to be
+  // carried in high, and after a punch-out it cannot be.
   path: [[0, 5], [4, 130], [-2, 250], [2, 368]],
-  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 11 }, { at: 1, w: 13 }],
+  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 10 }, { at: 1, w: 12 }],
   belts: { left: { depth: 30, spacing: 7, seed: 1701 }, right: { depth: 30, spacing: 7, seed: 1702 } },
-  bunkers: [
-    { at: 0.6, side: -1, off: 15, r: 6, kind: 'fairwayBunker' },
-    { at: 0.98, side: 1, off: 18, r: 6 },
+  sentinels: [
+    { at: 0.34, side: 1, off: 22, n: 5, spread: 9, type: 2 },
+    { at: 0.70, side: -1, off: 22, n: 5, spread: 9, type: 2 },
   ],
-  greenR: 15,
-  slope: { fall: [0, -0.12], spine: 0.16, back: 0.06 },
+  guard: ['frontTrees', 'leftSand', 'rightSand'],
+  slope: 'quarters',
 });
 
 export const HOLE_18 = pv({
   n: 18, par: 4, nickname: 'Home',
-  // The finisher: a lake all the way up the left from the drive to the green, sand on the right,
-  // and the biggest green on the course to aim at. Everything is on the line you dare take.
+  // The hardest hole here, and it should be. Water crosses at 198 so the drive is a lay-up, and
+  // then the green sits between water short and water long on the smallest putting surface of any
+  // par 4 out here - so the approach can be neither bailed out nor over-clubbed. The green runs
+  // away from back to front harder than any other. Par is meant to be a good score.
   path: [[0, 5], [8, 130], [18, 270], [14, 400]],
-  fw: [{ at: 0, w: 17 }, { at: 0.5, w: 13 }, { at: 1, w: 16 }],
+  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 9 }, { at: 1, w: 12 }],
   belts: { left: false, right: { depth: 24, spacing: 9, seed: 1802 } },
-  water: [{ at: 0.6, side: -1, off: 30, rx: 16, ry: 120, seed: 1803, n: 18 }],
-  bunkers: [
-    { at: 0.55, side: 1, off: 16, r: 7, kind: 'fairwayBunker' },
-    { at: 0.97, side: 1, off: 20, r: 7 },
-  ],
-  greenR: 17, greenRy: 15,
-  slope: { fall: [-0.04, -0.13], spine: 0.07 },
+  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  water: [{ at: 0.45, side: -1, off: 32, rx: 14, ry: 60, seed: 1803 }],
+  guard: ['frontWater', 'backWater', 'ringSand'],
+  slope: 'steep',
+  greenR: 10,
+  greenRy: 12,
   decor: [{ kind: 'path', poly: [[34, 20], [37, 20], [42, 200], [40, 400], [37, 400], [39, 200]] }],
 });
 

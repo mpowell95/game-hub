@@ -37,7 +37,10 @@ import { makeHole } from '../js/holegen.js';
 const DESERT_TYPES = [
   { name: 'saguaro', trunk: 0.9, canopy: 1.8, height: 15 },
   { name: 'paloverde', trunk: 0.7, canopy: 6.5, height: 8 },
-  { name: 'boulder', trunk: 3.2, canopy: 3.2, height: 30 },
+  // 40, NOT 30. MEASURED: the highest-peaking club in the stock bag is the 8 iron at 32.3 yds of
+  // apex, so a 30 yd boulder could be flown at the top of an 8 iron's arc - which quietly undid
+  // the one thing this obstacle exists to say. At 40 it is solid to everything, from anywhere.
+  { name: 'boulder', trunk: 3.2, canopy: 3.2, height: 40 },
 ];
 
 /** Red Mesa's house style: sparse scrub both sides, saguaros by default, and a narrower collar of
@@ -51,31 +54,26 @@ const rm = (spec) => makeHole({
 
 export const HOLE_1 = rm({
   n: 1, par: 4, nickname: 'Sunrise Wash',
-  // A generous opener, and the only wide fairway on the front nine. A dry wash cuts across it at
-  // driving distance: carry it or lay back, and the lay-back leaves a full 5 iron.
+  // A generous opener, and the only wide fairway on the front nine. The green is the kindest out
+  // here: everything on it feeds toward the middle.
   path: [[0, 5], [4, 130], [-4, 250], [2, 356]],
   fw: [{ at: 0, w: 19 }, { at: 0.5, w: 16 }, { at: 1, w: 15 }],
   belts: { left: { depth: 22, spacing: 15, seed: 2101 }, right: { depth: 22, spacing: 15, seed: 2102 } },
-  bunkers: [
-    { at: 0.47, side: 0, off: 0, r: 20, ry: 6, kind: 'fairwayBunker', seed: 2103 },
-    { at: 0.97, side: 1, off: 19, r: 6 },
-  ],
-  slope: { fall: [0.04, -0.14] },
+  bunkers: [{ at: 0.55, side: 1, off: 20, r: 8, kind: 'fairwayBunker' }],
+  guard: ['rightSand'],
+  slope: 'bowl',
 });
 
 export const HOLE_2 = rm({
   n: 2, par: 4, nickname: 'Coyote Bend',
-  // Dogleg left around a boulder field. The boulders block at ANY height, so there is no flying
-  // the corner: the only question is how much of it you dare cut on the ground.
+  // Dogleg left round a boulder field. Boulders block at ANY height, so there is no flying the
+  // corner: the only question is how much of it you dare cut on the ground.
   path: [[0, 5], [4, 110], [-24, 230], [-52, 320], [-58, 382]],
   fw: [{ at: 0, w: 16 }, { at: 0.45, w: 12 }, { at: 1, w: 14 }],
   belts: { left: { depth: 18, spacing: 16, type: 2, seed: 2201 }, right: { depth: 22, spacing: 14, seed: 2202 } },
   trees: [{ at: 0.44, side: -1, off: 12, type: 2 }, { at: 0.5, side: -1, off: 15, type: 2 }],
-  bunkers: [
-    { at: 0.52, side: 1, off: 15, r: 7, kind: 'fairwayBunker' },
-    { at: 0.96, side: -1, off: 18, r: 6 },
-  ],
-  slope: { fall: [-0.06, -0.16] },
+  guard: ['leftSand', 'backSand'],
+  slope: 'gentle',
 });
 
 export const HOLE_3 = rm({
@@ -84,233 +82,209 @@ export const HOLE_3 = rm({
   // to side, and long is the desert.
   path: [[0, 5], [-2, 90], [0, 166]],
   fw: [{ at: 0, w: 12 }, { at: 0.5, w: 9 }, { at: 1, w: 13 }],
-  greenR: 18, greenRy: 10,
   belts: { left: { depth: 20, spacing: 13, seed: 2301 }, right: { depth: 20, spacing: 13, seed: 2302 } },
-  bunkers: [
-    { at: 0.78, side: 0, off: 0, r: 16, ry: 6, kind: 'greensideBunker', seed: 2303 },
-    { at: 1, side: 1, off: 22, r: 6 },
-  ],
-  slope: { fall: [0, -0.3], spine: 0.09, back: 0.12 },
+  guard: ['frontJaws'],
+  slope: 'gentle',
+  greenR: 18, greenRy: 10,
 });
 
 export const HOLE_4 = rm({
   n: 4, par: 5, nickname: 'The Long Arroyo',
-  // A sand arroyo runs the entire right side from the tee to the green. It is a fairway bunker,
-  // not a penalty, so it is playable - but 88 % power and half the accuracy band for three
-  // straight shots is its own punishment.
+  // A sand arroyo runs the entire right side from the tee to the green, and a second one CROSSES
+  // the corridor at 205: the tee shot is a lay-up, and the arroyo is playable rather than penal,
+  // so the punishment is three straight shots at 88 % power with half the accuracy band.
   path: [[0, 5], [-6, 140], [6, 300], [-2, 420], [4, 512]],
   fw: [{ at: 0, w: 17 }, { at: 0.45, w: 13 }, { at: 1, w: 15 }],
   belts: { left: { depth: 22, spacing: 14, seed: 2401 }, right: false },
-  bunkers: [
-    { at: 0.3, side: 1, off: 22, r: 12, ry: 34, kind: 'fairwayBunker', seed: 2402 },
-    { at: 0.62, side: 1, off: 22, r: 12, ry: 34, kind: 'fairwayBunker', seed: 2403 },
-    { at: 0.98, side: -1, off: 19, r: 6 },
-  ],
-  slope: { fall: [0.05, -0.13] },
+  // A CROSS HAZARD ONLY FORCES A LAY-UP IF A DRIVER CANNOT CARRY IT. Measured: bands centred at
+  // 188-205 yds did almost nothing, because the drive carries 215 and simply flew them. The band
+  // has to sit WHERE THE DRIVE LANDS - centred near 220, deep enough that clearing it needs more
+  // than the bag has - so the choice is lay up short of 200 or be in it.
+  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  bunkers: [{ at: 0.55, side: 1, off: 19, r: 10, ry: 30, kind: 'fairwayBunker', seed: 2402 }],
+  guard: ['rightSand', 'frontSand'],
+  slope: 'spine',
 });
 
 export const HOLE_5 = rm({
   n: 5, par: 4, nickname: 'Cactus Alley',
-  // The narrowest hole on the property: 9 yards of turf between two stands of saguaro. They cannot
-  // be flown - the canopy stops at 15 yards and nothing peaks under that - so this is a driving
-  // test with no way out but straight.
+  // The narrowest driving test on the property: turf between two stands of saguaro. They cannot be
+  // flown - the canopy stops at 15 yards and nothing peaks under that - so this is straight or
+  // nothing, and the green tilts hard to the right once you get there.
   path: [[0, 5], [2, 120], [-2, 240], [0, 334]],
   fw: [{ at: 0, w: 13 }, { at: 0.4, w: 9 }, { at: 0.8, w: 9 }, { at: 1, w: 13 }],
   belts: { left: { depth: 24, spacing: 10, seed: 2501 }, right: { depth: 24, spacing: 10, seed: 2502 } },
-  bunkers: [{ at: 0.97, side: 1, off: 18, r: 6 }, { at: 0.93, side: -1, off: 17, r: 5 }],
-  slope: { fall: [0.03, -0.18] },
+  bunkers: [{ at: 0.97, side: 1, off: 18, r: 6 }],
+  guard: ['leftSand'],
+  slope: 'rightShed',
 });
 
 export const HOLE_6 = rm({
   n: 6, par: 3, nickname: 'Kiln',
-  // 142 yards, and the green is an island of turf in a sea of sand. There is no rough at all: you
-  // are on it, or you are in a bunker.
+  // The green is an island of turf in a sea of sand, and it crowns in the middle, so a ball that
+  // lands anywhere but the plateau runs off it into one. There is no rough here at all.
   path: [[0, 5], [0, 74], [2, 144]],
   fw: [{ at: 0, w: 9 }, { at: 1, w: 8 }],
-  rough: 4,
-  greenR: 12,
   belts: false,
-  bunkers: [
-    { at: 0.98, side: -1, off: 17, r: 8, seed: 2601 },
-    { at: 0.98, side: 1, off: 17, r: 8, seed: 2602 },
-    { at: 0.88, side: 0, off: 0, r: 9, ry: 5, seed: 2603 },
-    { at: 1, side: 0, off: 24, r: 8, ry: 5, seed: 2604 },
-  ],
-  slope: { fall: [-0.05, -0.34], spine: 0.1, back: 0.14 },
+  guard: ['ringSand'],
+  slope: 'crown',
+  greenR: 13,
 });
 
 export const HOLE_7 = rm({
   n: 7, par: 4, nickname: 'Mesa Rim',
-  // The fairway sits on a shelf with desert falling away on both sides and a pool hard against the
-  // green's left. The tee shot is comfortable; the approach is not.
+  // The fairway sits on a shelf with desert falling away both sides and a pool hard against the
+  // green's left. The tee shot is comfortable; the approach is a saddle green with water on the
+  // low side, which is as uncomfortable as this course gets before the turn.
   path: [[0, 5], [8, 130], [16, 250], [12, 384]],
   fw: [{ at: 0, w: 16 }, { at: 0.5, w: 12 }, { at: 1, w: 12 }],
   belts: { left: { depth: 20, spacing: 15, seed: 2701 }, right: { depth: 20, spacing: 15, type: 1, seed: 2702 } },
-  water: [{ at: 0.97, side: -1, off: 28, rx: 14, ry: 26, seed: 2703 }],
-  bunkers: [{ at: 0.98, side: 1, off: 19, r: 7 }],
-  slope: { fall: [-0.07, -0.15] },
+  bunkers: [{ at: 0.56, side: -1, off: 16, r: 8, kind: 'fairwayBunker' }],
+  guard: ['leftWater', 'frontJaws'],
+  slope: 'saddle',
+  greenR: 12,
 });
 
 export const HOLE_8 = rm({
   n: 8, par: 5, nickname: 'Thunder Valley',
   // A double dogleg with a waste area on the outside of each bend, so both drives are aimed at
-  // sand. Reachable in two by anyone who takes both corners on.
+  // sand, and a wash crossing at 205 that makes the first of them a lay-up.
   path: [[0, 5], [16, 150], [-10, 300], [10, 430], [22, 530]],
   fw: [{ at: 0, w: 17 }, { at: 0.35, w: 12 }, { at: 0.7, w: 12 }, { at: 1, w: 16 }],
   belts: { left: { depth: 20, spacing: 15, seed: 2801 }, right: { depth: 20, spacing: 15, seed: 2802 } },
-  bunkers: [
-    { at: 0.32, side: 1, off: 18, r: 11, ry: 7, kind: 'fairwayBunker', seed: 2803 },
-    { at: 0.66, side: -1, off: 18, r: 11, ry: 7, kind: 'fairwayBunker', seed: 2804 },
-    { at: 0.98, side: 1, off: 19, r: 6 },
-  ],
-  slope: { fall: [0.04, -0.12] },
+  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  guard: ['frontJaws', 'backSand'],
+  slope: 'tier',
 });
 
 export const HOLE_9 = rm({
   n: 9, par: 4, nickname: 'Adobe',
-  // Straight and honest until the last forty yards, where a chain of bunkers crosses the front of
-  // the green. There is no running one in here.
+  // Straight and honest until the last forty yards, where sand crosses the front of the green.
+  // There is no running one in here, and the green falls a different way in every quarter.
   path: [[0, 5], [-6, 120], [4, 250], [-2, 362]],
-  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 13 }, { at: 1, w: 13 }],
+  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 12 }, { at: 1, w: 12 }],
   belts: { left: { depth: 20, spacing: 15, seed: 2901 }, right: { depth: 20, spacing: 15, seed: 2902 } },
-  bunkers: [
-    { at: 0.9, side: 0, off: -12, r: 8, ry: 5, seed: 2903 },
-    { at: 0.9, side: 0, off: 8, r: 8, ry: 5, seed: 2904 },
-    { at: 0.99, side: 1, off: 20, r: 6 },
-  ],
-  slope: { fall: [0.02, -0.2], back: 0.11 },
+  guard: ['frontSand', 'leftSand', 'rightSand'],
+  slope: 'quarters',
 });
 
 export const HOLE_10 = rm({
   n: 10, par: 4, nickname: 'Rattler',
-  // It bends right, then left, then right again, and the fairway is never more than 12 yards wide
-  // once you are past the tee. Position, not distance.
+  // It bends right, then left, then right again. Position, not distance - and the green steps up
+  // halfway through, so the club into it depends on where the pin is.
   path: [[0, 5], [18, 110], [-8, 200], [18, 280], [8, 340]],
-  fw: [{ at: 0, w: 15 }, { at: 0.3, w: 11 }, { at: 0.7, w: 11 }, { at: 1, w: 13 }],
+  fw: [{ at: 0, w: 16 }, { at: 0.3, w: 13 }, { at: 0.7, w: 13 }, { at: 1, w: 14 }],
   belts: { left: { depth: 18, spacing: 13, seed: 3001 }, right: { depth: 18, spacing: 13, seed: 3002 } },
-  bunkers: [
-    { at: 0.5, side: 1, off: 14, r: 6, kind: 'fairwayBunker' },
-    { at: 0.97, side: -1, off: 18, r: 6 },
-  ],
-  slope: { fall: [-0.05, -0.17] },
+  bunkers: [{ at: 0.62, side: 1, off: 18, r: 8, kind: 'fairwayBunker' }],
+  guard: ['rightSand', 'backSand'],
+  slope: 'tier',
 });
 
 export const HOLE_11 = rm({
   n: 11, par: 3, nickname: 'High Noon',
-  // The long one: 176 yards, all of it over water, to a green with sand behind. Everything about
-  // it says take one more club, and one more club is the back bunker.
+  // All of it over water, to a green with sand behind. Everything about it says take one more
+  // club, and one more club is the back bunker.
   path: [[0, 5], [0, 92], [-4, 176]],
   fw: [{ at: 0, w: 10 }, { at: 0.55, w: 8 }, { at: 1, w: 13 }],
-  greenR: 14, greenRy: 13,
   belts: { left: false, right: { depth: 18, spacing: 14, seed: 3102 } },
   water: [{ at: 0.5, side: 0, off: 0, rx: 34, ry: 46, seed: 3103, n: 14 }],
-  bunkers: [{ at: 1, side: 0, off: 22, r: 9, ry: 6, seed: 3104 }],
-  slope: { fall: [0.05, -0.24], back: 0.12 },
+  guard: ['backSand', 'leftSand'],
+  slope: 'crown',
+  greenR: 13,
 });
 
 export const HOLE_12 = rm({
   n: 12, par: 4, nickname: 'Painted Hills',
-  // Boulders stand in the middle of the fairway at driving distance. They block at any height, so
-  // the tee shot is a decision rather than a swing: short of them, or through the gap.
+  // Boulders stand in the middle of the fairway at driving distance and more of them line the left
+  // shoulder of the green. They block at any height, so both the tee shot and the approach are
+  // decisions about a route rather than swings.
   path: [[0, 5], [-4, 120], [8, 250], [2, 378]],
-  fw: [{ at: 0, w: 18 }, { at: 0.5, w: 17 }, { at: 1, w: 14 }],
+  fw: [{ at: 0, w: 18 }, { at: 0.5, w: 15 }, { at: 1, w: 14 }],
   belts: { left: { depth: 20, spacing: 15, seed: 3201 }, right: { depth: 20, spacing: 15, seed: 3202 } },
-  trees: [
-    { at: 0.5, side: -1, off: 6, type: 2 },
-    { at: 0.53, side: 1, off: 9, type: 2 },
-    { at: 0.58, side: -1, off: 11, type: 2 },
-  ],
-  bunkers: [{ at: 0.97, side: 1, off: 19, r: 7 }],
-  slope: { fall: [0.03, -0.15] },
+  sentinels: [{ at: 0.55, side: 0, off: 4, n: 3, spread: 9, type: 2 }],
+  guard: ['leftTrees', 'rightSand'],
+  guardTree: 2,
+  slope: 'tier',
 });
 
 export const HOLE_13 = rm({
   n: 13, par: 5, nickname: 'The Gorge',
-  // Three shots for most, and the third is over water to a shallow green. The lay-up zone is
-  // pinched by sand on both sides, so there is no comfortable place to leave it.
+  // Three shots for most, and the gorge crosses at 205 so the first of them is a lay-up. The third
+  // is over water to a shallow green that runs hard from back to front.
   path: [[0, 5], [10, 150], [-6, 300], [4, 420], [-2, 524]],
-  fw: [{ at: 0, w: 17 }, { at: 0.5, w: 13 }, { at: 0.8, w: 10 }, { at: 1, w: 15 }],
+  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 11 }, { at: 0.8, w: 10 }, { at: 1, w: 13 }],
   belts: { left: { depth: 20, spacing: 15, seed: 3301 }, right: { depth: 20, spacing: 15, seed: 3302 } },
-  water: [{ at: 0.88, side: 0, off: 0, rx: 26, ry: 12, seed: 3303, n: 14 }],
-  bunkers: [
-    { at: 0.74, side: 1, off: 15, r: 7, kind: 'fairwayBunker' },
-    { at: 0.78, side: -1, off: 15, r: 7, kind: 'fairwayBunker' },
-    { at: 1, side: 1, off: 21, r: 6 },
-  ],
-  greenR: 16, greenRy: 11,
-  slope: { fall: [0, -0.22], spine: 0.07, back: 0.1 },
+  cross: [{ yd: 222, kind: 'water', depth: 34 }, { yd: 418, kind: 'waste', depth: 30 }],
+  guard: ['frontWater', 'ringSand'],
+  slope: 'steep',
+  greenR: 12, greenRy: 10,
 });
 
 export const HOLE_14 = rm({
   n: 14, par: 4, nickname: 'Roadrunner',
-  // 306 yards. A driver reaches, and everything around the green is sand: four bunkers, no rough,
-  // and a green that falls away at the back.
+  // A driver reaches, and everything round the green is sand on a crown that throws a ball off in
+  // whatever direction it arrived from. Going for it is the wrong play and it will not feel like
+  // it from the tee.
   path: [[0, 5], [-8, 110], [-4, 210], [-10, 306]],
-  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 11 }, { at: 1, w: 12 }],
-  belts: { left: { depth: 20, spacing: 13, seed: 3401 }, right: { depth: 20, spacing: 13, seed: 3402 } },
-  bunkers: [
-    { at: 0.96, side: -1, off: 18, r: 7, seed: 3403 },
-    { at: 0.96, side: 1, off: 18, r: 7, seed: 3404 },
-    { at: 0.86, side: 0, off: 0, r: 9, ry: 5, seed: 3405 },
-    { at: 1, side: 0, off: 23, r: 9, ry: 5, seed: 3406 },
-  ],
-  greenR: 12,
-  slope: { fall: [0.04, -0.3], back: 0.14 },
+  fw: [{ at: 0, w: 13 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
+  belts: { left: { depth: 24, spacing: 11, seed: 3401 }, right: { depth: 20, spacing: 13, seed: 3402 } },
+  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  guard: ['ringSand', 'backWater'],
+  slope: 'crown',
+  greenR: 10,
 });
 
 export const HOLE_15 = rm({
   n: 15, par: 4, nickname: 'Dust Devil',
   // Wide open off the tee, and then the fairway simply ends: the green sits alone on its own island
-  // of turf with forty yards of desert in front of it. The approach is all carry, and the club you
-  // have left is decided back on the tee.
+  // of turf with forty yards of desert in front of it and water short. The approach is all carry,
+  // and the club you have left is decided back on the tee.
   path: [[0, 5], [6, 140], [-2, 270], [6, 390]],
-  fw: [{ at: 0, w: 20 }, { at: 0.55, w: 17 }, { at: 0.78, w: 11 }, { at: 0.8, w: 3 }, { at: 1, w: 3 }],
+  fw: [{ at: 0, w: 17 }, { at: 0.55, w: 13 }, { at: 0.78, w: 9 }, { at: 0.8, w: 3 }, { at: 1, w: 3 }],
   belts: { left: { depth: 20, spacing: 15, seed: 3501 }, right: { depth: 20, spacing: 15, seed: 3502 } },
-  bunkers: [{ at: 0.98, side: -1, off: 20, r: 7 }],
-  greenR: 16,
-  slope: { fall: [-0.03, -0.13], spine: 0.07 },
+  guard: ['frontWater', 'ringSand'],
+  slope: 'quarters',
+  greenR: 11,
 });
 
 export const HOLE_16 = rm({
   n: 16, par: 3, nickname: 'Sundial',
-  // Short, and the green is the most severe on the course: it falls hard from back to front and
-  // sheds to both sides, so the putt matters more than the tee shot.
+  // Short, and the most severe green on the course: it crowns in the middle and is ringed with
+  // sand, so the putt matters far more than the tee shot and the tee shot is not easy either.
   path: [[0, 5], [4, 80], [2, 152]],
-  fw: [{ at: 0, w: 10 }, { at: 1, w: 12 }],
-  greenR: 15,
+  fw: [{ at: 0, w: 9 }, { at: 1, w: 10 }],
   belts: { left: { depth: 18, spacing: 14, type: 1, seed: 3601 }, right: { depth: 18, spacing: 14, seed: 3602 } },
-  bunkers: [{ at: 0.94, side: -1, off: 17, r: 6 }, { at: 1, side: 1, off: 20, r: 6 }],
-  slope: { fall: [0, -0.4], spine: 0.16, back: 0.16 },
+  guard: ['ringSand'],
+  slope: 'crown',
+  greenR: 11,
 });
 
 export const HOLE_17 = rm({
   n: 17, par: 4, nickname: 'Mirage',
-  // Water down the whole right side, and the fairway leans that way. The safe line is left, into
+  // Water down the whole right side and the fairway leans that way. The safe line is left, into
   // the palo verde - trivial to fly with a wedge, impossible with anything you would want to be
-  // hitting from there.
+  // hitting from there - and boulders stand on the corner so the line cannot simply be cut.
   path: [[0, 5], [-4, 130], [4, 250], [-2, 366]],
-  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 12 }, { at: 1, w: 13 }],
-  belts: { left: { depth: 22, spacing: 11, type: 1, seed: 3701 }, right: false },
-  water: [{ at: 0.6, side: 1, off: 26, rx: 14, ry: 110, seed: 3702, n: 18 }],
-  bunkers: [{ at: 0.96, side: -1, off: 18, r: 6 }],
-  slope: { fall: [0.08, -0.14] },
+  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
+  belts: { left: { depth: 24, spacing: 10, type: 1, seed: 3701 }, right: false },
+  water: [{ at: 0.5, side: 1, off: 26, rx: 13, ry: 80, seed: 3703 }],
+  sentinels: [{ at: 0.46, side: -1, off: 19, n: 4, spread: 9, type: 2 }],
+  guard: ['rightWater', 'frontSand'],
+  slope: 'saddle',
 });
 
 export const HOLE_18 = rm({
   n: 18, par: 4, nickname: 'Red Mesa',
-  // The hole the course is named for: a long, straight, uphill-feeling finisher with the lake down
-  // the left, sand on the right, and the biggest green out here to bring it home to.
+  // The hole the course is named for, and the hardest here. A wash crosses at 200 so the drive is
+  // a lay-up, the green then sits between water short and sand long on the smallest surface of any
+  // par 4 out here, and it runs away from back to front. Par is meant to be a good score.
   path: [[0, 5], [-8, 140], [2, 270], [-4, 392]],
-  fw: [{ at: 0, w: 17 }, { at: 0.5, w: 13 }, { at: 1, w: 16 }],
-  belts: { left: false, right: { depth: 22, spacing: 13, seed: 3802 } },
-  water: [{ at: 0.62, side: -1, off: 28, rx: 15, ry: 95, seed: 3803, n: 18 }],
-  bunkers: [
-    { at: 0.55, side: 1, off: 16, r: 8, kind: 'fairwayBunker' },
-    { at: 0.98, side: 1, off: 21, r: 7 },
-  ],
-  greenR: 18, greenRy: 15,
-  slope: { fall: [-0.05, -0.12], spine: 0.08 },
-  decor: [{ kind: 'path', poly: [[26, 30], [29, 30], [34, 200], [30, 390], [27, 390], [31, 200]] }],
+  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
+  belts: { left: { depth: 24, spacing: 12, seed: 3801 }, right: { depth: 20, spacing: 14, seed: 3802 } },
+  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  guard: ['frontWater', 'backSand', 'rightSand'],
+  slope: 'steep',
+  greenR: 11, greenRy: 13,
 });
 
 export const HOLES = [

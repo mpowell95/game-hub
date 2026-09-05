@@ -13,7 +13,7 @@ import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE
   greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
 import { RED_MESA } from '../courses/redmesa.js';
-import { COURSES, ROUNDS, roundKey, roundHoles, roundPar, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, roundKey, roundHoles, roundPar, roundsOfMode, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, mustPutt, canPutt } from './clubs.js';
 import * as CL from './clubs.js';
@@ -310,7 +310,18 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   ok('a green-zone stop is effectively straight', Math.abs(SW.mishit(0.62, 1, 1).deg) <= 1.5);
   // The flat 10 % became a RAMP (2026-09-04): the reference's bunker 7 iron stopped in red and
   // went 21.1 yds where ours gave ~41, so a red strike there costs real distance, not a token cut.
-  ok('a green-zone stop costs no distance at all', SW.mishit(0.6, 1, 1).distanceMul === 1);
+  //
+  // [CHANGED 2026-09-05] This used to assert that a green-band stop costs NO distance at all. That
+  // was true and it was the single biggest reason Matt could birdie every hole on both courses: a
+  // decent strike had perfect distance control, so a 130 yd approach finished within 13 yds of its
+  // target 94 % of the time against a scratch golfer's real 78 %. Distance now varies across the
+  // band, TWO-SIDED so it cannot be clubbed out - but DEAD CENTRE is still exactly 1.000, which is
+  // what keeps the over-swing calibration (240-245 yds at the top of the arc, measured with Matt)
+  // untouched and what keeps the middle of the bar worth aiming at.
+  ok('a dead-centre strike still costs no distance at all', SW.mishit(0.5, 1, 1).distanceMul === 1);
+  ok('...but a green-band strike does, and it is two-sided',
+    SW.mishit(0.6, 1, 1).distanceMul < 1 && SW.mishit(0.4, 1, 1).distanceMul > 1
+    && Math.abs(SW.mishit(0.6, 1, 1).distanceMul - 1) < 0.10);
   ok('an orange stop shades distance down toward 0.92',
     SW.mishit(0.82, 1, 1).distanceMul < 1 && SW.mishit(0.82, 1, 1).distanceMul >= 0.92);
   ok('a full red miss costs 40 % of the distance', Math.abs(SW.mishit(1, 1, 1).distanceMul - 0.6) < 1e-9);
@@ -1203,6 +1214,183 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
     ok(`${c.name}: no hole softlocks the ball`, stuck === 0, `${stuck} hole(s)`);
     ok(`${c.name}: every hole is finished in par+2 or better (worst was ${worst} on hole ${worstHole})`,
       worst > 0 && c.holes.every((h) => { const n = playOut(h); return n > 0 && n <= h.par + 2; }));
+  }
+}
+
+
+console.log('\n-- 15. the round menu: length first, then course, then which holes --');
+// Matt, 2026-09-05: "I want 3 modes: 3 hole, 9 hole, and 18 hole... If I chose 3 holes, each
+// course should be broken into 6 options of 3 holes. if 9 holes is chosen, 2 options, and 18
+// holes, just 1."
+{
+  ok('three lengths are offered', MODES.length === 3 && MODES.join(',') === '3,9,18');
+  ok(`3 holes offers six sets (${roundsOfMode(3).length})`, roundsOfMode(3).length === 6);
+  ok(`9 holes offers two (${roundsOfMode(9).length})`, roundsOfMode(9).length === 2);
+  ok(`18 holes offers one (${roundsOfMode(18).length})`, roundsOfMode(18).length === 1);
+
+  // The six three-hole sets must TILE the course: every hole in exactly one of them, in order.
+  const covered = [];
+  for (const r of roundsOfMode(3)) for (let i = r.from; i < r.to; i++) covered.push(i);
+  ok('the six sets tile all eighteen holes with no gap and no overlap',
+    covered.length === 18 && covered.every((v, i) => v === i));
+  ok('...and each is exactly three holes', roundsOfMode(3).every((r) => r.to - r.from === 3));
+  ok('the two nines tile them too',
+    roundsOfMode(9).map((r) => `${r.from}-${r.to}`).join(' ') === '0-9 9-18');
+
+  // [KNOWN-BUG PROBE] THE FROZEN KEYS. The four rounds that existed before this change must keep
+  // the exact stored keys they had, or every best round anyone has ever made reads as deleted
+  // (THE LAW rules 4 and 5). `pinevalley3` in particular is set 1 - the SAME three holes it always
+  // was - and must not have become "the first of six new sets" with a new key.
+  const pv = COURSES[0];
+  ok('[KNOWN-BUG PROBE] the frozen round keys are unchanged',
+    roundKey(pv, 'quick3') === 'pinevalley3' && roundKey(pv, 'front9') === 'pinevalley9'
+    && roundKey(pv, 'back9') === 'pinevalley9b' && roundKey(pv, 'full18') === 'pinevalley18');
+  ok('...and set 1 is still holes 1-3', roundRange(ROUNDS[0]) === '1-3');
+  const suffixes = ROUNDS.map((r) => r.suffix);
+  ok('every round key is unique', new Set(suffixes).size === suffixes.length);
+  ok('the five new sets take new suffixes, repurposing none',
+    ['3b', '3c', '3d', '3e', '3f'].every((x) => suffixes.includes(x)));
+
+  // A hole record is keyed by course and hole, NEVER by round: the same hole played in a 3-hole
+  // set, a nine and an eighteen is one record, not three.
+  ok('a hole key is course + hole number', holeKey(pv, 7) === 'pinevalley:7');
+  ok('...and it cannot collide with a round key',
+    !ROUNDS.some((r) => roundKey(pv, r.id) === holeKey(pv, 7)));
+  // Every round key needs its par in leaderboard-rank.js, checked against the course data above.
+  for (const c of COURSES) for (const r of ROUNDS) {
+    const k = roundKey(c, r.id);
+    ok(`${k} has a par row`, Number.isFinite(GOLF_COURSE_PAR[k]));
+  }
+}
+
+console.log('\n-- 15b. the putter can miss --');
+// Matt, after playing both courses: "There's not a single hole I can imagine myself ever getting
+// worse than a par on." Measured, the courses were not the main reason - every putt inside 30 ft
+// went in. See puttMishit's header in swing.js for the before/after curve.
+{
+  const h = PINE_VALLEY.holes[0];
+  const conv = (ft, barOff) => {
+    // barOff is a signed fraction of the bar half-window; 0 is a perfect strike.
+    let made = 0; const N = 120;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2; const yd = ft / 3;
+      const from = [h.pin[0] + Math.cos(a) * yd, h.pin[1] + Math.sin(a) * yd];
+      const pm = SW.puttMishit(0.5 + barOff / 2, 1);
+      const rangeFt = SH.puttRangeFt();
+      const aim = Math.atan2(h.pin[0] - from[0], h.pin[1] - from[1]) + (pm.deg * Math.PI) / 180;
+      const r = SH.simulatePutt({ hole: h, from, aimRad: aim,
+        power: Math.max(0, Math.min(1, (ft / rangeFt) * pm.paceMul)), rangeFt });
+      if (r.holed) made++;
+    }
+    return made / N;
+  };
+  ok('a PERFECT strike still holes a 10 ft putt every time', conv(10, 0) === 1);
+  const half = conv(30, 0.30);
+  ok(`...and a half-green-band strike misses most 30-footers (${(half * 100).toFixed(0)} % made)`, half < 0.55);
+  const edge = conv(15, 0.54);
+  ok(`...a strike at the green band's edge misses from 15 ft too (${(edge * 100).toFixed(0)} %)`, edge < 0.75);
+  ok('a short putt stays makeable off a poor strike', conv(3, 0.54) > 0.6);
+  // The pace term has to be TWO-SIDED or it is a bias a player simply clubs out.
+  ok('[KNOWN-BUG PROBE] the pace error takes a side',
+    SW.puttMishit(0.6, 1).paceMul < 1 && SW.puttMishit(0.4, 1).paceMul > 1);
+}
+
+console.log('\n-- 15c. the courses get harder as the round goes on --');
+// Matt: "The holes should progressively get more difficult on every course... until 18 - the most
+// challenging." Measured by PLAYING each hole rather than by reading its spec, because difficulty
+// is an outcome of the whole design and no single field carries it.
+{
+  const DEGR = Math.PI / 180;
+  const rnd = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t2 = Math.imul(a ^ (a >>> 15), 1 | a); t2 = (t2 + Math.imul(t2 ^ (t2 >>> 7), 61 | t2)) ^ t2; return ((t2 ^ (t2 >>> 14)) >>> 0) / 4294967296; }; };
+  const tapSigned = (r, b) => {
+    const u = r();
+    if (u < 0.70) return (r() - 0.5) * 2 * b.green;
+    if (u < 0.93) return (r() < 0.5 ? -1 : 1) * (b.green + r() * (b.orange - b.green));
+    return (r() < 0.5 ? -1 : 1) * (b.orange + r() * (1 - b.orange));
+  };
+  const aimAt = (hole, ball, reach) => {
+    if (distYd(ball, hole.pin) <= reach) return hole.pin;
+    const route = hole.route && hole.route.length > 1 ? hole.route : [hole.tee, hole.pin];
+    let bi = 0; let bd = Infinity;
+    for (let i = 0; i < route.length; i++) { const d = distYd(ball, route[i]); if (d < bd) { bd = d; bi = i; } }
+    let best = null;
+    for (let i = bi; i < route.length; i++) if (distYd(ball, route[i]) <= reach) best = route[i];
+    return best || route[Math.min(route.length - 1, bi + 1)];
+  };
+  const play = (hole, seed) => {
+    const r = rnd(seed);
+    let ball = [...hole.tee]; let pen = 0;
+    for (let n = 1; n <= 14; n++) {
+      const lie = surfaceAt(hole, ball[0], ball[1]);
+      if (mustPutt(lie)) {
+        const ft = distYd(ball, hole.pin) * 3;
+        const rangeFt = SH.puttRangeFt();
+        const pm = SW.puttMishit(0.5 + tapSigned(r, SW.bandsFor(1, 1)) / 2, 1);
+        const res = SH.simulatePutt({ hole, from: ball, aimRad: Math.atan2(hole.pin[0] - ball[0], hole.pin[1] - ball[1]) + pm.deg * DEGR,
+          power: Math.max(0, Math.min(1, (ft / rangeFt) * pm.paceMul)), rangeFt });
+        if (res.holed) return n + pen;
+        ball = res.rest; continue;
+      }
+      const club = autoSelectClub(distYd(ball, hole.pin), lie);
+      const L = lieOf(lie);
+      const reach = club.carry * L.power;
+      const tg = aimAt(hole, ball, reach);
+      const base = Math.atan2(tg[0] - ball[0], tg[1] - ball[1]);
+      const want = Math.min(1, distYd(ball, tg) / reach);
+      const m = SW.mishit(0.5 + tapSigned(r, SW.bandsFor(L.zone == null ? 1 : L.zone, CL.swingZone(club))) / 2,
+        want, L.zone == null ? 1 : L.zone, CL.swingZone(club), (n * 7717) ^ seed);
+      let out = null; let fall = null; let fallD = -1;
+      outer:
+      for (const dAim of [0, 6, -6, 14, -14, 26, -26, 45, -45]) {
+        for (const mul of [1, 0.85, 0.7, 0.55, 0.4, 0.15]) {
+          const res = SH.resolveShot({ hole, from: ball, aimRad: base + dAim * DEGR + m.deg * DEGR,
+            club, power: want * mul, mishitDeg: 0, distanceMul: m.distanceMul });
+          if (res.holed) return n + pen;
+          const moved = distYd(ball, res.rest);
+          if (!res.blocked && moved > fallD) { fall = res; fallD = moved; }
+          // A dry shot that advances is taken at once; a wet one is only a fallback, because a
+          // player looks at the water before choosing. `resolveShot` has already dropped the ball
+          // on dry ground and priced the stroke in `penalty`.
+          if (!res.blocked && !res.penalty && moved > 1) { out = res; break outer; }
+        }
+      }
+      if (!out) out = fall;
+      if (!out) return 14;
+      pen += out.penalty || 0;
+      ball = out.rest;
+    }
+    return 14;
+  };
+  const N = 24;
+  for (const c of COURSES) {
+    const vp = c.holes.map((h) => {
+      let sum = 0;
+      for (let i = 0; i < N; i++) sum += play(h, h.n * 7919 + i * 104729);
+      return sum / N - h.par;
+    });
+    const blocks = [0, 1, 2, 3, 4, 5].map((b) => vp.slice(b * 3, b * 3 + 3).reduce((a, v) => a + v, 0));
+    console.log(`  ${c.id} blocks 1-3..16-18: ${blocks.map((b) => (b >= 0 ? '+' : '') + b.toFixed(1)).join('  ')}`);
+
+    // NOT a monotonic assertion. A course whose every block is harder than the last by a measurable
+    // margin would need eighteen holes tuned against a probe rather than designed, and the probe
+    // itself flatters hard holes (it searches 45 shot options and always finds an escape a person
+    // would not). What IS asserted is the shape Matt asked for and the floor he complained about:
+    // the opening three are the easiest, the closing three are harder than the opening three, and
+    // no hole is a guaranteed birdie any more.
+    // NOT "block 1 is the easiest of six": with 24 rounds a block is worth about +/-0.3 of noise,
+    // and a hole with water on it swings further than that on its own. The three claims below are
+    // the ones the design actually makes and they hold well clear of the noise.
+    const firstHalf = blocks.slice(0, 3).reduce((a, v) => a + v, 0);
+    const lastHalf = blocks.slice(3).reduce((a, v) => a + v, 0);
+    ok(`${c.id}: the closing nine's three blocks are harder than the opening nine's`, lastHalf > firstHalf);
+    ok(`${c.id}: the closing block is harder than the opening one`, blocks[5] > blocks[0]);
+    ok(`${c.id}: the back nine is harder than the front`,
+      vp.slice(9).reduce((a, v) => a + v, 0) > vp.slice(0, 9).reduce((a, v) => a + v, 0));
+    // [KNOWN-BUG PROBE] Before 2026-09-05 every hole on both courses averaged about a shot UNDER
+    // par with a 90-100 % birdie rate. Matt: "I don't even know if there's a single hole here I
+    // wouldn't birdie."
+    const worst = Math.min(...vp);
+    ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
   }
 }
 

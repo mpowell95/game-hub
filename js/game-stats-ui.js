@@ -584,11 +584,21 @@ function battleshipScreen(rec) {
 // `golfCourseName` upper-cases it rather than hiding the row - but it shows as gibberish, so a new
 // round key belongs here the day it ships. These are `<course.id><suffix>` (golf/js/rounds.js).
 const GOLF_COURSES = {
-  pinevalley3: 'Pine Valley (3 holes)',
+  pinevalley3: 'Pine Valley (holes 1-3)',
+  pinevalley3b: 'Pine Valley (holes 4-6)',
+  pinevalley3c: 'Pine Valley (holes 7-9)',
+  pinevalley3d: 'Pine Valley (holes 10-12)',
+  pinevalley3e: 'Pine Valley (holes 13-15)',
+  pinevalley3f: 'Pine Valley (holes 16-18)',
   pinevalley9: 'Pine Valley (front 9)',
   pinevalley9b: 'Pine Valley (back 9)',
   pinevalley18: 'Pine Valley (18 holes)',
-  redmesa3: 'Red Mesa (3 holes)',
+  redmesa3: 'Red Mesa (holes 1-3)',
+  redmesa3b: 'Red Mesa (holes 4-6)',
+  redmesa3c: 'Red Mesa (holes 7-9)',
+  redmesa3d: 'Red Mesa (holes 10-12)',
+  redmesa3e: 'Red Mesa (holes 13-15)',
+  redmesa3f: 'Red Mesa (holes 16-18)',
   redmesa9: 'Red Mesa (front 9)',
   redmesa9b: 'Red Mesa (back 9)',
   redmesa18: 'Red Mesa (18 holes)',
@@ -603,6 +613,44 @@ function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(
  *  the real table, dashed, muted, under its own "not counted" label, mirroring skPracticeHTML
  *  exactly (same CSS classes - the box shape isn't Skeeball-specific, just named after its first
  *  user). Do not fold these into the lifetime tallies or the bestRoundByCourse table above. */
+/** THE PER-HOLE RECORDS. Matt, 2026-09-05: *"we'll have individual hole records"*.
+ *
+ *  Stored in `gf.bestHole`, keyed `<courseId>:<holeNumber>` (golf/js/rounds.js `holeKey`). Shown as
+ *  one row per COURSE with the eighteen numbers across it, because eighteen separate table rows per
+ *  course is thirty-six rows nobody reads - and a record no screen shows reads as deleted (rule 1),
+ *  which a wall of numbers is only barely better than.
+ *
+ *  A hole never played is a dash, not a zero: the lowest possible score on a hole is 1, so zero
+ *  would be a fabricated record rather than an absent one (rule 4). */
+function golfHolesHTML(gf) {
+  const best = (gf || {}).bestHole || {};
+  const byCourse = {};
+  for (const [k, v] of Object.entries(best)) {
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const i = k.lastIndexOf(':');
+    if (i < 0) continue;
+    const cid = k.slice(0, i);
+    const n = parseInt(k.slice(i + 1), 10);
+    if (!Number.isFinite(n)) continue;
+    (byCourse[cid] || (byCourse[cid] = {}))[n] = v;
+  }
+  const ids = Object.keys(byCourse).sort((a, b) => golfCourseName(a).localeCompare(golfCourseName(b)));
+  if (!ids.length) return '';
+  return `<h4 class="gs-tbl-h">${t('gs_golf_holes_h')}</h4>
+    ${ids.map((cid) => {
+      const m = byCourse[cid];
+      const cells = [];
+      for (let n = 1; n <= 18; n++) {
+        const v = m[n];
+        cells.push(`<span class="gs-gf-cell${Number.isFinite(v) ? '' : ' is-empty'}"><b>${Number.isFinite(v) ? v : '–'}</b><i>${n}</i></span>`);
+      }
+      return `<div class="gs-gf-holes">
+        <div class="gs-gf-hname">${esc(golfCourseName(cid))}</div>
+        <div class="gs-gf-row">${cells.join('')}</div>
+      </div>`;
+    }).join('')}`;
+}
+
 function golfPracticeHTML(gf) {
   const prac = (gf || {}).practice || {};
   const ids = Object.keys(prac).filter((id) => ((prac[id] || {}).rounds | 0) > 0);
@@ -623,7 +671,7 @@ function golfPracticeHTML(gf) {
  *  course actually played, best (lowest) strokes only - this repo's first per-key Math.min stat,
  *  see js/game-stats.js's ensureGf and js/players-agg.js's merge branch. */
 function golfScreen(rec) {
-  const gf = (rec && rec.gf) || { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {} };
+  const gf = (rec && rec.gf) || { rounds: 0, holes: 0, strokes: 0, points: 0, birdies: 0, eagles: 0, aces: 0, longestDriveYd: 0, bestRoundByCourse: {}, bestHole: {} };
   if (!(gf.rounds | 0)) return emptyState('Golf');
   const pts = gf.points | 0;
   const skill = pts >= 0 ? `+${pts}` : String(pts);
@@ -645,6 +693,7 @@ function golfScreen(rec) {
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_golf_best')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>` : ''}
+    ${golfHolesHTML(gf)}
     ${golfPracticeHTML(gf)}`;
 }
 
@@ -1293,6 +1342,17 @@ function ensureCss() {
     '.gs-sk-prow{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--hub-muted,#5b6b82)}',
     '.gs-sk-prow .gs-sk-nm{flex:1 1 100%;color:var(--hub-muted,#5b6b82)}',
     '.gs-sk-prow b{font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
+    // The per-hole record strip: eighteen numbers on one line per course, wrapping on a phone. It
+    // SCROLLS INSIDE ITSELF rather than widening the overlay - a fixed overlay that grows sideways
+    // takes the whole page with it (root CLAUDE.md's scroll rules).
+    '.gs-gf-holes{margin:8px 0 4px}',
+    '.gs-gf-hname{font-size:12px;font-weight:700;color:var(--hub-muted,#5b6b82);margin:0 0 4px}',
+    '.gs-gf-row{display:flex;gap:4px;overflow-x:auto;overscroll-behavior:contain;padding-bottom:4px}',
+    '.gs-gf-cell{flex:0 0 auto;min-width:30px;display:flex;flex-direction:column;align-items:center;'
+      + 'background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:8px;padding:4px 2px}',
+    '.gs-gf-cell b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
+    '.gs-gf-cell i{font-style:normal;font-size:11px;color:var(--hub-muted,#5b6b82)}',
+    '.gs-gf-cell.is-empty b{color:var(--hub-muted,#9aa8bb)}',
     '.gs-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.9rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
     '.gs-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.78rem;padding:10px 16px 40px;margin:0}',
   ].join('');
