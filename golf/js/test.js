@@ -903,14 +903,41 @@ console.log('\n-- 12d. THE GREEN SLOPE READ, AND THE METER SCALE --');
   near('the glyph is about 0.30 of the grid spacing, as measured', RN.SLOPE_GLYPH_FRAC, 0.30, 0.02);
   near('and it is drawn at about 57 % of the surface\'s own brightness', RN.SLOPE_TINT, 0.57, 0.02);
 
-  // THE ARC'S SCALE. Measured tick angles, straight from the footage.
+  // THE ARC'S SCALE. The tick scan read 139.0 / 191.6 / 243.0 deg, and the block 311-338, all around
+  // an ESTIMATED ring centre. The bar's level top edge (above) pins zero at exactly 90, and against
+  // that every one of those readings is 3 deg low - a CONSTANT offset, which is a rotated centre
+  // estimate rather than a different scale. So the scan's angles are corrected by +3 here, and the
+  // SPACING - which is what actually sets ARC_DEG_PER_UNIT, and which no centre error of this size
+  // disturbs - is asserted separately below.
+  const SCAN_BIAS = 3;
   for (const [pct, deg] of [[0.25, 139.0], [0.5, 191.6], [0.75, 243.0]]) {
-    near(`${pct * 100} % sits at ${deg} deg on the arc`,
-      SW.ARC_A0_DEG + pct * SW.ARC_DEG_PER_UNIT, deg, 1.2);
+    near(`${pct * 100} % sits at ${deg} deg in the scan, ${deg + SCAN_BIAS} corrected`,
+      SW.ARC_A0_DEG + pct * SW.ARC_DEG_PER_UNIT, deg + SCAN_BIAS, 1.5);
   }
-  near('100 % is at 295 deg', SW.ARC_A0_DEG + SW.ARC_DEG_PER_UNIT, 295, 1.5);
-  near('the over-swing block starts at 311 deg', SW.ARC_A0_DEG + SW.BLOCK_FROM * SW.ARC_DEG_PER_UNIT, 311, 1.5);
-  near('and the arc ends at 338 deg', SW.ARC_A0_DEG + SW.SWING_MAX * SW.ARC_DEG_PER_UNIT, 338, 1.5);
+  near('the ticks are 52 deg apart per 25 %, which is what sets the scale',
+    SW.ARC_DEG_PER_UNIT / 4, (243.0 - 139.0) / 2, 1.2,
+    'a difference, so the centre bias cancels out of it entirely');
+  near('100 % is at 298 deg', SW.ARC_A0_DEG + SW.ARC_DEG_PER_UNIT, 298, 1.5);
+
+  // [KNOWN-BUG PROBE] THE ACCURACY BAR MUST BE LEVEL AND CENTRED UNDER THE RING. Its corners are
+  // `ang(+/- BAR_HALF)`, so that is true if and only if zero is at 90 deg - straight down. It was
+  // briefly set to 87 from the tick scan and Matt saw it at once: "You moved it up and to the left
+  // and rotated it in an odd way." The reference's own bar, cropped at 1:1, has a DEAD HORIZONTAL
+  // white line along the top of its stripes - an observable that needs no estimate of where the
+  // ring's centre is, which is exactly what was wrong with the scan.
+  {
+    const ang = (v) => (SW.ARC_A0_DEG + v * SW.ARC_DEG_PER_UNIT) * Math.PI / 180;
+    const dy = Math.sin(ang(SW.BAR_HALF)) - Math.sin(ang(-SW.BAR_HALF));
+    const dx = Math.cos(ang(SW.BAR_HALF)) + Math.cos(ang(-SW.BAR_HALF));
+    ok('[KNOWN-BUG PROBE] the accuracy bar sits level', Math.abs(dy) < 1e-12,
+      `its two ends are ${dy.toFixed(4)} of a radius apart in height`);
+    ok('...and centred under the ring', Math.abs(dx) < 1e-12,
+      'both are only true when zero is straight down, at 90 deg');
+  }
+  near('the over-swing block starts at 311 deg in the scan, 314 corrected',
+    SW.ARC_A0_DEG + SW.BLOCK_FROM * SW.ARC_DEG_PER_UNIT, 311 + SCAN_BIAS, 1.5);
+  near('and the arc ends at 338 deg in the scan, 341 corrected',
+    SW.ARC_A0_DEG + SW.SWING_MAX * SW.ARC_DEG_PER_UNIT, 338 + SCAN_BIAS, 1.5);
   ok('there is a plain buffer between the 100 % line and the danger', SW.BLOCK_FROM > 1.03);
 
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
