@@ -9,6 +9,7 @@
 // ours (golf-reference-spec.md §20). The two numbers that are not are marked.
 
 import { CLUBS, lieOf, rollFactor } from './clubs.js';
+import { payingPower } from './swing.js';
 import { surfaceAt, slopeAt, treesOf, distYd, mulberry32 } from './holes.js';
 
 const DEG = Math.PI / 180;
@@ -269,7 +270,10 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
 export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distanceMul = 1 }) {
   const lieKind = surfaceAt(hole, from[0], from[1]);
   const lie = lieOf(lieKind);
-  const struck = club.carry * power * lie.power * distanceMul;
+  // `payingPower` is the power that becomes DISTANCE. Past the over-swing block's edge only a
+  // fraction of each extra unit pays, so holding to the top of the arc is worth far less than the
+  // raw number suggests - see swing.js's BLOCK_KEEPS_DIST.
+  const struck = club.carry * payingPower(power) * lie.power * distanceMul;
   // THE WIND, folded in before anything else looks at where the ball goes. The flight time is taken
   // from the UNWINDED carry: a headwind that shortens the shot also shortens the time it has to act
   // over, and solving that properly would need an iteration to buy a fraction of a yard.

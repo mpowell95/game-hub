@@ -1563,6 +1563,57 @@ angles: the bar's two ends must be at the same height and its midpoint must be u
 centre, which is true if and only if zero is straight down. The scan's raw angles are still asserted,
 with the +3 correction applied and named.
 
+## The over-swing is a gamble now, not free money (2026-09-05)
+
+Matt, after turning the dials himself: *"The max carry at the farthest past 100% and spot on should
+only be 240-245. I want it to go 20-30 yards offline. high risk."*
+
+### Why the multiplier could never have delivered that
+
+`OVER_SWING_MAX_MUL` multiplies the miss. **The power is locked at tap 2 and the accuracy attempt
+happens at tap 3**, so the multiplier is set in advance and applied to whatever miss follows - and a
+PERFECT strike has no miss to multiply. Two times zero is zero, and so is four and a half times zero.
+
+Measured, before this: a driver held to the top of the arc carried **259 yds against 215 for a clean
+100 %, and went 0.0 yds offline.** So the best play on every full shot in the game was tap, wait,
+tap - never using tap 2 at all, which is the tap the whole three-click mechanic is built around.
+
+### The two rules that fix it
+
+Both live in `swing.js`, both fire only past `BLOCK_FROM`, and both scale with how deep into the
+block the swing went (`blockDepth`).
+
+| | | |
+|---|---|---|
+| `BLOCK_KEEPS_DIST` | **0.40** | how much of the over-swing's extra power becomes yards |
+| `BLOCK_SPRAY_DEG` | **5.9** | a push offline that does NOT care how well the ball was struck |
+| `BLOCK_SPRAY_JITTER` | **0.20** | +/- 20 % on the spray, and it takes a random side |
+
+Measured after, driver off a fairway, **dead-centre strike**:
+
+| swing | carry | offline |
+|---|---|---|
+| 100 % | 215.0 | 0.0 |
+| 107.6 % (the block's edge) | 231.3 | 0.0 |
+| 112 % | 235.1 | 6.6 - 9.8 |
+| 116 % | 238.6 | 12.8 - 19.1 |
+| 120.6 % (the top) | **242.5** | **20.2 - 30.1** |
+
+Both of Matt's numbers, hit: 240-245 of carry, 20-30 yards offline.
+
+**THE SPRAY IS THE HALF THAT MATTERS**, because it is the only one a good player cannot out-skill.
+The distance falloff alone would just make the over-swing a worse deal; the spray makes it a coin
+flip. It takes a random SIDE, so the top of the arc is 20-30 yards left OR right rather than a
+fixed, learnable push.
+
+**ITS RANDOMNESS IS SEEDED FROM THE SHOT ITSELF** - the ball's position and the exact needle stop -
+never from `Math.random`. The player cannot predict it, and `resolveShot` stays a pure function of
+its inputs, which is what lets section 14 play out all 36 holes and get the same answer every run.
+`test.js` asserts that purity directly.
+
+Covered by `golf/js/test.js` section **8c**, including a KNOWN-BUG PROBE that a perfect strike at the
+top goes 20-30 yds offline - it used to return exactly 0.0 at any power, which was the bug.
+
 ## Two courses, thirty-six holes (2026-09-04)
 
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
