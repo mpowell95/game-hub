@@ -2276,3 +2276,37 @@ a circle and nonsense for a green twice as long as it is wide: the box radius pl
 ten yards outside the putting surface along the short axis, so the probe sampled open country and
 reported a missing collar on a hole whose collar is a uniform 5.9 yds. It walks the green polygon's
 own vertices now, which is what the sentence always claimed.
+
+### And the ponds were shards of glass (2026-09-06)
+
+Matt, on the hole 14 pilot: *"make the ponds not pointy and it's beautiful."*
+
+`blob()` drew n points with **each radius drawn fresh from 0.76-1.22**, so two neighbours 36 degrees
+apart could differ by 46 % of the radius. That is a spike by construction, and it is why every lake
+and every bunker on both courses had corners.
+
+Three things fix it and all three are needed - more points alone just makes a spikier star, and
+smoothing alone still leaves visible corners at this scale:
+
+1. the radii are **smoothed around the ring**, so a lobe is broad rather than a single spike;
+2. more of them, to have something to be smooth ALONG;
+3. **two rounds of Chaikin corner-cutting**, which is what actually rounds them. Each vertex is
+   replaced by two points a quarter of the way along each of its edges, so the polygon converges
+   toward its own quadratic B-spline. It cannot introduce a crossing, which is what the ray-cast lie
+   lookup needs.
+
+Measured on a 20 yd pond: 12 points with ~90 degree corners became **56 points with the sharpest
+corner at 161 degrees**.
+
+**The raw spread had to be WIDENED to 0.62-1.40 to compensate.** Smoothing and Chaikin both pull a
+shape toward its own average, so keeping the old numbers produced a near-circle (measured 0.86-0.96
+of the radius - rounder, and duller). The wider raw spread lands at 0.69-1.20 after both passes,
+which is the shape the old blob had, without the spikes.
+
+### `boomerang` and `wedge` are names I invented, and one of them does not work
+
+Neither is a golf-architecture term. `wedge` is a teardrop; `boomerang` was an attempt at an
+L-shaped green and came out a fat arrowhead, because r(a) cannot express a sharp inner corner (see
+the caveat above `GREEN_SHAPES`). If a future session wants a real L it needs drawn outlines and a
+polygon-offset routine for the fringe. Renaming `wedge` to `teardrop` and dropping `boomerang` is
+the honest tidy-up; left as-is pending Matt's call.
