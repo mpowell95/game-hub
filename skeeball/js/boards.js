@@ -779,9 +779,19 @@ export const BOARDS = [
         // three are NOT on one v: matching the GAP with three different mouths puts the wider 50
         // 0.15 in forward of the 100s. That is what "0.73 in" means here; it is a gap, not a line.
         // Recompute both numbers if a mouth or the tread ever moves.
-        topL: { u: -X * 2.07, v: X * 9.3725, r: X * 0.4, collarH: X * 0.8 },
+        // THE CORNER 100s ARE 3.25in (2026-09-05, Matt, in those words). They were 3.20in
+        // (0.800x), the tightest top basket on any machine here: against the 3.00in ball every
+        // machine shares, that left 0.10in of room on each side and the ball filled 94% of the
+        // mouth. THE CLASSIC and RUNAWAY both give their 100 a full 4.00in. Every physics trick
+        // this basket has needed since 2026-09-02 - the rim-relative capture gate, "the net", the
+        // throat - has been an attempt to get a ball through a hoop it barely fits.
+        // 0.8125x = 3.25in, and the ball now fills 92%.
+        //
+        // HIS NUMBER, ASKED FOR DIRECTLY. The HARD RULE at the top of skeeball/CLAUDE.md still
+        // stands for everyone else: never change a mouth unless Matt says to, in so many words.
+        topL: { u: -X * 2.07, v: X * 9.3725, r: X * 0.40625, collarH: X * 0.8 },
         topC: { u: 0, v: X * 9.335, r: X * 0.4375, collarH: X * 0.875 },
-        topR: { u: X * 2.07, v: X * 9.3725, r: X * 0.4, collarH: X * 0.8 },
+        topR: { u: X * 2.07, v: X * 9.3725, r: X * 0.40625, collarH: X * 0.8 },
       },
 
       minSpeed: 2.60,
