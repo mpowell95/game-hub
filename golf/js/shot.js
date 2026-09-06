@@ -49,9 +49,19 @@ export function rollMs(rollYd, kind) {
  *  Three hops with geometrically decaying length, together covering `HOP_SHARE` of the run-out in
  *  `HOP_TIME` of its duration - so the ball is plainly FASTER while it is bouncing and then settles
  *  into a long, slowing roll. */
-const HOP_DECAY = 0.55;
-const HOP_SHARE = 0.55;
-const HOP_TIME = 0.35;
+// RE-SHAPED 2026-09-06. Matt, on the same run-out for the third time: "the drive doesn't bounce
+// high enough, it comes in and bounces very low and a short distance then the roll stops short...
+// Nothing truly rolls out." The DISTANCES are measured off the reference and are not the problem
+// (a driver runs 38.7 yds on a fairway); the shape of the animation was. Two changes, both about
+// what the player sees rather than where the ball ends up:
+//   - the hops carry a bit more of the distance and decay more gently (0.55 -> 0.62 each), so the
+//     first bounce is a real bounce and the second is still one;
+//   - they take LESS of the time (0.35 -> 0.28), which leaves 72% of the run-out's duration for
+//     the roll itself. That is the half Matt cannot see: a roll that owns two thirds of the
+//     distance in a third of the time reads as a skid, not as a ball running out.
+const HOP_DECAY = 0.62;
+const HOP_SHARE = 0.62;
+const HOP_TIME = 0.28;
 const HOP_LENS = [1, HOP_DECAY, HOP_DECAY * HOP_DECAY];
 
 /** Where the ball is, `p` (0..1) through its ROLLOUT: how far along, and how high it is hopping.
@@ -80,7 +90,12 @@ const HOP_LENS = [1, HOP_DECAY, HOP_DECAY * HOP_DECAY];
 export function groundPoint(p, rollYd, apex, landedOn) {
   const noHop = landedOn === 'greensideBunker' || landedOn === 'fairwayBunker'
     || landedOn === 'heavyRough' || landedOn === 'water';
-  const hopH = noHop ? 0 : Math.min(apex * 0.14 + 0.8, rollYd * 0.33);
+  // 2026-09-06: `apex * 0.14 + 0.8` capped at a THIRD of the run-out, which is about 10 px for a
+  // driver and 3 px for an iron pitching on a green - Matt: "it bounces very low". Raised to
+  // `apex * 0.22 + 1.2`, and the cap given a floor of 1.2 yd, because the cap is what was killing
+  // the bounce on exactly the shots a player watches most closely: an approach that lands on a
+  // green runs only a few yards, and a ball landing on a green plainly bounces.
+  const hopH = noHop ? 0 : Math.min(apex * 0.22 + 1.2, Math.max(1.2, rollYd * 0.45));
   const share = noHop ? 0 : HOP_SHARE;
   const tHop = noHop ? 0 : HOP_TIME;
 

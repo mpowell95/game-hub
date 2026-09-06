@@ -2920,3 +2920,74 @@ CAPTURE point rather than the cup, and `CUP_CAPTURE_YD` is exactly 0.30 yd = 0.9
 at 10 fps the ball travels all the way up and overlaps the cup before it drops. 0.9 ft is one
 ball-width and it reads as in. Matt pushed back and he was right; the original claim came off a 1 fps
 survey, which this file already warns is only good for layout.
+
+## The opening flyover, the camera during a shot, and the run-out (2026-09-06)
+
+Three of Matt's, in one message. The second and third turned out to be the same bug.
+
+### The hole opens ON THE GREEN and travels back to the tee
+
+*"When you first get to (or open or start) [a hole], I'd like for it to begin by showing the green,
+then automatically move backwards from the green to the tee box."*
+
+`_enterHole` sets `this.intro`; `_frame` owns the camera while it runs (`_aimCamera` is skipped, or
+it would fight it). It parks on the pin for `INTRO_HOLD_MS` (1.0 s), then eases — in AND out — to
+the address pose over `INTRO_MOVE_MS` (2.6 s). **The hold and the ease at the start are the whole
+point.** The 3D build that used to live here had this same flyover and Matt reported it as "never
+plays for me": it covered the hole in 1.6 s on an ease-OUT curve, so 42 % of the travel happened in
+the first quarter second and the only readable frames were the last ones, at the tee.
+
+Any tap on the course skips it, and so does any control that starts a shot (`_tap`, `_nudgeAim`,
+`_stepClub` all call `_endIntro`). It runs on every hole, including a hole reached by advancing.
+
+### A touch during a shot PANS. It does not end the shot.
+
+*"As the ball rolls, I tried to move the screen so I could see it go in/near the hole. As soon as I
+did, the shot ended and skipped to where the ball would have ended up."*
+
+The canvas's `pointerdown` began with `if (this.anim) { this._skipAnim(); return; }`, so a drag
+could never start: the press itself ended the shot. **The skip moved to the release, and only for a
+press that never moved** — so a tap still skips (the reference's own worst flaw is a 7.5 s flight
+that cannot be skipped, §13 flaw 7) and a drag looks around while the ball keeps going. The look is
+dropped in `_settleShot`, because the next address is somewhere else.
+
+**A skip during the FLIGHT now lands the ball rather than ending the shot** (`_skipAnim`). The
+run-out is 3.4 s of the shot and carries a driver 38 yds; skipping past a long flight used to throw
+all of it away, which is most of why "nothing truly rolls out" was true for anyone impatient. A
+second tap, once the ball is down, ends it.
+
+### The cup is never underneath the controls
+
+*"I need the hole to never be covered by the on screen controls or anything."*
+
+The HUD floats over a full-bleed canvas — that is the layout — so the course keeps drawing behind
+the aim row, the club tile and the swing button. On the green the camera is nearly centred on the
+BALL, so a cup a few feet the other side of it lands in that bottom band and cannot be seen.
+
+`_keepCupClear(wantY)` MEASURES the four HUD clusters (`.gf-tl/.gf-tr/.gf-bl/.gf-br`, cached in
+`this.el`) and returns a camera y that keeps the cup between them, with 14 px of air. It runs only
+when the cup is within 1.6 screen-heights, and when the ball and the cup cannot both fit the BALL
+wins. Measuring the panels rather than hardcoding a band is what keeps it right when a panel
+changes size or a phone's safe area moves it.
+
+### The run-out was re-shaped, not re-tuned
+
+*"The drive doesn't bounce high enough, it comes in and bounces very low and a short distance then
+the roll stops short... Nothing truly rolls out."*
+
+The DISTANCES are measured off the reference and were not the problem (a driver runs 38.7 yds on a
+fairway, an iron 14-19, a lob wedge 2.9). What the player sees was. In `shot.js`:
+
+- **`HOP_TIME` 0.35 -> 0.28.** The hops carry 62 % of the distance in 28 % of the time, so the roll
+  owns nearly three quarters of the duration. A roll that owns two thirds of the distance in a
+  third of the time reads as a skid.
+- **`HOP_SHARE`/`HOP_DECAY` 0.55 -> 0.62**, so the first bounce is a real bounce and the second is
+  still one.
+- **Hop height `apex * 0.14 + 0.8` -> `apex * 0.22 + 1.2`, and the cap `rollYd/3` -> `rollYd * 0.45`
+  with a 1.2 yd floor.** The cap was what flattened the bounce on the shots a player watches
+  closest: an approach pitching on a green runs only a few yards, so its hop was being squeezed to
+  about 3 px. The first hop now lifts **22.3 px** (test 9c's probe; it was ~10, and ~4 before that).
+
+`test.js`'s lob-wedge ceiling moved with it — a third of the run-out to 0.46 of it. The rule it
+guards (a short run-out must not become a leap) is unchanged; a lob wedge peaks 1.3 yd on a 2.9 yd
+run-out.
