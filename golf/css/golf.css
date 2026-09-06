@@ -268,14 +268,85 @@
 /* Padded on the right so a long heading ("Round complete") cannot run under the close X. */
 .gf-root .gf-result__name { font-size: 30px; font-weight: 800; text-shadow: var(--gf-shadow); padding-right: 26px; }
 .gf-root .gf-result__sub { font-size: 13px; color: var(--gf-dim); margin-top: 3px; }
-.gf-root .gf-result__card-grid { display: flex; gap: 5px; justify-content: center; margin: 14px 0 8px; }
+/* NINE TO A ROW, LIKE A REAL CARD (2026-09-06). It was one flex row of however many holes the
+   round had, which is fine at three and unreadable at eighteen: 393px across eighteen cells is
+   21px each, too narrow for a two-digit score let alone a ring around it. A real scorecard breaks
+   at the turn for exactly this reason, so the grid wraps at nine and an eighteen-hole round reads
+   as a front nine over a back nine. */
+.gf-root .gf-result__card-grid {
+  display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 14px 0 8px;
+}
 .gf-root .gf-cell {
-  flex: 1; max-width: 56px; border: 1px solid rgba(255,255,255,.7);
+  /* The basis is "a ninth of the row", so nine cells fill it exactly and an eighteen-hole round
+     breaks cleanly at the turn; `flex-grow` then lets a three-hole round's cells open out to
+     `max-width` instead of leaving six ninths of the row empty. */
+  flex: 1 1 calc((100% - 40px) / 9); max-width: 56px; min-width: 0;
+  /* Border-box, or the basis above is CONTENT width and the 1px borders plus the cell's own
+     padding push the ninth cell onto the next row - measured: eight per row, not nine. */
+  box-sizing: border-box; border: 1px solid rgba(255,255,255,.7);
   display: flex; flex-direction: column; padding: 4px 0;
 }
 .gf-root .gf-cell span { font-size: 11px; color: var(--gf-dim); }
 .gf-root .gf-cell b { font-size: 17px; font-weight: 800; }
 .gf-root .gf-cell.is-now { background: rgba(255,255,255,.14); border-color: #fff; }
+
+/* REAL SCORECARD NOTATION (2026-09-06). Circle = birdie, double circle = eagle, square = bogey,
+   double square = double bogey - the convention printed on real cards, which is why it is a shape
+   AROUND the number rather than a replacement for it: the digit still reads normally and the ring
+   is what the eye counts down a column. `ui.js`'s `_scoreMark` decides which one; this file only
+   draws them, so the rule lives in exactly one place.
+
+   THE RINGS ARE THE ELEMENT'S OWN BORDER PLUS TWO PSEUDO-ELEMENTS, not three nested spans. A ring
+   is a box with a border, and a box is the one thing CSS draws without help; building them in the
+   markup would put layout in ui.js and make the shape impossible to restyle.
+
+   The inner box is a FIXED 22x22 whatever the digit is, so a "10" and a "3" get the same ring and
+   a row of cells stays on one baseline - a ring that hugged its text would make every hole a
+   different height. Outer rings step out 3px each, which is the smallest gap that still reads as
+   two rings rather than one thick one at this size. */
+.gf-root .gf-mark {
+  position: relative; display: inline-grid; place-items: center;
+  min-width: 20px; height: 20px; padding: 0 1px; font-style: normal;
+}
+.gf-root .gf-mark::before, .gf-root .gf-mark::after { content: none; }
+.gf-root .gf-mark.is-c1, .gf-root .gf-mark.is-c2, .gf-root .gf-mark.is-c3,
+.gf-root .gf-mark.is-s1, .gf-root .gf-mark.is-s2, .gf-root .gf-mark.is-s3 {
+  border: 1.5px solid currentColor;
+}
+.gf-root .gf-mark.is-c1, .gf-root .gf-mark.is-c2, .gf-root .gf-mark.is-c3 { border-radius: 50%; }
+.gf-root .gf-mark.is-s1, .gf-root .gf-mark.is-s2, .gf-root .gf-mark.is-s3 { border-radius: 2px; }
+/* The second and third rings. `inset: -3px` on a border-box gives a ring 3px outside the one
+   before it; the radius is inherited from the class above via its own declaration below. */
+.gf-root .gf-mark.is-c2::before, .gf-root .gf-mark.is-c3::before,
+.gf-root .gf-mark.is-s2::before, .gf-root .gf-mark.is-s3::before {
+  content: ''; position: absolute; inset: -3px; border: 1.5px solid currentColor;
+}
+.gf-root .gf-mark.is-c3::after, .gf-root .gf-mark.is-s3::after {
+  content: ''; position: absolute; inset: -6px; border: 1.5px solid currentColor;
+}
+.gf-root .gf-mark.is-c2::before, .gf-root .gf-mark.is-c3::before,
+.gf-root .gf-mark.is-c3::after { border-radius: 50%; }
+.gf-root .gf-mark.is-s2::before, .gf-root .gf-mark.is-s3::before,
+.gf-root .gf-mark.is-s3::after { border-radius: 3px; }
+/* A double or triple ring needs room to stand in, or it clips against the cell's own grid line.
+   The outermost ring is 6px outside a 20px box, so the cell has to be at least 32px of content
+   wide and tall enough for 32px plus the hole number. */
+.gf-root .gf-cell { padding: 4px 2px 8px; }
+.gf-root .gf-cell b { line-height: 1; padding: 4px 0 0; }
+.gf-root .gf-cell span { line-height: 1.1; }
+
+/* EIGHTEEN HOLES NEEDS A WIDER CARD AND A SMALLER RING. Nine cells across a 320px card is 27px
+   each, and the widest mark (a triple square around a two-digit score) is 32px - it would clip
+   its own cell. The card opens to 360 (still inside a 393px phone's 16px page padding) and the
+   type and rings step down one size. Three- and nine-hole rounds are untouched. */
+.gf-root .gf-result__card:has(.gf-result__card-grid[data-n="18"]) { max-width: 360px; }
+.gf-root .gf-result__card-grid[data-n="18"] { gap: 4px; }
+.gf-root [data-n="18"] .gf-cell { flex-basis: calc((100% - 32px) / 9); padding: 3px 1px 6px; }
+.gf-root [data-n="18"] .gf-cell b { font-size: 14px; }
+.gf-root [data-n="18"] .gf-mark { min-width: 16px; height: 16px; padding: 0; }
+.gf-root [data-n="18"] .gf-mark.is-c2::before, .gf-root [data-n="18"] .gf-mark.is-c3::before,
+.gf-root [data-n="18"] .gf-mark.is-s2::before, .gf-root [data-n="18"] .gf-mark.is-s3::before { inset: -2.5px; }
+.gf-root [data-n="18"] .gf-mark.is-c3::after, .gf-root [data-n="18"] .gf-mark.is-s3::after { inset: -4.5px; }
 .gf-root .gf-result__total { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
 .gf-root .gf-result .gf-actions { justify-content: center; }
 

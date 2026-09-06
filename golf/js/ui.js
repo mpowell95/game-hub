@@ -885,6 +885,42 @@ class GolfGame {
     return t('score_over', { n: d });
   }
 
+  /** REAL SCORECARD NOTATION. Matt, 2026-09-06: *"Look up real golf scorecards. There's already a
+   *  system. square for bogey, circle for birdie, double circle for eagle, etc."*
+   *
+   *  He is right and it is worth spelling out, because the convention is about PAR and not about
+   *  the raw number - which is the whole reason it works on a card where every hole has a
+   *  different par. It is drawn around the score, never instead of it: the digit still reads
+   *  normally and the shape is what a golfer's eye counts down the column.
+   *
+   *      <= -3   triple circle    albatross or better
+   *         -2   double circle    eagle
+   *         -1   circle           birdie
+   *          0   nothing          par
+   *         +1   square           bogey
+   *         +2   double square    double bogey
+   *      >= +3   triple square    triple bogey or worse
+   *
+   *  The middle five rows are the standard notation printed on real cards and are the ones Matt
+   *  named. The two outer rows are this game EXTENDING the same pattern one ring further: real
+   *  cards vary at those extremes and several simply stop at double, so there is no single
+   *  convention to clone. An ace takes whatever its par says (a 1 on a par 3 is a birdie, one
+   *  ring), because the notation is relative to par and marking it as an eagle would be wrong.
+   *
+   *  Returns the number of rings and their shape; the rings themselves are CSS (`--gf-mark`),
+   *  because three nested borders are three boxes and a box is the one thing CSS is good at. */
+  _scoreMark(strokes, par) {
+    if (!Number.isFinite(strokes) || !Number.isFinite(par)) return '';
+    const d = strokes - par;
+    if (d <= -3) return 'c3';
+    if (d === -2) return 'c2';
+    if (d === -1) return 'c1';
+    if (d === 0) return '';
+    if (d === 1) return 's1';
+    if (d === 2) return 's2';
+    return 's3';
+  }
+
   /** THE HOLE IS OVER, AND THE GAME SAYS SO. Matt: "I just holed out and nothing at all happened.
    *  Nothing saying my score, nothing asking if i wanted to play the next hole... It didn't even
    *  indicate that i had finished the hole."
@@ -943,9 +979,14 @@ class GolfGame {
         <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
         <div class="gf-result__name">${esc(last && !practice ? t('round_done') : this._scoreName(strokes, hole.par))}</div>
         <div class="gf-result__sub">${esc(t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
-        ${practice ? '' : `<div class="gf-result__card-grid">
-          ${this.holeIdxs.map((hi, i) => `<div class="gf-cell${i === this.pos ? ' is-now' : ''}">
-            <span>${this.course.holes[hi].n}</span><b>${Number.isFinite(this.scores[i]) ? this.scores[i] : '-'}</b></div>`).join('')}
+        ${practice ? '' : `<div class="gf-result__card-grid" data-n="${this.holeIdxs.length}">
+          ${this.holeIdxs.map((hi, i) => {
+            const sc = this.scores[i];
+            const mark = this._scoreMark(sc, this.course.holes[hi].par);
+            return `<div class="gf-cell${i === this.pos ? ' is-now' : ''}">
+            <span>${this.course.holes[hi].n}</span>
+            <b><i class="gf-mark${mark ? ` is-${mark}` : ''}">${Number.isFinite(sc) ? sc : '-'}</i></b></div>`;
+          }).join('')}
         </div>`}
         <div class="gf-result__total">${esc(toParTxt)}</div>
         ${this.newBest ? `<div class="gf-result__best">${esc(t('saved_best'))}</div>` : ''}
