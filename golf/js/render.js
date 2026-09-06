@@ -415,7 +415,7 @@ export function buildMap(hole, theme) {
     sc.fillStyle = '#000';
     for (const t of treesOf(hole)) {
       const type = hole.treeTypes[t.type];
-      const rr = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+      const rr = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
       const [tx, ty] = toPx(t.x, t.y);
       sc.beginPath();
       sc.ellipse(tx - type.height * SHADOW_LEN * MAP_PPY, ty + type.height * SHADOW_DROP * MAP_PPY,
@@ -454,7 +454,10 @@ export function buildMap(hole, theme) {
     const type = hole.treeTypes[t.type];
     const cactus = type.name === 'saguaro';
     const [px, py] = toPx(t.x, t.y);
-    const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * MAP_PPY;
+    // `t.s` is the tree's own size (holes.js's `treeScale`), so a wood is mature specimens with
+    // younger trees between them rather than one crown stamped three hundred times. `treeHit` reads
+    // the SAME multiple - what is painted is what stops the ball.
+    const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
     return { t, type, cactus, px, py, r, shapes: treeShapes(px, py, r, cactus) };
   });
   {

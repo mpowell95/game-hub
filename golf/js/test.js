@@ -684,6 +684,46 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
   // ball finishing directly behind a tree worth the drop prompt Stage C adds.
   const dead = SH.resolveShot({ hole: h3, from: [tree.x, tree.y - 20], aimRad: 0, club: CLUBS[13], power: 1, mishitDeg: 0 });
   ok('a trunk blocks even a shot lofted 19 yds over it', !!dead.blocked);
+
+  // --- A TREE'S OWN SIZE, AND THE ONE CONTRACT IT MUST NOT BREAK -----------------------------
+  //
+  // Matt, 2026-09-06: *"Make some trees bigger. Like their diameter and circumference."* Belt trees
+  // carry an `s` multiple (holes.js's `treeScale`) so a wood is mature specimens with younger trees
+  // between them instead of one crown stamped three hundred times.
+  //
+  // [KNOWN-BUG PROBE] THE SIZE HAS TO BE APPLIED IN BOTH PLACES OR THE GAME LIES ABOUT ITS OWN ART.
+  // `render.js` draws every crown at `canopy * s`; if `shot.js` kept testing the bare `type.canopy`
+  // the player would get big trees they can fly straight through and, on the small ones, invisible
+  // canopy blocking a shot that plainly missed. Nothing at runtime would notice either. So this
+  // throws at a canopy that only blocks IF the scale is honoured, and at one that only blocks if it
+  // is NOT - the pair fails whichever way the two files drift apart.
+  {
+    const oak = h3.treeTypes[1];                       // canopy 8, height 13
+    const at = [40, 300];                              // clear ground on hole 3, away from the belts
+    const clone = (extra) => ({ ...h3, trees: [...h3.trees, extra], _trees: undefined });
+    // 11 yds off line: outside a bare canopy of 8, inside a 1.7x one (13.6).
+    const off = 11;
+    const shot = (hole) => SH.resolveShot({ hole, from: [at[0] - off, at[1] - 30], aimRad: 0,
+      club: CLUBS[0], power: 1, mishitDeg: 0 });
+    const big = shot(clone({ x: at[0] - off + off, y: at[1], type: 1, s: 1.7 }));
+    const small = shot(clone({ x: at[0] - off + off, y: at[1], type: 1, s: 0.7 }));
+    const plain = shot(clone({ x: at[0] - off + off, y: at[1], type: 1 }));
+    ok('[KNOWN-BUG PROBE] a 1.7x canopy blocks a ball the bare canopy would miss', !!big.blocked,
+      `oak canopy ${oak.canopy}, ball ${off} yds off line, scaled reach ${(oak.canopy * 1.7).toFixed(1)}`);
+    ok('...an unscaled one at the same spot does not', !plain.blocked);
+    ok('...and a 0.7x one does not either', !small.blocked);
+    ok('a tree with no `s` behaves exactly as it always did',
+      !!plain.blocked === !!shot(clone({ x: at[0], y: at[1], type: 1, s: 1 })).blocked);
+  }
+
+  // The renderer is the other half of that contract and cannot be measured headlessly, so it is
+  // read as text: BOTH tree passes (the shadow and the canopy) must carry the multiple.
+  {
+    const src = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+    const scaled = (src.match(/\(t\.s \|\| 1\)/g) || []).length;
+    ok('[KNOWN-BUG PROBE] render.js scales BOTH the shadow and the canopy by the tree\'s own size',
+      scaled >= 2, `found ${scaled} uses of (t.s || 1); the shadow pass and the canopy pass each need one`);
+  }
 }
 
 console.log('\n-- 10b. THE CUP IS THE SAME RULE FOR EVERY SHOT --');

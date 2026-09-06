@@ -2761,3 +2761,54 @@ clipped it since Stage B, and no rule caught it because those trees are INSIDE t
 so were never strays. The set gained `water` and both bunker kinds. **Hand-placed `trees` entries
 are never filtered** - hole 3's signature oak stands on the fairway on purpose, and an author who
 writes a coordinate means it.
+
+### Some trees are bigger than others (2026-09-06)
+
+Matt: *"Make some trees bigger. Like their diameter and circumference. But keep them spread out and
+stuff."*
+
+Every tree in a belt was drawn at exactly its type's `canopy`, so a wood was **one crown stamped a
+few hundred times.** That is most of what makes a belt read as wallpaper rather than as woodland,
+and it is why the mottling, the seeded clumps and the upper-left highlight were all added to the
+RENDERER and still were not enough - none of them changes the SILHOUETTE, which is what the eye
+picks a repeat out of. `treeScale(rnd)` in `js/holes.js` gives each belt tree an `s` multiple:
+
+```
+12 %  1.30 - 1.80   mature specimens
+28 %  1.02 - 1.28   a size up
+38 %  0.82 - 1.00   ordinary
+22 %  0.62 - 0.80   young
+```
+
+**THE DISTRIBUTION IS ROUGHLY CANOPY-AREA-NEUTRAL, which is the "keep them spread out" half.**
+Coverage goes as the SQUARE of the scale, so a mix that merely averaged 1.0 would close a wood back
+up by about a fifth and quietly undo the feather pass. Mean s^2 here is 1.09, and `BELT_SPREAD`
+(sqrt of that, 1.044) takes it straight back out of the belt step - so the wood has big trees in it
+and is exactly as open as it was measured to be.
+
+**HEIGHTS ARE DELIBERATELY NOT SCALED.** A canopy's `height` is the fly-over gate the whole
+punch-low-or-loft-over decision runs on, and it is tuned against the bag's measured apexes (the
+8 iron's 32.3 yds). A wood of randomly unflyable trees would be a gameplay change wearing an art
+change's clothes - which is the mistake "The tempo was never asked for" already records once.
+
+**THE SIZE IS APPLIED IN THREE PLACES AND MUST STAY IN ALL THREE.** `render.js` draws the shadow and
+the crown at `canopy * s`; `shot.js`'s `treeHit` tests `trunk * s` and `canopy * s`, and its
+`near >= 3` escape reach scales too. This renderer's whole contract is that **what is painted is
+what stops the ball** - applying the size in one file and not the other would give the game big
+trees a ball flies straight through and small ones with invisible canopy, and nothing at runtime
+would notice either.
+
+So section 10 carries a PAIR of `[KNOWN-BUG PROBE]`s, and they fail whichever way the two files
+drift apart: a ball 11 yards off line must be blocked by a 1.7x oak (canopy 8 -> 13.6) and must NOT
+be blocked by the same oak unscaled or at 0.7x, and `render.js` is read as text and must carry the
+multiple in BOTH tree passes. Verified born-red: reverting either file's scale turns the matching
+probe red on its own.
+
+**Measured:** Pine Valley 5,762 -> 5,298 trees and Red Mesa 2,143 -> 2,014 (the `BELT_SPREAD` step),
+no unfinishable runs on either course, and the blocks recover some of what the thinning pass gave
+away - bigger crowns block more:
+
+```
+                     before                          after
+pinevalley   -0.6 +0.0 -0.1 +1.2 +0.8 +1.2    -0.4 +0.0 +0.0 +1.0 +1.5 +1.8
+```

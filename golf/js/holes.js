@@ -80,6 +80,39 @@ export function mulberry32(a) {
  *  ~155 px crown - a pitch of 0.56 diameters, so 1.12 radii. */
 export const BELT_PITCH = 1.15;
 
+/** A single tree's SIZE, as a multiple of its type's `canopy` and `trunk` (2026-09-06).
+ *
+ *  Matt: *"Make some trees bigger. Like their diameter and circumference. But keep them spread out
+ *  and stuff."* Every tree in a belt was drawn at exactly its type's canopy, so a wood was one
+ *  crown stamped a few hundred times - which is most of what makes a belt read as wallpaper rather
+ *  than as woodland, and it is why the mottling and the seeded clumps were added to the RENDERER
+ *  and still were not enough. Real woods are mature specimens with younger trees between them.
+ *
+ *  THE SCALE IS NOT COSMETIC AND MUST NOT BE APPLIED IN THE RENDERER ALONE. `shot.js`'s `treeHit`
+ *  reads the same multiple, because this renderer's whole contract is that what is painted is what
+ *  stops the ball - a crown drawn half again as wide that a ball flew through would be a worse bug
+ *  than the uniformity being fixed.
+ *
+ *  THE DISTRIBUTION IS ROUGHLY CANOPY-AREA-NEUTRAL, which is the "keep them spread out" half.
+ *  Coverage goes as the SQUARE of this, so a mix that merely averaged 1.0 would close a wood back
+ *  up by about a fifth and undo the feather pass. Mean s^2 here is 1.09 - a touch more cover than
+ *  before, and `BELT_SPREAD` below takes that back out of the step so the wood stays as open as it
+ *  was measured to be.
+ *
+ *  Heights are deliberately NOT scaled. A canopy's height is the fly-over gate the whole
+ *  punch-low-or-loft-over decision runs on, and it is tuned against the bag's measured apexes; a
+ *  wood of randomly unflyable trees would be a gameplay change wearing an art change's clothes. */
+export function treeScale(rnd) {
+  const u = rnd();
+  if (u < 0.12) return 1.30 + rnd() * 0.50;          // 12 % mature specimens
+  if (u < 0.40) return 1.02 + rnd() * 0.26;          // 28 % a size up
+  if (u < 0.78) return 0.82 + rnd() * 0.18;          // 38 % ordinary
+  return 0.62 + rnd() * 0.18;                        // 22 % young
+}
+
+/** Taken back out of the belt step so the size mix does not close the wood up again. sqrt(1.09). */
+const BELT_SPREAD = 1.044;
+
 /** Distance from a point to a polygon's OUTLINE (not its interior) - the nearest point on any of
  *  its edges. Used by `expandBelt` to thin a wood out toward its own edge, which needs a distance
  *  rather than the in/out answer `pointInPoly` gives. */
@@ -211,7 +244,7 @@ export function expandBelt(belt, type) {
   // genuinely open woodland you can see and play through. That range is the between-hole variety,
   // and it lives in the course data where a designer can see it.
   const step = Math.max((type && type.canopy ? type.canopy : belt.spacing) * BELT_PITCH,
-    belt.spacing * 0.72);
+    belt.spacing * 0.72) * BELT_SPREAD;
   for (let y = minY; y < maxY; y += step) {
     for (let x = minX; x < maxX; x += step) {
       const jx = x + (rnd() - 0.5) * step;
@@ -224,7 +257,7 @@ export function expandBelt(belt, type) {
       if (r >= keepAt(jx, jy)) continue;
       // `stray` marks a tree OUTSIDE the belt polygon. `treesOf` uses it to keep the bleed off
       // ground that is being played over - see there.
-      const t = { x: jx, y: jy, type: belt.type };
+      const t = { x: jx, y: jy, type: belt.type, s: treeScale(rnd) };
       if (!pointInPoly([jx, jy], belt.poly)) t.stray = true;
       out.push(t);
     }
