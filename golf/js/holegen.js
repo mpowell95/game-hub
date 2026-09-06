@@ -271,14 +271,48 @@ export function slopeFrom(spec, strength = 1, cols = 8, rows = 8) {
 /** An irregular closed blob: bunkers, lakes, waste areas. Seeded, so it is the same blob every
  *  time - a bunker that reshuffled per load would move under a ball already lying in it. */
 export function blob(cx, cy, rx, ry, seed, n = 10) {
+  // NOT TEN INDEPENDENT RANDOM RADII. Matt, 2026-09-06: *"make the ponds not pointy and it's
+  // beautiful."* The old version drew n points with each radius drawn fresh from 0.76-1.22, so two
+  // neighbours 36 degrees apart could differ by 46 % of the radius - which is a SPIKE, and a lake
+  // came out as a shard of glass rather than as water.
+  //
+  // Three things fix it and all three are needed. More points alone just makes a spikier star;
+  // smoothing alone still leaves visible corners at this scale.
+  //
+  //  1. the radii are SMOOTHED around the ring, so a lobe is broad rather than a single spike;
+  //  2. more of them, so the outline has something to be smooth ALONG;
+  //  3. two rounds of Chaikin corner-cutting, which is what actually rounds the corners - it
+  //     replaces every vertex with two points a quarter of the way along each of its edges, so a
+  //     polygon converges toward its own quadratic B-spline while staying simple. A simple polygon
+  //     is what the ray-cast lie lookup needs, and Chaikin cannot introduce a crossing.
   const rnd = mulberry32(seed);
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const k = 0.76 + rnd() * 0.46;
-    pts.push([+(cx + Math.cos(a) * rx * k).toFixed(1), +(cy + Math.sin(a) * ry * k).toFixed(1)]);
+  const m = Math.max(n, 14);
+  // The raw spread is WIDER than the old 0.76-1.22 on purpose: smoothing and Chaikin both pull a
+  // shape toward its own average, so keeping the old numbers came out as a near-circle (measured
+  // 0.86-0.96 of the radius). 0.62-1.40 raw lands at 0.69-1.20 after both, which is the shape the
+  // old blob had, without the spikes.
+  const raw = Array.from({ length: m }, () => 0.62 + rnd() * 0.78);
+  const k = raw.map((_, i) => (raw[(i + m - 1) % m] + raw[i] * 2 + raw[(i + 1) % m]) / 4);
+  let pts = [];
+  for (let i = 0; i < m; i++) {
+    const a = (i / m) * Math.PI * 2;
+    pts.push([cx + Math.cos(a) * rx * k[i], cy + Math.sin(a) * ry * k[i]]);
   }
-  return pts;
+  pts = chaikin(chaikin(pts));
+  return pts.map((q) => [+q[0].toFixed(1), +q[1].toFixed(1)]);
+}
+
+/** One round of Chaikin corner-cutting on a CLOSED polygon. Each edge contributes two points, at a
+ *  quarter and three quarters along it, and the original vertices are dropped - so every corner is
+ *  replaced by a short bevel and the shape stays inside its own convex hull. */
+function chaikin(pts) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]; const b = pts[(i + 1) % pts.length];
+    out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+    out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+  }
+  return out;
 }
 
 // --- the centreline -----------------------------------------------------------------------------
