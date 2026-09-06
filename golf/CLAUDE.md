@@ -2217,3 +2217,62 @@ invariant is now asserted **directly** instead (a given power goes the same dist
 you are facing, and full power is still the putter's stated range), plus a new probe that the
 tap-in has the WIDEST window rather than the tightest. The rubber-band incident it was written for
 is still guarded; only the proxy changed.
+
+## The green-shape and routing pilot: Pine Valley 14 (2026-09-06)
+
+Matt asked for ONE hole to be taken through the whole plan before the other thirty-five, which was
+the right call: two of the three findings below would have been repeated 36 times.
+
+### What was wrong, measured first
+
+```
+hole 14 "Highwater", par 4, 389 yd
+  bend 41 deg but only 15.7 yds of offset from the straight tee-to-pin line -> it wandered,
+                                                                              it never turned
+  green: 12-gon, radii 10.7-13.0 yd -> a 22 % ripple on a circle
+```
+
+### `GREEN_SHAPES`: seven families, as radius functions
+
+See the block above `greenPoly` for why r(a) rather than drawn outlines, and for the honest limit
+(a true L is not star-shaped, so `boomerang` reads as a fat L). `fringePoly` is the same function
+plus a CONSTANT, never the shape drawn bigger - scaling a kidney scales its notch, and the collar
+would then cut into the putting surface exactly where the notch is deepest.
+
+**The amplitudes were set by LOOKING at all seven drawn side by side at one size**, which is the
+only way to tell a peanut from a rounded rectangle. The first pass was too timid on four of the
+seven - `wedge` was indistinguishable from `round`, `peanut` had no waist - and they were pushed.
+`wedge` is still the least distinctive: it is a genuine teardrop (radii 3.5-16.9 yd) but its whole
+bounding box is smaller than a round green's, so at a glance it reads as "a small round green".
+
+**Two knock-ons that touch every green on both courses**, not just hole 14: outlines are sampled at
+`GREEN_POINTS` (34) instead of 12, because at twelve a kidney's notch falls between vertices and
+comes out as a lumpy disc; and the old seeded per-vertex wobble is now at a THIRD of its strength,
+because at full strength it fought the shape it was meant to be roughening.
+
+### The dogleg has to be AT the landing zone
+
+The first attempt bent hole 14 at 300 yds and measured **40.8 yds** of offset - and still rendered
+as a leaning strip, because a hole is about five times taller than it is wide on screen and a bend
+that late has nowhere to show. Moved to the corner at ~215 yds, where the drive finishes:
+
+```
+  now: 395 yd, bend 107 deg, max offset 44.7 yd  (was 41 deg / 15.7 yd)
+```
+
+The offset barely moved; **where the bend sits is what made it read.** A dogleg has to send the
+drive somewhere the approach does not.
+
+The lake now sits in the ELBOW, on the inside of the bend, so cutting the corner costs something,
+and the green is `long` turned **55 degrees across the approach** - the direct line meets it at its
+narrowest, the safe line left looks down its length. Measured: **+0.10 -> +0.57 vs par, birdie rate
+13 % -> 2 %, bogey-or-worse 23 % -> 47 %.** That is a big jump from a routing change alone and may
+be too much; it is in the 13-15 block, which is meant to be hard, and it is Matt's call.
+
+### And a test was measuring the wrong thing
+
+Section 11c ("every green has a collar") stepped out from the green's BOUNDING BOX. That is fine for
+a circle and nonsense for a green twice as long as it is wide: the box radius plus 3 is more than
+ten yards outside the putting surface along the short axis, so the probe sampled open country and
+reported a missing collar on a hole whose collar is a uniform 5.9 yds. It walks the green polygon's
+own vertices now, which is what the sentence always claimed.

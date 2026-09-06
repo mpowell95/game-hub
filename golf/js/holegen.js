@@ -25,21 +25,120 @@ import { mulberry32, bboxOf } from './holes.js';
 
 /** A 12-gon green. Shared with the hand-authored holes, which is the point: three hand-drawn
  *  blobs would each need re-checking against their own slope grid. */
-export function greenPoly(cx, cy, rx, ry = rx, seed = 0) {
-  // A GREEN IS NOT A CIRCLE. This drew a perfect 12-gon, so every green on both courses was the
-  // same shape at a different size - the last exactly-offset outline left on a hole once the
-  // corridors, the rough and the woods started to breathe, and the one a player looks straight at
-  // for two shots out of every four.
+/** THE GREEN'S SHAPE, as a family rather than a size.
+ *
+ *  Matt, 2026-09-06: *"you were meant to use a variety of shapes and characteristics, like kidney,
+ *  L-shaped, peanut, long-and-narrow at an angle to the approach. And not just change the size of
+ *  the circles but keep every green a circle."* He is right - the seeded wobble only pushed each of
+ *  twelve corners in or out by up to 18 %, which measures as a 19-22 % ripple on a circle. Every
+ *  green on the property was a circle with a rough edge.
+ *
+ *  EACH SHAPE IS A RADIUS FUNCTION r(a), NOT A DRAWN OUTLINE, and that is a deliberate constraint
+ *  rather than a shortcut. A star-shaped polygon - one where every ray from the centre crosses the
+ *  edge exactly once - buys three things this file would otherwise have to prove:
+ *
+ *    - it can never self-intersect, so the ray-cast lie lookup cannot report "outside" for a ball
+ *      plainly standing on the green;
+ *    - the FRINGE is the same function plus a constant, so the collar always strictly contains the
+ *      putting surface. A general polygon offset is a real algorithm with real degenerate cases,
+ *      and a fringe that crossed its own green would make the lie flicker along that seam;
+ *    - the pin sits at the centre, which is inside a star-shaped polygon by definition, however
+ *      deep a notch is cut into the edge.
+ *
+ *  `a` is measured in the GREEN'S OWN FRAME: 0 points back down the approach, so "the front" is the
+ *  side the ball arrives from even on a dogleg, and a shape's angle is authored relative to the
+ *  shot rather than to the map.
+ *
+ *  THE HONEST LIMIT: a true L has a sharp INNER corner, which is not star-shaped and cannot be
+ *  written as r(a). `boomerang` is the nearest this form reaches - two arms at right angles with a
+ *  filled-in elbow. It reads as a fat L, not an L. A real one needs explicit outlines plus polygon
+ *  offsetting for the fringe, which is a bigger job than this whole file.
+ */
+const TAU = Math.PI * 2;
+function angDiff(a, b) {
+  let d = (a - b) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return d;
+}
+const lobe = (d, w) => Math.exp(-((d / w) * (d / w)));
+
+export const GREEN_SHAPES = {
+  // Kept: a few greens on any real course are simply round.
+  round: () => 1,
+
+  // LONG AND NARROW, at whatever angle the hole authors. An ellipse in polar form, so the long
+  // axis is exact rather than approximated by pushing corners around.
+  long: (a) => {
+    const A = 1.42; const B = 0.68;
+    const c = Math.cos(a); const s = Math.sin(a);
+    return 1 / Math.sqrt((c / A) * (c / A) + (s / B) * (s / B));
+  },
+
+  // KIDNEY: convex, with one bite out of a single side. The bulge opposite the notch is what stops
+  // it reading as a circle with a dent in it.
+  kidney: (a) => 1 + 0.16 * Math.cos(a + Math.PI) - 0.58 * lobe(angDiff(a, 0), 0.55),
+
+  // PEANUT: two lobes with a waist. The waist is deep enough to matter - a putt across it leaves
+  // the putting surface and comes back on.
+  peanut: (a) => 0.58 + 0.62 * Math.abs(Math.cos(a)),
+
+  // WEDGE: wide at one end, narrow at the other. Which end faces the approach is set by the
+  // shape's angle, so a hole can present the broad edge or the point.
+  wedge: (a) => 0.72 + 0.46 * Math.cos(a),
+
+  // BOOMERANG: the nearest r(a) gets to an L - two arms 90 degrees apart. See the caveat above.
+  // The first pass used 0.68 + 0.48 and rendered as a blob with a bump; these amplitudes were set
+  // by LOOKING at the seven shapes drawn side by side at the same size, which is the only way to
+  // tell a peanut from a rounded rectangle. Four of the seven needed pushing.
+  boomerang: (a) => 0.50 + 0.75 * Math.max(lobe(angDiff(a, 0), 0.46), lobe(angDiff(a, Math.PI / 2), 0.46)),
+
+  // A soft triangle, for a green that has to sit into a corner.
+  clover: (a) => 1 + 0.30 * Math.cos(3 * a),
+};
+
+/** How many points an outline is sampled at. Twelve was enough for a wobbly circle and is not
+ *  enough for a kidney's notch or a peanut's waist - at twelve the notch falls between vertices and
+ *  the shape comes out as a slightly lumpy disc. */
+export const GREEN_POINTS = 34;
+
+export function greenPoly(cx, cy, rx, ry = rx, seed = 0, shape = 'round', angleRad = 0) {
+  // `rx`/`ry` are the green's SIZE and the shape is applied on top of them, so a hole keeps
+  // authoring "about 14 yards" and gets a kidney of that size rather than a kidney of some other.
   //
-  // The wobble is per-VERTEX and drawn from the green's own seed, and `greenShape` hands the SAME
-  // factors back for any radius. That is what lets the fringe be the same outline 6 yds out rather
-  // than a second, unrelated blob: a fringe that crossed its own green would put collar inside the
-  // putting surface, and the lie lookup would flicker between them along that seam.
+  // The seeded per-vertex wobble is still here but at a THIRD of its old strength: it exists to
+  // stop two peanuts on the same course being the identical peanut, and at full strength it fought
+  // the shape it was meant to be roughening.
+  const fn = GREEN_SHAPES[shape];
+  if (!fn) throw new Error(`golf: unknown green shape "${shape}"`);
   const k = greenShape(seed);
   const pts = [];
-  for (let i = 0; i < 12; i++) {
-    const a = (i * 30 * Math.PI) / 180;
-    pts.push([+(cx + rx * k[i] * Math.cos(a)).toFixed(1), +(cy + ry * k[i] * Math.sin(a)).toFixed(1)]);
+  for (let i = 0; i < GREEN_POINTS; i++) {
+    const a = (i / GREEN_POINTS) * TAU;
+    const jitter = 1 + (k[i % k.length] - 1) / 3;
+    const r = Math.max(0.25, fn(angDiff(a, angleRad)) * jitter);
+    pts.push([+(cx + rx * r * Math.cos(a)).toFixed(1), +(cy + ry * r * Math.sin(a)).toFixed(1)]);
+  }
+  return pts;
+}
+
+/** The FRINGE for a green, as the same outline pushed out by a constant number of yards.
+ *
+ *  It is not `greenPoly` at a bigger radius - scaling a kidney scales its notch too, and the collar
+ *  would then cut INTO the putting surface at the notch. Adding a constant to r(a) at every angle
+ *  is what makes the fringe contain the green by construction, whatever shape it is. */
+export function fringePoly(cx, cy, rx, ry, seed, shape, angleRad, padYd) {
+  const fn = GREEN_SHAPES[shape] || GREEN_SHAPES.round;
+  const k = greenShape(seed);
+  const pts = [];
+  for (let i = 0; i < GREEN_POINTS; i++) {
+    const a = (i / GREEN_POINTS) * TAU;
+    const jitter = 1 + (k[i % k.length] - 1) / 3;
+    const r = Math.max(0.25, fn(angDiff(a, angleRad)) * jitter);
+    pts.push([
+      +(cx + (rx * r + padYd) * Math.cos(a)).toFixed(1),
+      +(cy + (ry * r + padYd) * Math.sin(a)).toFixed(1),
+    ]);
   }
   return pts;
 }
@@ -407,6 +506,12 @@ export function makeHole(spec) {
   const hard = spec.hard == null ? hardnessOf(spec.n) : spec.hard;
   const roughPad = spec.rough == null ? 14 - 8 * hard : spec.rough;
   const greenSeed = spec.greenSeed || (spec.n * 6151 + 991);
+  // The green's SHAPE and how it is turned. `greenAngle` is degrees measured from the APPROACH -
+  // 0 points the shape's own "front" back down the fairway, 90 turns it across the shot - so
+  // "long and narrow at an angle to the approach" is one number and stays true when the hole's
+  // routing moves. The absolute bearing it becomes is worked out below, once the approach is known.
+  const gShape = spec.greenShape || 'round';
+  const gAngleDeg = spec.greenAngle == null ? 0 : spec.greenAngle;
   // A PAR 5 GETS THE PINCH BACK OFF. Three accurate swings compound: measured, Pine Valley 15 at
   // the full ramp necked to 12 yds of fairway and played to +1.36 with 78 % bogey-or-worse, which
   // is not a hard hole, it is an unfair one. A par 3 gets the same relief for the opposite reason
@@ -718,13 +823,18 @@ export function makeHole(spec) {
   });
   for (const b of bunkers) if ((b.kind || 'greensideBunker') === 'fairwayBunker') surfaces.push({ kind: 'fairwayBunker', poly: b.poly });
 
-  surfaces.push({ kind: 'fringe', poly: greenPoly(pin[0], pin[1], greenR + 6, greenRy + 6, greenSeed) });
+  // The shape's own frame, turned into a world bearing: `f` already points back down the approach.
+  const gAngleRad = Math.atan2(f[1], f[0]) + (gAngleDeg * Math.PI) / 180;
+  // THE FRINGE IS THE GREEN PUSHED OUT BY A CONSTANT, not the green drawn bigger. Scaling a kidney
+  // scales its notch, and the collar would then cut INTO the putting surface exactly where the
+  // notch is deepest.
+  surfaces.push({ kind: 'fringe', poly: fringePoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad, 6) });
   for (const b of bunkers) if ((b.kind || 'greensideBunker') !== 'fairwayBunker') surfaces.push({ kind: 'greensideBunker', poly: b.poly });
   surfaces.push({ kind: 'green', poly: 'green' });
   surfaces.push({ kind: 'tee', poly: [[tee[0] - 6, tee[1] - 5], [tee[0] + 6, tee[1] - 5], [tee[0] + 6, tee[1] + 5], [tee[0] - 6, tee[1] + 5]] });
 
   const green = {
-    poly: greenPoly(pin[0], pin[1], greenR, greenRy, greenSeed),
+    poly: greenPoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad),
     slope: slopeFrom(spec.slope || { fall: [0, -0.15] }, slopeK),
   };
 

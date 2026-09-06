@@ -839,13 +839,19 @@ console.log('\n-- 11c. every green has a collar --');
 // landed in `base` - HEAVY ROUGH, 82 % power and a 65 % accuracy band - on every side. Matt's
 // playtest put him 17.5 yds from the pin in heavy rough with only a lob wedge.
 for (const h of COURSES.flatMap((c) => c.holes)) {
-  const gb = greenBoxOf(h);
-  const cx = (gb.minX + gb.maxX) / 2; const cy = (gb.minY + gb.maxY) / 2;
-  const rx = (gb.maxX - gb.minX) / 2; const ry = (gb.maxY - gb.minY) / 2;
+  // STEPPED OUT FROM THE GREEN'S OWN EDGE, not from its bounding box. The box version was fine
+  // while every green was a circle and became nonsense the moment they were not (2026-09-06): on a
+  // green twice as long as it is wide, "the box radius plus 3" is more than TEN yards outside the
+  // putting surface along the short axis, so the probe was sampling open country and calling it a
+  // missing collar. Walking the polygon's own vertices tests what the sentence says.
+  const gpoly = h.green.poly;
+  const cx = gpoly.reduce((a, p) => a + p[0], 0) / gpoly.length;
+  const cy = gpoly.reduce((a, p) => a + p[1], 0) / gpoly.length;
   let harsh = 0;
-  for (let a = 0; a < 360; a += 15) {
-    const r = (a * Math.PI) / 180;
-    const k = surfaceAt(h, cx + Math.cos(r) * (rx + 3), cy + Math.sin(r) * (ry + 3));
+  for (const p of gpoly) {
+    const dx = p[0] - cx; const dy = p[1] - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    const k = surfaceAt(h, p[0] + (dx / d) * 3, p[1] + (dy / d) * 3);
     if (k === 'heavyRough') harsh++;
   }
   if (harsh) ok(`hole ${h.n}: missing the green by 3 yds never lands in heavy rough`, false,
