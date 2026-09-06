@@ -14,7 +14,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
@@ -293,15 +293,19 @@ class GolfGame {
     this.hole = null;
     this.rootEl.innerHTML = '';
     const c = this.course;
-    const mode = this.settings.lastMode || 3;
-    const rounds = roundsOfMode(mode);
+    // Only the lengths THIS course can actually be played at. A nine-hole course has no back nine
+    // and no eighteen, and a remembered mode from an eighteen-hole course must not survive the
+    // switch to one - it would leave the screen offering an empty round.
+    const modes = modesForCourse(c);
+    const mode = modes.includes(this.settings.lastMode || 3) ? (this.settings.lastMode || 3) : modes[0];
+    const rounds = roundsForCourse(c, mode);
     const el = document.createElement('div');
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
       <h1>${esc(t(`course_${c.id}`))}</h1>
       <div class="gf-coursepick gf-modepick">
-        ${MODES.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}"
+        ${modes.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}"
           data-mode="${m}"><span>${esc(t('mode_holes', { n: m }))}</span></button>`).join('')}
       </div>
       <div class="gf-coursepick">

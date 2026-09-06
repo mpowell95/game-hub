@@ -13,7 +13,7 @@ import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE
   greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
 import { RED_MESA } from '../courses/redmesa.js';
-import { COURSES, ROUNDS, MODES, roundKey, roundHoles, roundPar, roundsOfMode, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, mustPutt, canPutt } from './clubs.js';
 import * as CL from './clubs.js';
@@ -56,7 +56,7 @@ ok('every round key is distinct across both courses',
 // js/leaderboard-rank.js copies these pars rather than importing two courses of polygon data onto
 // the hub's critical path. This is the link that keeps the copy honest.
 for (const c of COURSES) {
-  for (const r of ROUNDS) {
+  for (const r of roundsFor(c)) {
     const key = roundKey(c, r.id);
     ok(`GOLF_COURSE_PAR.${key} matches the course data (${roundPar(c, r.id)})`,
       GOLF_COURSE_PAR[key] === roundPar(c, r.id), `table says ${GOLF_COURSE_PAR[key]}`);
@@ -1319,7 +1319,7 @@ console.log('\n-- 15. the round menu: length first, then course, then which hole
   ok('...and it cannot collide with a round key',
     !ROUNDS.some((r) => roundKey(pv, r.id) === holeKey(pv, 7)));
   // Every round key needs its par in leaderboard-rank.js, checked against the course data above.
-  for (const c of COURSES) for (const r of ROUNDS) {
+  for (const c of COURSES) for (const r of roundsFor(c)) {
     const k = roundKey(c, r.id);
     ok(`${k} has a par row`, Number.isFinite(GOLF_COURSE_PAR[k]));
   }
@@ -1445,12 +1445,23 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
     // NOT "block 1 is the easiest of six": with 24 rounds a block is worth about +/-0.3 of noise,
     // and a hole with water on it swings further than that on its own. The three claims below are
     // the ones the design actually makes and they hold well clear of the noise.
-    const firstHalf = blocks.slice(0, 3).reduce((a, v) => a + v, 0);
-    const lastHalf = blocks.slice(3).reduce((a, v) => a + v, 0);
-    ok(`${c.id}: the closing nine's three blocks are harder than the opening nine's`, lastHalf > firstHalf);
-    ok(`${c.id}: the closing block is harder than the opening one`, blocks[5] > blocks[0]);
-    ok(`${c.id}: the back nine is harder than the front`,
-      vp.slice(9).reduce((a, v) => a + v, 0) > vp.slice(0, 9).reduce((a, v) => a + v, 0));
+    // These are claims about an EIGHTEEN-hole round. A nine-hole course has no back nine and no
+    // blocks 4-6, so on one they compare real numbers against three EMPTY blocks and fail however
+    // well it plays - which is exactly what Oasis Sands did. The shape Matt asked for still applies
+    // within whatever length a course has, so a shorter course is held to the same claim over the
+    // blocks it actually has, rather than exempted.
+    if (c.holes.length >= 18) {
+      const firstHalf = blocks.slice(0, 3).reduce((a, v) => a + v, 0);
+      const lastHalf = blocks.slice(3).reduce((a, v) => a + v, 0);
+      ok(`${c.id}: the closing nine's three blocks are harder than the opening nine's`, lastHalf > firstHalf);
+      ok(`${c.id}: the closing block is harder than the opening one`, blocks[5] > blocks[0]);
+      ok(`${c.id}: the back nine is harder than the front`,
+        vp.slice(9).reduce((a, v) => a + v, 0) > vp.slice(0, 9).reduce((a, v) => a + v, 0));
+    } else {
+      const last = Math.ceil(c.holes.length / 3) - 1;
+      ok(`${c.id}: the closing block is harder than the opening one (${c.holes.length} holes)`,
+        blocks[last] > blocks[0]);
+    }
     // [KNOWN-BUG PROBE] Before 2026-09-05 every hole on both courses averaged about a shot UNDER
     // par with a 90-100 % birdie rate. Matt: "I don't even know if there's a single hole here I
     // wouldn't birdie."

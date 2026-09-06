@@ -6,8 +6,9 @@
 
 import PINE_VALLEY from '../courses/pinevalley.js';
 import RED_MESA from '../courses/redmesa.js';
+import OASIS_SANDS from '../courses/oasissands.js';
 
-export const COURSES = [PINE_VALLEY, RED_MESA];
+export const COURSES = [PINE_VALLEY, RED_MESA, OASIS_SANDS];
 
 export function courseById(id) { return COURSES.find((c) => c.id === id) || COURSES[0]; }
 
@@ -48,6 +49,30 @@ export const MODES = [3, 9, 18];
 
 /** Every round of one length, in order. */
 export function roundsOfMode(mode) { return ROUNDS.filter((r) => r.mode === mode); }
+
+/** The rounds a course can actually play at one length.
+ *
+ *  A round names a FIXED hole range, so a course with fewer holes than the range simply does not
+ *  offer it. Oasis Sands has nine holes and therefore has no back nine and no eighteen: `roundHoles`
+ *  would clamp `back9` to an EMPTY round, and `full18` to the same nine holes as `front9` while
+ *  storing the result under an `18` key that claims to be a full round. Both are wrong, and neither
+ *  is visible until someone taps it.
+ *
+ *  For an eighteen-hole course this returns exactly what `roundsOfMode` does, so Pine Valley and
+ *  Red Mesa are unchanged. */
+export function roundsFor(course) {
+  return ROUNDS.filter((r) => course.holes.length >= r.to);
+}
+
+/** ...and the same set narrowed to one length. */
+export function roundsForCourse(course, mode) {
+  return roundsFor(course).filter((r) => r.mode === mode);
+}
+
+/** The lengths a course can be played at, in the order the setup screen offers them. */
+export function modesForCourse(course) {
+  return MODES.filter((m) => roundsForCourse(course, m).length > 0);
+}
 
 /** The hole NUMBERS a round covers, as a display string ("1-3", "10-18"). */
 export function roundRange(round) {
