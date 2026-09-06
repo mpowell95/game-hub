@@ -2277,31 +2277,40 @@ ten yards outside the putting surface along the short axis, so the probe sampled
 reported a missing collar on a hole whose collar is a uniform 5.9 yds. It walks the green polygon's
 own vertices now, which is what the sentence always claimed.
 
-### And the ponds were shards of glass (2026-09-06)
+### The ponds: two wrong answers before the right one (2026-09-06)
 
-Matt, on the hole 14 pilot: *"make the ponds not pointy and it's beautiful."*
+Matt, on the hole 14 pilot: *"make the ponds not pointy and it's beautiful."* Then, on the fix:
+*"now the ponds are too ovaly. Make them shaped more like natural bodies of water."*
 
-`blob()` drew n points with **each radius drawn fresh from 0.76-1.22**, so two neighbours 36 degrees
-apart could differ by 46 % of the radius. That is a spike by construction, and it is why every lake
-and every bunker on both courses had corners.
+**Both wrong answers were the same mistake** - treating the outline as noise to be tuned rather than
+as a shape with a structure:
 
-Three things fix it and all three are needed - more points alone just makes a spikier star, and
-smoothing alone still leaves visible corners at this scale:
+1. `blob()` originally drew n points with **each radius drawn fresh from 0.76-1.22**, so two
+   neighbours 36 degrees apart could differ by 46 % of the radius. That is a spike by construction,
+   and every lake and bunker on both courses had corners.
+2. The obvious fix - smooth the radii round the ring, then two rounds of Chaikin corner-cutting -
+   removed the SHAPE along with the spikes, because **averaging a ring of numbers kills its low
+   frequencies as happily as its high ones**. Measured: radius variation collapsed from 0.76-1.22 to
+   0.86-0.96. Smooth, and an oval.
 
-1. the radii are **smoothed around the ring**, so a lobe is broad rather than a single spike;
-2. more of them, to have something to be smooth ALONG;
-3. **two rounds of Chaikin corner-cutting**, which is what actually rounds them. Each vertex is
-   replaced by two points a quarter of the way along each of its edges, so the polygon converges
-   toward its own quadratic B-spline. It cannot introduce a crossing, which is what the ray-cast lie
-   lookup needs.
+**The structure is FREQUENCY.** A real pond has a handful of broad bays and headlands - variation
+over a third of its perimeter - and nothing at all over ten degrees. So the radius is the first four
+harmonics and no more:
 
-Measured on a 20 yd pond: 12 points with ~90 degree corners became **56 points with the sharpest
-corner at 161 degrees**.
+```
+r(a) = 1 + A1 cos(a + p1) + A2 cos(2a + p2) + A3 cos(3a + p3) + A4 cos(4a + p4)
+```
 
-**The raw spread had to be WIDENED to 0.62-1.40 to compensate.** Smoothing and Chaikin both pull a
-shape toward its own average, so keeping the old numbers produced a near-circle (measured 0.86-0.96
-of the radius - rounder, and duller). The wider raw spread lands at 0.69-1.20 after both passes,
-which is the shape the old blob had, without the spikes.
+Harmonic 1 pushes the whole shape off its own centre, which is what makes it read as asymmetric
+rather than as a decorated circle; 2 is the long axis; 3 and 4 are the bays. **Cutting off at 4
+means a spike is not expressible** - there is no wavelength short enough - so this needs no
+smoothing pass and no corner-cutting at all. It is smooth BY CONSTRUCTION, which is why the Chaikin
+helper the second attempt added is gone again.
+
+Measured across five seeds: radius ratios **1.8 to 2.8** (the ovals were 1.4) with the sharpest
+corner between 137 and 161 degrees. And because every radius is positive the polygon is star-shaped,
+so it cannot self-intersect and the ray-cast lie lookup can never report "outside" for a ball
+sitting in the water.
 
 ### `boomerang` and `wedge` are names I invented, and one of them does not work
 
