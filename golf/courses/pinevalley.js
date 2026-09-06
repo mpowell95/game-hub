@@ -483,20 +483,34 @@ export const HOLE_17 = pv({
 
 export const HOLE_18 = pv({
   n: 18, par: 4, nickname: 'Home',
-  // The hardest hole here, and it should be. Water crosses at 198 so the drive is a lay-up, and
-  // then the green sits between water short and water long on the smallest putting surface of any
-  // par 4 out here - so the approach can be neither bailed out nor over-clubbed. The green runs
-  // away from back to front harder than any other. Par is meant to be a good score.
-  path: [[0, 5], [8, 130], [18, 270], [14, 400]],
-  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 9 }, { at: 1, w: 12 }],
-  belts: { left: false, right: { depth: 24, spacing: 9, seed: 1802 } },
+  // RE-CUT 2026-09-06, the second hole of the routing pass, and deliberately a DIFFERENT QUESTION
+  // from 14's. That one doglegs RIGHT around water sitting in the elbow, to a long green turned
+  // across the shot: the tee shot is a bid and the approach collects the bill. This one bends LEFT
+  // and asks nothing of the drive except that it stop short of the creek - the whole hole is the
+  // second shot, into a kidney green whose notch faces the approach, so the direct line is into the
+  // bay and the pin has to be come at from one side or the other.
+  //
+  // Two doglegs in a row would be a repeat; a dogleg and a lay-up is a pair.
+  path: [[0, 5], [4, 110], [2, 200], [-32, 268], [-56, 325], [-62, 372]],
+  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 10 }, { at: 1, w: 13 }],
+  belts: { left: { depth: 20, spacing: 11, seed: 1801 }, right: { depth: 24, spacing: 9, seed: 1802 } },
   cross: [{ yd: 222, kind: 'water', depth: 34 }],
-  water: [{ at: 0.45, side: -1, off: 32, rx: 14, ry: 60, seed: 1803 }],
-  guard: ['frontWater', 'backWater', 'ringSand'],
+  water: [{ at: 0.82, side: -1, off: 30, rx: 16, ry: 34, seed: 1803 }],
+  // The notch is turned 25 degrees off the approach rather than square to it, so a ball run in from
+  // the left still finds turf. Square on, the front of the green is simply missing and the hole
+  // stops being a question and starts being a wall.
+  greenShape: 'kidney',
+  greenAngle: 25,
+  guard: ['frontWater', 'ringSand'],
   slope: 'steep',
-  greenR: 10,
-  greenRy: 12,
-  decor: [{ kind: 'path', poly: [[34, 20], [37, 20], [42, 200], [40, 400], [37, 400], [39, 200]] }],
+  greenR: 15,
+  greenRy: 14,
+  // The cart path follows the hole. It used to run straight up x=34-42 from the days when this hole
+  // did too; once the routing bent left it was a stripe of tarmac stranded in open country 90 yards
+  // off the fairway. Art that no longer knows where the hole went is worse than no art.
+  // ...and it runs OUTSIDE the corridor, on the outside of the bend. The first re-cut followed the
+  // centreline, which put a strip of tarmac straight through the creek and the pond.
+  decor: [{ kind: 'path', poly: [[31, 20], [34, 20], [35, 190], [23, 268], [3, 330], [-1, 372], [-4, 372], [0, 330], [20, 268], [32, 190]] }],
 });
 
 export const HOLES = [
