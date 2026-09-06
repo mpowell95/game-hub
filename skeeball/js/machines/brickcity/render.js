@@ -1392,7 +1392,31 @@ export class Renderer {
     const hAt = (phi) => (H.lipLow
       ? H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2)
       : H.collarH);
-    const Rbot = R * 0.58;                           // the reference basket's taper
+    // THE NET NEVER CLOSES TIGHTER THAN THE BALL (2026-09-05). Matt, after three clips of a ball
+    // appearing to travel out through the side of a basket: 'why would you build it like that?'
+    //
+    // It was  - the taper read off the reference basket art and written as a fixed
+    // proportion of the RIM, so it scales with the hoop and has never once looked at the ball.
+    // On the wide penalty hoops that is fine. On every hoop under about 4.9in it draws a net
+    // whose bottom is NARROWER THAN THE BALL, so a perfectly scored ball - dead centre, in
+    // exactly the right place - still has to be drawn passing through the wires on its way down.
+    // Measured in Matt's units (x = 4in), ball 3.00in across:
+    //
+    //     HOT SHOT      100  hoop 3.50in  net bottom 2.22in   ball 0.78in too wide
+    //     HOT SHOT   10..60  hoop 4.25in  net bottom 2.66in   ball 0.34in too wide
+    //     BRICK CITY    100  hoop 3.25in  net bottom 2.08in   ball 0.92in too wide  <- worst
+    //     BRICK CITY   -20s  hoop 6.00in  net bottom 3.67in   ball fits
+    //     RUNAWAY       100  hoop 4.00in  net bottom 2.51in   ball 0.49in too wide
+    //
+    // Over 8,283 frames of a scored ball inside a BRICK CITY basket, 26.5% were drawn with the
+    // ball's centre outside the net, worst 4.63cm. No physics change can fix that: the physics
+    // puts the ball where it belongs and the DRAWING is too narrow for it.
+    //
+    // GUARD: NO RIM AND NO BALL MOVES HERE, and none may. This is one line in a renderer. The
+    // taper is kept wherever the ball fits through it (the -20s keep theirs in full) and stops
+    // exactly where the ball stops fitting - so the net still reads as a net, and the thing
+    // falling through it is inside it.
+    const Rbot = Math.min(R, Math.max(R * 0.58, G.ballR * 1.02));
     const yBot = 0.005;
     const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
 

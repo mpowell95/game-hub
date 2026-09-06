@@ -30,7 +30,7 @@
 // a session that changes how a machine is DRAWN must bump it or old pictures would be served for
 // ever. Bumping it is one line and costs one re-render per machine.
 
-export const PIC_V = 1;
+export const PIC_V = 2;
 
 const DB_NAME = 'gamehub-skeeball';
 const DB_VERSION = 1;
