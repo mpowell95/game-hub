@@ -134,6 +134,14 @@ const POSE_STILL_MS = 265;
 const POSE_BACK_MS = 40;
 const POSE_THRU_MS = 45;
 const WINDUP_MS = 850;
+
+/** THE OPENING FLYOVER (2026-09-06). The camera opens ON THE GREEN, sits there long enough to
+ *  read it, then travels back down the hole to the tee. Held first and eased at BOTH ends: a
+ *  move that starts at full speed is over before a player registers what they were shown, which
+ *  is how the old 3D build's flyover managed to be invisible while playing correctly every time.
+ *  A tap skips it, same as the flight. */
+const INTRO_HOLD_MS = 1000;
+const INTRO_MOVE_MS = 2600;
 // The meter's logical drawing box, in CSS pixels. The canvas itself is backed at devicePixelRatio
 // so the 3px band outline and the 13px tick numbers stay crisp on a phone.
 const METER_W = 176;
@@ -473,7 +481,21 @@ class GolfGame {
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();
+    // THE OPENING LOOK AT THE HOLE. Matt, 2026-09-06: "when you first get to (or open or start)
+    // [a hole], I'd like for it to begin by showing the green, then automatically move backwards
+    // from the green to the tee box." `t0` is set on the first frame that has a camera, because
+    // the camera is not built until the canvas has a real size (_sizeCanvas).
+    this.intro = { t0: 0 };
     this._renderPlay();
+  }
+
+  /** Cut the opening flyover short. Any tap on the course does this, and so does any control that
+   *  starts a shot - a player who is already aiming has stopped watching. */
+  _endIntro() {
+    if (!this.intro) return;
+    this.intro = null;
+    if (this.el && this.el.tc) this.el.tc.setAttribute('data-faded', '0');
+    this._aimCamera(true);
   }
 
   _bearingToPin() {
@@ -585,6 +607,10 @@ class GolfGame {
     for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'windpanel', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
+    // The four floating HUD clusters, by class: they carry no data-role because nothing
+    // paints into them, but _keepCupClear has to MEASURE them to know what part of the canvas is
+    // covered.
+    for (const k of ['tl', 'tr', 'bl', 'br']) this.el[k] = this.rootEl.querySelector('.gf-' + k);
 
     this._bindPlay();
     this._sizeCanvas();
@@ -669,10 +695,17 @@ class GolfGame {
     //      mid-look. Pointer capture makes that unnecessary.
     // `this.dragging`, not a closure local: the render loop reads it to know whether to ease the
     // free look back to the ball, and a local here would leave it easing back UNDER the finger.
-    let startX = 0; let startY = 0; let baseX = 0; let baseY = 0; let moved = 0;
+    let startX = 0; let startY = 0; let baseX = 0; let baseY = 0; let moved = 0; let skipOnTap = false;
     this.dragging = false;
     this._on(this.canvas, 'pointerdown', (ev) => {
-      if (this.anim) { this._skipAnim(); return; }
+      // WHILE THE BALL IS MOVING, THIS IS STILL A PAN. Matt, 2026-09-06: "as the ball rolls, I
+      // tried to move the screen so I could see it go in/near the hole. As soon as I did, the shot
+      // ended and skipped to where the ball would have ended up." Touching the screen used to skip
+      // on pointerDOWN, so a drag could never begin. The skip now happens on release, and only if
+      // the press never moved - so a TAP still skips the flight (the reference's own worst flaw is
+      // that it cannot be skipped) and a DRAG looks around instead.
+      skipOnTap = !!this.anim;
+      if (this.intro) this._endIntro();
       this.dragging = true; moved = 0; this.returning = false;
       startX = ev.clientX; startY = ev.clientY;
       baseX = this.previewDx; baseY = this.previewDy;
@@ -692,9 +725,17 @@ class GolfGame {
       if (!this.dragging) return;
       this.dragging = false;
       this.canvas.releasePointerCapture?.(ev && ev.pointerId);
+      const tapped = moved < 8;
+      if (skipOnTap) {
+        skipOnTap = false;
+        // A tap while the ball is in the air or rolling skips to the end of the shot; a drag was
+        // a look around, and the shot plays out in full underneath it.
+        if (tapped) this._skipAnim();
+        return;
+      }
       // A TAP (no real drag) snaps the view back to the ball. A drag HOLDS, so the player can
       // study the green for as long as they like.
-      if (moved < 8) { this.returning = true; this.el.tc.setAttribute('data-faded', '0'); }
+      if (tapped) { this.returning = true; this.el.tc.setAttribute('data-faded', '0'); }
     };
     this._on(this.canvas, 'pointerup', release);
     this._on(this.canvas, 'pointercancel', release);
@@ -702,6 +743,7 @@ class GolfGame {
 
   _nudgeAim(dir) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
+    if (this.intro) this._endIntro();
     const base = this._bearingToPin();
     let next = this.aimRad + dir * AIM_STEP_DEG * DEG;
     const limit = AIM_LIMIT_DEG * DEG;
@@ -718,6 +760,7 @@ class GolfGame {
 
   _stepClub(dir) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
+    if (this.intro) this._endIntro();
     if (this._mustPutt()) return;                   // the putter is the only club on the green
     this.club = stepClub(this._activeClub(), dir, this._lie());
     this._syncTempo();
@@ -727,6 +770,7 @@ class GolfGame {
   // ---------------------------------------------------------------- the swing ----
   _tap(atMs) {
     if (this.anim) { this._skipAnim(); return; }
+    if (this.intro) this._endIntro();
     if (this.holed) { this._renderSetup(); return; }
     // `atMs` is the input event's own timestamp when the caller has one - see the swing button's
     // binding. Everything downstream is a pure function of it, so the shot is resolved against
@@ -813,8 +857,19 @@ class GolfGame {
    *  changing about it (§13 flaw 7). Ours is ~4.5 s and skippable. */
   _skipAnim() {
     if (!this.anim) return;
-    const total = this.anim.dur + (this.anim.res && this.anim.res.rollMs ? this.anim.res.rollMs : 0);
-    this.anim.t0 = performance.now() - total - 1;   // also skips any windup still to run
+    const roll = (this.anim.res && this.anim.res.rollMs) ? this.anim.res.rollMs : 0;
+    const el = performance.now() - this.anim.t0;
+    // A SKIP DURING THE FLIGHT LANDS THE BALL; IT DOES NOT END THE SHOT. Skipping used to jump
+    // straight to the rest position, which threw away the bounce and the run-out - a second half
+    // that is 3.4 s long and carries a driver 38 yds. Matt, 2026-09-06: "the roll stops short.
+    // Nothing truly rolls out." Anyone impatient enough to tap past a 4.5 s flight was never
+    // seeing the roll at all. A tap now cuts to the landing and the ball bounces and runs from
+    // there; a second tap, once it is on the ground, ends the shot.
+    if (roll > 0 && el < this.anim.dur) {
+      this.anim.t0 = performance.now() - this.anim.dur;
+      return;
+    }
+    this.anim.t0 = performance.now() - this.anim.dur - roll - 1;   // also skips any windup left
   }
 
   /** Score name for a hole, the way a scorecard says it. */
@@ -982,6 +1037,12 @@ class GolfGame {
   _settleShot() {
     const a = this.anim;
     this.anim = null;
+    // A look-around DURING the shot ends with the shot. Holding it would leave the next address
+    // framed on wherever the player was watching from, which is not where their ball is now.
+    if (this.previewDx || this.previewDy) {
+      this.previewDx = 0; this.previewDy = 0; this.returning = false;
+      this.el.tc.setAttribute('data-faded', '0');
+    }
     // WHERE THE SHOT WAS STRUCK FROM IS `a.from`, NOT `this.ball` (2026-09-06).
     //
     // This used to read `const from = this.ball`, and both callers in `_frame` do
@@ -1112,10 +1173,60 @@ class GolfGame {
     // ON THE GREEN IT IS ALMOST CENTRED. That offset exists to show a fairway the ball is about to
     // fly up; a putt's target is a few feet away, so pushing the ball to the bottom of the frame
     // just spends the top half of the screen on whatever is behind the green.
-    const want = this.ball[1] + this.cam.halfH * (this._mustPutt() ? 0.12 : 0.5);
+    let want = this.ball[1] + this.cam.halfH * (this._mustPutt() ? 0.12 : 0.5);
+    want = this._keepCupClear(want);
     this.cam.x = this.ball[0];
     this.cam.y = snap ? want : this.cam.y + (want - this.cam.y) * 0.18;
     this.cam.clamp();
+  }
+
+  /** THE HOLE IS NEVER UNDERNEATH THE CONTROLS. Matt, 2026-09-06: "the hole is behind the aim
+   *  button or the power/aim meter... I need the hole to never be covered by the on screen
+   *  controls or anything."
+   *
+   *  The HUD floats OVER a full-bleed canvas (that is the whole layout), so the course keeps
+   *  drawing behind the aim row, the club tile and the swing button - and on the green, where the
+   *  camera is nearly centred on the BALL, a cup a few feet the other side of it lands in that
+   *  bottom band and is simply not visible.
+   *
+   *  The clear band is MEASURED from the HUD's own boxes rather than hardcoded, so it stays right
+   *  when a panel changes size or a phone's safe area moves it. Returns a camera y that puts the
+   *  cup inside the band; if the ball and the cup cannot both fit (they are further apart than the
+   *  clear band is tall) the ball wins, because that is the one the player is about to hit. */
+  _keepCupClear(wantY) {
+    if (!this.cam || !this.el || !this.canvas) return wantY;
+    const pin = this.hole.pin;
+    // Only worth doing when the cup is actually in play for this shot; a pin 200 yds away is off
+    // the top of a 95 yd frame whatever we do, and forcing it in would frame the wrong thing.
+    if (distYd(this.ball, pin) > this.cam.halfH * 1.6) return wantY;
+    const view = this.canvas.getBoundingClientRect();
+    if (view.height < 8) return wantY;
+    const M = 14;                                    // breathing room past the panel edge, px
+    let top = 0;
+    let bottom = view.height;
+    for (const key of ['tl', 'tc', 'tr']) {
+      const n = this.el[key];
+      if (!n || n.hidden) continue;
+      const r = n.getBoundingClientRect();
+      if (r.height > 0) top = Math.max(top, r.bottom - view.top + M);
+    }
+    for (const key of ['bl', 'br']) {
+      const n = this.el[key];
+      if (!n || n.hidden) continue;
+      const r = n.getBoundingClientRect();
+      if (r.height > 0) bottom = Math.min(bottom, r.top - view.top - M);
+    }
+    if (bottom - top < view.height * 0.25) return wantY;   // nothing sane left to aim at
+    // Screen y of a world y is (cam.y - Y) * ppy + height/2, so keeping a point inside
+    // [top, bottom] is a range on cam.y.
+    const half = view.height / 2;
+    const lo = (y) => y + (top - half) / this.cam.ppy;      // lowest cam.y that keeps y above `top`
+    const hi = (y) => y + (bottom - half) / this.cam.ppy;   // highest that keeps it above `bottom`
+    const loCup = lo(pin[1]), hiCup = hi(pin[1]);
+    const loBall = lo(this.ball[1]), hiBall = hi(this.ball[1]);
+    const loBoth = Math.max(loCup, loBall), hiBoth = Math.min(hiCup, hiBall);
+    if (loBoth <= hiBoth) return Math.min(hiBoth, Math.max(loBoth, wantY));
+    return Math.min(hiBall, Math.max(loBall, wantY));       // both will not fit: keep the ball
   }
 
   _frame = () => {
@@ -1123,6 +1234,29 @@ class GolfGame {
     const now = performance.now();
     let height = 0;
     let ballPos = this.ball;
+
+    // THE OPENING FLYOVER, before anything else can move the camera. It owns cam.x/cam.y outright
+    // while it runs, so `_aimCamera` is skipped below rather than being allowed to fight it.
+    if (this.intro) {
+      if (!this.intro.t0) {
+        this.intro.t0 = now;
+        this.cam.setWidth(VIEW_W_YDS);
+        this.cam.x = this.hole.pin[0];
+        this.cam.y = this.hole.pin[1];
+        this.cam.clamp();
+        this.intro.from = [this.cam.x, this.cam.y];
+        // The address pose this hands over to, computed once so the arrival is exact.
+        this.intro.to = [this.ball[0], this.ball[1] + this.cam.halfH * 0.5];
+        this.el.tc.setAttribute('data-faded', '1');
+      }
+      const el = now - this.intro.t0;
+      const q = Math.min(1, Math.max(0, el - INTRO_HOLD_MS) / INTRO_MOVE_MS);
+      const e = q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2;   // ease in AND out
+      this.cam.x = this.intro.from[0] + (this.intro.to[0] - this.intro.from[0]) * e;
+      this.cam.y = this.intro.from[1] + (this.intro.to[1] - this.intro.from[1]) * e;
+      this.cam.clamp();
+      if (q >= 1) this._endIntro();
+    }
 
     if (this.anim) {
       const el = now - this.anim.t0;
@@ -1194,7 +1328,7 @@ class GolfGame {
       // bar can express - the alternative is a swing that hangs there for ever waiting for a tap
       // the player has already failed to make.
       if (this.swing.read(now).expired) { this.swing.tap(now); this._fire(); this._paintHud(); }
-      this._aimCamera(false);
+      if (!this.intro) this._aimCamera(false);
     }
 
     // THE FREE LOOK HOLDS WHERE YOU LEAVE IT. It used to ease back the instant the finger lifted,

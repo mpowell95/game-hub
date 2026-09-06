@@ -650,8 +650,13 @@ console.log('\n-- 9c. IT BOUNCES, THEN IT ROLLS --');
   const wedge = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
   let wpeak = 0;
   for (let i = 0; i <= 200; i++) wpeak = Math.max(wpeak, SH.groundPoint(i / 200, wedge.rollYd, wedge.apex, 'fairway').height);
-  ok(`a lob wedge's hop is a third of its ${wedge.rollYd.toFixed(1)} yd run-out at most (${wpeak.toFixed(2)} yd)`,
-    wpeak <= wedge.rollYd * 0.34 + 1e-9);
+  // The ceiling was a third of the run-out and is now 0.45 of it (2026-09-06). The rule this
+  // guards - a short run-out must not become a leap - is unchanged; the number moved with the hop
+  // height, which was raised because the cap was flattening the bounce on the shots a player
+  // watches most closely (an approach pitching on a green runs only a few yards). A lob wedge
+  // peaks 1.3 yd on a 2.9 yd run-out: a bounce, not a leap.
+  ok(`a lob wedge's hop stays under half its ${wedge.rollYd.toFixed(1)} yd run-out (${wpeak.toFixed(2)} yd)`,
+    wpeak <= wedge.rollYd * 0.46 + 1e-9);
 }
 
 console.log('\n-- 9d. ROLL SPEED BY SURFACE --');
