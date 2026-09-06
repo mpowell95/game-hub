@@ -278,16 +278,34 @@ const pv = (spec) => makeHole({ treeTypes: TREE_TYPES, ...spec });
 
 export const HOLE_4 = pv({
   n: 4, par: 4, nickname: 'The Chute',
-  // Dead straight, and that is the trick: the belts squeeze the corridor to 9 yards exactly where
-  // a drive lands, so the safe play is a 3 wood short of the gate. The green is the first one on
-  // the property with sand across its front, so the lay-back still has to be flown in.
-  path: [[0, 5], [2, 120], [7, 250], [5, 372]],
+  // The belts squeeze the corridor to 9 yards exactly where a drive lands, so the safe play is a
+  // 3 wood short of the gate. The green has sand across its front, so the lay-back still has to be
+  // flown in.
+  //
+  // RE-CUT 2026-09-06 with the rest of the front nine. It used to run [[0,5],[2,120],[7,250],
+  // [5,372]] - 4 yards of offset from the straight tee-to-pin line over 367 yards, which is a
+  // ruler. THE LEAN IS SET IN THE FIRST 70 YARDS and then the hole runs straight: the tee shot is
+  // aimed a long way left of the pin and everything after it is honest. No other hole out here
+  // turns before the ball has left the tee, and it costs nothing on the opening stretch - a hole
+  // that asks you to AIM is not a hole that asks you to gamble.
+  path: [[0, 5], [-18, 70], [-38, 145], [-42, 235], [-36, 320], [-30, 372]],
   fw: [{ at: 0, w: 17 }, { at: 0.45, w: 9 }, { at: 0.7, w: 11 }, { at: 1, w: 15 }],
   belts: { left: { depth: 26, spacing: 8, seed: 401 }, right: { depth: 26, spacing: 8, seed: 402 } },
   bunkers: [{ at: 0.5, side: 1, off: 15, r: 6, kind: 'fairwayBunker' }],
-  water: [{ at: 1, side: -1, off: 36, rx: 17, ry: 24, seed: 403 }],
+  water: [{ at: 1, side: 1, off: 36, rx: 17, ry: 24, seed: 403 }],
+  // A TEARDROP THE OTHER WAY UP FROM HOLE 12'S. That one has its point AT you, so the target
+  // narrows the harder you carry it. This one is fat at the front and tapers away behind, so a
+  // shot that lands is safe and one that flies the pin runs out of green. Same family, opposite
+  // question, which is the whole reason the shapes are radius functions with an angle.
   guard: ['frontJaws', 'rightSand'],
-  slope: 'spine',
+  greenShape: 'teardrop',
+  greenAngle: 0,
+  slope: 'gentle',
+  // NO SIZE OVERRIDE, and that was checked rather than assumed. A teardrop's point is a few yards
+  // of radius by construction - measured 4.0-19.3 here, against the three already shipped: hole 12
+  // 3.6-16.6, hole 15 4.2-18.8, hole 18 3.8-16.9. The tip is the TAIL of the drop, at the BACK on
+  // this hole, and nobody aims at it. Hole 15's `greenR` bump was for the opposite case, where the
+  // notch ate the part of the green being played to.
 });
 
 export const HOLE_5 = pv({
@@ -298,7 +316,13 @@ export const HOLE_5 = pv({
   fw: [{ at: 0, w: 16 }, { at: 0.4, w: 13 }, { at: 0.75, w: 11 }, { at: 1, w: 14 }],
   belts: { left: { depth: 24, spacing: 9, seed: 501 }, right: { depth: 24, spacing: 9, type: 1, seed: 502 } },
   bunkers: [{ at: 0.55, side: -1, off: 17, r: 8, kind: 'fairwayBunker' }],
+  // BROADSIDE: long and narrow turned 90 degrees ACROSS the approach, so the green is wide and
+  // shallow and depth is the only thing that matters. On the longest par 4 on the property that is
+  // the right ask - the approach is a long iron, and a long iron's miss is long or short.
+  // Hole 7 uses the same family END-ON for the opposite reason.
   guard: ['leftSand', 'backSand'],
+  greenShape: 'long',
+  greenAngle: 90,
   slope: 'tier',
 });
 
@@ -309,40 +333,78 @@ export const HOLE_6 = pv({
   path: [[0, 5], [0, 80], [2, 152]],
   fw: [{ at: 0, w: 13 }, { at: 1, w: 12 }],
   belts: { left: { depth: 28, spacing: 7, seed: 601 }, right: { depth: 28, spacing: 7, seed: 602 } },
+  // THE ONE GENUINELY FLAT GREEN ON THE PROPERTY, which is what makes the sentence above literal
+  // rather than a claim. `bowl` was doing that job and it is hole 12's green; a bowl is not kind,
+  // it is a different kind of unkind, because it feeds a good shot away from a pin on the rim.
+  // Flat is the only thing on the list that asks nothing of the read, and one of those is right.
   guard: ['leftSand', 'rightSand'],
-  slope: 'bowl',
+  greenShape: 'round',
+  slope: 'flat',
 });
 
 export const HOLE_7 = pv({
   n: 7, par: 5, nickname: 'Long Meadow',
-  // THE FIRST FORCED LAY-UP ON THE PROPERTY. A creek crosses the whole corridor at 340 yards, so
-  // the second shot is a decision rather than a swing: a 3 wood is in the water, and the club that
-  // stops short of it leaves a full wedge rather than a chip.
-  path: [[0, 5], [-8, 130], [14, 280], [4, 400], [10, 505]],
-  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 12 }, { at: 0.78, w: 10 }, { at: 1, w: 14 }],
-  belts: { left: { depth: 22, spacing: 10, seed: 701 }, right: { depth: 22, spacing: 10, seed: 702 } },
-  // A CROSS HAZARD ONLY FORCES A LAY-UP IF A DRIVER CANNOT CARRY IT. Measured: bands centred at
-  // 188-205 yds did almost nothing, because the drive carries 215 and simply flew them. The band
-  // has to sit WHERE THE DRIVE LANDS - centred near 220, deep enough that clearing it needs more
-  // than the bag has - so the choice is lay up short of 200 or be in it.
+  // THE SECOND SHOT IS THE HOLE, twice over: the creek crosses the corridor at 408 yards - which
+  // is exactly where a drive plus a 3 wood comes down - AND the corner turns right in the same
+  // place. So going for it means carrying water and bending the ball, and laying up leaves a full
+  // wedge from the straight part. Nothing else out here asks both questions with one swing.
+  //
+  // RE-CUT 2026-09-06. It used to bend right in its first third and straighten out, which put the
+  // shape where the drive was and left the interesting shot flat. THE CORNER IS NOW AT 71-92 % OF
+  // THE HOLE, and the drive is honest.
+  path: [[0, 5], [-4, 120], [2, 250], [6, 365], [28, 428], [52, 478], [66, 522], [70, 552]],
+  fw: [{ at: 0, w: 15 }, { at: 0.38, w: 9 }, { at: 0.52, w: 13 }, { at: 0.66, w: 9 }, { at: 0.78, w: 9 }, { at: 1, w: 13 }],
+  belts: { left: { depth: 24, spacing: 9, seed: 701 }, right: { depth: 24, spacing: 9, seed: 702 } },
+  // THE LAY-UP HAS TO COST SOMETHING TOO, or moving the corner late just hands the hole away: with
+  // the drive honest and the second shot free to stop in front of the creek, this measured -0.46 -
+  // the easiest hole on the property, on a course whose complaint was that every hole was a birdie.
+  // Sand either side of where a lay-up finishes, and the corridor necked to 9 yards through the
+  // whole of it, so stopping short is a placement rather than a default.
+  bunkers: [
+    { at: 0.62, side: -1, off: 14, r: 7, kind: 'fairwayBunker', seed: 703 },
+    { at: 0.67, side: 1, off: 13, r: 7, kind: 'fairwayBunker', seed: 704 },
+  ],
+  // The band used to sit at 222, along with every other cross on the course - a lay-up off the
+  // tee, on a hole whose own comment described a creek at 340. It is where the shot with a
+  // decision in it actually lands now. See "The back nine, as a SET" in golf/CLAUDE.md.
   cross: [{ yd: 408, kind: 'water', depth: 30 }],
+  // END-ON: the same `long` family as hole 5, turned to point straight back down the approach, so
+  // this green is DEEP and NARROW where that one is wide and shallow. After a shot that has just
+  // carried water and turned a corner, the miss that matters is left and right, not long and short.
   guard: ['frontSand', 'rightSand', 'backSand'],
+  greenShape: 'long',
+  greenAngle: 0,
   slope: 'saddle',
   greenR: 13,
 });
 
 export const HOLE_8 = pv({
   n: 8, par: 4, nickname: 'Short Straw',
-  // 293 yards, so a driver reaches - and the green is ringed with sand, so a driver that does not
-  // finish ON it is in a bunker every time. The lay-up to a wedge is genuinely the better play,
-  // which is the whole idea of a short par 4.
-  path: [[0, 5], [6, 110], [12, 210], [10, 298]],
+  // The shortest par 4 on the property, and the tee shot is a placement rather than a swing: waste
+  // sand crosses at 262, so a big drive runs into it and the club that stops short leaves a wedge.
+  //
+  // RE-CUT 2026-09-06. It was dead straight (6 yards of offset over 293), so the placement was the
+  // only thing in it. IT TURNS LEFT LATE now - the corner is at about 200 yards, which is past
+  // where the lay-up finishes - so the WEDGE is played round a bend and the drive is not.
+  path: [[0, 5], [4, 95], [2, 185], [-16, 232], [-34, 270], [-40, 296]],
   fw: [{ at: 0, w: 13 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
   belts: { left: { depth: 22, spacing: 9, seed: 801 }, right: { depth: 26, spacing: 8, seed: 802 } },
-  cross: [{ yd: 262, kind: 'waste', depth: 24 }],
+  // `over: 3` rather than the default 8: this band sits where the corridor is BENDING, and the
+  // faces fan apart at a corner, so the stock reach past the rough put cream sand out in open
+  // country beyond the tree belt. A hazard drawn outside the hole is not a hazard, it is a mistake.
+  cross: [{ yd: 262, kind: 'waste', depth: 18, over: 3 }],
+  // THIS GREEN WAS HOLE 16'S, EXACTLY: round + crown + ringSand, radius 11 against its 10. Two
+  // greens on one course that are the same idea at the same size are one green drawn twice, and
+  // neither of them was doing anything the other was not. 16 keeps it - the Postage Stamp's whole
+  // point is that there is nothing clever about it - and this one becomes a CLOVER that sheds to
+  // one side: the lobes are three separate pin areas, and a wedge in the wrong one leaves a putt
+  // across a notch rather than a tap-in. On a hole whose defence is a lay-up, the second shot
+  // should be where the difficulty is.
   guard: ['ringSand'],
-  slope: 'crown',
-  greenR: 11,
+  greenShape: 'clover',
+  greenAngle: 30,
+  slope: 'leftShed',
+  greenR: 12,
 });
 
 export const HOLE_9 = pv({
@@ -354,8 +416,14 @@ export const HOLE_9 = pv({
   fw: [{ at: 0, w: 14 }, { at: 0.45, w: 9 }, { at: 1, w: 12 }],
   belts: { left: { depth: 24, spacing: 9, type: 1, seed: 901 }, right: { depth: 24, spacing: 9, seed: 902 } },
   sentinels: [{ at: 0.52, side: -1, off: 20, n: 6, spread: 9, type: 2 }],
+  // A PEANUT TURNED ACROSS THE SHOT. Its waist is what makes the closing hole of the front nine
+  // ask a question the other eight do not: the two lobes are effectively two small greens, and an
+  // approach that lands between them is on the narrowest part of the surface with a spine running
+  // through it. `saddle` was hole 7's slope, two holes earlier and in the same nine.
   guard: ['leftSand', 'backSand'],
-  slope: 'saddle',
+  greenShape: 'peanut',
+  greenAngle: 140,
+  slope: 'spine',
 });
 
 export const HOLE_10 = pv({

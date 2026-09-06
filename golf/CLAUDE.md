@@ -2510,3 +2510,111 @@ Both are env-gated so a normal run is unchanged:
   coordinate a blocked ball was standing on. Every fix above came from reading that coordinate; the
   first three guesses at the cause (the sentinels, the belt density, the green guards) were all
   wrong, and all three looked plausible.
+
+## The front nine, and the two things that only show up in a set (2026-09-06)
+
+Same pass as the back nine, and it found the same class of bug: something wrong in code that no
+hole spec touches, invisible until eighteen holes are drawn side by side.
+
+### Holes 1-3 are NOT re-cut, and that is deliberate
+
+They are the three holes the reference footage documents (`golf-reference-spec.md` §17.1) and the
+standing instruction on this rebuild is that the reference is cloned rather than improved. They are
+also the frozen `pinevalley3` round. Their centrelines, greens, slope grids and hazards stay as
+authored; only hole 1's corridor was ever re-cut, back in the fairway pass, and its green was not.
+
+**Matt asked for hole 3 to be swapped with an easier hole** (2026-09-06). It was not done, and the
+reason is a measurement rather than a preference: he called it hard when it measured **+2.98** and
+then **+1.25**, and both of those numbers were the OAK SOFTLOCK, not the hole. With that fixed
+(see "The back nine, as a SET") hole 3 measures **+0.13**, in line with hole 1 (-0.21) and hole 2
+(-0.58). The problem the swap was going to solve no longer exists, and the swap would cost the
+reference fidelity of the opening three. **His call, and he was told; if he still wants it, do it.**
+
+**The renumbering itself is safe from THE LAW's side, and that was CHECKED rather than assumed**
+(rule 1, rule 8). A fresh RTDB read on 2026-09-06: **237 player device records, zero with
+`gf.bestHole`, zero with `bestRoundByCourse`.** No golf record of any kind exists anywhere, so no
+`pinevalley:<n>` key can be repurposed out from under a stored best. That check has to be re-run
+before any future renumbering, because the moment one round is recorded it stops being true.
+
+### What 4-9 got
+
+| | routing, before | routing, now | green | slope |
+|---|---|---|---|---|
+| 4 | **straight** (4 yd of offset over 367) | LEFT, and the lean is set in the first 70 yards | teardrop / 0 | gentle |
+| 5 | right, mid | unchanged | long / **90 - broadside** | tier |
+| 6 | straight par 3 | unchanged | round | **flat** |
+| 7 | right in its first third | RIGHT, and the corner is at 71-92 % | long / **0 - end-on** | saddle |
+| 8 | **straight** (6 yd over 293) | LEFT late, the corner past the lay-up | clover / 30 | leftShed |
+| 9 | left at the landing zone | unchanged | peanut / 140 | spine |
+
+**The two `long` greens are the point of that family, not a repeat.** Hole 5 turns it 90 degrees so
+the green is wide and shallow and the only miss that matters is long or short - which is the right
+ask after a long iron, on the longest par 4 out here. Hole 7 turns it to 0 so the green is deep and
+narrow and the miss that matters is left or right - which is the right ask after a shot that has
+just carried water and bent round a corner. Same radius function, opposite question.
+
+**Hole 6's green is the one genuinely FLAT green on the property.** It used to be `bowl`, which is
+hole 12's, and a bowl is not kind - it is a different kind of unkind, because it feeds a good shot
+away from a pin on the rim. `flat` is the only entry in `SLOPE_PRESETS` that asks nothing of the
+read, and one hole out of thirty-six should be that hole.
+
+### HOLE 8'S GREEN WAS HOLE 16'S, EXACTLY
+
+`round` + `crown` + `ringSand`, radius 11 against 16's 10. Two greens on one course that are the
+same idea at the same size are one green drawn twice, and neither was doing anything the other was
+not. 16 keeps it - the Postage Stamp's whole point is that there is nothing clever about it - and 8
+became a clover that sheds to one side, so a wedge in the wrong lobe leaves a putt across a notch.
+
+**Nothing in a hole spec could have shown this.** Both holes read perfectly sensibly on their own
+page; it took a table of all eighteen `greenShape`/`slope`/`guard` triples to see that two rows were
+identical.
+
+### CROSS HAZARDS WERE SLABS
+
+Their two long edges always followed the corridor, but the **upstream and downstream faces were
+straight lines** drawn between the first and last station in the depth window. So every creek and
+waste band on both courses rendered as a hard-edged parallelogram laid across the hole - which is
+the same *"almost perfect rectangles"* the fairways were pulled up for, one layer out. On hole 8's
+re-cut, where the corridor bends through the band, it read as a car park.
+
+Each face is now a low-frequency wave across the corridor, built the way `blob()` builds a pond:
+**harmonics 1 and 2 only**, so there is no wavelength short enough to make a spike and no smoothing
+pass is needed. The two faces carry their own phases, so the band's DEPTH varies rather than the
+whole thing sliding up and down the hole, and the wave is floored at 0.35 of the half-depth so a
+face can bulge but never shear through the other one. Seeded from the hole, so it is the same creek
+on every device.
+
+**It fixed six holes on the back nine as well as three on the front**, which is the argument for
+fixing the generator rather than the hole.
+
+One knock-on, and it is real: at a CORNER the two faces fan apart, so the stock 8-yard reach past
+the rough put hole 8's cream sand out in open country beyond the tree belt. `over` is authorable per
+hazard and that band uses 3. **A hazard drawn outside the hole is not a hazard, it is a mistake.**
+
+### Hole 7 was the easiest hole on the property, and only length fixed it
+
+At 523 yards it was reachable in two, so the probe laid up, wedged on and measured **-0.46** - the
+lowest number on either course, on a course whose complaint was that everything was a birdie.
+
+**Two fixes that did almost nothing are worth recording**, because they are the obvious ones:
+necking the corridor to 9 yards through the lay-up zone moved it to -0.42, and putting a bunker
+either side of where the lay-up finishes moved it to -0.42 as well. Neither works, and the reason is
+in the probe: it takes the first DRY option that advances the ball, so a fairway bunker does not
+deter it at all - it only costs power and accuracy on the NEXT shot, which on a par 5 with a wedge
+left is nothing. This is the same finding `js/CLAUDE.md` records for Red Mesa 13-15: **in this
+engine what costs strokes is driving difficulty and length, not green-side decoration.**
+
+Lengthened to 559 so it is a genuine three-shot hole: **+0.04**. Pine Valley's par 5s are now 609,
+559, 556 and 574 - all four unreachable in two, which is a real loss of variety and is written down
+here rather than pretended away. A reachable par 5 needs its reward to cost something the probe can
+feel, and that is a bigger job than this pass.
+
+### Measured, per block of three
+
+```
+pinevalley   1-3 -0.7   4-6 +0.3   7-9 -0.3   10-12 +1.8   13-15 +2.5   16-18 +1.6
+redmesa      1-3 -0.5   4-6 -0.2   7-9 +0.5   10-12 +1.2   13-15 -0.3   16-18 +0.6
+```
+
+Blocked (unfinishable) runs across 432 Pine Valley rounds: **5**, unchanged - all still deep inside
+the 26-yard belts on 13 and 17. Still open, still pre-existing.

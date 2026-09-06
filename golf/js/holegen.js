@@ -827,17 +827,53 @@ export function makeHole(spec) {
     // authored against the ladder (drive 215, 3 wood 195) rather than against the hole's length.
     const at = cx.yd != null ? cx.yd : cx.at * length;
     const depth = cx.depth == null ? 22 : cx.depth;
-    const inner = [];
-    const outer = [];
-    for (const st of stations) {
-      if (st.s < at - depth / 2 || st.s > at + depth / 2) continue;
-      const wl = roughAt(st.t, st.s, -1, st) + (cx.over == null ? 8 : cx.over);
-      const wr = roughAt(st.t, st.s, +1, st) + (cx.over == null ? 8 : cx.over);
-      inner.push([+(st.x + st.nx * wr).toFixed(1), +(st.y + st.ny * wr).toFixed(1)]);
-      outer.push([+(st.x - st.nx * wl).toFixed(1), +(st.y - st.ny * wl).toFixed(1)]);
-    }
-    if (inner.length < 2) continue;
-    const poly = [...inner, ...outer.reverse()];
+
+    // ITS TWO FACES UNDULATE; IT IS NOT A SLAB. The band's long edges always followed the corridor,
+    // but its UPSTREAM and DOWNSTREAM faces were straight lines drawn between the first and last
+    // station in the depth window - so every creek and waste band on both courses rendered as a
+    // hard-edged parallelogram laid across the hole. On hole 8's re-cut, where the corridor bends
+    // through the band, it read as a car park. That is the same "almost perfect rectangles" Matt
+    // pulled the fairways up for, one layer out.
+    //
+    // Each face is now a low-frequency wave across the corridor, built the same way `blob()` builds
+    // a pond: harmonics 1 and 2 only, so there is no wavelength short enough to make a spike, and
+    // the two faces get their own phases so the band's DEPTH varies rather than the whole thing
+    // sliding up and down the hole. Seeded from the hole, so it is the same creek every time.
+    const stAt = (sv) => {
+      let i = 0;
+      while (i < stations.length - 2 && stations[i + 1].s < sv) i++;
+      const a = stations[i]; const b = stations[Math.min(stations.length - 1, i + 1)];
+      const f = b.s === a.s ? 0 : Math.max(0, Math.min(1, (sv - a.s) / (b.s - a.s)));
+      return { t: a.t + (b.t - a.t) * f, s: sv,
+        x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f,
+        nx: a.nx + (b.nx - a.nx) * f, ny: a.ny + (b.ny - a.ny) * f };
+    };
+    const crnd = mulberry32((cx.seed == null ? seed0 + 917 + ci * 31 : cx.seed) >>> 0);
+    const face = [0, 1].map(() => ({
+      a1: 0.16 + crnd() * 0.20, p1: crnd() * TAU,
+      a2: 0.10 + crnd() * 0.14, p2: crnd() * TAU,
+    }));
+    // 1 at the middle of the face, less at its ends: a hazard's edge bulges, it does not shear.
+    const faceS = (which, u) => {
+      const f = face[which]; const th = u * Math.PI;
+      const k = 1 + f.a1 * Math.cos(th + f.p1) + f.a2 * Math.cos(2 * th + f.p2);
+      return at + (which ? +1 : -1) * (depth / 2) * Math.max(0.35, k);
+    };
+    const NC = 13;
+    const edgeW = (st, side) => roughAt(st.t, st.s, side, st) + (cx.over == null ? 8 : cx.over);
+    const across = (which, rev) => {
+      const out = [];
+      for (let i = 0; i <= NC; i++) {
+        const u = rev ? 1 - i / NC : i / NC;
+        const st = stAt(faceS(which, u));
+        const wl = edgeW(st, -1); const wr = edgeW(st, +1);
+        const w = -wl + (wl + wr) * u;                    // left edge at u=0, right edge at u=1
+        out.push([+(st.x + st.nx * w).toFixed(1), +(st.y + st.ny * w).toFixed(1)]);
+      }
+      return out;
+    };
+    if (at - depth / 2 < stations[0].s || at + depth / 2 > stations[stations.length - 1].s) continue;
+    const poly = [...across(0, false), ...across(1, true)];
     if ((cx.kind || 'water') === 'water') specWater.push({ poly });
     else specBunkers.push({ poly, kind: cx.kind === 'waste' ? 'fairwayBunker' : cx.kind });
   }
