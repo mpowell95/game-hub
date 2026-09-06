@@ -269,7 +269,8 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   //    Pine Valley 3's lone fairway oak, and being ten yards short of it is the whole hole.
   const near = trees.reduce((n, t) => {
     const ty = hole.treeTypes[t.type];
-    return n + (Math.hypot(from[0] - t.x, from[1] - t.y) <= Math.max(ESCAPE_YD, ty.canopy * 1.6) ? 1 : 0);
+    const reach = Math.max(ESCAPE_YD, ty.canopy * (t.s || 1) * 1.6);
+    return n + (Math.hypot(from[0] - t.x, from[1] - t.y) <= reach ? 1 : 0);
   }, 0);
   const inWood = near >= 3 || surfaceAt(hole, from[0], from[1]) === 'trees';
 
@@ -284,8 +285,14 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   //
   // THE HOLE'S OWN FEATURE SURVIVES THIS: the designed shot on 3 is played from ten yards further
   // back than that, where the oak still blocks exactly as it always has.
+  // A TREE'S OWN SIZE (`t.s`, from holes.js's `treeScale`) SCALES ITS CANOPY AND TRUNK HERE TOO.
+  // The renderer draws every crown at that same multiple, and this file's contract with it is that
+  // what is painted is what stops the ball - applying the size in one place and not the other would
+  // give the game trees you can see and fly through, and trees you cannot see and cannot pass.
   const state = trees.map((t) => {
-    const type = hole.treeTypes[t.type];
+    const ty = hole.treeTypes[t.type];
+    const sc = t.s || 1;
+    const type = sc === 1 ? ty : { ...ty, trunk: ty.trunk * sc, canopy: ty.canopy * sc };
     const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
     return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy + SKIRT_YD || (inWood && d0 <= Math.max(ESCAPE_YD, type.canopy * 1.6)) };
   });
