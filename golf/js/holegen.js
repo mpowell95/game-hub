@@ -662,12 +662,32 @@ export function makeHole(spec) {
     // the hole could not be finished.
     const nose = (st) => 1.5 + 6.5 * (0.5 + 0.5 * Math.sin(st.s / g.l + g.p)) * g.a;
     const deep = (st) => depth * (1 + 0.55 * Math.sin(st.s / g.dl + g.dp) * g.da);
-    const poly = ribbon(stations, side,
-      (t, ss, sd, st) => roughAt(t, ss, sd, st) + nose(st),
-      (t, ss, sd, st) => roughAt(t, ss, sd, st) + nose(st) + deep(st), from, to);
+    const innerAt = (t, ss, sd, st) => roughAt(t, ss, sd, st) + nose(st);
+    const outerAt = (t, ss, sd, st) => roughAt(t, ss, sd, st) + nose(st) + deep(st);
+    const poly = ribbon(stations, side, innerAt, outerAt, from, to);
     if (poly.length < 6) continue;
-    surfaces.push({ kind: 'trees', poly });
-    treeBelts.push({ poly, type: b.type || 0, spacing: b.spacing || 9, seed: b.seed || (seed0 + (side > 0 ? 7 : 3)) });
+    // THE LIE SURFACE IS INSET FROM THE TREE POLYGON, and this is a deliberate break with the
+    // "one polygon does both" rule the paragraph above states. It has to be, now that the wood
+    // FEATHERS: the surface is painted as dark woodland ground, so wherever the trees thin out -
+    // at the outer edge and, visibly, at both ends of every belt - the ground showed through as a
+    // hard-edged dark slab. On holes 12 and 16 that was a rectangle sitting in open country, which
+    // is the same complaint the feather exists to fix, one layer down.
+    //
+    // Inset, the painted ground always stops well inside the tree cover, so what a player sees at
+    // the edge of a wood is trees thinning into rough rather than a shape ending. The cost is that
+    // the outermost trees stand on ROUGH rather than on the `trees` lie - which is what the edge of
+    // a wood is anyway, and is already true of the bleed strays outside the polygon entirely.
+    const lie = ribbon(stations, side,
+      (t, ss, sd, st) => innerAt(t, ss, sd, st) + 2,
+      (t, ss, sd, st) => Math.max(innerAt(t, ss, sd, st) + 5, outerAt(t, ss, sd, st) - 3),
+      from + 10, to - 10);
+    if (lie.length >= 6) surfaces.push({ kind: 'trees', poly: lie });
+    // `inner` is the belt's FAIRWAY-FACING edge on its own, and `depth` is how deep the wood is.
+    // `expandBelt` needs both: the first to keep its edge strays from bleeding in over the rough,
+    // the second to size the feather to the belt rather than to a constant. Neither is a rule and
+    // neither is read at runtime - they are authoring data for the expansion, like `spacing`.
+    treeBelts.push({ poly, inner: offsetSide(stations, side, innerAt, from, to), depth,
+      type: b.type || 0, spacing: b.spacing || 9, seed: b.seed || (seed0 + (side > 0 ? 7 : 3)) });
   }
 
   const specBunkers = [...(spec.bunkers || [])];

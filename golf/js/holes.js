@@ -80,10 +80,108 @@ export function mulberry32(a) {
  *  ~155 px crown - a pitch of 0.56 diameters, so 1.12 radii. */
 export const BELT_PITCH = 1.15;
 
+/** Distance from a point to a polygon's OUTLINE (not its interior) - the nearest point on any of
+ *  its edges. Used by `expandBelt` to thin a wood out toward its own edge, which needs a distance
+ *  rather than the in/out answer `pointInPoly` gives. */
+export function distToPolyEdge(pt, poly) {
+  const [px, py] = pt;
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]; const [xj, yj] = poly[j];
+    const dx = xj - xi; const dy = yj - yi;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - xi) * dx + (py - yi) * dy) / l2));
+    const ex = xi + dx * t - px; const ey = yi + dy * t - py;
+    const d = ex * ex + ey * ey;
+    if (d < best) best = d;
+  }
+  return Math.sqrt(best);
+}
+
+/** How far INSIDE the belt a tree has to be before the wood is fully closed up - CAPPED AT A THIRD
+ *  OF THE BELT'S OWN DEPTH. A flat 13 yds was measured against a 24 yd belt and left it with no
+ *  core at all (the deepest point in a 24 yd band is 12 yds from an edge), so hole 12's whole left
+ *  wall came out as 29 trees. A feather has to be a fraction of the thing it is feathering. */
+export const BELT_FEATHER_YD = 9;
+/** How far OUTSIDE it strays are still scattered, thinning to nothing. */
+export const BELT_BLEED_YD = 15;
+/** The keep-rate exactly ON the edge - the value both sides of the boundary meet at. */
+const EDGE_KEEP = 0.68;
+
 export function expandBelt(belt, type) {
   const rnd = mulberry32(belt.seed);
-  const { minX, minY, maxX, maxY } = bboxOf(belt.poly);
+  const bb = bboxOf(belt.poly);
+  // The sampling box reaches PAST the belt, because the wood has to bleed out of its own polygon.
+  // A HAND-AUTHORED BELT GETS NEITHER, and that is deliberate. Holes 1 and 3 are the reference
+  // clones: their belts are hand-drawn polygons with no `inner` edge and no matching INSET lie
+  // surface (see holegen.js), so feathering them would expose the dark woodland ground the inset
+  // exists to hide, and bleeding them would scatter strays across the fairway side. `inner` is the
+  // marker for "this belt was generated and the surface under it has been inset to suit".
+  const authored = !(belt.inner && belt.inner.length > 1);
+  const bleed = belt.bleed != null ? belt.bleed : (authored ? 0 : BELT_BLEED_YD);
+  const feather = belt.feather != null ? belt.feather
+    : (authored ? 3 : Math.min(BELT_FEATHER_YD, Math.max(3, (belt.depth == null ? 22 : belt.depth) / 3)));
+  const minX = bb.minX - bleed; const minY = bb.minY - bleed;
+  const maxX = bb.maxX + bleed; const maxY = bb.maxY + bleed;
   const out = [];
+
+  // A WOOD IS NOT A SLAB OF UNIFORM TREES THAT STOPS AT A LINE (2026-09-06).
+  //
+  // Matt, having played both courses: *"The fairway is lined by extremely dense forest that's
+  // impossible to hit out of on every single hole. And the tree line abruptly just ends on every
+  // hole."* Both halves were this function: it filled the belt polygon with a JITTERED UNIFORM
+  // GRID, so the density was identical from the fairway edge to the back of the wood and from the
+  // tee to the green, and it dropped to zero at the polygon boundary in the space of one step.
+  //
+  // Two things change, and they are one continuous function of SIGNED DISTANCE to the belt's edge
+  // so there is no seam at the boundary itself:
+  //
+  //  - **The edge feathers, both ways.** Inside, the keep-rate ramps from EDGE_KEEP at the boundary
+  //    to 1 at `feather` yards in, so the first few yards of wood are scattered trunks a ball can
+  //    be played through and only the core is a wall. Outside, it decays from the same EDGE_KEEP to
+  //    nothing over `bleed` yards, so the wood ENDS IN STRAYS rather than at a ruled line - at its
+  //    sides and, which is the visible half, at the tee and green ends of every belt.
+  //  - **The density breathes ALONG the hole.** Two harmonics, seeded per belt, so a wood has
+  //    thick stretches and near-clearings instead of being the same wood for 400 yards. The
+  //    wavelengths (about 34 and 89 yds) are long enough that a clearing is somewhere you can aim
+  //    at, not a gap you find by luck.
+  //
+  // THE STRAYS ARE OUTSIDE THE `trees` LIE, and that is correct rather than an oversight: the belt
+  // polygon is also the lie surface, so a ball among the strays is standing in ROUGH with trees
+  // around it - which is what the edge of a wood is. `shot.js`'s escape rules already handle a ball
+  // ringed by canopies whatever it is standing on (`near >= 3`), so this cannot wall anything in.
+  const wphase = [rnd() * 6.283, rnd() * 6.283];
+  // `y` is up the hole by the hole-format's own definition, so a wave in y is a wave ALONG the
+  // hole for most belts; the small x term stops it degenerating into stripes on a belt that runs
+  // sideways round a dogleg.
+  // A GENTLE TEXTURE, NOT CLEARINGS. The first version of this ran 0.10 to 1.0, which really did
+  // give a wood thick stretches and near-clearings - and a clearing SHOWS THE SLAB UNDERNEATH,
+  // because the belt polygon is also the `trees` lie surface and it is painted as a dark ground.
+  // Hollowing out the wood exposed a hard-edged dark rectangle on holes 12 and 16, which is a worse
+  // version of the problem being fixed. Between-hole variety comes from the authored `spacing`
+  // (which is a real dial again, see `step` below); this is only a bit of unevenness on top.
+  const density = (x, y) => {
+    const u = y + x * 0.35;
+    const w = 0.90 + 0.11 * Math.sin(u / 34 + wphase[0]) + 0.07 * Math.sin(u / 89 + wphase[1]);
+    return Math.max(0.76, Math.min(1, w));
+  };
+  // STRAYS NEVER BLEED TOWARD THE FAIRWAY. `belt.inner` is the belt's own fairway-facing edge, and
+  // a tree outside the polygon is dropped if that is the edge it is nearest to. Without this the
+  // bleed scattered specimens into the light rough on both sides of every hole and MADE THE GAME
+  // HARDER - measured, Pine Valley's closing block went from +1.6 to +4.1 and four holes became
+  // unfinishable, which is the exact opposite of the complaint being fixed. Past the ENDS of a belt
+  // there is no inner edge nearby, so the strays that fix the abrupt tree line are unaffected.
+  const innerEdge = belt.inner && belt.inner.length > 1 ? belt.inner : null;
+  const keepAt = (x, y) => {
+    const d = distToPolyEdge([x, y], belt.poly);
+    const inside = pointInPoly([x, y], belt.poly);
+    if (!inside) {
+      if (d > bleed) return 0;
+      if (innerEdge && distToPolyEdge([x, y], innerEdge) <= d + 0.01) return 0;
+      return EDGE_KEEP * (1 - d / bleed) ** 2 * density(x, y);
+    }
+    return (EDGE_KEEP + (1 - EDGE_KEEP) * Math.min(1, d / feather)) * density(x, y);
+  };
   // A BELT HAS TO CLOSE UP INTO A WALL. Measured on the reference (s1-tee frame 30): a single
   // canopy is ~155 device px across and the belt beside the fairway is one continuous mass 246 px
   // wide by 1040 tall - individual crowns are only readable as bumps along its edge. Ours were
@@ -100,13 +198,35 @@ export function expandBelt(belt, type) {
   // 2 yd centres: an impassable thicket that softlocked the ball on the first run of the 36-hole
   // test, and a rendering cost to match. A belt may be closed up, never past 55 % of the spacing
   // its author chose - so a wood becomes a wall and a stand of cactus stays a stand of cactus.
-  const step = Math.max(belt.spacing * 0.55,
-    Math.min(belt.spacing, (type && type.canopy ? type.canopy : belt.spacing) * BELT_PITCH));
+  // THE AUTHORED `spacing` WAS VERY NEARLY INERT, and that is most of why every hole's wood looked
+  // the same (2026-09-06). The old clamp was `max(spacing * 0.55, min(spacing, canopy * PITCH))`,
+  // and for a pine (canopy 4.5) the second term is 5.17 - so authored spacings of 7, 8 AND 9 all
+  // produced a step of 5.17, i.e. THE IDENTICAL WOOD. Those three values are what almost every belt
+  // on both courses uses. An author turning the dial from 7 to 9 changed nothing at all, which is
+  // exactly the "every single hole" Matt was describing.
+  //
+  // `canopy * BELT_PITCH` is now a FLOOR ON HOW TIGHT a belt may be closed - the thing it was
+  // written for, keeping a wood a solid mass rather than a row of buttons - and the authored
+  // spacing drives the step above it. A belt authored at 7 is the wall it always was; one at 13 is
+  // genuinely open woodland you can see and play through. That range is the between-hole variety,
+  // and it lives in the course data where a designer can see it.
+  const step = Math.max((type && type.canopy ? type.canopy : belt.spacing) * BELT_PITCH,
+    belt.spacing * 0.72);
   for (let y = minY; y < maxY; y += step) {
     for (let x = minX; x < maxX; x += step) {
       const jx = x + (rnd() - 0.5) * step;
       const jy = y + (rnd() - 0.5) * step;
-      if (pointInPoly([jx, jy], belt.poly)) out.push({ x: jx, y: jy, type: belt.type });
+      // rnd() is drawn UNCONDITIONALLY, before the cheap bbox reject, so the sequence a belt walks
+      // does not depend on which candidates survive - the same belt is the same wood on every
+      // device, which is the whole reason this is seeded.
+      const r = rnd();
+      if (jx < minX || jx > maxX || jy < minY || jy > maxY) continue;
+      if (r >= keepAt(jx, jy)) continue;
+      // `stray` marks a tree OUTSIDE the belt polygon. `treesOf` uses it to keep the bleed off
+      // ground that is being played over - see there.
+      const t = { x: jx, y: jy, type: belt.type };
+      if (!pointInPoly([jx, jy], belt.poly)) t.stray = true;
+      out.push(t);
     }
   }
   return out;
@@ -114,10 +234,24 @@ export function expandBelt(belt, type) {
 
 /** Every tree on the hole, hand-placed and belt-expanded, as one flat array. Cached on the hole so
  *  a belt is expanded once per session rather than per frame. */
+/** Ground a stray from a belt's bleed may never land on. A wood thins out into ROUGH, never onto
+ *  mown grass - a pine standing in the middle of the fairway is not a soft edge, it is a bug. */
+const NO_STRAY = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee']);
+
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
   const all = [...(hole.trees || [])];
-  for (const belt of hole.treeBelts || []) all.push(...expandBelt(belt, (hole.treeTypes || [])[belt.type]));
+  for (const belt of hole.treeBelts || []) {
+    for (const t of expandBelt(belt, (hole.treeTypes || [])[belt.type])) {
+      // The belt's own `inner` edge keeps strays off the fairway side on a GENERATED hole, but
+      // holes 1 and 3 are hand-authored and their belts carry no `inner` - so the bleed put a pine
+      // out in hole 3's light rough, 47 yards up the shot line, and section 10's lob-wedge probe
+      // went from clearing the oak to being stopped by it. The surface test covers both authoring
+      // paths and says the rule directly rather than by proxy.
+      if (t.stray && NO_STRAY.has(surfaceAt(hole, t.x, t.y))) continue;
+      all.push(t);
+    }
+  }
   Object.defineProperty(hole, '_trees', { value: all, enumerable: false });
   return all;
 }
