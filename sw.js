@@ -653,7 +653,7 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': 'f135e54560',
+  './golf/css/golf.css': '6df11f37c5',
   './golf/js/ui.js': 'ed0f62a129',
   './golf/js/strings.js': '3b42f7a9de',
   './golf/js/holes.js': 'f99a03461d',

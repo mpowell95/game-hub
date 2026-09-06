@@ -342,7 +342,6 @@
 .gf-root .gf-result__card:has(.gf-result__card-grid[data-n="18"]) { max-width: 360px; }
 .gf-root .gf-result__card-grid[data-n="18"] { gap: 4px; }
 .gf-root [data-n="18"] .gf-cell { flex-basis: calc((100% - 32px) / 9); padding: 3px 1px 6px; }
-.gf-root [data-n="18"] .gf-cell span { font-size: 10px; }
 .gf-root [data-n="18"] .gf-cell b { font-size: 14px; }
 .gf-root [data-n="18"] .gf-mark { min-width: 16px; height: 16px; padding: 0; }
 .gf-root [data-n="18"] .gf-mark.is-c2::before, .gf-root [data-n="18"] .gf-mark.is-c3::before,
