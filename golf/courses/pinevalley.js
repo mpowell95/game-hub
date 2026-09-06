@@ -325,7 +325,7 @@ export const HOLE_7 = pv({
   // 188-205 yds did almost nothing, because the drive carries 215 and simply flew them. The band
   // has to sit WHERE THE DRIVE LANDS - centred near 220, deep enough that clearing it needs more
   // than the bag has - so the choice is lay up short of 200 or be in it.
-  cross: [{ yd: 222, kind: 'water', depth: 34 }],
+  cross: [{ yd: 408, kind: 'water', depth: 30 }],
   guard: ['frontSand', 'rightSand', 'backSand'],
   slope: 'saddle',
   greenR: 13,
@@ -339,7 +339,7 @@ export const HOLE_8 = pv({
   path: [[0, 5], [6, 110], [12, 210], [10, 298]],
   fw: [{ at: 0, w: 13 }, { at: 0.5, w: 9 }, { at: 1, w: 11 }],
   belts: { left: { depth: 22, spacing: 9, seed: 801 }, right: { depth: 26, spacing: 8, seed: 802 } },
-  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  cross: [{ yd: 262, kind: 'waste', depth: 24 }],
   guard: ['ringSand'],
   slope: 'crown',
   greenR: 11,
@@ -362,12 +362,16 @@ export const HOLE_10 = pv({
   n: 10, par: 4, nickname: 'Split Oak',
   // The lone oak in the middle of the fairway, and now a second stand short of the green: a low
   // punch out from under the first one runs straight into the second. Fly them, or go round.
-  path: [[0, 5], [-2, 120], [6, 240], [2, 348]],
-  fw: [{ at: 0, w: 18 }, { at: 0.55, w: 13 }, { at: 1, w: 14 }],
+  // An S: right off the tee, then back left into the green. The oak sits on the INSIDE of the
+  // first bend, so the line that shortens the hole is the line that brings it into play.
+  path: [[0, 5], [2, 105], [26, 180], [16, 262], [-14, 320], [-20, 362]],
+  fw: [{ at: 0, w: 18 }, { at: 0.5, w: 12 }, { at: 1, w: 14 }],
   belts: { left: { depth: 22, spacing: 10, seed: 1001 }, right: { depth: 22, spacing: 10, seed: 1002 } },
-  trees: [{ at: 0.62, side: 1, off: 3, type: 1 }],
+  trees: [{ at: 0.44, side: 1, off: 2, type: 1 }],
   guard: ['frontTrees', 'rightSand'],
   guardTree: 1,
+  greenShape: 'peanut',
+  greenAngle: 0,
   slope: 'tier',
 });
 
@@ -376,11 +380,15 @@ export const HOLE_11 = pv({
   // An old quarry floor crosses at 300 yards and there is water behind the green, so both the
   // second shot and the third are played to a number rather than as hard as you can. The green
   // itself runs hard from back to front: above the hole is a mistake you cannot putt out of.
-  path: [[0, 5], [10, 140], [-6, 300], [10, 430], [26, 545]],
+  // A DOUBLE dogleg - left off the tee, right off the second - so neither of the first two shots
+  // is aimed at the flag and the quarry sits across the middle of it.
+  path: [[0, 5], [6, 120], [-26, 215], [-40, 300], [-10, 390], [24, 470], [34, 540]],
   fw: [{ at: 0, w: 19 }, { at: 0.4, w: 13 }, { at: 0.72, w: 10 }, { at: 1, w: 14 }],
   belts: { left: { depth: 22, spacing: 10, seed: 1101 }, right: { depth: 20, spacing: 11, seed: 1102 } },
-  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  cross: [{ yd: 300, kind: 'waste', depth: 30 }],
   guard: ['frontJaws', 'backWater'],
+  greenShape: 'long',
+  greenAngle: 25,
   slope: 'steep',
 });
 
@@ -391,9 +399,14 @@ export const HOLE_12 = pv({
   path: [[0, 5], [4, 100], [8, 192]],
   fw: [{ at: 0, w: 12 }, { at: 0.6, w: 10 }, { at: 1, w: 14 }],
   belts: { left: { depth: 24, spacing: 9, seed: 1201 }, right: false },
+  // The green is a TEARDROP with its point at you: the target narrows the further you try to
+  // carry it. The surface itself is a bowl, which is the one mercy on the hole - everything that
+  // lands feeds toward the middle, because everything that misses is wet or in sand.
   guard: ['frontWater', 'ringSand'],
-  slope: 'crown',
-  greenR: 13,
+  greenShape: 'teardrop',
+  greenAngle: 180,
+  slope: 'bowl',
+  greenR: 14,
 });
 
 export const HOLE_13 = pv({
@@ -401,12 +414,16 @@ export const HOLE_13 = pv({
   // Bends right, and a pond crosses the corridor at 240 - which on a 308 yard hole means the drive
   // is a lay-up and the approach is a wedge over water. The green falls a different way in every
   // quarter, so the read changes with the pin.
-  path: [[0, 5], [0, 95], [22, 180], [50, 232], [70, 300]],
-  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 10 }, { at: 1, w: 12 }],
+  // The sharpest corner on the property, and short enough that cutting it is a real temptation:
+  // 339 yards with the turn at 200, so the whole hole is how much of the trees you take on.
+  path: [[0, 5], [-2, 100], [0, 195], [38, 250], [70, 282], [80, 318]],
+  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 10 }, { at: 1, w: 13 }],
   belts: { left: { depth: 26, spacing: 8, seed: 1301 }, right: { depth: 26, spacing: 8, seed: 1302 } },
   cross: [{ yd: 222, kind: 'water', depth: 34 }],
   guard: ['leftSand', 'rightSand'],
-  slope: 'quarters',
+  greenShape: 'clover',
+  greenAngle: 40,
+  slope: 'saddle',
 });
 
 export const HOLE_14 = pv({
@@ -445,12 +462,21 @@ export const HOLE_15 = pv({
   // the hole becomes four honest swings rather than three heroic ones. It carried a SECOND cross
   // at 400 for one build and measured +1.11 with 80 % bogey-or-worse - which is not a hard hole,
   // it is an unfair one, and is exactly what the difficulty probe exists to catch.
-  path: [[0, 5], [-14, 150], [16, 300], [-6, 440], [8, 572]],
+  // One long, gentle bend left rather than a corner - the shape a genuinely long hole wants, so
+  // that three good swings are rewarded and no single one of them is a gamble.
+  path: [[0, 5], [6, 140], [4, 280], [-28, 400], [-56, 500], [-62, 570]],
   fw: [{ at: 0, w: 19 }, { at: 0.35, w: 16 }, { at: 0.65, w: 15 }, { at: 1, w: 17 }],
   belts: { left: { depth: 18, spacing: 12, seed: 1501 }, right: { depth: 18, spacing: 12, seed: 1502 } },
-  cross: [{ yd: 222, kind: 'waste', depth: 34 }],
+  cross: [{ yd: 400, kind: 'waste', depth: 34 }],
+  // The kidney's notch is turned to the BACK, so the front of the green is whole and a running
+  // approach works. On the longest hole out here the third shot should be allowed to land.
   guard: ['frontJaws', 'backSand'],
-  slope: 'saddle',
+  greenShape: 'kidney',
+  greenAngle: 200,
+  slope: 'spine',
+  // A kidney's notch eats radius, so the SIZE has to be authored back up or the longest hole on the
+  // property finishes at a 4.7 yd target. Measured at 16: the green runs 5.4-13.1 yds.
+  greenR: 16,
 });
 
 export const HOLE_16 = pv({
@@ -460,7 +486,10 @@ export const HOLE_16 = pv({
   path: [[0, 5], [-2, 70], [0, 140]],
   fw: [{ at: 0, w: 10 }, { at: 1, w: 9 }],
   belts: { left: { depth: 26, spacing: 8, seed: 1601 }, right: { depth: 26, spacing: 8, seed: 1602 } },
+  // Round, and deliberately the only round green on the nine. The Postage Stamp's whole idea is
+  // that there is nothing clever about it: it is small, it is ringed in sand, and it crowns.
   guard: ['ringSand'],
+  greenShape: 'round',
   slope: 'crown',
   greenR: 10,
 });
@@ -470,14 +499,26 @@ export const HOLE_17 = pv({
   // A double dogleg with SENTINELS on both corners, so the hole genuinely changes direction twice
   // and neither corner can be flown. Trees short of the green as well: the approach has to be
   // carried in high, and after a punch-out it cannot be.
-  path: [[0, 5], [4, 130], [-2, 250], [2, 368]],
-  fw: [{ at: 0, w: 14 }, { at: 0.5, w: 10 }, { at: 1, w: 12 }],
+  // It bends LATE - straight for 240 yards and then right - so the drive is easy and the approach
+  // is played round a corner. 14 turns where the drive lands and 13 turns before it; this one
+  // waits until you have already hit.
+  path: [[0, 5], [2, 120], [0, 240], [8, 285], [40, 335], [62, 372]],
+  fw: [{ at: 0, w: 15 }, { at: 0.5, w: 11 }, { at: 1, w: 12 }],
   belts: { left: { depth: 30, spacing: 7, seed: 1701 }, right: { depth: 30, spacing: 7, seed: 1702 } },
-  sentinels: [
-    { at: 0.34, side: 1, off: 22, n: 5, spread: 9, type: 2 },
-    { at: 0.70, side: -1, off: 22, n: 5, spread: 9, type: 2 },
+  // The first 240 yards of this hole were a plain tunnel with one auto-placed bunker in it, which
+  // on the contact sheet read as dead ground - the whole hole was its last hundred yards. The
+  // drive is now squeezed between two bunkers STAGGERED either side of where it lands (short-left,
+  // long-right), so the tee shot is a placement even though the corner is still 100 yards further
+  // on. Authored rather than left to the auto-defend, which only ever adds one, on the outside.
+  bunkers: [
+    { at: 0.5, side: -1, off: 13, r: 7, kind: 'fairwayBunker', seed: 1703 },
+    { at: 0.62, side: 1, off: 12, r: 6, kind: 'fairwayBunker', seed: 1704 },
   ],
-  guard: ['frontTrees', 'leftSand', 'rightSand'],
+  // One stand, on the inside of the late corner, where it actually guards something.
+  sentinels: [{ at: 0.72, side: 1, off: 21, n: 5, spread: 9, type: 2 }],
+  guard: ['frontTrees', 'leftSand'],
+  greenShape: 'peanut',
+  greenAngle: 70,
   slope: 'quarters',
 });
 

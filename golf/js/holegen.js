@@ -745,9 +745,26 @@ export function makeHole(spec) {
         break;
       // TREES SHORT OF THE GREEN. They do not block a shot that is high enough; they block the low
       // one, which is exactly the punch-out an over-cooked drive leaves you with.
+      //
+      // TWO STANDS WITH A LANE BETWEEN THEM, SET WELL BACK DOWN THE APPROACH. Both halves of that
+      // are fixes for a SHIPPING SOFTLOCK found by section 15c on 2026-09-06, not taste.
+      //
+      // It used to be five trees in a continuous arc across the green's whole front, at `edge + 8`.
+      // Measured on Pine Valley 17: that is a solid wall about 24 yds across sitting 18-20 yds off
+      // the pin, and a ball that stopped just SHORT of it - on the fairway, 25 yds from the hole -
+      // had no shot at all. All 45 of the probe's club/aim/power options came back blocked, on
+      // every one of them, for ever. 7 of 24 runs on 17 and 6 of 24 on 10 never finished the hole.
+      // `ESCAPE_YD` could not save it either: that relief only fires when the ball's own lie is
+      // `trees`, and this ball was standing on cut grass.
+      //
+      // The distance is what makes the trap impossible rather than merely unlikely: at `edge + 30`
+      // the closest a ball can stop short of the stand is ~45 yds from the pin, and from there
+      // every lofted club in the bag climbs over a canopy long before it reaches one. The lane is
+      // what keeps the guard a QUESTION - a shot flown up the middle gets through, one leaked
+      // either side does not - and a green with no way in at all is closed, not defended.
       case 'frontTrees':
-        for (let i = 0; i < 5; i++) {
-          const p2 = gEdge((i - 2) * 17 * DEG, 8 + (i % 2) * 5);
+        for (const bg of [-58, -40, -22, 22, 40, 58]) {
+          const p2 = gEdge(bg * DEG, 30 + (Math.abs(bg) === 40 ? 8 : 0));
           extraTrees.push({ x: +p2[0].toFixed(1), y: +p2[1].toFixed(1), type: spec.guardTree == null ? 0 : spec.guardTree });
         }
         break;

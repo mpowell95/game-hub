@@ -1377,20 +1377,23 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
         }
       }
       if (!out) out = fall;
-      if (!out) return 14;
+      if (!out) { if (process.env.GF_TRACE) console.log('      blocked at', ball.map((v) => v.toFixed(0)).join(','), surfaceAt(hole, ball[0], ball[1])); return 14; }
       pen += out.penalty || 0;
       ball = out.rest;
+      if (process.env.GF_TRACE) console.log('      ' + n + ' ' + club.name + ' -> ' + ball.map((v) => v.toFixed(0)).join(',') + ' ' + surfaceAt(hole, ball[0], ball[1]) + ' (' + distYd(ball, hole.pin).toFixed(0) + ' to go)');
     }
     return 14;
   };
   const N = 24;
   for (const c of COURSES) {
     const vp = c.holes.map((h) => {
-      let sum = 0;
-      for (let i = 0; i < N; i++) sum += play(h, h.n * 7919 + i * 104729);
+      let sum = 0; let cap = 0;
+      for (let i = 0; i < N; i++) { const v = play(h, h.n * 7919 + i * 104729); sum += v; if (v >= 14) cap++; }
+      if (process.env.GF_PERHOLE && cap) console.log('    ' + c.id + ' ' + h.n + ': ' + cap + '/' + N + ' runs hit the 14-shot ceiling');
       return sum / N - h.par;
     });
     const blocks = [0, 1, 2, 3, 4, 5].map((b) => vp.slice(b * 3, b * 3 + 3).reduce((a, v) => a + v, 0));
+    if (process.env.GF_PERHOLE) console.log('  ' + c.id + ' per hole: ' + vp.map((v, i) => (i + 1) + ':' + (v >= 0 ? '+' : '') + v.toFixed(2)).join(' '));
     console.log(`  ${c.id} blocks 1-3..16-18: ${blocks.map((b) => (b >= 0 ? '+' : '') + b.toFixed(1)).join('  ')}`);
 
     // NOT a monotonic assertion. A course whose every block is harder than the last by a measurable

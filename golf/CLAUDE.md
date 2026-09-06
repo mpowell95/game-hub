@@ -2379,3 +2379,134 @@ rather than renamed**: it existed to be the L-shaped green and could not be one,
 express a sharp inner corner - that corner is the one place a ray from the centre would cross the
 outline twice, which is exactly what star-shaped rules out. A family that promises a shape it cannot
 draw is a trap for the next session.
+
+## The back nine, as a SET - and the softlock the set test found (2026-09-06)
+
+Matt approved doing 10-18 in one batch rather than one at a time, and the reason is the whole
+finding below: **variety is a property of the SET, not of a hole.** Every one of these nine reads
+as a reasonable hole on its own. What was wrong only shows up with all nine drawn at one scale
+beside each other, and two of the three problems were in code the hole specs never touched.
+
+### The nine, as designed
+
+| | routing | green | slope | the question it asks |
+|---|---|---|---|---|
+| 10 | S: right off the tee, back left | peanut | tier | an oak on the inside of the first bend |
+| 11 | double dogleg, left then right | long / 25 deg | steep | the quarry across the second shot |
+| 12 | straight par 3 | teardrop / 180 | bowl | all carry, target narrows the further you go |
+| 13 | hard right, turn at 200 of 341 | clover / 40 | saddle | how much of the corner you take on |
+| 14 | right, turn AT the landing zone | long / 55 deg | rightShed | water in the elbow |
+| 15 | long gentle left, 574 yd | kidney / 200 | spine | placing the second shot |
+| 16 | straight par 3, 135 yd | round | crown | a wedge and a nerve |
+| 17 | late right - straight 240, then turn | peanut / 70 | quarters | the drive is placed, the approach is bent |
+| 18 | left, turn at the landing zone | kidney / 25 | steep | stop short of the creek, then everything |
+
+### EVERY CROSS HAZARD ON THE COURSE WAS AT EXACTLY 222 YARDS
+
+Six holes carry a `cross` band and all six read `{ yd: 222, depth: 34 }`. That is not six hazards,
+it is one hazard copied six times - and the tee shot on all six was therefore the same shot, which
+is precisely the "every hole is the same" Matt was describing. It came from applying one measured
+rule (*"a band a driver can CARRY is not a lay-up; they sit near 220"*) to every hole that got one,
+without ever asking which SHOT each band was meant to interrogate.
+
+Each is now placed where the shot with a decision in it actually lands:
+
+| hole | | was | now | the shot it now asks about |
+|---|---|---|---|---|
+| 7 | par 5, 503 | 222 water | **408 water** | the go-for-it second shot lands at ~410 |
+| 8 | par 4, 293 | 222 waste | **262 waste** | a stock drive is safe, going for the green is not |
+| 11 | par 5, 556 | 222 waste | **300 waste** | carry the quarry on the second, or stop in front |
+| 13 | par 4, 341 | 222 water | 222 water | unchanged - the drive stopping short IS this hole |
+| 15 | par 5, 574 | 222 waste | **400 waste** | unreachable in two, so the second is a placement |
+| 18 | par 4, 381 | 222 water | 222 water | unchanged - the creek off the tee IS this hole |
+
+**11's own comment already said 300** (*"An old quarry floor crosses at 300 yards"*) while its code
+said 222. The documentation was right and the data had drifted from it.
+
+Two holes still share 222, and that is deliberate: they are the two holes whose identity is a
+mandatory lay-up over water, at very different lengths (13 leaves a wedge, 18 a long iron).
+
+### `frontTrees` was a WALL, and it closed two greens completely
+
+Section 15c plays 24 rounds of every hole. On 17 it could not finish **7 of 24**, and on 10 **6 of
+24** - not "took a lot of shots", but a ball that could not move at all, with all 45 of the probe's
+club/aim/power options blocked, for ever.
+
+Traced to one place, and it is the same spot in every failed run: a ball resting on the FAIRWAY
+about 25 yards short of the green. `frontTrees` planted five trees in a continuous arc across the
+green's whole front at `edge + 8`, which on a 10-yard green is a solid screen ~24 yards wide sitting
+18-20 yards off the pin. **Nothing in the bag climbs 18 yards of pine in 25 yards of travel**, and
+`ESCAPE_YD` could not help because that relief only fired when the ball's own lie was `trees` - this
+ball was standing on cut grass.
+
+It is now **two stands with a lane between them, at `edge + 30`**. Both halves are the fix:
+
+- **The distance** makes the trap impossible rather than merely unlikely. The nearest a ball can
+  stop short of the stand is ~45 yards from the pin, and from there every lofted club climbs over a
+  canopy long before reaching one.
+- **The lane** keeps it a question. A shot flown up the middle gets through; one leaked either side
+  does not. A green with no way into it at all is closed, not defended.
+
+Measured: hole 17 **+4.79 -> +1.38** vs par, hole 10 **+3.54 -> +1.21**, ceiling runs 7 and 6 -> 1
+and 1.
+
+### And a ball at the DRIPLINE could not play out either
+
+Chasing the rest of the blocked runs found the same failure one step out. `treeHit` models a canopy
+as a solid cylinder from the ground to `height`, which is not what a tree is - there is clear air
+under the crown, which is exactly why the rules above already let a ball punch out from UNDERNEATH
+one. It is just as true two yards outside it, and the model needs it to be, or it softlocks: **Pine
+Valley 3's lone fairway oak blocked every shot from a ball resting 9.5 yards away on the fairway**,
+in all 45 directions, permanently. Canopy 8, ball at 9.5: outside the crown by a yard and a half,
+and therefore, to the model, a fly-over problem with no answer.
+
+Two rules, both in `shot.js`:
+
+- **`SKIRT_YD` (3)** - a canopy within `canopy + 3` yards is an under-the-branches question, not a
+  fly-over one, whatever the ball is sitting on.
+- **The wood is now recognised by WHAT IS AROUND THE BALL, not by the lie.** `inWood` was
+  `surfaceAt(...) === 'trees'`, and the `trees` lie is painted from the belt POLYGON - so a ball
+  that ran a yard past its edge onto light rough was surrounded by exactly the same stand and got
+  none of the relief. Three or more canopies within reach now means the ball is inside a stand.
+
+**Pine Valley 3's designed feature survives both**: the shot the hole is built around is played from
+ten yards further back than that, where the oak blocks exactly as it always has. Measured, hole 3
+went **+1.25 -> +0.13** - which is the softlock leaving, not the oak.
+
+Blocked runs across 432 Pine Valley rounds: **13 -> 5**.
+
+### Still open: five blocked runs remain, and they are deep inside the belts
+
+Three distinct spots, all a ball that has run into a 26-yard-deep pine belt at 8-yard spacing. The
+escape reaches 13 yards; the far half of the belt still blocks. A real player would chip out
+SIDEWAYS, and the probe only searches +/-45 degrees off the target line, so part of this is the
+probe rather than the game - but the game's own aim arc is +/-60 degrees, so it is not all of it.
+The lever is belt DEPTH (26-30 on holes 13 and 17, against 18-22 elsewhere), not another escape
+rule. **Not fixed, and it is pre-existing** - this pass reduced it, it did not create it.
+
+### 17's first 240 yards were dead ground
+
+On the contact sheet the hole was a plain tunnel with one auto-placed bunker in it: the whole hole
+was its last hundred yards. The drive is now squeezed between two bunkers **staggered** either side
+of where it lands - short-left and long-right - so the tee shot is a placement even though the
+corner is still 100 yards further on. Authored rather than left to the auto-defend, which only ever
+adds one, on the outside of the bend.
+
+### Measured, per block of three
+
+```
+pinevalley   1-3 -0.7   4-6 +0.0   7-9 -0.3   10-12 +1.9   13-15 +2.7   16-18 +1.8
+redmesa      1-3 -0.5   4-6 -0.2   7-9 +0.4   10-12 +1.2   13-15 -0.5   16-18 +0.6
+```
+
+### Two diagnostics were added to section 15c, and they are what found all of this
+
+Both are env-gated so a normal run is unchanged:
+
+- **`GF_PERHOLE=1`** prints every hole's average score against par, and - the important one - **how
+  many of the 24 runs hit the 14-shot ceiling.** The block averages alone hid this completely: a
+  block reading +5.4 looks like three hard holes and was in fact one unfinishable one.
+- **`GF_TRACE=1`** prints each shot's club, where it finished and its lie, and names the exact
+  coordinate a blocked ball was standing on. Every fix above came from reading that coordinate; the
+  first three guesses at the cause (the sentinels, the belt density, the green guards) were all
+  wrong, and all three looked plausible.
