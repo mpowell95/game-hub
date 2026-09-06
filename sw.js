@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v639';
+const CACHE = 'game-hub-v640';
 
 const ASSETS = [
   './',
@@ -515,7 +515,7 @@ const REST_MANIFEST = {
   './parchis/index.html': '45e49dd3f5',
   './filler/': '797ca5a8a2',
   './filler/index.html': '797ca5a8a2',
-  './filler/css/filler.css': 'e576a43d76',
+  './filler/css/filler.css': '89d92bcc00',
   './filler/js/ui.js': '6512de26c3',
   './filler/js/game.js': '90ce8fb511',
   './filler/js/ai.js': '7696a3c895',
