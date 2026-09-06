@@ -2618,3 +2618,112 @@ redmesa      1-3 -0.5   4-6 -0.2   7-9 +0.5   10-12 +1.2   13-15 -0.3   16-18 +0
 
 Blocked (unfinishable) runs across 432 Pine Valley rounds: **5**, unchanged - all still deep inside
 the 26-yard belts on 13 and 17. Still open, still pre-existing.
+
+## The woods (2026-09-06)
+
+Matt, having played both courses: *"The fairway is lined by extremely dense forest that's
+impossible to hit out of on every single hole. And the tree line abruptly just ends on every hole."*
+
+Both halves were `expandBelt` in `js/holes.js`, which filled a belt's polygon with a **jittered
+uniform grid**: identical density from the fairway edge to the back of the wood and from the tee to
+the green, dropping to zero at the polygon boundary in the space of one step.
+
+### THE AUTHORED `spacing` WAS VERY NEARLY INERT, which is the whole of "every single hole"
+
+The step was `max(spacing * 0.55, min(spacing, canopy * BELT_PITCH))`. For a pine (canopy 4.5) the
+second term is **5.17**, so:
+
+```
+authored spacing   7   8   9  10  11  12
+actual step      5.17 5.17 5.17 5.50 6.05 6.60
+```
+
+**7, 8 and 9 produced the identical wood** - and those three are what almost every belt on both
+courses uses (23 of 33 on Pine Valley). An author turning the dial from 7 to 9 changed nothing at
+all. That is not a subtle bug: it is a design control that was silently disconnected, and no
+amount of re-authoring course data would have moved it.
+
+`canopy * BELT_PITCH` is now a **floor on how tight** a belt may be closed - the thing it was
+written for, keeping a wood a solid mass rather than a row of buttons - and the authored spacing
+drives the step above it (`spacing * 0.72`). 7 is the wall it always was; 13 is open woodland you
+can see and play through. The existing authored values already spread 7-12 on Pine Valley and 10-16
+on Red Mesa, so the between-hole variety appeared the moment the dial was reconnected, with no
+course data changed.
+
+### The edge feathers, both ways
+
+One continuous function of SIGNED distance to the belt's edge, so there is no seam at the boundary:
+
+- **Inside**, the keep-rate ramps from `EDGE_KEEP` (0.68) at the boundary to 1 at `feather` yards
+  in, so the first few yards of wood are scattered trunks a ball can be played through and only the
+  core is a wall.
+- **Outside**, it decays from the same 0.68 to nothing over `BELT_BLEED_YD` (15), so a wood **ends
+  in strays** rather than at a ruled line - at its sides and, which is the visible half, at the tee
+  and green ends of every belt.
+
+`feather` is **a third of the belt's own depth**, capped at 9. A flat 13 was tried first and left a
+24-yard belt with no core at all (the deepest point in a 24-yard band is 12 yards from an edge):
+hole 12's entire left wall came out as **29 trees**. A feather has to be a fraction of the thing it
+is feathering, so `holegen.js` passes the belt its `depth`.
+
+### Three things the first version got wrong, all found by measuring
+
+1. **STRAYS BLED TOWARD THE FAIRWAY AND MADE THE GAME HARDER.** Scattered specimens landed in the
+   light rough on both sides of every hole, where nothing had blocked before: Pine Valley's closing
+   block went **+1.6 -> +4.1** and four holes became unfinishable. Two guards, because one was not
+   enough: `holegen.js` passes each belt its `inner` (fairway-facing) edge and a stray nearest that
+   edge is dropped; and `treesOf` drops any stray landing on `fairway`, `lightRough`, `green`,
+   `fringe` or `tee`. **The second guard exists because holes 1 and 3 are hand-authored and carry
+   no `inner`** - a pine landed in hole 3's light rough 47 yards up the shot line and section 10's
+   lob-wedge probe went from clearing the oak to being stopped by it, which is how it was found.
+2. **CLEARINGS EXPOSED THE SLAB UNDERNEATH.** The density wave originally ran 0.10 to 1.0, which
+   genuinely gave a wood thick stretches and near-clearings - and a clearing shows the belt polygon,
+   which IS the `trees` lie surface and is painted as dark woodland ground. Holes 12 and 16 came out
+   with a hard-edged dark rectangle sitting in open country: the same complaint being fixed, one
+   layer down. The wave is a gentle texture now (0.76 to 1.0); between-hole variety comes from
+   `spacing`, which is a real dial again.
+3. **THE LIE SURFACE IS NOW INSET FROM THE TREE POLYGON**, which is a deliberate break with the
+   "one polygon is both the belt and the lie surface" rule stated a few lines above it in
+   `holegen.js`. It has to be, now that the wood feathers: wherever the trees thin the painted
+   ground showed through. Inset (inner +2, outer -3, and 10 yards off each end) the ground always
+   stops well inside the tree cover, so the edge of a wood reads as trees thinning into rough rather
+   than as a shape ending. **The cost, accepted:** the outermost trees stand on rough rather than on
+   the `trees` lie - which is what the edge of a wood is, and was already true of every bleed stray.
+
+A HAND-AUTHORED belt (no `inner`) gets **neither feather nor bleed** - holes 1 and 3 only, the
+reference clones, whose surfaces are not inset to suit. `inner` is the marker for "generated, and
+the ground under this has been inset".
+
+### Measured
+
+| | before | after |
+|---|---|---|
+| trees, Pine Valley | 8,684 | **5,762** |
+| trees, Red Mesa | 3,730 | **2,143** |
+| unfinishable runs, 432 PV rounds | 5 | **0** |
+| expansion, all 18 holes | 102 ms | 471 ms |
+
+**The five stuck balls are gone**, which this pass was not aiming at: they were all deep inside the
+26-yard belts on 13 and 17, and a wood you can play out of has no inside to be stuck in.
+
+The expansion cost is a distance-to-polygon per candidate. It is paid **once per hole, at first
+mount, and cached** on the hole (`treesOf`), so it is ~26 ms on a hole nobody is waiting on;
+`test-visual.mjs`'s golf probe is unchanged at 14 passed.
+
+### THE COURSES GOT EASIER, AND THAT IS THE TRADE
+
+A wood you can play out of costs fewer strokes than one you cannot. Measured, per block of three:
+
+```
+                     before                          after
+pinevalley   -0.1 +0.2 -0.3 +1.8 +2.5 +1.6    -0.6 +0.0 -0.1 +1.2 +0.8 +1.2
+redmesa      -0.5 -0.2 +0.0 +0.3 -0.5 +0.8    -0.3 -0.3 +0.1 -0.2 -0.4 +0.5
+```
+
+Pine Valley's 13-15 block fell hardest (+2.5 -> +0.8), because holes 13 and 17 were the two with
+26-30 yard belts and most of their difficulty was the wall. Every assertion in section 15c still
+passes and no hole plays a full shot under par.
+
+**If the difficulty is wanted back, the lever is corridor width and length, not tree density** -
+which is the same finding `js/CLAUDE.md` records for Red Mesa 13-15 and this file records for hole
+7. Putting the trees back would put the complaint back with them.
