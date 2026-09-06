@@ -21,7 +21,7 @@ import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
-import { record } from './leaderboard-rank.js';
+import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 
 const t = makeT(STRINGS);
 
@@ -677,7 +677,19 @@ function golfScreen(rec) {
   const skill = pts >= 0 ? `+${pts}` : String(pts);
   const avg = gf.rounds > 0 ? (gf.strokes / gf.rounds).toFixed(1) : '–';
   const courseIds = Object.keys(gf.bestRoundByCourse || {}).sort((a, b) => golfCourseName(a).localeCompare(golfCourseName(b)));
-  const rows = courseIds.map((id) => `<tr><th scope="row">${esc(golfCourseName(id))}</th><td>${gf.bestRoundByCourse[id] | 0}</td></tr>`).join('');
+  // TO PAR SITS BESIDE THE STROKES, IT DOES NOT REPLACE THEM (queued 2026-09-03, done 2026-09-06).
+  // The leaderboard shows a best round as a score to par and this table showed raw strokes, so the
+  // two screens described the same round with two different numbers. Par is subtracted at DISPLAY
+  // time from the same `GOLF_COURSE_PAR` the board uses - the stored value stays strokes, which is
+  // the frozen recorder shape (THE LAW rule 5) - and the strokes column stays, because it is the
+  // number the game's own scorecard shows and dropping it would hide data a screen used to show
+  // (rule 1). A round key with no par row shows a dash rather than a fabricated 0.
+  const rows = courseIds.map((id) => {
+    const strokes = gf.bestRoundByCourse[id] | 0;
+    const par = GOLF_COURSE_PAR[id];
+    const toPar = Number.isFinite(par) ? formatBoardMetric(strokes - par, 'golf', t('lb_golf_even')) : null;
+    return `<tr><th scope="row">${esc(golfCourseName(id))}</th><td>${toPar === null ? '–' : esc(toPar)}</td><td>${strokes}</td></tr>`;
+  }).join('');
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${esc(skill)}</b><span>${t('gs_golf_skill')}</span></div>
@@ -690,7 +702,7 @@ function golfScreen(rec) {
     </div>
     ${rows ? `<h4 class="gs-tbl-h">${t('gs_golf_courses_h')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_golf_best')}</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_golf_topar')}</th><th scope="col">${t('gs_golf_strokes')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>` : ''}
     ${golfHolesHTML(gf)}

@@ -269,6 +269,31 @@ export function blockDepth(power) {
   return Math.min(1, (power - BLOCK_FROM) / Math.max(1e-6, SWING_MAX - BLOCK_FROM));
 }
 
+/** THE SPRAY STARTS AT 100 %, NOT AT THE BLOCK'S EDGE (2026-09-06, and this is a real bug fix).
+ *
+ *  Matt: *"You've been trying to make over swinging easy - all reward and no risk - but I've
+ *  fought you on that at every decision point."* He was right to check. Measured on the shipped
+ *  code, driver from the fairway, needle stopped dead centre:
+ *
+ *      100.0 %  215.0 yds   0.0 offline        106.0 %  227.9 yds   0.0 offline
+ *      102.0 %  219.3 yds   0.0 offline        107.6 %  231.3 yds   0.0 offline
+ *      104.0 %  223.6 yds   0.0 offline        109.0 %  232.5 yds   3.1 offline
+ *
+ *  +16.3 yards for NOTHING. `payingPower` pays in full below `BLOCK_FROM`, `blockSpray` was
+ *  gated on `BLOCK_FROM`, and the `OVER_SWING_MAX_MUL` ramp multiplies the STRIKE error, which is
+ *  zero on a dead-centre strike - two times zero is zero, the exact failure the spray was added to
+ *  close, reopened in the buffer between 100 % and the block. So stopping at 107 % was strictly
+ *  better than stopping at 100 % on every full shot in the game.
+ *
+ *  The spray now ramps from 100 % instead. Nothing Matt calibrated moves: `BLOCK_SPRAY_DEG` is
+ *  unchanged, so the top of the arc is still 5.9 deg (20-30 yds offline on a 242 yd carry), and
+ *  `payingPower` still starts paying its 40 % at `BLOCK_FROM`, so the top-of-arc carry is still
+ *  242.5. Only the free buffer is priced: 107.6 % now costs about 8.8 yds offline for its 16.3. */
+export function sprayDepth(power) {
+  if (power <= 1) return 0;
+  return Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
+}
+
 /** The power that actually becomes DISTANCE. Below the block it is the power itself; inside it,
  *  only `BLOCK_KEEPS_DIST` of every extra unit pays. */
 export function payingPower(power) {
@@ -279,7 +304,7 @@ export function payingPower(power) {
 /** The spray, in degrees, signed. `seed` makes it unpredictable to the player and reproducible to
  *  the tests; pass the shot's own numbers. */
 export function blockSpray(power, seed) {
-  const d = blockDepth(power);
+  const d = sprayDepth(power);
   if (d <= 0) return 0;
   let a = (seed | 0) + 0x9E3779B9;
   a = Math.imul(a ^ (a >>> 16), 2246822507);

@@ -442,9 +442,18 @@ console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
     mn >= 19 && mx <= 31 && mn > 0, 'Matt asked for 20-30; it used to be exactly 0.0 at any power');
   ok('...and it goes either way', left > 100 && right > 100,
     'a spray that always pushed the same side would be a known cost, not a risk');
-  ok('the spray is zero right up to the block\'s edge',
-    SW.blockSpray(1.0, 5) === 0 && SW.blockSpray(SW.BLOCK_FROM, 5) === 0
-    && SW.blockSpray(SW.BLOCK_FROM + 0.01, 5) !== 0);
+  // [KNOWN-BUG PROBE] THERE IS NO FREE BUFFER BETWEEN 100 % AND THE BLOCK (2026-09-06).
+  // The spray used to be gated on BLOCK_FROM, so 100-107.6 % paid FULL distance for ZERO offline
+  // cost: measured, +16.3 yds of driver carry with the ball still dead straight, which made 107 %
+  // strictly better than 100 % on every full shot in the game. It ramps from 100 % now.
+  ok('the spray is zero at exactly 100 % and never below it',
+    SW.blockSpray(1.0, 5) === 0 && SW.blockSpray(0.9, 5) === 0);
+  ok('[KNOWN-BUG PROBE] over-swinging costs something the moment it starts',
+    SW.blockSpray(1.02, 5) !== 0 && SW.blockSpray(SW.BLOCK_FROM, 5) !== 0,
+    'the 100-107.6 % buffer used to be +16.3 yds of carry for nothing');
+  ok('...and the cost grows all the way from 100 % to the top',
+    Math.abs(SW.blockSpray(1.02, 3)) < Math.abs(SW.blockSpray(1.076, 3))
+    && Math.abs(SW.blockSpray(1.076, 3)) < Math.abs(SW.blockSpray(SW.SWING_MAX, 3)));
   ok('and it grows the deeper into the block the swing goes',
     Math.abs(SW.blockSpray(1.12, 3)) < Math.abs(SW.blockSpray(SW.SWING_MAX, 3)));
 
