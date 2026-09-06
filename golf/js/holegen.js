@@ -50,9 +50,10 @@ import { mulberry32, bboxOf } from './holes.js';
  *  shot rather than to the map.
  *
  *  THE HONEST LIMIT: a true L has a sharp INNER corner, which is not star-shaped and cannot be
- *  written as r(a). `boomerang` is the nearest this form reaches - two arms at right angles with a
- *  filled-in elbow. It reads as a fat L, not an L. A real one needs explicit outlines plus polygon
- *  offsetting for the fringe, which is a bigger job than this whole file.
+ *  written as r(a) - that corner is the one place a ray from the centre would cross the outline
+ *  twice. So there is NO L-shaped green here, and there is deliberately no near-miss family
+ *  pretending to be one (see where `boomerang` used to be, below). A real L needs explicit outlines
+ *  plus a polygon-offset routine for the fringe, which is a bigger job than this whole file.
  */
 const TAU = Math.PI * 2;
 function angDiff(a, b) {
@@ -83,15 +84,18 @@ export const GREEN_SHAPES = {
   // the putting surface and comes back on.
   peanut: (a) => 0.58 + 0.62 * Math.abs(Math.cos(a)),
 
-  // WEDGE: wide at one end, narrow at the other. Which end faces the approach is set by the
-  // shape's angle, so a hole can present the broad edge or the point.
-  wedge: (a) => 0.72 + 0.46 * Math.cos(a),
-
-  // BOOMERANG: the nearest r(a) gets to an L - two arms 90 degrees apart. See the caveat above.
-  // The first pass used 0.68 + 0.48 and rendered as a blob with a bump; these amplitudes were set
-  // by LOOKING at the seven shapes drawn side by side at the same size, which is the only way to
-  // tell a peanut from a rounded rectangle. Four of the seven needed pushing.
-  boomerang: (a) => 0.50 + 0.75 * Math.max(lobe(angDiff(a, 0), 0.46), lobe(angDiff(a, Math.PI / 2), 0.46)),
+  // TEARDROP: wide at one end, tapering to a point at the other. Which end faces the approach is
+  // set by the shape's angle, so a hole can present the broad edge or the point.
+  //
+  // It was called `wedge` for one build. Matt: *"What is 'wedge'? What is 'boomerang'?"* - neither
+  // was a golf term, both were names I invented, and a family name that describes nothing is worse
+  // than no name. This one is a teardrop, so it is called that.
+  //
+  // `boomerang` was dropped in the same pass rather than renamed. It existed to be the L-shaped
+  // green, and it could not be one: r(a) cannot express a sharp INNER corner, so it rendered as a
+  // fat arrowhead. A family that promises a shape it cannot draw is a trap for the next session.
+  // A real L needs explicit outlines plus a polygon-offset routine for the fringe.
+  teardrop: (a) => 0.72 + 0.46 * Math.cos(a),
 
   // A soft triangle, for a green that has to sit into a corner.
   clover: (a) => 1 + 0.30 * Math.cos(3 * a),
@@ -688,8 +692,36 @@ export function makeHole(spec) {
   const f = [-gTan.tx, -gTan.ty];                       // toward the tee, along the approach
   const rr = [-f[1], f[0]];                             // right of the approach
   const gp = (fwd, side) => [pin[0] + f[0] * fwd + rr[0] * side, pin[1] + f[1] * fwd + rr[1] * side];
-  const gR = (a) => (a === 'x' ? greenR : greenRy);
-  const near = greenR + 6;                              // just outside the fringe
+
+  // GUARDS SIT AGAINST THE GREEN'S OWN EDGE, NOT AT A FIXED RADIUS.
+  //
+  // They used to be placed at `greenR + 6 + a bit`, which was exactly right while every green was a
+  // circle of radius `greenR`. The moment greens got SHAPES that distance stopped meaning anything:
+  // measured on hole 18's kidney, whose radius runs 6.1 to 15.2 yds, the six ringSand bunkers ended
+  // up between 9.2 and 20.2 yards PAST the putting surface - six white splashes floating in the
+  // rough rather than sand cut into the surround.
+  //
+  // `edgeAt` asks the same radius function the green itself is drawn from how far the edge is in a
+  // given direction, so a bunker tucks against a bay and stands off a headland, which is what a
+  // real green complex does.
+  const gBase = Math.atan2(f[1], f[0]);                 // world bearing of "toward the tee"
+  // The shape's own frame as a world bearing. Defined HERE, before the guards, because a guard has
+  // to ask the green how big it is in a direction and the green's rotation is part of that answer.
+  const gAngleRad = gBase + gAngleDeg * (Math.PI / 180);
+  const gJit = greenShape(greenSeed);
+  const edgeAt = (bearing) => {
+    const A = gBase + bearing;
+    const jitter = 1 + (gJit[Math.round(((A % TAU) + TAU) % TAU / TAU * GREEN_POINTS) % gJit.length] - 1) / 3;
+    const rr2 = Math.max(0.25, (GREEN_SHAPES[gShape] || GREEN_SHAPES.round)(angDiff(A, gAngleRad)) * jitter);
+    return Math.hypot(greenR * rr2 * Math.cos(A), greenRy * rr2 * Math.sin(A));
+  };
+  /** A point `pad` yards beyond the green's edge, on a bearing measured from the approach:
+   *  0 is short of the green, 90 is right of it, 180 long, 270 left. */
+  const gEdge = (bearing, pad) => {
+    const d = edgeAt(bearing) + 6 + pad;                // +6 clears the fringe
+    return [pin[0] + Math.cos(gBase + bearing) * d, pin[1] + Math.sin(gBase + bearing) * d];
+  };
+  const DEG = Math.PI / 180;
 
   let gseed = greenSeed;
   const guard = spec.guard || [];
@@ -697,59 +729,62 @@ export function makeHole(spec) {
     gseed += 37;
     switch (g) {
       // A wide bunker across the FRONT. There is no running one in from here.
+      // A wide bunker across the FRONT. There is no running one in from here.
       case 'frontSand':
-        specBunkers.push({ poly: blob(...gp(near + 4, 0), greenR * 0.95, 6.5, gseed, 11), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(0, 3), greenR * 0.9, 6.5, gseed, 11), kind: 'greensideBunker' });
         break;
-      // Two bunkers pinching the front, with a lane between them: harder than open, easier than
+      // Two bunkers pinching the front with a lane between them: harder than open, easier than
       // frontSand, and it rewards the player who finds the lane.
       case 'frontJaws':
-        specBunkers.push({ poly: blob(...gp(near + 2, -greenR * 0.78), 6.5, 5, gseed, 9), kind: 'greensideBunker' });
-        specBunkers.push({ poly: blob(...gp(near + 2, greenR * 0.78), 6.5, 5, gseed + 1, 9), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(-42 * DEG, 2), 6.5, 5, gseed, 9), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(42 * DEG, 2), 6.5, 5, gseed + 1, 9), kind: 'greensideBunker' });
         break;
       // WATER ACROSS THE FRONT. The approach is all carry - there is no bail-out short.
       case 'frontWater':
-        specWater.push({ poly: blob(...gp(near + 8, 0), greenR * 1.5, 10, gseed, 14) });
+        specWater.push({ poly: blob(...gEdge(0, 7), greenR * 1.4, 10, gseed, 14) });
         break;
-      // TREES SHORT OF THE GREEN. They do not block the shot that is high enough; they block the
-      // low one, which is exactly the punch-out an over-cooked drive leaves you with.
+      // TREES SHORT OF THE GREEN. They do not block a shot that is high enough; they block the low
+      // one, which is exactly the punch-out an over-cooked drive leaves you with.
       case 'frontTrees':
         for (let i = 0; i < 5; i++) {
-          const p2 = gp(near + 10 + (i % 2) * 5, (i - 2) * 7.5);
+          const p2 = gEdge((i - 2) * 17 * DEG, 8 + (i % 2) * 5);
           extraTrees.push({ x: +p2[0].toFixed(1), y: +p2[1].toFixed(1), type: spec.guardTree == null ? 0 : spec.guardTree });
         }
         break;
       case 'leftSand':
-        specBunkers.push({ poly: blob(...gp(0, -(near + 3)), 7.5, greenRy * 0.7, gseed, 10), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(-90 * DEG, 2), 7.5, greenRy * 0.6, gseed, 10), kind: 'greensideBunker' });
         break;
       case 'rightSand':
-        specBunkers.push({ poly: blob(...gp(0, near + 3), 7.5, greenRy * 0.7, gseed, 10), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(90 * DEG, 2), 7.5, greenRy * 0.6, gseed, 10), kind: 'greensideBunker' });
         break;
       case 'backSand':
-        specBunkers.push({ poly: blob(...gp(-(near + 3), 0), greenR * 0.7, 6, gseed, 10), kind: 'greensideBunker' });
+        specBunkers.push({ poly: blob(...gEdge(180 * DEG, 2), greenR * 0.65, 6, gseed, 10), kind: 'greensideBunker' });
         break;
-      // SAND ALL THE WAY ROUND. Miss the green in any direction and you are in it.
+      // SAND ALL THE WAY ROUND. Miss the green in any direction and you are in it. Each bunker is
+      // placed against the edge ON ITS OWN BEARING, so on a kidney they tuck into the bay and stand
+      // off the headland instead of sitting on one circle nine yards out in the rough.
       case 'ringSand':
         for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2 + 0.4;
-          specBunkers.push({ poly: blob(...gp(Math.cos(a) * (near + 4), Math.sin(a) * (near + 4)), 6.5, 5, gseed + i, 9), kind: 'greensideBunker' });
+          const bg = (i / 6) * TAU + 0.4;
+          specBunkers.push({ poly: blob(...gEdge(bg, 2), 6.5, 5, gseed + i, 9), kind: 'greensideBunker' });
         }
         break;
       case 'leftWater':
-        specWater.push({ poly: blob(...gp(0, -(near + 12)), 11, greenRy * 1.5, gseed, 13) });
+        specWater.push({ poly: blob(...gEdge(-90 * DEG, 10), 11, greenRy * 1.3, gseed, 13) });
         break;
       case 'rightWater':
-        specWater.push({ poly: blob(...gp(0, near + 12), 11, greenRy * 1.5, gseed, 13) });
+        specWater.push({ poly: blob(...gEdge(90 * DEG, 10), 11, greenRy * 1.3, gseed, 13) });
         break;
-      // WATER BEHIND. It never comes into play on a good shot, and it is the whole reason "one
-      // more club" is a decision rather than free.
+      // WATER BEHIND. It never comes into play on a good shot, and it is the whole reason "one more
+      // club" is a decision rather than free.
       case 'backWater':
-        specWater.push({ poly: blob(...gp(-(near + 13), 0), greenR * 1.5, 11, gseed, 13) });
+        specWater.push({ poly: blob(...gEdge(180 * DEG, 11), greenR * 1.4, 11, gseed, 13) });
         break;
       // A stand tight to one shoulder: the pin on that side is simply not attackable.
       case 'leftTrees': case 'rightTrees': {
         const sgn = g === 'leftTrees' ? -1 : 1;
         for (let i = 0; i < 4; i++) {
-          const p2 = gp((i - 1.5) * 8, sgn * (near + 6 + (i % 2) * 4));
+          const p2 = gEdge(sgn * (60 + i * 20) * DEG, 5 + (i % 2) * 4);
           extraTrees.push({ x: +p2[0].toFixed(1), y: +p2[1].toFixed(1), type: spec.guardTree == null ? 0 : spec.guardTree });
         }
         break;
@@ -851,8 +886,6 @@ export function makeHole(spec) {
   });
   for (const b of bunkers) if ((b.kind || 'greensideBunker') === 'fairwayBunker') surfaces.push({ kind: 'fairwayBunker', poly: b.poly });
 
-  // The shape's own frame, turned into a world bearing: `f` already points back down the approach.
-  const gAngleRad = Math.atan2(f[1], f[0]) + (gAngleDeg * Math.PI) / 180;
   // THE FRINGE IS THE GREEN PUSHED OUT BY A CONSTANT, not the green drawn bigger. Scaling a kidney
   // scales its notch, and the collar would then cut INTO the putting surface exactly where the
   // notch is deepest.

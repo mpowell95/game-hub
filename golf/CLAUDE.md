@@ -2319,3 +2319,63 @@ L-shaped green and came out a fat arrowhead, because r(a) cannot express a sharp
 the caveat above `GREEN_SHAPES`). If a future session wants a real L it needs drawn outlines and a
 polygon-offset routine for the fringe. Renaming `wedge` to `teardrop` and dropping `boomerang` is
 the honest tidy-up; left as-is pending Matt's call.
+
+## Hole 18, and the bug the green shapes hid (2026-09-06)
+
+The second hole of the routing pass, and deliberately a **different question** from 14's. Hole 14
+doglegs RIGHT around water sitting in the elbow, to a long green turned across the shot: the tee
+shot is a bid and the approach collects the bill. Hole 18 bends LEFT and asks nothing of the drive
+except that it stop short of the creek - the whole hole is the second shot, into a kidney green
+whose notch faces the approach. **Two doglegs in a row would be a repeat; a dogleg and a lay-up is
+a pair**, and that distinction is the whole reason to do these in batches rather than one at a time.
+
+```
+hole 14: 395 yd  bend 107 deg RIGHT  offset 44.7 yd  green 9.8-21.7 yd (long, 55 deg across)
+hole 18: 381 yd  bend 109 deg LEFT   offset 39.1 yd  green 6.1-15.2 yd (kidney, notch 25 deg off)
+```
+
+The kidney's notch is turned 25 degrees off the approach rather than square to it. Square on, the
+front of the green is simply missing and the hole stops being a question and becomes a wall.
+
+### GUARDS WERE PLACED AT A FIXED RADIUS, AND SHAPED GREENS BROKE THAT
+
+The green complexes were built at `greenR + 6 + a bit` from the pin, which is exactly right while
+every green is a circle of radius `greenR`. The moment greens got SHAPES that distance stopped
+meaning anything. Measured on hole 18's kidney, whose radius runs 6.1 to 15.2 yds: the six
+`ringSand` bunkers finished between **9.2 and 20.2 yards past the putting surface** - six white
+splashes floating in the rough rather than sand cut into the surround.
+
+`gEdge(bearing, pad)` asks the same radius function the green is DRAWN from how far its edge is in
+that direction, and places the hazard `edge + 6 + pad` out - so a bunker tucks into a bay and stands
+off a headland. Measured across the 33 generated holes afterwards: **worst gap 10.4 yds, median
+8.4** (centre to edge, against bunker radii of 6.5-7.5, so the sand's near edge bites into the
+collar - which is what a real green complex does).
+
+**This was invisible until a green was not round**, and it would have shipped on all 36. It is the
+clearest argument for the pilot: the bug was in code the shape work never touched.
+
+### And the cart path did not know the hole had moved
+
+Hole 18's `decor` path ran straight up x=34-42 from the days when the hole did too. Once the routing
+bent left it was a stripe of tarmac stranded 90 yards out in open country. Re-cut to follow the
+hole - and then re-cut again, because the first version followed the CENTRELINE and ran straight
+through the creek and the pond. It sits outside the corridor on the outside of the bend now.
+
+### Measured
+
+| | before | after |
+|---|---|---|
+| hole 14 | +0.10 vs par, 13 % birdie | **+0.62, 2 % birdie, 52 % bogey+** |
+| hole 18 | -0.15, 30 % birdie | **+0.45, 17 % birdie, 45 % bogey+** |
+| block 16-18 | +0.5 | **+1.3** |
+
+### The families are five plus one, and `wedge`/`boomerang` are gone
+
+`round` · `long` · `kidney` · `peanut` · `teardrop` · `clover`. Matt: *"What is 'wedge'? What is
+'boomerang'?"* - neither was a golf term, both were names invented here, and a family name that
+describes nothing is worse than no name. `wedge` became `teardrop` (which is what it is, and which
+also stops it colliding with the CLUB vocabulary the player already has). `boomerang` was **dropped
+rather than renamed**: it existed to be the L-shaped green and could not be one, because r(a) cannot
+express a sharp inner corner - that corner is the one place a ray from the centre would cross the
+outline twice, which is exactly what star-shaped rules out. A family that promises a shape it cannot
+draw is a trap for the next session.
