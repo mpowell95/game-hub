@@ -218,8 +218,8 @@ export const HOLE_3 = {
     { kind: 'fairway', poly: [
       [-15, 12], [-13, 90], [-9, 180], [-1, 250], [11, 318], [33, 376], [57, 416], [72, 458], [78, 508], [80, 548],
       [86, 548], [84, 500], [78, 448], [60, 400], [36, 354], [16, 300], [6, 240], [6, 172], [10, 90], [13, 12]] },
-    { kind: 'trees', poly: [[-28, 10], [-26, 120], [-20, 220], [-10, 300], [-44, 300], [-48, 160], [-46, 10]] },
-    { kind: 'trees', poly: [[26, 10], [22, 100], [22, 180], [30, 250], [58, 250], [54, 140], [52, 10]] },
+    { kind: 'trees', poly: [[-28, 10], [-26, 120], [-20, 220], [-22, 270], [-24, 315], [-31, 347], [-40, 337], [-44, 298], [-47, 230], [-48, 160], [-46, 10]] },
+    { kind: 'trees', poly: [[26, 10], [22, 100], [22, 180], [28, 232], [35, 262], [45, 274], [55, 259], [58, 222], [56, 150], [52, 10]] },
     // The lake crossing the fairway: the mid-hole carry.
     // MOVED AND THINNED 2026-09-05. The diagonal lake is this hole's documented feature and it
     // stays, but it used to start at y=246 - which, once distance began to scatter inside the green
@@ -246,10 +246,45 @@ export const HOLE_3 = {
     // it and the game prompts for a drop (golf-reference-spec.md §21.2). Hazards and the drop
     // prompt are Stage C; the tree itself is here now so the hole is the hole.
     { x: -2, y: 205, type: 1 },
+
+    // THE TREE LINE USED TO STOP DEAD JUST PAST THE POND (2026-09-06). Matt: *"what's up with hole
+    // 3? why do the trees just completely stop after that pond? You can add more, but you can add
+    // them sporadically."* Both belts below end at y=250-300 and the hole runs to y=620 with the
+    // pin at 540 - so MORE THAN HALF of the longest hole on the property was open country, because
+    // the belts were hand-drawn for the first half only and never finished.
+    //
+    // These are SPECIMENS, not a belt, and that is the whole point of "sporadically": they are
+    // individual `trees` entries, so they block a ball in flight but paint NO `trees` lie surface.
+    // A sparse belt would have covered the top of the hole in woodland ground with a handful of
+    // trunks standing on it - the dark-slab problem the feather pass already had to solve once.
+    //
+    // Placed by script against the hole's own geometry, in clusters of one to four with the odd oak
+    // among the pines, then written out as literals so they are reviewable and cannot move under a
+    // re-run. TWO constraints, and the second was learned the hard way: nothing on fairway, rough,
+    // sand, water or within 34 yds of the pin - AND nothing within 30 yds of the PLAYING LINE. A
+    // first pass checked only the surface, which let clusters sit in heavy rough 11 yds off the
+    // route and took the hole from +0.17 to +1.21 vs par. That is a hazard, not scenery, and this
+    // is the third hole of the course.
+    { x: 75.6, y: 273.2, type: 0 }, { x: -28.4, y: 316.3, type: 0 }, { x: 63.9, y: 331.8, type: 0 },
+    { x: -53.8, y: 332.8, type: 0 }, { x: -54.6, y: 334.2, type: 0 }, { x: -16.1, y: 337.7, type: 0 },
+    { x: -12.7, y: 338.5, type: 1 }, { x: -11.1, y: 339.7, type: 0 }, { x: -13.4, y: 339.8, type: 0 },
+    { x: -53.5, y: 340.2, type: 0 }, { x: 65.4, y: 344.1, type: 1 }, { x: 66.2, y: 344.2, type: 0 },
+    { x: 70.5, y: 345.4, type: 0 }, { x: -0.7, y: 412.5, type: 1 }, { x: 5.2, y: 414.2, type: 1 },
+    { x: 102.7, y: 416.2, type: 0 }, { x: -32.4, y: 417.9, type: 0 }, { x: -35.6, y: 418.8, type: 0 },
+    { x: 100.9, y: 419.7, type: 0 }, { x: 103.1, y: 421.6, type: 0 }, { x: -41.9, y: 423.6, type: 0 },
+    { x: -43.6, y: 423.7, type: 0 }, { x: 7.4, y: 434.5, type: 0 }, { x: 6.4, y: 435.3, type: 0 },
+    { x: 5.6, y: 436.9, type: 0 }, { x: 6.6, y: 437.9, type: 1 }, { x: 13.6, y: 452, type: 0 },
+    { x: 8.2, y: 453.9, type: 0 }, { x: 9.6, y: 455.8, type: 0 }, { x: -13.6, y: 456.3, type: 0 },
+    { x: -19.2, y: 460.3, type: 0 }, { x: 8.4, y: 479.7, type: 1 }, { x: 19.6, y: 486.6, type: 0 },
+    { x: 29.8, y: 499.4, type: 0 }, { x: -13, y: 503.8, type: 1 }, { x: 25, y: 505.2, type: 0 },
+    { x: -48.9, y: 532.1, type: 0 }, { x: -45.2, y: 533.5, type: 0 }, { x: -48.5, y: 536.2, type: 1 },
+    { x: -44.5, y: 538.2, type: 0 }, { x: 3.8, y: 554.5, type: 0 }, { x: 0.2, y: 556.9, type: 0 },
+    { x: 5.6, y: 559.8, type: 0 }, { x: 0.1, y: 561, type: 0 }, { x: -48.5, y: 582.3, type: 1 },
+    { x: -37, y: 583.1, type: 0 },
   ],
   treeBelts: [
-    { poly: [[-28, 10], [-26, 120], [-20, 220], [-10, 300], [-44, 300], [-48, 160], [-46, 10]], type: 0, spacing: 10, seed: 301 },
-    { poly: [[26, 10], [22, 100], [22, 180], [30, 250], [58, 250], [54, 140], [52, 10]], type: 0, spacing: 10, seed: 302 },
+    { poly: [[-28, 10], [-26, 120], [-20, 220], [-22, 270], [-24, 315], [-31, 347], [-40, 337], [-44, 298], [-47, 230], [-48, 160], [-46, 10]], type: 0, spacing: 10, seed: 301 },
+    { poly: [[26, 10], [22, 100], [22, 180], [28, 232], [35, 262], [45, 274], [55, 259], [58, 222], [56, 150], [52, 10]], type: 0, spacing: 10, seed: 302 },
   ],
   decor: [],
 };

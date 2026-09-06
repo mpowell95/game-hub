@@ -234,9 +234,17 @@ export function expandBelt(belt, type) {
 
 /** Every tree on the hole, hand-placed and belt-expanded, as one flat array. Cached on the hole so
  *  a belt is expanded once per session rather than per frame. */
-/** Ground a stray from a belt's bleed may never land on. A wood thins out into ROUGH, never onto
- *  mown grass - a pine standing in the middle of the fairway is not a soft edge, it is a bug. */
-const NO_STRAY = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee']);
+/** Ground a BELT-expanded tree may never land on. A wood thins out into rough, never onto mown
+ *  grass or into a hazard - a pine standing in the middle of the fairway is not a soft edge, it is
+ *  a bug, and one growing out of a bunker or a lake is worse.
+ *
+ *  IT APPLIES TO EVERY BELT TREE, not only to the strays outside the polygon. A hand-drawn belt can
+ *  overlap the corridor or a hazard it was never checked against - hole 3's right belt has clipped
+ *  the fairway bunker at y 166-186 since Stage B - and the fix is the same wherever the tree came
+ *  from. HAND-PLACED `trees` ENTRIES ARE NEVER FILTERED: hole 3's signature oak stands ON THE
+ *  FAIRWAY on purpose, and an author who writes a coordinate means it. */
+const NO_BELT_TREE = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee', 'water',
+  'fairwayBunker', 'greensideBunker']);
 
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
@@ -248,7 +256,7 @@ export function treesOf(hole) {
       // out in hole 3's light rough, 47 yards up the shot line, and section 10's lob-wedge probe
       // went from clearing the oak to being stopped by it. The surface test covers both authoring
       // paths and says the rule directly rather than by proxy.
-      if (t.stray && NO_STRAY.has(surfaceAt(hole, t.x, t.y))) continue;
+      if (NO_BELT_TREE.has(surfaceAt(hole, t.x, t.y))) continue;
       all.push(t);
     }
   }

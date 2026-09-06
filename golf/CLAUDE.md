@@ -2727,3 +2727,37 @@ passes and no hole plays a full shot under par.
 **If the difficulty is wanted back, the lever is corridor width and length, not tree density** -
 which is the same finding `js/CLAUDE.md` records for Red Mesa 13-15 and this file records for hole
 7. Putting the trees back would put the complaint back with them.
+
+### Hole 3's tree line stopped at the pond (2026-09-06)
+
+Matt: *"what's up with hole 3? why do the trees just completely stop after that pond? You can add
+more, but you can add them sporadically."*
+
+Both of its belts ended at y=250-300 and the hole runs to y=620 with the pin at 540, so **more than
+half of the longest hole on the property was open country.** Not a generator bug: hole 3 is one of
+the hand-authored reference clones and its belts were drawn for the first half and never finished.
+Three separate things were wrong, and only the first is the one he asked about.
+
+**1. The top half is now SPECIMENS, not a belt.** They are individual `trees` entries, so they block
+a ball in flight and paint NO `trees` lie surface. That is the whole meaning of "sporadically" - a
+sparse belt would have covered the top of the hole in dark woodland ground with a handful of trunks
+standing on it, which is the slab problem the feather pass had already solved once. 46 of them,
+placed by script against the hole's own geometry in clusters of one to four with the odd oak among
+the pines, then written out as literals so they are reviewable and cannot move under a re-run.
+
+**The placement rule that matters is DISTANCE FROM THE PLAYING LINE, not the surface.** A first pass
+checked only that nothing landed on fairway, rough, sand or water, and that let clusters sit in
+heavy rough eleven yards off the route: **hole 3 went +0.17 to +1.21 vs par.** That is a hazard, not
+scenery, on the third hole of the course. With a 30-yard clearance from `route` it plays **+0.33**.
+
+**2. The two belts stopped at a FLAT CUT, which is the abrupt end he has now reported twice.** They
+are tapered to a rounded point now (left closing near y=347, right near y=274, both clear of the
+pond at y 262-337). A hand-authored belt gets no feather and no bleed - its lie surface is not inset
+to suit - so the taper has to be in the polygon itself.
+
+**3. `NO_BELT_TREE` now applies to EVERY belt tree, not only to the strays outside the polygon.**
+Rendering hole 3 showed pines growing out of the fairway bunker at y 166-186: the right belt has
+clipped it since Stage B, and no rule caught it because those trees are INSIDE the belt polygon and
+so were never strays. The set gained `water` and both bunker kinds. **Hand-placed `trees` entries
+are never filtered** - hole 3's signature oak stands on the fairway on purpose, and an author who
+writes a coordinate means it.
