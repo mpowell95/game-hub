@@ -219,6 +219,9 @@ export function flightPoint(p, distanceYd, sideYd, apex) {
  *  went in. The escape has to be a property of the stand, not a constant. */
 export const ESCAPE_YD = 13;
 
+/** How far past a crown's edge a ball can still be played out from UNDER the branches. */
+export const SKIRT_YD = 3;
+
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
   if (!trees.length) return null;
@@ -253,11 +256,38 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   //    does, and a ball on the fairway is completely unaffected - this reads only on a ball that is
   //    already in the wood. It is the punch-out that the rule above already grants from under one
   //    tree, granted from under the stand, which is what playing out of trees is.
-  const inWood = surfaceAt(hole, from[0], from[1]) === 'trees';
+  //    ...AND THE LIE IS THE WRONG TEST FOR "IS THIS BALL WALLED IN". Measured 2026-09-06 by
+  //    section 15c, which plays 432 Pine Valley rounds: 13 of them ended with the ball unable to
+  //    move AT ALL, and three of those were standing on the FAIRWAY - cut grass, ringed by belt
+  //    trees on both sides, every one of 45 club/aim/power options blocked, for ever. The `trees`
+  //    lie is painted from the belt POLYGON, so a ball that runs a yard or two past its edge is
+  //    surrounded by exactly the same stand and gets none of the relief.
+  //
+  //    So the escape is granted by WHAT IS AROUND THE BALL rather than by what it is sitting on:
+  //    three or more canopies within reach means the ball is inside a stand, whatever the lie says.
+  //    ONE tree ahead of you is not a stand and still blocks - which is deliberate, because that is
+  //    Pine Valley 3's lone fairway oak, and being ten yards short of it is the whole hole.
+  const near = trees.reduce((n, t) => {
+    const ty = hole.treeTypes[t.type];
+    return n + (Math.hypot(from[0] - t.x, from[1] - t.y) <= Math.max(ESCAPE_YD, ty.canopy * 1.6) ? 1 : 0);
+  }, 0);
+  const inWood = near >= 3 || surfaceAt(hole, from[0], from[1]) === 'trees';
+
+  // AND A BALL AT THE DRIPLINE IS AN UNDER-THE-BRANCHES QUESTION, NOT A FLY-OVER ONE. `treeHit`
+  // models a canopy as a solid cylinder from the ground up to `height`, which is not what a tree
+  // is: there is clear air under the crown, which is why the rules above already let a ball punch
+  // out from UNDERNEATH one. The same is true a couple of yards outside it, and it has to be, or
+  // the model softlocks - measured on Pine Valley 3, whose lone fairway oak (canopy 8) blocked
+  // every shot from a ball resting 9.5 yds away on the fairway, in all 45 directions, for ever.
+  // `SKIRT_YD` past the crown is where "step under the branches and punch it out" stops being
+  // available and "carry it or go round" starts.
+  //
+  // THE HOLE'S OWN FEATURE SURVIVES THIS: the designed shot on 3 is played from ten yards further
+  // back than that, where the oak still blocks exactly as it always has.
   const state = trees.map((t) => {
     const type = hole.treeTypes[t.type];
     const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
-    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy || (inWood && d0 <= Math.max(ESCAPE_YD, type.canopy * 1.6)) };
+    return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy + SKIRT_YD || (inWood && d0 <= Math.max(ESCAPE_YD, type.canopy * 1.6)) };
   });
 
   // ...and the walk starts clear of the ball for the same reason.
