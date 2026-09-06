@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v632';
+const CACHE = 'game-hub-v633';
 
 const ASSETS = [
   './',
@@ -662,9 +662,9 @@ const REST_MANIFEST = {
   './golf/js/swing.js': '81b3425ba8',
   './golf/js/shot.js': 'ad5ac01d08',
   './golf/js/render.js': '5b82c2547a',
-  './golf/js/holegen.js': '7892dfd208',
+  './golf/js/holegen.js': '4dfc3f6284',
   './golf/js/rounds.js': '6cdbdec58e',
-  './golf/courses/pinevalley.js': '9c3777dcdb',
+  './golf/courses/pinevalley.js': '52d7f07ac9',
   './golf/courses/redmesa.js': '4bd568276c',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
