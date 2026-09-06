@@ -10,7 +10,7 @@
 // is outside the table and that the game keeps making progress.
 
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED } from './physics.js';
-import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP } from './table.js';
+import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
 import { Renderer } from './render.js';
 
@@ -28,7 +28,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 {
   const world = { colliders: [], flippers: [], gravity: 1000, drag: 0 };
   const b = makeBall(0, 0);
-  for (let i = 0; i < 480; i++) step(world, [b], null);
+  for (let i = 0; i < Math.round(1 / PHYS_DT); i++) step(world, [b], null);
   ok('gravity: one second of free fall reaches ~1000 u/s', near(b.vy, 1000, 12), `vy=${b.vy.toFixed(1)}`);
 }
 
@@ -83,7 +83,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 {
   const world = { colliders: [], flippers: [], gravity: 400000, drag: 0 };
   const b = makeBall(0, 0);
-  for (let i = 0; i < 480; i++) step(world, [b], null);
+  for (let i = 0; i < Math.round(1 / PHYS_DT); i++) step(world, [b], null);
   ok('speed is hard-capped (the anti-tunnelling bound)', Math.hypot(b.vx, b.vy) <= MAX_SPEED + 1e-6);
 }
 
@@ -127,7 +127,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
   }
   ok('the ramp path is continuous (no teleporting ball)', jumps === 0, `${jumps} jumps`);
   const end = rampPoint(1);
-  ok('the ramp ends at the right inlane', end.x > 280 && end.y > 480, `${end.x},${end.y}`);
+  ok('the ramp ends at the right inlane', end.x > 210 && end.y > 500, `${end.x},${end.y}`);
 }
 
 // --- 3. the rules ----------------------------------------------------------------------------------
@@ -157,8 +157,8 @@ function launched(g) {
   // Clearing the bank lights the scoop; the scoop then starts mission 1. Driven through the real
   // contact/switch entry points, never by poking fields, so a rename in game.js fails this.
   const g = launched(fresh());
-  for (let i = 0; i < 4; i++) g._contact('id', `drop${i}`, 100, 350, 400, g.balls[0]);
-  ok('four drop targets complete the bank', g.bankLit === true);
+  for (let i = 0; i < DROP_COUNT; i++) g._contact('id', `drop${i}`, 100, 350, 400, g.balls[0]);
+  ok('every drop target completes the bank', g.bankLit === true);
   ok('the bank resets so the shot stays available', g.drops.every((d) => d === false));
   const b = g.balls[0];
   g._switchHit(SWITCHES.find((s) => s.id === 'scoop'), b);
@@ -176,7 +176,7 @@ function launched(g) {
 
 {
   const g = launched(fresh());
-  for (let i = 0; i < 4; i++) g._contact('id', `drop${i}`, 100, 350, 400, g.balls[0]);
+  for (let i = 0; i < DROP_COUNT; i++) g._contact('id', `drop${i}`, 100, 350, 400, g.balls[0]);
   g._switchHit(SWITCHES.find((s) => s.id === 'scoop'), g.balls[0]);
   const need = g.mission.need;
   for (let i = 0; i < need; i++) g._contact('id', 'pop0', 110, 262, 400, g.balls[0]);
@@ -632,8 +632,24 @@ function launched(g) {
 // creep of g*dt/mu. The orbit - the shot the right flipper exists to make - is one long sustained
 // contact with archIn, so the table's headline shot was also the one that reliably killed the ball.
 {
-  ok('[KNOWN-BUG PROBE] every collider class is frictionless by default',
-    seg(0, 0, 1, 1).mu === 0 && circle(0, 0, 1).mu === 0 && flipper(0, 0, 10, 0, 1).mu === 0,
+  // 2026-09-06: THE ASSERTION MOVED FROM THE CONSTRUCTORS TO THE TABLE, and that is not a
+  // weakening. physics.js's constructors serve two boards now - the imported ROYAL FLUSH layout is
+  // designed against Box2D and is measurably worse with no friction at all (parked episodes 24 ->
+  // 96 when it was removed) - so a blanket 'every default is 0' can no longer be true. What the
+  // incident was actually about is narrower: a surface the ball RIDES must not brake it. So every
+  // ride surface on THIS table is asserted frictionless BY NAME, and the shared defaults are
+  // asserted merely BOUNDED, so a collider added without thinking can never be flypaper.
+  const RIDE = ['archIn', 'archOut', 'wallL', 'wallR', 'wallPF', 'funnelL', 'funnelR', 'orbitWall',
+    'orbitDeflect', 'divL', 'divR'];
+  const rideBuilt = buildTable({});
+  const gritty = RIDE.filter((id) => {
+    const c = rideBuilt.colliders.find((x) => x.id === id);
+    return !c || c.mu !== 0;
+  });
+  ok('[KNOWN-BUG PROBE] every surface the ball RIDES is frictionless', gritty.length === 0,
+    gritty.length ? `gritty: ${gritty.join(', ')}` : '');
+  ok('[KNOWN-BUG PROBE] no shared collider default can be flypaper',
+    seg(0, 0, 1, 1).mu < 0.2 && circle(0, 0, 1).mu < 0.2 && flipper(0, 0, 10, 0, 1).mu < 0.2,
     `seg ${seg(0, 0, 1, 1).mu}, circle ${circle(0, 0, 1).mu}, flipper ${flipper(0, 0, 10, 0, 1).mu}`);
 
   // Ride the arch on a full plunge and watch the speed. Born red: at the old mu of 0.02 the ball
@@ -660,11 +676,18 @@ function launched(g) {
   };
   const now = ride(null);
   ok('[KNOWN-BUG PROBE] a ball riding the orbit keeps its speed',
-    now.slowest > 600, `slowest in the arch ${now.slowest.toFixed(0)} u/s (at the old mu 0.02: ${ride(0.02).slowest.toFixed(0)})`);
+    now.slowest > 500, `slowest in the arch ${now.slowest.toFixed(0)} u/s (at the old mu 0.02: ${ride(0.02).slowest.toFixed(0)})`);
   ok('[KNOWN-BUG PROBE] the orbit completes promptly instead of crawling round',
-    now.round < 0.7, `${now.round.toFixed(2)} s top-to-exit (at the old mu 0.02: ${ride(0.02).round.toFixed(2)} s)`);
+    now.round < 1.0, `${now.round.toFixed(2)} s top-to-exit (at the old mu 0.02: ${ride(0.02).round.toFixed(2)} s)`);
 
   // A resting paddle must not be flypaper either: the ball rolls pivot -> tip under gravity alone.
+  // The three thresholds below were re-measured on 2026-09-06 against the new 348 x 694 playfield
+  // and its adaptive solver, and they are LOOSER than the numbers the old 400 x 760 table met.
+  // That is geometry, not a regression: this paddle is 63 units long against 58, its rest angle is
+  // 25 degrees against 27, and gravity is 9% lower, so the same frictionless roll takes 0.50 s
+  // here against 0.42 there. Each threshold sits about 1.5x its measured frictionless value, which
+  // is what makes the probe still fail loudly on the failure it exists for: when a badly-scoped
+  // cradle damped a resting paddle earlier the same day, this measured 99 s.
   const rollToTip = (mu) => {
     const { colliders, flippers } = buildTable({});
     if (mu != null) for (const f of flippers) f.mu = mu;
@@ -680,7 +703,7 @@ function launched(g) {
     return 99;
   };
   ok('[KNOWN-BUG PROBE] the ball rolls down a resting paddle instead of stalling on it',
-    rollToTip(null) < 0.45, `${rollToTip(null).toFixed(2)} s pivot-to-tip (at the old mu 0.05: ${rollToTip(0.05).toFixed(2)} s)`);
+    rollToTip(null) < 0.75, `${rollToTip(null).toFixed(2)} s pivot-to-tip (frictionless: ${rollToTip(0).toFixed(2)} s)`);
 }
 
 console.log(`\n${count - fail}/${count} passed`);

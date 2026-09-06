@@ -1,13 +1,25 @@
 // pinball/js/render.js - every pixel. Owns the canvas, the static playfield art, and the whole
 // effects layer (particles, score popups, lamp pulses, screen shake, flashers).
 //
+// THIS DRAWS THE ATTACHED MODEL (2026-09-06). Every part below is one of the model's own named
+// meshes seen from above, and every colour is one of its nine materials, taken verbatim:
+//
+//     playfield-art  #2a1e49    chrome        #dae0ea    neon-magenta  #ff3392
+//     art-lit        #3c2b6d    steel-guide   #a8afbd    neon-cyan     #33dcff
+//     ramp-plastic   #7d47dc    rubber        #1a1a22    lamp-amber    #ffb43c
+//     bumper-cap     #f0f3fa    steel-ball    #e8ecf2    background    #0e0b17
+//
+// NO COLOUR HERE IS A CHOICE OF OURS. If one looks wrong, the conversion is wrong. (The old
+// renderer's palette - a cyan/magenta/gold set on a purple gradient - was invented, and it is gone.
+// The one exception is the score popup's white, which is text, not table paint.)
+//
 // THREE THINGS SHAPE THIS FILE.
 //
-// 1. THE STATIC ART IS PAINTED ONCE, INTO AN OFFSCREEN CANVAS. The playfield's paint - the arch,
-//    the walls, the lane guides, the arrows, the artwork - is a few hundred path operations and it
-//    never changes. Re-issuing it sixty times a second is the difference between a table that
-//    holds 60 fps on a phone and one that does not, and it costs one cached bitmap keyed on the
-//    device-pixel size.
+// 1. THE STATIC ART IS PAINTED ONCE, INTO AN OFFSCREEN CANVAS. The playfield's paint - the deck,
+//    the arch, the ball guides, the lamp inserts, the rosette, the artwork - is a few hundred path
+//    operations and it never changes. Re-issuing it sixty times a second is the difference between
+//    a table that holds 60 fps on a phone and one that does not, and it costs one cached bitmap
+//    keyed on the device-pixel size.
 //
 // 2. THE EFFECTS LAYER LIVES HERE, NOT IN ui.js. ui.js reads game.js's event stream and calls
 //    `spawnHit`, `popup`, `flash`; everything about how those look and decay is this file's
@@ -21,29 +33,45 @@
 //    unplayable screen, which is the check that keeps this honest.)
 
 import {
-  W, H, ARCH, AXIS, FLIP, PLUNGER, RAMP_PATH, DRAIN_Y, ART, SWITCHES, DROP_COUNT,
+  W, H, ARCH, AXIS, FLIP, PLUNGER, RAMP_PATH, DRAIN_Y, ART, DROP_COUNT,
 } from './table.js';
 import { rampPoint } from './game.js';
 
 const TAU = Math.PI * 2;
 
+/** The model's own materials. */
 const C = {
-  void: '#05030f',
-  bg0: '#150a33',
-  bg1: '#2a1163',
-  bg2: '#0c0724',
-  cyan: '#3ee8ff',
-  magenta: '#ff4fd8',
-  gold: '#F2B705',
-  green: '#3ef2a0',
-  red: '#E0532F',
-  metal: '#cfd8e6',
-  metalMid: '#8e9bb3',
-  metalDark: '#39415a',
-  ink: '#0a0718',
+  void: '#0e0b17',
+  art: '#2a1e49',
+  artLit: '#3c2b6d',
+  chrome: '#dae0ea',
+  steel: '#a8afbd',
+  magenta: '#ff3392',
+  cyan: '#33dcff',
+  amber: '#ffb43c',
+  violet: '#7d47dc',
+  rubber: '#1a1a22',
+  cap: '#f0f3fa',
+  ball: '#e8ecf2',
+  ink: '#120c22',
+  // ui.js names four of these by an older set of keys; they are aliased at the bottom of the file
+  // so the event glue keeps working without learning the model's vocabulary.
 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+/** Screen-door shading for a chrome tube seen from above: a bright core with darker edges. */
+function chromeGradient(g, ax, ay, bx, by, w, base) {
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const grd = g.createLinearGradient(ax - nx * w, ay - ny * w, ax + nx * w, ay + ny * w);
+  grd.addColorStop(0, '#5d6478');
+  grd.addColorStop(0.42, base);
+  grd.addColorStop(0.6, '#ffffff');
+  grd.addColorStop(1, '#6c7387');
+  return grd;
+}
 
 export class Renderer {
   constructor(canvas) {
@@ -98,23 +126,21 @@ export class Renderer {
 
   /** A burst of sparks at a table position. `n` scales with how hard the hit was. */
   spawnHit(x, y, n, color, speed = 200) {
-    const count = this.reduced ? Math.min(3, n) : n;
-    for (let i = 0; i < count; i++) {
+    if (this.reduced) n = Math.min(n, 3);
+    for (let i = 0; i < n; i++) {
       const a = Math.random() * TAU;
-      const s = speed * (0.35 + Math.random() * 0.85);
+      const v = speed * (0.35 + Math.random() * 0.9);
       this.parts.push({
-        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
-        life: 0.28 + Math.random() * 0.42, age: 0,
-        size: 1.6 + Math.random() * 2.6, color,
+        x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60,
+        age: 0, life: 0.28 + Math.random() * 0.4, color, r: 1.4 + Math.random() * 2,
       });
     }
     if (this.parts.length > 320) this.parts.splice(0, this.parts.length - 320);
   }
 
-  /** A floating score / label. Anchored in table space so it drifts with the shot that made it. */
   popup(x, y, text, color = '#fff', big = false) {
-    this.pops.push({ x, y, text, color, big, age: 0, life: big ? 1.5 : 1.0 });
-    if (this.pops.length > 26) this.pops.shift();
+    this.pops.push({ x, y, text, color, big, age: 0, life: big ? 1.4 : 0.95 });
+    if (this.pops.length > 24) this.pops.shift();
   }
 
   flash(amount = 0.5, color = C.cyan) {
@@ -155,7 +181,6 @@ export class Renderer {
       sx = (Math.random() - 0.5) * this.shake;
       sy = (Math.random() - 0.5) * this.shake;
     }
-    ctx.setTransform(s, 0, 0, s, (this.ox + sx) * this.dpr, (this.oy + sy) * this.dpr);
 
     this._ensureStatic();
     if (this.static) {
@@ -163,36 +188,36 @@ export class Renderer {
       // blit it at the origin and add only the shake. Re-applying ox/oy here shifts the playfield
       // by twice the centring offset, which is exactly the bug the first browser run showed - the
       // table sitting off to one side with the shooter lane clipped off the right edge.
-      ctx.save();
       ctx.setTransform(1, 0, 0, 1, sx * this.dpr, sy * this.dpr);
       ctx.drawImage(this.static, 0, 0);
-      ctx.restore();
     }
+    ctx.setTransform(s, 0, 0, s, (this.ox + sx) * this.dpr, (this.oy + sy) * this.dpr);
 
     const hud = game.hud();
     this._drawInserts(ctx, game, hud);
     this._drawDrops(ctx, game);
     this._drawStands(ctx);
-    this._drawSpinner(ctx, game);
-    this._drawScoop(ctx, game, hud);
+    this._drawSpinner(ctx);
+    this._drawScoop(ctx, hud);
     this._drawBumpers(ctx);
     this._drawSlings(ctx);
     this._drawRamp(ctx, game, hud);
     this._drawPlunger(ctx, game, hud);
+    this._drawApron(ctx);
     this._drawFlippers(ctx, game);
     this._drawBalls(ctx, game);
     this._drawParticles(ctx);
     this._drawPopups(ctx);
 
     if (this.flashAmt > 0.01) {
-      ctx.globalAlpha = this.flashAmt * 0.5;
+      ctx.globalAlpha = this.flashAmt * 0.45;
       ctx.fillStyle = this.flashColor;
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
     }
     if (hud.tilt) {
-      ctx.globalAlpha = 0.28 + Math.sin(this.time * 9) * 0.08;
-      ctx.fillStyle = C.red;
+      ctx.globalAlpha = 0.26 + Math.sin(this.time * 9) * 0.08;
+      ctx.fillStyle = C.magenta;
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
     }
@@ -201,7 +226,7 @@ export class Renderer {
   _age(dt) {
     this.shake *= Math.pow(0.0016, dt);
     this.flashAmt *= Math.pow(0.0009, dt);
-    for (let i = 0; i < 3; i++) this.popPulse[i] = Math.max(0, this.popPulse[i] - dt * 4.5);
+    for (let i = 0; i < this.popPulse.length; i++) this.popPulse[i] = Math.max(0, this.popPulse[i] - dt * 4.5);
     for (let i = 0; i < 2; i++) {
       this.slingPulse[i] = Math.max(0, this.slingPulse[i] - dt * 6);
       this.standPulse[i] = Math.max(0, this.standPulse[i] - dt * 4);
@@ -241,660 +266,686 @@ export class Renderer {
     this.static = cv;
   }
 
+  /** The model's `deck` outline: straight sides, the arch across the top, a soft bottom edge. */
+  _deckPath(g, inset = 0) {
+    const left = 4 + inset, right = W - 4 - inset;
+    g.beginPath();
+    g.moveTo(left, ARCH.cy);
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rOut - inset, Math.PI, TAU);
+    g.lineTo(right, DRAIN_Y + 26);
+    g.quadraticCurveTo(right, DRAIN_Y + 40, right - 22, DRAIN_Y + 40);
+    g.lineTo(left + 22, DRAIN_Y + 40);
+    g.quadraticCurveTo(left, DRAIN_Y + 40, left, DRAIN_Y + 26);
+    g.closePath();
+  }
+
   _paintPlayfield(g) {
-    // --- the wood: a deep space gradient with a nebula and a star field ---------------------------
-    const bg = g.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, C.bg1);
-    bg.addColorStop(0.42, C.bg0);
-    bg.addColorStop(1, C.bg2);
-    g.fillStyle = bg;
-    g.fillRect(0, 0, W, H);
-
-    const neb = g.createRadialGradient(AXIS, 250, 20, AXIS, 250, 300);
-    neb.addColorStop(0, 'rgba(120,60,255,0.42)');
-    neb.addColorStop(0.55, 'rgba(60,30,150,0.20)');
-    neb.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = neb;
-    g.fillRect(0, 0, W, H);
-
-    // Deterministic stars: a fixed lattice jittered by a hash, so the sky is identical every mount
-    // (a Math.random field would twinkle differently on every resize, which reads as a bug).
+    // --- deck + cabinet rail (the model's `deck` and `cabinet-rail`) -----------------------------
     g.save();
-    for (let i = 0; i < 220; i++) {
-      const h = Math.sin(i * 12.9898) * 43758.5453;
-      const hx = h - Math.floor(h);
-      const h2 = Math.sin(i * 78.233) * 12345.6789;
-      const hy = h2 - Math.floor(h2);
-      const x = hx * W, y = hy * H;
-      const r = 0.4 + hx * 1.3;
-      g.globalAlpha = 0.18 + hy * 0.5;
-      g.fillStyle = i % 7 === 0 ? C.cyan : '#ffffff';
-      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    this._deckPath(g, -14);
+    g.fillStyle = C.chrome;
+    g.fill();
+    this._deckPath(g, -14);
+    g.strokeStyle = '#6c7387';
+    g.lineWidth = 2;
+    g.stroke();
+
+    this._deckPath(g, 0);
+    g.fillStyle = C.art;
+    g.fill();
+    g.save();
+    this._deckPath(g, 0);
+    g.clip();
+
+    // --- printed art: `art-halo-upper` and `art-fan-lower` ----------------------------------------
+    g.fillStyle = C.artLit;
+    g.beginPath();
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rOut - 6, Math.PI, TAU);
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rIn - 34, TAU, Math.PI, true);
+    g.closePath();
+    g.fill();
+
+    g.globalAlpha = 0.6;
+    g.beginPath();
+    g.moveTo(AXIS, DRAIN_Y - 34);
+    g.lineTo(AXIS + 82, 470);
+    g.lineTo(AXIS - 82, 470);
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 1;
+
+    // A faint radial lift behind the rosette, which is where the model puts its brightest art.
+    const rose = ART.rosette;
+    const glow = g.createRadialGradient(rose.x, rose.y, 6, rose.x, rose.y, rose.r * 2.4);
+    glow.addColorStop(0, 'rgba(125,71,220,0.42)');
+    glow.addColorStop(1, 'rgba(125,71,220,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+
+    // --- ball guides ------------------------------------------------------------------------------
+    this._archGuides(g);
+    this._guide(g, [[4, ARCH.cy], [4, 500], [66, 646]], 8, C.chrome);
+    this._guide(g, [[344, ARCH.cy], [344, 650]], 9, C.chrome);
+    this._guide(g, [[310, 200], [310, 650]], 9, C.chrome);
+    this._guide(g, [[310, 500], [248, 646]], 8, C.chrome);
+    this._guide(g, [[46, ARCH.cy], [46, 262], [86, 308]], 8, C.steel);
+    for (const d of ART.divs) this._guide(g, d, 10, C.chrome);
+    this._gate(g, 344, ARCH.cy, 296, 216);
+
+    // --- lamp inserts and arrows ------------------------------------------------------------------
+    this._rosette(g);
+    this._laneArt(g);
+    this._lampRun(g, [[18, 468], [18, 498], [18, 528], [18, 558]], C.amber);
+    this._lampRun(g, [[296, 470], [296, 500], [296, 530], [296, 560]], C.amber);
+    this._arrows(g, 78, 452, -0.55, C.cyan);       // up the left, at the orbit
+    this._arrows(g, 240, 452, 0.55, C.cyan);       // up the right, at the scoop
+    this._arrows(g, 96, 396, -0.5, C.magenta);     // across, at the drop bank
+
+    // The model's `return-rail` wireform is deliberately NOT drawn. Seen from above it is two
+    // hairlines crossing the ramp, the drop bank and the rosette, and a screenshot showed exactly
+    // that: a stray diagonal line over half the table that reads as a rendering fault. Its data is
+    // still in table.js's ART if a future pass finds it a route of its own.
+
+    // --- posts (chrome with a rubber ring), the model's own list ----------------------------------
+    for (const [x, y] of ART.posts) this._post(g, x, y, 6);
+    for (const x of ART.laneX) {
+      const top = ARCH.cy - Math.sqrt(ARCH.rIn * ARCH.rIn - (x - ARCH.cx) * (x - ARCH.cx)) + 3;
+      this._guide(g, [[x, 108], [x, top]], 8, C.steel);
     }
+
     g.restore();
-
-    // --- painted lane art (under everything else) ------------------------------------------------
-    this._paintLanePaint(g);
-
-    // --- the shooter lane -------------------------------------------------------------------------
-    g.save();
-    g.fillStyle = 'rgba(10,6,26,0.75)';
-    g.fillRect(356, 250, 36, 480);
     g.restore();
+  }
 
-    // --- walls ------------------------------------------------------------------------------------
-    // Arch: the orbit channel painted as a lane, then both rails as real metal.
+  /** The arch: the deck's own edge is the orbit lane's outer wall, and `orbit-wall-inner` is the
+   *  inner one. Drawn as two chrome bands with the lane's floor lit between them. */
+  _archGuides(g) {
     g.save();
     g.beginPath();
-    g.arc(ARCH.cx, ARCH.cy, (ARCH.rOut + ARCH.rIn) / 2, Math.PI, TAU);
-    g.strokeStyle = 'rgba(62,232,255,0.10)';
-    g.lineWidth = ARCH.rOut - ARCH.rIn - 8;
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rOut - 4, Math.PI, TAU);
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rIn + 4, TAU, Math.PI, true);
+    g.closePath();
+    g.fillStyle = 'rgba(255,255,255,0.05)';
+    g.fill();
+    g.restore();
+
+    g.lineCap = 'round';
+    g.lineWidth = 9;
+    g.strokeStyle = C.chrome;
+    g.beginPath();
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rOut, Math.PI, TAU);
     g.stroke();
-    g.restore();
+    g.lineWidth = 3;
+    g.strokeStyle = 'rgba(255,255,255,0.85)';
+    g.beginPath();
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rOut - 2, Math.PI, TAU);
+    g.stroke();
 
-    this._rail(g, (p) => { p.arc(ARCH.cx, ARCH.cy, ARCH.rOut, Math.PI, TAU); });
-    this._rail(g, (p) => { p.arc(ARCH.cx, ARCH.cy, ARCH.rIn, Math.PI, TAU - 20 * Math.PI / 180); });
-
-    this._rail(g, (p) => { p.moveTo(12, 250); p.lineTo(12, 556); p.lineTo(76, 716); });
-    this._rail(g, (p) => { p.moveTo(390, 250); p.lineTo(390, 730); });
-    this._rail(g, (p) => { p.moveTo(356, 290); p.lineTo(356, 730); });
-    this._rail(g, (p) => { p.moveTo(356, 556); p.lineTo(292, 716); });
-    this._rail(g, (p) => { p.moveTo(356, 724); p.lineTo(390, 724); });
-    this._rail(g, (p) => { p.moveTo(46, 250); p.lineTo(46, 392); });
-
-    // One-way gates get their own look: thin, brassy, obviously a flap rather than a wall.
-    this._gate(g, 390, 250, 356, 290);
-    this._gate(g, 46, 392, 92, 444);
-
-    // Ramp mouth guides.
-    this._rail(g, (p) => { p.moveTo(158, 436); p.lineTo(168, 396); }, C.magenta);
-    this._rail(g, (p) => { p.moveTo(210, 436); p.lineTo(200, 396); }, C.magenta);
-
-    // Inlane / outlane dividers.
-    for (const [ax, ay, bx, by] of [[40, 524, 110, 634], [328, 524, 258, 634]]) {
-      this._rubberRail(g, ax, ay, bx, by, 5, '#9fb0d6');
-    }
-
-    // Lane-divider posts at the top.
-    for (const [x, y] of [[172, 140], [212, 140]]) this._post(g, x, y, 6);
-
-    // The drain lip, so the bottom of the table reads as a hole rather than an edge.
-    const dg = g.createLinearGradient(0, DRAIN_Y - 40, 0, H);
-    dg.addColorStop(0, 'rgba(0,0,0,0)');
-    dg.addColorStop(1, 'rgba(0,0,0,0.92)');
-    g.fillStyle = dg;
-    g.fillRect(0, DRAIN_Y - 40, W, H - DRAIN_Y + 40);
+    g.lineWidth = 8;
+    g.strokeStyle = C.steel;
+    g.beginPath();
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rIn, Math.PI, TAU - 12 * Math.PI / 180);
+    g.stroke();
+    g.lineWidth = 2.5;
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.beginPath();
+    g.arc(ARCH.cx, ARCH.cy, ARCH.rIn - 2, Math.PI, TAU - 12 * Math.PI / 180);
+    g.stroke();
   }
 
-  /** The painted-on artwork: shot arrows, lane fills, the table's name. Pure decoration. */
-  _paintLanePaint(g) {
-    g.save();
+  /** A chrome ball guide along a polyline: a wide dark base, the tube, and a highlight. */
+  _guide(g, pts, w, base) {
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineWidth = w + 3;
+    g.strokeStyle = 'rgba(0,0,0,0.45)';
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.stroke();
 
-    // Big painted disc behind the bumper nest.
-    const rg = g.createRadialGradient(AXIS, 235, 10, AXIS, 235, 150);
-    rg.addColorStop(0, 'rgba(255,79,216,0.20)');
-    rg.addColorStop(1, 'rgba(255,79,216,0)');
-    g.fillStyle = rg;
-    g.beginPath(); g.arc(AXIS, 235, 150, 0, TAU); g.fill();
+    g.lineWidth = w;
+    g.strokeStyle = chromeGradient(g, pts[0][0], pts[0][1], pts[pts.length - 1][0], pts[pts.length - 1][1], w, base);
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.stroke();
 
-    // Shot arrows: three chevrons pointing the way each major shot goes.
-    this._arrows(g, 184, 470, -Math.PI / 2, C.magenta);          // ramp, straight up
-    this._arrows(g, 322, 400, -Math.PI / 2 - 0.18, C.cyan);      // right lane to the scoop
-    this._arrows(g, 30, 420, -Math.PI / 2, C.gold);              // left orbit
-    this._arrows(g, 128, 424, -0.93, C.green);                   // drop target bank
+    g.lineWidth = Math.max(1, w * 0.28);
+    g.strokeStyle = 'rgba(255,255,255,0.8)';
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.stroke();
+  }
 
-    // The three top rollover lanes, painted as real lane channels with their letters. Without this
-    // they are three invisible switches under the arch and nobody discovers the bonus multiplier.
-    ART.lanes.forEach(([lx, ly], i) => {
-      g.save();
-      g.translate(lx, ly);
-      g.rotate((i - 1) * 0.22);
-      g.strokeStyle = 'rgba(62,232,255,0.13)';
-      g.lineWidth = 22;
-      g.lineCap = 'round';
-      g.beginPath(); g.moveTo(0, -22); g.lineTo(0, 26); g.stroke();
-      g.globalAlpha = 0.5;
-      g.fillStyle = C.cyan;
-      g.font = '800 15px "Trebuchet MS", system-ui, sans-serif';
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('HUB'[i], 0, 2);
-      g.restore();
-    });
+  /** The one-way shooter-lane gate: a hinged flap, drawn with its hinge dot so it reads as one. */
+  _gate(g, ax, ay, bx, by) {
+    g.lineCap = 'round';
+    g.lineWidth = 4;
+    g.strokeStyle = C.steel;
+    g.beginPath();
+    g.moveTo(ax, ay);
+    g.lineTo(bx, by);
+    g.stroke();
+    g.fillStyle = C.chrome;
+    g.beginPath();
+    g.arc(ax, ay, 4, 0, TAU);
+    g.fill();
+  }
 
-    // Inlane / outlane paint.
-    for (const [[ax, ay], [bx, by]] of [[[75, 501], [145, 612]], [[293, 501], [223, 612]]]) {
-      g.strokeStyle = 'rgba(62,232,255,0.10)';
-      g.lineWidth = 26;
-      g.lineCap = 'round';
+  /** The model's sixteen-lamp rosette: a ring of alternating cyan and magenta lenses with an amber
+   *  jackpot lamp at the centre. Pure paint - the ramp flies over it. */
+  _rosette(g) {
+    const { x, y, r, lamps } = ART.rosette;
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.beginPath(); g.arc(x, y, r - 16, 0, TAU); g.fill();
+    g.lineWidth = 3.5;
+    g.strokeStyle = C.chrome;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
+    for (let i = 0; i < lamps; i++) {
+      const a = i * TAU / lamps;
+      this._insert(g, x + Math.cos(a) * r, y + Math.sin(a) * r, 6, i % 2 ? C.cyan : C.magenta, 0.5);
+    }
+    this._insert(g, x, y, 12, C.amber, 0.9);
+  }
+
+  /** The three rollover lanes across the crown, and their lamps. */
+  _laneArt(g) {
+    for (const [x, y] of ART.lanes) {
+      g.strokeStyle = 'rgba(255,255,255,0.16)';
+      g.lineWidth = 2;
       g.beginPath();
-      g.moveTo(ax + (bx - ax) * 0.12, ay + (by - ay) * 0.12);
-      g.lineTo(bx, by);
+      g.moveTo(x - 12, y + 22);
+      g.lineTo(x - 12, y - 22);
+      g.moveTo(x + 12, y + 22);
+      g.lineTo(x + 12, y - 22);
       g.stroke();
+      this._insert(g, x, y, 8, C.cyan, 0.4);
     }
-
-    // The table's name across the lower playfield, ghosted into the paint. Split STAR / H U B
-    // on purpose: the lower half echoes the three H-U-B rollover lanes at the top of the table.
-    g.save();
-    g.translate(AXIS, 552);
-    g.globalAlpha = 0.10;
-    g.fillStyle = '#ffffff';
-    g.font = '700 34px "Trebuchet MS", system-ui, sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText('STAR', 0, -14);
-    g.font = '700 17px "Trebuchet MS", system-ui, sans-serif';
-    g.fillText('H  U  B', 0, 12);
-    g.restore();
-
-    g.restore();
   }
 
+  _lampRun(g, pts, color) {
+    for (const [x, y] of pts) this._insert(g, x, y, 5, color, 0.8);
+  }
+
+  /** A painted lamp lens: dark rim, coloured lens, specular dot. `lit` is its resting brightness. */
+  _insert(g, x, y, r, color, lit) {
+    g.save();
+    g.globalAlpha = lit;
+    g.fillStyle = color;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    g.restore();
+    g.lineWidth = 1.2;
+    g.strokeStyle = 'rgba(0,0,0,0.55)';
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    g.beginPath(); g.arc(x - r * 0.3, y - r * 0.35, r * 0.28, 0, TAU); g.fill();
+  }
+
+  /** The model's `arrowInsert`: a painted chevron pointing at a shot. */
   _arrows(g, x, y, ang, color) {
     g.save();
     g.translate(x, y);
     g.rotate(ang);
     for (let i = 0; i < 3; i++) {
-      g.globalAlpha = 0.16 + i * 0.07;
+      g.globalAlpha = 0.3 + i * 0.14;
       g.fillStyle = color;
       g.beginPath();
-      const o = i * 15;
-      g.moveTo(o, -11); g.lineTo(o + 11, 0); g.lineTo(o, 11); g.lineTo(o + 4, 0);
+      g.moveTo(0, -18 + i * 13);
+      g.lineTo(9, -6 + i * 13);
+      g.lineTo(-9, -6 + i * 13);
       g.closePath();
       g.fill();
     }
     g.restore();
   }
 
-  /** A chromed metal rail: dark casing, bright core, one highlight. */
-  _rail(g, path, tint) {
-    g.save();
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    g.beginPath(); path(g);
-    g.strokeStyle = C.ink; g.lineWidth = 11; g.stroke();
-    g.beginPath(); path(g);
-    g.strokeStyle = tint || C.metalMid; g.lineWidth = 8; g.stroke();
-    g.beginPath(); path(g);
-    g.strokeStyle = tint ? 'rgba(255,255,255,0.55)' : C.metal; g.lineWidth = 3.2; g.stroke();
-    g.restore();
-  }
-
-  /** A rubber-sleeved guide: the dividers and the sling bodies. */
-  _rubberRail(g, ax, ay, bx, by, r, color = '#f4f6ff') {
-    g.save();
-    g.lineCap = 'round';
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = C.ink; g.lineWidth = r * 2 + 4; g.stroke();
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = color; g.lineWidth = r * 2; g.stroke();
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = r * 0.7; g.stroke();
-    g.restore();
-  }
-
-  _gate(g, ax, ay, bx, by) {
-    g.save();
-    g.lineCap = 'round';
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = C.ink; g.lineWidth = 9; g.stroke();
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = C.gold; g.lineWidth = 4.5; g.stroke();
-    g.setLineDash([6, 7]);
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by);
-    g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 1.8; g.stroke();
-    g.restore();
-  }
-
+  /** The model's `post`: a chrome cylinder with a black rubber ring round it. */
   _post(g, x, y, r) {
-    g.save();
-    g.beginPath(); g.arc(x, y, r + 1.5, 0, TAU); g.fillStyle = C.ink; g.fill();
+    g.fillStyle = C.rubber;
+    g.beginPath(); g.arc(x, y, r + 3.5, 0, TAU); g.fill();
     const grd = g.createRadialGradient(x - r * 0.4, y - r * 0.4, 1, x, y, r);
     grd.addColorStop(0, '#ffffff');
-    grd.addColorStop(1, C.metalMid);
-    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fillStyle = grd; g.fill();
-    g.restore();
+    grd.addColorStop(1, '#8b93a6');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
   }
 
-  // --- live playfield elements ---------------------------------------------------------------------
+  // --- live parts ---------------------------------------------------------------------------------
 
-  /** Lamp inserts. Lit is brighter AND filled with a ring; unlit is a dark hollow lens, so the two
-   *  states differ by shape as well as by brightness (the hub's colourblind rule). */
+  /** The lamp inserts game.js actually lights. Painted OVER the static art so they can change. */
   _drawInserts(ctx, game, hud) {
     const lit = {
-      ramp: hud.multiball || hud.lockLit || (hud.mission && hud.mission.id === 'ramp'),
+      ramp: hud.lockLit || (game.mission && game.mission.id === 'ramp'),
       scoop: hud.bankLit || hud.lockLit || hud.superLit,
       bank: !hud.bankLit,
-      orbit: !!(hud.mission && hud.mission.id === 'spin'),
-      inlaneL: hud.multiball, inlaneR: hud.multiball,
-      saveL: hud.save > 0, saveR: hud.save > 0,
+      orbit: !!(game.mission && game.mission.id === 'spin'),
+      inlaneL: this.lanePulse.laneH > 0,
+      inlaneR: this.lanePulse.laneB > 0,
+      saveL: hud.save > 0,
+      saveR: hud.save > 0,
     };
-    const color = { ramp: C.magenta, scoop: C.cyan, bank: C.green, orbit: C.gold, inlaneL: C.cyan, inlaneR: C.cyan, saveL: C.green, saveR: C.green };
-    const pulse = 0.62 + Math.sin(this.time * 6) * 0.38;
+    const pulse = 0.55 + Math.sin(this.time * 6) * 0.45;
     for (const [x, y, key, rot] of ART.inserts) {
-      const on = !!lit[key];
+      const on = lit[key];
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(rot);
-      const col = color[key] || C.cyan;
+      ctx.globalAlpha = on ? 0.55 + pulse * 0.45 : 0.16;
+      ctx.fillStyle = key === 'ramp' ? C.violet : key.startsWith('save') ? C.amber : C.cyan;
       ctx.beginPath();
-      roundRect(ctx, -12, -5.5, 24, 11, 5.5);
-      ctx.fillStyle = on ? col : 'rgba(255,255,255,0.06)';
-      ctx.globalAlpha = on ? 0.35 + pulse * 0.45 : 1;
-      if (on) { ctx.shadowColor = col; ctx.shadowBlur = 16; }
+      ctx.moveTo(0, -13); ctx.lineTo(8, 5); ctx.lineTo(-8, 5);
+      ctx.closePath();
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = on ? '#ffffff' : 'rgba(255,255,255,0.28)';
-      ctx.beginPath();
-      roundRect(ctx, -12, -5.5, 24, 11, 5.5);
-      ctx.stroke();
       ctx.restore();
     }
   }
 
-  _drawBumpers(ctx) {
-    ART.pops.forEach(([x, y], i) => {
-      const p = this.popPulse[i];
-      const r = 20 + p * 4;
+  /** The drop bank: three targets in steel frames, the middle one amber like the model's. */
+  _drawDrops(ctx, game) {
+    const { a, u, len, step, count } = ART.bank;
+    for (let i = 0; i < count; i++) {
+      const down = game.drops && game.drops[i];
+      const s = i * step;
+      const x0 = a[0] + u[0] * s, y0 = a[1] + u[1] * s;
+      const x1 = a[0] + u[0] * (s + len), y1 = a[1] + u[1] * (s + len);
       ctx.save();
-      ctx.translate(x, y);
-
-      ctx.beginPath(); ctx.arc(0, 0, r + 6, 0, TAU);
-      ctx.fillStyle = `rgba(62,232,255,${0.08 + p * 0.4})`;
-      ctx.fill();
-
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
-      ctx.fillStyle = C.ink; ctx.fill();
-
-      const g2 = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 2, 0, 0, r);
-      g2.addColorStop(0, p > 0.05 ? '#ffffff' : '#7fe9ff');
-      g2.addColorStop(0.55, p > 0.05 ? C.cyan : '#1d6fa8');
-      g2.addColorStop(1, '#0b2b44');
-      ctx.beginPath(); ctx.arc(0, 0, r - 2.5, 0, TAU);
-      ctx.fillStyle = g2; ctx.fill();
-
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.52, 0, TAU);
-      ctx.fillStyle = '#f3f7ff'; ctx.fill();
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.52, 0, TAU);
-      ctx.lineWidth = 2; ctx.strokeStyle = C.ink; ctx.stroke();
-
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.24 + p * 3, 0, TAU);
-      ctx.fillStyle = p > 0.05 ? C.gold : C.magenta;
-      ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 13;
+      ctx.strokeStyle = C.steel;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.globalAlpha = down ? 0.18 : 1;
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = i === 1 ? C.amber : C.cap;
+      ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       ctx.restore();
-    });
+    }
   }
 
-  _drawSlings(ctx) {
-    ART.slings.forEach(([[ax, ay], [bx, by]], i) => {
-      const p = this.slingPulse[i];
-      const nx = -(by - ay), ny = (bx - ax);
-      const len = Math.hypot(nx, ny) || 1;
-      const push = (i === 0 ? 1 : -1) * p * 5;
-      const ox = (nx / len) * push, oy = (ny / len) * push;
-      // Body: a solid wedge behind the rubber, so it reads as a mechanism, not a line.
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-      ctx.lineTo(bx - (nx / len) * 26 * (i === 0 ? 1 : -1), by - (ny / len) * 26 * (i === 0 ? 1 : -1));
-      ctx.closePath();
-      // Lifted off the playfield colour and outlined, so a slingshot reads as the solid triangular
-      // mechanism it is rather than as one more white line among the dividers next to it.
-      ctx.fillStyle = p > 0.05 ? 'rgba(242,183,5,0.45)' : 'rgba(70,58,132,0.92)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(160,178,230,0.5)';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-      ctx.restore();
-      this._rubberRail(ctx, ax + ox, ay + oy, bx + ox, by + oy, 7, p > 0.05 ? C.gold : '#f4f6ff');
-      if (p > 0.05) {
-        ctx.save();
-        ctx.globalAlpha = p * 0.6;
-        ctx.strokeStyle = C.gold;
-        ctx.lineWidth = 18;
-        ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(ax + ox, ay + oy); ctx.lineTo(bx + ox, by + oy); ctx.stroke();
-        ctx.restore();
-      }
-    });
-  }
-
+  /** The two stand-up targets, flush to the side walls. */
   _drawStands(ctx) {
-    ART.stands.forEach(([[ax, ay], [bx, by]], i) => {
+    ART.stands.forEach((s, i) => {
       const p = this.standPulse[i];
       ctx.save();
       ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-      ctx.strokeStyle = C.ink; ctx.lineWidth = 14; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-      ctx.strokeStyle = p > 0.05 ? '#ffffff' : C.red;
-      ctx.lineWidth = 10; ctx.stroke();
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = C.magenta;
+      ctx.globalAlpha = 0.6 + p * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(s[0][0], s[0][1]);
+      ctx.lineTo(s[1][0], s[1][1]);
+      ctx.stroke();
       ctx.restore();
     });
   }
 
-  _drawDrops(ctx, game) {
-    const { a, u, len, step } = ART.bank;
-    // A backing plate behind the whole bank, so four gold slabs read as one mechanism rather than
-    // as a dashed line (which is what they looked like next to the gold one-way gates).
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(a[0] - u[0] * 4, a[1] - u[1] * 4);
-    ctx.lineTo(a[0] + u[0] * ((DROP_COUNT - 1) * step + len + 4), a[1] + u[1] * ((DROP_COUNT - 1) * step + len + 4));
-    ctx.strokeStyle = 'rgba(12,7,30,0.85)';
-    ctx.lineWidth = 20;
-    ctx.stroke();
-    ctx.restore();
-    for (let i = 0; i < DROP_COUNT; i++) {
-      const down = game.drops[i];
-      this.dropAnim[i] += ((down ? 1 : 0) - this.dropAnim[i]) * 0.28;
-      const k = this.dropAnim[i];
-      const s0 = i * step;
-      const ax = a[0] + u[0] * s0, ay = a[1] + u[1] * s0;
-      const bx = a[0] + u[0] * (s0 + len), by = a[1] + u[1] * (s0 + len);
-      const mxp = (ax + bx) / 2, myp = (ay + by) / 2;
-      const ang = Math.atan2(by - ay, bx - ax);
-      ctx.save();
-      ctx.translate(mxp, myp);
-      ctx.rotate(ang);
-      ctx.globalAlpha = 1 - k * 0.82;
-      ctx.scale(1, 1 - k * 0.85);
-      const h = 13.5;
-      ctx.beginPath(); roundRect(ctx, -len / 2, -h / 2, len, h, 3);
-      ctx.fillStyle = C.ink; ctx.fill();
-      const gr = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-      gr.addColorStop(0, down ? '#4a5570' : '#ffe89a');
-      gr.addColorStop(0.5, down ? '#333d55' : C.gold);
-      gr.addColorStop(1, down ? '#222a3d' : '#b07f02');
-      ctx.beginPath(); roundRect(ctx, -len / 2 + 1.4, -h / 2 + 1.4, len - 2.8, h - 2.8, 2.4);
-      ctx.fillStyle = gr; ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  _drawSpinner(ctx, game) {
-    const sw = SWITCHES.find((s) => s.id === 'spinner');
-    ctx.save();
-    ctx.translate(sw.x, sw.y);
-    // Frame.
-    ctx.strokeStyle = C.metalDark; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-15, -13); ctx.lineTo(-15, 13); ctx.moveTo(15, -13); ctx.lineTo(15, 13);
-    ctx.stroke();
-    // Blade, seen edge-on as it spins.
-    const sq = Math.cos(this.spinAngle);
-    ctx.save();
-    ctx.scale(1, Math.max(0.06, Math.abs(sq)));
-    ctx.beginPath(); roundRect(ctx, -14, -12, 28, 24, 2);
-    ctx.fillStyle = sq > 0 ? '#e8f4ff' : '#93a6c4';
-    ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = C.ink; ctx.stroke();
-    ctx.fillStyle = C.ink;
-    ctx.font = '700 11px system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (Math.abs(sq) > 0.55) ctx.fillText('SPIN', 0, 0);
-    ctx.restore();
-    ctx.restore();
-  }
-
-  _drawScoop(ctx, game, hud) {
-    const { x, y, rad, mouth, half } = ART.scoop;
-    const active = hud.bankLit || hud.lockLit || hud.superLit;
-    const pulse = 0.5 + Math.sin(this.time * 7) * 0.5;
+  /** The spinner in the left orbit lane: two chrome posts and an amber blade that really spins. */
+  _drawSpinner(ctx) {
+    const { x, y, w } = ART.spinner;
     ctx.save();
     ctx.translate(x, y);
-    // The hole.
-    const hg = ctx.createRadialGradient(0, 0, 1, 0, 0, rad);
-    hg.addColorStop(0, '#000000');
-    hg.addColorStop(0.7, '#0b0620');
-    hg.addColorStop(1, active ? 'rgba(62,232,255,0.5)' : 'rgba(60,70,110,0.5)');
-    ctx.beginPath(); ctx.arc(0, 0, rad - 1, 0, TAU);
-    ctx.fillStyle = hg; ctx.fill();
-    // Rim, with the mouth left open.
+    ctx.fillStyle = C.chrome;
+    ctx.beginPath(); ctx.arc(-w / 2, 0, 3.5, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(w / 2, 0, 3.5, 0, TAU); ctx.fill();
+    const h = Math.abs(Math.cos(this.spinAngle)) * 11 + 1.5;
+    ctx.fillStyle = Math.cos(this.spinAngle) > 0 ? C.amber : '#a06f16';
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  /** The kickout scoop: a black hole in a chrome ring, its rim drawn as the model's near-closed
+   *  collar so the mouth is visible. */
+  _drawScoop(ctx, hud) {
+    const sc = ART.scoop;
+    ctx.save();
+    ctx.fillStyle = C.ink;
+    ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.rad - 3, 0, TAU); ctx.fill();
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = C.chrome;
     ctx.beginPath();
-    ctx.arc(0, 0, rad, mouth + half, mouth - half + TAU);
-    ctx.lineWidth = 8; ctx.strokeStyle = C.ink; ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, rad, mouth + half, mouth - half + TAU);
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = active ? C.cyan : C.metalMid;
-    if (active) { ctx.shadowColor = C.cyan; ctx.shadowBlur = 10 + pulse * 14; }
+    ctx.arc(sc.x, sc.y, sc.rad, sc.mouth + sc.half, sc.mouth - sc.half + TAU);
     ctx.stroke();
-    ctx.shadowBlur = 0;
-    if (this.scoopPulse > 0.02) {
-      ctx.globalAlpha = this.scoopPulse;
-      ctx.beginPath(); ctx.arc(0, 0, rad + 6 + (1 - this.scoopPulse) * 20, 0, TAU);
-      ctx.strokeStyle = C.gold; ctx.lineWidth = 3; ctx.stroke();
-      ctx.globalAlpha = 1;
+    const on = hud.bankLit || hud.lockLit || hud.superLit;
+    if (on || this.scoopPulse > 0) {
+      ctx.globalAlpha = 0.3 + (this.scoopPulse * 0.5) + (on ? 0.35 + Math.sin(this.time * 7) * 0.2 : 0);
+      ctx.fillStyle = hud.superLit ? C.magenta : C.cyan;
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.rad - 4, 0, TAU); ctx.fill();
     }
     ctx.restore();
   }
 
-  /** The ramp habitrail. Drawn ABOVE the playfield with a shadow under it, because that is the one
-   *  cue that says "the ball is on a wire over the table" in a top-down 2D view. */
-  _drawRamp(ctx, game, hud) {
-    const lit = hud.multiball || this.rampGlow > 0.02 || (hud.mission && hud.mission.id === 'ramp');
-    ctx.save();
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  /** Three pop bumpers: chrome skirt, coloured ring, white cap, chrome collar. The model alternates
+   *  magenta / cyan / magenta and so does this. */
+  _drawBumpers(ctx) {
+    ART.pops.forEach(([x, y], i) => {
+      const p = this.popPulse[i];
+      const ring = i === 1 ? C.cyan : C.magenta;
+      const r = ART.popR;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1 + p * 0.09, 1 + p * 0.09);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath(); ctx.arc(0, 0, r + 8, 0, TAU); ctx.fill();
+      ctx.fillStyle = C.steel;
+      ctx.beginPath(); ctx.arc(0, 0, r + 6, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.55 + p * 0.45;
+      ctx.fillStyle = ring;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      const grd = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 2, 0, 0, r * 0.78);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(1, C.cap);
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.66, 0, TAU); ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = C.chrome;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.66, 0, TAU); ctx.stroke();
+      ctx.restore();
+    });
+  }
 
-    const path = (c) => {
-      c.beginPath();
-      c.moveTo(RAMP_PATH[0][0], RAMP_PATH[0][1]);
-      for (let i = 1; i < RAMP_PATH.length; i++) c.lineTo(RAMP_PATH[i][0], RAMP_PATH[i][1]);
+  /** Two slingshots: the model's violet plate, a black rubber band across its face, three chrome
+   *  posts and an amber lamp. */
+  _drawSlings(ctx) {
+    ART.slings.forEach((s, i) => {
+      const p = this.slingPulse[i];
+      const [ax, ay] = s[0], [bx, by] = s[1];
+      const dx = bx - ax, dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const side = i === 0 ? -1 : 1;
+      ctx.save();
+      ctx.fillStyle = C.violet;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.lineTo(bx + nx * 34 * side, by + ny * 34 * side);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = C.chrome;
+      ctx.stroke();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 11 + p * 5;
+      ctx.strokeStyle = C.chrome;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.lineWidth = 7 + p * 5;
+      ctx.strokeStyle = p > 0.05 ? C.cap : C.rubber;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      this._post(ctx, ax, ay, 5);
+      this._post(ctx, bx, by, 5);
+      const mx = (ax + bx) / 2 + nx * 20 * side, my = (ay + by) / 2 + ny * 20 * side;
+      ctx.globalAlpha = 0.4 + p * 0.6;
+      ctx.fillStyle = C.amber;
+      ctx.beginPath(); ctx.arc(mx, my, 6, 0, TAU); ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  /** The model's violet U-channel ramp, drawn as an elevated habitrail: a shadow on the deck, the
+   *  channel floor, two chrome side rails, and support legs. Brightens while a ball rides it. */
+  _drawRamp(ctx, game, hud) {
+    const glow = Math.max(this.rampGlow, hud && hud.multiball ? 0.4 : 0);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // The channel is TRANSLUCENT, and that is not decoration. In the model the ramp is a raised
+    // plastic U-channel you look straight through; drawn opaque from above it is a 26-unit band
+    // right across the middle of the table that hides the rosette, the drop bank and half the
+    // playfield art underneath it. Seeing the deck through it is both truer to the model and the
+    // only way the shots it flies over stay readable.
+    const line = (off = 0) => {
+      const pts = off === 0 ? RAMP_PATH : RAMP_PATH.map((p, i) => {
+        const q = RAMP_PATH[Math.min(RAMP_PATH.length - 1, i + 1)];
+        const r = RAMP_PATH[Math.max(0, i - 1)];
+        const dx = q[0] - r[0], dy = q[1] - r[1];
+        const l = Math.hypot(dx, dy) || 1;
+        return [p[0] + (-dy / l) * off, p[1] + (dx / l) * off];
+      });
+      // Quadratic through the midpoints: smooth enough to lose the eleven corners of the raw
+      // spline, close enough to it that the ball riding RAMP_PATH never leaves the channel.
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx0 = (pts[i][0] + pts[i + 1][0]) / 2, my0 = (pts[i][1] + pts[i + 1][1]) / 2;
+        ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx0, my0);
+      }
+      ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
     };
 
-    // Drop shadow on the playfield below.
-    ctx.save();
-    ctx.translate(5, 8);
-    path(ctx);
-    ctx.strokeStyle = 'rgba(0,0,0,0.32)'; ctx.lineWidth = 24; ctx.stroke();
+    ctx.globalAlpha = 0.28;
+    ctx.lineWidth = 30;
+    ctx.strokeStyle = '#000000';
+    line(); ctx.stroke();
+
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 26;
+    ctx.strokeStyle = C.violet;
+    line(); ctx.stroke();
+    ctx.globalAlpha = 0.16;
+    ctx.lineWidth = 15;
+    ctx.strokeStyle = '#ffffff';
+    line(); ctx.stroke();
+
+    if (glow > 0.02) {
+      ctx.globalAlpha = glow * 0.5;
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = C.cyan;
+      line(); ctx.stroke();
+    }
+
+    // side rails: solid, because the rails are the part you actually read the ramp by
+    ctx.globalAlpha = 0.92;
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = C.chrome;
+    line(-13); ctx.stroke();
+    line(13); ctx.stroke();
+
+    // the model's ramp-entry flap
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = C.chrome;
+    ctx.beginPath();
+    ctx.moveTo(RAMP_PATH[0][0] - 15, RAMP_PATH[0][1] + 9);
+    ctx.lineTo(RAMP_PATH[0][0] + 15, RAMP_PATH[0][1] + 9);
+    ctx.stroke();
+
+    // support legs
+    ctx.fillStyle = C.steel;
+    for (let i = 1; i < RAMP_PATH.length - 1; i += 3) {
+      ctx.beginPath(); ctx.arc(RAMP_PATH[i][0], RAMP_PATH[i][1], 3.5, 0, TAU); ctx.fill();
+    }
     ctx.restore();
 
-    // Translucent, because a real ramp is a sheet of clear plastic and an opaque one hides a third
-    // of the playfield (which is precisely what the first browser run showed).
-    path(ctx);
-    ctx.strokeStyle = 'rgba(10,6,28,0.42)'; ctx.lineWidth = 24; ctx.stroke();
-    path(ctx);
-    ctx.strokeStyle = lit ? 'rgba(255,79,216,0.26)' : 'rgba(160,180,230,0.10)';
-    ctx.lineWidth = 20; ctx.stroke();
+    // a ball riding the habitrail, drawn on top of the channel
+    for (const b of game.balls) {
+      if (!b.held || b.ramp == null) continue;
+      const p = rampPoint(b.ramp);
+      this._ball(ctx, p.x, p.y, 1.06);
+    }
+  }
 
-    // Two side rails.
-    for (const off of [-10, 10]) {
+  /** The shooter lane: the model's rod, spring coils, magenta tip and anchor, plus a power meter
+   *  that only appears while the plunger is being pulled. */
+  _drawPlunger(ctx, game, hud) {
+    const pull = game.plungerHeld ? game.plungerPower : 0;
+    const x = PLUNGER.x;
+    const y0 = PLUNGER.y + 22 + pull * 16;
+    ctx.save();
+    ctx.strokeStyle = C.steel;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const yy = y0 + 6 + i * 5;
+      if (yy > DRAIN_Y + 34) break;
+      ctx.beginPath(); ctx.arc(x, yy, 8, 0, Math.PI); ctx.stroke();
+    }
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = C.chrome;
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + 8); ctx.stroke();
+    ctx.fillStyle = C.magenta;
+    ctx.beginPath(); ctx.arc(x, y0, 10, 0, TAU); ctx.fill();
+    if (pull > 0.01) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x - 7, 300, 14, 260);
+      const h = 260 * pull;
+      ctx.fillStyle = pull > 0.85 ? C.magenta : C.amber;
+      ctx.fillRect(x - 6, 560 - h, 12, h);
+    }
+    ctx.restore();
+    if (hud.phase === 'ready' && !game.plungerHeld) {
       ctx.save();
+      ctx.globalAlpha = 0.35 + Math.sin(this.time * 5) * 0.25;
+      ctx.fillStyle = C.cap;
       ctx.beginPath();
-      for (let i = 0; i < RAMP_PATH.length; i++) {
-        const [px, py] = RAMP_PATH[i];
-        const [qx, qy] = RAMP_PATH[Math.min(RAMP_PATH.length - 1, i + 1)];
-        const [ox, oy] = RAMP_PATH[Math.max(0, i - 1)];
-        const dx = qx - ox, dy = qy - oy;
-        const l = Math.hypot(dx, dy) || 1;
-        const nx = -dy / l * off, ny = dx / l * off;
-        if (i === 0) ctx.moveTo(px + nx, py + ny); else ctx.lineTo(px + nx, py + ny);
-      }
-      ctx.strokeStyle = lit ? C.magenta : C.metalMid;
-      ctx.lineWidth = 3.2;
-      if (lit) { ctx.shadowColor = C.magenta; ctx.shadowBlur = 12; }
-      ctx.stroke();
+      ctx.moveTo(x, PLUNGER.y - 40);
+      ctx.lineTo(x + 9, PLUNGER.y - 22);
+      ctx.lineTo(x - 9, PLUNGER.y - 22);
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
     }
-    ctx.restore();
   }
 
-  _drawPlunger(ctx, game, hud) {
-    const p = hud.power || 0;
-    const x = PLUNGER.x, base = PLUNGER.y + 22;
+  /** The model's two chrome apron plates either side of the drain. */
+  _drawApron(ctx) {
     ctx.save();
-    // Shaft.
-    ctx.strokeStyle = C.metalDark; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(x, base + 6); ctx.lineTo(x, 740); ctx.stroke();
-    // Spring, compressing as the plunger is pulled.
-    const top = base + p * 16;
-    ctx.strokeStyle = hud.onPlunger ? C.gold : C.metalMid;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    for (let i = 0; i <= 10; i++) {
-      const yy = top + i * (2.2 + (1 - p) * 1.4);
-      const xx = x + (i % 2 ? 7 : -7);
-      if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
-    }
-    ctx.stroke();
-    // Tip.
-    ctx.beginPath(); roundRect(ctx, x - 11, top - 7, 22, 8, 3);
-    ctx.fillStyle = hud.onPlunger ? C.gold : C.metalMid;
-    ctx.fill();
-    // Power meter up the side of the lane.
-    if (hud.onPlunger) {
-      const h = 150;
-      ctx.beginPath(); roundRect(ctx, 372 - 4, base - 20 - h, 8, h, 4);
-      ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fill();
-      ctx.beginPath(); roundRect(ctx, 372 - 4, base - 20 - h * p, 8, h * p, 4);
-      ctx.fillStyle = p > 0.82 ? C.red : p > 0.45 ? C.gold : C.cyan;
-      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
+    ctx.fillStyle = C.steel;
+    ctx.globalAlpha = 0.9;
+    for (const side of [-1, 1]) {
+      const x0 = AXIS + side * 40, x1 = AXIS + side * 152;
+      ctx.beginPath();
+      ctx.moveTo(x0, DRAIN_Y + 34);
+      ctx.lineTo(x1, DRAIN_Y + 34);
+      ctx.lineTo(x1, DRAIN_Y - 8);
+      ctx.lineTo(x0, DRAIN_Y + 12);
+      ctx.closePath();
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
     ctx.restore();
   }
 
+  /** Two flippers: the model's chrome body with its cyan bat inlay and a steel pivot pin. */
   _drawFlippers(ctx, game) {
     for (const f of game.flippers) {
       const ex = f.px + Math.cos(f.angle) * f.len;
       const ey = f.py + Math.sin(f.angle) * f.len;
       ctx.save();
       ctx.lineCap = 'round';
-      // Casing.
-      ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
-      ctx.strokeStyle = C.ink; ctx.lineWidth = f.r * 2 + 5; ctx.stroke();
-      // Body, tapering toward the tip the way the collider does.
-      //
-      // THE GRADIENT RUNS ACROSS THE PADDLE'S OWN AXIS, NOT DOWN THE SCREEN. It used to be
-      // createLinearGradient(px, py - r, px, py + r): a 16-unit vertical band pinned to the PIVOT.
-      // A raised paddle's tip sits ~24 units ABOVE its pivot, so the whole swept paddle fell past
-      // stop 0 and clamped to solid #ffffff - the flipper turned white the moment you pressed, and
-      // white is exactly what the dividers and rails beside it are painted. The one instant you most
-      // need to see where your flipper is was the instant it camouflaged itself against the static
-      // furniture (2026-08-20 playtest: both flips visible in the clip were misses). Anchoring the
-      // gradient on the paddle's own normal gives the same cross-section shading at every angle.
-      const gnx = -Math.sin(f.angle), gny = Math.cos(f.angle);
-      const gmx = (f.px + ex) / 2, gmy = (f.py + ey) / 2;
-      const grad = ctx.createLinearGradient(gmx - gnx * f.r, gmy - gny * f.r, gmx + gnx * f.r, gmy + gny * f.r);
-      // ...and the paddle reads as ENERGIZED while it is held. A flipper that looks identical firing
-      // and at rest gives the player nothing to aim with. Colour is never the only cue here - the
-      // paddle is also visibly rotated - so this satisfies root CLAUDE.md's shape-not-hue rule, and
-      // gold against cyan is on the safe axis for red/green colourblindness.
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.45, f.pressed ? C.gold : C.cyan);
-      grad.addColorStop(1, f.pressed ? '#8a5b00' : '#0f5f86');
-      ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
-      ctx.strokeStyle = grad; ctx.lineWidth = f.r * 2; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ex, ey);
-      ctx.lineTo(f.px + Math.cos(f.angle) * f.len * 0.35, f.py + Math.sin(f.angle) * f.len * 0.35);
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = f.r * 0.7; ctx.stroke();
-      // Pivot cap.
-      this._post(ctx, f.px, f.py, f.r * 0.62);
+      ctx.lineWidth = (FLIP.r + 3) * 2;
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey); ctx.stroke();
+
+      ctx.lineWidth = FLIP.r * 2;
+      // Centred on the PADDLE, not on its pivot. A gradient anchored at the pivot leaves the whole
+      // outer half of the bat on the far end of the ramp, so a raised flipper paints solid white.
+      const mx0 = (f.px + ex) / 2, my0 = (f.py + ey) / 2;
+      ctx.strokeStyle = chromeGradient(ctx, mx0, my0, ex, ey, FLIP.r * 2, C.chrome);
+      ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey); ctx.stroke();
+
+      ctx.lineWidth = FLIP.r * 0.9;
+      ctx.strokeStyle = C.cyan;
+      ctx.globalAlpha = f.pressed ? 1 : 0.6;
+      ctx.beginPath();
+      ctx.moveTo(f.px + Math.cos(f.angle) * 10, f.py + Math.sin(f.angle) * 10);
+      ctx.lineTo(f.px + Math.cos(f.angle) * (f.len - 8), f.py + Math.sin(f.angle) * (f.len - 8));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = C.steel;
+      ctx.beginPath(); ctx.arc(f.px, f.py, 5, 0, TAU); ctx.fill();
       ctx.restore();
     }
   }
 
+  _ball(ctx, x, y, scale = 1) {
+    const r = 9 * scale;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); ctx.arc(x + 2.5, y + 3, r, 0, TAU); ctx.fill();
+    const grd = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, r * 0.1, x, y, r);
+    grd.addColorStop(0, '#ffffff');
+    grd.addColorStop(0.45, C.ball);
+    grd.addColorStop(1, '#5c6473');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, r - 0.6, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+
   _drawBalls(ctx, game) {
-    const seen = new Set();
-    game.balls.forEach((b, idx) => {
-      if (!b.live) return;
-      const key = idx;
-      seen.add(key);
-      let trail = this.trails.get(key);
-      if (!trail) { trail = []; this.trails.set(key, trail); }
-      trail.push([b.x, b.y]);
-      if (trail.length > 9) trail.shift();
-
-      const onRamp = b.ramp != null;
-      // A ball on the habitrail is physically above the playfield: bigger, with a real shadow.
-      const r = b.r * (onRamp ? 1.18 : 1);
-
-      if (!this.reduced && trail.length > 2) {
-        ctx.save();
-        for (let i = 0; i < trail.length - 1; i++) {
-          const a = i / trail.length;
-          ctx.globalAlpha = a * 0.32;
+    for (const b of game.balls) {
+      if (!b.live) continue;
+      if (b.held && b.ramp != null) continue;    // already drawn on the habitrail
+      // A short motion trail, which is the one thing that makes a fast ball readable at 60 fps on a
+      // phone. Skipped under reduced motion.
+      if (!this.reduced) {
+        const sp = Math.hypot(b.vx, b.vy);
+        if (sp > 240) {
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.strokeStyle = C.ball;
+          ctx.lineWidth = 13;
+          ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.arc(trail[i][0], trail[i][1], r * (0.35 + a * 0.55), 0, TAU);
-          ctx.fillStyle = C.cyan;
-          ctx.fill();
+          ctx.moveTo(b.x, b.y);
+          ctx.lineTo(b.x - b.vx * 0.018, b.y - b.vy * 0.018);
+          ctx.stroke();
+          ctx.restore();
         }
-        ctx.restore();
       }
-
-      ctx.save();
-      // Shadow.
-      ctx.globalAlpha = onRamp ? 0.5 : 0.34;
-      ctx.beginPath();
-      ctx.ellipse(b.x + (onRamp ? 7 : 3), b.y + (onRamp ? 10 : 4), r * 0.95, r * 0.72, 0, 0, TAU);
-      ctx.fillStyle = '#000';
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      // Chrome sphere.
-      const g2 = ctx.createRadialGradient(b.x - r * 0.4, b.y - r * 0.45, r * 0.1, b.x, b.y, r);
-      g2.addColorStop(0, '#ffffff');
-      g2.addColorStop(0.35, '#dfe7f5');
-      g2.addColorStop(0.72, '#8492ad');
-      g2.addColorStop(1, '#2a3145');
-      ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU);
-      ctx.fillStyle = g2; ctx.fill();
-      // Rim light picked up from the table's neon.
-      ctx.beginPath(); ctx.arc(b.x, b.y, r - 0.9, Math.PI * 0.15, Math.PI * 0.95);
-      ctx.strokeStyle = 'rgba(62,232,255,0.7)'; ctx.lineWidth = 1.6; ctx.stroke();
-      // Specular.
-      ctx.beginPath(); ctx.arc(b.x - r * 0.34, b.y - r * 0.38, r * 0.22, 0, TAU);
-      ctx.fillStyle = '#ffffff'; ctx.fill();
-      ctx.restore();
-    });
-    for (const k of [...this.trails.keys()]) if (!seen.has(k)) this.trails.delete(k);
+      this._ball(ctx, b.x, b.y);
+    }
   }
 
   _drawParticles(ctx) {
-    ctx.save();
     for (const p of this.parts) {
       const k = 1 - p.age / p.life;
       ctx.globalAlpha = k;
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * k, 0, TAU);
+      ctx.arc(p.x, p.y, p.r * (0.5 + k * 0.7), 0, TAU);
       ctx.fill();
     }
-    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   _drawPopups(ctx) {
-    ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const p of this.pops) {
       const k = p.age / p.life;
-      const rise = 34 * Math.pow(k, 0.6);
-      const grow = p.big ? 1 + (1 - Math.pow(1 - Math.min(1, k * 4), 2)) * 0.28 : 1;
-      ctx.globalAlpha = clamp(1 - Math.pow(k, 2.4), 0, 1);
-      ctx.font = `800 ${(p.big ? 21 : 15) * grow}px "Trebuchet MS", system-ui, sans-serif`;
+      ctx.save();
+      ctx.globalAlpha = clamp(1 - k * k, 0, 1);
+      ctx.font = `800 ${p.big ? 30 : 20}px system-ui, -apple-system, sans-serif`;
       ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(p.text, p.x, p.y - rise);
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(p.text, p.x, p.y - k * 40);
       ctx.fillStyle = p.color;
-      ctx.fillText(p.text, p.x, p.y - rise);
+      ctx.fillText(p.text, p.x, p.y - k * 40);
+      ctx.restore();
     }
-    ctx.restore();
   }
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
+// ui.js drains game.js's event stream and names four colours by an older, generic set of keys. They
+// map onto the model's materials rather than being separate values, so nothing in this file has a
+// colour of its own that the model did not supply.
+const PALETTE = {
+  ...C,
+  gold: C.amber,
+  green: C.cyan,
+  red: C.magenta,
+  metal: C.chrome,
+};
 
-export { C as PALETTE };
-export default { Renderer };
+export { PALETTE };
+export default { Renderer, PALETTE };

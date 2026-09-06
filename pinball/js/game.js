@@ -21,43 +21,31 @@ import {
 } from './table.js';
 
 /**
- * Acceleration DOWN THE PLAYFIELD, table-units/s^2 - not free fall. The table is 400 x 760 units
- * standing in for a real 20.25 x 42 inch playfield, so one unit is 1.40 mm (which also makes the
- * 18-unit ball 25.3 mm, against a real pinball's 27 - the scale is honest, so this number can be
- * checked against a real machine and is, in test.js section 6e).
+ * Acceleration DOWN THE PLAYFIELD, table-units/s^2 - not free fall. The table is 348 x 694 units
+ * standing in for a real 20.25 x 42 inch playfield, so one unit is 1.48 mm (which also makes the
+ * 18-unit ball 26.6 mm, against a real pinball's 27 - the scale is honest, so this number can be
+ * checked against a real machine, and test.js does).
  *
- * 564 units/s^2 = 0.79 m/s^2 = (5/7) * g * sin(6.5 degrees).
+ * 515 units/s^2 = 0.76 m/s^2 = (5/7) * g * sin(6.2 degrees).
  *
- * THE 5/7 IS THE WHOLE POINT AND IT WAS MISSING UNTIL 2026-08-29. A pinball ROLLS down the
- * playfield, it does not slide: the rolling constraint puts two sevenths of gravity into spinning
- * the ball and only five sevenths into forward motion. This engine has no rotational inertia at
- * all (physics.js's ball.spin is advanced from vx for the RENDERER and never fed back), so the
- * 5/7 has to be carried in this constant or it is simply absent.
+ * THE 5/7 IS THE WHOLE POINT. A pinball ROLLS down the playfield, it does not slide: the rolling
+ * constraint puts two sevenths of gravity into spinning the ball and only five sevenths into
+ * forward motion. physics.js does now give the ball a real rotational degree of freedom, but only
+ * at contacts - there is no modelled playfield surface for it to roll ON, because the playfield is
+ * the screen. So the 5/7 is carried here or it is absent.
  *
- * It was 1150 until 2026-08-20 (an effective 9.5 degrees; a playtester said the table felt
- * "basically on a vertical wall"), then 790 until 2026-08-29. 790 is g * sin(6.5 deg) for a ball
- * that SLIDES - correct arithmetic for the wrong ball. Against a rolling ball it is
- * (5/7) * g * sin(9.1 deg): still a table pitched nine degrees, when real machines run 6-7 and
- * Visual Pinball's own default is 6.0 (DefaultTableMinSlope). Matt, on the 790 build: "You tried,
- * but it didn't make the game better." It was 40 percent too fast.
+ * 6.2 degrees is a real machine (they run 6 to 7; Visual Pinball's own default is 6.0). It was
+ * 1150 until 2026-08-20 - an effective 9.5 degrees, and a playtester said the table felt
+ * "basically on a vertical wall" - then 790, then 564 on the old 400 x 760 table. This is that
+ * same 6.2-degree pitch re-expressed for the new 694-tall playfield: 564 * 694/760.
  *
- * WHAT MOVED WITH IT, AND WHAT DELIBERATELY DID NOT. The 08-20 change was a UNIFORM time rescale -
- * every velocity in the engine moved by sqrt(new/old) together, so every trajectory came out
- * geometrically identical and the table simply ran slower. That is very likely why it changed
- * nothing that mattered: a uniformly slower game feels like the same game in slow motion.
- *
- * So this change is NOT uniform. Only the two BALLISTIC GATES moved, by k = sqrt(564/790) = 0.845,
- * because each is a v^2/2g threshold that would silently drift otherwise:
- *   - PLUNGER.minV / maxV (table.js) - minV is tuned to just barely FAIL to clear the arch, which
- *     is the entire plunger skill curve;
- *   - the rampIn switch's needUp gate (table.js) - "was that hard enough to make the habitrail".
- * The flipper sweep rate, both kicker strengths (pops, slings) and MAX_SPEED are UNCHANGED, on
- * purpose. A real flipper's coil does not know what the cabinet is pitched at. Leaving them means
- * the flippers hit just as hard against weaker gravity, so the ball hangs and shots reach - which
- * is the actual difference between a real machine and a ball dropped down a wall. Nothing got
- * faster, so tunnelling cannot have got worse.
+ * TWO BALLISTIC GATES MOVE WITH IT AND NOTHING ELSE DOES. PLUNGER.minV/maxV and the rampIn
+ * switch's needUp are both v^2/2g thresholds, so they are recomputed in table.js whenever this
+ * changes. The flipper sweep rate, both kicker strengths and MAX_SPEED are deliberately NOT
+ * scaled: a real flipper's coil does not know what the cabinet is pitched at, and leaving them
+ * alone is what makes the ball hang and the shots reach.
  */
-export const GRAVITY = 564;
+export const GRAVITY = 515;
 
 /** Difficulty is the shared 1-4 tier vocabulary on the stats WRITE path, so these keys go straight
  *  into byDiff and difficulty-tiers.js maps them for the leaderboard with no translation layer. */
@@ -93,12 +81,15 @@ const STUCK_NUDGE_AT = 3.5;      // seconds of near-zero speed before a gentle s
 const STUCK_RESERVE_AT = 8;      // ...and before the ball is re-served outright
 // The ORBIT watchdog (see _drainTick). STUCK_* above catches a ball that is WEDGED; these catch a
 // ball that is LOOPING, which is a different failure and the one this table actually has.
-const LOOP_Y = 470;              // below this line is the slingshot/flipper pocket
+const LOOP_Y = 430;              // below this line is the slingshot/flipper pocket
 const LOOP_MIN_SPEED = 70;       // under this the ball is cradled, not looping - leave it alone
 const LOOP_BREAK_AT = 6;         // seconds of looping down there before the table shoves it out
-const LOOP_KICK_OUT = 560;       // upward speed of that shove: clears the slingshot tops with room
+const LOOP_KICK_OUT = 510;       // upward speed of that shove: clears the slingshot tops with room
 const SLING_REPAY = 0.45;        // seconds before the same slingshot may score again
-const MAX_HOLD = 3;              // seconds a ball may legitimately be HELD (ramp ride is 1.15)
+/** The scoop's kickout, along its own mouth direction (table.js's SCOOP.mouth, 2.25 rad: down and
+ *  to the left, so an ejected ball is fed toward the left flipper rather than at a side wall). */
+const SCOOP_KICK = [-270, 335];
+const MAX_HOLD = 3.2;            // seconds a ball may legitimately be HELD (the ramp ride is 1.5)
 
 /** Deterministic PRNG so test.js can replay a whole game exactly. */
 export function mulberry32(seed) {
@@ -424,7 +415,7 @@ export class Pinball {
       case 'rampIn': {
         if (b.vy > -60) break;                       // rolling back down: not a made ramp
         if (b.vy > -s.needUp) {                      // hit it, but not hard enough
-          b.vy = 200; b.vx += (this.rand() - 0.5) * 90;
+          b.vy = 185; b.vx += (this.rand() - 0.5) * 82;
           this.emit({ type: 'rampreject', x: s.x, y: s.y });
           break;
         }
@@ -627,7 +618,7 @@ export class Pinball {
         b.scoop -= dt;
         if (b.scoop <= 0) {
           b.scoop = null; b.held = false;
-          b.vx = -90; b.vy = 480;
+          b.vx = SCOOP_KICK[0]; b.vy = SCOOP_KICK[1];
           this.emit({ type: 'kickout', x: b.x, y: b.y });
         }
       }
@@ -653,7 +644,7 @@ export class Pinball {
         if (b.heldFor > MAX_HOLD) {
           console.error('[pinball] a ball was held for %ss; releasing it. This is a bug.', b.heldFor.toFixed(1));
           b.heldFor = 0; b.ramp = null; b.scoop = null; b.held = false;
-          b.vx = -90; b.vy = 480;
+          b.vx = SCOOP_KICK[0]; b.vy = SCOOP_KICK[1];
           this.emit({ type: 'ballsearch' });
         }
         continue;
@@ -670,7 +661,7 @@ export class Pinball {
       // A ball that came back down the shooter lane is not stuck, it is a weak plunge. Hand it back
       // to the plunger promptly instead of letting the generic watchdog sit on it for eight seconds
       // - a dead-looking table is the fastest way to make a player think the game has broken.
-      if (b.x > PLUNGER.laneX && b.y > 620 && Math.hypot(b.vx, b.vy) < 60) {
+      if (b.x > PLUNGER.laneX && b.y > 570 && Math.hypot(b.vx, b.vy) < 60) {
         b.laneRest = (b.laneRest || 0) + dt;
         if (b.laneRest > 0.5) {
           b.laneRest = 0; b.restTime = 0;
