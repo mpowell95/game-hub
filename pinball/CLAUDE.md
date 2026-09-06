@@ -9,12 +9,16 @@
 A full single-table pinball machine: continuous 2D physics, two swinging flippers, a plunger with a
 power meter, pop bumpers, slingshots, a drop target bank, a spinner, an orbit, a habitrail ramp, a
 scoop, timed missions, lock-and-multiball, a wizard mode, an end-of-ball bonus count-up, and tilt.
-Built 2026-08-11. The table is called **STARHUB** on the playfield art and the setup screen; the
-game, the folder, the hub id and the stats id are all plainly `pinball`. The name is deliberately
-short, machine-shaped and tied to the hub: the three top rollover lanes spell H-U-B, and the
-playfield wordmark is painted STAR over H U B so the two echo each other. (It was "Nova Cadet" for
-about an hour; that read as invented lore, which nothing else in this hub of plainly-named games
-has.)
+Built 2026-08-11; **the playfield and the solver were both replaced on 2026-09-06** - see "The
+machine was replaced" below, which is the first thing to read before touching any of it.
+
+The table is still called **STARHUB** on the setup screen; the game, the folder, the hub id and the
+stats id are all plainly `pinball`. The name is deliberately short, machine-shaped and tied to the
+hub: the three top rollover lanes spell H-U-B. **It kept the name through the 2026-09-06 rebuild on
+purpose** - the layout is new, but the hub is the same hub, the lanes still spell the same word, and
+a new name would have churned the strings, the docs and the setup screen to say nothing new. (It was
+"Nova Cadet" for about an hour in 2026-08; that read as invented lore, which nothing else in this hub
+of plainly-named games has.)
 
 **Admin only for now.** The hub registry entry carries `devOnly: true`, so the card renders for Matt
 and the tester and for nobody else, and the My Stats tab is gated the same way (`TABS` in
@@ -60,11 +64,48 @@ top-left corner in immersive mode.
 The first three are DOM-free and that is load-bearing, not tidiness: `node pinball/js/test.js` plays
 thousands of simulated seconds without constructing a single element.
 
+## The machine was replaced (2026-09-06)
+
+Matt: *"replace the existing pinball machine with the attached. And completely rewrite the physics
+doc to make the game playable."* The attachment was **a three.js model of a playfield** -
+`pinball.html` plus `three-d-stage.js`, a deck outline with an arch, three pop bumpers, two
+slingshots, a drop bank, standups, a spinner, a scoop, a violet U-channel loop ramp on support legs,
+a left wireform return, a sixteen-lamp rosette, top rollover lanes, posts with rubber, arrow inserts,
+a plunger with a spring and an apron - in nine named materials.
+
+**What was taken, and what it cost.** The model is 3D and this game is a 2D top-down canvas with no
+build step and no dependencies, so the model is not loaded: it is CONVERTED. `table.js` carries its
+geometry, `render.js` carries its parts and its nine colours verbatim, and every place the
+conversion had to decide something is marked `DESIGN NOTE` in `table.js` with what the model showed
+and why the table does something else. Three of those are worth knowing here:
+
+- **The drop bank moved.** The model puts it across the top centre, directly under the rollover
+  lanes it also draws - in a solver that is a wall across the lane exits, so the ball can never reach
+  them. It is inside the ramp loop now, in the band between the pop bumpers and the rosette. (Its
+  first new home, the upper left, was WORSE and a screenshot proved it: all three targets sat under
+  the ramp's left descent and simply were not visible.)
+- **The scoop moved 60 units down-field.** The model's position converts to a point inside the arch
+  CHANNEL rather than on the playfield.
+- **The model's two concentric horseshoes became one.** It draws a wall at 0.212 inside the deck's
+  own 0.26 arch, which would leave a 38-unit channel with nothing in it and no way out. The deck
+  edge IS the orbit lane's outer wall now.
+
+**The old STARHUB layout is gone**, and with it the four wedges, the 4-target bank and the 400 x 760
+coordinate system. ROYAL FLUSH is untouched and is still the second board.
+
 ## The table
 
-400 x 760 logical units, y down, ball 18 across. **Every clearance in `table.js` is checked against
-that 18**: a channel meant to pass a ball is at least 24 wide, and anything narrower than 18 is
-deliberately sealed. See the shot map in `table.js`'s header comment.
+348 x 694 logical units, y down, ball 18 across - 19.3 balls wide against a real machine's 19.0,
+because the scale factor (666.67 units per model metre) was chosen to make the model's ball and this
+engine's ball the same ball. **Every clearance in `table.js` is checked against that 18**: a channel
+meant to pass a ball is at least 26 wide, and anything narrower than 18 is deliberately sealed. See
+the shot map in `table.js`'s header comment.
+
+**Two centre lines, and they are not the same.** `ARCH.cx` is 174 (the CABINET centre, because the
+arch spans the shooter lane too); `AXIS` is 157 (the PLAY AREA centre, because the shooter lane eats
+the right-hand 38 units). Every left/right pair below the arch is `x` and `314 - x`. The model
+mirrors everything about the cabinet centre and lets the shooter lane overlap the right outlane,
+which cannot work in a solver, so the lower playfield is shifted 17 units left as one piece.
 
 Shots, and which flipper feeds them:
 
@@ -72,32 +113,55 @@ Shots, and which flipper feeds them:
 |---|---|---|
 | Ramp (centre) | either | habitrail to the right inlane. 5 ramps light the lock; during multiball it is the JACKPOT |
 | Scoop (up the right wall) | left | mission start / lock / super jackpot, in that priority order |
-| Drop bank (upper left, 4 targets) | right | clearing it lights the scoop for the next mission |
+| Drop bank (up the middle, inside the ramp loop, 3 targets) | right | clearing it lights the scoop for the next mission |
 | Left orbit (past the spinner, round the arch) | right | spinner rips plus a combo-multiplied orbit award |
 | H-U-B lanes (across the top) | bumper kickouts | each completed set raises the end-of-ball bonus multiplier, to 8x |
 | Stand-up targets (both side walls) | anything | small points, and a soft outlane defence |
 
 Three mechanisms carry most of the table's behaviour and each has a comment where it is defined:
 
-- **The arch is a real 34-wide channel**, not a decorative ceiling, formed by two concentric arcs.
-  The plunger fires into it and a left-orbit shot travels the whole way round and drops back into
-  the playfield at the top right. The inner arc deliberately stops 20 degrees short of vertical on
-  the right; that gap IS the orbit's exit. Closing it makes the orbit a dead end.
+- **The arch is a real 34-wide channel**, not a decorative ceiling, formed by the deck's own edge
+  (rOut 170) and the model's `orbit-wall-inner` (rIn 128). The plunger fires into it and a left-orbit
+  shot travels the whole way round and drops back into the playfield at the top right. The inner arc
+  deliberately stops 12 degrees short of the right horizontal; that gap IS the orbit's exit. Closing
+  it makes the orbit a dead end.
 - **Two one-way gates.** The shooter-lane gate exists only for a DOWNWARD-moving ball, so a launch
   passes through it and a returning orbit ball is caught and rolled out into the playfield instead
   of dribbling back to the plunger. The orbit deflector uses the identical trick for the opposite
   reason: the left lane has to be enterable from below (that is the orbit shot) while still spitting
   a returning ball into the playfield rather than straight into the outlane.
 - **The ramp is a scripted habitrail, not simulated.** Entering the mouth fast enough (`needUp`)
-  hands the ball to `RAMP_PATH` for 1.15 s; entering it slowly bounces the ball back down. This is
-  how a real ramp behaves and it is far kinder than trying to simulate a banked wire in 2D.
+  hands the ball to `RAMP_PATH` for `RAMP_TIME` (1.5 s - it is a long loop); entering it slowly
+  bounces the ball back down. This is how a real ramp behaves and it is far kinder than trying to
+  simulate a banked wire in 2D. `RAMP_PATH` IS the model's own `rampCurve`, converted, plus two points
+  of ours to carry the ball into the right inlane; it is elevated, so it crosses the left lane, the
+  drop bank and the rosette without any of them caring. **`render.js` draws it TRANSLUCENT for
+  exactly that reason**: drawn opaque from above it is a 26-unit band right across the middle of the
+  table that hides everything it flies over, and the first screenshot of this build showed precisely
+  that.
 
-### Wedges: the failure mode this table actually has
+- **The one-way gate stops 14 units short of the shooter-lane wall, and that gap is the point.** The
+  first version ended ON that wall, which made the two into a closed corner: every ball that
+  completed the orbit rolled down the gate, hit the wall and PARKED. A soak measured 20% of all ball
+  life sitting in it, with the orbit, the spinner and the scoop scoring literally zero across five
+  games. 14 units against a ball of 18 plus two wall radii is still far too narrow for a descending
+  ball to slip back down the lane, so the gate loses nothing by not touching.
+
+### Wedges: the failure mode this table used to have
 
 A pinball table is convex shapes near other convex shapes, and **two convex surfaces a little under
 one ball apart make a permanent parking space**. The ball rolls in, touches both, and stops forever;
-it is a stable equilibrium, so nothing shakes it loose. Four of these shipped in the first draft and
-all four were found by `test.js`'s soak, never by reading the code:
+it is a stable equilibrium, so nothing in a rigid-body solver shakes it loose.
+
+**Since 2026-09-06 the solver lets a pinched ball out on its own** (`physics.js`'s `escapeWedge`: all
+of a micro-step's contacts are collected before anything is decided, and a ball held between opposing
+normals while barely moving gets a small outward impulse along their resultant). That is why the new
+layout has none of the four below and did not need a hunt for them. **It is not a licence to stop
+checking clearances**: a ball that has to escape a pinch every twenty seconds is a table that feels
+wrong even when it is not broken, and `test.js` still asserts the geometry.
+
+The four the OLD layout shipped, all found by the soak and never by reading the code, are kept
+because each one is a shape to recognise, not a coordinate to avoid:
 
 1. The scoop two units off the right wall — every ball parked at (358, 268).
 2. The inlane divider's end cap a few units clear of the flipper pivot — parked at (258, 624), and
@@ -112,6 +176,12 @@ all four were found by `test.js`'s soak, never by reading the code:
 
 **If you move the scoop, a bumper, a divider or a wall, re-run `node pinball/js/test.js` before
 anything else.** The soak is the only thing that finds these.
+
+**And read the histogram, not just the pass line.** The gate-corner trap above was invisible to every
+assertion in the suite - nothing wedged, nothing left the table, every game finished - and showed up
+only as "20% of ball life in one 60x60 cell of the upper right" in a scratch occupancy histogram.
+That is the same lesson the ROYAL FLUSH import already wrote down further below: profile where the
+ball IS before theorising about why it misbehaves.
 
 A fifth failure of the same family showed up only in a browser: the cached static playfield bitmap
 is painted WITH the centring transform already applied, so blitting it under that transform again
@@ -136,8 +206,8 @@ straight through the gap between them.
 
 So there are now two new invariants, not a tightened threshold:
 
-- `game.js` caps how long a ball may be HELD (`MAX_HOLD`, 3 s). Every legitimate hold is short and
-  known - the ramp ride is `RAMP_TIME` (1.15 s), a scoop hold is under a second - so anything past
+- `game.js` caps how long a ball may be HELD (`MAX_HOLD`, 3.2 s). Every legitimate hold is short and
+  known - the ramp ride is `RAMP_TIME` (1.5 s), a scoop hold is under a second - so anything past
   that is a bug, and it releases the ball and logs loudly rather than letting it sit.
 - `test.js` has a deterministic `[KNOWN-BUG PROBE]` firing a ball into the scoop and asserting ONE
   award, plus the same for the ramp, plus a soak invariant on the longest held time. All four were
@@ -150,6 +220,51 @@ The **ball-search watchdog** in `game.js` is the safety net under all of it, and
 DISPLACEMENT FROM AN ANCHOR, not speed. The first version watched for speed < 26 and never fired,
 because a wedged ball jitters: it crosses any speed threshold several times a second while going
 precisely nowhere. Displacement cannot be fooled that way.
+
+## The solver was completely rewritten (2026-09-06)
+
+Same instruction, second half: *"completely rewrite the physics doc to make the game playable."* Four
+things changed and each is a behaviour a player feels. The full reasoning is `physics.js`'s own
+header; this is what a future session needs to know before touching it.
+
+1. **The step is adaptive, so tunnelling is impossible by construction.** The old solver ran a fixed
+   1/480 s step and hard-capped the ball at `MAX_SPEED`, because speed x step had to stay under the
+   thinnest wall - which made the cap a CORRECTNESS bound, and its own header said raising it "re-opens
+   tunnelling, and the ball leaves the table". A pinball that cannot be hit hard is not a pinball.
+   The tick is 1/240 s now and is SUBDIVIDED internally so that no ball and no flipper tip advances
+   more than 0.3 ball radii per micro-step, however fast it is going. **`MAX_SPEED` is a gameplay
+   bound now, not a correctness one**, and moving it can no longer lose the ball.
+
+2. **Contacts are resolved together, and a pinched ball lets itself out.** See "Wedges" above.
+
+3. **A flipper has angular momentum, and its rubber softens with speed.** The old paddle snapped to a
+   constant angular velocity for one step and reported `omega` from whatever step it happened to
+   take, so a flip was an instantaneous event: the ball either met the paddle during that one step
+   and was launched, or met it a step later and was not. The paddle ACCELERATES to `speed` now and
+   stops dead against its stop, so a flip has a real ~30 ms profile and a late flip is a soft shot
+   rather than no shot. Restitution falls with impact speed, the way real flipper rubber does.
+
+4. **The ball rolls, and it can be cradled.** `spin` is a real degree of freedom (solid sphere,
+   I = 2/5 m r^2) driven by Coulomb friction bounded by the normal impulse, so friction spends itself
+   spinning the ball up and then stops braking it. **The cradle damping fires only while the flipper
+   is HELD UP.** The first version damped a slow ball on ANY stationary paddle, which is flypaper: a
+   ball at the DOWN stop must still roll off the end, and `test.js`'s roll-to-tip probe caught it at
+   99 s against a 0.50 s frictionless baseline.
+
+**Friction is no longer zero everywhere, and the test moved with it.** The old
+`[KNOWN-BUG PROBE] every collider class is frictionless by default` could not survive: `physics.js`
+serves two boards, and ROYAL FLUSH is designed against Box2D and measurably worse with none. What the
+2026-08-22 incident was actually about is narrower - **a surface the ball RIDES must not brake it** -
+so the probe now asserts every ride surface on THIS table (`archIn`, `archOut`, both side walls, both
+funnels, the orbit wall and deflector, both inlane dividers) is frictionless BY NAME, and asserts the
+shared defaults are merely BOUNDED under 0.2 so a collider added without thinking can never be
+flypaper. Same guarantee, expressed where it belongs.
+
+**Three thresholds in that block are looser than the old table met, and that is geometry.** The
+paddle is 63 units against 58, its rest angle 25 degrees against 27, and gravity 9% lower, so the
+same frictionless roll takes 0.50 s here against 0.42 s there. Each threshold sits about 1.5x its
+measured frictionless value - loose enough not to be a tripwire for the layout, tight enough that the
+bad cradle above measured 99 s and failed loudly.
 
 ## The rules
 
@@ -188,7 +303,7 @@ invents a game nobody played, and the shared store only ever grows, so it could 
 
 ## Testing
 
-`node pinball/js/test.js` (wired into `run-all-tests.mjs`). 66 assertions in five blocks:
+`node pinball/js/test.js` (wired into `run-all-tests.mjs`). 88 assertions in eight blocks:
 
 1. **The solver** — gravity, restitution, the one-way gate in BOTH directions, that a swinging
    flipper throws the ball and a flipper held at its stop does not, the speed cap, ball-vs-ball.
@@ -196,7 +311,7 @@ invents a game nobody played, and the shared store only ever grows, so it could 
    continuous and ending at the right inlane.
 3. **The rules** — driven through the real contact and switch entry points, never by poking fields,
    so a rename in `game.js` fails the test rather than silently passing.
-4. **The soak** — six full games of random flipper input, asserting on EVERY step that no ball
+4. **The soak** — full games of random flipper input, asserting on EVERY step that no ball
    leaves the table, that nothing wedges, that balls really drain and that the ball count stays
    sane. It deliberately does NOT assert "every game finishes": random flipping is an
    unrealistically good pinball player, so a random driver on Casual legitimately keeps a ball alive
@@ -255,9 +370,17 @@ how it survived here for as long as it did.
 
 ## Things a future session will want to know
 
-- **The speed cap is a correctness bound, not a difficulty knob.** `MAX_SPEED / PHYS_DT` is the
-  distance a ball travels per step, and it has to stay well under the thinnest wall. Raising it
-  without shortening `PHYS_DT` re-opens tunnelling, and the ball leaves the table.
+- **The speed cap is a DIFFICULTY knob now, not a correctness bound** (it was the other way round
+  until 2026-09-06). The tick subdivides itself so a ball never advances more than 0.3 ball radii per
+  micro-step whatever its speed, so `MAX_SPEED` no longer has to protect the walls. Raising it makes
+  the table faster and nothing else. What still has to hold is `MAX_TRAVEL` against the thinnest
+  surface on either board - ROYAL FLUSH's walls are radius 1, and 2.7 units of travel samples one at
+  least four times on the way through.
+- **A random flipper driver is not a playtest, and the soak's shot counts are not a playability
+  measure.** Random flipping reached the orbit once and the scoop once across five games on a table
+  where a measured flipper sweep puts the ball on the crown from the base of the paddle. What the
+  soak is for is invariants - nothing off the table, nothing wedged, balls really drain - and it is
+  good at those. For "is this fun", play it.
 - **The static playfield art is cached into an offscreen canvas keyed on device-pixel size.** If you
   add painted art that needs to change during play, it does NOT belong in `_paintPlayfield`.
 - **Reduced motion thins the garnish, it does not freeze the game.** Shake, full-screen flashers and
@@ -353,6 +476,10 @@ against STARHUB's **1.64 s** - their ball is **2.4x floatier**, on a layout peop
 playing. Their field is also shorter (600 vs 760) and their ball bigger (20 vs 18). Every axis says
 the same thing: tighter, busier, slower. Whatever happens to Royal Flush, that comparison is the
 most useful thing to come out of it, and STARHUB's own gravity should be read against it.
+
+*(Those STARHUB figures are the 2026-08-29 ones and are kept as written. On the 2026-09-06 playfield
+the same pitch reads 515 units/s^2 over a 694-tall field - 6.2 degrees, unchanged as an angle - and a
+crown-to-drain free fall measures 1.55 s. The comparison and its conclusion are untouched.)*
 
 ### The bug actually behind "the ball never drains"
 

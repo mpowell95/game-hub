@@ -75,7 +75,7 @@ export const STRINGS = {
     task_target: 'Drop the targets',
 
     // standing objective, shown on the dot-matrix line when nothing else is
-    hint_bank: 'Drop the 4 targets',
+    hint_bank: 'Drop the 3 targets',
     hint_royal: 'Drop the targets, ride the ramps',
     hint_scoop: 'Scoop lit: start a mission',
     hint_ramp: 'Ramps light the lock',
@@ -120,7 +120,7 @@ export const STRINGS = {
     help_s3: 'Targets',
     help_s4: 'Orbit',
     help_caption: 'Four shots. Lit ones are worth the most.',
-    help_ex1: '4 targets = the scoop starts a mission',
+    help_ex1: '3 targets = the scoop starts a mission',
     help_ex2: '5 ramps = lock, 3 locks = multiball',
     help_rule1: 'Tap the left half of the table for the left flipper, the right half for the right.',
     help_rule2: 'Nudge can save a ball. Three nudges too fast and the table tilts.',
@@ -180,7 +180,7 @@ export const STRINGS = {
     msg_bonus_x: 'Bonus {n}x',
     msg_extra_ball: 'Bola extra',
 
-    hint_bank: 'Tumba las 4 dianas',
+    hint_bank: 'Tumba las 3 dianas',
     hint_royal: 'Tumba las dianas, sube las rampas',
     hint_scoop: 'Hoyo listo: empieza una misión',
     hint_ramp: 'Las rampas encienden el bloqueo',
@@ -227,7 +227,7 @@ export const STRINGS = {
     help_s3: 'Dianas',
     help_s4: 'Órbita',
     help_caption: 'Cuatro tiros. Los encendidos valen más.',
-    help_ex1: '4 dianas = el hoyo empieza una misión',
+    help_ex1: '3 dianas = el hoyo empieza una misión',
     help_ex2: '5 rampas = bloqueo, 3 bloqueos = multibola',
     help_rule1: 'Toca la mitad izquierda de la mesa para el flipper izquierdo, y la derecha para el derecho.',
     help_rule2: 'Empujar puede salvar una bola. Tres empujones seguidos y la mesa hace tilt.',
