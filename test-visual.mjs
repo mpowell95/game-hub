@@ -1044,6 +1044,21 @@ const FIT_SIZES = [
   { w: 390, h: 664, why: 'short (with browser toolbars)' },
 ];
 
+// [KNOWN-BUG PROBE] A GAME THAT FITS THE SCREEN BECAUSE ITS PLAYFIELD IS GONE (2026-09-06).
+// Filler's fit check went green in both hosts at every size on 2026-09-01 while the board was a
+// 44px pill holding seven 0px-wide tiles: `margin: 0 auto` on a flex-column child cancels the
+// stretch, so the board sized itself to its own (empty) content. A destroyed board fits ANY
+// screen, so the fit numbers got better as the game got worse. Natalia played it that way for
+// five days before anyone had a picture of it.
+// So: name each game's playfield and the smallest a cell of it may honestly be, and check it in
+// the same pass that measures the screen. Registering a game here is a promise about the game,
+// not about the CSS that happens to be shipping today.
+const PLAYFIELD = {
+  // Filler's tiles are display-only (the tap targets are the 53px colour buttons), and the hub at
+  // 390x664 floors the board at 200px, which is a 22px tile. 18px is under that and far over zero.
+  filler: { sel: '.fl-board', cell: '.fl-tile', minCell: 18 },
+};
+
 /** Mount a game through the hub's OWN launch path (`initHub` + `hub.launch`), not by tapping a
  *  launcher card: dev-only games have no card for this suite's plain profile, and the launcher is
  *  not the point anyway - the hub's chrome and CSS are. See the comment inside mountInHub for why
@@ -1135,6 +1150,18 @@ async function checkFit(game) {
         if (r.over > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.over}px TALLER than the screen - you would have to scroll to see all of it`);
         else if (r.wide > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.wide}px too wide`);
         else ok(game, 'fit', `${label}: fits`);
+        const pf = PLAYFIELD[game];
+        if (pf) {
+          const m = await page.evaluate(({ sel, cell }) => {
+            const b = document.querySelector(sel);
+            if (!b) return null;
+            const c = b.querySelector(cell);
+            return { board: b.getBoundingClientRect().width, cell: c ? c.getBoundingClientRect().width : 0, cells: b.querySelectorAll(cell).length };
+          }, { sel: pf.sel, cell: pf.cell });
+          if (!m) fail(game, 'fit', `${label}: no ${pf.sel} on screen at all - the game never reached its playfield`);
+          else if (m.cell < pf.minCell) fail(game, 'fit', `${label}: PLAYFIELD COLLAPSED - ${pf.sel} is ${m.board.toFixed(0)}px wide and each ${pf.cell} is ${m.cell.toFixed(1)}px (need >= ${pf.minCell}px). It fits the screen because there is nothing on it.`);
+          else ok(game, 'fit', `${label}: playfield ${m.board.toFixed(0)}px, ${m.cells} cells at ${m.cell.toFixed(1)}px`);
+        }
       } catch (e) {
         fail(game, 'fit', `${label}: threw ${e.message.slice(0, 70)}`);
       } finally {
