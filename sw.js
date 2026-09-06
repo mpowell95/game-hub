@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v638';
+const CACHE = 'game-hub-v639';
 
 const ASSETS = [
   './',
@@ -308,7 +308,6 @@ const ASSETS = [
   './golf/js/rounds.js',
   './golf/courses/pinevalley.js',
   './golf/courses/redmesa.js',
-  './golf/courses/oasissands.js',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -655,19 +654,18 @@ const REST_MANIFEST = {
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
   './golf/css/golf.css': 'e21a83ec98',
-  './golf/js/ui.js': '3fe3893ebe',
+  './golf/js/ui.js': 'dcba28e5d9',
   './golf/js/strings.js': '3b42f7a9de',
   './golf/js/holes.js': 'f99a03461d',
   './golf/js/club-art.js': '777bcfb097',
-  './golf/js/clubs.js': 'c192f1e94b',
-  './golf/js/swing.js': '81b3425ba8',
-  './golf/js/shot.js': '227b2f205b',
-  './golf/js/render.js': '4df1541be9',
+  './golf/js/clubs.js': '9168dea0d9',
+  './golf/js/swing.js': '694b019bce',
+  './golf/js/shot.js': '8016eacca3',
+  './golf/js/render.js': 'bc998fc8aa',
   './golf/js/holegen.js': '0b7d925160',
   './golf/js/rounds.js': '9b7f566d8e',
-  './golf/courses/pinevalley.js': '91296651dc',
+  './golf/courses/pinevalley.js': '535d472a0e',
   './golf/courses/redmesa.js': '4bd568276c',
-  './golf/courses/oasissands.js': 'fff6ee4ce0',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

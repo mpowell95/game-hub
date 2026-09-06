@@ -628,10 +628,16 @@ export function drawFrame(ctx, map, hole, cam, st) {
     // nothing to read.
     const dots = (st.aimDots && st.aimDots.length)
       ? st.aimDots
-      // THE DOTS ARE A POWER LADDER, so on a curved putter scale they sit at f ** PUTT_GAMMA of the
-      // range, not at even fractions of it. Even spacing would put the 50 % dot at 30 ft when 50 %
-      // power actually goes 20, and a read that lies is worse than no read.
-      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * Math.pow(f, PUTT_GAMMA), risk: false }));
+      // EVENLY SPACED ON THE GROUND: 15 / 30 / 45 / 60 ft, and the ARC'S TICKS move to the powers
+      // that produce them (ui.js's `tickPow`). They used to sit at `f ** PUTT_GAMMA` - even POWER -
+      // which put them at 11 / 33 / 63 / 100 % of the range, so the tick reading "50" pointed at a
+      // third of the way to the hole and the putter was the one club whose ladder did not match its
+      // own labels. Matt, 2026-09-06: *"the 25%, 50%, 75%, and 100% red dots and power in general on
+      // the putter are all broken. none are correct."*
+      //
+      // The two have to move TOGETHER. Spacing the dots evenly while leaving the ticks on even power
+      // would just move the same disagreement onto the arc.
+      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * f, risk: false }));
     const full = dots.find((d) => !d.risk && d.at === Math.max(...dots.filter((x) => !x.risk).map((x) => x.at)));
     const fullAt = full ? full.at : dots[dots.length - 1].at;
     const endAt = dots[dots.length - 1].at;

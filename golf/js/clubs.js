@@ -211,15 +211,50 @@ export function swingTempo() {
  *
  *  It multiplies the LIE's zone rather than replacing it, and it deliberately does NOT touch the
  *  orange band - orange's job is that a bad lie stays hittable, which is a property of the lie. */
-export const ZONE_DRIVER = 0.72;
+/** THREE TIERS, NOT A FOURTEEN-STEP RAMP (2026-09-06).
+ *
+ *  The first version ran linearly by index from 0.72 to 1.00, which is a 2.2 % step per club.
+ *  Matt, having cycled the entire bag on one lie and filmed it: *"they were ALL equally difficult
+ *  (or easy) to hit... at a minimum, 1 difficulty setting for the driver and woods, another for
+ *  irons, and a third for the wedges."*
+ *
+ *  He is right, and the pixels prove it. Measured off that video, the accuracy bar's green band was
+ *  0 px wide for EVERY club - driver 0/29/71 green/orange/red, lob wedge 0/31/70, within one pixel
+ *  of each other. A 0.72-to-1.00 ramp is 8.5 px against 11.9 px on that bar, and the needle drawn
+ *  over the middle of it is 6 px. There was nothing to see. */
+export const ZONE_WOODS = 0.62;
+export const ZONE_IRONS = 0.80;
+export const ZONE_WEDGES = 1.00;
+
+/** Which tier a club is in: `woods` (driver, 3 wood, 5 wood), `irons` (2-9), `wedges` (p/s/l). */
+export function clubTier(club) {
+  if (!club || club.id === 'putter') return 'putter';
+  if (club.id === 'driver' || /wood$/.test(club.id)) return 'woods';
+  if (/wedge$/.test(club.id)) return 'wedges';
+  return 'irons';
+}
 
 export function swingZone(club) {
-  if (!club || club.id === 'putter') return 1;
-  const i = CLUBS.findIndex((c) => c.id === club.id);
-  if (i < 0) return 1;
-  const n = CLUBS.length - 1;
-  return ZONE_DRIVER + (1 - ZONE_DRIVER) * (i / n);
+  const tier = clubTier(club);
+  if (tier === 'putter') return 1;
+  if (tier === 'woods') return ZONE_WOODS;
+  if (tier === 'irons') return ZONE_IRONS;
+  return ZONE_WEDGES;
 }
+
+/** THE SMALLEST GREEN BAND A TIER MAY EVER BE SHOWN AS, as a fraction of the accuracy bar.
+ *
+ *  On a clean lie the measured numbers stand untouched (`0.545 * zone * clubZone`). The floor only
+ *  ever lifts a band that has COLLAPSED, and every lie but tee/fairway/green collapses: `LIES.zone`
+ *  is 0.167-0.22 for rough, sand and trees, so a driver's green band came out at 8.6 % of the bar -
+ *  a 0.8-frame half-window at 60 fps, about 8 device px, underneath a 6 px needle. That is not a
+ *  hard target, it is an invisible one, and it made all fourteen clubs identical.
+ *
+ *  IT IS PER TIER RATHER THAN ONE NUMBER, which is the whole point: a single floor would clamp all
+ *  three tiers to the same value on exactly the lies where they were already indistinguishable, and
+ *  re-create the bug it exists to fix. Orange is untouched and still keyed on the lie alone, so a
+ *  bad lie is still about avoiding red - it just has a target you can see while you do it. */
+export const GREEN_FLOOR = { woods: 0.16, irons: 0.21, wedges: 0.26, putter: 0.26 };
 
 /** Auto-pick a club for the shot in hand (§10.2: the game offers one after every shot, and the
  *  player overrides with ^ / v). On the green it is always the putter - no other club is offered,

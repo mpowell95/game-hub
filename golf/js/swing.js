@@ -175,7 +175,7 @@ export function barPosOf(pos) {
  *
  *  The bar is always full and the needle always sweeps at the same speed for a given club, so a
  *  smaller target is simply a smaller target, and the player can SEE it before committing. */
-export function bandsFor(zone = 1, clubZone = 1) {
+export function bandsFor(zone = 1, clubZone = 1, floor = 0) {
   // `clubZone` is the CLUB's own difficulty (clubs.js's `swingZone`): a driver's green band is
   // narrower than a lob wedge's from the very same lie. Matt: "Driver off the fairway shouldn't be
   // super easy to hit."
@@ -184,7 +184,10 @@ export function bandsFor(zone = 1, clubZone = 1) {
   // because orange's whole job is that a bad lie stays hittable - that is a property of where the
   // ball is sitting, not of what is being swung at it, and letting the club shrink it too would
   // make a driver out of a bunker a coin flip.
-  const green = 0.545 * zone * clubZone;
+  // `floor` is the tier's own minimum (clubs.js's `GREEN_FLOOR`). On a clean lie the product is
+  // already well above it and nothing changes; on rough, sand or trees the product collapses to
+  // 8-12 % and the floor is what keeps a visible, hittable target under each tier.
+  const green = Math.max(floor, 0.545 * zone * clubZone);
   const rest = 1 - green;
   const orangeShare = 0.30 + 0.10 * Math.min(1, Math.max(0, zone));
   return { green, orange: green + rest * orangeShare, red: 1 };
@@ -335,10 +338,13 @@ export function puttMishit(barPos, zone = 1) {
   return { deg: m.deg * PUTT_LINE_K * Math.sign(signed || 1), paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
 }
 
-export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0) {
+export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 0) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
-  const b = bandsFor(zone, clubZone);
+  // THE SAME `floor` THE METER IS PAINTED WITH. `_drawMeter` and this function must be handed
+  // identical arguments or the band a player aims at is not the band that scores the strike, which
+  // is the drift this whole file is built to avoid.
+  const b = bandsFor(zone, clubZone, floor);
   let deg;
   let distanceMul = 1;
   if (off <= b.green) {

@@ -16,9 +16,9 @@ import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
@@ -546,7 +546,7 @@ class GolfGame {
           <div class="gf-dist" data-role="dist"></div>
         </div>
 
-        <div class="gf-tr gf-panel">
+        <div class="gf-tr gf-panel" data-role="windpanel">
           <span>${t('wind')}</span>
           <span class="gf-windarrow" data-role="windarrow">${windArrow(0)}</span>
           <b data-role="wind">0.0</b>
@@ -582,7 +582,7 @@ class GolfGame {
     this.meter = this.rootEl.querySelector('[data-role="meter"]');
     this.mctx = this.meter.getContext('2d');
     this.el = {};
-    for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'swing']) {
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'windpanel', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
 
@@ -746,7 +746,16 @@ class GolfGame {
     // A TAP ON THE COURSE still eases home (see the pointerup handler). That one is a deliberate
     // "bring me back" gesture with nothing else happening, and the glide is what makes it read as
     // the camera travelling rather than as the hole teleporting.
-    if (r === 'begin') { this.previewDx = 0; this.previewDy = 0; this.returning = false; }
+    // THE READOUTS HAVE TO COME BACK, TOO. Zeroing the preview snaps the camera home but used to
+    // leave `data-faded` set, and nothing else clears it except a tap on the course - so ONE free
+    // look on hole 1 left the lie tile, the power cap and the yardage at 40 % opacity for the rest
+    // of the round. Matt's test-hole video is ghosted in every single frame. It is the same defect
+    // the METER had (see "The meter's two real bugs"), surviving in the one cluster that kept its
+    // fade on purpose.
+    if (r === 'begin') {
+      this.previewDx = 0; this.previewDy = 0; this.returning = false;
+      this.el.tc.setAttribute('data-faded', '0');
+    }
     if (r === 'fire') this._fire();
     this._paintHud();
   }
@@ -774,7 +783,7 @@ class GolfGame {
     // The over-swing spray needs a seed: unpredictable to the player, reproducible for the tests.
     // The ball's own position and the exact needle stop are what the shot already turns on.
     const seed = Math.round(this.ball[0] * 977) ^ Math.round(this.ball[1] * 31) ^ Math.round(pos * 1e5);
-    const m = mishit(barPosOf(pos), power, zone, clubZone, seed);
+    const m = mishit(barPosOf(pos), power, zone, clubZone, seed, GREEN_FLOOR[clubTier(this._activeClub())] || 0);
 
     // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
     // fairway and the tee, which is exactly the case this split exists for.
@@ -788,14 +797,14 @@ class GolfGame {
         power: Math.max(0, Math.min(1, power * pm.paceMul)),
         rangeFt: puttRangeFt(),
       });
-      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res };
+      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball] };
     } else {
       const club = this._activeClub();
       const res = resolveShot({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
         club, power, mishitDeg: 0, distanceMul: m.distanceMul,
       });
-      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: res.flightMs, res, club };
+      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: res.flightMs, res, club, from: [...this.ball] };
     }
     // The hub readout is set when the ball STOPS, never here - see _settleShot.
   }
@@ -973,7 +982,19 @@ class GolfGame {
   _settleShot() {
     const a = this.anim;
     this.anim = null;
-    const from = this.ball;
+    // WHERE THE SHOT WAS STRUCK FROM IS `a.from`, NOT `this.ball` (2026-09-06).
+    //
+    // This used to read `const from = this.ball`, and both callers in `_frame` do
+    // `this.ball = [...ballPos]; this._settleShot();` - so `this.ball` had ALREADY been moved to
+    // the landing point before it was read as the starting point. `lastShotYd` therefore measured
+    // a point against itself and the ring's hub printed **0.0 ft on every shot of every round**,
+    // which is what Matt's test-hole video shows from the first frame to the last. One of the
+    // reference's two numbers had never once worked.
+    //
+    // The address position is carried on the ANIMATION, which is the only thing that still knows
+    // it once the ball has moved. `golferAt` needs exactly the same value and already had this
+    // problem (see "The golfer stands still"), so there is now one field both read.
+    const from = a.from || this.ball;
     this.ball = [...a.res.rest];
     // THE HUB READOUT IS THE DISTANCE THE LAST SHOT TRAVELLED, and it is set HERE, when the ball
     // comes to rest. It used to be set in _fire(), which meant the third tap printed how far the
@@ -1053,6 +1074,11 @@ class GolfGame {
     const w = windFor(this.hole);
     this.el.wind.textContent = w.speed.toFixed(1);
     this.el.windarrow.innerHTML = windArrow(w.bearing * (180 / Math.PI), !(w.speed > 0));
+    // AND IT IS HIDDEN ON A PUTT. `shot.js` applies no wind to `simulatePutt` at all - deliberately,
+    // because wind does not move a rolling ball meaningfully and it would make the break unreadable
+    // - so a wind panel over a putt is a number that cannot affect anything the player is about to
+    // do. Reading one and adjusting for it is worse than not having it.
+    this.el.windpanel.hidden = this._putting();
     this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
   }
 
@@ -1232,7 +1258,11 @@ class GolfGame {
       // (measured: at frame 847+ the cap tracks steadily off screen at ~1.9 px a frame while the
       // camera follows the ball), which is what a golfer watching his own shot looks like. Ours
       // used to blink out 260 ms after impact.
-      golfer: !this.holed,
+      // ...BUT NOT WHILE A PUTT IS BEING LINED UP. On the green the camera is tight (34 yds) and the
+      // sprite is drawn AT the ball, so it covers the ball, the aim line and most of the way to the
+      // cup - the three things a putt is entirely about. He comes back the instant the stroke
+      // starts, which is when there is something to watch him do.
+      golfer: !this.holed && !(putting && !this.anim),
       golferAt: this.ball,
       swingPose,
       aimRad: this.aimRad,
@@ -1278,6 +1308,7 @@ class GolfGame {
     c.clearRect(0, 0, METER_W, METER_H);
     c.lineCap = 'butt';
 
+    const putting = this._putting();
     const cx = 88; const cy = 76;
     const OUT_R = 54; const BAND = 19;
     const R = OUT_R - BAND / 2;            // the band's centre radius
@@ -1354,8 +1385,25 @@ class GolfGame {
     // above. The tint itself is chosen to match "a light tint, not white" rather than sampled - the
     // meter sits over a sand bunker in three of the four clips and the fourth is the putt frame the
     // angles came from, where the line's own colour is mixed with the band under it.
+    //
+    // ON THE PUTTER THEY SIT WHERE THE BALL GOES A QUARTER, A HALF AND THREE QUARTERS OF THE RANGE,
+    // not at a quarter, a half and three quarters of the POWER (2026-09-06). Matt: *"the 25%, 50%,
+    // 75%, and 100% red dots and power in general on the putter are all broken. none are correct."*
+    //
+    // He is right, and it is `PUTT_GAMMA`. A full shot's distance is LINEAR in power, so its dots
+    // land at 25/50/75/100 % of the club's carry and the ticks name them exactly. A putt's is
+    // `range * power ** 1.6`, so at even power the dots landed at 11 / 33 / 63 / 100 % of the range
+    // - the tick reading "50" pointed at a third of the way to the hole. The putter was the one
+    // club in the bag where the meter's own labels did not mean what they say.
+    //
+    // The curve itself STAYS - it is what makes a tap-in hittable at all (see "Short putts ran past
+    // the hole"): linear, a 2 ft putt needs 3.3 % of the meter, reached 53 ms after the first tap.
+    // So the LADDER is evenly spaced on the ground (15/30/45/60 ft, and see `render.js`) and the
+    // TICKS move to the powers that produce it. Everything the player reads now agrees, the spacing
+    // never changes, and the short putt stays makeable.
+    const tickPow = putting ? (f) => Math.pow(f, 1 / PUTT_GAMMA) : (f) => f;
     for (const v of [0.25, 0.5, 0.75]) {
-      const a = ang(v);
+      const a = ang(tickPow(v));
       c.lineWidth = 2; c.strokeStyle = 'rgba(255,255,255,0.42)';
       const [x0, y0] = polar(IN_R + 1, a); const [x1, y1] = polar(OUT_R - 1, a);
       c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
@@ -1365,7 +1413,7 @@ class GolfGame {
     c.font = '800 13px ui-monospace, "SF Mono", Menlo, monospace';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const v of [0.25, 0.5, 0.75, 1.0]) {
-      const [lx, ly] = polar(OUT_R + 11, ang(v));
+      const [lx, ly] = polar(OUT_R + 11, ang(tickPow(v)));
       c.lineWidth = 3.5; c.strokeStyle = '#0b0f07'; c.lineJoin = 'round';
       c.strokeText(String(v * 100), lx, ly);
       c.fillStyle = '#ffffff';
@@ -1397,7 +1445,8 @@ class GolfGame {
       c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx2, by2); c.lineTo(dx2, dy2); c.lineTo(ex, ey);
       c.closePath(); c.stroke();
     };
-    const b = bandsFor(lieOf(this._lie()).zone, swingZone(this._activeClub()));
+    const b = bandsFor(lieOf(this._lie()).zone, swingZone(this._activeClub()),
+      GREEN_FLOOR[clubTier(this._activeClub())] || 0);
     outline(7, '#0b0f07');
     outline(3.5, '#fffdfc');
     quad(0, (1 - b.orange) / 2, '#fd0001');
@@ -1425,8 +1474,13 @@ class GolfGame {
     // committed to, for the entire downswing. Measured in the reference at 297 deg for 70+ frames,
     // and measured WHITE - the same as the needle. They are never confusable in practice because
     // the marker is above and the needle is below it, coming down.
-    if (read.power != null) needleAt(read.power, 6, 3, '#ffffff');
-    needleAt(read.pos, 6, 3, '#ffffff');
+    // 5/2 RATHER THAN 6/3. At dpr 3 the old needle was 18 device px of black key across the middle
+    // of the accuracy bar, and the bar's whole inner width is about 140 - so it ate 18 px out of
+    // every green band, from the centre, which is exactly where the band is. On the hardest tier
+    // (woods, floored at 16 % = 22 px) that left 4 px showing. Trimmed, the same band shows 9.
+    // It is still the widest single mark on the meter and still black-keyed against grass.
+    if (read.power != null) needleAt(read.power, 5, 2, '#ffffff');
+    needleAt(read.pos, 5, 2, '#ffffff');
 
     // --- the hub readout: how far the PREVIOUS shot travelled ----------------------------------
     if (this.lastShotYd != null) {

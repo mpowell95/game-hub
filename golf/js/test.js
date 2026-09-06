@@ -526,10 +526,22 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   near('dot 4 is the club\'s full distance', dots[3].at, 215, 0.01);
   ok('dots 1-3 are 25/50/75 % of it', Math.abs(dots[0].at - 53.75) < 0.01 && Math.abs(dots[2].at - 161.25) < 0.01);
   ok('dot 5 is the risk band past 100 %', dots[4].risk && dots[4].at > dots[3].at);
+  // [KNOWN-BUG PROBE] THE LADDER IS THE CLUB'S AND IT NEVER MOVES FOR THE LIE (Matt, 2026-09-06).
+  // It used to be multiplied by `lieOf(lie).power`, so the whole ruler shrank to 75 % out of a
+  // greenside bunker - which this very assertion used to demand, under the rationale that it
+  // "never lies about where a perfect strike lands". Matt overruled it: *"The power/aim line should
+  // never change. It should always be the same distance with the same spacing for the same club
+  // always... The game can't adjust and tell someone exactly how hard to swing."* The lie's cost is
+  // shown by the `Power: 82%` readout instead, and learning what that means is the skill.
   const sandDots = SH.aimDots(CLUBS[0], 'greensideBunker');
-  ok('the ladder RE-SCALES for a bad lie, so it never lies about where a perfect strike lands',
-    Math.abs(sandDots[3].at - 215 * 0.75) < 0.01);
-  ok('the ladder re-scales when the club changes', SH.aimDots(CLUBS[7], 'fairway')[3].at === 139);
+  const roughDots = SH.aimDots(CLUBS[0], 'heavyRough');
+  ok('[KNOWN-BUG PROBE] the ladder does NOT re-scale for a bad lie',
+    Math.abs(sandDots[3].at - 215) < 0.01 && Math.abs(roughDots[3].at - 215) < 0.01,
+    'a 7 iron\'s dots are a 7 iron\'s dots from anywhere');
+  ok('...and every dot matches the fairway ladder exactly, from every lie',
+    ['tee', 'fairway', 'lightRough', 'heavyRough', 'fairwayBunker', 'greensideBunker', 'trees']
+      .every((lie) => SH.aimDots(CLUBS[0], lie).every((d, i) => Math.abs(d.at - dots[i].at) < 1e-9)));
+  ok('the ladder still re-scales when the CLUB changes', SH.aimDots(CLUBS[7], 'fairway')[3].at === 139);
   ok('there is no ladder for the putter', SH.aimDots(PUTTER, 'green').length === 0);
 }
 
@@ -972,7 +984,7 @@ console.log('\n-- 12c. THE GOLFER STANDS STILL, AND THE VIEW DOES NOT SLIDE --')
   // around." The free look HOLDS where you leave it, so a player who had scrolled up the fairway
   // got half a second of the course sliding sideways starting on the same frame as the backswing.
   ok('[KNOWN-BUG PROBE] the view snaps home when the stroke begins, it does not glide',
-    /if \(r === 'begin'\) \{ this\.previewDx = 0; this\.previewDy = 0;/.test(ui)
+    /if \(r === 'begin'\) \{\s*\n\s*this\.previewDx = 0; this\.previewDy = 0;/.test(ui)
     && !/if \(r === 'begin'\) this\.returning = true;/.test(ui),
     'the eased return is still right for a TAP on the course, which is a deliberate come-back gesture');
   ok('...and the tap-on-the-course return still eases',
