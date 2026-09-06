@@ -411,12 +411,30 @@ export const HOLE_13 = pv({
 
 export const HOLE_14 = pv({
   n: 14, par: 4, nickname: 'Highwater',
-  // Water down the entire right side, and a green that sheds hard toward it. The safe line is
-  // left, and the safe line leaves the longest approach on the course.
-  path: [[0, 5], [-6, 130], [-2, 260], [4, 394]],
-  fw: [{ at: 0, w: 16 }, { at: 0.5, w: 12 }, { at: 1, w: 13 }],
-  belts: { left: { depth: 26, spacing: 9, seed: 1401 }, right: false },
-  water: [{ at: 0.5, side: 1, off: 30, rx: 15, ry: 90, seed: 1403 }],
+  // RE-CUT 2026-09-06, as the pilot for the routing and green-shape pass. It used to run
+  // [[0,5],[-6,130],[-2,260],[4,394]] - 41 degrees of total wiggle but only 15.7 yds of offset from
+  // the straight tee-to-pin line over 389 yards, which is to say it wandered and never turned.
+  // Matt: *"100 % of yours were completely straight. That's not how any golf course in the world
+  // is."*
+  //
+  // It is a genuine dogleg right now, and the water is on the INSIDE of the elbow, so the corner is
+  // a real bid rather than a decoration: take the tight line over the lake and a wedge is left,
+  // bail out left and the approach is a long iron to a green turned across the shot.
+  // THE BEND IS AT THE LANDING ZONE, not past it. A first attempt turned at 300 yds and measured
+  // 40.8 yds of offset from the straight line - which on a hole five times taller than it is wide
+  // still rendered as a leaning strip. A dogleg has to make the DRIVE go somewhere the approach
+  // does not, so the corner sits where the drive finishes.
+  path: [[0, 5], [0, 108], [6, 200], [44, 272], [76, 330], [86, 380]],
+  fw: [{ at: 0, w: 17 }, { at: 0.45, w: 11 }, { at: 0.72, w: 10 }, { at: 1, w: 14 }],
+  belts: { left: { depth: 26, spacing: 9, seed: 1401 }, right: { depth: 20, spacing: 11, seed: 1402 } },
+  // The lake sits in the elbow, which is what makes cutting the corner cost something.
+  water: [{ at: 0.62, side: 1, off: 26, rx: 20, ry: 40, seed: 1403 }],
+  // LONG AND NARROW, TURNED 55 DEGREES ACROSS THE APPROACH. A ball coming in on the direct line
+  // meets the green at its narrowest; the player who took the safe route left is looking down its
+  // length. That is the whole trade of the tee shot, paid at the green rather than restated there.
+  greenShape: 'long',
+  greenAngle: 55,
+  greenR: 15,
   guard: ['rightWater', 'frontSand'],
   slope: 'rightShed',
 });
