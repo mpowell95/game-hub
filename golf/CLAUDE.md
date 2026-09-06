@@ -2812,3 +2812,111 @@ away - bigger crowns block more:
                      before                          after
 pinevalley   -0.6 +0.0 -0.1 +1.2 +0.8 +1.2    -0.4 +0.0 +0.0 +1.0 +1.5 +1.8
 ```
+
+## The test hole video: five bugs, and the meter had no green band at all (2026-09-06)
+
+Matt filmed a 3-hole round on Pine Valley 1-3 and asked what was wrong with it. Everything below is
+measured off that clip, and the two biggest findings are things nobody had reported because they
+look like the game working.
+
+### THE ACCURACY BAR HAD NO GREEN BAND, FOR ANY CLUB, ON ANY LIE BUT THREE
+
+He cycled the whole bag on one lie and said they felt identical. Scanning the bar pixel by pixel in
+his own footage:
+
+```
+driver   green 0 px   orange 29   red 71        putter (on the green)  green 51   orange 20  red 28
+3 wood   green 0       orange 29   red 72
+2 iron   green 0       orange 29   red 72
+7 iron   green 0       orange 30   red 71
+s wedge  green 0       orange 31   red 69
+l wedge  green 0       orange 31   red 70
+```
+
+**Zero, and within one pixel of each other.** `LIES[].zone` is 0.167-0.22 for rough, sand and trees
+(the spec table's "85 %" is stale - it was retuned when the reference's 9.1 % bad-lie band was
+measured), so `0.545 * zone * clubZone` gave a driver **8.6 %** of the bar and a lob wedge **12.0 %**
+- 8.5 px against 11.9 px, with a 6 px needle drawn over the middle of both. Section 8b had been
+printing the same fact for weeks: **a driver's green half-window from light rough is 0.8 frames**,
+0.6 from heavy rough. Sub-frame at 60 fps. The suite only ever asserted a floor on ORANGE.
+
+So `swingZone` shipped, was arithmetically correct, and was invisible. Three changes:
+
+- **Three tiers, not a fourteen-step ramp** (Matt: *"1 difficulty setting for the driver and woods,
+  another for irons, and a third for the wedges"*). `ZONE_WOODS` 0.62 / `ZONE_IRONS` 0.80 /
+  `ZONE_WEDGES` 1.00, resolved by `clubTier()`.
+- **`GREEN_FLOOR`, per tier** (woods 0.16, irons 0.21, wedges 0.26 of the bar). A clean lie is above
+  it and is untouched; only a collapsed band is lifted. **It has to be per tier**: one floor would
+  clamp all three to the same number on exactly the lies where they were already identical and
+  rebuild the bug. Orange is untouched and still keyed on the lie alone.
+- **The needle is 5/2, not 6/3.** At dpr 3 it was 18 device px of black key across the middle of a
+  ~140 px bar, eating 18 px out of every band from the centre - which is where the band is.
+
+**`bandsFor` and `mishit` both take the floor, from the same call site.** They always shared their
+arguments and they must keep sharing them: the band a player aims at and the band that scores the
+strike are the same object or the meter is lying. Measured in the real UI at dpr 3, all three from
+one heavy-rough lie: **woods 8 px of green, irons 15, wedges 22** (was 0, 0, 0).
+
+### THE LADDER NO LONGER RE-SCALES FOR THE LIE
+
+`aimDots` was `club.carry * lieOf(lie).power`. Matt: *"The power/aim line should never change. It
+should always be the same distance with the same spacing for the same club always... The game can't
+adjust and tell someone exactly how hard to swing. It's a game. you have to learn and get better at
+it."* He is overruling the rationale it shipped with ("it never lies about where a perfect strike
+lands") and he is right that it was doing the player's thinking for them. The lie's cost is shown by
+the `Power: 82%` readout; learning what that means is the skill. The old assertion demanded the old
+behaviour and is now a `[KNOWN-BUG PROBE]` demanding the new one.
+
+### THE PUTTER WAS THE ONE CLUB WHOSE LADDER DID NOT MATCH ITS OWN LABELS
+
+Matt: *"the 25%, 50%, 75%, and 100% red dots and power in general on the putter are all broken. none
+are correct."*
+
+A full shot's distance is LINEAR in power, so its dots sit at 25/50/75/100 % of the club's carry and
+the arc's ticks name them exactly. A putt's is `range * power ** PUTT_GAMMA`, so at even POWER the
+dots landed at **11 / 33 / 63 / 100 %** of the range - the tick reading "50" pointed a third of the
+way to the hole. (The dots did not lie about the physics: measured, 25 % says 6.5 ft and the ball
+goes 6.4, 50 % says 19.8 and it goes 19.5. It is the SPACING that was wrong.)
+
+**The curve stays and the labels move.** Going linear would bring back the unhittable tap-in that
+`PUTT_GAMMA` exists to fix (a 2 ft putt at 3.3 % of the meter, 53 ms after the first tap). So the
+dots are evenly spaced on the ground - **15 / 30 / 45 / 60 ft** - and the arc's 25/50/75 ticks move
+to the powers that produce them (`tickPow`, `f ** (1/PUTT_GAMMA)`). **The two must move together**;
+spacing the dots evenly and leaving the ticks alone just relocates the same disagreement.
+
+### The hub readout had never worked
+
+`_settleShot` computed `lastShotYd = distYd(from, a.res.rest)` with `const from = this.ball` - but
+both callers do `this.ball = [...ballPos]; this._settleShot();`, so `this.ball` was already the
+landing point. It measured a point against itself and the ring's hub printed **0.0 ft on every shot
+of every round**, which is what the video shows from its first frame to its last. The address
+position rides on the animation (`a.from`) now, which is the only thing that still knows it.
+
+### One free look dimmed the HUD for the rest of the round
+
+`data-faded` (40 % opacity on the lie tile, the power cap and the yardage) is set when the free look
+drifts past 4 yds and was cleared in exactly one place - a tap on the course. Starting a swing zeroed
+the camera offset but never the attribute, and the element is not recreated between shots or holes.
+Every frame of the video is ghosted. Same defect the METER had and was fixed for; the one cluster
+that keeps its fade on purpose kept the bug with it.
+
+### And three smaller ones
+
+- **Hole 3's lake was a hard-edged parallelogram** with a crisp red-brown rim - eight literal points
+  from Stage B, so it never got the harmonic pond pass or the undulating cross-hazard faces. It is
+  `tiltedBlob()` now: `blob()` draws around its own centre, so a lake lying on a DIAGONAL has to be
+  built axis-aligned and turned. Centre, length, width and angle are all measured off the literal it
+  replaces.
+- **The golfer stood on the line of the putt.** At the 34-yard green view he covers the ball, the aim
+  line and most of the way to the cup. He is hidden while a putt is being lined up and comes back the
+  instant the stroke starts.
+- **The wind panel showed on putts.** `simulatePutt` applies no wind at all, deliberately, so it was
+  a number that could not affect anything the player was about to do.
+
+### One thing reported and then withdrawn
+
+The ball appearing to rest 0.9 ft from the cup before the holed banner. `rollPutt` does return the
+CAPTURE point rather than the cup, and `CUP_CAPTURE_YD` is exactly 0.30 yd = 0.9 ft - but re-watched
+at 10 fps the ball travels all the way up and overlaps the cup before it drops. 0.9 ft is one
+ball-width and it reads as in. Matt pushed back and he was right; the original claim came off a 1 fps
+survey, which this file already warns is only good for layout.

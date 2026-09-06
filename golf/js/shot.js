@@ -689,9 +689,21 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
  *
  *  They are a starting point, not a promise: a mishit moves the ball off them. That is exactly the
  *  right contract - an honest plan the player then has to execute. */
-export function aimDots(club, lieKind) {
+/** THE LADDER IS THE CLUB'S, AND IT NEVER MOVES (2026-09-06).
+ *
+ *  It used to be `club.carry * lieOf(lieKind).power`, so the whole ruler shrank to 82 % out of
+ *  heavy rough. Matt: *"The power/aim line should never change. It should always be the same
+ *  distance with the same spacing for the same club always... The game can't adjust and tell
+ *  someone exactly how hard to swing. It's a game. you have to learn and get better at it."*
+ *
+ *  He is overruling the rationale this line shipped with - "the ladder re-scales for a bad lie, so
+ *  it never lies about where a perfect strike lands" - and he is right that it was doing the
+ *  player's thinking for them. A 7 iron's dots are a 7 iron's dots from anywhere; the lie's cost is
+ *  shown honestly by the `Power: 82%` readout above the tile, and learning what that means from a
+ *  given lie is the skill. Written down so the next session does not "fix" it back. */
+export function aimDots(club, lieKind) {          // eslint-disable-line no-unused-vars
   if (!club || club.id === 'putter') return [];
-  const reach = club.carry * lieOf(lieKind).power;
+  const reach = club.carry;
   return [0.25, 0.5, 0.75, 1.0, RISK_FRACTION].map((f) => ({ at: reach * f, risk: f > 1 }));
 }
 export const RISK_FRACTION = 1.10;

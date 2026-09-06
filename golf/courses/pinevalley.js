@@ -18,7 +18,21 @@
 
 // Shared by every hole on the course. `trunk` blocks at any height; `canopy` blocks a ball
 // travelling below `height`. That pair is the whole punch-low-or-loft-over decision.
-import { makeHole, greenPoly, slopeGrid } from '../js/holegen.js';
+import { makeHole, greenPoly, slopeGrid, blob } from '../js/holegen.js';
+
+/** A hand-authored hazard, given the same harmonic outline the generated holes get.
+ *
+ *  `blob()` draws around its own centre, so a lake that lies along a DIAGONAL - hole 3's does, and
+ *  it is the only one on the property - has to be built axis-aligned and then turned. Matt, on the
+ *  test-hole video: the lake is a hard-edged parallelogram with a crisp red-brown rim, which is the
+ *  same "almost perfect rectangles" the fairways and the cross hazards were both pulled up for. It
+ *  was hand-drawn as eight literal points in Stage B and never got either pass. */
+function tiltedBlob(cx, cy, rx, ry, deg, seed, n = 16) {
+  const a = deg * Math.PI / 180;
+  const cos = Math.cos(a); const sin = Math.sin(a);
+  return blob(0, 0, rx, ry, seed, n)
+    .map(([x, y]) => [+(cx + x * cos - y * sin).toFixed(1), +(cy + x * sin + y * cos).toFixed(1)]);
+}
 
 const TREE_TYPES = [
   { name: 'pine', trunk: 0.6, canopy: 4.5, height: 18 },   // tall and narrow: clearing it costs a club
@@ -227,7 +241,9 @@ export const HOLE_3 = {
     // hole played to +2.98 with 48 % bogey-or-worse, on the THIRD hole of the course, which is
     // meant to be the gentlest golf on the property. Pulled back 16 yds and narrowed, so the lay-up
     // band is ~55 yds wide and the carry is a decision rather than a coin toss.
-    { kind: 'water', poly: [[-14, 262], [16, 272], [42, 296], [58, 326], [48, 337], [24, 313], [-2, 292], [-18, 283]] },
+    // The same eight-point diagonal band it always was - centre, length, width and angle all
+    // measured off the literal it replaces - with a harmonic outline instead of straight edges.
+    { kind: 'water', poly: tiltedBlob(20, 299, 47, 13, 40, 30303) },
     { kind: 'fairwayBunker', poly: [[16, 176], [20, 184], [26, 186], [30, 180], [28, 170], [22, 166], [17, 169]] },
     { kind: 'fringe', poly: greenPoly(58, 538, 20, 21, 19444) },
     { kind: 'greensideBunker', poly: [[74, 512], [78, 520], [84, 522], [88, 515], [86, 505], [80, 501], [75, 505]] },
