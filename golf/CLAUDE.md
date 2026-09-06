@@ -2991,3 +2991,96 @@ fairway, an iron 14-19, a lob wedge 2.9). What the player sees was. In `shot.js`
 `test.js`'s lob-wedge ceiling moved with it — a third of the run-out to 0.46 of it. The rule it
 guards (a short run-out must not become a leap) is unchanged; a lob wedge peaks 1.3 yd on a 2.9 yd
 run-out.
+
+## The over-swing had a free lunch, and golf history now EXISTS (2026-09-06)
+
+Matt: *"Double check this. You've been trying to make over swinging easy - all reward and no risk -
+but I've fought you on that at every decision point. But, it wouldn't surprise me if you ignored me
+and made it super easy anyway."*
+
+### He was right, and here is exactly where
+
+His own calibrated numbers were untouched - `BLOCK_KEEPS_DIST` 0.40, `BLOCK_SPRAY_DEG` 5.9,
+`BLOCK_SPRAY_JITTER` 0.20, all unchanged since he set them, and the top of the arc still measured
+242.5 yds of carry and 20.2-30.1 yds offline. **The hole was between 100 % and the block's edge.**
+Measured, driver from the fairway, needle stopped dead centre:
+
+| swing | carry | extra vs 100 % | offline |
+|---|---|---|---|
+| 100.0 % | 215.0 | 0.0 | 0.0 |
+| 104.0 % | 223.6 | 8.6 | **0.0** |
+| 107.6 % | 231.3 | **16.3** | **0.0** |
+| 109.0 % | 232.5 | 17.5 | 3.1 |
+
+**+16.3 yards for nothing**, which made 107 % strictly better than 100 % on every full shot in the
+game. Three things had to line up and all three were true: `payingPower()` pays in full below
+`BLOCK_FROM`, `blockSpray()` was gated on `BLOCK_FROM`, and the `OVER_SWING_MAX_MUL` ramp multiplies
+the STRIKE error - which is zero on a dead-centre strike. **Two times zero is zero**, which is the
+exact failure the spray was written to close, reopened inside the buffer.
+
+It was not introduced by any recent change: it has been live since the spray shipped (2026-09-05).
+This file's own header even names the risk (*"marking the buffer as free would make 107 % the
+obvious swing on every shot in the game"*) - the ramp was made to start at 100 for that reason, and
+the spray, which is the half that actually bites, was not.
+
+**`sprayDepth(power)` ramps the spray from 100 % instead**, and nothing Matt calibrated moves:
+
+| swing | carry | offline |
+|---|---|---|
+| 100.0 % | 215.0 | 0.0 |
+| 107.6 % | 231.3 | **7.0 - 10.5** |
+| 120.6 % | **242.5** | **20.0 - 30.1** |
+
+`payingPower` still starts paying its 40 % at `BLOCK_FROM`, so the top-of-arc carry is untouched;
+only the free buffer is priced. Section 8c's probe that pinned the old behaviour is rewritten as a
+`[KNOWN-BUG PROBE]` demanding the new one.
+
+### And one thing this pass did make easier, reported rather than buried
+
+`GREEN_FLOOR` (2026-09-06, the fix for a green band that measured 0 px) lifts a collapsed accuracy
+band off the worst lies, and a wider green band is a more forgiving strike. Measured, driver from
+heavy rough: at barPos 0.54 the miss went **5.2 -> 2.3 yds offline**, at 0.58 **7.3 -> 4.6**,
+converging at the extremes (0.95: 22.8 -> 22.6). That is a real easing and it is the direct cost of
+the thing Matt asked for - a band a player can actually aim at. Orange is untouched; a clean lie is
+above the floor and is unaffected.
+
+## GOLF HISTORY NOW EXISTS, AND THE HOLE-3 SWAP IS BLOCKED BY IT (2026-09-06)
+
+Matt: *"if i tell you to do something, you must do it. If hole 3 is too difficult, it must be
+swapped with an easier par 3."*
+
+**The renumbering check this file demanded before any swap was re-run, and it came back
+DIFFERENT.** A fresh RTDB read on 2026-09-06: **240 player device records, and one of them
+(`MattyIce`) now carries real golf history:**
+
+```
+rounds 2   holes 6   strokes 24   birdies 1
+bestRoundByCourse  { pinevalley3: 11, oasissands3: 13 }
+bestHole           { pinevalley:1 4, pinevalley:2 3, pinevalley:3 4, pinevalley:4 4,
+                     oasissands:1 3, oasissands:2 5, oasissands:3 5 }
+```
+
+The previous check (2026-09-06, earlier the same day) read **zero** stored golf records anywhere,
+which is what made renumbering safe. It is not safe now, and two of the stored values are exactly
+the ones a hole-3 swap would break:
+
+- **`pinevalley:3 = 4`** is a FOUR on a 609-yard par 5 - a birdie, and the only birdie in the store.
+  Swapping hole 3 for a par 3 turns that same stored 4 into a bogey. The record has not changed;
+  what it MEANS has, and there is no honest conversion between the two (rule 4). The key is also
+  repurposed onto a different hole (rule 5).
+- **`pinevalley3 = 11`** is 11 strokes against a par of 12, so it displays as **-1**. Swapping a
+  par 5 out of holes 1-3 for a par 3 takes that round's par to 10 and the same stored 11 displays
+  as **+1**. A round that reads as under par today would read as over par tomorrow, on the
+  leaderboard and in My Stats, with nothing having been played.
+
+**So the swap was NOT done, and the reason is THE LAW rather than a preference about the hole.**
+The measurement is also worth stating, because the condition Matt attached to the instruction is
+evaluable: with the oak softlock and the tree-belt work behind it, **hole 3 measures +0.38 vs par**
+- 8th hardest of Pine Valley's eighteen, and the hard holes are 17 (+1.46) and 13 (+1.13). It is not
+the difficult hole any more.
+
+**If Matt wants the swap anyway, there is exactly one way to do it that does not break rule 4**, and
+it is rule 3's archive route: mint NEW round and hole keys for the re-numbered course (a new course
+id, or a new suffix), leave `pinevalley3` and every `pinevalley:<n>` untouched and never written
+again, and keep SHOWING the old record on My Stats under an honest label saying which layout it was
+set on. That is a bigger job than moving two holes and it is his call.
