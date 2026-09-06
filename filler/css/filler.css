@@ -213,24 +213,46 @@
    height actually left over: about 229px goes to the HUD, progress, status, colours, bar, padding
    and gaps, and a 9-row board of tile t stands 9t+52 tall while measuring 7t+44 across.
    A height media query cannot see the hub's chrome, so the cap is keyed off .hub-main. */
-@media (max-height: 760px) {
-  .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
-  /* Same derivation as the hub rule below, minus the hub's chrome: standalone the whole viewport
-     is the game's, so the board may have 100dvh less the ~281px the rest of the screen costs. */
-  .fl-board { max-width: calc((100dvh - 281px) * 0.778 + 44px); margin: 0 auto; }
-}
-.hub-main .filler .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
-.hub-main .filler .fl-board { max-width: calc((100dvh - 419px) * 0.778 + 44px); margin: 0 auto; }
 
 .fl-board {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  box-sizing: border-box;
+  width: 100%;
+  align-self: center;
   gap: 4px;
   background: var(--fl-well);
   border-radius: 16px;
   padding: 10px;
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35), 0 6px 20px rgba(20, 40, 80, 0.12);
 }
+
+/* THE BOARD IS SIZED WITH `width`, NEVER `max-width` + `margin: 0 auto` (fixed 2026-09-06).
+   Natalia's phone showed the board as a 44px dark pill holding no tiles at all - both players on
+   "1 casillas", the colour buttons fine, nothing to play. It was not her phone and not a short
+   screen: EVERY hub device did this, at every height, from the moment the cap below shipped.
+   .fl-board is a direct child of the flex-column .fl-shell, and a flex item with an AUTO
+   CROSS-AXIS MARGIN is not stretched (CSS Flexbox 9.6) - so `margin: 0 auto` silently turned the
+   board's width from "the shell's" into "its own max-content". The tiles are empty <span>s, so
+   that is 0: 10px padding twice plus six 4px gaps = the 44px pill, measured. The cap was never
+   reached; the board never got as far as being capped.
+   Two rules, both of which have to hold:
+   - `width: min(100%, ...)` states the width outright, so nothing about stretch can apply, and
+     `align-self: center` does the centring the auto margins used to.
+   - `max(200px, ...)` is the floor. The height term is a SUBTRACTION and a subtraction can reach
+     zero; a board that measures its own way down to nothing is the bug above wearing a different
+     face. 200px is 22px tiles, small but visible - and the tiles are display-only (the tap targets
+     are the 53px colour buttons), so the 44px floor does not apply to them.
+   box-sizing is stated because the standalone page has no global border-box reset, and the "+44px"
+   term is padding-and-gaps: on content-box the same number would mean something else. */
+@media (max-height: 760px) {
+  .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  /* Same derivation as the hub rule below, minus the hub's chrome: standalone the whole viewport
+     is the game's, so the board may have 100dvh less the ~281px the rest of the screen costs. */
+  .fl-board { width: min(100%, max(200px, calc((100dvh - 296px) * 0.778 + 44px))); }
+}
+.hub-main .filler .fl-shell { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+.hub-main .filler .fl-board { width: min(100%, max(200px, calc((100dvh - 462px) * 0.778 + 44px))); }
 .fl-tile {
   position: relative;
   aspect-ratio: 1;
