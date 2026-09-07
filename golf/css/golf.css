@@ -335,18 +335,28 @@
 .gf-root .gf-cell b { line-height: 1; padding: 4px 0 0; }
 .gf-root .gf-cell span { line-height: 1.1; }
 
-/* EIGHTEEN HOLES NEEDS A WIDER CARD AND A SMALLER RING. Nine cells across a 320px card is 27px
-   each, and the widest mark (a triple square around a two-digit score) is 32px - it would clip
-   its own cell. The card opens to 360 (still inside a 393px phone's 16px page padding) and the
-   type and rings step down one size. Three- and nine-hole rounds are untouched. */
+/* A ROW OF NINE NEEDS A SMALLER RING, AND THAT IS NINE HOLES AS WELL AS EIGHTEEN. Nine cells
+   across the card is about 30px each, and the widest mark (a triple square around a two-digit
+   score) is 35.6px - it clips its own cell. The eighteen-hole card also opens to 360 (still inside
+   a 393px phone's 16px page padding), which a nine does not need.
+
+   THE SIZE STEP USED TO BE `[data-n="18"]` ALONE, and this comment used to say a nine-hole round
+   was untouched on purpose. It was untouched because there WAS no nine-hole course: every round
+   was 3 or 18, so `data-n="9"` never rendered. Oasis Sands is the first, and measured on it a
+   triple-bogey ring came out 35.6px in a 30px cell - 3.8px over its own grid line on each side,
+   into its neighbours. The row is nine cells wide in both cases, so it takes the same step down.
+   (2026-09-07) */
 .gf-root .gf-result__card:has(.gf-result__card-grid[data-n="18"]) { max-width: 360px; }
-.gf-root .gf-result__card-grid[data-n="18"] { gap: 4px; }
-.gf-root [data-n="18"] .gf-cell { flex-basis: calc((100% - 32px) / 9); padding: 3px 1px 6px; }
-.gf-root [data-n="18"] .gf-cell b { font-size: 14px; }
-.gf-root [data-n="18"] .gf-mark { min-width: 16px; height: 16px; padding: 0; }
+.gf-root .gf-result__card-grid[data-n="18"], .gf-root .gf-result__card-grid[data-n="9"] { gap: 4px; }
+.gf-root [data-n="18"] .gf-cell, .gf-root [data-n="9"] .gf-cell { flex-basis: calc((100% - 32px) / 9); padding: 3px 1px 6px; }
+.gf-root [data-n="18"] .gf-cell b, .gf-root [data-n="9"] .gf-cell b { font-size: 14px; }
+.gf-root [data-n="18"] .gf-mark, .gf-root [data-n="9"] .gf-mark { min-width: 16px; height: 16px; padding: 0; }
 .gf-root [data-n="18"] .gf-mark.is-c2::before, .gf-root [data-n="18"] .gf-mark.is-c3::before,
-.gf-root [data-n="18"] .gf-mark.is-s2::before, .gf-root [data-n="18"] .gf-mark.is-s3::before { inset: -2.5px; }
-.gf-root [data-n="18"] .gf-mark.is-c3::after, .gf-root [data-n="18"] .gf-mark.is-s3::after { inset: -4.5px; }
+.gf-root [data-n="18"] .gf-mark.is-s2::before, .gf-root [data-n="18"] .gf-mark.is-s3::before,
+.gf-root [data-n="9"] .gf-mark.is-c2::before, .gf-root [data-n="9"] .gf-mark.is-c3::before,
+.gf-root [data-n="9"] .gf-mark.is-s2::before, .gf-root [data-n="9"] .gf-mark.is-s3::before { inset: -2.5px; }
+.gf-root [data-n="18"] .gf-mark.is-c3::after, .gf-root [data-n="18"] .gf-mark.is-s3::after,
+.gf-root [data-n="9"] .gf-mark.is-c3::after, .gf-root [data-n="9"] .gf-mark.is-s3::after { inset: -4.5px; }
 .gf-root .gf-result__total { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
 .gf-root .gf-result .gf-actions { justify-content: center; }
 

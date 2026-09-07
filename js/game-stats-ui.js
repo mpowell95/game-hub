@@ -602,10 +602,29 @@ const GOLF_COURSES = {
   redmesa9: 'Red Mesa (front 9)',
   redmesa9b: 'Red Mesa (back 9)',
   redmesa18: 'Red Mesa (18 holes)',
+  // Oasis Sands has NINE holes, so it offers three three-hole sets and one nine - there is no back
+  // nine and no eighteen, and golf/js/rounds.js's `roundsFor` is what stops those being offered.
+  // These four shipped with the course and were not added here (2026-09-07), so a stored best read
+  // as "OASISSANDS3" on My Stats through the caps fallback below - which is exactly the failure
+  // this block's own comment warns about.
+  oasissands3: 'Oasis Sands (holes 1-3)',
+  oasissands3b: 'Oasis Sands (holes 4-6)',
+  oasissands3c: 'Oasis Sands (holes 7-9)',
+  oasissands9: 'Oasis Sands (all 9)',
   pinevalley: 'Pine Valley',
   redmesa: 'Red Mesa',
+  oasissands: 'Oasis Sands',
 };
 function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
+
+/** HOW MANY HOLES A COURSE HAS, for the per-hole record row. Not derived from the records: a hole
+ *  nobody has played yet has to show as an empty slot, which is the whole point of the row. An id
+ *  with no entry gets 18, the shape every course had when this row was written.
+ *
+ *  Oasis Sands is the first course with fewer, and without this its row drew EIGHTEEN cells with
+ *  nine permanent dashes for holes that do not exist. */
+const GOLF_COURSE_HOLES = { pinevalley: 18, redmesa: 18, oasissands: 9 };
+function golfCourseHoles(id) { return GOLF_COURSE_HOLES[id] || 18; }
 
 /** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in
  *  gf.practice and counted by nothing above (no rounds/strokes/points/bests/leaderboard).
@@ -640,7 +659,10 @@ function golfHolesHTML(gf) {
     ${ids.map((cid) => {
       const m = byCourse[cid];
       const cells = [];
-      for (let n = 1; n <= 18; n++) {
+      // The course's own hole count, never a fixed 18 - and never the highest hole with a record,
+      // which would hide the empty slots this row exists to show.
+      const holes = Math.max(golfCourseHoles(cid), ...Object.keys(m).map(Number));
+      for (let n = 1; n <= holes; n++) {
         const v = m[n];
         cells.push(`<span class="gs-gf-cell${Number.isFinite(v) ? '' : ' is-empty'}"><b>${Number.isFinite(v) ? v : '–'}</b><i>${n}</i></span>`);
       }
