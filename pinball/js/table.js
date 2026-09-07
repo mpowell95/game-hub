@@ -383,16 +383,23 @@ export const ART = {
   // they used to be - a table whose paint and whose colliders disagree, which is the standing
   // complaint in js/CLAUDE.md about duplicated geometry drifting apart. There is one copy now,
   // and it is this one.
+  // A HIERARCHY, NOT A UNIFORM SET OF STRIPES. Every rail was chrome and 8-9 wide, which put three
+  // and four near-parallel light-grey lines down each side of the lower playfield - a striped cage
+  // the ball disappeared into. Two rules now:
+  //   - anything the CABINET already draws is not drawn twice. The left wall from the arch down to
+  //     the funnel, and the whole right cabinet edge, were duplicates of the cabinet band running
+  //     alongside it at a different height.
+  //   - STRUCTURE is steel (darker, recessive); a guide the BALL RIDES is chrome (bright). So the
+  //     lanes read and the walls do not compete.
   rails: [
-    { pts: [[4, 174], [4, 486], [46, 565], [52, 650]], w: 8, mat: 'chrome' },   // left cabinet + funnel
-    { pts: [[344, 174], [344, 650]], w: 9, mat: 'chrome' },                     // shooter lane, outer
-    { pts: [[310, 200], [310, 650]], w: 9, mat: 'chrome' },                     // playfield right
-    { pts: [[310, 486], [268, 565], [262, 650]], w: 8, mat: 'chrome' },         // right funnel
+    { pts: [[4, 470], [46, 565], [52, 650]], w: 7, mat: 'steel' },              // left funnel
+    { pts: [[310, 200], [310, 650]], w: 8, mat: 'steel' },                      // shooter lane, inner
+    { pts: [[310, 470], [268, 565], [262, 650]], w: 7, mat: 'steel' },          // right funnel
     { pts: [[46, 174], [46, 262], [86, 308]], w: 8, mat: 'steel' },             // left orbit lane
     { pts: [[8, 392], [36, 410]], w: 7, mat: 'steel' },                         // lane guide, left
     { pts: [[mx(8), 392], [mx(36), 410]], w: 7, mat: 'steel' },                 // lane guide, right
-    { pts: [[92, 476], [92, 420]], w: 9, mat: 'steel' },                        // ramp entrance
-    { pts: [[132, 476], [132, 420]], w: 9, mat: 'steel' },
+    { pts: [[92, 476], [92, 420]], w: 9, mat: 'chrome' },                       // ramp entrance
+    { pts: [[132, 476], [132, 420]], w: 9, mat: 'chrome' },
   ],
   gate: [[344, 174], [296, 216]],
   orbitReturn: [[300, 232], [250, 278]],
