@@ -3278,3 +3278,44 @@ in a course-data pass:
   not in it, so all 211 fall back to the theme default and paint at `#3f6b34` — Pine Valley's
   forest green, on a red desert. Measured off the real raster. Three hex values with no reference
   to measure them against is art direction, which is Matt's.
+
+## Two more, and both are "this is the first NINE-hole course" (2026-09-07)
+
+The same playtest, carried on past the course data. Neither is about golf physics; both are places
+where the whole app assumed a course is eighteen holes because until Oasis Sands every course was.
+
+### The nine-hole scorecard drew its bogey rings across the cell
+
+`golf.css` steps the score mark down one size at `data-n="18"`, with a comment saying three- and
+nine-hole rounds are untouched **on purpose**. They were untouched because `data-n="9"` had never
+rendered: every round in the game was 3 or 18. The row is nine cells wide in BOTH cases.
+
+Measured in the real DOM at 375 px, a triple square around a two-digit score:
+
+| round | cell | outer ring | overflow per side |
+|---|---|---|---|
+| 3 holes | 56.0 px | 35.6 px | −9.2 (fits) |
+| **9 holes** | **30.0 px** | **35.6 px** | **+3.8 (crosses its own grid line)** |
+| 18 holes | 30.9 px | 26.6 px | −1.1 (fits) |
+
+The CSS says it itself, four lines above: *"the cell has to be at least 32px of content wide"* — a
+nine-hole cell has 24. The step-down now applies to `[data-n="9"]` as well, measured after at −1.1.
+
+### My Stats printed "OASISSANDS3"
+
+`js/game-stats-ui.js`'s `GOLF_COURSES` had all nine Pine Valley keys, all nine Red Mesa keys and
+both bare course ids — and **none of Oasis Sands' four, nor its bare id**. `golfCourseName` falls
+back to the id in caps rather than hiding the row (rule 1), so the row was there and unreadable.
+That block's own comment is the thing that was skipped: *"a new round key belongs here the day it
+ships."* It was live: the 2026-09-06 RTDB read that blocked the hole-3 swap shows `bestRoundByCourse
+{ pinevalley3: 11, oasissands3: 13 }` and `bestHole { oasissands:1 3, ... }` on MattyIce.
+
+The per-hole record row had the same shape of assumption in code: `for (let n = 1; n <= 18; n++)`,
+so a nine-hole course drew eighteen cells with nine permanent dashes for holes that do not exist.
+`GOLF_COURSE_HOLES` beside the name map fixes it, floored by the highest hole actually recorded so
+a stale entry can never hide a stored score.
+
+**`golf/js/test.js` section 15 now derives both from `rounds.js`**: every round key a course can
+produce must be named, every course id must be named, and every course's hole count must match its
+own data. It reads `js/game-stats-ui.js` as TEXT, because that module is a DOM file the engine
+suite cannot import — the same trick sections 12b/12c/12d already use on `ui.js` and `render.js`.

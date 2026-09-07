@@ -1424,6 +1424,37 @@ console.log('\n-- 15. the round menu: length first, then course, then which hole
     const k = roundKey(c, r.id);
     ok(`${k} has a par row`, Number.isFinite(GOLF_COURSE_PAR[k]));
   }
+
+  // [KNOWN-BUG PROBE] ...AND A NAME ON MY STATS. `js/game-stats-ui.js`'s GOLF_COURSES turns a
+  // stored key into something a person can read, and its fallback upper-cases an unknown one
+  // rather than hiding the row (THE LAW rule 1) - so a missing entry is not a blank, it is
+  // "OASISSANDS3" printed at a player. All four Oasis Sands keys AND its bare course id (used by
+  // the per-hole record row and the practice row) shipped with the course and were missing here,
+  // against a store that already carried `oasissands3`. Read as TEXT because that module is a DOM
+  // file this suite cannot import.
+  {
+    const gsui = fs.readFileSync(new URL('../../js/game-stats-ui.js', import.meta.url), 'utf8');
+    const map = /const GOLF_COURSES = \{([\s\S]*?)\n\};/.exec(gsui);
+    ok('js/game-stats-ui.js still has a GOLF_COURSES map', !!map);
+    const named = new Set([...(map ? map[1] : '').matchAll(/^\s*([A-Za-z0-9]+)\s*:/gm)].map((m) => m[1]));
+    for (const c of COURSES) {
+      ok(`GOLF_COURSES names ${c.id} itself`, named.has(c.id), 'the per-hole and practice rows use the bare course id');
+      for (const r of roundsFor(c)) {
+        const k = roundKey(c, r.id);
+        ok(`[KNOWN-BUG PROBE] GOLF_COURSES names ${k}`, named.has(k),
+          'a key with no entry prints as its own id in caps on My Stats');
+      }
+    }
+    // A course with fewer than eighteen holes needs its own count, or the per-hole row draws
+    // eighteen cells and leaves permanent dashes for holes that do not exist.
+    const hm = /const GOLF_COURSE_HOLES = \{([^}]*)\}/.exec(gsui);
+    ok('js/game-stats-ui.js knows how many holes each course has', !!hm);
+    for (const c of COURSES) {
+      const got = hm && new RegExp(`${c.id}\\s*:\\s*(\\d+)`).exec(hm[1]);
+      ok(`GOLF_COURSE_HOLES.${c.id} is ${c.holes.length}`, !!got && Number(got[1]) === c.holes.length,
+        got ? `says ${got[1]}` : 'missing');
+    }
+  }
 }
 
 console.log('\n-- 15a. every round has a LABEL, in both languages --');
