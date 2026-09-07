@@ -59,7 +59,7 @@ export const PTS = {
   bumper: 1000, sling: 250, spinner: 300, lane: 1000, laneSet: 12000,
   drop: 2500, bankDone: 30000, ramp: 6000, rampCombo: 6000, orbit: 8000,
   scoop: 15000, lock: 40000, mbStart: 75000, jackpot: 60000, jackpotStep: 30000,
-  superJackpot: 300000, standup: 1500, missionHit: 30000, skill: 50000,
+  superJackpot: 300000, standup: 1500, missionHit: 30000, skill: 8000,
 };
 
 /** The four timed missions, in fixed order. Each is started from the scoop once the drop bank has
@@ -182,6 +182,7 @@ export class Pinball {
     this.combo = 0;
     this.comboTimer = 0;
     this.saveTimer = 0;
+    this.saveUsed = false;
     this.skillLit = false;
   }
 
@@ -200,16 +201,30 @@ export class Pinball {
     return this;
   }
 
-  /** Put a fresh ball in the shooter lane, held on the plunger. */
-  _serve() {
+  /**
+   * Put a fresh ball in the shooter lane, held on the plunger.
+   *
+   * @param {boolean} arm  arm the ball save. TRUE for a new ball, FALSE for a save re-serve -
+   *   and that distinction is the whole point. Until 2026-09-07 every re-serve armed a fresh
+   *   full-length save, so a save led to a save led to a save: a 45-second recording shows BALL
+   *   SAVED four times on ball one, the counter resetting to 8 each time, and ball one running
+   *   on an unbroken save from four seconds in to twenty-nine. The moment it finally expired the
+   *   ball drained. That is not a ball save, it is an invulnerability field, and it hid the
+   *   five-second ball underneath it for a whole build.
+   *
+   *   A real machine gives one grace period per ball, timed from the serve. `saveUsed` is the
+   *   other half: the save fires ONCE, then the ball is on its own.
+   */
+  _serve(arm = true) {
     const b = makeBall(PLUNGER.x, PLUNGER.y);
     b.held = true;
     b.onPlunger = true;
     b.sw = {};
+    b.flipped = false;
     this.balls.push(b);
     this.plungerPower = 0;
     this.skillLit = true;
-    this.saveTimer = DIFFS[this.difficulty].save;
+    if (arm) { this.saveTimer = DIFFS[this.difficulty].save; this.saveUsed = false; }
   }
 
   // --- input -------------------------------------------------------------------------------------
@@ -292,7 +307,13 @@ export class Pinball {
 
   _contact(kind, id, x, y, speed, ball) {
     if (kind === 'ball') { if (speed > 120) this.emit({ type: 'clack', x, y, speed }); return; }
-    if (kind === 'flipper') { if (speed > 150) this.emit({ type: 'thock', x, y, speed }); return; }
+    if (kind === 'flipper') {
+      // `flipped` is what separates a shot the PLAYER made from one the plunger made. See the
+      // orbitTop branch in _switchHit.
+      if (ball) ball.flipped = true;
+      if (speed > 150) this.emit({ type: 'thock', x, y, speed });
+      return;
+    }
     if (!id) return;
     if (speed < 24 && !id.startsWith('pop') && !id.startsWith('sling')) return;
 
@@ -391,6 +412,26 @@ export class Pinball {
         break;
       }
       case 'orbitTop': {
+        // A PLUNGE IS NOT AN ORBIT SHOT. The plunger fires straight into the arch by design, so
+        // before this branch existed every launch tripped this switch and paid a full,
+        // combo-multiplied orbit award for no player input at all: a measured 15,600 to 24,000
+        // per plunge, repeated every time the ball came back to the shooter lane, which on the
+        // 2026-09-06 build was every five seconds. A 45-second recording banked 106,160 points
+        // that way with the flippers barely used.
+        //
+        // So a ball that has not touched a paddle since it was served gets the SKILL SHOT -
+        // once, worth PTS.skill, for pulling the plunger hard enough to make the arch - and
+        // nothing after that. The full orbit award, with its combo, is reserved for a ball the
+        // player actually sent round from the right flipper. `PTS.skill` and `skillLit` were both
+        // already here and nothing had ever awarded either.
+        if (!b.flipped) {
+          if (this.skillLit) {
+            this.skillLit = false;
+            this._award(PTS.skill, s.x, s.y, 'skill');
+            this.emit({ type: 'skillshot', x: s.x, y: s.y });
+          }
+          break;
+        }
         this.stats.orbits++; this.bonus.orbits++;
         this._combo();
         this._award(PTS.orbit * this.combo, s.x, s.y, 'orbit');
@@ -734,10 +775,12 @@ export class Pinball {
     if (this.multiball && live <= 1 && this.multiball.toFeed === 0) this._endMultiball();
     if (live > 0) return;
 
-    if (this.saveTimer > 0 && !this.tilted) {
+    if (this.saveTimer > 0 && !this.saveUsed && !this.tilted) {
+      this.saveUsed = true;
+      this.saveTimer = 0;
       this.emit({ type: 'ballsave' });
       this.emit({ type: 'msg', key: 'msg_ball_saved', big: true });
-      this._serve();
+      this._serve(false);
       this.phase = 'ready';
       return;
     }

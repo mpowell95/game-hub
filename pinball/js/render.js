@@ -324,13 +324,12 @@ export class Renderer {
 
     // --- ball guides ------------------------------------------------------------------------------
     this._archGuides(g);
-    this._guide(g, [[4, ARCH.cy], [4, 500], [66, 646]], 8, C.chrome);
-    this._guide(g, [[344, ARCH.cy], [344, 650]], 9, C.chrome);
-    this._guide(g, [[310, 200], [310, 650]], 9, C.chrome);
-    this._guide(g, [[310, 500], [248, 646]], 8, C.chrome);
-    this._guide(g, [[46, ARCH.cy], [46, 262], [86, 308]], 8, C.steel);
+    // Straight from table.js, so the paint and the colliders cannot disagree.
+    for (const r of ART.rails) this._guide(g, r.pts, r.w, r.mat === 'steel' ? C.steel : C.chrome);
     for (const d of ART.divs) this._guide(g, d, 10, C.chrome);
-    this._gate(g, 344, ARCH.cy, 296, 216);
+    for (const [x, y] of ART.slingPosts) this._post(g, x, y, 7);
+    this._gate(g, ART.gate[0][0], ART.gate[0][1], ART.gate[1][0], ART.gate[1][1]);
+    this._guide(g, ART.orbitReturn, 6, C.steel);
 
     // --- lamp inserts and arrows ------------------------------------------------------------------
     this._rosette(g);
