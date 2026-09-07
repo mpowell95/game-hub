@@ -329,6 +329,15 @@
 }
 
 .pb-root .pb-canvas { display: block; touch-action: none; }
+/* The screen-space effects layer - particles, score popups, the flashers - over the 3D canvas.
+   `pointer-events: none` matters: the flipper touch zones are siblings underneath it, and a
+   canvas that swallowed their taps would make the game unplayable while looking perfect. */
+.pb-root .pb-fx {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
 
 /* The flipper zones: the whole left and right halves of the playfield area, invisible until
    pressed. Named as ORNAMENT, not layout, and carrying no width constraint, so no decoration rule

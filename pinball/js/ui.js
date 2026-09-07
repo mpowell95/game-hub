@@ -18,7 +18,12 @@
 // progress": everything there is already saved the instant it changes.
 
 import { Pinball, MISSIONS } from './game.js';
-import { Renderer, PALETTE } from './render.js';
+// STARHUB renders in 3D (render3d.js, three.js) because the playfield it is built from is a 3D
+// model. The physics stays 2D - a pinball is a ball on a tilted plane, and every commercial
+// pinball simulation solves it that way and renders in 3D. ROYAL FLUSH keeps its own 2D vector
+// renderer, because that board came from a 2D vector game and drawing it any other way would be
+// the creative liberty its own file was written to prevent.
+import { Renderer, PALETTE } from './render3d.js';
 import { loadSettings, saveSettings, bestScore } from './store.js';
 import { H as TH } from './table.js';
 // The imported ROYAL FLUSH board runs its own rules and its own renderer; see royal.js's header for
@@ -262,6 +267,7 @@ export class PinballUI {
         </div>
         <div class="pb-stage" data-role="stage">
           <canvas class="pb-canvas" data-role="canvas" aria-label="${esc(t('aria_table'))}" role="img"></canvas>
+          <canvas class="pb-fx" data-role="fx" aria-hidden="true"></canvas>
           <button type="button" class="pb-zone pb-zone-l" data-side="left" aria-label="${esc(t('btn_left_flipper'))}"></button>
           <button type="button" class="pb-zone pb-zone-r" data-side="right" aria-label="${esc(t('btn_right_flipper'))}"></button>
         </div>
@@ -275,6 +281,7 @@ export class PinballUI {
     this.el = {
       stage: this.root.querySelector('[data-role="stage"]'),
       canvas: this.root.querySelector('[data-role="canvas"]'),
+      fx: this.root.querySelector('[data-role="fx"]'),
       score: this.root.querySelector('[data-role="score"]'),
       ball: this.root.querySelector('[data-role="ball"]'),
       msg: this.root.querySelector('[data-role="msg"]'),
@@ -286,7 +293,7 @@ export class PinballUI {
     // setFlipper / plungerDown / plungerUp / nudge / hud / takeEvents / result / score / phase),
     // so nothing below here has to know which board is running.
     const royal = this.settings.board === 'royal';
-    this.renderer = royal ? new RoyalRenderer(this.el.canvas) : new Renderer(this.el.canvas);
+    this.renderer = royal ? new RoyalRenderer(this.el.canvas) : new Renderer(this.el.canvas, this.el.fx);
     this.game = royal ? new RoyalPinball({}) : new Pinball({ difficulty: this.settings.difficulty });
     this.game.start();
     // Dev hook: the ONLY way a browser session can see what the ball is actually doing. Read-only,
@@ -698,6 +705,9 @@ export class PinballUI {
     document.removeEventListener('visibilitychange', this._onVis);
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
+    // The 3D renderer holds a WebGL context, and a browser only allows a handful before it starts
+    // dropping the oldest: every mount that did not release one would cost the hub a context.
+    if (this.renderer && this.renderer.dispose) { try { this.renderer.dispose(); } catch (err) { console.warn('[pinball] renderer dispose failed', err); } }
     this.game = null;
     this.renderer = null;
     this.root.classList.remove('pb-root');

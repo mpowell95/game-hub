@@ -12,7 +12,7 @@
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
-import { Renderer } from './render.js';
+
 
 let fail = 0, count = 0;
 function ok(label, cond, extra) {
@@ -645,45 +645,17 @@ function launched(g) {
 }
 
 {
-  // (d) THE FLIPPER WENT WHITE THE MOMENT YOU PRESSED IT. The paddle gradient was anchored to a
-  // 16-unit VERTICAL band at the pivot; a raised paddle's tip sits ~24 units ABOVE the pivot, so the
-  // whole swept paddle clamped to stop 0 (#ffffff) - the same white the static dividers and rails
-  // beside it are painted. Both flips visible in the recording were misses. The gradient has to
-  // follow the paddle's own axis instead, so it shades identically at every angle.
-  const calls = [];
-  const noop = () => {};
-  const stub = {
-    save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop,
-    fill: noop, arc: noop, closePath: noop, translate: noop, rotate: noop, scale: noop,
-    setTransform: noop, clip: noop, fillText: noop,
-    createLinearGradient(x0, y0, x1, y1) { calls.push([x0, y0, x1, y1]); return { addColorStop: noop }; },
-    createRadialGradient() { return { addColorStop: noop }; },
-    measureText() { return { width: 10 }; },
-  };
-  const r = Object.create(Renderer.prototype);
-  r._post = noop;
-  const mk = (angle) => {
-    calls.length = 0;
-    r._drawFlippers(stub, { flippers: [flipper(116, 640, 58, angle, angle, { id: 'flipL' })] });
-    return calls[0];
-  };
-  const rest = mk(27 * Math.PI / 180);
-  const up = mk(-25 * Math.PI / 180);
-  const span = (c) => (c ? Math.hypot(c[2] - c[0], c[3] - c[1]) : 0);
-  const mid = (c) => (c ? [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2] : [0, 0]);
-  // The paddle midpoint at the raised angle, which is where the gradient has to be centred. The old
-  // build centred it on the PIVOT at every angle, so comparing against the pivot is what makes this
-  // probe fail on the shipped code instead of passing vacuously.
-  const upMid = [116 + Math.cos(-25 * Math.PI / 180) * 58 / 2, 640 + Math.sin(-25 * Math.PI / 180) * 58 / 2];
-  ok('[PLAYTEST 2026-08-20] the paddle gradient turns with the paddle instead of being pinned down-screen',
-    !!rest && !!up && (Math.abs(rest[0] - up[0]) > 1 || Math.abs(rest[1] - up[1]) > 1),
-    `rest=${rest} up=${up}`);
-  ok('[PLAYTEST 2026-08-20] ...centred on the raised paddle itself, not on its pivot, so it is never solid white',
-    Math.hypot(mid(up)[0] - upMid[0], mid(up)[1] - upMid[1]) < 1
-    && Math.abs(span(rest) - span(up)) < 0.5 && span(up) > 4,
-    `gradient centre ${mid(up).map((v) => v.toFixed(1))} vs paddle midpoint ${upMid.map((v) => v.toFixed(1))}`);
+  // (d) THE FLIPPER WENT WHITE THE MOMENT YOU PRESSED IT. RETIRED 2026-09-07, and the reason is
+  // that the thing it tested no longer exists: the paddle gradient it probed belonged to the flat
+  // 2D renderer, and STARHUB renders in three.js now (render3d.js), where the paddle is a real
+  // solid lit from a real light and there is no gradient to anchor anywhere.
+  //
+  // It is recorded rather than deleted because the DEFECT it caught is still worth knowing: a
+  // shading trick keyed to screen axes rather than to the part itself will look right at rest and
+  // wrong the moment the part moves, and both flips visible in that playtest recording were misses
+  // because the swept paddle clamped to the same white as the rails beside it. Nothing in a 3D
+  // scene can reproduce it, which is the honest reason there is no replacement assertion here.
 }
-
 {
   // (e) THE TABLE PLAYED LIKE A WALL, TWICE. GRAVITY was 1150 (an effective 9.5 deg), then 790.
   //
