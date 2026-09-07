@@ -197,8 +197,31 @@ export function rollFactor(kind, club) {
  *  now twice established is that TEMPO IS NOT THE LEVER: it is the one thing in this game a player
  *  builds a rhythm against, and changing it for one club breaks that. Fix the short putt somewhere
  *  else. */
-export function swingTempo() {
-  return { upMs: UP_MS, downMs: DOWN_MS };
+/** THE PUTTER'S DEAD ZONE: the needle holds at zero for this long after the first tap, then climbs
+ *  at exactly the same speed as every other club.
+ *
+ *  The problem, measured through the real resolver rather than estimated: a 2 ft putt holes for
+ *  8.4-25.9 % of the meter, which at 1585 ms per power unit is a second tap **132-411 ms** after
+ *  the first. A second tap that fast is iOS's select-a-word gesture, so the OS takes it and shows
+ *  the copy bar - Matt: *"Short putts are hard to hit correctly because the meter doesn't let you
+ *  hit it that soft. If you tap that fast it selects something to copy."*
+ *
+ *  Two fixes were tried on 2026-09-06 and BOTH were reverted by Matt within hours: a steeper
+ *  `PUTT_GAMMA` (it also moves the dial's 25/50/75/100 ticks - *"you fucked up the power/aim meter
+ *  while putting BIG TIME"*) and a slower putter backswing (tempo is one speed for the whole bag,
+ *  twice established). So the constraint on any third attempt was explicit: leave the dial and the
+ *  tempo alone.
+ *
+ *  A dead zone does. Every tick stays where it is, the needle sweeps at the same rate, the power
+ *  curve is unchanged, and the other fourteen clubs never see it - the ONLY thing that moves is
+ *  when the climb starts, which slides every putt's window later by a fixed 250 ms. */
+export const PUTTER_DEAD_MS = 250;
+export function swingTempo(club) {
+  return {
+    upMs: UP_MS,
+    downMs: DOWN_MS,
+    deadMs: (club && club.id === 'putter') ? PUTTER_DEAD_MS : 0,
+  };
 }
 
 /** HOW WIDE THE GREEN ZONE IS FOR THIS CLUB, as a multiplier on the accuracy band.

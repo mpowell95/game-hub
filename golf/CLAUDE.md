@@ -3085,7 +3085,7 @@ id, or a new suffix), leave `pinevalley3` and every `pinevalley:<n>` untouched a
 again, and keep SHOWING the old record on My Stats under an honest label saying which layout it was
 set on. That is a bigger job than moving two holes and it is his call.
 
-## Short putts cannot be tapped softly enough - STILL OPEN (2026-09-06)
+## Short putts could not be tapped softly enough - FIXED 2026-09-07 (two attempts reverted first)
 
 Matt, after a Pine Valley round, on missing a 2.7 ft putt: *"Short putts are hard to hit correctly
 because the meter doesn't let you hit it that soft. If you tap that fast it selects something to
@@ -3117,10 +3117,32 @@ itself is not.**
   bag, and that is now twice-established: this was the second time a per-club tempo was shipped and
   reverted on Matt's instruction.
 
-**So the next attempt must leave the dial and the tempo alone.** What has not been tried: a short
-dead zone at the start of the putter's backswing (the needle holds at zero for ~250 ms before it
-begins), which moves every putt's window later in TIME without moving a single tick, changing the
-power curve, or touching the other fourteen clubs. Proposed, not shipped - ask first.
+**So the third attempt had to leave the dial and the tempo alone, and it does.**
+
+### The fix: a 250 ms DEAD ZONE on the putter's backswing (2026-09-07)
+
+`clubs.js`'s `PUTTER_DEAD_MS`, honoured by `swing.js`'s `backswingAt` through `tempo.deadMs`. The
+needle **holds at zero for 250 ms** after the first tap and then climbs at exactly the same speed as
+every other club. Measured, before and after, against the real resolver:
+
+| putt | power window | before | after |
+|---|---|---|---|
+| 1 ft | 1.9-23.5 % | 30-372 ms | **280-622 ms** |
+| 2 ft | 8.4-25.9 % | 132-411 ms | **382-661 ms** |
+| 3 ft | 12.5-28.3 % | 198-449 ms | **448-699 ms** |
+| 5 ft | 19.0-32.6 % | 300-516 ms | **550-766 ms** |
+| 15 ft | 40.9-50.5 % | 648-800 ms | 898-1050 ms |
+| 45 ft | 83.2-89.7 % | 1320-1423 ms | 1570-1673 ms |
+
+**Every window keeps its exact width** (342, 278, 250, 216, 152, 103 ms — identical in both
+columns) and every one moves by exactly 250 ms. That is the whole property that makes this
+acceptable where the other two were not: it is a DELAY, not a re-scaling. The dial's ticks stay at
+42/65/84/100 % of the sweep, the needle still sweeps at 1585 ms per power unit, `PUTT_GAMMA` stays
+1.6, and the other fourteen clubs have `deadMs: 0` and never see it.
+
+`test.js` section 8b pins all three: only the putter has a dead zone, the needle really does hold at
+zero through it, and — as a **[KNOWN-BUG PROBE]** — every power comes up exactly `deadMs` later and
+at the same rate, so a future per-club tempo cannot creep back in wearing this name.
 ### The copy bar itself
 
 Hill Climb's four-layer fix, ported (`hill-climb/CLAUDE.md`, "the copy/paste screen pops up"). Golf

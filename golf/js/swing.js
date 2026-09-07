@@ -141,9 +141,22 @@ export function topMsOf(upMs = UP_MS) { return SWING_MAX * upMs; }
 export function backswingAt(ms, tempo) {
   const up = tempo && tempo.upMs ? tempo.upMs : UP_MS;
   const down = tempo && tempo.downMs ? tempo.downMs : DOWN_MS;
+  // THE DEAD ZONE. `tempo.deadMs` holds the needle at zero for that long after the first tap, and
+  // only then does the backswing start climbing. It is not a tempo change: the needle still sweeps
+  // at UP_MS per power unit, every tick on the dial stays exactly where it is, and the power curve
+  // is untouched. All it does is move every window LATER IN TIME by a fixed amount.
+  //
+  // It exists for one measured problem (`clubs.js`, PUTTER_DEAD_MS): a 2 ft putt holes for a second
+  // tap 132-411 ms after the first, which is inside iOS's double-tap gesture, so the OS takes the
+  // tap and shows the copy bar instead. The two obvious fixes - a steeper power curve and a slower
+  // putter - were both tried and both reverted, because each one visibly changed the dial or the
+  // rhythm. This changes neither.
+  const dead = (tempo && tempo.deadMs) || 0;
+  if (ms <= dead) return { pos: 0, power: null, topped: false };
+  const t = ms - dead;
   const top = SWING_MAX * up;
-  if (ms <= top) return { pos: ms / up, power: null, topped: false };
-  return { pos: SWING_MAX - (ms - top) / down, power: SWING_MAX, topped: true };
+  if (t <= top) return { pos: t / up, power: null, topped: false };
+  return { pos: SWING_MAX - (t - top) / down, power: SWING_MAX, topped: true };
 }
 
 /** Where the needle sits during the DOWNSWING, `ms` after the power was locked at `power`. */
@@ -417,14 +430,14 @@ export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 
  *  function of (phase, t0, now), including "the player never took tap 2 and the swing topped
  *  out". Only a tap or a settle changes state. */
 export class Swing {
-  constructor() { this.tempo = { upMs: UP_MS, downMs: DOWN_MS }; this.reset(); }
+  constructor() { this.tempo = { upMs: UP_MS, downMs: DOWN_MS, deadMs: 0 }; this.reset(); }
 
   /** Set the tempo for the NEXT swing. The caller passes the club's own figures (clubs.js's
    *  `swingTempo`); a swing already in progress keeps the tempo it started with, because changing
    *  the needle's speed mid-stroke would move the target under the player's thumb. */
   setTempo(tempo) {
     if (this.phase !== PHASE.IDLE) return;
-    if (tempo && tempo.upMs > 0 && tempo.downMs > 0) this.tempo = { upMs: tempo.upMs, downMs: tempo.downMs };
+    if (tempo && tempo.upMs > 0 && tempo.downMs > 0) this.tempo = { upMs: tempo.upMs, downMs: tempo.downMs, deadMs: tempo.deadMs || 0 };
   }
 
   reset() {
