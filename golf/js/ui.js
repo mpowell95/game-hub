@@ -608,7 +608,7 @@ class GolfGame {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
     // The four floating HUD clusters, by class: they carry no data-role because nothing
-    // paints into them, but _keepCupClear has to MEASURE them to know what part of the canvas is
+    // paints into them, but _keepBallAndCupClear has to MEASURE them to know what part of the canvas is
     // covered.
     for (const k of ['tl', 'tr', 'bl', 'br']) this.el[k] = this.rootEl.querySelector('.gf-' + k);
 
@@ -1215,7 +1215,7 @@ class GolfGame {
     // fly up; a putt's target is a few feet away, so pushing the ball to the bottom of the frame
     // just spends the top half of the screen on whatever is behind the green.
     let want = this.ball[1] + this.cam.halfH * (this._mustPutt() ? 0.12 : 0.5);
-    want = this._keepCupClear(want);
+    want = this._keepBallAndCupClear(want);
     this.cam.x = this.ball[0];
     this.cam.y = snap ? want : this.cam.y + (want - this.cam.y) * 0.18;
     this.cam.clamp();
@@ -1234,12 +1234,12 @@ class GolfGame {
    *  when a panel changes size or a phone's safe area moves it. Returns a camera y that puts the
    *  cup inside the band; if the ball and the cup cannot both fit (they are further apart than the
    *  clear band is tall) the ball wins, because that is the one the player is about to hit. */
-  _keepCupClear(wantY) {
+  _keepBallAndCupClear(wantY) {
     if (!this.cam || !this.el || !this.canvas) return wantY;
     const pin = this.hole.pin;
     // Only worth doing when the cup is actually in play for this shot; a pin 200 yds away is off
     // the top of a 95 yd frame whatever we do, and forcing it in would frame the wrong thing.
-    if (distYd(this.ball, pin) > this.cam.halfH * 1.6) return wantY;
+    const cupInPlay = distYd(this.ball, pin) <= this.cam.halfH * 1.6;
     const view = this.canvas.getBoundingClientRect();
     if (view.height < 8) return wantY;
     const M = 14;                                    // breathing room past the panel edge, px
@@ -1263,11 +1263,18 @@ class GolfGame {
     const half = view.height / 2;
     const lo = (y) => y + (top - half) / this.cam.ppy;      // lowest cam.y that keeps y above `top`
     const hi = (y) => y + (bottom - half) / this.cam.ppy;   // highest that keeps it above `bottom`
-    const loCup = lo(pin[1]), hiCup = hi(pin[1]);
     const loBall = lo(this.ball[1]), hiBall = hi(this.ball[1]);
-    const loBoth = Math.max(loCup, loBall), hiBoth = Math.min(hiCup, hiBall);
-    if (loBoth <= hiBoth) return Math.min(hiBoth, Math.max(loBoth, wantY));
-    return Math.min(hiBall, Math.max(loBall, wantY));       // both will not fit: keep the ball
+    if (cupInPlay) {
+      const loBoth = Math.max(lo(pin[1]), loBall), hiBoth = Math.min(hi(pin[1]), hiBall);
+      if (loBoth <= hiBoth) return Math.min(hiBoth, Math.max(loBoth, wantY));
+    }
+    // THE BALL ITSELF, on every shot, cup or no cup. `_aimCamera` puts it a fixed fraction of the
+    // frame up from the bottom (0.5 x halfH) so the player can see up the hole - and on a phone
+    // that fraction lands INSIDE the bottom HUD, so on a long hole the golfer stood behind the aim
+    // button and the ball was drawn under the club tile. Matt's Pine Valley screenshots have the
+    // ball off the bottom edge entirely with the aim line running out of shot. The fixed fraction
+    // still decides the framing whenever it is legal; this only ever pulls it back into view.
+    return Math.min(hiBall, Math.max(loBall, wantY));
   }
 
   _frame = () => {

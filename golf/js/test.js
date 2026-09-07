@@ -19,6 +19,7 @@ import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, mustPutt, canPutt
 import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
+import { STRINGS } from './strings.js';
 import fs from 'node:fs';   // section 12b reads the shipped ui.js/render.js as text
 
 let fail = 0;
@@ -1351,6 +1352,19 @@ console.log('\n-- 15. the round menu: length first, then course, then which hole
   }
 }
 
+console.log('\n-- 15a. every round has a LABEL, in both languages --');
+// [KNOWN-BUG PROBE] A missing key is not a blank in this game: makeT returns the KEY, so the HUD
+// prints "round_set3b 2/3". The five three-hole sets added on 2026-09-05 shipped with no strings
+// at all, and Matt played a whole Pine Valley round with the raw key on screen. Every ROUNDS
+// entry, every language.
+{
+  for (const lang of ['en', 'es']) {
+    const dict = STRINGS[lang];
+    const missing = ROUNDS.filter((r) => !dict || typeof dict[r.labelKey] !== 'string' || !dict[r.labelKey]);
+    ok(`[KNOWN-BUG PROBE] every round is named in ${lang} (${ROUNDS.length} rounds)`,
+      missing.length === 0, missing.map((r) => r.labelKey).join(', '));
+  }
+}
 console.log('\n-- 15b. the putter can miss --');
 // Matt, after playing both courses: "There's not a single hole I can imagine myself ever getting
 // worse than a par on." Measured, the courses were not the main reason - every putt inside 30 ft
