@@ -111,12 +111,15 @@ export const SWITCHES = [
   { id: 'laneH', x: 139, y: 84, r: 14 },
   { id: 'laneU', x: 174, y: 84, r: 14 },
   { id: 'laneB', x: 209, y: 84, r: 14 },
-  { id: 'rampIn', x: 157, y: 512, r: 17, needUp: 150 },         // fast enough UP = made the ramp
-  { id: 'scoop', x: 288, y: 150, r: 11, capture: true },        // saucer: holds the ball
-  { id: 'inlaneL', x: 80, y: 545, r: 13 },
-  { id: 'inlaneR', x: mx(80), y: 545, r: 13 },
-  { id: 'outlaneL', x: 46, y: 570, r: 12 },
-  { id: 'outlaneR', x: mx(46), y: 570, r: 12 },
+  { id: 'rampIn', x: 112, y: 432, r: 12, needUp: 300 },         // fast enough UP = made the ramp
+  { id: 'scoop', x: 286, y: 206, r: 13, capture: true },        // saucer: holds the ball
+  // Both pairs sit on the CENTRE-LINE of their own channel, computed from the divider and the
+  // funnel either side of it. The first placement put outlaneR inside the funnel wall and
+  // inlaneR on the flipper pivot, so a soak logged 18 outlane drains and zero outlane switches.
+  { id: 'inlaneL', x: 88, y: 558, r: 13 },
+  { id: 'inlaneR', x: mx(88), y: 558, r: 13 },
+  { id: 'outlaneL', x: 63, y: 566, r: 12 },
+  { id: 'outlaneR', x: mx(63), y: 566, r: 12 },
 ];
 
 /** The habitrail the ramp shot rides: a scripted path, not physics. Entering the mouth fast enough
@@ -130,10 +133,15 @@ export const SWITCHES = [
  *  inlane. It is drawn ELEVATED (support legs, in the model and in render.js) which is why it may
  *  cross the left lane, the drop bank and the rosette without any of them caring. */
 export const RAMP_PATH = [
-  [157, 517], [137, 474], [94, 407], [55, 321], [61, 227], [122, 164],
-  [204, 161], [267, 217], [298, 311], [302, 407], [298, 474], [286, 522], [262, 552],
+  [112, 436], [86, 392], [58, 330], [61, 240], [110, 172], [190, 158],
+  [258, 196], [294, 268], [304, 352], [300, 432], [288, 492], [258, 528], [224, 548],
 ];
-export const RAMP_EXIT_V = [-96, 210];    // along the right inlane, downhill toward the flipper
+// A HABITRAIL HAS TO PUT THE BALL IN THE INLANE, NOT THE OUTLANE. The first routing ended at
+// (262, 552), which is the middle of the right OUTLANE - so every made ramp posted the ball
+// straight down the drain. A save-off soak scored ramp:10 and then drained 10 of its 12 balls
+// within six units of the same spot on the right. The last four points curve the rail inboard,
+// past the divider, so it lands at x 222 where the inlane feeds the flipper.
+export const RAMP_EXIT_V = [-70, 200];    // along the right inlane, downhill toward the flipper
 export const RAMP_TIME = 1.5;             // seconds end to end; it is a long loop
 
 /** Drop target bank: three targets on one diagonal in the upper left, fed by the RIGHT flipper.
@@ -163,11 +171,11 @@ function dropTarget(i) {
  *  CHANNEL rather than on the playfield - the model's two concentric horseshoes leave it in the
  *  lane. It moves 60 units down-field onto the playfield proper, where the one-way gate feeds it
  *  from the orbit and the left flipper can reach it up the right wall. */
-const SCOOP = { x: 288, y: 150, rad: 21, mouth: 2.25, half: 0.85 };
+const SCOOP = { x: 286, y: 206, rad: 18, mouth: 2.25, half: 1.0 };
 
 /** The three pop bumpers, in the model's triangle. `rad` is what the ball touches (the model's
  *  ring), not the wider skirt the renderer draws. */
-const POPS = [[120, 200], [228, 200], [174, 258]];
+const POPS = [[120, 200], [222, 196], [174, 258]];
 const POP_R = 21;
 
 /** The rollover lanes across the crown: three 35-wide channels between four dividers.
@@ -177,7 +185,7 @@ const POP_R = 21;
  *  on them. */
 const LANE_X = [121, 156, 191, 226];
 
-export const ART_STANDS = [[[12, 396], [12, 428]], [[mx(12), 396], [mx(12), 428]]];
+export const ART_STANDS = [[[12, 328], [12, 364]], [[mx(12), 328], [mx(12), 364]]];
 
 /**
  * Build a fresh set of colliders + flippers.
@@ -197,7 +205,7 @@ export function buildTable(opts = {}) {
   // The inner arch stops 12 degrees short of the right horizontal: that gap IS the orbit's exit.
   add(arc(ARCH.cx, ARCH.cy, ARCH.rIn, Math.PI, TAU - 12 * D, { id: 'archIn', e: 0.4, mu: 0 }));
 
-  add(seg(4, 174, 4, 500, { id: 'wallL', mu: 0 }));                // left cabinet
+  add(seg(4, 174, 4, 486, { id: 'wallL', mu: 0 }));                // left cabinet
   add(seg(344, 174, 344, 650, { id: 'wallR', mu: 0 }));            // shooter lane, outer
   add(seg(310, 200, 310, 650, { id: 'wallPF', mu: 0 }));           // shooter lane inner = playfield right
   add(seg(310, 646, 344, 646, { id: 'plungerFloor', e: 0.1 }));
@@ -205,8 +213,15 @@ export function buildTable(opts = {}) {
   // gravity here is straight down the screen, so a vertical channel delivers the ball nowhere and a
   // ball in it simply falls past the flipper. Both the outer wall and the divider inside it run at
   // the same angle, which is what feeds the inlane onto the flipper and the outlane into the drain.
-  add(seg(4, 500, 66, 646, { id: 'funnelL', mu: 0 }));
-  add(seg(310, 500, 248, 646, { id: 'funnelR', mu: 0 }));
+  // Each funnel is TWO segments, and the kink at y 565 is not styling. Run as one straight line
+  // to the drain it passes 18 units from the flipper pivot - exactly one ball - and a soak parked
+  // 81% of all ball life in that crook, jittering between the funnel and the paddle's base. The
+  // lower leg peels away so the gap is 26, comfortably more than a ball can sit in. The upper leg
+  // stays parallel to the divider inside it, which is what holds the outlane at 1.2 balls.
+  add(seg(4, 486, 46, 565, { id: 'funnelL', mu: 0 }));
+  add(seg(46, 565, 52, 650, { id: 'funnelL2', mu: 0 }));
+  add(seg(310, 486, 268, 565, { id: 'funnelR', mu: 0 }));
+  add(seg(268, 565, 262, 650, { id: 'funnelR2', mu: 0 }));
 
   // Shooter-lane gate. Exists only for a DOWNWARD-moving ball, and slopes down to the left, so a
   // launch passes through it going up and a ball returning round the orbit is caught and rolled out
@@ -222,6 +237,17 @@ export function buildTable(opts = {}) {
   // loses nothing by not touching.
   add(seg(344, 174, 296, 216, { id: 'gate', e: 0.25, mu: 0, oneWay: [0, 1] }));
 
+  // THE ORBIT RETURN, and it is the difference between a shot and a leak. Without it the gate
+  // drops the ball at x 296 and it falls straight down the right-hand wall into the right
+  // outlane: a save-off soak measured 10 of 12 drains landing within six units of the same spot,
+  // and every one of them had arrived that way. A real orbit does not return a ball to the drain,
+  // it returns it to the pop bumpers - so this guide carries it down and inboard into the nest.
+  //
+  // IT IS ONE-WAY FOR THE SAME REASON THE GATE IS. A left-flipper shot up the right wall at the
+  // scoop is travelling UP; a returning orbit ball is travelling DOWN. Built as a solid wall this
+  // guide would block the scoop shot outright, which is one of the two shots the left flipper has.
+  add(seg(300, 232, 250, 278, { id: 'orbitReturn', e: 0.3, mu: 0, oneWay: [0, 1] }));
+
   // Left orbit lane + its one-way exit deflector. The lane has to be enterable from below (that is
   // the orbit shot) while still spitting a RETURNING ball into the playfield rather than straight
   // into the outlane, and one collider does both.
@@ -230,7 +256,7 @@ export function buildTable(opts = {}) {
 
   // --- upper playfield -------------------------------------------------------------------------
   for (let i = 0; i < POPS.length; i++) {
-    add(circle(POPS[i][0], POPS[i][1], POP_R, { id: `pop${i}`, kick: 330, e: 0.45, mu: 0 }));
+    add(circle(POPS[i][0], POPS[i][1], POP_R, { id: `pop${i}`, kick: 380, e: 0.45, mu: 0 }));
   }
 
   // Each divider's top is carried 3 units INTO the inner arch. A divider that stops a few units
@@ -245,33 +271,82 @@ export function buildTable(opts = {}) {
 
   // Stand-up targets, one per side, FLUSH to the side walls (their capsules overlap the wall's, so
   // there is no V behind them for a ball to sit in). They double as a soft outlane defence.
-  add(seg(12, 396, 12, 428, { r: 5, e: 0.55, mu: 0, id: 'standL' }));
-  add(seg(mx(12), 396, mx(12), 428, { r: 5, e: 0.55, mu: 0, id: 'standR' }));
+  add(seg(12, 328, 12, 364, { r: 5, e: 0.55, mu: 0, id: 'standL' }));
+  add(seg(mx(12), 328, mx(12), 364, { r: 5, e: 0.55, mu: 0, id: 'standR' }));
 
   add(arc(SCOOP.x, SCOOP.y, SCOOP.rad, SCOOP.mouth + SCOOP.half, SCOOP.mouth - SCOOP.half + TAU,
     { id: 'scoopRim', e: 0.25, r: 4 }));
 
-  // Ramp mouth guides: a funnel wide at the bottom, one ball across at the switch.
-  add(seg(122, 558, 142, 502, { id: 'rampGuideL', e: 0.35 }));
-  add(seg(192, 558, 172, 502, { id: 'rampGuideR', e: 0.35 }));
+  // THE RAMP ENTRANCE IS A SLOT IN THE LEFT THIRD, NOT A FUNNEL IN THE CENTRE, AND BOTH halves
+  // of that were measured. A centred entrance is in BOTH flippers' natural lane, so it eats every
+  // shot and nothing else on the table is reachable; moved to the left third it becomes a
+  // cross-shot for the RIGHT flipper and leaves the centre lane open to the drop bank, the pop
+  // bumpers and the scoop. And a slot, not a funnel: The first version splayed from 70 units wide at the flipper line down to the
+  // switch, which put a catchment the width of the whole centre lane directly above both
+  // paddles. A 396-throw sweep of both flippers found the result: the ramp was made by 67% of
+  // every shot, and the orbit, the spinner, the scoop, the rollover lanes, the pop bumpers and
+  // the drop bank were reached by NONE of them - 0%, all six, from both flippers. Every rule in
+  // game.js hangs off those shots, which is why a 45-second recording never once cleared the
+  // drop bank and never left the opening objective.
+  //
+  // Parallel guides make it a target instead: a ball has to be travelling up INSIDE the slot to
+  // enter, and anything at an angle is turned away into the playfield.
+  add(seg(92, 476, 92, 420, { r: 5, id: 'rampGuideL', e: 0.35 }));
+  add(seg(132, 476, 132, 420, { r: 5, id: 'rampGuideR', e: 0.35 }));
 
   // --- lower playfield -------------------------------------------------------------------------
-  // Slingshots first: `kick` means a guaranteed outgoing speed, which is what the solenoid does.
-  add(seg(64, 456, 124, 556, { r: 7, e: 0.4, mu: 0, kick: 400, id: 'slingL' }));
-  add(seg(mx(64), 456, mx(124), 556, { r: 7, e: 0.4, mu: 0, kick: 400, id: 'slingR' }));
+  //
+  // REBUILT 2026-09-07, and this is the single change that turned the table into a game. Before
+  // it, a save-off soak measured a MEDIAN BALL LIFE OF 5.6 SECONDS and - the number that gave it
+  // away - 18 drains split 12 left outlane / 6 right outlane / **0 down the middle**. A real
+  // machine drains mostly down the middle; a table that only ever drains out the sides is not
+  // hard, it is leaking. Tracing the last 1.5 s of every drain named the same three colliders
+  // every time - wallL > divL > funnelL, over and over. The ball was not being beaten. It was
+  // walking into an open bay above the outlane mouth and riding a smooth chute to the drain.
+  //
+  // THE MISSING PART WAS THE LANE GUIDE. The model draws its outlane wall curving INBOARD at the
+  // top - its `outlane-wall-left` runs up to model (-0.150, 0.36), well clear of the cabinet edge
+  // - and the first conversion straightened it against the wall and threw that curve away. With
+  // it gone, everything between the standup target and the divider was open air, and a ball
+  // drifting left at y 430-460 simply fell in. `laneGuideL/R` is that curve put back: a ball
+  // coming down the side is steered onto the slingshot instead of into the outlane.
+  //
+  // THE OUTLANE IS STILL A REAL OUTLANE. It is entered through a slot between the slingshot's
+  // outer post and the top of the divider - about 1.4 balls, angled down and out, so it takes a
+  // ball genuinely going the wrong way. What it is no longer is a funnel.
 
-  // Inlane/outlane dividers, near-parallel to the side wall so the outlane stays about 1.2 balls
-  // wide for its whole length rather than fanning open at the bottom.
-  add(seg(34, 478, 87, 604, { r: 5, e: 0.4, mu: 0, id: 'divL' }));
-  add(seg(mx(34), 478, mx(87), 604, { r: 5, e: 0.4, mu: 0, id: 'divR' }));
+  // Slingshots. `kick` means a guaranteed outgoing speed, which is what the solenoid does.
+  // `kickN` is the face the coil is behind: up and INBOARD, toward the middle of the table. The
+  // other face is the inlane's floor and must be dead. See physics.js's resolve().
+  add(seg(58, 442, 122, 548, { r: 7, e: 0.4, mu: 0, kick: 400, kickN: [0.855, -0.516], id: 'slingL' }));
+  add(seg(mx(58), 442, mx(122), 548, { r: 7, e: 0.4, mu: 0, kick: 400, kickN: [-0.855, -0.516], id: 'slingR' }));
+
+  // The slingshot's outer post, and the lane guide running from the side wall onto it. Their
+  // capsules OVERLAP on purpose (2.8 units apart against 11 of combined radius): a gap there is a
+  // narrow upward-facing V, which is the classic parking space.
+  add(circle(60, 436, 7, { id: 'slingPostL', e: 0.55 }));
+  add(circle(mx(60), 436, 7, { id: 'slingPostR', e: 0.55 }));
+  add(seg(8, 392, 36, 410, { r: 4, e: 0.45, mu: 0, id: 'laneGuideL' }));
+  add(seg(mx(8), 392, mx(36), 410, { r: 4, e: 0.45, mu: 0, id: 'laneGuideR' }));
+
+  // Inlane/outlane dividers, PARALLEL to the funnel outside them so the outlane holds about 1.2
+  // balls for its whole length instead of fanning open at the bottom. Their lower ends overlap the
+  // flipper pivots, which is what feeds the inlane onto the paddle.
+  // THE TOP CAP IS DELIBERATELY SEALED AGAINST THE SIDE WALL - 15 units of gap against a ball of
+  // 18. It was 17 for one build, and 17 is the worst number available: just under a ball, so the
+  // ball cannot pass but can be squeezed, and a soak duly parked 23% of all ball life jammed in
+  // that corner between the divider's end cap and the wall. Either seal a gap properly or open
+  // it properly; never leave one a hair under a ball.
+  add(seg(28, 452, 92, 593, { r: 5, e: 0.4, mu: 0, id: 'divL' }));
+  add(seg(mx(28), 452, mx(92), 593, { r: 5, e: 0.4, mu: 0, id: 'divR' }));
 
   if (opts.outlaneSaves) {
-    // Casual closes each outlane, and WHERE it does that is the whole trick. Anything part-way DOWN
-    // an outlane cannot work: an outlane is a dead end, so a blocker there has nowhere to send the
-    // ball. These sit at the outlane's MOUTH, wedged between the side wall and the top of the
-    // divider, and roll the ball into the INLANE - which is what a real outlane post does.
-    add(circle(20, 466, 10, { id: 'savePostL', e: 0.55 }));
-    add(circle(mx(20), 466, 10, { id: 'savePostR', e: 0.55 }));
+    // Casual closes each outlane at its MOUTH, wedged between the slingshot's outer post and the
+    // top of the divider, and rolls the ball into the INLANE - which is what a real outlane post
+    // does. Anything part-way DOWN an outlane cannot work: an outlane is a dead end, so a blocker
+    // there has nowhere to send the ball.
+    add(circle(40, 440, 10, { id: 'savePostL', e: 0.55 }));
+    add(circle(mx(40), 440, 10, { id: 'savePostR', e: 0.55 }));
   }
 
   const flippers = [
@@ -287,15 +362,35 @@ export function buildTable(opts = {}) {
  *  wherever it has one. */
 export const ART = {
   scoop: SCOOP,
+  // EVERY BALL GUIDE THE RENDERER DRAWS, AS DATA. render.js used to carry its own copy of these
+  // polylines, and after one geometry pass it was drawing the funnels and the side wall where
+  // they used to be - a table whose paint and whose colliders disagree, which is the standing
+  // complaint in js/CLAUDE.md about duplicated geometry drifting apart. There is one copy now,
+  // and it is this one.
+  rails: [
+    { pts: [[4, 174], [4, 486], [46, 565], [52, 650]], w: 8, mat: 'chrome' },   // left cabinet + funnel
+    { pts: [[344, 174], [344, 650]], w: 9, mat: 'chrome' },                     // shooter lane, outer
+    { pts: [[310, 200], [310, 650]], w: 9, mat: 'chrome' },                     // playfield right
+    { pts: [[310, 486], [268, 565], [262, 650]], w: 8, mat: 'chrome' },         // right funnel
+    { pts: [[46, 174], [46, 262], [86, 308]], w: 8, mat: 'steel' },             // left orbit lane
+    { pts: [[8, 392], [36, 410]], w: 7, mat: 'steel' },                         // lane guide, left
+    { pts: [[mx(8), 392], [mx(36), 410]], w: 7, mat: 'steel' },                 // lane guide, right
+    { pts: [[92, 476], [92, 420]], w: 9, mat: 'steel' },                        // ramp entrance
+    { pts: [[132, 476], [132, 420]], w: 9, mat: 'steel' },
+  ],
+  gate: [[344, 174], [296, 216]],
+  orbitReturn: [[300, 232], [250, 278]],
   bank: { a: BANK_A, u: BANK_U, len: BANK_LEN, step: BANK_STEP, count: DROP_COUNT },
   pops: POPS,
   popR: POP_R,
   lanes: [[139, 84], [174, 84], [209, 84]],
   laneX: LANE_X,
-  slings: [[[64, 456], [124, 556]], [[mx(64), 456], [mx(124), 556]]],
+  slings: [[[58, 442], [122, 548]], [[mx(58), 442], [mx(122), 548]]],
+  slingPosts: [[60, 436], [mx(60), 436]],
+  laneGuides: [[[8, 392], [36, 410]], [[mx(8), 392], [mx(36), 410]]],
   stands: ART_STANDS,
-  divs: [[[34, 478], [87, 604]], [[mx(34), 478], [mx(87), 604]]],
-  savePosts: [[20, 466], [mx(20), 466]],
+  divs: [[[28, 452], [92, 593]], [[mx(28), 452], [mx(92), 593]]],
+  savePosts: [[40, 440], [mx(40), 440]],
   spinner: { x: 25, y: 262, w: 30 },
   // The model's sixteen-lamp rosette, the one piece of pure paint big enough to name. Decorative:
   // no collider, the ramp flies over it.
@@ -308,14 +403,14 @@ export const ART = {
   posts: [[89, 464], [mx(89), 464], [139, 377], [209, 377], [75, 204], [273, 204]],
   // Lamp inserts: small painted lenses that game.js lights. [x, y, key, rotation]
   inserts: [
-    [157, 468, 'ramp', 0],
-    [288, 196, 'scoop', 0],
+    [112, 392, 'ramp', 0],
+    [278, 254, 'scoop', 0],
     [152, 352, 'bank', 0],
     [25, 330, 'orbit', 0],
-    [80, 545, 'inlaneL', 1.0],
-    [mx(80), 545, 'inlaneR', -1.0],
-    [46, 545, 'saveL', 0],
-    [mx(46), 545, 'saveR', 0],
+    [88, 558, 'inlaneL', 1.0],
+    [mx(88), 558, 'inlaneR', -1.0],
+    [63, 528, 'saveL', 0],
+    [mx(63), 528, 'saveR', 0],
   ],
 };
 

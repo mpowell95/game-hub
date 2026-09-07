@@ -266,6 +266,83 @@ same frictionless roll takes 0.50 s here against 0.42 s there. Each threshold si
 measured frictionless value - loose enough not to be a tripwire for the layout, tight enough that the
 bad cradle above measured 99 s and failed loudly.
 
+## It was still not a game, and a screen recording proved it (2026-09-07)
+
+Matt played the 2026-09-06 build and sent 45 seconds of it. The build passed every test in this
+file. What the recording showed:
+
+| | |
+|---|---|
+| Ball 1 drained and was saved at | 0:11, 0:17, 0:22 |
+| Time from launch to drain | about **5 seconds**, four times over |
+| Objective line, 0:07 to 0:44 | "DROP THE 3 TARGETS", unchanged, through both balls |
+| Score after each launch, no flipper input | +8,000, +19,600, +24,000 |
+| Final | 106,160 points in 45 seconds, flippers barely used |
+
+**Five defects, each measured, each with the number that found it.**
+
+1. **The outlanes were funnels.** With the ball save switched off a soak measured a MEDIAN BALL
+   LIFE OF 5.6 SECONDS, and the number that gave it away was not that one: **18 drains, 12 left
+   outlane, 6 right outlane, ZERO down the middle.** A real machine drains mostly down the middle.
+   A table that only ever drains out the sides is not hard, it is leaking. Tracing the last 1.5 s
+   of every drain named the same three colliders every time - wallL, divL, funnelL - so the ball
+   was not being beaten, it was walking into an open bay above the outlane mouth and riding a
+   smooth chute to the drain. **The model's own outlane wall curves inboard at the top and the
+   first conversion straightened it**; `laneGuideL/R` is that curve put back. Now 40 s, and the
+   drains split across centre and both sides.
+
+2. **The ramp was the only shot on the table.** A 396-throw sweep of both flippers: ramp 67%,
+   and orbit / spinner / scoop / rollover lanes / pop bumpers / drop bank **0%, all six, from both
+   flippers**. Its entrance splayed from 70 units wide at the flipper line, which put a catchment
+   the width of the centre lane directly above both paddles. Every rule in `game.js` hangs off
+   those shots, which is why the objective never changed and no mission ever started. It is a
+   parallel-sided slot in the LEFT THIRD now; the centre lane is open, and the sweep reads scoop
+   21%, pops 34%, bank 45% from the left flipper and ramp 20-32% from the right.
+
+3. **The plunge scored the game.** The plunger fires into the arch by design, so every launch
+   tripped `orbitTop` and paid a full combo-multiplied orbit award for no player input - 15,600 to
+   24,000 a time, repeated every time the ball came back to the shooter lane. A ball that has not
+   touched a paddle since it was served now gets the SKILL SHOT instead, once. (`PTS.skill` and
+   `skillLit` were both already in the file and nothing had ever awarded either.)
+
+4. **The ball save re-armed on every save**, so a save led to a save led to a save and ball one ran
+   on an unbroken save from 0:04 to 0:29. That is not a ball save, it is an invulnerability field,
+   and it hid the five-second ball underneath it for a whole build. One save per ball now, timed
+   from the serve.
+
+5. **The slingshot was live on its back face.** The inlane side of a slingshot is buried in plastic
+   on a real machine; here it was a solenoid pointed at the wrong half of the table, and a soak
+   measured **53% of all ball life** bouncing in the pocket above the right inlane because the coil
+   fired the ball back up there every time it rolled down. `kickN` in `physics.js` is the face the
+   coil is behind.
+
+**Two more, both wedges, both found by an occupancy histogram rather than by any assertion:** the
+funnel passed exactly one ball's width from the flipper pivot (81% of ball life parked in that
+crook), and the inlane divider's top cap sat 17 units from the side wall - a hair under a ball, so
+the ball could not pass but could be squeezed (23%). **Either seal a gap properly or open it
+properly; never leave one just under a ball.**
+
+**And the wedge escape was measuring the wrong thing.** `escapeWedge` read the instantaneous speed,
+and a wedged ball does not sit still - it buzzes, crossing any threshold several times a second.
+`ball.avgV` is a smoothed speed over about a tenth of a second, which a buzz cannot fool. Same
+lesson as the ball search: measure where the ball is GOING, never how fast it happens to be moving
+this step.
+
+### What replaced the assertions that missed all of this
+
+The soak passed throughout. It could not see any of it, because a re-arming ball save hid the
+drains and a random driver hides everything else. So `test.js` has a new block, **SAVE-OFF**, and it
+measures the two things that actually track playability:
+
+- **ball life with the save switched off** - 5.6 s before, over 12 s asserted now;
+- **which exit the ball leaves by** - the middle has to be a real drain, not just the outlanes.
+
+Two soak thresholds came DOWN at the same time and that is not a goalpost moving: `physics.js` can
+CRADLE now, and this driver holds a flipper about a third of the time, so it went from an
+unrealistically good pinball player to an unrealistically good one **with a ball trap**. Counting
+its drains measures the driver. The outlanes are checked GEOMETRICALLY instead - mouth and channel
+both wider than a ball, mouth not so wide it is a funnel again.
+
 ## The rules
 
 - 3 balls (5 on Casual). Ball save at the start of each ball, 12 / 8 / 3 seconds by table.

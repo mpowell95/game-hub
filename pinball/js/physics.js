@@ -64,6 +64,7 @@ export function makeBall(x, y, vx = 0, vy = 0) {
   return {
     x, y, vx, vy, r: BALL_R, live: true, held: false, spin: 0, restTime: 0,
     pinch: 0,      // seconds spent wedged between opposing surfaces (see escapeWedge)
+    avgV: 0,       // smoothed speed; the wedge test uses this, never the instantaneous one
     seed: 1,       // per-ball counter; the ONLY source of "randomness" here, so replays are exact
   };
 }
@@ -85,7 +86,8 @@ export function seg(ax, ay, bx, by, opts = {}) {
   return {
     t: 'seg', ax, ay, bx, by,
     r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.06,
-    kick: opts.kick ?? 0, id: opts.id || '', oneWay: opts.oneWay || null,
+    kick: opts.kick ?? 0, kickN: opts.kickN || null,
+    id: opts.id || '', oneWay: opts.oneWay || null,
     on: opts.on !== false,
   };
 }
@@ -180,7 +182,7 @@ function jitter(ball) {
  * Returns the contact record the caller collects, or null if the ball was already separating (a
  * grazing pass still counts as a contact for scoring, so `speed` may be 0).
  */
-function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
+function resolve(ball, nx, ny, pen, e, mu, kick, sv, kickN) {
   // Positional correction with a slop: leaving a hair of overlap stops a ball resting on a surface
   // from being re-launched a thousandth of a unit every step, which is what makes a resting ball
   // buzz instead of sit.
@@ -221,6 +223,12 @@ function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
     ball.vx = nvx + svx; ball.vy = nvy + svy;
   }
 
+  // A SLINGSHOT IS ONLY LIVE ON ITS FRONT FACE, and `kickN` is what says which face that is.
+  // Without it the inlane side of a slingshot is a solenoid pointed at the wrong half of the
+  // table: a soak measured 53% of all ball life bouncing in the pocket above the right inlane,
+  // because every time the ball rolled down the back of the slingshot the coil fired it straight
+  // back up there. On a real machine that face is buried in plastic and has no switch behind it.
+  if (kick && kickN && (nx * kickN[0] + ny * kickN[1]) < 0.5) kick = 0;
   if (kick) {
     // A solenoid guarantees an outgoing speed, it does not add to whatever was there. Taking the
     // max rather than adding is what stops a fast ball ping-ponging out of a bumper nest at absurd
@@ -253,7 +261,7 @@ function hitSeg(ball, s) {
     const along = ball.vx * s.oneWay[0] + ball.vy * s.oneWay[1];
     if (along <= 0) return null;
   }
-  return resolve(ball, nx, ny, reach - d, s.e, s.mu, s.kick, null);
+  return resolve(ball, nx, ny, reach - d, s.e, s.mu, s.kick, null, s.kickN);
 }
 
 function hitCircle(ball, c) {
@@ -301,6 +309,7 @@ function hitFlipper(ball, f) {
   const rx = qx - f.px, ry = qy - f.py;
   const sv = { x: -f.omega * ry, y: f.omega * rx };
   const hit = resolve(ball, nx, ny, reach - d, f.e, f.mu, 0, sv);
+  if (hit && f.pressed) hit.cradle = true;
 
   // THE CRADLE. A slow ball resting on a stationary paddle is damped along the paddle, so it
   // settles into the pivot corner and stays there instead of trickling off. Trapping the ball is
@@ -340,11 +349,27 @@ function hitFlipper(ball, f) {
  * nowhere, so it can never alter live play.
  */
 const WEDGE_TIME = 0.25;      // seconds pinched before the ball lets itself out
-const WEDGE_SPEED = 60;       // below this a ball counts as "going nowhere"
-const WEDGE_KICK = 90;        // table-units/s of escape
+const WEDGE_SPEED = 110;      // SMOOTHED speed below which a ball counts as going nowhere
+const WEDGE_KICK = 110;       // table-units/s of escape
 
+/**
+ * IT TESTS THE SMOOTHED SPEED, NOT THE INSTANTANEOUS ONE, AND THAT IS THE WHOLE FIX.
+ * A wedged ball does not sit still: it buzzes between its two surfaces, and a measurement taken
+ * on any single step crosses any threshold you pick several times a second. The first version
+ * read `Math.hypot(vx, vy)` against 60 and duly never fired - a soak parked 81% of all ball life
+ * in one crook beside the right flipper, with the instantaneous speed swinging 1 to 66 the whole
+ * time. `ball.avgV` is an exponential average over about a tenth of a second, which a buzz
+ * cannot fool. It is the same lesson game.js's ball-search records: measure where the ball IS
+ * going, never how fast it happens to be moving this step.
+ *
+ * A DELIBERATE CRADLE IS EXEMPT. A ball held in the crook of a RAISED flipper is also two
+ * opposing contacts at low speed, and shoving it out would take away the one thing a player uses
+ * to aim. A flipper at its DOWN stop gets no such exemption - a ball stuck against a resting
+ * paddle and a wall is a wedge, not a skill.
+ */
 function escapeWedge(ball, contacts, dt) {
-  const sp = Math.hypot(ball.vx, ball.vy);
+  const sp = ball.avgV;
+  if (contacts.some((c) => c.cradle)) { ball.pinch = 0; return false; }
   let opposed = false;
   for (let i = 0; i < contacts.length && !opposed; i++) {
     for (let j = i + 1; j < contacts.length; j++) {
@@ -498,6 +523,9 @@ export function step(world, balls, onContact) {
 
       const s2 = Math.hypot(ball.vx, ball.vy);
       if (s2 > MAX_SPEED) { ball.vx = ball.vx / s2 * MAX_SPEED; ball.vy = ball.vy / s2 * MAX_SPEED; }
+      // Smoothed speed for the wedge test: a ~0.1 s time constant, so a buzz cannot fool it.
+      const k = Math.min(1, h / 0.1);
+      ball.avgV += (Math.min(s2, MAX_SPEED) - ball.avgV) * k;
     }
 
     ballPairs(balls, (x, y, spd) => { if (onContact) onContact('ball', 'ball', x, y, spd, null); });

@@ -9,7 +9,7 @@
 // the soak plays complete games with random flipper input and asserts, on EVERY step, that no ball
 // is outside the table and that the game keeps making progress.
 
-import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED } from './physics.js';
+import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
 import { Renderer } from './render.js';
@@ -415,13 +415,114 @@ function launched(g) {
   ok('SOAK: no wedges - the table is never dead for more than 25 s at a time', longestStall < 25,
     `${longestStall.toFixed(1)} s`);
   ok('SOAK: the ball-search watchdog almost never has to re-serve', searches <= 4, `${searches} re-serves`);
-  ok('SOAK: balls really do drain', drains >= 12, `${drains} drains`);
+  // 2026-09-07: THIS THRESHOLD CAME DOWN FROM 12 TO 3, AND THE REASON IS NOT THAT THE TABLE GOT
+  // EASIER TO TEST. Two things changed under it. The outlanes stopped being funnels (the lane
+  // guide in table.js), and physics.js learned to CRADLE - a slow ball on a raised paddle is
+  // damped and stays there. This driver presses a flipper on 7% of steps and releases on 14%,
+  // so it holds one up about a third of the time, which on a table that can cradle makes it a
+  // far better player than it used to be. Random flipping was always an unrealistically good
+  // pinball player; it is now an unrealistically good one WITH a ball trap.
+  //
+  // So this assertion is no longer the one that says whether the table is playable, and pretending
+  // otherwise is how a leaking table shipped. The measurement that DOES track it is the one
+  // below: ball life with the save switched off. On the 2026-09-06 build that was 5.6 seconds
+  // with every single drain going out an outlane and none down the middle - a table that was not
+  // hard, it was leaking - and a 45-second recording of real play shows exactly that, four drains
+  // and four ball saves inside 25 seconds.
+  ok('SOAK: balls really do drain', drains >= 3, `${drains} drains`);
   ok('SOAK: random play scores', totalScore > 0, `total ${totalScore}`);
   ok('SOAK: the ball count stays sane (multiball adds two, never more)', maxBalls >= 1 && maxBalls <= 4,
     `max ${maxBalls} balls`);
-  ok('SOAK: at least some games play right through to game over', gamesFinished >= 1, `${gamesFinished}/6`);
+  // Deliberately NOT asserted any more, for the reason above: with a cradle available a random
+  // driver can keep a ball alive for the whole 300 s, and failing on that is testing the driver
+  // rather than the table. The full drain -> bonus -> next ball -> game over chain is proved
+  // deterministically in 4b, which is where it belongs.
+  ok('SOAK: games make real progress', totalScore > 200000, `total ${totalScore}`);
   ok('SOAK: no capture ever holds the ball for more than 2.5 s', longestHold < 2.5,
     `longest hold ${longestHold.toFixed(1)}s - a capture switch is not letting go`);
+}
+
+// --- 4a2. THE NUMBER THAT SAYS WHETHER THE TABLE IS PLAYABLE ---------------------------------
+//
+// Ball life with the ball save switched OFF, and which of the three exits the ball leaves by.
+// Both halves matter and the second is the one that found the bug:
+//
+//   2026-09-06 build:  median 5.6 s,  drains 12 left outlane / 0 centre / 6 right outlane
+//   after the rework:  median 40 s,   drains  3 left outlane / 7 centre / 5 right outlane
+//
+// A real machine drains mostly DOWN THE MIDDLE. A table whose drains are all out of the sides
+// is not difficult, it is leaking, and no assertion in this file could see that: the soak
+// above passed the whole time, because a ball save was re-arming on every save and hiding it.
+{
+  const lives = [];
+  const exits = { left: 0, centre: 0, right: 0 };
+  const tipL = AXIS - FLIP.dx + Math.cos(FLIP.rest) * FLIP.len;
+  const tipR = AXIS + FLIP.dx - Math.cos(FLIP.rest) * FLIP.len;
+  for (let n = 0; n < 5; n++) {
+    const rand = mulberry32(4400 + n * 131);
+    const g = new Pinball({ difficulty: 'medium', rand });
+    g.start();
+    let t = 0, served = 0;
+    while (t < 180 && g.phase !== 'over') {
+      g.saveTimer = 0;                                  // the instrument
+      if (g.phase === 'ready') {
+        g.plungerDown();
+        for (let i = 0; i < 55; i++) g.update(1 / 120);
+        g.plungerUp();
+        served = t;
+      }
+      if (rand() < 0.07) g.setFlipper('left', true);
+      if (rand() < 0.16) g.setFlipper('left', false);
+      if (rand() < 0.07) g.setFlipper('right', true);
+      if (rand() < 0.16) g.setFlipper('right', false);
+      g.update(1 / 120); t += 1 / 120;
+      for (const ev of g.takeEvents()) {
+        if (ev.type !== 'drain') continue;
+        lives.push(t - served);
+        served = t;
+        if (ev.x < tipL - 8) exits.left++; else if (ev.x > tipR + 8) exits.right++; else exits.centre++;
+      }
+    }
+  }
+  lives.sort((a, b) => a - b);
+  const med = lives.length ? lives[Math.floor(lives.length / 2)] : 0;
+  const total = exits.left + exits.centre + exits.right;
+  ok('SAVE-OFF: a ball lives long enough to be a game (not the 5.6 s of the 2026-09-06 build)',
+    med > 12, `median ${med.toFixed(1)}s over ${lives.length} balls`);
+  ok('SAVE-OFF: the middle is a real drain, not just the outlanes',
+    total > 0 && exits.centre / total >= 0.25,
+    `left ${exits.left} centre ${exits.centre} right ${exits.right}`);
+  // The outlanes are checked GEOMETRICALLY rather than by counting drains, and the difference is
+  // worth stating. A random driver essentially never finds them - it holds a flipper about a
+  // third of the time, so it cradles, and a cradled ball is not going anywhere near an outlane.
+  // Counting its drains would therefore measure the driver, not the lane. What CAN be asserted
+  // without a driver is that the lane is a real, passable channel: a mouth wider than a ball
+  // between the slingshot's outer post and the top of the divider, and a channel wider than a
+  // ball all the way down to the drain. If either closes, the outlane has become decoration and
+  // the table has lost a third of the ways it can end a ball.
+  {
+    const cs = buildTable({}).colliders;
+    const by = (id) => cs.find((c) => c.id === id);
+    const post = by('slingPostL'), div = by('divL'), fun = by('funnelL');
+    const mouth = Math.hypot(post.x - div.ax, post.y - div.ay) - post.r - div.r;
+    // perpendicular width of the channel, measured at three heights down the divider
+    const dx = div.bx - div.ax, dy = div.by - div.ay, dl = Math.hypot(dx, dy);
+    const nx = -dy / dl, ny = dx / dl;
+    let narrowest = 1e9;
+    for (const t of [0.1, 0.35, 0.6]) {
+      const px = div.ax + dx * t, py = div.ay + dy * t;
+      const fx = fun.bx - fun.ax, fy = fun.by - fun.ay, fl = Math.hypot(fx, fy);
+      const u = Math.max(0, Math.min(1, ((px - fun.ax) * fx + (py - fun.ay) * fy) / (fl * fl)));
+      const qx = fun.ax + fx * u, qy = fun.ay + fy * u;
+      narrowest = Math.min(narrowest, Math.hypot(px - qx, py - qy) - div.r - fun.r);
+    }
+    ok('the left outlane MOUTH is wider than a ball', mouth > BALL_R * 2 + 2,
+      `${mouth.toFixed(1)} against a ball of ${BALL_R * 2}`);
+    ok('the left outlane CHANNEL is wider than a ball all the way down',
+      narrowest > BALL_R * 2 + 2, `narrowest ${narrowest.toFixed(1)}`);
+    ok('the outlane mouth is not so wide it is a funnel', mouth < BALL_R * 2 + 18,
+      `${mouth.toFixed(1)}; the 2026-09-06 build had an open bay here and drained 18 of 18 balls out of the sides`);
+  }
 }
 
 // --- 4b. the whole ball chain, deterministically ----------------------------------------------------
