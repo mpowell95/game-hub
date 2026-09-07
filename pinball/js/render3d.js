@@ -122,7 +122,7 @@ export class Renderer {
 
     // effects (screen space, drawn on the overlay)
     this.parts = [];
-    this.pops = [];
+    // popups live on the BACKGLASS now, never over the playfield - see popup()
     this.shake = 0;
     this.flashAmt = 0;
     this.flashColor = PALETTE.cyan;
@@ -619,6 +619,54 @@ export class Renderer {
       return { m, mat, key: keyName };
     });
 
+    // --- the backbox ------------------------------------------------------------------------------------------
+    // A real machine puts its score and its shouting on a BACKGLASS standing at the far end, not
+    // painted on the playfield. Matt, on the shipped build: *"the points and word popups should be
+    // shown on a back wall/scorepoint/point counter thing. There's too much that happens on top of
+    // the machine."* So every award value and every word now lands here instead of floating over
+    // the table, which is both what a pinball machine does and the only way to stop them covering
+    // the ball.
+    //
+    // It is a CanvasTexture, redrawn only when the text changes - not every frame.
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 288;
+      this._bbCv = cv;
+      this._bbCtx = cv.getContext('2d');
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      // The glass has to be TURNED ROUND to face the camera (see below), and the model group is
+      // already mirrored in x - the two compound rather than cancel, and the first build put
+      // "BUHRATS" on the backglass. Mirroring the texture as well is the third flip that makes it
+      // read forwards.
+      tex.center.set(0.5, 0.5);
+      tex.repeat.x = -1;
+      this._bbTex = tex;
+      const g = new THREE.Group();
+      g.position.set(AXIS, 0, tz(-30));
+      // Leaned toward the player, like a real backbox. Positive x-rotation tips the top away
+      // from the camera under this scene's -z viewing direction, so this is the negative one.
+      g.rotation.x = 0.24;
+      root.add(g);
+      const w = 250, h = 132;
+      // The cabinet the glass sits in, BEHIND the glass - and under this scene's conventions
+      // "behind" is the LARGER z, because the camera looks along +z from very negative z.
+      this._add(g, new THREE.BoxGeometry(w + 18, h + 16, 11), M.chrome, 0, h / 2 + 4, 5);
+      const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true }),
+      );
+      // A PlaneGeometry faces +z, which here is AWAY from the camera - so it has to be turned
+      // round, and turning it round also undoes the model group's x-mirror, which is what keeps
+      // the text on it readable rather than back to front.
+      face.rotation.y = Math.PI;
+      face.position.set(0, h / 2 + 4, -2);
+      g.add(face);
+      this._bbGroup = g;
+      this._bbLines = [];
+      this._bbDirty = true;
+    }
+
     // --- balls ----------------------------------------------------------------------------------------------------
     this.parts3.balls = [];
     for (let i = 0; i < 4; i++) {
@@ -680,10 +728,23 @@ export class Renderer {
       for (const y of [-4, H + 40]) corners.push(new THREE.Vector3(x, 0, tz(y)));
     }
     corners.push(new THREE.Vector3(-AXIS, mm(0.13), tz(180)));
+    // the backglass, which stands beyond the crown and must not be cropped
+    // The backglass's top corners, computed through the group's own lean rather than guessed:
+    // it stands beyond the crown and must not be cropped, and the HUD band above the canvas gives
+    // it nowhere to hide.
+    {
+      const gy = 4 + 132, gz = -2, lean = 0.24, gzWorld = tz(-30);
+      const wy = gy * Math.cos(lean) - gz * Math.sin(lean);
+      const wz = gy * Math.sin(lean) + gz * Math.cos(lean) + gzWorld;
+      for (const x of [-AXIS - 140, -AXIS + 140]) corners.push(new THREE.Vector3(x, wy, wz));
+    }
+    this._viewOff = this._viewOff || 0;
     const fits = (dist) => {
       cam.position.set(cx, Math.cos(TILT) * dist, cz - Math.sin(TILT) * dist);
       cam.lookAt(cx, 0, cz);
       cam.updateMatrixWorld(true);
+      if (this._viewOff) cam.setViewOffset(cssW, cssH, 0, this._viewOff, cssW, cssH);
+      else cam.clearViewOffset();
       cam.updateProjectionMatrix();
       for (const c of corners) {
         const v = c.clone().project(cam);
@@ -704,18 +765,36 @@ export class Renderer {
     // one end. Moving the camera to fix that changes the perspective and therefore what fits,
     // which turns a one-shot correction into a chase; `setViewOffset` slides the frustum window
     // instead, so the framing is untouched and the picture simply sits in the middle.
-    cam.clearViewOffset();
-    cam.updateProjectionMatrix();
-    let lowY = 1, highY = -1;
+    // Measure the offset, apply it, THEN FIT AGAIN. Shifting the frustum window moves the whole
+    // picture, so a fit that was exactly tight before the shift is over the edge after it - which
+    // is how the backglass ended up sliced off by the HUD band. Two passes is enough: the offset
+    // barely moves once the distance settles.
+    for (let pass = 0; pass < 2; pass++) {
+      let lowY = 1, highY = -1;
+      for (const c of corners) {
+        const v = c.clone().project(cam);
+        lowY = Math.min(lowY, v.y); highY = Math.max(highY, v.y);
+      }
+      const off = (lowY + highY) / 2;               // NDC: +1 is the top of the screen
+      this._viewOff = -off * cssH / 2;
+      lo = 200; hi = 4000;
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) hi = mid; else lo = mid;
+      }
+      fits(hi);
+    }
+
+    // The machine's screen-space box. spawnHit() throws its confetti from the EDGE of this,
+    // outward - see there for why.
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
     for (const c of corners) {
       const v = c.clone().project(cam);
-      lowY = Math.min(lowY, v.y); highY = Math.max(highY, v.y);
+      const sx = (v.x * 0.5 + 0.5) * cssW, sy = (-v.y * 0.5 + 0.5) * cssH;
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx);
+      y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
     }
-    const off = (lowY + highY) / 2;                 // NDC: +1 is the top of the screen
-    if (Math.abs(off) > 0.003) {
-      cam.setViewOffset(cssW, cssH, 0, -off * cssH / 2, cssW, cssH);
-      cam.updateProjectionMatrix();
-    }
+    this.box = { x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
   }
 
   /** Table coordinate -> CSS pixel, through the real camera, for the 2D effects overlay. */
@@ -726,22 +805,56 @@ export class Renderer {
 
   // --- effects API (called by ui.js from the game's event stream) ---------------------------------
 
+  /**
+   * A burst of confetti for a hit - THROWN CLEAR OF THE MACHINE, into the black surround.
+   *
+   * Matt, on the shipped build: *"Too much confetti on the screen causes the ball to get lost.
+   * All confetti must be off the machine and shown in the black outside."* He is right, and the
+   * reason is that the ball is a small grey sphere and every particle over the playfield is
+   * another small bright thing competing with it. So the burst no longer starts where the hit
+   * was: it starts where a line from the middle of the machine through the hit LEAVES the
+   * machine's silhouette, and travels outward from there. You still see which side of the table
+   * scored, and nothing is ever drawn over the ball.
+   *
+   * `this.box` is the machine's screen-space bounding box, measured in resize() from the same
+   * corners the camera framing uses - so it cannot drift out of step with what is on screen.
+   */
   spawnHit(x, y, n, color, speed = 200) {
     if (this.reduced) n = Math.min(n, 3);
+    const box = this.box;
+    if (!box) return;
+    const [px, py] = this._project(x, y, 12);
+    let dx = px - box.cx, dy = py - box.cy;
+    if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) { dx = 0; dy = 1; }
+    // How far along that direction the box edge is: the smaller of the two axis crossings.
+    const hw = (box.x1 - box.x0) / 2, hh = (box.y1 - box.y0) / 2;
+    const t = Math.min(
+      dx === 0 ? Infinity : hw / Math.abs(dx),
+      dy === 0 ? Infinity : hh / Math.abs(dy),
+    );
+    const ex = box.cx + dx * t, ey = box.cy + dy * t;
+    const len = Math.hypot(dx, dy) || 1;
+    const ox = dx / len, oy = dy / len;
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * TAU;
-      const v = speed * (0.35 + Math.random() * 0.9);
+      const spread = (Math.random() - 0.5) * 1.5;
+      const c = Math.cos(spread), s = Math.sin(spread);
+      const v = speed * (0.5 + Math.random() * 0.9) * 0.5;
       this.parts.push({
-        x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60,
-        age: 0, life: 0.28 + Math.random() * 0.4, color, r: 1.4 + Math.random() * 2,
+        sx: ex + (Math.random() - 0.5) * 26, sy: ey + (Math.random() - 0.5) * 26,
+        vx: (ox * c - oy * s) * v, vy: (ox * s + oy * c) * v,
+        age: 0, life: 0.5 + Math.random() * 0.5, color, r: 1.8 + Math.random() * 2.4,
       });
     }
-    if (this.parts.length > 300) this.parts.splice(0, this.parts.length - 300);
+    if (this.parts.length > 240) this.parts.splice(0, this.parts.length - 240);
   }
 
+  /** An award or a word. It goes on the BACKGLASS, never over the playfield - see the backbox
+   *  block in _build() for why. Newest at the top; three lines, each fading on its own clock. */
   popup(x, y, text, color = '#fff', big = false) {
-    this.pops.push({ x, y, text, color, big, age: 0, life: big ? 1.4 : 0.95 });
-    if (this.pops.length > 24) this.pops.shift();
+    if (!this._bbLines) return;
+    this._bbLines.unshift({ text: String(text), color, big, age: 0, life: big ? 2.6 : 1.9 });
+    if (this._bbLines.length > 3) this._bbLines.length = 3;
+    this._bbDirty = true;
   }
 
   flash(amount = 0.5, color = PALETTE.cyan) {
@@ -856,6 +969,7 @@ export class Renderer {
       this.camera.position.y += (Math.random() - 0.5) * s;
     }
 
+    if (this._bbDirty) { this._bbDirty = false; this._drawBackglass(hud); }
     this.renderer.render(this.scene, this.camera);
     this._drawFx(hud);
   }
@@ -878,18 +992,61 @@ export class Renderer {
       const p = this.parts[i];
       p.age += dt;
       if (p.age >= p.life) { this.parts.splice(i, 1); continue; }
-      p.vy += 900 * dt;
-      p.vx *= Math.pow(0.2, dt);
-      p.x += p.vx * dt; p.y += p.vy * dt;
+      // Screen-space pixels per second, not table units: these live in the black surround now.
+      p.vy += 260 * dt;
+      p.vx *= Math.pow(0.35, dt);
+      p.sx += p.vx * dt; p.sy += p.vy * dt;
     }
-    for (let i = this.pops.length - 1; i >= 0; i--) {
-      const p = this.pops[i];
-      p.age += dt;
-      if (p.age >= p.life) this.pops.splice(i, 1);
+    if (this._bbLines) {
+      for (let i = this._bbLines.length - 1; i >= 0; i--) {
+        const p = this._bbLines[i];
+        p.age += dt;
+        if (p.age >= p.life) { this._bbLines.splice(i, 1); this._bbDirty = true; }
+      }
+      // A fading line changes what is on the glass, so redraw while any line is alive - but at
+      // about 12 Hz, not every frame: this is a 512x288 canvas plus a texture upload.
+      if (this._bbLines.length) {
+        this._bbFade = (this._bbFade || 0) + dt;
+        if (this._bbFade > 0.08) { this._bbFade = 0; this._bbDirty = true; }
+      }
     }
   }
 
-  /** Particles, score popups and the flashers, in screen space over the 3D. */
+  /** Repaint the backglass: the score, then the last three awards. */
+  _drawBackglass(hud) {
+    const g = this._bbCtx;
+    if (!g) return;
+    const W2 = this._bbCv.width, H2 = this._bbCv.height;
+    g.clearRect(0, 0, W2, H2);
+    g.fillStyle = '#0b0718';
+    g.fillRect(0, 0, W2, H2);
+    // dot-matrix wash, the same idea as the HUD band in ui.js
+    g.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let y = 6; y < H2; y += 8) for (let x = 6; x < W2; x += 8) g.fillRect(x, y, 2, 2);
+    g.strokeStyle = 'rgba(51,220,255,0.35)';
+    g.lineWidth = 4;
+    g.strokeRect(6, 6, W2 - 12, H2 - 12);
+
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '700 30px system-ui, -apple-system, sans-serif';
+    g.fillStyle = 'rgba(218,224,234,0.55)';
+    g.fillText(hud && hud.multiball ? 'MULTIBALL' : 'STARHUB', W2 / 2, 40);
+
+    const lines = this._bbLines || [];
+    for (let i = 0; i < lines.length; i++) {
+      const p = lines[i];
+      const k = Math.max(0, 1 - p.age / p.life);
+      g.globalAlpha = 0.25 + k * 0.75;
+      g.fillStyle = p.color;
+      g.font = `800 ${p.big && i === 0 ? 58 : i === 0 ? 46 : 30}px system-ui, -apple-system, sans-serif`;
+      g.fillText(p.text, W2 / 2, 105 + i * 62);
+    }
+    g.globalAlpha = 1;
+    this._bbTex.needsUpdate = true;
+  }
+
+  /** Particles and the flashers, in screen space over the 3D. */
   _drawFx(hud) {
     const ctx = this.fxCtx;
     if (!ctx) return;
@@ -899,30 +1056,14 @@ export class Renderer {
 
     for (const p of this.parts) {
       const k = 1 - p.age / p.life;
-      const [sx, sy] = this._project(p.x, p.y, 12);
       ctx.globalAlpha = k;
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(sx, sy, p.r * (0.5 + k * 0.7) * 1.6, 0, TAU);
+      ctx.arc(p.sx, p.sy, p.r * (0.5 + k * 0.7), 0, TAU);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (const p of this.pops) {
-      const k = p.age / p.life;
-      const [sx, sy] = this._project(p.x, p.y, 30);
-      ctx.save();
-      ctx.globalAlpha = clamp(1 - k * k, 0, 1);
-      ctx.font = `800 ${p.big ? 28 : 19}px system-ui, -apple-system, sans-serif`;
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-      ctx.strokeText(p.text, sx, sy - k * 40);
-      ctx.fillStyle = p.color;
-      ctx.fillText(p.text, sx, sy - k * 40);
-      ctx.restore();
-    }
 
     if (this.flashAmt > 0.01) {
       ctx.globalAlpha = this.flashAmt * 0.4;
