@@ -387,7 +387,7 @@ export class Renderer {
     // rollover lane dividers
     for (const x of ART.laneX) {
       const top = ARCH.cy - Math.sqrt(ARCH.rIn * ARCH.rIn - (x - ARCH.cx) * (x - ARCH.cx)) + 3;
-      this._rail(root, [[x, 108], [x, top]], 8, mm(0.044), M.steel);
+      this._rail(root, [[x, ART.laneBottom], [x, top]], 8, mm(0.044), M.steel);
     }
 
     // --- posts -------------------------------------------------------------------------------------
