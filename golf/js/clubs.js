@@ -129,6 +129,21 @@ export function canPutt(kind) {
 /** @deprecated the old name for `mustPutt`, kept so nothing outside this file breaks silently. */
 export const isPuttable = mustPutt;
 
+/** How far a full-power putt runs, in feet. MUST match shot.js's MAX_PUTT_FT - test.js asserts it,
+ *  because the two files cannot import each other (shot.js already imports this one). */
+export const PUTTER_REACH_FT = 60;
+
+/** Where the putter is the ONLY club: the putting surface itself.
+ *
+ *  NOT the fringe, since 2026-09-07. `mustPutt` covers the collar too - that is right for which
+ *  club to HAND the player - but it was also used to lock the club buttons, and a ball on the
+ *  fringe can be further from the hole than a putter can reach. Measured over 40 rounds of Pine
+ *  Valley: eight lies on the collar 60-67 ft from the cup, where the only club offered could not
+ *  get there however perfectly it was struck. A forced two-putt from the fringe is not a golf
+ *  problem, it is a bag problem. On the green itself the putter stays the only option, which is
+ *  both real and what keeps the green simple. */
+export function lockedToPutter(kind) { return kind === 'green'; }
+
 /** ROLL after landing, as a fraction of carry: the surface the ball comes down ON, times how
  *  FLAT the club sends it in.
  *
@@ -300,7 +315,9 @@ export function autoSelectClub(distanceYd, lieKind) {
   // THE PUTTER IS OFFERED FROM THE COLLAR TOO, not only from the putting surface. Without this a
   // ball two feet off the green is handed the shortest club in the bag - a lob wedge, 50 yds - and
   // blasted clean over the green. Real golfers putt from the fringe; so does this.
-  if (mustPutt(lieKind)) return PUTTER;
+  // ...but only while the cup is inside the putter's range. Beyond that the collar gets a club
+  // that can actually reach it (see lockedToPutter above).
+  if (mustPutt(lieKind) && (lockedToPutter(lieKind) || distanceYd * 3 <= PUTTER_REACH_FT * 0.92)) return PUTTER;
   const reach = lieOf(lieKind).power;
   for (let i = CLUBS.length - 1; i >= 0; i--) {
     if (CLUBS[i].carry * reach >= distanceYd) return CLUBS[i];
@@ -321,7 +338,7 @@ export function autoSelectClub(distanceYd, lieKind) {
  *  the driver was thirteen taps the other way - and holding the button just sat there doing
  *  nothing, which reads as broken rather than as a limit. */
 export function stepClub(club, dir, lieKind) {
-  if (mustPutt(lieKind)) return PUTTER;
+  if (lockedToPutter(lieKind)) return PUTTER;
   const ladder = canPutt(lieKind) ? [...CLUBS, PUTTER] : CLUBS;
   const n = ladder.length;
   let i = ladder.findIndex((c) => c.id === club.id);

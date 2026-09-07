@@ -827,6 +827,106 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
   }
 }
 
+console.log('\n-- 10c. A BLOCKED SHOT STILL MOVES THE BALL, AND NEVER OFF THE MAP --');
+// Both came out of a 40-round playtest of Pine Valley with a human-shaped player (2026-09-07):
+// 66 strokes that moved the ball 0.00 yds, four holes that never finished at all, four spots the
+// ball returned to three times running, and 14 shots that finished outside the drawn hole.
+{
+  const hole = PINE_VALLEY.holes[10];        // 11: the wood down the left is where it happened
+  const wedge = CLUBS.find((c) => c.id === 'pwedge');
+  let worst = Infinity; let n = 0; let inside = 0;
+  for (const t of treesOf(hole)) {
+    const ty = hole.treeTypes[t.type]; const sc = t.s || 1;
+    for (const back of [1.5, 2.5, 4]) {
+      const from = [t.x, t.y - (ty.trunk * sc + back)];
+      if (surfaceAt(hole, from[0], from[1]) === 'water') continue;
+      const aim = Math.atan2(t.x - from[0], t.y - from[1]);
+      const r = SH.resolveShot({ hole, from, aimRad: aim, club: wedge, power: 0.85, mishitDeg: 0, distanceMul: 1 });
+      if (!r.blocked) continue;
+      n++;
+      worst = Math.min(worst, distYd(from, r.rest));
+      if (Math.hypot(r.rest[0] - t.x, r.rest[1] - t.y) < ty.trunk * sc) inside++;
+    }
+  }
+  ok(`[KNOWN-BUG PROBE] a shot into a trunk always moves the ball (${n} swings, worst ${worst === Infinity ? 'n/a' : worst.toFixed(2)} yds)`,
+    n > 0 && worst >= SH.MIN_BLOCKED_YD * 0.5,
+    'a stroke that moves the ball 0.00 yds leaves the identical lie, so the same swing does the same nothing for ever');
+  ok('...and it never comes to rest inside the trunk it hit', inside === 0, `${inside} shots finished inside a tree`);
+
+  // OFF THE MAP: the camera clamps to hole.bounds, so a ball outside them cannot be framed at all.
+  let out = 0; let tried = 0;
+  for (const h of [...PINE_VALLEY.holes, ...RED_MESA.holes]) {
+    for (const club of [CLUBS[0], CLUBS[3]]) {
+      for (const deg of [-60, -45, -30, 30, 45, 60]) {
+        const aim = Math.atan2(h.pin[0] - h.tee[0], h.pin[1] - h.tee[1]) + deg * (Math.PI / 180);
+        const r = SH.resolveShot({ hole: h, from: h.tee, aimRad: aim, club, power: 1.1, mishitDeg: 8, distanceMul: 1 });
+        tried++;
+        const b = h.bounds;
+        if (r.rest[0] < b.minX || r.rest[0] > b.maxX || r.rest[1] < b.minY || r.rest[1] > b.maxY) out++;
+      }
+    }
+  }
+  ok(`[KNOWN-BUG PROBE] no shot finishes outside the drawn hole (${tried} wild slices)`, out === 0, `${out} finished off the map`);
+}
+
+console.log('\n-- 10e. A PENALTY DROP MOVES THE BALL --');
+// [KNOWN-BUG PROBE] The water rule walks the flight line back to the last dry point, and when the
+// water starts a yard in front of the ball that point IS the ball. The player paid a stroke, the
+// ball did not move, and the same swing did the same thing for ever: measured on Pine Valley 3
+// during the 2026-09-07 playtest, a wedge from the rough beside the lake looping at "38,295".
+{
+  const wedge = CLUBS.find((c) => c.id === 'pwedge');
+  let tried = 0; let stuck = 0; let wet = 0; let out = 0; let worst = Infinity;
+  for (const c of COURSES) for (const hole of c.holes) {
+    const b = hole.bounds;
+    for (let x = b.minX + 3; x <= b.maxX - 3; x += 7) {
+      for (let y = b.minY + 3; y <= b.maxY - 3; y += 7) {
+        if (surfaceAt(hole, x, y) === 'water') continue;
+        // is there water within a short wedge of here? then aim straight at it
+        let target = null;
+        for (let a = 0; a < 8 && !target; a++) {
+          const th = (a / 8) * Math.PI * 2;
+          for (let d = 6; d <= 40; d += 4) {
+            const px = x + Math.sin(th) * d, py = y + Math.cos(th) * d;
+            if (surfaceAt(hole, px, py) === 'water') { target = [px, py]; break; }
+          }
+        }
+        if (!target) continue;
+        const aim = Math.atan2(target[0] - x, target[1] - y);
+        const dist = distYd([x, y], target);
+        const r = SH.resolveShot({ hole, from: [x, y], aimRad: aim, club: wedge, power: Math.min(1, dist / (wedge.carry * lieOf(surfaceAt(hole, x, y)).power)), mishitDeg: 0, distanceMul: 1 });
+        if (!r.penalty) continue;
+        tried++;
+        const moved = distYd([x, y], r.rest);
+        worst = Math.min(worst, moved);
+        if (moved < SH.MIN_DROP_YD - 0.01) stuck++;
+        if (surfaceAt(hole, r.rest[0], r.rest[1]) === 'water') wet++;
+        if (r.rest[0] < b.minX || r.rest[0] > b.maxX || r.rest[1] < b.minY || r.rest[1] > b.maxY) out++;
+      }
+    }
+  }
+  ok(`[KNOWN-BUG PROBE] every penalty drop moves the ball (${tried} shots into water, worst ${worst === Infinity ? 'n/a' : worst.toFixed(2)} yds)`,
+    tried > 50 && stuck === 0, `${stuck} drops left the ball where it was struck`);
+  ok('...and no drop is in the water', wet === 0, `${wet} wet drops`);
+  ok('...and no drop is off the map', out === 0, `${out} drops outside the hole`);
+}
+
+console.log('\n-- 10d. THE COLLAR HANDS OVER A CLUB THAT CAN REACH --');
+// A ball on the fringe can be further from the cup than a putter can go: measured at 60-67 ft on
+// four Pine Valley holes, where the only club offered could not get there however well it was
+// struck. The putter is still the default on the collar; past its range the bag opens.
+{
+  ok('the green is still putter-only', CL.lockedToPutter('green') && autoSelectClub(30, 'green').id === 'putter');
+  ok('the fringe is not locked', !CL.lockedToPutter('fringe'));
+  ok('a short one off the collar is still a putt', autoSelectClub(5, 'fringe').id === 'putter');
+  const far = autoSelectClub(23, 'fringe');          // 69 ft, past the putter's 60
+  ok(`a 69 ft one off the collar gets a club that reaches (${far.id})`, far.id !== 'putter' && far.carry >= 23);
+  ok('the club buttons work on the collar and not on the green',
+    stepClub(PUTTER, 1, 'fringe').id !== 'putter' && stepClub(PUTTER, 1, 'green').id === 'putter');
+  ok(`the two files agree on how far a putt goes (${CL.PUTTER_REACH_FT} ft vs ${SH.puttRangeFt()} ft)`,
+    CL.PUTTER_REACH_FT === SH.puttRangeFt(), 'clubs.js cannot import shot.js, so this is the guard against drift');
+}
+
 console.log('\n-- 10b. THE CUP IS THE SAME RULE FOR EVERY SHOT --');
 // Matt, 2026-09-04: "Anything can be holed. a 1 ft putt, a 30 ft putt, a 200 yard 3 wood shot.
 // Anything. as long as it goes over the hole at a reasonable speed (you can go over it if the ball
@@ -1008,8 +1108,35 @@ console.log('\n-- 12. the two yardages stay different on purpose --');
   }
   ok('no hole\'s card yardage is shorter than its own straight line', bad === 0);
 }
-ok("hole 3's card is well over its straight line, because it is a dogleg",
-  PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 50);
+ok("hole 3's card is over its straight line, because it is a dogleg",
+  PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 10);
+// [KNOWN-BUG PROBE] AND THE CARD IS THE ROUTE. `cardYards` is defined as the walk along the
+// hole's own centreline, so `route` is the thing it must agree with - and until 2026-09-07 hole 3
+// claimed 608.6 against a route that adds up to 550.8. It was out by 58 yds, it inflated the
+// course total on the setup screen, and the assertion above (a hand-picked "> 50" against the
+// STRAIGHT line) is why nothing caught it: it pinned the symptom of the wrong number, not the
+// rule.
+//
+// Two tolerances on purpose. Pine Valley was measured hole by hole during the 2026-09-07 playtest
+// and every one of its eighteen agrees with its route to within 10 yds, so it is held to 12. The
+// other courses are their own authors' work and were laid out to a looser standard (Oasis Sands
+// runs up to 32 yds out); they get the wide net, which still catches a 58 yd error anywhere.
+{
+  const gap = (h) => {
+    const pts = h.route && h.route.length > 1 ? h.route : [h.tee, h.pin];
+    let route = 0;
+    for (let i = 1; i < pts.length; i++) route += distYd(pts[i - 1], pts[i]);
+    return { route, off: Math.abs(route - h.cardYards) };
+  };
+  const tight = PINE_VALLEY.holes.filter((h) => gap(h).off > 12)
+    .map((h) => `hole ${h.n}: card ${Math.round(h.cardYards)} vs route ${Math.round(gap(h).route)}`);
+  ok(`every Pine Valley card yardage matches its own route (${PINE_VALLEY.holes.length} holes)`,
+    tight.length === 0, tight.join('; '));
+  const wide = COURSES.flatMap((c) => c.holes.filter((h) => gap(h).off > 40)
+    .map((h) => `${c.id} hole ${h.n}: card ${Math.round(h.cardYards)} vs route ${Math.round(gap(h).route)}`));
+  ok(`no card yardage anywhere is more than 40 yds off its route (${COURSES.reduce((x, c) => x + c.holes.length, 0)} holes)`,
+    wide.length === 0, wide.join('; '));
+}
 near('hole 1 is the one where they agree', distYd(PINE_VALLEY.holes[0].tee, PINE_VALLEY.holes[0].pin), 360.7, 0.05);
 
 console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');

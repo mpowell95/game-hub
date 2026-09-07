@@ -16,7 +16,7 @@ import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
+import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -527,7 +527,7 @@ class GolfGame {
    *  HUD grew its own auto-pick fallback and _fire kept reading the raw field. */
   _activeClub() {
     const lie = this._lie();
-    if (mustPutt(lie)) return PUTTER;
+    if (lockedToPutter(lie)) return PUTTER;
     // A putter carried onto a lie that cannot hold one (the ball ran into rough) hands the bag
     // back rather than swinging a putter out of the cabbage.
     if (!this.club) this.club = autoSelectClub(this._distToPin(), lie);
@@ -793,7 +793,7 @@ class GolfGame {
   _stepClub(dir) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
     if (this.intro) this._endIntro();
-    if (this._mustPutt()) return;                   // the putter is the only club on the green
+    if (lockedToPutter(this._lie())) return;        // the putter is the only club on the green
     this.club = stepClub(this._activeClub(), dir, this._lie());
     this._syncTempo();
     this._paintHud();

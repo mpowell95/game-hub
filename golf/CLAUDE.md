@@ -3362,3 +3362,96 @@ So a ball on the far corner of Oasis 8's collar faces a 116 ft putt with a 60 ft
 still leaves 56, and a three-putt from there is close to forced. It is driven by the green SHAPES
 (this course's greens reach 54-91 ft from the pin against 31-65 and 31-56), which are traced, so
 fixing it means redrawing greens rather than moving one pin. Recorded, not changed.
+## The overnight playtest: 40 rounds of Pine Valley, and what it found (2026-09-07)
+
+Matt: *"play through pine valley all 18 holes. maybe multiple times. hit good shots and hit bad
+shots. lose balls, take drops, make long putts and make yourself have to hit short putts... Find
+all bugs or glitches or errors on unrealistic physics."*
+
+Two harnesses, both in a scratchpad rather than the repo, because this was a hunt rather than a
+suite: a **headless player** that plays whole rounds through the real `shot.js`/`swing.js` with a
+human-shaped tap distribution (62 % of strikes in the green band, 25 % orange, 13 % a genuine hack,
+plus a one-in-ten wild power tap), and a **browser player** that does the same through the real UI
+at 393x852 with touch. The headless one plays a round in about a second, which is what makes 40 of
+them possible; the browser one is what sees the HUD.
+
+**The first version of the headless player was too stupid to be evidence.** It swung a driver out
+of the trees because `autoSelectClub` said so, which is not what a person does. Given the two
+things a person actually has - a wedge when in trouble, and the aim arrows to find a gap - its
+flags started meaning something. Worth remembering for the next hunt: a bad player model mostly
+finds its own bad play.
+
+### Five bugs, all fixed
+
+1. **A shot that hit a trunk could move the ball 0.00 yds.** `resolveShot` dropped a blocked ball
+   at `max(0, along - 2)`, so a trunk within two yards left it exactly where it was struck - same
+   lie, same trees, same result next swing. Over 40 rounds: **66 zero-yard strokes, four spots the
+   ball returned to three times running, and four holes that never finished at all** (11 and 17, in
+   the woods). A player cannot escape that by playing better, which is the definition of a
+   softlock. A blocked ball now always finishes at least `MIN_BLOCKED_YD` from where it was struck
+   and never inside the trunk it hit, kicked out perpendicular to the shot line - which is what a
+   ball glancing off a tree does. Test 10c.
+
+2. **A ball could finish outside the drawn hole.** 14 shots over the same 40 rounds, one of them 75
+   yds beyond the edge of hole 10. The camera clamps to `hole.bounds`, so those are balls the
+   player **cannot see and cannot frame**, with the aim line running off into flat colour. It is
+   pulled back inside the map rather than penalised: there are no out-of-bounds stakes drawn
+   anywhere in this game, and a stroke for crossing a line nobody can see cannot be learned from -
+   the lie out there is trees or heavy rough already. Test 10c.
+
+3. **A penalty drop could put the ball back on the divot it was played from.** The water rule walks
+   the flight line back to the last dry point, and when the water starts a yard in front of the
+   ball that point IS the ball. The player paid a stroke, nothing moved, and the same swing did the
+   same thing: measured on Pine Valley 3, a wedge from the rough beside the lake looping at
+   "38,295" stroke after stroke. A drop now searches outward for the nearest dry, in-bounds spot at
+   least `MIN_DROP_YD` away, preferring one no nearer the hole - real golf's own rule, and it needs
+   no UI. The stroke is still charged; it was the ball being stuck that was the bug. Test 10e, which
+   throws **4,206** shots into water across both courses.
+
+4. **The collar could hand you a club that could not reach the hole.** `mustPutt` covers the fringe,
+   and it was also being used to LOCK the club buttons - so a ball on the collar 60-67 ft from the
+   cup (measured on holes 1, 6, 11 and 14) was given a putter, whose range is a fixed 60 ft, and no
+   way to change it. A forced two-putt from the fringe is a bag problem, not a golf problem.
+   `lockedToPutter` is now the green alone; the fringe still DEFAULTS to the putter, which is right
+   almost always, but past its range the bag opens. Test 10d.
+
+5. **Hole 3's card said 608.6 yds and the hole is 550.8.** `cardYards` is defined as the walk along
+   the hole's own centreline, and `route` IS that centreline: its nine segments add to 550.8. Every
+   other Pine Valley hole agrees with its route to within 10 yds; this one was out by 58, which also
+   inflated the course total on the setup screen. The old test pinned the symptom (`card - straight
+   > 50`) rather than the rule, which is why it never caught it - it now checks card against route
+   on every hole of every course.
+
+### Measured and deliberately NOT changed
+
+- **Putting is harder than this repo's own documented target.** `swing.js` records a sweep giving
+  3 ft ~95 %, 10 ft ~65 %, 20 ft ~31 %; the harness's human player gets 3 ft 67 %, 12 ft 29 %,
+  20 ft 20 %, and three-putts from 20 ft **30 %** of the time (real golf is nearer 10 %). Nearly all
+  the short misses are the ball stopping SHORT - the harness aims for dead weight, and a person
+  putts past the hole - so the gap is at least partly the model. `PUTT_LINE_K` and `BREAK_K` are
+  measured, documented, test-pinned constants and Matt has reverted two putting changes in two days.
+  **Not touched. The numbers are here so the next session starts from them.**
+- **Break is nearly inert.** A putt aimed dead straight at the cup from 20 ft holes **93 %** of the
+  time across all 18 greens - greens whose slope arrows are drawn for the player to read. At
+  `BREAK_K` 0.30 that falls to 61 %, with 0-2.8 ft of bend at 20 ft. The constant's header says 0.12
+  is a measured decision (one cup width on a half slope) with a test on it, so it stands - but "the
+  arrows are nearly decoration" is a real observation and the call is Matt's.
+- **Input is dead for 1.4 s after the ball comes to REST.** `LOCK_MS`'s own comment says the lock is
+  for after the ball is *struck*, but `settle()` is called when it stops, so the first tap of the
+  next shot is silently swallowed for 1.4 s. It is what sent the browser harness's early putts to
+  full power - it never saw its first tap. A test pins the current behaviour explicitly, and the
+  `PHASE.LIVE` check already blocks input for the whole shot, so the only evidence this is wrong is
+  the comment. Left alone; flagged here.
+- **A 5-10 yd pitch needs a power tap 160-390 ms after the first**, the same double-tap window the
+  putter's dead zone exists for. Rare (0 of 2,403 sampled lies within 60 yds of a pin), and the
+  four-layer touch fix already stops the OS stealing the tap, so the remaining difficulty is
+  legitimate.
+- **Sand, wind, the bag, backwards shots, water drops and the points table** were all probed and are
+  sound: 436 bunker spots all escapable, 0 of 3,024 tee shots finishing behind the tee, the wind
+  arrow agreeing with the way the ball is pushed, and the stableford table monotonic on every par.
+
+### After the fixes
+
+40 rounds, same player: **no zero-yard strokes, no unfinished holes, no loops, no balls off the map,
+no unreachable putts, no stuck drops.** Mean score moved from +18.6 to +16.4 - that difference is
+the disaster holes that are no longer possible, not a change in how the game plays.
