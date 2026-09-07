@@ -3144,14 +3144,19 @@ already had layers 1 and 2 (`-webkit-user-select`/`touch-callout`/`tap-highlight
 A three-tap swing REQUIRES fast taps, so this is not an edge case in this game the way it is in
 most: the fix belongs here permanently.
 
-### The aim ladder is cut to the putt in hand
+### The putting ladder is NOT shortened for a short putt (tried, reverted the same day)
 
-Matt, on the same round: *"the lines are weird."* The putting ladder is 15/30/45/60 ft whatever the
-putt, so from a 2.7 ft tap-in it ran twenty times the length of the shot, off the green and out of
-frame — the biggest thing on screen, describing a putt nobody was playing.
+Matt, on the same round: *"the lines are weird."* Read as "too long": the ladder is 15/30/45/60 ft
+whatever the putt, so from a 2.7 ft tap-in it runs twenty times the length of the shot, off the
+green and out of frame. It was clipped to twice the distance to the hole — and Matt reverted it
+within the hour: **"Change d. Back. We talked about [this] before."**
 
-`ui.js` passes `puttReach` (twice the distance to the hole, floored at 12 ft) and `render.js` drops
-the dots past it. **Dots are dropped, never moved**, so every dot still sits at the distance its arc
-tick names — the agreement between the ladder and the arc that the 2026-09-06 fix established is
-untouched. A tap-in cuts every dot and draws a plain short line; that branch is explicitly handled
-(the old code would have read `dots[-1]`).
+He is right that it was already settled: the ladder running PAST the cup is the deliberate decision
+recorded in `render.js`'s own block (*"ours stopped at the pin, which left nothing to gauge power
+against"*). Clipping it also cut every dot off a tap-in, so the putt that most needs a pace
+reference got a stub with nothing on it.
+
+**So the ladder is back to 60 ft on every putt, and a future session should not re-derive the same
+"fix".** What "the lines are weird" actually means is still open — the length was a guess, and the
+other reading (the line pointing the wrong way when the ball finishes PAST the hole) has not been
+ruled out.

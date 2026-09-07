@@ -637,21 +637,16 @@ export function drawFrame(ctx, map, hole, cam, st) {
       //
       // The two have to move TOGETHER. Spacing the dots evenly while leaving the ticks on even power
       // would just move the same disagreement onto the arc.
-      // AND IT IS CUT TO THE PUTT IN HAND (2026-09-06). Matt, on a 2.7 ft putt and a 1.4 ft one:
-      // *"the lines are weird."* The ladder is 60 ft long whatever the putt, so from a tap-in it
-      // ran twenty times the length of the shot, straight off the green and out of frame - the
-      // biggest thing on screen, describing a putt nobody was playing. `puttReach` is how far the
-      // ladder may be drawn: twice the distance to the hole, floored so a short putt still shows
-      // its line. Dots past it are dropped rather than moved, so every dot that IS drawn still
-      // sits at the distance its arc tick names.
-      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * f, risk: false }))
-        .filter((d) => !st.puttReach || d.at <= st.puttReach);
-    // A tap-in can cut EVERY dot (the nearest is 15 ft): the line is then just the line, drawn to
-    // `puttReach`. Without this the maths below reads dots[-1] and takes Math.max of nothing.
-    const plain = dots.length === 0;
-    const solids = dots.filter((x) => !x.risk).map((x) => x.at);
-    const fullAt = plain ? (st.puttReach || 0) : (solids.length ? Math.max(...solids) : dots[dots.length - 1].at);
-    const endAt = plain ? fullAt : dots[dots.length - 1].at;
+      //
+      // IT IS NOT CUT SHORT FOR A SHORT PUTT, and that was tried and REVERTED on 2026-09-06. The
+      // ladder was clipped to twice the distance to the hole, which on a tap-in left a stub with no
+      // dots on it at all. Matt: *"Change d. Back. We talked about [this] before."* The full ladder
+      // running past the cup is the decision above, made deliberately, and a shorter one takes away
+      // the only thing there is to gauge pace against on exactly the putt that needs it.
+      : [0.25, 0.5, 0.75, 1.0].map((f) => ({ at: st.puttLine * f, risk: false }));
+    const full = dots.find((d) => !d.risk && d.at === Math.max(...dots.filter((x) => !x.risk).map((x) => x.at)));
+    const fullAt = full ? full.at : dots[dots.length - 1].at;
+    const endAt = dots[dots.length - 1].at;
 
     // THE LINE IS BLUE UP TO THE 100 % DOT AND RED PAST IT. Matt's call, 2026-09-04.
     ctx.lineWidth = 2;
