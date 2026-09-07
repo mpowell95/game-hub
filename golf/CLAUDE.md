@@ -3319,3 +3319,46 @@ a stale entry can never hide a stored score.
 produce must be named, every course id must be named, and every course's hole count must match its
 own data. It reads `js/game-stats-ui.js` as TEXT, because that module is a DOM file the engine
 suite cannot import — the same trick sections 12b/12c/12d already use on `ui.js` and `render.js`.
+
+## Hole 3's hole was cut two feet from the edge of its green (2026-09-07)
+
+Caught by sampling the DEPLOYED raster rather than the data: every pin on the course paints
+`#a6d861` (the desert theme's `green`) except hole 3's, which came back `#91c451` — the green's own
+`greenEdge` outline, stroked 1.2 yds wide, **painted over the cup**.
+
+The cause is the pin, not the renderer. Distance from each pin to its own green's edge:
+
+| | tightest | median |
+|---|---|---|
+| **Oasis Sands** | **0.8 yd (hole 3)** | 4.6 |
+| Pine Valley | 3.6 (hole 12) | 8.7 |
+| Red Mesa | 9.5 (hole 14) | 12.5 |
+
+0.8 yds is 4.5x tighter than anything on the other thirty-six holes, and this course's own
+next-tightest is 3.0. Moved 2.2 yds, to the NEAREST point with 3.0 yds of clearance — the minimum
+the references already use, not a re-centring: on this green the area centroid sits in a notch and
+walking toward it makes the clearance WORSE (3.0 → 0.2 at 40 % of the way), which is why the fix
+searches for clearance rather than heading for the middle. The route's last point and `cardYards`
+follow the pin.
+
+**Par is untouched**, so the stored `oasissands3` best and every `oasissands:<n>` hole record still
+mean exactly what they meant (THE LAW rules 4 and 5).
+
+The remaining tight pin is hole 7 at 2.5 yds, which is a front pin on a par 3 and does not reach
+the outline: the stroke covers 0.6 yds inward and the cup's own radius is 0.30, so it is clear.
+
+### And a measurement that is left alone: the longest FORCED putt
+
+`mustPutt` offers nothing but the putter from the green AND its collar, and the putter's range is a
+fixed 60 ft. The farthest point of a green complex from its own pin:
+
+```
+Oasis Sands  avg 89 ft, max 116 (hole 8)
+Pine Valley  avg 68 ft, max  82
+Red Mesa     avg 59 ft, max  71
+```
+
+So a ball on the far corner of Oasis 8's collar faces a 116 ft putt with a 60 ft club - a lag that
+still leaves 56, and a three-putt from there is close to forced. It is driven by the green SHAPES
+(this course's greens reach 54-91 ft from the pin against 31-65 and 31-56), which are traced, so
+fixing it means redrawing greens rather than moving one pin. Recorded, not changed.

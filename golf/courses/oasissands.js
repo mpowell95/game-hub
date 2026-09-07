@@ -53,6 +53,15 @@
 //     length; the three par 3s keep the straight line, because a par 3 is played over its hazard
 //     and its route here is the walking way round one.
 //
+//   - HOLE 3 CUT ITS HOLE 0.8 YDS FROM THE EDGE OF ITS OWN GREEN. Measured against the other 36
+//     holes, whose tightest pin is 3.6 (Pine Valley 12) and whose medians are 8.7 and 12.5; this
+//     course own next-tightest is 3.0. It is not only a pin nobody would cut - the green own
+//     outline is stroked 1.2 yds wide, so the EDGE PAINTED OVER THE CUP, measured on the live
+//     site as #91c451 (greenEdge) where every other pin reads #a6d861 (green). Moved 2.2 yds to
+//     the nearest point with 3.0 yds of clearance, which is the minimum the references use; the
+//     route last point and cardYards follow it. Par is untouched, so every stored oasissands:3
+//     and oasissands3 record still means exactly what it meant.
+//
 // STILL OPEN, and deliberately not invented here: this course has NO greenside bunkers at all
 // (Pine Valley 51, Red Mesa 55) - the nearest bunker to any pin is 74 yds. Adding some would mean
 // drawing sand this trace does not have.
@@ -141,9 +150,9 @@ const HOLES = [
   },
   // H3  Lagoon Bend  Par 4  284 yd
   {
-    n: 3, par: 4, cardYards: 300.2,
-    tee: [0, 0], pin: [0,284.3],
-    route: [[0,5],[0,25],[0,50],[0,75],[29.5,100],[30.6,125],[35,150],[37.2,175],[32.3,200],[20.8,225],[14.8,250],[0,284.3]],
+    n: 3, par: 4, cardYards: 302.3,
+    tee: [0, 0], pin: [-1.6,285.9],
+    route: [[0,5],[0,25],[0,50],[0,75],[29.5,100],[30.6,125],[35,150],[37.2,175],[32.3,200],[20.8,225],[14.8,250],[-1.6,285.9]],
     bounds: { minX: -55, maxX: 92.2, minY: -50, maxY: 329.3 },
     base: 'heavyRough',
     surfaces: [
