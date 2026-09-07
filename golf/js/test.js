@@ -358,6 +358,30 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
     return `${t.upMs}/${t.downMs}`;
   }));
   ok('every club in the bag swings at the same speed', speeds.size === 1, [...speeds].join(', '));
+
+  // THE PUTTER'S DEAD ZONE (2026-09-07). The needle holds at zero for 250 ms after the first tap
+  // and then climbs at exactly the same speed as everything else. It exists because a 2 ft putt
+  // holes for a tap 132-411 ms after the first, which is inside iOS's double-tap gesture - the two
+  // fixes that changed the SPEED or the CURVE were both reverted by Matt, so this one is required
+  // to move the window in time while leaving the dial identical.
+  ok('only the putter has a dead zone',
+    CL.swingTempo(PUTTER).deadMs === CL.PUTTER_DEAD_MS && CLUBS.every((c) => !CL.swingTempo(c).deadMs));
+  {
+    const t = CL.swingTempo(PUTTER);
+    const held = SW.backswingAt(t.deadMs - 1, t);
+    const moving = SW.backswingAt(t.deadMs + 100, t);
+    ok(`the needle holds at zero through the dead zone (${t.deadMs} ms)`, held.pos === 0 && moving.pos > 0);
+    // [KNOWN-BUG PROBE] The whole point is that it is a DELAY, not a tempo change: the same power
+    // must come up exactly deadMs later, never at a different rate. A regression here would be a
+    // per-club tempo wearing a different name, which Matt has now reverted twice.
+    const noDead = { upMs: t.upMs, downMs: t.downMs, deadMs: 0 };
+    const at = (p, tempo) => (tempo.deadMs || 0) + p * tempo.upMs;
+    const drift = [0.1, 0.25, 0.5, 0.9].map((p) =>
+      Math.abs((at(p, t) - at(p, noDead)) - t.deadMs)
+      + Math.abs(SW.backswingAt(at(p, t), t).pos - SW.backswingAt(at(p, noDead), noDead).pos));
+    ok('[KNOWN-BUG PROBE] it is a delay, not a speed change: every power comes up exactly deadMs later',
+      drift.every((d) => d < 1e-9), drift.join(', '));
+  }
   ok('...and that speed is the Swing\'s own default',
     CL.swingTempo().upMs === SW.UP_MS && CL.swingTempo().downMs === SW.DOWN_MS);
   ok('the downswing is still faster than the backswing', SW.DOWN_MS < SW.UP_MS,
