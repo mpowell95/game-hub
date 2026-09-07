@@ -1487,10 +1487,6 @@ class GolfGame {
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
       puttLine: putting ? puttRangeFt() / FT_PER_YD : 0,
-      // How far of that ladder is worth drawing for THIS putt: twice the distance to the hole,
-      // never less than 12 ft of it. A 60 ft ladder off a 2.7 ft tap-in was the whole screen
-      // (Matt, 2026-09-06: "the lines are weird"). See render.js's aim-ladder block.
-      puttReach: putting ? Math.max(this._distToPin() * 2, 12 / FT_PER_YD) : 0,
     });
     this._drawMeter(now);
     this.raf = requestAnimationFrame(this._frame);
