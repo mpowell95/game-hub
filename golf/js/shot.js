@@ -806,9 +806,34 @@ export const CUP_RADIUS_YD = 0.12;
 export const CUP_CAPTURE_YD = 0.30;
 export const CUP_MAX_SPEED = 2.2;                    // yd/s past which the ball runs over the top
 
-/** Does a ball passing this point, at this speed, drop? Close enough AND slow enough. */
-export function cupCheck(hole, x, y, speed) {
-  return Math.hypot(x - hole.pin[0], y - hole.pin[1]) <= CUP_CAPTURE_YD && speed <= CUP_MAX_SPEED;
+/** INSIDE THE FIRST RED DOT, A PUTT OVER THE HOLE IS IN, AT ANY PACE (Matt, 2026-09-07).
+ *
+ *  *"make it so putts within the 25% first red dot distance cannot go over the hole. ANY putt
+ *  within that distance that goes over the hole counts."*
+ *
+ *  THE DISTANCE IS THE LADDER'S OWN FIRST DOT, DERIVED AND NOT TYPED. `render.js` draws the putt
+ *  ladder at `[0.25, 0.5, 0.75, 1.0]` of `puttRangeFt()`, so dot 1 is a quarter of the putter's
+ *  range - 15 ft against the fixed 60. Writing `15` here would be a second copy of a number the
+ *  painter owns, and the two would drift the first time the range moved.
+ *
+ *  WHAT IT ACTUALLY CHANGES, measured: the speed gate rejects a putt that would run more than
+ *  4.0 ft PAST the cup (`CUP_MAX_SPEED^2 / 2 PUTT_DECEL`). From 2 ft that is any strike over 23.7 %
+ *  of the meter against a target of 11.9 % - double the intended power, which is an ordinary
+ *  over-hit - and the ball ran over the top and stayed out. Inside the first dot it drops instead.
+ *
+ *  IT DOES NOT MAKE A SHORT PUTT FREE, and that is worth being straight about: a putt left SHORT
+ *  never reaches the cup, so it still misses, and the LINE still has to be right. What it does is
+ *  make "hit it firmly" the correct and learnable play on a short putt, which is real golf's own
+ *  never-up-never-in - and before this, hitting it firmly was punished. */
+export function puttGimmeFt() { return puttRangeFt() * 0.25; }
+
+/** Does a ball passing this point, at this speed, drop? Close enough AND slow enough.
+ *
+ *  `maxSpeed` is the pace it may be doing and still drop; `simulatePutt` passes `Infinity` for a
+ *  putt struck from inside `puttGimmeFt()`. Every other caller gets `CUP_MAX_SPEED`, so a wood
+ *  running over the hole at pace still stays out - that rule is Matt's too and is unchanged. */
+export function cupCheck(hole, x, y, speed, maxSpeed = CUP_MAX_SPEED) {
+  return Math.hypot(x - hole.pin[0], y - hole.pin[1]) <= CUP_CAPTURE_YD && speed <= maxSpeed;
 }
 
 /** Roll a ball from `start` along `dirRad` for `rollYd`, watching the cup the whole way.
@@ -940,6 +965,12 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
   let t = 0;
   const MAX_T = 12;
 
+  // INSIDE THE FIRST RED DOT THERE IS NO SPEED LIMIT ON THE CUP (Matt, 2026-09-07): "ANY putt
+  // within that distance that goes over the hole counts." See `puttGimmeFt` above. It is measured
+  // from where the putt is STRUCK, not from where the ball happens to be as it arrives - every
+  // putt is inside the cup's own radius by then, so the arrival distance would exempt all of them.
+  const maxSpeed = distYd(from, hole.pin) * FT_PER_YD <= puttGimmeFt() ? Infinity : CUP_MAX_SPEED;
+
   // A ball already sitting over the cup is in. Checked BEFORE the speed break below, because a
   // putt with exactly enough pace to reach the hole and die there would otherwise stop on the lip
   // and be recorded as a miss - "as long as it goes over the hole at a reasonable speed" includes
@@ -948,7 +979,7 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
 
   while (t < MAX_T) {
     v = Math.hypot(vx, vy);
-    if (cupCheck(hole, x, y, v)) { holed = true; break; }
+    if (cupCheck(hole, x, y, v, maxSpeed)) { holed = true; break; }
     if (v <= 0.02) break;
     const g = slopeAt(hole, x, y);
     // The gradient points DOWNHILL, so the ball is pulled along it. Both components apply: a putt
@@ -966,8 +997,11 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
     t += DT;
     path.push([x, y]);
 
-    const dh = Math.hypot(x - hole.pin[0], y - hole.pin[1]);
-    if (dh <= CUP_CAPTURE_YD && Math.hypot(vx, vy) <= CUP_MAX_SPEED) { holed = true; break; }
+    // The same test again at the END of the step, so a cup entered between two samples is not
+    // missed. It goes through `cupCheck` rather than repeating its arithmetic: the two used to be
+    // separate copies, and a rule added to one of them (the gimme above) would have applied on
+    // half the frames.
+    if (cupCheck(hole, x, y, Math.hypot(vx, vy), maxSpeed)) { holed = true; break; }
   }
   return { path, rest: [x, y], holed, ms: t * 1000, restOn: surfaceAt(hole, x, y) };
 }

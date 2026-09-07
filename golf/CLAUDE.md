@@ -3599,6 +3599,11 @@ they leave one is how the prompt that matters becomes the one they have learned 
   within hours, and he set the constraint explicitly: *leave the dial and the tempo alone.* Every
   green stall that survives the fixes above is this - 45 of them in 540 holes, all from inside 3 ft.
   It needs Matt's call, not a fourth unprompted attempt.
+  **HE MADE IT THE SAME DAY, and it was a lever nobody had tried: see "Inside the first red dot, a
+  putt over the hole is IN" below.** It leaves the dial and the tempo alone and takes the SPEED
+  limit off the cup inside 15 ft, which turns the over-hit half of the miss into a make and so
+  makes being firm the right play. Green stalls went 48 to 3 and a poor round dropped 31 strokes.
+  The numbers in this bullet are the BEFORE.
 - **Seven of the eighteen greens force a putt longer than the putter's 60 ft range** from the far
   fringe (71, 71, 72, 68, 64, 62, 62 ft). A perfect lag leaves 2-13 ft, so it is a two-putt rather
   than a trap. Red Mesa is the KINDEST of the three courses on this measure: the farthest point of
@@ -3633,3 +3638,72 @@ future playtest harness has to do the same, or it will keep proving the physics 
 person can make it do - which is the first playtest's own lesson ("THE TEST SUITE ASSERTED THE WRONG
 THING") applied one level up. All three of tonight's sessions arrived at the same harness shape
 independently.
+
+## Inside the first red dot, a putt over the hole is IN (2026-09-07)
+
+Matt, after the Red Mesa playtest reported that a 3 ft putt was made 52 % of the time by an
+ordinary thumb against this file's own documented 95 %:
+
+> *"make it so putts within the 25% first red dot distance cannot go over the hole. ANY putt within
+> that distance that goes over the hole counts."*
+
+**THE DISTANCE IS THE LADDER'S OWN FIRST DOT AND IT IS DERIVED, NEVER TYPED.** `render.js` draws the
+putt ladder at `[0.25, 0.5, 0.75, 1.0]` of `puttRangeFt()`, so dot 1 is a quarter of the putter's
+range: **15 ft** against the fixed 60. `puttGimmeFt()` in `shot.js` is that quarter, and section 17
+asserts both that it equals `puttRangeFt() * 0.25` AND that render.js still spaces the dots that
+way. Writing `15` would be a second copy of a number the painter owns, and the rule would stop
+meaning what the player can see the first time the range moved - which is the whole point of tying
+it to a dot rather than to a distance.
+
+**WHAT IT ACTUALLY REMOVES.** `CUP_MAX_SPEED` rejects a ball crossing the cup faster than 2.2 yd/s,
+which is any putt that would run more than **4.0 ft past** (`v^2 / 2a`). From 2 ft that is any
+strike over 23.7 % of the meter against a target of 11.9 % - double the intended power, which is an
+ordinary over-hit, and the ball ran over the top and stayed out. Inside the first dot the speed
+limit is lifted entirely and it drops. `simulatePutt` measures the distance from where the putt is
+STRUCK, not from where the ball is as it arrives: every putt is inside the cup's own radius by then,
+so an arrival test would exempt all of them.
+
+**IT IS NOT A CONCESSION, AND THE NUMBERS SAY SO.** A putt left SHORT never reaches the cup and
+still misses; a putt pushed 22 degrees off line from 3 ft still misses. All that is gone is the
+speed limit. What that buys is that **"hit it firmly" becomes the correct and learnable play on a
+short putt** - real golf's own never-up-never-in - where before, hitting it firmly was punished.
+
+Measured on Red Mesa 1, 600 putts per cell, with a thumb aiming to DIE at the hole against one
+aiming to run 3 ft PAST:
+
+| | die at the hole | run 3 ft past |
+|---|---|---|
+| 3 ft, good | 84 % | **95 %** |
+| 3 ft, ok | 51 % | **75 %** |
+| 5 ft, good | 71 % | **94 %** |
+| 8 ft, good | 66 % | **91 %** |
+| 12 ft, good | 62 % | **86 %** |
+| 20 ft, good (OUTSIDE the dot) | 41 % | 49 % |
+| 30 ft, good (OUTSIDE the dot) | 27 % | 33 % |
+
+The two outside rows are the control: past 15 ft the rule does nothing and the small gain there is
+just the normal value of a firm putt. A full-power putt from 14.9 ft drops; from 15.2 ft it runs
+44 ft past, exactly as it always did.
+
+**And it is what fixed the three-putting.** Same thirty rounds, same seeds, with the player putting
+firm inside the dot:
+
+| | before | after |
+|---|---|---|
+| green stalls (3 putts in a row moving under a yard) | 48 | **3** |
+| holes that never holed out in 25 | 3 | **0** |
+| median round, good / ok / poor | 77 / 109 / 190 | **74 / 102 / 159** |
+
+A poor player gained thirty-one strokes a round, and every one of them came off a green.
+
+**THE OTHER TWO WAYS TO MISS ARE UNTOUCHED, AND SO IS EVERY FULL SHOT.** `cupCheck`'s default is
+still `CUP_MAX_SPEED`; only `simulatePutt` lifts it, and only inside the dot. Matt's older rule for
+struck shots - *"you can go over it if the ball is moving too fast"* - is unchanged, and section 17
+pins that too. The dial, the tempo and `PUTT_GAMMA` were not touched, which was the standing
+constraint on anything in this area.
+
+**What this does NOT fix, and it is worth saying plainly:** a putt from OUTSIDE 15 ft is exactly as
+hard as it was, and the reason short putts were missed at all - the power tap's spread against a
+189 ms climb - is still there. The rule works by making the over-hit half free, so the player's
+answer is to always be firm. If Matt ever wants the long putts easier too, that is still the dial
+and the tempo, and it is still his call.
