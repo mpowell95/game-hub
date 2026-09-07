@@ -55,7 +55,8 @@ top-left corner in immersive mode.
 | `js/physics.js` | the deterministic solver: shapes, contacts, impulses. Pure, no DOM |
 | `js/table.js` | the playfield as data: every wall, post, bumper, target, switch. Pure |
 | `js/game.js` | the rules: balls, scoring, missions, multiball, bonus, tilt. Pure, emits an event stream |
-| `js/render.js` | the canvas: cached static playfield art plus the whole effects layer |
+| `js/render3d.js` | the playfield in three.js: the model's own geometry, materials and lights, plus a 2D overlay for the effects layer |
+| `js/vendor/` | three.js, the same vendored copies Skeeball, Golf and Ball Run carry |
 | `js/store.js` | one preference, the table (see "Persistence") |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, input, HUD, the hub module contract |
@@ -342,6 +343,86 @@ CRADLE now, and this driver holds a flipper about a third of the time, so it wen
 unrealistically good pinball player to an unrealistically good one **with a ball trap**. Counting
 its drains measures the driver. The outlanes are checked GEOMETRICALLY instead - mouth and channel
 both wider than a ball, mouth not so wide it is a funnel again.
+
+## It renders in 3D now, because the model always was (2026-09-07)
+
+Matt, on the flat conversion: *"Claude Design created a beautiful, 3D pinball gameplay board. Why
+did you flatten it to shit and make it look terrible?"* There was no good reason. The game is a 2D
+canvas with a 2D solver, so I decided top-down art was the pragmatic route and wrote that down as an
+assumption instead of asking - and two readings of the request led to materially different work,
+which is exactly when to stop and ask.
+
+**`js/render3d.js` renders the model. `js/render.js` is deleted.** three.js is vendored in
+`js/vendor/`, the same copies Skeeball, Golf and Ball Run already carry, so this is not the repo's
+first dependency and it is not a new architectural decision.
+
+**THE PHYSICS IS STILL 2D AND THAT IS CORRECT, NOT A COMPROMISE.** A pinball is a ball on a tilted
+plane; every commercial pinball simulation solves it in 2D and renders in 3D. `game.js` and
+`physics.js` are untouched by the renderer. What changed is only what you look at.
+
+### The five that cost the most time, so a future session does not pay for them again
+
+1. **`world.z = -table.y`, and everything must agree.** Every flat part is an `ExtrudeGeometry`
+   authored in table coordinates and rotated -90 degrees about X, which is what stands it up - and
+   that rotation maps the shape's +y onto world **-z**. The deck and the rails therefore live at
+   negative z. The first build placed the bumpers, the ball and the posts at +z instead, so the
+   table rendered inside out with its floor behind the camera. `tz()` is the single place that
+   conversion happens now.
+
+2. **Which means the whole scene is MIRRORED, and needs a second flip.** A camera at very negative z
+   looking back along +z has world +x on its LEFT. One axis flip makes the table a mirror image:
+   the plunger came out on the left and the spinner on the right, which reads as almost right and is
+   completely wrong. `this.model.scale.x = -1` restores it; three.js flips the winding order itself
+   for a negative determinant, so lighting and shadows stay correct.
+
+3. **An extrusion's origin is its BOTTOM face.** Setting `position.y = base + h` - the
+   obvious-looking thing - lifts every part by its own height. It put the deck's top surface at
+   y = 14.7 and buried the rosette, the lamps, the drop targets and the stand-ups inside the slab,
+   which is why the middle of the table rendered empty.
+
+4. **Never extrude a Shape with a Path hole when a band will do.** The hole has to wind opposite to
+   the outer contour or the triangulator fills the whole thing, and the cabinet duly put a white
+   disc the size of the playfield in front of the camera. The cabinet is a band along the outline
+   now and the art halo is a `RingGeometry`; neither can fail that way.
+
+5. **The framing is SOLVED, not calculated.** Working the camera distance out from the table's
+   centre with trigonometry does not work for a tilted camera: the near end is far closer than the
+   centre, so it projects much larger than the formula allows and spills off the screen while the
+   far end is still cropped. `resize()` bisects the distance until every corner of the table lands
+   inside the frustum, then re-centres through `setViewOffset` - the FILM BACK, not the camera,
+   because moving the camera changes what fits and turns a one-shot correction into a chase.
+
+**TILT is 20 degrees and the number is set by the shape of a phone.** The table is 348 x 694, so at
+a tilt of t it projects 348 wide by 694·cos(t) tall; a 393x852 screen less the HUD is about 1:1.85.
+At 30 degrees that came out 1:1.73 - wider than the screen - so it fitted by width and left a third
+of the frame empty above it. 20 degrees gives 1:1.87, which fills.
+
+### Two things carried over from Skeeball, and one from the model
+
+- **`preserveDrawingBuffer: true`.** Without it a WebGL canvas reads back blank, and
+  `test-visual.mjs`'s PLAY probe - which samples the canvas three times to prove the table is
+  animating - fails with "nothing is moving" on a game that is running perfectly.
+- **A software-GL path.** `isSoftGL()` is Skeeball's probe verbatim; on SwiftShader the pixel ratio
+  drops and shadows go off. The shadow map also refreshes on demand rather than every frame, because
+  almost nothing in this scene moves - only the paddles, the ball and a falling drop target.
+- **Every emissive intensity is the model's.** That is the half the flat renderer threw away, and it
+  is the whole reason its amber lamp runs rendered **brown** and its cyan inserts **navy**. Those
+  were not colour choices gone wrong; they were the emission missing.
+
+### What the flat renderer had dropped, and is back
+
+The cabinet box with sides and a front lip, the recessed deck, every part's real height and shadow,
+the mushroom bumper caps, the raised ramp channel on its legs, upright drop targets, standing posts
+with rubber, the sunken scoop, the plunger spring, twenty lamp inserts (the upper arc, both banks
+beside the rosette, the drain row), four of the seven arrow inserts, and the wireform return rail -
+which was dropped from the flat build on purpose, because seen from directly above it was two
+hairlines crossing the ramp and the rosette and read as a rendering fault. At a height, casting a
+shadow, it reads as the piece of bent wire it is.
+
+**`test.js`'s paddle-gradient probe is retired**, and the file says why: it tested a 2D shading
+trick that no longer exists. The defect it caught is still worth knowing - a shading trick keyed to
+screen axes rather than to the part itself looks right at rest and wrong the moment the part moves -
+but nothing in a 3D scene can reproduce it, and an assertion that cannot fail is worse than none.
 
 ## The rules
 
