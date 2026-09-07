@@ -65,16 +65,34 @@ export const PTS = {
 /** The four timed missions, in fixed order. Each is started from the scoop once the drop bank has
  *  been cleared, and each is scored off ONE kind of switch, so the shot being asked for is always
  *  obvious from the table itself rather than only from the display. */
+// THE TARGETS ARE MEASURED, NOT CHOSEN. Each is set against the best BURST a driven game actually
+// managed inside one mission window, which is the right instrument: a mission is a burst, not a
+// background rate. Measuring the average rate instead reports all four as impossible by 10 to 45
+// times, and that is simply the wrong question - the ball is not in the bumper nest for most of a
+// game and nobody expects it to be.
+//
+// Best burst observed over 2400 s of driven play, against the need:
+//
+//   bumper   14 in 26 s    driver reached 50    comfortable, left alone
+//   spin     45 in 26 s    driver reached 32    unreachable -> 30
+//   ramp      5 in 30 s    driver reached  4    unreachable -> 3
+//   target    8 in 26 s    driver reached 40    comfortable, left alone
+//
+// A random driver is a poor player at AIM and a very good one at REPETITION, so a number it can
+// just about reach in a burst is about right for a person who can aim. Re-measure after any change
+// to the shot map: these were written for the pre-2026-09-07 table and none of them survived it.
 export const MISSIONS = [
   { id: 'bumper', need: 14, time: 26, lamp: 'pops' },
-  { id: 'spin', need: 45, time: 26, lamp: 'orbit' },
-  { id: 'ramp', need: 5, time: 30, lamp: 'ramp' },
+  { id: 'spin', need: 30, time: 26, lamp: 'orbit' },
+  { id: 'ramp', need: 3, time: 30, lamp: 'ramp' },
   { id: 'target', need: 8, time: 26, lamp: 'bank' },
 ];
 
 const EXTRA_BALL_AT = [750000, 2500000];
 const BONUS_MAX_MULT = 8;
-const RAMPS_TO_LIGHT_LOCK = 5;
+// 3, not 5. The lock is the other way into multiball and the only one that does not go through a
+// mission, so it should not need a ramp count nothing in a measured game ever reached.
+const RAMPS_TO_LIGHT_LOCK = 3;
 const LOCKS_FOR_MULTIBALL = 3;
 const COMBO_WINDOW = 6;          // seconds a ramp/orbit combo stays alive
 const STUCK_NUDGE_AT = 3.5;      // seconds of near-zero speed before a gentle shove
@@ -532,7 +550,7 @@ export class Pinball {
       this.emit({ type: 'msg', key: 'msg_super', big: true });
       return;
     }
-    if (this.bankLit && !this.mission && this.missionIdx < MISSIONS.length) {
+    if (this.bankLit && !this.mission) {
       this.bankLit = false;
       this._startMission();
       return;
@@ -573,10 +591,29 @@ export class Pinball {
     if (m.got >= m.need) this._finishMission(true);
   }
 
+  /**
+   * End the running mission.
+   *
+   * A FAILED MISSION STILL ADVANCES THE LADDER, and that is the fix for a rules layer nobody
+   * could get into. The four missions run in a fixed order and `missionIdx` only used to move on
+   * a WIN, so failing the first one put the player straight back on the first one - for ever.
+   * Measured over ten driven games: **eleven mission starts, all eleven Bumper Rush, none
+   * finished**, and Spinner Mania, Ramp Frenzy and Target Storm were never seen once. One
+   * awkward mission was holding the entire back half of the game shut, and no amount of tuning
+   * ITS number would have opened the other three.
+   *
+   * `missionsDone` still counts wins only, so the wizard mode is unaffected: it is four completed
+   * missions, not four attempts.
+   */
   _finishMission(won) {
     const m = this.mission;
     this.mission = null;
-    if (!won) { this.emit({ type: 'missionfail', id: m.id }); this.emit({ type: 'msg', key: 'msg_mission_fail' }); return; }
+    if (!won) {
+      this.missionIdx = (this.missionIdx + 1) % MISSIONS.length;
+      this.emit({ type: 'missionfail', id: m.id });
+      this.emit({ type: 'msg', key: 'msg_mission_fail' });
+      return;
+    }
     this.missionsDone++;
     this.stats.missions++;
     this.missionIdx++;
@@ -584,7 +621,9 @@ export class Pinball {
     this._award(award, null, null, 'mission');
     this.emit({ type: 'missiondone', id: m.id, award });
     this.emit({ type: 'msg', key: 'msg_mission_done', params: { n: fmt(award) }, big: true });
-    if (this.missionIdx >= MISSIONS.length && !this.multiball) this._startMultiball(true);
+    // Keyed off missionsDone, not missionIdx: the index wraps on a failure now, so it no longer
+    // says anything about how many were WON.
+    if (this.missionsDone >= MISSIONS.length && !this.multiball) this._startMultiball(true);
   }
 
   _missionTick(dt) {

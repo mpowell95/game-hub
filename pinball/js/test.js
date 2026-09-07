@@ -10,7 +10,7 @@
 // is outside the table and that the game keeps making progress.
 
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
-import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT } from './table.js';
+import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT, ART } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
 
 
@@ -545,6 +545,58 @@ function launched(g) {
     ok('the outlane mouth is not so wide it is a funnel', mouth < BALL_R * 2 + 18,
       `${mouth.toFixed(1)}; the 2026-09-06 build had an open bay here and drained 18 of 18 balls out of the sides`);
   }
+}
+
+// --- 4a3. THE WHOLE RULES CHAIN, DETERMINISTICALLY ----------------------------------------------
+//
+// Nothing in this file ever proved that a mission can be COMPLETED, that four of them start the
+// wizard, that three locks start a multiball, or that a jackpot pays - and on 2026-09-07 a driven
+// game reported eleven mission starts and zero finishes, which could have meant either "the rules
+// are broken" or "a random driver cannot play". It was the second, but there was no way to tell
+// them apart, which is the gap this block closes: it drives the rules through their REAL entry
+// points - the drop bank, the scoop switch, mission progress, the ramp - and never by poking
+// fields, so a rename in game.js fails the test rather than silently passing.
+{
+  const g = new Pinball({ difficulty: 'medium', rand: mulberry32(3) });
+  g.start(); g.plungerUp();
+  const ball = () => g.balls[0];
+  const hitSwitch = (id) => g._switchHit(SWITCHES.find((x) => x.id === id), ball());
+  const clearBank = () => {
+    for (let i = 0; i < DROP_COUNT; i++) g._contact('id', `drop${i}`, 100, 300, 400, ball());
+  };
+  const runMission = () => {
+    clearBank();
+    hitSwitch('scoop');
+    const m = g.mission;
+    if (!m) return null;
+    for (let i = 0; i < m.need + 2; i++) g._missionProgress(m.id, 1);
+    return m.id;
+  };
+
+  const order = [];
+  for (let n = 0; n < MISSIONS.length; n++) order.push(runMission());
+  ok('every mission can be started AND completed', g.missionsDone === MISSIONS.length,
+    `${g.missionsDone}/${MISSIONS.length} done, order ${order.join(' > ')}`);
+  ok('all four missions run in their own order, none repeated',
+    new Set(order).size === MISSIONS.length, order.join(' > '));
+  ok('four completed missions start the WIZARD multiball',
+    !!(g.multiball && g.multiball.wizard), `multiball=${!!g.multiball}`);
+
+  // the other route into multiball, which does not go through a mission at all
+  g._endMultiball();
+  for (let i = 0; i < 3; i++) {
+    for (let r = 0; r < 5; r++) { ball().flipped = true; g._rampMade(ball()); }
+    g.bankLit = false;                       // so the scoop takes the LOCK, not a mission
+    hitSwitch('scoop');
+  }
+  ok('ramps light the lock, and three locks start a multiball', !!g.multiball,
+    `locks ${g.locks}, lockLit ${g.lockLit}`);
+  g.takeEvents();
+  ball().flipped = true;
+  g._rampMade(ball());
+  const paid = g.takeEvents().filter((e) => e.type === 'jackpot');
+  ok('a ramp during multiball pays the JACKPOT', paid.length === 1 && paid[0].value > 0,
+    `${paid.length} jackpots, value ${paid[0] && paid[0].value}`);
 }
 
 // --- 4b. the whole ball chain, deterministically ----------------------------------------------------

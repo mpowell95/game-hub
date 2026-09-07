@@ -522,6 +522,73 @@ each side of the lower playfield. Two rules now, and `ART.rails` is where they l
   different height.
 - **Structure is steel; a guide the ball RIDES is chrome.** So the lanes read and the walls recede.
 
+## The rules layer was shut, and three things were holding it shut (2026-09-07)
+
+Asked whether the game was ready to release, and measuring rather than guessing: across six driven
+games the answer came back **6 missions started, 0 finished, 0 multiballs, 0 jackpots, 0 lane sets.**
+The whole back half of the game was unreachable. Three separate causes, each found by measuring the
+one before it.
+
+### 1. The rollover lane bank was too narrow, and its switches too high
+
+Firing 714 balls up the middle at every angle and speed: **4 of them (0.6%) hit a lane.** Two
+reasons, and the diagnosis was a histogram of where each ball was at its highest point:
+
+- **78 of the 112 balls that got up there went up the OUTSIDE of the bank**, in two clumps at x 100
+  and x 240. The four dividers spanned x 121..226 in a playfield 300 wide, so the gaps either side
+  were wide open and that is where the ball went. The bank spans the whole crown now (x 78..270),
+  with the outer dividers sealed 10 units from the inner arch, so anything that gets up there has to
+  take a lane.
+- **Of the 34 that did enter a channel, 4 tripped a switch.** The switches sat at y 84 with r 14;
+  the rest stalled at y 100-110, just short. They are at y 112 with r 26 now, and the dividers start
+  at y 140 instead of 108 so the channel is there to catch the ball on the way up rather than
+  beginning above the height it reaches.
+
+**0.6% to 7.6% per shot, and 85 of 94 high balls now take a channel.**
+
+### 2. The mission targets were written for a table that no longer exists
+
+None of the four had been re-derived after the playfield was rebuilt. **Measure them against the
+average rate and all four read as impossible by 10 to 45 times - and that is the wrong instrument.**
+A mission is a BURST, not a background rate; the ball is not in the bumper nest for most of a game
+and nobody expects it to be. Against the best burst a driven game actually managed in one mission
+window:
+
+| | need | driver's best | |
+|---|---|---|---|
+| Bumper Rush | 14 in 26 s | 50 | comfortable, left alone |
+| Spinner Mania | 45 in 26 s | 32 | unreachable -> **30** |
+| Ramp Frenzy | 5 in 30 s | 4 | unreachable -> **3** |
+| Target Storm | 8 in 26 s | 40 | comfortable, left alone |
+
+`RAMPS_TO_LIGHT_LOCK` came down 5 -> 3 for the same reason: the lock is the only route into
+multiball that does not go through a mission, and it needed a ramp count no measured game reached.
+
+### 3. One awkward mission was holding the other three shut
+
+The four missions run in a fixed order and `missionIdx` only advanced on a WIN, so failing the first
+put the player straight back on the first one, for ever. Measured over ten driven games: **eleven
+mission starts, all eleven Bumper Rush, and Spinner Mania, Ramp Frenzy and Target Storm never seen
+once.** No amount of tuning Bumper Rush's number would have opened the other three. A failed mission
+advances the ladder now; `missionsDone` still counts wins only, so the wizard is unaffected.
+
+After it: the ladder rotates (bumper 7 / spin 3 / ramp 1 across the same ten games) and the lock
+route came alive - 3 locks lit, 1 taken, from zero.
+
+### And the test that should have existed all along
+
+Nothing in `test.js` ever proved a mission could be COMPLETED. So "11 starts, 0 finishes" could have
+meant *the rules are broken* or *a random driver cannot play*, with no way to tell them apart.
+**Section 4a3 drives the whole chain deterministically** - bank, scoop, mission progress, ramp, all
+through the real entry points and never by poking fields - and proves four missions complete in
+order, that four completions start the wizard, that three locks start a multiball, and that a ramp
+during multiball pays a jackpot. All five pass, so the machinery is intact and what remains is a
+driver that cannot aim.
+
+**Which is the honest limit of every number above.** A random driver is a poor player at aim and a
+very good one at repetition; it can tell you a lane is geometrically unreachable, and it cannot tell
+you whether a person can complete Bumper Rush. That needs a person.
+
 ## The rules
 
 - 3 balls (5 on Casual). Ball save at the start of each ball, 12 / 8 / 3 seconds by table.

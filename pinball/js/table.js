@@ -124,9 +124,14 @@ export const FLIP = { len: 63, r: 8, rest: 25 * D, sweep: 52 * D, pivotY: 592, d
 export const SWITCHES = [
   { id: 'orbitTop', x: 174, y: 25, r: 18 },                     // crown of the arch channel
   { id: 'spinner', x: 25, y: 262, r: 15 },                      // left lane, on the orbit
-  { id: 'laneH', x: 139, y: 84, r: 14 },
-  { id: 'laneU', x: 174, y: 84, r: 14 },
-  { id: 'laneB', x: 209, y: 84, r: 14 },
+  // y 112, not 84, and r 26, not 14. The old pair of numbers asked the ball to reach a height it
+  // almost never got to and then to pass within 14 units of a point: of the 34 balls that did
+  // enter a channel, 4 tripped a switch, because the rest stalled at y 100-110 - just short. The
+  // dividers hold a ball within 19 units of the channel's centre-line, so r 26 catches anything in
+  // the channel between y 95 and y 129, which is the band a ball actually passes through.
+  { id: 'laneH', x: 110, y: 112, r: 26 },
+  { id: 'laneU', x: 174, y: 112, r: 26 },
+  { id: 'laneB', x: 238, y: 112, r: 26 },
   { id: 'rampIn', x: 112, y: 432, r: 12, needUp: 300 },         // fast enough UP = made the ramp
   { id: 'scoop', x: 286, y: 206, r: 13, capture: true },        // saucer: holds the ball
   // Both pairs sit on the CENTRE-LINE of their own channel, computed from the divider and the
@@ -194,12 +199,29 @@ const SCOOP = { x: 286, y: 206, rad: 18, mouth: 2.25, half: 1.0 };
 const POPS = [[120, 200], [222, 196], [174, 258]];
 const POP_R = 21;
 
-/** The rollover lanes across the crown: three 35-wide channels between four dividers.
- *  DESIGN NOTE. The model draws two dividers and three lamps that are not centred on them (the lamp
- *  row starts at -0.088 and steps 0.044, so it sits half a lane left of the pair at -0.052/+0.052).
- *  Four dividers is what actually makes three lanes, so there are four, and the lamps are centred
- *  on them. */
-const LANE_X = [121, 156, 191, 226];
+/**
+ * The rollover lanes across the crown: three channels between four dividers.
+ *
+ * DESIGN NOTE. The model draws two dividers and three lamps that are not centred on them (the lamp
+ * row starts at -0.088 and steps 0.044, so it sits half a lane left of the pair at -0.052/+0.052).
+ * Four dividers is what actually makes three lanes, so there are four, and the lamps are centred.
+ *
+ * THE BANK SPANS THE WHOLE CROWN, AND THAT IS THE FIX FOR A LANE SET NOBODY COULD COMPLETE.
+ * It used to run x 121..226 in a playfield 300 wide, which left the gaps either side wide open -
+ * and that is where the ball went. Firing 714 balls up the middle at every angle and speed:
+ * 112 of them got above y 110, and **78 of those went up the OUTSIDE of the bank**, in two
+ * clumps at x 100 and x 240. Only 34 ever entered a channel. Across six full driven games the
+ * H-U-B set was completed **zero** times, so the end-of-ball bonus multiplier never left 1x.
+ *
+ * At 78..270 the outer dividers sit 10 units from the inner arch - sealed, no ball fits - so
+ * anything that gets up there has to take a lane.
+ */
+const LANE_X = [78, 142, 206, 270];
+
+/** Where the dividers START, below the lanes. It was 108, which is about as high as a ball ever
+ *  gets: the channels only existed above the height most balls stall at, so a ball had to arrive
+ *  already inside one. At 140 the channel is there to catch it on the way up. */
+const LANE_BOTTOM = 140;
 
 export const ART_STANDS = [[[12, 328], [12, 364]], [[mx(12), 328], [mx(12), 364]]];
 
@@ -280,7 +302,7 @@ export function buildTable(opts = {}) {
   // them leaves one convex blob, which has no stable top.
   LANE_X.forEach((x, i) => {
     const top = ARCH.cy - Math.sqrt(ARCH.rIn * ARCH.rIn - (x - ARCH.cx) * (x - ARCH.cx)) + 3;
-    add(seg(x, 108, x, top, { r: 4, e: 0.5, mu: 0, id: `lanePost${i}` }));
+    add(seg(x, LANE_BOTTOM, x, top, { r: 4, e: 0.5, mu: 0, id: `lanePost${i}` }));
   });
 
   for (let i = 0; i < DROP_COUNT; i++) add(dropTarget(i));
@@ -406,8 +428,9 @@ export const ART = {
   bank: { a: BANK_A, u: BANK_U, len: BANK_LEN, step: BANK_STEP, count: DROP_COUNT },
   pops: POPS,
   popR: POP_R,
-  lanes: [[139, 84], [174, 84], [209, 84]],
+  lanes: [[110, 112], [174, 112], [238, 112]],
   laneX: LANE_X,
+  laneBottom: LANE_BOTTOM,
   slings: [[[58, 442], [122, 548]], [[mx(58), 442], [mx(122), 548]]],
   slingPosts: [[60, 436], [mx(60), 436]],
   laneGuides: [[[8, 392], [36, 410]], [[mx(8), 392], [mx(36), 410]]],
