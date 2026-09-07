@@ -3381,7 +3381,7 @@ things a person actually has - a wedge when in trouble, and the aim arrows to fi
 flags started meaning something. Worth remembering for the next hunt: a bad player model mostly
 finds its own bad play.
 
-### Five bugs, all fixed
+### Six bugs, all fixed
 
 1. **A shot that hit a trunk could move the ball 0.00 yds.** `resolveShot` dropped a blocked ball
    at `max(0, along - 2)`, so a trunk within two yards left it exactly where it was struck - same
@@ -3422,6 +3422,13 @@ finds its own bad play.
    > 50`) rather than the rule, which is why it never caught it - it now checks card against route
    on every hole of every course.
 
+6. **A ball could come to rest inside a tree trunk it never hit.** The blocked path steps clear of
+   the trunk it hit; this is the other way in - a ball that flew past the canopy and rolled to a
+   stop inside a different trunk, which the renderer then draws underneath a tree. One in a
+   hundred rounds (hole 17, at 23.5/261.6), rare enough to have been invisible. The clearance is
+   now universal, and it defers to the drop rule: a penalty drop is never pushed back inside
+   `MIN_DROP_YD` of the divot to get it out from under a tree.
+
 ### Measured and deliberately NOT changed
 
 - **Putting is harder than this repo's own documented target.** `swing.js` records a sweep giving
@@ -3442,6 +3449,13 @@ finds its own bad play.
   full power - it never saw its first tap. A test pins the current behaviour explicitly, and the
   `PHASE.LIVE` check already blocks input for the whole shot, so the only evidence this is wrong is
   the comment. Left alone; flagged here.
+- **The flight is played off wall clock, so a stalled frame jumps the ball.** `_frame` derives the
+  ball's position from `performance.now() - anim.t0`, so a main-thread stall (a GC pause, a heavy
+  touch handler, the app backgrounded) skips the ball forward rather than pausing it. Measured: a
+  900 ms stall mid-flight teleports it about 40 yds and the shot then plays on correctly. It is
+  the same pattern that made the OLD 3D build skip whole shots, and the fix is the same - advance
+  by the loop's own clamped `dt`. Left alone tonight because `ui.js` is being edited by another
+  session and the damage here is one cosmetic frame, not a lost shot.
 - **A 5-10 yd pitch needs a power tap 160-390 ms after the first**, the same double-tap window the
   putter's dead zone exists for. Rare (0 of 2,403 sampled lies within 60 yds of a pin), and the
   four-layer touch fix already stops the OS stealing the tap, so the remaining difficulty is
@@ -3452,6 +3466,7 @@ finds its own bad play.
 
 ### After the fixes
 
-40 rounds, same player: **no zero-yard strokes, no unfinished holes, no loops, no balls off the map,
-no unreachable putts, no stuck drops.** Mean score moved from +18.6 to +16.4 - that difference is
+100 rounds, same player: **no zero-yard strokes, no unfinished holes, no loops, no balls off the
+map, no unreachable putts, no stuck drops and no balls under a tree.** A separate 63,966-point sweep
+of every trees/heavy-rough spot on the course finds nowhere the ball cannot be freed. Mean score moved from +18.6 to +16.4 - that difference is
 the disaster holes that are no longer possible, not a change in how the game plays.

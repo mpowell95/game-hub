@@ -534,6 +534,36 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     }
   }
 
+  // NO BALL RESTS INSIDE A TREE. The blocked path already steps clear of the trunk it HIT; this
+  // is the other way in - a ball that flew past the canopy and rolled to a stop inside a
+  // different trunk, which the renderer then draws underneath a tree. One in a hundred rounds of
+  // Pine Valley (hole 17, at 23.5/261.6), so rare enough to have been invisible and cheap enough
+  // to make universal. Pushed radially out to the same clearance a blocked ball gets, and only if
+  // that spot is dry and on the map - a trunk is a better place to be than a pond.
+  if (!rolled.holed) {
+    for (const t of treesOf(hole)) {
+      const ty = hole.treeTypes[t.type];
+      if (!ty) continue;
+      const need = ty.trunk * (t.s || 1) + BLOCK_CLEAR_YD;
+      const dx = rest[0] - t.x, dy = rest[1] - t.y;
+      const d = Math.hypot(dx, dy);
+      if (d >= need) continue;
+      const ux = d < 1e-6 ? 1 : dx / d, uy = d < 1e-6 ? 0 : dy / d;
+      const cand = [t.x + ux * need, t.y + uy * need];
+      const b2 = hole.bounds;
+      if (cand[0] < b2.minX + EDGE_MARGIN_YD || cand[0] > b2.maxX - EDGE_MARGIN_YD) continue;
+      if (cand[1] < b2.minY + EDGE_MARGIN_YD || cand[1] > b2.maxY - EDGE_MARGIN_YD) continue;
+      const on = surfaceAt(hole, cand[0], cand[1]);
+      if (on === 'water') continue;
+      // ...and never at the cost of the drop rule: a penalty drop that got pushed back onto the
+      // divot would be the softlock this file just fixed, wearing a tree.
+      if (penalty && distYd(from, cand) < MIN_DROP_YD) continue;
+      rest = cand;
+      restOn = on;
+      break;
+    }
+  }
+
   return {
     carry, apex, sideYd, aimRad, blocked, wind, penalty,
     landing, landedOn, rollYd, rest, restOn,
