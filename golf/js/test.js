@@ -100,6 +100,23 @@ const clone = () => JSON.parse(JSON.stringify(PINE_VALLEY.holes[0]));
   const h = clone(); h.treeBelts[0].type = 7;
   ok('a tree belt naming a type that does not exist fails', validateHole(h).some((e) => /does not exist/.test(e)));
 }
+{
+  // [KNOWN-BUG PROBE] A HOLE WITH NO `green` SURFACE. `green.poly` alone is only read by the
+  // slope grid and the camera; the lie lookup and the renderer both walk `surfaces`. All nine
+  // Oasis Sands holes shipped without the entry (2026-09-07): the putting surface was painted in
+  // the collar's colour and every putt on the course was a FRINGE lie - 0.80 of the accuracy band
+  // and 1.55x the drag - while every other check here passed, because they all read `green.poly`.
+  const h = clone();
+  h.surfaces = h.surfaces.filter((s) => s.kind !== 'green');
+  ok('[KNOWN-BUG PROBE] a hole whose surfaces omit the green fails',
+    validateHole(h).some((e) => /no `green` surface/.test(e)));
+}
+{
+  const h = clone();
+  h.surfaces = h.surfaces.map((s) => (s.kind === 'green' ? { kind: 'green', poly: [[0, 0], [1, 0], [1, 1]] } : s));
+  ok('...and a green surface that does not cover the pin fails',
+    validateHole(h).some((e) => /does not contain the pin/.test(e)));
+}
 
 console.log('\n-- 3. the lie lookup follows the PAINT ORDER --');
 // The last polygon containing the point wins, for the lie exactly as for the paint. That one rule
@@ -381,6 +398,39 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
       + Math.abs(SW.backswingAt(at(p, t), t).pos - SW.backswingAt(at(p, noDead), noDead).pos));
     ok('[KNOWN-BUG PROBE] it is a delay, not a speed change: every power comes up exactly deadMs later',
       drift.every((d) => d < 1e-9), drift.join(', '));
+
+    // [KNOWN-BUG PROBE] A TAP INSIDE THE DEAD ZONE MUST DO NOTHING, NOT LOCK ZERO POWER.
+    // The dead zone exists because a tap-in is tapped fast, so the window it opened is the window
+    // a player is MOST likely to tap in - and the second tap used to read the parked needle and
+    // lock `power = 0.0000`. The shot fired, simulatePutt was handed 0, the ball moved 0.000 yd
+    // and _settleShot charged a stroke for it. Found 2026-09-07 by playing Oasis Sands: whole
+    // holes ended with the ball a foot from the cup and the score climbing.
+    for (const ms of [0, 40, 120, 200, 249, t.deadMs]) {
+      const s = new SW.Swing();
+      s.setTempo(t);
+      s.tap(0);
+      const r = s.tap(ms);
+      ok(`[KNOWN-BUG PROBE] a putter tap ${ms} ms in does nothing, it does not lock zero power`,
+        r === null && s.power === 0 && s.phase === SW.PHASE.BACK,
+        `got ${r} with power ${s.power} in phase ${s.phase}`);
+    }
+    {
+      const s = new SW.Swing();
+      s.setTempo(t);
+      s.tap(0);
+      s.tap(100);                       // ignored: still parked
+      const r = s.tap(t.deadMs + 300);  // ...and the backswing is still running, so this one lands
+      ok('...and the backswing is still live afterwards, so the next tap sets a real power',
+        r === 'power' && s.power > 0, `got ${r} with power ${s.power}`);
+    }
+    {
+      // Every other club has deadMs 0, so only the degenerate same-millisecond case is refused.
+      const d = CL.swingTempo(CLUBS[0]);
+      const s = new SW.Swing();
+      s.setTempo(d);
+      s.tap(0);
+      ok('a driver tap 40 ms in still sets a real power', s.tap(40) === 'power' && s.power > 0);
+    }
   }
   ok('...and that speed is the Swing\'s own default',
     CL.swingTempo().upMs === SW.UP_MS && CL.swingTempo().downMs === SW.DOWN_MS);

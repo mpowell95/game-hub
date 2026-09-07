@@ -374,6 +374,17 @@ export function validateHole(hole) {
   }
 
   if (!hole.pin || !pointInPoly(hole.pin, (hole.green || {}).poly || [])) at('pin is not inside green.poly');
+
+  // THE GREEN HAS TO BE IN `surfaces`, OR THE HOLE HAS NO PUTTING SURFACE AT ALL. `green.poly` on
+  // its own is only read by the slope grid and the camera; the lie lookup and the renderer both
+  // walk `surfaces`, so a hole that omits the green entry is painted in its collar's colour and
+  // every putt on it is played from the FRINGE - 0.80 of the accuracy band and 1.55x the drag.
+  // All nine Oasis Sands holes shipped that way (2026-09-07) and nothing here noticed, because
+  // every OTHER check about the green reads `green.poly` directly.
+  const greenSurf = (hole.surfaces || []).filter((s) => s.kind === 'green');
+  if (!greenSurf.length) at('no `green` surface: the putting surface is never painted and every putt is a fringe lie');
+  else if (!greenSurf.some((s) => pointInPoly(hole.pin, polyOf(s, hole)))) at('the `green` surface does not contain the pin');
+
   const teeSurf = (hole.surfaces || []).filter((s) => s.kind === 'tee');
   if (!teeSurf.some((s) => pointInPoly(hole.tee, polyOf(s, hole)))) at('tee is not inside a tee surface');
 

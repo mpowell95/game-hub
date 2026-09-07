@@ -3175,3 +3175,106 @@ reference got a stub with nothing on it.
 "fix".** What "the lines are weird" actually means is still open — the length was a guess, and the
 other reading (the line pointing the wrong way when the ball finishes PAST the hole) has not been
 ruled out.
+
+## Oasis Sands played for the first time, and it had no greens (2026-09-07)
+
+Matt: *"play through every hole of Oasis Sands. maybe multiple times. hit good shots and hit bad
+shots... Find all bugs or glitches or errors on unrealistic physics."*
+
+**How it was played.** A person on a phone, not an oracle: a harness that drives the REAL pipeline
+— `autoSelectClub`, the 1-degree aim arrow clamped to +/- 60, three taps on the needle with a
+GAUSSIAN TIMING ERROR (30 / 60 / 110 / 190 ms of standard deviation, from a steady tapper to a
+hopeless one), `mishit()` off the resulting `barPos`, then `resolveShot` / `simulatePutt` exactly
+as `_fire()` calls them. About 200 rounds, ~10,000 shots, with Pine Valley and Red Mesa played the
+same way as the control. **That control is what did the work**: every finding below is a place
+where this course differs from two hand-authored courses that are known good, and every one of
+them was invisible to `golf/js/test.js`, which was green throughout.
+
+### The five that were fixed
+
+| | measured |
+|---|---|
+| **No `green` surface on any of the nine holes** | `green.poly` was there, so every check that reads it passed. `surfaces` had only the collar — and the lie lookup and the renderer BOTH walk `surfaces`. The putting surface was painted in the collar's colour and **every putt on the course was a `fringe` lie**: 0.80 of the accuracy band, 1.55x the drag. |
+| **All nine green slope grids pointed UPHILL** | Cells point DOWNHILL by definition. All 27 greens on the other two courses fall toward the tee; all nine here fell away from it in both halves. |
+| **53 of 264 trees stood where no tree may grow** | 39 in water, 12 in bunkers, 2 on the fairway. One was a palm **10.1 yds from hole 7's pin, on the tee-to-pin line of a 159 yd par 3**; nothing on either other course is within 22 yds of a pin. |
+| **`route` stopped 20-59 yds short of every pin** | Pine Valley and Red Mesa end 0-6 yds short. |
+| **`cardYards` was the straight tee-to-pin line** | To within 0.6 yds on all nine, where the format says it is the playing centreline. Four doglegs read up to 59 yds short. |
+
+**Why nothing caught them.** `validateHole` checked six things about the green and read
+`green.poly` for every one; `NO_BELT_TREE` only filters BELT trees and this course emits every
+palm into the hand-placed `trees` array, which is never filtered (deliberately — Pine Valley 3's
+signature oak stands on the fairway on purpose); and the palm-clearance rule the generator applied
+measures against `route`, which is exactly what stopped short. Sections 14 and 15c both play this
+course and both passed, because their test player never mis-hits and searches 45 shot options.
+
+`validateHole` now refuses a hole with no `green` surface, or one whose green does not contain the
+pin, with a `[KNOWN-BUG PROBE]` in section 2.
+
+### Measured, before and after (average strokes per hole, all four player skills)
+
+1,080 holes on each version, the SAME seeds on both, all four player skills:
+
+```
+hole      H1     H2     H3     H4     H5     H6     H7     H8     H9    total
+par        3      4      4      5      3      4      3      4      4       34
+on main  5.06   5.74   5.94   6.93   5.27   6.14   6.98   5.68   6.78    54.53  (+20.53)
+after    4.74   5.38   5.77   7.00   4.83   5.87   5.39   5.50   6.43    50.90  (+16.90)
+worst      17     17     17     24     22     23     23     21     24   ->  13 16 17 24 19 23 21 21 24
+```
+
+Hole 7 is the one that moves: **-1.59 strokes**, worst round 23 -> 21, and the palm 10 yds from
+its pin is why. Nothing gets harder (H4's +0.07 is inside the noise). Putting conversion at
+3/6/10/20/30/45 ft now sits within a few points of both other courses at every distance, where
+before it was worse at every distance because every putt was struck from a collar.
+
+## A fast second tap on the putter threw the stroke away (2026-09-07)
+
+Found while playing the above, and it is not an Oasis bug — it is on `main` for every course, and
+it arrived with the fix in #416.
+
+`PUTTER_DEAD_MS` holds the putter's needle at zero for 250 ms after the first tap. A second tap
+inside that window read the parked needle and **locked `power` at exactly 0.0000**. The shot fired,
+`simulatePutt` was handed 0, the ball moved **0.000 yd**, and `_settleShot` charged a stroke for it.
+
+**The dead zone exists BECAUSE a tap-in is tapped fast** — its own header says a second tap inside
+about 300 ms is what iOS reads as a double tap — so the window it opened is the window a player is
+most likely to tap in. Measured on Oasis Sands: holes that ended with the ball a foot from the cup
+and the score still climbing.
+
+**A tap while the needle is still parked is not a power tap**, so it now does nothing and the
+backswing carries on (`Swing.tap` returns `null`, which `ui.js`'s caller already handles). The
+dial, the tempo and `PUTT_GAMMA` are all untouched — this only refuses to read a needle that has
+not moved. Every other club has `deadMs: 0` and is unaffected but for the degenerate
+two-taps-in-one-millisecond case, which this closes too. Section 8b pins it at 0/40/120/200/249/250
+ms, plus that the backswing is still live afterwards and that a driver at 40 ms still sets a real
+power.
+
+### Three things found, measured, and deliberately NOT fixed here
+
+They are all in the SHARED engine, they are all older than this course, and **Pine Valley and Red
+Mesa show them at the same rate or worse** — so they belong with whoever is working on those, not
+in a course-data pass:
+
+- **A blocked shot can move the ball 0 yds.** `treeHit` ignores a trunk only within `trunk + 1.2`
+  yds, and a blocked ball is dropped 2 yds SHORT of the contact point, so a trunk 2-3 yds ahead
+  blocks, drops the ball beside itself, and blocks again. Measured: Oasis 53 of 4,810 shots (1.1 %),
+  Pine Valley 60 of ~1,500, Red Mesa 66 of ~1,500. It is not a permanent lock — a 6-yd grid over all
+  nine Oasis holes found **0 positions** from which no club, aim or power moves the ball — but "I
+  swung and nothing happened" is what the player sees.
+- **The penalty drop can return the ball to exactly where it was struck from**, costing a stroke for
+  no progress, when the water begins within one fortieth of the carry. Oasis 13 of 4,810, Pine
+  Valley 11, Red Mesa 2.
+- **A ball can come to rest outside `hole.bounds`**, where the camera clamps and the map raster
+  stops. Oasis 8 of 4,810 (up to 18 yds out), Pine Valley 5, Red Mesa 9.
+
+### And two Oasis-specific things left alone on purpose
+
+- **No greenside bunkers anywhere on the course** (Pine Valley 51, Red Mesa 55; the nearest bunker
+  to any Oasis pin is 74 yds). The corridor carve took the sand out of play and the
+  greenside/fairway reclassification then had nothing within 35 yds of a green to reclassify.
+  Adding some means drawing sand this trace does not have.
+- **The palms have no species colour.** `TREE_FILL` in `render.js` is keyed by the tree type's
+  NAME and carries `saguaro` / `paloverde` / `boulder`; `palm`, `tall palm` and `scrub palm` are
+  not in it, so all 211 fall back to the theme default and paint at `#3f6b34` — Pine Valley's
+  forest green, on a red desert. Measured off the real raster. Three hex values with no reference
+  to measure them against is art direction, which is Matt's.
