@@ -538,7 +538,7 @@ class GolfGame {
   /** Keep the needle's speed in step with the club in hand. Called wherever the club can change
    *  (the club nudges, a settled shot, a new hole) rather than inside `_activeClub`, because that
    *  runs from the render loop too and a `Swing` mid-stroke must never be re-timed. */
-  _syncTempo() { this.swing.setTempo(swingTempo(this._activeClub())); }
+  _syncTempo() { this.swing.setTempo(swingTempo()); }
 
   _renderPlay() {
     this.rootEl.innerHTML = '';

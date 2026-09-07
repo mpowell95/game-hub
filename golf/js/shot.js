@@ -511,20 +511,24 @@ export function puttRangeFt() { return MAX_PUTT_FT; }
  *  the dots are what a player gauges power against. Dots at even distances over a curved meter
  *  would lie about where 50 % goes, and a putting read that lies is worse than none.
  *
- *  **1.6 -> 2.0 on 2026-09-06, and it still was not enough on its own.** Matt, after a Pine Valley
- *  round: *"Short putts are hard to hit correctly because the meter doesn't let you hit it that
- *  soft. If you tap that fast it selects something to copy."* The window measured through the real
- *  resolver, not the table above (which is a distance estimate rather than a holing one):
+ *  **1.6 -> 2.0 on 2026-09-06, AND REVERTED THE SAME DAY.** The number is not free: the arc's
+ *  25/50/75/100 ticks sit at `f ** (1/gamma)` of the sweep, so raising it pushes every tick further
+ *  round and crowds all four into the top half of the dial. Matt, with a photo of it: *"You also
+ *  fucked up the power/aim meter while putting BIG TIME. REVERT."* At 1.6 the ticks sit at
+ *  43/65/85/100 % of the sweep; at 2.0 they sit at 50/71/87/100 and the 25 is past halfway round a
+ *  dial that starts at zero.
+ *
+ *  The problem that prompted it is real and is STILL OPEN. Measured through the real resolver
+ *  (holing, not the distance estimate in the table above):
  *
  *      2 ft putt   holes for 8.4-25.9 % of power   =  132-411 ms after the first tap
  *
- *  A second tap inside ~300 ms is a DOUBLE TAP: iOS reads it as select-a-word, which is the copy
- *  bar Matt saw, and it is why the window could not be hit deliberately. Gamma 2.0 moves that to
- *  218-537 ms, and `clubs.js`'s `PUTTER_UP_MUL` (the putter's backswing, 1.42x, measured off the
- *  reference's own needle) moves it again to **309-763 ms** - opening past the double-tap
- *  threshold, 454 ms wide. The two levers do different jobs: the curve decides WHERE on the meter
- *  the putt sits, the tempo decides how many milliseconds that is worth. */
-export const PUTT_GAMMA = 2.0;
+ *  A second tap inside ~300 ms is a DOUBLE TAP - iOS reads it as select-a-word, which is the copy
+ *  bar Matt reported - so a tap-in's window is not merely narrow, it is somewhere the OS steals the
+ *  gesture. Two levers have now been tried and rejected: this curve (it moves the arc's labels) and
+ *  a slower putter backswing (`clubs.js`, tempo is one speed for the whole bag, twice now). Whatever
+ *  fixes it must leave BOTH the dial and the tempo alone. */
+export const PUTT_GAMMA = 1.6;
 export function puttDistanceFt(power, rangeFt) {
   return (rangeFt || MAX_PUTT_FT) * Math.pow(Math.max(0, Math.min(1, power)), PUTT_GAMMA);
 }

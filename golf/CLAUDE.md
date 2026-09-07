@@ -3085,7 +3085,7 @@ id, or a new suffix), leave `pinevalley3` and every `pinevalley:<n>` untouched a
 again, and keep SHOWING the old record on My Stats under an honest label saying which layout it was
 set on. That is a bigger job than moving two holes and it is his call.
 
-## Short putts could not be tapped softly enough (2026-09-06)
+## Short putts cannot be tapped softly enough - STILL OPEN (2026-09-06)
 
 Matt, after a Pine Valley round, on missing a 2.7 ft putt: *"Short putts are hard to hit correctly
 because the meter doesn't let you hit it that soft. If you tap that fast it selects something to
@@ -3102,32 +3102,25 @@ real resolver at 0.05 % steps rather than estimated:
 | 5 ft | 19.0-32.6 % | 300-516 ms |
 
 A second tap inside about 300 ms is a DOUBLE TAP. iOS reads that as select-a-word, hunts for the
-nearest selectable text and puts the Copy bar over the game — which is the thing Matt saw, and it
-means the window for a tap-in was not merely narrow, it was in a place a deliberate press could not
-reach without the OS taking the gesture.
+nearest selectable text and puts the Copy bar over the game - so the window for a tap-in is not
+merely narrow, it is somewhere the OS takes the gesture. **The copy bar is fixed (below). The putt
+itself is not.**
 
-Two levers, because they do different jobs, and the numbers are measured for both:
+### Two levers were tried on 2026-09-06 and BOTH were reverted, within hours, by Matt
 
-- **`PUTT_GAMMA` 1.6 -> 2.0** (`shot.js`) decides WHERE on the meter a putt sits. 2 ft moves from
-  132-411 ms to 218-537 ms. This is the same lever that was set to 1.6 on 2026-09-05 for the same
-  complaint; the earlier pass measured distance rather than holing, which is why it read as fixed.
-- **`PUTTER_UP_MUL` 1.42** (`clubs.js`) decides how many milliseconds a given slice of the meter is
-  worth. The putter's BACKSWING only — 1585 -> 2251 ms. Not invented: `swingTempo`'s own header
-  records the reference's needle at 2.18 deg/frame for a driver and **1.53 for the putter**, so the
-  putter's needle is 0.70x the speed. That measurement was taken in the pass that shipped per-club
-  tempo for the whole bag and was reverted on Matt's instruction; this applies it to the one club he
-  is now asking about and to nothing else.
+- **`PUTT_GAMMA` 1.6 -> 2.0** (`shot.js`). It decides where on the meter a putt sits — and also
+  where the arc's 25/50/75/100 ticks sit, at `f ** (1/gamma)` of the sweep. At 1.6 they are at
+  43/65/85/100 % of the dial; at 2.0 they crowd into 50/71/87/100, with the "25" past halfway round
+  a dial that starts at zero. Matt, with a photo: *"You also fucked up the power/aim meter while
+  putting BIG TIME. REVERT."*
+- **A slower putter backswing** (`clubs.js`, `PUTTER_UP_MUL` 1.42). Tempo is ONE SPEED for the whole
+  bag, and that is now twice-established: this was the second time a per-club tempo was shipped and
+  reverted on Matt's instruction.
 
-Together: **a 2 ft putt holes for a tap 309-763 ms after the first**, a 454 ms window that opens
-past the double-tap threshold. `test.js` section 8b still asserts one tempo for the other fourteen
-clubs, and now also asserts that the putter's backswing is the slower one and that its DOWNSWING is
-not — that half is the accuracy bar, the line rather than the pace, and there was no complaint
-about the line.
-
-**The cost, stated: long putts got harder.** Distance goes as `power ** gamma`, so at 2.0 a given
-pace error costs more distance than at 1.6. That is the right way round for a player who shoots 8
-under, but it is a real change and it is not free.
-
+**So the next attempt must leave the dial and the tempo alone.** What has not been tried: a short
+dead zone at the start of the putter's backswing (the needle holds at zero for ~250 ms before it
+begins), which moves every putt's window later in TIME without moving a single tick, changing the
+power curve, or touching the other fourteen clubs. Proposed, not shipped - ask first.
 ### The copy bar itself
 
 Hill Climb's four-layer fix, ported (`hill-climb/CLAUDE.md`, "the copy/paste screen pops up"). Golf
