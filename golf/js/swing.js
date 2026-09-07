@@ -463,6 +463,20 @@ export class Swing {
         // player who mistimed the first one.
         this.power = SWING_MAX; this.pos = b.pos; this.phase = PHASE.LIVE; return 'fire';
       }
+      // A TAP WHILE THE NEEDLE IS STILL PARKED AT ZERO IS NOT A POWER TAP. `tempo.deadMs` holds
+      // the putter's needle at zero for 250 ms after the first tap (clubs.js, PUTTER_DEAD_MS) -
+      // and a second tap inside that window used to LOCK POWER AT EXACTLY 0.0000. The shot then
+      // fired, `simulatePutt` was handed 0, the ball moved 0.000 yd and `_settleShot` charged a
+      // stroke for it. The dead zone exists precisely BECAUSE a tap-in is tapped fast (a second
+      // tap inside ~300 ms is what iOS reads as a double tap), so the window it opened was the
+      // window a player is most likely to tap in - measured on Oasis Sands, whole holes ended
+      // with the ball sitting a foot from the cup and the stroke count climbing.
+      //
+      // There is nothing to stop while the needle has not started, so the tap does nothing and
+      // the backswing carries on. `tap()` already returns null for "this tap did nothing" and
+      // ui.js's caller handles it. Every club with `deadMs: 0` is unaffected except for the
+      // degenerate two-taps-in-the-same-millisecond case, which this closes too.
+      if (!(b.pos > 0)) return null;
       this.power = b.pos; this.phase = PHASE.DOWN; this.t0 = now;
       return 'power';
     }
