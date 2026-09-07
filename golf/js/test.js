@@ -1072,8 +1072,14 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
   }
   ok('a 12 ft putt on hole 1 can be holed BY THE PHYSICS', holed,
     'this proves the simulation only - whether a PERSON can stop the meter there is section 11b');
-  const blast = SH.simulatePutt({ hole: green, from, aimRad: 0, power: 1 });
-  ok('a putt hammered over the cup at full pace does NOT drop', !blast.holed);
+  // THE SPEED LIMIT STILL EXISTS, BUT ONLY OUTSIDE THE FIRST RED DOT (2026-09-07). This used to
+  // hammer the 12 ft putt above, which is INSIDE the dot and now drops on purpose - Matt: "ANY putt
+  // within that distance that goes over the hole counts" (see section 17). The rule this assertion
+  // was written for is unchanged everywhere else, so it moves out to where it still holds rather
+  // than being deleted: past the dot, a putt over the top at full pace is still a miss.
+  const far = [green.pin[0], green.pin[1] - (SH.puttGimmeFt() / 3 + 3)];
+  const blast = SH.simulatePutt({ hole: green, from: far, aimRad: 0, power: 1 });
+  ok('a putt hammered over the cup at full pace does NOT drop, outside the first dot', !blast.holed);
 }
 
 console.log('\n-- 11c. every green has a collar --');
@@ -1909,6 +1915,73 @@ console.log('\n-- 16b. the camera can frame the ball where the HUD rule asks (20
     ok(`${c.id}: every hole has that room behind its tee`, short.length === 0,
       short.map((h) => `hole ${h.n} has ${(h.tee[1] - h.bounds.minY).toFixed(0)}`).join(', '));
   }
+}
+
+
+console.log('\n-- 17. inside the first red dot, a putt over the hole is IN (2026-09-07) --');
+// Matt: "make it so putts within the 25% first red dot distance cannot go over the hole. ANY putt
+// within that distance that goes over the hole counts."
+//
+// The distance is the LADDER'S OWN first dot and is derived, never typed: render.js draws the putt
+// ladder at [0.25, 0.5, 0.75, 1.0] of puttRangeFt(). If those two ever disagree the rule stops
+// meaning what the player can see, which is the whole point of tying it to a dot.
+{
+  const h = RED_MESA.holes[0];
+  const rangeFt = SH.puttRangeFt();
+  const gimme = SH.puttGimmeFt();
+
+  near(`the gimme is the ladder's first dot (${gimme} ft of ${rangeFt})`, gimme, rangeFt * 0.25, 1e-9);
+  const renderSrc = fs.readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+  ok('...and render.js still draws that dot at 0.25 of the putt line',
+    /\[0\.25,\s*0\.5,\s*0\.75,\s*1(\.0)?\]\.map\(\(f\)\s*=>\s*\(\{\s*at:\s*st\.puttLine\s*\*\s*f/.test(renderSrc),
+    'the ladder moved and puttGimmeFt() no longer names a dot the player can see');
+
+  // Straight at the cup, FULL power. Inside the dot it drops however fast it is going; a foot
+  // outside it, the same stroke runs over the top and away, exactly as it always did.
+  const smash = (ft) => {
+    const from = [h.pin[0], h.pin[1] - ft / SH.FT_PER_YD];
+    return SH.simulatePutt({ hole: h, from, aimRad: 0, power: 1, rangeFt });
+  };
+  for (const ft of [1, 3, 8, 14.9]) {
+    ok(`[KNOWN-BUG PROBE] a ${ft} ft putt smashed at 100 % still drops`, smash(ft).holed);
+  }
+  const past = smash(gimme + 0.2);
+  ok(`...and one from ${(gimme + 0.2).toFixed(1)} ft does NOT - the rule stops at the dot`,
+    !past.holed, 'the gimme is reaching past the first dot');
+
+  // IT IS NOT A CONCESSION. A putt left short never reaches the cup and still misses, and the LINE
+  // still has to be right - this only removes the SPEED limit, not the other two ways to miss.
+  const shortPutt = SH.simulatePutt({ hole: h, from: [h.pin[0], h.pin[1] - 1], aimRad: 0,
+    power: 0.04, rangeFt });
+  ok('a putt left SHORT still misses', !shortPutt.holed);
+  const pushed = SH.simulatePutt({ hole: h, from: [h.pin[0], h.pin[1] - 1], aimRad: 22 * Math.PI / 180,
+    power: SH.puttPowerFor(6, rangeFt), rangeFt });
+  ok('a putt pushed well off line still misses', !pushed.holed);
+
+  // AND IT IS A PUTT'S RULE ONLY. Matt, 2026-09-04, on full shots: "you can go over it if the ball
+  // is moving too fast". `cupCheck`'s default is unchanged, so a wood running over the hole at pace
+  // still stays out.
+  near('cupCheck still defaults to the speed limit', SH.CUP_MAX_SPEED, 2.2, 1e-9);
+  ok('a ball crossing the cup at pace is NOT holed by default',
+    !SH.cupCheck(h, h.pin[0], h.pin[1], SH.CUP_MAX_SPEED + 0.5));
+  ok('...and IS when the caller lifts the limit',
+    SH.cupCheck(h, h.pin[0], h.pin[1], SH.CUP_MAX_SPEED + 0.5, Infinity));
+
+  // WHAT IT IS WORTH, so a future change that quietly undoes it shows up as a number. Swept
+  // straight at the cup: inside the dot most of the meter holes, outside it a narrow band does.
+  const windowOf = (ft) => {
+    let n = 0;
+    for (let p = 0.02; p <= 1.0; p += 0.02) if (smashAt(ft, p).holed) n++;
+    return n / 50;
+  };
+  const smashAt = (ft, p) => SH.simulatePutt({ hole: h, from: [h.pin[0], h.pin[1] - ft / SH.FT_PER_YD],
+    aimRad: 0, power: p, rangeFt });
+  const inside = windowOf(3);
+  const outside = windowOf(20);
+  ok(`[KNOWN-BUG PROBE] inside the dot most of the meter holes a 3 ft putt (${(inside * 100).toFixed(0)} %)`,
+    inside > 0.7, 'the speed limit is still biting inside the first dot');
+  ok(`...and outside it the window is still narrow (20 ft: ${(outside * 100).toFixed(0)} %)`,
+    outside < 0.3, 'the gimme has leaked out past the first dot');
 }
 
 
