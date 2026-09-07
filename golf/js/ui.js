@@ -538,7 +538,7 @@ class GolfGame {
   /** Keep the needle's speed in step with the club in hand. Called wherever the club can change
    *  (the club nudges, a settled shot, a new hole) rather than inside `_activeClub`, because that
    *  runs from the render loop too and a `Swing` mid-stroke must never be re-timed. */
-  _syncTempo() { this.swing.setTempo(swingTempo()); }
+  _syncTempo() { this.swing.setTempo(swingTempo(this._activeClub())); }
 
   _renderPlay() {
     this.rootEl.innerHTML = '';
@@ -671,13 +671,45 @@ class GolfGame {
       const ts = ev && ev.timeStamp;
       return (Number.isFinite(ts) && ts > 0 && now - ts >= 0 && now - ts < 2000) ? ts : now;
     };
+    // RAPID TAPS MUST NOT BECOME A DOUBLE TAP. Matt, 2026-09-06, on trying to hit a short putt
+    // softly: *"if you tap that fast it selects something to copy."* Two taps inside ~300 ms are
+    // iOS's select-a-word gesture; Safari then hunts for the nearest selectable text and latches
+    // onto the HUD, and the Copy bar covers the game. A three-tap swing REQUIRES fast taps - a 2 ft
+    // putt's second tap lands about 300 ms after the first - so this is not an edge case here.
+    //
+    // The same four-layer fix Hill Climb needed (hill-climb/CLAUDE.md, "the copy/paste screen pops
+    // up"), because no single layer holds: (1) `-webkit-user-select`/`touch-callout`/
+    // `tap-highlight-color` on `.gf-root *`, already in golf.css; (2) `.gf-btn > span
+    // { pointer-events: none }`, already there; (3) a NON-PASSIVE touchstart that preventDefaults,
+    // which is what stops the gesture ever starting - and because that makes the synthesised
+    // pointer events unreliable, touch drives the button directly and the pointer path
+    // early-returns on `pointerType === 'touch'`; (4) the selectstart/selectionchange backstop
+    // below, which holds whichever path Safari took.
+    this._on(sw, 'touchstart', (ev) => {
+      ev.preventDefault();
+      sw.setAttribute('data-down', '1');
+      this._tap(evNow(ev));
+    }, { passive: false });
+    const swEnd = () => sw.removeAttribute('data-down');
+    this._on(sw, 'touchend', swEnd);
+    this._on(sw, 'touchcancel', swEnd);
     this._on(sw, 'pointerdown', (ev) => {
+      if (ev.pointerType === 'touch') return;   // the touchstart above already played this tap
       ev.preventDefault();
       sw.setAttribute('data-down', '1');
       this._tap(evNow(ev));
     });
     this._on(sw, 'pointerup', (ev) => { ev.preventDefault(); sw.removeAttribute('data-down'); });
-    this._on(sw, 'pointercancel', () => sw.removeAttribute('data-down'));
+    this._on(sw, 'pointercancel', swEnd);
+
+    // Layer 4: nothing inside the game is ever selectable, whichever gesture path got there.
+    this._on(this.rootEl, 'selectstart', (ev) => ev.preventDefault());
+    this._on(document, 'selectionchange', () => {
+      const sel = document.getSelection && document.getSelection();
+      if (!sel || sel.isCollapsed || !sel.anchorNode) return;
+      const node = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode;
+      if (node && this.rootEl.contains(node)) sel.removeAllRanges();
+    });
 
     // FREE LOOK. Drag the course around to study the hole, let go and it eases back to the ball.
     // Bound to the game's own root, NEVER to document - a non-passive touchmove on document turns
@@ -1455,6 +1487,10 @@ class GolfGame {
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
       puttLine: putting ? puttRangeFt() / FT_PER_YD : 0,
+      // How far of that ladder is worth drawing for THIS putt: twice the distance to the hole,
+      // never less than 12 ft of it. A 60 ft ladder off a 2.7 ft tap-in was the whole screen
+      // (Matt, 2026-09-06: "the lines are weird"). See render.js's aim-ladder block.
+      puttReach: putting ? Math.max(this._distToPin() * 2, 12 / FT_PER_YD) : 0,
     });
     this._drawMeter(now);
     this.raf = requestAnimationFrame(this._frame);

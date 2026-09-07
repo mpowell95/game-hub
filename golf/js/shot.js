@@ -509,8 +509,22 @@ export function puttRangeFt() { return MAX_PUTT_FT; }
  *
  *  THE AIM LADDER USES THE SAME CURVE (`render.js` draws its dots at `f ** PUTT_GAMMA`), because
  *  the dots are what a player gauges power against. Dots at even distances over a curved meter
- *  would lie about where 50 % goes, and a putting read that lies is worse than none. */
-export const PUTT_GAMMA = 1.6;
+ *  would lie about where 50 % goes, and a putting read that lies is worse than none.
+ *
+ *  **1.6 -> 2.0 on 2026-09-06, and it still was not enough on its own.** Matt, after a Pine Valley
+ *  round: *"Short putts are hard to hit correctly because the meter doesn't let you hit it that
+ *  soft. If you tap that fast it selects something to copy."* The window measured through the real
+ *  resolver, not the table above (which is a distance estimate rather than a holing one):
+ *
+ *      2 ft putt   holes for 8.4-25.9 % of power   =  132-411 ms after the first tap
+ *
+ *  A second tap inside ~300 ms is a DOUBLE TAP: iOS reads it as select-a-word, which is the copy
+ *  bar Matt saw, and it is why the window could not be hit deliberately. Gamma 2.0 moves that to
+ *  218-537 ms, and `clubs.js`'s `PUTTER_UP_MUL` (the putter's backswing, 1.42x, measured off the
+ *  reference's own needle) moves it again to **309-763 ms** - opening past the double-tap
+ *  threshold, 454 ms wide. The two levers do different jobs: the curve decides WHERE on the meter
+ *  the putt sits, the tempo decides how many milliseconds that is worth. */
+export const PUTT_GAMMA = 2.0;
 export function puttDistanceFt(power, rangeFt) {
   return (rangeFt || MAX_PUTT_FT) * Math.pow(Math.max(0, Math.min(1, power)), PUTT_GAMMA);
 }
