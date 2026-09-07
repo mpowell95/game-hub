@@ -86,6 +86,7 @@ export const STRINGS = {
 
     // score labels
     lbl_ramp: 'Ramp',
+    lbl_skill: 'Skill shot',
     lbl_jackpot: 'Jackpot',
     lbl_super: 'Super',
     lbl_orbit: 'Orbit',
@@ -199,6 +200,7 @@ export const STRINGS = {
     task_target: 'Tumba las dianas',
 
     lbl_ramp: 'Rampa',
+    lbl_skill: 'Tiro maestro',
     lbl_jackpot: 'Jackpot',
     lbl_super: 'Súper',
     lbl_orbit: 'Órbita',

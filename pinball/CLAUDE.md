@@ -424,6 +424,62 @@ trick that no longer exists. The defect it caught is still worth knowing - a sha
 screen axes rather than to the part itself looks right at rest and wrong the moment the part moves -
 but nothing in a 3D scene can reproduce it, and an assertion that cannot fail is worse than none.
 
+## The drain was narrower than the ball, and the table was shouting over itself (2026-09-07)
+
+Matt, on a clip of the 3D build: *"1. It's impossible for the ball to go between the paddles. And
+2. Too much confetti on the screen causes the ball to get lost. All confetti must be off the machine
+and shown in the black outside. And the points and word popups should be shown on a back
+wall/scorepoint/point counter thing. There's too much that happens on top of the machine."*
+
+### The drain gap was 0.97 balls
+
+The footage shows the ball sitting in the V between the two flipper tips, bouncing, frame after
+frame, never falling through. It could not: **the clear gap was 17.4 units against a ball of 18.**
+
+**The arithmetic that was got wrong, because it is easy to repeat.** The gap is NOT the distance
+between the tip centres. `physics.js` models the paddle as a capsule that tapers to 65% of `r` at
+the tip, so each tip eats another 5.2 units on top. At `dx` 71 the centres were 27.8 apart and the
+real gap was 17.4. At `dx` 74 it is 23.4, or **1.30 balls**; real machines run 1.2 to 1.6.
+
+    gap = (2*dx - 2*len*cos(rest)) - 2*(0.65*r)
+
+**And the test was lying about it.** The SAVE-OFF block classified any drain between `tipL - 8` and
+`tipR + 8` as a centre drain, so balls going round the OUTSIDE of a paddle were counted as centre
+drains - it reported 7 of them on a table where no centre drain was physically possible. The
+classifier uses the tips exactly now, and there is a geometric assertion beside it that fails if the
+gap is ever narrower than a ball again.
+
+### The confetti is off the machine, and the shouting is on a backglass
+
+Two separate changes, both for the same reason: the ball is a small grey sphere, and every bright
+thing drawn over the playfield is another small bright thing competing with it.
+
+- **`spawnHit()` throws its burst clear of the machine.** It no longer starts where the hit was: it
+  starts where a line from the middle of the machine through the hit LEAVES the machine's
+  silhouette, and travels outward into the black surround from there. You still see which side
+  scored, and nothing is ever drawn over the ball. `this.box` is the machine's screen-space bounding
+  box, measured in `resize()` from the same corners the camera framing uses, so it cannot drift out
+  of step with what is on screen.
+- **Every award value and word goes on a BACKGLASS**, standing at the far end of the table where a
+  real machine puts it, instead of floating over the playfield. It is a `CanvasTexture` redrawn only
+  when the text changes (and at about 12 Hz while a line fades), showing the last three lines.
+
+**Three flips to make the glass readable, and they compound rather than cancel.** The model group is
+mirrored in x (see the 3D section above); a `PlaneGeometry` faces +z, which here is AWAY from the
+camera, so the glass has to be turned round; and turning it round mirrors the text. The first build
+put **"BUHRATS"** on the backglass. `tex.repeat.x = -1` is the third flip.
+
+**And the framing has to fit twice now.** Sliding the frustum window moves the whole picture, so a
+fit that was exactly tight before the shift is over the edge after it - which is how the backglass
+ended up sliced off by the HUD band. `resize()` measures the offset, applies it, and re-fits; two
+passes is enough, because the offset barely moves once the distance settles.
+
+### One bug the backglass exposed on its first frame
+
+`lbl_skill` had no dictionary entry, so the raw key rendered on screen. The skill shot was added
+earlier the same day and its label was never added to `strings.js`. Both languages have it now, and
+every label `_award()` can emit is checked against both dictionaries.
+
 ## The rules
 
 - 3 balls (5 on Casual). Ball save at the start of each ball, 12 / 8 / 3 seconds by table.

@@ -480,13 +480,35 @@ function launched(g) {
         if (ev.type !== 'drain') continue;
         lives.push(t - served);
         served = t;
-        if (ev.x < tipL - 8) exits.left++; else if (ev.x > tipR + 8) exits.right++; else exits.centre++;
+        // A drain counts as CENTRE only if it went between the tips. Anything wider than that
+        // went round the OUTSIDE of a paddle, and calling it a centre drain is what hid a sealed
+        // drain gap for a whole build: this block reported 7 centre drains on a table where the
+        // gap was narrower than the ball and no centre drain was physically possible.
+        if (ev.x < tipL) exits.left++; else if (ev.x > tipR) exits.right++; else exits.centre++;
       }
     }
   }
   lives.sort((a, b) => a - b);
   const med = lives.length ? lives[Math.floor(lives.length / 2)] : 0;
   const total = exits.left + exits.centre + exits.right;
+  // THE GAP BETWEEN THE FLIPPER TIPS HAS TO BE WIDER THAN THE BALL, and for one shipped build it
+  // was not: 17.4 units against a ball of 18, or 0.97 balls. Matt, on a clip of it: "It's
+  // impossible for the ball to go between the paddles", and the footage shows the ball sitting in
+  // the V between the two tips, bouncing, never falling through.
+  //
+  // The arithmetic that was got wrong is worth spelling out, because it is easy to repeat: the
+  // gap is NOT the distance between the tip centres. physics.js tapers the paddle capsule to 65%
+  // of `r` at the tip, so each tip eats another 0.65*r. Real machines run 1.2 to 1.6 balls.
+  {
+    const reach = Math.cos(FLIP.rest) * FLIP.len;
+    const centres = (AXIS + FLIP.dx - reach) - (AXIS - FLIP.dx + reach);
+    const gap = centres - 2 * (FLIP.r * 0.65);
+    ok('the ball FITS between the flipper tips', gap > BALL_R * 2 + 2,
+      `${gap.toFixed(1)} units = ${(gap / (BALL_R * 2)).toFixed(2)} balls (the 2026-09-07 build shipped 0.97)`);
+    ok('...but the drain is not a barn door', gap < BALL_R * 2 * 1.8,
+      `${(gap / (BALL_R * 2)).toFixed(2)} balls`);
+  }
+
   ok('SAVE-OFF: a ball lives long enough to be a game (not the 5.6 s of the 2026-09-06 build)',
     med > 12, `median ${med.toFixed(1)}s over ${lives.length} balls`);
   ok('SAVE-OFF: the middle is a real drain, not just the outlanes',

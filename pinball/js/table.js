@@ -96,11 +96,27 @@ const mx = (x) => 314 - x;
  *  needs 766 u/s: 700 fails, and anything past about 800 makes it. */
 export const PLUNGER = { x: 327, y: 622, minV: 700, maxV: 1120, laneX: 300 };
 
-/** Flipper geometry, shared with the renderer so the paddle art and the collider can never drift.
- *  The model's flippers are 0.095 long with their pivots 0.212 apart, which is a modern long-flipper
- *  machine: 63 units of paddle and a 28-unit gap between the tips at rest, or 1.55 balls. Real
- *  machines run 1.3 to 1.6. */
-export const FLIP = { len: 63, r: 8, rest: 25 * D, sweep: 52 * D, pivotY: 592, dx: 71 };
+/**
+ * Flipper geometry, shared with the renderer so the paddle art and the collider can never drift.
+ *
+ * `dx` IS 74 BECAUSE THE BALL HAS TO FIT BETWEEN THE TIPS, and at 71 it did not. Matt, on a clip
+ * of the shipped build: *"It's impossible for the ball to go between the paddles"* - and the
+ * footage shows exactly that, the ball sitting in the V between the two tips for frame after
+ * frame, bouncing but never falling through.
+ *
+ * THE ARITHMETIC THAT WAS WRONG, because it is easy to get wrong the same way twice. The gap is
+ * not the distance between the tip CENTRES: physics.js models the paddle as a capsule that tapers
+ * to 65% of `r` at the tip, so each tip eats another 5.2 units. At dx 71 the centres were 27.8
+ * apart and the clear gap was 17.4 - against a ball of 18. **0.97 balls.** The table could not
+ * drain down the middle at all, which also means every "centre drain" the soak reported was a
+ * ball going round the OUTSIDE of a flipper and the classifier mislabelling it.
+ *
+ * At dx 74 the clear gap is 23.4, or 1.30 balls. Real machines run 1.2 to 1.6.
+ *
+ * If you move `len`, `r` or `rest`, recompute it: gap = (2*dx - 2*len*cos(rest)) - 2*(0.65*r).
+ * test.js asserts it, so the arithmetic lives there too and cannot drift again.
+ */
+export const FLIP = { len: 63, r: 8, rest: 25 * D, sweep: 52 * D, pivotY: 592, dx: 74 };
 
 // --- switches (non-physical trigger regions) ---------------------------------------------------
 // A switch is a circle the ball's CENTRE has to enter. game.js edge-detects entry, so a ball that
