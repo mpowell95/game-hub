@@ -206,21 +206,27 @@ export const HOLE_2 = {
 };
 
 // -------------------------------------------------------------------- hole 3 ----
-// Par 5, 608.6 yds. Long dogleg: trees pinch the tee shot, a large lake crosses the fairway as a
+// Par 5, 550.8 yds. Long dogleg: trees pinch the tee shot, a large lake crosses the fairway as a
 // mid-hole carry, bunkers guard the green right.
 //
 // cardYards is measured ALONG THE DOGLEG CENTRELINE and does NOT match the straight line from the
-// tee to the pin - the HUD will read well under 608.6 at address. That is correct and is how every
-// real scorecard differs from every real rangefinder. Do not "fix" it by deriving one from the
-// other; golf/CLAUDE.md, "Two different yardages".
+// tee to the pin - the HUD reads 538 at address against the card's 550.8. That is correct and is
+// how every real scorecard differs from every real rangefinder. Do not "fix" it by deriving one
+// from the other; golf/CLAUDE.md, "Two different yardages".
 //
-// A genuine three-shot hole on the stock ladder: driver, 3 wood, 3 wood is about 605 along the
+// IT SAID 608.6 UNTIL 2026-09-07, AND THAT WAS 58 YDS OF NOTHING. The `route` above IS the dogleg
+// centreline, and adding its nine segments gives 550.8 - so the card was not measuring the thing
+// its own comment says it measures. Every other hole on the course agrees with its route to within
+// 10 yds; this one was out by 58, which also inflated the course total on the setup screen. The
+// rule is unchanged and the straight-line HUD figure is untouched; only the claim is now true.
+//
+// A genuine three-shot hole on the stock ladder: driver, 3 wood, 3 wood is about 545 along the
 // centreline.
 export const HOLE_3 = {
   n: 3,
   par: 5,
   route: [[0, 5], [-1, 90], [-1, 180], [3, 245], [14, 320], [35, 376], [58, 416], [74, 460], [70, 505], [58, 540]],
-  cardYards: 608.6,
+  cardYards: 550.8,
   tee: [0, 5],
   pin: [58, 540],
   bounds: { minX: -70, maxX: 110, minY: -45, maxY: 620 },

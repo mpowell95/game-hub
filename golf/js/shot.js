@@ -237,6 +237,20 @@ export const ESCAPE_YD = 13;
 /** How far past a crown's edge a ball can still be played out from UNDER the branches. */
 export const SKIRT_YD = 3;
 
+/** How far a ball that hits a trunk finishes from where it was struck, at the least, and how far
+ *  clear of that trunk it is dropped. A blocked shot is meant to cost a stroke and go nowhere -
+ *  not to go NOWHERE AT ALL, which is a hole that cannot be finished. See resolveShot. */
+export const MIN_BLOCKED_YD = 2.0;
+export const BLOCK_CLEAR_YD = 1.0;
+
+/** How far inside the hole's drawn bounds a ball is allowed to finish. The camera clamps to those
+ *  bounds, so a ball outside them cannot be framed at all. */
+export const EDGE_MARGIN_YD = 2.0;
+
+/** How far a penalty drop must move the ball. A drop that lands on the divot the shot was played
+ *  from costs a stroke and changes nothing, which is a hole that cannot be finished. */
+export const MIN_DROP_YD = 2.5;
+
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
   if (!trees.length) return null;
@@ -370,8 +384,49 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   // behind where it was struck from.
   const p = blocked ? blocked.p : 1;
   const f = flightPoint(p, carry, sideYd, apex);
-  const along = blocked ? Math.max(0, f.along - 2) : f.along;
+  // A BLOCKED SHOT ALWAYS MOVES THE BALL. It used to be `Math.max(0, f.along - 2)`, and when the
+  // trunk is within two yards that is a stroke that moves the ball 0.00 yd and leaves the identical
+  // lie - so the same swing does the same nothing, for ever. Measured over 40 rounds of Pine Valley
+  // with a human-shaped player: 66 zero-yard strokes, four holes that never finished at all, and
+  // four spots the ball returned to three times running. That is a softlock, not a penalty.
+  //
+  // A ball that cannons off a trunk from two yards does not land on its own divot: it kicks out
+  // and drops a couple of yards away. MIN_BLOCKED_YD is that couple of yards, and the clear-of-the
+  // -trunk step below is what stops the new spot being inside the tree it just hit.
+  const along = blocked ? Math.max(MIN_BLOCKED_YD, f.along - 2) : f.along;
   const landing = [from[0] + sin * along + cos * f.side, from[1] + cos * along - sin * f.side];
+  if (blocked) {
+    // WHERE A BLOCKED BALL ACTUALLY ENDS UP. Two rules, and both are needed:
+    //
+    //   1. never inside the trunk it just hit - the next shot would start inside a tree;
+    //   2. never within MIN_BLOCKED_YD of where it was struck - that is the softlock this whole
+    //      block exists for, and rule 1 on its own can CAUSE it (kicking the ball to the near
+    //      side of a trunk it was already sitting beside moved it half a yard, which test 10c
+    //      caught).
+    //
+    // The kick is PERPENDICULAR to the shot line, on the side the ball was already curving to,
+    // because that is what a ball glancing off a trunk does.
+    const bt = blocked.tree;
+    const need = blocked.type.trunk + BLOCK_CLEAR_YD;
+    if (Math.hypot(landing[0] - bt.x, landing[1] - bt.y) < need) {
+      const side = f.side >= 0 ? 1 : -1;
+      landing[0] = bt.x + cos * side * need;
+      landing[1] = bt.y - sin * side * need;
+    }
+    let dx = landing[0] - from[0], dy = landing[1] - from[1];
+    let d = Math.hypot(dx, dy);
+    if (d < MIN_BLOCKED_YD) {
+      if (d < 1e-6) { dx = cos; dy = -sin; d = 1; }
+      landing[0] = from[0] + (dx / d) * MIN_BLOCKED_YD;
+      landing[1] = from[1] + (dy / d) * MIN_BLOCKED_YD;
+      // ...and if THAT walked it back into the trunk, step around the trunk instead.
+      if (Math.hypot(landing[0] - bt.x, landing[1] - bt.y) < need) {
+        const side = f.side >= 0 ? 1 : -1;
+        landing[0] = bt.x + cos * side * need;
+        landing[1] = bt.y - sin * side * need;
+      }
+    }
+  }
 
   const landedOn = surfaceAt(hole, landing[0], landing[1]);
   const rollYd = blocked ? 0 : carry * rollFactor(landedOn, club);
@@ -409,6 +464,74 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     }
     if (found) { rest = found.cand; restOn = found.on; }
     else { rest = [...from]; restOn = lieKind; }
+
+    // AND THE DROP HAS TO MOVE THE BALL. Walking the flight line back finds the last dry point on
+    // it - which, when the water starts a yard in front of the ball, is the ball itself. The
+    // player then pays a stroke, the ball does not move, the same swing does the same thing, and
+    // the hole cannot be finished: measured on Pine Valley 3, a wedge from the rough beside the
+    // lake looping at "38,295" for stroke after stroke.
+    //
+    // Real golf drops within a club-length of the crossing point and no nearer the hole; this
+    // searches outward from the ball for the nearest dry, in-bounds spot at least MIN_DROP_YD
+    // away, preferring one that is not closer to the pin, and takes any dry spot rather than
+    // none. The stroke is still charged - it is the ball being stuck that is the bug, not the
+    // penalty.
+    if (distYd(from, rest) < MIN_DROP_YD) {
+      const b = hole.bounds;
+      const wasTo = distYd(from, hole.pin);
+      let best = null;
+      for (let rad = MIN_DROP_YD; rad <= 14 && !best; rad += 1.5) {
+        for (let a = 0; a < 16; a++) {
+          const th = (a / 16) * Math.PI * 2;
+          const cand = [from[0] + Math.sin(th) * rad, from[1] + Math.cos(th) * rad];
+          if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
+          if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
+          const on = surfaceAt(hole, cand[0], cand[1]);
+          if (on === 'water') continue;
+          const nearer = distYd(cand, hole.pin) < wasTo - 0.5;
+          if (!best || (best.nearer && !nearer)) best = { cand, on, nearer };
+          if (!nearer) break;
+        }
+      }
+      if (best) { rest = best.cand; restOn = best.on; }
+    }
+  }
+
+  // THE BALL NEVER FINISHES OFF THE MAP. `hole.bounds` is the drawn extent of the hole, and the
+  // camera clamps to it - so a ball outside it is a ball the player CANNOT SEE and cannot frame,
+  // with an aim line running off into blank colour. Measured over 40 rounds of Pine Valley: 14
+  // shots finished outside, one of them 75 yds beyond the edge of hole 10.
+  //
+  // It is pulled back to the edge rather than penalised. There are no out-of-bounds stakes drawn
+  // anywhere in this game, and a stroke for crossing a line nobody can see is a punishment the
+  // player cannot learn from; the lie out there is trees or heavy rough already, which is the
+  // real cost of the miss. EDGE_MARGIN_YD keeps it a little inside so the camera has something to
+  // frame and the ball is not drawn half off the tilemap.
+  if (!rolled.holed) {
+    const b = hole.bounds;
+    const cx = Math.min(b.maxX - EDGE_MARGIN_YD, Math.max(b.minX + EDGE_MARGIN_YD, rest[0]));
+    const cy = Math.min(b.maxY - EDGE_MARGIN_YD, Math.max(b.minY + EDGE_MARGIN_YD, rest[1]));
+    if (cx !== rest[0] || cy !== rest[1]) {
+      rest = [cx, cy];
+      restOn = surfaceAt(hole, cx, cy);
+      // Pulling it in can land it in a pond at the edge; the water rule has already run, so this
+      // walks out of it the same way rather than leaving a ball sitting in a lake.
+      if (restOn === 'water') {
+        penalty = 1;
+        let out = null;
+        for (let k = 1; k <= 30 && !out; k++) {
+          for (const ang of [0, 90, 180, 270, 45, 135, 225, 315]) {
+            const rad = ang * DEG;
+            const cand = [cx + Math.sin(rad) * k, cy + Math.cos(rad) * k];
+            if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
+            if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
+            const on = surfaceAt(hole, cand[0], cand[1]);
+            if (on !== 'water') { out = { cand, on }; break; }
+          }
+        }
+        if (out) { rest = out.cand; restOn = out.on; } else { rest = [...from]; restOn = lieKind; }
+      }
+    }
   }
 
   return {
