@@ -10,7 +10,7 @@
 
 import { CLUBS, lieOf, rollFactor } from './clubs.js';
 import { payingPower } from './swing.js';
-import { surfaceAt, slopeAt, treesOf, distYd, mulberry32 } from './holes.js';
+import { surfaceAt, slopeAt, treesOf, distYd, mulberry32, greenBox, polyOf, bboxOf, pointInPoly } from './holes.js';
 
 const DEG = Math.PI / 180;
 
@@ -250,6 +250,29 @@ export const EDGE_MARGIN_YD = 2.0;
 /** How far a penalty drop must move the ball. A drop that lands on the divot the shot was played
  *  from costs a stroke and changes nothing, which is a hole that cannot be finished. */
 export const MIN_DROP_YD = 2.5;
+
+/** The hole's WATER polygons and their boxes, cached on the hole.
+ *
+ *  `surfaceAt` walks every surface of the hole and ray-casts each one, which is exactly right when
+ *  the question is "what is the ball lying on" and far too expensive to ask a few hundred times
+ *  inside one run-out. The run-out only needs one bit - is this water - so it asks that directly,
+ *  and a bounding-box test rejects almost every sample before any ray is cast. */
+function waterOf(hole) {
+  if (!hole._water) {
+    const w = (hole.surfaces || [])
+      .filter((s) => s.kind === 'water')
+      .map((s) => { const poly = polyOf(s, hole); return { poly, bb: bboxOf(poly) }; });
+    Object.defineProperty(hole, '_water', { value: w, enumerable: false });
+  }
+  return hole._water;
+}
+function isWater(hole, x, y) {
+  for (const w of waterOf(hole)) {
+    if (x < w.bb.minX || x > w.bb.maxX || y < w.bb.minY || y > w.bb.maxY) continue;
+    if (pointInPoly([x, y], w.poly)) return true;
+  }
+  return false;
+}
 
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
@@ -571,7 +594,11 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     travelledYd: distYd(from, rest),
     flightMs: flightMs(carry) * (blocked ? p : 1),
     // The ground phase is a real, watchable part of the shot, not a jump to the rest position.
-    rollMs: rollMs(rolled.holed ? distYd(landing, rest) : rollYd, landedOn),
+    // Timed off the distance the ball ACTUALLY covered, not the nominal `rollYd`: on a sloped
+    // green the run-out is integrated and a downhill one genuinely runs further, and `ui.js`
+    // animates from `landing` to `rest`, so timing the nominal would race the ball across the
+    // extra yards. On flat ground the two are the same number.
+    rollMs: rollMs(distYd(landing, rest), landedOn),
     lieKind,
   };
 }
@@ -797,15 +824,92 @@ export function rollWatchingCup(hole, start, dirRad, rollYd) {
   const cos = Math.cos(dirRad);
   const STEP = 0.05;                                  // yards; well under the cup's own radius
   const steps = Math.ceil(rollYd / STEP);
-  for (let i = 1; i <= steps; i++) {
-    const d = Math.min(rollYd, i * STEP);
-    const x = start[0] + sin * d;
-    const y = start[1] + cos * d;
-    // Speed remaining after rolling `d` of a total `rollYd`, under constant deceleration.
-    const speed = Math.sqrt(Math.max(0, v0 * v0 - 2 * PUTT_DECEL * d));
-    if (cupCheck(hole, x, y, speed)) return { rest: [x, y], holed: true };
+
+  // ============================================================================================
+  // THE RUN-OUT IS ON THE GROUND, SO IT MEETS WHAT IS ON THE GROUND (2026-09-07, Red Mesa).
+  //
+  // This used to be a bare straight line that consulted nothing but the cup, and three things
+  // fell out of that - all three measured on Red Mesa, a course whose whole identity is that a
+  // boulder "blocks at any height, from any club":
+  //
+  //   1. 1.4 % of tee shots ROLLED STRAIGHT THROUGH A TRUNK. A 3 wood on hole 12 ran 31 yds and
+  //      passed through a boulder after 7 of them.
+  //   2. A drive on hole 13 pitching short of the gorge ran 33 yds ACROSS THE WATER and finished
+  //      dry in the bunker beyond, with no penalty.
+  //   3. THE GREEN'S SLOPE DID NOTHING TO IT. Red Mesa says out loud that four of its greens
+  //      "crown in the middle, so a ball that lands anywhere but the plateau runs off it into
+  //      one". Not one of them did anything at all: a ball pitching five yards from the pin and
+  //      running four ran dead straight on all eight of that course's crown and steep greens. The
+  //      slope decided how a PUTT behaved and had no effect whatever on the shot that arrived.
+  //
+  // The walk is stepped by DISTANCE and carries v SQUARED, which is what keeps it cheap enough to
+  // run inside a tap handler: `d(v^2)/dd = -2a` is exact for constant deceleration, so on flat
+  // ground the ball stops at exactly `rollYd` and every roll distance Matt calibrated off the
+  // reference is reproduced to the yard (driver 38.7 nominal, 38.7 actual). The slope adds its own
+  // ALONG component to that same expression - a downhill run-out really does run further, which is
+  // the half of a crown that repels a ball - and turns the direction by its ACROSS one, using
+  // `BREAK_K`, the putt's own constant, so a ball trickling the last few feet of a run-out bends
+  // by exactly as much as a putt of that length would. That is the same argument this function was
+  // written on: one physics model, so "a 3 wood can be holed" needs no second one.
+  //
+  // Off the green the gradient is zero and this is the straight line it always was. Measured cost:
+  // 3.6 -> 5.7 ms per shot, well inside a frame.
+  // ============================================================================================
+  const near = [];
+  for (const t of treesOf(hole)) {
+    const ty = hole.treeTypes[t.type];
+    if (!ty) continue;
+    const r = ty.trunk * (t.s || 1);
+    if (Math.hypot(t.x - start[0], t.y - start[1]) <= rollYd + r + 1) near.push({ t, r });
   }
-  return { rest: [start[0] + sin * rollYd, start[1] + cos * rollYd], holed: false };
+  const gb = greenBox(hole);
+  let x = start[0];
+  let y = start[1];
+  let dx = sin;
+  let dy = cos;
+  let v2 = v0 * v0;
+  let travelled = 0;
+  for (let i = 1; i <= steps + 1200; i++) {
+    if (v2 <= 0) break;
+    const speed = Math.sqrt(v2);
+    if (cupCheck(hole, x, y, speed)) return { rest: [x, y], holed: true };
+    // Only inside the green's own bounding box can the ground be anything but flat.
+    if (x >= gb.minX && x <= gb.maxX && y >= gb.minY && y <= gb.maxY) {
+      const g = slopeAt(hole, x, y);
+      if (g[0] || g[1]) {
+        const along = g[0] * dx + g[1] * dy;
+        v2 += 2 * BREAK_K * along * STEP;
+        if (v2 <= 0) break;
+        const perpX = dy;                              // right of the direction of travel
+        const perpY = -dx;
+        const across = g[0] * perpX + g[1] * perpY;
+        const dTheta = (BREAK_K * across * STEP) / Math.max(0.25, v2);
+        const nx = dx + perpX * dTheta;
+        const ny = dy + perpY * dTheta;
+        const n = Math.hypot(nx, ny) || 1;
+        dx = nx / n; dy = ny / n;
+      }
+    }
+    v2 -= 2 * PUTT_DECEL * STEP;
+    x += dx * STEP;
+    y += dy * STEP;
+    travelled += STEP;
+    // A trunk stops it dead, short of the wood so the next shot does not start inside it. Checked
+    // every fourth step: the narrowest trunk in either course is 0.6 yds across and STEP is 0.05.
+    if ((i & 3) === 0) {
+      for (const n of near) {
+        if (Math.hypot(x - n.t.x, y - n.t.y) <= n.r) {
+          const back = Math.max(0, travelled - (n.r + 0.6));
+          return { rest: [start[0] + dx * back, start[1] + dy * back], holed: false };
+        }
+      }
+      // And water stops it where it went in; `resolveShot`'s own drop rule takes it from there.
+      // `surfaceAt` walks every surface of the hole, which is the expensive call in this loop, so
+      // the water polygons are asked directly and a bounding box rejects almost every sample.
+      if (isWater(hole, x, y)) return { rest: [x, y], holed: false };
+    }
+  }
+  return { rest: [x, y], holed: false };
 }
 
 /**

@@ -3478,3 +3478,158 @@ finds its own bad play.
 map, no unreachable putts, no stuck drops and no balls under a tree.** A separate 63,966-point sweep
 of every trees/heavy-rough spot on the course finds nowhere the ball cannot be freed. Mean score moved from +18.6 to +16.4 - that difference is
 the disaster holes that are no longer possible, not a change in how the game plays.
+
+## The Red Mesa playtest (2026-09-07)
+
+Red Mesa was played the way a person plays it: ~1,600 headless holes through the real engine, plus
+whole rounds driven in a real Chromium with real taps on the real swing button. The harness mirrors
+`_fire()` exactly - the auto-picked club, the aim the game hands you, three taps at wall-clock
+milliseconds with a gaussian timing error - so what it measures is what a thumb can actually do,
+not what the physics could do given a search. `golf/js/test.js` was green throughout, before and
+after.
+
+**Three sessions played the three courses the same night and two of the findings below were found
+independently by all of them**, which is worth recording on its own: the ball that could not be
+moved and the ball that finished off the map were fixed on `main` by the Pine Valley pass (#422,
+#423), and the putter's dead-zone stroke by the Oasis Sands pass (58ae4b1). Those fixes stand; this
+pass kept only the parts they did not cover, and the measurements are recorded here because they
+were made on a different course with different obstacles and they agree.
+
+### 1. THE RUN-OUT WENT THROUGH SOLID OBJECTS AND ACROSS WATER
+
+`rollWatchingCup` was a bare straight line that consulted nothing but the cup. On a course whose
+whole identity is that a boulder "blocks at any height, from any club": **1.4 % of tee shots rolled
+straight through a trunk** - a 3 wood on hole 12 ran 31 yds and passed through a boulder after 7 -
+and on hole 13 **a drive pitching short of the gorge ran 33 yds across the water and finished dry
+in the bunker beyond, with no penalty at all.**
+
+Both are stops now: the trunk short of the wood, so the next shot does not start inside it, and the
+water where the ball went in, with `resolveShot`'s own drop rule taking it from there. `surfaceAt`
+walks every surface of a hole, which is far too expensive to ask a few hundred times inside one
+run-out, so the water polygons are cached per hole and asked directly through a bounding box.
+Measured after: 0 and 0, over both fixed courses as well as this one.
+
+### 2. THE CROWN GREENS DID NOTHING
+
+This course's own text says four of its greens "crown in the middle, so a ball that lands anywhere
+but the plateau runs off it into one". Measured, **not one of them did anything at all**: a ball
+pitching five yards from the pin and running four ran in a dead straight line on all eight of its
+crown and steep greens. The slope decided how a PUTT behaved and had no effect whatever on the shot
+that arrived there, so a green could be designed to repel an approach and simply would not.
+
+The run-out is integrated now, with the putt's own `BREAK_K`, so the slope both bends it and
+lengthens a downhill one. **It is stepped by DISTANCE and carries v SQUARED** - `d(v^2)/dd = -2a` is
+exact for constant deceleration - which is what keeps it cheap enough to run inside a tap handler
+AND reproduces every flat roll distance Matt calibrated off the reference to the yard (driver 38.7
+nominal, 38.7 actual). Measured cost: 3.6 to 5.7 ms per shot, well inside a frame.
+
+**It is a small effect and honestly so, because `BREAK_K` is a small number** - and it has to be
+that number, or a run-out and a putt of the same length would bend by different amounts on the same
+green. On a synthetic green with one constant slope, a 5 yd run-out now covers **4.75 yds uphill,
+5.30 downhill, and bends 0.14 yds crossing it** (before: 5.00 / 5.00 / 0.00). Making a crown
+genuinely REPEL an approach needs the green's own `roll` raised from 0.036 - a tuning change across
+all three courses, and Matt's call rather than one to slip in under a bug fix.
+
+**Measure this on a synthetic green, not a real one.** On a crown the gradient reverses past the
+pin, so a run-out that climbs to the top and rolls down the far side covers exactly what a flat one
+does and reads as no effect at all; and a run-out aimed AT a pin is holed by the old straight-line
+code too, so a single number can pass while the slope is being read nowhere. Both of those wasted a
+pass here.
+
+### 3. THE BOUNDS CLAMP WAS OVERRULING THE GAME'S OWN FRAMING RULE, ON ALL 45 HOLES
+
+`_keepBallAndCupClear` exists because Matt said *"I need the hole to never be covered by the on
+screen controls"*. Measured at address on Red Mesa 1, at BOTH phone heights: `_aimCamera` asks for a
+camera y, `_keepBallAndCupClear` corrects it, and then `cam.clamp()` **overrules both**, because the
+frame's bottom edge would fall 9.7 yds outside `bounds`. The ball ended up 40 px lower than the
+game's own rule asked for - 666 of 852, hard against the aim row - on every hole of every course,
+and the rule written to prevent exactly that was silently discarded.
+
+`holegen.js` ran the bounds 45 yds behind the tee, a number chosen when `VIEW_W_YDS` was 70 and the
+frame was 76 yds deep. The view opened to 95 on 2026-09-04 and this did not move with it.
+**`BEHIND_TEE_YD` is 60 now**, and section 16b pins it against `VIEW_W_YDS` read out of render.js,
+so if the view opens up again the suite says so.
+
+**And the probe found twelve more holes that never went through `makeHole` at all**: Pine Valley
+1-3 and all nine of Oasis Sands carry hand-written `bounds`, and every one of them gave exactly 50
+yds where 51.5 is needed. Their `minY` moved with the rest. Growing a hole's bounds cannot break
+anything - `validateHole` only asks that every point be INSIDE them - it just gives the camera the
+room the HUD rule was already asking for. Measured after: the clamp no longer wins at 852 or at
+664 px, on any hole of any course.
+
+### 4. "NEW BEST SAVED" ON EVERY HOLE OF EVERY LATER ROUND
+
+`_recordRound` runs once, on the last hole, and was the only thing that ever wrote `newBest`.
+Nothing cleared it, so a player who set a best and started another round was told **"best saved" on
+the result card of hole 1, hole 2 and every hole after it**, on a round that had recorded nothing.
+Nothing was mis-STORED - `_recordRound` is the only writer and it was right - the card was lying.
+Cleared in `_startRound` and `_startPractice`.
+
+### 5. A ROUND COULD BE THROWN AWAY WITH ONE TAP, THROUGH THREE DIFFERENT DOORS
+
+`_recordRound` writes only on a COMPLETE round and there is no resume, so leaving one destroys it.
+There are three ways out of a round and **all three were unguarded**:
+
+1. **The hub's back pill**, because `isInProgress()` returned a hardcoded `false` on the strength of
+   a Stage C autosave that does not exist. Found independently by the Pine Valley pass and **fixed
+   on `main` by it** (#424), as `!!(this.hole && !this.recorded)`.
+2. **The game's own `quit` button**, top-left in the corner a thumb reaches for first, which dropped
+   straight to the setup screen on one tap. #424 does not touch it.
+3. **The result card's close (X)** mid-round, which did the same.
+
+2 and 3 ask now. The prompt goes on TOP of the result card, so cancelling leaves the card where it
+was rather than stranding the player on a hole they have already holed out; on the last hole every
+score is in and `finish` still closes in one tap.
+
+**The quit button has its own narrower test (`_roundAtStake`) rather than reusing
+`isInProgress()`**, and that is deliberate: `isInProgress()` answers the HUB's question and is true
+for a practice hole too, which is right for a confirm the player meets rarely. A practice hole is
+not a round - one unscored hole, no `bestRoundByCourse` write - and stopping the player every time
+they leave one is how the prompt that matters becomes the one they have learned to dismiss.
+
+### Measured and DELIBERATELY NOT CHANGED
+
+- **A short putt is missed far more often than this file's own calibration claims.** Swept with a
+  real thumb rather than a fixed bar offset (which is how the 3 ft ~95 % figure was produced), the
+  make rate is 81 % / 52 % / 19 % from 3 ft for a good / ok / poor player, and a miss from 2 ft
+  leaves 2.2 ft. The cause is not the line and not the cup: it is the POWER tap. 2 ft needs 0.119
+  power units, the needle covers that in 189 ms, and a casual thumb's spread is +/- 90 ms. **Putts
+  are missed SHORT and the next one is the same putt.** This is now the third session to find it;
+  the two previous fixes (a steeper `PUTT_GAMMA`, a slower putter tempo) were both reverted by Matt
+  within hours, and he set the constraint explicitly: *leave the dial and the tempo alone.* Every
+  green stall that survives the fixes above is this - 45 of them in 540 holes, all from inside 3 ft.
+  It needs Matt's call, not a fourth unprompted attempt.
+- **Seven of the eighteen greens force a putt longer than the putter's 60 ft range** from the far
+  fringe (71, 71, 72, 68, 64, 62, 62 ft). A perfect lag leaves 2-13 ft, so it is a two-putt rather
+  than a trap. Red Mesa is the KINDEST of the three courses on this measure: the farthest point of
+  a green complex from its own pin averages 59 ft here against Pine Valley's 68 and Oasis Sands' 89.
+- **The pin is off screen at address on 15 of 18 holes and under the top HUD on the other three.**
+  The clear band holds 122 yds at the 95-yard view; the shortest hole here is 139. This is the
+  known open item ("only 2 of the 5 aim dots are on screen"), and this file already calls the fix a
+  feel call. Fixing it means a wider view on short holes, which is Matt's to decide.
+- **Hole 11 "High Noon" is where the strokes go**, and it is the design rather than a defect: 17 of
+  30 rounds took three or more penalty strokes in a row there. It is 171 yds with 100 yds of water
+  in the middle, and the drop leaves 130 yds with 84 % of the line still over the lake - a shot an
+  8 iron makes and a wedge does not. Recorded because it is by far the biggest single source of
+  penalty strokes on the course; if Matt wants it softened, the lever is the lake's `ry`.
+- **The over-swing is NOT dominant, and a probe that said otherwise was wrong.** Measured the way
+  `_fire` actually resolves a shot (THE MISHIT GOES INTO `aimRad`, NOT `mishitDeg` - get that wrong
+  and the spray vanishes and the over-swing looks free): driver off a fairway, dead-centre strike,
+  100 % gives 253.7 yds total and 0.0 offline; the top of the arc gives 284.7 and **29.2 yds
+  offline**. That is Matt's own 240-245 carry and 20-30 yds offline, holding. On corridors 9-19 yds
+  wide, 29 yds offline is the desert. The "probably still dominant" note earlier in this file is
+  stale.
+- Everything numeric was swept for nonsense and none was found: no NaN, no negative carry, no putt
+  that outran the meter, no zero-power putt that moved the ball, no ball resting in water without a
+  penalty, and the club ladder cycles the right number of clubs from every lie.
+
+### The harness, and why the shipped test could not see the softlock
+
+`golf/js/test.js`'s section 14 plays each hole by SEARCHING 66 club/aim/power options per shot and
+taking any that is not blocked and not water. That is the right test for "can this hole be
+finished", and it is exactly why it reported no softlock on courses that had them: **a player does
+not search.** They take the club the game offers and the aim the game hands them, and swing. Any
+future playtest harness has to do the same, or it will keep proving the physics can do something no
+person can make it do - which is the first playtest's own lesson ("THE TEST SUITE ASSERTED THE WRONG
+THING") applied one level up. All three of tonight's sessions arrived at the same harness shape
+independently.

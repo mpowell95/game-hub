@@ -20,6 +20,7 @@ import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
 import { STRINGS } from './strings.js';
+import { BEHIND_TEE_YD } from './holegen.js';
 import fs from 'node:fs';   // section 12b reads the shipped ui.js/render.js as text
 
 let fail = 0;
@@ -1755,6 +1756,161 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
     ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
   }
 }
+
+console.log('\n-- 16. the RUN-OUT meets what is on the ground (2026-09-07, Red Mesa) --');
+// Section 10c above covers the ball that cannot be freed and the ball that finishes off the map.
+// This is the other half of the same playtest: `rollWatchingCup` was a bare straight line that
+// consulted nothing but the cup, so a ball ON THE GROUND passed through solid objects and ignored
+// the surface it was rolling over. Measured on the course whose whole identity is that a boulder
+// "blocks at any height, from any club".
+{
+  const DEGR = Math.PI / 180;
+  let throughTrunk = 0;
+  let dryAcrossWater = 0;
+  let firstTrunk = '';
+  let firstWet = '';
+  for (const c of COURSES) {
+    for (const h of c.holes) {
+      const trees = treesOf(h);
+      for (let a = -25; a <= 25; a += 3) {
+        for (const club of [CLUBS[0], CLUBS[1], CLUBS[4]]) {
+          const r = SH.resolveShot({ hole: h, from: [...h.tee], aimRad: a * DEGR, club, power: 1, mishitDeg: 0 });
+          if (!(r.rollYd > 0.5) || r.blocked || r.penalty) continue;
+          const N = 120;
+          for (let i = 0; i <= N; i++) {
+            const q = i / N;
+            const x = r.landing[0] + (r.rest[0] - r.landing[0]) * q;
+            const y = r.landing[1] + (r.rest[1] - r.landing[1]) * q;
+            if (surfaceAt(h, x, y) === 'water') {
+              dryAcrossWater++;
+              if (!firstWet) firstWet = `${c.id} hole ${h.n}, ${club.id} rolling ${r.rollYd.toFixed(0)} yds`;
+              break;
+            }
+            let hit = null;
+            for (const t of trees) {
+              const ty = h.treeTypes[t.type];
+              if (Math.hypot(x - t.x, y - t.y) <= ty.trunk * (t.s || 1) * 0.9) { hit = ty; break; }
+            }
+            if (hit) {
+              throughTrunk++;
+              if (!firstTrunk) firstTrunk = `${c.id} hole ${h.n}, ${club.id} through a ${hit.name || 'trunk'}`;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  // [KNOWN-BUG PROBE] Born red at 9: a 3 wood on Red Mesa 12 ran 31 yds and passed through a
+  // BOULDER after 7 of them, on a course that says in its own header that a boulder is solid to
+  // everything from anywhere.
+  ok('[KNOWN-BUG PROBE] a rolling ball does not pass through a trunk', throughTrunk === 0,
+    `${throughTrunk} did, e.g. ${firstTrunk}`);
+  // [KNOWN-BUG PROBE] Born red at 6: a drive on Red Mesa 13 pitched short of the gorge, ran 33 yds
+  // ACROSS the water and finished dry in the bunker beyond, with no penalty at all.
+  ok('[KNOWN-BUG PROBE] a rolling ball does not cross water and finish dry', dryAcrossWater === 0,
+    `${dryAcrossWater} did, e.g. ${firstWet}`);
+
+  // THE FLAT RUN-OUT IS UNCHANGED by the integration that lets a green's slope act on it. These
+  // are Matt's own reference-measured totals and the integration has to reproduce them to the yard,
+  // or a fix to how a green plays has quietly re-tuned every drive in the game.
+  const flat = {
+    n: 1, par: 5, cardYards: 600, tee: [0, 5], pin: [0, 595],
+    bounds: { minX: -300, maxX: 300, minY: -60, maxY: 700 }, base: 'fairway',
+    surfaces: [{ kind: 'fairway', poly: [[-300, -60], [300, -60], [300, 700], [-300, 700]] },
+      { kind: 'green', poly: 'green' }],
+    green: { poly: [[-1, 594], [1, 594], [1, 596], [-1, 596]], slope: { cols: 1, rows: 1, cells: [[0, 0]] } },
+    treeTypes: [], trees: [], treeBelts: [], decor: [], wind: { speed: 0, bearing: 0 },
+  };
+  for (const club of [CLUBS[0], CLUBS[6], CLUBS[13]]) {
+    const r = SH.resolveShot({ hole: flat, from: [0, 5], aimRad: 0, club, power: 1, mishitDeg: 0 });
+    near(`a FLAT run-out still covers its nominal roll (${club.id}: ${r.rollYd.toFixed(1)} nominal)`,
+      distYd(r.landing, r.rest), r.rollYd, 0.35);
+  }
+
+  // AND THE GREEN'S SLOPE NOW REACHES IT AT ALL, which it did not: every crown and steep green on
+  // Red Mesa ran an approach in a dead straight line for its whole length, on a course that says
+  // four of its greens throw a ball off.
+  //
+  // MEASURE THIS ON A SYNTHETIC GREEN, NOT A REAL ONE. On a crown the gradient reverses past the
+  // pin, so a run-out that climbs to the top and rolls down the far side covers exactly what a
+  // flat one does and reads as no effect; and a run-out aimed AT a pin is holed by the old
+  // straight-line code too, so a single number can pass while the slope is read nowhere. Both of
+  // those wasted a pass when this was written.
+  {
+    const gh = {
+      n: 1, par: 4, cardYards: 300, tee: [0, 5], pin: [0, 295],
+      bounds: { minX: -80, maxX: 80, minY: -60, maxY: 380 }, base: 'fairway',
+      surfaces: [{ kind: 'fairway', poly: [[-80, -60], [80, -60], [80, 380], [-80, 380]] },
+        { kind: 'green', poly: 'green' }],
+      green: { poly: [[-30, 170], [30, 170], [30, 230], [-30, 230]],
+        slope: { cols: 1, rows: 1, cells: [[0, -0.8]] } },      // falls straight back to the tee
+      treeTypes: [], trees: [], treeBelts: [], decor: [], wind: { speed: 0, bearing: 0 },
+    };
+    const start = [-14, 200];                                    // on the green, nowhere near the cup
+    const up = SH.rollWatchingCup(gh, start, 0, 5);              // straight up the hole: UPHILL
+    const down = SH.rollWatchingCup(gh, start, Math.PI, 5);      // back toward the tee: DOWNHILL
+    const across = SH.rollWatchingCup(gh, start, Math.PI / 2, 5);
+    const upYd = distYd(start, up.rest);
+    const downYd = distYd(start, down.rest);
+    const bend = Math.abs(across.rest[1] - start[1]);
+    ok(`[KNOWN-BUG PROBE] a green's slope reaches a RUN-OUT, not just a putt (5.0 asked: ${upYd.toFixed(2)} up, ${downYd.toFixed(2)} down)`,
+      downYd - upYd > 0.15,
+      'a run-out covers the same ground up the slope as down it - slopeAt is not being read');
+    ok(`...and it BENDS one rolling across the slope (${bend.toFixed(2)} yds off line over 5)`,
+      bend > 0.05, 'a run-out across a slope stayed dead straight');
+  }
+}
+
+console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-09-07, Red Mesa) --');
+// A scored round writes NOTHING until it is complete (`_recordRound` guards on it) and there is no
+// resume, so leaving one throws it away. Section 12b2 above covers the HUB's back pill; there are
+// two more doors out of a round and both were one unguarded tap: the game's own quit button, top
+// left in the corner a thumb reaches for first, and the result card's close. Read as text, because
+// the DOM half is not testable here and a structural check is what stops the rule going away.
+{
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] the quit button asks first', /q\('quit'\), 'click', \(\) => this\._quit\(\)/.test(ui));
+  // ...but a PRACTICE hole is not a round and must still leave instantly, or the prompt that
+  // matters becomes the one the player has learned to dismiss. That is why the quit button has its
+  // own narrower test rather than reusing the hub's `isInProgress()`, which answers true for one.
+  ok('...and it gates on a scored round, not on a practice hole',
+    /_roundAtStake\(\)\s*\{[\s\S]{0,300}?roundId !== 'practice'/.test(ui)
+    && /_quit\(before\)[\s\S]{0,200}?_roundAtStake\(\)/.test(ui));
+  ok("...and so does the result card's own close", /const close = \(\) => this\._quit\(/.test(ui));
+  ok('...and the prompt is named in both languages',
+    ['quit_title', 'quit_body', 'quit_yes', 'quit_no']
+      .every((k) => typeof STRINGS.en[k] === 'string' && STRINGS.en[k]
+        && typeof STRINGS.es[k] === 'string' && STRINGS.es[k]));
+  // [KNOWN-BUG PROBE] The false "new best" that outlived the round that set it, and so appeared on
+  // the result card of every hole of every round after it.
+  ok('[KNOWN-BUG PROBE] a new round clears the "best saved" flag',
+    (ui.match(/this\.newBest = false;/g) || []).length >= 2);
+}
+
+console.log('\n-- 16b. the camera can frame the ball where the HUD rule asks (2026-09-07) --');
+// `_keepBallAndCupClear` exists because Matt said "I need the hole to never be covered by the on
+// screen controls". Measured at address on Red Mesa 1 at both phone heights, `cam.clamp()` then
+// OVERRULED it - the frame's bottom edge fell 9.7 yds outside `bounds` - and the ball was drawn
+// 40 px lower than the game's own rule asked for, hard against the aim row, on every hole of every
+// course. `BEHIND_TEE_YD` was 45, chosen when VIEW_W_YDS was 70; the view opened to 95 and it did
+// not move with it.
+{
+ // VIEW_W_YDS is read out of render.js as TEXT: that file is a painter and importing it here
+ // would drag a canvas in. Section 12b already reads it the same way, for the same reason.
+  const renderSrc = fs.readFileSync(new URL(`./render.js`, import.meta.url), 'utf8');
+  const viewW = Number((renderSrc.match(/VIEW_W_YDS\s*=\s*([\d.]+)/) || [])[1]);
+  ok(`render.js still states a VIEW_W_YDS (${viewW})`, Number.isFinite(viewW) && viewW > 0);
+  const need = 0.5 * (852 / 2) / (393 / viewW);          // half the frame, at the tall phone
+  ok(`[KNOWN-BUG PROBE] a hole's bounds reach far enough behind the tee for the camera (${BEHIND_TEE_YD} yds, needs ${need.toFixed(1)})`,
+    BEHIND_TEE_YD >= need, 'the bounds clamp will overrule the framing rule again');
+  for (const c of COURSES) {
+    const short = c.holes.filter((h) => h.tee[1] - h.bounds.minY < need);
+    ok(`${c.id}: every hole has that room behind its tee`, short.length === 0,
+      short.map((h) => `hole ${h.n} has ${(h.tee[1] - h.bounds.minY).toFixed(0)}`).join(', '));
+  }
+}
+
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);
