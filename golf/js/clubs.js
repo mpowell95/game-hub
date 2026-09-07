@@ -187,8 +187,34 @@ export function rollFactor(kind, club) {
  *  complaint is about the GREEN ZONE'S WIDTH, and it is answered by `swingZone` below.
  *
  *  The single speed is `swing.js`'s UP_MS / DOWN_MS. */
-export function swingTempo() {
-  return { upMs: UP_MS, downMs: DOWN_MS };
+/** THE PUTTER'S BACKSWING IS SLOWER, and only the putter's, and only the BACKSWING.
+ *
+ *  Matt, 2026-09-06, on missing a 2.7 ft putt: *"Short putts are hard to hit correctly because the
+ *  meter doesn't let you hit it that soft. If you tap that fast it selects something to copy."*
+ *
+ *  Measured through the real resolver: a 2 ft putt holed for any power from 8.4 % to 25.9 %, which
+ *  at 1585 ms per power unit is a second tap **132 to 411 ms** after the first. That is not a golf
+ *  problem, it is a DOUBLE TAP - iOS reads two taps that close together as select-a-word, which is
+ *  the copy bar he saw. The window was never reachable with a deliberate press.
+ *
+ *  The multiplier is not invented. `swingTempo`'s own history records the reference's needle
+ *  measured frame by frame: 2.18 deg/frame for a driver against **1.53 for the putter** - the
+ *  putter's needle really is about 0.70x the speed, so 1/0.70 = 1.42x the duration. That
+ *  measurement was taken in the pass that shipped per-club tempo for the WHOLE BAG and was reverted
+ *  on Matt's instruction (*"I did NOT instruct you to change anything about tempo"*). This applies
+ *  it to the one club he is now asking about, and to nothing else.
+ *
+ *  DOWNSWING IS UNTOUCHED. That half is the accuracy bar - the LINE, not the pace - and there is no
+ *  complaint about the line. Slowing it would have made every putt easier to strike cleanly, which
+ *  is not what was asked for.
+ *
+ *  With `PUTT_GAMMA` at 2.0, the 2 ft window becomes 309-763 ms: it opens past the double-tap
+ *  threshold and is 454 ms wide. See DECISIONS in golf/CLAUDE.md, "Short putts could not be tapped
+ *  softly enough". */
+export const PUTTER_UP_MUL = 1.42;
+export function swingTempo(club) {
+  const putting = club && club.id === 'putter';
+  return { upMs: putting ? Math.round(UP_MS * PUTTER_UP_MUL) : UP_MS, downMs: DOWN_MS };
 }
 
 /** HOW WIDE THE GREEN ZONE IS FOR THIS CLUB, as a multiplier on the accuracy band.

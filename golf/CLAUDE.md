@@ -3084,3 +3084,74 @@ it is rule 3's archive route: mint NEW round and hole keys for the re-numbered c
 id, or a new suffix), leave `pinevalley3` and every `pinevalley:<n>` untouched and never written
 again, and keep SHOWING the old record on My Stats under an honest label saying which layout it was
 set on. That is a bigger job than moving two holes and it is his call.
+
+## Short putts could not be tapped softly enough (2026-09-06)
+
+Matt, after a Pine Valley round, on missing a 2.7 ft putt: *"Short putts are hard to hit correctly
+because the meter doesn't let you hit it that soft. If you tap that fast it selects something to
+copy."*
+
+**Both halves of that are one measurement.** The holing window for a short putt, swept through the
+real resolver at 0.05 % steps rather than estimated:
+
+| putt | holes for | which is, after the first tap |
+|---|---|---|
+| 1 ft | 1.9-23.5 % | 30-372 ms |
+| 2 ft | 8.4-25.9 % | **132-411 ms** |
+| 3 ft | 12.5-28.3 % | 198-449 ms |
+| 5 ft | 19.0-32.6 % | 300-516 ms |
+
+A second tap inside about 300 ms is a DOUBLE TAP. iOS reads that as select-a-word, hunts for the
+nearest selectable text and puts the Copy bar over the game — which is the thing Matt saw, and it
+means the window for a tap-in was not merely narrow, it was in a place a deliberate press could not
+reach without the OS taking the gesture.
+
+Two levers, because they do different jobs, and the numbers are measured for both:
+
+- **`PUTT_GAMMA` 1.6 -> 2.0** (`shot.js`) decides WHERE on the meter a putt sits. 2 ft moves from
+  132-411 ms to 218-537 ms. This is the same lever that was set to 1.6 on 2026-09-05 for the same
+  complaint; the earlier pass measured distance rather than holing, which is why it read as fixed.
+- **`PUTTER_UP_MUL` 1.42** (`clubs.js`) decides how many milliseconds a given slice of the meter is
+  worth. The putter's BACKSWING only — 1585 -> 2251 ms. Not invented: `swingTempo`'s own header
+  records the reference's needle at 2.18 deg/frame for a driver and **1.53 for the putter**, so the
+  putter's needle is 0.70x the speed. That measurement was taken in the pass that shipped per-club
+  tempo for the whole bag and was reverted on Matt's instruction; this applies it to the one club he
+  is now asking about and to nothing else.
+
+Together: **a 2 ft putt holes for a tap 309-763 ms after the first**, a 454 ms window that opens
+past the double-tap threshold. `test.js` section 8b still asserts one tempo for the other fourteen
+clubs, and now also asserts that the putter's backswing is the slower one and that its DOWNSWING is
+not — that half is the accuracy bar, the line rather than the pace, and there was no complaint
+about the line.
+
+**The cost, stated: long putts got harder.** Distance goes as `power ** gamma`, so at 2.0 a given
+pace error costs more distance than at 1.6. That is the right way round for a player who shoots 8
+under, but it is a real change and it is not free.
+
+### The copy bar itself
+
+Hill Climb's four-layer fix, ported (`hill-climb/CLAUDE.md`, "the copy/paste screen pops up"). Golf
+already had layers 1 and 2 (`-webkit-user-select`/`touch-callout`/`tap-highlight-color` on
+`.gf-root *`, and `pointer-events: none` on button labels). It now has the two that actually hold:
+
+3. **A non-passive `touchstart` on the swing button that calls `preventDefault()`**, which is what
+   stops the gesture ever starting. Because that makes the synthesised pointer events unreliable,
+   touch drives the button directly and the pointer handler early-returns on
+   `pointerType === 'touch'` — one authoritative path per input device.
+4. **A `selectstart` block plus a `selectionchange` backstop** that drops any selection anchored
+   inside `.gf-root`, whichever gesture path Safari took.
+
+A three-tap swing REQUIRES fast taps, so this is not an edge case in this game the way it is in
+most: the fix belongs here permanently.
+
+### The aim ladder is cut to the putt in hand
+
+Matt, on the same round: *"the lines are weird."* The putting ladder is 15/30/45/60 ft whatever the
+putt, so from a 2.7 ft tap-in it ran twenty times the length of the shot, off the green and out of
+frame — the biggest thing on screen, describing a putt nobody was playing.
+
+`ui.js` passes `puttReach` (twice the distance to the hole, floored at 12 ft) and `render.js` drops
+the dots past it. **Dots are dropped, never moved**, so every dot still sits at the distance its arc
+tick names — the agreement between the ladder and the arc that the 2026-09-06 fix established is
+untouched. A tap-in cuts every dot and draws a plain short line; that branch is explicitly handled
+(the old code would have read `dots[-1]`).

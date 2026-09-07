@@ -353,11 +353,20 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
   // speed per club, which came out of the measuring pass rather than out of the playtest list -
   // "I did NOT instruct you to change anything about tempo." The measurement stands and is recorded
   // in clubs.js's swingTempo header; shipping it was the mistake, not measuring it.
-  const speeds = new Set([...CLUBS, PUTTER].map((c) => {
+  // 2026-09-06: THE PUTTER IS THE ONE EXCEPTION, and only on the BACKSWING. Matt: "short putts are
+  // hard to hit correctly because the meter doesn't let you hit it that soft. If you tap that fast
+  // it selects something to copy." A 2 ft putt's holing window opened 132 ms after the first tap -
+  // inside iOS's double-tap gesture. The rule this block guards is unchanged for the other
+  // fourteen clubs; see clubs.js's PUTTER_UP_MUL.
+  const speeds = new Set(CLUBS.map((c) => {
     const t = CL.swingTempo(c);
     return `${t.upMs}/${t.downMs}`;
   }));
   ok('every club in the bag swings at the same speed', speeds.size === 1, [...speeds].join(', '));
+  const putt = CL.swingTempo(PUTTER);
+  const full = CL.swingTempo(CLUBS[0]);
+  ok(`the putter's BACKSWING is slower (${full.upMs} -> ${putt.upMs} ms)`, putt.upMs > full.upMs * 1.2);
+  ok('...and its downswing - the accuracy bar - is not', putt.downMs === full.downMs);
   ok('...and that speed is the Swing\'s own default',
     CL.swingTempo().upMs === SW.UP_MS && CL.swingTempo().downMs === SW.DOWN_MS);
   ok('the downswing is still faster than the backswing', SW.DOWN_MS < SW.UP_MS,
