@@ -3381,7 +3381,7 @@ things a person actually has - a wedge when in trouble, and the aim arrows to fi
 flags started meaning something. Worth remembering for the next hunt: a bad player model mostly
 finds its own bad play.
 
-### Six bugs, all fixed
+### Seven bugs, all fixed
 
 1. **A shot that hit a trunk could move the ball 0.00 yds.** `resolveShot` dropped a blocked ball
    at `max(0, along - 2)`, so a trunk within two yards left it exactly where it was struck - same
@@ -3428,6 +3428,14 @@ finds its own bad play.
    hundred rounds (hole 17, at 23.5/261.6), rare enough to have been invisible. The clearance is
    now universal, and it defers to the drop rule: a penalty drop is never pushed back inside
    `MIN_DROP_YD` of the divot to get it out from under a tree.
+
+7. **Leaving mid-round threw it away without a word.** `isInProgress()` returned a flat `false` on
+   the grounds that golf "will snapshot after every stroke in Stage C, so leaving is lossless" -
+   and that snapshot does not exist: `gamehub.golf.v1` holds the last course, round and length and
+   nothing else. So the pair was the wrong one, no save AND no warning, and the hub's back pill on
+   the fifteenth hole of an eighteen discarded the round silently. It now reports a round in
+   progress while a hole is mounted and the round is unrecorded, so the hub asks first. When the
+   Stage C save lands this goes back to `false` in the same commit that adds it.
 
 ### Measured and deliberately NOT changed
 

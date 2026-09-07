@@ -1174,6 +1174,20 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
     cupPx > BALL_R_PX);
 }
 
+console.log('\n-- 12b2. LEAVING MID-ROUND IS NOT SILENT --');
+{
+  // [KNOWN-BUG PROBE] `isInProgress()` returned a flat false on the grounds that golf "will
+  // snapshot after every stroke in Stage C, so leaving is lossless". The snapshot does not exist -
+  // gamehub.golf.v1 holds the last course, round and length and nothing else - so the pair was no
+  // save AND no warning, and the hub took you out of the fifteenth hole of an eighteen without a
+  // word. Until the Stage C save lands this must report a round in progress so the hub can ask.
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] a round in progress is reported to the hub',
+    /isInProgress\(\)\s*\{\s*return\s*!!\(this\.hole/.test(ui)
+    && !/isInProgress\(\)\s*\{\s*return false;/.test(ui),
+    'a flat false means the hub discards the round with no confirm, and there is no save to resume');
+}
+
 console.log('\n-- 12c. THE GOLFER STANDS STILL, AND THE VIEW DOES NOT SLIDE --');
 // Both read the shipped files as text, because both defects are about WHICH VALUE a line uses -
 // there is no engine call that can be wrong here, and both were invisible to every other suite.

@@ -1723,10 +1723,20 @@ class GolfGame {
     this.rootEl = null; this.canvas = null; this.ctx = null; this.map = null;
   }
 
-  /** Autosave/resume meaning (docs/BUILDING-A-GAME.md): golf will snapshot after every stroke in
-   *  Stage C, so leaving is lossless and this returns false for ordinary play. Until that save
-   *  exists there is nothing to resume and nothing to warn about either way. */
-  isInProgress() { return false; }
+  /** THE HUB ASKS BEFORE IT TAKES YOU OUT OF A ROUND (2026-09-07).
+   *
+   *  This returned a flat `false`, on the grounds that golf "will snapshot after every stroke in
+   *  Stage C, so leaving is lossless". That snapshot does not exist: `gamehub.golf.v1` holds the
+   *  last course, round and length and nothing else. So the two halves were the wrong pair -
+   *  no save AND no warning - and tapping the hub's back pill on the fifteenth hole of an
+   *  eighteen threw the whole round away without a word.
+   *
+   *  `true` here is the OTHER honest answer (docs/BUILDING-A-GAME.md, "isInProgress()'s two-plus
+   *  meanings"): there is nothing to resume, so say so and let the hub confirm. A hole is mounted
+   *  only while a round is actually being played, and `recorded` is set the moment a round is
+   *  written, so the last card and the setup screen do not nag. When the Stage C save lands this
+   *  should go back to false in the same commit that adds it. */
+  isInProgress() { return !!(this.hole && !this.recorded); }
 }
 
 let instance = null;
