@@ -480,6 +480,48 @@ passes is enough, because the offset barely moves once the distance settles.
 earlier the same day and its label was never added to `strings.js`. Both languages have it now, and
 every label `_award()` can emit is checked against both dictionaries.
 
+## The readability pass (2026-09-07)
+
+The last batch of the visual plan, and the one that could only be judged after the rest of it
+existed. Two complaints from the same root: *"the ball gets lost."*
+
+**The probe that made it arguable rather than a matter of taste.** `_read.mjs` (scratch, not
+shipped) freezes the world, parks the ball ON the left inlane rail - the busiest piece of furniture
+on the table and the hardest place to see it - and shoots the lower playfield at 3x. Before the
+pass, the ball in that frame is a grey speck indistinguishable from the rail under it. That is the
+whole case.
+
+### The ball was a mirror with nothing to reflect
+
+The model's `steel-ball` is roughness 0.08, metalness 0.4, and `three-d-stage.js`'s own header warns
+about exactly this: there is **no environment map** in this scene, "so high metalness has nothing to
+reflect and renders near-black. Cap metalness around 0.3-0.4 and carry a metal look with a brighter
+base color." At 0.4 the ball rendered as a dull grey dot. Lower metalness, a white base and a little
+emissive is the model's advice **followed**, not overridden.
+
+### It cast no shadow, and could not
+
+`castShadow` was already true. It made no difference: the shadow map is 1024 texels across a
+640x920 area, so a ball of radius 9 casts a shadow about **two texels** wide. Each ball carries its
+own painted contact shadow now - and on the ramp that shadow stays on the DECK and shrinks with
+height, which is what tells you the ball is up on the wire rather than on the playfield.
+
+### Forty painted lenses were out-shining the one thing that moves
+
+The bumper rings and the slingshot lamps are lights and should read as lights. The lamp lenses
+scattered over the deck are **paint**, and at the model's full emissive intensity forty of them beat
+the ball. They have their own materials at about a quarter of the emission.
+
+### Three rails a side is a cage, not a playfield
+
+Every rail was chrome and 8-9 wide, which put three and four near-parallel light-grey lines down
+each side of the lower playfield. Two rules now, and `ART.rails` is where they live:
+
+- **Anything the cabinet already draws is not drawn twice.** The left wall from the arch down to the
+  funnel, and the whole right cabinet edge, were duplicates running alongside the cabinet band at a
+  different height.
+- **Structure is steel; a guide the ball RIDES is chrome.** So the lanes read and the walls recede.
+
 ## The rules
 
 - 3 balls (5 on Casual). Ball save at the start of each ball, 12 / 8 / 3 seconds by table.

@@ -224,10 +224,25 @@ export class Renderer {
       magenta: std(C.magenta, { roughness: 0.3, emissive: C.magenta, emissiveIntensity: 0.5 }),
       cyan: std(C.cyan, { roughness: 0.3, emissive: C.cyan, emissiveIntensity: 0.5 }),
       amber: std(C.amber, { roughness: 0.35, emissive: C.amber, emissiveIntensity: 0.45 }),
+      // The same three at a quarter of the emission, for the PAINTED lamp lenses. The bumper
+      // rings and the slingshot lamps are lights and should read as lights; the forty-odd lenses
+      // scattered over the deck are paint, and at full emission forty of them out-shine the one
+      // small moving thing the player is trying to follow.
+      lensMagenta: std(C.magenta, { roughness: 0.45, emissive: C.magenta, emissiveIntensity: 0.13 }),
+      lensCyan: std(C.cyan, { roughness: 0.45, emissive: C.cyan, emissiveIntensity: 0.13 }),
+      lensAmber: std(C.amber, { roughness: 0.5, emissive: C.amber, emissiveIntensity: 0.12 }),
       violet: std(C.violet, { roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.82 }),
       rubber: std(C.rubber, { roughness: 0.72 }),
       cap: std(C.cap, { roughness: 0.22 }),
-      ball: std(C.ball, { roughness: 0.08, metalness: 0.4 }),
+      // THE BALL, AND WHY IT IS NOT THE MODEL'S 0.4 METALNESS. three-d-stage.js's own header says
+      // it plainly: there is NO environment map in this scene, "so high metalness has nothing to
+      // reflect and renders near-black. Cap metalness around 0.3-0.4 and carry a metal look with a
+      // brighter base color." At 0.4 with roughness 0.08 the ball is a mirror with nothing to
+      // mirror - it came out a dull grey speck, and a readability probe that parked it on the
+      // inlane rail could not pick it out from the rail at all. Lower metalness, brighter base and
+      // a little emissive so it never sinks into a shadow: this is the model's advice followed,
+      // not overridden.
+      ball: std(0xffffff, { roughness: 0.22, metalness: 0.12, emissive: 0xb9c6d8, emissiveIntensity: 0.34 }),
     };
   }
 
@@ -589,17 +604,17 @@ export class Renderer {
     this.parts3.lamps = [];
     for (let i = 0; i < 11; i++) {
       const a = Math.PI * (0.14 + 0.72 * i / 10);
-      lens(ARCH.cx - Math.cos(a) * 205, ARCH.cy - Math.sin(a) * 152, i % 3 ? this.M.cyan : this.M.magenta, 4.5);
+      lens(ARCH.cx - Math.cos(a) * 205, ARCH.cy - Math.sin(a) * 152, i % 3 ? this.M.lensCyan : this.M.lensMagenta, 4.5);
     }
     for (const [x, z] of ART.lanes) this.parts3.lamps.push(lens(x, z, this.M.cyan, 7));
     for (let i = 0; i < 4; i++) {
-      lens(18, 468 + i * 30, this.M.amber, 4.5);
-      lens(W - 52, 468 + i * 30, this.M.amber, 4.5);
+      lens(18, 468 + i * 30, this.M.lensAmber, 4.5);
+      lens(W - 52, 468 + i * 30, this.M.lensAmber, 4.5);
     }
     for (let i = 0; i < 3; i++) {
-      lens(ART.rosette.x - 84 + i * 22, 470, this.M.amber, 4.5);
-      lens(ART.rosette.x + 40 + i * 22, 470, this.M.amber, 4.5);
-      lens(AXIS - 30 + i * 30, DRAIN_Y - 26, this.M.magenta, 4.5);
+      lens(ART.rosette.x - 84 + i * 22, 470, this.M.lensAmber, 4.5);
+      lens(ART.rosette.x + 40 + i * 22, 470, this.M.lensAmber, 4.5);
+      lens(AXIS - 30 + i * 30, DRAIN_Y - 26, this.M.lensMagenta, 4.5);
     }
 
     // the arrow inserts game.js lights: a low triangular prism per shot
@@ -668,11 +683,38 @@ export class Renderer {
     }
 
     // --- balls ----------------------------------------------------------------------------------------------------
+    // EACH BALL CARRIES ITS OWN CONTACT SHADOW, and it is not decoration. The scene's shadow map
+    // is 1024 texels across a 640x920 area, so a ball of radius 9 casts a shadow about two texels
+    // wide - which is to say none. Without it the ball reads as floating and you cannot tell what
+    // it is over, which is half of why it got lost. A painted contact shadow is what every 2D
+    // pinball game has used for the same reason.
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      const g2 = cv.getContext('2d');
+      const grd = g2.createRadialGradient(32, 32, 2, 32, 32, 31);
+      grd.addColorStop(0, 'rgba(0,0,0,0.62)');
+      grd.addColorStop(0.55, 'rgba(0,0,0,0.30)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g2.fillStyle = grd;
+      g2.fillRect(0, 0, 64, 64);
+      this._shadowTex = new THREE.CanvasTexture(cv);
+    }
     this.parts3.balls = [];
+    this.parts3.ballShadows = [];
     for (let i = 0; i < 4; i++) {
       const b = this._add(root, new THREE.SphereGeometry(9, 22, 14), this.M.ball, 0, 9, 0);
       b.visible = false;
       this.parts3.balls.push(b);
+      const sh = new THREE.Mesh(
+        new THREE.PlaneGeometry(24, 24),
+        new THREE.MeshBasicMaterial({ map: this._shadowTex, transparent: true, depthWrite: false }),
+      );
+      sh.rotation.x = -Math.PI / 2;
+      sh.position.y = 0.9;
+      sh.visible = false;
+      root.add(sh);
+      this.parts3.ballShadows.push(sh);
     }
   }
 
@@ -941,15 +983,30 @@ export class Renderer {
       if (!b.live || n >= P.balls.length) continue;
       const m = P.balls[n++];
       m.visible = true;
+      const sh = P.ballShadows[n - 1];
       if (b.held && b.ramp != null) {
         // riding the habitrail: follow the ramp curve so the ball is visibly up on the wire
         const p = this.parts3.rampCurve.getPointAt(clamp(b.ramp, 0, 1));
-        m.position.set(p.x, p.y + 11, p.z);   // the curve is already in world space
+        m.position.set(p.x, p.y + 11, p.z);
+        // the shadow stays on the DECK below it, and shrinks with height - which is what tells
+        // you the ball is up on the ramp rather than on the playfield
+        sh.visible = true;
+        sh.position.set(p.x, 0.9, p.z);
+        const k = clamp(1 - p.y / 90, 0.35, 1);
+        sh.scale.setScalar(0.7 + k * 0.5);
+        sh.material.opacity = 0.25 + k * 0.75;
       } else {
         m.position.set(b.x, 9, tz(b.y));
+        sh.visible = true;
+        sh.position.set(b.x, 0.9, tz(b.y));
+        sh.scale.setScalar(1);
+        sh.material.opacity = 1;
       }
     }
-    for (let i = n; i < P.balls.length; i++) P.balls[i].visible = false;
+    for (let i = n; i < P.balls.length; i++) {
+      P.balls[i].visible = false;
+      P.ballShadows[i].visible = false;
+    }
 
     // The shadow map only has to be redrawn when something that casts one has actually moved:
     // the paddles, the ball, or a drop target on its way down.
