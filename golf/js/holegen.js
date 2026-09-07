@@ -438,6 +438,25 @@ export const BREATHE = 0.20;
  *  station IS an asymmetric corridor. */
 export const CURVE_ASYM = 0.42;
 
+/** How far a hole's bounds run BEHIND its tee, in yards.
+ *
+ *  IT WAS 45 AND THAT WAS SHORT BY TEN, WHICH THE CAMERA WAS QUIETLY PAYING (2026-09-07).
+ *
+ *  45 was chosen when render.js's VIEW_W_YDS was 70 and the frame was 76 yards deep. The view
+ *  opened to 95 on 2026-09-04 and this number did not move with it, so the room the camera needs
+ *  behind the tee grew and the room it had did not. Measured at address on Red Mesa 1 at BOTH
+ *  phone heights: ui.js's `_aimCamera` asks for a camera y, `_keepBallAndCupClear` corrects it to
+ *  hold the ball clear of the bottom controls, and then `cam.clamp()` OVERRULES BOTH, because the
+ *  frame's bottom edge would fall 9.7 yds outside `bounds`. The ball ended up 40 px lower than the
+ *  game's own rule asked for - 666 of 852, hard against the aim row - on every hole of every
+ *  course, and the rule written to prevent exactly that was silently discarded.
+ *
+ *  The camera's bottom edge wants to sit 54.7 yds behind the tee (the same number at 852 and at
+ *  664 px, because the HUD rule pins the ball a fixed number of PIXELS above the bottom panels).
+ *  60 is that with headroom for a taller phone, a safe area or a bigger panel. IT TRACKS
+ *  VIEW_W_YDS: if the view opens up again, this has to grow again. */
+export const BEHIND_TEE_YD = 60;
+
 /** 3. IT PINCHES WHERE THE BALL LANDS. A corridor of even width asks nothing of the player: the
  *  drive is as safe at 215 yds as at 140. The stock ladder says a drive carries 215 and a 3 wood
  *  195, so a hole knows its own landing zones from its par and its length, and that is where the
@@ -984,7 +1003,7 @@ export function makeHole(spec) {
   // every polygon has to sit inside them (validateHole checks it), and a hand-written box is one
   // more thing to forget when a bunker moves.
   //
-  // The 45 yards BEHIND the tee is not slack: the camera clamps itself inside bounds, so a hole
+  // The yards BEHIND the tee are not slack: the camera clamps itself inside bounds, so a hole
   // that stopped at its own tee would pin the ball to the bottom edge of the screen, underneath
   // the club tile and the aim row, for the whole tee shot.
   let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity;
@@ -1000,7 +1019,7 @@ export function makeHole(spec) {
   const bounds = {
     minX: Math.floor(minX - 8),
     maxX: Math.ceil(maxX + 8),
-    minY: Math.floor(Math.min(minY - 8, tee[1] - 45)),
+    minY: Math.floor(Math.min(minY - 8, tee[1] - BEHIND_TEE_YD)),
     maxY: Math.ceil(Math.max(maxY + 8, pin[1] + 55)),
   };
   // The camera frames VIEW_W_YDS (95) across; a hole NARROWER than the view gets centred rather

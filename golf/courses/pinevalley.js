@@ -66,7 +66,7 @@ export const HOLE_1 = {
   cardYards: 360.7,
   tee: [0, 5],
   pin: [12, 365.5],
-  bounds: { minX: -55, maxX: 55, minY: -45, maxY: 435 },
+  bounds: { minX: -55, maxX: 55, minY: -55, maxY: 435 },
   base: 'heavyRough',
   surfaces: [
     // RE-CUT 2026-09-05. These two rings used to be eight points a side at a DEAD CONSTANT 15 yd
@@ -181,7 +181,7 @@ export const HOLE_2 = {
   cardYards: 181.0,
   tee: [0, 5],
   pin: [2, 185],
-  bounds: { minX: -50, maxX: 50, minY: -45, maxY: 270 },
+  bounds: { minX: -50, maxX: 50, minY: -55, maxY: 270 },
   base: 'water',
   surfaces: [
     // The island itself: a rough collar the green and bunker sit on.
@@ -229,7 +229,7 @@ export const HOLE_3 = {
   cardYards: 550.8,
   tee: [0, 5],
   pin: [58, 540],
-  bounds: { minX: -70, maxX: 110, minY: -45, maxY: 620 },
+  bounds: { minX: -70, maxX: 110, minY: -55, maxY: 620 },
   base: 'heavyRough',
   surfaces: [
     { kind: 'lightRough', poly: [

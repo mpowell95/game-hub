@@ -440,6 +440,14 @@ class GolfGame {
     this.scores = [];
     this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 };
     this.recorded = false;
+    // AND THE "NEW BEST" FLAG, WHICH USED TO SURVIVE THE ROUND THAT SET IT (2026-09-07).
+    //
+    // `_recordRound` runs once, on the last hole, and it was the only thing that ever WROTE
+    // `newBest`. Nothing cleared it - so a player who set a best and then started another round
+    // was told "best saved" on the result card of hole 1, hole 2 and every hole after it, on a
+    // round that had recorded nothing at all. Nothing was mis-STORED by that; the store is written
+    // by `_recordRound` alone and it was right. It was the card that was lying.
+    this.newBest = false;
     this.settings.lastRound = roundId;
     saveSettings(this.settings);
     this._enterHole();
@@ -456,6 +464,7 @@ class GolfGame {
     this.scores = [];
     this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 };
     this.recorded = false;
+    this.newBest = false;                     // see _startRound: it used to outlive its own round
     this._enterHole();
   }
 
@@ -620,7 +629,7 @@ class GolfGame {
 
   _bindPlay() {
     const q = (r) => this.rootEl.querySelector(`[data-role="${r}"]`);
-    this._on(q('quit'), 'click', () => this._renderSetup());
+    this._on(q('quit'), 'click', () => this._quit());
 
     // Press-and-hold auto-repeat for the four nudge controls, after a 400 ms delay (§4).
     const hold = (el, fn) => {
@@ -1028,7 +1037,11 @@ class GolfGame {
         </div>
       </div>`;
     this.rootEl.appendChild(el);
-    const close = () => { el.remove(); this._renderSetup(); };
+    // LEAVING FROM HERE ABANDONS THE ROUND TOO, so it asks the same question the quit button does.
+    // On the last hole `isInProgress()` is already false (every score is in), so `finish` still
+    // closes in one tap; mid-round the prompt goes on TOP of this card, and cancelling leaves the
+    // card where it was rather than stranding the player on a hole they have already holed out.
+    const close = () => this._quit(() => el.remove());
     this._on(el.querySelector('[data-role="res-close"]'), 'click', close);
     const done = el.querySelector('[data-role="res-done"]');
     if (done) this._on(done, 'click', close);
@@ -1737,6 +1750,46 @@ class GolfGame {
    *  written, so the last card and the setup screen do not nag. When the Stage C save lands this
    *  should go back to false in the same commit that adds it. */
   isInProgress() { return !!(this.hole && !this.recorded); }
+
+  /** IS THERE A SCORED ROUND HERE THAT LEAVING WOULD THROW AWAY?
+   *
+   *  Deliberately NARROWER than `isInProgress()` above, which is the hub's question and answers it
+   *  for a practice hole too. This one is the QUIT BUTTON's question, and a practice hole is not a
+   *  round: it is one unscored hole that writes no `bestRoundByCourse` entry, so stopping the
+   *  player to confirm it would only teach them to dismiss the prompt that matters. */
+  _roundAtStake() {
+    return !!(this.hole && this.roundId && this.roundId !== 'practice' && this.holeIdxs
+      && this.scores.filter((v) => Number.isFinite(v)).length < this.holeIdxs.length);
+  }
+
+  /** LEAVING A ROUND ASKS FIRST. The quit button sits top-left, in the corner a thumb reaches for
+   *  first, and it used to drop straight back to the setup screen - one tap, no prompt, and the
+   *  round gone. There is no resume and `_recordRound` writes nothing until the round is complete,
+   *  so on the seventeenth hole of an eighteen that is the whole round. The hub's own back pill
+   *  was fixed the same night (`isInProgress` above); this is the other door out, and it was still
+   *  open. A practice hole still leaves instantly: there is nothing to lose.
+   *
+   *  `before` is run just ahead of the setup screen, so the result card can hand in its own
+   *  teardown and stay put if the player changes their mind. */
+  _quit(before) {
+    const leave = () => { if (before) before(); this._renderSetup(); };
+    if (!this._roundAtStake()) { leave(); return; }
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel">
+        <button type="button" class="gf-result__x" data-role="q-no" aria-label="${esc(t('quit_no'))}">&times;</button>
+        <div class="gf-result__name">${esc(t('quit_title'))}</div>
+        <div class="gf-result__sub">${esc(t('quit_body'))}</div>
+        <div class="gf-actions">
+          <button type="button" class="gf-btn" data-role="q-no"><span>${esc(t('quit_no'))}</span></button>
+          <button type="button" class="gf-btn" data-role="q-yes"><span>${esc(t('quit_yes'))}</span></button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    for (const b of el.querySelectorAll('[data-role="q-no"]')) this._on(b, 'click', () => el.remove());
+    this._on(el.querySelector('[data-role="q-yes"]'), 'click', () => { el.remove(); leave(); });
+  }
 }
 
 let instance = null;
