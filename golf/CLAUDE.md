@@ -4376,6 +4376,14 @@ Every course x every length x both heights, standalone; and both hosts at both h
 hole select (18 buttons), 393x852 and 390x664             0px
 ```
 
-**`overflow-y: auto` STAYS on `.gf-setup`, deliberately.** It is not what makes the screen scroll -
-overflowing is - and if a future change ever does overflow, a screen that can be scrolled is much
-better than one that silently clips its own buttons. The test asserts the overflow is zero instead.
+### `overflow: hidden`, and the argument that was wrong
+
+This shipped for one build as `overflow-y: auto`, with the reasoning that a screen which CAN scroll
+is safer than one that clips. Matt: *"I've told you several times before that I don't want any game
+in the gamehub to be scrollable at all. Everything MUST fit on a single screen. Always."*
+
+He is right, and it is his own long-standing rule - `docs/BUILDING-A-GAME.md` Part 0 has said "A
+game screen that scrolls at all is a bug" since it was written. **`auto` does not make a screen
+safe. It makes a screen that does not fit LOOK finished**, which is exactly how this one shipped
+scrolling through a green suite. The safety net is the TEST, not the scrollbar: `check-no-scroll.mjs`
+and `test-visual.mjs` both assert zero overflow, so `hidden` can never be quietly clipping.

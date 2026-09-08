@@ -51,7 +51,15 @@
 .gf-root .gf-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* --- shared chrome ------------------------------------------------------------------------- */
+/* `box-sizing: border-box` (2026-09-08). Without it a panel that is also `width: 100%` comes out
+   its own padding and border WIDER than the box it is in - measured, the course card was 377px in a
+   357px content box, which pushed `.gf-setup`'s scrollWidth to 403 in a 393px screen and made the
+   setup screen scroll SIDEWAYS. It had always been there; `overflow-y: auto` on the container
+   forces `overflow-x` to `auto` too, so it scrolled quietly rather than showing as a break. The
+   moment the container became `overflow: hidden` (Matt: nothing in the hub may scroll) the same
+   10px started CLIPPING instead, and `test-visual.mjs` said so. */
 .gf-root .gf-panel {
+  box-sizing: border-box;
   background: var(--gf-hatch), var(--gf-panel);
   border: 1px solid rgba(255, 255, 255, 0.85);
   outline: 2px solid rgba(0, 0, 0, 0.75);
@@ -195,17 +203,23 @@
    stacked (worth about 50 on its own). Nothing loses information and nothing gets smaller than the
    UX floor allows.
 
-   `overflow-y: auto` STAYS, deliberately. It is not what makes the screen scroll - overflowing is -
-   and if a future change ever does overflow, a screen that can be scrolled is far better than one
-   that silently clips its own buttons. `test-visual.mjs` asserts the overflow is zero instead, on
-   every course, every length, both hosts and both heights. */
+   `overflow: hidden`, NOT `auto`. This shipped as `auto` for one build with the argument that a
+   screen which CAN scroll is safer than one that clips - Matt's answer: *"I've told you several
+   times before that I don't want any game in the gamehub to be scrollable at all. Everything MUST
+   fit on a single screen. Always."* He is right and it is his own long-standing rule
+   (`docs/BUILDING-A-GAME.md` Part 0). `auto` does not make a screen safe, it makes a screen that
+   does not fit LOOK finished, which is exactly how this one shipped scrolling.
+
+   The safety net is the TEST, not the scrollbar: `check-no-scroll.mjs` and `test-visual.mjs` both
+   assert zero overflow on every course, every length, both hosts and both heights, so `hidden` can
+   never be quietly clipping anything. */
 .gf-root .gf-setup {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px;
   padding: calc(14px + var(--gf-top-pad, 0px)) 18px calc(14px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, #33501d 0%, #4a6b28 100%);
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 .gf-root .gf-setup h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: .01em; text-shadow: var(--gf-shadow); }
