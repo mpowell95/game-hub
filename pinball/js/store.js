@@ -18,10 +18,12 @@ import { loadStats } from '../../js/game-stats.js';
 
 const KEY = 'gamehub.pinball.v1';
 
-// `board` is which PLAYFIELD you last chose - STARHUB, or the imported ROYAL FLUSH layout (see
-// pinball/js/table-royal.js). Like `difficulty` it is a one-tap-recreatable preference, so THE
-// LAW rule 2's carve-out applies: losing it costs a tap, never a score.
-const BOARDS = ['starhub', 'royal'];
+// `board` is which PLAYFIELD you last chose - STARHUB (ours), the imported ROYAL FLUSH layout
+// (pinball/js/table-royal.js), or RAINBOW (pinball/js/table-rainbow.js). Like `difficulty` it is
+// a one-tap-recreatable preference, so THE LAW rule 2's carve-out applies: losing it costs a tap,
+// never a score - and an unknown value falls back to the default rather than throwing, which is
+// what lets a board be added or removed without stranding anyone's settings.
+const BOARDS = ['starhub', 'royal', 'rainbow'];
 
 const DEFAULTS = { difficulty: 'medium', board: 'starhub' };
 

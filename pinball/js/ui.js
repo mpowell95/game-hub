@@ -31,6 +31,15 @@ import { H as TH } from './table.js';
 import { RoyalPinball } from './royal.js';
 import { RoyalRenderer } from './render-royal.js';
 import RT from './table-royal.js';
+// RAINBOW: its own rules and its own renderer, the same split ROYAL FLUSH uses. See
+// pinball/js/rainbow.js's header for why a third shot map is a third class and not a third
+// branch inside game.js.
+import { RainbowPinball } from './rainbow.js';
+import { RainbowRenderer } from './render-rainbow.js';
+import NT from './table-rainbow.js';
+
+/** Board id -> the name printed on the setup screen and the backglass. */
+const BOARD_NAME = { starhub: 'STARHUB', royal: RT.NAME, rainbow: NT.NAME };
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -117,6 +126,7 @@ export class PinballUI {
     const boards = [
       { id: 'starhub', label: 'STARHUB' },
       { id: 'royal', label: RT.NAME },
+      { id: 'rainbow', label: NT.NAME },
     ].map((b) => `<button type="button" class="pb-board${b.id === this.settings.board ? ' is-on' : ''}" data-board="${b.id}">${esc(b.label)}</button>`).join('');
 
     this.root.innerHTML = `
@@ -124,14 +134,14 @@ export class PinballUI {
         <div class="pb-setup-inner">
           <div class="pb-brand">
             <span class="pb-brand-sub">${esc(t('title'))}</span>
-            <span class="pb-brand-main">${esc(this.settings.board === 'royal' ? RT.NAME : 'STARHUB')}</span>
+            <span class="pb-brand-main">${esc(BOARD_NAME[this.settings.board] || 'STARHUB')}</span>
           </div>
           <p class="pb-best">${best ? `${esc(t('your_best'))}: <b>${fmt(best)}</b>` : esc(t('no_best'))}</p>
 
           <h2 class="pb-h">${esc(t('setup_board'))}</h2>
           <div class="pb-boards">${boards}</div>
 
-          ${this.settings.board === 'royal' ? '' : `
+          ${this.settings.board !== 'starhub' ? '' : `
           <h2 class="pb-h">${esc(t('setup_table'))}</h2>
           <div class="pb-diffs">${cards}</div>`}
 
@@ -292,9 +302,20 @@ export class PinballUI {
     // ONE line picks the whole engine. Both classes expose the same surface (start / update /
     // setFlipper / plungerDown / plungerUp / nudge / hud / takeEvents / result / score / phase),
     // so nothing below here has to know which board is running.
-    const royal = this.settings.board === 'royal';
-    this.renderer = royal ? new RoyalRenderer(this.el.canvas) : new Renderer(this.el.canvas, this.el.fx);
-    this.game = royal ? new RoyalPinball({}) : new Pinball({ difficulty: this.settings.difficulty });
+    // Three boards, each with its own rules class and its own renderer. Difficulty is STARHUB's
+    // alone: the other two are one setting each, which is why their setup screens hide it.
+    const board = this.settings.board;
+    if (board === 'royal') {
+      this.renderer = new RoyalRenderer(this.el.canvas);
+      this.game = new RoyalPinball({});
+    } else if (board === 'rainbow') {
+      this.renderer = new RainbowRenderer(this.el.canvas, this.el.fx);
+      this.renderer.brand = NT.NAME;
+      this.game = new RainbowPinball({});
+    } else {
+      this.renderer = new Renderer(this.el.canvas, this.el.fx);
+      this.game = new Pinball({ difficulty: this.settings.difficulty });
+    }
     this.game.start();
     // Dev hook: the ONLY way a browser session can see what the ball is actually doing. Read-only,
     // and it exists because four green headless soaks shipped a board that threw on every contact.
@@ -622,6 +643,13 @@ export class PinballUI {
     // "Drop the 4 targets" - STARHUB's bank, which does not exist on that board. Playing it is how
     // that was found; the DMD sat there naming a shot the table does not have.
     if (this.settings.board === 'royal') return t('hint_royal');
+    // RAINBOW's own ladder, in the order its rules actually check: the centre feature when it is
+    // open, then the rows that open it.
+    if (this.settings.board === 'rainbow') {
+      if (hud.multiball) return t('hint_jackpot');
+      if (hud.lockLit) return t('hint_scoop');
+      return t('hint_rows');
+    }
     if (hud.multiball) return hud.superLit ? t('hint_super') : t('hint_jackpot');
     if (hud.bankLit) return t('hint_scoop');
     if (hud.lockLit) return t('hint_lock');

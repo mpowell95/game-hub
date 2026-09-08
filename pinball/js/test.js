@@ -853,6 +853,141 @@ function launched(g) {
     rollToTip(null) < 0.75, `${rollToTip(null).toFixed(2)} s pivot-to-tip (frictionless: ${rollToTip(0).toFixed(2)} s)`);
 }
 
+// --- 9. THE RAINBOW BOARD ------------------------------------------------------------------------
+//
+// A third board, a third rules class, and the same two questions the other two had to answer: is
+// the GEOMETRY playable, and can the RULES actually be completed? Those are separate questions and
+// this file learned the hard way that a green soak answers neither - across six driven games of
+// STARHUB it reported 6 missions started and 0 finished, which could equally have meant "the rules
+// are broken" or "a random driver cannot aim", with nothing able to tell them apart.
+//
+// So section 9b drives RAINBOW's whole chain through its REAL entry points - the rollovers, the
+// drop bank, the scoop switch - and never by poking fields, so a rename in rainbow.js fails the
+// test rather than silently passing.
+{
+  const RB = await import('./table-rainbow.js');
+  const { RainbowPinball } = await import('./rainbow.js');
+
+  // --- 9a. geometry ------------------------------------------------------------------------------
+  {
+    const { colliders, flippers } = RB.buildTable({});
+
+    // THE DRAIN GAP, measured the way pinball/CLAUDE.md says it must be. It is NOT the distance
+    // between the tip centres: physics.js tapers a flipper to 65% of `r` at the tip, so each tip
+    // eats another 0.65*r. STARHUB shipped a 0.97-ball drain because that term was forgotten, and
+    // Matt found it by playing: "It's impossible for the ball to go between the paddles."
+    const tipL = RB.AXIS - RB.FLIP.dx + Math.cos(RB.FLIP.rest) * RB.FLIP.len;
+    const tipR = RB.AXIS + RB.FLIP.dx - Math.cos(RB.FLIP.rest) * RB.FLIP.len;
+    const gap = (tipR - tipL) - 2 * (RB.FLIP.r * 0.65);
+    ok('[RAINBOW] the ball FITS between the flipper tips', gap > BALL_R * 2 + 2,
+      `${gap.toFixed(1)} units = ${(gap / (BALL_R * 2)).toFixed(2)} balls`);
+
+    // NO SWITCH BURIED IN A SOLID. A rollover the ball can never reach is a dead feature, and this
+    // board's headline award needs all sixteen of them.
+    let buried = null;
+    for (const sw of RB.SWITCHES) {
+      for (const c of colliders) {
+        if (c.t !== 'circle') continue;
+        if (Math.hypot(sw.x - c.x, sw.y - c.y) < c.r) { buried = `${sw.id} inside ${c.id}`; break; }
+      }
+      if (buried) break;
+    }
+    ok('[RAINBOW] no switch is buried inside a solid', !buried, buried || `${RB.SWITCHES.length} switches`);
+
+    // EVERYTHING IS ON THE TABLE.
+    const off = RB.SWITCHES.find((sw) => sw.x < 0 || sw.x > RB.W || sw.y < 0 || sw.y > RB.H);
+    ok('[RAINBOW] every switch is on the table', !off, off ? `${off.id} at ${off.x},${off.y}` : 'ok');
+
+    // THE SHOOTER LANE PASSES A BALL. ROYAL FLUSH spent two builds with a ball that could not fit
+    // down its own launch lane, because the wall radius is eaten out of the channel from BOTH
+    // sides and nothing was checking the CLEAR width.
+    const laneW = (RB.ART.laneOut - RB.ART.laneX) - 2 * 5;
+    ok('[RAINBOW] the shooter lane is wider than the ball', laneW > BALL_R * 2,
+      `${laneW} clear units against a ball of ${BALL_R * 2}`);
+
+    ok('[RAINBOW] four flippers: two main, two upper', flippers.length === 4,
+      flippers.map((f) => f.id).join(','));
+  }
+
+  // --- 9b. the whole rules chain, deterministically ------------------------------------------------
+  {
+    const g = new RainbowPinball({ rand: mulberry32(7) });
+    g.start();
+    // A real launch: plungerUp refuses a plunge with no power, and a ball still ON the plunger is
+    // skipped by _sensors - so without this the whole chain below silently tests nothing.
+    g.plungerDown(); g.plungerPower = 1; g.plungerUp();
+    const ball = () => g.balls[0];
+    // Drive a switch the way the solver would: put the ball on it, run the sensor pass, take it off.
+    const trip = (id) => {
+      const sw = RB.SWITCHES.find((x) => x.id === id);
+      const b = ball();
+      const ox = b.x, oy = b.y;
+      b.x = sw.x; b.y = sw.y;
+      g._sensors();
+      b.x = ox; b.y = oy;
+      if (b._inSensor) b._inSensor.delete(id);
+    };
+    const runRow = (name) => {
+      const pre = name === 'purple' ? 'p' : name === 'blue' ? 'b' : 'r';
+      RB.ROWS[name].forEach((_, i) => trip(pre + i));
+    };
+
+    runRow('purple');
+    ok('[RAINBOW] a completed row scores and clears itself', g.stats.rows === 1 && g.rowLit.purple.size === 0,
+      `rows ${g.stats.rows}, purple lit ${g.rowLit.purple.size}`);
+
+    runRow('blue');
+    runRow('red');
+    ok('[RAINBOW] all three rows on one ball is the headline award', g.stats.rainbows === 1,
+      `rainbows ${g.stats.rainbows}, combo ${g.combo}`);
+    ok('[RAINBOW] ...and it opens the centre feature', g.scoopLit, `scoopTimer ${g.scoopTimer.toFixed(1)}`);
+
+    // The other route the spec gives, which does not go through the rows at all.
+    const clearBank = () => {
+      for (let i = 0; i < RB.DROP_COUNT; i++) g._contact('id', `drop${i}`, 100, 100, 400);
+    };
+    g.scoopTimer = 0;
+    const multBefore = g.mult;
+    clearBank();
+    ok('[RAINBOW] clearing the drop bank raises the bonus multiplier', g.mult === multBefore + 1,
+      `${multBefore}x -> ${g.mult}x`);
+    ok('[RAINBOW] ...and lights the centre feature', g.bankLit && g.scoopLit, `bankLit ${g.bankLit}`);
+
+    // Three locks start a multiball. Each needs the feature lit again, which is the shot the board
+    // is asking for.
+    for (let n = 0; n < 3; n++) {
+      if (!g.scoopLit) { g.down.clear(); g._rebuild(); clearBank(); }
+      trip('scoop');
+      ball().held = false;                 // the kick-out, without waiting for it
+    }
+    ok('[RAINBOW] three locks start a multiball', g.multiball > 0 && g.balls.length === 3,
+      `multiball ${g.multiball.toFixed(0)}s, ${g.balls.length} balls`);
+
+    g.takeEvents();
+    trip('b0');
+    const paid = g.takeEvents().filter((e) => e.type === 'jackpot');
+    ok('[RAINBOW] a row rollover during multiball pays the JACKPOT',
+      paid.length === 1 && paid[0].value > 0, `${paid.length} jackpots, value ${paid[0] && paid[0].value}`);
+
+    // THE EDGE DETECTOR, which is the bug this repo has now met three times: STARHUB's scoop banked
+    // 1.5 million in one shot, ROYAL FLUSH's rollover paid eighteen times while the ball was pinned
+    // against a wall, and RAINBOW's first soak paid 1,777 standup awards from a ball leaning on a
+    // target. A scoring part pays on the way IN, never while the ball rests on it.
+    const g2 = new RainbowPinball({ rand: mulberry32(11) });
+    g2.start(); g2.plungerDown(); g2.plungerPower = 1; g2.plungerUp();
+    g2._touch = new Set(); g2._touchPrev = new Set();
+    let paidTimes = 0;
+    for (let i = 0; i < 40; i++) {
+      g2._touchPrev = g2._touch;
+      g2._touch = new Set();
+      const before = g2.score;
+      g2._contact('id', 'stand0', 40, 60, 300);
+      if (g2.score > before) paidTimes++;
+    }
+    ok('[KNOWN-BUG PROBE] [RAINBOW] a ball LEANING on a target is paid once, not forty times',
+      paidTimes === 1, `${paidTimes} awards over 40 solver ticks of unbroken contact`);
+  }
+}
 console.log(`\n${count - fail}/${count} passed`);
 if (fail) { console.log(`${fail} FAILURE(S)`); process.exit(1); }
 console.log('ALL PASS');

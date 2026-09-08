@@ -57,6 +57,9 @@ top-left corner in immersive mode.
 | `js/game.js` | the rules: balls, scoring, missions, multiball, bonus, tilt. Pure, emits an event stream |
 | `js/render3d.js` | the playfield in three.js: the model's own geometry, materials and lights, plus a 2D overlay for the effects layer |
 | `js/vendor/` | three.js, the same vendored copies Skeeball, Golf and Ball Run carry |
+| `js/table-rainbow.js` | the RAINBOW board as data (see "The third board") |
+| `js/rainbow.js` | RAINBOW's rules |
+| `js/render-rainbow.js` | RAINBOW's renderer, a subclass of `render3d.js` |
 | `js/store.js` | one preference, the table (see "Persistence") |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, input, HUD, the hub module contract |
@@ -783,6 +786,127 @@ how it survived here for as long as it did.
   TABLE'S FOUR SHOTS ARE, and that is a picture. If you add a mode, resist adding a paragraph.
 - Spanish keeps the borrowed pinball vocabulary (flipper, bumper, jackpot, tilt, multibola) because
   that is what Spanish players say — the same standing rule that keeps Oros/Copas in English.
+
+## The third board: RAINBOW, built from a spec (2026-09-08)
+
+Matt handed over two reference images of a custom wooden table (a playfield render and a CAD
+wireframe) plus a written design spec, and chose two things about it: it is a **third board inside
+this game**, not a new hub game, and it is **faithful to the reference**, not restyled in
+STARHUB's neon.
+
+**PROVENANCE.** Unlike ROYAL FLUSH there is no source project here - the spec says plainly that no
+rulesheet, manual or source code exists for the table in the images, and marks its own scoring
+section PROPOSED. So the LAYOUT is a reading of the two images and the RULES are the spec's
+proposal implemented as written. Nothing was taken from anybody's code.
+
+| File | Role |
+|---|---|
+| `js/table-rainbow.js` | the playfield as data: walls, parts, sensors, paint. Pure |
+| `js/rainbow.js` | `RainbowPinball` - the rules. Pure, same public surface `ui.js` already drives |
+| `js/render-rainbow.js` | `RainbowRenderer` - **subclasses `render3d.js`** (see below) |
+
+### The renderer subclasses STARHUB's, and that is the design
+
+`render3d.js` already carries the parts that are hard and have nothing to do with STARHUB: the
+camera framing (bisection on projected corners, then a film-back re-centre), the confetti thrown
+clear of the machine's silhouette, the backglass with its resting face, the painted contact shadow
+under each ball, the shake, the software-GL probe, `dispose()`. What IS about STARHUB is `_build`
+and `render`, and those are the two things `RainbowRenderer` overrides.
+
+Two small extractions in `render3d.js` made it possible and changed no behaviour: `_buildBackglass()`
+and `_buildBalls()` came out of `_build`, and the backglass wordmark reads `this.brand` (STARHUB by
+default) so a subclass can put its own board's name on the glass.
+
+### The scale, and the two centre lines
+
+350 x 690 in STARHUB's units with the same ball of radius 9, so `physics.js` runs it with no
+constants of its own - the same gravity, the same `MAX_TRAVEL`, the same flipper sweep, four
+playtests of tuning inherited rather than re-derived.
+
+**`AXIS` is 155, not 175, and the first draft paid for missing it.** The cabinet is 350 wide
+because the shooter lane eats the right-hand 40 units; the PLAY AREA is 4..306 and every left/right
+pair is `x` and `310 - x`. Mirroring about the cabinet centre instead put the right wall straight
+through the lane, and the very first launch hit it - the ball left the plunger at 1050 units/s and
+was thrown sideways at 865 before it had cleared the lane. STARHUB's `table.js` carries the same
+warning for the same reason.
+
+The conversion is **two factors, and deliberately so**: the reference playfield spans image x
+30..975 and y 10..1900, mapped onto 4..306 (0.320) and 4..684 (0.360). The 12% difference is the
+shooter lane coming out of the width, and it makes this table slightly taller in proportion than
+the photograph - which is closer to a real playfield (20.25in x 42in, about 1:2.07) than the
+reference crop is.
+
+### Three places the layout is not literal
+
+1. **The main flippers.** Measured off the render their tips are about six ball widths apart, which
+   is not a drain anybody can defend. The wireframe disagrees with the render here (its two bottom
+   bars converge to nearly meet, and the render's tips are hidden behind the bottom bumper), so
+   they use STARHUB's proven `dx` of 74 - a clear gap of 1.3 balls.
+2. **The centre oval.** Drawn full size, because it is the largest single thing on the reference
+   and the table does not read as that table without it. A HOLE 96 units across dead centre would
+   swallow nearly everything coming down the middle, so the paint is full size and the scoop that
+   captures is r 15 at its middle.
+3. **The lower green kites are slingshots.** The spec reads all four green triangles as one-way
+   gates. The upper pair are. The lower pair sit exactly where slingshots go, and a lower playfield
+   with none has nothing to keep a ball alive.
+
+### What the soak found, in the order it found it
+
+Every one of these was a number, and every one was found by measuring rather than by reading:
+
+| | measured | fixed |
+|---|---|---|
+| the right wall crossed the shooter lane | ball life **0.1 s**, 24 drains, score 0 | `AXIS` 155, mirror about 310 |
+| the drop bank was unreachable | 7 drops and **1 cleared bank in six games** | 84 wide, 7-unit collider |
+| a ball leaning on a target re-scored every tick | **1,777 standup awards**, 332,000 average | contact edge detection |
+| posts a hair from the wall | balls parked at (20, 383) and (64, 530) | every pair OPEN (>18) or SEALED (<12) |
+| the guide and the shelf converged to 15 units | 18 parked balls at (58, 209) and (253, 209) | overlapped into one blob |
+| the search fought the flipper cradle | 82 searches in eight games | main flippers exempt |
+| ...but exempting a DISC round the pivot | **74% of ball life** in four cells | measured against the bat |
+
+That last pair is the one worth remembering. A cradle on a lower paddle is the player aiming and
+must not be interrupted; a ball parked on an UPPER paddle cannot come back down, because the two
+upper flippers are on the same two buttons and a raised one is a shelf in the middle of the table.
+And the first cradle test used a disc round the pivot, which is a region the bat only sweeps a
+third of - so it exempted everything BEHIND the flipper and hid a real wedge inside the exemption.
+
+After all of it: **ball life 55 s, all eight soak games finish, no occupancy cell over 15%.**
+
+### The rules, which are the spec's
+
+- Standups 500, yellows 250, pops 100, slingshots 50, drop targets 500 each.
+- **All four drops** pays 5,000, raises the bonus multiplier (capped 5x) and lights the centre
+  scoop. The bank resets after two seconds.
+- **The rainbow rows**: each dot lights for 300 on its first pass and pays nothing while lit. A
+  completed row pays 2,500, clears itself and advances the combo meter. **All three rows on one
+  ball** pays 10,000 and opens the scoop for 20 seconds.
+- **The scoop**: locks 1 and 2 pay 3,000; the third starts a 30-second multiball where every row
+  rollover is a 5,000 jackpot, doubled if the combo meter is full.
+- **End of ball**: the standups hit that ball, times the multiplier.
+- 3 balls, one 7-second save per ball.
+
+Where the spec left a decision open, the choice is recorded at the point it is made. The two worth
+stating here: ball count is 3 to match the other two boards, and **the locked balls are virtual** -
+locks one and two are counted and lit rather than physically held, because a real lock means a ball
+sitting out of play while the player carries on with the next one, and the third lock releases all
+three either way.
+
+### Testing
+
+`pinball/js/test.js` section 9. **9a is geometry** - the drain gap measured with the tip taper
+included (the term STARHUB forgot, which shipped a 0.97-ball drain), no switch buried in a solid,
+everything on the table, and the shooter lane's CLEAR width against the ball (the number ROYAL
+FLUSH spent two builds ignoring). **9b drives the whole chain** through the real entry points and
+never by poking fields: a row completes and clears, three rows pay the headline award and open the
+scoop, a cleared bank raises the multiplier and lights it the other way, three locks start a
+multiball, and a rollover during multiball pays a jackpot. Plus a `[KNOWN-BUG PROBE]` on the edge
+detector, because **this repo has now met that bug three times** - STARHUB's scoop banking 1.5
+million in one shot, ROYAL FLUSH's rollover paying eighteen times against a wall, and this board's
+1,777 standup awards.
+
+**Nobody has played it yet.** Every clip Matt has sent of this game has found something serious
+while the suites were green, and that record is unbroken; the soak numbers above say the table
+works, not that it is fun.
 
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 

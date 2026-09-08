@@ -64,6 +64,12 @@ export const STRINGS = {
     msg_bonus_x: 'Bonus {n}x',
     msg_extra_ball: 'Extra ball',
 
+    // RAINBOW's own messages
+    msg_row_done: 'Row complete',
+    msg_rainbow: 'All three rows',
+    msg_scoop_lit: 'Centre scoop lit',
+    msg_mb_end: 'Jackpots over',
+
     // missions
     mission_bumper: 'Bumper Rush',
     mission_spin: 'Spinner Mania',
@@ -77,6 +83,7 @@ export const STRINGS = {
     // standing objective, shown on the dot-matrix line when nothing else is
     hint_bank: 'Drop the 3 targets',
     hint_royal: 'Drop the targets, ride the ramps',
+    hint_rows: 'Complete the 3 colour rows',
     hint_scoop: 'Scoop lit: start a mission',
     hint_ramp: 'Ramps light the lock',
     hint_lock: 'Scoop to lock a ball',
@@ -95,6 +102,9 @@ export const STRINGS = {
     lbl_scoop: 'Scoop',
     lbl_lock: 'Lock',
     lbl_lanes: 'H U B',
+    lbl_row: 'Row',
+    lbl_rainbow: 'All rows',
+    lbl_bonus: 'Bonus',
     lbl_mission: 'Mission',
     lbl_multiball: 'Multiball',
 
@@ -181,8 +191,15 @@ export const STRINGS = {
     msg_bonus_x: 'Bonus {n}x',
     msg_extra_ball: 'Bola extra',
 
+    // Los mensajes propios de RAINBOW
+    msg_row_done: 'Fila completa',
+    msg_rainbow: 'Las tres filas',
+    msg_scoop_lit: 'Hoyo central encendido',
+    msg_mb_end: 'Fin de los jackpots',
+
     hint_bank: 'Tumba las 3 dianas',
     hint_royal: 'Tumba las dianas, sube las rampas',
+    hint_rows: 'Completa las 3 filas de color',
     hint_scoop: 'Hoyo listo: empieza una misión',
     hint_ramp: 'Las rampas encienden el bloqueo',
     hint_lock: 'Hoyo para guardar una bola',
@@ -209,6 +226,9 @@ export const STRINGS = {
     lbl_scoop: 'Hoyo',
     lbl_lock: 'Bloqueo',
     lbl_lanes: 'H U B',
+    lbl_row: 'Fila',
+    lbl_rainbow: 'Todas las filas',
+    lbl_bonus: 'Bonus',
     lbl_mission: 'Misión',
     lbl_multiball: 'Multibola',
 
