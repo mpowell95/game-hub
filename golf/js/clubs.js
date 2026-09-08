@@ -96,13 +96,41 @@ export const LIES = {
   // corridor stopped short of the green, so a missed green landed in `base` - HEAVY ROUGH, the
   // harshest lie in the game (82 % power, 65 % band) - on all four sides. Every real course has a
   // collar, and missing a green by a yard should not be the same as being in the trees.
-  fringe: { power: 0.97, zone: 0.80, roll: 0.072 },
+  // The collar rolls a shade more than it did (0.072 -> 0.075), only so that it stays BETWEEN the
+  // green and the rough after the green was raised below. The ordering is the thing being kept.
+  fringe: { power: 0.97, zone: 0.80, roll: 0.075 },
   lightRough: { power: 0.92, zone: 0.22, roll: 0.054 },
   heavyRough: { power: 0.82, zone: 0.17, roll: 0.054 },
   fairwayBunker: { power: 0.88, zone: 0.19, roll: 0.00 },
   greensideBunker: { power: 0.75, zone: 0.167, roll: 0.00 },   // zone MEASURED
   trees: { power: 0.85, zone: 0.20, roll: 0.054 },
-  green: { power: 1.00, zone: 1.00, roll: 0.036 },
+  // THE GREEN USED TO BE THE SLOWEST SURFACE IN THE GAME, AT 0.036 (raised 2026-09-08).
+  //
+  // Matt: *"Balls don't run out or bounce much on the green. Is this intentional?"* It was not.
+  // The green's `roll` sat BELOW the fringe's (0.072) and below both roughs (0.054), so a ball
+  // pitching on the putting surface stopped faster than one pitching in the cabbage - while
+  // `PUTT_DRAG` over in shot.js, which that file says is deliberately shared so that "a surface
+  // cannot be fast for a putt and slow for a run-out", makes the green the FASTEST thing on the
+  // course (1.00 against the fairway's 1.90). The two tables disagreed, and the green was the only
+  // row they disagreed about.
+  //
+  // It is also a large part of the answer to *"I just played through all of Pine Valley and got a
+  // birdie on every single hole."* An approach that stops dead where it lands turns a green into a
+  // target that cannot be run through, so reaching one was worth a birdie and no hole design could
+  // change that. Measured over 40 rounds of Pine Valley, same seeds, only this number moving:
+  //
+  //      green.roll        0.036    0.070    0.090    0.110    0.150
+  //      good player       -1.6     +0.1      -       +2.2     +3.9
+  //      expert player     -6.2     -3.8      -       -1.1     +0.6
+  //
+  // 0.090 is 62 % of the fairway's 0.145: a green is short-cut and runs, but it is also softer than
+  // a summer fairway and takes more out of the bounce, so it is not simply the faster of the two. A
+  // 7 iron now releases about 9 yds on a green 20-30 yds deep, so an approach has to be landed
+  // short of the pin rather than at it - and `aimDots` shows CARRY, so that is a thing to learn.
+  //
+  // `golf/js/test.js` section 19 pins the ORDERING (green > fringe > rough, and PUTT_DRAG agreeing)
+  // rather than the value, so this can be retuned without the inversion coming back.
+  green: { power: 1.00, zone: 1.00, roll: 0.090 },
   water: { power: 1.00, zone: 1.00, roll: 0.00 },   // never actually played from; see Stage C
 };
 

@@ -373,7 +373,14 @@ export function puttMishit(barPos, zone = 1) {
   const m = mishit(barPos, 1, zone, 1, 0);
   const signed = (barPos - 0.5) * 2;
   const off = Math.min(1, Math.abs(signed));
-  return { deg: m.deg * PUTT_LINE_K * Math.sign(signed || 1), paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
+  // `m.deg` IS ALREADY SIGNED. `mishit` returns `deg * Math.sign(signed)`, so multiplying by the
+  // sign a SECOND time squares it away and every putt broke RIGHT whichever side of centre the
+  // needle was stopped on. Matt, 2026-09-08: *"if I land left of the green section, the ball should
+  // be off target to the left. If I land right of the green section, the ball should be off target
+  // to the right. Right now it appears to be inverted."* He was reading the putter, which is the
+  // one club where the ball's line is visible against a target, and it was inverted for exactly
+  // half the misses. Full shots were never affected - they take `m.deg` unchanged.
+  return { deg: m.deg * PUTT_LINE_K, paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
 }
 
 export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 0) {

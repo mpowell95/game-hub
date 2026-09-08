@@ -80,6 +80,9 @@
 .gf-root .gf-btn:active,
 .gf-root .gf-btn[data-down="1"] { background: #a83a00; transform: translate(1px, 1px); box-shadow: 2px 2px 0 rgba(0,0,0,.45); }
 .gf-root .gf-btn:disabled { opacity: .55; }
+/* The swing is UNDER WAY. The label already says which tap is next; this is the same fact in
+   peripheral vision, for the 250 ms of the putter's dead zone when nothing on the meter moves. */
+.gf-root .gf-btn[data-armed="1"] { background: #d97400; box-shadow: 0 0 0 2px #ffce3a inset, 3px 3px 0 rgba(0,0,0,.45); }
 /* Label text must never eat the tap (hill-climb's fix, layer 2). */
 .gf-root .gf-btn > span { pointer-events: none; }
 
@@ -117,7 +120,11 @@
 .gf-root .gf-lieart svg { display: block; }
 /* The power cap is OURS, not the reference's, and it keeps its own line so it can never collide
    with the flag and the quit button the way "Heavy rough Power: 82%" once did. */
-.gf-root .gf-power { margin-top: 3px; color: var(--gf-dim); font-size: 11px; padding: 2px 7px; }
+/* The lie, in words. The tile above it is a picture; this is the caption that makes the power cap
+   under it mean something. Its own line, because "Heavy rough Power: 82%" on one line once ran into
+   the flag and the quit button. */
+.gf-root .gf-lie { margin-top: 3px; font-size: 11px; font-weight: 700; padding: 2px 7px; }
+.gf-root .gf-power { margin-top: 2px; color: var(--gf-dim); font-size: 11px; padding: 2px 7px; }
 .gf-root .gf-power[hidden] { display: none; }
 .gf-root .gf-dist { margin-top: 4px; font-size: 22px; font-weight: 800; text-shadow: var(--gf-shadow); }
 

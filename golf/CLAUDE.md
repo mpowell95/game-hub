@@ -3803,3 +3803,187 @@ handed back with no choice at all, though the reference (`golf-reference-spec.md
 
 Strings are in EN and ES (`in_water`, `in_trees`, `penalty_stroke`, `drop_q`, `take_drop`,
 `play_from_lie`, `drop_costs`); section 15a fails if either language is missing one.
+
+## The playtest of 2026-09-08: seven items, and the green was the slowest surface in the game
+
+Matt played Pine Valley and sent seven things. Two of them are one-line inversions, one is a
+question, one is a HUD gap, and three are the same finding wearing different clothes: **the ball
+did not have to be struck well enough, and the green did not have to be read at all.**
+
+### 1. A missed putt broke the WRONG WAY (one line, and it was in a sign)
+
+> *"if I land left of the green section, the ball should be off target to the left. If I land right
+> of the green section, the ball should be off target to the right. Right now it appears to be
+> inverted."*
+
+`mishit()` returns an angle that is **already signed** - its last line is `deg * Math.sign(signed) +
+blockSpray(...)`. `puttMishit()` then multiplied by `Math.sign(signed)` a second time, which squares
+it away: measured, a needle stopped at bar position 0.2 (LEFT) and one stopped at 0.8 (RIGHT) both
+returned **+8.12 degrees**. Every putt broke right, whichever side of centre the miss was on.
+
+**Full shots were never affected** - they take `m.deg` unchanged, and the meter's own geometry is
+right too (the needle enters the bar from the left on the way down, so stopping early is left of
+centre, and `barPosOf` maps that to the left end of the bar). It was the putter alone, which is also
+the one club where the ball's line is visible against a target, which is why it was the putter Matt
+noticed it on. Section 19 carries both directions as a `[KNOWN-BUG PROBE]`.
+
+### 2. Off-target balls flew DEAD STRAIGHT, and shot.js had said otherwise for weeks
+
+> *"Do off target balls travel in a straight line? Or do they slice/hook like in real golf?"*
+
+Straight. And that was `ui.js` contradicting the engine: `flightPoint` has always put the lateral
+term on `p * p` while the along term is linear - a ball that starts on the aim line and bends away
+from it, with its own header saying *"the ball CURVES toward its miss over the flight rather than
+launching on a straight offset line"*. `_fire()` bypassed all of it by rotating `aimRad` by the miss
+and passing `mishitDeg: 0`, so the club was already pointing where the ball would finish.
+
+**Nothing calibrated moves**, and that is why this was safe to change: the lateral offset at `p = 1`
+is `tan(deg) * carry` either way, so the over-swing spray still measures 20-30 yds offline at the top
+of the arc. What changes is the SHAPE - and, because `treeHit` samples the same curve, which trees a
+sliced ball is genuinely behind.
+
+**One thing had to move with it.** `rollWatchingCup` was handed `aimRad`, which was the ball's true
+heading only while the miss was folded into it. With the miss on `sideYd` the ball is travelling at
+`atan(2 * sideYd / carry)` when it lands, so rolling down the aim line would have bent the ball out
+in the air and back on the ground. Measured on a flat hole, a 6-degree slice: **+7.96 yds of extra
+drift through the run-out**, where the old line gave exactly 0.00.
+
+> **A NOTE FOR THE NEXT SESSION, because this file used to say the opposite.** The Red Mesa playtest
+> wrote *"THE MISHIT GOES INTO `aimRad`, NOT `mishitDeg` - get that wrong and the spray vanishes and
+> the over-swing looks free"*. That was true as a description of the code at the time and it is no
+> longer how the shot is built. The spray does not vanish: it is part of `m.deg`, which is now what
+> `mishitDeg` carries. Measure the over-swing through `resolveShot` with `mishitDeg: m.deg` and
+> `aimRad: this.aimRad`, which is what `_fire()` does.
+
+### 3. The first tap on a putt looked like it did nothing
+
+> *"The first click on the green while putting does not appear to work. I click swing and nothing
+> happens. I have to click it a second time to start the swing."*
+
+**The tap worked.** `PUTTER_DEAD_MS` holds the putter's needle at zero for 250 ms after tap 1, and
+for those 250 ms the meter is byte-identical to its idle state - so the one club with a dead zone is
+the one club that gives no sign it heard you. A second tap inside the window is then correctly
+ignored (that guard exists because locking power at 0.0000 threw the stroke away), and the needle
+starts climbing at about the moment the second tap lands, which is exactly the experience described.
+
+**The dead zone is load-bearing and was not touched.** It is the third attempt at the short-putt
+problem and the only one Matt did not revert - the two before it moved the dial (`PUTT_GAMMA`) and
+the tempo, and both came back within hours. What it needed was feedback, not removal:
+
+- **The swing button names the next tap** - `swing` / `set power` / `set aim` (EN and ES), painted
+  from the render loop because the phase also changes without a tap (the backswing tops out; the
+  needle runs off the bar and fires), and written only when the text actually changes.
+- **`data-armed="1"` on the button** while a swing is live, which the CSS keys a colour and an inner
+  gold rule off.
+- **A charge ring inside the meter's hub** that sweeps once over the dead zone and completes as the
+  needle starts to move. It is drawn inside the band's inner radius, so it cannot be confused with
+  the needle or the planted power marker, and the other thirteen clubs have `deadMs: 0` and never
+  enter the branch.
+
+### 4 and 6. The break was still decoration on the holes people actually play
+
+> *"I don't think any of the slopes on the green are real. The ball seems to always go straight."*
+> *"I just played through all of Pine Valley and got a birdie on every single hole. I've been trying
+> to get you to make it not so easy. Why aren't you achieving this?"*
+
+`BREAK_K` went 0.12 -> 0.45 on 2026-09-07 for this exact complaint, and **that pass fixed the hard
+greens and left the easy ones.** The number that shows it is not the bend, it is the make rate:
+struck perfectly, aimed DEAD STRAIGHT at the cup, 15-30 ft, on Pine Valley's own greens:
+
+```
+hole            1     2     3     4     6     7     8    12    16    17
+BREAK_K 0.45   70 %  67 %  67 %  88 %  100 % 17 %  28 %  94 %   5 %   0 %
+BREAK_K 0.90   31 %  28 %  30 %  47 %  100 %  2 %  16 %  44 %   0 %   0 %
+```
+
+On the opening four holes - the ones a player meets first, and the ones Matt played through -
+aiming straight at the hole was the right play two times in three. `BREAK_K` is **0.90**.
+
+**Hole 6 stays at 100 % at every value and that is correct**: it is the one deliberately FLAT green
+on the property, and a course needs one hole that asks nothing of the read.
+
+**What reading the break is now WORTH**, measured over 40 rounds with a player who reads it
+perfectly against the same player aiming straight: **0.6 strokes at 0.45, 2.4 strokes at 0.90.**
+Before this the slope grids were worth about half a stroke a round, which is the definition of
+decoration.
+
+**A short putt is untouched**, because break grows with the square of the distance: at 3 ft it is
+under an inch either way, and every number in section 17 (the first-red-dot rule) holds.
+
+### 5. The green was the SLOWEST surface in the game
+
+> *"Balls don't run out or bounce much on the green. Is this intentional?"*
+
+It was not. `LIES.green.roll` was **0.036** - below the fringe's 0.072 and below both roughs' 0.054
+- so a ball pitching on the putting surface stopped faster than one pitching in the cabbage. And it
+contradicted `PUTT_DRAG` one file over, which `shot.js` says is deliberately shared so that *"a
+surface cannot be fast for a putt and slow for a run-out"*: there the green is the FASTEST thing on
+the course (1.00 against the fairway's 1.90). The green was the only row the two tables disagreed
+about.
+
+**It is also most of the answer to item 6.** An approach that stops dead where it lands turns a
+green into a target that cannot be run through, so reaching one was worth a birdie and no hole
+design could change that. Measured over 40 rounds of Pine Valley, same seeds, only this number
+moving (strokes against par 72; "good" strikes 88 % of shots inside the green band, "expert" 96 %):
+
+```
+green.roll        0.036    0.070    0.090    0.110    0.150
+good player       -1.6     +0.1       -      +2.2     +3.9
+expert player     -6.2     -3.8       -      -1.1     +0.6
+birdie-or-better  53 %     43 %       -      33 %     26 %
+```
+
+**0.090, with the fringe nudged to 0.075 so the ordering holds** (green > fringe > rough). That is
+62 % of the fairway's 0.145: a green is short-cut and runs, but it is also softer than a summer
+fairway and takes more out of the bounce, so it is not simply the faster of the two. A 7 iron now
+releases about 9 yds on a green 20-30 yds deep, which means an approach has to be landed SHORT of
+the pin - and `aimDots` shows CARRY, so that is a thing to learn rather than a thing the game does
+for you.
+
+`golf/js/test.js` section 19 pins the **ordering** rather than the value, so this can be retuned
+without the inversion coming back.
+
+### What the two changes did together
+
+Pine Valley, 40 rounds a hole, same seeds, the same three player models. `read` is whether the
+player plays the break rather than aiming at the cup:
+
+```
+                    before (0.036 / 0.45)      after (0.090 / 0.90)
+casual  (70/23/7)        +6.3                       +13.3
+good    (88/10)          -1.6                       +5.9   (+5.2 reading the break)
+expert  (96/3.5)         -6.2                       +3.4   (+1.0 reading the break)
+birdie-or-better, expert  53 %                        35 %
+```
+
+**The cost is stated rather than buried: a casual player is 7 strokes worse off.** Golf is still
+`live: false` in `adminConfig`, so nobody but a dev profile sees it, and the two levers are the two
+numbers above - `LIES.green.roll` in `clubs.js` and `BREAK_K` in `shot.js`. Nothing else moved to
+get this, and in particular the dial, the tempo, `PUTT_GAMMA`, `CUP_CAPTURE_YD` and `CUP_PAST_FT`
+were all left exactly where Matt set them.
+
+### 7. The power cap did not say what it was for
+
+> *"The % power bar isn't clear. It must say why. Rough, deep rough, bunker, etc."*
+
+The lie tile has been a PICTURE since the reference measuring pass, and the word survived only on
+its `aria-label` - so `Power: 82%` sat under a drawing with nothing in words saying what the 82 %
+was FOR. The lie's name is now printed between them.
+
+**On its own line, not appended to the percentage.** That pairing was tried and reverted once
+already (*"on one line 'Heavy rough Power: 82%' grew wide enough to run into the flag and the quit
+button"*, visible in Matt's own playtest footage), and the longest string here is the Spanish
+`Rough alto`, which is longer still. The picture is unchanged and section 12d still asserts it.
+
+### Found, measured, and NOT changed: Red Mesa 1 is a bowl with the pin at the bottom
+
+A putt aimed dead straight from 15-30 ft holes **100 % of the time on that green at every value of
+`BREAK_K` tried, up to 1.20** - the only green on either course that does not respond to the
+constant at all. It is not flat (its cells average 0.23, the same as Pine Valley 1): it is the
+`bowl` preset with the pin sitting at the bowl's low point, so the slope funnels every putt INTO
+the hole and more break simply funnels harder.
+
+The fix is to move that pin off the low point, the way Oasis Sands 3's pin was moved off its green's
+edge - par untouched, so the stored `bestHole` keys still mean what they meant. It is a course-data
+change on a hole nobody asked about, so it is recorded here rather than made. Pine Valley 12 is the
+other `bowl` and does NOT have the problem (94 % -> 44 %), because its pin is off centre.
