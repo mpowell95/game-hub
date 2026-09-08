@@ -940,28 +940,32 @@ function launched(g) {
     runRow('red');
     ok('[RAINBOW] all three rows on one ball is the headline award', g.stats.rainbows === 1,
       `rainbows ${g.stats.rainbows}, combo ${g.combo}`);
-    ok('[RAINBOW] ...and it opens the centre feature', g.scoopLit, `scoopTimer ${g.scoopTimer.toFixed(1)}`);
-
-    // The other route the spec gives, which does not go through the rows at all.
-    const clearBank = () => {
-      for (let i = 0; i < RB.DROP_COUNT; i++) g._contact('id', `drop${i}`, 100, 100, 400);
-    };
-    g.scoopTimer = 0;
-    const multBefore = g.mult;
-    clearBank();
-    ok('[RAINBOW] clearing the drop bank raises the bonus multiplier', g.mult === multBefore + 1,
-      `${multBefore}x -> ${g.mult}x`);
-    ok('[RAINBOW] ...and lights the centre feature', g.bankLit && g.scoopLit, `bankLit ${g.bankLit}`);
-
-    // Three locks start a multiball. Each needs the feature lit again, which is the shot the board
-    // is asking for.
-    for (let n = 0; n < 3; n++) {
-      if (!g.scoopLit) { g.down.clear(); g._rebuild(); clearBank(); }
-      trip('scoop');
-      ball().held = false;                 // the kick-out, without waiting for it
-    }
-    ok('[RAINBOW] three locks start a multiball', g.multiball > 0 && g.balls.length === 3,
+    // THE CENTRE OVAL IS PAINT. There is no scoop, no collider and no sensor in it - see
+    // table-rainbow.js's SCOOP comment - so nothing here may look one up.
+    ok('[RAINBOW] the centre oval carries no sensor', !RB.SWITCHES.some((s) => s.kind === 'scoop'),
+      `${RB.SWITCHES.length} switches, all rollovers`);
+    ok('[RAINBOW] ...and no collider either',
+      !RB.buildTable({}).colliders.some((c) => /scoop/i.test(c.id || '')), 'no scoopRim');
+    ok('[RAINBOW] all three rows starts the multiball', g.multiball > 0 && g.balls.length === 3,
       `multiball ${g.multiball.toFixed(0)}s, ${g.balls.length} balls`);
+
+    // The other route: the drop bank, which is the lock now that the scoop is gone.
+    const g3 = new RainbowPinball({ rand: mulberry32(5) });
+    g3.start(); g3.plungerDown(); g3.plungerPower = 1; g3.plungerUp();
+    const clearBank = () => {
+      g3.down.clear(); g3._rebuild();
+      g3._touchPrev = new Set(); g3._touch = new Set();
+      for (let i = 0; i < RB.DROP_COUNT; i++) g3._contact('id', `drop${i}`, 100, 100, 400);
+    };
+    const multBefore = g3.mult;
+    clearBank();
+    ok('[RAINBOW] clearing the drop bank raises the bonus multiplier', g3.mult === multBefore + 1,
+      `${multBefore}x -> ${g3.mult}x`);
+    ok('[RAINBOW] ...and takes a lock', g3.locks === 1, `locks ${g3.locks}`);
+    clearBank(); clearBank();
+    ok('[RAINBOW] three cleared banks start a multiball', g3.multiball > 0 && g3.balls.length === 3,
+      `multiball ${g3.multiball.toFixed(0)}s, ${g3.balls.length} balls`);
+    ok('[RAINBOW] the multiplier caps at 5x', g3.mult <= 5, `${g3.mult}x`);
 
     g.takeEvents();
     trip('b0');
@@ -986,6 +990,35 @@ function launched(g) {
     }
     ok('[KNOWN-BUG PROBE] [RAINBOW] a ball LEANING on a target is paid once, not forty times',
       paidTimes === 1, `${paidTimes} awards over 40 solver ticks of unbroken contact`);
+  }
+
+  // --- 9c. a short soak, because 9a and 9b never call update() -------------------------------------
+  //
+  // Which is not a hypothetical gap: removing the centre scoop made an import unused, dropping it
+  // took BALL_R out of _drain, and 114 assertions passed against a board that threw on its first
+  // frame. Sections 9a and 9b drive the rules through their entry points and never run the game
+  // loop, so nothing above this can catch a fault in update(), step(), _drain() or the search.
+  {
+    const g = new RainbowPinball({ rand: mulberry32(19) });
+    g.start();
+    let off = null, maxBalls = 0;
+    const dt = 1 / 60;
+    for (let i = 0; i < 60 * 90 && !off; i++) {
+      if (g.hud().onPlunger) { g.plungerDown(); g.plungerPower = 1; g.plungerUp(); }
+      if ((i % 37) === 0) g.setFlipper('left', (i % 74) === 0);
+      if ((i % 41) === 0) g.setFlipper('right', (i % 82) === 0);
+      g.update(dt);
+      maxBalls = Math.max(maxBalls, g.balls.length);
+      for (const b of g.balls) {
+        if (b.x < -60 || b.x > RB.W + 60 || b.y < -120 || b.y > RB.H + 120) {
+          off = `ball at ${b.x.toFixed(0)},${b.y.toFixed(0)}`;
+        }
+      }
+      if (g.phase === 'over') break;
+    }
+    ok('[RAINBOW] 90 s of play without throwing', true, `score ${g.score.toLocaleString()}, ball ${g.ball}`);
+    ok('[RAINBOW] no ball leaves the table', !off, off || 'all inside');
+    ok('[RAINBOW] the ball count never goes silly', maxBalls <= 3 && g.balls.length >= 0, `peak ${maxBalls}`);
   }
 }
 console.log(`\n${count - fail}/${count} passed`);

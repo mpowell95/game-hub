@@ -645,9 +645,11 @@ export class PinballUI {
     if (this.settings.board === 'royal') return t('hint_royal');
     // RAINBOW's own ladder, in the order its rules actually check: the centre feature when it is
     // open, then the rows that open it.
+    // RAINBOW's own ladder. It has no scoop, so nothing here may fall through to STARHUB's -
+    // which is the exact mistake ROYAL FLUSH shipped with, naming a shot the table does not have.
     if (this.settings.board === 'rainbow') {
       if (hud.multiball) return t('hint_jackpot');
-      if (hud.lockLit) return t('hint_scoop');
+      if (hud.locks > 0) return t('hint_locks', { n: hud.locks });
       return t('hint_rows');
     }
     if (hud.multiball) return hud.superLit ? t('hint_super') : t('hint_jackpot');

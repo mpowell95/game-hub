@@ -2,8 +2,8 @@
 //
 // A SEPARATE CLASS, FOR THE REASON royal.js GIVES. game.js's rules are welded to STARHUB's shots -
 // missions off a scoop, a lock lit by ramps, H-U-B lanes, a scripted habitrail. This board has none
-// of them: three rows of rollovers, four drop targets, three pop bumpers, a pair of upper flippers
-// and one central scoop. Threading a third shot map through that class would put a board check on
+// of them: three rows of rollovers, four drop targets, three pop bumpers and a pair of upper
+// flippers. Threading a third shot map through that class would put a board check on
 // every rule in it. So this is the same public surface ui.js already drives (start/update/
 // setFlipper/plungerDown/plungerUp/nudge/hud/takeEvents/result/score/phase) over its own rules.
 //
@@ -22,10 +22,8 @@ const BALLS = 3;              // the spec left ball count open; 3 matches the ot
 const SAVE_SECS = 7;          // ball save at the start of every ball, as the other boards have
 const GRAVITY = 515;          // STARHUB's, because this board is in STARHUB's units
 const DROP_RESET_SECS = 2;
-const SCOOP_LIT_SECS = 20;    // how long "all three rows" keeps the centre feature open
 const MB_SECS = 30;           // the spec's jackpot window
-const SCOOP_HOLD = 0.9;       // seconds the scoop keeps a ball before it kicks it back out
-const SCOOP_KICK = [0, -430]; // straight back up the middle
+const LOCKS_TO_MB = 3;        // the spec's three locks
 
 // Ball search: the same instrument royal.js uses, and for the reason written up there - a wedged
 // ball JITTERS, so speed cannot tell "not moving" from "not going anywhere". Only a bounding box
@@ -83,15 +81,14 @@ export class RainbowPinball {
     this.combo = 0;                   // the spec's "Rainbow combo meter": rows completed this game
 
     this.mult = 1;                    // end-of-ball bonus multiplier, raised by the drop bank
-    this.bankLit = false;             // a cleared bank lights one shot at the centre feature
-    this.scoopTimer = 0;              // all three rows in one ball opens it for a while
-    this.locks = 0;
+    this.locks = 0;                   // cleared drop banks; three of them start a multiball
     this.multiball = 0;               // seconds of jackpot window left, 0 when not running
     this.standupsThisBall = 0;
 
     // A SCORING PART PAYS ON THE WAY IN, NOT WHILE THE BALL LEANS ON IT. See _contact.
     this._touch = new Set();
     this._touchPrev = new Set();
+    this._cool = new Map();           // id -> time it may next pay; see _contact
     this.stats = { bumpers: 0, drops: 0, rows: 0, rainbows: 0, locks: 0, multiballs: 0, jackpots: 0, banks: 0, bestBall: 0 };
     this.ballScore = 0;
     this.events.length = 0;
@@ -182,7 +179,6 @@ export class RainbowPinball {
       this.saveTimer = Math.max(0, this.saveTimer - dt);
       if (this.saveTimer === 0) this.saveUsed = true;
     }
-    if (this.scoopTimer > 0) this.scoopTimer = Math.max(0, this.scoopTimer - dt);
     if (this.multiball > 0) {
       this.multiball = Math.max(0, this.multiball - dt);
       if (this.multiball === 0) this.emit({ type: 'msg', key: 'msg_mb_end' });
@@ -201,7 +197,6 @@ export class RainbowPinball {
     for (let i = 0; i < steps; i++) {
       const held = this._plungerBall();
       if (held) { held.x = T.PLUNGER.x; held.y = T.PLUNGER.y; held.vx = 0; held.vy = 0; }
-      this._scoopHold(PHYS_DT);
       // One solver tick, one edge window. `step` reports a contact per MICRO-step, so a ball
       // resting against a target reports it continuously - and the first soak of this board duly
       // paid 1,777 standup awards in six games, an inflated 332,000-point average, from a ball
@@ -224,7 +219,7 @@ export class RainbowPinball {
     if (!id) return;
     this._touch.add(id);
     // Already leaning on it when this tick began: it has been paid for. A drop target is exempt
-    // because `down` already makes it a once-only, and the scoop is not a collider at all.
+    // because `down` already makes it a once-only.
     if (this._touchPrev.has(id) && !id.startsWith('drop')) return;
     if (id.startsWith('pop')) {
       this._award(PTS.pop, x, y);
@@ -238,12 +233,14 @@ export class RainbowPinball {
       return;
     }
     if (id.startsWith('stand')) {
+      if (!this._arm(id, 0.3)) return;
       this._award(PTS.standup, x, y);
       this.standupsThisBall++;
       this.emit({ type: 'standup', id, i: Number(id.slice(5)) || 0, x, y });
       return;
     }
     if (id.startsWith('yell')) {
+      if (!this._arm(id, 0.3)) return;
       this._award(PTS.yellow, x, y);
       this.standupsThisBall++;
       this.emit({ type: 'standup', id, i: Number(id.slice(4)) || 0, x, y });
@@ -264,19 +261,50 @@ export class RainbowPinball {
     if (speed > 260) this.emit({ type: 'clack', x, y });
   }
 
+  /**
+   * THE DROP BANK IS THE LOCK NOW, and that is a consequence of deleting the centre scoop.
+   *
+   * The spec routes both of its rewards through the centre feature: a cleared bank "lights one
+   * shot" at it, and the shot itself is the lock. With no scoop there is no shot to light, so the
+   * bank IS the lock - clear it three times and the multiball starts. The multiplier it also
+   * raises is unchanged.
+   */
+  /**
+   * A REAL SWITCH IS DEBOUNCED, and the edge detector alone is not enough for a target.
+   *
+   * `_touchPrev` stops a ball that RESTS on a target being paid every tick. It cannot stop a ball
+   * that MICRO-BOUNCES on one - contact, no contact, contact - which is what a ball rattling in a
+   * standup cluster does, and a soak measured 1,595 standup awards in eight games that way. A
+   * physical target switch has a few tens of milliseconds of debounce for the same reason; 0.3 s
+   * is longer, because a rattle is slower than a contact bounce and nothing legitimate hits the
+   * same standup twice that fast.
+   */
+  _arm(id, secs) {
+    const next = this._cool.get(id) || 0;
+    if (this.time < next) return false;
+    this._cool.set(id, this.time + secs);
+    return true;
+  }
+
   _bankDone(keys, x, y) {
     this._award(PTS.bankAll, x, y, 'bank');
     this.stats.banks++;
-    // The spec: all four down raises the bonus multiplier (capped at 5x) and lights one shot at
-    // the centre feature.
     this.mult = Math.min(5, this.mult + 1);
-    this.bankLit = true;
     this.emit({ type: 'bankdone', x, y });
-    this.emit({ type: 'msg', key: 'msg_scoop_lit', big: true });
     this.dropTimers.push({ t: DROP_RESET_SECS, keys });
+    if (this.multiball > 0) return;
+    this.locks++;
+    this.stats.locks++;
+    if (this.locks < LOCKS_TO_MB) {
+      this._award(PTS.lock, x, y, 'lock');
+      this.emit({ type: 'lock', x, y });
+      this.emit({ type: 'msg', key: 'msg_lock_n', params: { n: this.locks } });
+      return;
+    }
+    this._startMultiball();
   }
 
-  // --- sensors: the rainbow rows, the yellows and the scoop ------------------------------------------
+  // --- sensors: the rainbow rows -----------------------------------------------------------------------
 
   /**
    * A ROLLOVER LIGHTS ONCE PER PASS, IT DOES NOT PAY EVERY TICK.
@@ -295,8 +323,7 @@ export class RainbowPinball {
         if (!inside) { b._inSensor.delete(s.id); continue; }
         if (b._inSensor.has(s.id)) continue;
         b._inSensor.add(s.id);
-        if (s.kind === 'scoop') this._scoopHit(b);
-        else if (s.row) this._dotHit(s, b);
+        if (s.row) this._dotHit(s, b);
       }
     }
   }
@@ -333,71 +360,35 @@ export class RainbowPinball {
     this.rowsThisBall.clear();
     this.stats.rainbows++;
     this._award(PTS.rainbow, b.x, b.y, 'rainbow');
-    this.scoopTimer = SCOOP_LIT_SECS;
     this.emit({ type: 'msg', key: 'msg_rainbow', big: true });
+    // The spec's reward for this was "lights the center feature for a limited time", and the
+    // centre feature is gone. So all three rows on one ball starts the multiball outright, which
+    // is what lighting the lock was worth. It is still the harder of the two routes.
+    if (this.multiball === 0) this._startMultiball();
   }
 
-  /** Is the centre feature open? Either route the spec gives: a cleared bank, or all three rows. */
-  get scoopLit() { return this.bankLit || this.scoopTimer > 0; }
-
-  _scoopHit(b) {
-    if (b.held) return;
-    b.held = true;
-    b.holdT = SCOOP_HOLD;
-    b.vx = 0; b.vy = 0;
-    b.x = T.SCOOP.x; b.y = T.SCOOP.y;
-    this.emit({ type: 'scoop', x: b.x, y: b.y });
-
-    if (this.multiball > 0) return;   // during multiball the scoop is just a hole
-    if (!this.scoopLit) return;       // unlit: it catches and kicks back, and pays nothing
-
-    this.bankLit = false;
-    this.scoopTimer = 0;
-    this.locks++;
-    this.stats.locks++;
-    if (this.locks < 3) {
-      this._award(PTS.lock, b.x, b.y, 'lock');
-      this.emit({ type: 'lock', x: b.x, y: b.y });
-      this.emit({ type: 'msg', key: 'msg_lock_n', params: { n: this.locks } });
-      return;
-    }
-    this._startMultiball(b);
-  }
 
   /**
    * Multiball. THE LOCKED BALLS ARE VIRTUAL, and that is deliberate: the spec's lock holds balls
-   * one and two "in" the scoop, but a real physical lock means a ball sitting out of play while the
+   * one and two are held, but a real physical lock means a ball sitting out of play while the
    * player carries on with the next one, which needs a second serve, a kick-out and a lot of state.
    * Locks one and two are counted and lit; the third RELEASES all three, which is what the player
    * sees either way.
    */
-  _startMultiball(b) {
+  _startMultiball() {
     this.locks = 0;
     this.multiball = MB_SECS;
     this.stats.multiballs++;
+    // The two extra balls come in over the bumper nest, which is where a machine with no ball
+    // trough door would put them.
     for (let i = 0; i < 2; i++) {
-      const nb = makeBall(T.SCOOP.x + (i ? 26 : -26), T.SCOOP.y - 20, (i ? 150 : -150), -260);
+      const nb = makeBall(T.AXIS + (i ? 30 : -30), 150, (i ? 150 : -150), 260);
       this.balls.push(nb);
     }
     this.emit({ type: 'multiball', wizard: false });
     this.emit({ type: 'msg', key: 'msg_multiball', big: true });
   }
 
-  /** A held ball sits in the scoop for a moment, then is kicked straight back up the middle. */
-  _scoopHold(dt) {
-    for (const b of this.balls) {
-      if (!b.held) continue;
-      b.holdT -= dt;
-      if (b.holdT > 0) continue;
-      b.held = false;
-      b.x = T.SCOOP.x;
-      b.y = T.SCOOP.y - T.SCOOP.rad - BALL_R - 2;
-      b.vx = SCOOP_KICK[0] + (this.rand() - 0.5) * 60;
-      b.vy = SCOOP_KICK[1];
-      if (b._inSensor) b._inSensor.delete('scoop');
-      this.emit({ type: 'kickout', x: b.x, y: b.y });
-    }
-  }
 
   // --- housekeeping ----------------------------------------------------------------------------------
 
@@ -530,9 +521,7 @@ export class RainbowPinball {
     this.dropTimers.length = 0;
     for (const n of ROW_NAMES) this.rowLit[n].clear();
     this.rowsThisBall.clear();
-    this.scoopTimer = 0;
     this.multiball = 0;
-    this.locks = 0;
     this.standupsThisBall = 0;
     this.saveUsed = false;
     this._rebuild();
@@ -558,7 +547,7 @@ export class RainbowPinball {
       // playfield lamps, which is where a machine puts it.
       mission: null,
       multiball: this.multiball > 0, wizard: false,
-      locks: this.locks, lockLit: this.scoopLit, bankLit: this.bankLit, superLit: false,
+      locks: this.locks, lockLit: false, bankLit: false, superLit: false,
       missionsDone: this.stats.rainbows, extraBalls: 0,
       power: this.plungerPower, onPlunger: !!this._plungerBall(),
       // this board's own, read by the renderer
