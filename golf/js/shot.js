@@ -490,9 +490,16 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
 
   // A ball pitching straight into the cup is in, whatever club sent it.
   const holedOnTheFly = !blocked && cupCheck(hole, landing[0], landing[1], 0);
+  // THE RUN-OUT FOLLOWS THE BALL, NOT THE AIM LINE (2026-09-08). `flightPoint` puts the lateral
+  // miss on `p * p`, so a ball that has curved is not travelling along `aimRad` when it lands - its
+  // heading is the slope of that curve at p = 1, `atan(2 * sideYd / carry)`. This did not matter
+  // while `ui.js` folded the miss into `aimRad` and left `sideYd` at zero (the two were the same
+  // line); it does now that a mishit is a genuine slice. A sliced drive keeps drifting as it runs,
+  // which is what a sliced drive does.
+  const rollRad = aimRad + Math.atan2(2 * sideYd, Math.max(1e-6, carry));
   const rolled = holedOnTheFly
     ? { rest: [...landing], holed: true }
-    : rollWatchingCup(hole, landing, aimRad, rollYd);
+    : rollWatchingCup(hole, landing, rollRad, rollYd);
   let rest = rolled.rest;
   let restOn = surfaceAt(hole, rest[0], rest[1]);
 
@@ -772,7 +779,33 @@ export const PUTT_DECEL = 1.81;
  *  Because the break is integrated the whole way down rather than applied as a formula at the end,
  *  a putt that dies at the hole bends MORE than one struck firm. That is correct golf and it costs
  *  nothing to get right. */
-export const BREAK_K = 0.45;
+/** 0.45 -> 0.90 ON 2026-09-08. Matt, after playing Pine Valley: *"I don't think any of the slopes
+ *  on the green are real. The ball seems to always go straight."*
+ *
+ *  He is right, and the number that proves it is not the bend, it is the MAKE RATE. Struck
+ *  perfectly and aimed DEAD STRAIGHT at the cup from 15-30 ft - no break read at all - on Pine
+ *  Valley's own greens:
+ *
+ *      hole            1     2     3     4     6     7     8    12    16    17
+ *      BREAK_K 0.45   70 %  67 %  67 %  88 %  100 % 17 %  28 %  94 %   5 %   0 %
+ *      BREAK_K 0.90   31 %  28 %  30 %  47 %  100 %  2 %  16 %  44 %   0 %   0 %
+ *
+ *  On the opening holes - the ones a player meets first, and the ones Matt played through - aiming
+ *  straight at the hole was the right play two times in three. That is a green whose arrows are
+ *  decoration, which is exactly the complaint, and it is the same complaint that took this constant
+ *  from 0.12 to 0.45 on 2026-09-07: that pass fixed the HARD greens and left the easy ones.
+ *
+ *  Hole 6 stays at 100 % at every value, and that is correct - it is the one deliberately FLAT
+ *  green on the property (golf/CLAUDE.md, "The front nine"). A course needs one hole that asks
+ *  nothing of the read.
+ *
+ *  WHAT IT IS WORTH TO READ THE BREAK, measured over 40 rounds with a player who reads it perfectly
+ *  against the same player aiming straight: **0.6 strokes at 0.45, 2.4 strokes at 0.90.** Before
+ *  this the slope grids were worth about half a stroke a round.
+ *
+ *  A SHORT PUTT IS UNCHANGED, because break grows with the square of the distance: at 3 ft it is
+ *  under an inch either way, and every number in section 17 holds. */
+export const BREAK_K = 0.90;
 
 /** HOW MUCH A ROLLING BALL IS SLOWED BY WHAT IT IS ROLLING ON, as a multiple of `PUTT_DECEL`
  *  (which is the green, and so is 1.00 by definition).

@@ -576,6 +576,7 @@ class GolfGame {
 
         <div class="gf-tc" data-role="tc">
           <span class="gf-lieart" data-role="lieart"></span>
+          <div class="gf-panel gf-lie" data-role="lie"></div>
           <div class="gf-panel gf-power" data-role="power"></div>
           <div class="gf-dist" data-role="dist"></div>
         </div>
@@ -616,7 +617,7 @@ class GolfGame {
     this.meter = this.rootEl.querySelector('[data-role="meter"]');
     this.mctx = this.meter.getContext('2d');
     this.el = {};
-    for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'windpanel', 'swing']) {
+    for (const k of ['par', 'shot', 'mode', 'holeno', 'lieart', 'lie', 'power', 'dist', 'tc', 'clubart', 'clubname', 'clubyds', 'wind', 'windarrow', 'windpanel', 'swing']) {
       this.el[k] = this.rootEl.querySelector(`[data-role="${k}"]`);
     }
     // The four floating HUD clusters, by class: they carry no data-role because nothing
@@ -888,9 +889,21 @@ class GolfGame {
       this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball] };
     } else {
       const club = this._activeClub();
+      // THE MISS IS A CURVE, NOT A ROTATED LAUNCH LINE (2026-09-08). Matt: *"Do off target balls
+      // travel in a straight line? Or do they slice/hook like in real golf?"* They travelled dead
+      // straight, and that was this call site contradicting the engine: `flightPoint` has always
+      // put the lateral term on `p * p` while the along term is linear - a ball that starts on the
+      // aim line and bends away from it - and `shot.js` says so in its own header. Handing the miss
+      // in as a ROTATION of `aimRad` with `mishitDeg: 0` bypassed all of it, so every mishit left
+      // the club already pointing where it would finish.
+      //
+      // The landing point barely moves: the lateral offset at p = 1 is `tan(deg) * carry` either
+      // way, so nothing calibrated against dispersion shifts. What changes is the SHAPE of the
+      // flight - and, because `treeHit` samples the same curve, which trees a sliced ball is
+      // actually behind.
       const res = resolveShot({
-        hole: this.hole, from: this.ball, aimRad: this.aimRad + m.deg * DEG,
-        club, power, mishitDeg: 0, distanceMul: m.distanceMul,
+        hole: this.hole, from: this.ball, aimRad: this.aimRad,
+        club, power, mishitDeg: m.deg, distanceMul: m.distanceMul,
       });
       this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: res.flightMs, res, club, from: [...this.ball] };
     }
@@ -1245,6 +1258,16 @@ class GolfGame {
       this._lieArtFor = lie;
     }
     this.el.lieart.setAttribute('aria-label', t(`lie_${lie}`));
+    // AND THE LIE IS NAMED IN WORDS, NOT ONLY DRAWN (2026-09-08). Matt: *"The % power bar isn't
+    // clear. It must say why. Rough, deep rough, bunker, etc."* The tile has been a PICTURE since
+    // the reference measuring pass, with the word surviving only on the aria-label - so a `Power:
+    // 82%` line appeared under it with nothing on screen saying what the 82 % was FOR.
+    //
+    // IT IS ITS OWN LINE, not appended to the percentage. That pairing was tried and reverted once
+    // already ("on one line 'Heavy rough Power: 82%' grew wide enough to run into the flag and the
+    // quit button" - visible in Matt's own playtest footage), and the longest string here is the
+    // Spanish `Rough alto`, which is longer still.
+    this.el.lie.textContent = t(`lie_${lie}`);
     // Every bad lie does two things and BOTH are shown before the swing: it caps distance, and it
     // narrows the accuracy band. The percentage is the cap; the band is drawn narrower.
     // TWO LINES, which is what the spec specified all along (§21.2: `Bunker` / `Power: 88%`).
@@ -1284,7 +1307,9 @@ class GolfGame {
     // - so a wind panel over a putt is a number that cannot affect anything the player is about to
     // do. Reading one and adjusting for it is worse than not having it.
     this.el.windpanel.hidden = this._putting();
-    this.el.swing.querySelector('span').textContent = this.holed ? t('back') : t('swing');
+    // The swing button's text is `_paintSwingLabel`'s, so that it can name WHICH TAP IS NEXT. This
+    // only drops the cache, because the element is rebuilt on a re-render and on a language change.
+    this._swingLabelKey = null; this._swingArmed = null;
   }
 
   /** Hold the free-look camera inside the hole. Without this the view scrolls off the map into
@@ -1560,6 +1585,7 @@ class GolfGame {
       puttLine: putting ? puttRangeFt() / FT_PER_YD : 0,
     });
     this._drawMeter(now);
+    this._paintSwingLabel(now);
     this.raf = requestAnimationFrame(this._frame);
   };
 
@@ -1588,6 +1614,40 @@ class GolfGame {
    * band's radii - and the outer white outline sits at 143-148 in both places. Ours drew it as a
    * fan sticking a third of a radius past the edge.
    */
+  /** THE SWING BUTTON SAYS WHICH TAP IS NEXT (2026-09-08).
+   *
+   *  Matt: *"The first click on the green while putting does not appear to work. I click swing and
+   *  nothing happens. I have to click it a second time to start the swing."*
+   *
+   *  The tap DID work. `PUTTER_DEAD_MS` holds the putter's needle at zero for 250 ms after tap 1
+   *  (clubs.js - it exists to move a tap-in's second tap out of iOS's double-tap window, and it is
+   *  load-bearing), and for those 250 ms the meter is byte-identical to its idle state. So the one
+   *  club with a dead zone is the one club that gives no sign it heard you, and a second tap inside
+   *  the window is correctly ignored - which reads as "the first click did nothing".
+   *
+   *  Two cues, and neither touches the dial, the tempo or the dead zone itself: this label, which
+   *  changes on the frame the tap lands, and the charge ring in `_drawMeter` below, which shows the
+   *  hold running down. `data-armed` on the button is the third, for the CSS.
+   *
+   *  It is written from the render loop rather than from `_tap` because the phase also changes
+   *  without a tap (the backswing tops out; the needle runs off the bar and fires), and it writes
+   *  only when the text actually changes - a DOM write every frame is not free. */
+  _paintSwingLabel(now) {
+    const ph = this.swing.read(now).phase;
+    const key = this.holed ? 'back'
+      : ph === PHASE.BACK ? 'swing_power'
+        : ph === PHASE.DOWN ? 'swing_aim' : 'swing';
+    if (this._swingLabelKey !== key) {
+      this._swingLabelKey = key;
+      this.el.swing.querySelector('span').textContent = t(key);
+    }
+    const armed = ph === PHASE.BACK || ph === PHASE.DOWN ? '1' : '0';
+    if (this._swingArmed !== armed) {
+      this._swingArmed = armed;
+      this.el.swing.setAttribute('data-armed', armed);
+    }
+  }
+
   _drawMeter(now) {
     const c = this.mctx;
     c.clearRect(0, 0, METER_W, METER_H);
@@ -1766,6 +1826,26 @@ class GolfGame {
     // It is still the widest single mark on the meter and still black-keyed against grass.
     if (read.power != null) needleAt(read.power, 5, 2, '#ffffff');
     needleAt(read.pos, 5, 2, '#ffffff');
+
+    // THE DEAD ZONE IS VISIBLE NOW. See `_paintSwingLabel` for the report this closes: while
+    // `tempo.deadMs` holds the putter's needle at zero, the meter used to be identical to its idle
+    // state, so the tap that started the swing left no mark anywhere on screen.
+    //
+    // A ring around the hub, sweeping clockwise from straight up and completing exactly as the
+    // needle starts to climb. It is drawn INSIDE the band's inner radius, so it cannot be mistaken
+    // for the needle or for the planted power marker, and it costs nothing on the other thirteen
+    // clubs - they have `deadMs: 0` and never enter this branch.
+    const dead = this.swing.tempo && this.swing.tempo.deadMs;
+    if (read.phase === PHASE.BACK && dead > 0) {
+      const q = Math.min(1, Math.max(0, (now - this.swing.t0) / dead));
+      if (q < 1) {
+        const r = IN_R - 9;
+        c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,0.55)';
+        c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); c.stroke();
+        c.lineWidth = 2.5; c.strokeStyle = '#ffce3a';
+        c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); c.stroke();
+      }
+    }
 
     // --- the hub readout: how far the PREVIOUS shot travelled ----------------------------------
     if (this.lastShotYd != null) {

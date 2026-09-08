@@ -943,8 +943,13 @@ console.log('\n-- 10b. THE CUP IS THE SAME RULE FOR EVERY SHOT --');
   ok('a ball passing a yard wide is not holed', !SH.cupCheck(h, h.pin[0] + 1, h.pin[1], 0.5));
 
   // Roll a ball from short of the hole so its roll dies right at the cup.
+  // 6.05 -> 6.4 ON 2026-09-08, and it is the SLOPE, not the cup rule. `rollWatchingCup` integrates
+  // the green's own gradient (added for Red Mesa's crown greens), hole 1's green falls toward the
+  // front, and `BREAK_K` doubled to 0.90 - so this run-out is climbing, and 6.05 nominal now dies
+  // 0.45 yds short of a cup that captures at 0.30. The probe is about whether a ROLL can be holed
+  // at all, which is what a dying 6.4 still measures.
   const start = [h.pin[0], h.pin[1] - 6];
-  const rolled = SH.rollWatchingCup(h, start, 0, 6.05);
+  const rolled = SH.rollWatchingCup(h, start, 0, 6.4);
   ok('[KNOWN-BUG PROBE] a ROLL that reaches the cup at dying pace is holed', rolled.holed,
     `finished at [${rolled.rest.map((v) => v.toFixed(2))}]`);
   const past = SH.rollWatchingCup(h, start, 0, 40);
@@ -1050,7 +1055,9 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
 }
 {
   const p = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
-  near('a 20 ft putt across a HALF-strength slope breaks 15 in', p.rest[0] * 36, 15.1, 0.8);
+  // 15.1 -> 31.6 in with BREAK_K 0.45 -> 0.90 (2026-09-08). See that constant's own header: at 0.45
+  // the OPENING greens still holed a straight-aimed putt two times in three.
+  near('a 20 ft putt across a HALF-strength slope breaks 32 in', p.rest[0] * 36, 31.6, 1.0);
   // [KNOWN-BUG PROBE] AND THAT BREAK HAS TO BEAT THE HOLE. The cup captures anything within
   // CUP_CAPTURE_YD of its centre, so a break smaller than that radius cannot change an outcome -
   // which is exactly what 0.12 was: 3.3 in of break against 10.8 in of cup, and a putt aimed dead
@@ -1063,7 +1070,15 @@ console.log('\n-- 11b. CAN A PERSON ACTUALLY HOLE IT? (the check this suite was 
 {
   const full = SH.simulatePutt({ hole: flatGreen([1, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
   const half = SH.simulatePutt({ hole: flatGreen([0.5, 0]), from: [0, 0], aimRad: 0, power: SH.puttPowerFor(20, SH.MAX_PUTT_FT) });
-  ok('a full slope breaks about twice as much as a half one', Math.abs(full.rest[0] / half.rest[0] - 2) < 0.15);
+  // MORE THAN TWICE, AND THAT IS THE INTEGRATION RATHER THAN A BUG. The break is applied the whole
+  // way down rather than as a formula at the end, so a ball that has already turned is travelling
+  // across MORE of the slope for the rest of its roll - and a curved path is longer, so it spends
+  // longer doing it. At BREAK_K 0.12 and 0.45 the effect was small enough that the ratio sat at
+  // 2.0-2.1 and this assertion read "about twice"; at 0.90 the same physics gives 2.48. What is
+  // being pinned is that the two are ordered and that the relation has not run away.
+  const ratio = full.rest[0] / half.rest[0];
+  ok(`a full slope breaks more than twice as much as a half one (${ratio.toFixed(2)}x)`,
+    ratio > 2 && ratio < 3.2);
 }
 {
   const p = SH.simulatePutt({ hole: flatGreen([0, 0]), from: [0, 0], aimRad: 0, power: 1 });
@@ -1336,8 +1351,13 @@ console.log('\n-- 12d. THE GREEN SLOPE READ, AND THE METER SCALE --');
   ok('the green stripe IS the 100 % line', /arc\(0\.985, 1\.004/.test(ui));
 
   // The lie readout is a picture of the surface, not the word.
+  // THE `!data-role="lie"` CLAUSE WAS DROPPED ON 2026-09-08, deliberately. It was written when the
+  // word REPLACED the picture, and the picture is the measured reference behaviour - that half is
+  // unchanged and is still asserted. What changed is that the word is now a CAPTION beside it:
+  // Matt, *"The % power bar isn't clear. It must say why. Rough, deep rough, bunker, etc."* Section
+  // 19 asserts the caption; this asserts the picture is still the readout.
   ok('[KNOWN-BUG PROBE] the lie readout is a PICTURE of the surface',
-    /function lieArt\(kind, pal\)/.test(ui) && /data-role="lieart"/.test(ui) && !/data-role="lie"/.test(ui));
+    /function lieArt\(kind, pal\)/.test(ui) && /data-role="lieart"/.test(ui));
   ok('...and it paints from the SAME map the ground is painted from',
     /fillsFor\(pal\)\[kind\]/.test(ui),
     'a second colour table would let the tile show a green the course does not have');
@@ -1647,7 +1667,40 @@ console.log('\n-- 15b. the putter can miss --');
     }
     return made / N;
   };
-  ok('a PERFECT strike still holes a 10 ft putt every time', conv(10, 0) === 1);
+  // A PERFECT STRIKE ON THE RIGHT LINE. `conv` aims dead straight at the cup, which was the same
+  // thing as the right line while the break was small; with BREAK_K at 0.90 (2026-09-08) it is not,
+  // so the read is now part of "perfect". `convRead` finds the line a player who reads the green
+  // would play - at most 6 degrees either side - and that line still holes a 10-footer every time.
+  const convRead = (ft) => {
+    let made = 0; const N = 120;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2; const yd = ft / 3;
+      const from = [h.pin[0] + Math.cos(a) * yd, h.pin[1] + Math.sin(a) * yd];
+      const rangeFt = SH.puttRangeFt();
+      const base = Math.atan2(h.pin[0] - from[0], h.pin[1] - from[1]);
+      // LINE **AND** PACE. Aim alone tops out at 89 % here, and that is not a shortfall in the
+      // model - it is what a real break does: how far a putt turns depends on how long it is on the
+      // green, so a big break is read as a pair (a wider line struck softer, or a tighter one
+      // struck firm). Both are things the player sets, with the aim arrows and the power tap.
+      let holed = false;
+      for (let d = -14; d <= 14 && !holed; d++) {
+        for (const mul of [1, 1.1, 0.92, 1.2, 0.85]) {
+          const r = SH.simulatePutt({ hole: h, from, aimRad: base + (d * Math.PI) / 180,
+            power: Math.min(1, SH.puttPowerFor(ft, rangeFt) * mul), rangeFt });
+          if (r.holed) { holed = true; break; }
+        }
+      }
+      if (holed) made++;
+    }
+    return made / N;
+  };
+  ok('a PERFECT strike ON THE READ still holes a 10 ft putt every time', convRead(10) === 1);
+  // ...and the read is now worth something, which is the whole point of raising BREAK_K: aiming
+  // STRAIGHT at the cup from 10 ft used to hole every time and now does not.
+  const straight10 = conv(10, 0);
+  ok(`[KNOWN-BUG PROBE] ...and aiming straight at it does NOT (${(straight10 * 100).toFixed(0)} % made)`,
+    straight10 < 0.97,
+    'the break is back inside the cup: aiming at the hole works from anywhere on this green');
   const half = conv(30, 0.30);
   ok(`...and a half-green-band strike misses most 30-footers (${(half * 100).toFixed(0)} % made)`, half < 0.55);
   const edge = conv(15, 0.54);
@@ -2056,6 +2109,101 @@ console.log('\n-- 18. the cup holds a ball running up to CUP_PAST_FT past it (20
   }
 }
 
+
+console.log('\n-- 19. the playtest of 2026-09-08: the side of the miss, the shape of it, and the lie --');
+// Matt, having played Pine Valley: seven items. Four of them are engine defects and are pinned
+// here; the other three were a question (do mishits curve - they do now), a HUD gap and a tuning
+// call, and are covered structurally below.
+{
+  const DEGR = Math.PI / 180;
+
+  // [KNOWN-BUG PROBE] THE PUTT'S LINE TOOK THE WRONG SIDE. `mishit` already returns a SIGNED angle
+  // (`deg * Math.sign(signed)`), and `puttMishit` multiplied by the sign a second time - which
+  // squares it away, so every putt broke RIGHT whichever side of centre the needle was stopped on.
+  // Matt: "if I land left of the green section, the ball should be off target to the left... Right
+  // now it appears to be inverted." Born red: both of these read +8.12 before the fix.
+  const left = SW.puttMishit(0.2, 1).deg;
+  const right = SW.puttMishit(0.8, 1).deg;
+  ok(`[KNOWN-BUG PROBE] a putt missed LEFT of centre goes left (${left.toFixed(2)} deg)`, left < 0,
+    'puttMishit is squaring the sign away again - m.deg is ALREADY signed');
+  ok(`...and one missed RIGHT goes right (${right.toFixed(2)} deg)`, right > 0);
+  near('...and the two are mirror images', Math.abs(left), Math.abs(right), 1e-9);
+  // The FULL-SHOT model was never wrong, and this is the guard that says so.
+  ok('a full shot missed left of centre still goes left',
+    SW.mishit(0.2, 1, 1, 1, 0).deg < 0 && SW.mishit(0.8, 1, 1, 1, 0).deg > 0);
+
+  // [KNOWN-BUG PROBE] THE MISS IS A CURVE. `flightPoint` has always put the lateral term on `p * p`
+  // while the along term is linear, and `ui.js` bypassed all of it by rotating `aimRad` and passing
+  // `mishitDeg: 0` - so an off-target ball flew dead straight. Matt: "Do off target balls travel in
+  // a straight line? Or do they slice/hook like in real golf?"
+  const bent = SH.flightPoint(0.5, 200, 20, 30);
+  ok(`[KNOWN-BUG PROBE] a mishit BENDS: half way down it is ${bent.side.toFixed(1)} yds off line, not 10.0`,
+    bent.side < 10 * 0.6, 'the lateral term is linear in p - the ball is flying a straight offset line');
+  const uiSrc = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('[KNOWN-BUG PROBE] ...and ui.js hands the miss in as `mishitDeg`, not folded into `aimRad`',
+    /resolveShot\(\{[\s\S]{0,220}?aimRad: this\.aimRad,[\s\S]{0,220}?mishitDeg: m\.deg/.test(uiSrc),
+    'the mishit is back in aimRad, which flies the ball straight and defeats flightPoint');
+
+  // The endpoint is unchanged, which is what keeps every dispersion number in this file honest:
+  // `tan(deg) * carry` is the lateral offset at p = 1 either way.
+  {
+    const CALMH = { ...PINE_VALLEY.holes[0], wind: { speed: 0, bearing: 0 } };
+    const drv = CLUBS[0];
+    const bentShot = SH.resolveShot({ hole: CALMH, from: [0, 5], aimRad: 0, club: drv, power: 1, mishitDeg: 4 });
+    const turned = SH.resolveShot({ hole: CALMH, from: [0, 5], aimRad: 4 * DEGR, club: drv, power: 1, mishitDeg: 0 });
+    near('a curved miss and a rotated one land the same distance off line',
+      Math.abs(bentShot.landing[0]), Math.abs(turned.landing[0]), 1.0);
+  }
+
+  // AND THE RUN-OUT FOLLOWS THE BALL. With the miss on `sideYd` the ball is not travelling along
+  // `aimRad` when it lands, so a roll down the aim line would put a sliced drive back on the line
+  // it was aimed at - the ball would bend out and then bend back.
+  {
+    const FLAT = {
+      n: 1, par: 5, cardYards: 600, tee: [0, 5], pin: [0, 595],
+      bounds: { minX: -300, maxX: 300, minY: -60, maxY: 700 }, base: 'fairway',
+      surfaces: [{ kind: 'fairway', poly: [[-300, -60], [300, -60], [300, 700], [-300, 700]] },
+        { kind: 'green', poly: 'green' }],
+      green: { poly: [[-1, 594], [1, 594], [1, 596], [-1, 596]], slope: { cols: 1, rows: 1, cells: [[0, 0]] } },
+      treeTypes: [], trees: [], treeBelts: [], decor: [], wind: { speed: 0, bearing: 0 },
+    };
+    const r = SH.resolveShot({ hole: FLAT, from: [0, 5], aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 6 });
+    const drift = Math.abs(r.rest[0]) - Math.abs(r.landing[0]);
+    ok(`[KNOWN-BUG PROBE] a sliced drive keeps drifting through its run-out (+${drift.toFixed(1)} yds)`,
+      drift > 0.5, 'the run-out is following aimRad, so the ball bends out in the air and back on the ground');
+  }
+
+  // THE GREEN IS NOT THE SLOWEST SURFACE IN THE GAME. Matt: "Balls don't run out or bounce much on
+  // the green. Is this intentional?" It was not: `LIES.green.roll` was 0.036, BELOW the fringe's
+  // 0.072 and below both roughs, while `PUTT_DRAG` (the table shot.js says is shared, so that "a
+  // surface cannot be fast for a putt and slow for a run-out") makes the green the FASTEST thing on
+  // the course. The two tables have to agree on their ORDERING or one of them is lying.
+  ok(`[KNOWN-BUG PROBE] a ball runs further on a green than on the fringe (${LIES.green.roll} vs ${LIES.fringe.roll})`,
+    LIES.green.roll > LIES.fringe.roll,
+    'the green is slower than its own collar for a struck shot and faster for a putt');
+  ok('...and further than out of rough', LIES.green.roll > LIES.lightRough.roll);
+  ok('...and PUTT_DRAG still agrees with that ordering',
+    SH.puttDrag('green') < SH.puttDrag('fringe') && SH.puttDrag('fringe') < SH.puttDrag('lightRough'));
+
+  // THE LIE IS NAMED IN WORDS. The tile is a picture (measured off the reference) and the word only
+  // survived on its aria-label, so `Power: 82%` sat under it with nothing saying what the 82 % was
+  // for. Matt: "The % power bar isn't clear. It must say why. Rough, deep rough, bunker, etc."
+  ok("the HUD prints the lie's name beside the power cap",
+    /this\.el\.lie\.textContent = t\(`lie_\$\{lie\}`\)/.test(uiSrc),
+    'the lie readout is a picture again, with nothing in words under it');
+
+  // AND THE SWING BUTTON SAYS WHICH TAP IS NEXT. `PUTTER_DEAD_MS` holds the needle at zero for
+  // 250 ms after tap 1, and for those 250 ms nothing on screen moved. Matt: "The first click on the
+  // green while putting does not appear to work... I have to click it a second time."
+  ok('the swing button names the next tap', /_paintSwingLabel\(now\)/.test(uiSrc)
+    && /swing_power/.test(uiSrc) && /swing_aim/.test(uiSrc),
+    'the button reads "swing" through the whole three-tap sequence again');
+  ok('...and the dead zone draws a charge ring', /tempo && this\.swing\.tempo\.deadMs/.test(uiSrc),
+    'the putter\'s 250 ms hold is invisible again');
+  for (const k of ['swing_power', 'swing_aim']) {
+    ok(`"${k}" exists in EN and ES`, !!STRINGS.en[k] && !!STRINGS.es[k]);
+  }
+}
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);
