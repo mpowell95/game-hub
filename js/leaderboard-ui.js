@@ -578,7 +578,10 @@ function boardPlaysOf(g, id) {
  *  pure score board it always was. */
 function boardTierOf(g, id) {
   if (_tier != null) return _tier;
-  return boardRankTier((tier) => gameMetricAt(g, id, tier), id);
+  // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
+  // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
+  // metric proves the player actually SCORED at it. See boardRankTier's own header.
+  return boardRankTier((tier) => gameMetricAt(g, id, tier), id, (tier) => playsAtTier(g, [id], tier));
 }
 
 /** The number this board ranks and PRINTS for a row: the game's own metric AT that row's tier.
@@ -640,8 +643,24 @@ function comparePlainMetric(a, b, id) {
  *  games played shouldn't be based on difficulty at all. But the wins should be."). Attached to the
  *  name it says what it means: this PLAYER is ranked at this tier. */
 function tierChipHTML(tier) {
+  // Nothing while a difficulty FILTER is selected: the control directly above the list already says
+  // "Showing: Easy", and repeating it on all twelve rows is noise that also reads as if the tier
+  // varied from row to row when it is the one thing on that screen that cannot.
+  if (_tier != null) return '';
   if (!tier) return '';
   return `<span class="lb-tierchip" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}<span>${esc(t(TIER_LABEL_KEY[tier]))}</span></span>`;
+}
+
+/** The same fact with no room for the word: the shape alone, carrying the tier in its `title` and
+ *  its accessible name. By Game's row prints the leader's score AT THEIR TIER (it has to - it must
+ *  name the person the board puts at #1, and that person's number is their tier's), so without a
+ *  marker that row reads as the game's all-time record and is off by however much easier the
+ *  record-holder's tier was. Shape, not hue (the colorblind rule); the word is one tap away on the
+ *  board itself. */
+function tierMarkHTML(tier) {
+  if (!tier) return '';
+  const label = esc(t(TIER_LABEL_KEY[tier]));
+  return `<span class="lb-tiermark" style="--lb-pill-color:${TIER_COLOR[tier]}" title="${label}" role="img" aria-label="${label}">${diffShapeSVG(tier)}</span>`;
 }
 
 // --- difficulty pills --------------------------------------------------------
@@ -1194,9 +1213,9 @@ function gameListHTML(list) {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
     // The leader shown here must be the row the board itself puts at #1, so it sorts through the
     // board's OWN order - the same function that numbers the rank badges.
+    const order = boardMetricCmp(meta.id);
     const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
-      .sort((a, b) => boardMetricCmp(meta.id)(a, b)
-        || (b.updatedAt || 0) - (a.updatedAt || 0));
+      .sort((a, b) => order(a, b) || (b.updatedAt || 0) - (a.updatedAt || 0));
     return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
   });
   rows.sort((a, b) => {
@@ -1209,7 +1228,7 @@ function gameListHTML(list) {
   const cards = rows.map(({ meta, lead, fav }) => {
     const art = GAME_ART[hubIdOf(meta.id)] || '';
     const body = lead
-      ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span></span>`
+      ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span>${tierMarkHTML(boardTierOf(lead, meta.id))}</span>`
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
       ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(t(lbUnitKeyOf(meta.id)))}</span></span>`
@@ -2002,6 +2021,10 @@ function ensureCss() {
     '.lb-tierchip{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--lb-ink);text-transform:uppercase}',
     '.lb-tierchip .lb-dshape{width:10px;height:10px;fill:var(--lb-pill-color,#5b6b82)}',
     '.lb-tierchip .lb-dshape-x2{width:18px}',
+    // The wordless form, for By Game's leader row (see tierMarkHTML).
+    '.lb-tiermark{flex:0 0 auto;display:inline-flex;align-items:center;margin-left:2px}',
+    '.lb-tiermark .lb-dshape{width:10px;height:10px;fill:var(--lb-pill-color,#5b6b82)}',
+    '.lb-tiermark .lb-dshape-x2{width:18px}',
     // The inline difficulty breakdown (catInlineHTML). It lives INSIDE .lb-psubline, so it costs
     // the card no height at all. NO WRAP and no sideways scroll, same rule the old strip had: the
     // JS budget decides what fits, and `overflow:hidden` is only the belt to that braces - a number

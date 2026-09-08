@@ -1403,17 +1403,37 @@ are read-only to this feature — nothing is stored, migrated or normalized.
     of games in first place, but... he's only ever played on easy. So what the hell?"* A board
     cannot rank on one number and print another. `boardMetricOf(g, id)` = `gameMetricAt(g, id,
     boardTierOf(g, id))` is now the single source of the headline, the sort and the rank badge.
-  - **A row's tier is the highest tier it has a real SCORE at**, not merely plays -
-    `boardRankTier(metricAt, id)` in `js/leaderboard-rank.js` (pure, tested headless; the caller
-    passes its own extractor). Plays alone would rank someone at Hard off fifty Hard games they
-    never won, above a Medium player with forty wins, and print a 0 beside their name.
-  - **`null` = no tier**: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill
-    Climb - every row is null, so those boards are exactly what they were) and legacy/unmapped
-    history in a game that has one. Those rows keep the all-tier number and sort below the tiered
-    rows. **Nothing leaves the board**: the other tiers are still on the card's tier tiles, the
-    difficulty filter still shows any tier's own numbers, Standing Records still names the
-    all-time best (King of Games' 51 is still printed on that same screen), and the player detail
-    still has the full per-tier table (rule 1).
+  - **A row's tier is the highest tier it has BOTH PLAYED AT AND SCORED AT** -
+    `boardRankTier(metricAt, id, playsAt)` in `js/leaderboard-rank.js` (pure, tested headless; the
+    caller passes both accessors). **Both are required and each closes a real bug:**
+    - **The SCORE half** stops attendance counting as achievement: plays alone would rank someone
+      at Hard off fifty Hard games they never won, above a Medium player with forty wins, and print
+      a 0 beside their name.
+    - **The PLAYS half is what proves the game HAS a difficulty axis at all**, and it was missed on
+      the first two passes. `gameMetricAt` IGNORES its tier argument for Skeeball (its metric is
+      machine-scoped) and Golf (course-scoped), so "is there a score at tier 4" is trivially yes and
+      **all three of Skeeball, Golf and Hill Climb printed EXPERT on every row** (measured on the
+      real boards, 2026-09-08). Their difficulty buckets are keyed by MACHINE / COURSE / STAGE,
+      `tierOf()` maps none of those to a tier, so `playsAt` is 0 at every tier and the answer is
+      `null` - which is the truth.
+  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Pinball, Golf, Hill Climb -
+    every row is null, so those three boards rank on their plain number exactly as they did before
+    any of this) and legacy/unmapped history in a game that has one. Those rows keep the all-tier
+    number and sort below the tiered rows. **Nothing leaves the board**: the other tiers are still
+    on the card's tier tiles, the difficulty filter still shows any tier's own numbers, Standing
+    Records still names the all-time best (King of Games' 51 is still printed on that same screen),
+    and the player detail still has the full per-tier table (rule 1).
+  - **Hill Climb's four stages ARE a difficulty axis and this board deliberately does NOT rank by
+    them.** `hcBestAt` slices by `HC_TIER_KEYS` (countryside/desert/arctic/moon, in unlock order),
+    so tier-first ranking there *works* - but it labels moon "Expert", and that board's difficulty
+    filter offers no tiers at all (`tierOf('countryside')` is null), so the chip would claim a tier
+    the screen cannot filter by. Ranking it by stage needs its own vocabulary in the chip and the
+    filter; until then it is untiered, like Skeeball. Do not "fix" it by dropping the plays gate.
+  - **By Game's leader row carries the same tier as a wordless SHAPE** (`tierMarkHTML`): that row
+    prints the leader's score AT THEIR TIER, because it has to name the person the board puts at #1,
+    so without a marker it reads as the game's all-time record. **The chip is suppressed entirely
+    while a difficulty FILTER is selected** - the control right above the list already says
+    "Showing: Easy", and repeating it on every row reads as if the tier varied per row.
   - **Every card names the tier it ranks at** (`tierChipHTML`, the ski-slope shape plus the word,
     **on the NAME line**, spaced by `.lb-pid`'s own gap so it costs no height) and the generic card
     **outlines the tile of that tier**. It started on the subline beside the plays count, where

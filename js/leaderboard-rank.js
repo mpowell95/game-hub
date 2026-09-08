@@ -342,24 +342,27 @@ export function compareBoardMetric(va, vb, id) {
   return LOWER_IS_BETTER.has(id) ? va - vb : vb - va;
 }
 
-/** WHICH TIER A ROW IS RANKED AT, given a way to read that row's metric at any tier: the HIGHEST
- *  tier the player has an actual SCORE at, `null` when they have none.
+/** WHICH TIER A ROW IS RANKED AT, given a way to read that row's PLAYS and its METRIC at any tier:
+ *  the HIGHEST tier the player has both played at AND has an actual score at. `null` when none.
  *
- *  A SCORE, not plays (2026-09-08, the second pass). The first pass asked "which tiers has this
- *  person played", which put a player on Hard off fifty Hard games they never won - above a Medium
- *  player with forty wins, printing a 0. `hasBoardMetric` is the same "is there a number here" test
- *  the leader row uses, so the answer is an achievement in every game's own metric: a win, a best
- *  length, a solve.
+ *  BOTH ACCESSORS ARE REQUIRED, and each one is load-bearing:
  *
- *  `null` means no tier: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill
- *  Climb), and legacy/unmapped history in a game that has one. The caller reads the ALL-TIER number
- *  for those rows and sorts them below the tiered ones - listed, with their real score, never
- *  dropped (THE LAW rule 1).
+ *  - `playsAt(tier)` is what proves the game HAS a difficulty axis at all. Skeeball's difficulty
+ *    bucket is keyed by MACHINE, golf's by COURSE, Hill Climb's by STAGE - `tierOf()` maps none of
+ *    those to a tier, so `playsAt` is 0 at every tier and the answer is `null`, which is the truth:
+ *    those boards have no difficulty. Without it they read EXPERT on every row (measured, 2026-09-08),
+ *    because their metric extractors IGNORE the tier argument - `skPointsAt`/`golfBestAt` return the
+ *    same number whatever tier you ask for, so "is there a score at tier 4" is trivially yes.
+ *  - `metricAt(tier)` is what makes it an ACHIEVEMENT rather than attendance. Plays alone would rank
+ *    someone at Hard off fifty Hard games they never won - above a Medium player with forty wins -
+ *    and print a 0 beside their name.
  *
- *  `metricAt(tier)` is the caller's own extractor, so this stays free of the stats shape. */
-export function boardRankTier(metricAt, id) {
+ *  A `null` row keeps the ALL-TIER number and sorts below the tiered ones: listed, with its real
+ *  score, never dropped (THE LAW rule 1). */
+export function boardRankTier(metricAt, id, playsAt) {
   for (let i = TIERS.length - 1; i >= 0; i--) {
-    if (hasBoardMetric(metricAt(TIERS[i]), id)) return TIERS[i];
+    const tier = TIERS[i];
+    if (playsAt(tier) > 0 && hasBoardMetric(metricAt(tier), id)) return tier;
   }
   return null;
 }
