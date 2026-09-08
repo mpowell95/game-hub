@@ -1959,7 +1959,11 @@ console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-0
   // own narrower test rather than reusing the hub's `isInProgress()`, which answers true for one.
   ok('...and it gates on a scored round, not on a practice hole',
     /_roundAtStake\(\)\s*\{[\s\S]{0,300}?roundId !== 'practice'/.test(ui)
-    && /_quit\(before\)[\s\S]{0,200}?_roundAtStake\(\)/.test(ui));
+    // 200 -> 600 chars on 2026-09-08, and it is the WINDOW that moved, not the rule. `leave()` now
+    // has to put `this.course` back when the TUTORIAL is what is being left (it is not in COURSES,
+    // so the setup screen would open with nothing selected), and that comment plus its branch push
+    // `_roundAtStake()` past where this regex could see it. The guard itself is untouched.
+    && /_quit\(before\)[\s\S]{0,600}?_roundAtStake\(\)/.test(ui));
   ok("...and so does the result card's own close", /const close = \(\) => this\._quit\(/.test(ui));
   ok('...and the prompt is named in both languages',
     ['quit_title', 'quit_body', 'quit_yes', 'quit_no']
@@ -2203,6 +2207,127 @@ console.log('\n-- 19. the playtest of 2026-09-08: the side of the miss, the shap
   for (const k of ['swing_power', 'swing_aim']) {
     ok(`"${k}" exists in EN and ES`, !!STRINGS.en[k] && !!STRINGS.es[k]);
   }
+}
+
+console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --');
+// Matt: "They have to play a practice hole /tutorial, then holes 1-3 unlock. Then when they've shot
+// par or better, the next set of 3 will unlock, and so on. Once they've unlocked all the 3 hole
+// things, they can then play 9 hole rounds... then when they shoot par or better, 18 holes unlocks"
+{
+  const P = await import('./progress.js');
+  const TUT = (await import('../courses/tutorial.js')).TUTORIAL_HOLE;
+  const TUTC = (await import('../courses/tutorial.js')).TUTORIAL_COURSE;
+  const pv = COURSES.find((c) => c.id === 'pinevalley');
+  const os = COURSES.find((c) => c.id === 'oasissands');
+  const ids = ['quick3', 'set3b', 'set3c', 'set3d', 'set3e', 'set3f', 'front9', 'back9', 'full18'];
+  const openOf = (gf, c = pv) => ids.filter((id) => roundsFor(c).some((r) => r.id === id))
+    .filter((id) => P.roundUnlocked(c, id, gf));
+
+  // NOTHING IS OPEN BEFORE THE TUTORIAL, and that is the floor: a brand new player has exactly one
+  // thing they can do, which is the lesson.
+  ok('[KNOWN-BUG PROBE] a brand new player has NO round unlocked', openOf({}).length === 0,
+    `opened ${openOf({}).join(', ')}`);
+  ok('...and every mode is locked too',
+    !P.modeUnlocked(pv, 3, {}) && !P.modeUnlocked(pv, 9, {}) && !P.modeUnlocked(pv, 18, {}));
+  ok('...and no hole may be practised yet', P.practisableHoles(pv, {}).size === 0);
+
+  // THE TUTORIAL IS THE KEY, and its SCORE is irrelevant - Matt: "score doesn't matter".
+  const tut = (n) => ({ bestHole: { [P.TUTORIAL_HOLE_KEY]: n } });
+  ok('the tutorial opens holes 1-3, whatever it was scored',
+    [1, 3, 9, 14].every((n) => openOf(tut(n)).join() === 'quick3'));
+  ok('...and it opens the first three holes to practice',
+    [...P.practisableHoles(pv, tut(4))].sort((a, b) => a - b).join() === '0,1,2');
+
+  // EACH SET IS THE PREVIOUS ONE'S REWARD, and par is a PASS (`<=`, not `<`).
+  const with3 = (over) => ({ ...tut(3), bestRoundByCourse: { pinevalley3: roundPar(pv, 'quick3') + over } });
+  ok('par exactly on holes 1-3 opens 4-6', openOf(with3(0)).includes('set3b'));
+  ok('one UNDER par opens it too', openOf(with3(-1)).includes('set3b'));
+  ok('[KNOWN-BUG PROBE] one OVER par does NOT', !openOf(with3(1)).includes('set3b'),
+    'the gate is <= par; a bogey must not unlock the next set');
+
+  // THE NINES OPEN WHEN THE LAST THREE-HOLE SET IS UNLOCKED. Matt's words are "once they've
+  // UNLOCKED all the 3 hole things", and this follows them literally - see roundState's own note.
+  const par = (id) => roundPar(pv, id);
+  const beat = (m) => ({ ...tut(3), bestRoundByCourse: m });
+  const thru5 = beat({ pinevalley3: par('quick3'), pinevalley3b: par('set3b'),
+    pinevalley3c: par('set3c'), pinevalley3d: par('set3d'), pinevalley3e: par('set3e') });
+  ok('beating sets 1-5 opens set 6 AND the front nine',
+    openOf(thru5).includes('set3f') && openOf(thru5).includes('front9'));
+  ok('...but not the back nine or the eighteen',
+    !openOf(thru5).includes('back9') && !openOf(thru5).includes('full18'));
+  const thruFront = beat({ ...thru5.bestRoundByCourse, pinevalley9: par('front9') });
+  ok('par on the front nine opens the back', openOf(thruFront).includes('back9'));
+  ok('...and still not the eighteen', !openOf(thruFront).includes('full18'));
+  const thruBack = beat({ ...thruFront.bestRoundByCourse, pinevalley9b: par('back9') });
+  ok('par on the back nine opens all eighteen', openOf(thruBack).includes('full18'));
+  ok('...and by then everything is open', openOf(thruBack).length === ids.length);
+
+  // A LOCK ALWAYS SAYS WHY. A locked tile with no reason on it is a dead end rather than the next
+  // thing to go and do, and the setup screen prints `need` verbatim.
+  let missing = 0;
+  for (const id of ids) {
+    for (const gf of [{}, tut(3), with3(0), thru5, thruFront]) {
+      const st = P.roundState(pv, id, gf);
+      if (!st.unlocked && (!st.need || !st.need.kind)) missing++;
+    }
+  }
+  ok('every locked round names what it is waiting for', missing === 0, `${missing} did not`);
+
+  // A NINE-HOLE COURSE HAS THREE SETS, NOT SIX, so the ladder has to be read off the COURSE.
+  // Oasis Sands is the case that catches a hardcoded six.
+  ok('a nine-hole course ladders over the sets it actually has',
+    P.setsOfCourse(os).length === 3 && P.setsOfCourse(pv).length === 6);
+  const osThru = { ...tut(3), bestRoundByCourse: { oasissands3: roundPar(os, 'quick3'),
+    oasissands3b: roundPar(os, 'set3b') } };
+  ok('...and its front nine opens off its LAST set, not Pine Valley\'s sixth',
+    P.roundUnlocked(os, 'front9', osThru));
+
+  // ONLY PINE VALLEY IS OPEN IN CODE. Matt: "we're going to release Pine Valley as the only course
+  // to start with." The admin override sits ON TOP of this (js/admin-config.js), so a course is
+  // released with a tap rather than a deploy - this is only the default.
+  ok('[KNOWN-BUG PROBE] Pine Valley is the only course open by default',
+    COURSES.filter((c) => P.courseOpenByDefault(c.id)).map((c) => c.id).join() === 'pinevalley');
+
+  // --- the tutorial hole itself -------------------------------------------------------------
+  ok('the tutorial hole is a VALID hole', validateHole(TUT).length === 0, validateHole(TUT).join('; '));
+  ok('...is a par 3 reachable from the tee with one club',
+    TUT.par === 3 && CLUBS.some((c) => c.carry >= distYd(TUT.tee, TUT.pin)));
+  // NOTHING TO EXPLAIN BUT THE SWING. Every hazard is a second lesson and a way for a first-timer
+  // to end up somewhere the script has no card for.
+  ok('...has no trees, no water and no sand',
+    TUT.trees.length === 0 && TUT.treeBelts.length === 0
+    && !TUT.surfaces.some((s2) => s2.kind === 'water' || s2.kind.endsWith('Bunker')));
+  ok('...is dead calm, so the lesson never has to teach a wind correction',
+    SH.windFor(TUT).speed === 0);
+  ok('...and its green is nearly flat', Math.max(...TUT.green.slope.cells.map((c) => Math.hypot(c[0], c[1]))) < 0.12);
+  // THE ID IS FROZEN (rule 5): progress.js reads this exact key, so renaming the course or
+  // renumbering the hole would silently re-lock the game for everyone who has done the lesson.
+  ok('the tutorial hole record key is `tutorial:1`',
+    holeKey(TUTC, TUT.n) === P.TUTORIAL_HOLE_KEY);
+  ok('...and the tutorial is NOT in COURSES', !COURSES.some((c) => c.id === TUTC.id));
+
+  // --- the lesson's steps -------------------------------------------------------------------
+  const TU = await import('./tutorial.js');
+  const uiSrc2 = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  for (const st of TU.STEPS) {
+    ok(`step "${st.id}" is written in EN and ES`, !!STRINGS.en[st.key] && !!STRINGS.es[st.key]);
+    // [KNOWN-BUG PROBE] A STEP THAT NOTHING CAN ADVANCE IS A DEAD END - the lesson would sit there
+    // for ever and the only way out would be to leave the game.
+    ok(`...and something can advance it (${st.advance})`,
+      st.advance === 'button' || TU.EVENTS.includes(st.advance));
+    // ...and an anchor the play screen does not render leaves a card floating with no arrow.
+    if (st.anchor) {
+      const sel = st.anchor.replace(/^\./, 'class="').replace(/^\[/, '[');
+      ok(`...and its anchor ${st.anchor} exists in the play screen`,
+        uiSrc2.includes(st.anchor.startsWith('.') ? st.anchor.slice(1) : st.anchor.slice(1, -1)),
+        `no element matches ${st.anchor}` + sel);
+    }
+  }
+  ok('every event the lesson waits on is reported by ui.js',
+    TU.EVENTS.every((e) => uiSrc2.includes(`_coach('${e}')`)),
+    'a step waits on an event the game never sends');
+  ok('the lesson can always be skipped', TU.STEPS.length > 0 && /data-role="tut-skip"/.test(
+    fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8')));
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);

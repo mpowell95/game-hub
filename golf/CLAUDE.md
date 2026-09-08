@@ -4185,3 +4185,122 @@ of plain rough below each tee box. Trimming it would make every picture bigger f
 budget, and it was NOT done: Matt's previous message on this screen was *"you've made the hole
 images wider than they should be by cutting off the beginning part of the hole"*, and cropping the
 approach to the tee is exactly what that objects to. It is his call, not a tidy-up to slip in.
+
+## The unlock ladder, and the tutorial hole (2026-09-08)
+
+Matt: *"we're going to release Pine Valley as the only course to start with. And 9 holes and 18
+holes need to be locked. They have to play a practice hole /tutorial, then holes 1-3 unlock. Then
+when they've shot par or better, the next set of 3 will unlock, and so on. Once they've unlocked all
+the 3 hole things, they can then play 9 hole rounds. Again, they play the front until they shoot par
+or better, then the back unlocks, then when they shoot par or better, 18 holes unlocks."*
+
+```
+             the tutorial hole            ->  holes 1-3
+   par or better on 1-3 / 4-6 / ... 13-15 ->  the next three
+       all six three-hole sets UNLOCKED   ->  the front nine
+        par or better on the front nine   ->  the back nine
+        par or better on the back nine    ->  all eighteen
+```
+
+### NOTHING NEW IS STORED FOR ANY OF IT, and that is the whole design
+
+A progression is earned data, so under THE LAW it can never be lost, never be rebuilt wrong, and
+never disagree between a player's two phones. The obvious implementation - an `unlocked: [...]`
+array written as the player goes - fails all three: it is a second source of truth that has to be
+migrated and merged, and **a device syncing a stale copy would TAKE UNLOCKS AWAY**, which is rule 1.
+
+So `golf/js/progress.js` DERIVES the ladder, every time, from records that already existed:
+
+- a 3-hole set, a nine and an eighteen from **`gf.bestRoundByCourse`** - strokes per round key,
+  already synced to `players/<id>`, already merged across devices with a per-key `Math.min`;
+- the tutorial from **`gf.bestHole['tutorial:1']`**, an ordinary per-hole record written through the
+  ordinary `holeOnly` path.
+
+Three consequences worth stating, because they are the reason:
+
+- A player who shot par on holes 1-3 on their old phone has set 2 open on a **brand-new phone** the
+  moment stats sync, with no migration and no extra write.
+- **An unlock cannot be lost by a merge**: `Math.min` on a stroke count only ever makes the
+  requirement more satisfied.
+- There is no new key to freeze or repurpose (rules 4 and 5), and `progress.js` could be deleted
+  tomorrow without one stored byte becoming unreadable.
+
+**`tutorial:1` IS frozen the moment anybody finishes the lesson.** Renaming the tutorial course id
+or renumbering its hole would orphan that record and silently re-lock the game for every player who
+has already done it. It has a row in `js/game-stats-ui.js`'s `GOLF_COURSES` and a length of 1 in
+`GOLF_COURSE_HOLES`, so My Stats shows it honestly instead of printing "TUTORIAL" with seventeen
+dashes (rule 1).
+
+### Two readings of Matt's words, and which one shipped
+
+*"Once they've UNLOCKED all the 3 hole things"* is implemented literally: the nines open when set 6
+is unlocked, which is itself the reward for shooting par on set 5 - so the player has proved
+something on five of the six, and set 6 need not be played. If he meant "beaten", `roundState`'s
+`mode === 9` branch names the one line to change.
+
+### Only Pine Valley, and the admin switch that was waiting for a caller
+
+`COURSE_OPEN_BY_DEFAULT` in `progress.js` is `{ pinevalley: true }`. `js/admin-config.js`'s
+per-course resolvers sit ON TOP of it, so releasing Red Mesa is a tap rather than a deploy - and
+those resolvers have existed with **no caller at all** since 2026-09-03, waiting for exactly this.
+
+**Use `courseTestingOverride`, NOT `isCourseTesting`, and the difference is a real bug this pass
+hit.** `resolveCourseTesting` returns TRUE when nothing has been written ("Missing key -> testing"),
+which was right when golf was a placeholder with no code-side default. It is wrong now: measured in
+a browser, it hid ALL THREE courses and the picker rendered **zero chips**. The override reader
+returns null when nothing is set, so an absent config changes nothing - which is the property every
+switch in this repo is supposed to have.
+
+### The tutorial hole
+
+`golf/courses/tutorial.js`. An ORDINARY hole object that passes `validateHole()`, because a lesson
+taught on a special-cased fake hole teaches the wrong game. A par 3 of **123 yards** (a stock 8
+iron), **no trees, no water, no bunkers**, a big green with a tenth of a real green's break, and
+`wind: { speed: 0 }` so the lesson never has to teach a correction before it has taught a swing. One
+full shot and one putt is the whole game, and a par 3 is the only length that guarantees it.
+
+It is a course-shaped object DELIBERATELY NOT IN `COURSES`: shaped like one so `ui.js` needs no
+special case (`holeKey`, `paletteFor`, `buildMap` all read `this.course`), out of the array because
+it has no rounds, no bests, no leaderboard row and no business in the picker.
+
+### The lesson: `golf/js/tutorial.js`
+
+Nine steps, `STEPS` is plain data with no DOM in it, and the `Coach` **never drives the game** - it
+watches. `ui.js` calls `coach.event(kind)` at points it already had (a tap, a shot fired, a ball
+settled, a hole holed) and the coach decides whether that was what the current step wanted. It
+cannot swing, aim, change club or block a control.
+
+**NO SCRIM, deliberately.** The obvious spotlight - a dark overlay with a hole cut over the control
+- is wrong here: three of the nine steps are about the swing METER, which has to be read WHILE the
+needle moves, and a scrim also hides the ball and the aim line. The highlight is a ring plus an
+arrow and the course stays fully visible. The ring pulses by GLOW, never scale (the UX floor: it
+sits on the swing button, the one control tapped three times in two seconds).
+
+**THE LESSON CAN NEVER BE STRANDED**, and both ways it could were found by driving it in a browser
+rather than by reading it:
+
+1. **The swing can fire itself** - if the needle runs off the bar with no third tap, `_frame` fires
+   the shot. The "tap a third time" step would have waited for ever on a tap the player had already
+   failed to make. `_frame` now reports it.
+2. **A hole in one skips `settled` entirely** - `_settleShot` returns early when the ball drops, on
+   the one hole in the game short enough to ace.
+
+So an event matches the first step FROM HERE ON that wants it, not just the current one. The lesson
+only ever moves forward, and it can always be skipped (skipping ends the CARDS, not the hole - the
+unlock reads the hole record, which only holing writes).
+
+### Measured, driving the whole thing in a real browser
+
+| | |
+|---|---|
+| a fresh profile | 0 of 9 rounds open, all three lengths locked, no practice button, no hole practisable |
+| every locked tile | names what it is waiting for ("Par or better on 10-12") |
+| the six round tiles | **all one height at 393, 360 and 320px**, locked or not |
+| the lesson | steps 1-9 advanced in order; card, ring and arrow all inside the screen at every step |
+| holing out | wrote `gf.bestHole = { "tutorial:1": 2 }` |
+| the setup screen after | `quick3` OPEN, sets 2-6 locked, "1 of 9 unlocked", practice button appears |
+| page errors | none |
+
+`test-visual.mjs`'s golf PLAY probe **seeds the tutorial record** rather than playing the lesson: its
+subject is the three-tap swing, and without the seed it would fail on a gate it is not testing. The
+ladder has its own coverage in `golf/js/test.js` section 20.
