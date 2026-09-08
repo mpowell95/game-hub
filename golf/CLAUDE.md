@@ -4083,3 +4083,42 @@ The strip carries `overscroll-behavior: contain` (root `CLAUDE.md`'s scroll rule
 flick that reaches either end pans the launcher underneath), and `_dropStripObs()` is called on
 every exit from the setup screen, because the observer holds a reference to all eighteen canvases
 and leaving for a hole would otherwise park them alive until the next setup render.
+
+### The course blurbs are one line, and that is a measured budget (2026-09-08)
+
+Matt: *"make the course description only 1 line... shorten it. then do the same for the other two
+courses."* All three wrapped to two lines on every phone.
+
+**MEASURED in the real DOM** rather than counted in characters, which is what a proportional font
+makes meaningless: the blurb line has **357px at a 393px viewport, 324px at 360px and 284px at
+320px.** So 284px is the budget. The old strings ran 409-469px; the new ones run 238-273px and were
+confirmed at ONE line at all three widths, in both languages.
+
+| | was | now |
+|---|---|---|
+| Pine Valley | Parkland. Tree lined corridors and water on nine of the eighteen. | **Parkland. Tree lined, water on nine holes.** |
+| Red Mesa | High desert. Narrow turf, saguaro, boulders and a lot of red dirt. | **High desert. Narrow turf, cactus and rock.** |
+| Oasis Sands | Desert links. Wide waste sand, palm lines and water on six of the nine. | **Desert links. Waste sand, palms, water.** |
+
+**It is deliberately NOT `white-space: nowrap`.** A translation that outgrew the line should wrap
+where somebody can see it rather than clip; keeping the strings short is the fix, and the budget is
+written above `blurb_pinevalley` in `js/strings.js` so the next one starts from it.
+
+### `sheet-course.mjs`: every hole of a course as one image
+
+Matt asked for all eighteen Pine Valley holes as a single collage so he could mark up the layout he
+wants for the setup strip. It is a repo tool rather than a scratch script because a course is a SET
+and this file has already recorded twice that set-level defects are invisible one hole at a time.
+`node sheet-course.mjs [course]`, needs the dev server up.
+
+**It also settled a question, and the answer is worth recording: NOTHING IN THE STRIP IS CROPPED.**
+Every tile letterboxes the whole hole (`Math.min(cv.width / map.w, cv.height / map.h)`, the same
+rule the sheet uses). Measured, the eighteen Pine Valley holes run **0.22 to 0.52** wide-to-tall
+against a tile of **0.436**, so fifteen are letterboxed left and right and three (6, 13, 16) top and
+bottom. What reads as "the beginning of the hole is cut off" is that a hole's map includes the 60
+yds behind its tee (`BEHIND_TEE_YD`, which the camera needs), so there is a band of empty rough
+below the tee box in every picture.
+
+**Still open, and it is the next thing on this screen:** Matt expected to see all eighteen holes
+WITHOUT scrolling. He is choosing a layout off the sheet above; do not redesign the strip until he
+has.

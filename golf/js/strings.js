@@ -16,9 +16,16 @@ export const STRINGS = {
     best_none: 'Best: -',
     best_is: 'Best: {n}',
     blurb: 'Wide fairways and still conditions.',
-    blurb_pinevalley: 'Parkland. Tree lined corridors and water on nine of the eighteen.',
-    blurb_redmesa: 'High desert. Narrow turf, saguaro, boulders and a lot of red dirt.',
-    blurb_oasissands: 'Desert links. Wide waste sand, palm lines and water on six of the nine.',
+    // ONE LINE EACH, AND THAT IS A MEASURED BUDGET (Matt, 2026-09-08: "make the course
+    // description only 1 line... shorten it. then do the same for the other two courses").
+    // MEASURED in the real DOM: the blurb line has 357px at a 393px viewport, 324px at 360px and
+    // 284px at 320px - so 284px is the budget, and every string below fits it with room to spare
+    // (238-273px). The old ones ran 409-469px and wrapped to two lines on every phone.
+    // It is deliberately NOT `white-space: nowrap` in the CSS: a translation that outgrew the line
+    // should wrap where somebody can see it, not clip. Keep new blurbs under about 40 characters.
+    blurb_pinevalley: 'Parkland. Tree lined, water on nine holes.',
+    blurb_redmesa: 'High desert. Narrow turf, cactus and rock.',
+    blurb_oasissands: 'Desert links. Waste sand, palms, water.',
     select_hole: 'Select practice hole:',
     back: 'back',
     // courses and rounds
@@ -142,9 +149,9 @@ export const STRINGS = {
     course: 'Pine Valley',
     play: 'jugar',
     practice: 'hoyo suelto',
-    blurb_pinevalley: 'Parque. Calles entre árboles y agua en nueve de los dieciocho.',
-    blurb_redmesa: 'Desierto alto. Césped estrecho, saguaros, rocas y mucha tierra roja.',
-    blurb_oasissands: 'Links del desierto. Arena abierta, palmeras y agua en seis de los nueve.',
+    blurb_pinevalley: 'Parque. Árboles y agua en nueve hoyos.',
+    blurb_redmesa: 'Desierto alto. Poco césped, cactus y rocas.',
+    blurb_oasissands: 'Desierto. Arena, palmeras y agua en seis.',
     course_pinevalley: 'Pine Valley',
     course_redmesa: 'Red Mesa',
     course_oasissands: 'Oasis Sands',
