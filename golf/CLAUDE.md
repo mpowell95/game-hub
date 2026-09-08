@@ -4027,3 +4027,59 @@ holes 2 and 3 of a course and are probably right as they are.
 **Pine Valley 13 still hits the 14-shot ceiling on 1 of 24 runs**, down from the belts work but not
 zero. Same cause as ever: a ball deep inside a 26-yard belt with the probe only searching +/-45
 degrees. Pre-existing, not made worse by this pass.
+
+## The setup screen shows every hole now, and the tiles line up (2026-09-08)
+
+Matt, with a screenshot of the round picker: *"Remove the yardage from these tiles so all the words
+and stuff are actually aligned. And get a photo of every hole, like the one that you have there, and
+line them up left to right so you can see every hole."*
+
+### The tiles were two different heights, and removing the yardage was only half of it
+
+`round_meta` was `par {par} | {yds} yds`, which wrapped to two lines in a three-column grid, so the
+top row of tiles was 64px tall and the bottom row 82. It is `par {par}` now.
+
+**That alone did not fix it**, and this is the part worth recording rather than the string change.
+MEASURED in the real DOM at 393px: with the yardage gone, `Holes 10-12` needs **100.3px** of a tile
+that offers **101.7** - it fits by 1.4px, which the button's own border then takes back, so the
+bottom row still wrapped and still stood 18px taller. A label that fits by a rounding error is not
+fixed, it is about to break.
+
+So the visible label is the **RANGE ALONE** (`10-12`), which needs 48px and leaves 53px of slack;
+the heading directly above it already says "Which holes?", and the full phrase survives on the
+button's `aria-label` so a screen reader still hears "Holes 10 to 12". `white-space: nowrap` on the
+tile's own lines is the second half - it is what stops a future string quietly re-introducing the
+ragged rows instead of overflowing where somebody would see it. Re-measured after: **all six tiles
+64px.**
+
+### Every hole, not just hole 1
+
+The card's picture was ONE canvas showing hole 1, on a screen whose entire job is choosing which
+three holes to play - so it said nothing about the other seventeen. It is a horizontal strip of
+eighteen now, each thumbnail captioned `4 - par 4`, built by the same `buildMap` the game plays on
+so the strip can never show a course the game does not have.
+
+**Eighteen `buildMap` calls is not something a menu can pay for**, and two things make it
+affordable:
+
+- **The big map is dropped the instant it is downscaled.** `buildMap` rasterises at `MAP_PPY`
+  (2.4 px/yd), so one hole is roughly 264 x 1128 px and eighteen held live would be about 21 MB of
+  canvas. Only the ~10k-pixel thumbnail survives, and that is what goes in `_stripCache`.
+- **A hole is only built when it scrolls into view**, via an `IntersectionObserver` with a 120px
+  `rootMargin`. The cache is keyed by course AND hole AND size, so scrolling back, switching course
+  and returning, or re-rendering the screen are all free.
+
+**Measured** (`node measure-hole-strip.mjs`, real Chromium at 393x852): **7 thumbnails painted on
+open, 18 after scrolling to the end (1.8 s of scrolling), 7 again after switching to Red Mesa**, no
+page errors.
+
+**AND IT NEVER LEAVES AN EMPTY BOX.** That is Part 0's own rule - name what replaces a placeholder
+and when - and an unpainted canvas is precisely the "empty machine box" Skeeball shipped. The
+observer is the path back to the truth where there is one; **where `IntersectionObserver` does not
+exist at all, every hole is painted up front instead**, because a picture that costs a moment beats
+a row of blank rectangles that never fill.
+
+The strip carries `overscroll-behavior: contain` (root `CLAUDE.md`'s scroll rules - without it a
+flick that reaches either end pans the launcher underneath), and `_dropStripObs()` is called on
+every exit from the setup screen, because the observer holds a reference to all eighteen canvases
+and leaving for a hole would otherwise park them alive until the next setup render.

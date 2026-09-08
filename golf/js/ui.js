@@ -14,7 +14,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundYards, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
@@ -320,7 +320,12 @@ class GolfGame {
         ${COURSES.map((k) => `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}"
           data-course="${esc(k.id)}"><span>${esc(t(`course_${k.id}`))}</span></button>`).join('')}
       </div>
-      <canvas class="gf-setup__art" data-role="art" aria-hidden="true"></canvas>
+      <div class="gf-strip" data-role="strip" role="group" aria-label="${esc(t('every_hole', { course: t(`course_${c.id}`)}))}">
+        ${c.holes.map((h, i) => `<figure class="gf-strip__hole">
+          <canvas data-hole-art="${i}"></canvas>
+          <figcaption>${esc(t('hole_thumb', { n: h.n, par: h.par }))}</figcaption>
+        </figure>`).join('')}
+      </div>
       <div class="gf-card gf-panel">
         <div class="gf-card-meta">
           <span>${esc(t('course_meta', { holes: c.holes.length, par: c.par, yds: Math.round(c.holes.reduce((a, h) => a + h.cardYards, 0)) }))}</span>
@@ -330,16 +335,17 @@ class GolfGame {
       <div class="gf-card">
         <div class="gf-card-blurb gf-pickhead">${esc(rounds.length > 1 ? t('pick_set') : t('pick_round'))}</div>
         <div class="gf-rounds${rounds.length === 1 ? ' is-one' : ''}">
-          ${rounds.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}">
-            <span>${esc(t('holes_range', { range: roundRange(r) }))}</span>
-            <small>${esc(t('round_meta', { par: roundPar(c, r.id), yds: Math.round(roundYards(c, r.id)) }))}</small>
+          ${rounds.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}"
+            aria-label="${esc(t('holes_range', { range: roundRange(r) }))}">
+            <span>${esc(roundRange(r))}</span>
+            <small>${esc(t('round_meta', { par: roundPar(c, r.id) }))}</small>
             <small class="gf-best">${esc(this._bestText(roundKey(c, r.id), roundPar(c, r.id)))}</small>
           </button>`).join('')}
         </div>
       </div>
       <button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`;
     this.rootEl.appendChild(el);
-    this._paintSetupArt(el.querySelector('[data-role="art"]'));
+    this._paintHoleStrip(el.querySelector('[data-role="strip"]'));
     for (const b of el.querySelectorAll('[data-mode]')) {
       this._on(b, 'click', () => {
         this.settings.lastMode = +b.dataset.mode;
@@ -368,30 +374,87 @@ class GolfGame {
     el.style.background = `linear-gradient(180deg, ${pal.setupA} 0%, ${pal.setupB} 100%)`;
   }
 
-  /** The course card's picture: hole 1 rendered whole, from the same map builder the game plays
-   *  on, so it can never show a course the game does not have. Cheap - one buildMap, drawn once. */
-  _paintSetupArt(cv) {
-    if (!cv) return;
-    requestAnimationFrame(() => {
-      if (this.destroyed || !cv.isConnected) return;
+  /** EVERY HOLE, LEFT TO RIGHT (2026-09-08). Matt: *"get a photo of every hole, like the one that
+   *  you have there, and line them up left to right so you can see every hole."*
+   *
+   *  It used to be ONE picture, of hole 1 - which on a screen whose whole job is choosing which
+   *  three holes to play told you nothing about seventeen of them.
+   *
+   *  Each thumbnail comes from `buildMap`, the same builder the game plays on, so the strip can
+   *  never show a course the game does not have. Two things make that affordable:
+   *
+   *  1. **THE BIG MAP IS DROPPED THE INSTANT IT IS DOWNSCALED.** `buildMap` rasterises at
+   *     MAP_PPY (2.4 px/yd), so one hole is roughly 264 x 1128 px and eighteen of them would be
+   *     about 21 MB of canvas held live for a menu. Only the thumbnail survives - about 10k px
+   *     each - and it is what goes in the cache.
+   *  2. **A HOLE IS ONLY BUILT WHEN IT SCROLLS INTO VIEW.** Five or so are visible at a time, so
+   *     opening the screen pays for five rather than eighteen, and the rest arrive as the strip is
+   *     dragged. `_stripCache` is keyed by course AND hole, so scrolling back, switching course
+   *     and coming back, or re-rendering the screen are all free.
+   *
+   *  **AND IT NEVER LEAVES AN EMPTY BOX.** That is `docs/BUILDING-A-GAME.md`'s own rule - name what
+   *  replaces a placeholder and when - and an unpainted canvas is exactly the "empty machine box"
+   *  Skeeball shipped. The observer is the path back to the truth where there is one; where there
+   *  is no `IntersectionObserver` at all, every hole is painted up front instead, because a picture
+   *  that costs a moment beats a row of blank rectangles that never fill. */
+  _paintHoleStrip(strip) {
+    if (!strip) return;
+    if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; }
+    if (!this._stripCache) this._stripCache = new Map();
+    const courseId = this.course.id;
+
+    const paint = (cv) => {
+      if (this.destroyed || !cv.isConnected || cv.dataset.painted) return;
       const r = cv.getBoundingClientRect();
       if (r.width < 8 || r.height < 8) return;
+      const i = +cv.dataset.holeArt;
+      const hole = this.course.holes[i];
+      if (!hole) return;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       cv.width = Math.round(r.width * dpr);
       cv.height = Math.round(r.height * dpr);
       const ctx = cv.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const pal = paletteFor(this.course.theme);
-      const map = buildMap(this.course.holes[0], this.course.theme);
-      // Fit the whole hole in, letterboxed on whichever axis has room to spare.
-      const sc = Math.min(cv.width / map.w, cv.height / map.h);
-      const w = map.w * sc;
-      const h = map.h * sc;
       ctx.fillStyle = pal.heavyRough;
       ctx.fillRect(0, 0, cv.width, cv.height);
-      ctx.drawImage(map.canvas, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
+
+      const key = `${courseId}:${i}:${cv.width}x${cv.height}`;
+      let thumb = this._stripCache.get(key);
+      if (!thumb) {
+        const map = buildMap(hole, this.course.theme);
+        // Fit the whole hole in, letterboxed on whichever axis has room to spare - the same rule
+        // the single picture used, so a hole is never cropped and the shapes stay comparable.
+        const sc = Math.min(cv.width / map.w, cv.height / map.h);
+        thumb = document.createElement('canvas');
+        thumb.width = Math.max(1, Math.round(map.w * sc));
+        thumb.height = Math.max(1, Math.round(map.h * sc));
+        const tctx = thumb.getContext('2d');
+        tctx.imageSmoothingEnabled = false;
+        tctx.drawImage(map.canvas, 0, 0, thumb.width, thumb.height);
+        // `map` goes out of scope here and its ~264x1128 canvas with it. Holding it would be the
+        // whole cost this cache exists to avoid.
+        this._stripCache.set(key, thumb);
+      }
+      ctx.drawImage(thumb, (cv.width - thumb.width) / 2, (cv.height - thumb.height) / 2);
+      cv.dataset.painted = '1';
+    };
+
+    const arts = [...strip.querySelectorAll('[data-hole-art]')];
+    requestAnimationFrame(() => {
+      if (this.destroyed || !strip.isConnected) return;
+      if (typeof IntersectionObserver !== 'function') { for (const cv of arts) paint(cv); return; }
+      this.stripObs = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) { paint(e.target); this.stripObs.unobserve(e.target); }
+      }, { root: strip, rootMargin: '120px' });
+      for (const cv of arts) this.stripObs.observe(cv);
     });
   }
+
+  /** The hole strip's observer holds a reference to every thumbnail canvas in it, so it has to go
+   *  when the strip does - otherwise leaving the setup screen for a hole parks eighteen detached
+   *  canvases alive until the next setup render. Cheap, idempotent, and called from every exit. */
+  _dropStripObs() { if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; } }
 
   /** The stored best for one round, as a score TO PAR - the same number the leaderboard shows, so
    *  the two screens can never disagree. The stored value itself is always STROKES (golf/CLAUDE.md,
@@ -409,6 +472,7 @@ class GolfGame {
   }
 
   _renderHoleSelect() {
+    this._dropStripObs();
     this.rootEl.innerHTML = '';
     const c = this.course;
     const el = document.createElement('div');
@@ -469,6 +533,7 @@ class GolfGame {
   }
 
   _enterHole() {
+    this._dropStripObs();
     const hole = this.course.holes[this.holeIdxs[this.pos]];
     // A hole that fails validation must fail LOUDLY rather than half-render: a malformed green
     // silently flattens the break, and that gets diagnosed as "putting feels wrong" for a week.
@@ -1870,6 +1935,8 @@ class GolfGame {
     this._offAll();
     if (this.offViewport) { this.offViewport(); this.offViewport = null; }
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
+    if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; }
+    if (this._stripCache) this._stripCache.clear();
     this.container.innerHTML = '';
     this.rootEl = null; this.canvas = null; this.ctx = null; this.map = null;
   }
