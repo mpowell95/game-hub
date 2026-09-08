@@ -24,7 +24,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { Renderer } from './render3d.js';
 import T, {
-  W, H, AXIS, DRAIN_Y, ART, FLIP, UPPER, PLUNGER, SCOOP, POPS, ROWS, mx,
+  W, H, AXIS, DRAIN_Y, ART, FLIP, UPPER, PLUNGER, POPS, ROWS, mx,
 } from './table-rainbow.js';
 
 const TAU = Math.PI * 2;
@@ -62,7 +62,7 @@ export class RainbowRenderer extends Renderer {
   _materials() {
     const M = super._materials();
     const std = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color }, o));
-    M.wood = std(0xffffff, { roughness: 0.72, metalness: 0.02 });   // takes the grain texture
+    M.wood = std(0xffffff, { roughness: 0.52, metalness: 0.03 });   // takes the grain texture; the reference is varnished, not bare
     M.woodLip = std(C.woodLip, { roughness: 0.66 });
     M.rail = std(C.rail, { roughness: 0.6 });
     M.cream = std(C.cream, { roughness: 0.42 });
@@ -95,9 +95,9 @@ export class RainbowRenderer extends Renderer {
     g.scale(cv.width / W, cv.height / H);
 
     let grd = g.createLinearGradient(0, 0, W, H);
-    grd.addColorStop(0, '#e0b177');
-    grd.addColorStop(0.45, '#d7a463');
-    grd.addColorStop(1, '#c8934f');
+    grd.addColorStop(0, '#e5a95f');
+    grd.addColorStop(0.45, '#d99a4d');
+    grd.addColorStop(1, '#c9862f');
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H);
 
@@ -142,29 +142,8 @@ export class RainbowRenderer extends Renderer {
     g.lineTo(mx(72), 232); g.lineTo(72, 232); g.lineTo(6, 196);
     g.closePath(); g.fill();
 
-    // The centre oval, full size, as painted art - the largest single thing on the reference table.
-    // The hole that actually captures is much smaller and sits at its middle; see table-rainbow.js.
-    {
-      const s = SCOOP.paint;
-      g.save();
-      // Centred on the scoop itself. The +14 offset the first build carried put the painted oval
-      // low enough to swallow the bottom pop bumper, and the ring that marks the actual hole then
-      // sat off-centre in its own artwork.
-      g.translate(SCOOP.x, SCOOP.y);
-      g.beginPath();
-      g.moveTo(0, -s.h / 2);
-      g.bezierCurveTo(s.w * 0.30, -s.h * 0.44, s.w * 0.34, -s.h * 0.06, s.w * 0.5, s.h * 0.16);
-      g.bezierCurveTo(s.w * 0.60, s.h * 0.42, s.w * 0.30, s.h / 2, 0, s.h / 2);
-      g.bezierCurveTo(-s.w * 0.30, s.h / 2, -s.w * 0.60, s.h * 0.42, -s.w * 0.5, s.h * 0.16);
-      g.bezierCurveTo(-s.w * 0.34, -s.h * 0.06, -s.w * 0.30, -s.h * 0.44, 0, -s.h / 2);
-      g.closePath();
-      const og = g.createRadialGradient(0, 0, 6, 0, 0, s.h * 0.5);
-      og.addColorStop(0, '#150c06');
-      og.addColorStop(1, '#3a2415');
-      g.fillStyle = og;
-      g.fill();
-      g.restore();
-    }
+    // NOTHING IN THE MIDDLE. The painted oval that used to be here is gone with the hardware that
+    // stood in it - see table-rainbow.js's POPS comment for what Matt asked for and why.
 
     // Faint printed guide arcs behind the three rows, so the rows read as one feature.
     g.strokeStyle = 'rgba(96,60,24,0.16)';
@@ -173,6 +152,25 @@ export class RainbowRenderer extends Renderer {
       const row = ROWS[n];
       g.beginPath();
       row.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+      g.stroke();
+    }
+
+    // The perforated band the reference prints under its top rail.
+    g.fillStyle = 'rgba(120,78,34,0.30)';
+    for (let x = 14; x < W - 14; x += 7) {
+      for (let y = 26; y < 46; y += 7) g.beginPath(), g.arc(x, y, 1.4, 0, TAU), g.fill();
+    }
+    // Three faint printed circles on the apron, and the reference's own shot arcs across the
+    // lower playfield. Both are print on the real table and neither is a part.
+    g.strokeStyle = 'rgba(120,78,34,0.22)';
+    g.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      g.beginPath(); g.arc(AXIS + i * 34, DRAIN_Y + 6, 11, 0, TAU); g.stroke();
+    }
+    for (let i = 0; i < 3; i++) {
+      g.strokeStyle = 'rgba(120,78,34,' + (0.16 - i * 0.04).toFixed(3) + ')';
+      g.beginPath();
+      g.arc(AXIS, DRAIN_Y + 20, 140 + i * 52, Math.PI * 1.08, Math.PI * 1.92);
       g.stroke();
     }
 
@@ -230,7 +228,15 @@ export class RainbowRenderer extends Renderer {
     this._rail(root, ART.wallL, 6, WALL_H, M.steel);
     this._rail(root, ART.wallR, 6, WALL_H, M.steel);
     for (const sh of ART.shelves) this._rail(root, sh, 7, mm(0.03), M.woodLip);
-    for (const gd of ART.guides) this._rail(root, gd, 5, mm(0.04), M.chrome);
+    for (const gd of ART.guides) {
+      this._rail(root, gd, 5, mm(0.04), M.chrome);
+      // The reference's wire runs between two RED-CAPPED POSTS. Decorative: the wire is the
+      // collider, and these stand on its ends where the reference stands them.
+      for (const p of gd) {
+        this._add(root, new THREE.CylinderGeometry(5, 5.6, 22, 14), M.nylon, p[0], 11, tz(p[1]));
+        this._add(root, new THREE.CylinderGeometry(5.4, 5.4, 7, 14), M.redPart, p[0], 24, tz(p[1]));
+      }
+    }
     for (const d of ART.divs) this._rail(root, d, 7, WALL_H, M.chrome);
 
     // --- the shooter lane ---------------------------------------------------------------------------
@@ -245,10 +251,10 @@ export class RainbowRenderer extends Renderer {
     }
 
     // --- the two wooden corner holes ------------------------------------------------------------------
+    // FLUSH, because they are flush in the reference and are no longer colliders either - a
+    // standing chrome ring here made a pocket with the standup cluster beside it.
     for (const [x, y] of ART.cornerHoles) {
-      this._add(root, new THREE.CylinderGeometry(12, 12, 3, 22), M.woodLip, x, 1.4, tz(y));
-      const ring = this._add(root, new THREE.TorusGeometry(12, 2, 8, 24), M.chrome, x, 2.4, tz(y));
-      ring.rotation.x = Math.PI / 2;
+      this._add(root, new THREE.CylinderGeometry(12, 12, 1.4, 22), M.woodLip, x, 0.7, tz(y));
     }
 
     // --- the drop target bank ---------------------------------------------------------------------------
@@ -261,7 +267,14 @@ export class RainbowRenderer extends Renderer {
       for (let i = 0; i < ART.dropCount; i++) {
         const x = b.x - b.w / 2 + step * (i + 0.5);
         const face = this._add(root, new THREE.BoxGeometry(step - 3, 20, 4), M.cream, x, 14, tz(b.y));
-        const stripe = this._add(root, new THREE.BoxGeometry(step - 9, 5, 4.6), M.redPart, x, 14, tz(b.y));
+        // The reference prints a red pattern on each face rather than one band, so it is three
+        // bars: at this size that is what a pattern reads as.
+        const stripe = new THREE.Group();
+        stripe.position.set(x, 14, tz(b.y));
+        root.add(stripe);
+        for (let k = -1; k <= 1; k++) {
+          this._add(stripe, new THREE.BoxGeometry(2.6, 13, 4.6), M.redPart, k * 4.6, 0, 0);
+        }
         this.parts3.drops.push({ face, stripe });
       }
     }
@@ -280,7 +293,7 @@ export class RainbowRenderer extends Renderer {
       this._add(root, new THREE.CylinderGeometry(9, 9, 6, 18), M.olive, x, 3, tz(y));
     }
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
-      this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 9, 16), M.dotYellow, x, 4.5, tz(y))
+      this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
     ));
     for (const [x, y] of ART.posts) {
       const g = new THREE.Group();
@@ -346,9 +359,9 @@ export class RainbowRenderer extends Renderer {
     for (const name of ['purple', 'blue', 'red']) {
       ROWS[name].forEach((p, i) => {
         const id = (name === 'purple' ? 'p' : name === 'blue' ? 'b' : 'r') + i;
-        const m = this._add(root, new THREE.SphereGeometry(9, 20, 12, 0, TAU, 0, Math.PI / 2),
+        const m = this._add(root, new THREE.SphereGeometry(7.5, 20, 12, 0, TAU, 0, Math.PI / 2),
           dotMat[name].clone(), p[0], 1, tz(p[1]));
-        m.scale.y = 0.52;
+        m.scale.y = 0.44;
         this.parts3.dots[id] = m;
       });
     }

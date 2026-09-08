@@ -88,15 +88,16 @@ export const BANK = { x: AXIS, y: 26, w: 84, h: 12 };
 /**
  * The three starburst pop bumpers: two up top, one guarding the drain.
  *
- * The bottom one stays at y 505, and THE PAINT MOVED INSTEAD. Matt's zoomed screenshot showed it
- * sitting inside the painted oval, which is not what the reference does. Moving the BUMPER down to
- * where the reference puts it is not available: the flippers sweep a 63-unit arc from y 527 to 583
- * either side of the centre line, and anything in the drain mouth is inside that arc - measured, a
- * bumper at 545 left 17.7 clear units from a resting paddle, which is a hair under a ball and the
- * exact shape this file's post comment warns about. The oval is PAINT and paint costs nothing to
- * move, so it is smaller and higher than the reference's proportion and the two no longer touch.
+ * THERE ARE TWO, NOT THREE, AND THE MIDDLE OF THE TABLE IS EMPTY. Matt, twice: *"Delete all that
+ * stuff in the very center. I want all of that part gone. You have a giant circle thing."* The
+ * reference does draw a third starburst low on the centre line, but it draws it BELOW the flipper
+ * tips, and that position is not available here - the flippers sweep a 63-unit arc from y 527 to
+ * 583 either side of the centre line, so anything in the drain mouth is inside it (measured: a
+ * bumper at y 545 left 17.7 clear units from a resting paddle, a hair under a ball). Put it high
+ * enough to clear the sweep and it lands in the middle of the playfield, which is what he was
+ * looking at. So it is gone, and so is the painted oval that used to sit above it.
  */
-export const POPS = [[117, 97, 25], [mx(117), 97, 25], [AXIS, 505, 25]];
+export const POPS = [[117, 97, 25], [mx(117), 97, 25]];
 export const POP_R = 25;
 
 /** The upper flippers, on the reference's raised platform. Pivot at the OUTER end, as flippers are. */
@@ -107,22 +108,44 @@ export const FLIP = { len: 63, r: 8, rest: 25 * D, sweep: 52 * D, pivotY: 556, d
 
 /** The red-and-white standup targets in the two top clusters, up the shoulders of the crown.
  *  Reference: image (130,180) rising to (300,55), and mirrored. */
+// TWO STAGGERED ROWS PER SIDE, six targets, which is what the reference shows - the first build
+// drew a single row of five and the cluster read as a fence rather than a bank. They sit close
+// enough to merge into one blob (9 clear units between neighbours, against a ball of 18), which
+// is deliberate: a cluster with no gap a ball can enter has no crevice to park in.
 export const STANDUPS = [];
-for (let i = 0; i < 5; i++) {
-  const x = 36 + i * 13.5, y = 65 - i * 11;
+// The second row is offset only 10 units, so each pair OVERLAPS into a solid bar. At 12 it did
+// not quite, and the crevice between the two rows parked three drop points at (272, 49); and the
+// first post starts at x 42 rather than 36, which puts 24 clear units between it and the side wall
+// instead of exactly one ball's width - the knife edge five more drop points balanced on.
+for (let i = 0; i < 3; i++) {
+  const x = 42 + i * 18, y = 65 - i * 15;
   STANDUPS.push([x, y], [mx(x), y]);
+  STANDUPS.push([x + 10, y + 3], [mx(x + 10), y + 3]);
 }
 
 /** The olive rubber discs interleaved with them, plus the four further down the side lanes. */
 export const RUBBERS = [];
-for (let i = 0; i < 4; i++) {
-  const x = 43 + i * 13.5, y = 60 - i * 11;
+// The row starts at x 44, clear of the side wall by 25 units, and every disc after the first
+// OVERLAPS the standup beside it. At x 30 the first disc stood 11 units off the wall - too narrow
+// to pass, wide enough for a ball to balance on top of the disc and lean on the wall, which is what
+// sweep-pinball-rests.mjs kept finding at (20, 74). Merged into the cluster there is nothing to
+// balance in, and merged is also what the reference looks like.
+for (let i = 0; i < 5; i++) {
+  const x = 44 + i * 15, y = 88 - i * 13;
   RUBBERS.push([x, y], [mx(x), y]);
 }
 // 44, not the reference's 39. Clearance from the side wall, which is the number that decides
 // whether a piece of furniture is a lane or a trap: a ball is 18 across and the wall surface is
 // at x 11, so 39 left 20 units - one ball and a hair. The soak parked a ball there. 44 leaves 25.
-RUBBERS.push([44, 376], [mx(44), 376], [28, 436], [mx(28), 436]);
+//
+// The lower pair moved from (28, 436) to (24, 455) for the same reason, one step further out: at
+// 436 it stood 17.4 clear units from the yellow standup above it, and sweep-pinball-rests.mjs
+// found 31 drop points at rest in that gap, 'held by: rub10+yell1'. At (24, 455) it MERGES into
+// the slingshot's upper end instead - one convex blob with no stable top, which is the same
+// answer STARHUB used for its inlane divider. (24 was not far enough: a ball could still balance
+// on TOP of it and lean on the side wall, 18 more drop points. 44 merges it into the slingshot's
+// upper end and the post beside it, so there is no crevice left to balance in.)
+RUBBERS.push([44, 376], [mx(44), 376], [44, 455], [mx(44), 455]);
 
 /**
  * THE RAINBOW ROWS, the feature the board is named for: purple 4, blue 9 in an upward arc, red 4.
@@ -132,7 +155,10 @@ RUBBERS.push([44, 376], [mx(44), 376], [28, 436], [mx(28), 436]);
  */
 export const ROWS = {
   purple: [-27, -9, 9, 27].map((d) => [AXIS + d, 305]),
-  blue: [-78, -58, -39, -19, 0, 19, 39, 58, 78].map((d) => {
+  // THIRTEEN, NOT NINE. The reference's blue band is the widest and densest thing on the
+  // playfield - its dots almost touch - and nine spread across the same span read as a thin
+  // dotted line. They are rollovers, so a denser row is not a harder shot, only a fuller one.
+  blue: [-78, -65, -52, -39, -26, -13, 0, 13, 26, 39, 52, 65, 78].map((d) => {
     const k = d / 78;
     return [AXIS + d, 326 + k * k * 27];
   }),
@@ -153,24 +179,18 @@ export const GATES = [[50, 348], [mx(50), 348]];
 /** The two lower green kites: slingshots - see the header, deviation 3. `n` is the face the coil is
  *  behind, so it cannot fire a ball that rolls in from the inlane side. STARHUB spent a playtest
  *  with 53% of ball life in the pocket a live back face kept firing into. */
+// THE OUTLANE MOUTH IS OPEN, NOT NEARLY OPEN. The slingshot's top end used to sit at x 34, which
+// left 17 clear units to the side wall against a ball of 18 - so the outlane could not be entered
+// but a ball could be squeezed into its mouth and held there, and sweep-pinball-rests.mjs parked 24
+// of 1,242 drop points in it. At 40 the mouth is 23 clear: the outlane is a real outlane, which is
+// also what it is supposed to be.
 export const SLINGS = [
-  { a: [34, 462], b: [80, 512], n: [0.736, -0.677] },
-  { a: [mx(34), 462], b: [mx(80), 512], n: [-0.736, -0.677] },
+  { a: [40, 462], b: [80, 512], n: [0.781, -0.625] },
+  { a: [mx(40), 462], b: [mx(80), 512], n: [-0.781, -0.625] },
 ];
 
 /** The centre oval. `paint` is the reference's full-size pear; `rad` is the hole that captures. */
-/**
- * The centre oval, and it is PAINT ONLY.
- *
- * The first build put a scoop in the middle of it - a hole that captured the ball and kicked it
- * back out. Matt, on the shipped build: *"Delete all that stuff in the very center. That's not a
- * real thing. It's a flat painted thing on the board in the ref photo. The circle thing that
- * captures then throws the ball that you built throws the ball up and catches it again. It
- * repeats a handful of times."* Both halves are right: the reference shows a printed oval with no
- * hardware in it, and a scoop that ejects straight up the middle of its own catchment re-catches
- * its own kick-out. There is no collider, no sensor and no rule here now, only the print.
- */
-export const SCOOP = { x: AXIS, y: 435, paint: { w: 92, h: 108 } };
+// The centre of this table carries nothing at all: no hardware, no paint. See the POPS comment.// The centre of this table carries nothing at all: no hardware, no paint. See the POPS comment.
 
 /** White nylon posts, from the reference's own scatter. Written once, mirrored on build. */
 // FEWER AND FURTHER APART THAN THE REFERENCE'S SCATTER, and every number is a clearance.
@@ -212,12 +232,14 @@ export const WALL_R = [[mx(6), 130], [mx(6), 500], [mx(62), 600], [mx(100), 660]
 // flipper pivot so nothing can be squeezed between them.
 export const DIVS = [[[36, 483], [86, 576]], [[mx(36), 483], [mx(86), 576]]];
 /** The wooden shoulders that funnel a ball off the upper platform toward its middle. */
-// The inner end is at x 70, not 60, and the 10 units are a clearance. At 60 the shelf's end cap
-// stood 19.4 clear units from the upper flipper's pivot - one ball and a twentieth - and a soak
-// parked balls at (237, 237) and (235, 235) doing exactly what pinball/CLAUDE.md says a gap that
-// size does. At 70 the gap is 9.6: a ball cannot enter it at all, and the way past is over the
-// upper flipper, which is what the flipper is there for.
-export const SHELVES = [[[6, 196], [70, 232]], [[mx(6), 196], [mx(70), 232]]];
+// THE SHELF STOPS BEFORE THE GUIDE CROSSES IT, and that is the fix for the trap in Matt's
+// screenshot. At (6,196)-(70,232) the shelf and the guide converged as they descended - shelf at
+// y 232 was x 70, guide at y 222 was x 78 - so the two made a narrowing V with its mouth wider
+// than a ball and its throat narrower. sweep-pinball-rests.mjs named it exactly: 26 of 829 drop
+// points came to rest at (57, 209), (253, 209) and (37, 197), every one of them 'held by:
+// shelf+guide'. Ending the shelf at x 42 leaves 22 clear units to the guide, so a ball rolls off
+// the shelf, onto the guide, and down it to the upper flipper - a chain, not a wedge.
+export const SHELVES = [[[6, 196], [42, 216]], [[mx(6), 196], [mx(42), 216]]];
 /** The reference's red posts joined by wire, running down to the upper flippers. */
 // The lower end is at (78, 222), which puts it 3.8 clear units from the shelf's end cap and 3
 // from the upper flipper's pivot - CLOSED, one convex blob, no stable top. At the reference's
@@ -280,7 +302,9 @@ export function buildTable(opts = {}) {
   RUBBERS.forEach((p, i) => add(circle(p[0], p[1], 8, { e: 0.62, mu: 0.02, id: `rub${i}` })));
   YELLOWS.forEach((p, i) => add(circle(p[0], p[1], 6, { e: 0.44, mu: 0.05, id: `yell${i}` })));
   POSTS.forEach((p, i) => add(circle(p[0], p[1], 6, { e: 0.5, mu: 0.02, id: `post${i}` })));
-  CORNER_HOLES.forEach((p, i) => add(circle(p[0], p[1], 11, { e: 0.34, mu: 0.06, id: `hole${i}` })));
+  // The two wooden circles in the top corners are FLUSH in the reference - printed, not standing -
+  // so they are paint here and not colliders. As colliders they made a pocket with the standup
+  // cluster beside them that sweep-pinball-rests.mjs could park a ball in.
 
   // --- the pop bumpers ----------------------------------------------------------------------------------------
   POPS.forEach((p, i) => add(circle(p[0], p[1], p[2], { e: 0.34, mu: 0.02, kick: 300, id: `pop${i}` })));
@@ -325,12 +349,12 @@ export const ART = {
   pops: POPS, popR: POP_R,
   standups: STANDUPS, rubbers: RUBBERS, yellows: YELLOWS, posts: POSTS,
   cornerHoles: CORNER_HOLES,
-  rows: ROWS, gates: GATES, slings: SLINGS, scoop: SCOOP,
+  rows: ROWS, gates: GATES, slings: SLINGS,
   guides: GUIDES, shelves: SHELVES, divs: DIVS,
   upper: UPPER, playR: PLAY_R,
 };
 
 export default {
-  NAME, W, H, DRAIN_Y, AXIS, BALL_R, FLIP, UPPER, PLUNGER, SCOOP,
+  NAME, W, H, DRAIN_Y, AXIS, BALL_R, FLIP, UPPER, PLUNGER,
   SWITCHES, DROP_COUNT, BANK, ROWS, POPS, POP_R, buildTable, ART, mx,
 };
