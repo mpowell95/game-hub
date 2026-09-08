@@ -974,6 +974,40 @@ targets, the perforated band under the top rail, the apron's three circles and t
 playfield's shot arcs, flush corner circles (they are printed on the reference, and as colliders
 they made a pocket), flatter rollover lenses, and warmer, glossier wood.
 
+### "You think what you've created looks like this?" - no, and here is what was missing (2026-09-08)
+
+Matt, with the reference photo beside a screenshot of the shipped board. He was right, and the
+honest list is longer than the three things I first named. What actually separates a wooden
+playfield from a picture of one, in order of how much each mattered here:
+
+1. **The light.** The base renderer's studio is built for STARHUB - one warm key raking across a
+   near-black deck, two coloured rim lights and a magenta lamp in the bumper nest. On a WOODEN deck
+   that reads as a dim brown photograph taken at dusk. The reference is lit evenly from above with
+   almost no shadow. `RainbowRenderer._build` retunes the scene's lights rather than `_boot`, so
+   STARHUB is untouched.
+2. **The camera.** STARHUB's 20 degree tilt exists to show off an arch in perspective. This board
+   is a flat sheet photographed from above; at 20 degrees its crown foreshortens away and the whole
+   read changes. `this.tilt = 10` (the base class reads `this.tilt`, defaulting to 20).
+3. **The raised upper playfield.** The single most distinctive shape in the reference, and the
+   first build drew a pale panel on a flat deck and called that the same thing. It is a real slab
+   now with the octagonal front edge and a darker lip, and everything standing on it is in one
+   raised group. The physics is untouched: the ball is DRAWN higher while its table y is above the
+   edge, ramped over 14 units so it steps down rather than popping.
+4. **The blueprint ghosts.** The reference prints large, very faint technical drawings across the
+   whole deck - a dome in section, concentric circles, two wheel assemblies. Without them the wood
+   is just wood.
+5. **Density.** The reference playfield is CROWDED. The post count doubled, and every added post was
+   checked against the open-or-sealed rule and then proved with a re-sweep.
+6. **Part size and finish.** Bigger, glossier rollover lenses; wider posts with a proper collar;
+   bigger green kites; bigger olive discs.
+7. **The wood itself.** Pale, cool and matte - a varnished maple sheet - not the caramel stain the
+   previous pass had warmed it to.
+8. **Both side lanes.** The reference has a wide grey channel down each side; this table only has
+   hardware in the right one, so the left is printed to match.
+
+**What will never match, and it is a deliberate trade:** the reference's biggest single feature is
+the giant dark oval and the starburst below it, dead centre. Matt asked for all of that gone -
+*"I want all of that part gone"* - so the middle of this table is bare wood by instruction.
 ### The rules, which are the spec's
 
 - Standups 500, yellows 250, pops 100, slingshots 50, drop targets 500 each.

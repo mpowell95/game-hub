@@ -30,14 +30,27 @@ import T, {
 const TAU = Math.PI * 2;
 const tz = (y) => -y;
 const ty = (a) => a;
+const clampf = (v, a, b) => (v < a ? a : v > b ? b : v);
 const K = 666.67;
+
+/**
+ * THE RAISED UPPER PLAYFIELD, which is the single most distinctive shape in the reference and the
+ * thing whose absence made this board not look like it. The reference's top third stands on a
+ * wooden shelf with a heavy octagonal front edge and a shadow under it; the first build drew a
+ * pale panel on a flat deck and called that the same thing. It is not.
+ *
+ * The physics stays two-dimensional - one plane, one ball height - so this is PURELY a rendering
+ * fact: everything whose table y is above `y` is drawn `h` higher, and so is the ball while it is
+ * up there (`_deckLift`). Nothing in table-rainbow.js knows about it.
+ */
+const PLATFORM = { y: 232, h: 13 };
 const mm = (metres) => metres * K;
 
 /** The reference's palette, read off the render. */
 const C = {
   wood: 0xd7a463,
   woodLip: 0xa9743c,
-  rail: 0x8a5a2b,
+  rail: 0xc09154,
   cream: 0xf3ead0,
   red: 0xc0272d,
   olive: 0x5d6b2f,
@@ -62,7 +75,7 @@ export class RainbowRenderer extends Renderer {
   _materials() {
     const M = super._materials();
     const std = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color }, o));
-    M.wood = std(0xffffff, { roughness: 0.52, metalness: 0.03 });   // takes the grain texture; the reference is varnished, not bare
+    M.wood = std(0xffffff, { roughness: 0.66, metalness: 0.0 });    // takes the grain texture
     M.woodLip = std(C.woodLip, { roughness: 0.66 });
     M.rail = std(C.rail, { roughness: 0.6 });
     M.cream = std(C.cream, { roughness: 0.42 });
@@ -74,10 +87,10 @@ export class RainbowRenderer extends Renderer {
     M.lamp = std(C.lamp, { roughness: 0.3, emissive: C.lamp, emissiveIntensity: 0.8 });
     M.pit = std(C.pit, { roughness: 0.9 });
     M.greyLane = std(C.grey, { roughness: 0.5, metalness: 0.2 });
-    M.dotPurple = std(C.purple, { roughness: 0.34, emissive: C.purple, emissiveIntensity: 0.3 });
-    M.dotBlue = std(C.blue, { roughness: 0.34, emissive: C.blue, emissiveIntensity: 0.3 });
-    M.dotRed = std(C.dotRed, { roughness: 0.34, emissive: C.dotRed, emissiveIntensity: 0.3 });
-    M.dotYellow = std(C.yellow, { roughness: 0.34, emissive: C.yellow, emissiveIntensity: 0.3 });
+    M.dotPurple = std(C.purple, { roughness: 0.16, emissive: C.purple, emissiveIntensity: 0.22 });
+    M.dotBlue = std(C.blue, { roughness: 0.16, emissive: C.blue, emissiveIntensity: 0.22 });
+    M.dotRed = std(C.dotRed, { roughness: 0.16, emissive: C.dotRed, emissiveIntensity: 0.22 });
+    M.dotYellow = std(C.yellow, { roughness: 0.16, emissive: C.yellow, emissiveIntensity: 0.22 });
     return M;
   }
 
@@ -95,9 +108,12 @@ export class RainbowRenderer extends Renderer {
     g.scale(cv.width / W, cv.height / H);
 
     let grd = g.createLinearGradient(0, 0, W, H);
-    grd.addColorStop(0, '#e5a95f');
-    grd.addColorStop(0.45, '#d99a4d');
-    grd.addColorStop(1, '#c9862f');
+    // Pale, cool and MATTE, which is what the reference is: a varnished maple sheet photographed
+    // flat, not a caramel-stained one lit from the side. The first pass warmed it toward orange
+    // and it read as a different timber.
+    grd.addColorStop(0, '#e9c48d');
+    grd.addColorStop(0.45, '#e0b878');
+    grd.addColorStop(1, '#d4a862');
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H);
 
@@ -155,6 +171,47 @@ export class RainbowRenderer extends Renderer {
       g.stroke();
     }
 
+    // THE BLUEPRINT GHOSTS. The reference prints large, very faint technical drawings across the
+    // whole upper playfield - a dome in section, concentric circles, two wheel-like assemblies -
+    // and they are a big part of why that deck reads as a designed object rather than as bare
+    // wood. Faint enough to sit under the hardware; the ball is still the brightest thing here.
+    g.save();
+    g.strokeStyle = 'rgba(122,86,44,0.20)';
+    g.lineWidth = 1.1;
+    // the dome, in section, centred under the bumper nest
+    for (let r = 26; r <= 96; r += 14) {
+      g.beginPath(); g.arc(AXIS, 214, r, Math.PI, TAU); g.stroke();
+    }
+    g.beginPath(); g.moveTo(AXIS - 96, 214); g.lineTo(AXIS + 96, 214); g.stroke();
+    for (let i = -2; i <= 2; i++) {
+      g.beginPath(); g.moveTo(AXIS + i * 34, 214); g.lineTo(AXIS + i * 34, 150); g.stroke();
+    }
+    // two wheel assemblies, low and wide, the reference's clearest ghost
+    for (const wx of [72, W - 122]) {
+      for (const r of [30, 20, 7]) {
+        g.beginPath(); g.arc(wx, 268, r, 0, TAU); g.stroke();
+      }
+      g.beginPath(); g.moveTo(wx - 34, 268); g.lineTo(wx + 34, 268); g.stroke();
+      g.beginPath(); g.moveTo(wx, 234); g.lineTo(wx, 302); g.stroke();
+    }
+    // a plate of small circles up the middle of the crown, and two long centre lines
+    for (let i = 0; i < 5; i++) {
+      g.beginPath(); g.arc(AXIS - 34 + i * 17, 120, 6, 0, TAU); g.stroke();
+    }
+    g.strokeStyle = 'rgba(122,86,44,0.13)';
+    g.beginPath(); g.moveTo(AXIS, 20); g.lineTo(AXIS, 640); g.stroke();
+    g.beginPath(); g.arc(AXIS, 470, 128, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+    g.restore();
+
+    // THE TWO SIDE LANES. The reference has a wide grey channel down BOTH sides; this table only
+    // has hardware in the right one (the shooter lane), so the left is printed to match.
+    g.fillStyle = 'rgba(150,152,158,0.55)';
+    g.fillRect(0, 150, 12, 420);
+    g.fillStyle = 'rgba(93,107,47,0.35)';
+    for (let y = 170; y < 560; y += 26) {
+      g.beginPath(); g.ellipse(7, y, 5, 9, 0.4, 0, TAU); g.fill();
+    }
+
     // The perforated band the reference prints under its top rail.
     g.fillStyle = 'rgba(120,78,34,0.30)';
     for (let x = 14; x < W - 14; x += 7) {
@@ -206,6 +263,11 @@ export class RainbowRenderer extends Renderer {
     const M = this.M;
     M.wood.map = this._woodTexture();
     this.parts3 = this.parts3 || {};
+    // NEARLY STRAIGHT DOWN, because the reference is. STARHUB's 20 degrees is chosen to fill a
+    // phone with a table that has a tall arch worth seeing in perspective; this board is a flat
+    // wooden sheet photographed from above, and at 20 degrees the crown foreshortens away and the
+    // whole read changes. 10 costs a little side margin and is worth it.
+    this.tilt = 10;
 
     // Every rollover on this board gets its own pulse channel, keyed by the switch id the rules
     // emit. The base class set up STARHUB's three lanes; this replaces them.
@@ -222,19 +284,41 @@ export class RainbowRenderer extends Renderer {
     // standup clusters.
     this._rail(root, [[8, 18], [340, 18]], 14, mm(0.055), M.rail, 0);
 
+    // --- THE RAISED UPPER PLAYFIELD -------------------------------------------------------------------
+    // A wooden slab with the reference's octagonal front edge, a darker lip along it, and a printed
+    // shadow on the deck below. Everything standing on it goes in `up`, which is this group.
+    const up = new THREE.Group();
+    up.position.y = PLATFORM.h;
+    root.add(up);
+    this.parts3.up = up;
+    {
+      const sh = new THREE.Shape();
+      sh.moveTo(8, 10);
+      sh.lineTo(W - 46, 10);
+      sh.lineTo(W - 46, 196);
+      sh.lineTo(272, PLATFORM.y);
+      sh.lineTo(38, PLATFORM.y);
+      sh.lineTo(8, 196);
+      sh.closePath();
+      this._flat(root, sh, PLATFORM.h, M.wood, 0);
+      // the front edge, as a band of darker wood - this is the piece that reads as a STEP
+      this._rail(root, [[8, 196], [38, PLATFORM.y], [272, PLATFORM.y], [W - 46, 196]],
+        9, PLATFORM.h + 3, M.woodLip, 0);
+    }
+
     // --- the walls the ball actually touches -------------------------------------------------------
     const WALL_H = mm(0.05);
     this._rail(root, ART.wallTop, 6, WALL_H, M.steel);
     this._rail(root, ART.wallL, 6, WALL_H, M.steel);
     this._rail(root, ART.wallR, 6, WALL_H, M.steel);
-    for (const sh of ART.shelves) this._rail(root, sh, 7, mm(0.03), M.woodLip);
+    for (const sh of ART.shelves) this._rail(up, sh, 7, mm(0.03), M.woodLip);
     for (const gd of ART.guides) {
-      this._rail(root, gd, 5, mm(0.04), M.chrome);
+      this._rail(up, gd, 5, mm(0.04), M.chrome);
       // The reference's wire runs between two RED-CAPPED POSTS. Decorative: the wire is the
       // collider, and these stand on its ends where the reference stands them.
       for (const p of gd) {
-        this._add(root, new THREE.CylinderGeometry(5, 5.6, 22, 14), M.nylon, p[0], 11, tz(p[1]));
-        this._add(root, new THREE.CylinderGeometry(5.4, 5.4, 7, 14), M.redPart, p[0], 24, tz(p[1]));
+        this._add(up, new THREE.CylinderGeometry(5, 5.6, 22, 14), M.nylon, p[0], 11, tz(p[1]));
+        this._add(up, new THREE.CylinderGeometry(5.4, 5.4, 7, 14), M.redPart, p[0], 24, tz(p[1]));
       }
     }
     for (const d of ART.divs) this._rail(root, d, 7, WALL_H, M.chrome);
@@ -254,7 +338,7 @@ export class RainbowRenderer extends Renderer {
     // FLUSH, because they are flush in the reference and are no longer colliders either - a
     // standing chrome ring here made a pocket with the standup cluster beside it.
     for (const [x, y] of ART.cornerHoles) {
-      this._add(root, new THREE.CylinderGeometry(12, 12, 1.4, 22), M.woodLip, x, 0.7, tz(y));
+      this._add(up, new THREE.CylinderGeometry(12, 12, 1.4, 22), M.woodLip, x, 0.7, tz(y));
     }
 
     // --- the drop target bank ---------------------------------------------------------------------------
@@ -263,15 +347,15 @@ export class RainbowRenderer extends Renderer {
     {
       const b = ART.bank;
       const step = b.w / ART.dropCount;
-      this._add(root, new THREE.BoxGeometry(b.w + 10, 5, 13), M.steel, b.x, 2.5, tz(b.y));
+      this._add(up, new THREE.BoxGeometry(b.w + 10, 5, 13), M.steel, b.x, 2.5, tz(b.y));
       for (let i = 0; i < ART.dropCount; i++) {
         const x = b.x - b.w / 2 + step * (i + 0.5);
-        const face = this._add(root, new THREE.BoxGeometry(step - 3, 20, 4), M.cream, x, 14, tz(b.y));
+        const face = this._add(up, new THREE.BoxGeometry(step - 3, 20, 4), M.cream, x, 14, tz(b.y));
         // The reference prints a red pattern on each face rather than one band, so it is three
         // bars: at this size that is what a pattern reads as.
         const stripe = new THREE.Group();
         stripe.position.set(x, 14, tz(b.y));
-        root.add(stripe);
+        up.add(stripe);
         for (let k = -1; k <= 1; k++) {
           this._add(stripe, new THREE.BoxGeometry(2.6, 13, 4.6), M.redPart, k * 4.6, 0, 0);
         }
@@ -281,16 +365,18 @@ export class RainbowRenderer extends Renderer {
 
     // --- standups, rubbers, yellows, posts ------------------------------------------------------------------
     // Red base, white cap: the reference's standup targets, which are the most numerous thing on it.
+    // Anything above PLATFORM.y stands on the raised shelf; anything below stands on the deck.
+    const deck = (y) => (y < PLATFORM.y ? up : root);
     this.parts3.standups = ART.standups.map(([x, y]) => {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
-      root.add(g);
+      deck(y).add(g);
       this._add(g, new THREE.CylinderGeometry(7, 7.6, 16, 16), M.redPart, 0, 8, 0);
       const cap = this._add(g, new THREE.CylinderGeometry(7.2, 7.2, 5, 16), M.cream, 0, 18, 0);
       return cap;
     });
     for (const [x, y] of ART.rubbers) {
-      this._add(root, new THREE.CylinderGeometry(9, 9, 6, 18), M.olive, x, 3, tz(y));
+      this._add(deck(y), new THREE.CylinderGeometry(10, 10, 7, 18), M.olive, x, 3.5, tz(y));
     }
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
       this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
@@ -298,9 +384,9 @@ export class RainbowRenderer extends Renderer {
     for (const [x, y] of ART.posts) {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
-      root.add(g);
-      this._add(g, new THREE.CylinderGeometry(5, 6.5, 26, 14), M.nylon, 0, 13, 0);
-      const ring = this._add(g, new THREE.TorusGeometry(7, 2.4, 8, 16), M.nylon, 0, 22, 0);
+      deck(y).add(g);
+      this._add(g, new THREE.CylinderGeometry(6, 7.6, 28, 14), M.nylon, 0, 14, 0);
+      const ring = this._add(g, new THREE.TorusGeometry(8.2, 2.8, 8, 16), M.nylon, 0, 24, 0);
       ring.rotation.x = Math.PI / 2;
     }
 
@@ -310,7 +396,7 @@ export class RainbowRenderer extends Renderer {
     this.parts3.pops = POPS.map(([x, y, R]) => {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
-      root.add(g);
+      deck(y).add(g);
       this._add(g, new THREE.CylinderGeometry(R + 9, R + 11, 5, 30), M.nylon, 0, 2.5, 0);
       // the black crown: eighteen tapered spikes round the rim
       for (let i = 0; i < 18; i++) {
@@ -333,7 +419,7 @@ export class RainbowRenderer extends Renderer {
     // reference's translucent green wedges.
     const kite = (x, y, rot, len) => {
       const sh = new THREE.Shape();
-      sh.moveTo(0, -len / 2); sh.lineTo(13, len / 2); sh.lineTo(-6, len * 0.32); sh.closePath();
+      sh.moveTo(0, -len / 2); sh.lineTo(20, len / 2); sh.lineTo(-9, len * 0.32); sh.closePath();
       const geo = new THREE.ExtrudeGeometry(sh, { depth: mm(0.026), bevelEnabled: false });
       geo.rotateX(-Math.PI / 2);
       const m = new THREE.Mesh(geo, this.M.kite);
@@ -342,7 +428,7 @@ export class RainbowRenderer extends Renderer {
       root.add(m);
       return m;
     };
-    this.parts3.gates = ART.gates.map((p, i) => kite(p[0], p[1], i ? -0.5 : 0.5, 34));
+    this.parts3.gates = ART.gates.map((p, i) => kite(p[0], p[1], i ? -0.5 : 0.5, 46));
     this.parts3.slings = ART.slings.map((s, i) => {
       const ax = s.a[0], ay = s.a[1], bx = s.b[0], by = s.b[1];
       const ang = Math.atan2(by - ay, bx - ax);
@@ -359,9 +445,9 @@ export class RainbowRenderer extends Renderer {
     for (const name of ['purple', 'blue', 'red']) {
       ROWS[name].forEach((p, i) => {
         const id = (name === 'purple' ? 'p' : name === 'blue' ? 'b' : 'r') + i;
-        const m = this._add(root, new THREE.SphereGeometry(7.5, 20, 12, 0, TAU, 0, Math.PI / 2),
+        const m = this._add(root, new THREE.SphereGeometry(10, 22, 14, 0, TAU, 0, Math.PI / 2),
           dotMat[name].clone(), p[0], 1, tz(p[1]));
-        m.scale.y = 0.44;
+        m.scale.y = 0.62;
         this.parts3.dots[id] = m;
       });
     }
@@ -393,7 +479,7 @@ export class RainbowRenderer extends Renderer {
     ]) {
       const g = new THREE.Group();
       g.position.set(spec.x, mm(0.004), tz(spec.y));
-      root.add(g);
+      deck(spec.y).add(g);
       bat(g, spec.len, spec.r);
       this.parts3.flippers.push(g);
     }
@@ -424,6 +510,24 @@ export class RainbowRenderer extends Renderer {
       sh.closePath();
       this._flat(root, sh, 5, M.woodLip, 0);
       this._rail(root, [[x0, DRAIN_Y + 10], [x1, DRAIN_Y - 10]], 4, mm(0.014), M.chrome, 5);
+    }
+
+    // THE LIGHT IS FLAT AND BRIGHT, which is most of why the reference looks like the reference.
+    // The base class's studio is built for STARHUB - one warm key raking across a near-black deck,
+    // two coloured rim lights and a magenta lamp in the bumper nest - and on a wooden playfield
+    // that reads as a dim brown photograph taken at dusk. The reference is lit evenly from above
+    // with almost no shadow. Retuned here rather than in _boot so STARHUB is untouched.
+    for (const o of this.scene.children) {
+      if (o.isHemisphereLight) {
+        o.intensity = 1.25;
+        o.color.setHex(0xffffff);
+        o.groundColor.setHex(0xc9b092);
+      } else if (o.isDirectionalLight) {
+        o.color.setHex(0xfffaf2);
+        o.intensity = o.castShadow ? 0.85 : 0.3;
+      } else if (o.isPointLight) {
+        o.intensity = 0;                      // the nest lamp is STARHUB's, not this board's
+      }
     }
 
     this._buildBackglass(root);
@@ -487,9 +591,13 @@ export class RainbowRenderer extends Renderer {
       const m = P.balls[n++];
       const sh = P.ballShadows[n - 1];
       m.visible = true;
-      m.position.set(b.x, 9, tz(b.y));
+      // ON THE PLATFORM THE BALL RIDES HIGHER. The physics is one plane; this is the rendering
+      // half of the same fiction the shelf is. Ramped over 14 units either side of the edge so
+      // the ball steps down rather than popping.
+      const lift = PLATFORM.h * clampf((PLATFORM.y + 7 - b.y) / 14, 0, 1);
+      m.position.set(b.x, 9 + lift, tz(b.y));
       sh.visible = true;
-      sh.position.set(b.x, 0.9, tz(b.y));
+      sh.position.set(b.x, 0.9 + lift, tz(b.y));
       sh.scale.setScalar(1);
       sh.material.opacity = 1;
     }
