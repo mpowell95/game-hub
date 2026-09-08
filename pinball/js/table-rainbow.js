@@ -108,32 +108,22 @@ export const FLIP = { len: 63, r: 8, rest: 25 * D, sweep: 52 * D, pivotY: 556, d
 
 /** The red-and-white standup targets in the two top clusters, up the shoulders of the crown.
  *  Reference: image (130,180) rising to (300,55), and mirrored. */
-// TWO STAGGERED ROWS PER SIDE, six targets, which is what the reference shows - the first build
-// drew a single row of five and the cluster read as a fence rather than a bank. They sit close
-// enough to merge into one blob (9 clear units between neighbours, against a ball of 18), which
-// is deliberate: a cluster with no gap a ball can enter has no crevice to park in.
+// TWO PER SIDE, WELL SEPARATED. Matt, on a zoom of the cluster: *"What are these things?"* - and
+// they did not read as targets at all, because the previous version packed six per side close
+// enough to OVERLAP on purpose. Overlapping was the right answer to a ball trap and the wrong
+// answer to everything else: merged into one lump they looked like a stack of poker chips.
+//
+// The way out is this file's own rule applied the other way round. A pair is safe if it is SEALED
+// (surfaces under about 12 apart, no ball can enter) or OPEN (over 18, a ball passes). Merging
+// achieves the first; separate parts need the second, and the shoulder is only long enough for two
+// of them at 25 clear units each. Two recognisable targets beat six unrecognisable ones.
 export const STANDUPS = [];
-// The second row is offset only 10 units, so each pair OVERLAPS into a solid bar. At 12 it did
-// not quite, and the crevice between the two rows parked three drop points at (272, 49); and the
-// first post starts at x 42 rather than 36, which puts 24 clear units between it and the side wall
-// instead of exactly one ball's width - the knife edge five more drop points balanced on.
-for (let i = 0; i < 3; i++) {
-  const x = 42 + i * 18, y = 65 - i * 15;
-  STANDUPS.push([x, y], [mx(x), y]);
-  STANDUPS.push([x + 10, y + 3], [mx(x + 10), y + 3]);
-}
+for (const [x, y] of [[44, 68], [108, 20]]) STANDUPS.push([x, y], [mx(x), y]);
 
-/** The olive rubber discs interleaved with them, plus the four further down the side lanes. */
+/** The olive rubber discs: one per shoulder, in the gap between the two standups, plus the pair
+ *  down the side lanes. */
 export const RUBBERS = [];
-// The row starts at x 44, clear of the side wall by 25 units, and every disc after the first
-// OVERLAPS the standup beside it. At x 30 the first disc stood 11 units off the wall - too narrow
-// to pass, wide enough for a ball to balance on top of the disc and lean on the wall, which is what
-// sweep-pinball-rests.mjs kept finding at (20, 74). Merged into the cluster there is nothing to
-// balance in, and merged is also what the reference looks like.
-for (let i = 0; i < 5; i++) {
-  const x = 44 + i * 15, y = 88 - i * 13;
-  RUBBERS.push([x, y], [mx(x), y]);
-}
+RUBBERS.push([76, 44], [mx(76), 44]);
 // 44, not the reference's 39. Clearance from the side wall, which is the number that decides
 // whether a piece of furniture is a lane or a trap: a ball is 18 across and the wall surface is
 // at x 11, so 39 left 20 units - one ball and a hair. The soak parked a ball there. 44 leaves 25.
