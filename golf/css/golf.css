@@ -181,11 +181,29 @@
 .gf-root .gf-swing { min-width: 104px; font-size: 17px; }
 
 /* --- setup / hole select ------------------------------------------------------------------- */
+/* THE SETUP SCREEN MUST NOT SCROLL. Matt, 2026-09-08, with a screen recording: *"Look at the
+   scroll. I do not want a scroll on these setup/golf landing pages."*
+
+   MEASURED at 390x664, the shortest height this repo tests, with everything else on the screen
+   summed: H1 30 + lengths 52 + courses 82 + card 55 + rounds 159 + foot 117 + 84 of gap + 36 of
+   padding = 615 of 664, which left 45px for a strip of eighteen holes. `_sizeStripRows` scales the
+   strip into whatever is left over, but it will not go below 54px a row - under that a hole is a
+   smudge - so the screen still overflowed by 35px.
+
+   These three cuts buy 68px back and they are the cheapest on the screen: 4px off each of six
+   gaps, 4px off the padding top and bottom, and the two foot buttons side by side instead of
+   stacked (worth about 50 on its own). Nothing loses information and nothing gets smaller than the
+   UX floor allows.
+
+   `overflow-y: auto` STAYS, deliberately. It is not what makes the screen scroll - overflowing is -
+   and if a future change ever does overflow, a screen that can be scrolled is far better than one
+   that silently clips its own buttons. `test-visual.mjs` asserts the overflow is zero instead, on
+   every course, every length, both hosts and both heights. */
 .gf-root .gf-setup {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px;
-  padding: calc(18px + var(--gf-top-pad, 0px)) 18px calc(18px + env(safe-area-inset-bottom));
+  gap: 10px;
+  padding: calc(14px + var(--gf-top-pad, 0px)) 18px calc(14px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, #33501d 0%, #4a6b28 100%);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -215,7 +233,11 @@
 }
 /* One row per nine. `--gf-strip-h` is written per row by `_sizeStripRows`, from the row's own
    width and the sum of its holes' aspects, so the row ends flush with no margin to spare. */
-.gf-root .gf-strip__row { display: flex; gap: 4px; width: 100%; }
+/* CENTRED, because the rows do not always fill the width any more. On a tall phone the height is
+   the width-filling one and there is no slack; on a short one `_sizeStripRows` scales the rows down
+   to fit the screen and a little is left over. Split evenly it reads as a margin; all on one side it
+   reads as a mistake. */
+.gf-root .gf-strip__row { display: flex; gap: 4px; width: 100%; justify-content: center; }
 /* `box-sizing: border-box` IS LOAD-BEARING, not tidiness. The rows are sized by arithmetic in
    `_sizeStripRows` - row width minus the gaps, divided by the sum of the aspects - and on
    content-box each tile's 1px border would add 2px that the arithmetic never subtracted: 18px
@@ -483,9 +505,15 @@
    here: a reason that clipped would be worse than a tile that grows. */
 .gf-root .gf-roundbtn.is-locked { min-height: 60px; }
 
+/* SIDE BY SIDE, not stacked: two full-width buttons one above the other cost about 50px of a
+   664px screen, and the screen did not have it. With only one of them (before the tutorial is
+   done, when practice is hidden) the row is a single full-width button, which is what that moment
+   wants anyway. */
 .gf-root .gf-setup__foot {
-  width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+  width: 100%; max-width: 360px; display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch;
 }
+.gf-root .gf-setup__foot .gf-btn { flex: 1 1 0; min-width: 0; }
+.gf-root .gf-setup__foot .gf-ladder { flex: 1 0 100%; }
 .gf-root .gf-ladder { text-align: center; font-size: 11px; color: var(--gf-dim); }
 /* The tutorial is the ONLY thing a new player can do, so until it is done it is the accent
    control on the screen - paired with a shape (the full-width button, alone above the ladder

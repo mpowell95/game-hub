@@ -4304,3 +4304,78 @@ unlock reads the hole record, which only holing writes).
 `test-visual.mjs`'s golf PLAY probe **seeds the tutorial record** rather than playing the lesson: its
 subject is the three-tap swing, and without the seed it would fail on a gate it is not testing. The
 ladder has its own coverage in `golf/js/test.js` section 20.
+
+## The setup screen scrolled, and the fit check could not see it (2026-09-08)
+
+Matt, with a screen recording of the hub on his phone: *"Look at the scroll. I do not want a scroll
+on these setup/golf landing pages."*
+
+### The check was green and the screen scrolled, and both were true
+
+`test-visual.mjs`'s `fit` check measures **the PAGE** - `documentElement.scrollHeight` against
+`window.innerHeight`. `.gf-setup` is `position: absolute; inset: 0` with its own `overflow-y: auto`,
+so it scrolls INSIDE ITSELF and the page never overflows at all. Every immersive game in this repo
+is built that way, so the page measure could have missed the same bug in any of them.
+
+The check now also walks the game's own root for any element with `overflow-y: auto|scroll` whose
+`scrollHeight` exceeds its `clientHeight`. **Verified born red**: with the old 14px gap restored it
+fails with *"the page fits but `gf-setup` scrolls INSIDE itself by 3px"*.
+
+### What it actually cost, measured
+
+At **390x664**, the shortest height this repo tests, with everything else on the screen summed:
+
+```
+H1 30 + lengths 52 + courses 82 + card 55 + rounds 159 + foot 117 + 84 gap + 36 padding = 615 of 664
+```
+
+That left **45px** for a strip of eighteen holes, and the strip wanted 206. Overflow: **82px** on the
+three-hole mode, 44-46px on the nines and the eighteen. Zero at 393x852, which is why it had not
+been caught by eye.
+
+### The fix: the strip takes what is LEFT, and three cheap cuts pay for the rest
+
+`_sizeStripRows` computed the height at which a row of nine exactly fills the WIDTH. That is still
+the ideal and it is what a tall phone gets - but it is now a **ceiling**. Everything else on the
+screen is measured, the strip is given the remainder, and when that is less than the rows want they
+are scaled down together and end a little short of the full width (centred, so the slack is split).
+A small side margin is a far smaller cost than a screen that scrolls.
+
+**IT SUMS THE SIBLINGS RATHER THAN READING `scrollHeight` WITH THE STRIP COLLAPSED.** That was the
+first attempt and it silently did nothing: `.gf-setup` is `inset: 0`, so its `scrollHeight` can never
+fall below its own `clientHeight` - collapsing the rows still measured 664 of 664, `avail` came out
+**-4**, and the strip kept its full size while the screen kept its 82px. Measured, not reasoned
+about. The children's heights plus the flex gaps and the padding is the same number with no floor
+under it, and it needs no reflow.
+
+Three cuts pay for the remaining 65px, and they are the cheapest on the screen:
+
+| | saves |
+|---|---|
+| the flex gap 14px -> 10px, six times | 24px |
+| the padding 18px -> 14px, top and bottom | 8px |
+| **the two foot buttons side by side instead of stacked** | ~50px |
+
+Nothing loses information and nothing goes under the UX floor. With only one foot button (before the
+tutorial is done, when practice is hidden) the row is a single full-width button anyway.
+
+A **4px safety margin** on the available height is what takes the last 1-2px: each tile carries a 1px
+border under `box-sizing: border-box` and the row heights are fractional, so what is drawn rounds up
+against what was computed.
+
+### Measured after: ZERO overflow everywhere
+
+Every course x every length x both heights, standalone; and both hosts at both heights through
+`test-visual.mjs`:
+
+```
+393x852   pinevalley / redmesa / oasissands, 3h 9h 18h   0px   (strip 208px)
+390x664   pinevalley / redmesa / oasissands, 3h          0px   (strip 113px)
+390x664   ... 9h                                          0px   (strip 183px)
+390x664   ... 18h                                         0px   (strip 187px)
+hole select (18 buttons), 393x852 and 390x664             0px
+```
+
+**`overflow-y: auto` STAYS on `.gf-setup`, deliberately.** It is not what makes the screen scroll -
+overflowing is - and if a future change ever does overflow, a screen that can be scrolled is much
+better than one that silently clips its own buttons. The test asserts the overflow is zero instead.

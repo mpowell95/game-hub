@@ -1161,11 +1161,33 @@ async function checkFit(game) {
         await page.waitForTimeout(1300);
         const r = await page.evaluate(() => {
           const de = document.documentElement;
-          return { over: de.scrollHeight - window.innerHeight, wide: de.scrollWidth - de.clientWidth };
+          // AND THE GAME'S OWN SCROLLING CONTAINERS, not just the page (added 2026-09-08).
+          //
+          // Matt filmed golf's setup screen scrolling on his phone while this check was green, and
+          // the check was not wrong so much as looking at the wrong thing: `.gf-setup` is
+          // `position: absolute; inset: 0` with its own `overflow-y: auto`, so it scrolls INSIDE
+          // itself and the PAGE never overflows at all. Every immersive game in this repo is built
+          // that way, so the page measure could miss the same bug in any of them.
+          //
+          // A fixed overlay that scrolls on purpose (a scorecard, a help sheet) is not on screen
+          // during this check - it is only ever opened by a tap - so what this finds is a LAYOUT
+          // that does not fit, which is Part 0's rule: "A game screen that scrolls at all is a bug."
+          const root = document.querySelector('[class$="-root"], .gf-root, .hub-main > *');
+          let inner = 0; let innerSel = '';
+          if (root) {
+            for (const el of [root, ...root.querySelectorAll('*')]) {
+              const ov = getComputedStyle(el).overflowY;
+              if (ov !== 'auto' && ov !== 'scroll') continue;
+              const d = el.scrollHeight - el.clientHeight;
+              if (d > inner) { inner = d; innerSel = el.className || el.tagName; }
+            }
+          }
+          return { over: de.scrollHeight - window.innerHeight, wide: de.scrollWidth - de.clientWidth, inner, innerSel };
         });
         await page.screenshot({ path: join(OUT, `${game}--fit-${host}-${size.h}.png`) });
         if (r.over > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.over}px TALLER than the screen - you would have to scroll to see all of it`);
         else if (r.wide > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.wide}px too wide`);
+        else if (r.inner > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: the page fits but "${r.innerSel}" scrolls INSIDE itself by ${r.inner}px`);
         else ok(game, 'fit', `${label}: fits`);
         const pf = PLAYFIELD[game];
         if (pf) {
