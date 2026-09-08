@@ -1042,7 +1042,9 @@ export class Renderer {
     // taken off is about 1:1.85. At 30 degrees the projection came out 1:1.73 - wider than the
     // screen - so it fitted by width and left a third of the frame empty above it. 20 degrees gives
     // 1:1.87, which fills. Any steeper and the table shrinks; any flatter and the far end crowds.
-    const TILT = 20 * Math.PI / 180;
+    // `this.tilt` so a subclassed board can choose its own viewing angle; 20 is STARHUB's, and the
+    // paragraph above is the reasoning for that number on that table.
+    const TILT = (this.tilt || 20) * Math.PI / 180;
     const cx = -AXIS, cz = tz(H * 0.5);
 
     // THE FRAMING IS SOLVED, NOT CALCULATED. Working the distance out from the table's centre
