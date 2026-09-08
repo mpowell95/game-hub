@@ -52,8 +52,8 @@ import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
-import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareTierFirst, boardRankTier,
-  formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
+import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
+  boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { loadFavorites } from './favorites.js';
@@ -586,18 +586,59 @@ function boardTierOf(g, id) {
  *  so the order and the number on screen can never disagree again. */
 function boardMetricOf(g, id) { return gameMetricAt(g, id, boardTierOf(g, id)); }
 
-/** THE ONE comparator every metric sort on a game board goes through (six call sites: the four in
- *  sortRows, the rank badges in gameDetail, and By Game's leader pick). Tier first, then that
- *  tier's own score via compareBoardMetric - which is what still gets golf's direction right. */
+/** THE ONE comparator every metric sort on a game board goes through. Tier first, then that tier's
+ *  own score via compareBoardMetric - which is what still gets golf's direction right. */
 function compareBoardRow(a, b, id) {
   return compareTierFirst(boardTierOf(a, id) || 0, boardTierOf(b, id) || 0,
     boardMetricOf(a, id), boardMetricOf(b, id), id);
 }
 
+/** THE BOARD'S ORDER, AS ONE FUNCTION - which is what stops the rows and their rank badges
+ *  disagreeing (2026-09-08). `sortRows` orders the list with it, `gameDetail` numbers the badges
+ *  with it, and By Game picks its leader row with it, so #1 on the board, the "1" chip and the
+ *  name on the By Game row are the same person by construction.
+ *
+ *  They HAD drifted, and Tic Tac Toe is where it showed: its rows are ordered Ultimate -> Classic
+ *  (Matt's own 2026-07-28 split) while the badges were numbered off the generic wins count, so a
+ *  board could read 3, 2, 1, T4, T4, 7, 6, T8 down the page. Matt, on a screenshot of exactly
+ *  that: "The leaderboard is weird."
+ *
+ *  Deliberately WITHOUT the plays/recency tie-breaks `sortRows` adds after it: those decide which
+ *  of two equally-ranked rows is drawn first, and a rank badge must call that pair TIED. */
+function boardMetricCmp(id) {
+  if (id === 'tictactoe') {
+    return (a, b) => {
+      // Difficulty leads (2026-09-08); the Ultimate -> Classic order inside a tier is untouched.
+      const d = (boardTierOf(b, id) || 0) - (boardTierOf(a, id) || 0);
+      if (d) return d;
+      const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
+      const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
+      return (ttVariantWins(tb.ultimate) - ttVariantWins(ta.ultimate))
+        || (ttVariantWins(tb.classic) - ttVariantWins(ta.classic));
+    };
+  }
+  return (a, b) => compareBoardRow(a, b, id);
+}
+
+/** The board's metric order with DIFFICULTY TAKEN OUT: the game's own number, all tiers together,
+ *  exactly as it was ranked before any of this. Matt, 2026-09-08: *"Number of games played
+ *  shouldn't be based on difficulty at all. But the wins should be."* So this is what breaks a tie
+ *  in the GAMES PLAYED sort - a volume order has no business consulting a difficulty tier, not
+ *  even to settle a draw. Nothing else uses it. */
+function comparePlainMetric(a, b, id) {
+  return compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
+}
+
 /** The tier a row is ranked at, said out loud on the card: the same ski-slope shape the filter and
  *  the tier tiles use, plus the word. Without it the board prints "6" under a name with nothing
- *  saying "that is a Hard score", which is how the old board managed to look sorted while being
- *  ranked on something else. Nothing for an untiered row - there is no tier to name. */
+ *  saying "that is a Hard score", which is how a board managed to look sorted while being ranked on
+ *  something else. Nothing for an untiered row - there is no tier to name.
+ *
+ *  IT RIDES THE NAME LINE, NEXT TO THE PLAYER (2026-09-08). Its first home was the subline, beside
+ *  the plays count, where "22 played  MEDIUM" read as "22 games played on Medium" - and games
+ *  played is the one number on this card that has nothing to do with difficulty (Matt: "Number of
+ *  games played shouldn't be based on difficulty at all. But the wins should be."). Attached to the
+ *  name it says what it means: this PLAYER is ranked at this tier. */
 function tierChipHTML(tier) {
   if (!tier) return '';
   return `<span class="lb-tierchip" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}<span>${esc(t(TIER_LABEL_KEY[tier]))}</span></span>`;
@@ -1028,7 +1069,7 @@ function metaLine(games, runs) {
 // Player card passes catInlineHTML(g) there, which is how the difficulty breakdown rides a line
 // that already exists instead of costing the card a row. Every game board omits it and is
 // byte-identical to before.
-function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml) {
+function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
   const me = g.key === _meKey ? ' is-me' : '';
   // Row 2 is the breakdown alone; the OTHER number moved under the name (row 1) in the 2026-08-25
   // handoff, so the card reads name / what they played on one line and the breakdown below it.
@@ -1038,7 +1079,7 @@ function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${sub}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierHtml || ''}<span class="lb-psubline">${sub}</span></span>
       <span class="lb-pnum"><b>${big.val}</b><span>${esc(big.unit)}</span></span>
     </div>
     ${footer}
@@ -1151,10 +1192,10 @@ function gameListHTML(list) {
   const isFav = (id) => favs.includes(hubIdOf(id));
   const rows = gameMetaSorted().map((meta) => {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
-    // The leader shown here must be the row the board itself puts at #1, so it sorts through
-    // compareBoardRow too: difficulty first, score second.
+    // The leader shown here must be the row the board itself puts at #1, so it sorts through the
+    // board's OWN order - the same function that numbers the rank badges.
     const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
-      .sort((a, b) => compareBoardRow(a, b, meta.id)
+      .sort((a, b) => boardMetricCmp(meta.id)(a, b)
         || (b.updatedAt || 0) - (a.updatedAt || 0));
     return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
   });
@@ -1352,7 +1393,7 @@ function ttCardHTML(g, chip) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}${tierChipHTML(rowTier)}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${ultimate}</b><span>${esc(t('lb_tt_ultimate'))}</span></span>
@@ -1377,7 +1418,7 @@ function snCardHTML(g, chip) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}${tierChipHTML(rowTier)}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${off}</b><span>${esc(t('lb_sn_walls_off'))}</span></span>
@@ -1391,59 +1432,27 @@ function snCardHTML(g, chip) {
  *  and Snake. 'wins' (= "this game's own metric") is left EXACTLY as it was before this redesign -
  *  Tic Tac Toe's ultimate -> classic -> recency order, every other game's metric -> plays -> recency. */
 function sortRows(rows, id, sort) {
+  const metric = boardMetricCmp(id);
+  const recent = (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0);
   if (sort === 'alpha') {
-    rows.sort((a, b) => {
-      const n = (a.name || '').localeCompare(b.name || '');
-      if (n) return n;
-      const m = compareBoardRow(a, b, id);
-      if (m) return m;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
+    rows.sort((a, b) => (a.name || '').localeCompare(b.name || '') || metric(a, b) || recent(a, b));
     return;
   }
   if (sort === 'played') {
-    rows.sort((a, b) => {
-      const p = boardPlaysOf(b, id) - boardPlaysOf(a, id);
-      if (p) return p;
-      const m = compareBoardRow(a, b, id);
-      if (m) return m;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
+    // GAMES PLAYED IS A VOLUME ORDER AND KNOWS NOTHING ABOUT DIFFICULTY (2026-09-08, Matt). Plays
+    // first, and a tie is settled by the plain all-tier number, never by a tier.
+    rows.sort((a, b) => (boardPlaysOf(b, id) - boardPlaysOf(a, id))
+      || comparePlainMetric(a, b, id) || recent(a, b));
     return;
   }
   if (sort === 'high') {
-    rows.sort((a, b) => {
-      const h = skBestAt(b, _machine) - skBestAt(a, _machine);
-      if (h) return h;
-      const m = compareBoardRow(a, b, id);   // the game's own metric breaks a tie
-      if (m) return m;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
+    rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || metric(a, b) || recent(a, b));
     return;
   }
-  if (id === 'tictactoe') {
-    rows.sort((a, b) => {
-      // Difficulty leads here too (2026-09-08). Its Ultimate -> Classic -> recency order is
-      // otherwise untouched: it is the SCORE half of the rule, applied within one tier.
-      const d = (boardTierOf(b, id) || 0) - (boardTierOf(a, id) || 0);
-      if (d) return d;
-      const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
-      const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
-      const u = ttVariantWins(tb.ultimate) - ttVariantWins(ta.ultimate);
-      if (u) return u;
-      const c = ttVariantWins(tb.classic) - ttVariantWins(ta.classic);
-      if (c) return c;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
-  } else {
-    rows.sort((a, b) => {
-      const m = compareBoardRow(a, b, id);
-      if (m) return m;
-      const p = boardPlaysOf(a, id) - boardPlaysOf(b, id);
-      if (p) return p;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
-  }
+  // The game's own metric: difficulty first (that is the half Matt does want tiered), then this
+  // board's own score order - Tic Tac Toe's Ultimate -> Classic, everyone else's single number.
+  // Fewer plays breaks a dead-equal pair, as it always did, and the badges call that pair tied.
+  rows.sort((a, b) => metric(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)) || recent(a, b));
 }
 
 /** Which machines this field has actually played, in the game's own chain order. Only these are
@@ -1490,7 +1499,7 @@ function gameDetail(list, id) {
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
       : (g) => boardMetricOf(g, id),
-    byMetric ? (a, b) => compareBoardRow(a, b, id) : null);
+    byMetric ? boardMetricCmp(id) : null);
   sortRows(rows, id, bSort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
@@ -1524,8 +1533,7 @@ function gameDetail(list, id) {
           big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
         }
-        const subHtml = `${esc(subText)}${tierChipHTML(rowTier)}`;
-        return playerCardHTML(g, chip, big, subText, tiles, subHtml);
+        return playerCardHTML(g, chip, big, subText, tiles, '', tierChipHTML(rowTier));
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
   return head + controls + cardsHtml + recordsHTML(list, id);
@@ -1985,11 +1993,13 @@ function ensureCss() {
     '.lb-pcard.is-me .lb-pname{font-weight:800}',
     '.lb-you{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.1em;background:var(--lb-ink);color:var(--lb-surface);padding:3px 5px;border-radius:3px}',
     '.lb-psubline{flex:1 0 100%;font-size:11.5px;color:var(--lb-muted);margin-top:2px;font-variant-numeric:tabular-nums;min-width:0}',
-    // The tier chip on a game board's card (2026-09-08): the ski-slope shape plus the word, riding
-    // the subline that already exists, so it costs the card no height. It is what makes the
-    // headline number legible - "6" means nothing until the row says the 6 is a Hard score.
+    // The tier chip on a game board's card (2026-09-08): the ski-slope shape plus the word, on the
+    // NAME line (`.lb-pid`'s own 6px gap spaces it), so it costs the card no height and reads as a
+    // fact about the PLAYER. It is what makes the headline number legible - "6" means nothing until
+    // the row says the 6 is a Hard score - and it must not sit beside the plays count, which is the
+    // one number here that difficulty never touches.
     // Shape first, hue second (the colorblind rule); the word carries it on its own if neither reads.
-    '.lb-tierchip{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--lb-ink);text-transform:uppercase}',
+    '.lb-tierchip{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--lb-ink);text-transform:uppercase}',
     '.lb-tierchip .lb-dshape{width:10px;height:10px;fill:var(--lb-pill-color,#5b6b82)}',
     '.lb-tierchip .lb-dshape-x2{width:18px}',
     // The inline difficulty breakdown (catInlineHTML). It lives INSIDE .lb-psubline, so it costs
