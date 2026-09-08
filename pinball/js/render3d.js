@@ -909,7 +909,17 @@ export class Renderer {
       return { m, mat, key: keyName };
     });
 
-    // --- the backbox ------------------------------------------------------------------------------------------
+    this._buildBackglass(root);
+    this._buildBalls(root);
+  }
+
+  /**
+   * THE BACKBOX, as its own method so a second board's renderer can stand one up without a
+   * second copy of it (js/render-rainbow.js subclasses this renderer and calls it). Extracted
+   * unchanged from _build.
+   */
+  _buildBackglass(root) {
+    const M = this.M;
     // A real machine puts its score and its shouting on a BACKGLASS standing at the far end, not
     // painted on the playfield. Matt, on the shipped build: *"the points and word popups should be
     // shown on a back wall/scorepoint/point counter thing. There's too much that happens on top of
@@ -956,7 +966,11 @@ export class Renderer {
       this._bbLines = [];
       this._bbDirty = true;
     }
+  }
 
+  /** The four balls and their painted contact shadows, extracted from _build for the same
+   *  reason the backglass was. */
+  _buildBalls(root) {
     // --- balls ----------------------------------------------------------------------------------------------------
     // EACH BALL CARRIES ITS OWN CONTACT SHADOW, and it is not decoration. The scene's shadow map
     // is 1024 texels across a 640x920 area, so a ball of radius 9 casts a shadow about two texels
@@ -1395,7 +1409,10 @@ export class Renderer {
     g.textBaseline = 'middle';
 
     // the wordmark, which says what MODE the machine is in
-    const title = hud && hud.wizard ? 'WIZARD' : hud && hud.multiball ? 'MULTIBALL' : 'STARHUB';
+    // `brand` so a subclassed renderer can put ITS board's name on the glass; STARHUB by default.
+    const title = hud && hud.wizard ? 'WIZARD'
+      : hud && hud.multiball ? 'MULTIBALL'
+      : (this.brand || 'STARHUB');
     g.font = '800 34px system-ui, -apple-system, sans-serif';
     g.lineWidth = 7; g.strokeStyle = 'rgba(11,7,24,0.9)';
     g.strokeText(title, W2 / 2, 44);
