@@ -14,7 +14,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
@@ -23,6 +23,12 @@ import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
+import TUTORIAL_COURSE from '../courses/tutorial.js';
+import { Coach } from './tutorial.js';
+import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderProgress,
+  courseOpenByDefault } from './progress.js';
+import { isCourseReleased, courseTestingOverride, readCachedConfig } from '../../js/admin-config.js';
+import { isDevProfile } from '../../js/challenge/hooks.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
 
@@ -338,18 +344,35 @@ class GolfGame {
     const modes = modesForCourse(c);
     const mode = modes.includes(this.settings.lastMode || 3) ? (this.settings.lastMode || 3) : modes[0];
     const rounds = roundsForCourse(c, mode);
+    // THE LADDER. Everything below is derived from the player's own record - see progress.js for
+    // why none of it is stored separately.
+    const gf = this._gf();
+    const needTutorial = !tutorialDone(gf);
+    const ladder = ladderProgress(c, gf);
+    // A course still in TESTING is hidden outright; one that is merely not open yet is SHOWN and
+    // locked, because a ladder you cannot see is not a ladder. Matt's own rule for Skeeball's
+    // machines, and the same reading here.
+    const courses = COURSES.filter((k) => this._isDev() || !this._courseTesting(k.id));
     const el = document.createElement('div');
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
       <h1>${esc(t(`course_${c.id}`))}</h1>
       <div class="gf-coursepick gf-modepick">
-        ${modes.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}"
-          data-mode="${m}"><span>${esc(t('mode_holes', { n: m }))}</span></button>`).join('')}
+        ${modes.map((m) => {
+    const open = modeUnlocked(c, m, gf);
+    return `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}${open ? '' : ' is-locked'}"
+          data-mode="${m}"
+          aria-label="${esc(open ? t('mode_holes', { n: m }) : `${t('mode_holes', { n: m })}, ${t('locked')}`)}"><span>${esc(t('mode_holes', { n: m }))}</span>${open ? '' : `<small>${esc(t('locked'))}</small>`}</button>`;
+  }).join('')}
       </div>
       <div class="gf-coursepick">
-        ${COURSES.map((k) => `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}"
-          data-course="${esc(k.id)}"><span>${esc(t(`course_${k.id}`))}</span></button>`).join('')}
+        ${courses.map((k) => {
+    const open = this._courseOpen(k.id);
+    return `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}${open ? '' : ' is-locked'}"
+          data-course="${esc(k.id)}"${open ? '' : ' disabled'}
+          aria-label="${esc(open ? t(`course_${k.id}`) : `${t(`course_${k.id}`)}, ${t('lock_course')}`)}"><span>${esc(t(`course_${k.id}`))}</span>${open ? '' : `<small>${esc(t('lock_course'))}</small>`}</button>`;
+  }).join('')}
       </div>
       <div class="gf-strip" data-role="strip" role="group" aria-label="${esc(t('every_hole', { course: t(`course_${c.id}`)}))}">
         ${holeRows(c).map((row) => `<div class="gf-strip__row">
@@ -367,15 +390,28 @@ class GolfGame {
       <div class="gf-card">
         <div class="gf-card-blurb gf-pickhead">${esc(rounds.length > 1 ? t('pick_set') : t('pick_round'))}</div>
         <div class="gf-rounds${rounds.length === 1 ? ' is-one' : ''}">
-          ${rounds.map((r) => `<button type="button" class="gf-btn gf-roundbtn" data-round="${esc(r.id)}"
-            aria-label="${esc(t('holes_range', { range: roundRange(r) }))}">
+          ${rounds.map((r) => {
+    const st = roundState(c, r.id, gf);
+    const lock = st.unlocked ? '' : this._lockText(st.need);
+    return `<button type="button" class="gf-btn gf-roundbtn${st.unlocked ? '' : ' is-locked'}"
+            data-round="${esc(r.id)}"${st.unlocked ? '' : ' disabled'}
+            aria-label="${esc(st.unlocked ? t('holes_range', { range: roundRange(r) })
+    : `${t('holes_range', { range: roundRange(r) })}, ${lock}`)}">
             <span>${esc(roundRange(r))}</span>
-            <small>${esc(t('round_meta', { par: roundPar(c, r.id) }))}</small>
-            <small class="gf-best">${esc(this._bestText(roundKey(c, r.id), roundPar(c, r.id)))}</small>
-          </button>`).join('')}
+            ${st.unlocked
+    ? `<small>${esc(t('round_meta', { par: roundPar(c, r.id) }))}</small>
+            <small class="gf-best">${esc(this._bestText(roundKey(c, r.id), roundPar(c, r.id)))}</small>`
+    : `<small class="gf-lock">${esc(lock)}</small>`}
+          </button>`;
+  }).join('')}
         </div>
       </div>
-      <button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`;
+      <div class="gf-setup__foot">
+        <button type="button" class="gf-btn gf-tutbtn${needTutorial ? ' is-cta' : ''}" data-role="tutorial">
+          <span>${esc(needTutorial ? t('tutorial_cta') : t('tutorial_again'))}</span></button>
+        ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`}
+        <div class="gf-ladder">${esc(t('ladder_progress', ladder))}</div>
+      </div>`;
     this.rootEl.appendChild(el);
     this._paintHoleStrip(el.querySelector('[data-role="strip"]'));
     for (const b of el.querySelectorAll('[data-mode]')) {
@@ -396,7 +432,57 @@ class GolfGame {
     for (const b of el.querySelectorAll('[data-round]')) {
       this._on(b, 'click', () => this._startRound(b.dataset.round));
     }
-    this._on(el.querySelector('[data-role="practice"]'), 'click', () => this._renderHoleSelect());
+    // PRACTICE IS HIDDEN UNTIL THE TUTORIAL IS DONE, because before it there is nothing to
+    // practise: every hole on the course is locked, so the screen would open on eighteen locked
+    // buttons and read as a broken game rather than as a ladder.
+    const prac = el.querySelector('[data-role="practice"]');
+    if (prac) this._on(prac, 'click', () => this._renderHoleSelect());
+    this._on(el.querySelector('[data-role="tutorial"]'), 'click', () => this._startTutorial());
+  }
+
+  /** THE PLAYER'S OWN GOLF RECORD, read fresh every time the setup screen is drawn.
+   *
+   *  It is not cached on the instance on purpose: stats sync in the background (`stats-net.js`
+   *  mirrors and merges on every hub load), so a player who shot par on their other phone should
+   *  find the next set open the next time they look at this screen, not the next time they restart
+   *  the game. Reading it costs one localStorage parse. */
+  _gf() { try { return gfOf(loadStats()); } catch { return {}; } }
+
+  /** IS THIS COURSE PLAYABLE AT ALL? The code default, with the admin's overrides ON TOP - never
+   *  replacing it, which is the rule `js/admin-config.js`'s own header states for every switch it
+   *  owns and the reason a missing, stale or unreachable config leaves the game behaving exactly as
+   *  the code says.
+   *
+   *  `courseTestingOverride`, NOT `isCourseTesting`, AND THE DIFFERENCE IS THE WHOLE BUG.
+   *  `resolveCourseTesting` returns TRUE when nothing has been written ("Missing key -> testing"),
+   *  which was right in 2026-09-03: golf was a placeholder with no code-side course default at all,
+   *  so testing was the only safe answer. It is wrong now that `progress.js` carries
+   *  `COURSE_OPEN_BY_DEFAULT` - it would make the code default unreachable and hide ALL THREE
+   *  courses from everyone, which is exactly what it did the first time this screen was driven in a
+   *  browser (measured: the course picker rendered zero chips). Two switches for one decision is
+   *  how a game ends up shipped hidden by accident, and this is that failure in miniature. The
+   *  OVERRIDE reader returns null when nothing is set, so an absent config changes nothing. */
+  _courseTesting(courseId) {
+    return courseTestingOverride(readCachedConfig(), courseId) === true;
+  }
+
+  _courseOpen(courseId) {
+    if (this._isDev()) return true;
+    if (this._courseTesting(courseId)) return false;
+    return courseOpenByDefault(courseId) || isCourseReleased(courseId);
+  }
+
+  _isDev() {
+    try { const p = loadProfile(); return !!(p && isDevProfile(p.name)); } catch { return false; }
+  }
+
+  /** What one locked round is waiting on, in words. A lock with no reason is a dead end; this is
+   *  what turns it into the next thing to go and do. */
+  _lockText(need) {
+    if (!need) return '';
+    if (need.kind === 'tutorial') return t('lock_tutorial');
+    const range = roundRange(need.roundId);
+    return need.kind === 'par' ? t('lock_par', { range }) : t('lock_unlock', { range });
   }
 
   /** The setup screen's backdrop follows the course. It is chrome rather than course art, but a
@@ -553,16 +639,23 @@ class GolfGame {
     this._dropStripObs();
     this.rootEl.innerHTML = '';
     const c = this.course;
+    const playable = practisableHoles(c, this._gf());
     const el = document.createElement('div');
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
       <h1>${esc(t(`course_${c.id}`))}</h1>
       <div class="gf-card gf-panel"><div class="gf-card-blurb">${esc(t('select_hole'))}</div>
-        <div class="gf-holes">${c.holes.map((h, i) => `
-          <button type="button" class="gf-btn gf-hole-btn" data-hole="${i}"
-            aria-label="${esc(`${t('hole_abbr')} ${h.n}, ${t('par_n', { n: h.par })}`)}">
-            <span>${h.n}</span><small>${h.par}</small></button>`).join('')}</div>
+        <div class="gf-holes">${c.holes.map((h, i) => {
+    // A HOLE IS PRACTISABLE ONCE THE SET THAT INTRODUCES IT IS UNLOCKED. Without this, practice
+    // is a way to walk the whole course without earning any of it, which would make the ladder
+    // decoration. See `practisableHoles` in progress.js.
+    const open = playable.has(i);
+    return `
+          <button type="button" class="gf-btn gf-hole-btn${open ? '' : ' is-locked'}" data-hole="${i}"${open ? '' : ' disabled'}
+            aria-label="${esc(`${t('hole_abbr')} ${h.n}, ${t('par_n', { n: h.par })}${open ? '' : `, ${t('locked')}`}`)}">
+            <span>${h.n}</span><small>${open ? h.par : '&#128274;'}</small></button>`;
+  }).join('')}</div>
         <div class="gf-card-meta"><span>${esc(t('not_counted'))}</span></div>
       </div>
       <button type="button" class="gf-btn" data-role="back"><span>${esc(t('back'))}</span></button>`;
@@ -610,6 +703,43 @@ class GolfGame {
     this._enterHole();
   }
 
+  /** THE LESSON. One hole, off no course, with a `Coach` watching.
+   *
+   *  It is started exactly like a practice hole - same `_enterHole`, same play screen, same
+   *  physics - with two differences: `this.course` is the tutorial's own course object, so
+   *  `holeKey` writes `tutorial:1` and `progress.js` can see it; and `this.coach` exists, which is
+   *  the only thing the play screen checks. */
+  _startTutorial() {
+    this.course = TUTORIAL_COURSE;
+    this.roundId = 'practice';
+    this.holeIdxs = [0];
+    this.pos = 0;
+    this.scores = [];
+    this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 };
+    this.recorded = false;
+    this.newBest = false;
+    this.tutorialRun = true;
+    this._enterHole();
+  }
+
+  /** Back to the setup screen from the tutorial, on the course the player was looking at before.
+   *  `this.course` is left pointing at the tutorial while the lesson runs, and the setup screen
+   *  reads `this.course` for everything - so without this, finishing the lesson would open a
+   *  course picker with a course in it that is not in `COURSES`. */
+  _leaveTutorial() {
+    this.tutorialRun = false;
+    this._dropCoach();
+    this.course = courseById(this.settings.lastCourse || COURSES[0].id);
+    this._renderSetup();
+  }
+
+  _dropCoach() { if (this.coach) { this.coach.destroy(); this.coach = null; } }
+
+  /** Tell the lesson what just happened. Called unconditionally from the game's own paths: the
+   *  coach ignores anything the current step is not waiting for, so no caller has to know which
+   *  step is up, and a golfer who is not in the lesson has no coach at all. */
+  _coach(kind) { if (this.coach) this.coach.event(kind); }
+
   _enterHole() {
     this._dropStripObs();
     const hole = this.course.holes[this.holeIdxs[this.pos]];
@@ -642,6 +772,18 @@ class GolfGame {
     // would leave `if (this.dropEl) return` blocking every later prompt in the round.
     this.dropEl = null;
     this._renderPlay();
+    // THE COACH IS REBUILT WITH THE SCREEN, because `_renderPlay` wipes `rootEl` and every card,
+    // ring and arrow the lesson has drawn goes with it. It keeps its own step index, so a
+    // re-render never restarts the lesson.
+    if (this.tutorialRun) {
+      if (!this.coach) {
+        this.coach = new Coach(this.rootEl, () => { this.coach = null; });
+        this.coach.start();
+      } else {
+        this.coach.root = this.rootEl;
+        this.coach.refresh();
+      }
+    }
   }
 
   /** Cut the opening flyover short. Any tap on the course does this, and so does any control that
@@ -989,6 +1131,11 @@ class GolfGame {
       this.el.tc.setAttribute('data-faded', '0');
     }
     if (r === 'fire') this._fire();
+    // The lesson's three swing steps are exactly the three taps, so they are reported from the one
+    // place that knows which tap this was.
+    if (r === 'begin') this._coach('tap-begin');
+    else if (r === 'power') this._coach('tap-power');
+    else if (r === 'fire') this._coach('fire');
     this._paintHud();
   }
 
@@ -1161,8 +1308,17 @@ class GolfGame {
     // score, and it would read as deleted if quitting on the twelfth threw away the ace you made
     // on the third (THE LAW rule 1). It is also why a PRACTICE hole sets one: a hole is a hole.
     // The round best is a separate, stricter thing and keeps its complete-round guard below.
+    // WHAT THIS ROUND JUST OPENED, read off the ladder rather than announced by whoever wrote the
+    // score. `progress.js` derives every unlock from the stored record, so the honest way to know
+    // what changed is to ask it either side of the write - which also means the card can never
+    // claim an unlock the setup screen will not then show.
+    const openBefore = this._unlockedIds();
     this._recordHole(hole, strokes);
     if (last && !practice) this._recordRound();
+    const gained = this._unlockedIds().filter((id) => !openBefore.includes(id));
+    const unlockedNow = gained.length
+      ? t('unlocked_now', { range: gained.map((id) => roundRange(id)).join(', ') })
+      : '';
 
     const played = this.scores.filter((v) => Number.isFinite(v));
     const parSoFar = this.holeIdxs
@@ -1189,7 +1345,9 @@ class GolfGame {
           }).join('')}
         </div>`}
         <div class="gf-result__total">${esc(toParTxt)}</div>
+        ${this.tutorialRun ? `<div class="gf-result__best">${esc(t('tut_holed'))}</div>` : ''}
         ${this.newBest ? `<div class="gf-result__best">${esc(t('saved_best'))}</div>` : ''}
+        ${unlockedNow ? `<div class="gf-result__best">${esc(unlockedNow)}</div>` : ''}
         <div class="gf-actions">
           ${last ? `<button type="button" class="gf-btn" data-role="res-done"><span>${esc(t('finish'))}</span></button>`
     : `<button type="button" class="gf-btn" data-role="res-next"><span>${esc(t('next_hole'))}</span></button>`}
@@ -1258,6 +1416,16 @@ class GolfGame {
     this.newBest = Number.isFinite(after) && (!Number.isFinite(before) || after < before);
   }
 
+  /** Every round of the CURRENT course that is open to this player right now, as round ids. Used
+   *  either side of a write to say what a score just unlocked. */
+  _unlockedIds() {
+    try {
+      const gf = this._gf();
+      const c = courseById(this.settings.lastCourse || COURSES[0].id);
+      return roundsFor(c).filter((r) => roundState(c, r.id, gf).unlocked).map((r) => r.id);
+    } catch { return []; }
+  }
+
   /** One hole's own record. Additive and Math.min inside the recorder; a failed write is queued
    *  and replayed by `recordGolf` itself, exactly as a round's is. */
   _recordHole(hole, strokes) {
@@ -1318,11 +1486,13 @@ class GolfGame {
       this.holed = true;
       this.swing.settle(performance.now());
       this._paintHud();
+      this._coach('holed');
       setTimeout(() => { if (!this.destroyed) this._showHoleResult(); }, 700);
       return;
     }
     this.shotN += 1 + ((a.res && a.res.penalty) || 0);
     this.swing.settle(performance.now());
+    this._coach('settled');
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();
@@ -1646,7 +1816,12 @@ class GolfGame {
       // of the accuracy bar with no third tap, the shot goes anyway, at the worst accuracy the
       // bar can express - the alternative is a swing that hangs there for ever waiting for a tap
       // the player has already failed to make.
-      if (this.swing.read(now).expired) { this.swing.tap(now); this._fire(); this._paintHud(); }
+      // THE LESSON HAS TO HEAR THIS ONE TOO. The swing fires itself when the needle runs off the
+      // bottom of the bar with no third tap; without telling the coach, the "tap a third time" step
+      // would wait for ever on a tap the player has already failed to make.
+      if (this.swing.read(now).expired) {
+        this.swing.tap(now); this._fire(); this._coach('fire'); this._paintHud();
+      }
       if (!this.intro) this._aimCamera(false);
     }
 
@@ -2055,7 +2230,14 @@ class GolfGame {
    *  `before` is run just ahead of the setup screen, so the result card can hand in its own
    *  teardown and stay put if the player changes their mind. */
   _quit(before) {
-    const leave = () => { if (before) before(); this._renderSetup(); };
+    const leave = () => {
+      if (before) before();
+      // THE TUTORIAL IS NOT A COURSE, so leaving it has to put `this.course` back before the setup
+      // screen reads it - otherwise the course picker opens on a course that is not in `COURSES`
+      // and the chips have nothing highlighted.
+      if (this.tutorialRun) { this._leaveTutorial(); return; }
+      this._renderSetup();
+    };
     if (!this._roundAtStake()) { leave(); return; }
     const el = document.createElement('div');
     el.className = 'gf-result';

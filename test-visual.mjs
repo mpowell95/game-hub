@@ -310,6 +310,23 @@ const PLAY = {
       // specific: any one of the three taps landing in the wrong PHASE leaves the meter parked and
       // the ball never leaves the tee, with nothing on screen saying so. Driving it through the
       // real button is the only way to find that out.
+      // THE LADDER IS SEEDED PAST, NOT PLAYED THROUGH (2026-09-08). Golf's setup screen is gated
+      // now: a player who has not finished the tutorial has every hole locked and no practice
+      // button at all, so this probe - whose subject is the three-tap SWING - would fail on a
+      // screen it is not testing. The unlock is derived from `gf.bestHole['tutorial:1']`
+      // (golf/js/progress.js), so writing that one record is the whole of "has done the lesson".
+      // The ladder itself has its own coverage in golf/js/test.js section 20; this is the play
+      // screen's probe and it should not have to earn its way to it.
+      await page.evaluate(() => {
+        const st = JSON.parse(localStorage.getItem('gamehub.stats') || '{}');
+        st.games = st.games || {}; st.games.golf = st.games.golf || {};
+        const gf = st.games.golf.gf || (st.games.golf.gf = {});
+        gf.bestHole = gf.bestHole || {};
+        gf.bestHole['tutorial:1'] = 3;
+        localStorage.setItem('gamehub.stats', JSON.stringify(st));
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForTimeout(600);
       const practice = await page.$('[data-role="practice"]');
       if (!practice) return { ok: false, why: 'no "practice" button on the course card' };
       await tap(practice);

@@ -602,6 +602,7 @@ const GOLF_COURSES = {
   redmesa9: 'Red Mesa (front 9)',
   redmesa9b: 'Red Mesa (back 9)',
   redmesa18: 'Red Mesa (18 holes)',
+  tutorial: 'Tutorial',
   // Oasis Sands has NINE holes, so it offers three three-hole sets and one nine - there is no back
   // nine and no eighteen, and golf/js/rounds.js's `roundsFor` is what stops those being offered.
   // These four shipped with the course and were not added here (2026-09-07), so a stored best read
@@ -623,7 +624,12 @@ function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(
  *
  *  Oasis Sands is the first course with fewer, and without this its row drew EIGHTEEN cells with
  *  nine permanent dashes for holes that do not exist. */
-const GOLF_COURSE_HOLES = { pinevalley: 18, redmesa: 18, oasissands: 9 };
+// THE TUTORIAL IS A ONE-HOLE COURSE. Finishing it writes `gf.bestHole['tutorial:1']` through the
+// ordinary per-hole path, and golf/js/progress.js reads exactly that key to decide whether holes
+// 1-3 are open - so the record is real, earned and load-bearing, and a record no screen shows
+// reads as deleted (THE LAW rule 1). It gets a name here and a length of one, which is what stops
+// the row printing "TUTORIAL" with seventeen dashes after it.
+const GOLF_COURSE_HOLES = { pinevalley: 18, redmesa: 18, oasissands: 9, tutorial: 1 };
 function golfCourseHoles(id) { return GOLF_COURSE_HOLES[id] || 18; }
 
 /** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in
