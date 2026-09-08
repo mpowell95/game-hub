@@ -1985,7 +1985,8 @@ console.log('\n-- 17. inside the first red dot, a putt over the hole is IN (2026
   // AND IT IS A PUTT'S RULE ONLY. Matt, 2026-09-04, on full shots: "you can go over it if the ball
   // is moving too fast". `cupCheck`'s default is unchanged, so a wood running over the hole at pace
   // still stays out.
-  near('cupCheck still defaults to the speed limit', SH.CUP_MAX_SPEED, 2.2, 1e-9);
+  near('cupCheck still defaults to the speed limit',
+    SH.CUP_MAX_SPEED, Math.sqrt(2 * SH.PUTT_DECEL * (SH.CUP_PAST_FT / SH.FT_PER_YD)), 1e-9);
   ok('a ball crossing the cup at pace is NOT holed by default',
     !SH.cupCheck(h, h.pin[0], h.pin[1], SH.CUP_MAX_SPEED + 0.5));
   ok('...and IS when the caller lifts the limit',
@@ -2006,6 +2007,53 @@ console.log('\n-- 17. inside the first red dot, a putt over the hole is IN (2026
     inside > 0.7, 'the speed limit is still biting inside the first dot');
   ok(`...and outside it the window is still narrow (20 ft: ${(outside * 100).toFixed(0)} %)`,
     outside < 0.3, 'the gimme has leaked out past the first dot');
+}
+
+
+console.log('\n-- 18. the cup holds a ball running up to CUP_PAST_FT past it (2026-09-08) --');
+// Matt, playtesting Pine Valley 3 with the screen in front of him: a 45.2 ft putt "went over the
+// hole and ended up here, 6.8 ft away. It should have gone in."
+//
+// 4.0 ft past was the old tolerance and it is the REALISTIC number - which is why it was wrong for
+// this game. The player is stopping a meter with a thumb, not rolling a ball, and the click above
+// the make window was a miss with nothing to show for a stroke that was on line and barely firm.
+{
+  const h = PINE_VALLEY.holes[2];                    // the hole in Matt's screenshot, par 5
+  const rangeFt = SH.puttRangeFt();
+  const puttFrom = (ft, p) => SH.simulatePutt({
+    hole: h, from: [h.pin[0], h.pin[1] - ft / SH.FT_PER_YD], aimRad: 0, power: p, rangeFt });
+  const endFt = (r) => Math.hypot(r.rest[0] - h.pin[0], r.rest[1] - h.pin[1]) * SH.FT_PER_YD;
+
+  // THE SPEED IS DERIVED FROM THE DISTANCE, NEVER TYPED. Two constants that have to agree are one
+  // constant and one line of arithmetic, or they drift the first time either is tuned.
+  near(`the cup's speed limit is the stopping speed for ${SH.CUP_PAST_FT} ft (${SH.CUP_MAX_SPEED.toFixed(2)} yd/s)`,
+    SH.CUP_MAX_SPEED ** 2 / (2 * SH.PUTT_DECEL) * SH.FT_PER_YD, SH.CUP_PAST_FT, 1e-9);
+
+  // [KNOWN-BUG PROBE] MATT'S OWN PUTT. 94 % of the meter from 45 ft: it crossed the cup and
+  // finished 6.8 ft past, and the 4.0 ft tolerance threw it out.
+  ok('[KNOWN-BUG PROBE] the 45 ft putt from the playtest drops (94 % of the meter, ran 6.8 ft past)',
+    puttFrom(45, 0.94).holed,
+    'a putt over the hole finishing inside CUP_PAST_FT is being rejected again');
+
+  // ...and it is still a LIMIT. Full power from the same spot runs 12.1 ft past - well outside the
+  // tolerance - and stays out, so pace has not stopped mattering.
+  const smashed = puttFrom(45, 1);
+  ok(`...and full power from there still runs over the top (${endFt(smashed).toFixed(1)} ft past)`,
+    !smashed.holed && endFt(smashed) > SH.CUP_PAST_FT,
+    'the tolerance has swallowed the whole meter: any pace now holes a long putt');
+
+  // The window it buys, so a later change that quietly closes it shows up as a number rather than
+  // as Matt playing the game again.
+  const windowAt = (ft) => {
+    let n = 0, t = 0;
+    for (let p = 0.02; p <= 1.001; p += 0.01) { if (puttFrom(ft, p).holed) n++; t++; }
+    return n / t;
+  };
+  for (const [ft, floor] of [[20, 0.11], [30, 0.10], [45, 0.09]]) {
+    const w = windowAt(ft);
+    ok(`a ${ft} ft putt has a ${(w * 100).toFixed(0)} % window of the meter`, w >= floor,
+      'the over-hit side has closed back up; see CUP_PAST_FT in shot.js');
+  }
 }
 
 

@@ -837,7 +837,34 @@ export function avgPuttDrag(hole, from, aimRad, distanceYd) {
  *  hole and roll on regardless. `cupCheck` below is now the ONE rule, used by both paths. */
 export const CUP_RADIUS_YD = 0.12;
 export const CUP_CAPTURE_YD = 0.30;
-export const CUP_MAX_SPEED = 2.2;                    // yd/s past which the ball runs over the top
+
+/** HOW FAR PAST THE HOLE A BALL MAY STILL BE RUNNING AND STILL DROP, in feet.
+ *
+ *  **4.0 ft -> 8.0 ft on 2026-09-08.** Matt, from a playtest, with the screen in front of him:
+ *  a 45.2 ft putt on Pine Valley 3 *"went over the hole and ended up here, 6.8 ft away. It should
+ *  have gone in."*
+ *
+ *  Reproduced exactly: that putt is 94 % of the meter, the ball crossed the cup and finished
+ *  6.8 ft past, and the 4.0 ft tolerance rejected it. The make window on that putt ran 85-91 % -
+ *  **seven clicks of ninety-nine** - and the click immediately above it was a miss with nothing
+ *  to show for a stroke that was on line and barely firm.
+ *
+ *  4.0 ft is the realistic number (a real cup stops holding a ball somewhere around there), and
+ *  that is exactly why it was wrong here: the player is not rolling a ball, they are stopping a
+ *  meter with a thumb. Measured make rate over the whole meter, aimed straight at the pin on
+ *  Pine Valley 3, before -> after:
+ *
+ *    20 ft   9 % -> 14 %      30 ft   8 % -> 13 %      45 ft   7 % -> 11 %
+ *
+ *  Matt chose 8 ft from a table of 4/7/8/12 (12 ft made pace stop mattering at all on a long putt;
+ *  he did not want that). **THE SPEED IS DERIVED FROM IT, NEVER TYPED** - `v^2 = 2 a d` against
+ *  the putting deceleration, so the pair can never drift apart and the comment can never go stale.
+ *
+ *  THE OTHER TWO WAYS TO MISS ARE UNTOUCHED: a putt left short still never reaches the cup, and
+ *  the line still has to be right. This only widens the over-hit side. Inside the first red dot
+ *  there is no speed limit at all (`puttGimmeFt` below), and that rule is unchanged. */
+export const CUP_PAST_FT = 8;
+export const CUP_MAX_SPEED = Math.sqrt(2 * PUTT_DECEL * (CUP_PAST_FT / FT_PER_YD));
 
 /** INSIDE THE FIRST RED DOT, A PUTT OVER THE HOLE IS IN, AT ANY PACE (Matt, 2026-09-07).
  *
@@ -850,9 +877,10 @@ export const CUP_MAX_SPEED = 2.2;                    // yd/s past which the ball
  *  painter owns, and the two would drift the first time the range moved.
  *
  *  WHAT IT ACTUALLY CHANGES, measured: the speed gate rejects a putt that would run more than
- *  4.0 ft PAST the cup (`CUP_MAX_SPEED^2 / 2 PUTT_DECEL`). From 2 ft that is any strike over 23.7 %
- *  of the meter against a target of 11.9 % - double the intended power, which is an ordinary
- *  over-hit - and the ball ran over the top and stayed out. Inside the first dot it drops instead.
+ *  `CUP_PAST_FT` PAST the cup (`CUP_MAX_SPEED^2 / 2 PUTT_DECEL`, 8.0 ft since 2026-09-08). From
+ *  2 ft that was any strike over 23.7 % of the meter against a target of 11.9 % - double the
+ *  intended power, which is an ordinary over-hit - and the ball ran over the top and stayed out.
+ *  Inside the first dot it drops instead, at any pace.
  *
  *  IT DOES NOT MAKE A SHORT PUTT FREE, and that is worth being straight about: a putt left SHORT
  *  never reaches the cup, so it still misses, and the LINE still has to be right. What it does is
