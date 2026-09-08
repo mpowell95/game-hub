@@ -365,3 +365,42 @@
 .gf-root .gf-result__best {
   font-size: 13px; font-weight: 800; color: #ffce3a; text-align: center;
 }
+
+/* --- the drop prompt, and the banner that names the trouble ------------------------------- */
+/* Modelled on .gf-result: same dark ground, same panel, same 44px hit floors. The reference puts
+   its two choices in a stacked pair of full-width orange buttons (golf-reference-spec.md 21.2),
+   which is also the right shape for a thumb. */
+.gf-root .gf-drop {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 12, 4, 0.62);
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.gf-root .gf-drop__card { width: 100%; max-width: 320px; text-align: center; padding: 18px 16px 16px; }
+.gf-root .gf-drop__name { font-size: 26px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-drop__q { font-size: 14px; margin-top: 8px; line-height: 1.35; }
+.gf-root .gf-drop__cost { font-size: 12px; color: var(--gf-dim); margin-top: 6px; }
+.gf-root .gf-drop__actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.gf-root .gf-drop__actions .gf-btn { width: 100%; }
+
+/* The banner is the no-choice case: it names what happened, then clears itself. No button,
+   because there is nothing to decide - you cannot play a ball that is in the lake. */
+.gf-root .gf-banner {
+  position: absolute; left: 0; right: 0; top: 38%; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none; text-align: center;
+  animation: gf-banner 2.4s ease-out forwards;
+}
+.gf-root .gf-banner b { font-size: 34px; font-weight: 800; text-shadow: var(--gf-shadow); letter-spacing: .01em; }
+.gf-root .gf-banner span { font-size: 14px; font-weight: 700; color: var(--gf-ink); text-shadow: var(--gf-shadow); }
+@keyframes gf-banner {
+  0% { opacity: 0; transform: translateY(8px); }
+  12% { opacity: 1; transform: translateY(0); }
+  72% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-root .gf-banner { animation: gf-banner-plain 2.4s steps(1) forwards; }
+  @keyframes gf-banner-plain { 0% { opacity: 1; } 99% { opacity: 1; } 100% { opacity: 0; } }
+}

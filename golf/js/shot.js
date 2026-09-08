@@ -379,6 +379,40 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
  * `lieFactor` SCALES the distance; it does not clamp the meter. The aim dots scale by the same
  * factor, so they keep telling the truth about where a perfect strike lands.
  */
+/** WHERE A DROPPED BALL GOES, for every kind of drop this game takes.
+ *
+ *  Real golf drops within a club-length of where the ball crossed the margin, no nearer the hole.
+ *  This is that, made deterministic: rings outward from the ball at MIN_DROP_YD and up, sixteen
+ *  directions each, and takes the first spot that is on the map, not on a surface the caller has
+ *  ruled out, and - preferred over anything else at the same radius - not closer to the pin.
+ *
+ *  The distance floor is the point of it. A drop that lands on the divot the shot was played from
+ *  costs a stroke and changes nothing, which is a hole that cannot be finished; that was a real
+ *  softlock (see MIN_DROP_YD).
+ *
+ *  `isBad(kind)` is what the caller cannot accept: water for the automatic hazard drop, water AND
+ *  trees for a player who has chosen to drop out of a wood. Returns null when nothing within
+ *  fourteen yards works, and the caller keeps the lie it had. */
+export function dropNear(hole, from, isBad) {
+  const b = hole.bounds;
+  const wasTo = distYd(from, hole.pin);
+  let best = null;
+  for (let rad = MIN_DROP_YD; rad <= 14 && !best; rad += 1.5) {
+    for (let a2 = 0; a2 < 16; a2++) {
+      const th = (a2 / 16) * Math.PI * 2;
+      const cand = [from[0] + Math.sin(th) * rad, from[1] + Math.cos(th) * rad];
+      if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
+      if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
+      const on = surfaceAt(hole, cand[0], cand[1]);
+      if (isBad(on)) continue;
+      const nearer = distYd(cand, hole.pin) < wasTo - 0.5;
+      if (!best || (best.nearer && !nearer)) best = { rest: cand, restOn: on, nearer };
+      if (!nearer) break;
+    }
+  }
+  return best;
+}
+
 export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distanceMul = 1 }) {
   const lieKind = surfaceAt(hole, from[0], from[1]);
   const lie = lieOf(lieKind);
@@ -500,23 +534,8 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     // none. The stroke is still charged - it is the ball being stuck that is the bug, not the
     // penalty.
     if (distYd(from, rest) < MIN_DROP_YD) {
-      const b = hole.bounds;
-      const wasTo = distYd(from, hole.pin);
-      let best = null;
-      for (let rad = MIN_DROP_YD; rad <= 14 && !best; rad += 1.5) {
-        for (let a = 0; a < 16; a++) {
-          const th = (a / 16) * Math.PI * 2;
-          const cand = [from[0] + Math.sin(th) * rad, from[1] + Math.cos(th) * rad];
-          if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
-          if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
-          const on = surfaceAt(hole, cand[0], cand[1]);
-          if (on === 'water') continue;
-          const nearer = distYd(cand, hole.pin) < wasTo - 0.5;
-          if (!best || (best.nearer && !nearer)) best = { cand, on, nearer };
-          if (!nearer) break;
-        }
-      }
-      if (best) { rest = best.cand; restOn = best.on; }
+      const moved = dropNear(hole, from, (k) => k === 'water');
+      if (moved) { rest = moved.rest; restOn = moved.restOn; }
     }
   }
 
@@ -732,14 +751,28 @@ export const PUTT_DECEL = 1.81;
 
 /** Lateral acceleration per unit of green gradient, yd/s^2.
  *
- *  Tuned by measurement, not guessed: at 0.12 a 20 ft putt across a half-strength slope breaks
- *  4.0 in, which is one cup width, which is the feel §20 asks for. golf/js/test.js measures
- *  exactly that and fails if it drifts.
+ *  **0.12 -> 0.45 on 2026-09-07, and the reason is the size of the hole.** At 0.12 a 20 ft putt
+ *  across a half-strength slope broke 3.3 in - and THE CUP CAPTURES WITHIN 10.8 in of its centre.
+ *  A break smaller than the capture radius cannot change an outcome, so the slope was decoration:
+ *  measured over all eighteen Pine Valley greens, a putt aimed dead straight at the cup from 20 ft
+ *  dropped **93 %** of the time, on greens whose arrows are drawn for the player to read. Matt,
+ *  told that number: *"make the break NOT decoration."*
+ *
+ *      K       half slope @ 20 ft   full slope @ 20 ft   straight-aim makes
+ *      0.12          3.3 in               6.8 in               93 %
+ *      0.30          8.9 in              20.4 in               61 %
+ *      0.45         15.1 in              31.6 in               43 %
+ *      0.60         20.4 in              44.4 in               30 %
+ *
+ *  0.45 is the first value where a half-slope putt breaks further than the cup can reach for it
+ *  (15.1 in against 10.8), which is the whole property being bought: on a sloped green you now
+ *  have to aim outside the hole. It is not a difficulty knob picked by feel - one notch lower and
+ *  the arrows still mean nothing on the flatter greens.
  *
  *  Because the break is integrated the whole way down rather than applied as a formula at the end,
  *  a putt that dies at the hole bends MORE than one struck firm. That is correct golf and it costs
  *  nothing to get right. */
-export const BREAK_K = 0.12;
+export const BREAK_K = 0.45;
 
 /** HOW MUCH A ROLLING BALL IS SLOWED BY WHAT IT IS ROLLING ON, as a multiple of `PUTT_DECEL`
  *  (which is the green, and so is 1.00 by definition).
