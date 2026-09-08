@@ -485,24 +485,37 @@ console.log('\n-- compareTierFirst(): tier first, score only within a tier --');
 // a score he set on EASY, while ranking him as a Hard player off a Hard best of 6. Ranking on one
 // number and printing another is the failure; boardRankTier picks the tier, and the caller reads
 // the metric AT it, so there is only one number.
-console.log('\n-- boardRankTier(): the highest tier with a real score --');
+console.log('\n-- boardRankTier(): the highest tier the player PLAYED and SCORED at --');
 {
   // King of Games' actual Snake record from the board Matt screenshotted (walls off).
   const kog = { 1: 51, 2: 0, 3: 6 };
   const at = (rec) => (tier) => rec[tier] | 0;
-  eq('[KNOWN-BUG PROBE] a 51 on Easy and a 6 on Hard ranks at HARD', boardRankTier(at(kog), 'snake'), 3);
-  eq('...and the number the board shows is that tier\'s 6, never the 51',
-    at(kog)(boardRankTier(at(kog), 'snake')), 6);
-  eq('a player who has only ever played Easy ranks at Easy', boardRankTier(at({ 1: 40 }), 'snake'), 1);
-  eq('a tier PLAYED but never scored on is not a tier you rank at',
-    boardRankTier(at({ 1: 40, 2: 0, 3: 0 }), 'snake'), 2 - 1);
-  eq('Expert outranks the lot', boardRankTier(at({ 1: 900, 4: 1 }), 'snake'), 4);
-  eq('no score at any tier is no tier at all, not tier 1', boardRankTier(at({}), 'snake'), null);
-  // Skeeball/Pinball/Golf/Hill Climb: their metric is the same at every tier because they have no
-  // difficulty axis, so nothing here may invent one.
-  eq('a game with no difficulty axis ranks at no tier', boardRankTier(() => 0, 'skeeball'), null);
-  eq('golf, where every round is a value and lower wins, still ranks at no tier',
-    boardRankTier(() => null, 'golf'), null);
+  const played = (rec) => (tier) => (rec[tier] === undefined ? 0 : 1);
+  const rank = (rec, id = 'snake') => boardRankTier(at(rec), id, played(rec));
+
+  eq('[KNOWN-BUG PROBE] a 51 on Easy and a 6 on Hard ranks at HARD', rank(kog), 3);
+  eq('...and the number the board shows is that tier\'s 6, never the 51', at(kog)(rank(kog)), 6);
+  eq('a player who has only ever played Easy ranks at Easy', rank({ 1: 40 }), 1);
+  eq('a tier PLAYED but never scored on is not a tier you rank at', rank({ 1: 40, 2: 0, 3: 0 }), 1);
+  eq('Expert outranks the lot', rank({ 1: 900, 4: 1 }), 4);
+  eq('no score at any tier is no tier at all, not tier 1', rank({}), null);
+
+  // THE SECOND BUG, and the reason playsAt is not optional (2026-09-08). Skeeball's metric is
+  // machine-scoped, golf's is course-scoped: both extractors IGNORE the tier they are handed and
+  // return the same number every time, so "is there a score at tier 4" is trivially yes. Measured
+  // on the live boards before this: Skeeball, Golf and Hill Climb each printed EXPERT on every row.
+  const tierBlind = (v) => () => v;
+  const neverPlayed = () => 0;
+  ok('[KNOWN-BUG PROBE] a tier-BLIND metric cannot invent a tier 4',
+    boardRankTier(tierBlind(409760), 'skeeball', neverPlayed) === null,
+    'Skeeball has no difficulty axis at all and its board said EXPERT on every row');
+  ok('[KNOWN-BUG PROBE] golf, whose every value is a real value, cannot either',
+    boardRankTier(tierBlind(-3), 'golf', neverPlayed) === null);
+  ok('...and a game whose buckets are STAGES, not difficulties, is untiered too',
+    boardRankTier((tier) => (tier === 4 ? 77 : 0), 'hillclimb', neverPlayed) === null,
+    'Hill Climb keys its buckets by stage; tierOf() maps none of them to a tier');
+  ok('a real difficulty axis still resolves with both accessors agreeing',
+    boardRankTier(at({ 1: 40, 3: 12 }), 'snake', played({ 1: 40, 3: 12 })) === 3);
 }
 
 // --- how it prints --------------------------------------------------------
@@ -517,6 +530,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
 // are six metric sort sites and one filter; a single missed one re-ranks a whole board.
 {
   const src = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
+  const rankSrc = readFileSync(new URL('./js/leaderboard-rank.js', import.meta.url), 'utf8');
   ok('golf\'s board metric is the best round, not the lifetime points total',
     /if \(id === 'golf'\) return golfBestAt\(g\);/.test(src));
   ok('[KNOWN-BUG PROBE] no metric sort site compares `b - a` any more',
@@ -551,7 +565,15 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] the card headline is still the metric at the row\'s own tier',
     /const metric = boardMetricOf\(g, id\);/.test(src));
   ok('a row\'s tier is decided by the tested pure function, not re-derived here',
-    /function boardTierOf\(g, id\) \{\s*\n\s*if \(_tier != null\) return _tier;\s*\n\s*return boardRankTier\(\(tier\) => gameMetricAt\(g, id, tier\), id\);/.test(src));
+    /return boardRankTier\(\(tier\) => gameMetricAt\(g, id, tier\), id, \(tier\) => playsAtTier\(g, \[id\], tier\)\);/.test(src));
+  ok('[KNOWN-BUG PROBE] the PLAYS accessor is passed, so a tier-blind metric cannot invent a tier',
+    /boardRankTier\(metricAt, id, playsAt\)/.test(rankSrc)
+    && /if \(playsAt\(tier\) > 0 && hasBoardMetric\(metricAt\(tier\), id\)\) return tier;/.test(rankSrc),
+    'Skeeball, Golf and Hill Climb each printed EXPERT on every row without it');
+  ok('By Game\'s leader row marks the tier its number belongs to',
+    /\$\{tierMarkHTML\(boardTierOf\(lead, meta\.id\)\)\}/.test(src) && /\.lb-tiermark\{/.test(src));
+  ok('the chip is suppressed while a difficulty filter is selected, which already says it once',
+    /function tierChipHTML\(tier\) \{[\s\S]{0,400}?if \(_tier != null\) return '';/.test(src));
   ok('[KNOWN-BUG PROBE] the board\'s number is the metric AT that row\'s tier',
     /function boardMetricOf\(g, id\) \{ return gameMetricAt\(g, id, boardTierOf\(g, id\)\); \}/.test(src),
     'ranking by tier while printing the all-tier best put an Easy 51 on top of a Hard board');
