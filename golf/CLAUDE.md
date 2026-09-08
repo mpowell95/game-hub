@@ -2065,10 +2065,15 @@ design actually claims - the closing nine is harder than the opening nine, the c
 harder than the opening block, the back nine is harder than the front - plus a `[KNOWN-BUG PROBE]`
 that **no hole plays a full shot under par**, which is the floor Matt complained about.
 
-**Red Mesa's 13-15 is still a dip and is not fixed.** Green guarding was tried there and moved it
-by less than the noise: in this engine what actually costs strokes is DRIVING difficulty, because a
-missed fairway costs power and accuracy band on the next shot, while a smaller green mostly costs a
-putt. Narrower corridors and more trees are the lever if it is worth another pass.
+**Red Mesa's 13-15 was a dip, and it CLOSED ON 2026-09-08 without being designed at.** Green
+guarding was tried here and moved it by less than the noise: in this engine what costs strokes is
+DRIVING difficulty, because a missed fairway costs power and accuracy band on the next shot, while
+a smaller green mostly costs a putt. What actually closed it was the playtest pass at the bottom of
+this file - a green that runs out and a break worth reading are both worth MORE on the holes with
+the most trouble around the green, which is what 13-15 has. Measured after: the course's six blocks
+run **-0.1 / +1.4 / +2.3 / +2.5 / +2.3 / +3.4**, so 13-15 is level with 10-12 and the closing three
+are the hardest on the course. The finding under it still stands and is the lever if the dip ever
+comes back: narrower corridors and more trees, not more sand round the green.
 
 ## The penalty drop, which finally exists (2026-09-05)
 
@@ -3987,3 +3992,38 @@ The fix is to move that pin off the low point, the way Oasis Sands 3's pin was m
 edge - par untouched, so the stored `bestHole` keys still mean what they meant. It is a course-data
 change on a hole nobody asked about, so it is recorded here rather than made. Pine Valley 12 is the
 other `bowl` and does NOT have the problem (94 % -> 44 %), because its pin is off centre.
+
+### What the 2026-09-08 pass left open, measured rather than remembered
+
+Run after the change, 24 rounds a hole (`GF_PERHOLE=1 node golf/js/test.js`):
+
+```
+pinevalley per hole  1:-0.21 2:-0.42 3:+0.08 4:+0.29 5:+0.25 6:+0.17 7:+0.58 8:+0.63 9:+0.21
+                    10:+1.25 11:+0.88 12:+0.25 13:+2.38 14:+2.38 15:+0.50 16:+0.79 17:+2.92 18:+0.58
+redmesa    per hole  1:-0.17 2:+0.08 3:-0.04 4:+0.08 5:+1.04 6:+0.29 7:+0.00 8:+1.04 9:+1.25
+                    10:+1.04 11:+0.42 12:+1.04 13:+0.67 14:+0.33 15:+1.29 16:+0.29 17:+0.96 18:+2.13
+blocks     pinevalley  -0.5 +0.7 +1.4 +2.4 +5.3 +4.3
+           redmesa     -0.1 +1.4 +2.3 +2.5 +2.3 +3.4
+           oasissands  +1.0 +0.4 +1.8
+```
+
+**GREENS WHERE AIMING STRAIGHT AT THE CUP STILL HOLES HALF THE TIME OR MORE**, swept 15-30 ft at
+BREAK_K 0.90 - this is the list to work from if the read should matter on more of them:
+
+```
+pinevalley   6: 100 %      (the one deliberately FLAT green - correct, leave it)
+redmesa      1: 100 %   2: 67 %   3: 63 %
+oasissands   5:  58 %
+```
+
+Every other green on all forty-five now needs a read. **Red Mesa 1 is the outlier and it is not a
+bug**: its own spec says *"The green is the kindest out here: everything on it feeds toward the
+middle"* - it is the `bowl` preset with the pin at the bowl's low point, so the slope funnels every
+putt INTO the hole, and raising `BREAK_K` funnels it harder. Kind was the intent; holing from 30 ft
+is past kind. Moving that pin off the low point is the fix (par untouched, so stored `bestHole`
+keys keep their meaning - the same move Oasis Sands 3's pin got). 2 and 3 are `gentle` greens on
+holes 2 and 3 of a course and are probably right as they are.
+
+**Pine Valley 13 still hits the 14-shot ceiling on 1 of 24 runs**, down from the belts work but not
+zero. Same cause as ever: a ball deep inside a 26-yard belt with the probe only searching +/-45
+degrees. Pre-existing, not made worse by this pass.
