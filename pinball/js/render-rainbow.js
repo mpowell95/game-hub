@@ -158,8 +158,27 @@ export class RainbowRenderer extends Renderer {
     g.lineTo(mx(72), 232); g.lineTo(72, 232); g.lineTo(6, 196);
     g.closePath(); g.fill();
 
-    // NOTHING IN THE MIDDLE. The painted oval that used to be here is gone with the hardware that
-    // stood in it - see table-rainbow.js's POPS comment for what Matt asked for and why.
+    // THE CENTRE OVAL, at the reference's full size, and PAINT ONLY - no hardware stands in it.
+    // See table-rainbow.js's OVAL comment.
+    {
+      const o = ART.oval;
+      g.save();
+      g.translate(o.x, o.y);
+      g.beginPath();
+      g.moveTo(0, -o.h / 2);
+      g.bezierCurveTo(o.w * 0.26, -o.h * 0.46, o.w * 0.36, -o.h * 0.10, o.w * 0.50, o.h * 0.14);
+      g.bezierCurveTo(o.w * 0.62, o.h * 0.40, o.w * 0.32, o.h / 2, 0, o.h / 2);
+      g.bezierCurveTo(-o.w * 0.32, o.h / 2, -o.w * 0.62, o.h * 0.40, -o.w * 0.50, o.h * 0.14);
+      g.bezierCurveTo(-o.w * 0.36, -o.h * 0.10, -o.w * 0.26, -o.h * 0.46, 0, -o.h / 2);
+      g.closePath();
+      const og = g.createRadialGradient(0, -o.h * 0.1, 8, 0, 0, o.h * 0.56);
+      og.addColorStop(0, '#2a1a0e');
+      og.addColorStop(0.75, '#3b2716');
+      og.addColorStop(1, '#4a3220');
+      g.fillStyle = og;
+      g.fill();
+      g.restore();
+    }
 
     // Faint printed guide arcs behind the three rows, so the rows read as one feature.
     g.strokeStyle = 'rgba(96,60,24,0.16)';
@@ -376,7 +395,7 @@ export class RainbowRenderer extends Renderer {
       return cap;
     });
     for (const [x, y] of ART.rubbers) {
-      this._add(deck(y), new THREE.CylinderGeometry(10, 10, 7, 18), M.olive, x, 3.5, tz(y));
+      this._add(deck(y), new THREE.CylinderGeometry(9, 9, 6, 18), M.olive, x, 3, tz(y));
     }
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
       this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
@@ -385,8 +404,8 @@ export class RainbowRenderer extends Renderer {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
       deck(y).add(g);
-      this._add(g, new THREE.CylinderGeometry(6, 7.6, 28, 14), M.nylon, 0, 14, 0);
-      const ring = this._add(g, new THREE.TorusGeometry(8.2, 2.8, 8, 16), M.nylon, 0, 24, 0);
+      this._add(g, new THREE.CylinderGeometry(4.2, 5.4, 24, 12), M.nylon, 0, 12, 0);
+      const ring = this._add(g, new THREE.TorusGeometry(6.4, 2, 8, 14), M.nylon, 0, 21, 0);
       ring.rotation.x = Math.PI / 2;
     }
 
@@ -518,13 +537,17 @@ export class RainbowRenderer extends Renderer {
     // that reads as a dim brown photograph taken at dusk. The reference is lit evenly from above
     // with almost no shadow. Retuned here rather than in _boot so STARHUB is untouched.
     for (const o of this.scene.children) {
+      // 0.95 and a 1.15 key, not 1.25 and 0.85. The first attempt at 'flat like the reference'
+      // went too far the other way: with the fill beating the key nothing had a lit side and a dark
+      // side, every part returned the same pale value, and the playfield read as washed out. The
+      // reference is EVENLY lit, not UNlit - its parts still have shading.
       if (o.isHemisphereLight) {
-        o.intensity = 1.25;
+        o.intensity = 0.95;
         o.color.setHex(0xffffff);
         o.groundColor.setHex(0xc9b092);
       } else if (o.isDirectionalLight) {
         o.color.setHex(0xfffaf2);
-        o.intensity = o.castShadow ? 0.85 : 0.3;
+        o.intensity = o.castShadow ? 1.15 : 0.28;
       } else if (o.isPointLight) {
         o.intensity = 0;                      // the nest lamp is STARHUB's, not this board's
       }
