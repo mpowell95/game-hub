@@ -18,7 +18,7 @@ import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, ro
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, FT_PER_YD, PUTT_GAMMA } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
@@ -495,6 +495,9 @@ class GolfGame {
     // from the green to the tee box." `t0` is set on the first frame that has a camera, because
     // the camera is not built until the canvas has a real size (_sizeCanvas).
     this.intro = { t0: 0 };
+    // The prompt is a child of rootEl, and _renderPlay wipes rootEl - so a stale reference here
+    // would leave `if (this.dropEl) return` blocking every later prompt in the round.
+    this.dropEl = null;
     this._renderPlay();
   }
 
@@ -1168,6 +1171,61 @@ class GolfGame {
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();
     this._paintHud();
+
+    // THE PLAYER IS TOLD WHAT THE HAZARD COST, AND ASKED WHEN THERE IS SOMETHING TO ASK.
+    // golf-reference-spec.md 21.2: the reference banners the trouble ("In the trees") and then
+    // puts up a modal with two stacked buttons - take a drop, or play it as it lies. Ours had
+    // neither: a ball in the water was moved and a stroke added with nothing on screen saying so,
+    // and a ball in the trees was simply yours to deal with.
+    if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
+    else if (this._lie() === 'trees') this._showDropPrompt();
+  }
+
+  /** The no-choice case: name what happened and clear itself. There is no button because there is
+   *  nothing to decide - a ball in the lake cannot be played from the lake. */
+  _showBanner(name, sub) {
+    const el = document.createElement('div');
+    el.className = 'gf-banner';
+    el.innerHTML = `<b>${esc(name)}</b><span>${esc(sub)}</span>`;
+    this.rootEl.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 2500);
+  }
+
+  /** The choice case. A ball in the trees is playable, so the player gets the reference's two
+   *  buttons rather than a rule applied over their head. A drop costs a stroke and goes through
+   *  the SAME `dropNear` the water rule uses, so both kinds of drop land by one set of numbers. */
+  _showDropPrompt() {
+    if (this.dropEl) return;
+    const el = document.createElement('div');
+    el.className = 'gf-drop';
+    el.innerHTML = `
+      <div class="gf-drop__card gf-panel">
+        <div class="gf-drop__name">${esc(t('in_trees'))}</div>
+        <div class="gf-drop__q">${esc(t('drop_q'))}</div>
+        <div class="gf-drop__cost">${esc(t('drop_costs'))}</div>
+        <div class="gf-drop__actions">
+          <button type="button" class="gf-btn" data-role="drop-take"><span>${esc(t('take_drop'))}</span></button>
+          <button type="button" class="gf-btn" data-role="drop-play"><span>${esc(t('play_from_lie'))}</span></button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    this.dropEl = el;
+    const close = () => { if (this.dropEl) { this.dropEl.remove(); this.dropEl = null; } };
+    this._on(el.querySelector('[data-role="drop-play"]'), 'click', close);
+    this._on(el.querySelector('[data-role="drop-take"]'), 'click', () => {
+      // Out of the trees AND never into the water; a stroke either way.
+      const moved = dropNear(this.hole, this.ball, (k) => k === 'trees' || k === 'water');
+      if (moved) {
+        this.ball = [...moved.rest];
+        this.shotN += 1;
+        this.aimRad = this._bearingToPin();
+        this.club = autoSelectClub(this._distToPin(), this._lie());
+        this._syncTempo();
+        this._aimCamera(false);
+        this._paintHud();
+      }
+      close();
+    });
   }
 
   // ---------------------------------------------------------------- painting ----

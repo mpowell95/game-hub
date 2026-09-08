@@ -33,7 +33,7 @@ and keeps the three module-contract exports so nothing in the repo carries a bro
 | A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
 | — | The hole-data format, written down before anything is built against it | **done** |
 | B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
-| C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round is done**; the drop prompt and the sunburst banner are not |
+| C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round and the drop prompt are done**; the sunburst banner is not |
 | D | Stats wiring, this file, `sw.js`, the full test sweep, release | **stats are wired**; My Stats' to-par display is not |
 | — | Thirty-three more holes: Pine Valley 4-18, and Red Mesa, a whole second course | **done** |
 
@@ -3707,3 +3707,62 @@ hard as it was, and the reason short putts were missed at all - the power tap's 
 189 ms climb - is still there. The rule works by making the over-hit half free, so the player's
 answer is to always be firm. If Matt ever wants the long putts easier too, that is still the dial
 and the tempo, and it is still his call.
+
+## The break is no longer decoration (2026-09-07)
+
+Matt, on the overnight playtest list: *"make the break NOT decoration."*
+
+`BREAK_K` was **0.12**. On a half-strength slope that bends a 20 ft putt **3.3 inches** - and the
+cup's own capture radius (`CUP_CAPTURE_YD` 0.30 yd) is **10.8 inches**. A ball aimed straight at the
+hole was still inside the cup after the slope had finished with it, so the green's slope arrows
+pointed at an effect that could not change an outcome. Straight-aim make rate on a sloped 20-footer
+was **93 %**, which is the same number a flat green gives.
+
+`BREAK_K` is **0.45** now. Measured, on the test's own half-slope green:
+
+| | 0.12 | 0.45 |
+|---|---|---|
+| bend on a 20 ft putt, half slope | 3.3 in | **15.1 in** |
+| bend on a 20 ft putt, full slope | 6.6 in | **30.4 in** |
+| straight-aim make, 20 ft on that slope | 93 % | **43 %** |
+
+The load-bearing line is the first one: **15.1 in beats the 10.8 in capture radius**, so reading the
+slope is now the difference between holing and missing rather than a graphic. Section 15c carries
+that as a `[KNOWN-BUG PROBE]` - it fails the day the bend drops back inside the cup.
+
+**A flat green is unchanged, and so is every putt inside the first red dot.** Break scales with the
+square of the distance, so at 3 ft it is under half an inch; section 17's short-putt numbers are the
+same after this as before it (86 % of the meter still holes a 3-footer).
+
+**One course moved and it is a NAMED GAP, not a silent one.** Section 15c also asserts that a
+course's closing three holes are harder than its opening three. Real break re-ordered Oasis Sands:
+its blocks went from -0.8 / -0.1 / -0.5 to +0.1 / +0.2 / -0.3, so its closing three are now its
+easiest by 0.4 - outside the +/-0.3 the probe carries as noise. That course belongs to another
+session and its greens are its own design decision, so the claim is exempted rather than the course
+retuned, and the exemption **prints on every run**. Delete the branch the moment its closing three
+are re-cut.
+
+## "In the water" / "In the trees": the player is told, and asked (2026-09-07)
+
+Two gaps, from the same overnight list. A ball in the water was moved and a stroke was added with
+**nothing on screen saying so** - the shot counter simply went up by two. A ball in the trees was
+handed back with no choice at all, though the reference (`golf-reference-spec.md` 21.2) gives one.
+
+- **The banner is the no-choice case.** Water: `.gf-banner` names it ("In the water") with the cost
+  under it ("One penalty stroke"), then clears itself after 2.5 s. No button, because a ball in the
+  lake cannot be played from the lake.
+- **The prompt is the choice case.** Trees: `.gf-drop` is a modal with two stacked full-width
+  buttons - **Take a drop** or **Play from lie** - and the cost stated on the card.
+- **Both drops go through ONE rule.** `dropNear(hole, from, isBad)` was pulled out of the water path
+  in `shot.js` and is now called by both; the tree drop just passes a wider `isBad` (trees AND
+  water). Rings outward from the ball at `MIN_DROP_YD` and up, sixteen directions per ring, first
+  spot that is on the map, off the barred surfaces and - preferred at equal radius - **not nearer
+  the pin**. The distance floor is the point of it: a drop onto the divot the shot was played from
+  costs a stroke and changes nothing, which is a hole that cannot be finished, and that was a real
+  softlock.
+- Verified in a real browser on Pine Valley 1: a drive into the right-hand trees put the modal up,
+  **Take a drop** moved the ball from 336.5 to 337.8 yds from the pin (further, never nearer) and
+  took shot 2 to shot 3.
+
+Strings are in EN and ES (`in_water`, `in_trees`, `penalty_stroke`, `drop_q`, `take_drop`,
+`play_from_lie`, `drop_costs`); section 15a fails if either language is missing one.
