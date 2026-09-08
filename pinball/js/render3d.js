@@ -175,11 +175,12 @@ export class Renderer {
 
     // The model's own studio: a soft sky/ground wash, one shadow-casting key, and a dim fill from
     // behind so nothing silhouettes to black.
-    // 0.62, not the stage's 1.0: this scene is looked at from one side only and lit against a
-    // near-black background, and at full strength the hemisphere washed the deck from the model's
-    // deep violet out to a flat lavender.
-    scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x241a3d, 0.62));
-    const key = new THREE.DirectionalLight(0xfff3e2, 1.45);
+    // 0.78, not the stage's 1.0: this scene is looked at from one side only and lit against a
+    // near-black background, and at full strength the hemisphere washed the deck out to a flat
+    // lavender. It was 0.62, which was tuned against a BARE deck - now that the deck carries a
+    // print worth seeing, the print has to be lit enough to read.
+    scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x2c2049, 0.78));
+    const key = new THREE.DirectionalLight(0xfff3e2, 1.6);
     key.position.set(-W * 0.75, 620, tz(-120));
     key.target.position.set(-AXIS, 0, tz(330));
     key.castShadow = true;
@@ -193,6 +194,23 @@ export class Renderer {
     const fill = new THREE.DirectionalLight(0xfff4e6, 0.42);
     fill.position.set(W * 0.6, 340, tz(900));
     scene.add(fill);
+    // TWO COLOURED RIM LIGHTS, low and raking in from the sides. The studio was one warm key and
+    // one warm fill, so every chrome part in the scene returned the same grey and the machine read
+    // flat however much geometry was on it. A magenta rake from one side and a cyan one from the
+    // other is the light an arcade cabinet actually sits in, and it is what gives the rails, the
+    // ramp and the ball an edge to be seen against.
+    const rimA = new THREE.DirectionalLight(0xff3392, 0.5);
+    rimA.position.set(-W * 1.5, 200, tz(600));
+    scene.add(rimA);
+    const rimB = new THREE.DirectionalLight(0x33dcff, 0.46);
+    rimB.position.set(W * 1.5, 230, tz(120));
+    scene.add(rimB);
+    // One lamp inside the bumper nest, so the sunburst printed under it reads as LIT rather than
+    // as a decal. Its x is NEGATED because the model group is mirrored (see below) and lights are
+    // added to the scene, not to the group - the key light above is placed the same way.
+    const nest = new THREE.PointLight(0xff62b4, 0.85, 430, 2);
+    nest.position.set(-ARCH.cx, 74, tz(232));
+    scene.add(nest);
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 20, 3000);
 
@@ -216,6 +234,12 @@ export class Renderer {
     const std = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color }, o));
     return {
       art: std(C.art, { roughness: 0.62, metalness: 0.0 }),
+      // THE PRINTED PLAYFIELD. White base colour on purpose: the print is a texture and the
+      // material must not tint it. `_deckTexture()` fills in the map during _build.
+      deck: std(0xffffff, { roughness: 0.66, metalness: 0.03 }),
+      // The apron is a PRINTED PLATE, not a bare steel wedge. Two flat grey trapezoids either
+      // side of the drain were the last unfinished-looking thing at the bottom of the table.
+      apron: std(0x1c1436, { roughness: 0.5, metalness: 0.18 }),
       artLit: std(C.artLit, { roughness: 0.62, metalness: 0.0 }),
       chrome: std(C.chrome, { roughness: 0.15, metalness: 0.38 }),
       steel: std(C.steel, { roughness: 0.3, metalness: 0.34 }),
@@ -234,6 +258,11 @@ export class Renderer {
       violet: std(C.violet, { roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.82 }),
       rubber: std(C.rubber, { roughness: 0.72 }),
       cap: std(C.cap, { roughness: 0.22 }),
+      // THE CABINET RAIL IS NOT CHROME. It is the largest single object in frame - a band all the
+      // way round the outline - and in bright chrome it read as a grey horseshoe with a dark hole
+      // in it, which drew the eye to the FRAME instead of to the table. Darker and cooler, so it
+      // recedes and the playfield is what you look at.
+      cabinet: std(0x6d6791, { roughness: 0.3, metalness: 0.44 }),
       // THE BALL, AND WHY IT IS NOT THE MODEL'S 0.4 METALNESS. three-d-stage.js's own header says
       // it plainly: there is NO environment map in this scene, "so high metalness has nothing to
       // reflect and renders near-black. Cap metalness around 0.3-0.4 and carry a metal look with a
@@ -256,12 +285,29 @@ export class Renderer {
     return m;
   }
 
-  /** The deck outline: straight sides, the arch across the top, a soft bottom edge. */
+  /**
+   * The deck outline: straight sides, the arch across the top, a soft bottom edge.
+   *
+   * THE ARC SWEEPS UP, AND THE FLAG THAT SAYS SO IS `false`. It was `true`, which swept the arc
+   * DOWN through (cx, cy + rOut) instead - so the deck's top edge was a bite taken OUT of the
+   * playfield and there was no surface at all above y = 174. Measured on the shipped build with a
+   * point-in-polygon test against this very shape: the bumper nest, the four rollover dividers,
+   * the crown and the whole upper third were all outside the deck.
+   *
+   * It rendered as a black void with three mushrooms and four white sticks standing in mid-air,
+   * which is most of what Matt was looking at when he said *"It looks half done."* It looked half
+   * done because a third of the table was not there. Nothing else pointed at it: the arch you can
+   * see at the top of every screenshot is the INNER WALL rail, drawn separately by `_arcPts` with
+   * its own explicit PI -> TAU sweep, so the table kept its silhouette while its floor was missing.
+   *
+   * `_shape` probe, for a future session: build this shape, `getPoints(240)`, and check that
+   * (174, 20) is inside it. If it is not, the crown is gone again.
+   */
   _deckShape(inset = 0) {
     const left = 4 + inset, right = W - 4 - inset, bot = DRAIN_Y + 40;
     const s = new THREE.Shape();
     s.moveTo(left, ARCH.cy);
-    s.absarc(ARCH.cx, ARCH.cy, ARCH.rOut - inset, Math.PI, 0, true);
+    s.absarc(ARCH.cx, ARCH.cy, ARCH.rOut - inset, Math.PI, 0, false);
     s.lineTo(right, bot - 14);
     s.quadraticCurveTo(right, bot, right - 22, bot);
     s.lineTo(left + 22, bot);
@@ -331,8 +377,249 @@ export class Renderer {
     return g;
   }
 
+  /**
+   * THE PRINTED PLAYFIELD, as a canvas texture.
+   *
+   * A real playfield is a PRINTED SHEET - colour fields, sunbursts, shot arrows, pinstripes and
+   * lettering, with the hardware bolted through it. This deck was one flat violet slab carrying a
+   * lit half-ring at the top and a triangle at the bottom, and Matt said what that looks like:
+   * *"Please make this better. It looks half done."* It did, and the reason was that every part
+   * on the table was modelled and NOTHING was printed.
+   *
+   * Painted once, at load, into a 1024x2048 canvas IN TABLE UNITS - `ctx.scale` does the
+   * conversion - so every coordinate below is the same number the physics uses and the art cannot
+   * drift away from the hardware standing on it. That is the same rule ART.rails follows.
+   *
+   * TWO UV FACTS, both of which cost a build to learn. ExtrudeGeometry's default UV generator
+   * hands the top face uv = the shape's own (x, y), so uv is ALREADY in table units and one
+   * repeat of 1/W by 1/H maps the whole print onto the deck. And `flipY` has to be false: table
+   * y runs down-field and a canvas' y runs down too, so the default flip prints it upside down.
+   *
+   * READABILITY RULE, and it is the reason nothing here is bright. The one small moving thing on
+   * this table is a near-white ball, and it has already been lost once (see "the ball got lost"
+   * in this game's CLAUDE.md). So the print is dark and saturated: colour carries it, never
+   * luminance, and the brightest thing on the deck stays the ball.
+   */
+  _deckTexture() {
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = 2048;
+    const g = cv.getContext('2d');
+    g.scale(cv.width / W, cv.height / H);
+    let grd;
+
+    // --- the base field ---------------------------------------------------------------------
+    grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0.00, '#3a2478');
+    grd.addColorStop(0.30, '#2e1d5d');
+    grd.addColorStop(0.64, '#241748');
+    grd.addColorStop(1.00, '#1b1036');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+
+    // A star field. Deterministic, because a playfield print that changed between loads would be
+    // a texture nobody could review twice.
+    let seed = 20260908;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    for (let i = 0; i < 300; i++) {
+      const x = rnd() * W, y = rnd() * H, r = 0.4 + rnd() * 1.5;
+      g.fillStyle = 'rgba(200,220,255,' + (0.05 + rnd() * 0.15).toFixed(3) + ')';
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+
+    // --- the bumper nest: a sunburst, clipped to the arch ------------------------------------
+    // This is the area the phone screenshot showed as pure black behind three grey mushrooms.
+    g.save();
+    g.beginPath(); g.arc(ARCH.cx, ARCH.cy, ARCH.rIn - 3, 0, TAU); g.clip();
+    g.fillStyle = '#2e1b5e'; g.fillRect(0, 0, W, H);
+    const nx = ARCH.cx, ny = 232;
+    for (let i = 0; i < 24; i++) {
+      const a0 = i * TAU / 24;
+      g.fillStyle = i % 2 ? 'rgba(255,51,146,0.17)' : 'rgba(125,71,220,0.22)';
+      g.beginPath(); g.moveTo(nx, ny); g.arc(nx, ny, 240, a0, a0 + TAU / 48); g.closePath(); g.fill();
+    }
+    grd = g.createRadialGradient(nx, ny, 6, nx, ny, 138);
+    grd.addColorStop(0.00, 'rgba(255,180,60,0.30)');
+    grd.addColorStop(0.48, 'rgba(255,51,146,0.15)');
+    grd.addColorStop(1.00, 'rgba(255,51,146,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.restore();
+
+    // --- bands following the arch --------------------------------------------------------------
+    g.lineCap = 'butt';
+    const band = (r, w, col) => {
+      g.strokeStyle = col; g.lineWidth = w;
+      g.beginPath(); g.arc(ARCH.cx, ARCH.cy, r, Math.PI, TAU); g.stroke();
+    };
+    band(ARCH.rOut - 13, 10, 'rgba(51,220,255,0.16)');
+    band(ARCH.rOut - 25, 2.5, 'rgba(51,220,255,0.34)');
+    band(ARCH.rIn + 13, 8, 'rgba(255,51,146,0.15)');
+
+    // --- the three rollover lanes, lettered ------------------------------------------------------
+    // H-U-B is the set the game already scores; the letters are the mechanic's own name, printed
+    // where a real machine prints them, and they are what makes the crown read as a scoring area
+    // rather than as four bare sticks.
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    ART.lanes.forEach((p, i) => {
+      g.font = '800 26px system-ui, -apple-system, Segoe UI, sans-serif';
+      g.lineWidth = 5; g.strokeStyle = 'rgba(11,7,24,0.8)';
+      g.strokeText('HUB'[i], p[0], 133);
+      g.fillStyle = 'rgba(51,220,255,0.60)';
+      g.fillText('HUB'[i], p[0], 133);
+    });
+
+    // --- shot arrows -------------------------------------------------------------------------------
+    // The chevrons a playfield uses to say "shoot here", pointing up-field at the three shots that
+    // are worth taking. They are paint: the LIT inserts that say whether a shot is live are the
+    // separate arrow prisms further down _build.
+    const chevrons = (x, y, ang, col, k = 1) => {
+      g.save(); g.translate(x, y); g.rotate(ang); g.scale(k, k);
+      g.strokeStyle = col; g.lineWidth = 5; g.lineJoin = 'round'; g.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        g.globalAlpha = 0.46 - i * 0.11;
+        g.beginPath();
+        g.moveTo(-14, i * 16 + 9); g.lineTo(0, i * 16 - 5); g.lineTo(14, i * 16 + 9);
+        g.stroke();
+      }
+      g.globalAlpha = 1; g.restore();
+    };
+    chevrons(112, 448, 0, '#7d47dc');           // up the ramp
+    chevrons(52, 336, -0.42, '#33dcff');        // round the left orbit
+    chevrons(272, 300, 0.55, '#ffb43c');        // into the scoop
+
+    // --- the ramp runway ------------------------------------------------------------------------
+    g.save();
+    g.beginPath();
+    g.moveTo(96, 478); g.lineTo(128, 478); g.lineTo(128, 392); g.lineTo(96, 392); g.closePath();
+    g.clip();
+    grd = g.createLinearGradient(0, 478, 0, 392);
+    grd.addColorStop(0, 'rgba(125,71,220,0.08)');
+    grd.addColorStop(1, 'rgba(125,71,220,0.48)');
+    g.fillStyle = grd; g.fillRect(90, 386, 46, 98);
+    g.restore();
+
+    // --- the outlanes, which the player should be able to SEE are dangerous -----------------------
+    for (let side = 0; side < 2; side++) {
+      const d = ART.divs[side];
+      const wall = side ? W - 4 : 4;
+      g.beginPath();
+      g.moveTo(d[0][0], d[0][1]); g.lineTo(d[1][0], d[1][1]);
+      g.lineTo(wall, d[1][1]); g.lineTo(wall, d[0][1]); g.closePath();
+      g.fillStyle = 'rgba(255,180,60,0.12)'; g.fill();
+    }
+
+    // --- the inlanes ---------------------------------------------------------------------------------
+    // Cyan against the outlanes' amber, so the safe channel and the losing one are told apart by
+    // COLOUR AND POSITION rather than by colour alone (this repo's rule: Matt is red/green
+    // colourblind, and amber against cyan is the pair that survives it).
+    for (let side = 0; side < 2; side++) {
+      const d = ART.divs[side], sl = ART.slings[side];
+      g.beginPath();
+      g.moveTo(d[0][0], d[0][1]); g.lineTo(d[1][0], d[1][1]);
+      g.lineTo(sl[1][0], sl[1][1]); g.lineTo(sl[0][0], sl[0][1]); g.closePath();
+      g.fillStyle = 'rgba(51,220,255,0.11)'; g.fill();
+    }
+
+    // --- arcs across the lower playfield ---------------------------------------------------------------
+    // Concentric rings centred below the drain: the print a machine uses to fill the half of the
+    // table the player actually looks at. Barely there on purpose - this is the patch the ball
+    // spends most of its life on.
+    for (let i = 0; i < 5; i++) {
+      g.strokeStyle = 'rgba(200,214,255,' + (0.075 - i * 0.011).toFixed(3) + ')';
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.arc(AXIS, DRAIN_Y + 24, 118 + i * 48, Math.PI * 1.07, Math.PI * 1.93);
+      g.stroke();
+    }
+
+    // --- the lower fan ------------------------------------------------------------------------------
+    // The model's `art-lower`, which used to be a separate flat mesh floating half a unit over the
+    // deck. It is print, so it is printed.
+    g.save();
+    g.beginPath();
+    g.moveTo(AXIS, DRAIN_Y - 32); g.lineTo(AXIS + 90, 448); g.lineTo(AXIS - 90, 448); g.closePath();
+    g.clip();
+    grd = g.createLinearGradient(0, 448, 0, DRAIN_Y);
+    grd.addColorStop(0, 'rgba(125,71,220,0.52)');
+    grd.addColorStop(1, 'rgba(125,71,220,0.04)');
+    g.fillStyle = grd; g.fillRect(0, 440, W, 250);
+    g.strokeStyle = 'rgba(51,220,255,0.20)'; g.lineWidth = 2;
+    for (let i = -4; i <= 4; i++) {
+      g.beginPath(); g.moveTo(AXIS, DRAIN_Y - 28); g.lineTo(AXIS + i * 32, 440); g.stroke();
+    }
+    g.restore();
+
+    // --- the mid-field ---------------------------------------------------------------------------
+    // Between the arch and the rosette the deck carried nothing at all, which is the second-largest
+    // empty area on the table after the nest itself.
+    grd = g.createLinearGradient(0, 296, 0, 456);
+    grd.addColorStop(0.0, 'rgba(51,220,255,0.13)');
+    grd.addColorStop(1.0, 'rgba(51,220,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 296, W, 160);
+
+    // --- printed plates under the target banks ----------------------------------------------------
+    // A target standing on bare deck reads as a part someone forgot to finish. Every one of them
+    // gets the printed strip a real machine puts underneath it.
+    g.lineCap = 'round';
+    {
+      const b = ART.bank;
+      const total = (b.count - 1) * b.step + b.len;
+      g.strokeStyle = 'rgba(255,180,60,0.26)';
+      g.lineWidth = 30;
+      g.beginPath();
+      g.moveTo(b.a[0], b.a[1]);
+      g.lineTo(b.a[0] + b.u[0] * total, b.a[1] + b.u[1] * total);
+      g.stroke();
+    }
+    for (const st of ART.stands) {
+      g.strokeStyle = 'rgba(255,51,146,0.24)';
+      g.lineWidth = 24;
+      g.beginPath(); g.moveTo(st[0][0], st[0][1]); g.lineTo(st[1][0], st[1][1]); g.stroke();
+    }
+
+    // --- a halo behind the rosette ---------------------------------------------------------------
+    {
+      const r = ART.rosette;
+      grd = g.createRadialGradient(r.x, r.y, r.r * 0.45, r.x, r.y, r.r + 36);
+      grd.addColorStop(0.00, 'rgba(255,180,60,0.20)');
+      grd.addColorStop(0.60, 'rgba(255,51,146,0.14)');
+      grd.addColorStop(1.00, 'rgba(255,51,146,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(r.x, r.y, r.r + 36, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(218,224,234,0.16)'; g.lineWidth = 1.5;
+      for (let i = 0; i < 32; i++) {
+        const a = i * TAU / 32, c = Math.cos(a), sn = Math.sin(a);
+        g.beginPath();
+        g.moveTo(r.x + c * (r.r + 9), r.y + sn * (r.r + 9));
+        g.lineTo(r.x + c * (r.r + 23), r.y + sn * (r.r + 23));
+        g.stroke();
+      }
+    }
+
+    // NO WORDMARK ON THE DECK. It was printed in the lower fan, which is where a real machine puts
+    // its name - and on this table the two slingshot plates and both flippers sit on top of that
+    // exact patch, so it came out as a muddy half-covered smear. The name is on the backglass,
+    // large and unobstructed, which is the other place a machine puts it.
+
+    // --- vignette --------------------------------------------------------------------------------------
+    grd = g.createRadialGradient(AXIS, 372, 240, AXIS, 372, 520);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.32)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = false;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.repeat.set(1 / W, 1 / H);
+    try { tex.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy()); } catch { /* default */ }
+    this._deckTex = tex;
+    return tex;
+  }
+
   _build(root) {
     const M = this.M;
+    M.deck.map = this._deckTexture();
 
     // --- cabinet ---------------------------------------------------------------------------------
     // The model's `cabinet-rail`: a chrome wall the deck sits recessed inside. The flat renderer
@@ -350,29 +637,11 @@ export class Renderer {
     // two chrome rings on top of each other across the middle of the playfield.
     const outline = this._deckShape(-5.5).getPoints(220).map((p) => [p.x, p.y]);
     outline.push(outline[0]);
-    this._rail(root, outline, 11, mm(0.088), M.chrome, -mm(0.022));
-    // deck slab
-    this._flat(root, this._deckShape(0), mm(0.022), M.art, -mm(0.022));
-
-    // --- printed art ------------------------------------------------------------------------------
-    // The model's `art-halo-upper`, as a half RING rather than a Shape with a hole - same trap as
-    // the cabinet above, and the same reason not to risk it.
-    {
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(ARCH.rIn - 34, ARCH.rOut - 8, 64, 1, 0, Math.PI),
-        M.artLit,
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(ARCH.cx, 0.5, tz(ARCH.cy));
-      ring.receiveShadow = true;
-      root.add(ring);
-    }
-    const fan = new THREE.Shape();
-    fan.moveTo(AXIS, DRAIN_Y - 34);
-    fan.lineTo(AXIS + 82, 470);
-    fan.lineTo(AXIS - 82, 470);
-    fan.closePath();
-    this._flat(root, fan, 0.6, M.artLit, 0);
+    this._rail(root, outline, 11, mm(0.088), M.cabinet, -mm(0.022));
+    // THE DECK SLAB, CARRYING THE PRINT. The halo ring and the lower fan used to be two extra
+    // meshes floating half a unit above it; they are paint, and paint belongs in the print, so
+    // they are drawn in `_deckTexture()` now along with everything else the deck was missing.
+    this._flat(root, this._deckShape(0), mm(0.022), M.deck, -mm(0.022));
 
     // --- ball guides ------------------------------------------------------------------------------
     const RAIL_H = mm(0.05);
@@ -406,7 +675,10 @@ export class Renderer {
       this._add(g, new THREE.CylinderGeometry(6, 6, 27, 12), M.chrome, 0, 19, 0);
       const cap = this._add(g, new THREE.SphereGeometry(R * 0.95, 26, 12, 0, TAU, 0, Math.PI / 2), M.cap, 0, 31, 0);
       cap.scale.y = 0.62;
-      const collar = this._add(g, new THREE.TorusGeometry(R * 0.95, 2.4, 8, 26), M.chrome, 0, 32, 0);
+      // the collar carries the bumper's OWN colour, so a cap is identifiable from across the table
+      // rather than being one of three identical grey mushrooms
+      const collar = this._add(g, new THREE.TorusGeometry(R * 0.95, 2.4, 8, 26),
+        i === 1 ? M.cyan : M.magenta, 0, 32, 0);
       collar.rotation.x = Math.PI / 2;
       return { g, ring, cap };
     });
@@ -594,7 +866,10 @@ export class Renderer {
       sh.lineTo(x1, DRAIN_Y - 8);
       sh.lineTo(x0, DRAIN_Y + 12);
       sh.closePath();
-      this._flat(root, sh, 5, this.M.steel, 0);
+      this._flat(root, sh, 5, this.M.apron, 0);
+      // a chrome lip along the edge the ball can reach, so the apron reads as a fitted part
+      // rather than as a grey triangle lying on the deck
+      this._rail(root, [[x0, DRAIN_Y + 12], [x1, DRAIN_Y - 8]], 4, mm(0.014), this.M.chrome, 5);
     }
 
     // --- lamps ------------------------------------------------------------------------------------------------
@@ -1026,6 +1301,16 @@ export class Renderer {
       this.camera.position.y += (Math.random() - 0.5) * s;
     }
 
+    // THE RESTING FACE CARRIES THE SCORE, so the glass has to be repainted when the score moves,
+    // and the score moves on almost every bumper hit. Signature-compared and rate-limited to
+    // about 12 Hz for the same reason the fading award lines are: a repaint is a 512x288 canvas
+    // plus a texture upload, and at 60 Hz that is a cost paid for a number nobody can read that
+    // fast anyway.
+    const sig = hud.score + '|' + hud.ball + '|' + hud.mult + '|' + hud.multiball + '|' + hud.wizard;
+    if (sig !== this._bbSig) {
+      this._bbAge = (this._bbAge || 0) + dt;
+      if (this._bbAge > 0.08) { this._bbAge = 0; this._bbSig = sig; this._bbDirty = true; }
+    }
     if (this._bbDirty) { this._bbDirty = false; this._drawBackglass(hud); }
     this.renderer.render(this.scene, this.camera);
     this._drawFx(hud);
@@ -1070,6 +1355,17 @@ export class Renderer {
   }
 
   /** Repaint the backglass: the score, then the last three awards. */
+  /**
+   * The backglass face.
+   *
+   * IT MUST NEVER BE EMPTY. The first version drew a black field, a thin cyan frame and the word
+   * STARHUB, and showed nothing at all until an award fired - so at launch, which is the moment a
+   * screenshot is taken, the biggest single object in the frame was a blank rectangle. That is a
+   * large part of what Matt was looking at when he said the machine looked half done.
+   *
+   * So it has a resting face now: rays behind the wordmark, the SCORE in the place a real machine
+   * puts it, and the ball number under it. An award still takes the middle over while it lasts.
+   */
   _drawBackglass(hud) {
     const g = this._bbCtx;
     if (!g) return;
@@ -1077,6 +1373,17 @@ export class Renderer {
     g.clearRect(0, 0, W2, H2);
     g.fillStyle = '#0b0718';
     g.fillRect(0, 0, W2, H2);
+
+    // rays out of the wordmark
+    g.save();
+    g.translate(W2 / 2, 52);
+    for (let i = 0; i < 18; i++) {
+      const a = i * TAU / 18;
+      g.fillStyle = i % 2 ? 'rgba(125,71,220,0.22)' : 'rgba(255,51,146,0.12)';
+      g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 440, a, a + TAU / 36); g.closePath(); g.fill();
+    }
+    g.restore();
+
     // dot-matrix wash, the same idea as the HUD band in ui.js
     g.fillStyle = 'rgba(255,255,255,0.035)';
     for (let y = 6; y < H2; y += 8) for (let x = 6; x < W2; x += 8) g.fillRect(x, y, 2, 2);
@@ -1086,18 +1393,40 @@ export class Renderer {
 
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = '700 30px system-ui, -apple-system, sans-serif';
-    g.fillStyle = 'rgba(218,224,234,0.55)';
-    g.fillText(hud && hud.multiball ? 'MULTIBALL' : 'STARHUB', W2 / 2, 40);
+
+    // the wordmark, which says what MODE the machine is in
+    const title = hud && hud.wizard ? 'WIZARD' : hud && hud.multiball ? 'MULTIBALL' : 'STARHUB';
+    g.font = '800 34px system-ui, -apple-system, sans-serif';
+    g.lineWidth = 7; g.strokeStyle = 'rgba(11,7,24,0.9)';
+    g.strokeText(title, W2 / 2, 44);
+    const wm = g.createLinearGradient(W2 / 2 - 150, 0, W2 / 2 + 150, 0);
+    wm.addColorStop(0, '#ff3392'); wm.addColorStop(0.5, '#ffb43c'); wm.addColorStop(1, '#33dcff');
+    g.fillStyle = wm;
+    g.fillText(title, W2 / 2, 44);
 
     const lines = this._bbLines || [];
-    for (let i = 0; i < lines.length; i++) {
-      const p = lines[i];
-      const k = Math.max(0, 1 - p.age / p.life);
-      g.globalAlpha = 0.25 + k * 0.75;
-      g.fillStyle = p.color;
-      g.font = `800 ${p.big && i === 0 ? 58 : i === 0 ? 46 : 30}px system-ui, -apple-system, sans-serif`;
-      g.fillText(p.text, W2 / 2, 105 + i * 62);
+    if (!lines.length) {
+      // the resting face: the score, big, where a machine puts it
+      const n = String(Math.round((hud && hud.score) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      g.font = '800 76px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      g.lineWidth = 8; g.strokeStyle = 'rgba(11,7,24,0.85)';
+      g.strokeText(n, W2 / 2, 146);
+      g.fillStyle = 'rgba(240,243,250,0.94)';
+      g.fillText(n, W2 / 2, 146);
+      g.font = '700 24px system-ui, -apple-system, sans-serif';
+      g.fillStyle = 'rgba(218,224,234,0.5)';
+      let foot = hud ? 'BALL ' + hud.ball + ' / ' + hud.ballsTotal : '';
+      if (hud && hud.mult > 1) foot += '     ' + hud.mult + 'X BONUS';
+      g.fillText(foot, W2 / 2, 216);
+    } else {
+      for (let i = 0; i < lines.length; i++) {
+        const p = lines[i];
+        const k = Math.max(0, 1 - p.age / p.life);
+        g.globalAlpha = 0.25 + k * 0.75;
+        g.fillStyle = p.color;
+        g.font = `800 ${p.big && i === 0 ? 58 : i === 0 ? 46 : 30}px system-ui, -apple-system, sans-serif`;
+        g.fillText(p.text, W2 / 2, 112 + i * 62);
+      }
     }
     g.globalAlpha = 1;
     this._bbTex.needsUpdate = true;

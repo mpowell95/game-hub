@@ -522,6 +522,70 @@ each side of the lower playfield. Two rules now, and `ART.rails` is where they l
   different height.
 - **Structure is steel; a guide the ball RIDES is chrome.** So the lanes read and the walls recede.
 
+## A third of the playfield was not there, and the print was missing (2026-09-08)
+
+Matt, on a phone screenshot of the shipped build: *"Please make this better. It looks half done."*
+It was two separate things, and the first one is the reason the second one was invisible.
+
+### The deck had no surface above y = 174
+
+`_deckShape()` draws the outline as a straight-sided body with an arch across the top, and the arch
+is `absarc(cx, cy, rOut, PI, 0, sweep)`. The sweep flag was `true`, which sweeps the arc **down**
+through (cx, cy + rOut) instead of up - so the top of the deck was a bite taken OUT of the
+playfield. Proved with a point-in-polygon test against that exact shape: the crown, the four
+rollover dividers, all three lanes and the whole bumper nest were **outside the deck**. There was
+no floor under any of them.
+
+It rendered as a black void with three mushrooms and four white sticks standing in mid-air, and
+nothing in the frame pointed at it - **the arch you can see at the top of every screenshot is the
+inner WALL rail**, drawn separately by `_arcPts` with its own explicit PI -> TAU sweep. So the
+table kept its whole silhouette while a third of its floor was missing, and every visual test
+passed: `test-visual.mjs` proves a game rendered, never that it rendered the right thing.
+
+The regression probe a future session can run in ten lines: build `_deckShape(0)`, `getPoints(240)`,
+and check that (174, 20) is inside the polygon. If it is not, the crown is gone again.
+
+### And nothing on the deck was PRINTED
+
+The other half. Every part on this table was modelled and the deck itself was one flat violet slab
+carrying two extra meshes - a lit half-ring and a triangle - floating half a unit above it. A real
+playfield is a **printed sheet** with the hardware bolted through it, and a machine with no print
+reads as unfinished however much geometry is standing on it.
+
+`_deckTexture()` is that sheet: a 1024x2048 canvas painted once at load, **in table units**, so
+every coordinate in it is the same number the physics uses and the art cannot drift away from the
+hardware standing on it - the rule `ART.rails` already follows. It carries the base field and star
+field, a sunburst under the bumper nest, bands following the arch, H-U-B over the three lanes, shot
+chevrons at the ramp/orbit/scoop, the ramp runway, printed plates under both target banks, amber
+outlanes against cyan inlanes, arcs across the lower playfield, the rosette halo and the lower fan.
+
+Two UV facts, each of which costs a build to learn:
+
+- `ExtrudeGeometry`'s default UV generator hands the top face `uv = ` the shape's own `(x, y)`, so
+  uv is **already in table units** and one repeat of `1/W` by `1/H` maps the whole print onto the deck.
+- `flipY` must be `false`. Table y runs down-field and a canvas' y runs down too, so the default
+  flip prints the sheet upside down.
+
+**Nothing on the print is bright, and that is a rule rather than a taste.** The one small moving
+thing on this table is a near-white ball and it has been lost once already. Colour carries the
+print; luminance is reserved for the ball.
+
+### The rest of the pass
+
+- **The backglass was empty until an award fired.** At launch - which is when a screenshot gets
+  taken - the biggest object in frame was a blank black rectangle. It has a resting face now: rays,
+  the wordmark (which doubles as the mode indicator), the SCORE where a machine puts it, and the
+  ball number. Repainting is signature-compared and rate-limited to ~12 Hz, because a repaint is a
+  512x288 canvas plus a texture upload and the score moves on almost every bumper hit.
+- **Two coloured rim lights and a lamp inside the nest.** The studio was one warm key and one warm
+  fill, so every chrome part returned the same grey. The nest lamp's x is NEGATED, like the key's:
+  lights are added to the scene, the model group is mirrored.
+- **The cabinet rail is no longer chrome.** It is the largest single object in frame, and in bright
+  chrome it read as a grey horseshoe that drew the eye to the frame instead of the table.
+- **Bumper collars carry each bumper's own colour**, so a cap is identifiable from across the table
+  instead of being one of three identical grey mushrooms.
+- **The apron is a printed plate with a chrome lip**, not two bare steel wedges.
+
 ## The rules layer was shut, and three things were holding it shut (2026-09-07)
 
 Asked whether the game was ready to release, and measuring rather than guessing: across six driven
