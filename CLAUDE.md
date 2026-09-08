@@ -311,8 +311,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/stats-net.js` | Firebase mirror to `players/<id>`; username registry; `syncHealth()` |
 | `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows, incl. multiplayer head-to-head (`headToHeadRows`) |
 | `js/game-stats-ui.js` | "My Stats" overlay |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); player detail shows multiplayer head-to-head wins (2026-08-11) |
-| `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); player detail shows multiplayer head-to-head wins (2026-08-11); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08) |
+| `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23), plus the board comparators the leaderboard DOES use (`compareBoardMetric`, `compareTierFirst`) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
 | `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball, Pinball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
