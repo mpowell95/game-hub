@@ -202,19 +202,20 @@ export const SLINGS = [
  */
 export const OVAL = { x: AXIS, y: 449, w: 96, h: 151 };
 
-/** White nylon posts, from the reference's own scatter. Written once, mirrored on build. */
-// FEWER AND FURTHER APART THAN THE REFERENCE'S SCATTER, and every number is a clearance.
-//
-// A pinball table is convex shapes near other convex shapes, and TWO OF THEM A LITTLE UNDER ONE
-// BALL APART MAKE A PERMANENT PARKING SPACE - the ball rolls in, touches both, and stops. The
-// first draft copied the reference's post scatter literally: posts at x 20 against a wall whose
-// surface is at x 11 (9 units of gap), and a pair 28 apart with 16 units between their surfaces.
-// A soak parked balls at (20, 383) and (64, 530) and called ball search 15 times in six games.
-//
-// So every pair below is either OPEN (surfaces more than 18 apart, a ball passes) or SEALED
-// (under about 12, a ball cannot enter at all). Nothing is left in between. Four posts in the
-// reference's lower cluster are gone rather than moved: they sat in the inlane, which is already
-// bounded by a divider and a slingshot and has no room for anything else.
+/**
+ * NO POSTS. Matt, after three passes trying to make them look right - first fatter, then doubled,
+ * then reshaped as studs - simply: *"No remove all of them."*
+ *
+ * They were the reference's own scatter of white nylon posts, and they were never worth what they
+ * cost. Every one is a convex shape near other convex shapes, which is how this table's parking
+ * spaces get made (a pair a little under one ball apart is a permanent trap), and three separate
+ * sweeps had to be spent moving them out of each other's way. Removing them takes the traps with
+ * them and leaves the playfield reading as the coloured rows, the bumpers, the kites and the oval,
+ * which is what the eye goes to on the reference anyway.
+ *
+ * The array stays, empty, so `ART.posts` and the loops that read it need no branch and a future
+ * session can put a considered few back without rebuilding anything. The open-or-sealed rule that
+ * governed them is in the RUBBERS and STANDUPS comments, where it still applies.
 // FOURTEEN, NOT TWENTY-EIGHT, AND THIN. A pass that doubled the count and fattened every one of
 // them made the table WORSE, not more like the reference - Matt: *"This looks terrible and even
 // less like the reference."* He was right and the reason is worth writing down: on the reference
@@ -222,10 +223,8 @@ export const OVAL = { x: AXIS, y: 449, w: 96, h: 151 };
 // fattened they became the loudest thing on the playfield, and a field of identical grey mushrooms
 // is not density, it is noise. Density on the reference comes from the big dark oval and the
 // coloured rows, not from the posts.
-const POST_HALF = [
-  [42, 250], [42, 320], [44, 400], [42, 470],
-  [80, 250], [112, 268], [76, 404],
-];
+ */
+const POST_HALF = [];
 export const POSTS = [];
 for (const [x, y] of POST_HALF) POSTS.push([x, y], [mx(x), y]);
 
