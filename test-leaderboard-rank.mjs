@@ -12,7 +12,7 @@ import { aggregatePlayers } from './js/players-agg.js';
 import {
   record, bucketsOf, tierRows, wilsonLower, competitiveRating,
   soloRating, fieldMaxOf, ratePlayer, rankPlayers,
-  golfBestAt, hasBoardMetric, compareBoardMetric, formatBoardMetric,
+  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, formatBoardMetric,
   GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 } from './js/leaderboard-rank.js';
 import { tierOf, TIER_WEIGHT } from './js/difficulty-tiers.js';
@@ -446,6 +446,40 @@ const golfCmp = (a, b) => compareBoardMetric(golfBestAt(a), golfBestAt(b), 'golf
 eq('a points board still sorts descending',
   [3, 9, 1].sort((a, b) => compareBoardMetric(a, b, 'skeeball')), [9, 3, 1]);
 
+// --- DIFFICULTY OUTRANKS SCORE (2026-09-08) --------------------------------
+// The spec, on a game's own board: "a player can only outrank someone by matching or beating
+// their difficulty tier. A higher score in a lower tier never beats a lower score in a higher
+// tier." Snake's tiers are Easy(1) < Medium(2) < Hard(3).
+console.log('\n-- compareTierFirst(): tier first, score only within a tier --');
+{
+  // The spec's own example, verbatim: A on Hard with 10, B on Medium with 40. A is #1.
+  ok('[KNOWN-BUG PROBE] Hard/10 outranks Medium/40 (score-only order put it second)',
+    compareTierFirst(3, 2, 10, 40, 'snake') < 0);
+  ok('the comparison is antisymmetric', compareTierFirst(2, 3, 40, 10, 'snake') > 0);
+  ok('a higher tier wins even at a score of zero', compareTierFirst(4, 1, 0, 9999, 'snake') < 0);
+  ok('score still decides INSIDE one tier', compareTierFirst(3, 3, 40, 10, 'snake') < 0);
+  ok('same tier, same score is still a tie', compareTierFirst(2, 2, 10, 10, 'snake') === 0);
+  ok('an untiered row sorts below every tiered one, never off the board',
+    compareTierFirst(1, 0, 1, 9999, 'snake') < 0);
+  ok('two untiered rows are ranked by score exactly as they always were',
+    compareTierFirst(0, 0, 3, 9, 'skeeball') > 0 && compareTierFirst(0, 0, 9, 3, 'skeeball') < 0);
+  // Golf is the one lower-is-better board, and its direction has to survive the new leading key.
+  ok('golf keeps its ascending order within a tier',
+    compareTierFirst(0, 0, -3, 3, 'golf') < 0);
+  ok('a golf player with no round still sinks', compareTierFirst(0, 0, 3, null, 'golf') < 0);
+
+  // A whole board, sorted the way the game screen sorts it.
+  const board = [
+    { n: 'EasyHigh', tier: 1, v: 400 },
+    { n: 'HardLow', tier: 3, v: 10 },
+    { n: 'MedMid', tier: 2, v: 40 },
+    { n: 'HardHigh', tier: 3, v: 25 },
+    { n: 'Legacy', tier: 0, v: 900 },
+  ].sort((a, b) => compareTierFirst(a.tier, b.tier, a.v, b.v, 'snake')).map((x) => x.n);
+  eq('a whole board ranks by tier, then by score inside it',
+    board, ['HardHigh', 'HardLow', 'MedMid', 'EasyHigh', 'Legacy']);
+}
+
 // --- how it prints --------------------------------------------------------
 eq('under par prints with its sign', formatBoardMetric(-3, 'golf', 'E'), '-3');
 eq('level par prints as E, never as 0', formatBoardMetric(0, 'golf', 'E'), 'E');
@@ -463,8 +497,22 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] no metric sort site compares `b - a` any more',
     !/gameMetricAt\(b, (?:id|meta\.id), [^)]*\) - gameMetricAt\(a,/.test(src),
     'a descending metric sort puts the worst golfer on top of the board');
-  eq('all six metric sort sites go through compareBoardMetric',
-    (src.match(/compareBoardMetric\(gameMetricAt\(a,/g) || []).length, 6);
+  // Since 2026-09-08 every metric sort goes through ONE wrapper, compareBoardRow, which applies
+  // the tier as the leading key and then defers to compareBoardMetric. Six sites, still: the four
+  // in sortRows, the rank badges, and By Game's leader pick. A site that skips the wrapper is a
+  // board that ranks a big Easy score over a small Hard one.
+  eq('all six metric sort sites go through compareBoardRow',
+    (src.match(/(?<!function )compareBoardRow\(a, b,/g) || []).length, 6);
+  ok('compareBoardRow is the tier-first comparator, built on compareBoardMetric',
+    /function compareBoardRow\(a, b, id, tier = _tier\) \{\s*\n\s*return compareTierFirst\(boardTierOf\(a, id\), boardTierOf\(b, id\),/.test(src));
+  ok('a player\'s board tier is the HIGHEST tier they have played at, 0 when they have none',
+    /function boardTierOf\(g, id\) \{[\s\S]*?playsAtTier\(g, \[id\], TIERS\[i\]\) > 0\) return TIERS\[i\];[\s\S]*?return 0;/.test(src));
+  ok('a selected tier FILTER turns tier-first off, so a filtered board is the score board',
+    /function boardTierOf\(g, id\) \{\s*\n\s*if \(_tier != null\) return 0;/.test(src));
+  ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
+    /const d = boardTierOf\(b, id\) - boardTierOf\(a, id\);\s*\n\s*if \(d\) return d;/.test(src));
+  ok('the rank badges call a tie by the comparator, so equal scores in different tiers are not tied',
+    /const same = i > 0 && \(cmp \? cmp\(ranked\[i - 1\], g\) === 0 : v === prev\);/.test(src));
   ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',
     /\.filter\(\(g\) => hasBoardMetric\(gameMetricAt\(g, meta\.id, null\), meta\.id\)\)/.test(src)
     && !/gameMetricAt\(g, meta\.id, null\) > 0/.test(src));
