@@ -392,12 +392,15 @@ export class RainbowRenderer extends Renderer {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
       deck(y).add(g);
-      this._add(g, new THREE.CylinderGeometry(7, 7.6, 16, 16), M.redPart, 0, 8, 0);
-      const cap = this._add(g, new THREE.CylinderGeometry(7.2, 7.2, 5, 16), M.cream, 0, 18, 0);
+      // A slim red barrel with a cream cap, which is what a standup target is. Fat and squat it
+      // read as a poker chip, and six of them overlapping read as a stack of them.
+      this._add(g, new THREE.CylinderGeometry(5.6, 6.4, 19, 16), M.redPart, 0, 9.5, 0);
+      const cap = this._add(g, new THREE.CylinderGeometry(6, 6, 4, 16), M.cream, 0, 21, 0);
       return cap;
     });
     for (const [x, y] of ART.rubbers) {
-      this._add(deck(y), new THREE.CylinderGeometry(9, 9, 6, 18), M.olive, x, 3, tz(y));
+      // FLAT. The reference's rubber discs lie on the deck; at 6 tall they were chips on edge.
+      this._add(deck(y), new THREE.CylinderGeometry(9, 9, 3.5, 18), M.olive, x, 1.75, tz(y));
     }
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
       this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
