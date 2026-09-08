@@ -402,12 +402,8 @@ export class RainbowRenderer extends Renderer {
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
       this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
     ));
-    // THE POSTS ARE STUDS, NOT MUSHROOMS. Matt circled four of them: *"What's with all of these
-    // things."* Seen from almost straight above, a fat cylinder with a torus near its top presents
-    // one big grey disc ringed by another, which reads as a plumbing fitting. On the reference a
-    // post is a SMALL BRIGHT WHITE STUD with a dark screw head in the middle of it, and that is
-    // three changes: narrower, whiter, and a dark centre so the eye has something to read as a
-    // screw rather than a blank cap. The collider is unchanged at r 6.
+    // ART.posts is empty by instruction - see table-rainbow.js's POST_HALF comment. The loop stays
+    // so putting a considered few back is a data change and not a code one.
     for (const [x, y] of ART.posts) {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
