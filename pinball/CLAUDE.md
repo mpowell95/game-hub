@@ -872,6 +872,47 @@ third of - so it exempted everything BEHIND the flipper and hid a real wedge ins
 
 After all of it: **ball life 55 s, all eight soak games finish, no occupancy cell over 15%.**
 
+### The centre scoop is deleted, and the lock moved to the drop bank (2026-09-08)
+
+Matt, on the shipped board, with a zoomed screenshot: *"The ball got stuck here super fast. Delete
+all that stuff in the very center. That's not a real thing. It's a flat painted thing on the board
+in the ref photo. The circle thing that captures then throws the ball that you built throws the
+ball up and catches it again. It repeats a handful of times."*
+
+Both halves were right. The reference shows a **printed oval with no hardware in it**, and a scoop
+that ejects straight up the middle of its own catchment will re-catch its own kick-out - the ball
+cycles until the kick happens to be off-axis enough to escape. There is no collider, no sensor and
+no rule in the centre now, only print, and `test.js` asserts both absences.
+
+**The lock had to move with it.** The spec routes both of its rewards through the centre feature: a
+cleared drop bank "lights one shot" at it, and the shot is the lock. With no shot to light, the
+**bank IS the lock** - three cleared banks start the multiball - and **all three rows on one ball**
+starts it outright, which is what lighting the lock was worth.
+
+**The bumper did not move; the paint did.** The zoom also showed the bottom pop bumper sitting
+inside the painted oval, which is not what the reference does. Moving the BUMPER to where the
+reference puts it is not available: the flippers sweep a 63-unit arc from y 527 to 583 either side
+of the centre line, and anything in the drain mouth is inside it - measured, a bumper at y 545 left
+17.7 clear units from a resting paddle, a hair under a ball and the exact trap this file warns
+about. Paint costs nothing to move, so the oval is smaller and higher than the reference's
+proportion and the two no longer touch.
+
+**Two more the same soak found:**
+
+- **The outlane dividers converged on the side wall** instead of running parallel to it: 20 clear
+  units at the top of the channel, 16 at y 520, **8.4 at the bottom**. A funnel that narrows past a
+  ball halfway down, so a ball entering the outlane jammed rather than drained - 16.6% of all ball
+  life in that one cell. They are parallel now, 21 to 23 clear throughout.
+- **The edge detector alone does not debounce a target.** `_touchPrev` stops a ball that RESTS on a
+  standup being paid every tick; it cannot stop one that MICRO-BOUNCES - contact, no contact,
+  contact - which is what a ball rattling in a target cluster does, and it measured **1,595 standup
+  awards in eight games**. A physical target switch is debounced for the same reason. 268 after.
+
+**And a gap in the tests this exposed.** Removing the scoop made an import unused; dropping it took
+`BALL_R` out of `_drain`, and **114 assertions passed against a board that threw on its first
+frame** - because sections 9a and 9b drive the rules through their entry points and never run the
+game loop. Section **9c** is 90 seconds of real `update()` calls, and it exists for that.
+
 ### The rules, which are the spec's
 
 - Standups 500, yellows 250, pops 100, slingshots 50, drop targets 500 each.

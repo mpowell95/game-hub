@@ -24,7 +24,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { Renderer } from './render3d.js';
 import T, {
-  W, H, AXIS, DRAIN_Y, ART, FLIP, UPPER, PLUNGER, SCOOP, POPS, POP_R, ROWS, mx,
+  W, H, AXIS, DRAIN_Y, ART, FLIP, UPPER, PLUNGER, SCOOP, POPS, ROWS, mx,
 } from './table-rainbow.js';
 
 const TAU = Math.PI * 2;
@@ -294,22 +294,22 @@ export class RainbowRenderer extends Renderer {
     // --- the starburst pop bumpers ---------------------------------------------------------------------------
     // A white skirt, a black spiked crown, and a lamp under a cream dome. The spikes are what makes
     // this board's bumpers read as ITS bumpers rather than as any three mushrooms.
-    this.parts3.pops = POPS.map(([x, y]) => {
+    this.parts3.pops = POPS.map(([x, y, R]) => {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
       root.add(g);
-      this._add(g, new THREE.CylinderGeometry(POP_R + 9, POP_R + 11, 5, 30), M.nylon, 0, 2.5, 0);
+      this._add(g, new THREE.CylinderGeometry(R + 9, R + 11, 5, 30), M.nylon, 0, 2.5, 0);
       // the black crown: eighteen tapered spikes round the rim
       for (let i = 0; i < 18; i++) {
         const a = i * TAU / 18;
         const sp = this._add(g, new THREE.ConeGeometry(3.4, 13, 4),
-          M.crown, Math.cos(a) * (POP_R - 1), 8, Math.sin(a) * (POP_R - 1));
+          M.crown, Math.cos(a) * (R - 1), 8, Math.sin(a) * (R - 1));
         sp.rotation.y = -a;
         sp.rotation.x = Math.PI / 2 - 0.5;
       }
-      const lamp = this._add(g, new THREE.CylinderGeometry(POP_R - 7, POP_R - 7, 6, 28), M.lamp, 0, 7, 0);
+      const lamp = this._add(g, new THREE.CylinderGeometry(R - 7, R - 7, 6, 28), M.lamp, 0, 7, 0);
       this._add(g, new THREE.CylinderGeometry(5, 5, 22, 12), M.nylon, 0, 17, 0);
-      const cap = this._add(g, new THREE.SphereGeometry(POP_R * 0.72, 24, 12, 0, TAU, 0, Math.PI / 2),
+      const cap = this._add(g, new THREE.SphereGeometry(R * 0.72, 24, 12, 0, TAU, 0, Math.PI / 2),
         M.cream, 0, 27, 0);
       cap.scale.y = 0.6;
       return { g, cap, lamp };
@@ -353,15 +353,9 @@ export class RainbowRenderer extends Renderer {
       });
     }
 
-    // --- the centre scoop --------------------------------------------------------------------------------------
-    {
-      this._add(root, new THREE.CylinderGeometry(SCOOP.rad, SCOOP.rad - 3, 24, 26), M.pit,
-        SCOOP.x, -12, tz(SCOOP.y));
-      const ring = this._add(root, new THREE.TorusGeometry(SCOOP.rad + 4, 3, 9, 28), M.chrome,
-        SCOOP.x, 3, tz(SCOOP.y));
-      ring.rotation.x = Math.PI / 2;
-      this.parts3.scoopRing = ring;
-    }
+    // NO HARDWARE IN THE CENTRE OVAL. It is print, drawn into the deck texture above, and that is
+    // all the reference has there - see table-rainbow.js's SCOOP comment for what was removed and
+    // why the scoop it replaced could not work.
 
     // --- the flippers -------------------------------------------------------------------------------------------
     // Red bat, cream top face, the reference's own colours. Four of them: two main, two upper.
@@ -471,9 +465,7 @@ export class RainbowRenderer extends Renderer {
     }
 
     P.yellows.forEach((m) => { m.material.emissiveIntensity = 0.3 + (hud.save > 0 ? pulse * 0.5 : 0); });
-    P.scoopRing.material.emissiveIntensity = 0;
-    P.scoopRing.scale.setScalar(1 + this.scoopPulse * 0.1);
-    for (const g of P.gates) g.material.emissiveIntensity = 0.35 + (hud.lockLit ? pulse * 0.8 : 0);
+    for (const g of P.gates) g.material.emissiveIntensity = 0.35 + (hud.locks > 0 ? pulse * 0.8 : 0);
 
     // balls
     let n = 0;

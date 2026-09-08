@@ -40,7 +40,7 @@
 //      slingshots go on every table ever built, in a mirrored pair immediately above the flippers,
 //      and a lower playfield with no slingshots has nothing to keep a ball alive.
 
-import { seg, circle, arc, flipper, BALL_R } from './physics.js';
+import { seg, circle, flipper, BALL_R } from './physics.js';
 
 export const NAME = 'RAINBOW';
 
@@ -85,8 +85,18 @@ export const DROP_COUNT = 4;
 // 7-unit collider reaches into the band a launched ball actually crosses.
 export const BANK = { x: AXIS, y: 26, w: 84, h: 12 };
 
-/** The three starburst pop bumpers: two up top, one guarding the drain. */
-export const POPS = [[117, 97], [mx(117), 97], [AXIS, 505]];
+/**
+ * The three starburst pop bumpers: two up top, one guarding the drain.
+ *
+ * The bottom one stays at y 505, and THE PAINT MOVED INSTEAD. Matt's zoomed screenshot showed it
+ * sitting inside the painted oval, which is not what the reference does. Moving the BUMPER down to
+ * where the reference puts it is not available: the flippers sweep a 63-unit arc from y 527 to 583
+ * either side of the centre line, and anything in the drain mouth is inside that arc - measured, a
+ * bumper at 545 left 17.7 clear units from a resting paddle, which is a hair under a ball and the
+ * exact shape this file's post comment warns about. The oval is PAINT and paint costs nothing to
+ * move, so it is smaller and higher than the reference's proportion and the two no longer touch.
+ */
+export const POPS = [[117, 97, 25], [mx(117), 97, 25], [AXIS, 505, 25]];
 export const POP_R = 25;
 
 /** The upper flippers, on the reference's raised platform. Pivot at the OUTER end, as flippers are. */
@@ -149,7 +159,18 @@ export const SLINGS = [
 ];
 
 /** The centre oval. `paint` is the reference's full-size pear; `rad` is the hole that captures. */
-export const SCOOP = { x: AXIS, y: 449, rad: 15, paint: { w: 96, h: 151 } };
+/**
+ * The centre oval, and it is PAINT ONLY.
+ *
+ * The first build put a scoop in the middle of it - a hole that captured the ball and kicked it
+ * back out. Matt, on the shipped build: *"Delete all that stuff in the very center. That's not a
+ * real thing. It's a flat painted thing on the board in the ref photo. The circle thing that
+ * captures then throws the ball that you built throws the ball up and catches it again. It
+ * repeats a handful of times."* Both halves are right: the reference shows a printed oval with no
+ * hardware in it, and a scoop that ejects straight up the middle of its own catchment re-catches
+ * its own kick-out. There is no collider, no sensor and no rule here now, only the print.
+ */
+export const SCOOP = { x: AXIS, y: 435, paint: { w: 92, h: 108 } };
 
 /** White nylon posts, from the reference's own scatter. Written once, mirrored on build. */
 // FEWER AND FURTHER APART THAN THE REFERENCE'S SCATTER, and every number is a clearance.
@@ -183,7 +204,13 @@ export const WALL_L = [[6, 40], [6, 500], [62, 600], [100, 660]];
 export const WALL_R = [[mx(6), 130], [mx(6), 500], [mx(62), 600], [mx(100), 660]];
 
 /** The inlane / outlane dividers. */
-export const DIVS = [[[26, 470], [70, 590]], [[mx(26), 470], [mx(70), 590]]];
+// PARALLEL TO THE SIDE WALL, which is the whole job of an outlane divider. At (26,470)-(70,590)
+// it converged on the wall instead: 20 clear units at the top of the channel, 16 at y 520 and 8.4
+// at the bottom - a funnel that narrows past a ball halfway down, so a ball entering the outlane
+// jammed rather than drained. A soak put 16.6% of all ball life in that one cell. It now runs 23
+// clear units at the top and 21.6 at the bottom, and its lower end is sealed 6.6 units from the
+// flipper pivot so nothing can be squeezed between them.
+export const DIVS = [[[36, 483], [86, 576]], [[mx(36), 483], [mx(86), 576]]];
 /** The wooden shoulders that funnel a ball off the upper platform toward its middle. */
 // The inner end is at x 70, not 60, and the 10 units are a clearance. At 60 the shelf's end cap
 // stood 19.4 clear units from the upper flipper's pivot - one ball and a twentieth - and a soak
@@ -200,14 +227,13 @@ export const SHELVES = [[[6, 196], [70, 232]], [[mx(6), 196], [mx(70), 232]]];
 export const GUIDES = [[[44, 153], [78, 222]], [[mx(44), 153], [mx(78), 222]]];
 
 /**
- * Every SENSOR on the board: the three rows, the yellow standups' lamps and the scoop mouth.
+ * Every SENSOR on the board: the three rows. (The centre oval is paint, not a scoop - see above.)
  * Checked by js/rainbow.js against the ball's position each tick; none of them is a collider.
  */
 export const SWITCHES = [];
 ROWS.purple.forEach((p, i) => SWITCHES.push({ id: `p${i}`, row: 'purple', x: p[0], y: p[1], r: 12 }));
 ROWS.blue.forEach((p, i) => SWITCHES.push({ id: `b${i}`, row: 'blue', x: p[0], y: p[1], r: 12 }));
 ROWS.red.forEach((p, i) => SWITCHES.push({ id: `r${i}`, row: 'red', x: p[0], y: p[1], r: 12 }));
-SWITCHES.push({ id: 'scoop', kind: 'scoop', x: SCOOP.x, y: SCOOP.y, r: SCOOP.rad });
 
 /**
  * Build the world: colliders and flippers.
@@ -257,7 +283,7 @@ export function buildTable(opts = {}) {
   CORNER_HOLES.forEach((p, i) => add(circle(p[0], p[1], 11, { e: 0.34, mu: 0.06, id: `hole${i}` })));
 
   // --- the pop bumpers ----------------------------------------------------------------------------------------
-  POPS.forEach((p, i) => add(circle(p[0], p[1], POP_R, { e: 0.34, mu: 0.02, kick: 300, id: `pop${i}` })));
+  POPS.forEach((p, i) => add(circle(p[0], p[1], p[2], { e: 0.34, mu: 0.02, kick: 300, id: `pop${i}` })));
 
   // --- the upper platform, its guides, and the one-way gates ------------------------------------------------------
   // There is deliberately NO wall across the front of the platform: the upper flippers sit in the
@@ -279,10 +305,6 @@ export function buildTable(opts = {}) {
   // --- the inlane / outlane dividers -----------------------------------------------------------------------------------
   for (const d of DIVS) add(seg(d[0][0], d[0][1], d[1][0], d[1][1], { r: 6, e: 0.4, mu: 0, id: 'div' }));
 
-  // --- the scoop collar --------------------------------------------------------------------------------------------------
-  // Open across the top so a ball coming down the middle can drop in; solid round the rest so one
-  // arriving from the side is turned away rather than swallowed.
-  add(arc(SCOOP.x, SCOOP.y, SCOOP.rad + 6, 20 * D, 160 * D, { r: 3, e: 0.3, mu: 0.1, id: 'scoopRim' }));
 
   // --- the flippers ------------------------------------------------------------------------------------------------------
   const flippers = [
