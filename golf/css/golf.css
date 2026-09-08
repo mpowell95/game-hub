@@ -194,10 +194,32 @@
 /* The card used to float in a large empty void on a real phone. It now fills the width it has and
    the screen carries a course strip behind it, so the space reads as art rather than as nothing. */
 .gf-root .gf-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
-.gf-root .gf-setup__art {
-  width: 100%; max-width: 360px; height: 22vh; min-height: 108px;
+/* EVERY HOLE, LEFT TO RIGHT. Eighteen holes cannot be shown at once on a phone at any useful size
+   - twenty pixels each is not a picture of anything - so the strip scrolls sideways and snaps.
+   `overscroll-behavior: contain` is required (root CLAUDE.md's scroll rules): without it a flick
+   that reaches either end keeps going and pans the launcher underneath. */
+.gf-root .gf-strip {
+  width: 100%; max-width: 360px;
+  display: flex; gap: 6px; align-items: flex-start;
+  overflow-x: auto; overflow-y: hidden;
+  overscroll-behavior: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+.gf-root .gf-strip__hole {
+  margin: 0; flex: 0 0 auto; scroll-snap-align: start;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.gf-root .gf-strip__hole canvas {
+  display: block; width: 68px; height: 22vh; min-height: 108px; max-height: 156px;
   border: 1px solid rgba(255,255,255,.85); box-shadow: var(--gf-shadow);
-  background: #6e812b; display: block;
+  background: #6e812b;
+}
+/* 11px is the floor (docs/BUILDING-A-GAME.md, Part 0). "18 - par 5" fits 68px at 11px; nothing
+   here is allowed to go smaller to buy a narrower tile. */
+.gf-root .gf-strip__hole figcaption {
+  font-size: 11px; font-weight: 700; color: var(--gf-dim); white-space: nowrap;
 }
 .gf-root .gf-card-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--gf-dim); }
 .gf-root .gf-card-blurb { font-size: 13px; }
@@ -232,10 +254,22 @@
    little more weight than the row under them. */
 .gf-root .gf-modepick { margin-bottom: 6px; }
 .gf-root .gf-modepick .gf-chip { font-weight: 800; }
+/* THE TILES MUST NOT WRAP, OR THE TWO ROWS ARE DIFFERENT HEIGHTS. Matt, 2026-09-08, with a
+   screenshot: *"Remove the yardage from these tiles so all the words and stuff are actually
+   aligned."* The yardage went (`round_meta` is `par {par}` now), and that was not enough on its
+   own - MEASURED at 393px, "Holes 10-12" needs 100.3px of a tile that offers 101.7, so the top row
+   sat at 64px tall and the bottom row at 82.
+   Both halves of the fix matter: the label is the RANGE alone ("10-12"), because the heading
+   directly above it already says "Which holes?" and the full phrase survives on the button's
+   aria-label; and `nowrap` is what stops a future string quietly re-introducing the ragged rows.
+   RE-MEASURED AFTER: all six tiles 64px tall, and the longest label needs 48px of the 101.7 it is
+   given - 53px of slack against the 1.4px it had. */
 .gf-root .gf-roundbtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px; padding: 8px 6px; min-height: 60px;
 }
+.gf-root .gf-roundbtn > span,
+.gf-root .gf-roundbtn small { white-space: nowrap; }
 .gf-root .gf-roundbtn small { font-size: 11px; font-weight: 600; opacity: .78; }
 .gf-root .gf-roundbtn .gf-best { opacity: 1; color: #ffce3a; }
 
