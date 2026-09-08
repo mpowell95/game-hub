@@ -526,10 +526,30 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   // the tier as the leading key and then defers to compareBoardMetric. Six sites, still: the four
   // in sortRows, the rank badges, and By Game's leader pick. A site that skips the wrapper is a
   // board that ranks a big Easy score over a small Hard one.
-  eq('all six metric sort sites go through compareBoardRow',
-    (src.match(/(?<!function )compareBoardRow\(a, b,/g) || []).length, 6);
+  // Since 2026-09-08 the board's order is ONE function, boardMetricCmp(id): the rows, the rank
+  // badges and By Game's leader row all sort through it, which is what stops them disagreeing.
+  eq('the rows, the badges and the By Game leader all use the board\'s one order',
+    (src.match(/(?<!function )boardMetricCmp\((?:id|meta\.id)\)/g) || []).length, 3);
+  ok('[KNOWN-BUG PROBE] Tic Tac Toe\'s bespoke order lives INSIDE that one function',
+    /function boardMetricCmp\(id\) \{\s*\n\s*if \(id === 'tictactoe'\)/.test(src)
+    && !/if \(id === 'tictactoe'\) \{\s*\n\s*rows\.sort/.test(src),
+    'ordering the rows Ultimate-first while numbering the badges on generic wins read 3,2,1,T4,T4,7,6,T8');
+  ok('the badge comparator carries no plays or recency tie-break, so an equal pair ties',
+    /rows\.sort\(\(a, b\) => metric\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\) \|\| recent\(a, b\)\);/.test(src)
+    && /byMetric \? boardMetricCmp\(id\) : null\);/.test(src));
+  ok('[KNOWN-BUG PROBE] GAMES PLAYED knows nothing about difficulty, not even as a tie-break',
+    /\(boardPlaysOf\(b, id\) - boardPlaysOf\(a, id\)\)\s*\n\s*\|\| comparePlainMetric\(a, b, id\) \|\| recent\(a, b\)\);/.test(src)
+    && /function comparePlainMetric\(a, b, id\) \{\s*\n\s*return compareBoardMetric\(gameMetricAt\(a, id, _tier\), gameMetricAt\(b, id, _tier\), id\);/.test(src),
+    'a volume order must not consult a tier');
+  ok('[KNOWN-BUG PROBE] the tier chip is on the NAME line, never beside the plays count',
+    /\$\{youBadge\(g\)\}\$\{tierChipHTML\(rowTier\)\}<span class="lb-psubline">/.test(src)
+    && /\$\{youBadge\(g\)\}\$\{tierHtml \|\| ''\}<span class="lb-psubline">/.test(src)
+    && !/lb-psubline">\$\{esc\(t\('lb_played_count'[^}]*\}\)\)\}\$\{tierChipHTML/.test(src),
+    '"22 played  MEDIUM" reads as "22 games played on Medium"');
   ok('compareBoardRow is the tier-first comparator over the tier\'s OWN score',
     /function compareBoardRow\(a, b, id\) \{\s*\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
+  ok('[KNOWN-BUG PROBE] the card headline is still the metric at the row\'s own tier',
+    /const metric = boardMetricOf\(g, id\);/.test(src));
   ok('a row\'s tier is decided by the tested pure function, not re-derived here',
     /function boardTierOf\(g, id\) \{\s*\n\s*if \(_tier != null\) return _tier;\s*\n\s*return boardRankTier\(\(tier\) => gameMetricAt\(g, id, tier\), id\);/.test(src));
   ok('[KNOWN-BUG PROBE] the board\'s number is the metric AT that row\'s tier',
@@ -543,12 +563,11 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /const rowTier = boardTierOf\(g, 'snake'\);\s*\n\s*const off = snBestAtWalls\(g, rowTier, 'off'\);\s*\n\s*const on = snBestAtWalls\(g, rowTier, 'on'\);/.test(src));
   ok('By Game\'s leader row prints the same number the board does',
     /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src));
-  ok('every card names the tier it ranks at, so the number is legible',
-    /function tierChipHTML\(tier\)/.test(src)
-    && (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 3
-    && /\.lb-tierchip\{/.test(src));
+  ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
   ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
     /const d = \(boardTierOf\(b, id\) \|\| 0\) - \(boardTierOf\(a, id\) \|\| 0\);\s*\n\s*if \(d\) return d;/.test(src));
+  ok('every card still names the tier it ranks at',
+    (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 3 && /\.lb-tierchip\{/.test(src));
   ok('the rank badges call a tie by the comparator, so equal scores in different tiers are not tied',
     /const same = i > 0 && \(cmp \? cmp\(ranked\[i - 1\], g\) === 0 : v === prev\);/.test(src));
   ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',

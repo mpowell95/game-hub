@@ -1415,10 +1415,26 @@ are read-only to this feature — nothing is stored, migrated or normalized.
     all-time best (King of Games' 51 is still printed on that same screen), and the player detail
     still has the full per-tier table (rule 1).
   - **Every card names the tier it ranks at** (`tierChipHTML`, the ski-slope shape plus the word,
-    on the subline that already exists so it costs no height) and the generic card **outlines the
-    tile of that tier**. Without it the board prints "6" under a name with nothing saying the 6 is
+    **on the NAME line**, spaced by `.lb-pid`'s own gap so it costs no height) and the generic card
+    **outlines the tile of that tier**. It started on the subline beside the plays count, where
+    "22 played  MEDIUM" read as "22 games played on Medium" - attached to the name it says what it
+    means: this PLAYER is ranked at this tier. Without it the board prints "6" under a name with nothing saying the 6 is
     a Hard score - which is exactly how the first pass managed to look sorted while being ranked on
     something else.
+  - **GAMES PLAYED IS A VOLUME ORDER AND KNOWS NOTHING ABOUT DIFFICULTY** (2026-09-08, Matt:
+    *"Number of games played shouldn't be based on difficulty at all. But the wins should be."*).
+    The Games sort orders by plays and settles a tie with `comparePlainMetric` - the all-tier
+    number, no tier anywhere in it. The plays COUNT was never tier-scoped without a filter; what
+    made it look like it was, was the tier chip sitting beside it, which is why the chip now rides
+    the NAME line (see above).
+  - **THE BOARD HAS ONE ORDER, `boardMetricCmp(id)`**, and the rows, the rank badges and By Game's
+    leader row all sort through it - so #1 on the board, the "1" chip and the By Game name are the
+    same person by construction. They had drifted, and **Tic Tac Toe is where it showed**: its rows
+    were ordered Ultimate -> Classic while its badges were numbered off the generic wins count, so
+    a real board read **3, 2, 1, T4, T4, 7, 6, T8** down the page (Matt: *"The leaderboard is
+    weird."*). Its bespoke order lives INSIDE that function now, not in a branch of `sortRows`.
+    The comparator deliberately carries no plays/recency tie-break: those decide which of two
+    equally-ranked rows draws first, and a badge must call that pair TIED.
   - **A selected difficulty FILTER makes that tier everyone's tier**, so a filtered board is the
     pure score board it always was.
   - **Rank badges call a tie by the comparator, not by the number** (`rankMap`'s `cmp` path). Two
