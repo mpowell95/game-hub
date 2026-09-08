@@ -1391,30 +1391,45 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   `difficulty-tiers.js` itself is untouched.
 - **DIFFICULTY OUTRANKS SCORE on a game's own board (2026-09-08).** Matt's spec: *"a player can
   only outrank someone by matching or beating their difficulty tier. A higher score in a lower
-  tier never beats a lower score in a higher tier."* Snake, with Easy < Medium < Hard: Hard/10 is
-  #1 over Medium/40. **Scope is a game's own board only** - the list you get by tapping into a
-  game (its rows, its rank badges, and By Game's leader row, which must name the same person the
-  board puts at #1). By Player's cross-game list is untouched; so is the tier-WEIGHTED rating
-  model, which is a different mechanism for the same idea and still unused for display.
-  - The comparison is `compareTierFirst(ta, tb, va, vb, id)` in `js/leaderboard-rank.js` - pure,
-    tested headless, and it defers to `compareBoardMetric` inside a tier, which is what keeps
-    golf ascending. `js/leaderboard-ui.js` wraps it as `compareBoardRow(a, b, id)`, **the one
-    comparator all six metric sort sites go through** (the four in `sortRows`, the rank badges in
-    `gameDetail`, and By Game's leader pick). `test-leaderboard-rank.mjs` counts those six.
-  - **A player's tier on a board is the HIGHEST tier they have any play at** (`boardTierOf`),
-    read from plays rather than the metric, because a game whose metric is a BEST (Snake, Ball
-    Run) has no per-tier win count to ask instead. **0 means no tier**: a game with no difficulty
-    axis at all (Skeeball, Pinball, Golf, Hill Climb - every row is 0, so those boards are
-    unchanged) and legacy/unmapped history in a game that has one. **A 0 row sorts below the
-    tiered rows, it never leaves the board** - still listed, still showing its own number (rule 1).
-  - **A selected difficulty FILTER turns tier-first off** (`boardTierOf` returns 0 for every row):
-    the board is then showing one tier, and only players with plays in it, so the score order is
-    the honest one. Filtered, this board is exactly the board it was before this change.
+  tier never beats a lower score in a higher tier."* **Scope is a game's own board** - the list you
+  get by tapping into a game (its rows, its rank badges, and By Game's leader row, which must name
+  the person the board puts at #1). It applies to EVERY game, not the one in the example: the
+  machinery is the generic tier machinery. By Player's cross-game list is untouched, and so is the
+  tier-WEIGHTED rating model, which is a different mechanism for the same idea.
+  - **THE NUMBER A ROW SHOWS IS THE SCORE AT ITS OWN TIER.** This is the whole of it, and the first
+    pass got it wrong: it ranked by tier but still printed and tie-broke on the ALL-TIER number, so
+    Snake's live board put King of Games first at **51 - a score he set on Easy** - while ranking
+    him as a Hard player off a Hard best of **6**. Matt, from the board: *"the 'longest' has the king
+    of games in first place, but... he's only ever played on easy. So what the hell?"* A board
+    cannot rank on one number and print another. `boardMetricOf(g, id)` = `gameMetricAt(g, id,
+    boardTierOf(g, id))` is now the single source of the headline, the sort and the rank badge.
+  - **A row's tier is the highest tier it has a real SCORE at**, not merely plays -
+    `boardRankTier(metricAt, id)` in `js/leaderboard-rank.js` (pure, tested headless; the caller
+    passes its own extractor). Plays alone would rank someone at Hard off fifty Hard games they
+    never won, above a Medium player with forty wins, and print a 0 beside their name.
+  - **`null` = no tier**: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill
+    Climb - every row is null, so those boards are exactly what they were) and legacy/unmapped
+    history in a game that has one. Those rows keep the all-tier number and sort below the tiered
+    rows. **Nothing leaves the board**: the other tiers are still on the card's tier tiles, the
+    difficulty filter still shows any tier's own numbers, Standing Records still names the
+    all-time best (King of Games' 51 is still printed on that same screen), and the player detail
+    still has the full per-tier table (rule 1).
+  - **Every card names the tier it ranks at** (`tierChipHTML`, the ski-slope shape plus the word,
+    on the subline that already exists so it costs no height) and the generic card **outlines the
+    tile of that tier**. Without it the board prints "6" under a name with nothing saying the 6 is
+    a Hard score - which is exactly how the first pass managed to look sorted while being ranked on
+    something else.
+  - **A selected difficulty FILTER makes that tier everyone's tier**, so a filtered board is the
+    pure score board it always was.
   - **Rank badges call a tie by the comparator, not by the number** (`rankMap`'s `cmp` path). Two
-    players on the same score in different tiers are #1 and #2, not a shared #1. Golf is
-    unaffected - its comparator returns 0 exactly when two rounds are equal.
-  - Tic Tac Toe's board keeps its bespoke Ultimate -> Classic -> recency order; the tier is
-    simply the key in front of it.
+    players on the same score in different tiers are #1 and #2, not a shared #1. Golf is unaffected.
+  - The comparison is `compareTierFirst(ta, tb, va, vb, id)`, which defers to `compareBoardMetric`
+    inside a tier (that is what keeps golf ascending). `compareBoardRow(a, b, id)` in
+    `js/leaderboard-ui.js` is **the one comparator all six metric sort sites go through**;
+    `test-leaderboard-rank.mjs` counts them and pins each wiring site.
+  - **Tic Tac Toe is the one board whose two numbers cannot follow the tier**: its `tt` sub-counter
+    has no per-tier storage (it splits by VARIANT), so the Ultimate/Classic pair stays all-tier and
+    only the row's order and chip carry the tier.
 - **Ball Run, Snake and Hill Climb are the places "wins at a tier" and "the game's own metric"
   diverge** — their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`/
   `bestDistanceByStage`), not a play count, so `leaderboard-ui.js` special-cases

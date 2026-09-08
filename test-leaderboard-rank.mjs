@@ -12,7 +12,7 @@ import { aggregatePlayers } from './js/players-agg.js';
 import {
   record, bucketsOf, tierRows, wilsonLower, competitiveRating,
   soloRating, fieldMaxOf, ratePlayer, rankPlayers,
-  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, formatBoardMetric,
+  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, boardRankTier, formatBoardMetric,
   GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 } from './js/leaderboard-rank.js';
 import { tierOf, TIER_WEIGHT } from './js/difficulty-tiers.js';
@@ -480,6 +480,31 @@ console.log('\n-- compareTierFirst(): tier first, score only within a tier --');
     board, ['HardHigh', 'HardLow', 'MedMid', 'EasyHigh', 'Legacy']);
 }
 
+// --- WHICH TIER A ROW RANKS AT, and therefore which number it shows ---------
+// The live-board bug this exists for (2026-09-08): Snake's board put King of Games first with 51,
+// a score he set on EASY, while ranking him as a Hard player off a Hard best of 6. Ranking on one
+// number and printing another is the failure; boardRankTier picks the tier, and the caller reads
+// the metric AT it, so there is only one number.
+console.log('\n-- boardRankTier(): the highest tier with a real score --');
+{
+  // King of Games' actual Snake record from the board Matt screenshotted (walls off).
+  const kog = { 1: 51, 2: 0, 3: 6 };
+  const at = (rec) => (tier) => rec[tier] | 0;
+  eq('[KNOWN-BUG PROBE] a 51 on Easy and a 6 on Hard ranks at HARD', boardRankTier(at(kog), 'snake'), 3);
+  eq('...and the number the board shows is that tier\'s 6, never the 51',
+    at(kog)(boardRankTier(at(kog), 'snake')), 6);
+  eq('a player who has only ever played Easy ranks at Easy', boardRankTier(at({ 1: 40 }), 'snake'), 1);
+  eq('a tier PLAYED but never scored on is not a tier you rank at',
+    boardRankTier(at({ 1: 40, 2: 0, 3: 0 }), 'snake'), 2 - 1);
+  eq('Expert outranks the lot', boardRankTier(at({ 1: 900, 4: 1 }), 'snake'), 4);
+  eq('no score at any tier is no tier at all, not tier 1', boardRankTier(at({}), 'snake'), null);
+  // Skeeball/Pinball/Golf/Hill Climb: their metric is the same at every tier because they have no
+  // difficulty axis, so nothing here may invent one.
+  eq('a game with no difficulty axis ranks at no tier', boardRankTier(() => 0, 'skeeball'), null);
+  eq('golf, where every round is a value and lower wins, still ranks at no tier',
+    boardRankTier(() => null, 'golf'), null);
+}
+
 // --- how it prints --------------------------------------------------------
 eq('under par prints with its sign', formatBoardMetric(-3, 'golf', 'E'), '-3');
 eq('level par prints as E, never as 0', formatBoardMetric(0, 'golf', 'E'), 'E');
@@ -503,14 +528,27 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   // board that ranks a big Easy score over a small Hard one.
   eq('all six metric sort sites go through compareBoardRow',
     (src.match(/(?<!function )compareBoardRow\(a, b,/g) || []).length, 6);
-  ok('compareBoardRow is the tier-first comparator, built on compareBoardMetric',
-    /function compareBoardRow\(a, b, id, tier = _tier\) \{\s*\n\s*return compareTierFirst\(boardTierOf\(a, id\), boardTierOf\(b, id\),/.test(src));
-  ok('a player\'s board tier is the HIGHEST tier they have played at, 0 when they have none',
-    /function boardTierOf\(g, id\) \{[\s\S]*?playsAtTier\(g, \[id\], TIERS\[i\]\) > 0\) return TIERS\[i\];[\s\S]*?return 0;/.test(src));
-  ok('a selected tier FILTER turns tier-first off, so a filtered board is the score board',
-    /function boardTierOf\(g, id\) \{\s*\n\s*if \(_tier != null\) return 0;/.test(src));
+  ok('compareBoardRow is the tier-first comparator over the tier\'s OWN score',
+    /function compareBoardRow\(a, b, id\) \{\s*\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
+  ok('a row\'s tier is decided by the tested pure function, not re-derived here',
+    /function boardTierOf\(g, id\) \{\s*\n\s*if \(_tier != null\) return _tier;\s*\n\s*return boardRankTier\(\(tier\) => gameMetricAt\(g, id, tier\), id\);/.test(src));
+  ok('[KNOWN-BUG PROBE] the board\'s number is the metric AT that row\'s tier',
+    /function boardMetricOf\(g, id\) \{ return gameMetricAt\(g, id, boardTierOf\(g, id\)\); \}/.test(src),
+    'ranking by tier while printing the all-tier best put an Easy 51 on top of a Hard board');
+  ok('[KNOWN-BUG PROBE] the card headline and the rank badge both read boardMetricOf',
+    /const metric = boardMetricOf\(g, id\);/.test(src)
+    && /: \(g\) => boardMetricOf\(g, id\),/.test(src)
+    && !/const metric = gameMetricAt\(g, id, _tier\);/.test(src));
+  ok('Snake\'s walls split is read at the row\'s own tier',
+    /const rowTier = boardTierOf\(g, 'snake'\);\s*\n\s*const off = snBestAtWalls\(g, rowTier, 'off'\);\s*\n\s*const on = snBestAtWalls\(g, rowTier, 'on'\);/.test(src));
+  ok('By Game\'s leader row prints the same number the board does',
+    /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src));
+  ok('every card names the tier it ranks at, so the number is legible',
+    /function tierChipHTML\(tier\)/.test(src)
+    && (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 3
+    && /\.lb-tierchip\{/.test(src));
   ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
-    /const d = boardTierOf\(b, id\) - boardTierOf\(a, id\);\s*\n\s*if \(d\) return d;/.test(src));
+    /const d = \(boardTierOf\(b, id\) \|\| 0\) - \(boardTierOf\(a, id\) \|\| 0\);\s*\n\s*if \(d\) return d;/.test(src));
   ok('the rank badges call a tie by the comparator, so equal scores in different tiers are not tied',
     /const same = i > 0 && \(cmp \? cmp\(ranked\[i - 1\], g\) === 0 : v === prev\);/.test(src));
   ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',
@@ -519,7 +557,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('rankMap can take a comparator, so the rank badges follow the sort',
     /function rankMap\(list, valueOf, cmp\)/.test(src) && /sort\(cmp \|\| \(\(a, b\)/.test(src));
   ok('the metric is printed through the formatter, so a to-par score keeps its sign',
-    /metricText\(gameMetricAt\(lead, meta\.id, null\), meta\.id\)/.test(src)
+    /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src)
     && /const metricStr = metricText\(metric, id\);/.test(src));
   ok('golf gets its own unit label, so My Stats keeps saying "points"',
     /id === 'golf' \? 'lb_unit_golf_best' : unitKeyOf\(id\)/.test(src));

@@ -52,7 +52,7 @@ import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
-import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareTierFirst,
+import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareTierFirst, boardRankTier,
   formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
@@ -558,29 +558,49 @@ function boardPlaysOf(g, id) {
 // The comparison itself is compareTierFirst() in leaderboard-rank.js, so it is pure and tested
 // headless; everything below only decides what "this player's tier" is.
 
-/** The tier a player is RANKED at on one game's board: the HIGHEST tier they have any recorded
- *  play at, 0 when they have none (a game with no difficulty axis, or legacy/unmapped history).
+/** THE TIER THIS ROW IS RANKED AT, and the tier its NUMBER is read at - one answer for both, which
+ *  is the whole point (2026-09-08, second pass). The first pass ranked by tier but still showed and
+ *  tie-broke on the ALL-TIER number, so Snake's board put King of Games first at 51 - a score he set
+ *  on Easy - while ranking him as a Hard player off a Hard best of 6. A board cannot rank on one
+ *  number and print another; that is the bug Matt caught on the live board.
  *
- *  0 while a tier FILTER is selected, for every row: the board is then showing ONE tier and only
- *  players with plays in it, so tier-first could only reorder rows by a tier the screen is not
- *  showing. Filtered, this board is the pure score board it always was.
+ *  It is the highest tier this player has an actual SCORE at (hasBoardMetric: a win, a best, a
+ *  solve - not merely plays). Plays alone would rank someone at Hard off fifty Hard games they
+ *  never won, above a Medium player with forty wins, and print a 0 next to their name. An
+ *  achievement is what the spec compares.
  *
- *  Reads plays, not the metric: "which difficulties has this person actually played" is the
- *  question, and a game whose metric is a BEST (Snake, Ball Run) has no per-tier win count to ask
- *  instead. Nothing here writes, and no row is ever dropped - an untiered row sorts to the bottom
- *  of the board, still listed, still showing its own number (THE LAW rule 1). */
+ *  `null` = no tier: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill Climb -
+ *  every row is null, so those boards are exactly what they were), and legacy/unmapped history in a
+ *  game that has one. Their number stays the all-tier number and their row sorts below the tiered
+ *  rows - still listed, still showing what they scored (THE LAW rule 1).
+ *
+ *  While a difficulty FILTER is selected it is that tier for every row, so a filtered board is the
+ *  pure score board it always was. */
 function boardTierOf(g, id) {
-  if (_tier != null) return 0;
-  for (let i = TIERS.length - 1; i >= 0; i--) if (playsAtTier(g, [id], TIERS[i]) > 0) return TIERS[i];
-  return 0;
+  if (_tier != null) return _tier;
+  return boardRankTier((tier) => gameMetricAt(g, id, tier), id);
 }
 
+/** The number this board ranks and PRINTS for a row: the game's own metric AT that row's tier.
+ *  Every headline, every sort and every rank badge on a game board goes through this one function,
+ *  so the order and the number on screen can never disagree again. */
+function boardMetricOf(g, id) { return gameMetricAt(g, id, boardTierOf(g, id)); }
+
 /** THE ONE comparator every metric sort on a game board goes through (six call sites: the four in
- *  sortRows, the rank badges in gameDetail, and By Game's leader pick). Tier first, then the
- *  game's own metric via compareBoardMetric - which is what still gets golf's direction right. */
-function compareBoardRow(a, b, id, tier = _tier) {
-  return compareTierFirst(boardTierOf(a, id), boardTierOf(b, id),
-    gameMetricAt(a, id, tier), gameMetricAt(b, id, tier), id);
+ *  sortRows, the rank badges in gameDetail, and By Game's leader pick). Tier first, then that
+ *  tier's own score via compareBoardMetric - which is what still gets golf's direction right. */
+function compareBoardRow(a, b, id) {
+  return compareTierFirst(boardTierOf(a, id) || 0, boardTierOf(b, id) || 0,
+    boardMetricOf(a, id), boardMetricOf(b, id), id);
+}
+
+/** The tier a row is ranked at, said out loud on the card: the same ski-slope shape the filter and
+ *  the tier tiles use, plus the word. Without it the board prints "6" under a name with nothing
+ *  saying "that is a Hard score", which is how the old board managed to look sorted while being
+ *  ranked on something else. Nothing for an untiered row - there is no tier to name. */
+function tierChipHTML(tier) {
+  if (!tier) return '';
+  return `<span class="lb-tierchip" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}<span>${esc(t(TIER_LABEL_KEY[tier]))}</span></span>`;
 }
 
 // --- difficulty pills --------------------------------------------------------
@@ -770,11 +790,13 @@ function mpTileHTML(g, id) {
     + `<i class="lb-mp-tag">${esc(t('lb_mp_short'))}</i><b>${played ? mpWinsOf(g, id) : '&mdash;'}</b></span>`;
 }
 
-function miniTilesHTML(tiers, valueFn) {
+function miniTilesHTML(tiers, valueFn, markTier) {
   if (!tiers.length) return '';
   return `<div class="lb-tiles">${tiers.map((tier) => {
     const v = valueFn(tier);
-    const sel = _tier === tier ? ' is-sel' : '';
+    // Marked = the tier this row is RANKED at (the board card passes it), or the selected filter
+    // on every other surface. Same highlight either way: "this is the tier that counts here".
+    const sel = (markTier === undefined ? _tier === tier : markTier === tier) ? ' is-sel' : '';
     const empty = v == null ? ' is-empty' : '';
     return `<span class="lb-tile2${sel}${empty}" style="--lb-pill-color:${TIER_COLOR[tier]}" title="${esc(t(TIER_LABEL_KEY[tier]))}">${diffShapeSVG(tier)}<b>${v == null ? '&mdash;' : v}</b></span>`;
   }).join('')}</div>`;
@@ -1132,7 +1154,7 @@ function gameListHTML(list) {
     // The leader shown here must be the row the board itself puts at #1, so it sorts through
     // compareBoardRow too: difficulty first, score second.
     const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
-      .sort((a, b) => compareBoardRow(a, b, meta.id, null)
+      .sort((a, b) => compareBoardRow(a, b, meta.id)
         || (b.updatedAt || 0) - (a.updatedAt || 0));
     return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
   });
@@ -1149,7 +1171,7 @@ function gameListHTML(list) {
       ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span></span>`
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
-      ? `<span class="lb-gnum"><b>${esc(metricText(gameMetricAt(lead, meta.id, null), meta.id))}</b><span>${esc(t(lbUnitKeyOf(meta.id)))}</span></span>`
+      ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(t(lbUnitKeyOf(meta.id)))}</span></span>`
       : `<span class="lb-gnum is-empty"><b>&mdash;</b><span>${esc(t('lb_no_games_yet'))}</span></span>`;
     return `<button type="button" class="lb-grow${lead ? '' : ' is-empty'}" data-game="${meta.id}">
       <span class="lb-gart">${art}</span>
@@ -1314,6 +1336,10 @@ function ttVariantWins(v) { return Math.max(0, Math.min((v && v.won) | 0, (v && 
 // (see sortRows below) — only the "wins" sort (this game's own metric) keeps its bespoke order.
 function ttCardHTML(g, chip) {
   const me = g.key === _meKey ? ' is-me' : '';
+  // The `tt` sub-counter has NO per-tier storage (see the note above ttVariantWins), so unlike
+  // every other board these two numbers cannot be read at one tier. The chip still names the tier
+  // the ROW ranks at, so the order is legible; the numbers stay the honest all-tier split.
+  const rowTier = boardTierOf(g, 'tictactoe');
   const tt = (g.games.tictactoe && g.games.tictactoe.tt) || null;
   const hasTt = !!(tt && (tt.classic || tt.ultimate));
   const ultimate = hasTt ? ttVariantWins(tt.ultimate) : 0;
@@ -1326,7 +1352,7 @@ function ttCardHTML(g, chip) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}${tierChipHTML(rowTier)}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${ultimate}</b><span>${esc(t('lb_tt_ultimate'))}</span></span>
@@ -1342,13 +1368,16 @@ function ttCardHTML(g, chip) {
 // Same "leave structurally alone" note as ttCardHTML above applies here (§3.5).
 function snCardHTML(g, chip) {
   const me = g.key === _meKey ? ' is-me' : '';
-  const off = snBestAtWalls(g, _tier, 'off');
-  const on = snBestAtWalls(g, _tier, 'on');
+  // At the tier this row is RANKED at (2026-09-08), not the all-tier best: this card is the one
+  // Matt caught printing a 51 set on Easy beside a Hard ranking.
+  const rowTier = boardTierOf(g, 'snake');
+  const off = snBestAtWalls(g, rowTier, 'off');
+  const on = snBestAtWalls(g, rowTier, 'on');
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}</span></span>
+      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}${tierChipHTML(rowTier)}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${off}</b><span>${esc(t('lb_sn_walls_off'))}</span></span>
@@ -1396,7 +1425,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       // Difficulty leads here too (2026-09-08). Its Ultimate -> Classic -> recency order is
       // otherwise untouched: it is the SCORE half of the rule, applied within one tier.
-      const d = boardTierOf(b, id) - boardTierOf(a, id);
+      const d = (boardTierOf(b, id) || 0) - (boardTierOf(a, id) || 0);
       if (d) return d;
       const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
       const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
@@ -1460,7 +1489,7 @@ function gameDetail(list, id) {
     ? (g) => boardPlaysOf(g, id)
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
-      : (g) => gameMetricAt(g, id, _tier),
+      : (g) => boardMetricOf(g, id),
     byMetric ? (a, b) => compareBoardRow(a, b, id) : null);
   sortRows(rows, id, bSort);
   const cardsHtml = rows.length
@@ -1468,9 +1497,15 @@ function gameDetail(list, id) {
         const chip = rankChipHTML(rankOf[g.key], tiedAt(g.key));
         if (id === 'tictactoe') return ttCardHTML(g, chip);
         if (id === 'snake') return snCardHTML(g, chip);
-        const metric = gameMetricAt(g, id, _tier);
+        // The row's OWN tier, and the score at it - never the all-tier number, which is how a
+        // Hard-ranked player printed an Easy 51 on the live board.
+        const rowTier = boardTierOf(g, id);
+        const metric = boardMetricOf(g, id);
         const played = boardPlaysOf(g, id);
-        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null))
+        // The tile for the tier this row ranks at is marked, so the headline is visibly one of
+        // the tiles rather than a number from nowhere. Every other tier is still printed beside
+        // it - nothing about a player's record leaves this card (THE LAW rule 1).
+        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier)
           + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(lbUnitKeyOf(id));
         const metricStr = metricText(metric, id);
@@ -1489,7 +1524,8 @@ function gameDetail(list, id) {
           big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
         }
-        return playerCardHTML(g, chip, big, subText, tiles);
+        const subHtml = `${esc(subText)}${tierChipHTML(rowTier)}`;
+        return playerCardHTML(g, chip, big, subText, tiles, subHtml);
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
   return head + controls + cardsHtml + recordsHTML(list, id);
@@ -1949,6 +1985,13 @@ function ensureCss() {
     '.lb-pcard.is-me .lb-pname{font-weight:800}',
     '.lb-you{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.1em;background:var(--lb-ink);color:var(--lb-surface);padding:3px 5px;border-radius:3px}',
     '.lb-psubline{flex:1 0 100%;font-size:11.5px;color:var(--lb-muted);margin-top:2px;font-variant-numeric:tabular-nums;min-width:0}',
+    // The tier chip on a game board's card (2026-09-08): the ski-slope shape plus the word, riding
+    // the subline that already exists, so it costs the card no height. It is what makes the
+    // headline number legible - "6" means nothing until the row says the 6 is a Hard score.
+    // Shape first, hue second (the colorblind rule); the word carries it on its own if neither reads.
+    '.lb-tierchip{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--lb-ink);text-transform:uppercase}',
+    '.lb-tierchip .lb-dshape{width:10px;height:10px;fill:var(--lb-pill-color,#5b6b82)}',
+    '.lb-tierchip .lb-dshape-x2{width:18px}',
     // The inline difficulty breakdown (catInlineHTML). It lives INSIDE .lb-psubline, so it costs
     // the card no height at all. NO WRAP and no sideways scroll, same rule the old strip had: the
     // JS budget decides what fits, and `overflow:hidden` is only the belt to that braces - a number

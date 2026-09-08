@@ -24,7 +24,7 @@
 // after, and this is reversible by editing these functions and nothing else.
 
 import { COMPETITIVE } from './players-agg.js';
-import { tierOf, TIER_WEIGHT } from './difficulty-tiers.js';
+import { TIERS, tierOf, TIER_WEIGHT } from './difficulty-tiers.js';
 
 /** Below this many rated plays a rating is shown but flagged: the sample is too small to mean much.
  *  Wilson already pushes those players down; the flag just makes the reason legible. */
@@ -342,6 +342,28 @@ export function compareBoardMetric(va, vb, id) {
   return LOWER_IS_BETTER.has(id) ? va - vb : vb - va;
 }
 
+/** WHICH TIER A ROW IS RANKED AT, given a way to read that row's metric at any tier: the HIGHEST
+ *  tier the player has an actual SCORE at, `null` when they have none.
+ *
+ *  A SCORE, not plays (2026-09-08, the second pass). The first pass asked "which tiers has this
+ *  person played", which put a player on Hard off fifty Hard games they never won - above a Medium
+ *  player with forty wins, printing a 0. `hasBoardMetric` is the same "is there a number here" test
+ *  the leader row uses, so the answer is an achievement in every game's own metric: a win, a best
+ *  length, a solve.
+ *
+ *  `null` means no tier: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill
+ *  Climb), and legacy/unmapped history in a game that has one. The caller reads the ALL-TIER number
+ *  for those rows and sorts them below the tiered ones - listed, with their real score, never
+ *  dropped (THE LAW rule 1).
+ *
+ *  `metricAt(tier)` is the caller's own extractor, so this stays free of the stats shape. */
+export function boardRankTier(metricAt, id) {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (hasBoardMetric(metricAt(TIERS[i]), id)) return TIERS[i];
+  }
+  return null;
+}
+
 /** DIFFICULTY TIER OUTRANKS SCORE, on a game's own board (2026-09-08, Matt's spec: "a player can
  *  only outrank someone by matching or beating their difficulty tier. A higher score in a lower
  *  tier never beats a lower score in a higher tier"). Tier is the FIRST key, the board's own
@@ -375,6 +397,7 @@ export function formatBoardMetric(value, id, evenLabel = 'E') {
 export default {
   record, bucketsOf, tierMix, tierRows, wilsonLower, competitiveRating,
   fieldMaxOf, soloRating, ratePlayer, rankPlayers, cmp, PROVISIONAL_PLAYS,
-  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, formatBoardMetric,
+  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, boardRankTier,
+  formatBoardMetric,
   LOWER_IS_BETTER, GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 };
