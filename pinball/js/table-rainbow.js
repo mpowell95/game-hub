@@ -190,7 +190,17 @@ export const SLINGS = [
 ];
 
 /** The centre oval. `paint` is the reference's full-size pear; `rad` is the hole that captures. */
-// The centre of this table carries nothing at all: no hardware, no paint. See the POPS comment.// The centre of this table carries nothing at all: no hardware, no paint. See the POPS comment.
+/**
+ * THE CENTRE OVAL, AND IT IS PAINT. No collider, no sensor, no rule - and no bumper standing in
+ * it either (see POPS). The build before this deleted the paint as well, which was a misreading:
+ * Matt's *"It's a flat painted thing on the board in the ref photo"* was him saying the oval IS
+ * paint and my hole in it was the thing that did not belong. It is the biggest single shape on the
+ * reference table and the thing the whole playfield is composed around; without it the middle is a
+ * pale void and the eye has nothing to hold on to.
+ *
+ * Full reference size: 96 x 151, centred at (155, 449).
+ */
+export const OVAL = { x: AXIS, y: 449, w: 96, h: 151 };
 
 /** White nylon posts, from the reference's own scatter. Written once, mirrored on build. */
 // FEWER AND FURTHER APART THAN THE REFERENCE'S SCATTER, and every number is a clearance.
@@ -205,15 +215,16 @@ export const SLINGS = [
 // (under about 12, a ball cannot enter at all). Nothing is left in between. Four posts in the
 // reference's lower cluster are gone rather than moved: they sat in the inlane, which is already
 // bounded by a divider and a slingshot and has no room for anything else.
-// TWICE AS MANY AS THE FIRST SAFE SET, because the reference playfield is CROWDED and a sparse
-// one does not read as it however good the parts are. Every added post was checked the same way:
-// more than 18 clear units from its neighbours (a ball passes) or under 12 (a ball cannot enter),
-// never in between - and then sweep-pinball-rests.mjs was re-run to prove it.
+// FOURTEEN, NOT TWENTY-EIGHT, AND THIN. A pass that doubled the count and fattened every one of
+// them made the table WORSE, not more like the reference - Matt: *"This looks terrible and even
+// less like the reference."* He was right and the reason is worth writing down: on the reference
+// these posts are SMALL, THIN and subordinate, background hardware you look past. Doubled and
+// fattened they became the loudest thing on the playfield, and a field of identical grey mushrooms
+// is not density, it is noise. Density on the reference comes from the big dark oval and the
+// coloured rows, not from the posts.
 const POST_HALF = [
   [42, 250], [42, 320], [44, 400], [42, 470],
   [80, 250], [112, 268], [76, 404],
-  [66, 296], [66, 356], [100, 300], [100, 356],
-  [78, 442], [110, 430], [120, 500],
 ];
 export const POSTS = [];
 for (const [x, y] of POST_HALF) POSTS.push([x, y], [mx(x), y]);
@@ -307,7 +318,7 @@ export function buildTable(opts = {}) {
   STANDUPS.forEach((p, i) => add(circle(p[0], p[1], 7, { e: 0.46, mu: 0.05, id: `stand${i}` })));
   RUBBERS.forEach((p, i) => add(circle(p[0], p[1], 8, { e: 0.62, mu: 0.02, id: `rub${i}` })));
   YELLOWS.forEach((p, i) => add(circle(p[0], p[1], 6, { e: 0.44, mu: 0.05, id: `yell${i}` })));
-  POSTS.forEach((p, i) => add(circle(p[0], p[1], 7, { e: 0.5, mu: 0.02, id: `post${i}` })));
+  POSTS.forEach((p, i) => add(circle(p[0], p[1], 6, { e: 0.5, mu: 0.02, id: `post${i}` })));
   // The two wooden circles in the top corners are FLUSH in the reference - printed, not standing -
   // so they are paint here and not colliders. As colliders they made a pocket with the standup
   // cluster beside them that sweep-pinball-rests.mjs could park a ball in.
@@ -355,7 +366,7 @@ export const ART = {
   pops: POPS, popR: POP_R,
   standups: STANDUPS, rubbers: RUBBERS, yellows: YELLOWS, posts: POSTS,
   cornerHoles: CORNER_HOLES,
-  rows: ROWS, gates: GATES, slings: SLINGS,
+  rows: ROWS, gates: GATES, slings: SLINGS, oval: OVAL,
   guides: GUIDES, shelves: SHELVES, divs: DIVS,
   upper: UPPER, playR: PLAY_R,
 };
