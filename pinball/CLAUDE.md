@@ -913,6 +913,67 @@ proportion and the two no longer touch.
 frame** - because sections 9a and 9b drive the rules through their entry points and never run the
 game loop. Section **9c** is 90 seconds of real `update()` calls, and it exists for that.
 
+### The centre is empty, and the traps were swept out exhaustively (2026-09-08)
+
+Matt, on the build after the scoop came out: *"The stuff in the center is still there. I want all
+of that part gone. You have a giant circle thing."* And: *"The ball still gets stuck lots of
+places - see screenshot. You need to play it or something to prevent this. It's not a good use of
+my time if every test result is 'the ball gets stuck'."*
+
+**The middle of the table is empty now.** Two pop bumpers, not three, and no painted oval. The
+reference does draw a third starburst low on the centre line - but it draws it BELOW the flipper
+tips, and that position is not available: the flippers sweep a 63-unit arc from y 527 to 583
+either side of the centre line, so anything in the drain mouth is inside it (measured, a bumper at
+y 545 left 17.7 clear units from a resting paddle, a hair under a ball). Put it high enough to
+clear the sweep and it lands in the middle of the playfield, which is what he was looking at.
+
+### `sweep-pinball-rests.mjs`, and why the soak could never have found these
+
+**A soak is a sample.** A random flipper driver visits the parts of the table it happens to visit;
+a trap in a corner it never reaches is invisible however many games you run. Every wedge in this
+file above was found by squinting at an occupancy histogram after the fact, which is exactly the
+process Matt is objecting to.
+
+The new tool does not sample. It drops a ball, **at rest, on every point of a grid over the whole
+playfield**, runs the real solver for six seconds, and asks whether it reached the drain. It names
+the colliders holding each survivor, clusters them, and re-runs each one with a sideways push so a
+ball balanced on a single post's apex - which no real ball can do - is reported as a knife edge
+rather than a trap. `--held` sweeps the different table a player creates by holding the flippers.
+
+On RAINBOW, in one afternoon:
+
+| | at rest, not the drain | distinct places |
+|---|---|---|
+| as shipped | 252 of 829 drops | 50 |
+| after the fixes below | **1 of 1,209** | 1 |
+| flippers held | **2 of 854** | 2 |
+
+And every fix came from the tool naming the pair, not from reading the file:
+
+- **`shelf+guide`** - 26 drops at (57, 209), (253, 209) and (37, 197). The upper shelf and the wire
+  guide converged as they descended, making a V with a mouth wider than a ball and a throat
+  narrower. **This is the ball in Matt's screenshot.** The shelf now stops before the guide crosses
+  it, so a ball rolls off the shelf, onto the guide, and down to the flipper - a chain, not a wedge.
+- **`rub10+yell1`** - 31 drops. A rubber disc 17.4 clear units from the standup above it. Moved so
+  it merges into the slingshot instead.
+- **`sling0+wallL`** - 24 drops. The outlane MOUTH was 17 clear units against a ball of 18: too
+  narrow to enter, wide enough to be squeezed into. It is 23 now, so the outlane is an outlane.
+- **`wallL+rub0+stand0`**, **`stand1+stand5`** - the new denser target clusters, twice. Fixed by
+  overlapping them into solid bars rather than spacing them.
+
+**The rule the whole exercise comes down to** is already in this file and is worth restating: a
+gap is either OPEN (more than 18 clear units, a ball passes) or SEALED (under about 12, a ball
+cannot enter). Anything in between is a parking space. Nine of the ten fixes above were a number
+between 12 and 18.
+
+### The look was taken closer to the reference at the same time
+
+Denser standup clusters in two staggered rows, olive discs merged into them, thirteen blue
+rollovers instead of nine, red-capped posts on the wire guides, a printed pattern on the drop
+targets, the perforated band under the top rail, the apron's three circles and the lower
+playfield's shot arcs, flush corner circles (they are printed on the reference, and as colliders
+they made a pocket), flatter rollover lenses, and warmer, glossier wood.
+
 ### The rules, which are the spec's
 
 - Standups 500, yellows 250, pops 100, slingshots 50, drop targets 500 each.
