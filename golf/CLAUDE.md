@@ -3708,6 +3708,43 @@ hard as it was, and the reason short putts were missed at all - the power tap's 
 answer is to always be firm. If Matt ever wants the long putts easier too, that is still the dial
 and the tempo, and it is still his call.
 
+## The cup holds a ball running 8 ft past, not 4 (2026-09-08)
+
+Matt, playtesting Pine Valley 3 with the screen in front of him: a 45.2 ft putt *"went over the hole
+and ended up here, 6.8 ft away. It should have gone in."*
+
+**Reproduced exactly before anything was changed.** That putt is **94 % of the meter**; the ball
+crossed the cup and finished 6.8 ft past, and `CUP_MAX_SPEED` rejected it because the old tolerance
+was 4.0 ft past. The make window on that putt ran **85-91 % - seven clicks of ninety-nine** - and
+the click immediately above it was a miss with nothing to show for a stroke that was on line and
+barely firm.
+
+**4.0 ft is the REALISTIC number, and that is exactly why it was wrong here.** A real cup stops
+holding a ball somewhere around there. But the player is not rolling a ball, they are stopping a
+meter with a thumb, and the over-hit side of that window was one click wide.
+
+Measured make rate over the whole meter, aimed straight at the pin on Pine Valley 3:
+
+| tolerance | 20 ft | 30 ft | 45 ft |
+|---|---|---|---|
+| 4 ft (was) | 9 % | 8 % | 7 % |
+| 6 ft | 12 % | 10 % | 9 % |
+| **8 ft (now)** | **14 %** | **13 %** | **11 %** |
+| 12 ft | 20 % | 17 % | 16 % |
+
+Matt chose 8 from that table. 12 made pace stop mattering on a long putt and he did not want that.
+
+**THE SPEED IS DERIVED FROM THE DISTANCE, NEVER TYPED.** `CUP_PAST_FT` is 8 and `CUP_MAX_SPEED` is
+`sqrt(2 * PUTT_DECEL * CUP_PAST_FT / 3)` = 3.107 yd/s. Two constants that have to agree are one
+constant and one line of arithmetic, or they drift the first time either is tuned - the same rule
+`puttGimmeFt()` follows against the ladder's own first dot.
+
+**Nothing else moved.** A putt left short still never reaches the cup; a putt pushed off line still
+misses; the dial, the tempo, `PUTT_GAMMA` and `BREAK_K` are untouched; and inside the first red dot
+there is still no speed limit at all, so every short-putt number in the section below is unchanged.
+Full power from 45 ft still runs 12.1 ft past and still stays out, which is what keeps pace a thing
+worth judging. Section 18 pins all of it, including Matt's own putt as a `[KNOWN-BUG PROBE]`.
+
 ## The break is no longer decoration (2026-09-07)
 
 Matt, on the overnight playtest list: *"make the break NOT decoration."*
