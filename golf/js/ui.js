@@ -588,28 +588,78 @@ class GolfGame {
     });
   }
 
-  /** EACH ROW'S HEIGHT IS MEASURED, NOT PICKED. Every tile's width is its own hole's aspect times
-   *  the row height, so a row of nine exactly fills the width at one height and one height only:
-   *  `(row width - the gaps) / the sum of that row's aspects`. Picking a height instead would leave
-   *  a ragged margin on the right of every row, which is the wasted space this whole layout exists
-   *  to remove - and it would differ per course, because Red Mesa's holes are not Pine Valley's.
+  /** EACH ROW'S HEIGHT IS MEASURED, NOT PICKED, AND THE SCREEN'S HEIGHT WINS.
    *
-   *  Measured on Pine Valley at 393px: the front nine's aspects sum to 3.099 and the back nine's to
-   *  3.293, so the two rows come out 102px and 96px tall and both end flush. */
+   *  Every tile's width is its own hole's aspect times the row height, so a row of nine fills the
+   *  width at exactly one height: `(row width - the gaps) / the sum of that row's aspects`. That is
+   *  what removes the letterboxing, and on a tall phone it is the answer.
+   *
+   *  **BUT THE SETUP SCREEN MUST NOT SCROLL** (Matt, 2026-09-08, with a screen recording: *"Look at
+   *  the scroll. I do not want a scroll on these setup/golf landing pages"*). Measured on the
+   *  shipped build: 0px of overflow at 393x852 and **82px at 390x664**, before the hub's own ~98px
+   *  of chrome is taken off the top - which is the phone in the video.
+   *
+   *  So the width-filling height is a CEILING, not the answer. Everything else on the screen is
+   *  measured first, and the strip gets what is left. When that is less than the rows want, they
+   *  are scaled down together and the rows end a little short of the full width - a small margin
+   *  down one side, which is a far smaller cost than a screen that scrolls, and the one Matt has
+   *  now ruled on twice.
+   *
+   *  HOW "EVERYTHING ELSE" IS MEASURED: the rows are collapsed to zero and the screen's own
+   *  `scrollHeight` is read. That counts the padding, the gaps and every sibling with no list of
+   *  them to keep in step - the same reason `_fit()` collapses the root before measuring its top.
+   *  It costs one forced reflow, once per render of a menu. */
   _sizeStripRows() {
     const strip = this.stripEl;
     if (!strip || !strip.isConnected) return;
+    const setup = strip.closest('.gf-setup');
+    const rows = [...strip.querySelectorAll('.gf-strip__row')];
+    if (!rows.length) return;
     const GAP = 4;
-    for (const row of strip.querySelectorAll('.gf-strip__row')) {
+
+    // What each row would need to fill the width exactly. This is the ideal, and the ceiling.
+    const want = rows.map((row) => {
       const arts = [...row.querySelectorAll('[data-hole-art]')];
-      if (!arts.length) continue;
       const w = row.clientWidth;
-      if (w < 8) continue;
+      if (!arts.length || w < 8) return 0;
       let sum = 0;
       for (const cv of arts) sum += parseFloat(cv.style.getPropertyValue('--gf-ar')) || 0.33;
-      const h = Math.max(28, (w - GAP * (arts.length - 1)) / sum);
-      row.style.setProperty('--gf-strip-h', `${h.toFixed(2)}px`);
+      return (w - GAP * (arts.length - 1)) / sum;
+    });
+    const wanted = want.reduce((a, v) => a + v, 0) + GAP * (rows.length - 1);
+
+    let scale = 1;
+    if (setup) {
+      // WHY THIS SUMS THE SIBLINGS INSTEAD OF READING `scrollHeight` WITH THE STRIP COLLAPSED.
+      // That was the first attempt and it silently did nothing: `.gf-setup` is `position: absolute;
+      // inset: 0`, so its scrollHeight can never fall BELOW its own client height - collapsing the
+      // rows to zero still measured 664 of 664, `avail` came out -4, and the strip kept its full
+      // size while the screen kept its 82px of overflow. Measured, not reasoned about.
+      //
+      // The children's heights plus the flex gaps and the padding is the same number without the
+      // floor under it, and it needs no reflow.
+      const cs = getComputedStyle(setup);
+      const gapY = parseFloat(cs.rowGap) || 0;
+      const kids = [...setup.children];
+      let other = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+        + gapY * Math.max(0, kids.length - 1);
+      for (const k of kids) if (k !== strip) other += k.getBoundingClientRect().height;
+      // A 4px SAFETY MARGIN. Without it this lands 1-2px over, every time: each tile carries a 1px
+      // border under `box-sizing: border-box` and the row heights are fractional, so the sum of what
+      // is drawn rounds up against the sum of what was computed. Four pixels is cheaper than a
+      // scrollbar.
+      const avail = setup.clientHeight - other - GAP * (rows.length - 1) - 4;
+      // MIN_ROW is the floor: below about 54px a hole is a smudge rather than a picture, and at
+      // that point letting the screen scroll would be the lesser evil. Nothing measured reaches it
+      // - the tightest case (390x664 in the hub) lands well above - and if a future screen ever
+      // does, `test-visual.mjs`'s no-scroll check is what will say so.
+      const MIN_ROW = 54;
+      if (avail > 0 && wanted > avail) scale = Math.max((MIN_ROW * rows.length) / wanted, avail / wanted);
     }
+    rows.forEach((row, i) => {
+      if (!want[i]) return;
+      row.style.setProperty('--gf-strip-h', `${(want[i] * scale).toFixed(2)}px`);
+    });
   }
 
   /** The hole strip's observer holds a reference to every thumbnail canvas in it, so it has to go
