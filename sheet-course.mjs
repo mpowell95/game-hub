@@ -12,24 +12,30 @@
 // Needs the dev server up (`node server.mjs`), because it renders through the real render.js in a
 // real browser rather than reimplementing the painter.
 //
-//   node sheet-course.mjs [pinevalley|redmesa|oasissands]   ->  .visual-out/<course>-holes.png
+// NO LABELS BY DEFAULT (Matt, 2026-09-08: "we don't need labels. I don't want any text here at
+// all"). Pass `--labels` when the point is identifying a hole rather than reading the set.
+//
+//   node sheet-course.mjs [pinevalley|redmesa|oasissands] [--labels]
+//        ->  .visual-out/<course>-holes.png
 
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 
-const COURSE = process.argv[2] || 'pinevalley';
+const ARGS = process.argv.slice(2);
+const LABELS = ARGS.includes('--labels');
+const COURSE = ARGS.find((a) => !a.startsWith('--')) || 'pinevalley';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const p = await b.newPage({ viewport: { width: 1200, height: 1400 }, deviceScaleFactor: 1 });
 await p.goto('http://localhost:8123/golf/', { waitUntil: 'networkidle' });
 
-const dataUrl = await p.evaluate(async (courseId) => {
+const dataUrl = await p.evaluate(async ({ courseId, labels }) => {
   const R = await import('/golf/js/render.js');
   const { COURSES } = await import('/golf/js/rounds.js');
   const course = COURSES.find((c) => c.id === courseId);
   if (!course) throw new Error(`no course "${courseId}" - have ${COURSES.map((c) => c.id).join(', ')}`);
   const COLS = Math.min(6, course.holes.length);
   const ROWS = Math.ceil(course.holes.length / COLS);
-  const TW = 190, TH = 400, PAD = 10, LAB = 26;
+  const TW = 190, TH = 400, PAD = 10, LAB = labels ? 26 : 0;
   const cv = document.createElement('canvas');
   cv.width = COLS * (TW + PAD) + PAD;
   cv.height = ROWS * (TH + LAB + PAD) + PAD;
@@ -48,14 +54,16 @@ const dataUrl = await p.evaluate(async (courseId) => {
     c.fillStyle = '#0b0f07';
     c.fillRect(x - 1, y - 1, TW + 2, TH + 2);
     c.drawImage(m.canvas, x + (TW - w) / 2, y + (TH - hh) / 2, w, hh);
-    c.fillStyle = '#ffffff';
-    c.font = '700 17px system-ui, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText(`${h.n} \u00b7 par ${h.par} \u00b7 ${Math.round(h.cardYards)} yds`, x + TW / 2, y + TH + LAB / 2 + 2);
+    if (labels) {
+      c.fillStyle = '#ffffff';
+      c.font = '700 17px system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(`${h.n} \u00b7 par ${h.par} \u00b7 ${Math.round(h.cardYards)} yds`, x + TW / 2, y + TH + LAB / 2 + 2);
+    }
   });
   return cv.toDataURL('image/png');
-}, COURSE);
+}, { courseId: COURSE, labels: LABELS });
 
 fs.mkdirSync('.visual-out', { recursive: true });
 const out = `.visual-out/${COURSE}-holes.png`;

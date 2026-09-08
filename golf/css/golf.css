@@ -194,33 +194,41 @@
 /* The card used to float in a large empty void on a real phone. It now fills the width it has and
    the screen carries a course strip behind it, so the space reads as art rather than as nothing. */
 .gf-root .gf-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
-/* EVERY HOLE, LEFT TO RIGHT. Eighteen holes cannot be shown at once on a phone at any useful size
-   - twenty pixels each is not a picture of anything - so the strip scrolls sideways and snaps.
-   `overscroll-behavior: contain` is required (root CLAUDE.md's scroll rules): without it a flick
-   that reaches either end keeps going and pans the launcher underneath. */
+/* EVERY HOLE, AS A GRID, WITH NO WASTED SPACE AND NO TEXT.
+   Matt, 2026-09-08, on the contact sheet: *"your image actually looks better than what I'm trying
+   to make. But you waste a TON of space with the black. Fix that. and we don't need labels. I don't
+   want any text here at all."*
+
+   THE BLACK WAS LETTERBOXING, and it was unavoidable while every tile was the same box: the
+   eighteen Pine Valley holes run 0.22 to 0.52 wide-to-tall, so a single tile aspect leaves bars on
+   two thirds of them however it is chosen. So the tile is not a fixed box any more - every hole is
+   drawn at ONE HEIGHT and given its OWN width, straight from its own bounds (`--gf-ar`, set inline
+   by ui.js). Nothing is letterboxed and nothing is cropped, because the tile IS the hole's shape.
+
+   `flex-wrap` then does the layout rather than a fixed column count: at 393px it settles into rows
+   of eight or nine, and on a narrower phone it simply takes another row instead of overflowing.
+   That is also why there is no horizontal scroll left here - all eighteen are on screen at once,
+   which is what Matt expected the first time. */
 .gf-root .gf-strip {
   width: 100%; max-width: 360px;
-  display: flex; gap: 6px; align-items: flex-start;
-  overflow-x: auto; overflow-y: hidden;
-  overscroll-behavior: contain;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+  display: flex; flex-direction: column; gap: 4px;
 }
+/* One row per nine. `--gf-strip-h` is written per row by `_sizeStripRows`, from the row's own
+   width and the sum of its holes' aspects, so the row ends flush with no margin to spare. */
+.gf-root .gf-strip__row { display: flex; gap: 4px; width: 100%; }
+/* `box-sizing: border-box` IS LOAD-BEARING, not tidiness. The rows are sized by arithmetic in
+   `_sizeStripRows` - row width minus the gaps, divided by the sum of the aspects - and on
+   content-box each tile's 1px border would add 2px that the arithmetic never subtracted: 18px
+   across a row of nine, which pushed the last hole of each nine off the right edge of the screen.
+   Measured exactly that before this line existed. */
 .gf-root .gf-strip__hole {
-  margin: 0; flex: 0 0 auto; scroll-snap-align: start;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-}
-.gf-root .gf-strip__hole canvas {
-  display: block; width: 68px; height: 22vh; min-height: 108px; max-height: 156px;
-  border: 1px solid rgba(255,255,255,.85); box-shadow: var(--gf-shadow);
+  display: block; box-sizing: border-box;
+  height: var(--gf-strip-h, 96px);
+  width: calc(var(--gf-strip-h, 96px) * var(--gf-ar, 0.33));
+  border: 1px solid rgba(255,255,255,.85);
   background: #6e812b;
 }
-/* 11px is the floor (docs/BUILDING-A-GAME.md, Part 0). "18 - par 5" fits 68px at 11px; nothing
-   here is allowed to go smaller to buy a narrower tile. */
-.gf-root .gf-strip__hole figcaption {
-  font-size: 11px; font-weight: 700; color: var(--gf-dim); white-space: nowrap;
-}
+
 .gf-root .gf-card-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--gf-dim); }
 .gf-root .gf-card-blurb { font-size: 13px; }
 .gf-root .gf-actions { display: flex; gap: 10px; }

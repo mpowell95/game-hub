@@ -4119,6 +4119,69 @@ bottom. What reads as "the beginning of the hole is cut off" is that a hole's ma
 yds behind its tee (`BEHIND_TEE_YD`, which the camera needs), so there is a band of empty rough
 below the tee box in every picture.
 
-**Still open, and it is the next thing on this screen:** Matt expected to see all eighteen holes
-WITHOUT scrolling. He is choosing a layout off the sheet above; do not redesign the strip until he
-has.
+**And that is what the strip became.** Matt, off the sheet: *"your image actually looks better than
+what I'm trying to make. But you waste a TON of space with the black. Fix that. and we don't need
+labels. I don't want any text here at all."* See the section below.
+
+## The hole strip became a grid: no black, no text, no scrolling (2026-09-08)
+
+Matt, looking at `sheet-course.mjs`'s contact sheet beside the app: *"your image actually looks
+better than what I'm trying to make. But you waste a TON of space with the black. Fix that. and we
+don't need labels. I don't want any text here at all."* Plus, from the message before it, *"I
+thought i'd be able to see all the holes without scrolling."*
+
+### The black was letterboxing, and no single tile size could ever have removed it
+
+The eighteen Pine Valley holes run **0.22 to 0.52** wide-to-tall. Any fixed tile aspect leaves bars
+on roughly two thirds of them, whichever aspect is chosen - so this was never a matter of picking a
+better number.
+
+**The tile is not a box the hole is fitted into any more. It IS the hole's shape.** Every canvas is
+drawn at its row's height and given its own width, from `holeAspect(h)` - straight off `bounds`,
+which is exactly what `buildMap` rasterises, so the number and the picture cannot disagree. Nothing
+is letterboxed and nothing is cropped.
+
+### The rows are NINES, and their height is measured rather than picked
+
+Left to `flex-wrap` the strip came out **9 / 8 / 1** on Pine Valley, with hole 18 stranded on a row
+of its own - which reads as a mistake rather than as a layout. `holeRows()` chunks by nine instead,
+which is also the right unit for golf: an eighteen shows its front nine over its back nine, and a
+nine-hole course is one row.
+
+`_sizeStripRows()` then gives each row the one height at which it exactly fills the width:
+`(row width - the gaps) / the sum of that row's aspects`. Picking a height instead would leave a
+ragged margin down the right of every row - the very waste this layout exists to remove - and it
+would differ per course, because Red Mesa's holes are not Pine Valley's. Measured on Pine Valley at
+393px: the front nine's aspects sum to 3.099 and the back nine's to 3.293, so the rows come out
+**102px and 96px** and both end flush (measured overflow 0.0 and 0.0).
+
+**`box-sizing: border-box` on the tile is load-bearing, not tidiness.** On content-box each tile's
+1px border adds 2px the arithmetic never subtracted - 18px across a row of nine - which pushed the
+last hole of each nine off the right edge of the screen. That was measured, not theorised.
+
+### Measured after
+
+| | |
+|---|---|
+| strip height | **207.6px** for all eighteen (was 302px for a scrolling row of one nine) |
+| rows | 2, overflow **0.0px** and **0.0px** |
+| the setup screen scrolls | **no** - `scrollHeight === clientHeight`, at 393x852 |
+| blank tiles | **none**, on either eighteen-hole course |
+| `test-visual.mjs golf` | 14/14, fits standalone AND in the hub at 852 and 664 |
+
+**The captions are gone and there is no visible text in the strip at all.** Each canvas keeps an
+`aria-label` (`4 - par 4`), which is not text on screen and is the only thing a screen reader would
+otherwise have.
+
+`_sizeStripRows()` is re-run from `_fit()`, because a rotation changes the row width and every row
+would otherwise keep the height it was given in the old orientation. The thumbnails are then
+repainted at the new size; `_stripCache` is keyed by size, so rotating back is free.
+
+### One piece of empty space is DELIBERATELY still there
+
+Every hole's map includes the **60 yds behind its tee** (`BEHIND_TEE_YD`, which the camera needs -
+a hole whose bounds stopped at its own tee pinned the ball under the controls). So there is a band
+of plain rough below each tee box. Trimming it would make every picture bigger for the same height
+budget, and it was NOT done: Matt's previous message on this screen was *"you've made the hole
+images wider than they should be by cutting off the beginning part of the hole"*, and cropping the
+approach to the tee is exactly what that objects to. It is his call, not a tidy-up to slip in.

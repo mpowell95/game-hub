@@ -99,6 +99,28 @@ function lieArt(kind, pal) {
   </svg>`;
 }
 
+/** A hole's picture is exactly as wide as the hole is, which is what leaves NO letterbox: the tile
+ *  is not a box the hole is fitted into, it IS the hole's own shape. Straight off `bounds`, which
+ *  is what `buildMap` rasterises, so the number here and the picture can never disagree. */
+function holeAspect(h) {
+  const w = h.bounds.maxX - h.bounds.minX;
+  const y = h.bounds.maxY - h.bounds.minY;
+  return (w > 0 && y > 0) ? w / y : 0.33;
+}
+
+/** THE ROWS ARE NINES, NOT WHATEVER `flex-wrap` HAPPENS TO FIT. Left to wrap on its own the strip
+ *  came out 9 / 8 / 1 on Pine Valley - hole 18 stranded on a row of its own, which reads as a
+ *  mistake rather than as a layout. A nine is also the right unit for golf: an eighteen-hole course
+ *  shows its front nine over its back nine, and a nine-hole course is one row. */
+function holeRows(course) {
+  const rows = [];
+  course.holes.forEach((h, i) => {
+    if (i % 9 === 0) rows.push([]);
+    rows[rows.length - 1].push({ h, i });
+  });
+  return rows;
+}
+
 function windArrow(deg, calm = true) {
   return `<svg width="26" height="26" viewBox="0 0 16 16" aria-hidden="true" style="transform:rotate(${deg}deg)">
     <path d="M8 1 L14.5 8.5 L10.5 8.5 L10.5 15 L5.5 15 L5.5 8.5 L1.5 8.5 Z" fill="${calm ? '#7d8a6d' : '#f2f7ea'}" stroke="#0d1208" stroke-width="1.2" stroke-linejoin="round"/>
@@ -261,6 +283,15 @@ class GolfGame {
     // no-op must stay a no-op or the two chase each other for ever.
     if (`${h}px` === prev) return;
     if (this.canvas) this._sizeCanvas();
+    // The setup screen's hole rows are sized by MEASUREMENT, so a rotation has to re-measure them
+    // or every row keeps the height it was given in the old orientation. The canvases are then
+    // repainted at their new size - `_stripCache` is keyed by size, so the old thumbnails are kept
+    // rather than thrown away, and rotating back is free.
+    if (this.stripEl && this.stripEl.isConnected) {
+      this._sizeStripRows();
+      for (const cv of this.stripEl.querySelectorAll('[data-hole-art]')) delete cv.dataset.painted;
+      this._paintHoleStrip(this.stripEl);
+    }
   }
 
   _sizeCanvas() {
@@ -321,10 +352,11 @@ class GolfGame {
           data-course="${esc(k.id)}"><span>${esc(t(`course_${k.id}`))}</span></button>`).join('')}
       </div>
       <div class="gf-strip" data-role="strip" role="group" aria-label="${esc(t('every_hole', { course: t(`course_${c.id}`)}))}">
-        ${c.holes.map((h, i) => `<figure class="gf-strip__hole">
-          <canvas data-hole-art="${i}"></canvas>
-          <figcaption>${esc(t('hole_thumb', { n: h.n, par: h.par }))}</figcaption>
-        </figure>`).join('')}
+        ${holeRows(c).map((row) => `<div class="gf-strip__row">
+          ${row.map(({ h, i }) => `<canvas class="gf-strip__hole" data-hole-art="${i}"
+            style="--gf-ar:${holeAspect(h).toFixed(4)}"
+            aria-label="${esc(t('hole_thumb', { n: h.n, par: h.par }))}"></canvas>`).join('')}
+        </div>`).join('')}
       </div>
       <div class="gf-card gf-panel">
         <div class="gf-card-meta">
@@ -441,20 +473,66 @@ class GolfGame {
     };
 
     const arts = [...strip.querySelectorAll('[data-hole-art]')];
+    this.stripEl = strip;
     requestAnimationFrame(() => {
       if (this.destroyed || !strip.isConnected) return;
-      if (typeof IntersectionObserver !== 'function') { for (const cv of arts) paint(cv); return; }
+      this._sizeStripRows();
+      // PAINTED A FEW PER FRAME, NEVER ALL AT ONCE. `buildMap` rasterises a whole hole (roughly
+      // 264 x 1176 px on Pine Valley 1), and eighteen of those in one frame is a visible stall on
+      // the frame the setup screen appears. Four a frame puts the first row up immediately and the
+      // rest in under a hundred milliseconds, which reads as the screen drawing rather than as the
+      // screen hanging.
+      const chunk = (list) => {
+        if (this.destroyed || !strip.isConnected || !list.length) return;
+        for (const cv of list.splice(0, 4)) paint(cv);
+        if (list.length) requestAnimationFrame(() => chunk(list));
+      };
+      if (typeof IntersectionObserver !== 'function') { chunk([...arts]); return; }
       this.stripObs = new IntersectionObserver((entries) => {
-        for (const e of entries) if (e.isIntersecting) { paint(e.target); this.stripObs.unobserve(e.target); }
-      }, { root: strip, rootMargin: '120px' });
+        const due = [];
+        for (const e of entries) if (e.isIntersecting) { due.push(e.target); this.stripObs.unobserve(e.target); }
+        chunk(due);
+      // THE ROOT IS THE VIEWPORT, NOT THE STRIP, since 2026-09-08: the strip does not scroll any
+      // more (every hole is on screen at once), so a strip-rooted observer would simply fire for
+      // all eighteen at load and the laziness would be worth nothing. Against the viewport it
+      // still defers whatever is below the fold on a short phone, which is where it earns its
+      // keep - and `_paintStripChunked` below is what stops the rest landing in one frame.
+      }, { rootMargin: '120px' });
       for (const cv of arts) this.stripObs.observe(cv);
     });
+  }
+
+  /** EACH ROW'S HEIGHT IS MEASURED, NOT PICKED. Every tile's width is its own hole's aspect times
+   *  the row height, so a row of nine exactly fills the width at one height and one height only:
+   *  `(row width - the gaps) / the sum of that row's aspects`. Picking a height instead would leave
+   *  a ragged margin on the right of every row, which is the wasted space this whole layout exists
+   *  to remove - and it would differ per course, because Red Mesa's holes are not Pine Valley's.
+   *
+   *  Measured on Pine Valley at 393px: the front nine's aspects sum to 3.099 and the back nine's to
+   *  3.293, so the two rows come out 102px and 96px tall and both end flush. */
+  _sizeStripRows() {
+    const strip = this.stripEl;
+    if (!strip || !strip.isConnected) return;
+    const GAP = 4;
+    for (const row of strip.querySelectorAll('.gf-strip__row')) {
+      const arts = [...row.querySelectorAll('[data-hole-art]')];
+      if (!arts.length) continue;
+      const w = row.clientWidth;
+      if (w < 8) continue;
+      let sum = 0;
+      for (const cv of arts) sum += parseFloat(cv.style.getPropertyValue('--gf-ar')) || 0.33;
+      const h = Math.max(28, (w - GAP * (arts.length - 1)) / sum);
+      row.style.setProperty('--gf-strip-h', `${h.toFixed(2)}px`);
+    }
   }
 
   /** The hole strip's observer holds a reference to every thumbnail canvas in it, so it has to go
    *  when the strip does - otherwise leaving the setup screen for a hole parks eighteen detached
    *  canvases alive until the next setup render. Cheap, idempotent, and called from every exit. */
-  _dropStripObs() { if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; } }
+  _dropStripObs() {
+    if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; }
+    this.stripEl = null;
+  }
 
   /** The stored best for one round, as a score TO PAR - the same number the leaderboard shows, so
    *  the two screens can never disagree. The stored value itself is always STROKES (golf/CLAUDE.md,
