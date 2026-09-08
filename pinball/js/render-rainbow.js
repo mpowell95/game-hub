@@ -83,6 +83,8 @@ export class RainbowRenderer extends Renderer {
     M.olive = std(C.olive, { roughness: 0.7 });
     M.kite = std(C.green, { roughness: 0.25, transparent: true, opacity: 0.72, emissive: C.green, emissiveIntensity: 0.35 });
     M.nylon = std(C.nylon, { roughness: 0.34, metalness: 0.04 });
+    M.postWhite = std(0xf6f8fb, { roughness: 0.28, metalness: 0.02 });
+    M.screw = std(0x6a6f78, { roughness: 0.4, metalness: 0.35 });
     M.crown = std(C.crown, { roughness: 0.55 });
     M.lamp = std(C.lamp, { roughness: 0.3, emissive: C.lamp, emissiveIntensity: 0.8 });
     M.pit = std(C.pit, { roughness: 0.9 });
@@ -400,13 +402,20 @@ export class RainbowRenderer extends Renderer {
     this.parts3.yellows = ART.yellows.map(([x, y]) => (
       this._add(root, new THREE.CylinderGeometry(6.5, 6.5, 5, 16), M.dotYellow, x, 2.5, tz(y))
     ));
+    // THE POSTS ARE STUDS, NOT MUSHROOMS. Matt circled four of them: *"What's with all of these
+    // things."* Seen from almost straight above, a fat cylinder with a torus near its top presents
+    // one big grey disc ringed by another, which reads as a plumbing fitting. On the reference a
+    // post is a SMALL BRIGHT WHITE STUD with a dark screw head in the middle of it, and that is
+    // three changes: narrower, whiter, and a dark centre so the eye has something to read as a
+    // screw rather than a blank cap. The collider is unchanged at r 6.
     for (const [x, y] of ART.posts) {
       const g = new THREE.Group();
       g.position.set(x, 0, tz(y));
       deck(y).add(g);
-      this._add(g, new THREE.CylinderGeometry(4.2, 5.4, 24, 12), M.nylon, 0, 12, 0);
-      const ring = this._add(g, new THREE.TorusGeometry(6.4, 2, 8, 14), M.nylon, 0, 21, 0);
+      this._add(g, new THREE.CylinderGeometry(3.4, 4.6, 19, 12), M.postWhite, 0, 9.5, 0);
+      const ring = this._add(g, new THREE.TorusGeometry(5.2, 1.5, 8, 14), M.postWhite, 0, 16.5, 0);
       ring.rotation.x = Math.PI / 2;
+      this._add(g, new THREE.CylinderGeometry(1.7, 1.7, 1.4, 10), M.screw, 0, 19.6, 0);
     }
 
     // --- the starburst pop bumpers ---------------------------------------------------------------------------
