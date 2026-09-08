@@ -1389,6 +1389,32 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   (`tierOf()` returns null) count in All ONLY** and appear under no tier item — dropping them from
   All would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
   `difficulty-tiers.js` itself is untouched.
+- **DIFFICULTY OUTRANKS SCORE on a game's own board (2026-09-08).** Matt's spec: *"a player can
+  only outrank someone by matching or beating their difficulty tier. A higher score in a lower
+  tier never beats a lower score in a higher tier."* Snake, with Easy < Medium < Hard: Hard/10 is
+  #1 over Medium/40. **Scope is a game's own board only** - the list you get by tapping into a
+  game (its rows, its rank badges, and By Game's leader row, which must name the same person the
+  board puts at #1). By Player's cross-game list is untouched; so is the tier-WEIGHTED rating
+  model, which is a different mechanism for the same idea and still unused for display.
+  - The comparison is `compareTierFirst(ta, tb, va, vb, id)` in `js/leaderboard-rank.js` - pure,
+    tested headless, and it defers to `compareBoardMetric` inside a tier, which is what keeps
+    golf ascending. `js/leaderboard-ui.js` wraps it as `compareBoardRow(a, b, id)`, **the one
+    comparator all six metric sort sites go through** (the four in `sortRows`, the rank badges in
+    `gameDetail`, and By Game's leader pick). `test-leaderboard-rank.mjs` counts those six.
+  - **A player's tier on a board is the HIGHEST tier they have any play at** (`boardTierOf`),
+    read from plays rather than the metric, because a game whose metric is a BEST (Snake, Ball
+    Run) has no per-tier win count to ask instead. **0 means no tier**: a game with no difficulty
+    axis at all (Skeeball, Pinball, Golf, Hill Climb - every row is 0, so those boards are
+    unchanged) and legacy/unmapped history in a game that has one. **A 0 row sorts below the
+    tiered rows, it never leaves the board** - still listed, still showing its own number (rule 1).
+  - **A selected difficulty FILTER turns tier-first off** (`boardTierOf` returns 0 for every row):
+    the board is then showing one tier, and only players with plays in it, so the score order is
+    the honest one. Filtered, this board is exactly the board it was before this change.
+  - **Rank badges call a tie by the comparator, not by the number** (`rankMap`'s `cmp` path). Two
+    players on the same score in different tiers are #1 and #2, not a shared #1. Golf is
+    unaffected - its comparator returns 0 exactly when two rounds are equal.
+  - Tic Tac Toe's board keeps its bespoke Ultimate -> Classic -> recency order; the tier is
+    simply the key in front of it.
 - **Ball Run, Snake and Hill Climb are the places "wins at a tier" and "the game's own metric"
   diverge** — their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`/
   `bestDistanceByStage`), not a play count, so `leaderboard-ui.js` special-cases

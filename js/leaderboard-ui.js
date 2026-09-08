@@ -52,7 +52,7 @@ import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
-import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric,
+import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareTierFirst,
   formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
@@ -545,6 +545,44 @@ function boardPlaysOf(g, id) {
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
 }
 
+// --- DIFFICULTY OUTRANKS SCORE, on a game's own board (2026-09-08) ----------------------------
+// The spec, in Matt's words: "a player can only outrank someone by matching or beating their
+// difficulty tier. A higher score in a lower tier never beats a lower score in a higher tier."
+// Snake, Easy < Medium < Hard: Hard/10 is #1 over Medium/40.
+//
+// Scope is THIS SCREEN ONLY - a game's own board (the list you get by tapping into a game), which
+// is what the spec asks for. By Player's cross-game list is untouched: its number is already
+// difficulty-aware in a different way (the category filter picks a tier and counts wins IN it),
+// and the tier-weighted rating model is a separate thing again (leaderboard-rank.js).
+//
+// The comparison itself is compareTierFirst() in leaderboard-rank.js, so it is pure and tested
+// headless; everything below only decides what "this player's tier" is.
+
+/** The tier a player is RANKED at on one game's board: the HIGHEST tier they have any recorded
+ *  play at, 0 when they have none (a game with no difficulty axis, or legacy/unmapped history).
+ *
+ *  0 while a tier FILTER is selected, for every row: the board is then showing ONE tier and only
+ *  players with plays in it, so tier-first could only reorder rows by a tier the screen is not
+ *  showing. Filtered, this board is the pure score board it always was.
+ *
+ *  Reads plays, not the metric: "which difficulties has this person actually played" is the
+ *  question, and a game whose metric is a BEST (Snake, Ball Run) has no per-tier win count to ask
+ *  instead. Nothing here writes, and no row is ever dropped - an untiered row sorts to the bottom
+ *  of the board, still listed, still showing its own number (THE LAW rule 1). */
+function boardTierOf(g, id) {
+  if (_tier != null) return 0;
+  for (let i = TIERS.length - 1; i >= 0; i--) if (playsAtTier(g, [id], TIERS[i]) > 0) return TIERS[i];
+  return 0;
+}
+
+/** THE ONE comparator every metric sort on a game board goes through (six call sites: the four in
+ *  sortRows, the rank badges in gameDetail, and By Game's leader pick). Tier first, then the
+ *  game's own metric via compareBoardMetric - which is what still gets golf's direction right. */
+function compareBoardRow(a, b, id, tier = _tier) {
+  return compareTierFirst(boardTierOf(a, id), boardTierOf(b, id),
+    gameMetricAt(a, id, tier), gameMetricAt(b, id, tier), id);
+}
+
 // --- difficulty pills --------------------------------------------------------
 // diffShapeSVG now lives in js/difficulty-tiers.js (imported above) so every game's setup
 // screen can share the exact same shape markup; behavior here is unchanged.
@@ -929,9 +967,15 @@ function rankMap(list, valueOf, cmp) {
   const countAt = {};
   let prev = null;
   let rank = 0;
+  // WHEN A COMPARATOR IS GIVEN, IT DECIDES WHAT A TIE IS (2026-09-08). Equal `valueOf` is only the
+  // same rank when the value is the whole order - and since difficulty now outranks score, two
+  // players on the same score in DIFFERENT tiers are not tied, they are #1 and #2. Golf is
+  // unaffected: its comparator returns 0 exactly when the two rounds are equal, as before.
   ranked.forEach((g, i) => {
     const v = valueOf(g);
-    if (v !== prev) { rank = i + 1; prev = v; }
+    const same = i > 0 && (cmp ? cmp(ranked[i - 1], g) === 0 : v === prev);
+    if (!same) { rank = i + 1; }
+    prev = v;
     rankOf[g.key] = rank;
     countAt[rank] = (countAt[rank] || 0) + 1;
   });
@@ -1085,8 +1129,10 @@ function gameListHTML(list) {
   const isFav = (id) => favs.includes(hubIdOf(id));
   const rows = gameMetaSorted().map((meta) => {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
+    // The leader shown here must be the row the board itself puts at #1, so it sorts through
+    // compareBoardRow too: difficulty first, score second.
     const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
-      .sort((a, b) => compareBoardMetric(gameMetricAt(a, meta.id, null), gameMetricAt(b, meta.id, null), meta.id)
+      .sort((a, b) => compareBoardRow(a, b, meta.id, null)
         || (b.updatedAt || 0) - (a.updatedAt || 0));
     return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
   });
@@ -1320,7 +1366,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const n = (a.name || '').localeCompare(b.name || '');
       if (n) return n;
-      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
+      const m = compareBoardRow(a, b, id);
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1330,7 +1376,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const p = boardPlaysOf(b, id) - boardPlaysOf(a, id);
       if (p) return p;
-      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
+      const m = compareBoardRow(a, b, id);
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1340,7 +1386,7 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => {
       const h = skBestAt(b, _machine) - skBestAt(a, _machine);
       if (h) return h;
-      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);   // the game's own metric breaks a tie
+      const m = compareBoardRow(a, b, id);   // the game's own metric breaks a tie
       if (m) return m;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
@@ -1348,6 +1394,10 @@ function sortRows(rows, id, sort) {
   }
   if (id === 'tictactoe') {
     rows.sort((a, b) => {
+      // Difficulty leads here too (2026-09-08). Its Ultimate -> Classic -> recency order is
+      // otherwise untouched: it is the SCORE half of the rule, applied within one tier.
+      const d = boardTierOf(b, id) - boardTierOf(a, id);
+      if (d) return d;
       const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
       const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
       const u = ttVariantWins(tb.ultimate) - ttVariantWins(ta.ultimate);
@@ -1358,7 +1408,7 @@ function sortRows(rows, id, sort) {
     });
   } else {
     rows.sort((a, b) => {
-      const m = compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id);
+      const m = compareBoardRow(a, b, id);
       if (m) return m;
       const p = boardPlaysOf(a, id) - boardPlaysOf(b, id);
       if (p) return p;
@@ -1411,7 +1461,7 @@ function gameDetail(list, id) {
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
       : (g) => gameMetricAt(g, id, _tier),
-    byMetric ? (a, b) => compareBoardMetric(gameMetricAt(a, id, _tier), gameMetricAt(b, id, _tier), id) : null);
+    byMetric ? (a, b) => compareBoardRow(a, b, id) : null);
   sortRows(rows, id, bSort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {

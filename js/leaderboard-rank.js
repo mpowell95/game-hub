@@ -342,6 +342,26 @@ export function compareBoardMetric(va, vb, id) {
   return LOWER_IS_BETTER.has(id) ? va - vb : vb - va;
 }
 
+/** DIFFICULTY TIER OUTRANKS SCORE, on a game's own board (2026-09-08, Matt's spec: "a player can
+ *  only outrank someone by matching or beating their difficulty tier. A higher score in a lower
+ *  tier never beats a lower score in a higher tier"). Tier is the FIRST key, the board's own
+ *  metric only breaks a tie WITHIN one tier - so Snake's Hard/10 ranks above Medium/40.
+ *
+ *  `ta`/`tb` are 1-4 (js/difficulty-tiers.js), or 0 for a row that sits at NO tier: a game with no
+ *  difficulty axis at all (Skeeball, Pinball, Golf, Hill Climb - every row is 0, so the order is
+ *  exactly the score order it always was), and legacy/unmapped history in a game that does have
+ *  one. A 0 row sorts BELOW every tiered row rather than off the board - it is still listed, with
+ *  its number, which is what THE LAW rule 1 asks for; nothing here reads or writes storage.
+ *
+ *  Deliberately takes tiers as NUMBERS, not groups: the caller decides what "this player's tier"
+ *  means on this board (leaderboard-ui.js's boardTierOf: the highest tier they have any play at,
+ *  and 0 for everyone while a tier FILTER is selected, since then every listed row is in it). */
+export function compareTierFirst(ta, tb, va, vb, id) {
+  const d = (tb | 0) - (ta | 0);
+  if (d) return d;
+  return compareBoardMetric(va, vb, id);
+}
+
 /** How a board metric is PRINTED. Golf's is a score to par, so it takes a sign, and 0 is level
  *  par - which reads as "E" on every scorecard there has ever been, never as "0". `evenLabel` is
  *  passed in already translated: this module stays free of i18n. */
@@ -355,6 +375,6 @@ export function formatBoardMetric(value, id, evenLabel = 'E') {
 export default {
   record, bucketsOf, tierMix, tierRows, wilsonLower, competitiveRating,
   fieldMaxOf, soloRating, ratePlayer, rankPlayers, cmp, PROVISIONAL_PLAYS,
-  golfBestAt, hasBoardMetric, compareBoardMetric, formatBoardMetric,
+  golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, formatBoardMetric,
   LOWER_IS_BETTER, GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 };
