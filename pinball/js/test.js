@@ -11,6 +11,7 @@
 
 import { readFileSync } from 'node:fs';
 import DT from './table-design.js';
+import { DesignPinball } from './design.js';
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT, ART } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
@@ -1057,6 +1058,23 @@ function launched(g) {
     }).map((f) => f.id);
     ok('[FOUNDRY] every paddle tip RISES when the flipper is actuated',
       back.length === 0, back.length ? 'swings down: ' + back.join(', ') : 'all ' + flippers.length + ' rise');
+  }
+
+  // [KNOWN-BUG PROBE] AN UPPER PADDLE MUST NOT BE HOLDABLE. Both upper paddles share the lower
+  // paddles' buttons, so a player cradling holds them up too - and a raised upper paddle is a bar
+  // lying across the deck. Measured on a 1,312-point rest sweep of the deck: 84 balls came to rest
+  // with the paddles down and 762 with them held, nearly all ON a bat, 105 of them in the V the
+  // two make over the drop hole. Driven, the ball never reached the main playfield in 90 s.
+  {
+    const g = new DesignPinball({});
+    g.start();
+    g.setFlipper('left', true); g.setFlipper('right', true);
+    for (let i = 0; i < 60; i++) g.update(1 / 60);   // one second, button still held
+    const up = g.flippers.filter((f) => f.pressed).map((f) => f.id);
+    ok('[FOUNDRY] an UPPER paddle drops on its own, however long the button is held',
+      up.every((id) => /lower/.test(id)), up.length ? 'still up: ' + up.join(', ') : 'none held');
+    ok('[FOUNDRY] a LOWER paddle still cradles - holding it is the player aiming',
+      g.flippers.filter((f) => /lower/.test(f.id)).every((f) => f.pressed), 'both lower paddles held');
   }
 
   // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
