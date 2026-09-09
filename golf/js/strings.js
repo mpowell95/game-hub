@@ -23,7 +23,7 @@ export const STRINGS = {
     // (238-273px). The old ones ran 409-469px and wrapped to two lines on every phone.
     // It is deliberately NOT `white-space: nowrap` in the CSS: a translation that outgrew the line
     // should wrap where somebody can see it, not clip. Keep new blurbs under about 40 characters.
-    blurb_tutorial: 'A short par 3. Two shots and you are away.',
+    blurb_tutorial: 'A short par 4. Drive, approach, putt.',
     // --- the tutorial, and the unlock ladder -------------------------------------------------
     tutorial: 'Tutorial',
     tutorial_cta: 'Start the tutorial',
@@ -32,15 +32,14 @@ export const STRINGS = {
     tut_ok: 'got it',
     tut_skip: 'skip the tutorial',
     tut_your_turn: 'your turn',
-    tut_welcome: 'A par 3, 123 yards. Get on the green, then hole the putt. Your score does not matter here.',
-    tut_aim: 'These arrows turn your aim. The dotted line shows where the ball is headed, and the dots along it are how far each swing carries.',
-    tut_club: 'Up and down change club. The number under the name is how far it goes from this lie.',
-    tut_swing1: 'Tap SWING to start the backswing. The needle climbs the dial.',
-    tut_swing2: 'Tap again to set your POWER. Stop it near the green line, which is 100 percent.',
-    tut_swing3: 'The needle is coming back down. Tap a third time when it is in the GREEN band of the bar. That is your accuracy.',
-    tut_watch: 'Watch it go. Tap the course to skip ahead.',
-    tut_putt: 'Now putt. The same three taps: start, power, then stop it in the green. The arrows on the green point downhill.',
-    tut_holed: 'That is the whole game. Holes 1 to 3 are open now.',
+    // FIVE CARDS, AND NONE OF THEM IS ON SCREEN DURING A SWING (see golf/js/tutorial.js's header).
+    // Matt on the first draft: "it is WAY too wordy (per usual)". The three swing cards it replaced
+    // ran 47 words between them and each appeared AFTER the tap it described.
+    tut_welcome: 'Par 4, 372 yards. Two good shots and a putt. Score does not count here.',
+    tut_controls: 'These arrows aim. Up and down change club. The dots are how far each swing carries.',
+    tut_swing: 'Three taps: start, set power, set aim. The button says which is next.',
+    tut_putt: 'Same three taps. The chevrons point downhill.',
+    tut_holed: 'That is the game. Holes 1 to 3 are open.',
     locked: 'locked',
     lock_tutorial: 'Play the tutorial',
     lock_par: 'Par or better on {range}',
@@ -174,7 +173,7 @@ export const STRINGS = {
     course: 'Pine Valley',
     play: 'jugar',
     practice: 'hoyo suelto',
-    blurb_tutorial: 'Un par 3 corto. Dos golpes y listo.',
+    blurb_tutorial: 'Un par 4 corto. Drive, approach y putt.',
     // --- the tutorial, and the unlock ladder -------------------------------------------------
     tutorial: 'Tutorial',
     tutorial_cta: 'Empezar el tutorial',
@@ -183,15 +182,11 @@ export const STRINGS = {
     tut_ok: 'entendido',
     tut_skip: 'saltar el tutorial',
     tut_your_turn: 'te toca',
-    tut_welcome: 'Un par 3 de 123 yardas. Llega al green y mete el putt. Aquí el resultado no cuenta.',
-    tut_aim: 'Estas flechas giran tu puntería. La línea de puntos muestra hacia dónde va la bola, y los puntos son la distancia de cada golpe.',
-    tut_club: 'Arriba y abajo cambian de palo. El número bajo el nombre es cuánto llega desde esta posición.',
-    tut_swing1: 'Toca GOLPEAR para empezar la subida. La aguja sube por el dial.',
-    tut_swing2: 'Toca otra vez para fijar la POTENCIA. Párala cerca de la línea verde, que es el 100 por ciento.',
-    tut_swing3: 'La aguja vuelve a bajar. Toca una tercera vez cuando esté en la zona VERDE de la barra. Esa es tu precisión.',
-    tut_watch: 'Mira cómo va. Toca el campo para saltar.',
-    tut_putt: 'Ahora el putt. Los mismos tres toques: empezar, potencia y parar en verde. Las flechas del green apuntan cuesta abajo.',
-    tut_holed: 'Eso es todo el juego. Los hoyos 1 a 3 ya están abiertos.',
+    tut_welcome: 'Par 4, 372 yardas. Dos buenos golpes y un putt. Aquí no cuenta el resultado.',
+    tut_controls: 'Estas flechas apuntan. Arriba y abajo cambian de palo. Los puntos son la distancia de cada golpe.',
+    tut_swing: 'Tres toques: empezar, potencia, precisión. El botón dice cuál toca.',
+    tut_putt: 'Los mismos tres toques. Las flechas apuntan cuesta abajo.',
+    tut_holed: 'Eso es el juego. Los hoyos 1 a 3 ya están abiertos.',
     locked: 'bloqueado',
     lock_tutorial: 'Juega el tutorial',
     lock_par: 'Par o mejor en {range}',

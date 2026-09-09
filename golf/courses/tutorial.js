@@ -15,10 +15,23 @@
 //
 // WHAT IT IS DESIGNED TO TEACH, AND WHY IT IS SHAPED LIKE THIS:
 //
-//   * **One full shot, then one putt.** That is the whole game in two strokes - the three-tap
-//     swing and the read - and nothing else. A par 3 is the only length that guarantees it.
-//   * **123 yards, which is a stock 8 iron.** Short enough that the auto-picked club really can
-//     reach the green from the tee, so the lesson never has to explain a lay-up.
+//   * **A PAR 4, WHICH IS THE SHAPE OF ALMOST EVERY HOLE IN THE GAME.** It shipped as a par 3 on
+//     2026-09-08 and Matt's verdict was blunt: *"it should be a par 4."* He is right, and the
+//     reason is that a par 3 teaches the one hole type a player will hardly ever meet. A par 4
+//     teaches the actual loop - a DRIVE, then an APPROACH with a different club from a different
+//     lie, then a putt - which is also the only way the club ladder gets taught by using it rather
+//     than by being described.
+//   * **372 yards, which is a stock driver and a mid iron.** The approved ladder carries a driver
+//     215 and a 6 iron 139, so two clean strikes finish about 18 yards short of the pin: a putt,
+//     never a tap-in, and never a lay-up to explain.
+//
+//     THE PAR WAS SAFE TO CHANGE, AND THAT WAS CHECKED RATHER THAN ASSUMED (THE LAW rule 4). A
+//     stored `tutorial:1` of 3 means a par on a par 3 and a birdie on a par 4 - the same number
+//     silently changing meaning, which is exactly what blocked the Pine Valley hole-3 swap. A
+//     fresh RTDB read on 2026-09-09: 255 player device records, 52 carrying a golf key, and
+//     ZERO carrying any `tutorial:*` record at all. Nobody had finished the lesson, so there was
+//     no meaning to break. Re-run that check before touching this par again; the moment one
+//     person completes it, it is frozen.
 //   * **NO TREES, NO WATER, NO BUNKERS, NO ROUGH WORTH THE NAME.** Every hazard is a second thing
 //     to explain and a way for a first-timer's ball to end up somewhere the lesson has no script
 //     for. The corridor is fairway from wall to wall with a ring of light rough outside it, so a
@@ -39,29 +52,29 @@
 import { greenPoly, slopeGrid } from '../js/holegen.js';
 
 const GREEN_CX = 0;
-const GREEN_CY = 128;
+const GREEN_CY = 377;
 
 /** The corridor: a plain rectangle of fairway with a soft waist, wide enough that a first swing
  *  cannot really leave it. Authored rather than generated, because `makeHole`'s landing-zone pinch
  *  and auto-defend bunkers are exactly what this hole must not have. */
 const FAIRWAY = [
-  [-22, -6], [-24, 30], [-23, 70], [-22, 105], [-24, 150],
-  [24, 150], [22, 105], [23, 70], [24, 30], [22, -6],
+  [-24, -6], [-26, 60], [-25, 130], [-24, 200], [-26, 280], [-25, 340], [-26, 400],
+  [26, 400], [25, 340], [26, 280], [24, 200], [25, 130], [26, 60], [24, -6],
 ];
 const ROUGH = [
-  [-34, -12], [-36, 30], [-35, 70], [-34, 105], [-36, 158],
-  [36, 158], [34, 105], [35, 70], [36, 30], [34, -12],
+  [-36, -12], [-38, 60], [-37, 130], [-36, 200], [-38, 280], [-37, 340], [-38, 412],
+  [38, 412], [37, 340], [38, 280], [36, 200], [37, 130], [38, 60], [36, -12],
 ];
 
 export const TUTORIAL_HOLE = {
   n: 1,
-  par: 3,
-  cardYards: 123,
+  par: 4,
+  cardYards: 372,
   tee: [0, 5],
   pin: [GREEN_CX, GREEN_CY],
   // 60 yds behind the tee, same as every generated hole: the camera clamps inside `bounds`, and a
   // hole that stopped at its own tee would pin the ball under the controls for the whole tee shot.
-  bounds: { minX: -46, maxX: 46, minY: -55, maxY: 172 },
+  bounds: { minX: -48, maxX: 48, minY: -55, maxY: 424 },
   base: 'lightRough',
   surfaces: [
     { kind: 'lightRough', poly: ROUGH },
@@ -86,7 +99,7 @@ export const TUTORIAL_HOLE = {
   // `wind` and it wins; nothing else on the property does, and this is what that escape hatch was
   // written for.
   wind: { speed: 0, bearing: 0 },
-  route: [[0, 5], [0, 60], [GREEN_CX, GREEN_CY]],
+  route: [[0, 5], [0, 110], [0, 215], [0, 300], [GREEN_CX, GREEN_CY]],
 };
 
 /** A COURSE-SHAPED OBJECT, DELIBERATELY NOT IN `COURSES`.
@@ -101,7 +114,7 @@ export const TUTORIAL_COURSE = {
   theme: 'pine',
   blurbKey: 'blurb_tutorial',
   holes: [TUTORIAL_HOLE],
-  par: 3,
+  par: 4,
 };
 
 export default TUTORIAL_COURSE;
