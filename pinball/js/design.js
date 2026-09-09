@@ -16,6 +16,9 @@ import { step, makeBall, PHYS_DT, BALL_R } from './physics.js';
 import T, { buildLevel } from './table-design.js';
 
 const BALLS = 3;
+/** How long an UPPER paddle stays up on one press. Long enough to be a real swing at a ball,
+ *  short enough that it can never be the shelf the deck sweep measured. */
+const UPPER_HOLD = 0.22;
 const SAVE_SECS = 7;
 const GRAVITY = 515;
 const SAUCER_HOLD = 0.9;
@@ -117,11 +120,39 @@ export class DesignPinball {
   _plungerBall() { return this.balls.find((b) => b.onPlunger) || null; }
 
   /** One button per side drives the lower paddle and the upper one above it, which is how a machine
-   *  with upper flippers is wired and the only thing a phone has room for. */
+   *  with upper flippers is wired and the only thing a phone has room for.
+   *
+   *  AN UPPER FLIPPER CANNOT BE HELD, AND THAT IS WHAT STOPS THE DECK BEING A BALL TRAP.
+   *  Measured: dropping a ball at rest on 1,312 points of the deck, 84 came to rest with the
+   *  paddles down and **762 - 58% - came to rest with them held**, nearly all of them ON a raised
+   *  bat. A raised upper flipper is a bar lying across the middle of the deck, and 105 of those
+   *  balls sat in the V the two of them make straddling the drop hole. `pinball/CLAUDE.md` already
+   *  states the shape for RAINBOW: the upper paddles share the lower paddles' buttons, and a
+   *  player holds a button to cradle, so a held upper paddle is a shelf in the middle of the table.
+   *
+   *  So the upper pair AUTO-RELEASE: a press swings them and they drop back on their own after
+   *  UPPER_HOLD. That is a real mechanism, it keeps the paddle worth pressing, and a paddle that
+   *  cannot stay up cannot be a shelf. The LOWER pair are untouched - a cradle down there is the
+   *  player aiming, and taking it away would be taking the game away.
+   */
   setFlipper(side, down) {
     const left = side === 'left';
     for (const f of this.flippers) {
-      if (/left/.test(f.id) === left) f.pressed = down;
+      if (/left/.test(f.id) !== left) continue;
+      if (/upper/.test(f.id)) {
+        if (down && !f.pressed) f._upT = UPPER_HOLD;   // a fresh press starts the swing
+        if (!down) f._upT = 0;
+        f.pressed = down;
+      } else f.pressed = down;
+    }
+  }
+
+  /** Drop any upper paddle whose swing has run its course, however long the button is held. */
+  _upperFlippers(dt) {
+    for (const f of this.flippers) {
+      if (!/upper/.test(f.id) || !f.pressed) continue;
+      f._upT = (f._upT || 0) - dt;
+      if (f._upT <= 0) f.pressed = false;
     }
   }
 
@@ -137,6 +168,7 @@ export class DesignPinball {
   update(dt) {
     dt = Math.min(dt, 0.05);
     this.time += dt;
+    this._upperFlippers(dt);
     if (this.phase === 'over' || this.phase === 'attract') return;
     if (this.plungerHeld) this.plungerPower = Math.min(1, this.plungerPower + dt * 1.1);
     if (this.saveTimer > 0) {

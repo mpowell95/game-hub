@@ -1176,6 +1176,57 @@ So `test.js` asserts it directly: every paddle tip must RISE when the flipper is
 life went 20.1 s -> **32.2 s** and the average 11,600 -> **14,210** on the same driver, which is
 what a paddle that actually defends the drain is worth.
 
+### The audit after the three playing defects: what it found, and what it did not (2026-09-09)
+
+**The upper paddles turned the deck into a ball trap, and it only happened while a button was
+held.** Both upper paddles share the lower paddles' buttons, which is how a machine with upper
+flippers is wired - and a player holds a button to cradle. Dropping a ball at rest on 1,312 points
+of the deck:
+
+| | paddles down | paddles held |
+|---|---|---|
+| left the deck | 1,175 | 549 |
+| **came to rest** | 84 | **762 in 46 places** |
+
+Nearly all of them ON a raised bat, and 105 in the V the two make straddling the drop hole. Driven,
+with both buttons held, the ball **never reached the main playfield in 90 seconds** in 25 of 25
+runs: it sat on the paddles until ball search gave up and re-served it. This is the shape RAINBOW
+already records - *a raised upper paddle is a shelf in the middle of the table* - and it had been
+carried straight into this board.
+
+**The fix is that an upper paddle cannot be HELD.** A press swings it and it drops back on its own
+after `UPPER_HOLD` (0.22 s). A real mechanism, it keeps the paddle worth pressing, and a paddle
+that cannot stay up cannot be a shelf. **The lower pair are untouched** - a cradle down there is
+the player aiming, and taking it away would be taking the game away. After: **67 at rest, the same
+number held or not**, and ball searches across eight driven games fell from 16 to 1.
+
+**Four rounds of geometry were tried first and every one made it worse** (84 -> 105 -> 209 -> 477),
+and they are worth recording as a dead end: stopping the upper guide rails clear of the pivots,
+sloping the outer lip into the V, filling the pivot pockets, then running the whole V ledge through
+the pivots. Each closed one pocket by opening another somewhere along the same chain. The defect
+was never a gap - it was a MOVING part that should not have been able to stop moving, and no
+arrangement of static walls addresses that.
+
+**What the audit checked and found clean:** every renderer method `ui.js` calls exists (ROYAL
+FLUSH shipped that one thrown per contact); every `lbl_*` the board can emit is in BOTH
+dictionaries; no ball ever leaves the table; no "going nowhere for 4 s" episode; no capture held
+longer than 0 s; and occupancy is well spread, with the busiest 100 px cell at 3.9% against the
+15% this file uses as a wedge signal.
+
+**Two things are open, and both are Matt's call rather than defects:**
+
+- **70.8% of play happens on the UPPER DECK.** The plunger feeds the deck, because that is what the
+  model's chute does, so the main playfield - flippers, slingshots, drain - is the minority of the
+  game. Fixing it means changing where the shooter lane delivers, which is a design decision.
+- **Ball life is 13.7 s median** (min 7.0) across eight driven games. That clears STARHUB's
+  asserted 12 s, but only just.
+
+**A measurement note that cost a wrong report.** `DesignPinball` takes `{rand}`, not `{seed}`, and
+a fixed modulo flipper driver makes every "game" the same game. The first audit ran eight identical
+games and reported them as eight (41.3 s ball life, 89.2% on level 2). With a real per-game RNG and
+a randomised driver the honest numbers are the ones above. **If every game in a batch reports the
+same number to one decimal place, the batch is one game.**
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
