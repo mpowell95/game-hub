@@ -101,6 +101,21 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
 - **A game screen that scrolls at all is a bug** (`dominoes/CLAUDE.md`). If content doesn't fit,
   that's a layout problem to fix, not something to let the page scroll around.
 
+  **`overflow-y: auto` DOES NOT SATISFY THIS RULE, AND IT IS THE MOST COMMON WAY OF BREAKING IT.**
+  Matt, 2026-09-08: *"I've told you several times before that I don't want any game in the gamehub
+  to be scrollable at all. Everything MUST fit on a single screen. Always."* Golf shipped its setup
+  screen as `auto` with the written argument that a screen which CAN scroll is safer than one that
+  clips. It is not: `auto` makes a screen that does not fit LOOK finished, which is exactly how it
+  reached his phone scrolling. **The safety net is the test, not the scrollbar.**
+
+  **It is not enough for the PAGE to fit.** Every immersive game here pins itself to the viewport
+  with `position: absolute; inset: 0`, so a game can scroll INSIDE ITSELF while the page does not
+  overflow by a pixel - and every page-level fit check in this repo passed all of them. Run
+  **`node check-no-scroll.mjs`** (repo root, needs `node server.mjs` up): every game, both hosts,
+  both phone heights, page overflow AND any scrollable element inside the game's own root, in about
+  a minute. Snake had `max-height: calc(100dvh - 150px); overflow-y: auto` on its setup screen with
+  a comment calling it the correct reading of this rule. It was not.
+
 **If you are building a new game, keep reading — Parts 1-3 below are the rest of it. Otherwise
 you're done; go make your change.**
 

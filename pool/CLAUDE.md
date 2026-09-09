@@ -456,3 +456,21 @@ were ported over (with `.p2-`/`poolv2` naming) rather than re-discovered from sc
 Still open, ranked per BUILD-SPEC.md §6: **#5 (two-real-device MP play — the one item here that
 genuinely cannot be verified without two physical phones; see "Known limitations")** and #12
 (deliberately deferred rules features — a second named rulebook, not edits to Bar Rules 8-Ball).
+## The setup screen scrolled inside itself on a short phone in the hub (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Measured by `check-no-scroll.mjs`: at 390x664 in the hub - the only one of pool's four screens that
+failed - `.p2-setup` scrolled INSIDE ITSELF by 45px, a 545px box holding 590px (header 136 + card
+416 + padding).
+
+**Every page-level fit check in this repo passed it**, and that is the lesson rather than the fix.
+`.p2-setup` is `position: absolute; inset: 0` with its own `overflow-y: auto`, so the PAGE never
+overflows by a pixel while the screen scrolls. `test-visual.mjs`'s `fit` check measured only the
+page until this pass; `check-no-scroll.mjs` was written for exactly this shape.
+
+The 45px comes off spacing alone (`.p2-headerpanel`'s padding and `.p2-modecard`'s margin, padding
+and gap). No font under 11px, no tap target under 44px, nothing hidden. It is scoped to
+`@media (max-height: 720px)` rather than made unconditional: the tall layout is the one Matt has
+looked at, and tightening it everywhere would change a screen that was not broken.

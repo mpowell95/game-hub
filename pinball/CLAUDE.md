@@ -1249,3 +1249,19 @@ difference between hard and broken.
 this whole import is the same: wall radius, restitution, friction, and now the clock. When this board
 feels wrong, the next thing to check is which of their constants is still being ignored - not our
 physics.
+## The setup screen scrolled inside itself on a short phone (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Measured by `check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.pb-setup` scrolled
+INSIDE ITSELF by 88px - a 664px box holding 752px (56px of top padding plus a 678px inner column).
+Both 852px screens fit, so the trim in `pinball.css` is scoped `@media (max-height: 720px)`.
+
+**This one had a scrollbar nobody could see coming.** `.pb-setup` is `position: absolute; inset: 0`
+with its own `overflow-y: auto`, so the PAGE never overflowed and every page-level fit check in the
+repo passed it. `check-no-scroll.mjs` walks the game's own root for elements that CAN scroll and
+do, which is the only way this shape of bug shows up.
+
+The 88px comes off spacing alone: the setup's top padding, the inner column's gap, and the brand
+block's margin and font size. Nothing hidden, nothing under the UX floor.

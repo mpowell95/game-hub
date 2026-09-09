@@ -67,6 +67,20 @@ const MEASURE = () => {
   return out;
 };
 
+/** The launcher's one-time announcement sits over everything on a fresh profile. Marking it seen
+ *  through its own module is what a player's tap does; removing the node is the belt and braces. */
+async function dismissAnnouncement(page) {
+  try {
+    await page.evaluate(async () => {
+      try {
+        const m = await import('/js/announce.js');
+        for (const a of (m.ANNOUNCEMENTS || [])) m.markSeen(a.id);
+      } catch { /* module missing: the node removal below is still worth doing */ }
+      document.querySelectorAll('.ann-overlay').forEach((n) => n.remove());
+    });
+  } catch { /* never let a popup workaround fail a run */ }
+}
+
 const games = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const list = games.length ? games : allGames();
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -113,6 +127,10 @@ for (const game of list) {
         } else {
           await page.goto(`${BASE}/${game}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
         }
+        // THE ANNOUNCEMENT POPUP IS DISMISSED FIRST. It is `position: fixed` so it should not move
+        // the game's layout - but "should not" is not a measurement, and a probe that reads a
+        // screen with a modal over it is reading the modal's world, not the player's.
+        await dismissAnnouncement(page);
         await page.waitForTimeout(1600);
         const r = await page.evaluate(MEASURE);
         checks++;

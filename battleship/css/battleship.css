@@ -211,6 +211,30 @@
 }
 .bs-chip-value { font-weight: 900; }
 
+/* A SHORT PHONE IN THE HUB IS THE ONLY SCREEN THIS DOES NOT FIT ON (2026-09-08). Matt: "I've told
+   you several times before that I don't want any game in the gamehub to be scrollable at all.
+   Everything MUST fit on a single screen. Always." Measured, the mode screen stands 629px against
+   the 526px the hub leaves at 390x664, and 127px over at 360x640; standalone fits at every size
+   tested, because the hub spends ~138px on its own chrome that no height media query can see -
+   hence the `.hub-main` scope.
+
+   Every number below is SPACING or the decorative avatar. Nothing is hidden, no text drops under
+   11px, and the two big buttons keep 44px of height because they are the tap targets - which is
+   also the floor on how far their padding may come down. */
+@media (max-height: 760px) {
+  .hub-main .bs-root .bs-shell { padding: 6px 10px 8px; gap: 8px; }
+  .hub-main .bs-root .bs-headerpanel { padding: 10px 16px; gap: 4px; }
+  .hub-main .bs-root .bs-title { font-size: 1.15rem; }
+  .hub-main .bs-root .bs-modecard { padding: 10px 14px 8px; gap: 7px; margin-top: -20px; }
+  .hub-main .bs-root .bs-avatar { width: 52px; height: 52px; font-size: 1.6rem; border-width: 2px; }
+  .hub-main .bs-root .bs-diffname { font-size: 1.15rem; }
+  .hub-main .bs-root .bs-bigbtn { padding: 10px 12px; }
+  .hub-main .bs-root .bs-options { gap: 4px; margin-top: 0; }
+  .hub-main .bs-root .bs-chips { gap: 4px; }
+  .hub-main .bs-root .bs-chip { padding: 6px 9px; }
+  .hub-main .bs-root .bs-link { padding: 4px 4px; }
+}
+
 /* --- screen 2: deploy your ships --------------------------------------------------------------- */
 
 .bs-deploy { display: grid; gap: 10px; position: relative; }

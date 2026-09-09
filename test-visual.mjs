@@ -61,12 +61,14 @@ const EXCLUDED = { 'business-deal': 'non-ESM launch-out app with its own nested 
 // The rule for adding to this list: only real, already-shipped debt. If you are about to add a
 // game you just wrote, fix the game instead.
 const KNOWN_GAPS = {
-  'no horizontal page scroll': {
-    chinchon: 'overflows ~30px at 393px wide. 246 bare top-level prefixed CSS rules (root '
-      + 'CLAUDE.md games table) and the widest setup screen in the repo; a real fix is a layout '
-      + 'pass on that screen, not a one-line clamp.',
-    'dots-boxes': 'overflows ~5px at 393px wide.',
-  },
+  // BOTH ENTRIES THAT LIVED HERE ARE GONE (2026-09-08), and neither needed the "layout pass" this
+  // list claimed. Chinchon overflowed 30px because its standalone `body` is `display: flex`, which
+  // makes `#chinchon` a flex item whose default `min-width: auto` is its min-content - so the game
+  // was allowed to refuse to shrink; `#chinchon { min-width: 0 }` and the page measures 390 of 390.
+  // Dots and Boxes overflowed 5px because `.db-vscard` is `width: 100%` of a padded shell in a file
+  // with no `box-sizing` reset, so its padding and border landed outside the 370px it was given.
+  // Keep this key: the check is still enforced for every game, there is just nothing excused.
+  'no horizontal page scroll': {},
   // Found 2026-08-10, the first time these three were ever put through the `fit` check - it was
   // built for Pool, and the suite only checks games whose own folder changed, so a game nobody has
   // touched since had simply never been measured. ALL THREE PREDATE the check and were verified
@@ -87,11 +89,15 @@ const KNOWN_GAPS = {
     // Closing it means SHRINKING THE CARDS, which is a readability redesign of the game with the
     // most fragile CSS in the repo (246 bare top-level rules) and needs eyes on screenshots per
     // VISUAL-PROCESS.md - not a number nudged until a test goes green.
-    chinchon: '136px too tall (hub, 390x664) only. Both standalone heights and the tall hub fit '
-      + 'since 2026-09-01; the rest needs a card-size pass, not spacing.',
+    chinchon: 'the GAME screen (.cc-game) is 136px too tall (hub, 390x664) only. Both standalone '
+      + 'heights and the tall hub fit since 2026-09-01, and the SETUP screen was fixed 2026-09-08; '
+      + 'what is left is the hand and the mat, which needs a card-size pass, not spacing.',
     escoba: 'up to 165px too tall (hub, 390x664). Fits fine at 393x852, both hosts.',
-    mancala: 'up to 222px too tall (hub, 390x664), and 34px even on a TALL phone in the hub - the '
-      + 'worst of the three, and the only one that overflows a full-size screen.',
+    // Mancala's entry is GONE (2026-09-08). It was the worst of the three and it was not a layout
+    // pass: 56px of it was decorative `padding: 16px 8px 40px` on its own standalone page (the same
+    // debt chinchon's page shed in 2026-09-01), and the rest came off the logo and the column's
+    // spacing. Chinchon's entry above is now about `.cc-game` ONLY - its setup screen was fixed the
+    // same day, and the two were never the same problem.
   },
 };
 const gapFor = (check, game) => (KNOWN_GAPS[check] || {})[game];
@@ -917,10 +923,17 @@ async function checkGame(game, mode) {
       // its own container". Flagging those too made the check fire on the one pattern it is
       // supposed to bless: Skeeball's scroll-snap machine carousel, where every slide is reachable
       // by swiping and nothing is hidden. Clipping is unreachable; scrolling is reachable.
+      //
+      // AND AN ELLIPSIS IS NOT A CUT-OFF (2026-09-08). `text-overflow: ellipsis` on a `nowrap`
+      // element is an author saying "truncate this on purpose, and show that you did" - the label
+      // ends in a visible "..." rather than disappearing off an edge. Chinchon's setup rows are
+      // built that way (`.cc-summary-value`, `max-width: 62%`), and flagging them made this check
+      // report a game as broken for doing exactly the right thing with a long opponent name.
       const clipped = [];
       for (const e of document.querySelectorAll('body *')) {
         const c = getComputedStyle(e);
         if (!/hidden|clip/.test(c.overflowX)) continue;
+        if (c.textOverflow === 'ellipsis' && /nowrap|pre$/.test(c.whiteSpace)) continue;
         if (e.scrollWidth > e.clientWidth + 2 && e.clientWidth > 0) {
           clipped.push(`${e.tagName.toLowerCase()}.${(e.className || '').toString().trim().split(/\s+/)[0] || '?'} (${e.scrollWidth} wide in ${e.clientWidth})`);
         }

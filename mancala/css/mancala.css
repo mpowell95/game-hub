@@ -234,6 +234,41 @@
 .mancala .mc-ghost:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(36, 22, 9, 0.5); }
 .mancala .mc-small { padding: 8px 12px; font-size: 13px; }
 
+/* THE SETUP SCREEN DID NOT FIT, AND IT WAS THE ONLY SCREEN IN THE GAME THAT DID NOT (2026-09-08).
+   Matt: "I've told you several times before that I don't want any game in the gamehub to be
+   scrollable at all. Everything MUST fit on a single screen. Always." Measured, the setup column
+   stood 748px: 34px over in the hub at 393x852, 160px over standalone at 390x664 and 222px over in
+   the hub at 390x664 - the worst of the three, because the hub spends ~138px on its own chrome
+   that no height media query can see.
+
+   THE TWO BLOCKS BELOW ARE WRITTEN TO COMPOSE, and that is deliberate: the hub one only ever
+   touches SPACING (the root's padding, the column's padding and its gap) and the short one only
+   ever touches SIZES (the logo, the two headings, the buttons' own padding). They therefore add up
+   on the screen that needs both, instead of the more specific one simply overriding the other -
+   which is what happens the moment two blocks set the same property. */
+.hub-main .mancala { padding: 4px 6px 4px; }
+.hub-main .mancala .mc-setup { padding: 8px 8px 4px; gap: 7px; }
+
+@media (max-height: 760px) {
+  .mancala .mc-setup { padding: 10px 8px 6px; gap: 7px; }
+  .hub-main .mancala .mc-setup { padding: 6px 8px 4px; gap: 4px; }
+  .mancala .mc-logo { width: 48px; padding: 4px; gap: 3px; border-width: 2px; border-radius: 12px; }
+  .mancala .mc-logo-store { height: 7px; border-width: 2px; }
+  .mancala .mc-logo-pits { gap: 3px; }
+  .mancala .mc-logo-pit { width: 8px; height: 8px; border-width: 2px; }
+  .mancala .mc-title { font-size: 21px; }
+  .mancala .mc-sub { margin-top: -3px; font-size: 12.5px; }
+  .mancala .mc-vscard { padding: 5px 12px; }
+  .mancala .mc-vsemoji { font-size: 22px; }
+  .mancala .mc-field { gap: 4px; }
+  .mancala .mc-segbtn { padding: 7px 6px; }
+  /* 11px of padding on a 17px label keeps this at 44px - it is the tap target, and that is the
+     floor these numbers stop at rather than the smallest that would fit. */
+  .mancala .mc-primary { padding: 11px 18px; font-size: 16px; }
+  .mancala .mc-secondary { padding: 11px 18px; font-size: 15px; }
+  .mancala .mc-ghost { padding: 7px 14px; }
+}
+
 /* --- board ------------------------------------------------------------- */
 
 .mancala .mc-boardwrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }

@@ -130,6 +130,26 @@
 .dm-root .dm-setup-actions .dm-btn { flex: 1; }
 .dm-root .dm-setup-actions .dm-btn.is-help { flex: none; width: 54px; padding: 12px 0 15px; background: #7B62D6; color: #F4EFFF; }
 
+/* A SHORT PHONE IN THE HUB IS 87px SHORT, AND NOTHING ELSE IS (2026-09-08). Matt: "I've told you
+   several times before that I don't want any game in the gamehub to be scrollable at all.
+   Everything MUST fit on a single screen. Always." Measured, the setup screen stands 556px against
+   493px of room at 390x664 and 640 leaves 87px over; standalone fits at every size tested, because
+   the hub spends ~138px on its own chrome, and a height media query alone cannot see that - hence
+   the `.hub-main` scope, the same shape snake's trim uses.
+
+   All of it comes out of SPACING and the decorative avatar, in that order. Nothing is removed, no
+   text goes under 11px, and `.dm-segbtn` keeps 44px of height - it is the tap target. */
+@media (max-height: 760px) {
+  .hub-main .dm-root .dm-setup { gap: 9px; padding: 12px 16px 16px; }
+  .hub-main .dm-root .dm-setup-panel { padding: 12px 18px 14px; }
+  .hub-main .dm-root .dm-setup-title { font-size: 1.55rem; }
+  .hub-main .dm-root .dm-setup-sub { margin-top: 5px; font-size: 0.9rem; }
+  .hub-main .dm-root .dm-setup-avatar { width: 64px; height: 64px; margin-top: 0; }
+  .hub-main .dm-root .dm-setup-avatar svg { width: 48px; height: 48px; }
+  .hub-main .dm-root .dm-setup-diffname { font-size: 1.15rem; }
+  .hub-main .dm-root .dm-segbtn { padding: 9px 6px 11px; }
+}
+
 /* -------------------------------------------------------------------------- the play stack -- */
 /* Nothing in here ever changes the layout: the header, both hand rows and the floor keep fixed
    space, and every overlay (bot thinking, boneyard, modals) sits on top of them. */

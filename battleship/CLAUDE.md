@@ -902,3 +902,21 @@ answer sequence AND being unaffected by which fleet object either side happens t
 `fleets: [null, null]`, the real MP shape); the AI's structural no-cheat property across all three
 tiers; every tier-pair x board-size full solo playthrough terminating without throwing; Pro beating
 Beginner in most of 40 games as a sanity check on tier ordering.
+## The mode screen fits a short phone in the hub (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Measured by `check-no-scroll.mjs`: `.bs-shell` stands 629px against the 526px the hub leaves at
+390x664, and 127px over at 360x640. **Standalone fits at every size tested**, because the hub
+spends ~138px on its own chrome that no height media query can see - hence the `.hub-main` scope on
+the block in `battleship.css`, the same shape snake, dominoes, chinchon and mancala use.
+
+Every number in it is spacing or the decorative bot avatar (78px -> 52px). Nothing is hidden, no
+text drops under 11px, and the two big buttons keep 44px of height - which is also the floor on how
+far their padding may come down, since they are the tap targets.
+
+Worth noting for the next time this screen grows: the three OPTION chips ("Board: Classic (10x10)",
+"First shot: Alternate", "Bonus shot: Off") each take a line of their own at phone width, so they
+are 102px of the screen for three settings. Making them fit two-across would be the next 36px, and
+it needs shorter labels rather than a smaller font - they are already at .72rem.

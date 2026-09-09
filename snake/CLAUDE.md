@@ -175,3 +175,37 @@ node snake/js/test.js
 and growth, self-collision via a closed 2x2 loop at length 7, the legal tail-chase at length 4,
 wrap mode at all four walls plus wrap self-collision still being fatal, and food-spawn integrity
 over 50 seeded random runs. Wired into run-all-tests.mjs.
+## Nothing on the setup screen scrolls, and the D-pad previews follow the swatch (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+This game had the rule's most explicit violation in the repo, and it was WRITTEN DOWN as a design
+decision: `.hub-main .sn-root .sn-setup` carried `max-height: calc(100dvh - 150px)` and
+`overflow-y: auto`, with a comment saying *"the OPTIONS scroll rather than the page: the page never
+scrolls, which is the actual rule."* That is not the rule. The rule is that everything fits.
+
+The scroll is gone and the 124px it was hiding is paid for by measurement. `check-no-scroll.mjs`
+(repo root) is what finds this class of bug now - it walks the game's own root for any element that
+CAN scroll and does, so a fixed box quietly scrolling inside a page that fits is no longer
+invisible.
+
+**Where the 124px came from** (measured in the hub at 390x664: 617px of setup against 493px of
+room), and every one of them is a place the screen was wasting space rather than using it:
+
+- **BOTH segmented rows were taller than their own text.** "Medium" wrapped to a second line inside
+  a 112px button, so the Difficulty row stood 64px against the 45px the two-button Walls row needs.
+  A third of that field was a line break. `white-space: nowrap` plus a step down in size holds it.
+- **The six D-pad options were TWO different heights** (83px and 97px), because only "Solid +
+  arrows" is long enough to wrap - so the bottom row of a picker whose entire job is comparing six
+  pictures stood 14px taller than the top one. That label is now **"Arrows"** ("Flechas"), which is
+  what the picture beside it already shows, and it is the pair to "Solid" rather than a longer
+  version of it.
+- The rest is padding and gaps, plus the tagline ("The old phone classic.") on the short hub
+  screen only. Nothing else is hidden; `.sn-seg`, `.sn-play` and `.sn-howto` all keep 44px.
+
+**`--sn-mini` is one variable and the swatch must be set from it in the same rule.** The preview
+pad's size and the box holding it were two independent numbers until this pass, and the earlier
+short-screen trims moved only the box: measured in the hub at 390x664, a 62px pad sat in a 40px
+swatch and its bottom row was drawn straight through the option's own label. `overflow: hidden` on
+the swatch would have been worse - it would crop the shape the picker exists to show.

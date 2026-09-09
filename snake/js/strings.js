@@ -52,7 +52,7 @@ export const STRINGS = {
     dpad_circle: 'Circle',
     dpad_gamepad: 'Gamepad',
     dpad_solid: 'Solid',
-    dpad_solid_arrows: 'Solid + arrows',
+    dpad_solid_arrows: 'Arrows',
     aria_dpad_style_group: 'D-pad style',
     // Walls mode (setup screen)
     walls: 'Walls',
@@ -99,7 +99,7 @@ export const STRINGS = {
     dpad_circle: 'Círculo',
     dpad_gamepad: 'Mando',
     dpad_solid: 'Sólido',
-    dpad_solid_arrows: 'Sólido + flechas',
+    dpad_solid_arrows: 'Flechas',
     aria_dpad_style_group: 'Estilo de cruceta',
     walls: 'Paredes',
     walls_on: 'Con paredes',

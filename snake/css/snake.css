@@ -11,6 +11,7 @@
   --sn-card: #ffffff;
   --sn-accent: #3f7d2c;
   --sn-muted: #6a7461;
+  --sn-mini: 62px;   /* the size of the six D-pad previews; the short-screen blocks step it down */
   display: block;
   color: var(--sn-ink);
 }
@@ -64,6 +65,7 @@
    reads as a pad. Tap targets are unaffected - .sn-dpad-option keeps its full box. */
 @media (max-height: 760px) {
   .sn-root .sn-setup { padding: 12px 18px 16px; gap: 8px; }
+  .sn-root { --sn-mini: 44px; }
   .sn-root .sn-dpad-swatch { height: 44px; }
 }
 /* IN THE HUB, THE SCREEN IS SHORTER THAN THE VIEWPORT - and a height media query cannot see that.
@@ -71,15 +73,62 @@
    earlier than it does standalone: measured 731px of setup against 714px of room at 393x852, a
    viewport far too tall to trip any max-height rule. So the trim is keyed off the HOST instead. */
 .hub-main .sn-root .sn-setup { padding: 12px 18px 16px; gap: 8px; }
+.hub-main .sn-root { --sn-mini: 44px; }
 .hub-main .sn-root .sn-dpad-swatch { height: 44px; }
-/* ...and on a genuinely small phone in the hub even that is not enough (657px of setup against
-   526px of room). The OPTIONS scroll rather than the page: the page never scrolls, which is the
-   actual rule, and overscroll-behavior keeps a flick that reaches the end from panning the hub
-   underneath (root CLAUDE.md's scroll rules). */
-.hub-main .sn-root .sn-setup {
-  max-height: calc(100dvh - 150px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+
+/* A SHORT PHONE IN THE HUB IS THE TIGHTEST SCREEN THIS GAME HAS, and until 2026-09-08 it did not
+   fit: the setup screen stood 617px against 493px of room, and the difference was papered over by
+   letting the options SCROLL inside a fixed box. Matt: "I've told you several times before that I
+   don't want any game in the gamehub to be scrollable at all. Everything MUST fit on a single
+   screen. Always." So the scroll is gone and the 124px is paid for by measurement, in the two
+   places it was actually being wasted plus a general tightening:
+
+     * BOTH segmented rows were TALLER THAN THEIR TEXT. "Medium" wrapped to a second line inside a
+       112px button (64px tall against the 45px the two-button Walls row needs), so a third of that
+       field was a line break. `white-space: nowrap` plus a step down in size holds it on one line.
+     * THE SIX D-PAD OPTIONS WERE TWO DIFFERENT HEIGHTS (83px and 97px) for the same reason - only
+       "Solid + arrows" is long enough to wrap, so the bottom row of a picker whose whole job is
+       comparing six pictures stood 14px taller than the top one.
+
+   Nothing here goes under the UX floor: the tap target is `.sn-dpad-option`, whose box is
+   untouched by the swatch's height, and no text drops below 11px. The one thing REMOVED is the
+   tagline, which is decoration - the heading above it already says Snake. */
+@media (max-height: 760px) {
+  .hub-main .sn-root .sn-setup { padding: 10px 18px 12px; gap: 6px; }
+  .hub-main .sn-root .sn-title { font-size: 1.25rem; }
+  .hub-main .sn-root .sn-tag { display: none; }
+  .hub-main .sn-root .sn-label { font-size: 0.88rem; }
+  .hub-main .sn-root .sn-field { gap: 6px; }
+  /* 12px of padding, not less: these buttons must stay 44px tall (the UX floor's tap target). */
+  .hub-main .sn-root .sn-seg { padding: 12px 6px; font-size: 0.88rem; white-space: nowrap; }
+  .hub-main .sn-root .sn-dpad-hint { font-size: 0.78rem; }
+  .hub-main .sn-root .sn-dpad-options { gap: 6px; }
+  .hub-main .sn-root .sn-dpad-option { padding: 5px 3px; gap: 3px; font-size: 0.72rem; white-space: nowrap; }
+  .hub-main .sn-root .sn-play { padding: 12px 16px; font-size: 1.02rem; }
+  .hub-main .sn-root .sn-howto { padding: 12px 16px; }
+}
+
+/* AND A GENUINELY SMALL PHONE (360x640 is still common on Android) is 16px tighter again. The
+   D-pad hint goes here rather than in the block above because it is the only line on the screen
+   that says nothing the label and the six pictures beneath it do not already say. */
+@media (max-height: 700px) {
+  .sn-root .sn-dpad-hint,
+  .hub-main .sn-root .sn-dpad-hint { display: none; }
+  .sn-root,
+  .hub-main .sn-root { --sn-mini: 40px; }
+  .sn-root .sn-dpad-swatch,
+  .hub-main .sn-root .sn-dpad-swatch { height: 40px; }
+}
+/* A NARROW SCREEN IS A SEPARATE QUESTION FROM A SHORT ONE, and only one label is long enough to
+   ask it: "Solid + arrows" ("Solido + flechas" in Spanish, longer still) needs 94px of the 89px a
+   third of a 360px screen leaves it, so it was clipped mid-word. The options give back their side
+   padding rather than their font size - 0.72rem is already close to the 11px floor, and a label
+   nobody can read is not a saving. */
+@media (max-width: 380px) {
+  .sn-root .sn-dpad-options,
+  .hub-main .sn-root .sn-dpad-options { gap: 5px; }
+  .sn-root .sn-dpad-option,
+  .hub-main .sn-root .sn-dpad-option { padding-left: 1px; padding-right: 1px; }
 }
 .sn-root .sn-dpad-option {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px;
@@ -96,14 +145,21 @@
    with the base ".sn-pad" rule above (both are .sn-root + one class), so which one wins would
    depend on source order rather than intent — adding ".sn-pad" makes these unambiguously more
    specific so the mini overrides always win regardless of how the rules get reordered later. */
+/* ONE VARIABLE SIZES ALL SIX PREVIEWS, and the swatch that holds them must be set from it in the
+   same rule. They were two independent numbers until 2026-09-08, and the short-screen trims moved
+   only the swatch: measured in the hub at 390x664, a 62px pad sat in a 40px box and its bottom row
+   was drawn straight through the option's own label. `overflow: hidden` would have cropped the pad
+   instead, which is worse - the whole job of this picker is comparing six shapes. */
 .sn-root .sn-pad.sn-pad--mini { pointer-events: none; gap: 3px; margin: 0; }
-.sn-root .sn-pad.sn-pad--mini.sn-pad--classic { width: 62px; grid-template-rows: repeat(2, 21px); }
+.sn-root .sn-pad.sn-pad--mini.sn-pad--classic {
+  width: var(--sn-mini); grid-template-rows: repeat(2, calc((var(--sn-mini) - 3px) / 2));
+}
 .sn-root .sn-pad.sn-pad--mini.sn-pad--compass,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--circle,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--gamepad,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--solid,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--solidArrows {
-  width: 62px; height: 62px;
+  width: var(--sn-mini); height: var(--sn-mini);
   grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
 }
 .sn-root .sn-pad--mini .sn-padbtn { font-size: 0.58rem; border-radius: 5px; }

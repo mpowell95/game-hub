@@ -431,3 +431,17 @@ The final block is the **`+N` badge coupling probe** (see "A tile is never a `<b
 a regression tripwire for the one bug in this game that reached a player silently. Reintroducing
 the v258 mistake trips it four ways.
 Wired into `run-all-tests.mjs`.
+## The setup screen fits a short phone in the hub (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Measured by `check-no-scroll.mjs`: `.dm-setup` stands 556px against the 493px the hub leaves at
+390x664 (87px over at 360x640). **Standalone fits at every size tested** - the hub spends ~138px on
+its own chrome, and no height media query can see that, which is why the trim in `dominoes.css` is
+scoped `.hub-main` rather than by height alone. Snake, battleship, chinchon and mancala all carry
+the same shape of block for the same reason.
+
+All of it comes out of SPACING and the decorative bot avatar, in that order: the column's gap and
+padding, the title panel's padding, the avatar 84px -> 64px. Nothing is hidden, no text goes under
+11px, and `.dm-segbtn` keeps 44px - it is the tap target and it is the floor the numbers stop at.
