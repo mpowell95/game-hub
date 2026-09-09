@@ -405,6 +405,11 @@ export const GAMES = [
   },
 ];
 
+/** How often a foregrounded app may ask for a new build. Long enough that switching apps back
+ *  and forth costs nothing; short enough that a phone kept alive all day still catches the day's
+ *  deploys. See `_checkForNewBuild`. */
+const UPDATE_ASK_MS = 5 * 60 * 1000;
+
 class Hub {
   constructor(root) {
     this.root = root;
@@ -417,7 +422,23 @@ class Hub {
     // The reconnect hook matters: a device that played offline used to sit un-mirrored until its
     // next cold start, and because the sync failed silently nobody could tell. syncMyStats mirrors
     // the whole store every time, so this retry simply repairs whatever the offline period missed.
-    this._onVis = () => { if (document.visibilityState === 'hidden') this._syncStats(); };
+    this._onVis = () => {
+      if (document.visibilityState === 'hidden') { this._syncStats(); return; }
+      // ...AND ASK FOR A NEW BUILD WHEN THE APP COMES BACK (2026-09-09). Matt: *"how could her
+      // phone POSSIBLY have an old build? it JUST went live"* - a fair challenge, and chasing it
+      // found this.
+      //
+      // A browser checks for a new service worker ON NAVIGATION. An INSTALLED PWA that is resumed
+      // from the app switcher rather than relaunched never navigates, so it never asks, and the
+      // only thing in this app that called `reg.update()` was the manual "Check for update" button
+      // in the admin page. A phone that is opened and closed all day without ever being killed can
+      // therefore sit on a build from this morning indefinitely - which is exactly the shape of
+      // Ana playing the pre-10am tutorial at six in the evening.
+      //
+      // Nothing else is needed: if a new worker does take over, `controllerchange` already runs
+      // `_onNewBuildActive`, which reloads on the launcher and HOLDS while a game is open.
+      this._checkForNewBuild();
+    };
     document.addEventListener('visibilitychange', this._onVis);
     this._onOnline = () => this._syncStats();
     window.addEventListener('online', this._onOnline);
@@ -916,6 +937,20 @@ class Hub {
         });
       });
     }).catch(() => { /* no registration is not an error worth surfacing */ });
+  }
+
+  /** Ask the service worker registration whether there is a newer build, at most every
+   *  `UPDATE_ASK_MS`. Fire-and-forget: the answer arrives as `controllerchange`, which is already
+   *  wired. Throttled because `visibilitychange` fires on every app switch, and a network request
+   *  per switch is a cost with no benefit - a build is minutes old at worst either way. */
+  _checkForNewBuild() {
+    if (!('serviceWorker' in navigator) || this._destroyed) return;
+    const now = Date.now();
+    if (this._lastUpdateAsk && now - this._lastUpdateAsk < UPDATE_ASK_MS) return;
+    this._lastUpdateAsk = now;
+    navigator.serviceWorker.getRegistration()
+      .then((reg) => { if (reg && !this._destroyed) return reg.update(); })
+      .catch(() => { /* offline, or no registration: nothing to say */ });
   }
 
   /** The new build has taken control of this page. */
