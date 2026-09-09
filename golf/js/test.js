@@ -1245,7 +1245,11 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
   // hole can now also end by the player PICKING UP, and that branch does not read `shotN` at all.
   ok('[KNOWN-BUG PROBE] the result screen counts the shot that holed it',
     /const strokes = this\.pickedUp \? maxStrokes\(hole\.par\) : this\.shotN;/.test(ui)
-    && !/this\.shotN - 1/.test(ui),
+    // The ban is on the SCORE subtracting one, not on the expression appearing anywhere: since the
+    // cap landed, `_capReached()` legitimately reads `this.shotN - 1` to count shots USED. Pinning
+    // the bare substring made this probe fail on correct code, which is the one thing a probe must
+    // never do - a test that cries wolf gets deleted by the next session that meets it.
+    && !/const strokes = this\.shotN - 1/.test(ui),
     'shotN is already the shot just played, because the holed path returns before it is incremented');
   // ALSO UPDATED, and this one changed shape rather than wording. It used to require exactly ONE
   // caller, because a second caller would have broken "shotN is the shot just played". There are
@@ -1256,7 +1260,10 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
   ok(`...and \`_showHoleResult\` is reachable only by holing out or picking up (${callers} callers)`,
     callers === 2
     && /if \(a\.res\.holed\)[\s\S]{0,400}?this\._showHoleResult\(\)/.test(ui)
-    && /_pickUp\(\)\s*\{[\s\S]{0,900}?this\._showHoleResult\(\)/.test(ui),
+    // 1400 rather than a tight window: `_pickUp` carries the reasoning for both bugs found while
+    // driving it (the lesson stall and the unsaved shot), and a comment growing must not fail a
+    // structural probe about control flow. MEASURED at 947 chars when this was written.
+    && /_pickUp\(\)\s*\{[\s\S]{0,1400}?this\._showHoleResult\(\)/.test(ui),
     'a third caller would have to prove for itself what `strokes` means');
 
   // [KNOWN-BUG PROBE] Matt: "the ball rolls over the hole without going in - and leaves a 1-3 ft
