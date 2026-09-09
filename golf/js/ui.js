@@ -177,6 +177,12 @@ const INTRO_MOVE_MS = 2600;
  *  `CARET_HALF` half its base. They are named here rather than buried in the draw call because the
  *  tick labels have to be pushed out by exactly `CARET_GAP + CARET_LEN` plus a little air whenever
  *  a caret is on the dial, or the 100 % caret lands on the "100". */
+/** How long the LESSON waits after a shot comes to rest before it says anything. The ball reaches
+ *  its rest position on the same frame `_settleShot` runs, and the camera eases in for ~245 ms
+ *  after that, so a card fired immediately lands on a scene that is still moving. 700 ms is the
+ *  beat the holed path already waits before showing its result card - one pause in the game, not
+ *  two different ones. It gates only the coach; play is not slowed by it. */
+const SETTLE_CARD_MS = 700;
 const CARET_GAP = 3;
 const CARET_LEN = 11;
 const CARET_HALF = 5.5;
@@ -1599,11 +1605,30 @@ class GolfGame {
     }
     this.shotN += 1 + ((a.res && a.res.penalty) || 0);
     this.swing.settle(performance.now());
-    this._coach('settled');
-    // ON THE PUTTING SURFACE, which is a different question from "the ball stopped". The lesson
-    // spans a par 4, so the approach may take one shot or three; a putting card fired on `settled`
-    // would be telling a player standing in the fairway to putt. See golf/js/tutorial.js.
-    if (this._lie() === 'green') this._coach('on-green');
+    // A LESSON CARD WAITS FOR THE BALL TO HAVE STOPPED, not for the frame it stops ON.
+    //
+    // Matt: "The club thing should only pop up once the ball has stopped moving." Measured at
+    // frame rate before the fix: the coach stepped at 17898 ms and the animation ended at 17898 -
+    // the SAME FRAME. The card was arriving on top of a ball that had, that instant, been rolling;
+    // the camera is still easing in for another 245 ms after that, so the whole scene is moving
+    // under a card that has just appeared. Nothing is wrong with the numbers - there is simply no
+    // beat between the shot finishing and the lesson speaking.
+    //
+    // The DELAY IS ON THE LESSON, NOT ON THE GAME. `shotN`, the auto-pick, the HUD, the banner and
+    // the drop prompt all still land on the settling frame, so nothing about playing the hole is
+    // slowed down; only the coach waits. `SETTLE_CARD_MS` matches the 700 ms the holed path
+    // already waits before its result card, so the two beats in the game are the same beat.
+    // `on-green` goes with it, in the same order, or the putting popup would overtake the card
+    // that comes before it.
+    const onGreen = this._lie() === 'green';
+    setTimeout(() => {
+      if (this.destroyed || !this.coach) return;
+      this._coach('settled');
+      // ON THE PUTTING SURFACE, which is a different question from "the ball stopped". The lesson
+      // spans a par 4, so the approach may take one shot or three; a putting card fired on
+      // `settled` would tell a player standing in the fairway to putt. See golf/js/tutorial.js.
+      if (onGreen) this._coach('on-green');
+    }, SETTLE_CARD_MS);
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();
@@ -1672,9 +1697,15 @@ class GolfGame {
     const L = lieOf(lie);
     this.el.par.textContent = t('par_n', { n: this.hole.par });
     this.el.shot.textContent = t('shot_n', { n: this.shotN });
-    this.el.mode.textContent = this.roundId === 'practice'
-      ? t('mode_practice')
-      : `${t(roundById(this.roundId).labelKey)} ${this.pos + 1}/${this.holeIdxs.length}`;
+    // THE LESSON IS NOT A PRACTICE HOLE, AND THE HUD SAID IT WAS. It runs as `roundId:
+    // 'practice'` (one hole, no `bestRoundByCourse` write), which is right for the recorder and
+    // wrong for the label: the result card says "Tutorial complete" while the panel three inches
+    // above it read "practice" for the whole lesson.
+    this.el.mode.textContent = this.tutorialRun
+      ? t('mode_tutorial')
+      : this.roundId === 'practice'
+        ? t('mode_practice')
+        : `${t(roundById(this.roundId).labelKey)} ${this.pos + 1}/${this.holeIdxs.length}`;
     this.el.holeno.textContent = String(this.hole.n);
     // The lie is a PICTURE of the surface now, not the word. The name stays on the aria-label.
     if (this._lieArtFor !== lie) {

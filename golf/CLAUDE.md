@@ -4812,3 +4812,63 @@ step and every step after it. The card count is unchanged at eight, so the pip r
 `test.js` section 20 pins the ORDER as a `[KNOWN-BUG PROBE]` - the club step is after the swing
 step, with a silent `settled` step between them - because nothing at runtime notices step order and
 the old arrangement looked perfectly reasonable in the file.
+
+## Playing it again: three more things (2026-09-09)
+
+Matt: *"The club thing should only pop up once the ball has stopped moving. play through the
+tutorial again and check for anything else off."* Played end to end at 390x664 with a sampler
+running at animation-frame rate in the page, because polling from node is ~50 ms round trips and
+the two events in question were one frame apart.
+
+### 1. THE CARD APPEARED ON THE SAME FRAME THE BALL STOPPED
+
+Measured before: the animation ended at **17898 ms** and the coach stepped to `club` at **17898** -
+the same frame. Nothing was wrong with the numbers; there was simply no beat. The card arrived on
+top of a ball that had, that instant, still been rolling, and the camera goes on easing in for
+another **245 ms** after that, so the whole scene is moving under a card that has just appeared.
+
+`SETTLE_CARD_MS` (700) gates the coach, and **only the coach**: `shotN`, the auto-pick, the HUD,
+the banner and the drop prompt all still land on the settling frame, so nothing about playing the
+hole is slowed. It matches the 700 ms the holed path already waits before its result card, so the
+game has one beat rather than two different ones. `on-green` goes with it in the same order, or the
+putting popup would overtake the card ahead of it.
+
+Measured after: ball at rest 17776, camera still 18018, card 18485 - **709 ms after the ball stops
+and 467 ms after the scene is completely still.**
+
+### 2. THE RAIL VANISHED ON THE SILENT STEPS
+
+`_render` returned early for a step with no key, so it drew nothing at all. But `data-tut` holds the
+controls 30 px up for the WHOLE lesson - so an empty rail left a reserved strip of bare course under
+them, and the progress pips blinked out for the two shots of the approach and came back for the
+putting card. A silent step now draws the rail with **pips only** and no rings: the row is
+continuous and the space it reserved is the space it uses.
+
+`_pipsHTML` needed the other half of it. A silent step is not in `CARDS`, so `indexOf` returned -1
+and every pip came out blank - the row would have been there saying nothing. Counting the cards
+BEHIND it marks those done and lights the one AHEAD, which is what a waypoint between two cards
+means.
+
+### 3. THE HUD CALLED THE LESSON "PRACTICE"
+
+The tutorial runs as `roundId: 'practice'` - one hole, no `bestRoundByCourse` write - which is right
+for the recorder and wrong for the label. The result card said "Tutorial complete" while the panel
+three inches above it had read **practice** for the whole lesson. `mode_tutorial` (EN and ES), keyed
+on `tutorialRun`; an ordinary practice hole still says practice, verified in both languages.
+
+### What was checked and was fine
+
+Every step screenshotted and audited at 390x664: **33 checks, 0 failed** - nothing the lesson draws
+falls off screen, no rail card or ring covers a control (a popup and the result card DO cover them,
+which is what modal means), and nothing scrolls, page or inner. The ladder was re-checked from the
+setup screen rather than from the module: a fresh player sees **0 of 6** three-hole sets with each
+one naming what it waits for, the tutorial opens **1-3**, and par on 1-3 opens **4-6** and shows
+"Best: E".
+
+Two things that look wrong in a screenshot and are not: the HUD is dimmed behind the result card
+(that is `.gf-result`'s own scrim, `rgba(6,12,4,0.62)`), and the ball rests **0.9 ft** from the cup
+before the holed banner (that is `CUP_CAPTURE_YD`, one ball-width, already investigated and
+withdrawn once).
+
+**Still open, unchanged and pre-existing:** only 2 of the aim ladder's dots are on screen at address
+with a driver, which this file already records as a feel call for Matt.
