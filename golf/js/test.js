@@ -1964,7 +1964,13 @@ console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-0
     // so the setup screen would open with nothing selected), and that comment plus its branch push
     // `_roundAtStake()` past where this regex could see it. The guard itself is untouched.
     && /_quit\(before\)[\s\S]{0,600}?_roundAtStake\(\)/.test(ui));
-  ok("...and so does the result card's own close", /const close = \(\) => this\._quit\(/.test(ui));
+  // The SHAPE moved on 2026-09-09 and the RULE did not. A tutorial run's card hands the lesson its
+  // last step instead of asking (a practice hole is not a round at stake, and the coach's closing
+  // card is what the player is about to read); every other run still routes its close through
+  // `_quit`, which is the thing that asks. Both branches are pinned, so neither can quietly go.
+  ok("...and so does the result card's own close",
+    /const close = [\s\S]{0,160}?\(\) => this\._quit\(\(\) => el\.remove\(\)\)/.test(ui)
+    && /const close = onCard[\s\S]{0,120}?_coach\('result-closed'\)/.test(ui));
   ok('...and the prompt is named in both languages',
     ['quit_title', 'quit_body', 'quit_yes', 'quit_no']
       .every((k) => typeof STRINGS.en[k] === 'string' && STRINGS.en[k]
