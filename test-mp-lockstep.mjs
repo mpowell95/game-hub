@@ -212,6 +212,9 @@ class FakeRoom {
 
 const MP_RECOVERY_MAX_ATTEMPTS = 3;   // chinchon/js/ui.js:50 / escoba/js/ui.js:50
 const E_MP_DIFFICULTY = 'mp';         // escoba/js/ui.js MP_DIFFICULTY (tierOf('mp') === null)
+const C_MP_DIFFICULTY = 'mp';         // chinchon/js/ui.js MP_DIFFICULTY (added 2026-09-09 - Chinchón
+                                      // was the last game still filing online matches under an AI
+                                      // tier; Escoba's identical bug was fixed 2026-08-11)
 
 function mpNewState() {   // chinchon/js/ui.js _mpNewState / escoba/js/ui.js (UI-only fields dropped)
   return {
@@ -252,6 +255,8 @@ class ChinchonSide {
     this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
     this.mismatches = 0; this.recoveriesApplied = 0; this.errors = [];
     this.saves = [];   // in-memory _mpSaveSnapshot (:1933-1941)
+    this.statsCommits = [];   // _commitStats's arguments, captured instead of written
+    this._statsCommitted = false;
     const side = this;
     this.localAgent = {   // humanAgent @ :147-161
       isHuman: true,
@@ -436,6 +441,22 @@ class ChinchonSide {
     this.game = game;
     game.onEvent = (t, p) => this.onEvent(t, p);
   }
+  /** _commitStats (chinchon/js/ui.js): the difficulty bucket is MP_DIFFICULTY ('mp'), NEVER the
+   *  AI tier. Mirrored as the real expression rather than asserted as a constant, so that
+   *  reverting the game's branch fails here: a remote seat carries no `difficulty`, so the old
+   *  `opp0.difficulty || _setup.aiDifficulty[0] || 'normal'` fell through to 'normal' and filed
+   *  every online match as a Medium win over an AI that was not at the table. */
+  commitStats() {   // _commitStats
+    if (this._statsCommitted || !this.game) return;
+    this._statsCommitted = true;
+    const won = !!(this.game.winner && this.game.winner.id === this.mp.seat);
+    const opp0 = this.game.players.find((p) => !p.isHuman);
+    const difficulty = this.mp
+      ? C_MP_DIFFICULTY
+      : ((opp0 && opp0.difficulty) || 'normal');
+    this.statsCommits.push({ difficulty, won });
+  }
+
   async onEvent(type, payload) {   // onEvent MP hooks @ :706-779 (render/pacing/toasts omitted)
     if (this.dead) return;
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
@@ -457,6 +478,7 @@ class ChinchonSide {
         break;
       case 'matchEnd':
         this.matchEnded = true;
+        this.commitStats();
         if (this.isHost) await this.room.writeResult({ winnerId: this.game.winner.id });
         break;
     }
@@ -1252,6 +1274,20 @@ console.log('\n--- C1: Chinchón full match (KNOWN-BUG PROBE: guest deadlocks at
        '      silently missing from the guest\'s gamehub.stats, a THE-LAW rule-6-class loss)',
       guest.matchEnded,
       `guest.matchEnded=${guest.matchEnded} guest awaitingRoundN=${guest.mp.awaitingRoundN} (stuck waiting for a round ${guest.mp.awaitingRoundN} that will never be published)`);
+    // The bucket an online match lands in. Chinchón was the LAST game still writing an AI tier
+    // here (fixed 2026-09-09); Escoba's identical bug was found and fixed on 2026-08-11, and it
+    // survived in Chinchón precisely because Escoba's fix got this assertion and Chinchón's had
+    // none. tierOf('mp') is null, so these plays count everywhere and claim no difficulty.
+    const cCommits = [...host.statsCommits, ...guest.statsCommits];
+    ok('C1 [KNOWN-BUG PROBE]: an online match records under \'mp\', never an AI difficulty\n' +
+       '      (chinchon/js/ui.js MP_DIFFICULTY - a remote seat has no `difficulty`, so the old\n' +
+       '      `opp0.difficulty || _setup.aiDifficulty[0] || \'normal\'` filed every online match as a\n' +
+       '      Medium win over an AI that was never at the table: counted, but indistinguishable from\n' +
+       '      solo play on every screen, and absent from the leaderboard\'s Versus category)',
+      cCommits.length === 2 && cCommits.every((c) => c.difficulty === 'mp'),
+      JSON.stringify(cCommits));
+    ok('C1: exactly one of the two sides won it',
+      cCommits.length === 2 && cCommits[0].won !== cCommits[1].won, JSON.stringify(cCommits));
   } catch (e) { fail++; console.log(`FAIL  C1 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
 }

@@ -72,10 +72,10 @@ them — a game whose levels are called Beginner / Intermediate / Pro is Easy / 
 
 Games with no difficulty at all: Skeeball, Golf, Yahtzee.
 
-Online matches against real people carry no difficulty tier and count as **Versus**: Escoba, Tic
-Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship. Chinchón can also be
-played against other people, but it files those matches under a difficulty rather than as Versus, so
-they do not show up there.
+Online matches against real people carry no difficulty tier and count as **Versus**: Chinchón,
+Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship.
+(Chinchón matches played before 2026-09-09 are the exception: they were filed under a difficulty
+and stay there.)
 
 Plays recorded before a game had difficulty carry no tier either and count as **No tier**.
 

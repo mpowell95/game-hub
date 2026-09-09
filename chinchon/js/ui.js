@@ -60,6 +60,24 @@ const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Multiplayer results record under their OWN difficulty bucket rather than inheriting whatever AI
+// tier the setup screen last showed (2026-09-09). This is the repo-wide convention - MP_DIFFICULTY
+// in escoba/js/ui.js, tic-tac-toe/js/ui.js, boggle/js/ui.js, dots-boxes/js/ui.js, filler/js/ui.js,
+// mancala/js/ui.js, battleship/js/ui.js; 'mp' in yahtzee and pool - and Chinchón was the last game
+// still missing it. It wrote `opp0.difficulty || _setup.aiDifficulty[0] || 'normal'`, and a remote
+// seat has no difficulty at all, so EVERY online match was filed as an Intermediate win over the
+// AI: recorded and counted, but indistinguishable from solo play on every screen that shows it, and
+// invisible in the leaderboard's Versus category. Escoba had the identical bug and fixed it on
+// 2026-08-11; this is the same fix, one game later.
+//
+// tierOf('mp') is null (js/difficulty-tiers.js), so these plays count in every total and in the
+// leaderboard's All filter and claim no tier pill; js/game-stats-ui.js's DIFF_META already names
+// the bucket "Multiplayer" in the by-difficulty table.
+//
+// NOT RETROACTIVE, and deliberately so (THE LAW rule 5): online matches played before this land in
+// 'normal' and stay exactly where they are. Nothing is moved, rewritten or deleted - only what
+// FUTURE matches record changes.
+const MP_DIFFICULTY = 'mp';
 // Solo autosave (batch 9, HANDOFF-FB-RESUME; extended to mid-round in batch C,
 // HANDOFF-FB3-SETTINGS-RESUME): mirrors STORE_MP_SAVE's shape (v/at/snap) minus
 // the MP-only code/role/seq fields -- a solo match has no room to rejoin. Same
@@ -971,8 +989,13 @@ class ChinchonUI {
     saveJSON(STORE_STATS, this.stats);
     // Also record into the unified Game Stats (per difficulty + close-quality counters), kept
     // alongside chinchon-stats.
+    // MP records under its own bucket; solo keeps reading the opponent AI's tier. See
+    // MP_DIFFICULTY at the top of this file for why the old expression could not be right for an
+    // online match: a remote seat carries no `difficulty`.
     const opp0 = this.game.players.find((p) => !p.isHuman);
-    const difficulty = (opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal';
+    const difficulty = this.mp
+      ? MP_DIFFICULTY
+      : ((opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal');
     const won = !!(this.game.winner && this.game.winner.id === human.id);
     recordChinchon(difficulty, won, {
       closed: this._matchCloses || 0,
