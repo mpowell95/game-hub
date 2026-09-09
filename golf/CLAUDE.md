@@ -4640,3 +4640,102 @@ the two drift, the lesson is teaching a screen that does not exist.
 calling the first one yet, so nothing was visibly broken, but `test-i18n-strings.mjs` cannot see a
 duplicate key (the file is a JS object, not JSON) and the next person to wire "resume round" would
 have got "resume". The pause menu's key is `pause_resume`.
+
+## The tutorial playtest: two phantom strokes (2026-09-09)
+
+Matt, after the pause menu shipped: *"test the game as thoroughly as possible."* Played with the
+harness shape this file's own record insists on - **a person, not an oracle**: it takes the club
+`autoSelectClub` offers and the aim the game hands it, stops the meter with a thumb carrying a
+gaussian timing error (30 / 60 / 110 / 190 ms of standard deviation), and resolves the shot through
+`_fire()`'s own call chain. About 1,300 holes headless, plus the whole lesson and the pause menu
+driven in a real Chromium at 390x664.
+
+### 1. A TAP COULD LOCK A POWER THE BALL DOES NOT MOVE ON, AND THE STROKE WAS CHARGED
+
+`Swing.tap` refused a second tap only when the needle sat at EXACTLY zero. That closed the case it
+was written for two days earlier (the putter's dead zone locking `power = 0.0000`) and left the
+millisecond either side of it wide open. Measured through the real resolver:
+
+```
+putter, tap 2 at   251 ms  ->  power 0.00063   ball moves 0.000 ft
+                   270 ms  ->  power 0.01262   ball moves 0.051 ft
+                   300 ms  ->  power 0.03155   ball moves 0.227 ft
+driver, tap 2 at     1 ms  ->  power 0.00063   ball moves 1.2 yds
+```
+
+The dead zone ends at 250 ms and a 2 ft putt holes for a tap 382-661 ms in, so **the window this
+opened is the window a nervous thumb actually lands in.** It hit about 3 % of holes, almost all of
+them on the two slower player models. It is the third appearance of "I swung and nothing happened",
+and the first two were closed by rules that were too narrow.
+
+**`MIN_TAP_POS` (0.027) is the needle's own drawn width, measured off the meter's geometry rather
+than picked.** The needle's key is 5 CSS px (`needleAt(read.pos, 5, 2, ...)`), and the accuracy bar
+is a trapezoid 33.4 px along its inner edge and 51.5 along its outer for the whole `2 * BAR_HALF`
+window - so 5 px is 0.041 power units at the narrow end and 0.027 at the wide one. The floor is the
+WIDE end: refuse only while the needle has CERTAINLY not moved by its own width anywhere on the
+bar. `test.js` recomputes that from `ARC_A0_DEG` / `ARC_DEG_PER_UNIT` / `BAR_HALF` and fails if the
+constant drifts from it, and separately fails if `ui.js` stops drawing the needle 5 px wide.
+
+**REFUSING IS STRICTLY BETTER THAN FIRING.** The backswing carries on, so the next tap sets a
+bigger power than the player meant - a bad shot, but a shot. The alternative is a stroke gone with
+the ball where it was, which no amount of playing better avoids.
+
+**One pinned assertion moved with the rule**, and it is named in the test: "a driver tap 40 ms in
+still sets a real power" rested on "a club with `deadMs: 0` is only ever refused in the degenerate
+same-millisecond case", which is exactly the reasoning that left the hole. A driver is now refused
+for its first ~43 ms too. What the block still proves is the part that matters: a refused tap
+leaves the backswing running.
+
+### 2. THE PAUSE MENU LEFT THE SWING BUTTON DEAD FOR 1.4 SECONDS
+
+`_pauseMenu` cancelled a live meter with `swing.settle()`, and settle carries `LOCK_MS` - the lock
+after a ball has been STRUCK. Nothing is struck when a swing is cancelled, so the player resumed
+and their first tap was swallowed. **Measured in a browser, and it is the clearest kind of
+evidence**: with the menu opened mid-backswing and closed again, a tap on the swing button left the
+phase reading `idle`; after the fix the same tap reads `back`. It is `reset()` now, guarded on
+`!this.anim` so a ball already in the air keeps the phase and the lock `_settleShot` owns.
+
+### What the sweep found nothing wrong with
+
+Every failure class this file has a history of, over ~1,300 holes at four skill levels:
+
+| | |
+|---|---|
+| strokes that moved the ball under 0.05 yd | **0** |
+| balls resting outside `hole.bounds` | **0** |
+| a ball returning to the same tenth of a yard three times | **0** |
+| holes that never holed out | **0** |
+| NaN or absent power | **0** |
+
+**Pine Valley 3 was the one hole to hit a shot cap, and it is the cap.** 200 rounds by the worst
+player on a 551-yard par 5 with a 60-shot ceiling: worst 32 strokes, **zero unfinished**.
+
+### The tutorial hole plays like a lesson
+
+```
+expert  3.37 strokes  (-0.63 vs par 4)      ok    4.97  (+0.97)
+good    3.82          (-0.18)               poor  7.43  (+3.43)
+```
+
+A good player makes par or better and a poor one is not stuck - which is what a first hole should
+do. **The ball comes to rest on the green itself in 100 % of rounds at every skill level**, which
+is the number that matters for the lesson rather than for the golf: the putting card waits on
+`on-green`, and `on-green` is the green SURFACE, not the fringe. A round that never rested there
+would take the later `holed` straight past the dial and putt cards through the forward search.
+
+### The ladder was walked rather than reasoned about
+
+Every gate opens exactly when it should - tutorial to set 1, par on each set to the next, set 6
+UNLOCKED (not beaten) to the front nine, par on the front to the back, par on the back to
+eighteen - and **no gate closes once open**, because every requirement reads a best and every best
+is `Math.min` in `recordGolf`, in the `bestHole` fold and in `players-agg.js`'s merge. That is the
+whole safety property of deriving the ladder instead of storing it, and it now has a walked
+transcript rather than an argument.
+
+### The pause menu, at every phase
+
+Opened during the opening flyover, at address, mid-backswing, mid-downswing, with the ball in the
+air, and over the result card. The meter is cancelled in the two swing cases with `shotN` unchanged;
+a flight keeps running and lands underneath the menu, `shotN` 1 -> 2, ball moved - lossless; the
+menu cannot open twice; and the ordinary quit route still asks, cancels back into the round and
+confirms out to the setup screen.
