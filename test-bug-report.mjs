@@ -39,6 +39,7 @@ globalThis.localStorage = {
 
 const bug = await import('./js/bug-report.js');
 const ann = await import('./js/announce.js');
+const { GAME_ART } = await import('./js/game-art.js');
 
 // =================================================================================================
 console.log('\n=== js/bug-report.js: the description clamp ===');
@@ -166,8 +167,17 @@ for (const a of ann.ANNOUNCEMENTS) {
     if (!a[field]) continue;
     ok(`${a.id}: ${field} has both en and es`, !!(a[field].en && a[field].es));
   }
-  ok(`${a.id}: en and es bodies have the same number of paragraphs`,
-    (a.body.en || []).length === (a.body.es || []).length);
+  // A body is optional (golf's announcement is a heading, a tile and a button, and nothing else).
+  if (a.body) {
+    ok(`${a.id}: en and es bodies have the same number of paragraphs`,
+      (a.body.en || []).length === (a.body.es || []).length);
+  }
+  // `tile` draws a game's real launcher art. A wrong hub id is silent - the popup opens with the
+  // picture missing, which is precisely the "empty box" the art exists to avoid.
+  if (a.tile) {
+    ok(`${a.id}: tile.art names a real game in js/game-art.js`, !!GAME_ART[a.tile.art]);
+    ok(`${a.id}: tile has a name in both languages`, !!(a.tile.name && a.tile.name.en && a.tile.name.es));
+  }
   // A typo'd image path is silent: the popup still opens, just with a hole where the picture was
   // (announce-ui.js removes a figure whose image fails to load, on purpose). So check the files.
   // Not a failure - a reminder. A gated announcement is invisible to the family, and the whole

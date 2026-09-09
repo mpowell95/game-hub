@@ -22,8 +22,10 @@ import { parseReleaseDate } from './new-badge.js';
 const KEY = 'gamehub.announce.v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Newest last. `action: 'bug-report'` is understood by js/announce-ui.js and opens the report
- *  form straight from the popup's own button. */
+/** Newest last. `action: 'bug-report'` and `action: 'play-golf'` are understood by the hub's
+ *  handler and run straight from the popup's own button. `tile: { art, name }` draws that game's
+ *  real launcher art (js/game-art.js, keyed by HUB id) with its name under it - use it for a new
+ *  game, where the thing being announced is a tile the player is about to go looking for. */
 export const ANNOUNCEMENTS = [
   {
     // GOLF. Matt, 2026-09-09: *"I want a popup on the gamehub itself saying something like new
@@ -40,22 +42,23 @@ export const ANNOUNCEMENTS = [
     // released on the admin page - no second deploy, nothing to remember.
     //
     // No `shots`: those are "here is where the button lives" pictures for a control nobody would
-    // find on their own. A new game is a new TILE on the launcher they are already looking at.
+    // find on their own. A new game is a new TILE on the launcher they are already looking at,
+    // which is why this one shows the TILE ITSELF (`tile`) instead of a screenshot - the player
+    // then knows exactly what to look for when the popup closes.
+    //
+    // NO BODY TEXT. Matt, 2026-09-09, on the first version: *"Way too much text. The first sentence
+    // is useless... It's just supposed to say: New Game! / Golf / And show the thumbnail."* The
+    // paragraph it replaced explained the tutorial gate; that explanation belongs in the game,
+    // where the lesson is the first thing on the screen anyway. Nothing here needs a `body`, and
+    // the `icon` and `badge` are gone with it: the tile is the picture, and a gold NEW pill above
+    // a heading that already reads "New game!" is the same word twice.
     id: 'golf-2026-09-09',
     from: '2026-09-09',
     until: '2026-11-15',
     requiresGame: 'golf',
-    icon: '\u26F3',
-    badge: true,
     action: 'play-golf',
-    title: { en: 'New game: Golf', es: 'Juego nuevo: Golf' },
-    // Short on purpose. The tile is on the screen behind this popup, so the popup's whole job is
-    // to point at it - and the one thing worth saying is that there is a lesson first, because the
-    // rest of the course is locked until it is done and that would otherwise read as broken.
-    body: {
-      en: ['Eighteen holes at Pine Valley. Play the tutorial first, then holes unlock three at a time as you shoot par.'],
-      es: ['Dieciocho hoyos en Pine Valley. Juega primero el tutorial y los hoyos se van abriendo de tres en tres al hacer par.'],
-    },
+    title: { en: 'New game!', es: '\u00a1Juego nuevo!' },
+    tile: { art: 'golf', name: { en: 'Golf', es: 'Golf' } },
     cta: { en: 'Play', es: 'Jugar' },
   },
   {

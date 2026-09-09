@@ -33,6 +33,7 @@ import SK_STRINGS from '../skeeball/js/strings.js';
 import { statsId, statsKey } from './game-stats.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity } from './players-agg.js';
+import { ANNOUNCEMENTS, textFor } from './announce.js';
 import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
@@ -129,6 +130,14 @@ function ensureCss() {
   .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink);
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
+  /* Two columns, seen and not-yet, side by side so the shape of the answer is one glance. They
+     stack under 320px of room rather than squeezing names into two characters each. */
+  .adm-annlists { display: flex; flex-wrap: wrap; gap: var(--gh-sp-3); width: 100%; margin-top: var(--gh-sp-2); }
+  .adm-annlist { flex: 1 1 130px; min-width: 0; }
+  .adm-annlist h4 { margin: 0 0 2px; font-size: var(--gh-fs-xs); font-weight: 800;
+                    text-transform: uppercase; letter-spacing: .04em; color: var(--gh-muted); }
+  .adm-annlist ul { margin: 0; padding-left: 1.1em; font-size: var(--gh-fs-sm); line-height: 1.5; }
+  .adm-annlist .adm-note { display: inline; margin: 0; }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
   .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
@@ -221,6 +230,7 @@ function render(card, opts = {}) {
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
+      ${sec('announce', t('adm_ann_title'), announceSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
     <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
@@ -283,6 +293,78 @@ function skeeballSectionHTML(cfg) {
           { value: 'testing', label: t('adm_mode_testing') },
         ], mode)}
       </div>`}
+    </div>`;
+  }).join('');
+}
+
+// --- announcements: who has actually seen each popup ---------------------------------------------
+
+/**
+ * Per announcement, per PERSON: has any of their devices dismissed it yet.
+ *
+ * Matt, releasing golf: *"i want a way to see who has seen the popup too."* The seen-list is a
+ * local preference on each phone; `js/stats-net.js` now mirrors it to `players/<id>/announce` on
+ * the beats it already syncs on, and this reads that back.
+ *
+ * Grouped by PERSON, like the scores section and for the same reason: a popup is shown once per
+ * DEVICE, so somebody with two phones has genuinely seen it once they dismiss it on either. Their
+ * second phone still owes them the popup, which is why the row names how many of their devices
+ * have reported it rather than just ticking them off.
+ *
+ * A device that has not synced since this shipped reports nothing, and "nothing" is NOT "not seen"
+ * - it is missing data, and it says so. Same honesty rule as read-install-state.mjs's
+ * "(not seen yet)".
+ */
+function announceSectionHTML() {
+  const all = _players || {};
+  const ids = Object.keys(all);
+  if (!ids.length) return `<p class="adm-note">${esc(t('adm_ann_none'))}</p>`;
+  const ident = buildIdentity(all);
+  const people = new Map();
+  for (const id of ids) {
+    const rec = all[id] || {};
+    const prof = rec.profile || {};
+    const key = ident.keyFor(prof, id);
+    if (!people.has(key)) people.set(key, { name: '', devices: 0, reported: 0, seen: new Set() });
+    const p = people.get(key);
+    const nm = (prof.name || '').trim();
+    if (nm && !p.name) p.name = nm;
+    p.devices++;
+    const ann = rec.announce;
+    if (ann && Array.isArray(ann.seen)) {
+      p.reported++;
+      for (const sid of ann.seen) p.seen.add(sid);
+    }
+  }
+  const rows = [...people.values()].sort((a, b) =>
+    (a.name || '\uffff').localeCompare(b.name || '\uffff'));
+  const lang = getLang();
+  return ANNOUNCEMENTS.map((a) => {
+    const title = textFor(a.title, lang) || a.id;
+    const yes = rows.filter((p) => p.seen.has(a.id));
+    const no = rows.filter((p) => !p.seen.has(a.id));
+    const person = (p) => {
+      // A device that has never reported is the only thing standing between "not seen" and "we do
+      // not know", so it rides the name rather than being averaged away into a tick. Somebody whose
+      // phones have ALL gone quiet is not a no - it is no answer, and the two must not read alike.
+      const stale = p.devices - p.reported;
+      const note = !p.reported ? t('adm_ann_nodata') : stale ? t('adm_ann_stale', { n: stale }) : '';
+      return `<li>${esc(p.name || t('adm_sc_unnamed'))}${
+        note ? ` <span class="adm-note">${esc(note)}</span>` : ''}</li>`;
+    };
+    return `<div class="adm-row adm-row--stack">
+      <div class="adm-row-main">
+        <div class="adm-name">${esc(title)}</div>
+        <div class="adm-note">${esc(t('adm_ann_count', { seen: yes.length, all: rows.length }))}</div>
+      </div>
+      <div class="adm-annlists">
+        <div class="adm-annlist"><h4>${esc(t('adm_ann_seen'))}</h4>
+          ${yes.length ? `<ul>${yes.map(person).join('')}</ul>`
+            : `<p class="adm-note">${esc(t('adm_ann_nobody'))}</p>`}</div>
+        <div class="adm-annlist"><h4>${esc(t('adm_ann_notyet'))}</h4>
+          ${no.length ? `<ul>${no.map(person).join('')}</ul>`
+            : `<p class="adm-note">${esc(t('adm_ann_everyone'))}</p>`}</div>
+      </div>
     </div>`;
   }).join('');
 }

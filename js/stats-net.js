@@ -16,6 +16,7 @@ import { statsId, loadStats } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
+import { loadSeen } from './announce.js';
 
 let _db = null, _api = null;
 
@@ -140,6 +141,14 @@ export async function syncMyStats() {
       // it a fact. It also catches the one case an auto-reload could never fix: a device whose
       // shell install FAILED sits on an old build indefinitely and looks completely normal.
       device: Object.assign(installState(), { build: await appVersion() }),
+      // WHICH LAUNCHER ANNOUNCEMENTS THIS DEVICE HAS DISMISSED (2026-09-09). Matt, releasing golf:
+      // *"i want a way to see who has seen the popup too."* The seen-list is a local preference and
+      // never left the phone, so "did everyone get told about the new game" had no answer anywhere.
+      // Same shape of addition as `device` above and for the same reasons: a new child node, read
+      // by no gameplay or stats path, riding the mirror this device already performs rather than
+      // getting a write of its own. It is a REPORT, never a source - nothing reads it back, so a
+      // wiped or stale copy cannot make a popup reappear or vanish on anybody's phone.
+      announce: { seen: loadSeen(), at: Date.now() },
       updatedAt: _api.serverTimestamp(),
     };
     await _api.update(_api.ref(_db, 'players/' + id), rec);
