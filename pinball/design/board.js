@@ -251,15 +251,10 @@ P.push({ type: 'ramp', name: 'ramp_right', x: [836, 941], xFoot: [755, 857], z: 
 // not a lane. Measured: it swallowed 16 of the 69 rising balls per 30 games. So the rail runs up the
 // wall and cuts across to the mouth corner, which seals the pocket AND funnels an arriving ball
 // inboard toward the mouth instead of past it.
-const RAIL_OUT = [[134, 931], [45, 886], [45, 687], [45, 593]];
-const RAIL_IN = [[228, 931], [206, 886], [169, 787], [153, 687], [136, 593]];
-const mirRail = (pt) => [2 * 493 - pt[0], pt[1]];
-for (let i = 0; i < RAIL_OUT.length - 1; i++) {
-  wall(`ramp_rail_left_out_${i}`, RAIL_OUT[i], RAIL_OUT[i + 1], 0.005, 0.026, Y1, 'steel', [1]);
-  wall(`ramp_rail_left_in_${i}`, RAIL_IN[i], RAIL_IN[i + 1], 0.005, 0.026, Y1, 'steel', [1]);
-  wall(`ramp_rail_right_out_${i}`, mirRail(RAIL_OUT[i]), mirRail(RAIL_OUT[i + 1]), 0.005, 0.026, Y1, 'steel', [1]);
-  wall(`ramp_rail_right_in_${i}`, mirRail(RAIL_IN[i]), mirRail(RAIL_IN[i + 1]), 0.005, 0.026, Y1, 'steel', [1]);
-}
+// NO FREE-STANDING RAILS BESIDE THE RAMP. Matt, twice: *"GET RID OF THOSE FUCKING RAILS NEXT TO
+// THE RAMP. I TOLD YOU TO NOT INCLUDE THEM."* They are gone. What replaces them is not a rail
+// beside the ramp - it is the ramp having SIDES, generated from its own geometry in the footprint
+// pass below, so the channel and the thing you can see are the same object.
 // L1 backstops across each mouth. The transition to L2 fires first; these catch anything it does
 // not, so level 1 has no open corridor up a ramp lane.
 // AND THE OUTER LANES ARE CLOSED AT THE TOP. They used to be the ramp lanes, so the ramps closed
@@ -475,7 +470,11 @@ const setShape = (part, rec) => {
     if (P.some((q) => q.name === a.name)) continue;
     const src = P.find((q) => q.type === a.type && q.mat === a.mat) || P.find((q) => q.type === a.type);
     if (!src) continue;
-    P.push({ ...JSON.parse(JSON.stringify(src)), name: a.name, mat: a.mat || src.mat });
+    // ...but NOT the sibling's level. The six rails Matt drew beside the flippers were copies of
+    // ramp_rail_right_in, which no longer exists, so the search fell through to a steel wall on
+    // the UPPER DECK and all six were built on level 2 - present in the model, absent from the
+    // playfield the ball is actually on.
+    P.push({ ...JSON.parse(JSON.stringify(src)), name: a.name, mat: a.mat || src.mat, levels: (a.levels || [1]).slice() });
   }
   for (const part of P) {
     const rec = LAYOUT[part.name];
@@ -489,7 +488,12 @@ const circleFP = (name, levels, at, r, extra) => addFP(levels, { name, shape: 'c
 const capsuleFP = (name, levels, a, b, r, extra) => addFP(levels, { name, shape: 'capsule', a: PX(...a), b: PX(...b), r: r4(r), ...extra });
 const BUMPER_R = 0.038, FLIP_R0 = 0.012, FLIP_R1 = 0.007, SLING_POST_R = 0.006;
 for (const p of P) {
-  if (!p.levels.length) continue;
+  // A RAMP HAS NO  AND STILL NEEDS WALLS.  means "not a flat obstacle on either
+  // deck", which is true of the SURFACE - you roll along it, not into it - but it skipped the whole
+  // part, sides included, so the lane was a picture. That is what Matt found by playing it: the ball
+  // rolls straight over it like paint. The ramp case below emits its own walls and says which level
+  // they live on, so it must not be filtered out here.
+  if (!p.levels.length && p.type !== 'ramp') continue;
   switch (p.type) {
     case 'wall': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, p.note ? { note: p.note } : {}); break;
     case 'gate': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, { oneWay: p.oneWay, note: p.note }); break;
@@ -507,6 +511,29 @@ for (const p of P) {
     case 'saucer': circleFP(p.name, p.levels, p.at, p.r || 0.016, { captures: true,
       note: 'a ball entering is held and kicked back out up the middle; scores' }); break;
     case 'targets': capsuleFP(p.name, p.levels, [p.xs[0] - 15, p.z], [p.xs[3] + 15, p.z], 0.007); break;
+    case 'ramp': {
+      // MATT FOUND THIS BY PLAYING IT: *"THE REASON THE RAMPS DONT WORK IS BECAUSE YOUVE MADE
+      // THEM FLAT. THE BALL TREATS IT LIKE PAINT AND ROLLS RIGHT OVER IT."* He is exactly right.
+      // A `ramp` carried `levels: []`, so it generated NO collider at all: the lane was a picture
+      // and the only solid things near it were the free-standing rails, now deleted.
+      //
+      // So the ramp builds its OWN walls, sampled along the same bend the 3D surface uses, which
+      // is what makes the channel and the drawing the same object rather than two things that
+      // have to be kept in step by hand. The mouth is left open - the bottom span carries no
+      // wall - because a wall across it is the defect test.js already guards against.
+      const xf = p.xFoot || p.x;
+      const N = 10;
+      const at = (side, i) => {
+        const t = i / N;
+        const bend = t * t * (3 - 2 * t) * 0.45 + t * 0.55;
+        return [xf[side] + (p.x[side] - xf[side]) * bend, p.z[1] + (p.z[0] - p.z[1]) * t];
+      };
+      for (let i = 0; i < N; i++) {
+        capsuleFP(`${p.name}_wall_out_${i}`, [1], at(0, i), at(0, i + 1), 0.008);
+        capsuleFP(`${p.name}_wall_in_${i}`, [1], at(1, i), at(1, i + 1), 0.008);
+      }
+      break;
+    }
     case 'sling': {
       // THE LIVE FACE IS THE HYPOTENUSE, FOUND BY MEASURING - not A-to-C by convention. Matt has
       // asked for the hypotenuse from the start, and A-to-C stopped being it the moment he rotated
