@@ -105,6 +105,25 @@ function visibleTabs() {
   try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
   return TABS.filter((tab) => !tab.devOnly || dev || isGameLive(hubIdOf(tab.id), !tab.devOnly));
 }
+/** THE LAUNCHER'S visibility rule, for a STATS id - exported 2026-09-09 so the leaderboard can ask
+ *  the same question the hub card asks, rather than keeping a third copy of "which games are
+ *  released". Matt: *"hide admin only games from the leaderboard too."* `js/hub.js` computes
+ *  `isGameLive(g.id, !g.devOnly) || dev`; this is that, with `hubIdOf` in front and TABS supplying
+ *  the same `devOnly` default the hub registry does.
+ *
+ *  **It is NOT visibleTabs() above, and the difference is the point.** That one passes any tab that
+ *  is not `devOnly`, so a game hidden by an admin OVERRIDE still has its My Stats screen - which is
+ *  what keeps a player's own history reachable when Matt takes a game off the launcher (THE LAW
+ *  rule 1: the leaderboard is the bragging wall and may hide an unreleased game; My Stats is that
+ *  person's own ledger and must not). Do not "unify" the two: the asymmetry is load-bearing. */
+export function isGameOnLauncher(statsId) {
+  let dev = false;
+  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
+  if (dev) return true;
+  const tab = TABS.find((x) => x.id === statsId);
+  return isGameLive(hubIdOf(statsId), !(tab && tab.devOnly));
+}
+
 const C4_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
 /** A game's display title in the active language (call at render time, never module scope). */
 function gameLabel(id) { const tab = TABS.find((x) => x.id === id); return tab ? t(tab.labelKey) : id; }
