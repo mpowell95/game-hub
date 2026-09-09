@@ -4528,3 +4528,59 @@ entirely** - the gate Matt had just asked for let you past without using it.
 `SKIPPABLE` now names the events the lesson can legitimately miss (`fire`, `settled`, `on-green`,
 `holed`) and only those skip forward. Anything the player TAPS ends the step that asked for it, or
 nothing. A `[KNOWN-BUG PROBE]` fails if a control event joins that set.
+
+## The lesson is a rail, not a stack of popups (2026-09-09)
+
+Matt: *"i hate the pop ups. Create mockups of alternatives."* Six were drawn and he picked **E2** -
+a thin rail welded to the bottom edge of the screen with a row of progress pips, and the game's own
+controls riding up above it. Then, on the per-step mockups: *"i like the bottom rail with pips, but
+it covers the buttons."*
+
+### The rail is CSS-welded to the bottom. It is NOT positioned by JS.
+
+The first build measured the tallest control cluster and placed the rail above it. `.gf-br` carries
+the 150px meter, so the measurement put the rail at **y=390 - the middle of the screen**, directly
+over the popup's own "got it" button. A lesson whose own button is unreachable is not a lesson.
+
+So `.gf-tut__rail` is `bottom: 0` with `height: calc(30px + env(safe-area-inset-bottom))`, and
+`.gf-root[data-tut="1"] .gf-bl, .gf-root[data-tut="1"] .gf-br` ride **30px up** while the lesson is
+live. Both numbers are in one CSS block. `data-tut` is set when the coach is constructed and removed
+when it finishes, so nothing about the layout survives the lesson.
+
+`golf/js/test.js` section 20 asserts the ride-up rule structurally, because nothing at runtime would
+notice a rail that has drifted back over a control.
+
+### Three of the eleven steps are POPUPS, and each one paints the REAL meter
+
+A card that says *"stop the needle near 100 %"* is describing a picture. The two swing lessons (**a
+good swing** / **a bad swing**) and the putting lesson are popups precisely because they can SHOW
+it: `_paintTutorialDial` calls the game's own `_drawMeter` with `still: true` and a list of `marks`,
+so the dial in the card is the dial on the screen, drawn by the same code, and cannot drift from it.
+
+- **a good swing** marks 100 % power and the bar's centre.
+- **a bad swing** marks the top of the arc, 100 % in a second colour, and the END of the bar, beside
+  a small chart of what each one costs. Matt: *"Add another different color arrow to #4 that is a
+  100% power no tap and how offline that is vs the yellow with the max power."*
+- **the putting dial** paints BOTH dials side by side (FULL SHOT / PUTTING), because `PUTT_GAMMA` is
+  1.6 and the only honest way to say the ticks sit further round is to put the two dials together.
+
+**A popup step renders PIPS ONLY in the rail** (`_railHTML(s, true)`). The first build printed the
+popup's own text in the rail underneath it, which read as the app saying the same thing twice.
+
+### The cards are five and three, and every one is under ten words
+
+Matt, twice: *"still way too much text. I'm not reviewing all of it."* The suite fails the build if
+a rail card passes ten words in either language, or a popup sixteen. There is **no skip button** and
+a `[KNOWN-BUG PROBE]` fails if one comes back: skipping stopped the cards and left holes 1-3 locked,
+because the unlock reads `bestHole['tutorial:1']` and only holing out writes it.
+
+### The result card is the last lesson, not the end of it
+
+The lesson's closing card is about the pause menu, and it has to come AFTER the round is scored - so
+the result card's close **hands off** (`_coach('result-closed')`) instead of quitting, and the coach's
+`onFinish` is what leaves the hole. On a tutorial run the card is titled "Tutorial complete" and
+names the unlock once; the generic `unlockedNow` line is suppressed, or it printed twice.
+
+`test.js` pins both branches of that close - the tutorial hand-off AND the ordinary `_quit`, which is
+what asks before a round is thrown away. The old single-arrow regex was pinned to a shape, not to the
+rule, and went red the day the shape moved.

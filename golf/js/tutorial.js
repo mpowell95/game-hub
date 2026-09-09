@@ -48,6 +48,7 @@
 import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { STRINGS } from './strings.js';
+import { SWING_MAX, BAR_HALF } from './swing.js';
 
 const t = makeT(STRINGS);
 
@@ -68,38 +69,89 @@ const t = makeT(STRINGS);
  *  on top of the aim row - measured in a real browser, with the aim buttons showing through the
  *  card. The ring and the arrow still point at `anchor`; only the card is pushed clear. */
 export const STEPS = [
-  { id: 'welcome', anchor: null, key: 'tut_welcome', advance: 'button' },
   // THE LESSON MAKES YOU USE THE CONTROL, IT DOES NOT DESCRIBE IT (2026-09-09). Matt: "make them
-  // click buttons to aim. make them click buttons to change clubs." These two advance on the
-  // player's own tap on the aim arrows and the club arrows, so the ring and the arrow sit on the
-  // control until it has actually been worked. Reading "these arrows aim" teaches nobody anything;
-  // pressing one does.
-  { id: 'aim', anchor: '.gf-aimrow', clear: '.gf-bl', side: 'above', key: 'tut_aim', advance: 'aim' },
-  { id: 'club', anchor: '.gf-clubrow', clear: '.gf-bl', side: 'above', key: 'tut_club', advance: 'club' },
-  { id: 'swing', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_swing', advance: 'tap-begin' },
+  // click buttons to aim. make them click buttons to change clubs." These advance on the player's
+  // own tap, so the rings sit on the control until it has actually been worked.
+  //
+  // TWO RINGS, NOT ONE, AND ONLY ON THE BUTTONS. Matt: "you can't tap on the 'aim' rectangle. So
+  // don't include that in the highlighted thing. Only outline the buttons." The readouts between
+  // and beside the arrows are not controls and are not ringed.
+  { id: 'aim', rings: ['aim-l', 'aim-r'], key: 'tut_aim', advance: 'aim' },
+  { id: 'club', rings: ['club-up', 'club-dn'], key: 'tut_club', advance: 'club' },
+
+  // THE TWO SWING POPUPS COME BEFORE THE FIRST SWING, NEVER DURING ONE. The backswing is 1585 ms
+  // per power unit, so anything that APPEARS while the needle moves cannot be found, read and acted
+  // on - which is how the first version failed. Both are dismissed before a tap is ever asked for.
+  { id: 'good', popup: 'good', key: 'tut_good', advance: 'button' },
+  { id: 'bad', popup: 'bad', key: 'tut_bad', advance: 'button' },
+  { id: 'swing', rings: ['swing'], marks: 'swing', key: 'tut_swing', advance: 'tap-begin' },
+
   // SILENT until the ball is on the putting surface. `on-green` rather than `settled` because this
   // is a par 4: the approach may take one shot or three, and a card that appeared after the first
   // one would be telling a player standing in the fairway to putt.
-  { id: 'to-green', anchor: null, key: null, advance: 'on-green' },
-  { id: 'putt', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_putt', advance: 'tap-begin' },
-  { id: 'sink', anchor: null, key: null, advance: 'holed' },
-  { id: 'holed', anchor: null, key: 'tut_holed', advance: 'button' },
+  { id: 'to-green', key: null, advance: 'on-green' },
+  { id: 'dial', popup: 'dial', key: 'tut_dial', advance: 'button' },
+  { id: 'putt', rings: ['swing'], marks: 'swing', key: 'tut_swing2', advance: 'tap-begin' },
+  { id: 'sink', key: null, advance: 'holed' },
+  // THE RESULT PANEL SAYS THE LESSON IS OVER, not a rail card - `ui.js`'s `_showHoleResult` prints
+  // "Tutorial complete" and the unlock. This step waits for the player to close it.
+  { id: 'card', key: null, advance: 'result-closed' },
+  { id: 'bug', popup: 'bug', key: 'tut_bug', advance: 'button' },
 ];
 
 /** The cards, in order - the silent waypoints above are not steps the player can see, so numbering
- *  them "step 4 of 7" would count two the player never meets. */
-export const CARDS = STEPS.filter((s) => s.key);
+ *  them "step 4 of 9" would count three the player never meets. */
+export const CARDS = STEPS.filter((s2) => s2.key);
+
+/** WHERE THE GOLD MARKS GO ON THE DIAL, in the meter's own `pos` units: 100 % power on the band,
+ *  dead centre in the accuracy bar. Shared by the popups and by the live dial, so the mark the
+ *  lesson points at and the mark the player then aims for are the same number. */
+export const GOOD_MARKS = [{ power: 1 }, { bar: 0 }];
+/** ...and a BAD swing: the far end of the arc, and the far end of the bar - which is also where the
+ *  needle ends up when the third tap never comes. The cyan one is the same no-tap miss at 100 %,
+ *  drawn beside it so the two can be compared. Cyan rather than a second warm colour: Matt is
+ *  red/green colorblind, and gold against cyan is the pair this repo already uses. */
+export const BAD_MARKS = [{ power: SWING_MAX }, { power: 1, colour: '#5ec8f5' }, { bar: -BAR_HALF }];
 
 /** Every event kind the coach understands, exported so `golf/js/test.js` can check that each step
  *  waits on one of them (or on its own button) and the lesson cannot strand the player. */
-export const EVENTS = ['aim', 'club', 'tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed'];
+export const EVENTS = ['aim', 'club', 'tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed', 'result-closed'];
 
 /** THE EVENTS A STEP CAN LEGITIMATELY MISS, and the only ones `event()` will skip forward to.
  *  They are all things the GAME does rather than things the player taps: the swing fires itself if
  *  the needle runs off the bar with no third tap, and a hole in one returns early and never sends
  *  `settled` or `on-green` at all. Everything else is a control the lesson is waiting to see used,
  *  and skipping ahead on one of those would let the player past a gate without working it. */
-export const SKIPPABLE = new Set(['fire', 'settled', 'on-green', 'holed']);
+export const SKIPPABLE = new Set(['fire', 'settled', 'on-green', 'holed', 'result-closed']);
+
+/** The popup's dial canvases are painted by `ui.js`'s own `_drawMeter`, which draws at this size. */
+const DIAL_W = 176;
+const DIAL_H = 150;
+
+/** THE BAD SWING'S SECOND HALF: what the miss does to the ball. Measured through the real engine -
+ *  a driver off a fairway with the needle running off the end of the bar finishes 33.9 yds offline
+ *  at 100 % power and 39.4 at the top of the arc, and 15 yds SHORTER. Gold is the over-swing, cyan
+ *  the same miss at 100 %, matching the two marks on the dial above it. */
+const SLICE_SVG = `<svg class="gf-tut__slice" viewBox="0 0 400 150" aria-hidden="true">
+  <line x1="24" y1="128" x2="256" y2="128" stroke="#7f8f6e" stroke-width="3" stroke-dasharray="9 8"/>
+  <path d="M24 128 C104 126 168 116 236 86" fill="none" stroke="#5ec8f5" stroke-width="7" stroke-linecap="round"/>
+  <path d="M240 84 l-23 1 l10 15 z" fill="#5ec8f5"/>
+  <path d="M24 128 C104 124 164 100 240 34" fill="none" stroke="#ffce3a" stroke-width="7" stroke-linecap="round"/>
+  <path d="M244 31 l-24 3 l12 15 z" fill="#ffce3a"/>
+  <circle cx="24" cy="128" r="8" fill="#fff" stroke="#000" stroke-width="3"/>
+  <g font-family="inherit" font-weight="800" font-size="22" stroke="#000" stroke-width="5" paint-order="stroke">
+    <text x="256" y="40" fill="#ffce3a">39 yds off</text>
+    <text x="252" y="96" fill="#5ec8f5">34 yds off</text>
+  </g>
+</svg>`;
+
+/** The closing card points at the pause menu, so it shows one. */
+const PAUSE_ART = (tt) => `<div class="gf-tut__pause" aria-hidden="true">
+  <div class="gf-tut__pauseh">${esc(tt('paused'))}</div>
+  <div class="gf-tut__pauserow">${esc(tt('resume'))}</div>
+  <div class="gf-tut__pauserow is-lit">${esc(tt('report_bug'))}</div>
+  <div class="gf-tut__pauserow">${esc(tt('quit'))}</div>
+</div>`;
 
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -112,7 +164,8 @@ export class Coach {
     this.onFinish = onFinish || (() => {});
     this.i = 0;
     this.el = null;
-    this.ringEl = null;
+    this.rings = [];
+    this.onDial = null;
     this.listeners = [];
     this.finished = false;
     this.offViewport = null;
@@ -181,7 +234,8 @@ export class Coach {
     for (const [el, type, fn] of this.listeners) el.removeEventListener(type, fn);
     this.listeners.length = 0;
     if (this.el) { this.el.remove(); this.el = null; }
-    if (this.ringEl) { this.ringEl.remove(); this.ringEl = null; }
+    for (const r of this.rings) r.remove();
+    this.rings.length = 0;
     if (this.offViewport) { this.offViewport(); this.offViewport = null; }
   }
 
@@ -189,6 +243,17 @@ export class Coach {
 
   _on(el, type, fn) { el.addEventListener(type, fn); this.listeners.push([el, type, fn]); }
 
+  /** WHAT THE LESSON DRAWS, and it is one of exactly two things.
+   *
+   *  A RAIL - one line across the screen, sitting ON TOP of the control clusters rather than over
+   *  them. Matt picked it off the mockups and named the flaw in the same breath: *"i like the bottom
+   *  rail with pips, but it covers the buttons"*. So `ui.js` lifts the bottom HUD by the rail's own
+   *  height for as long as the lesson runs (`.gf-root[data-tut="1"]`), and the rail owns the strip
+   *  that frees up. Nothing the player is being asked to press is ever underneath it.
+   *
+   *  A POPUP - a centred card carrying a DRAWING OF THE REAL DIAL, used four times: a good swing, a
+   *  bad one, the putting dial, and the closing note. Each is dismissed with one button before the
+   *  lesson asks for a tap, so no popup is ever on screen while the needle is moving. */
   _render() {
     const s = this.step;
     if (!s) return;
@@ -198,12 +263,13 @@ export class Coach {
     // see the header. It still waits for its event, so the lesson advances normally.
     if (!s.key) return;
 
-    // The ring goes down first so the card, which is appended after it, is always on top of it.
-    if (s.anchor) {
-      this.ringEl = document.createElement('div');
-      this.ringEl.className = 'gf-tut-ring';
-      this.ringEl.setAttribute('aria-hidden', 'true');
-      this.root.appendChild(this.ringEl);
+    for (const role of (s.rings || [])) {
+      const ring = document.createElement('div');
+      ring.className = 'gf-tut-ring';
+      ring.dataset.for = role;
+      ring.setAttribute('aria-hidden', 'true');
+      this.root.appendChild(ring);
+      this.rings.push(ring);
     }
 
     const el = document.createElement('div');
@@ -212,91 +278,102 @@ export class Coach {
     // `aria-live="polite"` rather than `assertive`: the card explains the control the player is
     // about to use, and cutting them off mid-word to say so is worse than saying it a beat later.
     el.setAttribute('aria-live', 'polite');
-    el.innerHTML = `
-      <div class="gf-tut__card gf-panel" data-side="${esc(s.side || 'centre')}">
-        <div class="gf-tut__text">${esc(t(s.key))}</div>
-        ${s.advance === 'button'
-    ? `<button type="button" class="gf-btn gf-tut__ok" data-role="tut-ok"><span>${esc(t('tut_ok'))}</span></button>`
-    : `<div class="gf-tut__wait">${esc(t('tut_your_turn'))}</div>`}
-      </div>
-      <div class="gf-tut__arrow" aria-hidden="true"></div>`;
+    el.innerHTML = s.popup ? this._popupHTML(s) : this._railHTML(s);
     this.root.appendChild(el);
     this.el = el;
+
+    for (const c of el.querySelectorAll('canvas[data-dial]')) this._paintDial(c);
 
     const ok = el.querySelector('[data-role="tut-ok"]');
     if (ok) this._on(ok, 'click', () => this._next());
     // THERE IS NO SKIP, AND THAT IS NOT AN OVERSIGHT (Matt, 2026-09-09: "get rid of the 'skip
-    // tutorial' button. that is NOT an option - per what I've told you already"). The lesson is the
-    // gate on holes 1-3 - `progress.js` opens them off `bestHole['tutorial:1']`, which only holing
-    // out writes - so a skip button offered an exit that led nowhere: the cards stopped and the
-    // game stayed locked. Five cards of under ten words each is not a thing to need an escape from.
+    // tutorial' button. that is NOT an option"). The lesson is the gate on holes 1-3 -
+    // `progress.js` opens them off `bestHole['tutorial:1']`, which only holing out writes - so a
+    // skip button offered an exit that led nowhere: the cards stopped and the game stayed locked.
 
     // `onViewportResize`, NEVER a raw `resize` listener - the repo's rule, and it bites here for
-    // its own reason as well as the usual one: a card is positioned from a MEASURED anchor rect,
-    // and mobile browsers fire `resize` continuously while the URL bar animates, so a raw listener
-    // would re-measure and re-place the card several times per frame during any scroll.
+    // its own reason as well: the rings are positioned from MEASURED control rects, and mobile
+    // browsers fire `resize` continuously while the URL bar animates.
     this.offViewport = onViewportResize(() => this._place());
     this._place();
   }
 
-  /** Put the card beside its anchor and the arrow between them, then clamp the whole thing inside
-   *  the screen. Measured every time rather than positioned in CSS, because the controls move with
-   *  the safe area and the phone's height. */
+  /** The pips say how much lesson is left, which is the one thing the old card never did and most
+   *  of why a tutorial feels long. One per CARD - the silent waypoints are not steps a player
+   *  meets, so numbering them would count three that never appear. */
+  _pipsHTML(s) {
+    const i = CARDS.indexOf(s);
+    return `<span class="gf-tut__pips" aria-hidden="true">${CARDS
+      .map((_, k) => `<i class="${k < i ? 'is-done' : k === i ? 'is-on' : ''}"></i>`).join('')}</span>`;
+  }
+
+  /** `bare` is a popup step: the pips still say how far along the lesson is, but the sentence lives
+   *  in the popup and repeating it under one is the clutter Matt cut ("no text needs to be on that
+   *  banner here. we have a full popup"). */
+  _railHTML(s, bare) {
+    return `<div class="gf-tut__rail">${this._pipsHTML(s)}` +
+      (bare ? '' : `<span class="gf-tut__text">${esc(t(s.key))}</span>`) + '</div>';
+  }
+
+  _popupHTML(s) {
+    const dial = (kind, label) => `<figure class="gf-tut__dialbox">` +
+      (label ? `<figcaption>${esc(label)}</figcaption>` : '') +
+      `<canvas data-dial="${esc(kind)}" width="${DIAL_W}" height="${DIAL_H}" aria-hidden="true"></canvas></figure>`;
+    let art = '';
+    if (s.popup === 'good') art = dial('good', '');
+    else if (s.popup === 'bad') art = dial('bad', '') + SLICE_SVG;
+    else if (s.popup === 'dial') {
+      art = `<div class="gf-tut__two">${dial('full', t('tut_dial_full'))}${dial('putt', t('tut_dial_putt'))}</div>`;
+    } else if (s.popup === 'bug') art = PAUSE_ART(t);
+    return `<div class="gf-tut__pop gf-panel">
+        <div class="gf-tut__h">${esc(t(`${s.key}_h`))}</div>
+        ${art}
+        <div class="gf-tut__text">${esc(t(s.key))}</div>
+        <button type="button" class="gf-btn gf-tut__ok" data-role="tut-ok"><span>${esc(t('tut_ok'))}</span></button>
+      </div>${this._railHTML(s, true)}`;
+  }
+
+  /** THE POPUPS PAINT THE REAL METER, through `ui.js`'s own `_drawMeter`. A picture of a dial would
+   *  be a second copy of the one thing this popup exists to explain, and it would go stale the day
+   *  the meter is retuned. `onDial` is handed in by ui.js. */
+  _paintDial(canvas) {
+    if (!this.onDial) return;
+    const kind = canvas.dataset.dial;
+    this.onDial(canvas, {
+      putting: kind === 'putt',
+      marks: kind === 'good' ? GOOD_MARKS : kind === 'bad' ? BAD_MARKS : null,
+    });
+  }
+
+  /** WHICH DIAL MARKS THE LIVE METER SHOWS, asked by `_drawMeter` every frame. Only the two steps
+   *  that follow the swing popups carry them, so the marks the popup just pointed at are on the
+   *  real dial when the player turns to it - and are gone again once the lesson is. */
+  dialMarks() { const s = this.step; return (s && s.marks === 'swing') ? GOOD_MARKS : null; }
+
+  /** Put the rings on their controls and the rail above them, measured every time - the controls
+   *  move with the safe area, the phone's height and the hub's own chrome. */
   _place() {
     const el = this.el;
     const s = this.step;
     if (!el || !s || !this.root) return;
-    const card = el.querySelector('.gf-tut__card');
-    const arrow = el.querySelector('.gf-tut__arrow');
     const rootR = this.root.getBoundingClientRect();
 
-    if (!s.anchor) {
-      card.style.left = ''; card.style.top = '';
-      el.setAttribute('data-centre', '1');
-      arrow.style.display = 'none';
-      if (this.ringEl) this.ringEl.style.display = 'none';
-      return;
+    // THE RAIL IS WELDED TO THE BOTTOM EDGE and the CONTROLS move, which is the shape Matt picked
+    // ("i like the bottom rail with pips, but it covers the buttons"). It is positioned in CSS, not
+    // here: an earlier version measured the tallest control cluster and sat above it, which put the
+    // rail halfway up the screen because `.gf-br` carries the 150px meter - measured in a browser
+    // at y=390 of 664, straight across the popup's own button.
+
+    for (const ring of this.rings) {
+      const target = this.root.querySelector(`[data-role="${ring.dataset.for}"]`);
+      if (!target) { ring.style.display = 'none'; continue; }
+      const r = target.getBoundingClientRect();
+      ring.style.display = '';
+      ring.style.left = `${r.left - rootR.left - 4}px`;
+      ring.style.top = `${r.top - rootR.top - 4}px`;
+      ring.style.width = `${r.width + 8}px`;
+      ring.style.height = `${r.height + 8}px`;
     }
-    el.setAttribute('data-centre', '0');
-    const target = this.root.querySelector(s.anchor);
-    if (!target) { arrow.style.display = 'none'; return; }
-    const r = target.getBoundingClientRect();
-    const x = r.left - rootR.left;
-    const y = r.top - rootR.top;
-
-    if (this.ringEl) {
-      this.ringEl.style.display = '';
-      this.ringEl.style.left = `${x - 4}px`;
-      this.ringEl.style.top = `${y - 4}px`;
-      this.ringEl.style.width = `${r.width + 8}px`;
-      this.ringEl.style.height = `${r.height + 8}px`;
-    }
-
-    const cw = card.offsetWidth;
-    const ch = card.offsetHeight;
-    const GAP = 16;
-    // The card clears `clear` when a step names one (the whole control cluster), and the anchor
-    // otherwise. The ARROW and the RING are unaffected: they still point at the anchor, which is
-    // what makes "this row, not that one" readable when the card has been pushed further away.
-    const clearEl = s.clear ? this.root.querySelector(s.clear) : null;
-    const cr = clearEl ? clearEl.getBoundingClientRect() : r;
-    const cyTop = cr.top - rootR.top;
-    const cyBot = cr.bottom - rootR.top;
-    let cx = x + r.width / 2 - cw / 2;
-    let cy = s.side === 'below' ? cyBot + GAP : cyTop - ch - GAP;
-    // Clamp inside the root with a margin, so a card anchored to a corner control never hangs off
-    // the screen. This is why `side` can be authored: the clamp is what makes it safe.
-    const M = 8;
-    cx = Math.max(M, Math.min(rootR.width - cw - M, cx));
-    cy = Math.max(M, Math.min(rootR.height - ch - M, cy));
-    card.style.left = `${cx}px`;
-    card.style.top = `${cy}px`;
-
-    arrow.style.display = '';
-    const ax = Math.max(cx + 12, Math.min(cx + cw - 12, x + r.width / 2));
-    const pointsDown = cy + ch <= y + r.height / 2;
-    arrow.setAttribute('data-dir', pointsDown ? 'down' : 'up');
-    arrow.style.left = `${ax - 9}px`;
-    arrow.style.top = pointsDown ? `${cy + ch - 2}px` : `${cy - 16}px`;
   }
+
 }
