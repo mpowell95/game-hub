@@ -47,6 +47,7 @@
 //  - A game board with no difficulty axis gets no difficulty filter. Skeeball gets a MACHINE
 //    filter in its place, which belongs to that visit and is deliberately not persisted.
 
+import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
@@ -69,47 +70,16 @@ const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'g
 // TIER_COLOR itself now lives in difficulty-tiers.js (2026-07-24) so every game's setup screen
 // can use it too; imported above, values unchanged.
 
-// Old test/debug device records. They stay in Firebase untouched (no data is ever deleted); they are
-// simply never rendered. Matched by deviceId prefix.
-const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test1", preview bot
+// WHO NEVER RENDERS lives in js/hidden-players.js now (2026-09-09) - a dependency-free module, so
+// the launcher-path callers that used to copy this rule by hand can import it instead. The
+// reasoning that used to sit here (why the name rule is a PREFIX and the durable half, why nameless
+// is only safe while js/name-gate.js exists, and Matt's 2026-08-26 rule that a name is a real
+// person until he says otherwise) moved there with it. This file stays the canonical CALLER.
+const HIDDEN_PREFIX = HIDDEN_DEVICE_PREFIX;
 
-// Test/QA profile names (2026-07-29, widened 2026-07-31). Device-id prefixes above only hide
-// devices that already existed when the prefix was written; a fresh test pass mints a new device id
-// every time (new browser/profile/incognito), so a NAME match is what actually stays durable across
-// repeat testing. That is why "Tester" kept reappearing: only the ONE device `4392d978` was hidden,
-// so the same name on any new browser was a brand-new, visible row. Matt (2026-07-31): no test
-// account should ever appear on the leaderboard.
-//
-// So the rule is now a PREFIX rule, not an exact list: any name starting with "test" (Test, Tester,
-// test1, testing) or "zzz" (zzztest and friends), plus the exact names below. Deliberately blunt -
-// a real player is not called "Testxyz", and the cost of a miss is a test row on the family board.
-// Hidden here only: those plays stay recorded, stay synced, and stay visible on My Stats on the
-// device that made them, same as every other hidden record. Case-insensitive, trimmed.
-// WHO ACTUALLY RUNS TEST ROUNDS, from Matt, 2026-08-26: test1, test2 and MattyIce. NOBODY ELSE.
-// He said it after a session called *TP* - a real player, and the board's most-played account - a
-// test account on the strength of its initials. Do not infer "test" from a name's shape, from
-// initials, from an odd play count, or from a name you do not recognise: every name in this family
-// is a real person until Matt says otherwise, and hiding one makes their whole history vanish from
-// the board (THE LAW rule 1). Adding a name here needs him to name it.
-const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);
-const HIDDEN_NAME_PREFIX = ['test', 'zzz'];
-
-/** True for a row that must never render: a test/QA account, or a device with no real name.
- *
- *  Nameless rows (2026-07-31, superseding the 2026-07-30 "show players who never set a profile
- *  name" change): the app is no longer PLAYABLE without a name - js/name-gate.js gates the hub and
- *  every standalone game page - so a nameless record can only be pre-gate history, and its owner is
- *  gated into naming themselves the next time they open anything. At that moment players-agg.js's
- *  identity graph attaches that exact history to their real row and it reappears here, because the
- *  record was never altered. Until then it stays synced and fully visible to its owner on My Stats.
- *  THE LAW rule 1 is about history no screen shows; this history has a screen, and a way back onto
- *  this one. Do not re-hide nameless rows WITHOUT that gate in place - that combination is the
- *  stored-but-invisible bug 59f8e9b fixed. */
+/** True for a row that must never render: a test/QA account, or a device with no real name. */
 function isHiddenRow(g) {
-  const name = (g.name || '').trim().toLowerCase();
-  if (!name || name === 'you') return true;                          // 'You' is profile-store's blank default
-  if (HIDDEN_NAMES.has(name)) return true;
-  return HIDDEN_NAME_PREFIX.some((p) => name.startsWith(p));
+  return isHiddenName(g && g.name);
 }
 
 // --- sort preference (2026-07-29, HANDOFF-LB-FILTER-SORT.md) ----------------------------------

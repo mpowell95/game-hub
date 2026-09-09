@@ -135,6 +135,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
 | `js/arcade-scores.js` | (2026-08-11) the shared high-score + unlock layer for the arcade-cabinet games (Skeeball now, Pinball next). Pure. Per-board all-time and **date-keyed daily** bests, unlocks, the cross-device merges, and `appWideBest` (derived from synced records - there is deliberately no shared `highscores/` node). The daily best is a MAP keyed by local day, never a value that resets: see its header and `test-arcade-scores.mjs` |
+| `js/hidden-players.js` | (2026-09-09) WHO NEVER RENDERS: `isHiddenName()` / `isHiddenDeviceId()` and the lists behind them. Dependency-free, so a launcher-path caller can import it instead of copying it. Read by `leaderboard-ui.js`, `messages.js` and `admin-ui.js`; `test-leaderboard-rank.mjs` still MIRRORS it on purpose (that mirror is the regression check) |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data. Owns one preference key of its own, `gamehub.lb.sort.v1` (the sort choice, alongside `gamehub.favorites.v1`/`gamehub.theme.v1`/`gamehub.lang.v1` — THE LAW rule 2's carve-out) |
@@ -1090,11 +1091,11 @@ soft delete (rule 5).
   separate node and no separate reader, so replying to a broadcast is an ordinary conversation.
 - **The admin read-all is read-only because the MODULE has no admin write path**, not because the
   button avoids one.
-- **The test-account filter in `readContacts` is a SECOND SITE** of `isHiddenRow()`'s rule from
-  `js/leaderboard-ui.js` (a third copy lives in `test-leaderboard-rank.mjs`). Duplicated rather than
-  imported because `js/messages.js` is a SHELL asset the launcher loads on every start just to paint
-  the badge, and pulling the whole leaderboard overlay onto that path is the wrong trade. **If the
-  canonical list changes, change this one too.**
+- **The test-account filter in `readContacts` imports `js/hidden-players.js`** (as of 2026-09-09).
+  It used to be a hand-kept SECOND COPY of `isHiddenRow()`'s rule, duplicated because this file is a
+  SHELL asset the launcher loads on every start just to paint the badge and importing the canonical
+  copy meant dragging the whole leaderboard overlay onto that path. The shared module has no imports
+  of its own, so that objection is gone and there is nothing left to keep in step by hand.
 - **No push notifications.** The badge appears when a player opens the app. Web Push needs FCM, a
   server to send from, and a permission prompt — the same platform limit Report a bug documents.
   `navigator.setAppBadge()` on the installed app is the cheapest half-step if it is ever wanted.
@@ -1230,6 +1231,17 @@ account because of the initials. (An older line in the root CLAUDE.md lists a `T
 family is a real person until Matt says otherwise, and hiding one makes their entire history vanish
 from the board - rule 1, against somebody who did nothing but play. A name joins `HIDDEN_NAMES`
 only when he names it.
+
+**The rule lives in `js/hidden-players.js` since 2026-09-09, and the copies are gone.** It had three
+hand-kept sites (leaderboard-ui.js canonical, messages.js, and test-leaderboard-rank.mjs's
+deliberate mirror), duplicated for a real reason messages.js's own header recorded: importing the
+canonical copy meant pulling the whole leaderboard overlay onto the launcher's start-up path just to
+paint a badge. A FOURTH consumer is what changed the trade - `js/admin-ui.js`'s Announcements
+section, where ~100 pre-gate nameless devices buried the four real people (Matt: *"the announcement
+page has like 100 'unnamed player's"*) - and a dependency-free twenty-line module costs that path
+nothing. `leaderboard-ui.js`'s `isHiddenRow(g)` is now a one-line delegate and stays the canonical
+CALLER; `test-leaderboard-rank.mjs` still mirrors the rule by hand, deliberately, because a test
+that imports the thing it is checking checks nothing.
 
 If a new stray test/debug record turns up by device id instead (e.g. found via
 `node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
@@ -2255,8 +2267,9 @@ by no gameplay or stats path, riding the mirror the device already performs on l
 return-to-launcher and reconnect. **It is a REPORT, never a source** - nothing reads it back, so a
 stale or wiped copy cannot make a popup reappear or vanish on anybody's phone.
 
-`js/admin-ui.js`'s **Announcements** section reads it, one entry per announcement, **grouped by
-PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
+`js/admin-ui.js`'s **Announcements** section reads it, one entry per announcement, filtered by
+`js/hidden-players.js` (the same people the leaderboard renders - it shipped unfiltered and ~100
+pre-gate nameless devices buried the four real people) and **grouped by PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
 somebody with two phones has seen it once they dismiss it on either, and their second phone still
 owes them one. **A device that has not synced since this shipped reports nothing, and nothing is not
 "not seen"** - a person whose phones have all gone quiet reads `no data yet`, never as a no. Same

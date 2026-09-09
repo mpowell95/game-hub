@@ -34,6 +34,7 @@ import { statsId, statsKey } from './game-stats.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import { ANNOUNCEMENTS, textFor } from './announce.js';
+import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
@@ -324,6 +325,13 @@ function announceSectionHTML() {
   for (const id of ids) {
     const rec = all[id] || {};
     const prof = rec.profile || {};
+    // The same people the leaderboard renders, and for the same reasons (js/hidden-players.js).
+    // Matt, the day this shipped: *"the announcement page has like 100 'unnamed player's."* Those
+    // are pre-gate devices that recorded plays before js/name-gate.js made a nameless device
+    // impossible to create - real history, still synced, still on its owner's My Stats, and
+    // nothing here deletes any of it. They just cannot answer the question this screen asks: a
+    // popup shown to a device whose owner has no name is not a person anyone can go and tell.
+    if (isHiddenDeviceId(id) || isHiddenName(prof.name)) continue;
     const key = ident.keyFor(prof, id);
     if (!people.has(key)) people.set(key, { name: '', devices: 0, reported: 0, seen: new Set() });
     const p = people.get(key);
