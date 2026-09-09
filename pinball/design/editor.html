@@ -8,7 +8,13 @@
   Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
   duplicate objects as well... It should show me the entire screen thats displayed on my phone, not
   just the game board."* Then: *"let me select multiple objects at once to move them together."* Then:
-  *"I need the ability to inset or draw objects and rotate objects."*
+  *"I need the ability to inset or draw objects and rotate objects."* Then, after a deploy reloaded
+  the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"*
+
+  NOTHING YOU DO HERE IS EVER HELD ONLY IN MEMORY. Every change is written to localStorage on the
+  spot, and the page reloads into exactly what you left. It shipped without that, so a reload - a
+  deploy, a crash, a closed tab - silently threw away an afternoon of work, which is the one
+  failure a tool like this must not have.
 
   IT READS THE REAL BOARD. `design/board.js` exports `PARTS`, the same list the 3D model and the
   physics footprints are both built from, so what is drawn here is what is in the game - not a
@@ -71,6 +77,9 @@
   kbd { background: #12101a; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
     font-size: 12px; }
   p.help { color: var(--dim); margin: 6px 0; font-size: 13px; }
+  .saved { color: var(--ok); font-size: 12px; letter-spacing: .06em; align-self: center; }
+  .restored { margin: 0 14px; padding: 10px 14px; border-radius: 10px; background: #17331f;
+    border: 1px solid #46d39a; color: #ccf6e6; font-size: 13px; }
   /* THE SELECTION FURNITURE MUST NOT SWALLOW CLICKS. The dashed box is drawn OVER the parts, so
      without this a tap inside your own selection hits the outline, finds no part under the
      pointer, and clears everything - measured: a 27-part lasso dropped to 0 on the first attempt
@@ -109,6 +118,7 @@
   <button id="all">Select all shown</button>
   <button id="clear" disabled>Deselect</button>
   <button id="reset">Reset all</button>
+  <span id="saved" class="saved">saved</span>
   <button id="svg" class="go">Export SVG</button>
   <button id="json" class="go">Export edits</button>
   <select id="levels">
@@ -231,6 +241,17 @@ function shapeOf(p) {
 }
 
 // ---------------------------------------------------------------------------------------------
+/**
+ * THE WORK IS SAVED THE MOMENT IT CHANGES.
+ *
+ * `gamehub.foundryEditor.v1` holds the whole part list plus the selection, rewritten on every
+ * edit. It is a WORKING FILE, not player data - THE LAW does not reach it - but it is somebody's
+ * afternoon, so it is written eagerly rather than on some "save" button nobody would press.
+ *
+ * It is also written on `pagehide`, which is the one event that fires reliably when a tab is
+ * closed or a phone backgrounds it; `beforeunload` does not fire on iOS and `unload` is worse.
+ */
+const SAVE_KEY = 'gamehub.foundryEditor.v1';
 let items = [];
 /** THE SELECTION IS A SET OF IDS. One part selected is a set of one, so there is no second code
  *  path for "several" that could drift out of step with the single-part one. */
@@ -251,6 +272,26 @@ function build() {
   }
 }
 build();
+
+function saveWork() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), seq, made, items, sel: [...sel] }));
+  } catch (e) { /* a full or blocked store must never break the editor */ }
+}
+/** Load the saved work, if there is any. Returns what it restored, for the banner. */
+function loadWork() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.items) || !d.items.length) return null;
+    items = d.items;
+    sel = new Set(d.sel || []);
+    seq = d.seq || items.length;
+    made = d.made || 0;
+    return d;
+  } catch (e) { return null; }
+}
 
 const byId = (id) => items.find((i) => i.id === id);
 const chosen = () => items.filter((i) => sel.has(i.id));
@@ -348,7 +389,12 @@ function rotateSel(deg) {
 const snapOn = () => document.getElementById('snap').checked;
 const snap = (v) => snapOn() ? Math.round(v / 5) * 5 : Math.round(v);
 
-function push() { history.push(JSON.stringify({ items, sel: [...sel] })); if (history.length > 60) history.shift(); }
+// `push` is called before EVERY change, so this is the one place that has to save - a change that
+// does not go through it does not exist.
+function push() {
+  history.push(JSON.stringify({ items, sel: [...sel] }));
+  if (history.length > 60) history.shift();
+}
 function undo() {
   if (!history.length) return;
   const was = JSON.parse(history.pop());
@@ -433,6 +479,11 @@ const shown = () => {
 
 let boardG = null, overlayG = null;
 function draw() {
+  // Saving from draw() rather than from push() catches everything: a drag saves its final state
+  // on the redraw at the end, not the state before it started.
+  saveWork();
+  const stamp = document.getElementById('saved');
+  if (stamp) stamp.textContent = 'saved ' + new Date().toLocaleTimeString();
   svg.textContent = '';
   svg.appendChild(chrome());
   boardG = el('g', { transform: `translate(${BOARD_X} ${BOARD_TOP}) scale(${SCALE})` });
@@ -786,7 +837,12 @@ $('p-rot').addEventListener('change', () => {
   if (deg) rotateSel(deg);
   $('p-rot').value = 0;
 });
-$('reset').onclick = () => { if (confirm('Throw away every change and reload the board as it ships?')) { build(); sel = new Set(); history = []; draw(); } };
+$('reset').onclick = () => {
+  if (!confirm('Throw away every change and reload the board as it ships? This cannot be undone.')) return;
+  build(); sel = new Set(); history = []; made = 0;
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  draw();
+};
 $('levels').onchange = draw;
 
 addEventListener('keydown', (e) => {
@@ -862,5 +918,22 @@ $('json').onclick = () => {
 const setZoom = () => { const z = +$('zoom').value; svg.setAttribute('width', 393 * z); svg.setAttribute('height', 852 * z); };
 $('zoom').onchange = setZoom;
 setZoom();
+
+// RESTORE, then say what happened. A banner rather than a silent restore: coming back to work you
+// forgot you had left is as confusing as losing it.
+const restored = loadWork();
+if (restored) {
+  const when = new Date(restored.at || Date.now());
+  const note = document.createElement('div');
+  note.className = 'restored';
+  note.textContent = `Picked up where you left off (saved ${when.toLocaleString()}). ` +
+    'Every change is saved as you make it.';
+  document.querySelector('main').before(note);
+}
 draw();
+
+// The last line of defence: a tab being closed or backgrounded. pagehide is the event that fires
+// reliably for both, on desktop and on iOS.
+addEventListener('pagehide', saveWork);
+addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveWork(); });
 </script>
