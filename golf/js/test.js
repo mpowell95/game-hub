@@ -2088,7 +2088,11 @@ console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-0
   // matters becomes the one the player has learned to dismiss. That is why the quit button has its
   // own narrower test rather than reusing the hub's `isInProgress()`, which answers true for one.
   ok('...and it gates on a scored round, not on a practice hole',
-    /_roundAtStake\(\)\s*\{[\s\S]{0,300}?roundId !== 'practice'/.test(ui)
+    // 300 -> 1200 chars on 2026-09-09, and once again it is the WINDOW that moved, not the rule.
+    // `_roundAtStake()` gained its "nothing is at stake when the save landed" branch and the note
+    // explaining it, which pushes the practice check further from the function's opening brace.
+    // The practice guard itself is untouched, and is what this line is actually for.
+    /_roundAtStake\(\)\s*\{[\s\S]{0,1200}?roundId !== 'practice'/.test(ui)
     // 200 -> 600 chars on 2026-09-08, and it is the WINDOW that moved, not the rule. `leave()` now
     // has to put `this.course` back when the TUTORIAL is what is being left (it is not in COURSES,
     // so the setup screen would open with nothing selected), and that comment plus its branch push
