@@ -653,6 +653,20 @@ function smoothChain(pts, passes = 4) {
     if (part.type !== 'band' || part.name !== 'arch_outer') continue;
     part.outer = part.outer.filter((q) => q[1] <= RAMP_TOP_PY);
     part.inner = part.inner.filter((q) => q[1] <= RAMP_TOP_PY);
+    // AND THE END CAPS COME WITH THEM.
+    //
+    // `yEndL` / `yEndR` are a SEPARATE field that closes off each leg, and BOTH the mesh (the
+    // band case in buildBoard) and the footprint pass build from them directly - neither looks at
+    // the point chains at all. arch_outer carried yEnd 880, so trimming the points to py 590 moved
+    // nothing that anyone could see or touch: the legs still reached py 880, and there was a SOLID
+    // capsule lying across the ramp lane at that line, from x 128 to x 214.
+    //
+    // Matt, looking at the board: *"the thing that came through a little bit now fully comes
+    // through the full ramp. A ball would never be able to get past it."* He was right. My check
+    // after the trim measured only the chains, so it reported clear - the same drawn-versus-solid
+    // split that has caused nearly every bug on this board.
+    part.yEndL = Math.min(part.yEndL, RAMP_TOP_PY);
+    part.yEndR = Math.min(part.yEndR, RAMP_TOP_PY);
   }
 
   // NO POST MAY SIT INSIDE A BAND. post_big_left (350, 750) and post_big_right (646, 745) were
