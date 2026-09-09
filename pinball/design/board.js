@@ -218,7 +218,8 @@ wall('chute_stop', [986, 1880], [1073, 1880], 0.008, 0.02, Y1, 'darkwood', [1, 2
 // THE RIGHT RAMP, and it lives INSIDE the board now that the chute has moved out of its way -
 // the mirror of the left one, in the 89 px lane between the arch's right leg and the board's right
 // wall. 70 px = 0.037 m of clear channel against a 0.027 ball.
-P.push({ type: 'ramp', name: 'ramp_right', x: [866, 936], z: [640, 908], mat: 'ramp', levels: [], note: 'two-way L1<->L2, in the middle shot band' });
+P.push({ type: 'ramp', name: 'ramp_right', x: [846, 941], xFoot: [755, 857], z: [596, 933], mat: 'ramp', levels: [],
+  note: 'two-way L1<->L2. Top against the wall, MOUTH SWUNG INBOARD - measured off the reference photo, mirrored from ramp_left.' });
 
 // A RAIL DOWN EACH RAMP'S INNER EDGE. The arch leg only hugs the ramp near the deck - the left leg
 // swings from x 129 out to 186 as it descends, and the right one from 862 in to 809 - so below the
@@ -239,10 +240,24 @@ P.push({ type: 'ramp', name: 'ramp_right', x: [866, 936], z: [640, 908], mat: 'r
 // rail's flank instead. Matt: *"Shorten the left and right thin vertical walls."* They now cover
 // only the top half of the lane, which is the part that has to guide the ball onto the ramp; the
 // bottom half is open, so a shot off a paddle can come into the lane from the side.
-wall('ramp_rail_left_out',  [45, 640], [45, 790], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_left_in',   [150, 640], [150, 790], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_right_in',  [866, 640], [866, 790], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_right_out', [936, 640], [936, 790], 0.005, 0.026, Y1, 'steel', [1]);
+// THE RAILS FOLLOW THE LANE, FOOT TO TOP. Four straight verticals used to cover py 640..790 only,
+// so the bottom 118 px of the ramp - the entire approach - had nothing guiding a ball into it.
+// These are the measured edges, four segments each, mouth first.
+// THE OUTER RAIL HUGS THE WALL, it does not follow the ramp floor. Tracing the floor left an 89 px
+// pocket between wall_left and the rail at the mouth, narrowing to nothing at py 593 - a wedge that
+// passes through every width on its way to zero, which by this repo gap rule is a parking space and
+// not a lane. Measured: it swallowed 16 of the 69 rising balls per 30 games. So the rail runs up the
+// wall and cuts across to the mouth corner, which seals the pocket AND funnels an arriving ball
+// inboard toward the mouth instead of past it.
+const RAIL_OUT = [[134, 931], [45, 886], [45, 687], [45, 593]];
+const RAIL_IN = [[228, 931], [206, 886], [169, 787], [153, 687], [136, 593]];
+const mirRail = (pt) => [2 * 493 - pt[0], pt[1]];
+for (let i = 0; i < RAIL_OUT.length - 1; i++) {
+  wall(`ramp_rail_left_out_${i}`, RAIL_OUT[i], RAIL_OUT[i + 1], 0.005, 0.026, Y1, 'steel', [1]);
+  wall(`ramp_rail_left_in_${i}`, RAIL_IN[i], RAIL_IN[i + 1], 0.005, 0.026, Y1, 'steel', [1]);
+  wall(`ramp_rail_right_out_${i}`, mirRail(RAIL_OUT[i]), mirRail(RAIL_OUT[i + 1]), 0.005, 0.026, Y1, 'steel', [1]);
+  wall(`ramp_rail_right_in_${i}`, mirRail(RAIL_IN[i]), mirRail(RAIL_IN[i + 1]), 0.005, 0.026, Y1, 'steel', [1]);
+}
 // L1 backstops across each mouth. The transition to L2 fires first; these catch anything it does
 // not, so level 1 has no open corridor up a ramp lane.
 // AND THE OUTER LANES ARE CLOSED AT THE TOP. They used to be the ramp lanes, so the ramps closed
@@ -298,7 +313,12 @@ P.push({ type: 'plunger', name: 'plunger_rod', at: [1020, 1875], len: 230 * S, l
  * is SEALED - a ball cannot enter it. The arch is not symmetric (its left leg ends at x 224, its
  * right at 776), so the two mouths are not mirror images; sealing the gap wins over symmetry.
  */
-P.push({ type: 'ramp', name: 'ramp_left', x: [45, 150], z: [640, 908], mat: 'ramp', levels: [], note: 'two-way L1<->L2; widened to 105 px because the shot map put 12 of the far paddle arrivals between x 129 and 150' });
+// THE LANE LEANS, AND THE LEAN IS MEASURED. `xFoot` is the mouth and `x` the top, and rampCurved
+// interpolates between them, so the lane is a slanted channel rather than a vertical box. Matt,
+// with the reference recoloured by hand: *"the ramp is curved towards the center (A LITTLE - DO
+// NOT SEND ME SEMI CIRCLE RAMPS). This allows balls to actually go up the ramp."*
+P.push({ type: 'ramp', name: 'ramp_left', x: [45, 140], xFoot: [129, 231], z: [596, 933], mat: 'ramp', levels: [],
+  note: 'two-way L1<->L2. Top against the wall at x 45..140, mouth swung inboard to x 129..231 - read off the reference photo.' });
 // left lane guide + posts
 // THE LEFT LANE RAIL, MOVED INBOARD. Matt: *"the left is in a spot that is impossible for the ball
 // to actually go up. there's a barrier blocking the on ramp part."* Traced: a ball climbing the

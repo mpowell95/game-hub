@@ -64,9 +64,35 @@ export const LAUNCH_LEVEL = 2;
 // lifting it as it goes. STARHUB's habitrail is scripted the same way and for the same reason;
 // pinball/CLAUDE.md calls it *a scripted habitrail, not simulated*, which is far kinder than
 // trying to solve a banked wire in 2D.
+// THE MOUTH MOVED, AND THAT IS THE WHOLE FIX. It used to be x 45..150 at py 908, hard against the
+// side wall, where a rising ball essentially never went: over 30 driven games exactly ONE upward
+// crossing of py 908 landed in it, and none at all in the right one, out of 21 upward crossings
+// at that height anywhere on the board. The mouth measured off the reference photo is 84 px
+// further inboard and catches 15 of those 21.
 export const RAMPS = [
-  { id: 'rampL', x: [px(45), px(150)],  y: px(908), foot: px(97),  top: { x: px(97),  y: px(600), vx: 150, vy: -150 } },
-  { id: 'rampR', x: [px(866), px(936)], y: px(908), foot: px(901), top: { x: px(901), y: px(600), vx: -150, vy: -150 } },
+  { id: 'rampL', x: [px(129), px(231)], y: px(933), foot: px(180), minEntry: 330, top: { x: px(92),  y: px(596), vx: 150, vy: -150 } },
+  { id: 'rampR', x: [px(755), px(857)], y: px(933), foot: px(806), minEntry: 330, top: { x: px(894), y: px(596), vx: -150, vy: -150 } },
+];
+
+/**
+ * THE ONE-WAY KICKERS, one just in front of each mouth, on level 1.
+ *
+ * Matt: *"maybe we put a little speed boost thing on level 1 just in front of the ramp so it can
+ * make it up the incline. This boost would have to be 1-way functional ONLY. And allow for the
+ * ball to roll down the ramp without being shot back up it."*
+ *
+ * `u` is the unit vector UP THE LANE, taken from the lane's own first segment (the mouth at
+ * py 933 to the next measured point at py 886), not from vertical - the lane leaves the mouth at
+ * 26 degrees off upright, so a kicker aimed up the page would fire the ball at the rail.
+ *
+ * ONE-WAY IS `minAlong`, NOT A FLAG. The push only happens when the ball's velocity ALREADY has
+ * a component up the lane bigger than `minAlong`. A ball rolling back down has a negative
+ * component and gets nothing, which is the behaviour asked for; a ball dribbling sideways across
+ * the pad gets nothing either, so it cannot be used as a free ride.
+ */
+export const KICKERS = [
+  { id: 'kickL', x: px(242), y: px(1059), r: px(34), u: [-0.44, -0.90], boost: 250, minAlong: 120 },
+  { id: 'kickR', x: px(744), y: px(1059), r: px(34), u: [0.44, -0.90], boost: 250, minAlong: 120 },
 ];
 /** The gap in the deck's front lip between the upper flipper tips: the way DOWN to level 1. */
 export const DROP_HOLE = { x: [px(455), px(545)], y: px(724), to: { x: px(500), y: px(785) } };
@@ -129,6 +155,6 @@ export const ROW_SIZE = { magenta: 4, blue: 9, red: 4 };
 export const DROP_IDS = ['target_bank'];
 
 export default {
-  NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, DROP_HOLE, SAUCER,
+  NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
   SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS,
 };
