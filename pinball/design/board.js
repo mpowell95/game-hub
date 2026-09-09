@@ -10,7 +10,9 @@
 // Layout is authored in reference-image pixels (986 x 1990) and converted with PX():
 //   x = (px - 493) * 0.000527,  z = (py - 995) * 0.000527   (table 0.52 m x 1.05 m)
 
-export const VERSION = 'v6 — arches: flat crown, measured edges';
+import { LAYOUT, REMOVED, ADDED } from './layout.js';
+
+export const VERSION = 'v7 — Matt\'s editor layout, applied from layout.js';
 export const BALL_DIAMETER = 0.027;
 const S = 0.000527, CX = 493, CY = 995;
 export const PX = (px, py) => [r4((px - CX) * S), r4((py - CY) * S)];
@@ -218,7 +220,7 @@ wall('chute_stop', [986, 1880], [1073, 1880], 0.008, 0.02, Y1, 'darkwood', [1, 2
 // THE RIGHT RAMP, and it lives INSIDE the board now that the chute has moved out of its way -
 // the mirror of the left one, in the 89 px lane between the arch's right leg and the board's right
 // wall. 70 px = 0.037 m of clear channel against a 0.027 ball.
-P.push({ type: 'ramp', name: 'ramp_right', x: [846, 941], xFoot: [755, 857], z: [596, 933], mat: 'ramp', levels: [],
+P.push({ type: 'ramp', name: 'ramp_right', x: [836, 941], xFoot: [755, 857], z: [596, 933], mat: 'ramp', levels: [],
   note: 'two-way L1<->L2. Top against the wall, MOUTH SWUNG INBOARD - measured off the reference photo, mirrored from ramp_left.' });
 
 // A RAIL DOWN EACH RAMP'S INNER EDGE. The arch leg only hugs the ramp near the deck - the left leg
@@ -317,7 +319,7 @@ P.push({ type: 'plunger', name: 'plunger_rod', at: [1020, 1875], len: 230 * S, l
 // interpolates between them, so the lane is a slanted channel rather than a vertical box. Matt,
 // with the reference recoloured by hand: *"the ramp is curved towards the center (A LITTLE - DO
 // NOT SEND ME SEMI CIRCLE RAMPS). This allows balls to actually go up the ramp."*
-P.push({ type: 'ramp', name: 'ramp_left', x: [45, 140], xFoot: [129, 231], z: [596, 933], mat: 'ramp', levels: [],
+P.push({ type: 'ramp', name: 'ramp_left', x: [45, 150], xFoot: [129, 231], z: [596, 933], mat: 'ramp', levels: [],
   note: 'two-way L1<->L2. Top against the wall at x 45..140, mouth swung inboard to x 129..231 - read off the reference photo.' });
 // left lane guide + posts
 // THE LEFT LANE RAIL, MOVED INBOARD. Matt: *"the left is in a spot that is impossible for the ball
@@ -415,6 +417,72 @@ P.push({ type: 'saucer', name: 'saucer_right', at: [901, 110], y0: Y2, levels: [
 P.push({ type: 'teardrop', name: 'decal_teardrop', y0: Y1, levels: [] });
 
 // ---------------------------------------------------------------- footprints (2D, meters)
+/**
+ * MATT'S LAYOUT, APPLIED. Everything above is the board as the Claude Design export built it;
+ * this writes his editor export over the top, which is what makes the deployed board and the
+ * layout tool agree. Three exports had been sent and none of them reached the game, because the
+ * tool was seeded from a scratchpad mockup instead of from here. Matt: *"why does the board look
+ * nothing like it did in the tool? I made many changes that you confirmed, but that I do not see
+ * here."*
+ *
+ * It writes back into each part's OWN fields rather than replacing the part, so the 3D builder,
+ * the material table and the footprint pass all keep working unchanged - a post stays a post.
+ */
+const setShape = (part, rec) => {
+  const pt = rec.pts;
+  switch (part.type) {
+    case 'post': case 'disc': case 'bumper': case 'saucer':
+      part.at = pt[0].slice();
+      if (rec.r !== undefined) part.r = r4(rec.r * S);
+      break;
+    case 'wall': case 'gate':
+      part.a = pt[0].slice(); part.b = pt[1].slice();
+      // AND ITS THICKNESS. The editor draws a wall as a capsule and carries its width; without
+      // this a part copied from a sibling keeps the SIBLING thickness, and the thin rails Matt
+      // drew beside the flippers were built with wall_left's 45 px timber. The rest sweep found
+      // 507 balls parked in the slots that made.
+      if (rec.w !== undefined) part.t = r4(rec.w * S);
+      break;
+    case 'flipper':
+      part.pivot = pt[0].slice(); part.tip = pt[1].slice();
+      break;
+    case 'sling':
+      part.A = pt[0].slice(); part.B = pt[1].slice(); part.C = pt[2].slice();
+      break;
+    case 'poly': case 'wedge': case 'targets':
+      if (part.pts) part.pts = pt.map((q) => q.slice());
+      break;
+    case 'band': {
+      // A band was flattened to one ring by the editor (outer, then inner reversed). Split it
+      // back the same way, or the arch comes back inside out.
+      const h = pt.length / 2;
+      part.outer = pt.slice(0, h).map((q) => q.slice());
+      part.inner = pt.slice(h).reverse().map((q) => q.slice());
+      break;
+    }
+    default: break;   // ramp, incline, plunger, teardrop: not the editor's to set
+  }
+  if (rec.levels) part.levels = rec.levels.slice();
+};
+
+{
+  const gone = new Set(REMOVED);
+  for (let i = P.length - 1; i >= 0; i--) if (gone.has(P[i].name)) P.splice(i, 1);
+  // A part Matt DREW is built by copying a sibling of the same type, which is how it inherits the
+  // fields the editor does not carry: height, material, level tag. Its GEOMETRY is overwritten by
+  // setShape below, thickness included, so nothing of the sibling shape survives.
+  for (const a of ADDED) {
+    if (P.some((q) => q.name === a.name)) continue;
+    const src = P.find((q) => q.type === a.type && q.mat === a.mat) || P.find((q) => q.type === a.type);
+    if (!src) continue;
+    P.push({ ...JSON.parse(JSON.stringify(src)), name: a.name, mat: a.mat || src.mat });
+  }
+  for (const part of P) {
+    const rec = LAYOUT[part.name];
+    if (rec) setShape(part, rec);
+  }
+}
+
 const FP = { 1: [], 2: [] };
 const addFP = (levels, fp) => levels.forEach(l => FP[l].push(fp));
 const circleFP = (name, levels, at, r, extra) => addFP(levels, { name, shape: 'circle', c: PX(...at), r: r4(r), ...extra });
@@ -439,12 +507,24 @@ for (const p of P) {
     case 'saucer': circleFP(p.name, p.levels, p.at, p.r || 0.016, { captures: true,
       note: 'a ball entering is held and kicked back out up the middle; scores' }); break;
     case 'targets': capsuleFP(p.name, p.levels, [p.xs[0] - 15, p.z], [p.xs[3] + 15, p.z], 0.007); break;
-    case 'sling':
+    case 'sling': {
+      // THE LIVE FACE IS THE HYPOTENUSE, FOUND BY MEASURING - not A-to-C by convention. Matt has
+      // asked for the hypotenuse from the start, and A-to-C stopped being it the moment he rotated
+      // these in the editor: on his export the sides run AB 204, BC 100, CA 178, so the kicker was
+      // living on the second-longest edge, whose outward normal points at the DRAIN. Measured, a
+      // ball thrown at it was returned to py 1562-1642 and went straight back down.
+      //
+      // Deriving it means the face stays right however he rotates or reshapes them next time.
       ['A', 'B', 'C'].forEach(k => circleFP(`${p.name}_post_${k}`, p.levels, p[k], SLING_POST_R));
-      capsuleFP(`${p.name}_face_AC`, p.levels, p.A, p.C, 0.003, { kicks: true });
-      capsuleFP(`${p.name}_face_AB`, p.levels, p.A, p.B, 0.003);
-      capsuleFP(`${p.name}_face_BC`, p.levels, p.B, p.C, 0.003);
+      const EDGES = [['AB', p.A, p.B], ['BC', p.B, p.C], ['CA', p.C, p.A]];
+      let hyp = EDGES[0], hypLen = -1;
+      for (const e of EDGES) {
+        const L = Math.hypot(e[2][0] - e[1][0], e[2][1] - e[1][1]);
+        if (L > hypLen) { hypLen = L; hyp = e; }
+      }
+      for (const e of EDGES) capsuleFP(`${p.name}_face_${e[0]}`, p.levels, e[1], e[2], 0.003, e === hyp ? { kicks: true } : undefined);
       break;
+    }
     case 'flipper': {
       const [ax, az] = PX(...p.pivot), [bx, bz] = PX(...p.tip);
       addFP(p.levels, { name: p.name, shape: 'capsule', a: [ax, az], b: [bx, bz], r: FLIP_R1, rPivot: FLIP_R0, rTip: FLIP_R1, dynamic: true,
@@ -581,7 +661,12 @@ export function buildBoard(THREE) {
         const e = Math.min(u, 1 - u);
         const rail = e < 0.12 ? ((0.12 - e) / 0.12) ** 2 * RAIL : 0;
         const dip = -DIP * Math.sin(Math.PI * u);
-        const x0 = xf[0] + (x[0] - xf[0]) * t, x1 = xf[1] + (x[1] - xf[1]) * t;
+        // `t` is 0 at the mouth and 1 at the top. Cubing the blend keeps the lane close to the
+        // mouth line for the first stretch and then sweeps it across, which is the bend the
+        // reference photo shows - and it is a bend rather than a taper, which the old linear
+        // blend could never be.
+        const bend = t * t * (3 - 2 * t) * 0.45 + t * 0.55;
+        const x0 = xf[0] + (x[0] - xf[0]) * bend, x1 = xf[1] + (x[1] - xf[1]) * bend;
         const px = x0 + (x1 - x0) * u;
         const v = V3(px, pz, yBase + rail + dip);
         pos.push(v.x, v.y, v.z);
