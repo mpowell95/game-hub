@@ -142,7 +142,9 @@ negative, and level par reads as "E" rather than 0.
   that means going up; Golf's is a score against par, so it improves downward. The one way a number
   falls is the admin voiding a player's scores on one Skeeball machine, which removes them from
   display without touching the stored record.
-- Two languages: English and Spanish.
+- **Two languages: English and Spanish**, and the Spanish label is usually the longer of the two.
+- **The person this is mainly for is red/green colourblind.** Anything the leaderboard distinguishes
+  by colour is also distinguished some other way — a shape, a word, a mark — never by hue alone.
 - **An admin-only game is nowhere on the leaderboard** — no By Game row, no board of its own — just
   as it is nowhere on the launcher. Today those games are Pinball, Pipes and Pool. It is one switch
   inside the app, so any game can be hidden or released with no code change.
