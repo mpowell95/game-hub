@@ -1575,6 +1575,28 @@ Six pairs on the shipped board have drifted off 493, four of them from my own ra
 (`post_exit` 499, `ramp` 499.3, `flipper_lower` 500, `lane_rail` 494.3). `wall_bottom` reads 522.5
 and is CORRECT: the cabinet is not symmetric, because the chute hangs off the right.
 
+#### The SVG export was a picture; it is a document now (2026-09-09)
+
+Matt, opening it in another drawing tool: *"why can't other svg editors recognize the objects and
+stuff?"* Because it was a screenshot of the page. Four reasons, all fixed:
+
+1. **Nothing was named.** Each part carried `data-id="i37"`, a custom attribute every other editor
+   ignores, so the layer list read Path 1, Path 2, Path 3. Every element now carries an `id`, an
+   `inkscape:label` and a `<title>`; between them every editor worth using shows the name.
+2. **No layers.** One flat list with the phone chrome mixed into it. Five layers now (Cabinet, Both
+   levels, Level 1, Level 2, Guides), and inside each the parts are grouped BY TYPE - 21 groups,
+   `level-1/post`, `level-2/bumper` and so on, so the tree reads like the board.
+3. **Half the parts were strokes.** A wall was a two-point line with a 45-wide round cap, which is
+   a LINE in another editor and reshapes strangely until you outline it. Every capsule is written
+   as a real closed outline: two straight sides and two half-round ends, the same shape, editable
+   as geometry.
+4. **Everything sat inside a scaled group**, so the numbers another tool showed were not the
+   board's own. The layers carry no transform: a coordinate in the file is a coordinate in
+   `board.js`. The `<desc>` says so, with the mirror line and the chute's range.
+
+Measured on the export: it parses, 115 elements carry a name and a title, 94 shapes draw, and the
+only stroke-only path left is the mirror guide.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
