@@ -23,7 +23,10 @@ const KEY = 'gamehub.pinball.v1';
 // a one-tap-recreatable preference, so THE LAW rule 2's carve-out applies: losing it costs a tap,
 // never a score - and an unknown value falls back to the default rather than throwing, which is
 // what lets a board be added or removed without stranding anyone's settings.
-const BOARDS = ['starhub', 'royal', 'rainbow'];
+// FOUNDRY is the Claude Design model, mounted whole - see js/render-design.js. An unknown value
+// still falls back to the default rather than throwing, which is what lets a board be added or
+// removed without stranding anyone's settings.
+const BOARDS = ['starhub', 'royal', 'rainbow', 'foundry'];
 
 const DEFAULTS = { difficulty: 'medium', board: 'starhub' };
 

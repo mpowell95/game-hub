@@ -1044,6 +1044,65 @@ million in one shot, ROYAL FLUSH's rollover paying eighteen times against a wall
 while the suites were green, and that record is unbroken; the soak numbers above say the table
 works, not that it is fun.
 
+## The fourth board: FOUNDRY, the Claude Design export (2026-09-08)
+
+Matt sent `3D Pinball Playfield.zip` - a three.js model of the wooden reference table built by
+Claude Design - with six numbered corrections, then a seventh that reframed the whole layout:
+*"the chute is BESIDE the game board. NOT part of it. The left wall of the chute is the rightmost -
+final - wall of the actual playing board... Create the full board without the launch chute. Then
+stick the launch chute onto the right side. Stop factoring it into the board."*
+
+| File | Role |
+|---|---|
+| `design/board.js` | Claude Design's model, patched. Exports `buildBoard(THREE)`, `FOOTPRINTS`, `TRANSITIONS` |
+| `design/three-d-stage.js`, `design/viewer.html`, `design/README.md` | the export as delivered, kept for provenance |
+| `design/_playtest.mjs`, `design/_shots.mjs` | dev harnesses: the rest sweep and the shot map. Not shipped assets |
+| `js/table-design.js` | the adapter - `FOOTPRINTS` in, `physics.js` colliders out |
+| `js/design.js` | `DesignPinball` - the rules |
+| `js/render-design.js` | `DesignRenderer` - **mounts the model group, does not convert it** |
+
+**THE MODEL IS MOUNTED, NOT CONVERTED.** STARHUB's model had to be converted because the game was a
+2D canvas at the time. There is no such reason now, and a conversion would be a second copy of the
+geometry that could drift from the `FOOTPRINTS` the physics reads. `design/board.js` is the one
+source and both sides read it.
+
+### What was wrong with the export, and how each was measured
+
+- **The ramps were flat rectangular boards, laid backwards.** `rampCurved()` replaces `inclineBox()`:
+  eased elevation with a channel cross-section and raised rails.
+- **The bands were faceted.** `smoothEdge(pts, step = 6)`, Catmull-Rom.
+- **The centre band was missing**, with the saucer that belongs under its crown.
+- **The flippers were about four balls apart** with a capture hole between them. `dx` retuned to a
+  clear 0.039 m (1.4 balls); `bumper_lower` deleted.
+- **`wall_bottom` had no drain gap.** 861 of 1,008 dropped balls rested on it and NOT ONE drained.
+  Split into `wall_bottom_left` and `wall_bottom_right`; the 210 px between them is the drain.
+- **The launch chute was 46 px against a 51 px ball** - it could not fit down its own lane. 69 px now,
+  hung off the outboard face of the board's right wall.
+- **The ramp mouths were unreachable, and the first three readings of that were wrong.** The shot map
+  required the ball to pass THROUGH py 908; the backstop stops it there by design, and the ball rests
+  against it at py 938. Counting CONTACT with the backstop instead: 0 hits became 28. Matt, while I
+  was reshaping the ramp rather than moving it: *"you should have slid the ramp over to make it
+  accessible, not change the shape."* The ramps stay the shape Design drew them.
+
+### Three defects the driven play-test found, all edge-detection or delivery
+
+1. **The launch delivered INTO the chute** (x 1020). The ball arrived on the deck outside its walls,
+   fell off the front and was handed back to the plunger; a 60-second driven game scored zero.
+   `LAUNCH_TO` is x 880, inside the board.
+2. **A ramp re-fired on every bounce** - 1,056 awards in six games. `b._ramp` is an edge flag, and a
+   ramp now delivers the ball INTO the deck (x 230 / 756, y 380) instead of back out its own opening.
+3. **The board rendered mirrored**, chute on the left. `stage.scale.set(K, K, -K)`: the mount's -z
+   double-negated with the model group's own `scale.x = -1`.
+
+### Where it stands
+
+Driven headlessly: **11,155 average, 6 of 6 games finishing, 9.1 s ball life**, both ramps and the
+drop hole used. Level 2 is reachable on about **5% of flipper shots**.
+
+**Three things are open and none is a bug:** 5% may not be the ramp rate a player wants; the outer
+lanes dead-end at the ramp mouths rather than draining; and 9.1 s is short beside STARHUB's asserted
+12 s. All three need a person, not another soak. **Nobody has played it yet.**
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
