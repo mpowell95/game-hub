@@ -1499,6 +1499,28 @@ Every control keeps a 44 px tap target. Nothing scrolls sideways.
 Verified with real touch events: dragging a part moves it exactly (385, 270) -> (465, 330), and a
 resize handle can be grabbed and dragged with a finger.
 
+#### Matt's second export, applied (2026-09-09)
+
+`foundry-edits.json`, 13:09Z: **14 parts deleted and one moved.**
+
+| | |
+|---|---|
+| removed | `deck_L2` (the upper deck slab), `insert_dark_L2_1..9`, `target_disc_1..4` |
+| changed | `playfield_L1` moved (+20, -40) |
+
+**Every one of them is render-only.** All four kinds carry `levels: []`, so none has a physics
+footprint: the counts are 230 on level 1 and 24 on level 2 before and after, unchanged. The ball
+behaves exactly as it did; what changed is what you look at.
+
+Two consequences worth stating, because neither is obvious from the diff:
+
+- **The upper deck has no visible floor now.** Level 2 still exists in the solver and the ball still
+  rides it, but the translucent sheet under it is gone, so a ball up there reads as floating over
+  the lower playfield.
+- **The playfield sheet no longer lines up with the cabinet.** Every wall, post and lane stayed put,
+  so the printed wood sits 20 px right and 40 px high of the frame around it. If that was a stray
+  drag rather than an intention, it is one line to put back.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

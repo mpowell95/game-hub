@@ -34,8 +34,13 @@ const mirror2 = (fn) => fn(false) || fn(true);
 
 // cabinet
 P.push({ type: 'base', name: 'cabinet_floor', levels: [] });
-P.push({ type: 'poly', name: 'playfield_L1', pts: [[45,40],[955,40],[955,1750],[891,1750],[891,1650],[600,1880],[390,1880],[45,1650]], y0: 0.004, d: Y1 - 0.004, mat: 'maple', levels: [] });
-P.push({ type: 'poly', name: 'deck_L2', pts: [[45,40],[955,40],[955,640],[782,640],[545,724],[455,724],[218,640],[45,640]], y0: Y2 - 0.012, d: 0.012, mat: 'deckwood', levels: [] });
+// MOVED (+20, -40) in the layout editor. This is the printed wood SHEET and it carries no
+// footprint, so nothing about the ball changes - but every wall, post and lane stayed where it
+// was, so the sheet now sits 20 px right and 40 px high of the cabinet it is inside.
+P.push({ type: 'poly', name: 'playfield_L1', pts: [[65,0],[975,0],[975,1710],[911,1710],[911,1610],[620,1840],[410,1840],[65,1610]], y0: 0.004, d: Y1 - 0.004, mat: 'maple', levels: [] });
+// THE UPPER DECK SLAB IS DELETED. It was the translucent sheet the top section stood on - render
+// only, `levels: []`, so level 2 still exists in the physics exactly as before and the ball still
+// rides it. What is gone is the floor you could see under it.
 wall('wall_left',   [22.5, 0],   [22.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 2]);
 // THE BOARD'S RIGHT WALL, AND THE FEED GAP AT THE TOP OF IT.
 //
@@ -380,8 +385,8 @@ SIDE_DARK.concat(SIDE_DARK.map(([x, y]) => [M - x, y]))
   .forEach((a, i) => disc(`insert_dark_L1_${i + 1}`, a, 0.011, Y1, 'unlit', false));
 SIDE_YELLOW.concat(SIDE_YELLOW.map(([x, y]) => [M - x, y]))
   .forEach((a, i) => disc(`insert_yellow_side_${i + 1}`, a, 0.011, Y1, 'yellow', true));
-[[280, 200], [225, 240], [335, 150], [445, 135], [500, 130], [555, 135], [665, 150], [720, 200], [775, 240]].forEach((a, i) => disc(`insert_dark_L2_${i + 1}`, a, 0.011, Y2, 'unlit', false));
-[[190, 185], [250, 155], [796, 185], [736, 155]].forEach((a, i) => disc(`target_disc_${i + 1}`, a, 0.013, Y2, 'olive', false));
+// The nine unlit inserts and the four olive target discs that were painted across the upper deck
+// are deleted. Paint, no footprint.
 P.push({ type: 'saucer', name: 'saucer_left',  at: [85, 110],  y0: Y2, levels: [] });
 P.push({ type: 'saucer', name: 'saucer_right', at: [901, 110], y0: Y2, levels: [] });
 [[[155, 940], [30, 60]], [[831, 940], [-30, 60]], [[140, 1325], [45, 35]], [[805, 1315], [-45, 35]]].forEach(([tip, d], i) =>
