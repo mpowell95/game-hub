@@ -655,6 +655,67 @@ function smoothChain(pts, passes = 4) {
     part.inner = part.inner.filter((q) => q[1] <= RAMP_TOP_PY);
   }
 
+  // NO POST MAY SIT INSIDE A BAND. post_big_left (350, 750) and post_big_right (646, 745) were
+  // both geometrically INSIDE arch_inner - invisible, and colliding from within another solid.
+  // Matt placed them in the editor and then the arch moved underneath them, which is the same
+  // drift the sensors and the arrows had. Rather than delete something he positioned, each is
+  // pushed straight out to the nearest edge of the band it is buried in, plus its own radius.
+  {
+    const ringOf = (b) => b.outer.concat(b.inner.slice().reverse());
+    const inRing = (pt, ring) => {
+      let c = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i], d = ring[j];
+        if ((a[1] > pt[1]) !== (d[1] > pt[1])
+          && pt[0] < (d[0] - a[0]) * (pt[1] - a[1]) / (d[1] - a[1]) + a[0]) c = !c;
+      }
+      return c;
+    };
+    for (const q of P) {
+      if (q.type !== 'post' || !q.at) continue;
+      for (const b of P) {
+        if (b.type !== 'band') continue;
+        const ring = ringOf(b);
+        if (!inRing(q.at, ring)) continue;
+        // Walk OUTWARD until it is clear of every band. Pushing away from the nearest ring point
+        // does not work: the ring is the outer chain plus the inner one reversed, so the nearest
+        // point is often on the far side and the post gets pushed deeper in. This searches 24
+        // directions at growing radius and takes the first clear spot, which is the closest one.
+        // CLEAR BY MORE THAN A BALL, not just clear. At +8 the post came to rest 8 px off the
+        // band and that gap is a PARKING SPACE by this board rule - wide enough to admit a ball,
+        // too narrow to release it. The sweep found 23 drops wedged there. The ball is 51 px, so
+        // the post is pushed out until its SURFACE stands a full ball-width clear of the band.
+        const R = (q.r / S) + 56;
+        // At the smallest radius that clears, several angles usually work. Prefer the one that
+        // moves OUTBOARD - away from the mirror line - because that is the open side beside an arch
+        // leg; taking the first angle scanned sent both posts INBOARD, across the arch and 73 px
+        // from where Matt put them.
+        let moved = null;
+        for (let step = R; step <= R + 90 && !moved; step += 4) {
+          let best = null, bestOut = -Infinity;
+          for (let k = 0; k < 24; k++) {
+            const th = k * Math.PI / 12;
+            const cand = [q.at[0] + Math.cos(th) * step, q.at[1] + Math.sin(th) * step];
+            if (P.some((z) => z.type === 'band' && inRing(cand, ringOf(z)))) continue;
+            const outward = Math.abs(cand[0] - 493) - Math.abs(q.at[0] - 493);
+            if (outward > bestOut) { bestOut = outward; best = cand; }
+          }
+          moved = best;
+        }
+        if (moved) q.at = [r4(moved[0]), r4(moved[1])];
+        break;      }
+    }
+  }
+
+  // A LEFT/RIGHT PAIR THAT WAS PUSHED OUT STAYS A PAIR. The search runs on each post on its own,
+  // so the two big posts came out 10 px apart across the mirror line. Matt asks for symmetry more
+  // than for anything else on this board, so the left result is mirrored onto the right.
+  for (const L of P) {
+    if (L.type !== 'post' || !/_left$/.test(L.name)) continue;
+    const R = P.find((z) => z.name === L.name.replace(/_left$/, '_right'));
+    if (R && R.at) R.at = [r4(2 * 493 - L.at[0]), R.at[1]];
+  }
+
   // ...and every band gets the tremor taken out of it, whether it came from the editor or not.
   // ...AND AT THAT LEVEL'S HEIGHT, IN BOTH DIRECTIONS. The rule below only ever pushed y0 UP, for
   // level-2 parts drawn too low. The six rails Matt drew beside the flippers are the other
@@ -704,7 +765,13 @@ for (const p of P) {
       // A non-capture saucer is decorative and stays solid.
       if (!p.capture) circleFP(p.name, p.levels, p.at, p.r || 0.016);
       break;
-    case 'targets': capsuleFP(p.name, p.levels, [p.xs[0] - 15, p.z], [p.xs[3] + 15, p.z], 0.007); break;
+    case 'targets':
+      // ONE COLLIDER PER TARGET. It used to be a SINGLE capsule spanning all four, 195 px of
+      // unbroken wall - so `this.down` could never receive an id, the bank could never drop,
+      // and it paid PTS.target on every touch for ever. A drop target bank has to be four
+      // separate things that can each be knocked over, which is what this builds.
+      p.xs.forEach((cx, i) => capsuleFP(`${p.name}_${i}`, p.levels, [cx - 21, p.z], [cx + 21, p.z], 0.007));
+      break;
     case 'ramp': {
       // MATT FOUND THIS BY PLAYING IT: *"THE REASON THE RAMPS DONT WORK IS BECAUSE YOUVE MADE
       // THEM FLAT. THE BALL TREATS IT LIKE PAINT AND ROLLS RIGHT OVER IT."* He is exactly right.
@@ -746,7 +813,15 @@ for (const p of P) {
         const L = Math.hypot(e[2][0] - e[1][0], e[2][1] - e[1][1]);
         if (L > hypLen) { hypLen = L; hyp = e; }
       }
-      for (const e of EDGES) capsuleFP(`${p.name}_face_${e[0]}`, p.levels, e[1], e[2], 0.003, e === hyp ? { kicks: true } : undefined);
+      // AND THE LIVE ONE IS CALLED `face_live`. The scorer in js/design.js used to look for
+      // `face_AC` - the edge that WAS the hypotenuse before Matt rotated these. Once the live
+      // face became whichever edge is longest, that name stopped matching anything, so both
+      // slingshots kicked the ball and paid nothing. Naming the face by its ROLE means the
+      // scorer cannot drift away from the geometry again.
+      for (const e of EDGES) {
+        const nm = e === hyp ? `${p.name}_face_live` : `${p.name}_face_${e[0]}`;
+        capsuleFP(nm, p.levels, e[1], e[2], 0.003, e === hyp ? { kicks: true } : undefined);
+      }
       break;
     }
     case 'flipper': {

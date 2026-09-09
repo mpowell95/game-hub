@@ -32,6 +32,8 @@ const PTS = {
   bumper: 100, sling: 50, post: 10, target: 500,
   dot: 300, row: 2500, allRows: 10000,
   ramp: 2000, saucer: 5000, yellow: 250,
+  // knocking all four drop targets over in one ball
+  bank: 7500,
 };
 
 export class DesignPinball {
@@ -403,15 +405,29 @@ export class DesignPinball {
       this.emit({ type: 'bumper', i: /left/.test(id) ? 0 : 1, x, y });
       return;
     }
-    if (/slingshot.*face_AC/.test(id)) {
+    // `face_live` is whichever edge board.js found to be the hypotenuse - see its sling case.
+    if (/slingshot.*face_live/.test(id)) {
       this._award(PTS.sling, x, y);
       this.emit({ type: 'sling', id: /left/.test(id) ? 'slingL' : 'slingR', x, y });
       return;
     }
     if (/^target_bank/.test(id)) {
+      // A TARGET THAT IS HIT GOES DOWN AND STAYS DOWN. `this.down` was created, read by
+      // buildLevel and cleared per ball - and never written to, so the bank was a permanent
+      // wall paying PTS.target on every touch. Dropping one rebuilds that level without it;
+      // dropping all four pays the bank bonus and stands them all back up.
+      if (this.down.has(id)) return;
       if (!this._arm(id, 0.3)) return;
+      this.down.add(id);
       this._award(PTS.target, x, y, 'bank');
-      this.emit({ type: 'drop', x, y });
+      this.emit({ type: 'drop', id, x, y });
+      if (this.down.size >= T.DROP_IDS.length) {
+        this.down.clear();
+        this.stats.banks = (this.stats.banks || 0) + 1;
+        this._award(PTS.bank, x, y, 'bankdone');
+        this.emit({ type: 'msg', key: 'msg_bank', big: true });
+      }
+      this._rebuild();
       return;
     }
     if (/^post_red/.test(id)) {
