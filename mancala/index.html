@@ -13,9 +13,16 @@
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding: 16px 8px 40px;
+      /* NO DECORATIVE PADDING ON A GAME PAGE. This was `16px 8px 40px` - 56px of chrome around
+         a game that already lays out to fill the screen, and 56px of the 160px by which this page
+         overflowed a 664px phone (2026-09-08). Chinchon's own page carries the same note from
+         2026-09-01; mancala was the other odd one out. The home-indicator clearance is kept,
+         honestly, via env(). */
+      padding: 0 8px env(safe-area-inset-bottom, 0px);
     }
-    #mancala { width: 100%; max-width: 820px; }
+    /* A flex item's default `min-width: auto` is its min-content, so without this the game can
+       refuse to shrink and the page scrolls sideways instead (see chinchon/index.html). */
+    #mancala { width: 100%; max-width: 820px; min-width: 0; }
   </style>
 </head>
 <body>

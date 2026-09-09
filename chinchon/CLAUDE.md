@@ -364,3 +364,40 @@ transmitted snapshot's device-relative `isHuman` flags by seat before rebuilding
 round-boundary snapshot (`midRound:false`) resumes via `_resumeNextRound` (never `initMatch()`,
 which zeroes every score), with a restoring guest awaiting the host's published round record
 (`_mpAwaitNextRound`) before playing.
+## The setup screen: 31px sideways, 141px too tall, and neither was the card sizes (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Two separate bugs, found by `check-no-scroll.mjs`, and the interesting part is that this file (and
+`test-visual.mjs`'s known-gaps list) had blamed both on *"246 bare top-level prefixed CSS rules and
+the widest setup screen in the repo... a real fix is a layout pass"*. Neither needed one.
+
+### The sideways scroll was ONE line, in `index.html`
+
+`body` is `display: flex`, so `#chinchon` is a flex item - and **a flex item's default
+`min-width: auto` is its min-content**. Measured at a 390px viewport, `.cc-root` laid itself out
+**452px wide** and the page scrolled 31px sideways: not because anything inside is too wide to fit,
+but because the game was allowed to refuse to shrink. `#chinchon { min-width: 0 }` and the whole
+page measures 390 of 390, with nothing overflowing anywhere.
+
+### The height came off spacing and one button row, not the cards
+
+141px, in the hub at 390x664 (`.cc-root` 634px against 493px of room). Standalone fits at every
+size tested. In order of size:
+
+- **The two foot buttons share one row** (-43). "Start game" and "How to play" were stacked;
+  `.cc-setup-foot` is a column by default - the tall-screen layout is untouched - and a row on the
+  short hub screen. Golf's setup screen does exactly this and for the same reason.
+- **The panel's own gaps and padding** (-62).
+- **The mode chips held to one line** (-22): "Host online" was wrapping.
+- **The settings labels held to one line** (-17): "Closing rules" wrapped, so that row stood 17px
+  taller than its six neighbours.
+
+**The seven summary rows are UNTOUCHED at 42px.** They are the tap targets and they were already
+the tightest thing on the screen; taking height out of them would have made an existing sub-44px
+row worse to fix a problem that had cheaper answers.
+
+**This says nothing about `.cc-game`**, which is a separate screen and still measures over in the
+hub - see `test-visual.mjs`'s known gaps. That one really is the hand and the mat, and it really
+does need a card-size pass with eyes on screenshots.

@@ -236,3 +236,33 @@ six M-series probes green (`test-mp-lockstep.mjs`); real-room behaviour is unver
 devices are required for `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment
 cannot reach Firebase at all (see that doc's "why these four categories can't move to the
 cloud"). Nothing here has been played on a real phone yet.
+## The setup screen fit nothing, and its own page was 56px of that (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+The worst of the nine: measured by `check-no-scroll.mjs`, the setup column stood 748px - **34px
+over in the hub even at 393x852**, 160px over standalone at 390x664 and 222px over in the hub at
+390x664.
+
+### 56px of it was decorative padding on the standalone page
+
+`mancala/index.html`'s body carried `padding: 16px 8px 40px` around a game that already lays out to
+fill the screen. Chinchon's page carries the same note from 2026-09-01 (*"NO DECORATIVE PADDING ON
+A GAME PAGE... every other game's standalone page uses `padding: 0`"*); mancala was the other odd
+one out. The home-indicator clearance is kept, honestly, via `env(safe-area-inset-bottom)`.
+`#mancala` also gained `min-width: 0`, for the reason chinchon's did.
+
+### THE TWO CSS BLOCKS ARE WRITTEN TO COMPOSE, and that is the whole trick
+
+One is scoped `.hub-main` at any height and touches only SPACING (the root's padding, the column's
+padding and gap). The other is `@media (max-height: 760px)` at any host and touches only SIZES (the
+logo, the two headings, the buttons' own padding). They therefore ADD UP on the screen that needs
+both - the short hub screen, which needed all 222px - instead of the more specific one simply
+overriding the other, which is what happens the moment two blocks set the same property. If a
+future trim is needed, put it in whichever block owns that KIND of property.
+
+The logo (a little mancala board) is the single biggest item and takes the biggest cut: 122px ->
+about 56. `.mc-primary` and `.mc-secondary` stop at 11px of padding on a 16px label, which is 44px
+- they are the tap targets, and that is the floor these numbers stop at rather than the smallest
+that would fit.

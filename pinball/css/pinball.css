@@ -632,3 +632,26 @@
   cursor: pointer; touch-action: manipulation;
 }
 .pb-board.is-on { color: #0d1420; background: #ffce3a; border-color: #ffce3a; }
+
+/* --- SHORT SCREENS: nothing in this hub may scroll -------------------------------------------
+   Matt, 2026-09-08: *"I don't want any game in the gamehub to be scrollable at all. Everything
+   MUST fit on a single screen. Always."*
+
+   MEASURED by `check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.pb-setup` scrolled
+   inside itself by 88px, a 664px box holding 752px (56px of top padding + a 678px inner column).
+   Both 852px screens fit, so this is scoped to the height that does not - the tall layout is the
+   one that has been looked at, and tightening it everywhere would change a screen nobody
+   complained about.
+
+   THIS ONE ALSO HAD A SCROLLBAR NOBODY COULD SEE COMING: `.pb-setup` is `position: absolute;
+   inset: 0` with its own `overflow-y: auto`, so the PAGE never overflowed and every page-level fit
+   check in this repo passed it. The 88px comes off spacing alone. */
+@media (max-height: 720px) {
+  .pb-root .pb-setup { padding-top: max(env(safe-area-inset-top, 0px), 40px); }
+  .pb-root .pb-setup-inner { gap: 8px; }
+  .pb-root .pb-brand { margin-top: 8px; }
+  .pb-root .pb-brand-main { font-size: clamp(1.7rem, 9vw, 2.4rem); }
+  .pb-root .pb-h { margin-top: 2px; }
+  .pb-boards { margin-bottom: 8px; }
+  .pb-root .pb-diffs { gap: 6px; }
+}

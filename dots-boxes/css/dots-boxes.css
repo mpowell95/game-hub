@@ -65,6 +65,26 @@
   .db-root .db-shell { padding-left: 10px; padding-right: 10px; }
 }
 
+/* AND ON A SHORT PHONE IN THE HUB THE BOARD ITSELF IS THE OVERFLOW (2026-09-08). Matt: "I've told
+   you several times before that I don't want any game in the gamehub to be scrollable at all.
+   Everything MUST fit on a single screen. Always."
+
+   Measured at 390x664 in the hub, mid-game: 28px over. `--db-cell` is sized off the VIEWPORT WIDTH
+   alone (`min(17.5vw, 80px)`), so the board grows to fill a phone's width and never once asks how
+   much HEIGHT is left under it - which is fine on a tall screen and 28px too much on a short one.
+   The shell's padding and gap were already trimmed for the hub in 2026-09-01 and are nearly spent,
+   so this comes off the cell.
+
+   Per size rather than one multiplier: the three boards are 3x3, 4x4 and 7x7, so the same cell cut
+   costs a different number of rows on each. Measured after, mid-game in the hub at 390x664: small
+   0px over, medium 0px, large 0px. `.db-edge`'s 44px tap target is untouched - it is
+   `min(44px, dot + cell)` and every cell here stays well above it. */
+@media (max-height: 760px) {
+  .hub-main .db-root .db-board[data-size="small"] { --db-cell: min(19.5vw, 96px); }
+  .hub-main .db-root .db-board[data-size="medium"] { --db-cell: min(15.5vw, 80px); }
+  .hub-main .db-root .db-board[data-size="large"] { --db-cell: min(5.9vw, 38px); }
+}
+
 /* --- shared bits --------------------------------------------------------- */
 
 .db-root .db-title {
@@ -90,6 +110,11 @@
 }
 
 .db-root .db-vscard {
+  /* BORDER-BOX, because this card is `width: 100%` of a padded shell. Nothing in this file sets a
+     box-sizing reset, so on content-box its 14px of side padding and 1px border land OUTSIDE the
+     370px it is given: measured at a 390px viewport it rendered 400px wide and hung 5px off both
+     edges of the screen, which is the page scrolling sideways (2026-09-08). */
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -545,6 +570,7 @@
 .db-root .db-vsdash { font-size: 12px; font-weight: 900; color: var(--db-muted); }
 
 .db-root .db-mp-lobby {
+  box-sizing: border-box;   /* same reason as .db-vscard above: a padded full-width flex box */
   display: flex;
   flex-direction: column;
   gap: 10px;

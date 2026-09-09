@@ -510,3 +510,21 @@
   .hc-root .hc-tab:active,
   .hc-root .hc-pedal.is-down { transform: none; }
 }
+
+/* --- SHORT SCREENS: nothing in this hub may scroll -------------------------------------------
+   Matt, 2026-09-08: *"I don't want any game in the gamehub to be scrollable at all. Everything
+   MUST fit on a single screen. Always."*
+
+   MEASURED by `check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.hc-body` scrolled
+   inside itself by 137px - four 107px cards, 453px of them, in a 324px box. Both 852px screens
+   fit, so this is scoped to the height that does not.
+
+   TWO COLUMNS RATHER THAN SMALLER CARDS, and that is the point: this screen is FOUR cards, so the
+   height is four rows of card, and trimming 34px off each one would have taken the note text with
+   it. Two columns makes it two rows and costs nothing but width, which this screen has - the same
+   grid the 620px rule above already switches to, asked for by height instead. */
+@media (max-height: 720px) {
+  .hc-root .hc-cards { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .hc-root .hc-intro { margin: 2px 2px 6px; }
+  .hc-root .hc-card { padding: 7px 9px; }
+}

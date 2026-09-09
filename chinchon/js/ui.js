@@ -558,8 +558,10 @@ class ChinchonUI {
         ${statsLine}
         ${modeSeg}
         ${this._renderSettingsCard(isHost)}
-        ${actionBtn}
-        <button class="cc-btn cc-btn-ghost" data-action="help">${t('howto')}</button>
+        <div class="cc-setup-foot">
+          ${actionBtn}
+          <button class="cc-btn cc-btn-ghost" data-action="help">${t('howto')}</button>
+        </div>
       </div>`;
   }
 

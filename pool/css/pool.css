@@ -420,3 +420,20 @@
   .p2-root .p2-pl { transition: none; }
   .p2-root .p2-pl-group { transition: none; }
 }
+
+/* --- SHORT SCREENS: nothing in this hub may scroll -------------------------------------------
+   Matt, 2026-09-08: *"I don't want any game in the gamehub to be scrollable at all. Everything
+   MUST fit on a single screen. Always."*
+
+   MEASURED by `check-no-scroll.mjs` at 390x664 in the hub - the only one of pool's four screens
+   that failed - `.p2-setup` scrolled inside itself by 45px: a 545px box holding 590px of setup
+   (header 136 + card 416 + padding). Every other size and host fits, so this is scoped to the
+   height that does not rather than made unconditional: the tall layout is the one Matt has looked
+   at and approved, and tightening it everywhere would change a screen that was not broken.
+
+   The 58px comes off spacing alone - no font under the 11px floor, no tap target under 44px, and
+   nothing hidden. */
+@media (max-height: 720px) {
+  .p2-root .p2-headerpanel { padding: 10px 22px 12px; }
+  .p2-root .p2-modecard { margin-top: 10px; padding: 10px 16px 10px; gap: 8px; }
+}

@@ -286,3 +286,16 @@ independent of the play loop.
 - **The touch-input fixes cannot be regression-tested headlessly.** `js/test.js` is node-only and
   the behaviour is a browser gesture, so it is covered by the scripted Chromium pass described
   above rather than by the suite. Re-run that pass by hand if `bindPlay()` is touched.
+## The garage cards scrolled inside themselves on a short phone (2026-09-08)
+
+Matt: *"I've told you several times before that I don't want any game in the gamehub to be
+scrollable at all. Everything MUST fit on a single screen. Always."*
+
+Measured by `check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.hc-body` scrolled INSIDE
+ITSELF by 137px - four 107px cards, 453px of them, in a 324px box. Both 852px screens fit, so the
+block in `hill-climb.css` is scoped `@media (max-height: 720px)`.
+
+**Two columns rather than smaller cards, and that is the point.** This screen is FOUR cards, so its
+height is four rows of card; trimming 34px off each one would have taken the note text with it.
+Two columns makes it two rows and costs nothing but width, which this screen has - it is the same
+grid the existing 620px-wide rule already switches to, asked for by height instead.

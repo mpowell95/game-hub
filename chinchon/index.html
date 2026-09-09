@@ -20,6 +20,12 @@
          home-indicator clearance it was presumably for is kept, honestly, via env(). */
       padding: 0 0 env(safe-area-inset-bottom, 0px);
     }
+    /* THE MOUNT POINT IS A FLEX ITEM, AND A FLEX ITEM'S DEFAULT `min-width: auto` IS ITS
+       MIN-CONTENT (2026-09-08). Measured at a 390px viewport, `.cc-root` laid out 452px wide and
+       the whole page scrolled 31px sideways - not because anything inside is too wide to fit, but
+       because the body's `display: flex` let the game refuse to shrink below its preferred size.
+       With this, nothing overflows at all (measured: doc scrollWidth 390 of 390). */
+    #chinchon { min-width: 0; }
   </style>
 </head>
 <body>

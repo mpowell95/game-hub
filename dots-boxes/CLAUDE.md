@@ -217,3 +217,18 @@ Firebase at all. **The per-edge move granularity under real chain-capture latenc
 many rapid edges in one turn) is the one thing this pass could not de-risk and is flagged
 explicitly for that pass** — see the handoff entry there. Nothing here has been played on a real
 phone yet.
+## The page scrolled SIDEWAYS by 5px, and it was a missing `box-sizing` (2026-09-08)
+
+Found by `check-no-scroll.mjs` (repo root): standalone, at both phone heights, the page overflowed
+its own width by 5px. Not a layout that is too wide - nothing in this game needs more than the
+screen - but `.db-vscard`, which is `width: 100%` of a padded shell.
+
+**Nothing in `dots-boxes.css` sets a `box-sizing` reset**, so on content-box that card's 14px of
+side padding and 1px border land OUTSIDE the 370px it is given: measured at a 390px viewport it
+rendered **400px wide and hung 5px off both edges of the screen**. `.db-mp-lobby` is the same shape
+of box (a padded, block-level flex column) and got the same fix.
+
+**Both fixes are per-rule, deliberately, rather than a blanket `.db-root *` reset.** A reset here
+would silently re-size the board, the buttons and every padded panel in the game at once, which is
+a much bigger change than the bug being fixed. If a future pass wants the reset, it needs
+screenshots (VISUAL-PROCESS.md), not a one-liner.

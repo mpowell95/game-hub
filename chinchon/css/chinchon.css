@@ -76,10 +76,41 @@
   padding: 22px; background: var(--cc-surface); border: 1px solid var(--cc-surface-2);
   border-radius: 16px; box-shadow: 0 6px 24px rgba(20, 40, 80, 0.08);
 }
+/* The two buttons under the settings card. A column by default - the tall-screen layout is
+   unchanged - and one ROW on the short hub screen below, which is where the 43px it saves is the
+   difference between fitting and scrolling. */
+.cc-setup-foot { display: flex; flex-direction: column; gap: 18px; }
+.cc-setup-foot .cc-btn { width: 100%; }
+
 .cc-lead { margin: 0; color: var(--cc-muted); line-height: 1.5; }
 .cc-lead em { color: var(--cc-ink); font-style: normal; font-weight: 700; }
 .cc-credit { margin: 2px 0 0; text-align: center; font-size: 0.72rem; color: var(--cc-muted); }
 .cc-credit a { color: var(--cc-muted); text-decoration: underline; }
+
+/* A SHORT PHONE IN THE HUB IS THE ONE SCREEN THIS SETUP DID NOT FIT ON (2026-09-08). Matt: "I've
+   told you several times before that I don't want any game in the gamehub to be scrollable at all.
+   Everything MUST fit on a single screen. Always." Measured, `.cc-root` stood 634px against the
+   493px the hub leaves at 390x664 - 141px over - while standalone fit at every size tested,
+   because the hub spends ~138px on its own chrome that no height media query can see. Hence the
+   `.hub-main` scope, the same shape snake's, dominoes' and battleship's trims use.
+
+   Nothing is hidden and no row loses a word. The 141px comes from, in order of size: the two foot
+   buttons sharing one row (-43, golf's setup screen does the same), the panel's own gaps and
+   padding (-62), the mode chips held to one line (-22) and the settings labels held to one line
+   (-17, "Closing rules" was wrapping and standing 17px taller than its six neighbours). The
+   summary rows themselves are UNTOUCHED at 42px - they are the tap targets, and they were already
+   the tightest thing on the screen. */
+@media (max-height: 760px) {
+  .hub-main .cc-root { padding: 4px 6px 6px; }
+  .hub-main .cc-root .cc-header { margin-bottom: 6px; }
+  .hub-main .cc-root .cc-title { font-size: 1.25rem; }
+  .hub-main .cc-root .cc-card-panel { padding: 10px; gap: 8px; }
+  .hub-main .cc-root .cc-seg { padding: 8px 6px; font-size: 0.9rem; white-space: nowrap; }
+  .hub-main .cc-root .cc-summary-row { padding: 11px 12px; }
+  .hub-main .cc-root .cc-summary-label { white-space: nowrap; }
+  .hub-main .cc-root .cc-setup-foot { flex-direction: row; gap: 8px; }
+  .hub-main .cc-root .cc-setup-foot .cc-btn { flex: 1; }
+}
 
 /* Avatar picker (popup grid) */
 .cc-avatar-sheet { max-width: 380px; }
