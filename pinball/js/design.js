@@ -29,11 +29,16 @@ const SAUCER_HOLD = 0.9;
 const SEARCH_DIST = 30, SEARCH_SECS = 3, SEARCH_VX = 210, SEARCH_VY = 150, SEARCH_GIVE_UP = 3;
 
 const PTS = {
-  bumper: 100, sling: 50, post: 10, target: 500,
+  // THE BANK WAS PAYING FOR HALF THE GAME. Measured over 16 driven games before this: the drop
+  // targets and their bonus were 45.2% of all points, against 0.6% for a ramp and 2.8% for the
+  // saucer. The easiest repeatable thing on the board out-earned the two hardest shots by fifty to
+  // one. A target is 200 now and the bank bonus 4,000, and a ramp - which needs a clean flipper
+  // shot up a lane - is worth double.
+  bumper: 100, sling: 50, post: 10, target: 200,
   dot: 300, row: 2500, allRows: 10000,
-  ramp: 2000, saucer: 5000, yellow: 250,
+  ramp: 4000, saucer: 5000, yellow: 250,
   // knocking all four drop targets over in one ball
-  bank: 7500,
+  bank: 4000,
 };
 
 export class DesignPinball {
@@ -349,7 +354,8 @@ export class DesignPinball {
           b.held = true; b.holdT = 99;
           b._drop = 0;
           b._dropFrom = [b.x, b.y];
-        } else if (b.y > T.px(760) && b.x < T.px(941) && b._drop == null) {
+        } else if (b._drop == null && b.x < T.px(941)
+          && T.deckEdge(b.x) !== null && b.y > T.deckEdge(b.x)) {
           // A BALL LEAVING THE DECK OVER A RAMP LANE MUST NOT BE SCOOPED STRAIGHT BACK UP IT.
           // The deck front is py 760 and both ramp lanes pass under it, so a ball walking off
           // the edge there landed on level 1 INSIDE the lane, satisfied the mouth test on the
@@ -362,7 +368,14 @@ export class DesignPinball {
           // things worse: the ball landed in the lane, could not be taken up, and had no way out of
           // the channel either - it rattled between the rails for the whole eight seconds of a rest
           // sweep. The deck simply extends over the lane, which is what a real ramp passes under.
-          if (b.x < T.px(200) || b.x > T.px(786)) continue;
+          // A BALL THAT LEAVES THE DECK OVER A RAMP LANE FALLS INTO THE LANE, and is marked so
+          // the mouth does not scoop it straight back up - a ramp only goes UP, so without this
+          // it would ride the same ramp for ever. The lane is a walled channel now, so it slides
+          // down it and out of the mouth, which is the way back down that the ramps never had.
+          //
+          // The old version skipped these bands entirely and left the ball on level 2 - which,
+          // now that the deck mesh is real, meant riding down past the flippers on nothing.
+          if (b.x < T.px(200) || b.x > T.px(786)) b._ramp = true;
           // off the front of the deck anywhere else - but the SHOOTER LANE is not the front of
           // the deck. It runs the full length of the cabinet outboard of the board (x px
           // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the

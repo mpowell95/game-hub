@@ -94,6 +94,32 @@ export const KICKERS = [
   { id: 'kickL', x: px(242), y: px(1059), r: px(34), u: [-0.44, -0.90], boost: 250, minAlong: 120 },
   { id: 'kickR', x: px(744), y: px(1059), r: px(34), u: [0.44, -0.90], boost: 250, minAlong: 120 },
 ];
+/**
+ * WHERE THE DECK ENDS, AT A GIVEN x - read off the deck_L2 polygon itself.
+ *
+ * The rules used to decide a ball had left the deck with `y > px(760)` and two hardcoded x
+ * bands, and the deck MESH is not that shape: it runs to py 760 across the middle, but only to
+ * py 596 outboard of x 150 and x 836, where the ramps are, and it is cut back to py 724 for the
+ * drop hole. So the drawing and the rule disagreed in four places at once. The worst of them:
+ * between x 150 and 200 the rule kept the ball ON level 2 while the mesh had already ended, so a
+ * ball rode down past the flippers on nothing at all and drained where no flipper could reach it.
+ *
+ * Asking the polygon means they cannot disagree again, whatever shape the deck becomes.
+ */
+const DECK_POLY = (PARTS.find((p) => p.name === 'deck_L2') || { pts: [] }).pts;
+export function deckEdge(x) {
+  const bx = x / px(1);                       // back to reference pixels, which is what pts are in
+  let edge = null;
+  for (let i = 0; i < DECK_POLY.length; i++) {
+    const a = DECK_POLY[i], b = DECK_POLY[(i + 1) % DECK_POLY.length];
+    if ((a[0] > bx) === (b[0] > bx)) continue;   // this edge does not span x
+    const t = (bx - a[0]) / (b[0] - a[0]);
+    const y = a[1] + (b[1] - a[1]) * t;
+    if (edge === null || y > edge) edge = y;     // the FRONT edge is the lowest crossing
+  }
+  return edge === null ? null : px(edge);
+}
+
 /** The gap in the deck's front lip between the upper flipper tips: the way DOWN to level 1. */
 export const DROP_HOLE = { x: [px(455), px(545)], y: px(724), to: { x: px(500), y: px(785) } };
 
@@ -175,5 +201,5 @@ export const DROP_IDS = [0, 1, 2, 3].map((i) => `target_bank_${i}`);
 
 export default {
   NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
-  SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS,
+  SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS, deckEdge,
 };
