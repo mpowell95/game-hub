@@ -139,7 +139,22 @@ const t = makeT(STRINGS);
 // button at exactly the right moment. 1.0 deg is 3.8 yds at driver range and about 9 INCHES at
 // wedge range, which is the resolution the short game actually needs. Holding still crosses the
 // full +/- 60 deg quickly, because the repeat below now accelerates.
-const AIM_STEP_DEG = 1.0;
+// A SINGLE TAP IS FINE; HOLDING GETS COARSE. Matt, 2026-09-09: *"the aim arrows move the aim by a
+// lot more than usual. I just hit the 2 iron and the 8 iron and a single click moved the aim spot
+// by a lot."* MEASURED: the step is exactly 1.000 deg on every club and has never been anything
+// else, and the camera frame is the same 95 yds wide whatever is in hand - so nothing moved. What
+// moved is what you can SEE: reclaiming the HUD's dead chrome (2026-09-09) made the canvas taller,
+// and since the frame's scale is set by its WIDTH, a taller canvas shows further up the hole. The
+// aim ladder's far dot - the one that swings the most - used to be off the top of the screen on an
+// iron and now is not. At a 2 iron's 175 yds, 1 deg is 3.1 yds of landing spot.
+//
+// So the tap gets finer and the HOLD does not: one tap is 0.35 deg (about a yard at that range,
+// which is the resolution an approach actually needs), and the repeat ramps its own step up to
+// 1.4 deg as it accelerates, so a full sweep of the +/- 60 deg arc still takes about 5 s. Tapping
+// is for placing the aim, holding is for crossing the arc, and they no longer have to be the same
+// number.
+const AIM_STEP_DEG = 0.35;
+const AIM_STEP_HOLD_DEG = 1.4;
 const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line to the hole
 // PRESS-AND-HOLD, ACCELERATING. It used to be a flat 8 taps a second after a 400 ms delay, which
 // is the worst of both: too fast to place the aim by holding, too slow to cross the arc. It now
@@ -1081,15 +1096,19 @@ class GolfGame {
       // repeat: `k` is how far into the ramp we are, so the delay eases from HOLD_SLOW_MS down to
       // HOLD_FAST_MS and then stays there for as long as the finger is down.
       const tick = () => {
-        fn();
+        // `k` is the ramp: 0 on the first repeat, 1 once the hold is at full speed. It sets the
+        // gap to the NEXT repeat and is handed to `fn`, so a control can make its STEP grow with
+        // the hold too - which is what lets a single tap on the aim arrows be finer than the
+        // sweep a held one has to manage (see AIM_STEP_DEG).
         const k = Math.min(1, (performance.now() - heldSince - HOLD_DELAY_MS) / HOLD_RAMP_MS);
+        fn(k);
         timer = setTimeout(tick, HOLD_SLOW_MS + (HOLD_FAST_MS - HOLD_SLOW_MS) * k);
       };
       const start = (ev) => {
         ev.preventDefault();
         el.setAttribute('data-down', '1');
         heldSince = performance.now();
-        fn();
+        fn(0);
         timer = setTimeout(tick, HOLD_DELAY_MS);
       };
       this._on(el, 'pointerdown', start);
@@ -1098,8 +1117,8 @@ class GolfGame {
       this._on(el, 'pointerleave', stop);
       this.listeners.push([{ removeEventListener: stop }, '', () => {}, undefined]);
     };
-    hold(q('aim-l'), () => this._nudgeAim(-1));
-    hold(q('aim-r'), () => this._nudgeAim(+1));
+    hold(q('aim-l'), (k) => this._nudgeAim(-1, k));
+    hold(q('aim-r'), (k) => this._nudgeAim(+1, k));
     hold(q('club-up'), () => this._stepClub(+1));
     hold(q('club-dn'), () => this._stepClub(-1));
 
@@ -1224,11 +1243,13 @@ class GolfGame {
     this._on(this.canvas, 'pointercancel', release);
   }
 
-  _nudgeAim(dir) {
+  /** `k` is how far into a press-and-hold's acceleration this step is, 0 for a single tap. */
+  _nudgeAim(dir, k = 0) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
     if (this.intro) this._endIntro();
     const base = this._bearingToPin();
-    let next = this.aimRad + dir * AIM_STEP_DEG * DEG;
+    const step = AIM_STEP_DEG + (AIM_STEP_HOLD_DEG - AIM_STEP_DEG) * Math.max(0, Math.min(1, k));
+    let next = this.aimRad + dir * step * DEG;
     const limit = AIM_LIMIT_DEG * DEG;
     // Aim is limited to +/- 60 deg from the line to the hole, so the player can never lose the
     // hole entirely by leaning on one arrow.
@@ -1240,6 +1261,18 @@ class GolfGame {
     this.aimRad = next;
     this._coach('aim');
     this._paintHud();
+  }
+
+  /** The swing button kicks when a tap is refused. 220 ms, class-driven so reduced-motion CSS can
+   *  flatten it; re-armed by removing the class first so back-to-back refusals each show. */
+  _refuseFlash() {
+    const el = this.el && this.el.swing;
+    if (!el) return;
+    el.classList.remove('is-refused');
+    void el.offsetWidth;
+    el.classList.add('is-refused');
+    clearTimeout(this._refuseT);
+    this._refuseT = setTimeout(() => { if (!this.destroyed && el) el.classList.remove('is-refused'); }, 220);
   }
 
   _stepClub(dir) {
@@ -1297,6 +1330,12 @@ class GolfGame {
     if (r === 'begin') this._coach('tap-begin');
     else if (r === 'power') this._coach('tap-power');
     else if (r === 'fire') this._coach('fire');
+    // A REFUSED TAP HAS TO SAY SO. `swing.tap()` returns null for "this tap did nothing", which is
+    // the putter's dead zone almost every time (see MIN_TAP_POS in swing.js). Silence there is the
+    // whole of Matt's report - *"I have to click swing twice to get it to start moving"* - because
+    // a tap that vanishes leaves the player one tap out of step for the rest of the stroke: their
+    // next tap sets POWER when they think it is setting accuracy.
+    if (r === null) this._refuseFlash();
     this._paintHud();
   }
 
@@ -2151,6 +2190,15 @@ class GolfGame {
    *  It is written from the render loop rather than from `_tap` because the phase also changes
    *  without a tap (the backswing tops out; the needle runs off the bar and fires), and it writes
    *  only when the text actually changes - a DOM write every frame is not free. */
+  /** 1 at the instant of tap 1, easing to 0 as a club's dead zone runs out; 0 when there is none
+   *  (every club but the putter). Pure - it reads the swing's own clock, it does not keep one. */
+  _chargeK(now, read) {
+    const dead = (this.swing.tempo && this.swing.tempo.deadMs) || 0;
+    if (!dead || !read || read.phase !== PHASE.BACK || read.pos > 0) return 0;
+    const el = now - this.swing.t0;
+    return Math.max(0, Math.min(1, 1 - el / dead));
+  }
+
   _paintSwingLabel(now) {
     const ph = this.swing.read(now).phase;
     const key = this.holed ? 'back'
@@ -2362,7 +2410,24 @@ class GolfGame {
     // (woods, floored at 16 % = 22 px) that left 4 px showing. Trimmed, the same band shows 9.
     // It is still the widest single mark on the meter and still black-keyed against grass.
     if (read.power != null) needleAt(read.power, 5, 2, '#ffffff');
-    needleAt(read.pos, 5, 2, '#ffffff');
+    // THE CHARGE. `PUTTER_DEAD_MS` holds the putter's needle at zero for 250 ms after tap 1 (see
+    // clubs.js for why that exists and what was tried instead), and for that quarter second the
+    // meter gave no sign at all that it had heard the tap - the button's own label changed, which
+    // nobody watching the needle ever sees. Matt: *"the putting double tap bug is back. I have to
+    // click swing twice to get it to start moving."* He is not tapping twice by choice; the first
+    // tap looks like nothing, so the second is instinctive, and MIN_TAP_POS then eats it.
+    //
+    // So the needle CHARGES: gold, and fatter, easing back to its normal white as the hold runs
+    // out, so it is unmistakably alive before it starts to climb. It touches nothing else - not
+    // the dial, not the tempo, not the dead zone, not a single power number - which is the same
+    // constraint the two reverted fixes (a steeper curve, a slower putter) both broke.
+    // Never on the tutorial's STILL dial: that one is handed a fabricated `read` and has no clock.
+    const charge = opts.read ? 0 : this._chargeK(now, read);
+    if (charge > 0) {
+      needleAt(read.pos, 5 + 5 * charge, 2 + 4 * charge, '#ffce3a');
+    } else {
+      needleAt(read.pos, 5, 2, '#ffffff');
+    }
 
     // ============================================================================================
     // THE LESSON POINTS AT THE DIAL (2026-09-09). Matt: "Use arrows. point to where they should aim

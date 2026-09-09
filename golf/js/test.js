@@ -466,6 +466,24 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
       // ...and the ui.js it is measured against still draws the needle that wide.
       ok('...and ui.js still draws the needle 5 px wide',
         /needleAt\(read\.pos, 5, 2,/.test(fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8')));
+      // [KNOWN-BUG PROBE] A TAP THAT IS REFUSED MUST SAY SO, AND THE DEAD ZONE MUST LOOK ALIVE.
+      // Matt, 2026-09-09, playing the released build: *"the putting double tap bug is back. I have
+      // to click swing twice to get it to start moving."* MEASURED in a real browser: on the
+      // putter the needle sits at 0 for PUTTER_DEAD_MS and does not pass MIN_TAP_POS until ~272 ms,
+      // so every tap in that window is discarded - and the ONLY cue was the button's own text
+      // label, which nobody watching the needle reads. The cost is not one wasted tap: it leaves
+      // the player a tap out of step, so their next tap sets POWER when they think it sets
+      // accuracy. Both halves are pinned here because either one alone leaves the report open.
+      {
+        const uiS = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+        ok('a refused tap flashes the swing button', /if \(r === null\) this\._refuseFlash\(\);/.test(uiS));
+        ok('...and the CSS it needs is shipped',
+          /\.gf-btn\.is-refused/.test(fs.readFileSync(new URL('../css/golf.css', import.meta.url), 'utf8')));
+        ok('the needle charges while a dead zone runs down', /_chargeK\(now, read\)/.test(uiS)
+          && /needleAt\(read\.pos, 5 \+ 5 \* charge/.test(uiS));
+        ok('...and the charge is off on the tutorial\'s still dial', /opts\.read \? 0 : this\._chargeK/.test(uiS));
+      }
+
       // [KNOWN-BUG PROBE] The defect itself: a putt struck at the floor must actually move the
       // ball. Under the old `> 0` guard the same tap moved it 0.000 ft and cost a stroke.
       const holeT = PINE_VALLEY.holes[0];
@@ -2463,6 +2481,32 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   // buttons to aim. make them click buttons to change clubs."
   const byId = Object.fromEntries(TU.STEPS.map((st) => [st.id, st]));
   ok('the aim step waits on a real tap of the aim arrows', byId.aim && byId.aim.advance === 'aim');
+
+  // THE AIM ARROWS: A TAP IS FINE, A HOLD IS COARSE (2026-09-09). Matt, on the released build:
+  // *"a single click moved the aim spot by a lot."* Nothing had changed the step - it was 1.000 deg
+  // on every club and still is on a HOLD - what changed is that reclaiming the HUD's dead chrome
+  // made the canvas taller, and since the frame's scale comes from its WIDTH, a taller canvas sees
+  // further up the hole: the aim ladder's far dot, the one that swings most, stopped being off the
+  // top of the screen on an iron. So the two uses were split. The numbers are checked against what
+  // they have to buy - about a yard of landing spot per tap at iron range, and a full sweep of the
+  // arc inside a few seconds of holding - rather than pinned as literals nobody can argue with.
+  {
+    const uiS = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+    const tap = +(/const AIM_STEP_DEG = ([\d.]+);/.exec(uiS) || [])[1];
+    const held = +(/const AIM_STEP_HOLD_DEG = ([\d.]+);/.exec(uiS) || [])[1];
+    const limit = +(/const AIM_LIMIT_DEG = (\d+)/.exec(uiS) || [])[1];
+    ok('both aim steps are defined', tap > 0 && held > 0, `tap ${tap} held ${held}`);
+    ok('a single tap is finer than a held one', tap < held, `${tap} vs ${held}`);
+    // A 2 iron carries 175 yds; one tap should move the landing spot about a yard, not three.
+    const yds = 175 * Math.tan(tap * Math.PI / 180);
+    ok('one tap moves an iron\'s landing spot about a yard', yds > 0.4 && yds < 1.6, `${yds.toFixed(2)} yds at 175`);
+    // Holding still has to cross the arc. The repeat tops out at 16 a second (HOLD_FAST_MS).
+    const secs = limit / (held * 16);
+    ok('a held arrow still crosses the arc in a few seconds', secs < 4, `${secs.toFixed(1)} s to ${limit} deg`);
+    ok('the hold hands its ramp position to the step', /fn\(k\);/.test(uiS)
+      && /hold\(q\('aim-r'\), \(k\) => this\._nudgeAim\(\+1, k\)\)/.test(uiS));
+    ok('...and the club arrows deliberately do not use it', /hold\(q\('club-up'\), \(\) => this\._stepClub\(\+1\)\)/.test(uiS));
+  }
   ok('the club step waits on a real tap of the club arrows', byId.club && byId.club.advance === 'club');
   // [KNOWN-BUG PROBE] THE CLUB LESSON IS ON THE SECOND SHOT, NOT THE TEE. Matt, 2026-09-09: "As it
   // is now, they'll change clubs on the tee shot then have to change back. You actually have to
