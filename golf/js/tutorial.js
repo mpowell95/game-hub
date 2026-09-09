@@ -271,9 +271,21 @@ export class Coach {
     if (!s) return;
     this._teardown();
     if (!this.root || !this.root.isConnected) return;
-    // A SILENT WAYPOINT DRAWS NOTHING. This is what keeps words off the screen during a swing -
-    // see the header. It still waits for its event, so the lesson advances normally.
-    if (!s.key) return;
+    // A SILENT WAYPOINT SAYS NOTHING, BUT THE RAIL STAYS. No words is the whole point - it is what
+    // keeps the lesson off the screen during a swing (see the header) - but drawing NOTHING was a
+    // second thing nobody asked for: `data-tut` holds the controls 30 px up for the whole lesson,
+    // so an empty rail left a reserved strip of bare course under them, and the progress pips
+    // blinked out for the two shots of the approach and came back for the putting card. Pips only,
+    // and no rings: the row is continuous and the space it reserved is the space it uses.
+    if (!s.key) {
+      const bar = document.createElement('div');
+      bar.className = 'gf-tut';
+      bar.setAttribute('aria-hidden', 'true');   // nothing to announce; the pips are decoration
+      bar.innerHTML = `<div class="gf-tut__rail">${this._pipsHTML(s)}</div>`;
+      this.root.appendChild(bar);
+      this.el = bar;
+      return;
+    }
 
     for (const role of (s.rings || [])) {
       const ring = document.createElement('div');
@@ -314,7 +326,11 @@ export class Coach {
    *  of why a tutorial feels long. One per CARD - the silent waypoints are not steps a player
    *  meets, so numbering them would count three that never appear. */
   _pipsHTML(s) {
-    const i = CARDS.indexOf(s);
+    // A SILENT STEP IS NOT IN `CARDS`, so `indexOf` is -1 and every pip would come out blank - the
+    // row would be there and say nothing. Counting the cards BEHIND it marks those done and lights
+    // the one AHEAD as current, which is what a waypoint between two cards means: you are past
+    // these, and that is the next thing the lesson will say.
+    const i = CARDS.includes(s) ? CARDS.indexOf(s) : CARDS.filter((c) => STEPS.indexOf(c) < STEPS.indexOf(s)).length;
     return `<span class="gf-tut__pips" aria-hidden="true">${CARDS
       .map((_, k) => `<i class="${k < i ? 'is-done' : k === i ? 'is-on' : ''}"></i>`).join('')}</span>`;
   }
