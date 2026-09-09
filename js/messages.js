@@ -32,6 +32,7 @@
 // The messages themselves are neither: they are only ever added.
 
 import { loadProfile } from './profile-store.js';
+import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
 import { readPlayersOnce } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
@@ -396,19 +397,12 @@ export async function unreadMessageCount() {
 /**
  * Test and debug accounts, hidden from the recipient list.
  *
- * SECOND SITE, KEPT IN STEP BY HAND: `isHiddenRow()` in js/leaderboard-ui.js is the canonical copy
- * of this rule (and `test-leaderboard-rank.mjs` mirrors it a third time). It is duplicated rather
- * than imported because js/messages.js is a SHELL asset the launcher loads on every start just to
- * paint the pill's badge, and leaderboard-ui.js is the whole leaderboard overlay - the wrong thing
- * to drag onto that path. If the canonical list changes, change this one too.
- *
- * A PREFIX, never a substring: "Contest" and "Tess" are real names a real person could pick.
+ * This was a hand-kept SECOND COPY of js/leaderboard-ui.js's rule until 2026-09-09, duplicated
+ * because this file is a SHELL asset the launcher loads on every start just to paint the badge, and
+ * importing the canonical copy meant dragging the whole leaderboard overlay onto that path. The
+ * rule now lives in js/hidden-players.js, which has no imports of its own and costs that path
+ * nothing - so there is one source again, and nothing here to keep in step by hand.
  */
-const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);
-const isTestName = (n) => {
-  const s = (typeof n === 'string' ? n : '').trim().toLowerCase();
-  return !s || s.startsWith('test') || s.startsWith('zzz') || HIDDEN_NAMES.has(s);
-};
 
 /**
  * The recipient list: one row per PERSON, not per device. aggregatePlayers() has already folded a
