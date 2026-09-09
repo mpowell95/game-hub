@@ -5,8 +5,9 @@ or interaction guidance.
 
 ## The app
 
-The Game Hub is a phone-first web app that hosts 23 small games for one family, with a shared
-player profile and a synced record of every game anyone plays on any of their devices.
+The Game Hub is a phone-first web app that hosts 23 small games for one family — 20 of them visible
+to everyone, three still admin-only — with a shared player profile and a synced record of every game
+anyone plays on any of their devices.
 
 ## The leaderboard has two views
 
@@ -140,7 +141,10 @@ negative, and level par reads as "E" rather than 0.
   falls is the admin voiding a player's scores on one Skeeball machine, which removes them from
   display without touching the stored record.
 - Two languages: English and Spanish.
-- **Pinball is the only game hidden from everyone but the admin.** Golf is live for everyone.
-  Visibility is an admin switch inside the app, so this can change with no code change.
+- **Three games are currently admin-only: Pinball, Pipes and Pool.** Only Pinball is hidden in the
+  code; the other two are hidden by an admin switch inside the app, which can hide or release any
+  game with no code change. Golf was hidden the same way until recently and is now live.
+- **The leaderboard does not hide those games.** It gates on nothing but whether somebody has played
+  a game, so an admin-only game still gets its row on By Game and its own board, for everyone.
 - Pool appears twice: the current game, and a retired earlier build kept on the board so the games
   played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
