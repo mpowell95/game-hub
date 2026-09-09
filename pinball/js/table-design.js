@@ -154,6 +154,9 @@ export function buildLevel(n, opts = {}) {
     };
     // A footprint's `oneWay` is already a unit normal in table axes, which is what physics.js wants.
     if (f.oneWay) o.oneWay = f.oneWay;
+    // ...and a slingshot's kickN, which says WHICH face the coil is behind. Without it the
+    // guard in physics.js is dead and the face fires from both sides.
+    if (f.kickN) o.kickN = f.kickN;
     if (f.shape === 'circle') colliders.push(circle(ux(f.c[0]), uy(f.c[1]), f.r * K, o));
     else colliders.push(seg(ux(f.a[0]), uy(f.a[1]), ux(f.b[0]), uy(f.b[1]), { ...o, r: f.r * K }));
   }

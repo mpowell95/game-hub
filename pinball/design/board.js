@@ -525,9 +525,29 @@ const setShape = (part, rec) => {
     case 'sling':
       part.A = pt[0].slice(); part.B = pt[1].slice(); part.C = pt[2].slice();
       break;
-    case 'poly': case 'wedge': case 'targets':
+    case 'poly':
       if (part.pts) part.pts = pt.map((q) => q.slice());
       break;
+    case 'wedge': {
+      // A WEDGE KEEPS ITS GEOMETRY IN `tip` AND `d`, NOT IN `pts`. It used to share the poly case,
+      // which writes part.pts - a field a wedge does not have - so the assignment was a silent
+      // no-op and moving one in the editor did nothing at all. Same family as the band `yEnd` bug:
+      // a part whose real geometry lives somewhere setShape never looked.
+      part.tip = pt[0].slice();
+      const mid = [(pt[1][0] + pt[2][0]) / 2, (pt[1][1] + pt[2][1]) / 2];
+      part.d = [r4(mid[0] - pt[0][0]), r4(mid[1] - pt[0][1])];
+      break;
+    }
+    case 'targets': {
+      // ...and a TARGET BANK keeps its in `xs` and `z`. Same silent no-op: the editor could move
+      // the bank and the board would build it exactly where it always was.
+      const xs = pt.map((q) => q[0]), ys = pt.map((q) => q[1]);
+      const x0 = Math.min(...xs) + 22, x1 = Math.max(...xs) - 22;
+      const n = part.xs.length;
+      part.xs = part.xs.map((_, i) => r4(x0 + (x1 - x0) * (n > 1 ? i / (n - 1) : 0)));
+      part.z = r4((Math.min(...ys) + Math.max(...ys)) / 2);
+      break;
+    }
     case 'band': {
       // A band was flattened to one ring by the editor (outer, then inner reversed). Split it
       // back the same way, or the arch comes back inside out.
@@ -669,6 +689,20 @@ function smoothChain(pts, passes = 4) {
     part.yEndR = Math.min(part.yEndR, RAMP_TOP_PY);
   }
 
+  // A BAND LEG ENDS WHERE ITS OWN CHAIN ENDS. `yEndL`/`yEndR` close each leg and are read
+  // DIRECTLY by both the mesh and the footprint pass - the chains are never consulted - and
+  // nothing keeps the two in step. So a band Matt reshapes in the editor keeps its old leg ends:
+  // measured, arch_inner ran 35 px past the shape he drew, and arch_outer ran 290 px past it,
+  // straight across a ramp lane with a solid capsule at the bottom. Clamping them here covers
+  // every band, not just the one that was reported.
+  for (const part of P) {
+    if (part.type !== 'band' || !part.outer || !part.inner) continue;
+    const endL = Math.max(part.outer[0][1], part.inner[0][1]);
+    const endR = Math.max(part.outer[part.outer.length - 1][1], part.inner[part.inner.length - 1][1]);
+    part.yEndL = Math.min(part.yEndL, r4(endL));
+    part.yEndR = Math.min(part.yEndR, r4(endR));
+  }
+
   // NO POST MAY SIT INSIDE A BAND. post_big_left (350, 750) and post_big_right (646, 745) were
   // both geometrically INSIDE arch_inner - invisible, and colliding from within another solid.
   // Matt placed them in the editor and then the arch moved underneath them, which is the same
@@ -807,6 +841,15 @@ for (const p of P) {
         capsuleFP(`${p.name}_wall_out_${i}`, [1], at(0, i), at(0, i + 1), 0.008);
         capsuleFP(`${p.name}_wall_in_${i}`, [1], at(1, i), at(1, i + 1), 0.008);
       }
+      // AND IT IS CLOSED AT THE TOP, ON LEVEL 1. The lane delivers onto the DECK, which is a
+      // level-2 thing - a ball still on level 1 has no business leaving through the far end,
+      // and until the arch was trimmed back the arch leg happened to be in the way. Matt, after
+      // it was trimmed: *"The ball also went through the back of the ramp."* The climb is
+      // scripted and held, so this cap cannot interfere with a ball that is on its way up.
+      // ...and it is ONE-WAY: it stops a ball leaving UP the lane and lets one drop in from
+      // above. A solid cap sealed the strip between the trimmed arch and the lane into a
+      // pocket - the rest sweep found 108 balls parked at py 555 the moment it went in.
+      capsuleFP(`${p.name}_top`, [1], at(0, N), at(1, N), 0.008, { oneWay: [0, -1] });
       break;
     }
     case 'sling': {
@@ -832,9 +875,26 @@ for (const p of P) {
       // face became whichever edge is longest, that name stopped matching anything, so both
       // slingshots kicked the ball and paid nothing. Naming the face by its ROLE means the
       // scorer cannot drift away from the geometry again.
+      // AND IT CARRIES ITS OUTWARD NORMAL. physics.js has a guard for exactly this -
+      // `if (kick && kickN && ...) kick = 0` - with a comment saying a slingshot without one is
+      // "a solenoid pointed at the wrong half of the table". NOTHING EVER SET kickN. So both
+      // faces of both slingshots fired in BOTH directions, and Matt found the consequence by
+      // playing it: *"the ball just got stuck bouncing between the triangles above the bumpers
+      // for infinity."* Two coils facing each other, each guaranteeing 250 out, is a machine
+      // that never loses energy.
+      //
+      // The normal points away from the third vertex, which is the side the ball can reach.
+      const third = EDGES.find((e) => e !== hyp && e[1] !== hyp[1] && e[1] !== hyp[2]);
+      const away = (third && third[1]) || p.B;
+      const mx = (hyp[1][0] + hyp[2][0]) / 2, my = (hyp[1][1] + hyp[2][1]) / 2;
+      let nx = -(hyp[2][1] - hyp[1][1]), ny = hyp[2][0] - hyp[1][0];
+      const nl = Math.hypot(nx, ny) || 1;
+      nx /= nl; ny /= nl;
+      if ((away[0] - mx) * nx + (away[1] - my) * ny > 0) { nx = -nx; ny = -ny; }
       for (const e of EDGES) {
         const nm = e === hyp ? `${p.name}_face_live` : `${p.name}_face_${e[0]}`;
-        capsuleFP(nm, p.levels, e[1], e[2], 0.003, e === hyp ? { kicks: true } : undefined);
+        capsuleFP(nm, p.levels, e[1], e[2], 0.003,
+          e === hyp ? { kicks: true, kickN: [r4(nx), r4(ny)] } : undefined);
       }
       break;
     }
