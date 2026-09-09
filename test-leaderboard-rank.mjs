@@ -531,6 +531,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
 {
   const src = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
   const rankSrc = readFileSync(new URL('./js/leaderboard-rank.js', import.meta.url), 'utf8');
+  const uiSrc = readFileSync(new URL('./js/game-stats-ui.js', import.meta.url), 'utf8');
   ok('golf\'s board metric is the best round, not the lifetime points total',
     /if \(id === 'golf'\) return golfBestAt\(g\);/.test(src));
   ok('[KNOWN-BUG PROBE] no metric sort site compares `b - a` any more',
@@ -577,6 +578,19 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
     /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'pinball', 'golf'\]\);/.test(src)
     && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
+  // ADMIN-ONLY GAMES ARE OFF THE BOARD (2026-09-09). The three things that must NOT be filtered
+  // with them are each a rule 1 failure if they ever are - see the comment at the call site.
+  ok('By Game lists only the games this person can see on the launcher',
+    /gameMetaSorted\(\)\.filter\(\(meta\) => isGameOnLauncher\(meta\.id\)\)\.map\(/.test(src)
+    && /isGameOnLauncher/.test(uiSrc));
+  ok('[KNOWN-BUG PROBE] GAME_META itself is NOT filtered, so a hidden game\'s wins still count',
+    /const ALL_IDS = GAME_META\.map\(\(g\) => g\.id\);/.test(src),
+    'filtering GAME_META would drop those wins out of every cross-game total');
+  ok('a hidden board cannot be reached through a stale _game',
+    /if \(_game && !isGameOnLauncher\(_game\)\) _game = null;/.test(src));
+  ok('[KNOWN-BUG PROBE] My Stats keeps its OWN, more permissive rule, so your own history stays',
+    /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| dev \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
+    'unifying visibleTabs with isGameOnLauncher would hide a player\'s own record of a pulled game');
   ok('By Game\'s leader row marks the tier its number belongs to',
     /\$\{tierMarkHTML\(boardTierOf\(lead, meta\.id\)\)\}/.test(src) && /\.lb-tiermark\{/.test(src));
   ok('the chip is suppressed while a difficulty filter is selected, which already says it once',

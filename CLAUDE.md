@@ -326,7 +326,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/stats-net.js` | Firebase mirror to `players/<id>`; username registry; `syncHealth()` |
 | `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows. **It exports no `headToHeadRows`** - that function was removed on 2026-08-11 with the screen it fed (see the note under "Where the deep docs live"); this row went on naming it until 2026-09-09 |
 | `js/game-stats-ui.js` | "My Stats" overlay |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); multiplayer wins show as a per-game VS chip on that game's board, NOT as head-to-head on the player detail (2026-08-11 - this row said the opposite until 2026-09-09); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08) |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); multiplayer wins show as a per-game VS chip on that game's board, NOT as head-to-head on the player detail (2026-08-11 - this row said the opposite until 2026-09-09); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08); an admin-only game is off By Game and has no board, while its wins still count in every cross-game total (2026-09-09) |
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23), plus the board comparators the leaderboard DOES use (`compareBoardMetric`, `compareTierFirst`) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
@@ -674,6 +674,16 @@ from code if a future screen needs it.
   DECLINES TO HONOR an earned unlock while it is set, never deletes it (rule 2).
 - **Every write verifies by fresh re-read and fails loudly** (rule 6). A dev origin never writes the
   family's config at all, same guard and same opt-in key as `js/stats-net.js`.
+- **An admin-only game is now hidden from the LEADERBOARD as well as the launcher (2026-09-09).**
+  Matt: *"hide admin only games from the leaderboard too."* `isGameOnLauncher(statsId)` in
+  `js/game-stats-ui.js` is the hub card's own rule (`isGameLive(id, !devOnly) || dev`) exported once,
+  so the launcher and the board cannot disagree; `js/leaderboard-ui.js` filters By Game through it
+  and refuses to render a board for a game it hides. **Three things are deliberately NOT filtered
+  with it, each a rule 1 failure if they ever are**: `GAME_META` itself (`ALL_IDS`/`COMP_IDS` are
+  built from it, so filtering there would silently drop those wins out of every cross-game total),
+  the player-detail game list, and the stored data. `visibleTabs()` in the same file keeps its own,
+  MORE PERMISSIVE rule on purpose - a game hidden by an override still has its My Stats screen, so a
+  player's own record of a game Matt has pulled back stays reachable. Do not unify the two.
 - **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
   a `GAME_META` row in `js/leaderboard-ui.js` while still being admin-only, and why
   `players-agg.test.mjs`'s `OFF_THE_BOARD` list is now empty and must stay that way: a game released

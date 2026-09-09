@@ -58,7 +58,8 @@ import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, com
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { loadFavorites } from './favorites.js';
-import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
+import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
+  isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -1210,7 +1211,15 @@ function gameListHTML(list) {
   let favs = [];
   try { favs = loadFavorites() || []; } catch { favs = []; }
   const isFav = (id) => favs.includes(hubIdOf(id));
-  const rows = gameMetaSorted().map((meta) => {
+  // ADMIN-ONLY GAMES ARE OFF THIS LIST (2026-09-09, Matt: "hide admin only games from the
+  // leaderboard too"). Same rule as the hub card, asked through the one shared helper, so the
+  // launcher and the board cannot disagree about what is released. THREE THINGS ARE DELIBERATELY
+  // NOT FILTERED, and each is THE LAW rule 1: GAME_META itself (ALL_IDS/COMP_IDS are built from
+  // it, so filtering here would silently drop those wins out of every cross-game total), the
+  // player-detail game list (a person's own record of a game Matt has pulled back stays reachable,
+  // via game-stats-ui's visibleTabs, which is deliberately more permissive), and the stored data,
+  // which is untouched. A game released later simply reappears with its whole history intact.
+  const rows = gameMetaSorted().filter((meta) => isGameOnLauncher(meta.id)).map((meta) => {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
     // The leader shown here must be the row the board itself puts at #1, so it sorts through the
     // board's OWN order - the same function that numbers the rank badges.
@@ -1656,6 +1665,9 @@ function currentBody() {
   const list = aggregatePlayers(recs, corrections()).filter((g) => !isHiddenRow(g));
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
+  // A board for a game this person cannot see is not rendered: `_game` is only ever set by tapping
+  // a row that the filter above already allowed, but a stale value must not become a way in.
+  if (_game && !isGameOnLauncher(_game)) _game = null;
   if (_game) return gameDetail(list, _game);
   // Each list owns its own control row now (By Game's is three sort pills and no filter), so the
   // shell no longer emits one on their behalf.

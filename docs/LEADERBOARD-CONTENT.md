@@ -144,7 +144,10 @@ negative, and level par reads as "E" rather than 0.
 - **Three games are currently admin-only: Pinball, Pipes and Pool.** Only Pinball is hidden in the
   code; the other two are hidden by an admin switch inside the app, which can hide or release any
   game with no code change. Golf was hidden the same way until recently and is now live.
-- **The leaderboard does not hide those games.** It gates on nothing but whether somebody has played
-  a game, so an admin-only game still gets its row on By Game and its own board, for everyone.
+- **An admin-only game is off the leaderboard too**, by the same switch that takes it off the
+  launcher. It has no By Game row and no board of its own. Two things it does NOT lose: its wins
+  still count in every cross-game total on By Player, and anyone who has played it still sees their
+  own record of it on their player page. Release the game again and its row returns with its whole
+  history.
 - Pool appears twice: the current game, and a retired earlier build kept on the board so the games
   played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
