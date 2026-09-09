@@ -101,6 +101,21 @@ This whole sequence is pre-authorized by this instruction; it does not need to b
 per session, and it does not need Matt to have used one of the three words. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
+## When Matt asks what you are doing, ANSWER HIM. Immediately.
+
+Matt, 2026-09-08, after three messages during one long run ("any day now...", "dude what the fuck
+are you doing? what could possibly be taking so long") that were each read, noted, and answered
+only at the end of the work: *"Next time I message you asking what you're doing YOU MUST ANSWER
+ME."*
+
+A message that arrives mid-turn is not a note to fold into the final report. **Stop, and say where
+you actually are** - the step you are on, what is left, and why it is taking as long as it is -
+before the next tool call. A short honest answer costs one message; carrying on silently reads as
+being ignored, which is what it was.
+
+This is not the same as asking permission and it does not mean abandoning the work. Answer, then
+carry on.
+
 ## Answer about the game you were asked about
 
 Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
