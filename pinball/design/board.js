@@ -388,7 +388,20 @@ for (const p of P) {
     case 'flipper': {
       const [ax, az] = PX(...p.pivot), [bx, bz] = PX(...p.tip);
       addFP(p.levels, { name: p.name, shape: 'capsule', a: [ax, az], b: [bx, bz], r: FLIP_R1, rPivot: FLIP_R0, rTip: FLIP_R1, dynamic: true,
-        pivot: [ax, az], length: r4(Math.hypot(bx - ax, bz - az)), restAngle: r4(Math.atan2(bz - az, bx - ax)), sweep: r4(50 * Math.PI / 180 * p.dir),
+        // THE SWEEP IS NEGATIVE dir, AND THE POSITIVE VERSION SWUNG ALL FOUR PADDLES BACKWARDS.
+        // Matt: *"the paddles swing backwards."* Measured, with `50 * dir`: the left paddle's tip
+        // went from px (450, 1650) to (340, 1706) and the right one's from (550, 1650) to
+        // (660, 1706) - both DOWN and OUTWARD, away from the ball, which is the opposite of what
+        // a flipper does. Table z runs down-field, so a paddle rising toward the playfield is z
+        // DECREASING, which this part's own note has said all along: `tip swings toward -z`. The
+        // note was right and the number disagreed with it.
+        //
+        // The renderer was never wrong about this. It draws the paddle exactly where the solver
+        // puts it - checked by putting a mesh tip and a physics tip in the same world frame and
+        // measuring the distance between them, which is 0.0 units. A backwards paddle on screen
+        // meant a backwards paddle in the physics, and changing the render sign would only have
+        // hidden it.
+        pivot: [ax, az], length: r4(Math.hypot(bx - ax, bz - az)), restAngle: r4(Math.atan2(bz - az, bx - ax)), sweep: r4(-50 * Math.PI / 180 * p.dir),
         note: 'tapered capsule: rPivot at a, rTip at b; rotates about pivot by `sweep` radians (tip swings toward -z) when actuated' });
       break;
     }
