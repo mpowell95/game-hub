@@ -46,6 +46,26 @@ const PLUNGER_TRAVEL = 26 * 0.000527;
  */
 const SURFACE_Y = 0.020 * 666.67;   // 13.33 - the lower playfield's top face
 
+/**
+ * THE INSERTS LIGHT UP.
+ *
+ * Matt: *"each color is it's own group. When the ball passes over a circle, it should light up.
+ * Once all the circles of that color are lit up, something happens."*
+ *
+ * The RULE has always been there - js/design.js `_dot` lights one, pays PTS.dot, and when the row
+ * completes pays PTS.row and clears it; all three rows in a ball pays PTS.allRows. What was
+ * missing is that NOTHING EVER DREW IT. This file had no reference to `rowLit`, to inserts, or to
+ * any lit material, so every insert stayed its painted colour whatever the ball did. The mechanic
+ * ran invisibly: the score moved and the board said nothing.
+ *
+ * (And until this deploy the sensors were off their inserts, so mostly it did not even run.)
+ *
+ * Each insert gets its OWN material instance the first time it is seen - the board shares one
+ * material per colour, so setting a colour without cloning would light the whole row at once.
+ */
+const LIT_BOOST = 1.9;      // how much brighter a lit insert is than its painted colour
+const DIM = 0.45;           // ...and how much duller an unlit one is
+
 export class DesignRenderer extends Renderer {
   _build(root) {
     this.parts3 = this.parts3 || {};
@@ -75,6 +95,39 @@ export class DesignRenderer extends Renderer {
     this._buildBalls(root);
   }
 
+  /**
+   * Paint each rollover insert lit or unlit from the game's own `rowLit` sets.
+   *
+   * The mesh for row `magenta` index 0 is `insert_magenta_1` - the switch ids are zero-based and
+   * the part names are one-based, which is the only fiddly part of this.
+   */
+  _lightInserts(P, hud) {
+    if (!P.stage || !hud || !hud.rowLit) return;
+    if (!this._inserts) {
+      // Found once and cached: getObjectByName walks the whole graph, and this runs every frame.
+      this._inserts = [];
+      for (const row of ['magenta', 'blue', 'red']) {
+        for (let i = 1; i <= 12; i++) {
+          const m = P.stage.getObjectByName(`insert_${row}_${i}`);
+          if (!m) break;
+          // Its own material, or lighting one would light every insert sharing the colour.
+          m.material = m.material.clone();
+          m.userData.base = m.material.color.clone();
+          this._inserts.push({ m, row, id: `${row}${i - 1}` });
+        }
+      }
+    }
+    for (const it of this._inserts) {
+      const set = hud.rowLit[it.row];
+      const lit = !!(set && set.has && set.has(it.id));
+      const want = lit ? LIT_BOOST : DIM;
+      if (it.m.userData.k === want) continue;      // only touch it when the state actually changes
+      it.m.userData.k = want;
+      it.m.material.color.copy(it.m.userData.base).multiplyScalar(want);
+      if (it.m.material.emissive) it.m.material.emissive.copy(it.m.userData.base).multiplyScalar(lit ? 0.55 : 0);
+    }
+  }
+
   render(game, dt) {
     if (!this.ok) return;
     this.time += dt;
@@ -95,6 +148,8 @@ export class DesignRenderer extends Renderer {
     // never moved: the rod is built once and nothing here ever touched it, so the only feedback
     // for a power that climbs over most of a second was a number. The rod now sits back by up to
     // 26 px of board, which is the whole travel, so the pull is the gauge.
+    this._lightInserts(P, hud);
+
     const rod = P.stage && P.stage.getObjectByName('plunger_rod');
     if (rod) {
       if (rod.userData.restZ === undefined) rod.userData.restZ = rod.position.z;
