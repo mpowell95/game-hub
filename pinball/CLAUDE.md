@@ -1151,6 +1151,31 @@ and the ramps are taken 18 times where the gates had allowed none.
 the defects are a name that does not match and a wall that should not exist, which no simulation
 can catch but a `readFileSync` can.
 
+### Every paddle swung backwards, and the renderer was not the reason (2026-09-08)
+
+Matt, on the build that fixed the paddles moving at all: *"the paddles swing backwards."*
+
+**The cause was in the PHYSICS, one number in `design/board.js`:** `sweep: 50 * dir`. Measured, the
+left paddle's tip went from px (450, 1650) to (340, 1706) and the right one's from (550, 1650) to
+(660, 1706) - both DOWN and OUTWARD, away from the ball. Table z runs down-field, so a paddle
+rising toward the playfield is z DECREASING, which the part's own note had said all along:
+`tip swings toward -z`. The note was right and the number disagreed with it. `-50 * dir` now.
+
+**The renderer was never wrong about it, and changing it would have hidden the bug.** The first
+attempt at this flipped the render sign, reasoned out of `board.js`'s `yaw()` against
+`render3d.js`'s identity `ty()`. That derivation was the wrong instrument - two frames, two
+mirrors and a sign convention that differs between the model and the engine. What settled it in
+one run was putting a MESH TIP AND A PHYSICS TIP IN THE SAME WORLD FRAME AND MEASURING THE
+DISTANCE BETWEEN THEM: 0.00 units, at both ends of the swing, on all four paddles. The paddle on
+screen is exactly where the solver puts it, so a backwards paddle on screen is a backwards paddle
+in the physics.
+
+**Nothing else in the suite could see it.** A shot map and a soak both read as merely worse when
+the flippers swing the wrong way - the driver plays a poor table and every assertion still passes.
+So `test.js` asserts it directly: every paddle tip must RISE when the flipper is actuated. Ball
+life went 20.1 s -> **32.2 s** and the average 11,600 -> **14,210** on the same driver, which is
+what a paddle that actually defends the drain is worth.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

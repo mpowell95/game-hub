@@ -10,6 +10,7 @@
 // is outside the table and that the game keeps making progress.
 
 import { readFileSync } from 'node:fs';
+import DT from './table-design.js';
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT, ART } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
@@ -1043,6 +1044,20 @@ function launched(g) {
   // ...and it must ADD the swing to the group's own rest yaw, not overwrite it.
   ok('[FOUNDRY] the paddle swing is added to the mesh\'s base yaw, never assigned over it',
     /baseYaw/.test(rend) && !/m\.rotation\.y = -\(f\.angle/.test(rend), 'baseYaw - (angle - rest)');
+
+  // [KNOWN-BUG PROBE] every paddle swung the wrong way, and it was the PHYSICS, not the render.
+  // A flipper's tip has to rise toward the playfield when it is actuated; all four went down and
+  // outward, away from the ball. Nothing in a shot map or a soak reads as wrong when this is
+  // backwards - the driver simply plays a worse table - so it is asserted directly.
+  {
+    const { flippers } = DT.buildLevel(1);
+    const back = flippers.filter((f) => {
+      const ry = f.py + Math.sin(f.rest) * f.len, uy = f.py + Math.sin(f.up) * f.len;
+      return uy >= ry;
+    }).map((f) => f.id);
+    ok('[FOUNDRY] every paddle tip RISES when the flipper is actuated',
+      back.length === 0, back.length ? 'swings down: ' + back.join(', ') : 'all ' + flippers.length + ' rise');
+  }
 
   // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
   ok('[FOUNDRY] nothing moves the ball across the board wall at the top of the chute',
