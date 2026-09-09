@@ -27,6 +27,9 @@ import T, { W, H, AXIS, px } from './table-design.js';
 const K = 666.67;
 const tz = (y) => -y;
 
+/** How far the plunger rod travels, in world units - 26 reference px of board. */
+const PLUNGER_TRAVEL = 26 * 0.000527;
+
 export class DesignRenderer extends Renderer {
   _build(root) {
     this.parts3 = this.parts3 || {};
@@ -61,6 +64,20 @@ export class DesignRenderer extends Renderer {
     this.time += dt;
     this._age(dt);
     const hud = game.hud();
+
+    // THE PLUNGER PULLS BACK. Matt: *"fix the chute launcher thing (doesn't move when you press
+    // launch so you can't tell how hard it's gunna go or how long to hold it down for)."* It
+    // never moved: the rod is built once and nothing here ever touched it, so the only feedback
+    // for a power that climbs over most of a second was a number. The rod now sits back by up to
+    // 26 px of board, which is the whole travel, so the pull is the gauge.
+    const rod = P.stage && P.stage.getObjectByName('plunger_rod');
+    if (rod) {
+      if (rod.userData.restZ === undefined) rod.userData.restZ = rod.position.z;
+      const pull = (hud.onPlunger ? (hud.power || 0) : 0);
+      // eased so the last of the travel is visibly slower, the way a real spring stiffens
+      const e = pull * (2 - pull);
+      rod.position.z = rod.userData.restZ + e * PLUNGER_TRAVEL;
+    }
     const P = this.parts3;
 
     // THE FOUR PADDLES, AND TWO THINGS THAT BOTH HAVE TO BE RIGHT.

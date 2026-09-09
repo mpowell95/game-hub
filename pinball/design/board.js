@@ -491,6 +491,54 @@ const setShape = (part, rec) => {
   if (rec.levels) part.levels = rec.levels.slice();
 };
 
+/**
+ * SMOOTH A HAND-DRAWN CHAIN. Chaikin corner-cutting: every segment is replaced by its quarter
+ * and three-quarter points, twice, which rounds off the wobble without moving the line. The two
+ * ENDS are pinned, because an arch leg has to keep finishing exactly where it finishes.
+ *
+ * WHY THIS EXISTS. Matt, more than five times over a day: the semi-circles are crudely drawn,
+ * they are not smooth lines. *"i think i sketched them with my trackpad mouse and you treated
+ * that shape as gospel."* That is exactly what happened - the arch outlines come through the
+ * editor export and I applied them point for point. Measured on arch_outer: six vertices turned
+ * more than 12 degrees and the worst turned 43. That is a mouse tremor, not a design.
+ *
+ * It runs on the PART, so the 3D mesh and the collision footprints are both built from the
+ * smoothed chain. There is one shape, not two that have to be kept in step.
+ */
+function smoothChain(pts, passes = 4) {
+  let out = pts.map((q) => q.slice());
+  for (let k = 0; k < passes; k++) {
+    const next = [out[0].slice()];
+    for (let i = 0; i < out.length - 1; i++) {
+      const a = out[i], b = out[i + 1];
+      next.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+      next.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+    }
+    next.push(out[out.length - 1].slice());
+    out = next;
+  }
+  // ...then walk the smoothed line at a FIXED SPACING. Two Chaikin passes quadruple the point
+  // count, and a band emits one collider per segment - arch_outer alone went from 101 to 400 and
+  // level 1 from 270 colliders to 829. Resampling every 14 px keeps the smoothness (the curve is
+  // already smooth; this only chooses where to sample it) and puts the count back where it was.
+  const step = 9;
+  const res = [out[0].slice()];
+  let carry = 0;
+  for (let i = 0; i < out.length - 1; i++) {
+    const A = out[i], B = out[i + 1];
+    const seg = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    let d = step - carry;
+    while (d < seg) {
+      const t = d / seg;
+      res.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]);
+      d += step;
+    }
+    carry = (carry + seg) % step;
+  }
+  res.push(out[out.length - 1].slice());
+  return res.map((q) => [r4(q[0]), r4(q[1])]);
+}
+
 {
   const gone = new Set(REMOVED);
   for (let i = P.length - 1; i >= 0; i--) if (gone.has(P[i].name)) P.splice(i, 1);
@@ -510,6 +558,12 @@ const setShape = (part, rec) => {
   for (const part of P) {
     const rec = LAYOUT[part.name];
     if (rec) setShape(part, rec);
+  }
+  // ...and every band gets the tremor taken out of it, whether it came from the editor or not.
+  for (const part of P) {
+    if (part.type !== 'band') continue;
+    part.outer = smoothChain(part.outer);
+    part.inner = smoothChain(part.inner);
   }
 }
 
