@@ -28,7 +28,10 @@ const K = 666.67;
 const tz = (y) => -y;
 
 /** How far the plunger rod travels, in world units - 26 reference px of board. */
-const PLUNGER_TRAVEL = 26 * 0.000527;
+// 26 px of travel was invisible on a phone - Matt: *"you can't see the launched thing move
+// backwards. You didn't do much here."* 70 px is most of the rod, which is what a real plunger
+// looks like at full pull.
+const PLUNGER_TRAVEL = 70 * 0.000527;
 
 /**
  * WHERE THE PLAYFIELD SURFACE ACTUALLY IS, in the units the ball is positioned in.

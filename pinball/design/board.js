@@ -639,7 +639,12 @@ function smoothChain(pts, passes = 4) {
   for (const part of P) {
     if (part.type !== 'wall' || !part.a || !part.b) continue;
     for (const f of P) {
-      if (f.type !== 'flipper' || !/lower/.test(f.name)) continue;
+      // EVERY flipper, not just the lower pair. The upper guide rails stop 16 px short of the
+      // upper flippers and 227 px from anything else, so a ball running down one drops through
+      // air onto the paddle - the same bounce Matt reported at the bottom of the table, which
+      // he then found again up here: *"The bumpers on level 2 are not flush with the rails
+      // they're connected to. same bumping problem."*
+      if (f.type !== 'flipper') continue;
       const end = Math.hypot(part.b[0] - f.pivot[0], part.b[1] - f.pivot[1]) < 60 ? 'b'
         : Math.hypot(part.a[0] - f.pivot[0], part.a[1] - f.pivot[1]) < 60 ? 'a' : null;
       if (end) part[end] = f.pivot.slice();
@@ -702,6 +707,22 @@ function smoothChain(pts, passes = 4) {
     part.yEndL = Math.min(part.yEndL, r4(endL));
     part.yEndR = Math.min(part.yEndR, r4(endR));
   }
+
+  // NOTHING GETS IN BEHIND THE ARCH - NOT SOLVED, AND THE ATTEMPT IS RECORDED HERE.
+  //
+  // Matt: *"You have moved the semi circle thing on level 1 so much that you semi broke level 1.
+  // it should not be able to go behind that large semi-circle thing."* He is right: arch_outer used
+  // to run its legs to py 880 and close that space, and trimming them at 590 to get them out of the
+  // ramps opened it.
+  //
+  // The legs cannot simply go back - that IS the ramp lane, x 131..219 against a lane of 129..231.
+  // A SKIRT just inboard of the ramp wall was tried at three offsets and made things WORSE every
+  // time: rest sweep 146 -> 215, 218, 229, and the new pocket MOVED WITH THE SKIRT (x 255, then
+  // 290) which is what proves the skirt is the wall making it. A long barrier parallel to the ramp
+  // turns the strip inboard of it into a dead-end channel.
+  //
+  // The honest fix is to move the arch LEGS inboard so they clear the ramps and still close the
+  // space - which changes the shape Matt drew, so it is his call and not one to make quietly.
 
   // NO POST MAY SIT INSIDE A BAND. post_big_left (350, 750) and post_big_right (646, 745) were
   // both geometrically INSIDE arch_inner - invisible, and colliding from within another solid.
