@@ -788,6 +788,30 @@ class GolfGame {
    *  step is up, and a golfer who is not in the lesson has no coach at all. */
   _coach(kind) { if (this.coach) this.coach.event(kind); }
 
+  /** PAINT A STILL DIAL FOR THE LESSON'S POPUPS, through the meter's own painter. Handed to the
+   *  Coach as `onDial` so `golf/js/tutorial.js` never has to know how a dial is drawn - and so the
+   *  popup that teaches the meter cannot drift from the meter. */
+  _paintTutorialDial(canvas, opts) {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    canvas.width = Math.round(METER_W * dpr);
+    canvas.height = Math.round(METER_H * dpr);
+    canvas.style.width = `${METER_W}px`;
+    canvas.style.height = `${METER_H}px`;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // A STILL dial: no needle, no planted marker, no hub readout. `pos: -BAR_HALF` parks the needle
+    // off the bottom of the bar where it cannot be mistaken for a mark the lesson is pointing at.
+    this._drawMeter(performance.now(), {
+      ctx,
+      still: true,
+      putting: opts.putting,
+      club: opts.putting ? PUTTER : CLUBS[0],
+      lie: opts.putting ? 'green' : 'fairway',
+      read: { phase: PHASE.IDLE, pos: -BAR_HALF, power: null },
+      marks: opts.marks,
+    });
+  }
+
   _enterHole() {
     this._dropStripObs();
     const hole = this.course.holes[this.holeIdxs[this.pos]];
@@ -824,8 +848,21 @@ class GolfGame {
     // ring and arrow the lesson has drawn goes with it. It keeps its own step index, so a
     // re-render never restarts the lesson.
     if (this.tutorialRun) {
+      // THE BOTTOM HUD RIDES UP BY THE RAIL'S OWN HEIGHT while the lesson runs. Matt, picking the
+      // rail off the mockups: *"i like the bottom rail with pips, but it covers the buttons"* - so
+      // the rail does not float over the controls, the controls move and it takes the strip they
+      // give back. `_keepBallAndCupClear` measures those clusters, so the camera follows for free.
+      this.rootEl.setAttribute('data-tut', '1');
       if (!this.coach) {
-        this.coach = new Coach(this.rootEl, () => { this.coach = null; });
+        this.coach = new Coach(this.rootEl, () => {
+          this.coach = null;
+          if (this.rootEl) this.rootEl.removeAttribute('data-tut');
+          // THE LESSON'S END IS THE HOLE'S END. Its last card sits on top of the result panel, so
+          // the panel's own close hands off to the coach rather than quitting; leaving is this.
+          if (this.tutorialRun && this.holed) this._leaveTutorial();
+          else this._fit();
+        });
+        this.coach.onDial = (cv, o) => this._paintTutorialDial(cv, o);
         this.coach.start();
       } else {
         this.coach.root = this.rootEl;
@@ -1383,7 +1420,8 @@ class GolfGame {
     el.innerHTML = `
       <div class="gf-result__card gf-panel">
         <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
-        <div class="gf-result__name">${esc(last && !practice ? t('round_done') : this._scoreName(strokes, hole.par))}</div>
+        <div class="gf-result__name">${esc(this.tutorialRun ? t('tut_complete')
+    : last && !practice ? t('round_done') : this._scoreName(strokes, hole.par))}</div>
         <div class="gf-result__sub">${esc(t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
         ${practice ? '' : `<div class="gf-result__card-grid" data-n="${this.holeIdxs.length}">
           ${this.holeIdxs.map((hi, i) => {
@@ -1395,9 +1433,9 @@ class GolfGame {
           }).join('')}
         </div>`}
         <div class="gf-result__total">${esc(toParTxt)}</div>
-        ${this.tutorialRun ? `<div class="gf-result__best">${esc(t('tut_holed'))}</div>` : ''}
+        ${this.tutorialRun ? `<div class="gf-result__best">${esc(t('tut_unlocked'))}</div>` : ''}
         ${this.newBest ? `<div class="gf-result__best">${esc(t('saved_best'))}</div>` : ''}
-        ${unlockedNow ? `<div class="gf-result__best">${esc(unlockedNow)}</div>` : ''}
+        ${unlockedNow && !this.tutorialRun ? `<div class="gf-result__best">${esc(unlockedNow)}</div>` : ''}
         <div class="gf-actions">
           ${last ? `<button type="button" class="gf-btn" data-role="res-done"><span>${esc(t('finish'))}</span></button>`
     : `<button type="button" class="gf-btn" data-role="res-next"><span>${esc(t('next_hole'))}</span></button>`}
@@ -1408,7 +1446,10 @@ class GolfGame {
     // On the last hole `isInProgress()` is already false (every score is in), so `finish` still
     // closes in one tap; mid-round the prompt goes on TOP of this card, and cancelling leaves the
     // card where it was rather than stranding the player on a hole they have already holed out.
-    const close = () => this._quit(() => el.remove());
+    const onCard = this.coach && this.coach.step && this.coach.step.advance === 'result-closed';
+    const close = onCard
+      ? () => { el.remove(); this._coach('result-closed'); }
+      : () => this._quit(() => el.remove());
     this._on(el.querySelector('[data-role="res-close"]'), 'click', close);
     const done = el.querySelector('[data-role="res-done"]');
     if (done) this._on(done, 'click', close);
@@ -2020,12 +2061,17 @@ class GolfGame {
     }
   }
 
-  _drawMeter(now) {
-    const c = this.mctx;
+  /** `opts` lets the tutorial paint a STILL dial into its own canvas without a second painter:
+   *  `{ ctx, putting, club, lie, read, marks, still }`. One painter is the point - the popup that
+   *  teaches the meter and the meter itself cannot drift apart if they are the same function, and
+   *  the putting dial's whole lesson (its 25/50/75 marks sit further round, because distance is
+   *  power^PUTT_GAMMA) is a property of this code rather than a picture somebody drew. */
+  _drawMeter(now, opts = {}) {
+    const c = opts.ctx || this.mctx;
     c.clearRect(0, 0, METER_W, METER_H);
     c.lineCap = 'butt';
 
-    const putting = this._putting();
+    const putting = opts.putting != null ? opts.putting : this._putting();
     const cx = 88; const cy = 76;
     const OUT_R = 54; const BAND = 19;
     const R = OUT_R - BAND / 2;            // the band's centre radius
@@ -2162,8 +2208,9 @@ class GolfGame {
       c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx2, by2); c.lineTo(dx2, dy2); c.lineTo(ex, ey);
       c.closePath(); c.stroke();
     };
-    const b = bandsFor(lieOf(this._lie()).zone, swingZone(this._activeClub()),
-      GREEN_FLOOR[clubTier(this._activeClub())] || 0);
+    const bClub = opts.club || this._activeClub();
+    const b = bandsFor(lieOf(opts.lie || this._lie()).zone, swingZone(bClub),
+      GREEN_FLOOR[clubTier(bClub)] || 0);
     outline(7, '#0b0f07');
     outline(3.5, '#fffdfc');
     quad(0, (1 - b.orange) / 2, '#fd0001');
@@ -2177,7 +2224,7 @@ class GolfGame {
     // A radial line at `ang(v)`, black-edged so it reads on the band, the block or the bar alike.
     // The needle lands inside the bar when |pos| <= BAR_HALF and on the band otherwise, from the
     // same expression - the whole point of putting both on one scale.
-    const read = this.swing.read(now);
+    const read = opts.read || this.swing.read(now);
     const needleAt = (v, wOuter, wInner, colour) => {
       const inBar = Math.abs(v) <= BAR_HALF;
       const [x0, y0] = inBar ? top(barPosOf(v)) : polar(IN_R - 1, ang(v));
@@ -2214,8 +2261,12 @@ class GolfGame {
     //
     // Drawn for the whole lesson and for no other player, gold (#ffce3a, the repo's standing
     // "this one" accent) on a black key so it reads over the band, the block and the bar alike.
-    if (this.coach && !this.coach.finished) {
-      const caret = (v, inBar) => {
+    // MARKS. Gold carets pointing at a power on the band and/or a spot in the accuracy bar. The
+    // lesson uses them two ways: on the LIVE dial while it is teaching the swing, and inside its own
+    // popups, which paint a still dial through this same function.
+    const marks = opts.marks || (this.coach && this.coach.dialMarks && this.coach.dialMarks());
+    if (marks && marks.length) {
+      const caret = (v, inBar, colour) => {
         const [x, y] = inBar ? top(barPosOf(v)) : polar(OUT_R + 6, ang(v));
         // The band caret points INWARD, at the band. A canvas triangle whose apex is at local
         // (0,-9) points along `rotation - 90 deg`, so pointing at the ring's centre from outside it
@@ -2225,22 +2276,17 @@ class GolfGame {
         c.save(); c.translate(x, y); c.rotate(a);
         c.beginPath(); c.moveTo(0, -9); c.lineTo(6, -19); c.lineTo(-6, -19); c.closePath();
         c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.stroke();
-        c.fillStyle = '#ffce3a'; c.fill();
+        c.fillStyle = colour || '#ffce3a'; c.fill();
         c.restore();
       };
-      caret(1, false);   // 100 % power, on the band
-      caret(0, true);    // dead centre, in the accuracy bar
+      for (const m of marks) {
+        if (m.power != null) caret(m.power, false, m.colour);
+        if (m.bar != null) caret(m.bar, true, m.colour);
+      }
     }
 
-    // NO CHARGE RING. One shipped here on 2026-09-09 - a gold arc sweeping the hub while the
-    // putter's `deadMs` held the needle at zero - and Matt's verdict the same day was "i hate the
-    // circle thing that appears when I go to putt. remove that thing." The report it was written
-    // for (the putter's first tap looking like it did nothing) is still closed, by the SWING
-    // BUTTON'S LABEL: `_paintSwingLabel` moves it to "set power" on the frame the tap lands, which
-    // is a word where the player is already looking rather than a new graphic on the dial.
-
     // --- the hub readout: how far the PREVIOUS shot travelled ----------------------------------
-    if (this.lastShotYd != null) {
+    if (!opts.still && this.lastShotYd != null) {
       c.font = '600 9px system-ui, sans-serif';
       c.fillStyle = '#a8b895';
       c.fillText(t('last_shot_lbl'), cx, cy - 8);

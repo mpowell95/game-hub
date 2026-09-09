@@ -590,37 +590,81 @@
    of what is being taught. The highlight is a ring on the control plus an arrow, and the course
    stays fully visible. */
 .gf-root .gf-tut { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
-/* OPAQUE, unlike every other panel in this game. The HUD panels are deliberately see-through
-   (measured off the reference: the band composites over the grass), and that is right for a
-   readout you glance at - but this card carries three lines of prose over a mown, speckled,
-   tree-lined fairway, and read in a real browser the course showed straight through the words. */
-.gf-root .gf-tut__card {
-  position: absolute; width: min(260px, calc(100% - 24px));
-  padding: 10px 12px; pointer-events: auto;
-  display: flex; flex-direction: column; gap: 7px;
-  border: 2px solid #ffce3a;
-  background: #17210f;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+/* --- THE LESSON: A RAIL, AND FOUR POPUPS (2026-09-09) ----------------------------------------
+   Matt picked the rail off the mockups and named its flaw in the same breath: *"i like the bottom
+   rail with pips, but it covers the buttons"*. So the rail does NOT float over the controls - the
+   control clusters ride up by its height for as long as the lesson runs (`[data-tut]` below), and
+   the rail owns the strip they give back. Nothing the player is being asked to press is ever
+   underneath it.
+
+   OPAQUE, unlike every other panel in this game. The HUD panels are deliberately see-through
+   (measured off the reference: the band composites over the grass), which is right for a readout
+   you glance at - but this carries a sentence over a mown, speckled, tree-lined fairway, and read
+   in a real browser the course showed straight through the words. */
+.gf-root[data-tut="1"] .gf-bl,
+.gf-root[data-tut="1"] .gf-br { bottom: calc(10px + 30px + env(safe-area-inset-bottom)); }
+
+.gf-root .gf-tut__rail {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(30px + env(safe-area-inset-bottom));
+  padding: 0 10px env(safe-area-inset-bottom); pointer-events: auto;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 14, 8, .94);
+  border-top: 2px solid #ffce3a;
 }
-.gf-root .gf-tut[data-centre="1"] .gf-tut__card {
-  left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 32px));
+/* HOW MUCH LESSON IS LEFT, which is the one thing the old card never said and most of why a
+   tutorial feels long. Taken out of flow so the sentence sits on the screen's own centre line. */
+.gf-root .gf-tut__pips { position: absolute; left: 10px; display: flex; gap: 4px; }
+.gf-root .gf-tut__pips i {
+  width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .28);
 }
-.gf-root .gf-tut__step { font-size: 11px; font-weight: 700; color: #ffce3a; }
-.gf-root .gf-tut__text { font-size: 13px; line-height: 1.35; }
-.gf-root .gf-tut__ok { min-height: 44px; }
-.gf-root .gf-tut__wait { font-size: 11px; font-weight: 700; color: var(--gf-dim); text-align: center; }
-/* 44px of height even though it reads as a link: it is a real control and the UX floor's tap
-   target applies to it exactly as much as to the buttons around it. */
-.gf-root .gf-tut__skip {
-  background: none; border: 0; color: var(--gf-dim); font: inherit; font-size: 11px;
-  text-decoration: underline; min-height: 44px; padding: 0; cursor: pointer;
+.gf-root .gf-tut__pips i.is-done { background: rgba(255, 206, 58, .55); }
+.gf-root .gf-tut__pips i.is-on { background: #ffce3a; }
+.gf-root .gf-tut__rail .gf-tut__text {
+  font-size: 13px; line-height: 1.3; text-align: center; padding: 0 58px;
 }
-.gf-root .gf-tut__arrow {
-  position: absolute; width: 18px; height: 18px; pointer-events: none;
-  background: #ffce3a;
-  clip-path: polygon(50% 100%, 0 0, 100% 0);
+
+/* --- the popups ---------------------------------------------------------------------------- */
+.gf-root .gf-tut__pop {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+  width: min(300px, calc(100% - 28px)); padding: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: #17210f; border: 2px solid #ffce3a; box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+  pointer-events: auto; text-align: center;
 }
-.gf-root .gf-tut__arrow[data-dir="up"] { clip-path: polygon(50% 0, 0 100%, 100% 100%); }
+.gf-root .gf-tut__h { font-size: 17px; font-weight: 800; letter-spacing: .02em; }
+.gf-root .gf-tut__pop .gf-tut__text { font-size: 13px; line-height: 1.35; }
+/* GOLD, not the game's orange: this is the lesson's own accent, the same one the dial marks and the
+   pips use, so "the thing the tutorial wants you to press" is one colour throughout. */
+.gf-root .gf-tut__ok {
+  min-height: 44px; padding: 0 20px; background: #ffce3a; color: #2a2000; border-color: #8a6a00;
+}
+.gf-root .gf-tut__slice { overflow: visible; }
+/* The dial is painted by ui.js's own `_drawMeter` into this canvas - one painter, so the popup
+   that explains the meter cannot drift from the meter. */
+.gf-root .gf-tut__dialbox { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.gf-root .gf-tut__dialbox canvas { display: block; }
+.gf-root .gf-tut__dialbox figcaption {
+  font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #ffce3a;
+}
+.gf-root .gf-tut__two { display: flex; gap: 4px; width: 100%; justify-content: center; }
+.gf-root .gf-tut__two .gf-tut__dialbox { flex: 1; min-width: 0; }
+.gf-root .gf-tut__two canvas { width: 100%; height: auto; }
+.gf-root .gf-tut__slice { width: 100%; height: auto; display: block; font-family: inherit; }
+/* The closing card points at a pause menu, so it shows one. */
+.gf-root .gf-tut__pause {
+  width: 100%; display: flex; flex-direction: column; gap: 5px; padding: 7px;
+  background: rgba(0, 0, 0, .4); border: 1px solid rgba(255, 255, 255, .25);
+}
+.gf-root .gf-tut__pauseh {
+  font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #b9c4a8;
+}
+.gf-root .gf-tut__pauserow {
+  font-size: 13px; font-weight: 800; padding: 9px 0; text-align: center;
+  background: rgba(255, 255, 255, .1); border: 1px solid rgba(0, 0, 0, .5);
+}
+.gf-root .gf-tut__pauserow.is-lit { background: #ffce3a; color: #2a2000; border-color: #8a6a00; }
+
 .gf-root .gf-tut-ring {
   position: absolute; pointer-events: none; z-index: 39;
   border: 2px solid #ffce3a; box-shadow: 0 0 0 3px rgba(255, 206, 58, .28);
