@@ -324,9 +324,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/game-stats-global.js` | non-ESM recorder port for Monopoly Deal/Parchís (`window.__ghStats`) |
 | `js/firebase-boot.js` | the ONE bootstrap for the named `'stats'` Firebase app |
 | `js/stats-net.js` | Firebase mirror to `players/<id>`; username registry; `syncHealth()` |
-| `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows, incl. multiplayer head-to-head (`headToHeadRows`) |
+| `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows. **It exports no `headToHeadRows`** - this row claimed one until 2026-09-09; `headToHead` appears nowhere in the repo's JS |
 | `js/game-stats-ui.js` | "My Stats" overlay |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); player detail shows multiplayer head-to-head wins (2026-08-11); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08) |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08). **No head-to-head anywhere on it** - this row claimed the player detail showed it until 2026-09-09, and it does not: `recordHeadToHead` writes `h2h` into every record and NO screen in the app reads it back (see the note under the games table) |
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23), plus the board comparators the leaderboard DOES use (`compareBoardMetric`, `compareTierFirst`) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
@@ -356,6 +356,15 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
   Monopoly Deal's must-stay-synced duplicates, and the Report a bug pipeline (what it collects,
   where it lands, how Matt reads it, and how to add the next announcement).
 - **`<game>/CLAUDE.md`** — each game's own docs (see the games table).
+
+**Head-to-head is RECORDED and DISPLAYED NOWHERE (found 2026-09-09, while writing
+`docs/LEADERBOARD-CONTENT.md`).** `recordHeadToHead(gameId, opponent, won)` in `js/game-stats.js`
+writes an `h2h` branch into every player's record, and it is carried across devices and backed up -
+but `headToHead` does not appear in any other file in this repo, and no screen reads `h2h`. Two rows
+of the module table above asserted the opposite for a year. Nothing is LOST (the wins themselves are
+counted in every total and shown on every board, so this is not a rule 1 failure), but a "who beats
+whom" screen would need no new recorder - the data is already there. **Do not delete `h2h` or its
+recorder** (rule 5), and do not re-add the claim that something shows it without opening the file.
 - **`docs/BUILDING-A-GAME.md`** — the UX floor every game's UI must meet, the module contract,
   the "Adding a game" checklist, and screen/cross-game patterns (how-to-play screens, setup
   defaults, viewport-fit-by-measurement, physics-tunnelling prevention). Auto-loaded by a skill
