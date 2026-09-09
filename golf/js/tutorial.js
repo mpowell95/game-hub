@@ -69,7 +69,13 @@ const t = makeT(STRINGS);
  *  card. The ring and the arrow still point at `anchor`; only the card is pushed clear. */
 export const STEPS = [
   { id: 'welcome', anchor: null, key: 'tut_welcome', advance: 'button' },
-  { id: 'controls', anchor: '.gf-aimrow', clear: '.gf-bl', side: 'above', key: 'tut_controls', advance: 'button' },
+  // THE LESSON MAKES YOU USE THE CONTROL, IT DOES NOT DESCRIBE IT (2026-09-09). Matt: "make them
+  // click buttons to aim. make them click buttons to change clubs." These two advance on the
+  // player's own tap on the aim arrows and the club arrows, so the ring and the arrow sit on the
+  // control until it has actually been worked. Reading "these arrows aim" teaches nobody anything;
+  // pressing one does.
+  { id: 'aim', anchor: '.gf-aimrow', clear: '.gf-bl', side: 'above', key: 'tut_aim', advance: 'aim' },
+  { id: 'club', anchor: '.gf-clubrow', clear: '.gf-bl', side: 'above', key: 'tut_club', advance: 'club' },
   { id: 'swing', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_swing', advance: 'tap-begin' },
   // SILENT until the ball is on the putting surface. `on-green` rather than `settled` because this
   // is a par 4: the approach may take one shot or three, and a card that appeared after the first
@@ -86,7 +92,14 @@ export const CARDS = STEPS.filter((s) => s.key);
 
 /** Every event kind the coach understands, exported so `golf/js/test.js` can check that each step
  *  waits on one of them (or on its own button) and the lesson cannot strand the player. */
-export const EVENTS = ['tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed'];
+export const EVENTS = ['aim', 'club', 'tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed'];
+
+/** THE EVENTS A STEP CAN LEGITIMATELY MISS, and the only ones `event()` will skip forward to.
+ *  They are all things the GAME does rather than things the player taps: the swing fires itself if
+ *  the needle runs off the bar with no third tap, and a hole in one returns early and never sends
+ *  `settled` or `on-green` at all. Everything else is a control the lesson is waiting to see used,
+ *  and skipping ahead on one of those would let the player past a gate without working it. */
+export const SKIPPABLE = new Set(['fire', 'settled', 'on-green', 'holed']);
 
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -128,6 +141,15 @@ export class Coach {
    *  and an event nothing ahead is waiting for is ignored, exactly as before. */
   event(kind) {
     if (this.finished) return;
+    // A PLAYER ACTION ONLY EVER ENDS THE STEP THAT ASKED FOR IT. The forward search below exists
+    // for events the lesson can MISS; it must not apply to the ones the lesson is GATING on, and
+    // that distinction was found by driving it: with a plain search, tapping the CLUB arrow while
+    // the aim card was up matched the club step two ahead and skipped the aim step entirely - the
+    // gate Matt asked for ("make them click buttons to aim") let you past without clicking it.
+    if (!SKIPPABLE.has(kind)) {
+      if (this.step && this.step.advance === kind) this._next();
+      return;
+    }
     for (let j = this.i; j < STEPS.length; j++) {
       if (STEPS[j].advance !== kind) continue;
       this.i = j;

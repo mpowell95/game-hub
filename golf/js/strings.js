@@ -36,8 +36,9 @@ export const STRINGS = {
     // short sentence is not read at all - it is skipped, which is worse than not writing it.
     // KEEP EVERY CARD UNDER TEN WORDS. golf/js/test.js fails the build if one grows.
     tut_welcome: 'Par 4. Score does not count.',
-    tut_controls: 'Arrows aim. Up and down change club.',
-    tut_swing: 'Three taps: start, power, aim.',
+    tut_aim: 'Tap an arrow to aim.',
+    tut_club: 'Tap up or down to change club.',
+    tut_swing: 'Three taps. Stop it on the gold marks.',
     tut_putt: 'Same three taps. Chevrons point downhill.',
     tut_holed: 'Done. Holes 1 to 3 are open.',
     locked: 'locked',
@@ -181,8 +182,9 @@ export const STRINGS = {
     tut_ok: 'entendido',
     tut_your_turn: 'te toca',
     tut_welcome: 'Par 4. El resultado no cuenta.',
-    tut_controls: 'Las flechas apuntan. Arriba y abajo cambian de palo.',
-    tut_swing: 'Tres toques: empezar, potencia, precisión.',
+    tut_aim: 'Toca una flecha para apuntar.',
+    tut_club: 'Toca arriba o abajo para cambiar de palo.',
+    tut_swing: 'Tres toques. Para en las marcas doradas.',
     tut_putt: 'Los mismos tres toques. Las flechas van cuesta abajo.',
     tut_holed: 'Listo. Los hoyos 1 a 3 ya están abiertos.',
     locked: 'bloqueado',

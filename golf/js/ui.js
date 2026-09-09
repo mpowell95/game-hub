@@ -1133,6 +1133,7 @@ class GolfGame {
     rel = Math.max(-limit, Math.min(limit, rel));
     next = base + rel;
     this.aimRad = next;
+    this._coach('aim');
     this._paintHud();
   }
 
@@ -1142,6 +1143,7 @@ class GolfGame {
     if (lockedToPutter(this._lie())) return;        // the putter is the only club on the green
     this.club = stepClub(this._activeClub(), dir, this._lie());
     this._syncTempo();
+    this._coach('club');
     this._paintHud();
   }
 
@@ -2196,6 +2198,39 @@ class GolfGame {
     // It is still the widest single mark on the meter and still black-keyed against grass.
     if (read.power != null) needleAt(read.power, 5, 2, '#ffffff');
     needleAt(read.pos, 5, 2, '#ffffff');
+
+    // ============================================================================================
+    // THE LESSON POINTS AT THE DIAL (2026-09-09). Matt: "Use arrows. point to where they should aim
+    // to hit on the power meter."
+    //
+    // TWO GOLD CARETS, AND THEY ARE ON SCREEN BEFORE THE FIRST TAP - never revealed mid-swing.
+    // That is the whole constraint here: the backswing is 1585 ms per power unit, so anything that
+    // APPEARS while the needle is moving cannot be found, read and acted on in time (the three
+    // cards this replaced failed exactly that way). A mark that was already there is read at a
+    // glance, which is what an arrow is for and a sentence is not.
+    //
+    //   * on the BAND, at 100 % power - where to stop it on the way up;
+    //   * in the BAR, at dead centre - where to stop it on the way down.
+    //
+    // Drawn for the whole lesson and for no other player, gold (#ffce3a, the repo's standing
+    // "this one" accent) on a black key so it reads over the band, the block and the bar alike.
+    if (this.coach && !this.coach.finished) {
+      const caret = (v, inBar) => {
+        const [x, y] = inBar ? top(barPosOf(v)) : polar(OUT_R + 6, ang(v));
+        // The band caret points INWARD, at the band. A canvas triangle whose apex is at local
+        // (0,-9) points along `rotation - 90 deg`, so pointing at the ring's centre from outside it
+        // is `ang(v) - PI/2`, not `+`. With `+` it points away from the dial and lands on the "100"
+        // tick label, which is what the first render did.
+        const a = inBar ? Math.PI : ang(v) - Math.PI / 2;
+        c.save(); c.translate(x, y); c.rotate(a);
+        c.beginPath(); c.moveTo(0, -9); c.lineTo(6, -19); c.lineTo(-6, -19); c.closePath();
+        c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.stroke();
+        c.fillStyle = '#ffce3a'; c.fill();
+        c.restore();
+      };
+      caret(1, false);   // 100 % power, on the band
+      caret(0, true);    // dead centre, in the accuracy bar
+    }
 
     // NO CHARGE RING. One shipped here on 2026-09-09 - a gold arc sweeping the hub while the
     // putter's `deadMs` held the needle at zero - and Matt's verdict the same day was "i hate the

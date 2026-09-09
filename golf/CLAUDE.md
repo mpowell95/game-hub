@@ -4495,3 +4495,36 @@ it reads as "not yours yet" without being a fourth colour.
 (`THEMES[...].setupA/setupB` in `render.js`), so a rule in the stylesheet is silently overridden -
 which cost a round of measuring here. Change the palette. A comment in `golf.css` says so at the
 point somebody would otherwise try.
+
+## The lesson makes you USE the controls, and points at the dial (2026-09-09)
+
+Matt: *"tutorial is still bad. Use arrows. point to where they should aim to hit on the power meter.
+make them click buttons to aim. make them click buttons to change clubs."*
+
+The cards described the controls; now the lesson waits for them to be worked. `_nudgeAim` and
+`_stepClub` report `aim` and `club`, and the aim and club steps advance on nothing else - the ring
+and the arrow stay on the control until it has actually been pressed. Reading "these arrows aim"
+teaches nobody anything; pressing one does.
+
+**TWO GOLD CARETS ON THE METER, and they are on screen BEFORE the first tap.** One outside the band
+at 100 % power, pointing in at the green stripe; one at the accuracy bar's dead centre. That timing
+is the whole constraint on this screen: the backswing is 1585 ms per power unit, so a mark REVEALED
+while the needle is moving cannot be found and acted on, which is exactly how the three swing cards
+failed. A mark that was already there is read at a glance - which is what an arrow is for and a
+sentence is not. They are drawn only while a coach is live, so no other player ever sees them.
+
+**A canvas triangle whose apex is at local `(0,-9)` points along `rotation - 90 deg`.** The first
+render used `+`, so the band caret pointed away from the dial and landed on the "100" tick label.
+Worth knowing before nudging that number.
+
+### The forward search was a way past the gate
+
+`event()` matches the first step FROM HERE ON that wants the kind, so the lesson can never strand on
+an event it missed (the swing fires itself if the needle runs off the bar; a hole in one never sends
+`settled`). Applied to a GATED step that search is a hole: measured in a browser, tapping the CLUB
+arrow while the aim card was up matched the club step two ahead and **skipped the aim step
+entirely** - the gate Matt had just asked for let you past without using it.
+
+`SKIPPABLE` now names the events the lesson can legitimately miss (`fire`, `settled`, `on-green`,
+`holed`) and only those skip forward. Anything the player TAPS ends the step that asked for it, or
+nothing. A `[KNOWN-BUG PROBE]` fails if a control event joins that set.

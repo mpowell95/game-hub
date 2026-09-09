@@ -2357,6 +2357,28 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     ok(`...and the step after "${TU.STEPS[i].id}" draws nothing`, !TU.STEPS[i + 1].key,
       `"${TU.STEPS[i + 1].id}" would appear while the needle is sweeping`);
   }
+  // --- the lesson makes you USE the controls (2026-09-09) ------------------------------------
+  // Matt: "Use arrows. point to where they should aim to hit on the power meter. make them click
+  // buttons to aim. make them click buttons to change clubs."
+  const byId = Object.fromEntries(TU.STEPS.map((st) => [st.id, st]));
+  ok('the aim step waits on a real tap of the aim arrows', byId.aim && byId.aim.advance === 'aim');
+  ok('the club step waits on a real tap of the club arrows', byId.club && byId.club.advance === 'club');
+  // [KNOWN-BUG PROBE] A PLAYER ACTION MAY ONLY END THE STEP THAT ASKED FOR IT. `event()` searches
+  // FORWARD so the lesson can never strand on an event it missed - but applied to a gated step that
+  // search is a way past the gate: measured in a browser, tapping CLUB while the aim card was up
+  // matched the club step two ahead and skipped aim entirely.
+  ok('[KNOWN-BUG PROBE] a control tap cannot skip the step before it',
+    !TU.SKIPPABLE.has('aim') && !TU.SKIPPABLE.has('club') && !TU.SKIPPABLE.has('tap-begin'),
+    'a gated step can be skipped by tapping the NEXT step\'s control');
+  ok('...while the events the lesson can genuinely miss still skip forward',
+    ['fire', 'settled', 'on-green', 'holed'].every((e) => TU.SKIPPABLE.has(e)));
+  // THE ARROWS ON THE DIAL. Two gold carets, drawn for the whole lesson so they are on screen
+  // BEFORE the first tap - a mark revealed mid-swing cannot be found and acted on in 1585 ms.
+  ok('the meter marks where to stop the needle, for the lesson only',
+    /this\.coach && !this\.coach\.finished/.test(uiSrc2) && /caret\(1, false\)/.test(uiSrc2)
+    && /caret\(0, true\)/.test(uiSrc2),
+    'the tutorial no longer points at 100 % and at the bar centre');
+
   // NO SKIP BUTTON. Matt: "that is NOT an option". It offered an exit that led nowhere - the cards
   // stopped and holes 1-3 stayed locked, because the unlock reads a hole record only holing writes.
   ok('[KNOWN-BUG PROBE] there is no skip button', !/data-role="tut-skip"/.test(
