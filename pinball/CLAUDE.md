@@ -1227,6 +1227,71 @@ games and reported them as eight (41.3 s ball life, 89.2% on level 2). With a re
 a randomised driver the honest numbers are the ones above. **If every game in a batch reports the
 same number to one decimal place, the batch is one game.**
 
+### The ramps were unreachable, and five separate things were in the way (2026-09-09)
+
+Matt: *"youve made it so no ball can ever travel to the top level. and balls get stuck on the top
+level. you put a horizontal wall where there should just be an edge - no barrier of any kind - under
+the top paddles. and the ramps are still all fucked up. and you added some sort of gray barrier walls
+in an L and reverse L shape... Shorten the left and right thin vertical walls. test until a ball can
+be hit by the bottom paddle and go directly up the ramp to the top level."*
+
+Every part of that was correct. The instrument that made it fixable was **a contact tally: fire a
+ball off each bottom paddle at every contact point and every flip timing, and count what a RISING
+shot touches above py 1400, by collider name.** Each pass named the next thing in the way; guessing
+named none of them.
+
+| in the way | what it was | contacts |
+|---|---|---|
+| `outlane_top_left` + `ramp_rail_left_in` | the L. A wall across py 908 meeting a vertical rail at its corner, right over the mouth. Mirrored on the right | - |
+| `arch_outer_end_left/right` | the outer arch band ended AT py 908, so its foot cap stood in the mouth | 58 / 46 |
+| `post_lane_1`, `post_lane_2` (+ `_r1`, `_r2`) | four steel posts standing free in the lane approach | 33, 22 |
+| `lane_rail_left/right` | ran py 980..1410, sealing the far paddle out of the lane entirely | 32 |
+| `post_lane_3` (+ `_r3`) | the last post, wedged against the re-shaped rail | 47 rest-sweep drops |
+
+What the board has now: no wall anywhere across py 908; the thin vertical ramp rails cover only the
+top half of each lane (py 640..790); the band feet end at py 880; each lane rail runs DIAGONALLY
+from the cabinet wall at py 960 down to py 1410, so it funnels a crossing shot into the lane instead
+of fencing it out; and the left mouth is 105 px wide, because the shot map put arrivals between
+x 129 and 150.
+
+**The result, measured through the real game** - the ball is put on a paddle, the paddle is flipped,
+and it only counts if a `ramp` event fires AND the ball is genuinely on level 2 afterwards:
+
+| | before | after |
+|---|---|---|
+| left paddle | 0 of 240 | **75 of 240 (31.3%)** |
+| right paddle | 0 of 240 | **18 of 240 (7.5%)** |
+
+The two sides differ because the board is not symmetric - the chute takes the right-hand 160 px, so
+the left paddle has a longer, cleaner run at its mouth than the right one has at its own.
+
+### The deck front is an EDGE now, and that alone emptied it
+
+`ledge_left`, `ledge_right` and their two extensions made a continuous lip right across the front of
+the deck with a single 90 px hole in it, so a ball that rolled down the deck stopped ON the lip.
+Nothing is built there now: `js/design.js` drops a deck ball to level 1 past py 760, which IS the
+edge - the ball rolls off the front of the raised deck onto the playfield underneath.
+
+| rest sweep, 1,312 drops on the deck | at rest |
+|---|---|
+| with the lip, paddles held | 762 |
+| with the lip, paddles down | 67 |
+| **no lip** | **0** |
+
+### And the arch crown was flat, which is a shelf
+
+With the lanes open a ball can now get above the arch on level 1, and `OUTER_OUT` ran dead level at
+py 305-306 across x 350..650. 21 of 1,289 level-1 drops came to rest on it. The crown is cambered by
+13 px over that span - invisible at this scale, and enough that a ball rolls off. **Level 1 rest
+sweep: 74 in 5 places -> 0.**
+
+Driven, after all of it: **11,266 average, 8 of 8 games finishing, ball life 32.2 s median** (was
+13.7), nothing off the table. `test.js` section 10 now sweeps the real game for the ramp shot and
+fails under 8%, and asserts structurally that no ledge wall and no outlane wall come back.
+
+**Still true, and still Matt's call: 84% of play happens on the upper deck**, because the shooter
+lane feeds it. Nothing here changed that.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
