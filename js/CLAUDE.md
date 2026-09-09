@@ -1926,7 +1926,15 @@ look at... I don't give a fuck about generic multiplayer wins or losses. I care 
 wins and losses."* He was right twice over: that screen is reached by drilling in from a game, so a
 number that ignores which game you came from reads as a bug, and a cross-game head-to-head total is
 not a fact anyone wanted. It was removed, along with `headToHeadRows()` and the `h2h`/`deviceIds`
-aggregation in `players-agg.js` that existed only to feed it.
+aggregation in `players-agg.js` that existed only to feed it. (`recordHeadToHead` still runs and
+still writes `h2h`; nothing reads it. That is the decision, not an oversight - rule 5 keeps the key.)
+
+**Chinchón was the last game still filing online matches under an AI tier, fixed 2026-09-09.** Every
+other multiplayer game writes `'mp'`; `chinchon/js/ui.js` wrote `opp0.difficulty || ... || 'normal'`,
+so a remote seat (which has no `difficulty`) landed every online match in Medium - the identical bug
+Escoba fixed the day this section was written. It survived four weeks because Escoba's fix got a
+`test-mp-lockstep.mjs` assertion and Chinchón's had none; C1 now carries the same one. Not
+retroactive: pre-fix matches stay in `normal`.
 
 What replaced it is smaller and answers the actual question: **a fourth chip in the tier row on a
 game's own board** (`mpTileHTML` in `js/leaderboard-ui.js`), reading `byDiff.mp.won` for THAT game.

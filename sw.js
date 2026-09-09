@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v747';
+const CACHE = 'game-hub-v748';
 
 const ASSETS = [
   './',
@@ -525,7 +525,7 @@ const REST_MANIFEST = {
   './chinchon/js/game.js': 'ff23b6d017',
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
-  './chinchon/js/ui.js': '7174372ef6',
+  './chinchon/js/ui.js': 'ababefca1f',
   './chinchon/js/strings.js': 'ba6eab58b2',
   './parchis/': '45e49dd3f5',
   './parchis/index.html': '45e49dd3f5',

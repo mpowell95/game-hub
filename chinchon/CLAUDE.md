@@ -238,6 +238,25 @@ likewise stays the Spanish term in both languages.
 
 ---
 
+## An online match records under 'mp', not under an AI tier (2026-09-09)
+
+`_commitStats` wrote `opp0.difficulty || _setup.aiDifficulty[0] || 'normal'`. A remote seat has no
+`difficulty` at all, so **every online match was filed as a Medium win over an AI that was not at the
+table** - counted in every total, but indistinguishable from solo play on every screen that shows a
+difficulty, and absent from the leaderboard's Versus category. It now writes `MP_DIFFICULTY` ('mp')
+whenever `this.mp` is set; solo play is untouched and still reads the opponent AI's tier.
+
+This is the repo-wide convention and Chinchón was the LAST game without it: Escoba had the identical
+bug and fixed it on 2026-08-11 (`MP_DIFFICULTY` in `escoba/js/ui.js` carries the full write-up), and
+tic-tac-toe, boggle, dots-boxes, filler, mancala and battleship all define the same constant.
+**It survived here for four weeks because Escoba's fix got a test assertion and Chinchón's had
+none** - `test-mp-lockstep.mjs`'s C1 block now mirrors this branch and fails if it is reverted
+(verified born red).
+
+**NOT RETROACTIVE, deliberately** (THE LAW rule 5): matches played before this stay in the `normal`
+bucket exactly as recorded. Nothing is moved, rewritten or deleted; only what future matches record
+changes.
+
 ## Hub notes
 
 Chinchón: in-hub `module:` — Spanish rummy vs AI. No worker (light heuristic AI). See the rest of this file.
