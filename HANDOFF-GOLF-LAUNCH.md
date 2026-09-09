@@ -215,11 +215,9 @@ Three things worth knowing if you touch that bar:
    obstacle: the three top clusters could be one flex row with `space-between` and would then be
    incapable of overlapping. The tutorial's rings position from measured rectangles and do not care.
 
-2. **`golf/CLAUDE.md` has a stale paragraph.** Near the top, under the stored shape, it says *"Queued
-   for Stage D: My Stats' 'Best rounds' table shows raw STROKES while the leaderboard shows the same
-   round as a score to par... Not done yet."* **It was done on 2026-09-06** —
-   `js/game-stats-ui.js` shows to-par AND strokes side by side, with the reasoning in a comment
-   right there. Delete the queued note (rule 9) so nobody rebuilds finished work.
+2. ~~**`golf/CLAUDE.md` has a stale paragraph** claiming My Stats' to-par display is still
+   queued.~~ **Fixed 2026-09-09** - both the paragraph and the Stage D row now say it landed on
+   2026-09-06, which it did.
 
 3. **Red Mesa hole 1**: a putt aimed dead straight from 15–30 ft holes **100 %** of the time at any
    `BREAK_K`, because the pin sits at the low point of a `bowl` green and the slope funnels
