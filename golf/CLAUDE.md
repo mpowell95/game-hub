@@ -4985,3 +4985,65 @@ you cannot out-skill, which is the whole point of the penalty.
 **The honest caveat, so nobody is surprised by it:** past 100 % the spray can push a left miss to
 the right, because it is added rather than aligned. Inside the ordinary swing the aim-side rule is
 absolute.
+
+## Five more from playing the lesson (2026-09-09)
+
+### 1. THE SWING IS HELD UNTIL THE GATED CONTROL IS USED
+
+Matt: *"you shouldn't be able to swing without first tapping the aim arrows."* The aim and club
+steps already refused to ADVANCE on anything but their own control - but nothing stopped the player
+swinging straight past them, so the one lesson that teaches by MAKING you use a control could be
+walked around while its card sat there and the ball flew.
+
+`Coach.blocksSwing()` is true only on a step that RINGS a control (a card with nothing to press
+cannot be waiting on a press, which keeps every silent waypoint and every popup out of it by
+construction), and `_tap` asks before starting a swing.
+
+**A refused tap is never silent.** `nudge()` flashes the rings and pulses the rail; the class is
+removed and re-added so it restarts on every attempt rather than only the first. A control that
+quietly does nothing reads as broken - which is exactly the complaint the putter's dead zone got.
+
+### 2. The rings are bigger
+
+*"the aim, and the change club ones need to be more obvious."* 2 px of hairline at 28 % glow over a
+busy pixel-art course was easy to read past. Now 3 px, a wider brighter halo, and a hard BLACK KEY
+outside it - the same trick the swing meter and the tree canopies need to hold their shape against
+grass. Reduced motion keeps the emphasis and drops only the movement: the ring holds its brightest
+state and a refused swing still changes it.
+
+### 3. THE PUTTING LESSON NEVER FIRED FROM THE FRINGE
+
+*"the putting one didn't popup now when i'm putting from the fringe. It gave me the putter, but the
+clues didn't come up."* `_settleShot` fired `on-green` on `_lie() === 'green'`, but `mustPutt` -
+the predicate that HANDS the player the putter - is green **or fringe**. So the collar gave him a
+club he had not been taught and no card explaining it.
+
+It is `mustPutt(this._lie())` now. Still not `settled`: the fairway and the rough do not force a
+putter, so a card there would tell a player standing in the fairway to putt.
+
+### 4. The bad-swing line fits on one line
+
+*"...exaggerates mishits"* - "Extra power exaggerates mishits.", measured at one line.
+
+### 5. The putting card points at both 25s
+
+*"put arrows pointing at the 25% on both meters on the putting info popup."* This is the card's
+whole argument made visible: the two carets sit at obviously different angles, which is the thing
+the sentence is claiming.
+
+**The putting caret is NOT at power 0.25.** A putt travels `range * power ** PUTT_GAMMA`, so that
+dial draws its 25 % tick at `0.25 ** (1 / PUTT_GAMMA)` - about 42 % of the way round - and a caret
+at 0.25 would point at bare band a third of a turn short of the number it is naming. `PUTT_TICK_MARK`
+derives it from `PUTT_GAMMA` rather than typing it, so it moves if the curve is ever retuned.
+
+### 6. The closing card shows the ROUTE, not just the destination
+
+*"The image should show the pause button and the pause menu with the report a bug option."* It drew
+the menu alone, which says what to look for and not where it lives - and pause is a small word in a
+corner a new player has had no reason to press. It now draws the button, an arrow down from it, and
+the menu it opens with `report a bug` lit. The replica button is built from `.gf-btn`'s own colour
+and the rows from `.gf-pause__row`'s, so the picture cannot drift from the thing.
+
+It is a REPLICA, not the real control: a live button inside a lesson popup would be a second way to
+press it. Heading and body are now "Please report bugs!" / "Tap pause mid-game, then Report a bug,
+if you notice anything." (Matt wrote "Click"; every other string in this game says Tap.)
