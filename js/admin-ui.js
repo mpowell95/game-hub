@@ -133,12 +133,19 @@ function ensureCss() {
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
   /* Two columns, seen and not-yet, side by side so the shape of the answer is one glance. They
      stack under 320px of room rather than squeezing names into two characters each. */
-  .adm-annlists { display: flex; flex-wrap: wrap; gap: var(--gh-sp-3); width: 100%; margin-top: var(--gh-sp-2); }
-  .adm-annlist { flex: 1 1 130px; min-width: 0; }
-  .adm-annlist h4 { margin: 0 0 2px; font-size: var(--gh-fs-xs); font-weight: 800;
-                    text-transform: uppercase; letter-spacing: .04em; color: var(--gh-muted); }
-  .adm-annlist ul { margin: 0; padding-left: 1.1em; font-size: var(--gh-fs-sm); line-height: 1.5; }
-  .adm-annlist .adm-note { display: inline; margin: 0; }
+  /* Three collapsible groups, counts on the summary line. A bullet per person is two screens of
+     scrolling for one announcement; the question is "how many", with the names one tap away. */
+  .adm-anngrps { width: 100%; margin-top: var(--gh-sp-2); }
+  .adm-anngrp { border-top: 1px solid var(--gh-border); }
+  .adm-anngrp > summary { list-style: none; cursor: pointer; padding: 6px 0; min-height: 34px;
+                          display: flex; align-items: center; gap: 6px;
+                          font-size: var(--gh-fs-xs); font-weight: 800; text-transform: uppercase;
+                          letter-spacing: .04em; color: var(--gh-muted); }
+  .adm-anngrp > summary::-webkit-details-marker { display: none; }
+  .adm-anngrp > summary b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
+  .adm-anngrp > summary::after { content: '\\25be'; margin-left: auto; }
+  .adm-anngrp[open] > summary::after { content: '\\25b4'; }
+  .adm-anngrp > p { margin: 0 0 var(--gh-sp-2); font-size: var(--gh-fs-sm); line-height: 1.5; }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
   .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
@@ -347,31 +354,36 @@ function announceSectionHTML() {
   const rows = [...people.values()].sort((a, b) =>
     (a.name || '\uffff').localeCompare(b.name || '\uffff'));
   const lang = getLang();
+  // Names run as a COMMA LIST, not a bullet per line. Matt, on the first version: *"This is not
+  // easy to understand at a glance."* Twenty-six people at one name per row is two full screens of
+  // scrolling per announcement, and the answer he is after ("has everyone been told yet") is a
+  // COUNT with the names available if he wants them.
+  const names = (list) => list.map((p) => esc(p.name || t('adm_sc_unnamed'))).join(', ');
+  const group = (label, list, open) => `<details class="adm-anngrp"${open ? ' open' : ''}>
+      <summary>${esc(label)} <b>${list.length}</b></summary>
+      <p>${list.length ? names(list) : `<span class="adm-note">${esc(t('adm_ann_nobody'))}</span>`}</p>
+    </details>`;
   return ANNOUNCEMENTS.map((a) => {
     const title = textFor(a.title, lang) || a.id;
-    const yes = rows.filter((p) => p.seen.has(a.id));
-    const no = rows.filter((p) => !p.seen.has(a.id));
-    const person = (p) => {
-      // A device that has never reported is the only thing standing between "not seen" and "we do
-      // not know", so it rides the name rather than being averaged away into a tick. Somebody whose
-      // phones have ALL gone quiet is not a no - it is no answer, and the two must not read alike.
-      const stale = p.devices - p.reported;
-      const note = !p.reported ? t('adm_ann_nodata') : stale ? t('adm_ann_stale', { n: stale }) : '';
-      return `<li>${esc(p.name || t('adm_sc_unnamed'))}${
-        note ? ` <span class="adm-note">${esc(note)}</span>` : ''}</li>`;
-    };
+    // THREE GROUPS, NOT TWO, AND THE THIRD IS THE WHOLE POINT. The first version had "seen it" and
+    // "not yet", and dropped everyone whose phones have never reported into "not yet" - which on
+    // the day this shipped was 24 of 26 people, and read as a claim that nobody had seen the bug
+    // report notice from August. They HAD; that dismissal simply lived on their phone and was
+    // never uploaded until now. Matt read it exactly that way (*"Only Unai has seen it?"*), which
+    // is a screen telling him something untrue. "No answer" is its own column.
+    const heard = rows.filter((p) => p.reported);
+    const quiet = rows.filter((p) => !p.reported);
+    const yes = heard.filter((p) => p.seen.has(a.id));
+    const no = heard.filter((p) => !p.seen.has(a.id));
     return `<div class="adm-row adm-row--stack">
       <div class="adm-row-main">
         <div class="adm-name">${esc(title)}</div>
-        <div class="adm-note">${esc(t('adm_ann_count', { seen: yes.length, all: rows.length }))}</div>
+        ${quiet.length ? `<div class="adm-note">${esc(t('adm_ann_waiting', { n: quiet.length, all: rows.length }))}</div>` : ''}
       </div>
-      <div class="adm-annlists">
-        <div class="adm-annlist"><h4>${esc(t('adm_ann_seen'))}</h4>
-          ${yes.length ? `<ul>${yes.map(person).join('')}</ul>`
-            : `<p class="adm-note">${esc(t('adm_ann_nobody'))}</p>`}</div>
-        <div class="adm-annlist"><h4>${esc(t('adm_ann_notyet'))}</h4>
-          ${no.length ? `<ul>${no.map(person).join('')}</ul>`
-            : `<p class="adm-note">${esc(t('adm_ann_everyone'))}</p>`}</div>
+      <div class="adm-anngrps">
+        ${group(t('adm_ann_seen'), yes, true)}
+        ${group(t('adm_ann_notyet'), no, false)}
+        ${quiet.length ? group(t('adm_ann_nodata'), quiet, false) : ''}
       </div>
     </div>`;
   }).join('');

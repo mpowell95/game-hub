@@ -2269,9 +2269,22 @@ stale or wiped copy cannot make a popup reappear or vanish on anybody's phone.
 
 `js/admin-ui.js`'s **Announcements** section reads it, one entry per announcement, filtered by
 `js/hidden-players.js` (the same people the leaderboard renders - it shipped unfiltered and ~100
-pre-gate nameless devices buried the four real people) and **grouped by PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
+pre-gate nameless devices buried the real people) and **grouped by PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
 somebody with two phones has seen it once they dismiss it on either, and their second phone still
 owes them one. **A device that has not synced since this shipped reports nothing, and nothing is not
 "not seen"** - a person whose phones have all gone quiet reads `no data yet`, never as a no. Same
 honesty rule as `read-install-state.mjs`'s `(not seen yet)`, and it is not retroactive: everyone
 reads as unknown until their next hub load.
+
+**THREE GROUPS, AND THE THIRD ONE IS THE WHOLE POINT.** The first version had two, Seen it and Not
+yet, and dropped everyone whose phones had never reported into Not yet - which on the day it shipped
+was 24 of 26 people, and read as a claim that nobody had seen the bug-report notice from August.
+They HAD; that dismissal simply lived on their phone and was never uploaded until now. Matt read it
+exactly that way (*"Only Unai has seen it?"*), which is a screen telling him something untrue.
+**"No answer yet" is its own column**, and the count sitting under each title is how many people have
+not opened the app since the mirror was added - the one caveat worth stating, said once instead of
+being repeated after every name.
+
+Names are a **comma list inside a collapsed `<details>`**, not a bullet per row. Matt: *"This is not
+easy to understand at a glance."* Twenty-six people at one row each is two screens of scrolling per
+announcement; the question is a COUNT, with the names one tap away. Seen it opens by default.
