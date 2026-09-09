@@ -123,7 +123,14 @@ same line — update the probe deliberately and say why, do not delete it.
 
 ---
 
-## Job C — the leaderboard
+## Job C — the leaderboard — **DONE 2026-09-09**
+
+> **Shipped.** C1 is a separate `rounds` tally in My Stats' overview (not a global rename); C2 was
+> "leave it alone" and was left alone; C3 is `golf/js/board.js`, opened from the setup screen. Three
+> bugs found by driving it are written up in `golf/CLAUDE.md`, "Job C: the leaderboard". The rest of
+> this section is kept as the specification it was written as.
+
+## Job C — the original brief
 
 ### C1. Golf's plays are "rounds", not "runs"
 

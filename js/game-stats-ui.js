@@ -1098,14 +1098,20 @@ export function gameListHTML(games) {
  *  game, solo included: it was always an honest number and stays one. */
 function overviewTotals(games) {
   const g = games || {};
-  let plays = 0, wins = 0, runs = 0;
+  let plays = 0, wins = 0, runs = 0, rounds = 0;
   for (const tab of visibleTabs()) {
     const tot = (g[tab.id] || {}).total || {};
     plays += tot.played | 0;
-    if (SOLO.has(tab.id)) runs += tot.played | 0;
+    // GOLF'S PLAYS ARE ROUNDS, NOT RUNS (2026-09-09, HANDOFF-GOLF-LAUNCH.md job C1). It is in
+    // SOLO with Ball Run, Snake, Nuts & Bolts, Hill Climb, Pinball and Skeeball, and `runs` is the
+    // right word for all six - which is exactly why golf needs its own and NOT a global rename.
+    // A round of golf is not a run at anything, and calling it one is the kind of small wrongness
+    // that makes a screen feel like it was written for a different game.
+    if (tab.id === 'golf') rounds += tot.played | 0;
+    else if (SOLO.has(tab.id)) runs += tot.played | 0;
     else wins += record(tot).wins;
   }
-  return { plays, wins, runs };
+  return { plays, wins, runs, rounds };
 }
 
 function overviewHTML(st) {
@@ -1124,6 +1130,7 @@ function overviewHTML(st) {
         <div class="gs-tally"><b>${totals.plays}</b><span>${t('gs_total_games')}</span></div>
         <div class="gs-tally"><b>${totals.wins}</b><span>${t('gs_wins')}</span></div>
         ${totals.runs > 0 ? `<div class="gs-tally"><b>${totals.runs}</b><span>${t('gs_runs')}</span></div>` : ''}
+        ${totals.rounds > 0 ? `<div class="gs-tally"><b>${totals.rounds}</b><span>${t('gs_golf_rounds')}</span></div>` : ''}
       </div>
     </div>`;
 }

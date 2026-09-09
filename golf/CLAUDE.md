@@ -5348,3 +5348,64 @@ is the diagram, not the caption.
 
 The lesson is 10 cards now rather than 8. The pips row was measured at 393, 360 and **320** px: no
 overflow, and the rail text still fits on one line at all three.
+
+## Job C: the leaderboard (2026-09-09)
+
+`HANDOFF-GOLF-LAUNCH.md` job C, in three parts. C2 was "leave it alone" and was left alone.
+
+### C1: golf's plays are ROUNDS, not runs
+
+Golf sits in `SOLO` (`js/players-agg.js`) with Ball Run, Snake, Nuts & Bolts, Hill Climb, Pinball
+and Skeeball, so its plays were counted into a tally labelled **Runs** in My Stats' overview.
+
+**Not a global rename**, which is the whole point: `runs` is the right word for the other six. Golf
+gets its own tally, counted separately in `overviewTotals` and shown as **Rounds** when it is above
+zero. A round of golf is not a run at anything, and calling it one is the kind of small wrongness
+that makes a screen feel like it was written for a different game.
+
+Everywhere else golf already had its own word - `gs_golf_rounds` on its My Stats screen,
+`lb_unit_golf_best` ("best round") on the hub board - so this was the one remaining site.
+
+### C3: the detailed boards live INSIDE golf
+
+`golf/js/board.js`. Matt: *"Since the golf leaderboard is likely a lot, maybe we have the more
+specific info within the golf game itself?"* Skeeball set the precedent: one number on the hub
+board, the full picture on the machine's own backboard.
+
+Two rows of chips - **length** (3 / 9 / 18) then **which round** (1-3, 4-6 … front nine, back nine,
+18) - and one ranked list. The chips are the setup screen's own two-level shape, because that is the
+shape the player already knows.
+
+- **It invents no data and no aggregation.** The round keys are frozen and already synced. People
+  come from `readPlayersOnce()` → `aggregatePlayers()`, which is how the hub board reads them, and
+  the number comes from `golfBestAt(group, roundKey)` - the same extractor with a different key. A
+  second aggregation would be a second answer to "who has played what", and the two would drift.
+- **Lengths are never merged or compared** (rule 4). Every list is ONE round key and the header
+  names it and its par. A three-hole best and an eighteen-hole best are not the same measurement.
+- **A round key with no par row is refused, not shown.** `golfBestAt` subtracts
+  `GOLF_COURSE_PAR[key] || 0`, so on an unknown key it returns raw STROKES dressed as a score to par
+  - a number that looks like a wonderful round. `hasPar()` checks the table before anything prints.
+- **Never played is not zero.** A player with no score on the selected round is absent, and a round
+  nobody has played says so.
+- **A tie is a tie**: two players level are both 2nd and the next is 4th.
+- Read is paid for by `ui.js` (`_openBoard`), not inside the module, so the button can say it is
+  working - `readPlayersOnce` is a network call. Both modules are lazy: a player who never opens
+  this screen never downloads it or the aggregation layer.
+- **Looking at the board does not go through `_askDiscard`.** It is a screen you open and close, so
+  a player checking where they stand mid-round must not be asked to throw that round away first.
+
+### Three things found by driving it
+
+1. **Level par printed `lb_golf_even`.** That is the HUB's string key; this module's `t` is built
+   from `golf/js/strings.js`, so it resolved to nothing and printed itself. Golf owns `board_even`.
+2. **`isMe` looked for a device id that groups do not carry.** An aggregated group has a device
+   COUNT, not a list of ids. It matches on the identity key instead (`buildIdentity().keyFor`),
+   which is how every other screen in this app answers "which of these rows is me".
+3. **The chips shared `data-mode` / `data-round` with the setup screen**, which is still in the DOM
+   behind the overlay - so a document-wide query found ITS chip, and the first driven tap landed on
+   a locked button on a screen nobody could see. The handlers were scoped to the overlay and were
+   never wrong; the NAMES were, and a name that is only safe because of where you happen to look it
+   up is a trap for whoever debugs this next. They are `data-bmode` / `data-bround`.
+
+Also: the overlay is fully opaque. At 94 % the setup screen's own "Best:" figures showed through a
+screen that is itself a list of scores.
