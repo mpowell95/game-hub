@@ -88,7 +88,11 @@ export class DesignPinball {
   _serve() {
     const b = makeBall(T.PLUNGER.x, T.PLUNGER.y, 0, 0);
     b.onPlunger = true;
-    b.layer = 1;
+    // THE SHOOTER LANE IS ON LEVEL 2, AND THAT IS WHAT MAKES THE PLUNGE REAL. The lane feeds the
+    // DECK, so a ball that rides it is a deck ball for the whole trip: it climbs, meets the top
+    // wall and turns left through the gap in the board right wall, all under the solver. The old
+    // build served on level 1 and moved the ball across the wall by hand at the top.
+    b.layer = 2;
     this.balls.push(b);
     if (!this.saveUsed) this.saveTimer = SAVE_SECS;
     this.ballScore = 0;
@@ -180,23 +184,33 @@ export class DesignPinball {
         for (const r of T.RAMPS) {
           const near = b.y <= r.y + BALL_R * 3 && b.x >= r.x[0] && b.x <= r.x[1];
           if (!near) { if (b.y > r.y + 300) b._ramp = false; continue; }
-          if (b._ramp || b.vy >= 0) continue;
+          // ANY ball in the lane above the mouth line goes up, not only one still climbing. The
+          // mouth used to be a WALL as well, which stopped a stalling ball dead and parked it in
+          // the dead space over the arch; that wall is gone (see design/board.js) and this is
+          // what replaces it. The _ramp flag still makes it once per approach, not per bounce.
+          if (b._ramp || (b.vy >= 0 && b.y > r.y)) continue;
           b._ramp = true;
           b.layer = 2; b.x = r.to.x; b.y = r.to.y; b.vx = r.to.vx; b.vy = r.to.vy;
           this.ramps++; this.stats.ramps++;
           this._award(PTS.ramp, b.x, b.y, 'ramp');
           this.emit({ type: 'ramp', x: b.x, y: b.y });
         }
-        // the plunge: up the outboard chute and over the top onto the deck
-        if (b.y < T.px(200) && b.x > T.px(960)) {
-          b.layer = 2; b.x = T.LAUNCH_TO.x; b.y = T.LAUNCH_TO.y; b.vx = -220; b.vy = 60;
-        }
+        // NOTHING HAPPENS AT THE TOP OF THE CHUTE ANY MORE, AND THAT IS THE FIX. A plunged ball
+        // is put on level 2 by the plunger itself and rides the chute the whole way up under its
+        // own power; the board's right wall stops at py 300 on level 2, so the ball rolls out of
+        // the lane and onto the deck through a real opening. The line that used to be here moved
+        // it 140 px sideways through a solid wood wall.
       } else if (L === 2) {
         if (b.y > T.DROP_HOLE.y && b.x >= T.DROP_HOLE.x[0] && b.x <= T.DROP_HOLE.x[1]) {
           b.layer = 1; b.y = T.DROP_HOLE.to.y;
           this.emit({ type: 'rampexit', x: b.x, y: b.y });
-        } else if (b.y > T.px(760)) {
-          b.layer = 1;   // off the front of the deck anywhere else
+        } else if (b.y > T.px(760) && b.x < T.px(941)) {
+          // off the front of the deck anywhere else - but the SHOOTER LANE is not the front of
+          // the deck. It runs the full length of the cabinet outboard of the board (x px
+          // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the
+          // x guard the plunge dropped to level 1 on its first step and the ride happened on the
+          // wrong level entirely.
+          b.layer = 1;
         }
       }
     }
@@ -314,7 +328,7 @@ export class DesignPinball {
       if (b.x < T.px(960) || b.y < T.px(1400)) continue;
       if (Math.hypot(b.vx, b.vy) > 60) continue;
       b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-      b.onPlunger = true; b.layer = 1; b._box = null; b._still = 0;
+      b.onPlunger = true; b.layer = 2; b._box = null; b._still = 0;
       this.emit({ type: 'reload' });
     }
   }
@@ -351,7 +365,7 @@ export class DesignPinball {
       if (b._searches >= SEARCH_GIVE_UP) {
         b._searches = 0;
         b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-        b.onPlunger = true; b.layer = 1; b._box = null;
+        b.onPlunger = true; b.layer = 2; b._box = null;
         this.emit({ type: 'reload' });
         continue;
       }
@@ -369,7 +383,7 @@ export class DesignPinball {
       if (!out) continue;
       if (this.saveTimer > 0 && this.phase === 'play' && this.balls.length === 1) {
         b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-        b.onPlunger = true; b.layer = 1; b._box = null; b._still = 0;
+        b.onPlunger = true; b.layer = 2; b._box = null; b._still = 0;
         this.emit({ type: 'ballsave' });
         continue;
       }

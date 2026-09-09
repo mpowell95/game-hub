@@ -1103,6 +1103,54 @@ drop hole used. Level 2 is reachable on about **5% of flipper shots**.
 lanes dead-end at the ramp mouths rather than draining; and 9.1 s is short beside STARHUB's asserted
 12 s. All three need a person, not another soak. **Nobody has played it yet.**
 
+### Three defects, all found by PLAYING it, none visible to any headless test (2026-09-08)
+
+Matt, on the first shipped build: *"none of the paddles move. The ball goes up the launch chute
+then magically appears on the other side of the wood wall. You added gates to block the ramps off
+completely."* All three were real, and all three live in the seam between the model and the engine,
+which is the one place the 117 headless assertions did not reach.
+
+**1. The render loop for the paddles did nothing, silently.** `board.js` builds each flipper as a
+pivot GROUP named `<name>_pivot`; the renderer asked for `f.id`, got `undefined` back every frame,
+and moved on without an error. The second half is worse than the name: that group already carries
+the paddle's REST YAW, so assigning `rotation.y` would have thrown the orientation away and pointed
+all four paddles down +x. The swing is added to a base angle captured on the first frame, and it is
+SUBTRACTED - a table angle `t` maps to `rotation.y = -t`, because `board.js`'s `yaw()` is
+`atan2(-dz, dx)` against the footprint's own `atan2(dz, dx)`. Measured: `baseYaw` -0.664 against a
+rest angle of +0.664.
+
+**2. The launch was a teleport, because the shooter lane was a closed tube.** `wall_right` ran the
+full 1,990 px, so a plunged ball could not leave the chute and one line moved it 140 px sideways
+through solid wood. A real shooter lane ends at the top of the cabinet and the ball ROLLS OUT of it.
+Three changes and no teleport anywhere:
+
+- the ball is served on **LEVEL 2** and rides the lane as a deck ball for the whole trip;
+- `wall_right` stops at py 300 **on level 2 only** (`wall_right_upper` keeps level 1 closed), which
+  is the opening it leaves through;
+- **a gap alone is not a feed.** Traced, the ball rose the full lane at x 1020, hit the top wall
+  square on and came straight back down, every time. `chute_feed` is the diagonal guide every real
+  machine has across the top of the lane, and it turns the plunge left onto the deck.
+
+Two knock-on facts, each of which cost a trace: `chute_stop` (the plunger seat) had to exist on
+level 2 as well, or a weak plunge falls past it; and the deck's "off the front" rule needed an x
+guard, because the chute is past py 760 for most of its length and the ball dropped to level 1 on
+its first step without one.
+
+**3. `ramp_mouth_left/right` were walls across the ramp entrances.** With `outlane_top_left/right`
+beside them they made an unbroken bar across py 908 from x 45 to 250 and from 750 to 936. The
+thing they guarded is real - level 1 otherwise has an open corridor up each lane into the dead
+space above the arch - but a wall in a ramp mouth is not the way to guard it. They are deleted, and
+`design.js` closes the corridor instead: **the transition fires for ANY level-1 ball above the
+mouth line in the lane**, not only one still travelling upward, so nothing can come to rest up
+there. The `_ramp` edge flag still makes it once per approach.
+
+Driven, after all three: **11,600 average, 6 of 6 games finishing, 20.1 s ball life** (was 9.1 s),
+and the ramps are taken 18 times where the gates had allowed none.
+
+**Section 10 of `test.js` is the tripwire for all three**, and it is structural on purpose: two of
+the defects are a name that does not match and a wall that should not exist, which no simulation
+can catch but a `readFileSync` can.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

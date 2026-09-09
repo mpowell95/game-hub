@@ -9,6 +9,7 @@
 // the soak plays complete games with random flipper input and asserts, on EVERY step, that no ball
 // is outside the table and that the game keeps making progress.
 
+import { readFileSync } from 'node:fs';
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT, ART } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
@@ -1021,6 +1022,39 @@ function launched(g) {
     ok('[RAINBOW] the ball count never goes silly', maxBalls <= 3 && g.balls.length >= 0, `peak ${maxBalls}`);
   }
 }
+
+// ============================================================================================
+// 10. FOUNDRY - the three defects Matt found by PLAYING the shipped build, none of which any
+//     headless assertion could see, because all three live between the model and the engine.
+//
+//     "none of the paddles move" / "the ball goes up the launch chute then magically appears on
+//     the other side of the wood wall" / "you added gates to block the ramps off completely".
+// ============================================================================================
+{
+  const src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+  const board = src('../design/board.js');
+  const rend = src('./render-design.js');
+
+  // [KNOWN-BUG PROBE] the paddles did not move, and the loop that moves them threw no error.
+  // board.js names each flipper GROUP `<name>_pivot`; getObjectByName(f.id) matched nothing, so
+  // the render loop silently did nothing on every frame for the life of the build.
+  ok('[FOUNDRY] the renderer looks the paddles up by their PIVOT GROUP name',
+    /getObjectByName\(f\.id \+ .\_pivot.\)/.test(rend), 'f.id + "_pivot"');
+  // ...and it must ADD the swing to the group's own rest yaw, not overwrite it.
+  ok('[FOUNDRY] the paddle swing is added to the mesh\'s base yaw, never assigned over it',
+    /baseYaw/.test(rend) && !/m\.rotation\.y = -\(f\.angle/.test(rend), 'baseYaw - (angle - rest)');
+
+  // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
+  ok('[FOUNDRY] nothing moves the ball across the board wall at the top of the chute',
+    !/LAUNCH_TO/.test(src('./design.js')), 'no LAUNCH_TO destination');
+  ok('[FOUNDRY] the chute has a real way out: a feed guide and a gap in the right wall on L2',
+    /chute_feed/.test(board) && /wall_right_upper/.test(board), 'chute_feed + wall_right_upper');
+
+  // [KNOWN-BUG PROBE] a wall stood across each ramp entrance, so neither ramp could be shot.
+  ok('[FOUNDRY] there is no wall across either ramp mouth',
+    !/wall\(.ramp_mouth_/.test(board), 'ramp_mouth_left/right deleted');
+}
+
 console.log(`\n${count - fail}/${count} passed`);
 if (fail) { console.log(`${fail} FAILURE(S)`); process.exit(1); }
 console.log('ALL PASS');
