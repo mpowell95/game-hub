@@ -454,15 +454,26 @@ export class Coach {
     // rail halfway up the screen because `.gf-br` carries the 150px meter - measured in a browser
     // at y=390 of 664, straight across the popup's own button.
 
+    // A RING NEVER CROSSES THE RAIL. The controls sit exactly on the rail's top edge (one number
+    // governs both - see golf.css), so the 4 px outset below put the lowest ring 5 px INTO the bar
+    // - measured, and it reads as one muddy gold band because the ring and the rail's top border
+    // are the same colour. The outset is dropped on whichever side would cross it rather than the
+    // ring being shrunk all round: the other three sides keep their full standoff.
+    const railTop = this.el ? (() => {
+      const bar = this.el.querySelector('.gf-tut__rail');
+      return bar ? bar.getBoundingClientRect().top - rootR.top : Infinity;
+    })() : Infinity;
     for (const ring of this.rings) {
       const target = this.root.querySelector(`[data-role="${ring.dataset.for}"]`);
       if (!target) { ring.style.display = 'none'; continue; }
       const r = target.getBoundingClientRect();
+      const top = r.top - rootR.top - 4;
+      const bottom = Math.min(r.bottom - rootR.top + 4, railTop - 2);
       ring.style.display = '';
       ring.style.left = `${r.left - rootR.left - 4}px`;
-      ring.style.top = `${r.top - rootR.top - 4}px`;
+      ring.style.top = `${top}px`;
       ring.style.width = `${r.width + 8}px`;
-      ring.style.height = `${r.height + 8}px`;
+      ring.style.height = `${Math.max(12, bottom - top)}px`;
     }
   }
 
