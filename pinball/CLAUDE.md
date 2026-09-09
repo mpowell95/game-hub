@@ -1418,6 +1418,39 @@ ON THE PATH ELEMENT: with two bumpers selected, pressing one and moving 100 x 50
 from (493, 270) to (593, 320) with both still selected.
 
 
+#### Drawing new parts, and rotating them
+
+Matt: *"I need the ability to inset or draw objects and rotate objects."*
+
+**Draw** arms a tool; the picker names the thing by the PART TYPE it will become in `board.js`
+(post, disc, bumper, saucer, wall, rect, poly) rather than by its geometry, because that is the word
+a session applying the export needs. A circle is one tap. A wall or a rectangle is one drag. A
+polygon is a tap per corner and Enter to close, which is the only tool that makes an arbitrary
+outline. Escape abandons a half-drawn one. The tool disarms itself after each part, so drawing four
+posts is four arms - deliberate, because an armed tool ignores what is under the pointer (or you
+could not draw over anything) and a tool left armed by accident eats every click.
+
+A drawn part exports as `added` with **`copyOf: null` and `drawn: true`**, which is how the export
+tells "duplicate that post" from "here is a wall that did not exist".
+
+**Rotate** is the green grip on a stalk above the selection box, plus the two 15 degree buttons, the
+`[` and `]` keys, and a Rotate field. **The field is a RELATIVE nudge and resets to 0**, because
+these shapes are points and carry no orientation of their own - there is no absolute angle to show.
+For the same reason rotation MOVES THE POINTS rather than being stored beside the shape: `board.js`
+writes every part as coordinates, so an angle held separately would have to be baked out on export,
+and the export would stop being "here are the new numbers". A lone circle is unchanged by rotating,
+which is correct; inside a selection its centre swings round the group anchor with everything else.
+
+**One bug, and it is the same shape as the multi-select one.** Tapping a polygon corner sets no
+drag, so `pointerup` ran with nothing to end, called `draw()`, and wiped the ghost - two taps in and
+the outline you were placing had never appeared. The end-of-drag handler redraws an in-progress
+polygon now.
+
+Verified in a real browser: a post lands exactly where it is tapped (500, 1200, r 11); a wall
+dragged (200, 1300) to (400, 1400) is a 220 x 120 capsule; six 15 degree steps swap a 220 x 120 box
+to 120 x 220 with the centre unmoved and -90 in the field puts it back; the grip drag rotates; and a
+three-tap polygon exports with its three corners verbatim.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

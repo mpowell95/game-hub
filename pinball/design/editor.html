@@ -7,7 +7,8 @@
 
   Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
   duplicate objects as well... It should show me the entire screen thats displayed on my phone, not
-  just the game board."* And then: *"let me select multiple objects at once to move them together."*
+  just the game board."* Then: *"let me select multiple objects at once to move them together."* Then:
+  *"I need the ability to inset or draw objects and rotate objects."*
 
   IT READS THE REAL BOARD. `design/board.js` exports `PARTS`, the same list the 3D model and the
   physics footprints are both built from, so what is drawn here is what is in the game - not a
@@ -79,6 +80,13 @@
   .sel-one { fill: none; stroke: var(--accent); stroke-width: 4; opacity: .55; }
   .marquee { fill: #ffce3a22; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 14 10; }
   .handle { fill: var(--accent); stroke: #000; stroke-width: 2; cursor: pointer; }
+  /* The rotate grip stands OFF the box on a stalk, because a ninth handle ON the box would be
+     one more thing to hit by accident while resizing. */
+  .rot-grip { fill: #46d39a; stroke: #000; stroke-width: 2; cursor: grab; }
+  .rot-stalk { stroke: #46d39a; stroke-width: 4; fill: none; pointer-events: none; }
+  .draw-ghost { fill: #46d39a33; stroke: #46d39a; stroke-width: 5; stroke-dasharray: 14 10;
+    pointer-events: none; }
+  #phone.drawing { cursor: crosshair; }
 </style>
 
 <header>
@@ -86,6 +94,18 @@
   <button id="dup" disabled>Duplicate</button>
   <button id="del" class="hot" disabled>Delete</button>
   <button id="undo" disabled>Undo</button>
+  <button id="draw">Draw</button>
+  <select id="drawkind">
+    <option value="post">Post (circle)</option>
+    <option value="disc">Disc (circle)</option>
+    <option value="bumper">Bumper (circle)</option>
+    <option value="saucer">Saucer (circle)</option>
+    <option value="wall">Wall (drag a line)</option>
+    <option value="rect">Rectangle (drag a box)</option>
+    <option value="poly">Polygon (tap corners, Enter to close)</option>
+  </select>
+  <button id="rotL" disabled>&#8634; 15&deg;</button>
+  <button id="rotR" disabled>&#8635; 15&deg;</button>
   <button id="all">Select all shown</button>
   <button id="clear" disabled>Deselect</button>
   <button id="reset">Reset all</button>
@@ -123,6 +143,7 @@
         <div class="row"><span>Centre y</span><input id="p-y" type="number" step="1"></div>
         <div class="row"><span>Width</span><input id="p-w" type="number" step="1"></div>
         <div class="row"><span>Height</span><input id="p-h" type="number" step="1"></div>
+        <div class="row"><span>Rotate</span><input id="p-rot" type="number" step="5" value="0"></div>
         <p class="help" id="multi-note" hidden>
           These are the box around EVERYTHING selected. Moving it moves them all together, keeping
           their spacing; resizing it scales the whole arrangement.
@@ -139,7 +160,9 @@
         <kbd>shift+tap</kbd> add or remove one &middot; <kbd>drag a corner</kbd> resize &middot;
         <kbd>arrows</kbd> nudge 1 px &middot; <kbd>shift+arrows</kbd> 10 px &middot;
         <kbd>Ctrl+A</kbd> select all shown &middot; <kbd>D</kbd> duplicate &middot;
-        <kbd>Delete</kbd> delete &middot; <kbd>Ctrl+Z</kbd> undo &middot; <kbd>Esc</kbd> deselect
+        <kbd>Delete</kbd> delete &middot; <kbd>Ctrl+Z</kbd> undo &middot;
+        <kbd>[</kbd> <kbd>]</kbd> rotate 15&deg; &middot; <kbd>Enter</kbd> close a polygon &middot;
+        <kbd>Esc</kbd> deselect, or cancel a drawing
       </p>
     </div>
 
@@ -293,6 +316,35 @@ function sizeGroupTo(list, wantW, wantH, lockW, lockH) {
   }
 }
 
+/**
+ * ROTATE A SELECTION ABOUT ONE ANCHOR.
+ *
+ * Rotation is not a stored property here - the shapes are points, and this MOVES the points. That
+ * is deliberate: `board.js` writes every part as coordinates, so a rotation that lived as an angle
+ * beside the shape would have to be baked out again on export, and the export would stop being
+ * "here are the new numbers".
+ *
+ * A lone circle is unchanged by this, which is correct - a disc has no orientation. Inside a
+ * SELECTION its centre swings round the group anchor like everything else.
+ */
+function rotateGroup(list, ang, cx, cy) {
+  const c = Math.cos(ang), sn = Math.sin(ang);
+  for (const it of list) {
+    it.shape.pts = it.shape.pts.map(([x, y]) => {
+      const dx = x - cx, dy = y - cy;
+      return [cx + dx * c - dy * sn, cy + dx * sn + dy * c];
+    });
+  }
+}
+/** Rotate what is selected, about the middle of its own box. */
+function rotateSel(deg) {
+  const list = chosen(); if (!list.length) return;
+  push();
+  const [cx, cy] = boxCentre(groupBox(list));
+  rotateGroup(list, deg * Math.PI / 180, cx, cy);
+  draw();
+}
+
 const snapOn = () => document.getElementById('snap').checked;
 const snap = (v) => snapOn() ? Math.round(v / 5) * 5 : Math.round(v);
 
@@ -395,13 +447,25 @@ function draw() {
 }
 
 const HANDLES = [['nw', 0, 0], ['n', .5, 0], ['ne', 1, 0], ['e', 1, .5], ['se', 1, 1], ['s', .5, 1], ['sw', 0, 1], ['w', 0, .5]];
-function drawSel(marquee) {
+function drawSel(marquee, poly, ghost) {
   overlayG.textContent = '';
   if (marquee) {
     overlayG.appendChild(el('rect', {
       x: Math.min(marquee.x0, marquee.x1), y: Math.min(marquee.y0, marquee.y1),
       width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), class: 'marquee',
     }));
+  }
+  // THE GHOST: what the shape you are drawing looks like so far.
+  if (ghost) {
+    const [ax, ay] = ghost.start, [bx, by] = ghost.now;
+    const d = DRAW_DEFAULTS[ghost.kind];
+    overlayG.appendChild(d.k === 'capsule'
+      ? el('path', { d: `M ${ax} ${ay} L ${bx} ${by}`, class: 'draw-ghost' })
+      : el('rect', { x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay), class: 'draw-ghost' }));
+  }
+  if (poly && poly.pts.length) {
+    overlayG.appendChild(el('path', { d: 'M ' + poly.pts.map((q) => q.join(' ')).join(' L '), class: 'draw-ghost' }));
+    for (const q of poly.pts) overlayG.appendChild(el('circle', { cx: q[0], cy: q[1], r: 12, class: 'rot-grip' }));
   }
   const list = chosen();
   if (!list.length) return;
@@ -415,6 +479,10 @@ function drawSel(marquee) {
   // ...and one dashed box with handles round the lot, which is the thing you drag.
   const g = groupBox(list), w = g.x1 - g.x0, h = g.y1 - g.y0;
   overlayG.appendChild(el('rect', { x: g.x0 - 10, y: g.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline' }));
+  // THE ROTATE GRIP, on a stalk above the box.
+  const gx = g.x0 - 10 + (w + 20) / 2, gy = g.y0 - 10;
+  overlayG.appendChild(el('path', { d: `M ${gx} ${gy} L ${gx} ${gy - 70}`, class: 'rot-stalk' }));
+  overlayG.appendChild(el('circle', { cx: gx, cy: gy - 70, r: 24, class: 'rot-grip', 'data-rot': '1' }));
   for (const [k, fx, fy] of HANDLES) {
     overlayG.appendChild(el('circle', {
       cx: g.x0 - 10 + (w + 20) * fx, cy: g.y0 - 10 + (h + 20) * fy, r: 22, class: 'handle', 'data-h': k,
@@ -430,14 +498,86 @@ const toBoard = (evt) => {
 };
 const additive = (e) => e.shiftKey || e.ctrlKey || e.metaKey;
 
+// --------------------------------------------------------------------------------- drawing
+/**
+ * DRAW A NEW PART. Everything the board is made of reduces to a circle, a capsule or a polygon
+ * (see shapeOf), so those are the three things you can draw - and the picker names them by the
+ * PART TYPE they will become in `board.js` (post, disc, bumper, saucer, wall, rect, poly) rather
+ * than by their geometry, because that is the word a session applying the export needs.
+ *
+ * A circle is one tap. A wall or a rectangle is one drag. A polygon is a tap per corner and Enter
+ * to close it - the only tool here that needs more than one gesture, and the only one that can
+ * make an arbitrary outline.
+ */
+const DRAW_DEFAULTS = {
+  post:   { k: 'circle', r: 11, colour: MAT.steel },
+  disc:   { k: 'circle', r: 21, colour: MAT.unlit },
+  bumper: { k: 'circle', r: BUMPER_R, colour: MAT.cream },
+  saucer: { k: 'circle', r: 30, colour: MAT.cream },
+  wall:   { k: 'capsule', w: 20, colour: MAT.darkwood },
+  rect:   { k: 'poly', colour: MAT.ramp },
+  poly:   { k: 'poly', colour: MAT.ramp },
+};
+let drawing = null;        // { kind, pts } while a polygon is being tapped out
+let made = 0;              // how many parts this session has drawn, for the names
+
+const drawKind = () => document.getElementById('drawkind').value;
+const drawOn = () => document.getElementById('draw').classList.contains('on');
+
+function addPart(kind, shape) {
+  const d = DRAW_DEFAULTS[kind];
+  const it = {
+    id: 'i' + (seq++), name: `new_${kind}_${++made}`, type: kind === 'rect' ? 'ramp' : kind,
+    levels: [1], colour: d.colour, shape, from: null, copy: false, made: true,
+  };
+  push();
+  items.push(it);
+  sel = new Set([it.id]);
+  draw();
+}
+
+/** Stop drawing, whether the shape was finished or abandoned. */
+function endDraw() {
+  drawing = null;
+  document.getElementById('draw').classList.remove('on');
+  svg.classList.remove('drawing');
+  draw();
+}
+
+
 let drag = null;
 svg.addEventListener('pointerdown', (e) => {
   const t = e.target;
   const h = t.getAttribute && t.getAttribute('data-h');
+  const rot = t.getAttribute && t.getAttribute('data-rot');
   const id = t.getAttribute && t.getAttribute('data-id');
   const p = toBoard(e);
 
-  if (h && sel.size) {
+  // DRAWING COMES FIRST, and it ignores what is under the pointer: while the tool is armed a tap
+  // on an existing part is still a tap on the board, or you could not draw over anything.
+  if (drawOn()) {
+    const kind = drawKind();
+    const d = DRAW_DEFAULTS[kind];
+    if (kind === 'poly') {
+      drawing = drawing || { kind, pts: [] };
+      drawing.pts.push([snap(p.x), snap(p.y)]);
+      drawSel(null, drawing);
+    } else if (d.k === 'circle') {
+      addPart(kind, { k: 'circle', pts: [[snap(p.x), snap(p.y)]], r: d.r });
+      endDraw();
+    } else {
+      drag = { mode: 'draw', kind, start: [snap(p.x), snap(p.y)], now: [snap(p.x), snap(p.y)] };
+    }
+    svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
+
+  if (rot && sel.size) {
+    push();
+    const c = boxCentre(groupBox(chosen()));
+    drag = { mode: 'rot', list: chosen(), c, from: Math.atan2(p.y - c[1], p.x - c[0]), acc: 0 };
+  } else if (h && sel.size) {
     push();
     drag = { mode: 'size', h, list: chosen(), start: p, box: groupBox(chosen()) };
   } else if (id) {
@@ -473,6 +613,22 @@ svg.addEventListener('pointermove', (e) => {
   if (!drag) return;
   const p = toBoard(e);
 
+  if (drag.mode === 'draw') {
+    drag.now = [snap(p.x), snap(p.y)];
+    drawSel(null, null, drag);
+    return;
+  }
+  if (drag.mode === 'rot') {
+    // The angle is measured from the group's own centre, so the part follows the pointer round it.
+    // Snap holds it to 5 degrees, which is what the checkbox means everywhere else in this tool.
+    const now = Math.atan2(p.y - drag.c[1], p.x - drag.c[0]);
+    let deg = (now - drag.from) * 180 / Math.PI;
+    if (snapOn()) deg = Math.round(deg / 5) * 5;
+    const step = deg - drag.acc;
+    if (step) { rotateGroup(drag.list, step * Math.PI / 180, drag.c[0], drag.c[1]); drag.acc = deg; }
+    drawSel(); showProps();
+    return;
+  }
   if (drag.mode === 'move') {
     const wantX = snap(p.x - drag.start.x), wantY = snap(p.y - drag.start.y);
     const dx = wantX - drag.acc[0], dy = wantY - drag.acc[1];
@@ -514,7 +670,24 @@ svg.addEventListener('pointermove', (e) => {
   drawSel(); showProps();
 });
 
-const endDrag = () => { drag = null; draw(); };
+const endDrag = () => {
+  if (drag && drag.mode === 'draw') {
+    const [ax, ay] = drag.start, [bx, by] = drag.now;
+    const d = DRAW_DEFAULTS[drag.kind];
+    // A drag that never moved is a mis-tap, not a zero-length wall.
+    if (Math.hypot(bx - ax, by - ay) > 8) {
+      if (d.k === 'capsule') addPart(drag.kind, { k: 'capsule', pts: [[ax, ay], [bx, by]], w: d.w });
+      else addPart(drag.kind, { k: 'poly', pts: [[ax, ay], [bx, ay], [bx, by], [ax, by]] });
+    }
+    drag = null; endDraw(); return;
+  }
+  drag = null;
+  draw();
+  // A POLYGON IN PROGRESS HAS TO SURVIVE THE POINTERUP. Tapping a corner sets no drag, so this
+  // handler ran with nothing to end and called draw(), which rebuilds the scene and wiped the
+  // ghost - two taps in and the outline you were placing had never appeared.
+  if (drawing && drawing.pts.length) drawSel(null, drawing);
+};
 svg.addEventListener('pointerup', endDrag);
 svg.addEventListener('pointercancel', endDrag);
 
@@ -525,6 +698,7 @@ function showProps() {
   $('none').hidden = !!list.length; $('props').hidden = !list.length;
   $('dup').disabled = !list.length; $('del').disabled = !list.length;
   $('clear').disabled = !list.length; $('undo').disabled = !history.length;
+  $('rotL').disabled = !list.length; $('rotR').disabled = !list.length;
   $('nsel').textContent = list.length;
   $('multi-note').hidden = list.length < 2;
   if (!list.length) return;
@@ -595,12 +769,36 @@ $('del').onclick = remove;
 $('undo').onclick = undo;
 $('clear').onclick = () => { sel = new Set(); draw(); };
 $('all').onclick = () => { push(); sel = new Set(shown().map((i) => i.id)); draw(); };
+$('rotL').onclick = () => rotateSel(-15);
+$('rotR').onclick = () => rotateSel(15);
+$('draw').onclick = () => {
+  const on = $('draw').classList.toggle('on');
+  svg.classList.toggle('drawing', on);
+  drawing = null;
+  if (on) { sel = new Set(); }
+  draw();
+};
+$('drawkind').onchange = () => { drawing = null; draw(); };
+$('p-rot').addEventListener('change', () => {
+  // The field is a RELATIVE nudge, not a stored angle: these shapes are points and carry no
+  // orientation of their own, so there is no absolute number to show you. It resets to 0 after.
+  const deg = +$('p-rot').value || 0;
+  if (deg) rotateSel(deg);
+  $('p-rot').value = 0;
+});
 $('reset').onclick = () => { if (confirm('Throw away every change and reload the board as it ships?')) { build(); sel = new Set(); history = []; draw(); } };
 $('levels').onchange = draw;
 
 addEventListener('keydown', (e) => {
   if (/input|textarea/i.test(e.target.tagName)) return;
-  if (e.key === 'Escape') { sel = new Set(); draw(); return; }
+  if (e.key === 'Escape') { if (drawOn()) { endDraw(); return; } sel = new Set(); draw(); return; }
+  if (e.key === 'Enter' && drawing && drawing.pts.length >= 3) {
+    e.preventDefault();
+    addPart('poly', { k: 'poly', pts: drawing.pts.map((q) => q.slice()) });
+    endDraw(); return;
+  }
+  if (e.key === '[') { e.preventDefault(); rotateSel(-15); return; }
+  if (e.key === ']') { e.preventDefault(); rotateSel(15); return; }
   if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
   if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('all').click(); return; }
   const list = chosen();
@@ -640,6 +838,9 @@ $('json').onclick = () => {
   const changed = [], added = [], removed = [];
   const seen = new Set();
   for (const it of items) {
+    // A DRAWN part has no original, so it is `added` with copyOf null - which is how a session
+    // applying this tells 'duplicate that post' from 'here is a wall that did not exist'.
+    if (it.made) { added.push({ name: it.name, copyOf: null, drawn: true, type: it.type, shape: it.shape }); continue; }
     if (it.copy) { added.push({ name: it.name, copyOf: it.from, type: it.type, shape: it.shape }); continue; }
     seen.add(it.from);
     const was = original.get(it.from);
