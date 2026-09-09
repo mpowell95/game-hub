@@ -671,11 +671,19 @@ export function buildBoard(THREE) {
    * the cross-section is a shallow CHANNEL with raised rails, which is what keeps the ball on it.
    */
   const rampCurved = (name, x, z, mat, p, yOff = 0) => {
-    const NL = 48, NW = 13;
-    // `xFoot` flares the bottom of the ramp to the width of the gap the ball arrives through.
+    // THE CROSS-SECTION IS THE WHOLE PROBLEM WITH HOW THESE LOOK. Matt, with three screenshots:
+    // *"Look how messy and ugly this is."* They read as warped sheets of card with a scallop cut
+    // out of the bottom, and the reason is NW: at 13 samples across, a rail living in the outer 12%
+    // is ONE vertex. One vertex is not a rail, it is a spike - which is the odd fold line running
+    // down the middle of each ramp in his pictures - and with nothing standing up at the edges the
+    // rest is just a bent plane.
+    //
+    // 30 samples across gives the rail five, which is enough to read as a wall with a rounded top.
+    const NL = 56, NW = 30;
     const xf = p.xFoot || x;
     const z0 = z[0], z1 = z[1];
-    const RAIL = 0.014, DIP = 0.0025, T = 0.006;
+    // Taller, wider rails. RAIL_W is the fraction of the width each rail occupies.
+    const RAIL = 0.020, RAIL_W = 0.17, DIP = 0.0022, T = 0.006;
     // elevation along the ramp: 1 at z0 (top of the board, deck height), 0 at z1 (playfield)
     const ease = (t) => t * t * (3 - 2 * t);
     const pos = [], idx = [];
@@ -686,8 +694,16 @@ export function buildBoard(THREE) {
       for (let j = 0; j <= NW; j++) {
         const u = j / NW;
         const e = Math.min(u, 1 - u);
-        const rail = e < 0.12 ? ((0.12 - e) / 0.12) ** 2 * RAIL : 0;
-        const dip = -DIP * Math.sin(Math.PI * u);
+        // A rounded rail rather than a spike: cosine, so the top of the wall is a curve and the
+        // inside face meets the floor smoothly instead of at a crease.
+        const k = e < RAIL_W ? (RAIL_W - e) / RAIL_W : 0;
+        // AND IT DIES AWAY AT THE MOUTH. A rail standing full height at the very foot is a lip the
+        // ball has to climb before it is even on the ramp - and it is what cut that scalloped
+        // notch out of the bottom edge in Matt's screenshots. It grows in over the first sixth of
+        // the run, so the mouth is flush with the playfield and the channel forms above it.
+        const grow = Math.min(1, t / 0.16);
+        const rail = (1 - Math.cos(k * Math.PI)) / 2 * RAIL * grow;
+        const dip = -DIP * Math.sin(Math.PI * u) * grow;
         // `t` is 0 at the mouth and 1 at the top. Cubing the blend keeps the lane close to the
         // mouth line for the first stretch and then sweeps it across, which is the bend the
         // reference photo shows - and it is a bend rather than a taper, which the old linear
