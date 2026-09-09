@@ -1057,6 +1057,7 @@ stick the launch chute onto the right side. Stop factoring it into the board."*
 | `design/board.js` | Claude Design's model, patched. Exports `buildBoard(THREE)`, `FOOTPRINTS`, `TRANSITIONS` |
 | `design/three-d-stage.js`, `design/viewer.html`, `design/README.md` | the export as delivered, kept for provenance |
 | `design/_playtest.mjs`, `design/_shots.mjs` | dev harnesses: the rest sweep and the shot map. Not shipped assets |
+| `design/editor.html` | the LAYOUT EDITOR: move, resize, delete, duplicate, export. See below |
 | `js/table-design.js` | the adapter - `FOOTPRINTS` in, `physics.js` colliders out |
 | `js/design.js` | `DesignPinball` - the rules |
 | `js/render-design.js` | `DesignRenderer` - **mounts the model group, does not convert it** |
@@ -1347,6 +1348,40 @@ the gate deleted** - the random driver simply never sent a ball at the feed. Tha
 lesson this file has now learned three times. The probe that means anything THROWS AT THE FEED: a
 ball on the deck, level with the opening, driven at it at three speeds from twelve heights. Born
 red at 36 of 36.
+
+### The layout editor: `design/editor.html` (2026-09-09)
+
+Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
+duplicate objects as well. Make sure you include an "Export SVG" button or something similar. It
+should show me the entire screen thats displayed on my phone, not just the game board."*
+
+Open it at `/pinball/design/editor.html`, on a desktop or on the phone.
+
+**It reads the real board.** `design/board.js` exports `PARTS`, the same list the 3D model and the
+physics footprints are both built from, so what it draws is what is in the game. Nothing writes
+back: you export, and a session applies the export.
+
+**Every part becomes one of four editable shapes** - circle, capsule, polygon, rectangle. The board
+has seventeen part types, each with its own builder in `board.js`; re-implementing all seventeen in
+the editor would be a second copy of the geometry that could drift, which is the mistake this board
+exists to avoid. A move/resize/duplicate tool needs the SHAPE, not the builder.
+
+**The whole phone screen is drawn, not the playfield alone** - top bar, objective strip, backglass,
+the machine, and the LAUNCH / NUDGE / pause row, at 393 x 852, which is the viewport this repo
+measures every game against. **The board is drawn TOP-DOWN**, where the game renders it at an 11
+degree tilt, because a part cannot be dragged accurately in perspective and the point of the tool
+is the coordinates.
+
+**Units are reference pixels** (x 0..1100, y 0..1990) - the numbers `board.js` is written in, so a
+number read off the panel pastes straight into the source.
+
+Two exports: **Export SVG** is the phone screen as a picture, with no editing furniture in it.
+**Export edits** is a JSON of what changed - `removed`, `changed` (with the before and after shape)
+and `added` (a duplicate and what it was copied from) - which is what a session applies.
+
+**One bug worth recording, because the shape recurs.** Typing 120 into Width on a pop bumper gave
+132. A circle has ONE size, and the resize averaged the x and y factors: the untouched Height
+contributed a factor of exactly 1 to the average. It takes the axis that actually moved now.
 
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
