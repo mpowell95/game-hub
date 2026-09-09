@@ -707,7 +707,14 @@
 .gf-root .gf-tut__dialbox figcaption {
   font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #ffce3a;
 }
-.gf-root .gf-tut__two { display: flex; gap: 4px; width: 100%; justify-content: center; }
+/* THE DOTS CARD: the real dial on the left, a schematic aim line on the right, read as one pair.
+   The line is deliberately not a copy of the drawn one - that is in perspective up a fairway, and
+   a picture trying to match it would be a worse diagram AND a second thing to keep in step with
+   render.js. The COLOURS are the real ones, because those are what a player matches by eye. */
+.gf-root .gf-tut__dots { flex: 0 0 auto; width: 34%; max-width: 116px; height: auto; align-self: center; }
+/* THE SLOPE CARD. Wider than it is tall, so it gets the full width rather than sharing a row. */
+.gf-root .gf-tut__slope { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
+.gf-root .gf-tut__two { display: flex; gap: 4px; width: 100%; justify-content: center; align-items: center; }
 .gf-root .gf-tut__two .gf-tut__dialbox { flex: 1; min-width: 0; }
 .gf-root .gf-tut__two canvas { width: 100%; height: auto; }
 .gf-root .gf-tut__slice { width: 100%; height: auto; display: block; font-family: inherit; }
