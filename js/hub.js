@@ -496,6 +496,20 @@ class Hub {
       const prof = loadProfile();
       if (!(prof && isAdmin(prof.name))) return;
     }
+    // AN ANNOUNCEMENT ABOUT A GAME WAITS FOR THAT GAME TO BE LIVE. `requiresGame` is a hub id, and
+    // the entry is held back until `isGameLive` says everyone can actually see the tile.
+    //
+    // It exists because the alternative is a trap: golf's announcement had to be written and
+    // deployed while golf was still admin-only, and shipping it ungated would have told the whole
+    // family about a game none of them could find. Gating it `adminOnly` instead would have worked
+    // exactly once and then needed a SECOND deploy to un-gate on the right day - a thing to
+    // remember, which is the kind of thing that gets forgotten (the bug-report entry needed
+    // precisely that, and `test-bug-report.mjs` prints a NOTE on every run because of it).
+    //
+    // This way the popup turns itself on the moment Matt flips the game live on the admin page:
+    // no deploy, no timing, and the same one-per-device guarantee. Returning BEFORE
+    // showAnnouncement is what preserves it - that call is what marks an entry seen.
+    if (a.requiresGame && !isGameLive(a.requiresGame, false)) return;
     this._announced = true;
     // Warm the report modules while the popup is being read. Someone shown "Please report bugs!"
     // is about to tap Try it, and that button pulls a whole import chain (bug-report-ui ->
@@ -506,7 +520,12 @@ class Hub {
     try {
       const { showAnnouncement } = await import('./announce-ui.js');
       await showAnnouncement(a, {
-        onAction: (action) => { if (action === 'bug-report') this.openBugReport(); },
+        onAction: (action) => {
+          if (action === 'bug-report') this.openBugReport();
+          // ...and a game announcement opens the game, so "Play" lands on it rather than leaving
+          // the player to find the tile they were just told about.
+          else if (action === 'play-golf') this.launch('golf');
+        },
       });
     } catch (err) { console.warn('[hub] announcement could not be shown', err); }
   }
