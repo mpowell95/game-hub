@@ -5,7 +5,7 @@ or interaction guidance.
 
 ## The app
 
-The Game Hub is a phone-first web app that hosts 24 small games for one family, with a shared
+The Game Hub is a phone-first web app that hosts 23 small games for one family, with a shared
 player profile and a synced record of every game anyone plays on any of their devices.
 
 ## The leaderboard has two views
@@ -18,9 +18,10 @@ player profile and a synced record of every game anyone plays on any of their de
 
 - Rank number (people who tie share a rank)
 - Name and emoji avatar, with a "You" marker on the viewer's own row
-- One number: their wins in the selected category, or their total games played
-- A breakdown of their wins by category — as many categories as fit on the line, biggest first,
-  with the selected one always among them. Their own page below shows all six
+- One number: their total in the selected category, or their total games played. That total is
+  wins in every category except No tier, where it is runs
+- A breakdown by category — only as many as fit the line, chosen biggest-first with the selected
+  one always kept, and then shown in difficulty order. Their own page shows all six
 
 Sorts: Wins, Played, Name.
 Category filter: Everything, Easy, Medium, Hard, Expert, No tier, Versus.
@@ -39,28 +40,32 @@ Sorts: A to Z, Most played, Favorites. A game nobody has played says so and has 
 Header: the game's name and how many games everyone has played of it.
 
 Per row: rank (ties share a rank), name, avatar, the difficulty tier that player is ranked at,
-their games played, the game's own number, and — for the games that can be played against other
-people — that player's wins against real people in this game, marked VS.
+their games played, the game's own number, and — once anyone has played that game against real
+people — that player's wins against real people in it, marked VS.
 
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
 
 Sorts: the game's own number (named after it — Wins, Obstacles, Longest, Solved, Distance, Points,
 Best round), Games, Name. Skeeball has a fourth, High score.
-Difficulty filter: only tiers somebody has actually played.
+Difficulty filter: only tiers somebody has actually played. Skeeball has a machine filter in its
+place, and the games with no difficulty have neither.
 
-Below the rows, "Standing records": all-time bests for that game, each with the holder's name.
-They differ per game — Snake has longest snake and total runs; Boggle has best score, words found
-and longest word; Skeeball has best game, best throw, 100 cups hit and points all time; Chinchón
-has chinchóns, closes and minus tens.
+Below the rows, "Standing records": all-time bests and totals for that game, each with the holder's
+name. They are different facts per game — Snake has longest snake and total runs; Boggle has best
+score, words found and longest word; Skeeball has best game, best throw, 100 cups hit and points all
+time; Chinchón has chinchóns, closes and minus tens.
+
+Eleven games have them: Connect 4, Chinchón, Escoba, Nuts & Bolts, Ball Run, Dots and Boxes, Boggle,
+Snake, Hill Climb, Skeeball, Tic Tac Toe. On every other game the section is simply absent.
 
 ## A player's own page (opened from either view)
 
 Their name, avatar, total games played, total wins, their tagline if they have written one, a
 button to message them, their wins broken down by all six categories (zeros included, under the
 heading "Wins by difficulty"), and a list of every game they have played with their number in each.
-Opening one of those games shows their full record for it, including a win / loss / draw table
-broken down by difficulty.
+Opening one of those games shows a screen built for that game specifically: a win / loss record by
+difficulty for the games with an opponent, and bests and lifetime counters for the ones without.
 
 (The message button is absent on the viewer's own row, and on old records that predate player
 codes.)
@@ -70,7 +75,8 @@ codes.)
 Four tiers, in order: **Easy, Medium, Hard, Expert.** Each game's own difficulty words map onto
 them — a game whose levels are called Beginner / Intermediate / Pro is Easy / Medium / Hard.
 
-Games with no difficulty at all: Skeeball, Golf, Yahtzee.
+Games with no difficulty at all: Skeeball, Golf, Yahtzee. (Yahtzee still separates playing a
+person from playing the computer — the computer games are No tier.)
 
 Online matches against real people carry no difficulty tier and count as **Versus**: Chinchón,
 Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship.
@@ -120,4 +126,4 @@ negative, and level par reads as "E" rather than 0.
 - Two languages: English and Spanish.
 - Pinball is currently visible to the admin only.
 - Pool appears twice: the current game, and a retired earlier build kept on the board so the games
-  played on it stay visible.
+  played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
