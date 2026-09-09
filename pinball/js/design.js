@@ -146,7 +146,15 @@ export class DesignPinball {
     this.plungerPower = 0;
     if (p <= 0.02) return;
     b.onPlunger = false;
-    b.vy = -(430 + 620 * p);
+    // THE WEAKEST PLUNGE STILL CLEARS THE LANE. Measured on the shipped build: the ball needed
+    // 0.70 power to get out at all, and power builds at 1.1 per second - so LAUNCH had to be
+    // held for 0.64 s or the ball rolled back and sat on the plunger. Two thirds of the
+    // plunger did nothing, and a normal tap did nothing at all. Matt found it on ball 2: the
+    // table simply stopped, reading "PULL AND RELEASE TO LAUNCH" with the ball in the lane.
+    //
+    // The floor is now just above what it takes to clear, so a soft plunge dribbles onto the
+    // playfield the way a real one does, and the range above it is the part you aim with.
+    b.vy = -(880 + 430 * p);
     b.vx = 0;
     this.phase = 'play';
     this.emit({ type: 'launch', power: p });
@@ -631,7 +639,11 @@ export class DesignPinball {
     }
     this.ball++;
     this.down.clear();
-    for (const n of T.ROW_NAMES) this.rowLit[n].clear();
+    // THE LIT INSERTS ARE NOT WIPED BETWEEN BALLS. Matt: *"the lit circles should stay on. not
+    // be reset every single ball."* Clearing them per ball made a colour essentially
+    // uncompletable - nine blue inserts inside one ball is a whole game on its own - so the
+    // rows are progress across the GAME now. They still clear when a row completes and pays,
+    // and start() resets them for a new game.
     this.rowsThisBall.clear();
     this.saveUsed = false;
     this._rebuild();
