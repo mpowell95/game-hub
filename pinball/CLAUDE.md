@@ -1478,6 +1478,27 @@ the two shared `BUMPER_R` and one constant cannot express two sizes. **The 3D bu
 it** - a skirt drawn at the shared radius while the collider used a smaller one would be exactly the
 drift this board exists to avoid.
 
+#### It is usable on a phone (2026-09-09)
+
+Matt: *"I switched to mobile. Please make it mobile friendly."*
+
+**The grips were 7 CSS pixels across, and that is the finding.** A handle written as `r: 22` is 22
+REFERENCE pixels; the board is drawn at 0.31 of that inside a viewBox itself scaled to the page, so
+on a phone at fit width they came out about seven pixels. Nothing a finger could hit - and the
+reason every browser test of a drag had to reach for the element by name instead of pointing at it.
+`S2B(css)` converts a size you want ON SCREEN into the board units the overlay draws in, so a grip
+is **44 CSS px at every zoom** (measured: all eight handles and the rotate grip, exactly 44). The
+dashed outlines scale the same way, or they are hairlines on a phone and slabs at 2.4x.
+
+The rest of the pass: **Fit screen** is the default under 700 px and it MEASURES the window rather
+than trusting 393 x 852, fitting by width and height and taking the smaller, and re-fitting on
+rotate (coalesced to one frame, the rule `js/viewport.js` holds every game to). The toolbar folded
+from six rows to two, with everything but draw, rotate, duplicate, delete and undo behind **More**.
+Every control keeps a 44 px tap target. Nothing scrolls sideways.
+
+Verified with real touch events: dragging a part moves it exactly (385, 270) -> (465, 330), and a
+resize handle can be grabbed and dragged with a finger.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
