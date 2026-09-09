@@ -4927,3 +4927,35 @@ WIDTH problem and it measures identically at a 46 px pad and a 0 px pad, so it i
 untouched by this change. It is invisible to the suites because both of them drive golf at 393x852
 and 390x664 only, and it starts below 390 - which is an iPhone SE and most of Android. Raised as
 its own task rather than widened into this one.
+
+## The bad-swing card was underselling its own lesson by four times (2026-09-09)
+
+Matt, looking at the card: *"are those numbers accurate? a 20% increase in power would only result
+in being 5 additional yards offline?"* No, and he caught it by arithmetic alone.
+
+The card's two labels were **34** and **39 yds off** - hardcoded in `SLICE_SVG`. Re-measured through
+the real resolver on the TUTORIAL HOLE (the hole the card is teaching on, and the only one with no
+trees, water or sand to interfere), a driver from the tee with the needle at the END of the bar:
+
+| | offline | mishit |
+|---|---|---|
+| 100 % power | **24.4 yds** | 8.0 deg |
+| max power (1.206) | **45 yds** (29-46) | 10-22 deg |
+
+So the real cost of 21 % more power is about **21 yards, not 5** - nearly DOUBLE the miss. The card
+was making exactly the right point and quoting numbers that argued against it.
+
+**Two reasons they were stale.** They were taken on a Pine Valley fairway, where a tree can stop
+the ball and shorten the measurement; and they predate 2026-09-08, when the mishit moved out of
+`aimRad` into `mishitDeg` so the ball CURVES, and `sprayDepth` began ramping the over-swing spray
+from 100 % rather than from the block's edge.
+
+**The max-power figure is a typical value, not a fixed one.** `blockSpray` takes a random side, so
+the ball lands 29-46 yds off depending on whether the spray agrees with the mishit or partly
+cancels it. 45 is the median.
+
+`golf/js/test.js` section 20 now **re-measures both numbers through `resolveShot` and fails if
+either label drifts from the engine by more than a few yards** - and separately asserts that
+over-swinging is still the bigger miss at all, which is the claim the card exists to make. A
+hardcoded number in a teaching aid is a number that will go stale; this is the cheapest way to stop
+it happening silently a second time.
