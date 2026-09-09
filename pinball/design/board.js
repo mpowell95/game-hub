@@ -22,6 +22,12 @@ function r4(v) { return Math.round(v * 1e4) / 1e4; }
 // levels: [1], [2], [1,2] = colliding on those levels; [] = decoration
 const P = [];
 const wall  = (name, a, b, t, h, y0, mat, levels, note) => P.push({ type: 'wall', name, a, b, t, h, y0, mat, levels, note });
+/** A ONE-WAY GATE: a wall that only exists for a ball travelling the forbidden way. `oneWay` is a
+ *  unit normal in TABLE axes (+x right, +y down-field); the gate blocks a ball whose velocity has
+ *  a positive component along it and is not there at all for one going the other way. This is the
+ *  sprung metal flap every real machine has at the top of its shooter lane, and js/physics.js has
+ *  had the mechanism since STARHUB - see `oneWay` there. */
+const gate  = (name, a, b, t, h, y0, mat, levels, oneWay, note) => P.push({ type: 'gate', name, a, b, t, h, y0, mat, levels, oneWay, note });
 const post  = (name, at, r, h, y0, mat, levels) => P.push({ type: 'post', name, at, r, h, y0, mat, levels });
 const disc  = (name, at, r, y0, mat, lit) => P.push({ type: 'disc', name, at, r, y0, mat, lit, levels: [] });
 const mirror2 = (fn) => fn(false) || fn(true);
@@ -45,7 +51,17 @@ wall('wall_left',   [22.5, 0],   [22.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 
 // It stays FULL LENGTH ON LEVEL 1, because level 1 is the lower playfield and a ball down there
 // has no business in the shooter lane.
 wall('wall_right',       [963.5, 300], [963.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 2], 'the playing board ENDS here; its outboard face is the launch chute left wall');
-wall('wall_right_upper', [963.5, 0],   [963.5, 300],  45 * S, 0.09, 0, 'darkwood', [1],    'closed on L1; open on L2, which is the shooter lane feed');
+wall('wall_right_upper', [963.5, 0],   [963.5, 300],  45 * S, 0.09, 0, 'darkwood', [1],    'closed on L1; gated on L2, which is the shooter lane feed');
+// THE FEED IS A ONE-WAY GATE, NOT A HOLE. Matt, on 47 seconds of play in which the ball did almost
+// nothing else: *"I just hit the ball all the way back down the chute... OBVIOUSLY this should be
+// impossible."* He is right, and this repo already knew it: STARHUB's own shooter lane has had
+// exactly this gate since the day it was built, and `pinball/CLAUDE.md` describes it - *the
+// shooter-lane gate exists only for a DOWNWARD-moving ball, so a launch passes through it and a
+// returning ball is caught*. Opening a plain gap here made the lane a two-way corridor, so every
+// ball that reached the deck rolled straight back into the chute and fell the whole way down.
+//
+// It blocks +x (a ball heading back toward the chute) and does not exist for -x (a ball leaving it).
+gate('chute_gate', [963.5, 40], [963.5, 300], 0.010, 0.05, Y2, 'steel', [2], [1, 0], 'the shooter lane flap: out onto the deck yes, back into the chute never');
 // THE FEED ITSELF. A gap alone is not a feed: traced, a plunged ball rose the full length of the
 // chute at x 1020, hit the top wall square on and came straight back down, twelve times. Every
 // real machine has a curved guide across the top of the shooter lane that turns the ball into the
@@ -378,6 +394,7 @@ for (const p of P) {
   if (!p.levels.length) continue;
   switch (p.type) {
     case 'wall': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, p.note ? { note: p.note } : {}); break;
+    case 'gate': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, { oneWay: p.oneWay, note: p.note }); break;
     case 'post': circleFP(p.name, p.levels, p.at, p.r); break;
     case 'bumper': circleFP(p.name, p.levels, p.at, BUMPER_R, { kicks: true }); break;
     case 'band': {
@@ -476,7 +493,11 @@ export function buildBoard(THREE) {
     green: mk('insert_green', 0x2FD22F, { emissive: 0x0C6A0C, roughness: 0.4 }),
     unlit: mk('insert_unlit', 0x4A5416),
     olive: mk('target_olive', 0x9CA23C, { roughness: 0.5 }),
-    decal: mk('decal_dark', 0x1E1409, { roughness: 0.9 }),
+    // PAINT, NOT A HOLE. At 0x1E1409 against 0xC58B3E maple the teardrop decal read as a void cut
+    // out of the middle of the playfield - a solid black shape a third of the lower deck across, and
+    // the first thing your eye goes to in any screenshot. It is a printed graphic on a wooden sheet,
+    // so it is a dark umber that sits ON the wood.
+    decal: mk('decal_dark', 0x53381C, { roughness: 0.9 }),
   };
   const V3 = (px, py, y) => { const [x, z] = PX(px, py); return new THREE.Vector3(x, y, z); };
   const mesh = (name, geo, mat, p) => {
@@ -574,6 +595,7 @@ export function buildBoard(THREE) {
         sh.closePath();
         g.add(extrude(p.name, sh, p.h, p.mat, p.y0, p)); break;
       }
+      case 'gate':
       case 'wall': {
         const grp = oriented(p.name, p.a, p.b), L = len(p.a, p.b);
         const m = mesh(p.name, new THREE.BoxGeometry(L, p.h, p.t), p.mat, p); m.position.set(L / 2, p.y0 + p.h / 2, 0);

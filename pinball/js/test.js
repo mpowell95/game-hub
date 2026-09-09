@@ -1128,6 +1128,79 @@ function launched(g) {
   ok('[FOUNDRY] no outlane wall lies across py 908 beside a ramp rail',
     !/wall\('outlane_top_/.test(board), 'outlane_top_left/right deleted');
 
+  // [KNOWN-BUG PROBE] THE BALL MUST NEVER GO BACK DOWN THE SHOOTER LANE, AND MUST NEVER JUMP.
+  // Matt, on 47 seconds of play that was almost entirely the ball cycling in the chute: *"the ball
+  // teleports all over the place. When the ball goes down the right ramp, it teleports to the middle
+  // of the board on level 2... I just hit the ball all the way back down the chute... OBVIOUSLY this
+  // should be impossible."*
+  //
+  // Both were real and both were mine. The feed at the top of the lane was a plain GAP, so the lane
+  // was a two-way corridor - STARHUB has had a one-way gate there since it was built, and this board
+  // shipped without one. And a ramp set the ball's position to a point in the middle of the deck in
+  // a single step, which is what a teleport is.
+  //
+  // This drives eight games and measures both: a crossing INTO the lane through the feed, and any
+  // one-frame position jump the solver could not have produced.
+  {
+    let reEntered = 0, jumps = 0, biggest = 0;
+    for (let g0 = 0; g0 < 4; g0++) {
+      let sd = g0 * 7 + 1;
+      const rnd = () => (sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296;
+      const g = new DesignPinball({ rand: rnd });
+      g.start();
+      let prev = null;
+      for (let i = 0; i < 60 * 60; i++) {
+        if (g.hud().onPlunger) { g.plungerDown(); for (let k = 0; k < 40; k++) g.update(1 / 60); g.plungerUp(); prev = null; }
+        if (rnd() < 0.09) g.setFlipper('left', true);
+        if (rnd() < 0.12) g.setFlipper('left', false);
+        if (rnd() < 0.09) g.setFlipper('right', true);
+        if (rnd() < 0.12) g.setFlipper('right', false);
+        g.update(1 / 60);
+        const b = g.balls[0];
+        if (!b) { prev = null; continue; }
+        if (prev && prev[0] / DT.U < 960 && b.x / DT.U > 986 && b.y / DT.U < 400) reEntered++;
+        if (prev && !b.onPlunger) {
+          const d = Math.hypot(b.x - prev[0], b.y - prev[1]) / DT.U;
+          if (d > 90) { jumps++; biggest = Math.max(biggest, d); }
+        }
+        prev = [b.x, b.y];
+        if (g.phase === 'over') break;
+      }
+    }
+    // A DRIVEN COUNT IS A SAMPLE, and this one passed with the gate deleted - four random games
+    // simply never sent a ball at the feed. So the real probe THROWS AT IT: a ball on the deck,
+    // level with the opening, driven hard at the chute. It must not get through.
+    {
+      let through = 0;
+      for (let py = 60; py <= 290; py += 20) {
+        for (const vx of [200, 500, 900]) {
+          const { colliders, flippers } = DT.buildLevel(2);
+          const w = { colliders, flippers, gravity: 515, drag: 0.16, nudgeX: 0, nudgeY: 0 };
+          const b = makeBall(DT.px(930), DT.px(py), vx, 0);
+          for (let i = 0; i < 240 * 2; i++) { step(w, [b], () => {}); if (b.x / DT.U > 990) break; }
+          if (b.x / DT.U > 990) through++;
+        }
+      }
+      ok('[FOUNDRY] a ball driven straight at the feed from the deck cannot get into the lane',
+        through === 0, `${through} of 36 aimed shots got through`);
+    }
+    ok('[FOUNDRY] no ball ever gets back into the shooter lane through the feed',
+      reEntered === 0, `${reEntered} re-entries in four driven games`);
+    ok('[FOUNDRY] the ball never jumps: no one-frame move the solver could not have made',
+      jumps === 0, jumps ? `${jumps} jumps, biggest ${biggest.toFixed(0)} px` : 'no jump over 90 px');
+  }
+  // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
+  // would trap the launch in its own lane.
+  {
+    const gate = DT.buildLevel(2).colliders.find((c) => c.id === 'chute_gate');
+    ok('[FOUNDRY] the shooter lane feed is a one-way gate',
+      !!gate && !!gate.oneWay && gate.oneWay[0] > 0,
+      gate ? 'oneWay ' + JSON.stringify(gate.oneWay) : 'chute_gate MISSING');
+  }
+  // ...and a ramp is a CLIMB the ball is walked up, never a destination it is moved to.
+  ok('[FOUNDRY] a ramp carries the ball up its own centre line, it does not place it',
+    /_rampRide/.test(src('./design.js')) && !/r\.to\.x/.test(src('./design.js')), 'RAMPS carry `top`, and _rampRide walks the ball to it');
+
   // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
   ok('[FOUNDRY] nothing moves the ball across the board wall at the top of the chute',
     !/LAUNCH_TO/.test(src('./design.js')), 'no LAUNCH_TO destination');

@@ -88,7 +88,10 @@ export class DesignRenderer extends Renderer {
       const sh = P.ballShadows[n - 1];
       // A ball on the upper deck rides at the deck's height; b.layer is what the solver stepped it
       // on, so this cannot disagree with the physics.
-      const lift = ((b.layer | 0) === 2) ? px(95) : 0;
+      // `b.lift` is the ball's height between the two decks, 0 on the playfield and 1 up top. It is
+      // a real number, not a flag, because a ball climbing a ramp is part way up for half a second
+      // and drawing that as a jump is what made the ramp look like a teleport.
+      const lift = px(95) * (b.lift !== undefined ? b.lift : (((b.layer | 0) === 2) ? 1 : 0));
       m.visible = true;
       m.position.set(b.x, 9 + lift, tz(b.y));
       sh.visible = true;

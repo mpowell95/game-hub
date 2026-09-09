@@ -55,9 +55,18 @@ export const LAUNCH_LEVEL = 2;
 // mouth (x 87 or 901, just above the deck edge) put it straight back through the same gap it came
 // up: it fell out, dropped to the mouth again and re-fired, 1,056 times in six driven games. Each
 // one now arrives well inside the deck, heading across it, the way a habitrail hands a ball off.
+// A RAMP IS A CLIMB, NOT A DESTINATION. `to` used to be a point in the MIDDLE OF THE DECK and the
+// ball was moved there in one step. Matt: *"the ball teleports all over the place. When the ball
+// goes down the right ramp, it teleports to the middle of the board on level 2."*
+//
+// `top` is where the ramp physically ENDS - its own mouth on the deck edge, on the ramp's own
+// centre line - and js/design.js walks the ball from the foot to the top over RAMP_CLIMB seconds,
+// lifting it as it goes. STARHUB's habitrail is scripted the same way and for the same reason;
+// pinball/CLAUDE.md calls it *a scripted habitrail, not simulated*, which is far kinder than
+// trying to solve a banked wire in 2D.
 export const RAMPS = [
-  { id: 'rampL', x: [px(45), px(150)], y: px(908), to: { x: px(230), y: px(380), vx: 260, vy: 120 } },
-  { id: 'rampR', x: [px(866), px(936)], y: px(908), to: { x: px(756), y: px(380), vx: -260, vy: 120 } },
+  { id: 'rampL', x: [px(45), px(150)],  y: px(908), foot: px(97),  top: { x: px(97),  y: px(600), vx: 150, vy: -150 } },
+  { id: 'rampR', x: [px(866), px(936)], y: px(908), foot: px(901), top: { x: px(901), y: px(600), vx: -150, vy: -150 } },
 ];
 /** The gap in the deck's front lip between the upper flipper tips: the way DOWN to level 1. */
 export const DROP_HOLE = { x: [px(455), px(545)], y: px(724), to: { x: px(500), y: px(785) } };
@@ -91,6 +100,8 @@ export function buildLevel(n, opts = {}) {
       mu: /rail|ledge|ramp|apron|chute|wall/.test(f.name) ? 0 : 0.05,
       kick: kicks ? (/bumper/.test(f.name) ? 300 : 250) : 0,
     };
+    // A footprint's `oneWay` is already a unit normal in table axes, which is what physics.js wants.
+    if (f.oneWay) o.oneWay = f.oneWay;
     if (f.shape === 'circle') colliders.push(circle(ux(f.c[0]), uy(f.c[1]), f.r * K, o));
     else colliders.push(seg(ux(f.a[0]), uy(f.a[1]), ux(f.b[0]), uy(f.b[1]), { ...o, r: f.r * K }));
   }
