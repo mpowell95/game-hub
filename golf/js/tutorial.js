@@ -192,12 +192,10 @@ export class Coach {
     el.setAttribute('aria-live', 'polite');
     el.innerHTML = `
       <div class="gf-tut__card gf-panel" data-side="${esc(s.side || 'centre')}">
-        <div class="gf-tut__step">${esc(t('tut_step', { n: CARDS.indexOf(s) + 1, of: CARDS.length }))}</div>
         <div class="gf-tut__text">${esc(t(s.key))}</div>
         ${s.advance === 'button'
     ? `<button type="button" class="gf-btn gf-tut__ok" data-role="tut-ok"><span>${esc(t('tut_ok'))}</span></button>`
     : `<div class="gf-tut__wait">${esc(t('tut_your_turn'))}</div>`}
-        <button type="button" class="gf-tut__skip" data-role="tut-skip">${esc(t('tut_skip'))}</button>
       </div>
       <div class="gf-tut__arrow" aria-hidden="true"></div>`;
     this.root.appendChild(el);
@@ -205,11 +203,11 @@ export class Coach {
 
     const ok = el.querySelector('[data-role="tut-ok"]');
     if (ok) this._on(ok, 'click', () => this._next());
-    // SKIP IS ALWAYS AVAILABLE, and it finishes the LESSON rather than the HOLE. The player still
-    // has to hole out to unlock holes 1-3 (that is `progress.js`'s rule and it reads the hole
-    // record, which only holing writes) - this just stops the cards. Somebody replaying the
-    // tutorial for a better score should not have to tap through nine of them again.
-    this._on(el.querySelector('[data-role="tut-skip"]'), 'click', () => this._finish());
+    // THERE IS NO SKIP, AND THAT IS NOT AN OVERSIGHT (Matt, 2026-09-09: "get rid of the 'skip
+    // tutorial' button. that is NOT an option - per what I've told you already"). The lesson is the
+    // gate on holes 1-3 - `progress.js` opens them off `bestHole['tutorial:1']`, which only holing
+    // out writes - so a skip button offered an exit that led nowhere: the cards stopped and the
+    // game stayed locked. Five cards of under ten words each is not a thing to need an escape from.
 
     // `onViewportResize`, NEVER a raw `resize` listener - the repo's rule, and it bites here for
     // its own reason as well as the usual one: a card is positioned from a MEASURED anchor rect,

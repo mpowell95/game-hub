@@ -4423,11 +4423,25 @@ A par 4's approach may take one shot or three. A putting card fired on `settled`
 standing in the fairway to putt, so `ui.js` reports a new event when the ball comes to rest ON the
 putting surface and the lesson waits for that instead.
 
-### Five cards, and they are short
+### Five cards, 25 words, no step counter, NO SKIP BUTTON
 
-Nine steps became five; the three swing cards ran 47 words between them and are now one sentence.
-The `club` card is gone - a par 4 teaches the club ladder by making you use it, which a par 3 never
-could, and that is most of the argument for the par change.
+Matt, twice: *"it is WAY too wordy (per usual)"*, then *"still way too much text. I'm not reviewing
+all of it."* Nine steps became five cards; the three swing cards ran 47 words between them and are
+now five. **A card is read in the half second before a tap, so anything past a short sentence is not
+read at all** - it is skipped, which is worse than not writing it. `golf/js/test.js` fails the build
+if any card in either language grows past ten words.
+
+The "Step 1 of 5" line is gone too - a line of text on every card to say a thing the player was not
+asking.
+
+**And there is no skip button** (Matt: *"get rid of the 'skip tutorial' button. that is NOT an
+option - per what I've told you already"*). It offered an exit that led nowhere: the lesson is the
+gate on holes 1-3, `progress.js` opens them off `bestHole['tutorial:1']`, and only holing out writes
+that - so skipping stopped the cards and left the game locked. Five cards of under ten words is not
+a thing that needs an escape hatch. A `[KNOWN-BUG PROBE]` fails if the button comes back.
+
+The `club` card is gone as well - a par 4 teaches the club ladder by making you use it, which a par
+3 never could, and that is most of the argument for the par change.
 
 ### THE PAR WAS SAFE TO CHANGE, AND IT WAS CHECKED (THE LAW rule 4)
 
