@@ -1,0 +1,523 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FOUNDRY layout editor</title>
+<!--
+  FOUNDRY LAYOUT EDITOR - move, resize, delete and duplicate the parts of the pinball board.
+
+  Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
+  duplicate objects as well... It should show me the entire screen thats displayed on my phone, not
+  just the game board."*
+
+  IT READS THE REAL BOARD. `design/board.js` exports `PARTS`, the same list the 3D model and the
+  physics footprints are both built from, so what is drawn here is what is in the game - not a
+  redrawing of it that could drift. Nothing here writes back on its own: you export, and a session
+  applies the export to `board.js`.
+
+  THE WHOLE PHONE SCREEN IS DRAWN, not only the playfield: the top bar, the objective strip, the
+  backglass, the machine, and the LAUNCH / NUDGE / pause row. The board is drawn top-down (the game
+  renders it in perspective at a 11 degree tilt), because you cannot drag a part accurately in
+  perspective - the point of this tool is the coordinates.
+
+  UNITS. Everything inside the board is in REFERENCE PIXELS, x 0..1100 and y 0..1990 - the same
+  numbers `board.js` is written in. The readout and the export are in those pixels too, so a number
+  you see here can be pasted straight into the source.
+-->
+<style>
+  :root {
+    --bg: #12101a; --panel: #1b1926; --line: #2e2b3d; --ink: #ece9f5; --dim: #9d97b5;
+    --accent: #ffce3a; --hot: #ff4f8b; --ok: #46d39a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px;
+    align-items: center; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; letter-spacing: .04em; }
+  button, select, label.chk {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; font: inherit; cursor: pointer; min-height: 40px;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.hot { border-color: var(--hot); color: #ffd7e6; }
+  button.go { border-color: var(--ok); color: #ccf6e6; }
+  label.chk { display: inline-flex; gap: 7px; align-items: center; }
+  main { display: flex; gap: 16px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
+  #stage { background: #000; border-radius: 26px; padding: 0; overflow: hidden;
+    box-shadow: 0 12px 40px #0009; flex: 0 0 auto; }
+  #phone { display: block; touch-action: none; }
+  aside { flex: 1 1 300px; min-width: 280px; max-width: 460px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+    margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .row span:first-child { color: var(--dim); width: 84px; flex: 0 0 auto; }
+  .row input { flex: 1; background: #12101a; border: 1px solid var(--line); color: var(--ink);
+    border-radius: 7px; padding: 7px 9px; font: inherit; min-height: 38px; }
+  #list { max-height: 320px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  #list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px;
+    justify-content: space-between; }
+  #list li:hover { background: #262336; }
+  #list li.sel { background: #3a2f14; color: var(--accent); }
+  #list li small { color: var(--dim); }
+  kbd { background: #12101a; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+    font-size: 12px; }
+  p.help { color: var(--dim); margin: 6px 0; font-size: 13px; }
+  .sel-outline { fill: none; stroke: var(--accent); stroke-width: 6; stroke-dasharray: 18 12; }
+  .handle { fill: var(--accent); stroke: #000; stroke-width: 2; cursor: pointer; }
+</style>
+
+<header>
+  <h1>FOUNDRY layout</h1>
+  <button id="dup" disabled>Duplicate</button>
+  <button id="del" class="hot" disabled>Delete</button>
+  <button id="undo" disabled>Undo</button>
+  <button id="reset">Reset all</button>
+  <button id="svg" class="go">Export SVG</button>
+  <button id="json" class="go">Export edits</button>
+  <select id="levels">
+    <option value="all">Both levels</option>
+    <option value="1">Level 1 only (playfield)</option>
+    <option value="2">Level 2 only (upper deck)</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="snap" checked> Snap to 5 px</label>
+  <select id="zoom">
+    <option value="1">Actual phone size</option>
+    <option value="1.4" selected>1.4x</option>
+    <option value="1.8">1.8x</option>
+    <option value="2.4">2.4x</option>
+  </select>
+</header>
+
+<main>
+  <div id="stage"><svg id="phone" width="393" height="852" viewBox="0 0 393 852"></svg></div>
+
+  <aside>
+    <div class="card">
+      <h2>Selected part</h2>
+      <div id="none" class="help">Tap a part on the board, or pick one from the list.</div>
+      <div id="props" hidden>
+        <div class="row"><span>Name</span><input id="p-name" readonly></div>
+        <div class="row"><span>Type</span><input id="p-type" readonly></div>
+        <div class="row"><span>Level</span><input id="p-level" readonly></div>
+        <div class="row"><span>Centre x</span><input id="p-x" type="number" step="1"></div>
+        <div class="row"><span>Centre y</span><input id="p-y" type="number" step="1"></div>
+        <div class="row"><span>Width</span><input id="p-w" type="number" step="1"></div>
+        <div class="row"><span>Height</span><input id="p-h" type="number" step="1"></div>
+        <p class="help">Reference pixels, the same numbers <code>board.js</code> uses:
+          x runs 0 to 1100 across the cabinet, y runs 0 to 1990 down it.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Keys</h2>
+      <p class="help">
+        <kbd>drag</kbd> move &middot; <kbd>drag a corner</kbd> resize &middot;
+        <kbd>arrows</kbd> nudge 1 px &middot; <kbd>shift+arrows</kbd> 10 px &middot;
+        <kbd>D</kbd> duplicate &middot; <kbd>Delete</kbd> delete &middot; <kbd>Ctrl+Z</kbd> undo
+        &middot; <kbd>Esc</kbd> deselect
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>All parts (<span id="count">0</span>)</h2>
+      <ul id="list"></ul>
+    </div>
+  </aside>
+</main>
+
+<script type="module">
+import { PARTS } from './board.js';
+
+// ---------------------------------------------------------------------------------------------
+// The board's own numbers. S is board.js's metres-per-reference-pixel, so `m2px` is how a part
+// whose size is written in METRES (a wall's thickness, a post's radius) gets back to the pixel grid
+// everything else is drawn on.
+const S = 0.000527;
+const m2px = (m) => m / S;
+const BUMPER_R = m2px(0.038), FLIP_R0 = m2px(0.012), FLIP_R1 = m2px(0.007), SLING_POST_R = m2px(0.006);
+const BW = 1100, BH = 1990;                 // the cabinet, in reference pixels
+
+// board.js's material palette, so a part is the colour here that it is in the game.
+const MAT = {
+  maple: '#C58B3E', deckwood: '#B47B36', darkwood: '#5A3817', black: '#17130F',
+  cream: '#F1E5C4', red: '#C22020', steel: '#C4C8CE', ramp: '#8E9194', band: '#7C7F83',
+  yellow: '#E8E11C', magenta: '#D634D6', blue: '#2F7DE6', redlit: '#E01E1E', green: '#2FD22F',
+  unlit: '#4A5416', olive: '#9CA23C', decal: '#53381C',
+};
+const colourOf = (p) => MAT[p.mat] || (p.type === 'teardrop' ? MAT.decal : p.type === 'flipper' ? MAT.red
+  : p.type === 'bumper' ? MAT.cream : p.type === 'sling' ? MAT.red
+  : p.type === 'targets' ? MAT.cream : p.type === 'saucer' ? MAT.cream
+  : p.type === 'plunger' ? MAT.steel : p.type === 'wedge' ? MAT.green : MAT.steel);
+
+// ---------------------------------------------------------------------------------------------
+// EVERY PART BECOMES ONE OF FOUR SHAPES. The board has seventeen part types and each is built by
+// its own branch in board.js; re-implementing all seventeen here would be a second copy that could
+// drift. Instead each one is reduced to the shape you can actually EDIT - a circle, a capsule, a
+// polygon or a rectangle - which is all a move/resize/duplicate tool needs, and which is enough to
+// write the part's new numbers back out.
+function shapeOf(p) {
+  const cap = (a, b, w) => ({ k: 'capsule', pts: [a.slice(), b.slice()], w });
+  switch (p.type) {
+    case 'poly': return { k: 'poly', pts: p.pts.map((q) => q.slice()) };
+    case 'wall':
+    case 'gate': return cap(p.a, p.b, m2px(p.t));
+    case 'band': {
+      // A solid band: its outer edge forward, then its inner edge back, as one closed outline.
+      const pts = p.outer.map((q) => q.slice()).concat(p.inner.slice().reverse().map((q) => q.slice()));
+      return { k: 'poly', pts };
+    }
+    case 'saucer': return { k: 'circle', pts: [p.at.slice()], r: m2px(p.r || 0.016) };
+    case 'post': return { k: 'circle', pts: [p.at.slice()], r: m2px(p.r) };
+    case 'disc': return { k: 'circle', pts: [p.at.slice()], r: m2px(p.r) };
+    case 'bumper': return { k: 'circle', pts: [p.at.slice()], r: BUMPER_R };
+    case 'ramp':
+    case 'incline': return { k: 'poly', pts: [[p.x[0], p.z[0]], [p.x[1], p.z[0]], [p.x[1], p.z[1]], [p.x[0], p.z[1]]] };
+    case 'plunger': return cap([p.at[0], p.at[1] - m2px(p.len) / 2], [p.at[0], p.at[1] + m2px(p.len) / 2], m2px(0.008));
+    case 'sling': return { k: 'poly', pts: [p.A.slice(), p.B.slice(), p.C.slice()] };
+    case 'flipper': return cap(p.pivot, p.tip, FLIP_R0 * 2);
+    case 'targets': return { k: 'poly', pts: [[p.xs[0] - 22, p.z - 11], [p.xs[3] + 22, p.z - 11], [p.xs[3] + 22, p.z + 11], [p.xs[0] - 22, p.z + 11]] };
+    case 'wedge': return { k: 'poly', pts: [p.tip.slice(), [p.tip[0] + p.d[0] - p.d[1] * 0.35, p.tip[1] + p.d[1] + p.d[0] * 0.35], [p.tip[0] + p.d[0] + p.d[1] * 0.35, p.tip[1] + p.d[1] - p.d[0] * 0.35]] };
+    case 'teardrop': return { k: 'poly', pts: [[490, 1050], [590, 1120], [640, 1330], [640, 1420], [560, 1520], [420, 1520], [330, 1420], [330, 1330], [400, 1120]] };
+    default: return null;      // 'base' is the cabinet floor: nothing to move
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+let items = [];               // the editable model
+let sel = null, history = [], seq = 0;
+
+function build() {
+  items = [];
+  seq = 0;
+  for (const p of PARTS) {
+    const sh = shapeOf(p);
+    if (!sh) continue;
+    items.push({
+      id: 'i' + (seq++), name: p.name, type: p.type,
+      levels: (p.levels && p.levels.length) ? p.levels.slice() : [1, 2],
+      colour: colourOf(p), shape: sh, from: p.name, copy: false, src: p,
+    });
+  }
+}
+build();
+
+const bbox = (it) => {
+  const xs = it.shape.pts.map((q) => q[0]), ys = it.shape.pts.map((q) => q[1]);
+  const pad = it.shape.k === 'circle' ? it.shape.r : (it.shape.k === 'capsule' ? it.shape.w / 2 : 0);
+  return { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad };
+};
+const centre = (it) => { const b = bbox(it); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; };
+
+function moveTo(it, cx, cy) {
+  const [ox, oy] = centre(it), dx = cx - ox, dy = cy - oy;
+  it.shape.pts = it.shape.pts.map((q) => [q[0] + dx, q[1] + dy]);
+}
+function scaleTo(it, w, h) {
+  const b = bbox(it), cw = b.x1 - b.x0, ch = b.y1 - b.y0;
+  const sx = cw > 0.001 ? w / cw : 1, sy = ch > 0.001 ? h / ch : 1;
+  const [cx, cy] = centre(it);
+  it.shape.pts = it.shape.pts.map((q) => [cx + (q[0] - cx) * sx, cy + (q[1] - cy) * sy]);
+  // A CIRCLE HAS ONE SIZE, so averaging sx and sy is wrong when only one of them changed: typing
+  // 120 into Width asked for 120 and got 132, because the untouched Height contributed a factor of
+  // 1 to the average. Take the axis that actually moved.
+  const near1 = (v) => Math.abs(v - 1) < 1e-6;
+  const f = near1(sx) ? sy : near1(sy) ? sx : (sx + sy) / 2;
+  if (it.shape.k === 'circle') it.shape.r *= f;
+  if (it.shape.k === 'capsule') it.shape.w *= f;
+}
+
+const snapOn = () => document.getElementById('snap').checked;
+const snap = (v) => snapOn() ? Math.round(v / 5) * 5 : Math.round(v);
+
+function push() { history.push(JSON.stringify(items.map((i) => ({ ...i, src: undefined })))); if (history.length > 60) history.shift(); paintChrome(); }
+function undo() {
+  if (!history.length) return;
+  const was = JSON.parse(history.pop());
+  items = was.map((i) => ({ ...i, src: PARTS.find((p) => p.name === i.from) }));
+  sel = null; draw();
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE PHONE SCREEN. 393 x 852 is the viewport the game is measured against everywhere else in this
+// repo (test-visual.mjs drives every game at exactly that size), so this is the real thing rather
+// than a picture of a phone.
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('phone');
+const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+const BOARD_TOP = 176, BOARD_H = 620;
+const SCALE = BOARD_H / BH;                     // 620 / 1990
+const BOARD_X = (393 - BW * SCALE) / 2;
+
+function chrome() {
+  const g = el('g');
+  g.appendChild(el('rect', { x: 0, y: 0, width: 393, height: 852, fill: '#0d0b16' }));
+
+  // top bar
+  const bar = el('text', { x: 16, y: 30, fill: '#cfc9e6', 'font-size': 13, 'font-family': 'system-ui', 'letter-spacing': 1.5 });
+  bar.textContent = 'BALL 1/3  ●○○'; g.appendChild(bar);
+  const sc = el('text', { x: 377, y: 32, fill: '#fff', 'font-size': 24, 'font-family': 'system-ui', 'text-anchor': 'end' });
+  sc.textContent = '0'; g.appendChild(sc);
+
+  // objective strip
+  g.appendChild(el('rect', { x: 12, y: 44, width: 369, height: 56, rx: 10, fill: '#161228', stroke: '#3ad0e0', 'stroke-width': 1 }));
+  const ob = el('text', { x: 26, y: 70, fill: '#ffce3a', 'font-size': 15, 'font-family': 'system-ui', 'letter-spacing': 1 });
+  ob.textContent = 'BALL 1'; g.appendChild(ob);
+  const ob2 = el('text', { x: 26, y: 90, fill: '#b9b2d6', 'font-size': 13, 'font-family': 'system-ui', 'letter-spacing': 1 });
+  ob2.textContent = 'SHOOT A RAMP TO THE UPPER DECK'; g.appendChild(ob2);
+
+  // backglass
+  g.appendChild(el('rect', { x: 96, y: 110, width: 201, height: 60, rx: 4, fill: '#1a1030', stroke: '#8f93a8', 'stroke-width': 2 }));
+  const bt = el('text', { x: 196, y: 133, fill: '#ff7ad9', 'font-size': 13, 'font-family': 'system-ui', 'text-anchor': 'middle', 'letter-spacing': 2 });
+  bt.textContent = 'FOUNDRY'; g.appendChild(bt);
+  const bs = el('text', { x: 196, y: 156, fill: '#fff', 'font-size': 17, 'font-family': 'system-ui', 'text-anchor': 'middle' });
+  bs.textContent = '0'; g.appendChild(bs);
+
+  // buttons
+  const btn = (x, w, label, stroke, fill) => {
+    g.appendChild(el('rect', { x, y: 802, width: w, height: 40, rx: 10, fill: '#1a1533', stroke, 'stroke-width': 1.5 }));
+    const t = el('text', { x: x + w / 2, y: 828, fill, 'font-size': 14, 'font-family': 'system-ui', 'text-anchor': 'middle', 'letter-spacing': 1.5 });
+    t.textContent = label; g.appendChild(t);
+  };
+  btn(12, 160, 'LAUNCH', '#ffce3a', '#ffce3a');
+  btn(182, 130, 'NUDGE', '#ff4f8b', '#ff8ec0');
+  btn(324, 57, 'II', '#6b6a86', '#cfc9e6');
+  return g;
+}
+
+function pathFor(sh) {
+  if (sh.k === 'circle') {
+    const [c] = sh.pts, r = sh.r;
+    return `M ${c[0] - r} ${c[1]} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
+  }
+  if (sh.k === 'capsule') {
+    const [a, b] = sh.pts;
+    return `M ${a[0]} ${a[1]} L ${b[0]} ${b[1]}`;
+  }
+  return 'M ' + sh.pts.map((q) => q.join(' ')).join(' L ') + ' Z';
+}
+
+function shapeNode(it) {
+  const p = el('path', { d: pathFor(it.shape), 'data-id': it.id });
+  if (it.shape.k === 'capsule') {
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', it.colour);
+    p.setAttribute('stroke-width', Math.max(4, it.shape.w));
+    p.setAttribute('stroke-linecap', 'round');
+  } else {
+    p.setAttribute('fill', it.colour);
+    // The upper deck is translucent in the game for exactly this reason: opaque, it is a slab over
+    // the whole top half and you cannot see - or hit - anything underneath it.
+    if (it.name === 'deck_L2') p.setAttribute('fill-opacity', 0.5);
+    p.setAttribute('stroke', '#00000055');
+    p.setAttribute('stroke-width', 2);
+  }
+  return p;
+}
+
+let boardG = null, overlayG = null;
+function draw() {
+  svg.textContent = '';
+  svg.appendChild(chrome());
+
+  boardG = el('g', { transform: `translate(${BOARD_X} ${BOARD_TOP}) scale(${SCALE})` });
+  // the cabinet, so the parts have something to sit on
+  boardG.appendChild(el('rect', { x: 0, y: 0, width: BW, height: BH, fill: '#2c1c0c', rx: 20 }));
+  boardG.appendChild(el('rect', { x: 45, y: 40, width: 910, height: 1900, fill: MAT.maple, rx: 8 }));
+
+  const want = document.getElementById('levels').value;
+  for (const it of items) {
+    if (want !== 'all' && !it.levels.includes(+want)) continue;
+    const n = shapeNode(it);
+    n.style.cursor = 'move';
+    boardG.appendChild(n);
+  }
+  overlayG = el('g');
+  boardG.appendChild(overlayG);
+  svg.appendChild(boardG);
+  drawSel();
+  paintList();
+}
+
+const HANDLES = [['nw', 0, 0], ['n', .5, 0], ['ne', 1, 0], ['e', 1, .5], ['se', 1, 1], ['s', .5, 1], ['sw', 0, 1], ['w', 0, .5]];
+function drawSel() {
+  overlayG.textContent = '';
+  const it = items.find((i) => i.id === sel);
+  if (!it) return;
+  const b = bbox(it), w = b.x1 - b.x0, h = b.y1 - b.y0;
+  overlayG.appendChild(el('rect', { x: b.x0 - 10, y: b.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline' }));
+  for (const [k, fx, fy] of HANDLES) {
+    const hx = b.x0 - 10 + (w + 20) * fx, hy = b.y0 - 10 + (h + 20) * fy;
+    const c = el('circle', { cx: hx, cy: hy, r: 22, class: 'handle', 'data-h': k });
+    overlayG.appendChild(c);
+  }
+}
+
+// --------------------------------------------------------------------------------- interaction
+const toBoard = (evt) => {
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  return pt.matrixTransform(boardG.getScreenCTM().inverse());
+};
+
+let drag = null;
+svg.addEventListener('pointerdown', (e) => {
+  const t = e.target;
+  const h = t.getAttribute && t.getAttribute('data-h');
+  const id = t.getAttribute && t.getAttribute('data-id');
+  if (h && sel) {
+    const it = items.find((i) => i.id === sel);
+    drag = { mode: 'size', h, it, start: toBoard(e), box: bbox(it) };
+    push();
+  } else if (id) {
+    sel = id;
+    const it = items.find((i) => i.id === id);
+    drag = { mode: 'move', it, start: toBoard(e), from: centre(it) };
+    push();
+    draw();
+  } else { sel = null; draw(); return; }
+  svg.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+svg.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const p = toBoard(e);
+  if (drag.mode === 'move') {
+    moveTo(drag.it, snap(drag.from[0] + p.x - drag.start.x), snap(drag.from[1] + p.y - drag.start.y));
+  } else {
+    const b = drag.box, dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+    let w = b.x1 - b.x0, h = b.y1 - b.y0;
+    if (drag.h.includes('e')) w += dx; if (drag.h.includes('w')) w -= dx;
+    if (drag.h.includes('s')) h += dy; if (drag.h.includes('n')) h -= dy;
+    scaleTo(drag.it, Math.max(6, snap(w)), Math.max(6, snap(h)));
+  }
+  drawSel(); showProps();
+});
+const endDrag = () => { drag = null; draw(); showProps(); };
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+
+// --------------------------------------------------------------------------------- panel + list
+const $ = (id) => document.getElementById(id);
+function showProps() {
+  const it = items.find((i) => i.id === sel);
+  $('none').hidden = !!it; $('props').hidden = !it;
+  $('dup').disabled = !it; $('del').disabled = !it; $('undo').disabled = !history.length;
+  if (!it) return;
+  const b = bbox(it), [cx, cy] = centre(it);
+  $('p-name').value = it.name; $('p-type').value = it.type;
+  $('p-level').value = it.levels.join(' + ');
+  $('p-x').value = Math.round(cx); $('p-y').value = Math.round(cy);
+  $('p-w').value = Math.round(b.x1 - b.x0); $('p-h').value = Math.round(b.y1 - b.y0);
+}
+for (const k of ['x', 'y', 'w', 'h']) {
+  $('p-' + k).addEventListener('change', () => {
+    const it = items.find((i) => i.id === sel); if (!it) return;
+    push();
+    if (k === 'x' || k === 'y') moveTo(it, +$('p-x').value, +$('p-y').value);
+    else scaleTo(it, +$('p-w').value, +$('p-h').value);
+    draw(); showProps();
+  });
+}
+function paintList() {
+  const ul = $('list'); ul.textContent = '';
+  $('count').textContent = items.length;
+  for (const it of items) {
+    const li = document.createElement('li');
+    if (it.id === sel) li.className = 'sel';
+    li.innerHTML = `<span>${it.name}</span><small>${it.type} · L${it.levels.join('')}</small>`;
+    li.onclick = () => { sel = it.id; draw(); showProps(); };
+    ul.appendChild(li);
+  }
+  showProps();
+}
+function paintChrome() { $('undo').disabled = !history.length; }
+
+// --------------------------------------------------------------------------------- the commands
+function duplicate() {
+  const it = items.find((i) => i.id === sel); if (!it) return;
+  push();
+  const c = JSON.parse(JSON.stringify({ ...it, src: undefined }));
+  c.id = 'i' + (seq++); c.name = it.name + '_copy'; c.copy = true; c.src = it.src;
+  c.shape.pts = c.shape.pts.map((q) => [q[0] + 40, q[1] + 40]);
+  items.splice(items.indexOf(it) + 1, 0, c);
+  sel = c.id; draw(); showProps();
+}
+function remove() {
+  const it = items.find((i) => i.id === sel); if (!it) return;
+  push(); items.splice(items.indexOf(it), 1); sel = null; draw(); showProps();
+}
+$('dup').onclick = duplicate;
+$('del').onclick = remove;
+$('undo').onclick = undo;
+$('reset').onclick = () => { if (confirm('Throw away every change and reload the board as it ships?')) { build(); sel = null; history = []; draw(); } };
+$('levels').onchange = draw;
+// The SVG viewBox stays 393 x 852 whatever the zoom - the export is always the phone screen at
+// its real size, and only the thing on your desk gets bigger.
+const setZoom = () => { const z = +$('zoom').value; svg.setAttribute('width', 393 * z); svg.setAttribute('height', 852 * z); };
+$('zoom').onchange = setZoom;
+setZoom();
+
+addEventListener('keydown', (e) => {
+  if (/input|textarea/i.test(e.target.tagName)) return;
+  const it = items.find((i) => i.id === sel);
+  if (e.key === 'Escape') { sel = null; draw(); return; }
+  if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
+  if (!it) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(); return; }
+  if (e.key === 'd' || e.key === 'D') { e.preventDefault(); duplicate(); return; }
+  const step = e.shiftKey ? 10 : 1;
+  const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (!d) return;
+  e.preventDefault(); push();
+  const [cx, cy] = centre(it); moveTo(it, cx + d[0], cy + d[1]);
+  draw(); showProps();
+});
+
+// --------------------------------------------------------------------------------- the exports
+function save(name, text, mime) {
+  const b = new Blob([text], { type: mime });
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a');
+  a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+
+$('svg').onclick = () => {
+  // The WHOLE PHONE SCREEN, not the board alone: draw it fresh with nothing selected, so the export
+  // has no editing furniture in it.
+  const was = sel; sel = null; draw();
+  const out = svg.cloneNode(true);
+  out.setAttribute('xmlns', NS);
+  overlayG.textContent = '';
+  save('foundry-screen.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + out.outerHTML, 'image/svg+xml');
+  sel = was; draw();
+};
+
+$('json').onclick = () => {
+  const original = new Map();
+  for (const p of PARTS) { const sh = shapeOf(p); if (sh) original.set(p.name, sh); }
+  const changed = [], added = [], removed = [];
+  const seen = new Set();
+  for (const it of items) {
+    if (it.copy) { added.push({ name: it.name, copyOf: it.from, type: it.type, shape: it.shape }); continue; }
+    seen.add(it.name);
+    const was = original.get(it.name);
+    if (!was || JSON.stringify(was) === JSON.stringify(it.shape)) continue;
+    changed.push({ name: it.name, type: it.type, was, now: it.shape });
+  }
+  for (const p of PARTS) if (shapeOf(p) && !seen.has(p.name) && !items.some((i) => i.from === p.name && !i.copy)) removed.push(p.name);
+  const doc = {
+    what: 'FOUNDRY layout edits, in reference pixels (x 0..1100, y 0..1990). Apply to pinball/design/board.js.',
+    when: new Date().toISOString(),
+    counts: { changed: changed.length, added: added.length, removed: removed.length },
+    removed, changed, added,
+  };
+  save('foundry-edits.json', JSON.stringify(doc, null, 2), 'application/json');
+};
+
+draw();
+</script>
