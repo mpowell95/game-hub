@@ -2285,6 +2285,10 @@ exactly that way (*"Only Unai has seen it?"*), which is a screen telling him som
 not opened the app since the mirror was added - the one caveat worth stating, said once instead of
 being repeated after every name.
 
-Names are a **comma list inside a collapsed `<details>`**, not a bullet per row. Matt: *"This is not
-easy to understand at a glance."* Twenty-six people at one row each is two screens of scrolling per
-announcement; the question is a COUNT, with the names one tap away. Seen it opens by default.
+**One ROW per group - the label, the count and the NAMES all on the same line**, wrapping; only the
+no-answer list folds, because that one is everybody. Matt: *"This is not easy to understand at a
+glance."* Twenty-six people at one bullet each is two screens of scrolling per announcement. The
+first attempt at compressing it put each group behind its own `<details>`, which he read as worse
+still (*"This is more difficult to read"*) and he was right: three tappable rows per announcement is
+TALLER than the bullet list they replaced, and it hid the two SHORT answers behind the same control
+as the long one. Four lines per announcement now, nothing to tap for the part you came for.

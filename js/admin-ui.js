@@ -131,21 +131,21 @@ function ensureCss() {
   .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink);
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
-  /* Two columns, seen and not-yet, side by side so the shape of the answer is one glance. They
-     stack under 320px of room rather than squeezing names into two characters each. */
-  /* Three collapsible groups, counts on the summary line. A bullet per person is two screens of
-     scrolling for one announcement; the question is "how many", with the names one tap away. */
-  .adm-anngrps { width: 100%; margin-top: var(--gh-sp-2); }
-  .adm-anngrp { border-top: 1px solid var(--gh-border); }
-  .adm-anngrp > summary { list-style: none; cursor: pointer; padding: 6px 0; min-height: 34px;
-                          display: flex; align-items: center; gap: 6px;
-                          font-size: var(--gh-fs-xs); font-weight: 800; text-transform: uppercase;
-                          letter-spacing: .04em; color: var(--gh-muted); }
-  .adm-anngrp > summary::-webkit-details-marker { display: none; }
-  .adm-anngrp > summary b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
-  .adm-anngrp > summary::after { content: '\\25be'; margin-left: auto; }
-  .adm-anngrp[open] > summary::after { content: '\\25b4'; }
-  .adm-anngrp > p { margin: 0 0 var(--gh-sp-2); font-size: var(--gh-fs-sm); line-height: 1.5; }
+  /* ONE ROW PER GROUP: label, count and names on the same line, wrapping. Stacking a collapsible
+     per group was TALLER than the bullet list it replaced and hid the two short answers behind the
+     same control as the long one. Only the no-answer list folds - that one is everybody. */
+  .adm-anngrps { width: 100%; margin-top: var(--gh-sp-1); }
+  .adm-annline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 4px 0; }
+  .adm-annlbl { flex: none; font-size: var(--gh-fs-xs); font-weight: 800; text-transform: uppercase;
+                letter-spacing: .04em; color: var(--gh-muted); }
+  .adm-annlbl b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
+  .adm-annnames { flex: 1 1 60%; min-width: 0; font-size: var(--gh-fs-sm); line-height: 1.45; }
+  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px; padding: 4px 0;
+                           display: flex; align-items: center; gap: 6px; }
+  .adm-annfold > summary::-webkit-details-marker { display: none; }
+  .adm-annfold > summary::after { content: '\\25be'; color: var(--gh-muted); }
+  .adm-annfold[open] > summary::after { content: '\\25b4'; }
+  .adm-annfold > p { margin: 0 0 var(--gh-sp-2); font-size: var(--gh-fs-sm); line-height: 1.45; color: var(--gh-muted); }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
   .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
@@ -359,9 +359,18 @@ function announceSectionHTML() {
   // scrolling per announcement, and the answer he is after ("has everyone been told yet") is a
   // COUNT with the names available if he wants them.
   const names = (list) => list.map((p) => esc(p.name || t('adm_sc_unnamed'))).join(', ');
-  const group = (label, list, open) => `<details class="adm-anngrp"${open ? ' open' : ''}>
-      <summary>${esc(label)} <b>${list.length}</b></summary>
-      <p>${list.length ? names(list) : `<span class="adm-note">${esc(t('adm_ann_nobody'))}</span>`}</p>
+  // ONE LINE PER GROUP: the label, the count and the NAMES, all on the same row. The first version
+  // stacked a collapsible per group, which Matt read as worse than the bullets it replaced
+  // (*"This is more difficult to read"*) - three tappable rows per announcement is TALLER than the
+  // list it was meant to compress, and it hid the two short answers behind the same control as the
+  // long one. Only the no-answer list folds, because that one is everybody.
+  const line = (label, list) => `<div class="adm-annline">
+      <span class="adm-annlbl">${esc(label)} <b>${list.length}</b></span>
+      ${list.length ? `<span class="adm-annnames">${names(list)}</span>` : ''}
+    </div>`;
+  const fold = (label, list) => `<details class="adm-annfold">
+      <summary><span class="adm-annlbl">${esc(label)} <b>${list.length}</b></span></summary>
+      <p>${names(list)}</p>
     </details>`;
   return ANNOUNCEMENTS.map((a) => {
     const title = textFor(a.title, lang) || a.id;
@@ -381,9 +390,9 @@ function announceSectionHTML() {
         ${quiet.length ? `<div class="adm-note">${esc(t('adm_ann_waiting', { n: quiet.length, all: rows.length }))}</div>` : ''}
       </div>
       <div class="adm-anngrps">
-        ${group(t('adm_ann_seen'), yes, true)}
-        ${group(t('adm_ann_notyet'), no, false)}
-        ${quiet.length ? group(t('adm_ann_nodata'), quiet, false) : ''}
+        ${line(t('adm_ann_seen'), yes)}
+        ${line(t('adm_ann_notyet'), no)}
+        ${quiet.length ? fold(t('adm_ann_nodata'), quiet) : ''}
       </div>
     </div>`;
   }).join('');
