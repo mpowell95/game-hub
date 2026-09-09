@@ -2464,6 +2464,24 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   const byId = Object.fromEntries(TU.STEPS.map((st) => [st.id, st]));
   ok('the aim step waits on a real tap of the aim arrows', byId.aim && byId.aim.advance === 'aim');
   ok('the club step waits on a real tap of the club arrows', byId.club && byId.club.advance === 'club');
+  // [KNOWN-BUG PROBE] THE CLUB LESSON IS ON THE SECOND SHOT, NOT THE TEE. Matt, 2026-09-09: "As it
+  // is now, they'll change clubs on the tee shot then have to change back. You actually have to
+  // change clubs for the second shot." On a 372 yd par 4 the driver is already the club you want,
+  // so on the tee every tap on those arrows was a change the player had to undo before they could
+  // play - the one lesson that teaches a control by USING it, teaching a wrong move. Nothing at
+  // runtime notices step order, so it is pinned here: the club step comes after the first swing,
+  // and the swing is still reached without it.
+  {
+    const iSwing = TU.STEPS.findIndex((st) => st.id === 'swing');
+    const iClub = TU.STEPS.findIndex((st) => st.id === 'club');
+    ok('[KNOWN-BUG PROBE] the club lesson comes AFTER the tee shot, not before it',
+      iSwing > 0 && iClub > iSwing, `swing at ${iSwing}, club at ${iClub}`);
+    // ...and it waits for the drive to come to REST first. Without that silent step the card would
+    // land the instant the first tap started the backswing, which is the defect one step over.
+    ok('...and a silent step waits for the drive to settle in between',
+      TU.STEPS.slice(iSwing + 1, iClub).some((st) => !st.key && st.advance === 'settled'),
+      'the club card would appear while the ball is still in the air');
+  }
   // [KNOWN-BUG PROBE] A PLAYER ACTION MAY ONLY END THE STEP THAT ASKED FOR IT. `event()` searches
   // FORWARD so the lesson can never strand on an event it missed - but applied to a gated step that
   // search is a way past the gate: measured in a browser, tapping CLUB while the aim card was up

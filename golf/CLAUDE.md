@@ -4778,3 +4778,37 @@ make room for a caret nowhere near it. A label moves only when a caret is within
 (0.16 rad) of its own angle, which in practice is the 100 % mark and nothing else. Verified by
 rendering: 75, 50 and 25 sit where they always did, and the live dial, the good-swing card and the
 bad-swing card all fit their canvas.
+
+## The club lesson moved to the second shot (2026-09-09)
+
+Matt: *"I think we should move the change club tip to the second shot. As it is now, they'll change
+clubs on the tee shot then have to change back. You actually have to change clubs for the second
+shot."*
+
+**He is right, and it made the one lesson that teaches a control by USING it teach a wrong move.**
+The tutorial hole is a 372 yd par 4 and the driver is already the club you want there, so every tap
+on those arrows was a change the player had to undo before they could play. Worse than pointless:
+the ladder WRAPS, so a single "up" tap on the tee takes the driver round to the **putter** - caught
+on camera by the probe written for this change, which putted from the tee and went nowhere.
+
+After the drive the bag has genuinely moved on. Measured in a browser: the drive settles in the
+fairway and `autoSelectClub` puts a **7 iron** in hand, so working the control is now the thing a
+player would be doing anyway rather than something to reverse.
+
+### It needed a silent step, not just a reorder
+
+`club` following `swing` directly would put a card on screen the instant the first tap started the
+backswing - the same defect the three-cards-per-swing version had, one step further on. So a silent
+`after-drive` step waits on `settled` in between:
+
+```
+aim -> good -> bad -> swing -> after-drive(silent) -> club -> to-green(silent) -> dial -> putt ...
+```
+
+`settled` was already emitted by `_settleShot` and is already in `SKIPPABLE`, so nothing new is
+sent and the lesson still cannot strand: a shot holed from anywhere takes `holed` forward past this
+step and every step after it. The card count is unchanged at eight, so the pip row does not move.
+
+`test.js` section 20 pins the ORDER as a `[KNOWN-BUG PROBE]` - the club step is after the swing
+step, with a silent `settled` step between them - because nothing at runtime notices step order and
+the old arrangement looked perfectly reasonable in the file.
