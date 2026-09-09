@@ -40,8 +40,12 @@ Sorts: A to Z, Most played, Favorites. A game nobody has played says so and has 
 Header: the game's name and how many games everyone has played of it.
 
 Per row: rank (ties share a rank), name, avatar, the difficulty tier that player is ranked at,
-their games played, the game's own number, and — once anyone has played that game against real
-people — that player's wins against real people in it, marked VS.
+their games played, and the game's own number.
+
+Under that, a breakdown: one tile per difficulty the field has played, holding that player's number
+at that difficulty, with an em dash where they have none — and, once anyone has played the game
+against real people, a VS tile holding that player's wins against real people in it. The three games
+whose number cannot be split by difficulty (Skeeball, Pinball, Golf) have no tiles.
 
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
@@ -49,7 +53,8 @@ a lower score at a higher one.
 Sorts: the game's own number (named after it — Wins, Obstacles, Longest, Solved, Distance, Points,
 Best round), Games, Name. Skeeball has a fourth, High score.
 Difficulty filter: only tiers somebody has actually played. Skeeball has a machine filter in its
-place, and the games with no difficulty have neither.
+place, and only once the field has played more than one machine. The games with no difficulty have
+neither.
 
 Below the rows, "Standing records": all-time bests and totals for that game, each with the holder's
 name. They are different facts per game — Snake has longest snake and total runs; Boggle has best
@@ -62,8 +67,9 @@ Snake, Hill Climb, Skeeball, Tic Tac Toe. On every other game the section is sim
 ## A player's own page (opened from either view)
 
 Their name, avatar, total games played, total wins, their tagline if they have written one, a
-button to message them, their wins broken down by all six categories (zeros included, under the
-heading "Wins by difficulty"), and a list of every game they have played with their number in each.
+button to message them, all six categories with zeros included — the four difficulties under "Wins
+by difficulty", then No tier and Versus under "Everything else", labelled "Runs, no difficulty" and
+"Wins against people" — and a list of every game they have played with their number in each.
 Opening one of those games shows a screen built for that game specifically: a win / loss record by
 difficulty for the games with an opponent, and bests and lifetime counters for the ones without.
 
@@ -113,7 +119,9 @@ negative, and level par reads as "E" rather than 0.
 - **Pinball** — three table settings: Casual, Standard, Tournament. They are its difficulty, in
   that order. It is the one game with a difficulty but no per-difficulty score, so its number is
   one lifetime total.
-- **Golf** — several courses at 3, 9 or 18 holes. The board ranks one course.
+- **Golf** — three courses (Pine Valley, Red Mesa, Oasis Sands), each playable as 3, 9 or 18
+  holes: six three-hole sets, two nines, or the full eighteen. The board ranks one of those rounds
+  only — Pine Valley's first three holes.
 
 ## Also true
 
