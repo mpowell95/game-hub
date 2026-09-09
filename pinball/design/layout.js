@@ -42,42 +42,66 @@ export const ADDED = [
   {
     "name": "ramp_rail_right_in_copy_copy",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "ramp_rail_right_in_copy_copy_copy",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "ramp_rail_right_in_copy_copy_copy_2",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "ramp_rail_right_in_copy_copy_copy_copy",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "ramp_rail_right_in_copy_copy_copy_3",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "ramp_rail_right_in_copy_copy_copy_copy_2",
     "type": "wall",
-    "mat": "steel"
+    "mat": "steel",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "insert_yellow_center_copy",
     "type": "disc",
-    "mat": "yellow"
+    "mat": "yellow",
+    "levels": [
+      1
+    ]
   },
   {
     "name": "insert_yellow_center_copy_copy",
     "type": "disc",
-    "mat": "yellow"
+    "mat": "yellow",
+    "levels": [
+      1
+    ]
   }
 ];
 
