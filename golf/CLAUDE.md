@@ -4455,3 +4455,43 @@ The hole itself: 372 yards, straight, fairway wall to wall with a ring of light 
 water, no sand, dead calm, a big nearly flat green. The approved ladder carries a driver 215 and a
 6 iron 139, so two clean strikes finish about 18 yards short of the pin - a putt, never a tap-in,
 and never a lay-up to explain.
+
+## The setup screen looks like golf, and the circle is gone (2026-09-09)
+
+Matt, in one message: *"i hate the circle thing that appears when I go to putt. remove that thing."*
+· *"On the landing/setup page, there's a lot of wasted space instead of increasing the size of the
+holes. I don't like the color scheme at all either. it doesn't look golf like at all."* · *"Delete
+'which holes?' There is no need for superfluous garbage clutter like this."* · *"Use ALL space
+available."*
+
+**THE CHARGE RING IS GONE.** It shipped that same day, a gold arc sweeping the meter's hub while
+`PUTTER_DEAD_MS` held the needle at zero. The report it was written for - the putter's first tap
+looking like it did nothing - is still closed by the OTHER half of that fix: the swing button's
+label moves to "set power" on the frame the tap lands. That is a word where the player is already
+looking; the ring was a new graphic on a dial they are trying to read. `test.js` section 19 carries
+a `[KNOWN-BUG PROBE]` that it stays gone.
+
+**THE HOLE PICTURES ARE NEARLY DOUBLE THE SIZE, and every pixel came from clutter.** The strip is
+given whatever height the rest of the screen does not need (`_sizeStripRows`), so the way to make
+the pictures bigger is to delete things, not to resize them. Measured at 390x664, strip height:
+
+| | |
+|---|---|
+| before | **120px** |
+| the `<h1>` course name, which the selected course chip already says | 150 |
+| the "Which holes?" line | 172 |
+| "Not open yet" -> "locked", so a course chip is one line instead of three | 196 |
+| "Play the tutorial again" -> "tutorial", one line instead of two | **206px** |
+
+**THE COLOURS: a cream scorecard on cut grass.** The screen was traffic-cone orange tiles on khaki.
+The orange is the reference's own accent and it STAYS on the play screen, where it was measured
+(`golf-reference-spec.md` 15.1) - but the setup screen was never in the footage and had inherited
+the accent by default rather than by decision. Tiles are ivory with deep-green ink, the selected one
+is the flag's gold (`#ffce3a`, the repo's standing selection accent, still paired with a border and
+a weight change because colour alone may never carry a state), and a locked tile is dimmed grass so
+it reads as "not yours yet" without being a fourth colour.
+
+**THE GROUND COLOUR IS NOT IN `golf.css`.** `ui.js` writes it inline from the course palette
+(`THEMES[...].setupA/setupB` in `render.js`), so a rule in the stylesheet is silently overridden -
+which cost a round of measuring here. Change the palette. A comment in `golf.css` says so at the
+point somebody would otherwise try.

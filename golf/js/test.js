@@ -2202,8 +2202,13 @@ console.log('\n-- 19. the playtest of 2026-09-08: the side of the miss, the shap
   ok('the swing button names the next tap', /_paintSwingLabel\(now\)/.test(uiSrc)
     && /swing_power/.test(uiSrc) && /swing_aim/.test(uiSrc),
     'the button reads "swing" through the whole three-tap sequence again');
-  ok('...and the dead zone draws a charge ring', /tempo && this\.swing\.tempo\.deadMs/.test(uiSrc),
-    'the putter\'s 250 ms hold is invisible again');
+  // AND NOTHING ELSE. A charge ring in the meter's hub shipped alongside that label on 2026-09-09
+  // and Matt removed it the same day: "i hate the circle thing that appears when I go to putt.
+  // remove that thing." The label is where the player is already looking; the ring was a new
+  // graphic on a dial they are trying to read. This asserts it stays gone.
+  ok('[KNOWN-BUG PROBE] ...and nothing draws a charge ring in the hub',
+    !/deadMs;?\s*$[\s\S]{0,400}?c\.arc\(cx, cy, r,/m.test(uiSrc) && !/charge ring, sweeping/.test(uiSrc),
+    'the charge ring is back on the putting dial');
   for (const k of ['swing_power', 'swing_aim']) {
     ok(`"${k}" exists in EN and ES`, !!STRINGS.en[k] && !!STRINGS.es[k]);
   }

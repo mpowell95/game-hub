@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v686';
+const CACHE = 'game-hub-v687';
 
 const ASSETS = [
   './',
@@ -667,15 +667,15 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': '40f8bba0a4',
-  './golf/js/ui.js': 'a19ad02794',
-  './golf/js/strings.js': 'b541d12988',
+  './golf/css/golf.css': '34275b5b1c',
+  './golf/js/ui.js': '364fdea4d4',
+  './golf/js/strings.js': 'b2918c45bd',
   './golf/js/holes.js': 'e698c54e72',
   './golf/js/club-art.js': '777bcfb097',
   './golf/js/clubs.js': 'b020ff95b5',
   './golf/js/swing.js': 'e90a1c643c',
   './golf/js/shot.js': '0984fd290b',
-  './golf/js/render.js': '2fbfeaf891',
+  './golf/js/render.js': 'a4e8ba9280',
   './golf/js/holegen.js': '93428994c1',
   './golf/js/rounds.js': '9b7f566d8e',
   './golf/js/progress.js': 'ac0e7f0d2c',
