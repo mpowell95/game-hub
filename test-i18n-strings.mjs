@@ -3,10 +3,15 @@
 //
 // For each dictionary (js/strings.js + every <game>/js/strings.js — add a new game's here
 // as its phase lands), asserts:
+//   - no key is declared TWICE inside one language block (a duplicate is legal JavaScript and
+//     silently wins, so five Spanish lines pasted into the `en` block parse fine and shadow the
+//     English - shipped 2026-09-09, and every EN reader got Spanish while `es` had nothing)
 //   - every `es` key also exists in `en` (no orphaned Spanish)
 //   - for every key present in both, the set of {placeholder} tokens matches
 //   - no value is an empty string
 // and logs (informational only) the count of `en` keys missing from `es`.
+
+import { readFileSync } from 'node:fs';
 
 const DICTS = [
   { name: 'js/strings.js', path: './js/strings.js' },
@@ -33,6 +38,28 @@ const DICTS = [
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;
 
+// A duplicate key cannot be seen after the module is parsed - the second one has already replaced
+// the first - so this reads the SOURCE. Each language block is `  <lang>: {` at two spaces of
+// indent, and its keys sit at four; anything deeper belongs to a nested value, not to the block.
+const BLOCK_RE = /^ {2}([a-z]{2}): \{$/;
+const KEY_RE = /^ {4}([A-Za-z0-9_$]+):/;
+
+function duplicateKeys(src) {
+  const out = [];
+  let lang = null, seen = null;
+  for (const line of src.split(/\r?\n/)) {
+    const b = BLOCK_RE.exec(line);
+    if (b) { lang = b[1]; seen = new Set(); continue; }
+    if (!lang) continue;
+    if (/^ {2}\}/.test(line)) { lang = null; continue; }
+    const k = KEY_RE.exec(line);
+    if (!k) continue;
+    if (seen.has(k[1])) out.push(`${lang}.${k[1]}`);
+    seen.add(k[1]);
+  }
+  return out;
+}
+
 function placeholders(s) {
   if (typeof s !== 'string') return new Set();
   return new Set([...s.matchAll(PLACEHOLDER_RE)].map((m) => m[1]));
@@ -48,6 +75,11 @@ let fail = 0, missingTotal = 0;
 
 for (const { name, path } of DICTS) {
   console.log(`\n=== ${name} ===`);
+  for (const dup of duplicateKeys(readFileSync(new URL(path, import.meta.url), 'utf8'))) {
+    fail++;
+    console.log(`FAIL duplicate key declared twice in one block: ${dup}`);
+  }
+
   const mod = await import(path);
   const dict = mod.STRINGS || mod.default;
   const en = dict.en || {};
