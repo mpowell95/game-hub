@@ -143,38 +143,26 @@ const DIAL_H = 150;
 /** THE BAD SWING'S SECOND HALF: what the miss does to the ball. Gold is the over-swing, cyan the
  *  same miss at 100 %, matching the two marks on the dial above it.
  *
- *  RE-MEASURED 2026-09-09, and the old figures were badly wrong. Matt, looking at the card: *"are
- *  those numbers accurate? a 20% increase in power would only result in being 5 additional yards
- *  offline?"* No. It said 34 and 39 - a 5 yd difference for 21 % more power, which is exactly the
- *  smell he picked up on. Measured through the real resolver on the TUTORIAL HOLE (the hole the
- *  card is teaching on, and the only one with no trees, water or sand to interfere), a driver from
- *  the tee with the needle at the END of the bar:
+ *  THE TWO NUMBERS ARE MATT'S, AND THEY ARE ILLUSTRATIVE - do not re-derive them from the engine.
+ *  They started as a measurement, went stale, and read 34 and 39, which he caught by arithmetic
+ *  alone: *"a 20% increase in power would only result in being 5 additional yards offline?"* It
+ *  would not. Re-measured on this hole, a driver from the tee with the needle at the END of the
+ *  bar finishes 24.4 yds offline at 100 % power and about 45 at the top of the arc (29-46, since
+ *  `blockSpray` takes a random side). He rounded the first to 25 and set the pair at 25 and 45.
  *
- *      100 % power     24.4 yds offline, 8.0 deg of mishit
- *      max power       45 yds offline (29-46), 10-22 deg
- *
- *  So the real answer is about 21 yds, not 5 - nearly DOUBLE the miss, which is the whole point the
- *  card is making and it was underselling it by four times.
- *
- *  TWO REASONS THE OLD NUMBERS WERE STALE. They were taken on a Pine Valley fairway, where a tree
- *  can stop the ball and shorten the measurement; and they predate 2026-09-08, when the mishit
- *  moved out of `aimRad` into `mishitDeg` so the ball CURVES, and `sprayDepth` began ramping the
- *  over-swing spray from 100 % rather than from the block's edge.
- *
- *  THE MAX-POWER FIGURE IS A TYPICAL VALUE, NOT A FIXED ONE. `blockSpray` takes a random side, so
- *  it lands 29-46 yds off depending on whether the spray agrees with the mishit or partly cancels
- *  it. 45 is the median. `golf/js/test.js` section 20 re-measures both and fails if either label
- *  drifts from the engine again. */
+ *  THE CURVES ARE DELIBERATELY NOT TO SCALE. Matt: *"doesn't have to be to scale, but show that
+ *  it's a lot more curve."* Gold rises about 100 units against cyan's 22 - far more than the 1.8x
+ *  the numbers say - because the card's job is to make the difference land in a glance. */
 const SLICE_SVG = `<svg class="gf-tut__slice" viewBox="0 0 400 150" aria-hidden="true">
   <line x1="24" y1="128" x2="256" y2="128" stroke="#7f8f6e" stroke-width="3" stroke-dasharray="9 8"/>
-  <path d="M24 128 C104 126 168 116 236 86" fill="none" stroke="#5ec8f5" stroke-width="7" stroke-linecap="round"/>
-  <path d="M240 84 l-23 1 l10 15 z" fill="#5ec8f5"/>
-  <path d="M24 128 C104 124 164 100 240 34" fill="none" stroke="#ffce3a" stroke-width="7" stroke-linecap="round"/>
-  <path d="M244 31 l-24 3 l12 15 z" fill="#ffce3a"/>
+  <path d="M24 128 C110 128 178 124 236 106" fill="none" stroke="#5ec8f5" stroke-width="7" stroke-linecap="round"/>
+  <path d="M240 104 l-23 1 l10 15 z" fill="#5ec8f5"/>
+  <path d="M24 128 C124 130 182 112 240 28" fill="none" stroke="#ffce3a" stroke-width="7" stroke-linecap="round"/>
+  <path d="M244 25 l-24 3 l12 15 z" fill="#ffce3a"/>
   <circle cx="24" cy="128" r="8" fill="#fff" stroke="#000" stroke-width="3"/>
   <g font-family="inherit" font-weight="800" font-size="22" stroke="#000" stroke-width="5" paint-order="stroke">
-    <text x="256" y="40" fill="#ffce3a">45 yds off</text>
-    <text x="252" y="96" fill="#5ec8f5">24 yds off</text>
+    <text x="256" y="34" fill="#ffce3a">45 yds off</text>
+    <text x="252" y="116" fill="#5ec8f5">25 yds off</text>
   </g>
 </svg>`;
 

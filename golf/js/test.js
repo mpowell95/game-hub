@@ -2531,55 +2531,26 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
       && /\.gf-tut__rail \.gf-tut__text \{[\s\S]{0,400}?flex: 1; min-width: 0/.test(cssSrc),
       'absolute pips force the text into hand-guessed padding');
   }
-  // [KNOWN-BUG PROBE] THE BAD-SWING CARD'S TWO NUMBERS ARE RE-MEASURED, NOT REMEMBERED.
+  // THE BAD-SWING CARD'S TWO NUMBERS ARE MATT'S, NOT A MEASUREMENT.
   //
-  // They were hardcoded in the SVG and went stale: the card said 34 and 39 yds, a 5 yd difference
-  // for 21 % more power, when the real gap is about 21 yds. Matt spotted it by arithmetic alone -
-  // *"a 20% increase in power would only result in being 5 additional yards offline?"* The figures
-  // had been taken on a Pine Valley fairway (where a tree can stop the ball) and predated the
-  // 2026-09-08 change that made the miss a CURVE and ramped the over-swing spray from 100 %.
-  //
-  // Resolved here exactly as `_fire` does it - the mishit goes in as `mishitDeg`, never folded into
-  // `aimRad` - on the tutorial hole, which has no trees, water or sand and is dead calm.
+  // They were briefly re-derived from `resolveShot` here, after the hardcoded pair went stale and
+  // he caught it - *"a 20% increase in power would only result in being 5 additional yards
+  // offline?"* It would not; the honest figures are ~24 and ~45. He then set them at **25 and 45**
+  // and asked for the solver to go: this is a teaching card, the numbers are illustrative, and a
+  // round 25 reads better than 24.4. So the check is only that the card still MAKES ITS POINT -
+  // two numbers, and the over-swing one clearly larger. No engine call.
   {
-    const th = TUTC.holes[0];
     const TUT_SRC = fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8');
-    const driver = CLUBS[0];
-    const pos = -SW.BAR_HALF;                       // the needle running off the end of the bar
-    const zone = LIES.tee.zone;
-    const cz = CL.swingZone(driver);
-    const floor = CL.GREEN_FLOOR[CL.clubTier(driver)] || 0;
-    const offlineAt = (power) => {
-      const out = [];
-      for (let i = 0; i < 200; i++) {
-        // The spray takes a RANDOM SIDE seeded from the shot, so sample real positions rather than
-        // trusting one seed - the max-power figure is a typical value, not a fixed one.
-        const ball = [th.tee[0] + (i % 20) * 0.05, th.tee[1] + Math.floor(i / 20) * 0.05];
-        const seed = Math.round(ball[0] * 977) ^ Math.round(ball[1] * 31) ^ Math.round(pos * 1e5);
-        const m = SW.mishit(SW.barPosOf(pos), power, zone, cz, seed, floor);
-        const r = SH.resolveShot({ hole: th, from: ball, aimRad: 0, club: driver,
-          power, mishitDeg: m.deg, distanceMul: m.distanceMul });
-        out.push(Math.abs(r.rest[0] - ball[0]));
-      }
-      out.sort((a, b) => a - b);
-      return out[Math.floor(out.length / 2)];
-    };
     const label = (colour) => {
       const m = TUT_SRC.match(new RegExp(`fill="${colour}">(\\d+) yds off`));
       return m ? Number(m[1]) : null;
     };
-    const cyan = offlineAt(1);                      // 100 % power
-    const gold = offlineAt(SW.SWING_MAX);           // the top of the arc
-    ok('[KNOWN-BUG PROBE] the bad-swing card\'s 100 % figure matches the engine',
-      label('#5ec8f5') !== null && Math.abs(label('#5ec8f5') - cyan) <= 3,
-      `card says ${label('#5ec8f5')}, engine says ${cyan.toFixed(1)}`);
-    ok('...and its over-swing figure does too',
-      label('#ffce3a') !== null && Math.abs(label('#ffce3a') - gold) <= 4,
-      `card says ${label('#ffce3a')}, engine says ${gold.toFixed(1)}`);
-    // ...and the point the card is MAKING has to still be true: more power, a bigger miss.
-    ok('...and over-swinging really is the bigger miss',
-      gold > cyan * 1.4,
-      `${cyan.toFixed(1)} -> ${gold.toFixed(1)} yds offline is not the lesson the card teaches`);
+    const cyan = label('#5ec8f5');
+    const gold = label('#ffce3a');
+    ok('the bad-swing card still shows both figures', cyan !== null && gold !== null,
+      `cyan ${cyan}, gold ${gold}`);
+    ok('...and the over-swing is plainly the bigger miss', gold > cyan * 1.4,
+      `${cyan} -> ${gold} is not the lesson the card teaches`);
   }
   ok('[KNOWN-BUG PROBE] there is no skip button', !/data-role="tut-skip"/.test(
     fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8')));

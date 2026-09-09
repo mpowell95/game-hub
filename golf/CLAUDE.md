@@ -4954,8 +4954,34 @@ from 100 % rather than from the block's edge.
 the ball lands 29-46 yds off depending on whether the spray agrees with the mishit or partly
 cancels it. 45 is the median.
 
-`golf/js/test.js` section 20 now **re-measures both numbers through `resolveShot` and fails if
-either label drifts from the engine by more than a few yards** - and separately asserts that
-over-swinging is still the bigger miss at all, which is the claim the card exists to make. A
-hardcoded number in a teaching aid is a number that will go stale; this is the cheapest way to stop
-it happening silently a second time.
+**THE NUMBERS ON THE CARD ARE MATT'S, AND THEY ARE ILLUSTRATIVE - do not re-derive them.** They
+were briefly wired to `resolveShot` so they could not go stale again; he then set them at **25 and
+45** and asked for the solver to go. *"say 25 yards instead of 24 just because. So get rid of that
+solver and just use 25 and 45."* It is a teaching card, not a readout, and a round 25 reads better
+than 24.4. Section 20 now checks only that both figures are present and that the over-swing one is
+plainly larger - the claim the card exists to make - with no engine call.
+
+**The curves are deliberately NOT to scale** (Matt: *"doesn't have to be to scale, but show that
+it's a lot more curve"*). Gold rises about 100 units against cyan's 22, far more than the 1.8x the
+numbers say, because the card's job is to land the difference in a glance.
+
+### And the random side is ONLY the over-swing
+
+Matt, reading the same card: *"I noticed the over swing picks a random side. Didn't I specifically
+tell you that left aim misses should curve left and right misses should curve right?"*
+
+Both are true, and the line says so:
+
+```js
+const signedDeg = deg * Math.sign(signed || 1) + blockSpray(power, seed);
+```
+
+`deg * Math.sign(signed)` is his rule and it governs EVERY shot - stop left of the bar's centre and
+the ball misses left, stop right and it misses right. `blockSpray` is added on top and is **zero at
+or below 100 % power** (`sprayDepth` returns 0 there), so it exists only past 100 %. His read of
+why: *"that's actually not a bad idea"* - an over-swing you cannot predict the side of is a gamble
+you cannot out-skill, which is the whole point of the penalty.
+
+**The honest caveat, so nobody is surprised by it:** past 100 % the spray can push a left miss to
+the right, because it is added rather than aligned. Inside the ordinary swing the aim-side rule is
+absolute.
