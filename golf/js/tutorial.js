@@ -16,6 +16,28 @@
 // that was the thing the current step was waiting for. It cannot swing, aim, change club, or block
 // a control; the worst a bug in here can do is show the wrong card.
 //
+// NO CARD IS EVER ON SCREEN WHILE THE NEEDLE IS MOVING (2026-09-09).
+//
+// Matt, on the first version: *"You say hit 'swing' then it starts moving immediately, but more
+// words appear. you don't have time to read what to do next before the time has passed."*
+//
+// He is describing a design error, not a slow reader. The first version had three cards across one
+// swing - `swing1` ended on `tap-begin`, `swing2` on `tap-power`, `swing3` on `fire` - so each tap
+// REVEALED the instruction for the next one. The backswing is 1585 ms per power unit and the
+// downswing quicker, so the player had roughly a second to find, read and act on a sentence that
+// had not existed a moment earlier. It cannot be done, and no amount of shortening the sentence
+// fixes it: the words arrive after the moment they describe.
+//
+// So the three taps are taught ONCE, BEFORE the first of them, and then the lesson goes quiet. The
+// swing button already names the next tap (`swing` / `set power` / `set aim`, painted from the
+// render loop) and the charge ring already shows the putter's dead zone - during a swing those are
+// the whole interface, and a card would only cover the meter it is talking about.
+//
+// THE MECHANISM IS A STEP WITH NO CARD. A step whose `key` is null renders nothing at all and just
+// waits for its event. That is what lets the lesson span three shots of a par 4 without ever
+// putting words over a swing: card, silence until the ball is on the green, card, silence until it
+// drops, card.
+//
 // WHY NOT DIM THE SCREEN. The obvious spotlight treatment - a dark scrim with a hole cut over the
 // control - was tried and is wrong for this game: three of the six steps are about the SWING METER,
 // which the player has to read WHILE the needle moves, and a scrim over the course also hides the
@@ -47,19 +69,24 @@ const t = makeT(STRINGS);
  *  card. The ring and the arrow still point at `anchor`; only the card is pushed clear. */
 export const STEPS = [
   { id: 'welcome', anchor: null, key: 'tut_welcome', advance: 'button' },
-  { id: 'aim', anchor: '.gf-aimrow', clear: '.gf-bl', side: 'above', key: 'tut_aim', advance: 'button' },
-  { id: 'club', anchor: '.gf-clubrow', clear: '.gf-bl', side: 'above', key: 'tut_club', advance: 'button' },
-  { id: 'swing1', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_swing1', advance: 'tap-begin' },
-  { id: 'swing2', anchor: '[data-role="meter"]', clear: '.gf-br', side: 'above', key: 'tut_swing2', advance: 'tap-power' },
-  { id: 'swing3', anchor: '[data-role="meter"]', clear: '.gf-br', side: 'above', key: 'tut_swing3', advance: 'fire' },
-  { id: 'watch', anchor: null, key: 'tut_watch', advance: 'settled' },
-  { id: 'putt', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_putt', advance: 'fire' },
-  { id: 'holed', anchor: null, key: 'tut_holed', advance: 'holed' },
+  { id: 'controls', anchor: '.gf-aimrow', clear: '.gf-bl', side: 'above', key: 'tut_controls', advance: 'button' },
+  { id: 'swing', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_swing', advance: 'tap-begin' },
+  // SILENT until the ball is on the putting surface. `on-green` rather than `settled` because this
+  // is a par 4: the approach may take one shot or three, and a card that appeared after the first
+  // one would be telling a player standing in the fairway to putt.
+  { id: 'to-green', anchor: null, key: null, advance: 'on-green' },
+  { id: 'putt', anchor: '[data-role="swing"]', clear: '.gf-br', side: 'above', key: 'tut_putt', advance: 'tap-begin' },
+  { id: 'sink', anchor: null, key: null, advance: 'holed' },
+  { id: 'holed', anchor: null, key: 'tut_holed', advance: 'button' },
 ];
+
+/** The cards, in order - the silent waypoints above are not steps the player can see, so numbering
+ *  them "step 4 of 7" would count two the player never meets. */
+export const CARDS = STEPS.filter((s) => s.key);
 
 /** Every event kind the coach understands, exported so `golf/js/test.js` can check that each step
  *  waits on one of them (or on its own button) and the lesson cannot strand the player. */
-export const EVENTS = ['tap-begin', 'tap-power', 'fire', 'settled', 'holed'];
+export const EVENTS = ['tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed'];
 
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -145,6 +172,9 @@ export class Coach {
     if (!s) return;
     this._teardown();
     if (!this.root || !this.root.isConnected) return;
+    // A SILENT WAYPOINT DRAWS NOTHING. This is what keeps words off the screen during a swing -
+    // see the header. It still waits for its event, so the lesson advances normally.
+    if (!s.key) return;
 
     // The ring goes down first so the card, which is appended after it, is always on top of it.
     if (s.anchor) {
@@ -162,7 +192,7 @@ export class Coach {
     el.setAttribute('aria-live', 'polite');
     el.innerHTML = `
       <div class="gf-tut__card gf-panel" data-side="${esc(s.side || 'centre')}">
-        <div class="gf-tut__step">${esc(t('tut_step', { n: this.i + 1, of: STEPS.length }))}</div>
+        <div class="gf-tut__step">${esc(t('tut_step', { n: CARDS.indexOf(s) + 1, of: CARDS.length }))}</div>
         <div class="gf-tut__text">${esc(t(s.key))}</div>
         ${s.advance === 'button'
     ? `<button type="button" class="gf-btn gf-tut__ok" data-role="tut-ok"><span>${esc(t('tut_ok'))}</span></button>`

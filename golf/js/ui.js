@@ -1543,6 +1543,10 @@ class GolfGame {
     this.shotN += 1 + ((a.res && a.res.penalty) || 0);
     this.swing.settle(performance.now());
     this._coach('settled');
+    // ON THE PUTTING SURFACE, which is a different question from "the ball stopped". The lesson
+    // spans a par 4, so the approach may take one shot or three; a putting card fired on `settled`
+    // would be telling a player standing in the fairway to putt. See golf/js/tutorial.js.
+    if (this._lie() === 'green') this._coach('on-green');
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();

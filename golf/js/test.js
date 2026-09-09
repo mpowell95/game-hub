@@ -2290,8 +2290,16 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
 
   // --- the tutorial hole itself -------------------------------------------------------------
   ok('the tutorial hole is a VALID hole', validateHole(TUT).length === 0, validateHole(TUT).join('; '));
-  ok('...is a par 3 reachable from the tee with one club',
-    TUT.par === 3 && CLUBS.some((c) => c.carry >= distYd(TUT.tee, TUT.pin)));
+  // A PAR 4 (2026-09-09). Matt: "it should be a par 4" - a par 3 teaches the one hole type the
+  // player will hardly ever meet, and skips the whole club-changing half of the game. Reachable in
+  // TWO clean strikes and not one, so the lesson really does contain a drive AND an approach.
+  {
+    const d = distYd(TUT.tee, TUT.pin);
+    const longest = Math.max(...CLUBS.map((c) => c.carry));
+    ok('...is a par 4: too long for one club, inside two',
+      TUT.par === 4 && d > longest && d <= longest * 2,
+      `${d.toFixed(0)} yds against a longest club of ${longest}`);
+  }
   // NOTHING TO EXPLAIN BUT THE SWING. Every hazard is a second lesson and a way for a first-timer
   // to end up somewhere the script has no card for.
   ok('...has no trees, no water and no sand',
@@ -2309,8 +2317,11 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   // --- the lesson's steps -------------------------------------------------------------------
   const TU = await import('./tutorial.js');
   const uiSrc2 = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  // A STEP WITH NO `key` IS A SILENT WAYPOINT and draws nothing - it is how the lesson waits out a
+  // swing without putting words over the meter (golf/js/tutorial.js's header). It has no string to
+  // check and no anchor to point at; it still has to be advanceable, which the loop below covers.
   for (const st of TU.STEPS) {
-    ok(`step "${st.id}" is written in EN and ES`, !!STRINGS.en[st.key] && !!STRINGS.es[st.key]);
+    if (st.key) ok(`step "${st.id}" is written in EN and ES`, !!STRINGS.en[st.key] && !!STRINGS.es[st.key]);
     // [KNOWN-BUG PROBE] A STEP THAT NOTHING CAN ADVANCE IS A DEAD END - the lesson would sit there
     // for ever and the only way out would be to leave the game.
     ok(`...and something can advance it (${st.advance})`,
@@ -2326,6 +2337,21 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   ok('every event the lesson waits on is reported by ui.js',
     TU.EVENTS.every((e) => uiSrc2.includes(`_coach('${e}')`)),
     'a step waits on an event the game never sends');
+  // [KNOWN-BUG PROBE] NO CARD MAY BE ON SCREEN WHILE THE NEEDLE IS MOVING. Matt, on the first
+  // version: "You say hit 'swing' then it starts moving immediately, but more words appear. you
+  // don't have time to read what to do next before the time has passed." A card that ENDS on
+  // `tap-begin` is fine - that tap dismisses it. A card that ends on `tap-power` or `fire` is one
+  // that APPEARED mid-swing, which is the defect. Nothing at runtime would notice.
+  ok('[KNOWN-BUG PROBE] no card waits on a tap in the middle of a swing',
+    !TU.CARDS.some((st) => st.advance === 'tap-power' || st.advance === 'fire'),
+    TU.CARDS.filter((st) => st.advance === 'tap-power' || st.advance === 'fire').map((st) => st.id).join());
+  // ...and the step that follows a swing-starting card must be silent, or the card it shows lands
+  // on screen the moment the backswing starts - the same defect one step further on.
+  for (let i = 0; i < TU.STEPS.length - 1; i++) {
+    if (TU.STEPS[i].advance !== 'tap-begin') continue;
+    ok(`...and the step after "${TU.STEPS[i].id}" draws nothing`, !TU.STEPS[i + 1].key,
+      `"${TU.STEPS[i + 1].id}" would appear while the needle is sweeping`);
+  }
   ok('the lesson can always be skipped', TU.STEPS.length > 0 && /data-role="tut-skip"/.test(
     fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8')));
 }

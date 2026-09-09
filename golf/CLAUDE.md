@@ -4387,3 +4387,57 @@ game screen that scrolls at all is a bug" since it was written. **`auto` does no
 safe. It makes a screen that does not fit LOOK finished**, which is exactly how this one shipped
 scrolling through a green suite. The safety net is the TEST, not the scrollbar: `check-no-scroll.mjs`
 and `test-visual.mjs` both assert zero overflow, so `hidden` can never be quietly clipping.
+
+## The tutorial is a par 4, and it stops talking during the swing (2026-09-09)
+
+Matt played the first version: *"the tutorial is terrible. it should be a par 4. it is WAY too
+wordy (per usual). You say hit 'swing' then it starts moving immediately, but more words appear.
+you don't have time to read what to do next before the time has passed."*
+
+Three complaints, and the third is a design error rather than a slow reader.
+
+### NO CARD IS ON SCREEN WHILE THE NEEDLE IS MOVING
+
+The first version had THREE cards across one swing - `swing1` ended on `tap-begin`, `swing2` on
+`tap-power`, `swing3` on `fire` - so **each tap revealed the instruction for the next one.** The
+backswing is 1585 ms per power unit and the downswing quicker, so the player had about a second to
+find, read and act on a sentence that had not existed a moment earlier. **Shortening the sentence
+does not fix that**: the words arrive after the moment they describe.
+
+So the three taps are taught ONCE, before the first of them, and then the lesson goes quiet. During
+a swing the swing button already names the next tap (`swing` / `set power` / `set aim`, painted from
+the render loop) and the charge ring already shows the putter's dead zone - those are the whole
+interface, and a card would only cover the meter it is talking about.
+
+**The mechanism is a step with no card.** A step whose `key` is null renders nothing and just waits
+for its event. That is what lets the lesson span three shots of a par 4 without ever putting words
+over a swing: card, silence until the ball is on the green, card, silence until it drops, card.
+
+`golf/js/test.js` section 20 carries it as a `[KNOWN-BUG PROBE]` - no card may wait on `tap-power`
+or `fire` (a card that ends on one of those is a card that APPEARED mid-swing), and the step
+following any card that ends on `tap-begin` must be silent. Nothing at runtime would notice either.
+
+### `on-green`, not `settled`
+
+A par 4's approach may take one shot or three. A putting card fired on `settled` would tell a player
+standing in the fairway to putt, so `ui.js` reports a new event when the ball comes to rest ON the
+putting surface and the lesson waits for that instead.
+
+### Five cards, and they are short
+
+Nine steps became five; the three swing cards ran 47 words between them and are now one sentence.
+The `club` card is gone - a par 4 teaches the club ladder by making you use it, which a par 3 never
+could, and that is most of the argument for the par change.
+
+### THE PAR WAS SAFE TO CHANGE, AND IT WAS CHECKED (THE LAW rule 4)
+
+A stored `tutorial:1` of 3 means a PAR on a par 3 and a BIRDIE on a par 4 - the same number silently
+changing meaning, which is exactly what blocked the Pine Valley hole-3 swap. Fresh RTDB read,
+2026-09-09: **255 player device records, 52 carrying a golf key, ZERO carrying any `tutorial:*`
+record.** Nobody had finished the lesson, so there was no meaning to break. **Re-run that check
+before touching this par again** - the moment one person completes it, `tutorial:1` is frozen.
+
+The hole itself: 372 yards, straight, fairway wall to wall with a ring of light rough, no trees, no
+water, no sand, dead calm, a big nearly flat green. The approved ladder carries a driver 215 and a
+6 iron 139, so two clean strikes finish about 18 yards short of the pin - a putt, never a tap-in,
+and never a lay-up to explain.
