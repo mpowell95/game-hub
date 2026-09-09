@@ -19,7 +19,7 @@
 // instead, and the chute hangs off the outboard face of the board's right wall.
 
 import { seg, circle, flipper, BALL_R } from './physics.js';
-import { FOOTPRINTS, TRANSITIONS } from '../design/board.js';
+import { FOOTPRINTS, TRANSITIONS, PARTS } from '../design/board.js';
 
 export const NAME = 'FOUNDRY';
 
@@ -134,22 +134,40 @@ export function buildLevel(n, opts = {}) {
   return { colliders, flippers };
 }
 
-/** Sensors: the saucer, and the rollover inserts painted on the lower playfield. */
-export const SWITCHES = [{ id: 'saucer', kind: 'saucer', x: SAUCER.x, y: SAUCER.y, r: SAUCER.r }];
-{
-  // The insert rows, as the export lays them out. They are paint on the model and rollovers here.
-  const ROWS = {
-    magenta: [[405, 845], [465, 838], [525, 838], [590, 850]],
-    blue: [[255, 970], [315, 945], [375, 925], [435, 910], [495, 910], [555, 912], [620, 925], [680, 950], [735, 985]],
-    red: [[395, 995], [455, 982], [520, 982], [575, 1005]],
-  };
-  for (const row of Object.keys(ROWS)) {
-    ROWS[row].forEach((p, i) => SWITCHES.push({ id: `${row}${i}`, row, x: px(p[0]), y: px(p[1]), r: px(34) }));
-  }
-  SWITCHES.push({ id: 'centre', kind: 'yellow', x: px(505), y: px(765), r: px(30) });
-}
+/**
+ * Sensors: the saucer, and the rollover inserts.
+ *
+ * EVERY ONE IS READ OFF THE PART IT BELONGS TO. These used to be a hand-copied list of
+ * coordinates, written when the inserts were first laid out - and then the inserts moved. The
+ * symmetry pass respaced the blue and red rows, and Matt moved all four magenta inserts to the
+ * UPPER DECK. The switches stayed where they were, so every painted insert had slid out from
+ * under its own sensor: the magenta row was drawn on level 2 while its switches sat on the
+ * playfield, and the blue row's ends were 60 px adrift. A player rolled over paint and scored
+ * nothing, or scored from bare wood.
+ *
+ * Deriving them means the light and the switch cannot disagree again, whatever the editor does
+ * next. The LEVEL comes from the part too, so a level-2 insert is only tripped by a level-2 ball.
+ */
+export const SWITCHES = [{ id: 'saucer', kind: 'saucer', level: 1, x: SAUCER.x, y: SAUCER.y, r: SAUCER.r }];
 export const ROW_NAMES = ['magenta', 'blue', 'red'];
-export const ROW_SIZE = { magenta: 4, blue: 9, red: 4 };
+export const ROW_SIZE = {};
+{
+  const num = (n) => Number(n.split('_').pop()) || 0;
+  const levelOf = (p) => (p.levels && p.levels.length === 1 ? p.levels[0] : 1);
+  for (const row of ROW_NAMES) {
+    const parts = PARTS.filter((p) => p.type === 'disc' && p.name.startsWith(`insert_${row}_`))
+      .sort((a, b) => num(a.name) - num(b.name));
+    ROW_SIZE[row] = parts.length;
+    parts.forEach((p, i) => SWITCHES.push({
+      id: `${row}${i}`, row, level: levelOf(p), x: px(p.at[0]), y: px(p.at[1]), r: px(34),
+    }));
+  }
+  // The gold inserts - one originally, three since Matt duplicated it. Each is its own rollover.
+  PARTS.filter((p) => p.type === 'disc' && p.name.startsWith('insert_yellow_center'))
+    .forEach((p, i) => SWITCHES.push({
+      id: i ? `centre${i}` : 'centre', kind: 'yellow', level: levelOf(p), x: px(p.at[0]), y: px(p.at[1]), r: px(30),
+    }));
+}
 
 /** The drop-target bank across the top of the deck. */
 export const DROP_IDS = ['target_bank'];
