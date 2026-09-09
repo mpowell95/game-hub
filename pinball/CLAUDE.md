@@ -1451,6 +1451,33 @@ dragged (200, 1300) to (400, 1400) is a 220 x 120 capsule; six 15 degree steps s
 to 120 x 220 with the centre unmoved and -90 in the field puts it back; the grip drag rotates; and a
 three-tap polygon exports with its three corners verbatim.
 
+#### The editor saved nothing, and a deploy proved it (2026-09-09)
+
+Matt, mid-session, after a deploy reloaded the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE
+CHANGES I JUST MADE???"*
+
+**It shipped holding every edit in memory only.** No autosave, no draft, nothing on disk - so a
+reload, a closed tab, a crash or (as here) a deploy landing under an open page threw the work away
+without a word. Nothing was actually lost this time, because he had already exported; that was luck,
+not design.
+
+`gamehub.foundryEditor.v1` now holds the whole part list plus the selection, **written on every
+redraw** - which is after a drag finishes, not before it starts - and again on `pagehide` and on the
+page going hidden. `pagehide` rather than `beforeunload`, because `beforeunload` does not fire on
+iOS. The page reloads straight back into the work and says so in a banner; a silent restore is as
+confusing as a silent loss. **Reset all** clears the store as well, or it would come back.
+
+It is a WORKING FILE, not player data, so THE LAW does not reach it - but it is somebody's afternoon,
+which is why it is written eagerly instead of behind a Save button nobody would press.
+
+#### Matt's first two edits, applied
+
+From `foundry-edits.json`: `wall_top` 40 px thick -> **60**, and `bumper_upper_left` r 72.1 px ->
+**66**. The second needed a small change to the board: **a bumper may carry its own `r` now**, since
+the two shared `BUMPER_R` and one constant cannot express two sizes. **The 3D builder scales with
+it** - a skirt drawn at the shared radius while the collider used a smaller one would be exactly the
+drift this board exists to avoid.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

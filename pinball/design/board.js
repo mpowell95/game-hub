@@ -67,7 +67,8 @@ gate('chute_gate', [963.5, 40], [963.5, 300], 0.010, 0.05, Y2, 'steel', [2], [1,
 // real machine has a curved guide across the top of the shooter lane that turns the ball into the
 // playfield, and this is it - a diagonal on level 2 only, so the lower playfield never sees it.
 wall('chute_feed', [1076, 210], [968, 60], 0.006, 0.03, Y2, 'steel', [2], 'turns a rising plunge left, out of the lane and onto the deck');
-wall('wall_top',    [0, 20],     [1100, 20],   40 * S, 0.09, 0, 'darkwood', [1, 2]);
+// 60 px, not 40: Matt thickened it in the layout editor.
+wall('wall_top',    [0, 20],     [1100, 20],   60 * S, 0.09, 0, 'darkwood', [1, 2]);
 // THE DRAIN HAS TO BE A GAP, NOT A NOTE. This wall ran the full width with a comment saying the
 // band x 390..600 was the drain - so in the solver the ball landed on it and stopped. Played, that
 // is 861 of 1008 dropped balls coming to rest along the bottom wall and NOT ONE draining. This
@@ -350,7 +351,10 @@ P.push({ type: 'flipper', name: 'flipper_upper_right', pivot: [656, 622],  tip: 
 // (The lower pop bumper that used to stand at [462, 1700] is GONE. Matt: *"delete the big circle
 // thing between the two bottommost paddles"* - with the flippers where they are now it would sit
 // in the drain mouth, inside their sweep.)
-P.push({ type: 'bumper', name: 'bumper_upper_left',  at: [385, 270],  y0: Y2, levels: [2] });
+// A BUMPER MAY CARRY ITS OWN RADIUS. They shared `BUMPER_R` until Matt made the left one smaller
+// in the layout editor, and one shared constant cannot express two sizes. `r` is in METRES like
+// every other size in this file; a bumper without one still takes BUMPER_R.
+P.push({ type: 'bumper', name: 'bumper_upper_left',  at: [385, 270],  y0: Y2, levels: [2], r: 66 * S });
 P.push({ type: 'bumper', name: 'bumper_upper_right', at: [601, 270],  y0: Y2, levels: [2] });
 // upper deck red posts + guide rails
 [[130, 190], [240, 115], [310, 55], [150, 440], [130, 560]].forEach(([x, y], i) => {
@@ -396,7 +400,7 @@ for (const p of P) {
     case 'wall': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, p.note ? { note: p.note } : {}); break;
     case 'gate': capsuleFP(p.name, p.levels, p.a, p.b, p.t / 2, { oneWay: p.oneWay, note: p.note }); break;
     case 'post': circleFP(p.name, p.levels, p.at, p.r); break;
-    case 'bumper': circleFP(p.name, p.levels, p.at, BUMPER_R, { kicks: true }); break;
+    case 'bumper': circleFP(p.name, p.levels, p.at, p.r || BUMPER_R, { kicks: true }); break;
     case 'band': {
       // solid variable-width band: its two edges are emitted as chains of thin capsules (r = 1 mm, faces flush with the edge)
       const chain = (pts, tag) => pts.slice(1).forEach((b, i) => capsuleFP(`${p.name}_${tag}_${i + 1}`, p.levels, pts[i], b, 0.001, { solidSide: tag === 'outer' ? 'inside' : 'outside' }));
@@ -608,9 +612,13 @@ export function buildBoard(THREE) {
         const m = mesh(p.name, cyl(p.r, 0.0015, 24), p.mat, p); m.position.copy(V3(...p.at, p.y0 + 0.00075)); g.add(m); break;
       }
       case 'bumper': {
-        const skirt = mesh(p.name + '_skirt', cyl(BUMPER_R, 0.005, 32), 'black', p); skirt.position.copy(V3(...p.at, p.y0 + 0.0025));
-        const body = mesh(p.name + '_body', cyl(0.028, 0.02, 32), 'cream', p); body.position.copy(V3(...p.at, p.y0 + 0.015));
-        const cap = mesh(p.name + '_cap', new THREE.SphereGeometry(0.031, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), 'cream', p);
+        // THE MESH FOLLOWS THE FOOTPRINT. A bumper may carry its own `r` now, and a skirt drawn at
+        // the shared BUMPER_R while the collider used a smaller one would be the drift this board
+        // exists to avoid: what you see and what the ball hits have to be the same circle.
+        const br = p.r || BUMPER_R, k = br / BUMPER_R;
+        const skirt = mesh(p.name + '_skirt', cyl(br, 0.005, 32), 'black', p); skirt.position.copy(V3(...p.at, p.y0 + 0.0025));
+        const body = mesh(p.name + '_body', cyl(0.028 * k, 0.02, 32), 'cream', p); body.position.copy(V3(...p.at, p.y0 + 0.015));
+        const cap = mesh(p.name + '_cap', new THREE.SphereGeometry(0.031 * k, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), 'cream', p);
         cap.scale.y = 0.45; cap.position.copy(V3(...p.at, p.y0 + 0.025));
         g.add(skirt, body, cap); break;
       }
