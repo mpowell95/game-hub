@@ -1545,6 +1545,36 @@ Verified with real touch events on a phone viewport: a 3 px tap selects and does
 drag moves (228, 880) -> (393, 1005); a 5 px wobble afterwards does not; and the locked playfield
 cannot be dragged at all.
 
+#### A polygon could not be finished, and symmetry was a matter of patience (2026-09-09)
+
+Matt: *"I can't figure out how to draw. I draw a polygon, but how do i get it to stay? it keeps
+dropping new points until I click Draw again, but that also deletes everything i did."* And: *"it
+should be symmetrical. It's difficult to get everything perfect, so it is not symmetrical."*
+
+**Enter was the only way to close a polygon, on a tool whose whole point is a phone.** No keyboard
+is up while you are tapping a board, so a shape could be started and never landed - and the Draw
+button, the one thing that looked like it might finish it, threw it away. Now: **tapping the first
+corner again closes it** (that corner is drawn big once there are three), and while a polygon has
+three or more corners the Draw button reads **Finish (n)** and completes it. Escape still abandons.
+
+**THE MIRROR LINE IS x 493, AND IT IS MEASURED.** Sixteen of the board's twenty-two left/right pairs
+sit exactly on it - the walls, both slingshots, the upper flippers, the pop bumpers, all five red
+post pairs, the guide rails, the saucer. **It is not the middle of the cabinet (550)**: the launch
+chute takes the right-hand strip, so the playing area is off-centre inside the box, which is the
+same fact `js/table-design.js` records as its own `AXIS`.
+
+Two commands sit on that number:
+
+- **Mirror** copies everything selected to the other side. The copy is a real new part named for the
+  side it lands on (`post_exit_left` -> `post_exit_right`), so the export carries it as `added`.
+- **Match pair** makes a selection symmetric to the pixel, taking the LEFT part as master and
+  REPLACING the right one with its mirror - not nudging it. One part selected instead centres it on
+  the axis. Both say what they did under the panel.
+
+Six pairs on the shipped board have drifted off 493, four of them from my own ramp work
+(`post_exit` 499, `ramp` 499.3, `flipper_lower` 500, `lane_rail` 494.3). `wall_bottom` reads 522.5
+and is CORRECT: the cabinet is not symmetric, because the chute hangs off the right.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
