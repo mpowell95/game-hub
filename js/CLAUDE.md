@@ -2234,3 +2234,31 @@ every device untouched and lands fresh for everyone on release day.
 
 An entry's `action` is also wired for this: `play-golf` calls `hub.launch('golf')`, so the popup's
 button opens the game rather than leaving the player to find the tile they were just told about.
+
+**An entry may show a GAME'S OWN TILE instead of screenshots** (`tile: { art, name }`, drawn from
+`js/game-art.js` by hub id). Matt, on golf's first version: *"Way too much text. The first sentence
+is useless... It's just supposed to say: New Game! / Golf / And show the thumbnail."* A new game's
+notice is pointing at a tile the player is about to go looking for, so the tile IS the explanation;
+`shots` remain the right tool for a control nobody would find on their own. `body`, `icon` and
+`badge` are all optional now - an entry with none of them renders heading, tile, name, button.
+`test-bug-report.mjs` fails on a `tile.art` that names no real game, because a wrong hub id is
+silent: the popup opens with a hole where the picture was.
+
+### Who has actually seen an announcement (2026-09-09)
+
+Matt, the day golf went live: *"i want a way to see who has seen the popup too."* The seen-list is a
+per-device preference that never left the phone, so the question had no answer anywhere.
+
+**`js/stats-net.js`'s `syncMyStats()` mirrors it to `players/<id>/announce` = `{ seen, at }`**, the
+same shape of addition as `device` (install state) and for the same reasons: a new child node, read
+by no gameplay or stats path, riding the mirror the device already performs on load, tab-hide,
+return-to-launcher and reconnect. **It is a REPORT, never a source** - nothing reads it back, so a
+stale or wiped copy cannot make a popup reappear or vanish on anybody's phone.
+
+`js/admin-ui.js`'s **Announcements** section reads it, one entry per announcement, **grouped by
+PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
+somebody with two phones has seen it once they dismiss it on either, and their second phone still
+owes them one. **A device that has not synced since this shipped reports nothing, and nothing is not
+"not seen"** - a person whose phones have all gone quiet reads `no data yet`, never as a no. Same
+honesty rule as `read-install-state.mjs`'s `(not seen yet)`, and it is not retroactive: everyone
+reads as unknown until their next hub load.

@@ -9,6 +9,7 @@
 // notice again after they acted on it is its own small bug.
 
 import { markSeen, textFor } from './announce.js';
+import { GAME_ART } from './game-art.js';
 import { resolvedTheme } from './theme.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -40,6 +41,15 @@ function ensureCss() {
                font-size: .66rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
                white-space: nowrap; }
   .ann-modal h2 { margin: var(--gh-sp-2) var(--gh-sp-6) var(--gh-sp-3); font-size: var(--gh-fs-lg); font-weight: 800; }
+  /* A new game's own launcher tile, drawn from the SAME js/game-art.js the launcher reads, so the
+     picture in the popup and the picture the player then goes looking for cannot drift apart. The
+     art is a landscape 160x90 SVG with its own full-bleed background rect, so the frame is given
+     that aspect ratio and the svg simply fills it. */
+  .ann-tile { margin: 0 auto var(--gh-sp-2); width: min(280px, 100%); aspect-ratio: 16 / 9;
+              border-radius: var(--gh-r-md); overflow: hidden; border: 1px solid var(--gh-border);
+              background: var(--gh-surface-2); }
+  .ann-tile svg { width: 100%; height: 100%; display: block; }
+  .ann-tilename { margin: 0 0 var(--gh-sp-4); font-size: var(--gh-fs-lg); font-weight: 800; }
   .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: left; }
   /* Two whole phone screens, side by side. Each column is half the modal, so the pictures stay
      tall-and-narrow (which is what they are) instead of being letterboxed. */
@@ -84,12 +94,19 @@ export function showAnnouncement(a, { onAction } = {}) {
     // dark phone still gets the light picture.
     const dark = resolvedTheme() === 'dark';
     const shots = Array.isArray(a.shots) ? a.shots : [];
+    // The tile art is trusted repo source (js/game-art.js), the only unescaped HTML here; an id
+    // with no art simply drops the picture rather than leaving an empty frame, the same way a
+    // missing screenshot removes its own figure.
+    const tileArt = (a.tile && GAME_ART[a.tile.art]) || '';
+    const tileName = (a.tile && textFor(a.tile.name, lang)) || '';
     host.innerHTML = `
       <div class="gh-modal ann-modal" role="dialog" aria-modal="true" aria-label="${esc(t('ann_dialog_aria'))}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
-        <div class="ann-icon" aria-hidden="true">${esc(a.icon || '📣')}</div>
+        ${a.icon ? `<div class="ann-icon" aria-hidden="true">${esc(a.icon)}</div>` : ''}
         ${a.badge ? `<div><span class="ann-badge">${esc(t('hub_new_tag'))}</span></div>` : ''}
         <h2>${esc(textFor(a.title, lang))}</h2>
+        ${tileArt ? `<div class="ann-tile" aria-hidden="true">${tileArt}</div>
+        <p class="ann-tilename">${esc(tileName)}</p>` : ''}
         ${paras.map((p) => `<p class="ann-body">${esc(p)}</p>`).join('')}
         ${shots.length ? '<div class="ann-shots">' : ''}${shots.map((s) => {
           const cap = esc(textFor(s.caption, lang) || '');
