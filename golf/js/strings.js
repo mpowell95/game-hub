@@ -28,18 +28,18 @@ export const STRINGS = {
     tutorial: 'Tutorial',
     tutorial_cta: 'Start the tutorial',
     tutorial_again: 'Play the tutorial again',
-    tut_step: 'Step {n} of {of}',
     tut_ok: 'got it',
-    tut_skip: 'skip the tutorial',
     tut_your_turn: 'your turn',
-    // FIVE CARDS, AND NONE OF THEM IS ON SCREEN DURING A SWING (see golf/js/tutorial.js's header).
-    // Matt on the first draft: "it is WAY too wordy (per usual)". The three swing cards it replaced
-    // ran 47 words between them and each appeared AFTER the tap it described.
-    tut_welcome: 'Par 4, 372 yards. Two good shots and a putt. Score does not count here.',
-    tut_controls: 'These arrows aim. Up and down change club. The dots are how far each swing carries.',
-    tut_swing: 'Three taps: start, set power, set aim. The button says which is next.',
-    tut_putt: 'Same three taps. The chevrons point downhill.',
-    tut_holed: 'That is the game. Holes 1 to 3 are open.',
+    // FIVE CARDS, 25 WORDS IN TOTAL, and none is on screen during a swing (golf/js/tutorial.js).
+    // Matt, twice: "it is WAY too wordy (per usual)", then "still way too much text. I'm not
+    // reviewing all of it." A card is read in the half second before a tap, so anything past a
+    // short sentence is not read at all - it is skipped, which is worse than not writing it.
+    // KEEP EVERY CARD UNDER TEN WORDS. golf/js/test.js fails the build if one grows.
+    tut_welcome: 'Par 4. Score does not count.',
+    tut_controls: 'Arrows aim. Up and down change club.',
+    tut_swing: 'Three taps: start, power, aim.',
+    tut_putt: 'Same three taps. Chevrons point downhill.',
+    tut_holed: 'Done. Holes 1 to 3 are open.',
     locked: 'locked',
     lock_tutorial: 'Play the tutorial',
     lock_par: 'Par or better on {range}',
@@ -178,15 +178,13 @@ export const STRINGS = {
     tutorial: 'Tutorial',
     tutorial_cta: 'Empezar el tutorial',
     tutorial_again: 'Jugar el tutorial otra vez',
-    tut_step: 'Paso {n} de {of}',
     tut_ok: 'entendido',
-    tut_skip: 'saltar el tutorial',
     tut_your_turn: 'te toca',
-    tut_welcome: 'Par 4, 372 yardas. Dos buenos golpes y un putt. Aquí no cuenta el resultado.',
-    tut_controls: 'Estas flechas apuntan. Arriba y abajo cambian de palo. Los puntos son la distancia de cada golpe.',
-    tut_swing: 'Tres toques: empezar, potencia, precisión. El botón dice cuál toca.',
-    tut_putt: 'Los mismos tres toques. Las flechas apuntan cuesta abajo.',
-    tut_holed: 'Eso es el juego. Los hoyos 1 a 3 ya están abiertos.',
+    tut_welcome: 'Par 4. El resultado no cuenta.',
+    tut_controls: 'Las flechas apuntan. Arriba y abajo cambian de palo.',
+    tut_swing: 'Tres toques: empezar, potencia, precisión.',
+    tut_putt: 'Los mismos tres toques. Las flechas van cuesta abajo.',
+    tut_holed: 'Listo. Los hoyos 1 a 3 ya están abiertos.',
     locked: 'bloqueado',
     lock_tutorial: 'Juega el tutorial',
     lock_par: 'Par o mejor en {range}',

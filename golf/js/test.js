@@ -2352,8 +2352,19 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     ok(`...and the step after "${TU.STEPS[i].id}" draws nothing`, !TU.STEPS[i + 1].key,
       `"${TU.STEPS[i + 1].id}" would appear while the needle is sweeping`);
   }
-  ok('the lesson can always be skipped', TU.STEPS.length > 0 && /data-role="tut-skip"/.test(
+  // NO SKIP BUTTON. Matt: "that is NOT an option". It offered an exit that led nowhere - the cards
+  // stopped and holes 1-3 stayed locked, because the unlock reads a hole record only holing writes.
+  ok('[KNOWN-BUG PROBE] there is no skip button', !/data-role="tut-skip"/.test(
     fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8')));
+  // EVERY CARD UNDER TEN WORDS. Matt, twice: "it is WAY too wordy", then "still way too much text.
+  // I'm not reviewing all of it." A card is read in the half second before a tap; past a short
+  // sentence it is skipped, which is worse than not writing it.
+  for (const st of TU.CARDS) {
+    for (const lang of ['en', 'es']) {
+      const words = String(STRINGS[lang][st.key]).trim().split(/\s+/).length;
+      ok(`card "${st.id}" is under ten words (${lang}: ${words})`, words <= 10);
+    }
+  }
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
