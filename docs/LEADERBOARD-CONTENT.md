@@ -21,7 +21,7 @@ player profile and a synced record of every game anyone plays on any of their de
 - One number: their wins in the selected category, or their total games played
 - A breakdown of their wins across all six categories
 
-Sorts: Wins, Games Played, Name.
+Sorts: Wins, Played, Name.
 Category filter: Everything, Easy, Medium, Hard, Expert, No tier, Versus.
 
 ## By Game shows, per game
@@ -37,13 +37,14 @@ Sorts: A to Z, Most played, Favorites. A game nobody has played says so and has 
 
 Header: the game's name and how many games everyone has played of it.
 
-Per row: rank, name, avatar, the difficulty tier that player is ranked at, their games played, and
-the game's own number.
+Per row: rank (ties share a rank), name, avatar, the difficulty tier that player is ranked at,
+their games played, and the game's own number.
 
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
 
-Sorts: the game's own number, Games Played, Name.
+Sorts: the game's own number (named after it — Wins, Obstacles, Longest, Solved, Distance, Points,
+Best round), Games, Name. Skeeball has a fourth, High score.
 Difficulty filter: only tiers somebody has actually played.
 
 Below the rows, "Standing records": all-time bests for that game, each with the holder's name.
@@ -53,9 +54,13 @@ has chinchóns, closes and minus tens.
 
 ## A player's own page (opened from either view)
 
-Their name, avatar, total games played, their six-category breakdown, a button to send them a
-message, and a list of every game they have played with their number in each. Opening one of those
-games shows their full record for it, including a win / loss / draw table broken down by difficulty.
+Their name, avatar, total games played, total wins, their tagline if they have written one, a
+button to message them, their wins broken down by all six categories, and a list of every game they
+have played with their number in each. Opening one of those games shows their full record for it,
+including a win / loss / draw table broken down by difficulty.
+
+(The message button is absent on the viewer's own row, and on old records that predate player
+codes.)
 
 ## Difficulty
 
@@ -79,27 +84,33 @@ before a game had difficulty carry no tier either and count as **No tier**.
 | Points | Skeeball, Pinball |
 | Best round | Golf |
 
-Golf's number is a score against par: it is the only number where lower is better, and it can be
-negative or zero.
+Golf's number is a score against par: it is the only number where lower is better, it can be
+negative, and level par reads as "E" rather than 0.
 
 ## Games with more than one machine, map, mode or course
 
 - **Skeeball** — five machines: THE CLASSIC, HOT SHOT, HOT SHOT: BRICK CITY, HOT SHOT: RUNAWAY,
-  POPONGO. The board can be filtered to one machine, and plays, points and records are all held per
-  machine.
+  POPONGO. The board can be filtered to one machine, and plays, points and standing records are all
+  held per machine.
 - **Snake** — two modes: Walls off and Walls on. Both numbers are shown for every player.
 - **Tic Tac Toe** — two variants: Classic and Ultimate. Both numbers are shown for every player.
 - **Ball Run** — two maps: Classic and Orbital. They share one combined number.
 - **Hill Climb** — four stages: Countryside, Desert, Arctic, Moon. The stages are its difficulty,
   in that order.
 - **Pinball** — three table settings: Casual, Standard, Tournament. They are its difficulty, in
-  that order.
+  that order. It is the one game with a difficulty but no per-difficulty score, so its number is
+  one lifetime total.
 - **Golf** — several courses at 3, 9 or 18 holes. The board ranks one course.
 
 ## Also true
 
 - Everyone with any recorded play appears. Nobody is ever dropped for how they played.
 - One person can play on several phones; their devices are merged into one row.
-- Every number is a lifetime total or a personal best, so nothing on the leaderboard goes down.
+- Test and development accounts, and players who never chose a name, never appear at all.
+- Every number is a lifetime total or a personal best, so it only ever goes up — except that the
+  admin can void one player's scores on one Skeeball machine, which removes them from display
+  without touching the stored record.
 - Two languages: English and Spanish.
-- Pinball is currently visible to the admin only; every other game listed here is live for everyone.
+- Pinball is currently visible to the admin only.
+- Pool appears twice: the current game, and a retired earlier build kept on the board so the games
+  played on it stay visible.
