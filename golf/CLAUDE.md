@@ -5243,3 +5243,59 @@ byte-identical); a kill with the result card up (resumes on the next hole with t
 score kept); a complete three-hole round (recorded, best landed, save cleared, no resume offered
 after); and the discard prompt in all three of its outcomes. `golf/js/test.js` section 22 covers the
 validator (24 refusals and tolerances), `resumePos`/`isComplete`, and every call site structurally.
+
+## Job B: a hole's maximum score is double par plus one (2026-09-09)
+
+Matt: *"Double Par plus 1 should be each hole's max."* Par 3 → **7**, par 4 → **9**, par 5 → **11**.
+`maxStrokes(par)` in `golf/js/rounds.js`.
+
+**It is real golf** - equitable stroke control, the rule that stops one disaster hole swallowing a
+card - so it does not read as an arbitrary game limit the way a flat "ten shots and you are out"
+would.
+
+**THE HOLE ENDS AT THE CAP.** That is the half that makes it a feature rather than a clamp: a game
+that keeps asking for shots it has already decided not to count is asking the player to work for
+nothing. It also bounds the whole "ball stuck in the trees" class of bug by construction - every
+hole now ends - which retires `golf/js/test.js` section 15c's 14-shot ceiling as a real-play
+concern (that ceiling was only ever in the test harness's simulated player, never in the game).
+
+### The mechanics, and the three things that are easy to get wrong
+
+- **`shotN` is the shot ABOUT to be played**, so `shotN - 1` is how many have been used.
+  `_capReached()` tests `shotN - 1 >= maxStrokes(par)`.
+- **The score is the ALLOWANCE, not the counter.** A water penalty adds two strokes at once, so
+  `shotN` can overshoot: measured in a browser, it reached **10 on a par 4** and the hole was worth
+  **9**. `min(shotN, cap)` would give the same answer here and is still the wrong expression,
+  because it hides that the hole is worth its allowance.
+- **`pickedUp` is a flag, not a clamp**, because the CARD has to be able to say what happened. A 9
+  labelled "Double bogey" on a hole nobody holed out is the game claiming a shot the player never
+  played. The card reads **Picked up** / **Picked up at 9**.
+
+### Two bugs found by driving it, both now `[KNOWN-BUG PROBE]`s
+
+1. **The tutorial would have stalled.** The tutorial hole is a par 4, so its cap is 9 - reachable by
+   a first-time player, which is exactly who is on it. The lesson's `sink` step waits on `'holed'`,
+   so a capped hole left it waiting for a ball that was never going to drop. `_pickUp` fires
+   `_coach('holed')`: to the lesson, that event means "the hole is over", not "the ball went in".
+2. **The shot that hit the cap was not saved.** `_settleShot` returns at the cap without reaching
+   its own `_saveRound`, so a kill inside the 700 ms before the card rewound the player one shot.
+   `_pickUp` saves first, which also puts `shotN` past the allowance in the file - and that is what
+   `_resumeSaved`'s own `_capReached()` check reads to finish the hole rather than re-offer a shot
+   the cap says does not exist.
+
+### What it does NOT touch
+
+- **Existing records are never rewritten** (THE LAW rule 5). A stored 14 from before this shipped
+  stays 14 and stays visible. New scores only.
+- **Stableford is unchanged.** A capped score arrives already capped and lands in the same "double
+  bogey or worse" bucket every blow-up has always landed in. The cap changes the number the hole
+  cost, never how that number is valued.
+
+### Section 12b was updated, deliberately
+
+That `[KNOWN-BUG PROBE]` pins that the result screen never subtracts one from `shotN` (every score
+in the game was once a stroke too low), and it required `_showHoleResult` to have exactly ONE
+caller - because a second caller would have broken "shotN is the shot just played". There are two
+now. The rule is preserved differently rather than dropped: the cap path never reads `shotN` for the
+score at all, it uses the allowance, so the probe now requires every caller to be one of those two.
+A third would have to prove for itself what `strokes` means.

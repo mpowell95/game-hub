@@ -105,6 +105,24 @@ export function roundYards(course, roundId) {
 /** Modified Stableford points for one hole, as `js/game-stats.js` has always stored them: a pure
  *  function of (score, par), so the lifetime `gf.points` counter stays truthful with nothing
  *  fabricated (golf/CLAUDE.md, "Stored shape"). */
+/** A HOLE'S MAXIMUM SCORE: double par plus one. Par 3 -> 7, par 4 -> 9, par 5 -> 11.
+ *
+ *  Matt, 2026-09-09: *"Double Par plus 1 should be each hole's max."* This is real golf - it is
+ *  equitable stroke control, the rule that stops one disaster hole swallowing a card - so it does
+ *  not read as an arbitrary game limit the way a flat "10 shots and you are out" would.
+ *
+ *  THE HOLE ENDS AT THE CAP; the player picks up. That is the half that makes it a feature rather
+ *  than a clamp: a game that keeps asking for shots it has already decided not to count is asking
+ *  the player to do work for nothing. It also bounds the whole "ball stuck in the trees" class of
+ *  bug by construction - every hole now ends.
+ *
+ *  NEW SCORES ONLY. Nothing already stored is rewritten (THE LAW rule 5); a record of 14 made
+ *  before this shipped stays 14 and stays visible. */
+export function maxStrokes(par) { return 2 * par + 1; }
+
+/** Stableford. A capped score arrives here already capped, so it lands in the same
+ *  "double bogey or worse" bucket every blow-up has always landed in - the cap changes the NUMBER
+ *  the hole cost, never the way this function values it. */
 export function stablefordPoints(strokes, par) {
   const d = strokes - par;
   if (d <= -3) return 8;       // albatross
