@@ -79,6 +79,13 @@ export const STEPS = [
   // and beside the arrows are not controls and are not ringed.
   { id: 'aim', rings: ['aim-l', 'aim-r'], key: 'tut_aim', advance: 'aim' },
 
+  // WHAT THE RED DOTS ARE, said out loud at last. Matt, relaying Ana's first round: *"she had no
+  // idea that the 25/50/75/100 corresponded to red dots on the blue aim line."* It comes straight
+  // after `aim` because that is the moment the player is looking at the line - they have just moved
+  // it - and before the two swing popups, because those talk about the meter and this is what the
+  // meter's numbers MEAN on the ground.
+  { id: 'dots', popup: 'dots', key: 'tut_dots', advance: 'button' },
+
   // THE TWO SWING POPUPS COME BEFORE THE FIRST SWING, NEVER DURING ONE. The backswing is 1585 ms
   // per power unit, so anything that APPEARS while the needle moves cannot be found, read and acted
   // on - which is how the first version failed. Both are dismissed before a tap is ever asked for.
@@ -103,6 +110,12 @@ export const STEPS = [
   // is a par 4: the approach may take one shot or three, and a card that appeared after the first
   // one would be telling a player standing in the fairway to putt.
   { id: 'to-green', key: null, advance: 'on-green' },
+
+  // THE GREEN BREAKS, and until now nothing said so. Matt: *"i guess that the greens are sloped?
+  // that might need to be said too."* It comes BEFORE the dial card rather than after: this one is
+  // about reading the green the ball has just landed on, which is what a player does first, and the
+  // dial card is about how hard to hit the putt, which is what they do second.
+  { id: 'slope', popup: 'slope', key: 'tut_slope', advance: 'button' },
   { id: 'dial', popup: 'dial', key: 'tut_dial', advance: 'button' },
   { id: 'putt', rings: ['swing'], marks: 'swing', key: 'tut_swing2', advance: 'tap-begin' },
   { id: 'sink', key: null, advance: 'holed' },
@@ -178,6 +191,71 @@ const SLICE_SVG = `<svg class="gf-tut__slice" viewBox="0 0 400 150" aria-hidden=
     <text x="256" y="34" fill="#ffce3a">45 yds off</text>
     <text x="252" y="116" fill="#5ec8f5">25 yds off</text>
   </g>
+</svg>`;
+
+/** THE RED DOTS ARE THE METER'S OWN NUMBERS, ON THE GROUND (2026-09-09).
+ *
+ *  Matt, relaying Ana's first round: *"she had no idea that the 25/50/75/100 corresponded to red
+ *  dots on the blue aim line."* Nothing in the game said so. The dial has four numbered ticks and
+ *  the ground has four red dots, and that they are the SAME FOUR NUMBERS - where this club lands
+ *  the ball at that power - is the single most useful fact in the game. It was left to be guessed.
+ *
+ *  The card draws the REAL dial beside a schematic aim line, so the numbers on the left and the
+ *  dots on the right are read as one pair. The line is schematic on purpose: the real one is drawn
+ *  in perspective up a fairway, and a picture that tried to copy that would be a worse diagram and
+ *  a second thing to keep in step with `render.js`. The DOT COLOURS AND THE LINE COLOUR ARE the
+ *  real ones (`pal.aim` / `pal.aimLine`), because those are the part a player has to match by eye.
+ *
+ *  IT SHOWS THE 100 % DOT AS THE LAST BLUE ONE, and the line turning red past it, which is exactly
+ *  what the course draws - that red section is the over-swing, and it is the thing the bad-swing
+ *  card two steps later is about. */
+const DOTS_SVG = `<svg class="gf-tut__dots" viewBox="0 0 150 190" aria-hidden="true">
+  <line x1="46" y1="176" x2="46" y2="44" stroke="#5ec8f5" stroke-width="6" stroke-linecap="round"/>
+  <line x1="46" y1="44" x2="46" y2="16" stroke="#e0532f" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="46" cy="176" r="8" fill="#fff" stroke="#000" stroke-width="3"/>
+  <g stroke="#5c0d0d" stroke-width="3">
+    <rect x="39" y="137" width="14" height="14" fill="#e0532f"/>
+    <rect x="39" y="104" width="14" height="14" fill="#e0532f"/>
+    <rect x="39" y="71" width="14" height="14" fill="#e0532f"/>
+    <rect x="39" y="38" width="14" height="14" fill="#e0532f"/>
+  </g>
+  <g font-family="inherit" font-weight="800" font-size="20" fill="#fff"
+     stroke="#000" stroke-width="5" paint-order="stroke">
+    <text x="68" y="151">25</text>
+    <text x="68" y="118">50</text>
+    <text x="68" y="85">75</text>
+    <text x="68" y="52">100</text>
+  </g>
+</svg>`;
+
+/** GREENS ARE SLOPED, AND THE CHEVRONS POINT DOWNHILL (2026-09-09).
+ *
+ *  Matt, same round: *"i guess that the greens are sloped? that might need to be said too."* They
+ *  are, `render.js`'s `drawSlope` has always drawn the chevrons, and no card ever mentioned them -
+ *  so a player reads them as texture rather than as the one piece of information that decides
+ *  where to aim a putt.
+ *
+ *  The picture shows the chevrons pointing ONE WAY, the blue aim line pointing left of the cup, and
+ *  the white path bending RIGHT into it - so "the ball bends the way these point" is the whole
+ *  diagram rather than a caption. The first draft had the chevrons pointing straight down the
+ *  screen with an uphill putt, which reads as ambiguous: the break and the aim were both vertical
+ *  and nothing in the picture said which caused which.
+ *
+ *  Schematic like the slice card, and for the same reason: the point is the RELATIONSHIP, not a
+ *  faithful copy of any particular green. */
+const SLOPE_SVG = `<svg class="gf-tut__slope" viewBox="0 0 300 170" aria-hidden="true">
+  <ellipse cx="150" cy="88" rx="132" ry="76" fill="#7ec850" stroke="#4f8f34" stroke-width="4"/>
+  <g stroke="#5f9e3c" stroke-width="7" stroke-linecap="butt" fill="none">
+    <path d="M60 44 l14 14 l-14 14"/><path d="M108 36 l14 14 l-14 14"/><path d="M156 44 l14 14 l-14 14"/>
+    <path d="M60 100 l14 14 l-14 14"/><path d="M108 108 l14 14 l-14 14"/><path d="M156 100 l14 14 l-14 14"/>
+  </g>
+  <circle cx="236" cy="60" r="11" fill="#0f1508"/>
+  <circle cx="236" cy="60" r="7" fill="#2c3a1e"/>
+  <line x1="96" y1="140" x2="186" y2="26" stroke="#5ec8f5" stroke-width="4"
+        stroke-dasharray="8 7" stroke-linecap="round"/>
+  <path d="M96 140 C126 92 158 44 233 59" fill="none" stroke="#fff" stroke-width="5"
+        stroke-linecap="round"/>
+  <circle cx="96" cy="140" r="8" fill="#fff" stroke="#000" stroke-width="3"/>
 </svg>`;
 
 /** The closing card points at the pause menu, so it shows one. */
@@ -409,7 +487,9 @@ export class Coach {
       (label ? `<figcaption>${esc(label)}</figcaption>` : '') +
       `<canvas data-dial="${esc(kind)}" width="${DIAL_W}" height="${DIAL_H}" aria-hidden="true"></canvas></figure>`;
     let art = '';
-    if (s.popup === 'good') art = dial('good', '');
+    if (s.popup === 'dots') art = `<div class="gf-tut__two">${dial('plain', '')}${DOTS_SVG}</div>`;
+    else if (s.popup === 'slope') art = SLOPE_SVG;
+    else if (s.popup === 'good') art = dial('good', '');
     else if (s.popup === 'bad') art = dial('bad', '') + SLICE_SVG;
     else if (s.popup === 'dial') {
       art = `<div class="gf-tut__two">${dial('full', t('tut_dial_full'))}${dial('putt', t('tut_dial_putt'))}</div>`;
@@ -430,6 +510,9 @@ export class Coach {
     const kind = canvas.dataset.dial;
     this.onDial(canvas, {
       putting: kind === 'putt',
+      // `plain` is the SAME full dial with NO caret. The dots card wants the meter's numbers read
+      // as numbers, not as a target: a gold arrow pointing at 25 there says "aim here", which is
+      // the putting card's message two steps later and not this one's.
       marks: kind === 'good' ? GOOD_MARKS : kind === 'bad' ? BAD_MARKS
         : kind === 'full' ? FULL_TICK_MARK : kind === 'putt' ? PUTT_TICK_MARK : null,
     });

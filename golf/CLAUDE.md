@@ -5299,3 +5299,52 @@ caller - because a second caller would have broken "shotN is the shot just playe
 now. The rule is preserved differently rather than dropped: the cap path never reads `shotN` for the
 score at all, it uses the allowance, so the probe now requires every caller to be one of those two.
 A third would have to prove for itself what `strokes` means.
+
+## Two things the lesson never said (2026-09-09)
+
+Both came from Ana's first round, relayed by Matt, and both were things the game DREW and never
+named.
+
+### 1. The red dots are the meter's own numbers, on the ground
+
+> *"she had no idea that the 25/50/75/100 corresponded to red dots on the blue aim line."*
+
+The dial has four numbered ticks. The ground has four red dots. That they are the SAME FOUR NUMBERS
+- where this club lands the ball at that power - is the single most useful fact in the game, and it
+was left to be guessed. A player who has not made the connection is reading the dial as an abstract
+power gauge instead of as a distance picker.
+
+A `dots` popup, **straight after `aim`**: that is the moment the player is looking at the line,
+because they have just moved it, and it comes before the two swing popups because those talk about
+the meter and this is what the meter's numbers MEAN on the ground.
+
+It draws the REAL dial (`dial('plain')`) beside a schematic aim line. **`plain` is a new dial kind:
+the full dial with NO caret.** `full` carries the gold arrow at 25 %, which on this card would say
+"aim here" - the putting card's message two steps later, not this one's.
+
+The line is schematic on purpose. The real one is drawn in perspective up a fairway, so a picture
+trying to match it would be a worse diagram AND a second thing to keep in step with `render.js`.
+The COLOURS are the real ones (`pal.aim`, `pal.aimLine`, and the line turning red past the 100 %
+dot), because those are the part a player has to match by eye.
+
+### 2. Greens are sloped
+
+> *"i guess that the greens are sloped? that might need to be said too."*
+
+They are, `render.js`'s `drawSlope` has always drawn the chevrons, and no card ever mentioned them -
+so they read as texture rather than as the one thing that decides where to aim a putt.
+
+A `slope` popup, **before the dial card rather than after**: this one is about reading the green the
+ball has just landed on, which is what a player does first; the dial card is about how hard to hit
+it, which is what they do second.
+
+**The picture had to be redrawn once.** The first version put the chevrons pointing straight down
+the screen with an uphill putt, and it was ambiguous - the break and the aim were both vertical, and
+nothing said which caused which. It now shows the chevrons pointing ONE WAY, a blue aim line pointing
+left of the cup, and the white ball path bending RIGHT into it. "The ball bends the way these point"
+is the diagram, not the caption.
+
+### What this cost
+
+The lesson is 10 cards now rather than 8. The pips row was measured at 393, 360 and **320** px: no
+overflow, and the rail text still fits on one line at all three.
