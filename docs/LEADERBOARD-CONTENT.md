@@ -140,8 +140,7 @@ negative, and level par reads as "E" rather than 0.
   falls is the admin voiding a player's scores on one Skeeball machine, which removes them from
   display without touching the stored record.
 - Two languages: English and Spanish.
-- Any game's visibility is an admin switch inside the app, so it can change with no code change.
-  Pinball is admin-only in the code itself; Golf carries no such flag and is hidden the other way,
-  by that switch. Check with the admin for what is actually released today.
+- **Pinball is the only game hidden from everyone but the admin.** Golf is live for everyone.
+  Visibility is an admin switch inside the app, so this can change with no code change.
 - Pool appears twice: the current game, and a retired earlier build kept on the board so the games
   played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
