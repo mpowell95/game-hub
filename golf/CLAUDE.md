@@ -4584,3 +4584,59 @@ names the unlock once; the generic `unlockedNow` line is suppressed, or it print
 `test.js` pins both branches of that close - the tutorial hand-off AND the ordinary `_quit`, which is
 what asks before a round is thrown away. The old single-arrow regex was pinned to a shape, not to the
 rule, and went red the day the shape moved.
+
+## The pause menu, and quit moved into it (2026-09-09)
+
+Matt, in the same message that approved the tutorial rework: *"I want to add a feature where
+[players] can pause then report a bug from the pause menu. I want that to be at the end of the
+tutorial but be part of. Something like this is a brand new game please report any bugs you
+encounter in the pause menu."* The lesson's closing card was built first and says exactly that, so
+the menu it names had to exist.
+
+**PAUSED** · **resume** · **report a bug** · **quit**, three full-width 46px rows.
+
+### It REPLACED the top-left quit button rather than joining it
+
+That corner already holds a button and the flag, and this is an immersive game measured to fit one
+screen at 390x664 - the setup screen shipped scrolling by 82px through a green suite, and a third
+control in that row is exactly the kind of thing that fits by a rounding error. **Quit is a row in
+the menu now**, which also puts one deliberate tap in front of the door that throws a round away.
+`_quit()` still asks after it and that guard is untouched; `test.js` section 16a pins BOTH hops, so
+the route cannot be quietly short-circuited back to a one-tap exit.
+
+### A LIVE SWING IS CANCELLED, NOT PAUSED
+
+`_frame` keeps running behind an overlay. A player who taps pause mid-backswing would have the
+needle run off the bar, fire itself, and be charged a stroke for a shot nobody saw - which is the
+one thing a pause menu must not do. `swing.settle()` puts the meter back to address with no stroke
+and nothing lost. **A ball already in the AIR is left alone**: the shot is resolved either way, and
+reaching into a running animation is the only version of this that could lose something. Measured
+in a browser: `back` -> `idle`, `shotN` unchanged. A `[KNOWN-BUG PROBE]` pins the cancel.
+
+### The report form is imported LAZILY, and preselected on golf
+
+`js/bug-report-ui.js` pulls in the whole device-report and Firebase picture. An immersive game must
+not carry that on its mount path for a button most rounds never press, so it is a dynamic import
+inside the handler, with a loud `console.error` if it fails rather than a row that silently does
+nothing. `openBugReport({ gameId: 'golf' })` takes the HUB id, so the form's own picker opens on
+golf - measured: the `<select>` reads `golf` with the form on screen.
+
+**This is the repo's first in-game entry point to Report a bug, and it is a deliberate exception to
+the rule in `js/CLAUDE.md`** ("No in-game entry point, deliberately... a button there would fight
+for space in exactly the games most likely to need one"). It costs no space because it is a row
+inside a menu that had to exist anyway, and golf is the game currently most likely to need one.
+
+### The menu and the tutorial's picture are one design
+
+`.gf-pause__rows` and `PAUSE_ART` in `js/tutorial.js` share their shape, their heading and their
+gold accent (`#ffce3a`, the repo's standing selection accent, paired with a border and a weight
+change - never hue alone). The lesson shows a picture of this menu and then the player meets it; if
+the two drift, the lesson is teaching a screen that does not exist.
+
+### One duplicate key, found on the way
+
+`golf/js/strings.js` had **two `resume` keys in the same object literal** - the setup screen's
+`'resume round'` and the tutorial art's `'resume'` - and the later one silently won. Nothing was
+calling the first one yet, so nothing was visibly broken, but `test-i18n-strings.mjs` cannot see a
+duplicate key (the file is a JS object, not JSON) and the next person to wire "resume round" would
+have got "resume". The pause menu's key is `pause_resume`.

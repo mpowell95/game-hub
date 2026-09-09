@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v707';
+const CACHE = 'game-hub-v708';
 
 const ASSETS = [
   './',
@@ -677,9 +677,9 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': '82646c28bd',
   './golf/': '59d2747a24',
   './golf/index.html': '59d2747a24',
-  './golf/css/golf.css': '306136be4b',
-  './golf/js/ui.js': 'f1e07d985a',
-  './golf/js/strings.js': 'afa133a3e1',
+  './golf/css/golf.css': 'ac817f72ab',
+  './golf/js/ui.js': '635d8fc0bb',
+  './golf/js/strings.js': '6a412670f7',
   './golf/js/holes.js': 'e698c54e72',
   './golf/js/club-art.js': '777bcfb097',
   './golf/js/clubs.js': 'b020ff95b5',
@@ -689,7 +689,7 @@ const REST_MANIFEST = {
   './golf/js/holegen.js': '93428994c1',
   './golf/js/rounds.js': '9b7f566d8e',
   './golf/js/progress.js': 'ac0e7f0d2c',
-  './golf/js/tutorial.js': '94d972783d',
+  './golf/js/tutorial.js': 'ab93ba9178',
   './golf/courses/pinevalley.js': 'aabb5248b9',
   './golf/courses/redmesa.js': '4bd568276c',
   './golf/courses/oasissands.js': 'b26e3a67c2',

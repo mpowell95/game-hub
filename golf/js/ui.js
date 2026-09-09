@@ -843,6 +843,9 @@ class GolfGame {
     // The prompt is a child of rootEl, and _renderPlay wipes rootEl - so a stale reference here
     // would leave `if (this.dropEl) return` blocking every later prompt in the round.
     this.dropEl = null;
+    // Same reason: `_renderPlay` wipes rootEl, and a stale reference would make `_pauseMenu`'s own
+    // "already open" guard refuse to open it again for the rest of the round.
+    this.pauseEl = null;
     this._renderPlay();
     // THE COACH IS REBUILT WITH THE SCREEN, because `_renderPlay` wipes `rootEl` and every card,
     // ring and arrow the lesson has drawn goes with it. It keeps its own step index, so a
@@ -933,7 +936,7 @@ class GolfGame {
         <div class="gf-tl">
           <div class="gf-tl-col">
             <div class="gf-tl-row">
-              <button type="button" class="gf-btn" data-role="quit"><span>${t('quit')}</span></button>
+              <button type="button" class="gf-btn" data-role="pause"><span>${t('pause')}</span></button>
               <div class="gf-flag"><span style="color:${PALETTE.pin}">&#9873;</span><span data-role="holeno"></span></div>
             </div>
             <div class="gf-panel gf-info">
@@ -1003,7 +1006,7 @@ class GolfGame {
 
   _bindPlay() {
     const q = (r) => this.rootEl.querySelector(`[data-role="${r}"]`);
-    this._on(q('quit'), 'click', () => this._quit());
+    this._on(q('pause'), 'click', () => this._pauseMenu());
 
     // Press-and-hold auto-repeat for the four nudge controls, after a 400 ms delay (§4).
     const hold = (el, fn) => {
@@ -2338,6 +2341,56 @@ class GolfGame {
   _roundAtStake() {
     return !!(this.hole && this.roundId && this.roundId !== 'practice' && this.holeIdxs
       && this.scores.filter((v) => Number.isFinite(v)).length < this.holeIdxs.length);
+  }
+
+  /** THE PAUSE MENU. Matt, at the end of the tutorial rework: "I want to add a feature where
+   *  [players] can pause then report a bug from the pause menu... Something like this is a brand
+   *  new game please report any bugs you encounter in the pause menu." The lesson's closing card
+   *  says exactly that, so the menu it names has to exist.
+   *
+   *  IT REPLACED THE TOP-LEFT QUIT BUTTON RATHER THAN JOINING IT. That corner already holds the
+   *  button and the flag, and this is an immersive game measured to fit one screen at 390x664 - a
+   *  third control there is the kind of thing that fits by a rounding error. Quit is a row in the
+   *  menu now, which also puts one more deliberate tap in front of the door that throws a round
+   *  away; `_quit()` still asks after it, and that guard is untouched.
+   *
+   *  A LIVE SWING IS CANCELLED, NOT PAUSED. The needle runs off `_frame`, and `_frame` keeps
+   *  running behind an overlay - so a player who taps pause mid-backswing would have the meter
+   *  fire itself and be charged a stroke for a shot they never saw. `swing.settle()` puts it back
+   *  to address with no stroke and nothing lost. A ball already in the AIR is left alone: the shot
+   *  is resolved either way and interrupting it is the one thing that could lose it. */
+  _pauseMenu() {
+    if (this.pauseEl) return;
+    this.swing.settle(performance.now());
+    this._paintHud();
+    const el = document.createElement('div');
+    this.pauseEl = el;
+    el.className = 'gf-result gf-pause';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel">
+        <div class="gf-pause__h">${esc(t('paused'))}</div>
+        <div class="gf-pause__rows">
+          <button type="button" class="gf-pause__row" data-role="p-resume">${esc(t('pause_resume'))}</button>
+          <button type="button" class="gf-pause__row is-lit" data-role="p-bug">${esc(t('report_bug'))}</button>
+          <button type="button" class="gf-pause__row" data-role="p-quit">${esc(t('quit'))}</button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    const close = () => { if (this.pauseEl) { this.pauseEl.remove(); this.pauseEl = null; } };
+    this._on(el.querySelector('[data-role="p-resume"]'), 'click', close);
+    // Tapping the ground behind the card resumes. Safe with no confirm, because resuming loses
+    // nothing; the row that DOES lose something goes through `_quit`'s own prompt.
+    this._on(el, 'click', (ev) => { if (ev.target === el) close(); });
+    this._on(el.querySelector('[data-role="p-quit"]'), 'click', () => { close(); this._quit(); });
+    this._on(el.querySelector('[data-role="p-bug"]'), 'click', () => {
+      close();
+      // Lazily imported: the report form pulls in the whole device-report + Firebase picture, and
+      // an immersive game must not carry that on its mount path for a button most rounds never
+      // press. `gameId` is the HUB id, which preselects golf in the form's own picker.
+      import('../../js/bug-report-ui.js')
+        .then((m) => m.openBugReport({ gameId: 'golf' }))
+        .catch((err) => { console.error('[golf] bug report failed to open', err); });
+    });
   }
 
   /** LEAVING A ROUND ASKS FIRST. The quit button sits top-left, in the corner a thumb reaches for

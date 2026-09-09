@@ -148,7 +148,7 @@ const SLICE_SVG = `<svg class="gf-tut__slice" viewBox="0 0 400 150" aria-hidden=
 /** The closing card points at the pause menu, so it shows one. */
 const PAUSE_ART = (tt) => `<div class="gf-tut__pause" aria-hidden="true">
   <div class="gf-tut__pauseh">${esc(tt('paused'))}</div>
-  <div class="gf-tut__pauserow">${esc(tt('resume'))}</div>
+  <div class="gf-tut__pauserow">${esc(tt('pause_resume'))}</div>
   <div class="gf-tut__pauserow is-lit">${esc(tt('report_bug'))}</div>
   <div class="gf-tut__pauserow">${esc(tt('quit'))}</div>
 </div>`;
