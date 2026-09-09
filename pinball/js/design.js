@@ -330,7 +330,29 @@ export class DesignPinball {
       this._chute();
       this._drain();
     }
+    this._rampLift();
     this._ballSearch(dt);
+  }
+
+  /**
+   * A BALL IN A LANE IS DRAWN ON THE LANE, NOT UNDER IT.
+   *
+   * `lift` is the ball's height between the two playfields, and until now only the scripted
+   * climb and the drop hole ever set it - so an ORDINARY level-1 ball that found its way into
+   * a ramp lane kept lift 0 and was drawn at playfield height with the ramp surface arching
+   * over the top of it. See T.rampLift for the measurement and for why the lane is the only
+   * place on this board where a level-1 ball is not at level-1 height.
+   *
+   * It is a DRAWING fact only. The lane is flat to the solver, as it has been all along, and
+   * nothing here touches a position or a velocity.
+   */
+  _rampLift() {
+    for (const b of this.balls) {
+      if (b.onPlunger || b.held || b._climbR || b._drop != null) continue;
+      if ((b.layer | 0) !== 1) continue;
+      const h = T.rampLift(b.x, b.y);
+      b.lift = h === null ? 0 : h;
+    }
   }
 
   /**

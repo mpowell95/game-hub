@@ -90,6 +90,38 @@ export const RAMPS = [
  * component and gets nothing, which is the behaviour asked for; a ball dribbling sideways across
  * the pad gets nothing either, so it cannot be used as a free ride.
  */
+/**
+ * HOW HIGH IS THE RAMP FLOOR UNDER A BALL AT (x, y)? 0 on the playfield, 1 at deck height,
+ * null when the point is not inside a lane at all.
+ *
+ * Matt, twice: *"the ball still went through the ramp and disappeared."* It is not going
+ * through anything. A ball on LEVEL 1 inside a ramp lane - one that dribbled into the mouth
+ * too slowly to trigger the climb, or one that rolled off the deck edge at x 45..150, where
+ * that edge IS the top of the ramp - is drawn at playfield height, while the ramp surface
+ * over it climbs to deck height. Measured over 24 driven games: 5,391 of 115,019 frames, so
+ * roughly one frame in twenty, the ball is underneath the lane it is rolling along. It comes
+ * back into view at the mouth, where the surface returns to the playfield - which is exactly
+ * the *"then popped back into existence"* half of the report.
+ *
+ * The bend and the ease below are the SAME two expressions rampCurved builds the surface from
+ * and the footprint pass builds the walls from. Three copies would drift; this is the third
+ * reader of one shape, not a fourth shape.
+ */
+export function rampLift(x, y) {
+  for (const p of PARTS) {
+    if (p.type !== 'ramp') continue;
+    const xf = p.xFoot || p.x;
+    const t = (p.z[1] - y / px(1)) / (p.z[1] - p.z[0]);
+    if (t < 0 || t > 1) continue;
+    const bend = t * t * (3 - 2 * t) * 0.45 + t * 0.55;
+    const x0 = xf[0] + (p.x[0] - xf[0]) * bend, x1 = xf[1] + (p.x[1] - xf[1]) * bend;
+    const bx = x / px(1);
+    if (bx < Math.min(x0, x1) || bx > Math.max(x0, x1)) continue;
+    return t * t * (3 - 2 * t);
+  }
+  return null;
+}
+
 export const KICKERS = [
   { id: 'kickL', x: px(242), y: px(1059), r: px(34), u: [-0.44, -0.90], boost: 250, minAlong: 120 },
   { id: 'kickR', x: px(744), y: px(1059), r: px(34), u: [0.44, -0.90], boost: 250, minAlong: 120 },
@@ -203,6 +235,7 @@ export const ROW_SIZE = {};
 export const DROP_IDS = [0, 1, 2, 3].map((i) => `target_bank_${i}`);
 
 export default {
+  rampLift,
   NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
   SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS, deckEdge,
 };

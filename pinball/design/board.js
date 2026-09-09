@@ -708,22 +708,33 @@ function smoothChain(pts, passes = 4) {
     part.yEndR = Math.min(part.yEndR, r4(endR));
   }
 
-  // NOTHING GETS IN BEHIND THE ARCH - NOT SOLVED, AND THE ATTEMPT IS RECORDED HERE.
+  // NOTHING GETS IN BEHIND THE ARCH - NOT SOLVED, AND THREE MEASURED ATTEMPTS ARE RECORDED HERE.
   //
   // Matt: *"You have moved the semi circle thing on level 1 so much that you semi broke level 1.
-  // it should not be able to go behind that large semi-circle thing."* He is right: arch_outer used
-  // to run its legs to py 880 and close that space, and trimming them at 590 to get them out of the
-  // ramps opened it.
+  // it should not be able to go behind that large semi-circle thing."* He is right that the shape
+  // changed: arch_outer used to run its legs to py 880 and reach the playfield, and trimming them
+  // at 590 to get them out of the ramps leaves the arch ENDING IN MID-AIR.
   //
   // The legs cannot simply go back - that IS the ramp lane, x 131..219 against a lane of 129..231.
-  // A SKIRT just inboard of the ramp wall was tried at three offsets and made things WORSE every
-  // time: rest sweep 146 -> 215, 218, 229, and the new pocket MOVED WITH THE SKIRT (x 255, then
-  // 290) which is what proves the skirt is the wall making it. A long barrier parallel to the ramp
-  // turns the strip inboard of it into a dead-end channel.
+  // Three ways of closing it have now been built and measured, against a rest sweep of 146:
   //
-  // The honest fix is to move the arch LEGS inboard so they clear the ramps and still close the
-  // space - which changes the shape Matt drew, so it is his call and not one to make quietly.
-
+  //   1. A THIN SKIRT just inboard of the ramp wall, at three offsets: 215, 218, 229. The new
+  //      pocket MOVED WITH THE SKIRT (x 255, then 290), which is what proves the skirt made it -
+  //      a thin barrier parallel to the ramp turns the strip beside it into a dead end.
+  //   2. THE LEG ITSELF RUN DOWN THE RAMP WALL, full 86 px width, outer edge inside the wall's
+  //      own radius so the two overlap and no strip exists between them: 397. The corridor
+  //      between the ramps and arch_inner is only about 100 px wide, so an 86 px band in it
+  //      leaves a slot against arch_inner's leg instead - the same defect one step inboard.
+  //   3. FILLING THE BAND so it collides as solid as it is drawn (see the band footprint case):
+  //      163, and the 17 balls it removed from inside the two arches were in cells no driven
+  //      ball ever visits, while the 5 it added were reachable. Correct in principle, worse in
+  //      play, so it is not in.
+  //
+  // AND THE BALL CANNOT ACTUALLY GET BEHIND IT. Over 257,690 driven frames the ball never once
+  // occupied level 1 above py 581, and only 4 frames anywhere outboard of the arch. What is left
+  // is the LOOK of a leg that stops in mid-air, which is a change to the shape Matt drew, so the
+  // remaining choice is his: bring the legs down inboard (a narrower leg than he drew), or draw
+  // them down at deck height so the arch passes OVER the ramps the way a real one does.
   // NO POST MAY SIT INSIDE A BAND. post_big_left (350, 750) and post_big_right (646, 745) were
   // both geometrically INSIDE arch_inner - invisible, and colliding from within another solid.
   // Matt placed them in the editor and then the arch moved underneath them, which is the same
@@ -817,7 +828,11 @@ for (const p of P) {
     case 'post': circleFP(p.name, p.levels, p.at, p.r); break;
     case 'bumper': circleFP(p.name, p.levels, p.at, p.r || BUMPER_R, { kicks: true }); break;
     case 'band': {
-      // solid variable-width band: its two edges are emitted as chains of thin capsules (r = 1 mm, faces flush with the edge)
+      // A band emits its two EDGES as chains of thin capsules (r = 1 mm, faces flush with the
+      // edge). The space between them is hollow, and `solidSide` below is dead metadata - it is
+      // written into footprints.json and read by nothing, not table-design.js and not physics.js.
+      // Filling that space was built and measured and is NOT in; see the arch record above for
+      // the numbers and why.
       const chain = (pts, tag) => pts.slice(1).forEach((b, i) => capsuleFP(`${p.name}_${tag}_${i + 1}`, p.levels, pts[i], b, 0.001, { solidSide: tag === 'outer' ? 'inside' : 'outside' }));
       chain(p.outer, 'outer'); chain(p.inner, 'inner');
       // leg ends: closing segments
