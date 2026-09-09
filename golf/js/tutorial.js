@@ -77,7 +77,6 @@ export const STEPS = [
   // don't include that in the highlighted thing. Only outline the buttons." The readouts between
   // and beside the arrows are not controls and are not ringed.
   { id: 'aim', rings: ['aim-l', 'aim-r'], key: 'tut_aim', advance: 'aim' },
-  { id: 'club', rings: ['club-up', 'club-dn'], key: 'tut_club', advance: 'club' },
 
   // THE TWO SWING POPUPS COME BEFORE THE FIRST SWING, NEVER DURING ONE. The backswing is 1585 ms
   // per power unit, so anything that APPEARS while the needle moves cannot be found, read and acted
@@ -85,6 +84,19 @@ export const STEPS = [
   { id: 'good', popup: 'good', key: 'tut_good', advance: 'button' },
   { id: 'bad', popup: 'bad', key: 'tut_bad', advance: 'button' },
   { id: 'swing', rings: ['swing'], marks: 'swing', key: 'tut_swing', advance: 'tap-begin' },
+
+  // SILENT while the drive is in the air. It is what makes the club card land on the SECOND shot
+  // rather than the tee, and it has to exist: `club` following `swing` directly would put a card
+  // on screen the instant the first tap landed, on top of a moving needle.
+  { id: 'after-drive', key: null, advance: 'settled' },
+
+  // THE CLUB LESSON IS ON THE SECOND SHOT, NOT THE TEE (2026-09-09). Matt: "As it is now, they'll
+  // change clubs on the tee shot then have to change back. You actually have to change clubs for
+  // the second shot." He is right, and it made the one lesson in the set that teaches a control by
+  // USING it teach a change the player has to undo before they can play: the driver is already the
+  // club you want on a 372 yd par 4, so every tap on those arrows was wrong. After the drive the
+  // bag has genuinely moved on, so working the control is the thing you would do anyway.
+  { id: 'club', rings: ['club-up', 'club-dn'], key: 'tut_club', advance: 'club' },
 
   // SILENT until the ball is on the putting surface. `on-green` rather than `settled` because this
   // is a par 4: the approach may take one shot or three, and a card that appeared after the first
