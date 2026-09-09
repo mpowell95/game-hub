@@ -1383,6 +1383,41 @@ and `added` (a duplicate and what it was copied from) - which is what a session 
 132. A circle has ONE size, and the resize averaged the x and y factors: the untouched Height
 contributed a factor of exactly 1 to the average. It takes the axis that actually moved now.
 
+#### Selecting several at once
+
+Matt: *"let me select multiple objects at once to move them together."*
+
+**The selection is a SET, and a set of one is the ordinary case.** Drag, resize, nudge, duplicate,
+delete, the panel and the export all work on the whole set, so there is no separate "multi" path to
+keep in step with the single-part one. Shift-tap (or ctrl/cmd-tap) adds one or drops one, on the
+board or in the list; dragging empty board lassoes; Ctrl+A takes everything on the shown level.
+Dragging a part that is already in the set moves the whole set and keeps the spacing; dragging one
+that is not selects it alone first, which is what every drawing tool does.
+
+**Three bugs came out of building it, and each is a shape worth knowing:**
+
+- **The selection furniture swallowed the clicks.** The dashed box is drawn OVER the parts, so a
+  tap inside your own selection hit the outline, found no part, and cleared everything - a 27-part
+  lasso dropped to 0 on the first attempt to drag it. `pointer-events: none` on the outlines; the
+  eight handles keep theirs.
+- **Plain overlap made the lasso useless.** `playfield_L1`, `deck_L2` and the cabinet walls have
+  boxes the size of the BOARD, so every lasso caught them: a 140 x 100 px drag over the bumpers
+  selected 26 parts. A part is caught now if its CENTRE is in the box, or it overlaps AND its own
+  box is no more than three times the lasso.
+- **Resizing a MIXED selection needs a solver, not one pass.** A part's box is its points plus its
+  own radius, so scaling points by `sx` while scaling every radius by the same factor only composes
+  cleanly when every part is the same size. With two posts of different radii, asking for 2986 gave
+  2966 and asking a height of 300 gave 180. `sizeGroupTo` measures, scales and measures again;
+  four or five passes land inside a tenth of a pixel.
+
+**How the browser tests of this were wrong three times, which is the useful part.** A synthetic
+PointerEvent dispatched on the `<svg>` has `target = svg`, so every drag test was really testing the
+empty-board branch and reported the selection clearing as a bug. And `elementFromPoint` returns null
+below the fold, so the second attempt found nothing at all. The test that means anything dispatches
+ON THE PATH ELEMENT: with two bumpers selected, pressing one and moving 100 x 50 moved the group box
+from (493, 270) to (593, 320) with both still selected.
+
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,

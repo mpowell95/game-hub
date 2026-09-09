@@ -7,7 +7,7 @@
 
   Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
   duplicate objects as well... It should show me the entire screen thats displayed on my phone, not
-  just the game board."*
+  just the game board."* And then: *"let me select multiple objects at once to move them together."*
 
   IT READS THE REAL BOARD. `design/board.js` exports `PARTS`, the same list the 3D model and the
   physics footprints are both built from, so what is drawn here is what is in the game - not a
@@ -22,6 +22,10 @@
   UNITS. Everything inside the board is in REFERENCE PIXELS, x 0..1100 and y 0..1990 - the same
   numbers `board.js` is written in. The readout and the export are in those pixels too, so a number
   you see here can be pasted straight into the source.
+
+  SELECTION IS A SET, never one part. Everything below - drag, resize, nudge, duplicate, delete,
+  the panel, the export - works on the whole set, and a set of one is the ordinary case rather than
+  a special one. That is why there is no separate "multi" code path to keep in step.
 -->
 <style>
   :root {
@@ -42,6 +46,7 @@
   button:disabled { opacity: .4; cursor: default; }
   button.hot { border-color: var(--hot); color: #ffd7e6; }
   button.go { border-color: var(--ok); color: #ccf6e6; }
+  button.on { border-color: var(--accent); color: var(--accent); background: #2a2413; }
   label.chk { display: inline-flex; gap: 7px; align-items: center; }
   main { display: flex; gap: 16px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
   #stage { background: #000; border-radius: 26px; padding: 0; overflow: hidden;
@@ -65,7 +70,14 @@
   kbd { background: #12101a; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
     font-size: 12px; }
   p.help { color: var(--dim); margin: 6px 0; font-size: 13px; }
+  /* THE SELECTION FURNITURE MUST NOT SWALLOW CLICKS. The dashed box is drawn OVER the parts, so
+     without this a tap inside your own selection hits the outline, finds no part under the
+     pointer, and clears everything - measured: a 27-part lasso dropped to 0 on the first attempt
+     to drag it. The eight handles keep their pointer events; they are meant to be grabbed. */
+  .sel-outline, .sel-one, .marquee { pointer-events: none; }
   .sel-outline { fill: none; stroke: var(--accent); stroke-width: 6; stroke-dasharray: 18 12; }
+  .sel-one { fill: none; stroke: var(--accent); stroke-width: 4; opacity: .55; }
+  .marquee { fill: #ffce3a22; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 14 10; }
   .handle { fill: var(--accent); stroke: #000; stroke-width: 2; cursor: pointer; }
 </style>
 
@@ -74,6 +86,8 @@
   <button id="dup" disabled>Duplicate</button>
   <button id="del" class="hot" disabled>Delete</button>
   <button id="undo" disabled>Undo</button>
+  <button id="all">Select all shown</button>
+  <button id="clear" disabled>Deselect</button>
   <button id="reset">Reset all</button>
   <button id="svg" class="go">Export SVG</button>
   <button id="json" class="go">Export edits</button>
@@ -96,8 +110,11 @@
 
   <aside>
     <div class="card">
-      <h2>Selected part</h2>
-      <div id="none" class="help">Tap a part on the board, or pick one from the list.</div>
+      <h2>Selection</h2>
+      <div id="none" class="help">
+        Tap a part, or drag a box across empty board to lasso several.
+        Shift-tap adds one to the selection.
+      </div>
       <div id="props" hidden>
         <div class="row"><span>Name</span><input id="p-name" readonly></div>
         <div class="row"><span>Type</span><input id="p-type" readonly></div>
@@ -106,6 +123,10 @@
         <div class="row"><span>Centre y</span><input id="p-y" type="number" step="1"></div>
         <div class="row"><span>Width</span><input id="p-w" type="number" step="1"></div>
         <div class="row"><span>Height</span><input id="p-h" type="number" step="1"></div>
+        <p class="help" id="multi-note" hidden>
+          These are the box around EVERYTHING selected. Moving it moves them all together, keeping
+          their spacing; resizing it scales the whole arrangement.
+        </p>
         <p class="help">Reference pixels, the same numbers <code>board.js</code> uses:
           x runs 0 to 1100 across the cabinet, y runs 0 to 1990 down it.</p>
       </div>
@@ -114,15 +135,16 @@
     <div class="card">
       <h2>Keys</h2>
       <p class="help">
-        <kbd>drag</kbd> move &middot; <kbd>drag a corner</kbd> resize &middot;
+        <kbd>drag a part</kbd> move &middot; <kbd>drag empty board</kbd> lasso &middot;
+        <kbd>shift+tap</kbd> add or remove one &middot; <kbd>drag a corner</kbd> resize &middot;
         <kbd>arrows</kbd> nudge 1 px &middot; <kbd>shift+arrows</kbd> 10 px &middot;
-        <kbd>D</kbd> duplicate &middot; <kbd>Delete</kbd> delete &middot; <kbd>Ctrl+Z</kbd> undo
-        &middot; <kbd>Esc</kbd> deselect
+        <kbd>Ctrl+A</kbd> select all shown &middot; <kbd>D</kbd> duplicate &middot;
+        <kbd>Delete</kbd> delete &middot; <kbd>Ctrl+Z</kbd> undo &middot; <kbd>Esc</kbd> deselect
       </p>
     </div>
 
     <div class="card">
-      <h2>All parts (<span id="count">0</span>)</h2>
+      <h2>All parts (<span id="count">0</span>) &middot; <span id="nsel">0</span> selected</h2>
       <ul id="list"></ul>
     </div>
   </aside>
@@ -137,7 +159,7 @@ import { PARTS } from './board.js';
 // everything else is drawn on.
 const S = 0.000527;
 const m2px = (m) => m / S;
-const BUMPER_R = m2px(0.038), FLIP_R0 = m2px(0.012), FLIP_R1 = m2px(0.007), SLING_POST_R = m2px(0.006);
+const BUMPER_R = m2px(0.038), FLIP_R0 = m2px(0.012);
 const BW = 1100, BH = 1990;                 // the cabinet, in reference pixels
 
 // board.js's material palette, so a part is the colour here that it is in the game.
@@ -186,8 +208,11 @@ function shapeOf(p) {
 }
 
 // ---------------------------------------------------------------------------------------------
-let items = [];               // the editable model
-let sel = null, history = [], seq = 0;
+let items = [];
+/** THE SELECTION IS A SET OF IDS. One part selected is a set of one, so there is no second code
+ *  path for "several" that could drift out of step with the single-part one. */
+let sel = new Set();
+let history = [], seq = 0;
 
 function build() {
   items = [];
@@ -198,46 +223,85 @@ function build() {
     items.push({
       id: 'i' + (seq++), name: p.name, type: p.type,
       levels: (p.levels && p.levels.length) ? p.levels.slice() : [1, 2],
-      colour: colourOf(p), shape: sh, from: p.name, copy: false, src: p,
+      colour: colourOf(p), shape: sh, from: p.name, copy: false,
     });
   }
 }
 build();
+
+const byId = (id) => items.find((i) => i.id === id);
+const chosen = () => items.filter((i) => sel.has(i.id));
 
 const bbox = (it) => {
   const xs = it.shape.pts.map((q) => q[0]), ys = it.shape.pts.map((q) => q[1]);
   const pad = it.shape.k === 'circle' ? it.shape.r : (it.shape.k === 'capsule' ? it.shape.w / 2 : 0);
   return { x0: Math.min(...xs) - pad, y0: Math.min(...ys) - pad, x1: Math.max(...xs) + pad, y1: Math.max(...ys) + pad };
 };
-const centre = (it) => { const b = bbox(it); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; };
-
-function moveTo(it, cx, cy) {
-  const [ox, oy] = centre(it), dx = cx - ox, dy = cy - oy;
-  it.shape.pts = it.shape.pts.map((q) => [q[0] + dx, q[1] + dy]);
+/** The box round EVERYTHING selected. This is what the panel reads and what a drag or a resize
+ *  works on, which is what makes "move them together" fall out rather than be a special case. */
+function groupBox(list) {
+  if (!list.length) return null;
+  const bs = list.map(bbox);
+  return {
+    x0: Math.min(...bs.map((b) => b.x0)), y0: Math.min(...bs.map((b) => b.y0)),
+    x1: Math.max(...bs.map((b) => b.x1)), y1: Math.max(...bs.map((b) => b.y1)),
+  };
 }
-function scaleTo(it, w, h) {
-  const b = bbox(it), cw = b.x1 - b.x0, ch = b.y1 - b.y0;
-  const sx = cw > 0.001 ? w / cw : 1, sy = ch > 0.001 ? h / ch : 1;
-  const [cx, cy] = centre(it);
-  it.shape.pts = it.shape.pts.map((q) => [cx + (q[0] - cx) * sx, cy + (q[1] - cy) * sy]);
-  // A CIRCLE HAS ONE SIZE, so averaging sx and sy is wrong when only one of them changed: typing
-  // 120 into Width asked for 120 and got 132, because the untouched Height contributed a factor of
-  // 1 to the average. Take the axis that actually moved.
+const boxCentre = (b) => [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+
+const shift = (it, dx, dy) => { it.shape.pts = it.shape.pts.map((q) => [q[0] + dx, q[1] + dy]); };
+
+/** Scale a whole selection about ONE anchor, so the parts keep their spacing relative to each
+ *  other. Scaling each part about its own centre instead would leave the arrangement unchanged
+ *  and only fatten the pieces, which is not what dragging a corner looks like it should do. */
+function scaleGroup(list, sx, sy, cx, cy) {
   const near1 = (v) => Math.abs(v - 1) < 1e-6;
   const f = near1(sx) ? sy : near1(sy) ? sx : (sx + sy) / 2;
-  if (it.shape.k === 'circle') it.shape.r *= f;
-  if (it.shape.k === 'capsule') it.shape.w *= f;
+  for (const it of list) {
+    it.shape.pts = it.shape.pts.map((q) => [cx + (q[0] - cx) * sx, cy + (q[1] - cy) * sy]);
+    // A CIRCLE HAS ONE SIZE, so averaging sx and sy is wrong when only one of them changed: typing
+    // 120 into Width asked for 120 and got 132, because the untouched Height contributed a factor
+    // of 1 to the average. Take the axis that actually moved.
+    if (it.shape.k === 'circle') it.shape.r *= f;
+    if (it.shape.k === 'capsule') it.shape.w *= f;
+  }
+}
+
+/**
+ * RESIZE A SELECTION TO AN EXACT BOX, BY ITERATING.
+ *
+ * One pass does not land on the number you typed once the selection is MIXED. A part's box is
+ * its points plus its own radius, so the group's box is `span + 2r` - and scaling the points by
+ * sx while scaling every radius by the same factor only composes cleanly when every part has the
+ * same radius. With two posts of different sizes, asking for 2986 gave 2966 and asking a height
+ * of 300 gave 180.
+ *
+ * So it measures, scales, and measures again. Four or five passes land inside a tenth of a pixel,
+ * and the loop stops the moment the residual factor is 1.
+ *
+ * `lockW` / `lockH` hold an axis still: dragging the `e` handle must not change the height, and
+ * typing in Width must not change what Height reads.
+ */
+function sizeGroupTo(list, wantW, wantH, lockW, lockH) {
+  for (let pass = 0; pass < 8; pass++) {
+    const b = groupBox(list);
+    const cw = b.x1 - b.x0, ch = b.y1 - b.y0, [cx, cy] = boxCentre(b);
+    const sx = lockW || cw <= 0.001 ? 1 : wantW / cw;
+    const sy = lockH || ch <= 0.001 ? 1 : wantH / ch;
+    if (Math.abs(sx - 1) < 1e-4 && Math.abs(sy - 1) < 1e-4) return;
+    scaleGroup(list, sx, sy, cx, cy);
+  }
 }
 
 const snapOn = () => document.getElementById('snap').checked;
 const snap = (v) => snapOn() ? Math.round(v / 5) * 5 : Math.round(v);
 
-function push() { history.push(JSON.stringify(items.map((i) => ({ ...i, src: undefined })))); if (history.length > 60) history.shift(); paintChrome(); }
+function push() { history.push(JSON.stringify({ items, sel: [...sel] })); if (history.length > 60) history.shift(); }
 function undo() {
   if (!history.length) return;
   const was = JSON.parse(history.pop());
-  items = was.map((i) => ({ ...i, src: PARTS.find((p) => p.name === i.from) }));
-  sel = null; draw();
+  items = was.items; sel = new Set(was.sel);
+  draw();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -249,34 +313,29 @@ const svg = document.getElementById('phone');
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 
 const BOARD_TOP = 176, BOARD_H = 620;
-const SCALE = BOARD_H / BH;                     // 620 / 1990
+const SCALE = BOARD_H / BH;
 const BOARD_X = (393 - BW * SCALE) / 2;
 
 function chrome() {
   const g = el('g');
   g.appendChild(el('rect', { x: 0, y: 0, width: 393, height: 852, fill: '#0d0b16' }));
-
-  // top bar
   const bar = el('text', { x: 16, y: 30, fill: '#cfc9e6', 'font-size': 13, 'font-family': 'system-ui', 'letter-spacing': 1.5 });
   bar.textContent = 'BALL 1/3  ●○○'; g.appendChild(bar);
   const sc = el('text', { x: 377, y: 32, fill: '#fff', 'font-size': 24, 'font-family': 'system-ui', 'text-anchor': 'end' });
   sc.textContent = '0'; g.appendChild(sc);
 
-  // objective strip
   g.appendChild(el('rect', { x: 12, y: 44, width: 369, height: 56, rx: 10, fill: '#161228', stroke: '#3ad0e0', 'stroke-width': 1 }));
   const ob = el('text', { x: 26, y: 70, fill: '#ffce3a', 'font-size': 15, 'font-family': 'system-ui', 'letter-spacing': 1 });
   ob.textContent = 'BALL 1'; g.appendChild(ob);
   const ob2 = el('text', { x: 26, y: 90, fill: '#b9b2d6', 'font-size': 13, 'font-family': 'system-ui', 'letter-spacing': 1 });
   ob2.textContent = 'SHOOT A RAMP TO THE UPPER DECK'; g.appendChild(ob2);
 
-  // backglass
   g.appendChild(el('rect', { x: 96, y: 110, width: 201, height: 60, rx: 4, fill: '#1a1030', stroke: '#8f93a8', 'stroke-width': 2 }));
   const bt = el('text', { x: 196, y: 133, fill: '#ff7ad9', 'font-size': 13, 'font-family': 'system-ui', 'text-anchor': 'middle', 'letter-spacing': 2 });
   bt.textContent = 'FOUNDRY'; g.appendChild(bt);
   const bs = el('text', { x: 196, y: 156, fill: '#fff', 'font-size': 17, 'font-family': 'system-ui', 'text-anchor': 'middle' });
   bs.textContent = '0'; g.appendChild(bs);
 
-  // buttons
   const btn = (x, w, label, stroke, fill) => {
     g.appendChild(el('rect', { x, y: 802, width: w, height: 40, rx: 10, fill: '#1a1533', stroke, 'stroke-width': 1.5 }));
     const t = el('text', { x: x + w / 2, y: 828, fill, 'font-size': 14, 'font-family': 'system-ui', 'text-anchor': 'middle', 'letter-spacing': 1.5 });
@@ -293,10 +352,7 @@ function pathFor(sh) {
     const [c] = sh.pts, r = sh.r;
     return `M ${c[0] - r} ${c[1]} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
   }
-  if (sh.k === 'capsule') {
-    const [a, b] = sh.pts;
-    return `M ${a[0]} ${a[1]} L ${b[0]} ${b[1]}`;
-  }
+  if (sh.k === 'capsule') { const [a, b] = sh.pts; return `M ${a[0]} ${a[1]} L ${b[0]} ${b[1]}`; }
   return 'M ' + sh.pts.map((q) => q.join(' ')).join(' L ') + ' Z';
 }
 
@@ -309,32 +365,28 @@ function shapeNode(it) {
     p.setAttribute('stroke-linecap', 'round');
   } else {
     p.setAttribute('fill', it.colour);
+    p.setAttribute('stroke', '#00000055');
+    p.setAttribute('stroke-width', 2);
     // The upper deck is translucent in the game for exactly this reason: opaque, it is a slab over
     // the whole top half and you cannot see - or hit - anything underneath it.
     if (it.name === 'deck_L2') p.setAttribute('fill-opacity', 0.5);
-    p.setAttribute('stroke', '#00000055');
-    p.setAttribute('stroke-width', 2);
   }
   return p;
 }
+
+const shown = () => {
+  const want = document.getElementById('levels').value;
+  return items.filter((it) => want === 'all' || it.levels.includes(+want));
+};
 
 let boardG = null, overlayG = null;
 function draw() {
   svg.textContent = '';
   svg.appendChild(chrome());
-
   boardG = el('g', { transform: `translate(${BOARD_X} ${BOARD_TOP}) scale(${SCALE})` });
-  // the cabinet, so the parts have something to sit on
-  boardG.appendChild(el('rect', { x: 0, y: 0, width: BW, height: BH, fill: '#2c1c0c', rx: 20 }));
-  boardG.appendChild(el('rect', { x: 45, y: 40, width: 910, height: 1900, fill: MAT.maple, rx: 8 }));
-
-  const want = document.getElementById('levels').value;
-  for (const it of items) {
-    if (want !== 'all' && !it.levels.includes(+want)) continue;
-    const n = shapeNode(it);
-    n.style.cursor = 'move';
-    boardG.appendChild(n);
-  }
+  boardG.appendChild(el('rect', { x: 0, y: 0, width: BW, height: BH, fill: '#2c1c0c', rx: 20, 'data-bg': '1' }));
+  boardG.appendChild(el('rect', { x: 45, y: 40, width: 910, height: 1900, fill: MAT.maple, rx: 8, 'data-bg': '1' }));
+  for (const it of shown()) { const n = shapeNode(it); n.style.cursor = 'move'; boardG.appendChild(n); }
   overlayG = el('g');
   boardG.appendChild(overlayG);
   svg.appendChild(boardG);
@@ -343,16 +395,30 @@ function draw() {
 }
 
 const HANDLES = [['nw', 0, 0], ['n', .5, 0], ['ne', 1, 0], ['e', 1, .5], ['se', 1, 1], ['s', .5, 1], ['sw', 0, 1], ['w', 0, .5]];
-function drawSel() {
+function drawSel(marquee) {
   overlayG.textContent = '';
-  const it = items.find((i) => i.id === sel);
-  if (!it) return;
-  const b = bbox(it), w = b.x1 - b.x0, h = b.y1 - b.y0;
-  overlayG.appendChild(el('rect', { x: b.x0 - 10, y: b.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline' }));
+  if (marquee) {
+    overlayG.appendChild(el('rect', {
+      x: Math.min(marquee.x0, marquee.x1), y: Math.min(marquee.y0, marquee.y1),
+      width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), class: 'marquee',
+    }));
+  }
+  const list = chosen();
+  if (!list.length) return;
+  // A thin outline round each member, so you can see WHICH parts are in the set...
+  if (list.length > 1) {
+    for (const it of list) {
+      const b = bbox(it);
+      overlayG.appendChild(el('rect', { x: b.x0 - 5, y: b.y0 - 5, width: b.x1 - b.x0 + 10, height: b.y1 - b.y0 + 10, class: 'sel-one' }));
+    }
+  }
+  // ...and one dashed box with handles round the lot, which is the thing you drag.
+  const g = groupBox(list), w = g.x1 - g.x0, h = g.y1 - g.y0;
+  overlayG.appendChild(el('rect', { x: g.x0 - 10, y: g.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline' }));
   for (const [k, fx, fy] of HANDLES) {
-    const hx = b.x0 - 10 + (w + 20) * fx, hy = b.y0 - 10 + (h + 20) * fy;
-    const c = el('circle', { cx: hx, cy: hy, r: 22, class: 'handle', 'data-h': k });
-    overlayG.appendChild(c);
+    overlayG.appendChild(el('circle', {
+      cx: g.x0 - 10 + (w + 20) * fx, cy: g.y0 - 10 + (h + 20) * fy, r: 22, class: 'handle', 'data-h': k,
+    }));
   }
 }
 
@@ -362,64 +428,127 @@ const toBoard = (evt) => {
   pt.x = evt.clientX; pt.y = evt.clientY;
   return pt.matrixTransform(boardG.getScreenCTM().inverse());
 };
+const additive = (e) => e.shiftKey || e.ctrlKey || e.metaKey;
 
 let drag = null;
 svg.addEventListener('pointerdown', (e) => {
   const t = e.target;
   const h = t.getAttribute && t.getAttribute('data-h');
   const id = t.getAttribute && t.getAttribute('data-id');
-  if (h && sel) {
-    const it = items.find((i) => i.id === sel);
-    drag = { mode: 'size', h, it, start: toBoard(e), box: bbox(it) };
+  const p = toBoard(e);
+
+  if (h && sel.size) {
     push();
+    drag = { mode: 'size', h, list: chosen(), start: p, box: groupBox(chosen()) };
   } else if (id) {
-    sel = id;
-    const it = items.find((i) => i.id === id);
-    drag = { mode: 'move', it, start: toBoard(e), from: centre(it) };
+    if (additive(e)) {
+      // Shift-tap toggles ONE part in or out and never starts a drag, so you can build a set up
+      // (or drop one part out of it) without nudging anything.
+      push();
+      if (sel.has(id)) sel.delete(id); else sel.add(id);
+      draw();
+      svg.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+    // Dragging a part that is ALREADY selected moves the whole set. Dragging one that is not
+    // selects it alone first, which is what every drawing tool does.
+    if (!sel.has(id)) { sel = new Set([id]); }
     push();
+    const list = chosen();
+    drag = { mode: 'move', list, start: p, from: list.map((it) => bbox(it)), acc: [0, 0] };
     draw();
-  } else { sel = null; draw(); return; }
+  } else {
+    // Empty board: start a lasso. Shift keeps what is already selected and adds to it.
+    if (!additive(e)) sel = new Set();
+    drag = { mode: 'lasso', keep: new Set(sel), box: { x0: p.x, y0: p.y, x1: p.x, y1: p.y } };
+    draw();
+    drawSel(drag.box);
+  }
   svg.setPointerCapture(e.pointerId);
   e.preventDefault();
 });
+
 svg.addEventListener('pointermove', (e) => {
   if (!drag) return;
   const p = toBoard(e);
+
   if (drag.mode === 'move') {
-    moveTo(drag.it, snap(drag.from[0] + p.x - drag.start.x), snap(drag.from[1] + p.y - drag.start.y));
-  } else {
+    const wantX = snap(p.x - drag.start.x), wantY = snap(p.y - drag.start.y);
+    const dx = wantX - drag.acc[0], dy = wantY - drag.acc[1];
+    if (dx || dy) { for (const it of drag.list) shift(it, dx, dy); drag.acc = [wantX, wantY]; }
+  } else if (drag.mode === 'size') {
     const b = drag.box, dx = p.x - drag.start.x, dy = p.y - drag.start.y;
     let w = b.x1 - b.x0, h = b.y1 - b.y0;
     if (drag.h.includes('e')) w += dx; if (drag.h.includes('w')) w -= dx;
     if (drag.h.includes('s')) h += dy; if (drag.h.includes('n')) h -= dy;
-    scaleTo(drag.it, Math.max(6, snap(w)), Math.max(6, snap(h)));
+    const wideOnly = drag.h === 'e' || drag.h === 'w';
+    const tallOnly = drag.h === 'n' || drag.h === 's';
+    sizeGroupTo(drag.list, Math.max(6, snap(w)), Math.max(6, snap(h)), tallOnly, wideOnly);
+  } else if (drag.mode === 'lasso') {
+    drag.box.x1 = p.x; drag.box.y1 = p.y;
+    const b = drag.box;
+    const lo = [Math.min(b.x0, b.x1), Math.min(b.y0, b.y1)], hi = [Math.max(b.x0, b.x1), Math.max(b.y0, b.y1)];
+    sel = new Set(drag.keep);
+    // WHAT THE LASSO CATCHES, and the first rule was wrong. Plain overlap seemed right - on a board
+    // this dense, "wholly inside" would mean boxing the whole arch to catch one post - but the
+    // playfield, the deck and the cabinet walls have boxes the size of the BOARD, so every lasso
+    // caught all of them: a 140 x 100 px drag over the bumpers selected 26 parts, playfield_L1 and
+    // deck_L2 among them.
+    //
+    // So a part is caught if its CENTRE is in the box, or it overlaps AND its own box is no more
+    // than three times the lasso. A wall you deliberately drag across is caught; the sheet under
+    // everything is not, unless you lasso most of the board - which is what Select all is for.
+    const area = Math.max(1, (hi[0] - lo[0]) * (hi[1] - lo[1]));
+    for (const it of shown()) {
+      const q = bbox(it);
+      const cx = (q.x0 + q.x1) / 2, cy = (q.y0 + q.y1) / 2;
+      const inside = cx >= lo[0] && cx <= hi[0] && cy >= lo[1] && cy <= hi[1];
+      const overlaps = q.x1 >= lo[0] && q.x0 <= hi[0] && q.y1 >= lo[1] && q.y0 <= hi[1];
+      if (inside || (overlaps && (q.x1 - q.x0) * (q.y1 - q.y0) <= area * 3)) sel.add(it.id);
+    }
+    drawSel(drag.box);
+    paintList();
+    return;
   }
   drawSel(); showProps();
 });
-const endDrag = () => { drag = null; draw(); showProps(); };
+
+const endDrag = () => { drag = null; draw(); };
 svg.addEventListener('pointerup', endDrag);
 svg.addEventListener('pointercancel', endDrag);
 
 // --------------------------------------------------------------------------------- panel + list
 const $ = (id) => document.getElementById(id);
 function showProps() {
-  const it = items.find((i) => i.id === sel);
-  $('none').hidden = !!it; $('props').hidden = !it;
-  $('dup').disabled = !it; $('del').disabled = !it; $('undo').disabled = !history.length;
-  if (!it) return;
-  const b = bbox(it), [cx, cy] = centre(it);
-  $('p-name').value = it.name; $('p-type').value = it.type;
-  $('p-level').value = it.levels.join(' + ');
+  const list = chosen();
+  $('none').hidden = !!list.length; $('props').hidden = !list.length;
+  $('dup').disabled = !list.length; $('del').disabled = !list.length;
+  $('clear').disabled = !list.length; $('undo').disabled = !history.length;
+  $('nsel').textContent = list.length;
+  $('multi-note').hidden = list.length < 2;
+  if (!list.length) return;
+  const b = groupBox(list), [cx, cy] = boxCentre(b);
+  const one = list.length === 1 ? list[0] : null;
+  $('p-name').value = one ? one.name : `${list.length} parts selected`;
+  $('p-type').value = one ? one.type : [...new Set(list.map((i) => i.type))].join(', ');
+  $('p-level').value = one ? one.levels.join(' + ') : [...new Set(list.flatMap((i) => i.levels))].sort().join(' + ');
   $('p-x').value = Math.round(cx); $('p-y').value = Math.round(cy);
   $('p-w').value = Math.round(b.x1 - b.x0); $('p-h').value = Math.round(b.y1 - b.y0);
 }
 for (const k of ['x', 'y', 'w', 'h']) {
   $('p-' + k).addEventListener('change', () => {
-    const it = items.find((i) => i.id === sel); if (!it) return;
+    const list = chosen(); if (!list.length) return;
     push();
-    if (k === 'x' || k === 'y') moveTo(it, +$('p-x').value, +$('p-y').value);
-    else scaleTo(it, +$('p-w').value, +$('p-h').value);
-    draw(); showProps();
+    const b = groupBox(list), [cx, cy] = boxCentre(b);
+    if (k === 'x' || k === 'y') {
+      const dx = +$('p-x').value - cx, dy = +$('p-y').value - cy;
+      for (const it of list) shift(it, dx, dy);
+    } else {
+      // Only the field you typed in moves; the other axis is held, so Width does not drag Height.
+      sizeGroupTo(list, +$('p-w').value, +$('p-h').value, k !== 'w', k !== 'h');
+    }
+    draw();
   });
 }
 function paintList() {
@@ -427,54 +556,63 @@ function paintList() {
   $('count').textContent = items.length;
   for (const it of items) {
     const li = document.createElement('li');
-    if (it.id === sel) li.className = 'sel';
+    if (sel.has(it.id)) li.className = 'sel';
     li.innerHTML = `<span>${it.name}</span><small>${it.type} · L${it.levels.join('')}</small>`;
-    li.onclick = () => { sel = it.id; draw(); showProps(); };
+    li.onclick = (e) => {
+      // The list obeys the same rule as the board: plain tap replaces, shift/ctrl toggles.
+      if (additive(e)) { if (sel.has(it.id)) sel.delete(it.id); else sel.add(it.id); }
+      else sel = new Set([it.id]);
+      draw();
+    };
     ul.appendChild(li);
   }
   showProps();
 }
-function paintChrome() { $('undo').disabled = !history.length; }
 
 // --------------------------------------------------------------------------------- the commands
 function duplicate() {
-  const it = items.find((i) => i.id === sel); if (!it) return;
+  const list = chosen(); if (!list.length) return;
   push();
-  const c = JSON.parse(JSON.stringify({ ...it, src: undefined }));
-  c.id = 'i' + (seq++); c.name = it.name + '_copy'; c.copy = true; c.src = it.src;
-  c.shape.pts = c.shape.pts.map((q) => [q[0] + 40, q[1] + 40]);
-  items.splice(items.indexOf(it) + 1, 0, c);
-  sel = c.id; draw(); showProps();
+  const made = [];
+  for (const it of list) {
+    const c = JSON.parse(JSON.stringify(it));
+    c.id = 'i' + (seq++); c.name = it.name + '_copy'; c.copy = true;
+    c.shape.pts = c.shape.pts.map((q) => [q[0] + 40, q[1] + 40]);
+    items.splice(items.indexOf(it) + 1, 0, c);
+    made.push(c.id);
+  }
+  sel = new Set(made);       // the copies are what you now hold, so a drag moves them off the originals
+  draw();
 }
 function remove() {
-  const it = items.find((i) => i.id === sel); if (!it) return;
-  push(); items.splice(items.indexOf(it), 1); sel = null; draw(); showProps();
+  const list = chosen(); if (!list.length) return;
+  push();
+  for (const it of list) items.splice(items.indexOf(it), 1);
+  sel = new Set(); draw();
 }
 $('dup').onclick = duplicate;
 $('del').onclick = remove;
 $('undo').onclick = undo;
-$('reset').onclick = () => { if (confirm('Throw away every change and reload the board as it ships?')) { build(); sel = null; history = []; draw(); } };
+$('clear').onclick = () => { sel = new Set(); draw(); };
+$('all').onclick = () => { push(); sel = new Set(shown().map((i) => i.id)); draw(); };
+$('reset').onclick = () => { if (confirm('Throw away every change and reload the board as it ships?')) { build(); sel = new Set(); history = []; draw(); } };
 $('levels').onchange = draw;
-// The SVG viewBox stays 393 x 852 whatever the zoom - the export is always the phone screen at
-// its real size, and only the thing on your desk gets bigger.
-const setZoom = () => { const z = +$('zoom').value; svg.setAttribute('width', 393 * z); svg.setAttribute('height', 852 * z); };
-$('zoom').onchange = setZoom;
-setZoom();
 
 addEventListener('keydown', (e) => {
   if (/input|textarea/i.test(e.target.tagName)) return;
-  const it = items.find((i) => i.id === sel);
-  if (e.key === 'Escape') { sel = null; draw(); return; }
+  if (e.key === 'Escape') { sel = new Set(); draw(); return; }
   if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
-  if (!it) return;
+  if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('all').click(); return; }
+  const list = chosen();
+  if (!list.length) return;
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(); return; }
   if (e.key === 'd' || e.key === 'D') { e.preventDefault(); duplicate(); return; }
   const step = e.shiftKey ? 10 : 1;
   const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
   if (!d) return;
   e.preventDefault(); push();
-  const [cx, cy] = centre(it); moveTo(it, cx + d[0], cy + d[1]);
-  draw(); showProps();
+  for (const it of list) shift(it, d[0], d[1]);
+  draw();
 });
 
 // --------------------------------------------------------------------------------- the exports
@@ -487,12 +625,11 @@ function save(name, text, mime) {
 }
 
 $('svg').onclick = () => {
-  // The WHOLE PHONE SCREEN, not the board alone: draw it fresh with nothing selected, so the export
+  // The WHOLE PHONE SCREEN, not the board alone: drawn fresh with nothing selected, so the export
   // has no editing furniture in it.
-  const was = sel; sel = null; draw();
+  const was = new Set(sel); sel = new Set(); draw();
   const out = svg.cloneNode(true);
   out.setAttribute('xmlns', NS);
-  overlayG.textContent = '';
   save('foundry-screen.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + out.outerHTML, 'image/svg+xml');
   sel = was; draw();
 };
@@ -504,12 +641,12 @@ $('json').onclick = () => {
   const seen = new Set();
   for (const it of items) {
     if (it.copy) { added.push({ name: it.name, copyOf: it.from, type: it.type, shape: it.shape }); continue; }
-    seen.add(it.name);
-    const was = original.get(it.name);
+    seen.add(it.from);
+    const was = original.get(it.from);
     if (!was || JSON.stringify(was) === JSON.stringify(it.shape)) continue;
     changed.push({ name: it.name, type: it.type, was, now: it.shape });
   }
-  for (const p of PARTS) if (shapeOf(p) && !seen.has(p.name) && !items.some((i) => i.from === p.name && !i.copy)) removed.push(p.name);
+  for (const p of PARTS) if (shapeOf(p) && !seen.has(p.name)) removed.push(p.name);
   const doc = {
     what: 'FOUNDRY layout edits, in reference pixels (x 0..1100, y 0..1990). Apply to pinball/design/board.js.',
     when: new Date().toISOString(),
@@ -519,5 +656,10 @@ $('json').onclick = () => {
   save('foundry-edits.json', JSON.stringify(doc, null, 2), 'application/json');
 };
 
+// The SVG viewBox stays 393 x 852 whatever the zoom - the export is always the phone screen at its
+// real size, and only the thing on your desk gets bigger.
+const setZoom = () => { const z = +$('zoom').value; svg.setAttribute('width', 393 * z); svg.setAttribute('height', 852 * z); };
+$('zoom').onchange = setZoom;
+setZoom();
 draw();
 </script>
