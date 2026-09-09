@@ -19,7 +19,8 @@ player profile and a synced record of every game anyone plays on any of their de
 - Rank number (people who tie share a rank)
 - Name and emoji avatar, with a "You" marker on the viewer's own row
 - One number: their wins in the selected category, or their total games played
-- A breakdown of their wins across all six categories
+- A breakdown of their wins by category — as many categories as fit on the line, biggest first,
+  with the selected one always among them. Their own page below shows all six
 
 Sorts: Wins, Played, Name.
 Category filter: Everything, Easy, Medium, Hard, Expert, No tier, Versus.
@@ -38,7 +39,8 @@ Sorts: A to Z, Most played, Favorites. A game nobody has played says so and has 
 Header: the game's name and how many games everyone has played of it.
 
 Per row: rank (ties share a rank), name, avatar, the difficulty tier that player is ranked at,
-their games played, and the game's own number.
+their games played, the game's own number, and — for the games that can be played against other
+people — that player's wins against real people in this game, marked VS.
 
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
@@ -55,9 +57,10 @@ has chinchóns, closes and minus tens.
 ## A player's own page (opened from either view)
 
 Their name, avatar, total games played, total wins, their tagline if they have written one, a
-button to message them, their wins broken down by all six categories, and a list of every game they
-have played with their number in each. Opening one of those games shows their full record for it,
-including a win / loss / draw table broken down by difficulty.
+button to message them, their wins broken down by all six categories (zeros included, under the
+heading "Wins by difficulty"), and a list of every game they have played with their number in each.
+Opening one of those games shows their full record for it, including a win / loss / draw table
+broken down by difficulty.
 
 (The message button is absent on the viewer's own row, and on old records that predate player
 codes.)
@@ -69,8 +72,12 @@ them — a game whose levels are called Beginner / Intermediate / Pro is Easy / 
 
 Games with no difficulty at all: Skeeball, Golf, Yahtzee.
 
-Online matches against real people carry no difficulty tier and count as **Versus**. Plays recorded
-before a game had difficulty carry no tier either and count as **No tier**.
+Online matches against real people carry no difficulty tier and count as **Versus**: Escoba, Tic
+Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship. Chinchón can also be
+played against other people, but it files those matches under a difficulty rather than as Versus, so
+they do not show up there.
+
+Plays recorded before a game had difficulty carry no tier either and count as **No tier**.
 
 ## Every game's number is a different thing
 
