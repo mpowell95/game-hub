@@ -665,6 +665,25 @@
 }
 .gf-root .gf-tut__pauserow.is-lit { background: #ffce3a; color: #2a2000; border-color: #8a6a00; }
 
+/* THE PAUSE MENU. Deliberately the same three-row shape the tutorial's closing card draws
+   (`PAUSE_ART` in js/tutorial.js) - the lesson shows a picture of this menu and then the player
+   meets it, so the picture and the thing have to be one design. The rows are full-width buttons
+   at 46px, above the 44px tap floor, and `report a bug` carries the standing gold accent plus a
+   border and a weight change, never hue alone. */
+.gf-root .gf-pause .gf-result__card { max-width: 300px; padding: 14px; }
+.gf-root .gf-pause__h {
+  font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  color: #b9c4a8; padding-bottom: 10px;
+}
+.gf-root .gf-pause__rows { display: flex; flex-direction: column; gap: 8px; }
+.gf-root .gf-pause__row {
+  font: inherit; font-size: 16px; font-weight: 800; color: var(--gf-ink);
+  min-height: 46px; padding: 10px 12px; width: 100%; cursor: pointer;
+  background: rgba(255, 255, 255, .1); border: 1px solid rgba(0, 0, 0, .5);
+  touch-action: manipulation;
+}
+.gf-root .gf-pause__row.is-lit { background: #ffce3a; color: #2a2000; border-color: #8a6a00; }
+
 .gf-root .gf-tut-ring {
   position: absolute; pointer-events: none; z-index: 39;
   border: 2px solid #ffce3a; box-shadow: 0 0 0 3px rgba(255, 206, 58, .28);

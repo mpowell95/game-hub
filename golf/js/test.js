@@ -1953,7 +1953,22 @@ console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-0
 // the DOM half is not testable here and a structural check is what stops the rule going away.
 {
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
-  ok('[KNOWN-BUG PROBE] the quit button asks first', /q\('quit'\), 'click', \(\) => this\._quit\(\)/.test(ui));
+  // The top-left button became PAUSE on 2026-09-09 and quit moved into that menu, so the route is
+  // one hop longer and the rule is not: the only thing that leaves a round still goes through
+  // `_quit`, which asks. Both hops are pinned - the button opens the menu, the menu's quit row
+  // calls `_quit()` - so neither can be quietly short-circuited back to a one-tap exit.
+  ok('[KNOWN-BUG PROBE] the quit button asks first',
+    /q\('pause'\), 'click', \(\) => this\._pauseMenu\(\)/.test(ui)
+    && /'\[data-role="p-quit"\]'\)[^\n]*'click',[^\n]*this\._quit\(\)/.test(ui));
+  // ...and the menu the tutorial's closing card promises actually has the row it draws.
+  ok('...and the pause menu can open a bug report for golf',
+    /data-role="p-bug"/.test(ui)
+    && /import\('\.\.\/\.\.\/js\/bug-report-ui\.js'\)/.test(ui)
+    && /openBugReport\(\{ gameId: 'golf' \}\)/.test(ui));
+  // [KNOWN-BUG PROBE] `_frame` keeps running behind an overlay, so a swing left live while the
+  // menu is open fires itself and charges a stroke for a shot nobody saw.
+  ok('[KNOWN-BUG PROBE] opening the pause menu cancels a live swing',
+    /_pauseMenu\(\)\s*\{[\s\S]{0,120}?this\.swing\.settle\(/.test(ui));
   // ...but a PRACTICE hole is not a round and must still leave instantly, or the prompt that
   // matters becomes the one the player has learned to dismiss. That is why the quit button has its
   // own narrower test rather than reusing the hub's `isInProgress()`, which answers true for one.
