@@ -2816,6 +2816,7 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
 {
   console.log('\n-- 24. golf\'s own leaderboard --');
   const BD = await import('./board.js');
+  const IDG = await import('../../js/players-agg.js');
   const P = (name, code, best) => ({ profile: { name, playerId: code },
     stats: { games: { golf: { total: { played: 1, won: 1 }, gf: { rounds: 1, bestRoundByCourse: best } } } } });
   const fam = {
@@ -2825,7 +2826,12 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     u: P('Unai', 'UU', { pinevalley3: 15 }),
     z: P('zzztest', 'ZZ', { pinevalley3: 3 }),
   };
-  const rows = BD.boardRows(fam, 'pinevalley3', 'code:PA');
+  // THE VIEWER'S KEY IS ASKED FOR, NOT SPELLED OUT. `identityKey` prefers the CODE form, but the
+  // union in `buildIdentity` can canonicalise a group onto its NAME form - Anita's group key is
+  // `name:anita bonita`, not `code:PA`. A hardcoded key here passes only by luck and fails the day
+  // the graph merges differently, which is exactly what it did the first time this ran.
+  const meKey = IDG.buildIdentity(fam).keyFor({ name: 'Anita Bonita', playerId: 'PA' }, 'dev1');
+  const rows = BD.boardRows(fam, 'pinevalley3', meKey);
   ok('everyone with a score on that round is listed', rows.length === 4, `${rows.length} rows`);
   ok('a test account is not', !rows.some((r) => /zzz/i.test(r.name)));
   // LOWER WINS - the only metric in this app where that is true, and the reason the hub board
@@ -2876,7 +2882,12 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   // It is opaque: at 94 % the setup screen's own "Best:" figures showed through a screen that is
   // itself a list of scores.
   ok('the overlay is opaque', /\.gf-board \{[^}]*background: #0c1207/.test(src));
-  ok('golf owns its own level-par string', /t\('board_even'\)/.test(src) && !/lb_golf_even/.test(src));
+  // The negative is on the CALL, not on the string appearing anywhere: board.js's own header
+  // explains why it does not use the hub's key, and naming it there is the documentation. A probe
+  // that fails because a comment mentions the thing it is warning about is a probe that gets
+  // deleted by the next person who meets it.
+  ok('golf owns its own level-par string',
+    /t\('board_even'\)/.test(src) && !/t\('lb_golf_even'\)/.test(src));
 
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
   ok('the setup screen offers it', /data-role="board"/.test(ui) && /this\._openBoard\(\)/.test(ui));
