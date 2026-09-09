@@ -2506,10 +2506,31 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     /_paintTutorialDial\(/.test(uiSrc2) && /this\._drawMeter\(performance\.now\(\), \{/.test(uiSrc2),
     'the tutorial draws its own dial instead of using the meter painter');
   // ...and the bottom HUD moves out from under the rail rather than the rail floating over it.
-  ok('the controls ride up while the lesson runs',
-    /data-tut/.test(uiSrc2) && /\[data-tut="1"\] \.gf-bl/.test(
-      fs.readFileSync(new URL('../css/golf.css', import.meta.url), 'utf8')),
-    'the rail would cover the club tile and the swing button');
+  {
+    const cssSrc = fs.readFileSync(new URL('../css/golf.css', import.meta.url), 'utf8');
+    ok('the controls ride up while the lesson runs',
+      /data-tut/.test(uiSrc2) && /\[data-tut="1"\] \.gf-bl/.test(cssSrc),
+      'the rail would cover the club tile and the swing button');
+    // [KNOWN-BUG PROBE] THE RAIL'S HEIGHT AND THE CONTROLS' OFFSET ARE THE SAME NUMBER. They used
+    // to be written twice - `10px + 30px` for the controls against `30px` for the rail - which is
+    // how a 10 px strip of bare course ended up between them. Raising the bar for Matt's bigger
+    // text (2026-09-09) then hit the same class of bug from the other side: the rail's 2 px gold
+    // top border sat OUTSIDE its stated height on content-box, so a 40 px bar rendered 42 and
+    // overlapped the controls by exactly the border. One name, used by both, measured border-box.
+    ok('[KNOWN-BUG PROBE] the rail and the controls are sized from ONE number',
+      /--gf-rail-h:/.test(cssSrc)
+      && /\[data-tut="1"\] \.gf-br \{ bottom: calc\(var\(--gf-rail-h\)/.test(cssSrc)
+      && /height: calc\(var\(--gf-rail-h\)/.test(cssSrc)
+      && /box-sizing: border-box;\s*\n\s*height: calc\(var\(--gf-rail-h\)/.test(cssSrc),
+      'the bar and the gap above it can drift apart again');
+    // ...and the lesson's own bar must never squeeze its sentence out of shape. The pips are a
+    // flex ITEM now; held out of flow they needed hand-guessed side padding, and at 15 px the
+    // Spanish club card wrapped to three lines at 360 px and overflowed the bar.
+    ok('...and the rail lays its pips and text out in flow',
+      /\.gf-tut__pips \{ flex: none/.test(cssSrc)
+      && /\.gf-tut__rail \.gf-tut__text \{[\s\S]{0,400}?flex: 1; min-width: 0/.test(cssSrc),
+      'absolute pips force the text into hand-guessed padding');
+  }
   ok('[KNOWN-BUG PROBE] there is no skip button', !/data-role="tut-skip"/.test(
     fs.readFileSync(new URL('./tutorial.js', import.meta.url), 'utf8')));
   // EVERY CARD UNDER TEN WORDS. Matt, twice: "it is WAY too wordy", then "still way too much text.

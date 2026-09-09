@@ -150,6 +150,47 @@ Build a leaderboard screen inside golf with tabs for **3 holes / front 9 / back 
 
 ---
 
+## Done after this doc was first written — the tutorial rail
+
+Matt, 2026-09-09: *"in my screenshot I made the text on the very bottom larger. Add that. But
+extend it down. I don't want the bottom hud controls shifted up so make more room. And I don't want
+this to impact non-tutorial holes."*
+
+**Shipped.** The rail is 40 px (was 30) and its text 15 px (was 13), and the controls did **not**
+move: measured before and after, `.gf-bl`/`.gf-br` sit 40 px above the root's bottom in both. The
+bar grew into the 10 px strip of bare course that was already sitting between it and the controls.
+
+**It cannot get taller than that without moving something, and here is the measurement.** The 40 px
+under the game in the hub is `.hub-main.hub-main-immersive`'s own `padding-bottom` — it belongs to
+the hub and to every other immersive game in it, so it is not golf's to take. Past 40 px the only
+thing left to give is the controls' position, which is the one thing that was ruled out. If a
+future session wants a taller bar it has to start there, with Matt.
+
+**Non-tutorial holes are untouched by construction**: `data-tut="1"` is set only while the lesson is
+running and the rail exists only then. Verified rather than assumed — on a practice hole the
+controls sit at their ordinary 10 px inset with no rail and no `data-tut`.
+
+Three things worth knowing if you touch that bar:
+
+- **`--gf-rail-h` is one number and both rules read it.** The height and the controls' offset used
+  to be written separately (`30px` against `10px + 30px`), which is how the 10 px gap appeared in
+  the first place. The rail is `box-sizing: border-box` for the same reason: its 2 px gold top
+  border sat outside a content-box height, so a 40 px bar rendered 42 and overlapped the controls
+  by exactly the border.
+- **The pips are a flex ITEM now, not an absolute one.** Held out of flow, the text had to be kept
+  off them with hand-guessed side padding, and at 15 px the Spanish club card wrapped to three
+  lines at 360 px and overflowed the bar. In the row they cannot overlap and the text gets whatever
+  is actually left. This is the same flow-vs-absolute lesson as the HUD overlap below, applied
+  where it was cheap.
+- **The text is not `nowrap` with an ellipsis.** Clipping a tutorial instruction to make it fit is
+  worse than any layout problem it solves. Two lines is 39 px inside a 40 px bar, so a long
+  translation on a narrow phone wraps rather than disappearing. `es tut_club` was shortened to
+  "Toca las flechas para cambiar de palo." so it is one line at 393 px.
+
+`golf/js/test.js` section 20 pins the one-number rule and the flow layout as `[KNOWN-BUG PROBE]`s.
+
+---
+
 ## Smaller, already known
 
 1. **The top-left and top-centre HUD clusters overlap on narrow phones.** Measured gap between
