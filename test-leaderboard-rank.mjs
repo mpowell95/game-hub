@@ -570,6 +570,13 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /boardRankTier\(metricAt, id, playsAt\)/.test(rankSrc)
     && /if \(playsAt\(tier\) > 0 && hasBoardMetric\(metricAt\(tier\), id\)\) return tier;/.test(rankSrc),
     'Skeeball, Golf and Hill Climb each printed EXPERT on every row without it');
+  ok('[KNOWN-BUG PROBE] Pinball ranks on its POINTS, never on winsAtTier wearing that label',
+    /if \(id === 'pinball'\) return pbPointsAt\(g\);/.test(src)
+    && /function pbPointsAt\(g\) \{[\s\S]{0,200}?pb\.points \| 0/.test(src),
+    'a player with 2,000,000 lifetime points read "2 POINTS" - their number of Tournament games');
+  ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
+    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'pinball', 'golf'\]\);/.test(src)
+    && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
   ok('By Game\'s leader row marks the tier its number belongs to',
     /\$\{tierMarkHTML\(boardTierOf\(lead, meta\.id\)\)\}/.test(src) && /\.lb-tiermark\{/.test(src));
   ok('the chip is suppressed while a difficulty filter is selected, which already says it once',

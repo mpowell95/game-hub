@@ -1424,23 +1424,24 @@ are read-only to this feature — nothing is stored, migrated or normalized.
     - **The PLAYS half is what proves the game HAS a difficulty axis at all**, and it was missed on
       the first two passes. `gameMetricAt` IGNORES its tier argument for Skeeball (its metric is
       machine-scoped) and Golf (course-scoped), so "is there a score at tier 4" is trivially yes and
-      **all three of Skeeball, Golf and Hill Climb printed EXPERT on every row** (measured on the
-      real boards, 2026-09-08). Their difficulty buckets are keyed by MACHINE / COURSE / STAGE,
-      `tierOf()` maps none of those to a tier, so `playsAt` is 0 at every tier and the answer is
-      `null` - which is the truth.
-  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Pinball, Golf, Hill Climb -
-    every row is null, so those three boards rank on their plain number exactly as they did before
-    any of this) and legacy/unmapped history in a game that has one. Those rows keep the all-tier
+      **both printed EXPERT on every row** (measured, 2026-09-08). Their difficulty buckets are keyed
+      by MACHINE and by COURSE, `tierOf()` maps neither to a tier, so `playsAt` is 0 at every tier
+      and the answer is `null` - which is the truth.
+  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Golf and Yahtzee - every row is
+    null, so those boards rank on their plain number exactly as they did before any of this) and
+    legacy/unmapped history in a game that has one. Those rows keep the all-tier
     number and sort below the tiered rows. **Nothing leaves the board**: the other tiers are still
     on the card's tier tiles, the difficulty filter still shows any tier's own numbers, Standing
     Records still names the all-time best (King of Games' 51 is still printed on that same screen),
     and the player detail still has the full per-tier table (rule 1).
-  - **Hill Climb's four stages ARE a difficulty axis and this board deliberately does NOT rank by
-    them.** `hcBestAt` slices by `HC_TIER_KEYS` (countryside/desert/arctic/moon, in unlock order),
-    so tier-first ranking there *works* - but it labels moon "Expert", and that board's difficulty
-    filter offers no tiers at all (`tierOf('countryside')` is null), so the chip would claim a tier
-    the screen cannot filter by. Ranking it by stage needs its own vocabulary in the chip and the
-    filter; until then it is untiered, like Skeeball. Do not "fix" it by dropping the plays gate.
+  - **HILL CLIMB AND PINBALL ARE FULLY TIERED GAMES, and a session reviewing this got that wrong
+    once (2026-09-08) by reading `hcBestAt`'s stage keys and assuming the stored bucket matched.**
+    It does not: `recordHillClimb` maps the stage INDEX onto `easy|medium|hard|expert` and writes
+    THAT to `byDiff` (countryside -> Easy ... moon -> Expert), and `recordPinball` writes its three
+    table settings (Casual/Standard/Tournament) as `easy|medium|hard`. So both carry real tiers,
+    both offer the difficulty filter, and Hill Climb genuinely ranks furthest-stage-first: a moon
+    run of 77 m outranks a countryside run of 900 m, which is the rule working, not a bug. **Read
+    the recorder, not the display extractor**, when asking whether a game has a difficulty axis.
   - **By Game's leader row carries the same tier as a wordless SHAPE** (`tierMarkHTML`): that row
     prints the leader's score AT THEIR TIER, because it has to name the person the board puts at #1,
     so without a marker it reads as the game's all-time record. **The chip is suppressed entirely

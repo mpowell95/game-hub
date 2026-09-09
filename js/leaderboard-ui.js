@@ -451,6 +451,24 @@ function skPointsAt(g, machine) {
   if (!machine || machine === 'all') return sk.points | 0;
   return ((sk.boards || {})[machine] || {}).points | 0;
 }
+/** PINBALL'S LIFETIME POINTS, and the same GUARD Skeeball's own note above spells out: NEVER
+ *  winsAtTier for this game. `recordPinball` calls `bumpTotals(..., true)`, so every game played is
+ *  stored as a "win" and this board fell through to counting them - under a unit label that says
+ *  POINTS. Measured 2026-09-08 on a fabricated but real-shaped record: a player with a 900,000 best
+ *  and 2,000,000 lifetime points read "2 POINTS", which was their number of Tournament games.
+ *  Skeeball had exactly this bug and exactly this fix (Matt: "Points should show lifetime points.
+ *  Not your best single round."); Pinball simply never got a case here. `pb.bestScore` is still
+ *  stored and still shown on My Stats, so nothing is hidden by ranking on the lifetime total.
+ *
+ *  Tier-blind, like Skeeball's: `pb` keeps no per-tier points breakdown, so two players on the same
+ *  tier compare lifetime totals that include their easier tables. Same documented exception as Tic
+ *  Tac Toe's Ultimate/Classic split. Pinball's TIER is still real and still leads the ranking - its
+ *  three table settings are stored as easy/medium/hard by recordPinball. */
+function pbPointsAt(g) {
+  const pb = g.games.pinball && g.games.pinball.pb;
+  return pb ? pb.points | 0 : 0;
+}
+
 /** BEST SINGLE RACK - the high score. The same reading it always was; it is just no longer what
  *  "Points" means. The board offers it as its own sort now (see sortItemsFor). */
 function skBestAt(g, machine) {
@@ -485,11 +503,24 @@ function skPlaysAt(g, machine) {
 // three things had to move together in one commit, and a test guards each: this extractor, the
 // SORT DIRECTION at every one of its six call sites, and gameListHTML's `metric > 0` leader
 // filter (which dropped every under-par and every level-par round). See js/leaderboard-rank.js.
+/** THE GAMES WHOSE METRIC IGNORES THE TIER IT IS HANDED - the map two sessions had to rediscover
+ *  the hard way (2026-09-08), so it is written down once here rather than re-derived from the
+ *  extractors below. Skeeball's number is scoped by MACHINE, golf's by COURSE, Pinball's is one
+ *  lifetime total; none of the three has a per-tier breakdown to read.
+ *
+ *  Skeeball and golf are untiered anyway (their stored buckets are keyed by machine and by course,
+ *  which map to no tier). **Pinball is the one that is genuinely tiered AND tier-blind**: its three
+ *  table settings are stored as easy/medium/hard, so it ranks tier-first correctly, but there is no
+ *  per-tier points figure - which is why it gets no per-tier tiles. Printing the same lifetime
+ *  total under Easy, Medium and Hard would claim they were three separate scores. */
+const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'pinball', 'golf']);
+
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
+  if (id === 'pinball') return pbPointsAt(g);
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   return winsAtTier(g, [id], tier);
 }
@@ -1503,7 +1534,8 @@ function gameDetail(list, id) {
         // The tile for the tier this row ranks at is marked, so the headline is visibly one of
         // the tiles rather than a number from nowhere. Every other tier is still printed beside
         // it - nothing about a player's record leaves this card (THE LAW rule 1).
-        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier)
+        const tiles = (METRIC_IS_TIER_BLIND.has(id) ? ''
+          : miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier))
           + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(lbUnitKeyOf(id));
         const metricStr = metricText(metric, id);
