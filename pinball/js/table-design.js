@@ -56,7 +56,7 @@ export const LAUNCH_LEVEL = 2;
 // up: it fell out, dropped to the mouth again and re-fired, 1,056 times in six driven games. Each
 // one now arrives well inside the deck, heading across it, the way a habitrail hands a ball off.
 export const RAMPS = [
-  { id: 'rampL', x: [px(45), px(129)], y: px(908), to: { x: px(230), y: px(380), vx: 260, vy: 120 } },
+  { id: 'rampL', x: [px(45), px(150)], y: px(908), to: { x: px(230), y: px(380), vx: 260, vy: 120 } },
   { id: 'rampR', x: [px(866), px(936)], y: px(908), to: { x: px(756), y: px(380), vx: -260, vy: 120 } },
 ];
 /** The gap in the deck's front lip between the upper flipper tips: the way DOWN to level 1. */

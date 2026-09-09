@@ -88,8 +88,15 @@ wall('apron_edge_right', [941, 1650], [600, 1880], 0.006, 0.03, Y1, 'darkwood', 
 // upper-deck front lip (V ledge) — a lip on the deck edge, L2 only; the deck is open underneath. Gap 455..545 px = drop hole
 // The V ledge now starts at the INNER edge of each ramp mouth, so the mouth is a real opening in
 // the deck edge rather than a hole behind a lip.
-wall('ledge_left',  [218, 640], [455, 724], 0.008, 0.024, Y2 - 0.012, 'darkwood', [2]);
-wall('ledge_right', [782, 640], [545, 724], 0.008, 0.024, Y2 - 0.012, 'darkwood', [2]);
+// THE FRONT OF THE DECK IS AN EDGE, NOT A BARRIER. Matt: *"you put a horizontal wall where there
+// should just be an edge - no barrier of any kind - under the top paddles."* There were four walls
+// there (ledge_left/right and their two extensions) making a continuous lip right across the deck
+// with one 90 px hole in it, so a ball that rolled down the deck stopped on the lip - 67 of them
+// on a rest sweep - instead of simply falling off the front.
+//
+// Nothing is built there now. js/design.js drops a deck ball to level 1 once it is past py 760,
+// which IS the edge: the ball rolls off the front of the raised deck and lands on the playfield
+// underneath, the way it does on the real table.
 // L1 under the deck: two thick solid gray arch bands (measured off the reference, see README "Arch measurements").
 // Each band = semicircular annulus on top + straight vertical legs ending in round caps; legs end at different heights.
 // cIn/rIn: inner-edge circle; cOut/rOut: outer-edge circle (outer band's outer edge is offset 10 px left — the
@@ -129,7 +136,7 @@ function smoothEdge(pts, step = 6) {
 
 const OUTER_OUT = [ // outer edge of the outer band: measured left leg (y 900 -> 640), shoulder + FLAT crown measured through the deck (y 306), right leg
   [186, 900], [176, 880], [166, 860], [158, 840], [152, 820], [149, 800], [145, 780], [143, 760], [140, 740], [137, 720], [136, 700], [133, 680], [131, 660], [129, 640],
-  [135, 600], [150, 540], [170, 490], [200, 440], [218, 400], [232, 380], [244, 360], [252, 340], [268, 320], [290, 310], [350, 306], [430, 305], [500, 305], [570, 305], [650, 306], [700, 306],
+  [135, 600], [150, 540], [170, 490], [200, 440], [218, 400], [232, 380], [244, 360], [252, 340], [268, 320], [290, 318], [350, 314], [430, 309], [500, 305], [570, 309], [650, 314], [700, 318],  // crown CAMBERED, see below
   [716, 320], [732, 340], [748, 360], [756, 380], [764, 400], [790, 440], [820, 490], [840, 540], [856, 600], [862, 640],
   [864, 660], [866, 680], [866, 700], [866, 720], [864, 740], [860, 760], [856, 780], [847, 800], [841, 820], [833, 840], [826, 860], [817, 880], [809, 900]];
 const OUTER_IN = [ // inner edge of the outer band: rounder than the outer edge (crown 414), measured at x = 230..500 through the deck
@@ -161,7 +168,7 @@ const CENTRE_IN = [
   [452, 700], [452, 676], [456, 654], [466, 640], [480, 632], [500, 630], [520, 632], [534, 640],
   [544, 654], [548, 676], [548, 700]];
 
-P.push({ type: 'band', name: 'arch_outer', outer: OUTER_OUT, inner: OUTER_IN, yEndL: 908, yEndR: 908, h: 0.028, y0: Y1, mat: 'band', levels: [1] });
+P.push({ type: 'band', name: 'arch_outer', outer: OUTER_OUT, inner: OUTER_IN, yEndL: 880, yEndR: 880, h: 0.028, y0: Y1, mat: 'band', levels: [1] });
 P.push({ type: 'band', name: 'arch_inner', outer: INNER_OUT, inner: INNER_IN, yEndL: 796, yEndR: 796, h: 0.028, y0: Y1, mat: 'band', levels: [1] });
 P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN, yEndL: 700, yEndR: 700, h: 0.024, y0: Y1, mat: 'band', levels: [1] });
 // short L2 lips closing the deck edge over the arch legs, so the ramp mouths are exactly the ramps' width
@@ -171,8 +178,7 @@ P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN,
 // ...and the rest of the deck edge is closed, right out to both cabinet walls, because the old
 // outer ramp lanes are gone. A ball can now leave the deck ONLY down a ramp or through the drop
 // hole.
-wall('ledge_left_ext',   [129, 640],  [218, 640], 0.008, 0.024, Y2 - 0.012, 'darkwood', [2]);
-wall('ledge_right_ext',  [782, 640], [866, 640], 0.008, 0.024, Y2 - 0.012, 'darkwood', [2]);
+// (the two ledge extensions were part of that lip and are gone with it - see the deck edge above)
 // THE BUTTON IN THE MOUTH OF THE CENTRE ARCH. A real capture hole, not decoration: it carries a
 // footprint so the engine can score it, and it sits under the third band's crown.
 P.push({ type: 'saucer', name: 'saucer_centre', at: [500, 656], y0: Y1, levels: [1], capture: true, r: 0.016 });
@@ -205,18 +211,26 @@ P.push({ type: 'ramp', name: 'ramp_right', x: [866, 936], z: [640, 908], mat: 'r
 // touch this. It is the backstop for anything the transition does not catch.
 // A rail down BOTH edges of each ramp. They used to borrow the arch leg as their inner wall; out
 // here in the middle of the table neither has one, so each gets its own pair.
-wall('ramp_rail_left_out',  [45, 640], [45, 908], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_left_in',   [129, 640], [129, 908], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_right_in',  [866, 640], [866, 908], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_rail_right_out', [936, 640], [936, 908], 0.005, 0.026, Y1, 'steel', [1]);
+// THE THIN VERTICAL RAILS ARE SHORT. They ran the full py 640..908, so each ramp lane was a
+// walled slot a ball had to already be inside to enter, and a shot arriving at any angle hit the
+// rail's flank instead. Matt: *"Shorten the left and right thin vertical walls."* They now cover
+// only the top half of the lane, which is the part that has to guide the ball onto the ramp; the
+// bottom half is open, so a shot off a paddle can come into the lane from the side.
+wall('ramp_rail_left_out',  [45, 640], [45, 790], 0.005, 0.026, Y1, 'steel', [1]);
+wall('ramp_rail_left_in',   [150, 640], [150, 790], 0.005, 0.026, Y1, 'steel', [1]);
+wall('ramp_rail_right_in',  [866, 640], [866, 790], 0.005, 0.026, Y1, 'steel', [1]);
+wall('ramp_rail_right_out', [936, 640], [936, 790], 0.005, 0.026, Y1, 'steel', [1]);
 // L1 backstops across each mouth. The transition to L2 fires first; these catch anything it does
 // not, so level 1 has no open corridor up a ramp lane.
 // AND THE OUTER LANES ARE CLOSED AT THE TOP. They used to be the ramp lanes, so the ramps closed
 // them; with the ramps moved inboard they became open corridors running from the flippers to the
 // top of the cabinet, and the shot map duly reported balls reaching py 66. An outlane ends at the
 // drain, so its top is a wall.
-wall('outlane_top_left',  [129, 908],  [250, 908], 0.005, 0.026, Y1, 'steel', [1]);
-wall('outlane_top_right', [750, 908], [866, 908], 0.005, 0.026, Y1, 'steel', [1]);
+// THE TWO L-SHAPED BARRIERS ARE GONE. `outlane_top_left` ran across py 908 from x 129 to 250 and
+// met the vertical `ramp_rail_left_in` at its corner; the right pair mirrored it. Matt: *"you added
+// some sort of gray barrier walls in an L and reverse L shape. These help to ruin the game - by
+// making sure no ball EVER gets anywhere close to going up the ramp."* They sat directly across
+// the approach to both ramp mouths. There is nothing across py 908 now.
 // NO WALL ACROSS EITHER RAMP MOUTH. There used to be one on each, called a backstop, and
 // together with outlane_top_left/right they made an unbroken bar across py 908 from x 45 to 250
 // and from 750 to 936. Matt: *"You added gates to block the ramps off completely."* He is right:
@@ -261,22 +275,21 @@ P.push({ type: 'plunger', name: 'plunger_rod', at: [1020, 1875], len: 230 * S, l
  * is SEALED - a ball cannot enter it. The arch is not symmetric (its left leg ends at x 224, its
  * right at 776), so the two mouths are not mirror images; sealing the gap wins over symmetry.
  */
-P.push({ type: 'ramp', name: 'ramp_left', x: [45, 129], z: [640, 908], mat: 'ramp', levels: [], note: 'two-way L1<->L2, in the middle shot band' });
+P.push({ type: 'ramp', name: 'ramp_left', x: [45, 150], z: [640, 908], mat: 'ramp', levels: [], note: 'two-way L1<->L2; widened to 105 px because the shot map put 12 of the far paddle arrivals between x 129 and 150' });
 // left lane guide + posts
 // THE LEFT LANE RAIL, MOVED INBOARD. Matt: *"the left is in a spot that is impossible for the ball
 // to actually go up. there's a barrier blocking the on ramp part."* Traced: a ball climbing the
 // left lane had a clear band only 19 px wide - between the cabinet wall and this rail's posts -
 // against a ball 26 px across. The ramp did not need moving; its APPROACH did. At x 148 the lane
 // is 0.033 m of clear channel and feeds the ramp mouth square on.
-wall('lane_rail_left', [148, 980], [153, 1410], 0.006, 0.014, Y1, 'steel', [1]);
-post('post_lane_1', [148, 980], 0.006, 0.022, Y1, 'steel', [1]);
-post('post_lane_2', [148, 1100], 0.006, 0.022, Y1, 'steel', [1]);
-post('post_lane_3', [148, 1250], 0.006, 0.022, Y1, 'steel', [1]);
+wall('lane_rail_left', [45, 960], [153, 1410], 0.006, 0.014, Y1, 'steel', [1]);
+// EACH LANE RAIL CARRIES ONE POST NOW, AT ITS OWN TOP END. It used to have three, at py 980,
+// 1100 and 1250. Shortening the rail opened the way into the ramp lane and left the top two posts
+// standing free in that opening - steel bollards directly across the only path from the far paddle
+// into the ramp lane, and the two heaviest blockers a rising shot met (33 and 22 contacts in a
+// 240-shot sweep).
 // ...and its mirror, which the right ramp needs for exactly the same reason.
-wall('lane_rail_right', [833, 980], [838, 1410], 0.006, 0.014, Y1, 'steel', [1]);
-post('post_lane_r1', [838, 980], 0.006, 0.022, Y1, 'steel', [1]);
-post('post_lane_r2', [838, 1100], 0.006, 0.022, Y1, 'steel', [1]);
-post('post_lane_r3', [838, 1250], 0.006, 0.022, Y1, 'steel', [1]);
+wall('lane_rail_right', [941, 960], [838, 1410], 0.006, 0.014, Y1, 'steel', [1]);
 // posts around ramp exits / under deck
 post('post_big_left',  [345, 785], 0.009, 0.024, Y1, 'steel', [1]);
 post('post_big_right', [641, 785], 0.009, 0.024, Y1, 'steel', [1]);

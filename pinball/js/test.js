@@ -1077,6 +1077,57 @@ function launched(g) {
       g.flippers.filter((f) => /lower/.test(f.id)).every((f) => f.pressed), 'both lower paddles held');
   }
 
+  // [KNOWN-BUG PROBE] A BOTTOM PADDLE MUST BE ABLE TO SHOOT A RAMP TO THE TOP LEVEL.
+  // Matt: *"test until a ball can be hit by the bottom paddle and go directly up the ramp to the
+  // top level."* Level 2 had been unreachable from the flippers: two L-shaped barriers sat across
+  // py 908 (a vertical ramp rail meeting a horizontal outlane wall at its corner), the outer arch
+  // band's foot ended in the mouth, three steel posts stood in each lane and the lane rail ran the
+  // whole way down. Every one of those was named by a contact tally of what a rising shot hits, and
+  // removing them took the shot from 0% to 31% on the left paddle.
+  //
+  // This drives the REAL game - the ball is put on a paddle, the paddle is flipped, and it only
+  // counts if a 'ramp' event fires AND the ball is genuinely on level 2 afterwards.
+  {
+    let made = 0, n = 0;
+    for (const side of ['left', 'right']) {
+      for (let t = 0.2; t <= 0.91; t += 0.1) {
+        for (let d = 0; d <= 30; d += 5) {
+          const g = new DesignPinball({ rand: () => 0.5 });
+          g.start();
+          const b = g.balls[0];
+          const f = g.flippers.find((q) => q.id === `flipper_lower_${side}`);
+          b.onPlunger = false; b.layer = 1;
+          b.x = f.px + Math.cos(f.angle) * f.len * t;
+          b.y = f.py + Math.sin(f.angle) * f.len * t - 34;
+          b.vx = 0; b.vy = 250;
+          g.phase = 'play';
+          let flipped = false, gotRamp = false, onL2 = false;
+          for (let i = 0; i < 60 * 5; i++) {
+            if (!flipped && i >= d) { g.setFlipper(side, true); flipped = true; }
+            if (flipped && i === d + 8) g.setFlipper(side, false);
+            g.update(1 / 60);
+            for (const e of g.takeEvents()) if (e.type === 'ramp') gotRamp = true;
+            const q = g.balls[0];
+            if (!q) break;
+            if ((q.layer | 0) === 2 && gotRamp) { onL2 = true; break; }
+          }
+          n++; if (onL2) made++;
+        }
+      }
+    }
+    ok('[FOUNDRY] a bottom paddle can shoot a ramp to the top level',
+      made >= n * 0.08, `${made} of ${n} swept shots reached level 2 (${(100 * made / n).toFixed(1)}%)`);
+  }
+
+  // [KNOWN-BUG PROBE] the front of the deck is an EDGE, not a barrier. Four walls used to make a
+  // continuous lip across it with one hole, so a ball that rolled down the deck stopped on the lip
+  // - 67 of them on a rest sweep. With them gone the same sweep rests ZERO.
+  ok('[FOUNDRY] nothing is built across the front of the deck',
+    !/wall\('ledge_/.test(board), 'no ledge walls');
+  // ...and no L-shaped barrier stands across the ramp approach.
+  ok('[FOUNDRY] no outlane wall lies across py 908 beside a ramp rail',
+    !/wall\('outlane_top_/.test(board), 'outlane_top_left/right deleted');
+
   // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
   ok('[FOUNDRY] nothing moves the ball across the board wall at the top of the chute',
     !/LAUNCH_TO/.test(src('./design.js')), 'no LAUNCH_TO destination');
