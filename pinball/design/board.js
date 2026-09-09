@@ -267,6 +267,15 @@ P.push({
 // beginning at 150 started INSIDE the lane and its outboard end hung over nothing. Solving the
 // ramp's own bend at py 730 puts that wall at x 180.4 (and 811.6 mirrored), so that is where they
 // begin: rail and ramp side are one continuous edge.
+// THE INLANE GUIDES END ON THE FLIPPER, NOT SHORT OF IT. Matt: *"the rails that connect to the
+// paddles are not flush with the paddles as I requested. When rolling down the rail, the ball
+// hits the end of the paddle and bounce. It shouldn't bounce. It should roll smoothly onto the
+// paddle."* The left guide stopped at (308, 1680) and the flipper pivot is at (325, 1705) - so a
+// ball ran off the end of the rail, fell 25 px through open air and landed on the paddle's round
+// pivot cap, which is exactly what a bounce is. Each guide now ends AT its flipper's pivot: the
+// last stretch of rail is buried inside the pivot cap, so the ball is still supported when it
+// meets the paddle and simply rolls on. Applied in the layout pass below, after the editor's
+// coordinates land, so it is right whatever Matt drags next.
 const DECK_RAILS = [
   { name: 'deck_lip_left', a: [180, 730], b: [330, 758] },   // from the left ramp wall, into the open middle
   { name: 'deck_lip_right', a: [806, 730], b: [656, 758] },  // from the right ramp wall, into the open middle
@@ -606,6 +615,16 @@ function smoothChain(pts, passes = 4) {
     const rec = LAYOUT[part.name];
     if (rec) setShape(part, rec);
   }
+  // The two inlane guides are extended to their own flipper's pivot - see the note by DECK_RAILS.
+  for (const part of P) {
+    if (part.type !== 'wall' || !part.a || !part.b) continue;
+    for (const f of P) {
+      if (f.type !== 'flipper' || !/lower/.test(f.name)) continue;
+      const end = Math.hypot(part.b[0] - f.pivot[0], part.b[1] - f.pivot[1]) < 60 ? 'b'
+        : Math.hypot(part.a[0] - f.pivot[0], part.a[1] - f.pivot[1]) < 60 ? 'a' : null;
+      if (end) part[end] = f.pivot.slice();
+    }
+  }
   // A PART ON LEVEL 2 IS DRAWN AT DECK HEIGHT. The editor sets which LEVEL a part belongs to; it
   // knows nothing about height, so a part Matt moved to level 2 kept the y0 it was built with. That
   // did not show while there was no deck - now there is one, and the four magenta inserts he moved
@@ -620,6 +639,20 @@ function smoothChain(pts, passes = 4) {
     if (!part.levels || part.levels.length !== 1 || part.y0 === undefined) continue;
     if (part.levels[0] === 2 && part.y0 < Y2) part.y0 = Y2;
     if (part.levels[0] === 1 && part.y0 > Y1) part.y0 = Y1;
+  }
+
+  // THE OUTER ARCH'S LEGS RAN STRAIGHT THROUGH BOTH RAMPS. Matt: *"The large semi circle thing on
+  // level 1 goes directly through the ramps. idk why you haven't fixed this. It's a big huge
+  // issue."* Measured: between py 596 and 933 its left leg occupies x 131..219, and ramp_left
+  // occupies x 45..150 at the top widening to 129..231 at the mouth - the leg is inside the lane
+  // for that whole 337 px, in the model and in the colliders. It is trimmed to stop at py 590,
+  // six pixels above where the ramps begin. The arch keeps its shape and its position; it just
+  // no longer reaches down into something else.
+  const RAMP_TOP_PY = 590;
+  for (const part of P) {
+    if (part.type !== 'band' || part.name !== 'arch_outer') continue;
+    part.outer = part.outer.filter((q) => q[1] <= RAMP_TOP_PY);
+    part.inner = part.inner.filter((q) => q[1] <= RAMP_TOP_PY);
   }
 
   // ...and every band gets the tremor taken out of it, whether it came from the editor or not.
@@ -662,8 +695,15 @@ for (const p of P) {
       capsuleFP(`${p.name}_end_right`, p.levels, [p.outer[p.outer.length - 1][0], p.yEndR], [p.inner[p.inner.length - 1][0], p.yEndR], 0.001, {});
       break;
     }
-    case 'saucer': circleFP(p.name, p.levels, p.at, p.r || 0.016, { captures: true,
-      note: 'a ball entering is held and kicked back out up the middle; scores' }); break;
+    case 'saucer':
+      // A CAPTURE SAUCER IS A HOLE. It emitted a SOLID DISC at exactly the position and radius of
+      // its own sensor, so the ball bounced off the thing it was supposed to fall into and the
+      // 5000 points were unreachable. Matt: *"If you hit the ball directly into that opening, it
+      // should hold the ball for a moment and give you points, then release it."* A capture
+      // saucer now emits NO collider - js/design.js's _saucer holds, scores and releases it.
+      // A non-capture saucer is decorative and stays solid.
+      if (!p.capture) circleFP(p.name, p.levels, p.at, p.r || 0.016);
+      break;
     case 'targets': capsuleFP(p.name, p.levels, [p.xs[0] - 15, p.z], [p.xs[3] + 15, p.z], 0.007); break;
     case 'ramp': {
       // MATT FOUND THIS BY PLAYING IT: *"THE REASON THE RAMPS DONT WORK IS BECAUSE YOUVE MADE
@@ -696,7 +736,10 @@ for (const p of P) {
       // ball thrown at it was returned to py 1562-1642 and went straight back down.
       //
       // Deriving it means the face stays right however he rotates or reshapes them next time.
-      ['A', 'B', 'C'].forEach(k => circleFP(`${p.name}_post_${k}`, p.levels, p[k], SLING_POST_R));
+      // NO CORNER POSTS. Matt: *"I do not like how the triangles above the paddles have the large
+      // circles on each point. get rid of those."* They were a steel disc per vertex, in the
+      // model AND in the footprints. The three faces already carry a 3 mm radius, so the corners
+      // stay rounded without a post sitting on each one.
       const EDGES = [['AB', p.A, p.B], ['BC', p.B, p.C], ['CA', p.C, p.A]];
       let hyp = EDGES[0], hypLen = -1;
       for (const e of EDGES) {
@@ -953,7 +996,7 @@ export function buildBoard(THREE) {
         const shrink = pts => { const c = pts.reduce((s, q) => [s[0] + q[0] / 3, s[1] + q[1] / 3], [0, 0]); return pts.map(q => [c[0] + (q[0] - c[0]) * 0.72, c[1] + (q[1] - c[1]) * 0.72]); };
         g.add(extrude(p.name + '_rubber', polyShape([p.A, p.B, p.C]), 0.012, 'red', p.y0, p));
         g.add(extrude(p.name + '_top', polyShape(shrink([p.A, p.B, p.C])), 0.003, 'cream', p.y0 + 0.012, p));
-        ['A', 'B', 'C'].forEach(k => { const m = mesh(`${p.name}_post_${k}`, cyl(SLING_POST_R, 0.024, 16), 'steel', p); m.position.copy(V3(...p[k], p.y0 + 0.012)); g.add(m); });
+        // (the three corner posts are gone - see the footprint pass)
         break;
       }
       case 'ramp': g.add(rampCurved(p.name, p.x, p.z, p.mat, p)); break;
