@@ -131,21 +131,29 @@ function ensureCss() {
   .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink);
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
-  /* ONE ROW PER GROUP: label, count and names on the same line, wrapping. Stacking a collapsible
-     per group was TALLER than the bullet list it replaced and hid the two short answers behind the
-     same control as the long one. Only the no-answer list folds - that one is everybody. */
-  .adm-anngrps { width: 100%; margin-top: var(--gh-sp-1); }
-  .adm-annline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 4px 0; }
-  .adm-annlbl { flex: none; font-size: var(--gh-fs-xs); font-weight: 800; text-transform: uppercase;
-                letter-spacing: .04em; color: var(--gh-muted); }
-  .adm-annlbl b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
+  /* ONE BAR, TWO LINES. See announceSectionHTML for why the third bucket went away; this is the
+     "at a glance" half - a bar is read without reading, which three versions of text rows were not.
+     It is a MAGNITUDE, not a category, so the number beside it carries the meaning, not the hue. */
+  .adm-annhow { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.45; }
+  .adm-ann { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
+  .adm-ann:first-of-type { border-top: 0; padding-top: 0; }
+  .adm-annhead { display: flex; align-items: baseline; gap: var(--gh-sp-2); }
+  .adm-annttl { flex: 1 1 auto; min-width: 0; font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink); }
+  .adm-anncount { flex: none; font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-muted); }
+  .adm-annbar { height: 8px; margin: 6px 0 var(--gh-sp-2); border-radius: 999px;
+                background: var(--gh-surface-2); border: 1px solid var(--gh-border); overflow: hidden; }
+  .adm-annbar > span { display: block; height: 100%; background: #ffce3a; }
+  .adm-annline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 3px 0; }
+  .adm-annlbl { flex: none; min-width: 62px; font-size: var(--gh-fs-xs); font-weight: 800;
+                text-transform: uppercase; letter-spacing: .04em; color: var(--gh-muted); }
   .adm-annnames { flex: 1 1 60%; min-width: 0; font-size: var(--gh-fs-sm); line-height: 1.45; }
-  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px; padding: 4px 0;
-                           display: flex; align-items: center; gap: 6px; }
+  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px; padding: 3px 0;
+                           display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
   .adm-annfold > summary::-webkit-details-marker { display: none; }
-  .adm-annfold > summary::after { content: '\\25be'; color: var(--gh-muted); }
-  .adm-annfold[open] > summary::after { content: '\\25b4'; }
-  .adm-annfold > p { margin: 0 0 var(--gh-sp-2); font-size: var(--gh-fs-sm); line-height: 1.45; color: var(--gh-muted); }
+  .adm-annfold > summary::after { content: '\\203a'; margin-left: auto; color: var(--gh-muted); font-size: 18px; }
+  .adm-annfold[open] > summary::after { content: '\\2039'; }
+  .adm-annfold > p { margin: 2px 0 0; padding-left: 70px; font-size: var(--gh-fs-sm);
+                     line-height: 1.45; color: var(--gh-muted); }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
   .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
@@ -354,46 +362,50 @@ function announceSectionHTML() {
   const rows = [...people.values()].sort((a, b) =>
     (a.name || '\uffff').localeCompare(b.name || '\uffff'));
   const lang = getLang();
-  // Names run as a COMMA LIST, not a bullet per line. Matt, on the first version: *"This is not
-  // easy to understand at a glance."* Twenty-six people at one name per row is two full screens of
-  // scrolling per announcement, and the answer he is after ("has everyone been told yet") is a
-  // COUNT with the names available if he wants them.
   const names = (list) => list.map((p) => esc(p.name || t('adm_sc_unnamed'))).join(', ');
-  // ONE LINE PER GROUP: the label, the count and the NAMES, all on the same row. The first version
-  // stacked a collapsible per group, which Matt read as worse than the bullets it replaced
-  // (*"This is more difficult to read"*) - three tappable rows per announcement is TALLER than the
-  // list it was meant to compress, and it hid the two short answers behind the same control as the
-  // long one. Only the no-answer list folds, because that one is everybody.
-  const line = (label, list) => `<div class="adm-annline">
-      <span class="adm-annlbl">${esc(label)} <b>${list.length}</b></span>
-      ${list.length ? `<span class="adm-annnames">${names(list)}</span>` : ''}
-    </div>`;
-  const fold = (label, list) => `<details class="adm-annfold">
-      <summary><span class="adm-annlbl">${esc(label)} <b>${list.length}</b></span></summary>
-      <p>${names(list)}</p>
-    </details>`;
-  return ANNOUNCEMENTS.map((a) => {
+
+  // TWO STATES AND A BAR, after three goes at this. What made the earlier versions unreadable was
+  // not the layout, it was the TAXONOMY: a third bucket ("no answer yet" - a phone that has not
+  // reported since the mirror shipped) that Matt could neither act on nor decode. Matt: *"What
+  // does this mean? SEEN IT / NOT YET / NO ANSWER YET?"* and *"think harder instead of just moving
+  // words around."* He was right. That bucket is an artefact of WHEN the tracking shipped, it is
+  // most of the list on day one, it shrinks to nothing on its own, and either way the action is
+  // identical to "not yet": wait for them to open the app.
+  //
+  // So it folds into Not yet, and the ONE sentence at the top of the section says so, in plain
+  // words, once - instead of a label per row that needs a glossary. That sentence is what keeps
+  // this honest: it is exactly the caveat that made the first two-bucket version tell a lie ("Only
+  // Unai has seen it?" about a notice from August that most people HAD seen), and unlike a bucket
+  // name it can actually explain itself.
+  //
+  // The BAR is the "at a glance" part. Three attempts at rows of text all failed the same way: you
+  // had to read to learn the answer. A bar is read without reading. It is a MAGNITUDE, not a
+  // category, so the colourblind rule is satisfied by the number beside it rather than by a shape.
+  const bar = (n, all) => {
+    const pct = all ? Math.round((n / all) * 100) : 0;
+    return `<div class="adm-annbar" role="img" aria-label="${esc(t('adm_ann_seenof', { n, all }))}">
+        <span style="width:${pct}%"></span>
+      </div>`;
+  };
+  return `<p class="adm-annhow">${esc(t('adm_ann_how'))}</p>` + ANNOUNCEMENTS.map((a) => {
     const title = textFor(a.title, lang) || a.id;
-    // THREE GROUPS, NOT TWO, AND THE THIRD IS THE WHOLE POINT. The first version had "seen it" and
-    // "not yet", and dropped everyone whose phones have never reported into "not yet" - which on
-    // the day this shipped was 24 of 26 people, and read as a claim that nobody had seen the bug
-    // report notice from August. They HAD; that dismissal simply lived on their phone and was
-    // never uploaded until now. Matt read it exactly that way (*"Only Unai has seen it?"*), which
-    // is a screen telling him something untrue. "No answer" is its own column.
-    const heard = rows.filter((p) => p.reported);
-    const quiet = rows.filter((p) => !p.reported);
-    const yes = heard.filter((p) => p.seen.has(a.id));
-    const no = heard.filter((p) => !p.seen.has(a.id));
-    return `<div class="adm-row adm-row--stack">
-      <div class="adm-row-main">
-        <div class="adm-name">${esc(title)}</div>
-        ${quiet.length ? `<div class="adm-note">${esc(t('adm_ann_waiting', { n: quiet.length, all: rows.length }))}</div>` : ''}
+    const yes = rows.filter((p) => p.seen.has(a.id));
+    const no = rows.filter((p) => !p.seen.has(a.id));
+    return `<div class="adm-ann">
+      <div class="adm-annhead">
+        <span class="adm-annttl">${esc(title)}</span>
+        <span class="adm-anncount">${esc(t('adm_ann_seenof', { n: yes.length, all: rows.length }))}</span>
       </div>
-      <div class="adm-anngrps">
-        ${line(t('adm_ann_seen'), yes)}
-        ${line(t('adm_ann_notyet'), no)}
-        ${quiet.length ? fold(t('adm_ann_nodata'), quiet) : ''}
+      ${bar(yes.length, rows.length)}
+      <div class="adm-annline">
+        <span class="adm-annlbl">${esc(t('adm_ann_seen'))}</span>
+        <span class="adm-annnames">${yes.length ? names(yes) : esc(t('adm_ann_nobody'))}</span>
       </div>
+      ${no.length ? `<details class="adm-annfold">
+        <summary><span class="adm-annlbl">${esc(t('adm_ann_notyet'))}</span>
+          <span class="adm-annnames">${esc(t('adm_ann_npeople', { n: no.length }))}</span></summary>
+        <p>${names(no)}</p>
+      </details>` : ''}
     </div>`;
   }).join('');
 }
