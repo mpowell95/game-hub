@@ -596,6 +596,12 @@ function smoothChain(pts, passes = 4) {
     // playfield the ball is actually on.
     P.push({ ...JSON.parse(JSON.stringify(src)), name: a.name, mat: a.mat || src.mat, levels: (a.levels || [1]).slice() });
   }
+  // ...AND AT THAT LEVEL'S HEIGHT, IN BOTH DIRECTIONS. The rule below only ever pushed y0 UP, for
+  // level-2 parts drawn too low. The six rails Matt drew beside the flippers are the other
+  // direction: they are `levels: [1]`, but the ADDED pass copies a sibling wholesale and
+  // overrides only name, mat and levels - so all six inherited chute_feed's y0 of Y2. They
+  // collided on the playfield while being DRAWN 50 mm above it: invisible walls beside the
+  // flippers, floating steel over them, and `levelTag` filed the meshes under the upper deck.
   for (const part of P) {
     const rec = LAYOUT[part.name];
     if (rec) setShape(part, rec);
@@ -604,11 +610,25 @@ function smoothChain(pts, passes = 4) {
   // knows nothing about height, so a part Matt moved to level 2 kept the y0 it was built with. That
   // did not show while there was no deck - now there is one, and the four magenta inserts he moved
   // up were being drawn UNDERNEATH it. Level and height are the same fact, so they follow each other.
+  // ...AND AT THAT LEVEL'S HEIGHT, IN BOTH DIRECTIONS. The rule below only ever pushed y0 UP, for
+  // level-2 parts drawn too low. The six rails Matt drew beside the flippers are the other
+  // direction: they are `levels: [1]`, but the ADDED pass copies a sibling wholesale and
+  // overrides only name, mat and levels - so all six inherited chute_feed's y0 of Y2. They
+  // collided on the playfield while being DRAWN 50 mm above it: invisible walls beside the
+  // flippers, floating steel over them, and `levelTag` filed the meshes under the upper deck.
   for (const part of P) {
-    if (part.levels && part.levels.length === 1 && part.levels[0] === 2 && part.y0 !== undefined && part.y0 < Y2) part.y0 = Y2;
+    if (!part.levels || part.levels.length !== 1 || part.y0 === undefined) continue;
+    if (part.levels[0] === 2 && part.y0 < Y2) part.y0 = Y2;
+    if (part.levels[0] === 1 && part.y0 > Y1) part.y0 = Y1;
   }
 
   // ...and every band gets the tremor taken out of it, whether it came from the editor or not.
+  // ...AND AT THAT LEVEL'S HEIGHT, IN BOTH DIRECTIONS. The rule below only ever pushed y0 UP, for
+  // level-2 parts drawn too low. The six rails Matt drew beside the flippers are the other
+  // direction: they are `levels: [1]`, but the ADDED pass copies a sibling wholesale and
+  // overrides only name, mat and levels - so all six inherited chute_feed's y0 of Y2. They
+  // collided on the playfield while being DRAWN 50 mm above it: invisible walls beside the
+  // flippers, floating steel over them, and `levelTag` filed the meshes under the upper deck.
   for (const part of P) {
     if (part.type !== 'band') continue;
     part.outer = smoothChain(part.outer);

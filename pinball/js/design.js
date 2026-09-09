@@ -427,9 +427,14 @@ export class DesignPinball {
 
   _sensors() {
     for (const b of this.balls) {
-      if (b.onPlunger || b.held || (b.layer | 0) !== 1) continue;
+      if (b.onPlunger || b.held) continue;
       if (!b._in) b._in = new Set();
+      const L = b.layer | 0;
       for (const s of T.SWITCHES) {
+        // A SENSOR BELONGS TO A DECK. Every switch used to be level-1 only, so the four magenta
+        // inserts Matt moved to the upper deck could never be tripped by anything - the ball is
+        // on layer 2 up there. Each switch carries the level of the part it was read from.
+        if ((s.level || 1) !== L) { b._in.delete(s.id); continue; }
         const inside = Math.hypot(b.x - s.x, b.y - s.y) <= s.r;
         if (!inside) { b._in.delete(s.id); continue; }
         if (b._in.has(s.id)) continue;

@@ -30,6 +30,22 @@ const tz = (y) => -y;
 /** How far the plunger rod travels, in world units - 26 reference px of board. */
 const PLUNGER_TRAVEL = 26 * 0.000527;
 
+/**
+ * WHERE THE PLAYFIELD SURFACE ACTUALLY IS, in the units the ball is positioned in.
+ *
+ * board.js puts the lower playfield's top face at Y1 = 0.020 m, and the mount scales the whole
+ * model by K = 666.67 with the stage at y 0 - so that face lands at 13.33 units. The ball was
+ * drawn at `y = 9 + lift`, which is BALL_R and nothing else, inherited from STARHUB where the
+ * playfield top was y = 0. On this board that put the ball's centre 13.33 units UNDER the wood:
+ * of its 18 units of diameter only the top 4.67 showed. The shadow at `y = 0.9` was worse -
+ * inside the black cabinet_floor box and under the whole playfield slab, so the contact shadow
+ * that tells you what the ball is over was never visible at all.
+ *
+ * `lift` is already correct: px(95) = 33.38 matches (Y2 - Y1) * K = 33.33. Only the BASE was
+ * missing.
+ */
+const SURFACE_Y = 0.020 * 666.67;   // 13.33 - the lower playfield's top face
+
 export class DesignRenderer extends Renderer {
   _build(root) {
     this.parts3 = this.parts3 || {};
@@ -65,6 +81,15 @@ export class DesignRenderer extends Renderer {
     this._age(dt);
     const hud = game.hud();
 
+    // `P` IS DECLARED BEFORE ANYTHING READS IT, AND THAT IS NOT A STYLE POINT. The plunger block
+    // below was added above this line, which put `P` in its temporal dead zone: every frame threw
+    // `ReferenceError: Cannot access 'P' before initialization` - before the flipper loop, before
+    // the ball loop, before renderer.render(). js/ui.js re-arms the animation frame at the TOP of
+    // _frame and calls this unguarded, so the loop survived and the physics kept stepping while
+    // the canvas stayed on its last drawn frame. The board did not render at all for five deploys.
+    // Anything new in render() goes BELOW this line.
+    const P = this.parts3;
+
     // THE PLUNGER PULLS BACK. Matt: *"fix the chute launcher thing (doesn't move when you press
     // launch so you can't tell how hard it's gunna go or how long to hold it down for)."* It
     // never moved: the rod is built once and nothing here ever touched it, so the only feedback
@@ -78,7 +103,6 @@ export class DesignRenderer extends Renderer {
       const e = pull * (2 - pull);
       rod.position.z = rod.userData.restZ + e * PLUNGER_TRAVEL;
     }
-    const P = this.parts3;
 
     // THE FOUR PADDLES, AND TWO THINGS THAT BOTH HAVE TO BE RIGHT.
     //
@@ -110,9 +134,9 @@ export class DesignRenderer extends Renderer {
       // and drawing that as a jump is what made the ramp look like a teleport.
       const lift = px(95) * (b.lift !== undefined ? b.lift : (((b.layer | 0) === 2) ? 1 : 0));
       m.visible = true;
-      m.position.set(b.x, 9 + lift, tz(b.y));
+      m.position.set(b.x, SURFACE_Y + 9 + lift, tz(b.y));
       sh.visible = true;
-      sh.position.set(b.x, 0.9 + lift, tz(b.y));
+      sh.position.set(b.x, SURFACE_Y + 0.9 + lift, tz(b.y));
       sh.scale.setScalar(1);
       sh.material.opacity = 1;
     }
