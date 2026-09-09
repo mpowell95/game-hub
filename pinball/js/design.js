@@ -19,6 +19,8 @@ const BALLS = 3;
 /** How long an UPPER paddle stays up on one press. Long enough to be a real swing at a ball,
  *  short enough that it can never be the shelf the deck sweep measured. */
 const UPPER_HOLD = 0.22;
+/** How long a ball takes to climb a ramp. A real habitrail is about half a second of travel. */
+const RAMP_CLIMB = 0.55;
 const SAVE_SECS = 7;
 const GRAVITY = 515;
 const SAUCER_HOLD = 0.9;
@@ -95,7 +97,7 @@ export class DesignPinball {
     // DECK, so a ball that rides it is a deck ball for the whole trip: it climbs, meets the top
     // wall and turns left through the gap in the board right wall, all under the solver. The old
     // build served on level 1 and moved the ball across the wall by hand at the top.
-    b.layer = 2;
+    b.layer = 2; b.lift = 1;
     this.balls.push(b);
     if (!this.saveUsed) this.saveTimer = SAVE_SECS;
     this.ballScore = 0;
@@ -147,6 +149,32 @@ export class DesignPinball {
     }
   }
 
+  /**
+   * WALK A BALL UP A RAMP. The ball is held for RAMP_CLIMB seconds and moved along the ramp's own
+   * centre line from the mouth (py 908) to the top (py 600), rising as it goes - `b.lift` is 0 on
+   * the playfield and 1 on the deck, and js/render-design.js draws the ball at that height, so the
+   * climb is something you watch rather than a jump.
+   *
+   * It only becomes a level-2 ball at the TOP. Setting the layer at the foot would put it on the
+   * deck's world while it is still visibly down at the deck edge.
+   */
+  _rampRide(dt) {
+    for (const b of this.balls) {
+      if (!b._climbR) continue;
+      const r = b._climbR;
+      b._climb = Math.min(1, (b._climb || 0) + dt / RAMP_CLIMB);
+      const e = b._climb * b._climb * (3 - 2 * b._climb);   // ease, so it slows as it crests
+      b.x = b._climbFrom[0] + (r.top.x - b._climbFrom[0]) * e;
+      b.y = b._climbFrom[1] + (r.top.y - b._climbFrom[1]) * e;
+      b.vx = 0; b.vy = 0;
+      b.lift = e;
+      if (b._climb < 1) continue;
+      b._climbR = null; b.held = false; b.holdT = 0; b.lift = 1;
+      b.layer = 2; b.vx = r.top.vx; b.vy = r.top.vy;
+      this.emit({ type: 'rampexit', x: b.x, y: b.y });
+    }
+  }
+
   /** Drop any upper paddle whose swing has run its course, however long the button is held. */
   _upperFlippers(dt) {
     for (const f of this.flippers) {
@@ -169,6 +197,7 @@ export class DesignPinball {
     dt = Math.min(dt, 0.05);
     this.time += dt;
     this._upperFlippers(dt);
+    this._rampRide(dt);
     if (this.phase === 'over' || this.phase === 'attract') return;
     if (this.plungerHeld) this.plungerPower = Math.min(1, this.plungerPower + dt * 1.1);
     if (this.saveTimer > 0) {
@@ -222,7 +251,10 @@ export class DesignPinball {
           // what replaces it. The _ramp flag still makes it once per approach, not per bounce.
           if (b._ramp || (b.vy >= 0 && b.y > r.y)) continue;
           b._ramp = true;
-          b.layer = 2; b.x = r.to.x; b.y = r.to.y; b.vx = r.to.vx; b.vy = r.to.vy;
+          // Hand the ball to the climb rather than moving it. _rampRide walks it up the ramp's own
+          // centre line and lets it out at the top; nothing here changes its position.
+          b.held = true; b.holdT = 99; b._climb = 0; b._climbR = r;
+          b._climbFrom = [b.x, b.y];
           this.ramps++; this.stats.ramps++;
           this._award(PTS.ramp, b.x, b.y, 'ramp');
           this.emit({ type: 'ramp', x: b.x, y: b.y });
@@ -234,7 +266,7 @@ export class DesignPinball {
         // it 140 px sideways through a solid wood wall.
       } else if (L === 2) {
         if (b.y > T.DROP_HOLE.y && b.x >= T.DROP_HOLE.x[0] && b.x <= T.DROP_HOLE.x[1]) {
-          b.layer = 1; b.y = T.DROP_HOLE.to.y;
+          b.layer = 1; b.lift = 0; b.y = T.DROP_HOLE.to.y;
           this.emit({ type: 'rampexit', x: b.x, y: b.y });
         } else if (b.y > T.px(760) && b.x < T.px(941)) {
           // off the front of the deck anywhere else - but the SHOOTER LANE is not the front of
@@ -242,7 +274,7 @@ export class DesignPinball {
           // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the
           // x guard the plunge dropped to level 1 on its first step and the ride happened on the
           // wrong level entirely.
-          b.layer = 1;
+          b.layer = 1; b.lift = 0;
         }
       }
     }
@@ -339,7 +371,7 @@ export class DesignPinball {
    *  so an upward kick would fire the ball into its own crown. */
   _saucerHold(dt) {
     for (const b of this.balls) {
-      if (!b.held) continue;
+      if (!b.held || b._climbR) continue;   // a ball climbing a ramp is held by the climb, not the saucer
       b.holdT -= dt;
       if (b.holdT > 0) continue;
       b.held = false;
@@ -360,7 +392,7 @@ export class DesignPinball {
       if (b.x < T.px(960) || b.y < T.px(1400)) continue;
       if (Math.hypot(b.vx, b.vy) > 60) continue;
       b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-      b.onPlunger = true; b.layer = 2; b._box = null; b._still = 0;
+      b.onPlunger = true; b.layer = 2; b.lift = 1; b._box = null; b._still = 0;
       this.emit({ type: 'reload' });
     }
   }
@@ -397,7 +429,7 @@ export class DesignPinball {
       if (b._searches >= SEARCH_GIVE_UP) {
         b._searches = 0;
         b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-        b.onPlunger = true; b.layer = 2; b._box = null;
+        b.onPlunger = true; b.layer = 2; b.lift = 1; b._box = null;
         this.emit({ type: 'reload' });
         continue;
       }
@@ -415,7 +447,7 @@ export class DesignPinball {
       if (!out) continue;
       if (this.saveTimer > 0 && this.phase === 'play' && this.balls.length === 1) {
         b.x = T.PLUNGER.x; b.y = T.PLUNGER.y; b.vx = 0; b.vy = 0;
-        b.onPlunger = true; b.layer = 2; b._box = null; b._still = 0;
+        b.onPlunger = true; b.layer = 2; b.lift = 1; b._box = null; b._still = 0;
         this.emit({ type: 'ballsave' });
         continue;
       }

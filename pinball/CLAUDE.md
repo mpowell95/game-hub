@@ -1292,6 +1292,62 @@ fails under 8%, and asserts structurally that no ledge wall and no outlane wall 
 **Still true, and still Matt's call: 84% of play happens on the upper deck**, because the shooter
 lane feeds it. Nothing here changed that.
 
+### The shooter lane had no gate, and the ramp was still a teleport (2026-09-09)
+
+Matt, with 47 seconds of play in which the ball did almost nothing but cycle in the chute: *"the
+ball teleports all over the place. When the ball goes down the right ramp, it teleports to the
+middle of the board on level 2... I just hit the ball all the way back down the chute. Do you
+intentionally forget everything? Is this permitted on any other pinball machine we have worked on?
+OBVIOUSLY this should be impossible."*
+
+**It is not permitted on any other machine here, and this repo already had the answer.** STARHUB
+has had a one-way gate at the top of its shooter lane since the day it was built, and this file
+describes it two sections up: *the shooter-lane gate exists only for a DOWNWARD-moving ball, so a
+launch passes through it and a returning orbit ball is caught*. `js/physics.js` has carried the
+`oneWay` mechanism the whole time. Opening a plain GAP in the board wall to feed the deck made the
+lane a two-way corridor, so every ball that reached the deck rolled straight back in and fell the
+whole length of it. `chute_gate` is that flap, on level 2, blocking +x only.
+
+**Reading the clip is what found it.** Five frames a second over the four windows Matt named: the
+ball is in the chute at 3-5 s, in the chute at 10-12 s, in the chute at 19-21 s. Three separate
+launches, one behaviour. A pair of frames seconds apart would have shown a ball somewhere on the
+table and nothing else - **at five frames a second the cycle is the whole story.**
+
+### A ramp is a climb now, and `to` is gone
+
+`RAMPS[].to` was a point in the MIDDLE OF THE DECK and the ball was moved there in one step, which
+is a teleport however it is described. Each ramp carries `top` - its own mouth on the deck edge, on
+its own centre line - and `_rampRide` walks the ball there over `RAMP_CLIMB` (0.55 s), easing as it
+crests, with `b.lift` running 0 to 1 so `render-design.js` draws the height. Traced frame by frame,
+a left-paddle shot travels px (876, 894) -> (901, 600) continuously and becomes a level-2 ball only
+at the top. STARHUB scripts its habitrail the same way and this file already called it *a scripted
+habitrail, not simulated*.
+
+`b.lift` is a NUMBER, not a flag, and every other route between the decks sets it too - a drop
+through the hole, a fall off the front, a serve into the lane. A flag was what made the ramp look
+like a jump even after the position was right.
+
+### And the black hole in the middle of the playfield was paint
+
+Raycast through it rather than guessed at: `decal_teardrop`, in `decal_dark` at 0x1E1409 against
+0xC58B3E maple. A printed graphic rendering as a void a third of the lower playfield across, and
+the first thing the eye goes to in every screenshot. It is 0x53381C now - plainly darker than the
+wood, plainly paint on it.
+
+### What the probes measure, and one that was worthless
+
+| | before | after |
+|---|---|---|
+| balls re-entering the lane through the feed | every ball, every launch | **0** |
+| one-frame position jumps over 90 px | the ramp, every time | **0 (biggest 0)** |
+| aimed shots at the feed that get through | **36 of 36** | **0 of 36** |
+
+**The first draft of the chute probe counted crossings during four DRIVEN games, and it passed with
+the gate deleted** - the random driver simply never sent a ball at the feed. That is the sampling
+lesson this file has now learned three times. The probe that means anything THROWS AT THE FEED: a
+ball on the deck, level with the opening, driven at it at three speeds from twelve heights. Born
+red at 36 of 36.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
