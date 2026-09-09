@@ -602,6 +602,17 @@
   box-shadow: 0 0 0 2px #ffce3a inset, 3px 3px 0 rgba(0, 0, 0, .45);
 }
 
+/* THE ROUND YOU LEFT, first thing on the setup screen and the only full-width control above the
+   pickers - it is the one action a returning player wants, and it has to be findable before they
+   start tapping round buttons that would throw it away. Same orange CTA treatment as the
+   tutorial's, because it is the same kind of thing: the obvious next tap. */
+.gf-root .gf-resume {
+  width: 100%; flex-direction: column; gap: 2px; min-height: 54px; padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.gf-root .gf-resume.is-cta { background: #d97400; box-shadow: 0 0 0 2px #ffce3a inset, 3px 3px 0 rgba(0, 0, 0, .45); }
+.gf-root .gf-resume small { font-size: 12px; font-weight: 700; opacity: .92; text-transform: none; letter-spacing: 0; }
+
 /* --- the lesson's popups and arrows ---------------------------------------------------------
    NO SCRIM. Three of the nine steps are about the swing METER, which has to be read while the
    needle is moving, and a dark overlay would also hide the ball and the aim line - the other half
