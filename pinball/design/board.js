@@ -206,6 +206,33 @@ P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN,
 // (the two ledge extensions were part of that lip and are gone with it - see the deck edge above)
 // THE BUTTON IN THE MOUTH OF THE CENTRE ARCH. A real capture hole, not decoration: it carries a
 // footprint so the engine can score it, and it sits under the third band's crown.
+// THE UPPER DECK HAS AN EDGE AGAIN. Matt: *"if it's a separate level, by definition it has an
+// edge. Are you talking about a wall or rail or barrier so it can't simply fall off the edge?
+// because that's fine. But it has to look like and act like it's falling off something."*
+//
+// The last lip was removed because it ran straight across under the upper paddles, which is the
+// one place he said there must be no barrier: *"you put a horizontal wall where there should
+// just be an edge - no barrier of any kind - under the top paddles."* So this one is built as
+// SPANS with that stretch left out, along with the drop hole and the two ramp mouths - the three
+// places a ball is supposed to be able to leave the deck.
+//
+// It is a LIP, not a wall: 8 mm thick and 14 mm tall against the paddles' 26, so it holds a
+// rolling ball and does not shield the deck from a shot.
+const DECK_EDGE_Y = 760;
+// x spans of the lip, left to right. The gaps between them are, in order: the left ramp mouth,
+// the stretch under the upper paddles, the drop hole, and the right ramp mouth.
+const DECK_SPANS = [[150, 330], [440, 455], [545, 546], [656, 836]];
+// ...AND IT IS NOT BUILT YET, ON PURPOSE. The lip works - it holds a rolling ball on the deck -
+// and that is the problem: with only the drop hole and the two ramp mouths to leave by, the rest
+// sweep went from 158 resting points to 266 in 22 places, and nearly all of the new ones are balls
+// circulating on the DECK that never come down at all. That is the "balls get stuck on the top
+// level" complaint rebuilt on purpose. The edge goes in when the deck can be shown to drain with it
+// there; until then the deck stays open and the FALL (js/design.js) is what makes leaving it read
+// as leaving something.
+// DECK_SPANS.forEach((sp, i) => {
+//   if (sp[1] - sp[0] < 8) return;
+//   wall(`deck_lip_${i}`, [sp[0], DECK_EDGE_Y], [sp[1], DECK_EDGE_Y], 0.008, 0.014, Y2, 'steel', [2]);
+// });
 P.push({ type: 'saucer', name: 'saucer_centre', at: [500, 656], y0: Y1, levels: [1], capture: true, r: 0.016 });
 // shooter lane
 // shooter lane: thin wooden rail from just below the outer band's right leg end down to the plunger

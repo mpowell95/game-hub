@@ -162,12 +162,13 @@ export class DesignPinball {
       if (b._drop === undefined || b._drop === null) continue;
       b._drop = Math.min(1, b._drop + dt / DROP_FALL);
       const e = b._drop * b._drop * (3 - 2 * b._drop);
-      b.x = b._dropFrom[0] + (T.DROP_HOLE.to.x - b._dropFrom[0]) * e;
-      b.y = b._dropFrom[1] + (T.DROP_HOLE.to.y - b._dropFrom[1]) * e;
+      const to = b._dropTo || [T.DROP_HOLE.to.x, T.DROP_HOLE.to.y];
+      b.x = b._dropFrom[0] + (to[0] - b._dropFrom[0]) * e;
+      b.y = b._dropFrom[1] + (to[1] - b._dropFrom[1]) * e;
       b.vx = 0; b.vy = 0;
       b.lift = 1 - e;
       if (b._drop < 1) continue;
-      b._drop = null; b.held = false; b.holdT = 0; b.lift = 0;
+      b._drop = null; b._dropTo = null; b.held = false; b.holdT = 0; b.lift = 0;
       b.layer = 1;
       b.vy = 120;                       // it leaves the hole already moving down, as a fall does
       this.emit({ type: 'rampexit', x: b.x, y: b.y });
@@ -346,7 +347,7 @@ export class DesignPinball {
           b.held = true; b.holdT = 99;
           b._drop = 0;
           b._dropFrom = [b.x, b.y];
-        } else if (b.y > T.px(760) && b.x < T.px(941)) {
+        } else if (b.y > T.px(760) && b.x < T.px(941) && b._drop == null) {
           // A BALL LEAVING THE DECK OVER A RAMP LANE MUST NOT BE SCOOPED STRAIGHT BACK UP IT.
           // The deck front is py 760 and both ramp lanes pass under it, so a ball walking off
           // the edge there landed on level 1 INSIDE the lane, satisfied the mouth test on the
@@ -365,7 +366,17 @@ export class DesignPinball {
           // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the
           // x guard the plunge dropped to level 1 on its first step and the ride happened on the
           // wrong level entirely.
-          b.layer = 1; b.lift = 0;
+          //
+          // AND IT FALLS OFF, IT DOES NOT SIMPLY CHANGE DECK. Matt: *"it has to look like and act
+          // like it's falling off something. it can't just roll as if it was continuously on a
+          // single surface."* Setting layer and lift in the same frame is exactly that - the ball
+          // crossed py 760 and carried on with nothing dropping and nothing pausing. It is handed
+          // to the same scripted fall the drop hole uses, so `lift` runs 1 to 0 while it travels
+          // and the renderer lowers it off the deck.
+          b.held = true; b.holdT = 99;
+          b._drop = 0;
+          b._dropFrom = [b.x, b.y];
+          b._dropTo = [b.x, b.y + T.px(46)];
         }
       }
     }
