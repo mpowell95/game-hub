@@ -34,7 +34,7 @@ and keeps the three module-contract exports so nothing in the repo carries a bro
 | — | The hole-data format, written down before anything is built against it | **done** |
 | B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
 | C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round and the drop prompt are done**; the sunburst banner is not |
-| D | Stats wiring, this file, `sw.js`, the full test sweep, release | **stats are wired**; My Stats' to-par display is not |
+| D | Stats wiring, this file, `sw.js`, the full test sweep, release | **done** (My Stats' to-par landed 2026-09-06); release is a tap on the admin page |
 | — | Thirty-three more holes: Pine Valley 4-18, and Red Mesa, a whole second course | **done** |
 
 **Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
@@ -102,11 +102,13 @@ the per-key `Math.min` for `bestRoundByCourse`.
   quick round's suffix is `3`, so `pinevalley3` - frozen back when Pine Valley WAS three holes -
   comes out unchanged with no special case to remember. `golf/js/test.js` asserts it.
 
-**Queued for Stage D (Matt, 2026-09-03):** My Stats' "Best rounds" table shows raw STROKES while
-the leaderboard shows the same round as a score to par. Make My Stats show to-par too, so the two
-screens agree, and keep lifetime points as its separate "Skill level" line. Not done yet. (The
-game's OWN setup screen already shows to-par, so it and the leaderboard agree; My Stats is the
-odd one out.)
+**My Stats shows a best round as a score TO PAR beside the strokes (asked 2026-09-03, done
+2026-09-06).** This paragraph used to say "not done yet" and stayed that way for three days after
+it shipped, which is how a doc starts costing time instead of saving it - a session reading it
+would rebuild finished work. Par is subtracted at DISPLAY time in `js/game-stats-ui.js` from the
+same `GOLF_COURSE_PAR` the board uses; the stored value stays STROKES, which is the frozen recorder
+shape (rule 5), and the strokes column stays beside it because it is the number the game's own
+scorecard shows (rule 1).
 
 **Also noted, not changed:** `recordGolf` sets its win/loss flag from `points >= 0`, a leftover
 from the Modified Stableford era, so an over-par round records a `lost`. Golf is in
