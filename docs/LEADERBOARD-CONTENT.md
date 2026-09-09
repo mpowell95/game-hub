@@ -3,11 +3,13 @@
 A statement of facts only: what information exists on the leaderboard today. No layout, styling,
 or interaction guidance.
 
+Written structurally on purpose: it names rules and games, never counts, so that adding a game
+cannot silently make it wrong.
+
 ## The app
 
-The Game Hub is a phone-first web app that hosts 23 small games for one family — 20 of them visible
-to everyone, three still admin-only — with a shared player profile and a synced record of every game
-anyone plays on any of their devices.
+The Game Hub is a phone-first web app that hosts a couple of dozen small games for one family, with
+a shared player profile and a synced record of every game anyone plays on any of their devices.
 
 ## The leaderboard has two views
 
@@ -47,7 +49,7 @@ Under that, on most games, a breakdown: one tile per difficulty the field has pl
 player's number at that difficulty, with an em dash where they have none — and, once anyone has
 played the game against real people, a VS tile holding that player's wins against real people in it.
 
-**Five games have no tiles, for two different reasons.** Skeeball, Pinball and Golf because their
+**Some games have no tiles, for two different reasons.** Skeeball, Pinball and Golf because their
 number cannot be split by difficulty. Tic Tac Toe and Snake because their rows are a different shape
 entirely: two numbers side by side (Ultimate and Classic, Walls off and Walls on) and no tiles of any
 kind — so Tic Tac Toe shows no VS tile even though it is played against other people.
@@ -56,7 +58,7 @@ Ranking: difficulty tier first, score second. A higher score at a lower difficul
 a lower score at a higher one.
 
 Sorts: the game's own number (named after it — Wins, Obstacles, Longest, Solved, Distance, Points,
-Best round), Games, Name. Skeeball has a fourth, High score.
+Best round), Games, Name. Skeeball has one more, High score.
 Difficulty filter: only tiers somebody has actually played. Skeeball has a machine filter in its
 place, and only once the field has played more than one machine. The games with no difficulty have
 neither.
@@ -66,9 +68,9 @@ name. They are different facts per game — Snake has longest snake and total ru
 score, words found and longest word; Skeeball has best game, best throw, 100 cups hit and points all
 time; Chinchón has chinchóns, closes and minus tens.
 
-Eleven games have them: Connect 4, Chinchón, Escoba, Nuts & Bolts, Ball Run, Dots and Boxes, Boggle,
-Snake, Hill Climb, Skeeball, Tic Tac Toe. On every other game the section is simply absent — as it is
-on one of the eleven until somebody has a non-zero value for at least one of its records.
+The games with standing records are Connect 4, Chinchón, Escoba, Nuts & Bolts, Ball Run, Dots and
+Boxes, Boggle, Snake, Hill Climb, Skeeball and Tic Tac Toe. Elsewhere the section is simply absent —
+as it is on those games too, until somebody has a non-zero value for at least one of their records.
 
 ## A player's own page (opened from either view)
 
@@ -114,22 +116,22 @@ negative, and level par reads as "E" rather than 0.
 
 ## Games with more than one machine, map, mode or course
 
-- **Skeeball** — five machines: THE CLASSIC, HOT SHOT, HOT SHOT: BRICK CITY, HOT SHOT: RUNAWAY,
-  POPONGO. The board can be filtered to one machine, and plays, points, best game and best throw are
-  all held per machine. "100 cups hit" is not: it is a lifetime total across every machine, and it
-  drops out of the standing records entirely while a machine is selected.
+- **Skeeball** — machines: THE CLASSIC, HOT SHOT, HOT SHOT: BRICK CITY, HOT SHOT: RUNAWAY, POPONGO.
+  The board can be filtered to one machine, and plays, points, best game and best throw are all held
+  per machine. "100 cups hit" is not: it is a lifetime total across every machine, and it drops out
+  of the standing records entirely while a machine is selected.
 - **Snake** — two modes: Walls off and Walls on. Both numbers are shown for every player.
 - **Tic Tac Toe** — two variants: Classic and Ultimate. Both numbers are shown for every player.
 - **Ball Run** — two maps: Classic and Orbital. They share one combined number.
-- **Hill Climb** — four stages: Countryside, Desert, Arctic, Moon. The stages are its difficulty,
-  in that order.
-- **Pinball** — three table settings: Casual, Standard, Tournament. They are its difficulty, in
-  that order. It is the one game with a difficulty but no per-difficulty score, so its number is
-  one lifetime total.
-- **Golf** — three courses. Pine Valley and Red Mesa have eighteen holes each, playable as six
-  three-hole sets, two nines, or the full eighteen. Oasis Sands has nine, so it offers three
-  three-hole sets and one nine, and no eighteen. The board ranks one of those rounds only — Pine
-  Valley's first three holes.
+- **Hill Climb** — stages, in this order: Countryside, Desert, Arctic, Moon. The stages are its
+  difficulty.
+- **Pinball** — table settings, in this order: Casual, Standard, Tournament. They are its
+  difficulty. It is the one game with a difficulty but no per-difficulty score, so its number is one
+  lifetime total.
+- **Golf** — three courses. Pine Valley and Red Mesa have eighteen holes each, playable as
+  three-hole sets, nines, or the full eighteen. Oasis Sands has nine, so it offers three-hole sets
+  and one nine, and no eighteen. The board ranks one of those rounds only — Pine Valley's first
+  three holes.
 
 ## Also true
 
@@ -141,15 +143,11 @@ negative, and level par reads as "E" rather than 0.
   falls is the admin voiding a player's scores on one Skeeball machine, which removes them from
   display without touching the stored record.
 - Two languages: English and Spanish.
-- **Three games are currently admin-only: Pinball, Pipes and Pool.** Only Pinball is hidden in the
-  code; the other two are hidden by an admin switch inside the app, which can hide or release any
-  game with no code change. Golf was hidden the same way until recently and is now live.
-- **An admin-only game is off the leaderboard too**, by the same switch that takes it off the
-  launcher. It has no By Game row and no board of its own. Two things it does NOT lose: its wins
-  still count in every cross-game total on By Player, and anyone who has played it still sees their
-  own record of it on their player page. Release the game again and its row returns with its whole
-  history.
-- Pool is on the leaderboard twice: the current game and a retired earlier build. That is why the
-  leaderboard knows 24 games while the app hosts 23. **Right now only the RETIRED one shows** — the
-  current Pool is admin-only and therefore hidden, while the retired build has no launcher tile to
-  be hidden from and is deliberately kept so the games played on it stay visible.
+- **An admin-only game is nowhere on the leaderboard** — no By Game row, no board of its own — just
+  as it is nowhere on the launcher. Today those games are Pinball, Pipes and Pool. It is one switch
+  inside the app, so any game can be hidden or released with no code change.
+- **A retired game is off the board the same way**, and for the same reason: there is no longer a
+  card to tap.
+- **Hiding a game hides the board's row, never anybody's history.** Whether it is admin-only or
+  retired, everyone who played it still sees their own record of it on their player page, and their
+  wins on it still count in every cross-game total. Release it again and its row returns whole.

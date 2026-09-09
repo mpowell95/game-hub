@@ -681,7 +681,12 @@ from code if a future screen needs it.
   and refuses to render a board for a game it hides. **Three things are deliberately NOT filtered
   with it, each a rule 1 failure if they ever are**: `GAME_META` itself (`ALL_IDS`/`COMP_IDS` are
   built from it, so filtering there would silently drop those wins out of every cross-game total),
-  the player-detail game list, and the stored data. `visibleTabs()` in the same file keeps its own,
+  the player-detail game list, and the stored data. **A RETIRED build is hidden by the same helper**
+  (`retired: true` on its TABS row - `poolv2` is the only one): it has no `js/hub.js` registry entry
+  at all, so `isGameOnLauncher`'s `isGameLive` default assumed a row that does not exist and put the
+  retired Pool build on the board while the current Pool was hidden. That one flag now drives the
+  leaderboard, the launcher answer and `gameChoices()`'s bug-report picker, replacing a hardcoded
+  id check. It deliberately does NOT hide the My Stats tab. `visibleTabs()` in the same file keeps its own,
   MORE PERMISSIVE rule on purpose - a game hidden by an override still has its My Stats screen, so a
   player's own record of a game Matt has pulled back stays reachable. Do not unify the two.
 - **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
