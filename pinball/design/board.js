@@ -206,33 +206,37 @@ P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN,
 // (the two ledge extensions were part of that lip and are gone with it - see the deck edge above)
 // THE BUTTON IN THE MOUTH OF THE CENTRE ARCH. A real capture hole, not decoration: it carries a
 // footprint so the engine can score it, and it sits under the third band's crown.
-// THE UPPER DECK HAS AN EDGE AGAIN. Matt: *"if it's a separate level, by definition it has an
-// edge. Are you talking about a wall or rail or barrier so it can't simply fall off the edge?
-// because that's fine. But it has to look like and act like it's falling off something."*
+// THE UPPER DECK HAS AN EDGE, AND THE EDGE IS TILTED.
 //
-// The last lip was removed because it ran straight across under the upper paddles, which is the
-// one place he said there must be no barrier: *"you put a horizontal wall where there should
-// just be an edge - no barrier of any kind - under the top paddles."* So this one is built as
-// SPANS with that stretch left out, along with the drop hole and the two ramp mouths - the three
-// places a ball is supposed to be able to leave the deck.
+// Matt: *"if it's a separate level, by definition it has an edge. Are you talking about a wall or
+// rail or barrier so it can't simply fall off the edge? because that's fine."*
 //
-// It is a LIP, not a wall: 8 mm thick and 14 mm tall against the paddles' 26, so it holds a
-// rolling ball and does not shield the deck from a shot.
-const DECK_EDGE_Y = 760;
-// x spans of the lip, left to right. The gaps between them are, in order: the left ramp mouth,
-// the stretch under the upper paddles, the drop hole, and the right ramp mouth.
-const DECK_SPANS = [[150, 330], [440, 455], [545, 546], [656, 836]];
-// ...AND IT IS NOT BUILT YET, ON PURPOSE. The lip works - it holds a rolling ball on the deck -
-// and that is the problem: with only the drop hole and the two ramp mouths to leave by, the rest
-// sweep went from 158 resting points to 266 in 22 places, and nearly all of the new ones are balls
-// circulating on the DECK that never come down at all. That is the "balls get stuck on the top
-// level" complaint rebuilt on purpose. The edge goes in when the deck can be shown to drain with it
-// there; until then the deck stays open and the FALL (js/design.js) is what makes leaving it read
-// as leaving something.
-// DECK_SPANS.forEach((sp, i) => {
-//   if (sp[1] - sp[0] < 8) return;
-//   wall(`deck_lip_${i}`, [sp[0], DECK_EDGE_Y], [sp[1], DECK_EDGE_Y], 0.008, 0.014, Y2, 'steel', [2]);
-// });
+// THE FIRST ATTEMPT WAS A FLAT BAR AT py 760 AND IT PARKED BALLS. 113 of 783 dropped on the deck
+// could not get off, and they sat in two tight lines ON the bar, just outboard of each paddle.
+// Matt, seeing the plot: *"You built a fucking wall then asked me why the ball kept getting stuck
+// up there."* Right: a lip at constant y is perpendicular to gravity, so a ball that arrives
+// anywhere except an opening has nowhere to go and simply rests against it.
+//
+// A REAL DECK EDGE SLOPES, so a ball running down onto it is fed along to an opening. These two
+// rails drop 28 px over their 180 px run - about 9 degrees, comfortably past the 0.05 friction -
+// and they drop TOWARD the ramp mouth on their own side. A ball landing anywhere on either rail
+// rolls along it and out of the mouth.
+//
+// They stay above py 758, because design.js drops a ball off the deck at py 760: a rail hanging
+// below that line would hold a ball at a position the fall has already claimed.
+//
+// THE MIDDLE IS OPEN, all of x 330..656. That is the stretch under the upper paddles, and Matt has
+// been explicit about it twice: *"you put a horizontal wall where there should just be an edge -
+// no barrier of any kind - under the top paddles."* The drop hole sits inside that opening.
+// AND THEY SLOPE INBOARD, NOT OUT. The first tilt fed the ramp mouths, which sounds right and is
+// wrong: THE RAMPS ONLY GO UP. Nothing carries a ball back DOWN one, so the mouth is not an exit at
+// all - measured, every ball steered there simply stopped, 37% of the sweep. The deck's one real way
+// off is the open stretch under the paddles, drop hole included, so that is where these feed.
+const DECK_RAILS = [
+  { name: 'deck_lip_left', a: [150, 730], b: [330, 758] },   // feeds the open middle
+  { name: 'deck_lip_right', a: [836, 730], b: [656, 758] },  // feeds the open middle
+];
+for (const r of DECK_RAILS) wall(r.name, r.a, r.b, 0.008, 0.014, Y2, 'steel', [2]);
 P.push({ type: 'saucer', name: 'saucer_centre', at: [500, 656], y0: Y1, levels: [1], capture: true, r: 0.016 });
 // shooter lane
 // shooter lane: thin wooden rail from just below the outer band's right leg end down to the plunger
