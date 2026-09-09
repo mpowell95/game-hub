@@ -170,7 +170,8 @@ export const ROW_SIZE = {};
 }
 
 /** The drop-target bank across the top of the deck. */
-export const DROP_IDS = ['target_bank'];
+// One id per target, matching the four colliders board.js now emits for the bank.
+export const DROP_IDS = [0, 1, 2, 3].map((i) => `target_bank_${i}`);
 
 export default {
   NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
