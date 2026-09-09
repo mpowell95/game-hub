@@ -9,6 +9,9 @@
 // the soak plays complete games with random flipper input and asserts, on EVERY step, that no ball
 // is outside the table and that the game keeps making progress.
 
+import { readFileSync } from 'node:fs';
+import DT from './table-design.js';
+import { DesignPinball } from './design.js';
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R } from './physics.js';
 import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP, DROP_COUNT, ART } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
@@ -1021,6 +1024,194 @@ function launched(g) {
     ok('[RAINBOW] the ball count never goes silly', maxBalls <= 3 && g.balls.length >= 0, `peak ${maxBalls}`);
   }
 }
+
+// ============================================================================================
+// 10. FOUNDRY - the three defects Matt found by PLAYING the shipped build, none of which any
+//     headless assertion could see, because all three live between the model and the engine.
+//
+//     "none of the paddles move" / "the ball goes up the launch chute then magically appears on
+//     the other side of the wood wall" / "you added gates to block the ramps off completely".
+// ============================================================================================
+{
+  const src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+  const board = src('../design/board.js');
+  const rend = src('./render-design.js');
+
+  // [KNOWN-BUG PROBE] the paddles did not move, and the loop that moves them threw no error.
+  // board.js names each flipper GROUP `<name>_pivot`; getObjectByName(f.id) matched nothing, so
+  // the render loop silently did nothing on every frame for the life of the build.
+  ok('[FOUNDRY] the renderer looks the paddles up by their PIVOT GROUP name',
+    /getObjectByName\(f\.id \+ .\_pivot.\)/.test(rend), 'f.id + "_pivot"');
+  // ...and it must ADD the swing to the group's own rest yaw, not overwrite it.
+  ok('[FOUNDRY] the paddle swing is added to the mesh\'s base yaw, never assigned over it',
+    /baseYaw/.test(rend) && !/m\.rotation\.y = -\(f\.angle/.test(rend), 'baseYaw - (angle - rest)');
+
+  // [KNOWN-BUG PROBE] every paddle swung the wrong way, and it was the PHYSICS, not the render.
+  // A flipper's tip has to rise toward the playfield when it is actuated; all four went down and
+  // outward, away from the ball. Nothing in a shot map or a soak reads as wrong when this is
+  // backwards - the driver simply plays a worse table - so it is asserted directly.
+  {
+    const { flippers } = DT.buildLevel(1);
+    const back = flippers.filter((f) => {
+      const ry = f.py + Math.sin(f.rest) * f.len, uy = f.py + Math.sin(f.up) * f.len;
+      return uy >= ry;
+    }).map((f) => f.id);
+    ok('[FOUNDRY] every paddle tip RISES when the flipper is actuated',
+      back.length === 0, back.length ? 'swings down: ' + back.join(', ') : 'all ' + flippers.length + ' rise');
+  }
+
+  // [KNOWN-BUG PROBE] AN UPPER PADDLE MUST NOT BE HOLDABLE. Both upper paddles share the lower
+  // paddles' buttons, so a player cradling holds them up too - and a raised upper paddle is a bar
+  // lying across the deck. Measured on a 1,312-point rest sweep of the deck: 84 balls came to rest
+  // with the paddles down and 762 with them held, nearly all ON a bat, 105 of them in the V the
+  // two make over the drop hole. Driven, the ball never reached the main playfield in 90 s.
+  {
+    const g = new DesignPinball({});
+    g.start();
+    g.setFlipper('left', true); g.setFlipper('right', true);
+    for (let i = 0; i < 60; i++) g.update(1 / 60);   // one second, button still held
+    const up = g.flippers.filter((f) => f.pressed).map((f) => f.id);
+    ok('[FOUNDRY] an UPPER paddle drops on its own, however long the button is held',
+      up.every((id) => /lower/.test(id)), up.length ? 'still up: ' + up.join(', ') : 'none held');
+    ok('[FOUNDRY] a LOWER paddle still cradles - holding it is the player aiming',
+      g.flippers.filter((f) => /lower/.test(f.id)).every((f) => f.pressed), 'both lower paddles held');
+  }
+
+  // [KNOWN-BUG PROBE] A BOTTOM PADDLE MUST BE ABLE TO SHOOT A RAMP TO THE TOP LEVEL.
+  // Matt: *"test until a ball can be hit by the bottom paddle and go directly up the ramp to the
+  // top level."* Level 2 had been unreachable from the flippers: two L-shaped barriers sat across
+  // py 908 (a vertical ramp rail meeting a horizontal outlane wall at its corner), the outer arch
+  // band's foot ended in the mouth, three steel posts stood in each lane and the lane rail ran the
+  // whole way down. Every one of those was named by a contact tally of what a rising shot hits, and
+  // removing them took the shot from 0% to 31% on the left paddle.
+  //
+  // This drives the REAL game - the ball is put on a paddle, the paddle is flipped, and it only
+  // counts if a 'ramp' event fires AND the ball is genuinely on level 2 afterwards.
+  {
+    let made = 0, n = 0;
+    for (const side of ['left', 'right']) {
+      for (let t = 0.2; t <= 0.91; t += 0.1) {
+        for (let d = 0; d <= 30; d += 5) {
+          const g = new DesignPinball({ rand: () => 0.5 });
+          g.start();
+          const b = g.balls[0];
+          const f = g.flippers.find((q) => q.id === `flipper_lower_${side}`);
+          b.onPlunger = false; b.layer = 1;
+          b.x = f.px + Math.cos(f.angle) * f.len * t;
+          b.y = f.py + Math.sin(f.angle) * f.len * t - 34;
+          b.vx = 0; b.vy = 250;
+          g.phase = 'play';
+          let flipped = false, gotRamp = false, onL2 = false;
+          for (let i = 0; i < 60 * 5; i++) {
+            if (!flipped && i >= d) { g.setFlipper(side, true); flipped = true; }
+            if (flipped && i === d + 8) g.setFlipper(side, false);
+            g.update(1 / 60);
+            for (const e of g.takeEvents()) if (e.type === 'ramp') gotRamp = true;
+            const q = g.balls[0];
+            if (!q) break;
+            if ((q.layer | 0) === 2 && gotRamp) { onL2 = true; break; }
+          }
+          n++; if (onL2) made++;
+        }
+      }
+    }
+    ok('[FOUNDRY] a bottom paddle can shoot a ramp to the top level',
+      made >= n * 0.08, `${made} of ${n} swept shots reached level 2 (${(100 * made / n).toFixed(1)}%)`);
+  }
+
+  // [KNOWN-BUG PROBE] the front of the deck is an EDGE, not a barrier. Four walls used to make a
+  // continuous lip across it with one hole, so a ball that rolled down the deck stopped on the lip
+  // - 67 of them on a rest sweep. With them gone the same sweep rests ZERO.
+  ok('[FOUNDRY] nothing is built across the front of the deck',
+    !/wall\('ledge_/.test(board), 'no ledge walls');
+  // ...and no L-shaped barrier stands across the ramp approach.
+  ok('[FOUNDRY] no outlane wall lies across py 908 beside a ramp rail',
+    !/wall\('outlane_top_/.test(board), 'outlane_top_left/right deleted');
+
+  // [KNOWN-BUG PROBE] THE BALL MUST NEVER GO BACK DOWN THE SHOOTER LANE, AND MUST NEVER JUMP.
+  // Matt, on 47 seconds of play that was almost entirely the ball cycling in the chute: *"the ball
+  // teleports all over the place. When the ball goes down the right ramp, it teleports to the middle
+  // of the board on level 2... I just hit the ball all the way back down the chute... OBVIOUSLY this
+  // should be impossible."*
+  //
+  // Both were real and both were mine. The feed at the top of the lane was a plain GAP, so the lane
+  // was a two-way corridor - STARHUB has had a one-way gate there since it was built, and this board
+  // shipped without one. And a ramp set the ball's position to a point in the middle of the deck in
+  // a single step, which is what a teleport is.
+  //
+  // This drives eight games and measures both: a crossing INTO the lane through the feed, and any
+  // one-frame position jump the solver could not have produced.
+  {
+    let reEntered = 0, jumps = 0, biggest = 0;
+    for (let g0 = 0; g0 < 4; g0++) {
+      let sd = g0 * 7 + 1;
+      const rnd = () => (sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296;
+      const g = new DesignPinball({ rand: rnd });
+      g.start();
+      let prev = null;
+      for (let i = 0; i < 60 * 60; i++) {
+        if (g.hud().onPlunger) { g.plungerDown(); for (let k = 0; k < 40; k++) g.update(1 / 60); g.plungerUp(); prev = null; }
+        if (rnd() < 0.09) g.setFlipper('left', true);
+        if (rnd() < 0.12) g.setFlipper('left', false);
+        if (rnd() < 0.09) g.setFlipper('right', true);
+        if (rnd() < 0.12) g.setFlipper('right', false);
+        g.update(1 / 60);
+        const b = g.balls[0];
+        if (!b) { prev = null; continue; }
+        if (prev && prev[0] / DT.U < 960 && b.x / DT.U > 986 && b.y / DT.U < 400) reEntered++;
+        if (prev && !b.onPlunger) {
+          const d = Math.hypot(b.x - prev[0], b.y - prev[1]) / DT.U;
+          if (d > 90) { jumps++; biggest = Math.max(biggest, d); }
+        }
+        prev = [b.x, b.y];
+        if (g.phase === 'over') break;
+      }
+    }
+    // A DRIVEN COUNT IS A SAMPLE, and this one passed with the gate deleted - four random games
+    // simply never sent a ball at the feed. So the real probe THROWS AT IT: a ball on the deck,
+    // level with the opening, driven hard at the chute. It must not get through.
+    {
+      let through = 0;
+      for (let py = 60; py <= 290; py += 20) {
+        for (const vx of [200, 500, 900]) {
+          const { colliders, flippers } = DT.buildLevel(2);
+          const w = { colliders, flippers, gravity: 515, drag: 0.16, nudgeX: 0, nudgeY: 0 };
+          const b = makeBall(DT.px(930), DT.px(py), vx, 0);
+          for (let i = 0; i < 240 * 2; i++) { step(w, [b], () => {}); if (b.x / DT.U > 990) break; }
+          if (b.x / DT.U > 990) through++;
+        }
+      }
+      ok('[FOUNDRY] a ball driven straight at the feed from the deck cannot get into the lane',
+        through === 0, `${through} of 36 aimed shots got through`);
+    }
+    ok('[FOUNDRY] no ball ever gets back into the shooter lane through the feed',
+      reEntered === 0, `${reEntered} re-entries in four driven games`);
+    ok('[FOUNDRY] the ball never jumps: no one-frame move the solver could not have made',
+      jumps === 0, jumps ? `${jumps} jumps, biggest ${biggest.toFixed(0)} px` : 'no jump over 90 px');
+  }
+  // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
+  // would trap the launch in its own lane.
+  {
+    const gate = DT.buildLevel(2).colliders.find((c) => c.id === 'chute_gate');
+    ok('[FOUNDRY] the shooter lane feed is a one-way gate',
+      !!gate && !!gate.oneWay && gate.oneWay[0] > 0,
+      gate ? 'oneWay ' + JSON.stringify(gate.oneWay) : 'chute_gate MISSING');
+  }
+  // ...and a ramp is a CLIMB the ball is walked up, never a destination it is moved to.
+  ok('[FOUNDRY] a ramp carries the ball up its own centre line, it does not place it',
+    /_rampRide/.test(src('./design.js')) && !/r\.to\.x/.test(src('./design.js')), 'RAMPS carry `top`, and _rampRide walks the ball to it');
+
+  // [KNOWN-BUG PROBE] the launch teleported the ball 140 px sideways through a solid wall.
+  ok('[FOUNDRY] nothing moves the ball across the board wall at the top of the chute',
+    !/LAUNCH_TO/.test(src('./design.js')), 'no LAUNCH_TO destination');
+  ok('[FOUNDRY] the chute has a real way out: a feed guide and a gap in the right wall on L2',
+    /chute_feed/.test(board) && /wall_right_upper/.test(board), 'chute_feed + wall_right_upper');
+
+  // [KNOWN-BUG PROBE] a wall stood across each ramp entrance, so neither ramp could be shot.
+  ok('[FOUNDRY] there is no wall across either ramp mouth',
+    !/wall\(.ramp_mouth_/.test(board), 'ramp_mouth_left/right deleted');
+}
+
 console.log(`\n${count - fail}/${count} passed`);
 if (fail) { console.log(`${fail} FAILURE(S)`); process.exit(1); }
 console.log('ALL PASS');

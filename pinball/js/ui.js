@@ -37,9 +37,14 @@ import RT from './table-royal.js';
 import { RainbowPinball } from './rainbow.js';
 import { RainbowRenderer } from './render-rainbow.js';
 import NT from './table-rainbow.js';
+// FOUNDRY: the Claude Design export, mounted as its own board. Its renderer adds the model's own
+// THREE group rather than converting it; see js/render-design.js.
+import { DesignPinball } from './design.js';
+import { DesignRenderer } from './render-design.js';
+import DT from './table-design.js';
 
 /** Board id -> the name printed on the setup screen and the backglass. */
-const BOARD_NAME = { starhub: 'STARHUB', royal: RT.NAME, rainbow: NT.NAME };
+const BOARD_NAME = { starhub: 'STARHUB', royal: RT.NAME, rainbow: NT.NAME, foundry: DT.NAME };
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -127,6 +132,7 @@ export class PinballUI {
       { id: 'starhub', label: 'STARHUB' },
       { id: 'royal', label: RT.NAME },
       { id: 'rainbow', label: NT.NAME },
+      { id: 'foundry', label: DT.NAME },
     ].map((b) => `<button type="button" class="pb-board${b.id === this.settings.board ? ' is-on' : ''}" data-board="${b.id}">${esc(b.label)}</button>`).join('');
 
     this.root.innerHTML = `
@@ -308,6 +314,10 @@ export class PinballUI {
     if (board === 'royal') {
       this.renderer = new RoyalRenderer(this.el.canvas);
       this.game = new RoyalPinball({});
+    } else if (board === 'foundry') {
+      this.renderer = new DesignRenderer(this.el.canvas, this.el.fx);
+      this.renderer.brand = DT.NAME;
+      this.game = new DesignPinball({});
     } else if (board === 'rainbow') {
       this.renderer = new RainbowRenderer(this.el.canvas, this.el.fx);
       this.renderer.brand = NT.NAME;
@@ -647,6 +657,8 @@ export class PinballUI {
     // open, then the rows that open it.
     // RAINBOW's own ladder. It has no scoop, so nothing here may fall through to STARHUB's -
     // which is the exact mistake ROYAL FLUSH shipped with, naming a shot the table does not have.
+    // FOUNDRY's own line: two ramps to the deck and a saucer under the centre arch.
+    if (this.settings.board === 'foundry') return t('hint_ramps');
     if (this.settings.board === 'rainbow') {
       if (hud.multiball) return t('hint_jackpot');
       if (hud.locks > 0) return t('hint_locks', { n: hud.locks });

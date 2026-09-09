@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pinball playfield</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<style>
+  html,body{margin:0;height:100%;background:#2a2622;font-family:Helvetica,Arial,sans-serif}
+  three-d-stage:not(:defined){visibility:hidden}
+  three-d-stage{width:100vw;height:100vh;display:block}
+  #ui{position:fixed;top:12px;left:12px;display:flex;gap:6px;z-index:10}
+  #ui a{color:#f3ede2;background:#3c3631;border:1px solid #5a5148;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:13px}
+  #ui a.on{background:#c58b3e;color:#1b1511;border-color:#c58b3e}
+</style>
+</head>
+<body>
+<div id="ui">
+  <a href="?level=all">All</a><a href="?level=1">Level 1</a><a href="?level=2">Level 2</a><a href="?level=all&fp=1">Footprints</a><a href="?level=all&view=top">Top view</a><span id="ver" style="color:#a89d8e;font-size:12px;padding:6px 4px"></span>
+</div>
+<three-d-stage name="pinball-playfield" background="#2a2622"></three-d-stage>
+<script src="./three-d-stage.js"></script>
+<script type="module">
+  const { buildBoard, FOOTPRINTS, LEVELS, VERSION } = await import('./board.js?v=' + Date.now());
+  const q = new URLSearchParams(location.search);
+  const level = q.get('level') || 'all', fp = q.get('fp') === '1', top = q.get('view') === 'top' || level !== 'all';
+  document.querySelectorAll('#ui a').forEach(a => { if (a.search === location.search || (level === 'all' && !fp && !top && a.textContent === 'All')) a.classList.add('on'); });
+  document.getElementById('ver').textContent = 'board ' + VERSION;
+  const stage = document.querySelector('three-d-stage');
+  const { THREE } = await stage.ready;
+  const board = buildBoard(THREE);
+  let count = 0;
+  board.traverse(o => {
+    if (!o.isMesh) return; count++;
+    if (level === '1' && o.userData.level === 2) o.visible = false;
+    if (level === '2' && o.userData.level === 1) o.visible = false;
+  });
+  console.log('meshes:', count, 'L1 footprints:', FOOTPRINTS[1].length, 'L2 footprints:', FOOTPRINTS[2].length);
+  if (fp) {
+    const lm = new THREE.LineBasicMaterial({ color: 0x00ffee });
+    const ring = (c, r, y) => { const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2; pts.push(new THREE.Vector3(c[0] + r * Math.cos(a), y, c[1] + r * Math.sin(a))); } return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lm); };
+    const cap = (a, b, r, y) => { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, nx = -dz / L * r, nz = dx / L * r; const pts = [a[0] + nx, a[1] + nz, b[0] + nx, b[1] + nz, b[0] - nx, b[1] - nz, a[0] - nx, a[1] - nz, a[0] + nx, a[1] + nz]; const v = []; for (let i = 0; i < pts.length; i += 2) v.push(new THREE.Vector3(pts[i], y, pts[i + 1])); const grp = new THREE.Group(); grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(v), lm), ring(a, r, y), ring(b, r, y)); return grp; };
+    for (const l of [1, 2]) for (const f of FOOTPRINTS[l]) {
+      const y = LEVELS[l].surfaceY + 0.03;
+      board.add(f.shape === 'circle' ? ring(f.c, f.r, y) : f.shape === 'arc' ? ring(f.c, f.r, y) : cap(f.a, f.b, f.r, y));
+    }
+  }
+  stage.setObject(board);
+  if (q.get('snap') === '1') setTimeout(() => {
+    const c = stage.shadowRoot?.querySelector('canvas') || stage.querySelector('canvas');
+    const img = document.createElement('img'); img.src = c.toDataURL('image/png');
+    Object.assign(img.style, { position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 5, objectFit: 'contain', background: '#2a2622' });
+    document.body.appendChild(img);
+  }, 1500);
+  if (top) {
+    const cam = stage._camera, ctl = stage._controls;
+    cam.position.set(0, 1.9, 0.02); ctl.target.set(0, 0.03, 0); cam.fov = 35; cam.updateProjectionMatrix(); ctl.update();
+  }
+</script>
+</body>
+</html>

@@ -1044,6 +1044,461 @@ million in one shot, ROYAL FLUSH's rollover paying eighteen times against a wall
 while the suites were green, and that record is unbroken; the soak numbers above say the table
 works, not that it is fun.
 
+## The fourth board: FOUNDRY, the Claude Design export (2026-09-08)
+
+Matt sent `3D Pinball Playfield.zip` - a three.js model of the wooden reference table built by
+Claude Design - with six numbered corrections, then a seventh that reframed the whole layout:
+*"the chute is BESIDE the game board. NOT part of it. The left wall of the chute is the rightmost -
+final - wall of the actual playing board... Create the full board without the launch chute. Then
+stick the launch chute onto the right side. Stop factoring it into the board."*
+
+| File | Role |
+|---|---|
+| `design/board.js` | Claude Design's model, patched. Exports `buildBoard(THREE)`, `FOOTPRINTS`, `TRANSITIONS` |
+| `design/three-d-stage.js`, `design/viewer.html`, `design/README.md` | the export as delivered, kept for provenance |
+| `design/_playtest.mjs`, `design/_shots.mjs` | dev harnesses: the rest sweep and the shot map. Not shipped assets |
+| `design/editor.html` | the LAYOUT EDITOR: move, resize, delete, duplicate, export. See below |
+| `js/table-design.js` | the adapter - `FOOTPRINTS` in, `physics.js` colliders out |
+| `js/design.js` | `DesignPinball` - the rules |
+| `js/render-design.js` | `DesignRenderer` - **mounts the model group, does not convert it** |
+
+**THE MODEL IS MOUNTED, NOT CONVERTED.** STARHUB's model had to be converted because the game was a
+2D canvas at the time. There is no such reason now, and a conversion would be a second copy of the
+geometry that could drift from the `FOOTPRINTS` the physics reads. `design/board.js` is the one
+source and both sides read it.
+
+### What was wrong with the export, and how each was measured
+
+- **The ramps were flat rectangular boards, laid backwards.** `rampCurved()` replaces `inclineBox()`:
+  eased elevation with a channel cross-section and raised rails.
+- **The bands were faceted.** `smoothEdge(pts, step = 6)`, Catmull-Rom.
+- **The centre band was missing**, with the saucer that belongs under its crown.
+- **The flippers were about four balls apart** with a capture hole between them. `dx` retuned to a
+  clear 0.039 m (1.4 balls); `bumper_lower` deleted.
+- **`wall_bottom` had no drain gap.** 861 of 1,008 dropped balls rested on it and NOT ONE drained.
+  Split into `wall_bottom_left` and `wall_bottom_right`; the 210 px between them is the drain.
+- **The launch chute was 46 px against a 51 px ball** - it could not fit down its own lane. 69 px now,
+  hung off the outboard face of the board's right wall.
+- **The ramp mouths were unreachable, and the first three readings of that were wrong.** The shot map
+  required the ball to pass THROUGH py 908; the backstop stops it there by design, and the ball rests
+  against it at py 938. Counting CONTACT with the backstop instead: 0 hits became 28. Matt, while I
+  was reshaping the ramp rather than moving it: *"you should have slid the ramp over to make it
+  accessible, not change the shape."* The ramps stay the shape Design drew them.
+
+### Three defects the driven play-test found, all edge-detection or delivery
+
+1. **The launch delivered INTO the chute** (x 1020). The ball arrived on the deck outside its walls,
+   fell off the front and was handed back to the plunger; a 60-second driven game scored zero.
+   `LAUNCH_TO` is x 880, inside the board.
+2. **A ramp re-fired on every bounce** - 1,056 awards in six games. `b._ramp` is an edge flag, and a
+   ramp now delivers the ball INTO the deck (x 230 / 756, y 380) instead of back out its own opening.
+3. **The board rendered mirrored**, chute on the left. `stage.scale.set(K, K, -K)`: the mount's -z
+   double-negated with the model group's own `scale.x = -1`.
+
+### Where it stands
+
+Driven headlessly: **11,155 average, 6 of 6 games finishing, 9.1 s ball life**, both ramps and the
+drop hole used. Level 2 is reachable on about **5% of flipper shots**.
+
+**Three things are open and none is a bug:** 5% may not be the ramp rate a player wants; the outer
+lanes dead-end at the ramp mouths rather than draining; and 9.1 s is short beside STARHUB's asserted
+12 s. All three need a person, not another soak. **Nobody has played it yet.**
+
+### Three defects, all found by PLAYING it, none visible to any headless test (2026-09-08)
+
+Matt, on the first shipped build: *"none of the paddles move. The ball goes up the launch chute
+then magically appears on the other side of the wood wall. You added gates to block the ramps off
+completely."* All three were real, and all three live in the seam between the model and the engine,
+which is the one place the 117 headless assertions did not reach.
+
+**1. The render loop for the paddles did nothing, silently.** `board.js` builds each flipper as a
+pivot GROUP named `<name>_pivot`; the renderer asked for `f.id`, got `undefined` back every frame,
+and moved on without an error. The second half is worse than the name: that group already carries
+the paddle's REST YAW, so assigning `rotation.y` would have thrown the orientation away and pointed
+all four paddles down +x. The swing is added to a base angle captured on the first frame, and it is
+SUBTRACTED - a table angle `t` maps to `rotation.y = -t`, because `board.js`'s `yaw()` is
+`atan2(-dz, dx)` against the footprint's own `atan2(dz, dx)`. Measured: `baseYaw` -0.664 against a
+rest angle of +0.664.
+
+**2. The launch was a teleport, because the shooter lane was a closed tube.** `wall_right` ran the
+full 1,990 px, so a plunged ball could not leave the chute and one line moved it 140 px sideways
+through solid wood. A real shooter lane ends at the top of the cabinet and the ball ROLLS OUT of it.
+Three changes and no teleport anywhere:
+
+- the ball is served on **LEVEL 2** and rides the lane as a deck ball for the whole trip;
+- `wall_right` stops at py 300 **on level 2 only** (`wall_right_upper` keeps level 1 closed), which
+  is the opening it leaves through;
+- **a gap alone is not a feed.** Traced, the ball rose the full lane at x 1020, hit the top wall
+  square on and came straight back down, every time. `chute_feed` is the diagonal guide every real
+  machine has across the top of the lane, and it turns the plunge left onto the deck.
+
+Two knock-on facts, each of which cost a trace: `chute_stop` (the plunger seat) had to exist on
+level 2 as well, or a weak plunge falls past it; and the deck's "off the front" rule needed an x
+guard, because the chute is past py 760 for most of its length and the ball dropped to level 1 on
+its first step without one.
+
+**3. `ramp_mouth_left/right` were walls across the ramp entrances.** With `outlane_top_left/right`
+beside them they made an unbroken bar across py 908 from x 45 to 250 and from 750 to 936. The
+thing they guarded is real - level 1 otherwise has an open corridor up each lane into the dead
+space above the arch - but a wall in a ramp mouth is not the way to guard it. They are deleted, and
+`design.js` closes the corridor instead: **the transition fires for ANY level-1 ball above the
+mouth line in the lane**, not only one still travelling upward, so nothing can come to rest up
+there. The `_ramp` edge flag still makes it once per approach.
+
+Driven, after all three: **11,600 average, 6 of 6 games finishing, 20.1 s ball life** (was 9.1 s),
+and the ramps are taken 18 times where the gates had allowed none.
+
+**Section 10 of `test.js` is the tripwire for all three**, and it is structural on purpose: two of
+the defects are a name that does not match and a wall that should not exist, which no simulation
+can catch but a `readFileSync` can.
+
+### Every paddle swung backwards, and the renderer was not the reason (2026-09-08)
+
+Matt, on the build that fixed the paddles moving at all: *"the paddles swing backwards."*
+
+**The cause was in the PHYSICS, one number in `design/board.js`:** `sweep: 50 * dir`. Measured, the
+left paddle's tip went from px (450, 1650) to (340, 1706) and the right one's from (550, 1650) to
+(660, 1706) - both DOWN and OUTWARD, away from the ball. Table z runs down-field, so a paddle
+rising toward the playfield is z DECREASING, which the part's own note had said all along:
+`tip swings toward -z`. The note was right and the number disagreed with it. `-50 * dir` now.
+
+**The renderer was never wrong about it, and changing it would have hidden the bug.** The first
+attempt at this flipped the render sign, reasoned out of `board.js`'s `yaw()` against
+`render3d.js`'s identity `ty()`. That derivation was the wrong instrument - two frames, two
+mirrors and a sign convention that differs between the model and the engine. What settled it in
+one run was putting a MESH TIP AND A PHYSICS TIP IN THE SAME WORLD FRAME AND MEASURING THE
+DISTANCE BETWEEN THEM: 0.00 units, at both ends of the swing, on all four paddles. The paddle on
+screen is exactly where the solver puts it, so a backwards paddle on screen is a backwards paddle
+in the physics.
+
+**Nothing else in the suite could see it.** A shot map and a soak both read as merely worse when
+the flippers swing the wrong way - the driver plays a poor table and every assertion still passes.
+So `test.js` asserts it directly: every paddle tip must RISE when the flipper is actuated. Ball
+life went 20.1 s -> **32.2 s** and the average 11,600 -> **14,210** on the same driver, which is
+what a paddle that actually defends the drain is worth.
+
+### The audit after the three playing defects: what it found, and what it did not (2026-09-09)
+
+**The upper paddles turned the deck into a ball trap, and it only happened while a button was
+held.** Both upper paddles share the lower paddles' buttons, which is how a machine with upper
+flippers is wired - and a player holds a button to cradle. Dropping a ball at rest on 1,312 points
+of the deck:
+
+| | paddles down | paddles held |
+|---|---|---|
+| left the deck | 1,175 | 549 |
+| **came to rest** | 84 | **762 in 46 places** |
+
+Nearly all of them ON a raised bat, and 105 in the V the two make straddling the drop hole. Driven,
+with both buttons held, the ball **never reached the main playfield in 90 seconds** in 25 of 25
+runs: it sat on the paddles until ball search gave up and re-served it. This is the shape RAINBOW
+already records - *a raised upper paddle is a shelf in the middle of the table* - and it had been
+carried straight into this board.
+
+**The fix is that an upper paddle cannot be HELD.** A press swings it and it drops back on its own
+after `UPPER_HOLD` (0.22 s). A real mechanism, it keeps the paddle worth pressing, and a paddle
+that cannot stay up cannot be a shelf. **The lower pair are untouched** - a cradle down there is
+the player aiming, and taking it away would be taking the game away. After: **67 at rest, the same
+number held or not**, and ball searches across eight driven games fell from 16 to 1.
+
+**Four rounds of geometry were tried first and every one made it worse** (84 -> 105 -> 209 -> 477),
+and they are worth recording as a dead end: stopping the upper guide rails clear of the pivots,
+sloping the outer lip into the V, filling the pivot pockets, then running the whole V ledge through
+the pivots. Each closed one pocket by opening another somewhere along the same chain. The defect
+was never a gap - it was a MOVING part that should not have been able to stop moving, and no
+arrangement of static walls addresses that.
+
+**What the audit checked and found clean:** every renderer method `ui.js` calls exists (ROYAL
+FLUSH shipped that one thrown per contact); every `lbl_*` the board can emit is in BOTH
+dictionaries; no ball ever leaves the table; no "going nowhere for 4 s" episode; no capture held
+longer than 0 s; and occupancy is well spread, with the busiest 100 px cell at 3.9% against the
+15% this file uses as a wedge signal.
+
+**Two things are open, and both are Matt's call rather than defects:**
+
+- **70.8% of play happens on the UPPER DECK.** The plunger feeds the deck, because that is what the
+  model's chute does, so the main playfield - flippers, slingshots, drain - is the minority of the
+  game. Fixing it means changing where the shooter lane delivers, which is a design decision.
+- **Ball life is 13.7 s median** (min 7.0) across eight driven games. That clears STARHUB's
+  asserted 12 s, but only just.
+
+**A measurement note that cost a wrong report.** `DesignPinball` takes `{rand}`, not `{seed}`, and
+a fixed modulo flipper driver makes every "game" the same game. The first audit ran eight identical
+games and reported them as eight (41.3 s ball life, 89.2% on level 2). With a real per-game RNG and
+a randomised driver the honest numbers are the ones above. **If every game in a batch reports the
+same number to one decimal place, the batch is one game.**
+
+### The ramps were unreachable, and five separate things were in the way (2026-09-09)
+
+Matt: *"youve made it so no ball can ever travel to the top level. and balls get stuck on the top
+level. you put a horizontal wall where there should just be an edge - no barrier of any kind - under
+the top paddles. and the ramps are still all fucked up. and you added some sort of gray barrier walls
+in an L and reverse L shape... Shorten the left and right thin vertical walls. test until a ball can
+be hit by the bottom paddle and go directly up the ramp to the top level."*
+
+Every part of that was correct. The instrument that made it fixable was **a contact tally: fire a
+ball off each bottom paddle at every contact point and every flip timing, and count what a RISING
+shot touches above py 1400, by collider name.** Each pass named the next thing in the way; guessing
+named none of them.
+
+| in the way | what it was | contacts |
+|---|---|---|
+| `outlane_top_left` + `ramp_rail_left_in` | the L. A wall across py 908 meeting a vertical rail at its corner, right over the mouth. Mirrored on the right | - |
+| `arch_outer_end_left/right` | the outer arch band ended AT py 908, so its foot cap stood in the mouth | 58 / 46 |
+| `post_lane_1`, `post_lane_2` (+ `_r1`, `_r2`) | four steel posts standing free in the lane approach | 33, 22 |
+| `lane_rail_left/right` | ran py 980..1410, sealing the far paddle out of the lane entirely | 32 |
+| `post_lane_3` (+ `_r3`) | the last post, wedged against the re-shaped rail | 47 rest-sweep drops |
+
+What the board has now: no wall anywhere across py 908; the thin vertical ramp rails cover only the
+top half of each lane (py 640..790); the band feet end at py 880; each lane rail runs DIAGONALLY
+from the cabinet wall at py 960 down to py 1410, so it funnels a crossing shot into the lane instead
+of fencing it out; and the left mouth is 105 px wide, because the shot map put arrivals between
+x 129 and 150.
+
+**The result, measured through the real game** - the ball is put on a paddle, the paddle is flipped,
+and it only counts if a `ramp` event fires AND the ball is genuinely on level 2 afterwards:
+
+| | before | after |
+|---|---|---|
+| left paddle | 0 of 240 | **75 of 240 (31.3%)** |
+| right paddle | 0 of 240 | **18 of 240 (7.5%)** |
+
+The two sides differ because the board is not symmetric - the chute takes the right-hand 160 px, so
+the left paddle has a longer, cleaner run at its mouth than the right one has at its own.
+
+### The deck front is an EDGE now, and that alone emptied it
+
+`ledge_left`, `ledge_right` and their two extensions made a continuous lip right across the front of
+the deck with a single 90 px hole in it, so a ball that rolled down the deck stopped ON the lip.
+Nothing is built there now: `js/design.js` drops a deck ball to level 1 past py 760, which IS the
+edge - the ball rolls off the front of the raised deck onto the playfield underneath.
+
+| rest sweep, 1,312 drops on the deck | at rest |
+|---|---|
+| with the lip, paddles held | 762 |
+| with the lip, paddles down | 67 |
+| **no lip** | **0** |
+
+### And the arch crown was flat, which is a shelf
+
+With the lanes open a ball can now get above the arch on level 1, and `OUTER_OUT` ran dead level at
+py 305-306 across x 350..650. 21 of 1,289 level-1 drops came to rest on it. The crown is cambered by
+13 px over that span - invisible at this scale, and enough that a ball rolls off. **Level 1 rest
+sweep: 74 in 5 places -> 0.**
+
+Driven, after all of it: **11,266 average, 8 of 8 games finishing, ball life 32.2 s median** (was
+13.7), nothing off the table. `test.js` section 10 now sweeps the real game for the ramp shot and
+fails under 8%, and asserts structurally that no ledge wall and no outlane wall come back.
+
+**Still true, and still Matt's call: 84% of play happens on the upper deck**, because the shooter
+lane feeds it. Nothing here changed that.
+
+### The shooter lane had no gate, and the ramp was still a teleport (2026-09-09)
+
+Matt, with 47 seconds of play in which the ball did almost nothing but cycle in the chute: *"the
+ball teleports all over the place. When the ball goes down the right ramp, it teleports to the
+middle of the board on level 2... I just hit the ball all the way back down the chute. Do you
+intentionally forget everything? Is this permitted on any other pinball machine we have worked on?
+OBVIOUSLY this should be impossible."*
+
+**It is not permitted on any other machine here, and this repo already had the answer.** STARHUB
+has had a one-way gate at the top of its shooter lane since the day it was built, and this file
+describes it two sections up: *the shooter-lane gate exists only for a DOWNWARD-moving ball, so a
+launch passes through it and a returning orbit ball is caught*. `js/physics.js` has carried the
+`oneWay` mechanism the whole time. Opening a plain GAP in the board wall to feed the deck made the
+lane a two-way corridor, so every ball that reached the deck rolled straight back in and fell the
+whole length of it. `chute_gate` is that flap, on level 2, blocking +x only.
+
+**Reading the clip is what found it.** Five frames a second over the four windows Matt named: the
+ball is in the chute at 3-5 s, in the chute at 10-12 s, in the chute at 19-21 s. Three separate
+launches, one behaviour. A pair of frames seconds apart would have shown a ball somewhere on the
+table and nothing else - **at five frames a second the cycle is the whole story.**
+
+### A ramp is a climb now, and `to` is gone
+
+`RAMPS[].to` was a point in the MIDDLE OF THE DECK and the ball was moved there in one step, which
+is a teleport however it is described. Each ramp carries `top` - its own mouth on the deck edge, on
+its own centre line - and `_rampRide` walks the ball there over `RAMP_CLIMB` (0.55 s), easing as it
+crests, with `b.lift` running 0 to 1 so `render-design.js` draws the height. Traced frame by frame,
+a left-paddle shot travels px (876, 894) -> (901, 600) continuously and becomes a level-2 ball only
+at the top. STARHUB scripts its habitrail the same way and this file already called it *a scripted
+habitrail, not simulated*.
+
+`b.lift` is a NUMBER, not a flag, and every other route between the decks sets it too - a drop
+through the hole, a fall off the front, a serve into the lane. A flag was what made the ramp look
+like a jump even after the position was right.
+
+### And the black hole in the middle of the playfield was paint
+
+Raycast through it rather than guessed at: `decal_teardrop`, in `decal_dark` at 0x1E1409 against
+0xC58B3E maple. A printed graphic rendering as a void a third of the lower playfield across, and
+the first thing the eye goes to in every screenshot. It is 0x53381C now - plainly darker than the
+wood, plainly paint on it.
+
+### What the probes measure, and one that was worthless
+
+| | before | after |
+|---|---|---|
+| balls re-entering the lane through the feed | every ball, every launch | **0** |
+| one-frame position jumps over 90 px | the ramp, every time | **0 (biggest 0)** |
+| aimed shots at the feed that get through | **36 of 36** | **0 of 36** |
+
+**The first draft of the chute probe counted crossings during four DRIVEN games, and it passed with
+the gate deleted** - the random driver simply never sent a ball at the feed. That is the sampling
+lesson this file has now learned three times. The probe that means anything THROWS AT THE FEED: a
+ball on the deck, level with the opening, driven at it at three speeds from twelve heights. Born
+red at 36 of 36.
+
+### The layout editor: `design/editor.html` (2026-09-09)
+
+Matt: *"create an html tool that lets me resize and move objects. I must be able to delete and
+duplicate objects as well. Make sure you include an "Export SVG" button or something similar. It
+should show me the entire screen thats displayed on my phone, not just the game board."*
+
+Open it at `/pinball/design/editor.html`, on a desktop or on the phone.
+
+**It reads the real board.** `design/board.js` exports `PARTS`, the same list the 3D model and the
+physics footprints are both built from, so what it draws is what is in the game. Nothing writes
+back: you export, and a session applies the export.
+
+**Every part becomes one of four editable shapes** - circle, capsule, polygon, rectangle. The board
+has seventeen part types, each with its own builder in `board.js`; re-implementing all seventeen in
+the editor would be a second copy of the geometry that could drift, which is the mistake this board
+exists to avoid. A move/resize/duplicate tool needs the SHAPE, not the builder.
+
+**The whole phone screen is drawn, not the playfield alone** - top bar, objective strip, backglass,
+the machine, and the LAUNCH / NUDGE / pause row, at 393 x 852, which is the viewport this repo
+measures every game against. **The board is drawn TOP-DOWN**, where the game renders it at an 11
+degree tilt, because a part cannot be dragged accurately in perspective and the point of the tool
+is the coordinates.
+
+**Units are reference pixels** (x 0..1100, y 0..1990) - the numbers `board.js` is written in, so a
+number read off the panel pastes straight into the source.
+
+Two exports: **Export SVG** is the phone screen as a picture, with no editing furniture in it.
+**Export edits** is a JSON of what changed - `removed`, `changed` (with the before and after shape)
+and `added` (a duplicate and what it was copied from) - which is what a session applies.
+
+**One bug worth recording, because the shape recurs.** Typing 120 into Width on a pop bumper gave
+132. A circle has ONE size, and the resize averaged the x and y factors: the untouched Height
+contributed a factor of exactly 1 to the average. It takes the axis that actually moved now.
+
+#### Selecting several at once
+
+Matt: *"let me select multiple objects at once to move them together."*
+
+**The selection is a SET, and a set of one is the ordinary case.** Drag, resize, nudge, duplicate,
+delete, the panel and the export all work on the whole set, so there is no separate "multi" path to
+keep in step with the single-part one. Shift-tap (or ctrl/cmd-tap) adds one or drops one, on the
+board or in the list; dragging empty board lassoes; Ctrl+A takes everything on the shown level.
+Dragging a part that is already in the set moves the whole set and keeps the spacing; dragging one
+that is not selects it alone first, which is what every drawing tool does.
+
+**Three bugs came out of building it, and each is a shape worth knowing:**
+
+- **The selection furniture swallowed the clicks.** The dashed box is drawn OVER the parts, so a
+  tap inside your own selection hit the outline, found no part, and cleared everything - a 27-part
+  lasso dropped to 0 on the first attempt to drag it. `pointer-events: none` on the outlines; the
+  eight handles keep theirs.
+- **Plain overlap made the lasso useless.** `playfield_L1`, `deck_L2` and the cabinet walls have
+  boxes the size of the BOARD, so every lasso caught them: a 140 x 100 px drag over the bumpers
+  selected 26 parts. A part is caught now if its CENTRE is in the box, or it overlaps AND its own
+  box is no more than three times the lasso.
+- **Resizing a MIXED selection needs a solver, not one pass.** A part's box is its points plus its
+  own radius, so scaling points by `sx` while scaling every radius by the same factor only composes
+  cleanly when every part is the same size. With two posts of different radii, asking for 2986 gave
+  2966 and asking a height of 300 gave 180. `sizeGroupTo` measures, scales and measures again;
+  four or five passes land inside a tenth of a pixel.
+
+**How the browser tests of this were wrong three times, which is the useful part.** A synthetic
+PointerEvent dispatched on the `<svg>` has `target = svg`, so every drag test was really testing the
+empty-board branch and reported the selection clearing as a bug. And `elementFromPoint` returns null
+below the fold, so the second attempt found nothing at all. The test that means anything dispatches
+ON THE PATH ELEMENT: with two bumpers selected, pressing one and moving 100 x 50 moved the group box
+from (493, 270) to (593, 320) with both still selected.
+
+
+#### Drawing new parts, and rotating them
+
+Matt: *"I need the ability to inset or draw objects and rotate objects."*
+
+**Draw** arms a tool; the picker names the thing by the PART TYPE it will become in `board.js`
+(post, disc, bumper, saucer, wall, rect, poly) rather than by its geometry, because that is the word
+a session applying the export needs. A circle is one tap. A wall or a rectangle is one drag. A
+polygon is a tap per corner and Enter to close, which is the only tool that makes an arbitrary
+outline. Escape abandons a half-drawn one. The tool disarms itself after each part, so drawing four
+posts is four arms - deliberate, because an armed tool ignores what is under the pointer (or you
+could not draw over anything) and a tool left armed by accident eats every click.
+
+A drawn part exports as `added` with **`copyOf: null` and `drawn: true`**, which is how the export
+tells "duplicate that post" from "here is a wall that did not exist".
+
+**Rotate** is the green grip on a stalk above the selection box, plus the two 15 degree buttons, the
+`[` and `]` keys, and a Rotate field. **The field is a RELATIVE nudge and resets to 0**, because
+these shapes are points and carry no orientation of their own - there is no absolute angle to show.
+For the same reason rotation MOVES THE POINTS rather than being stored beside the shape: `board.js`
+writes every part as coordinates, so an angle held separately would have to be baked out on export,
+and the export would stop being "here are the new numbers". A lone circle is unchanged by rotating,
+which is correct; inside a selection its centre swings round the group anchor with everything else.
+
+**One bug, and it is the same shape as the multi-select one.** Tapping a polygon corner sets no
+drag, so `pointerup` ran with nothing to end, called `draw()`, and wiped the ghost - two taps in and
+the outline you were placing had never appeared. The end-of-drag handler redraws an in-progress
+polygon now.
+
+Verified in a real browser: a post lands exactly where it is tapped (500, 1200, r 11); a wall
+dragged (200, 1300) to (400, 1400) is a 220 x 120 capsule; six 15 degree steps swap a 220 x 120 box
+to 120 x 220 with the centre unmoved and -90 in the field puts it back; the grip drag rotates; and a
+three-tap polygon exports with its three corners verbatim.
+
+#### The editor saved nothing, and a deploy proved it (2026-09-09)
+
+Matt, mid-session, after a deploy reloaded the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE
+CHANGES I JUST MADE???"*
+
+**It shipped holding every edit in memory only.** No autosave, no draft, nothing on disk - so a
+reload, a closed tab, a crash or (as here) a deploy landing under an open page threw the work away
+without a word. Nothing was actually lost this time, because he had already exported; that was luck,
+not design.
+
+`gamehub.foundryEditor.v1` now holds the whole part list plus the selection, **written on every
+redraw** - which is after a drag finishes, not before it starts - and again on `pagehide` and on the
+page going hidden. `pagehide` rather than `beforeunload`, because `beforeunload` does not fire on
+iOS. The page reloads straight back into the work and says so in a banner; a silent restore is as
+confusing as a silent loss. **Reset all** clears the store as well, or it would come back.
+
+It is a WORKING FILE, not player data, so THE LAW does not reach it - but it is somebody's afternoon,
+which is why it is written eagerly instead of behind a Save button nobody would press.
+
+#### Matt's first two edits, applied
+
+From `foundry-edits.json`: `wall_top` 40 px thick -> **60**, and `bumper_upper_left` r 72.1 px ->
+**66**. The second needed a small change to the board: **a bumper may carry its own `r` now**, since
+the two shared `BUMPER_R` and one constant cannot express two sizes. **The 3D builder scales with
+it** - a skirt drawn at the shared radius while the collider used a smaller one would be exactly the
+drift this board exists to avoid.
+
+#### It is usable on a phone (2026-09-09)
+
+Matt: *"I switched to mobile. Please make it mobile friendly."*
+
+**The grips were 7 CSS pixels across, and that is the finding.** A handle written as `r: 22` is 22
+REFERENCE pixels; the board is drawn at 0.31 of that inside a viewBox itself scaled to the page, so
+on a phone at fit width they came out about seven pixels. Nothing a finger could hit - and the
+reason every browser test of a drag had to reach for the element by name instead of pointing at it.
+`S2B(css)` converts a size you want ON SCREEN into the board units the overlay draws in, so a grip
+is **44 CSS px at every zoom** (measured: all eight handles and the rotate grip, exactly 44). The
+dashed outlines scale the same way, or they are hairlines on a phone and slabs at 2.4x.
+
+The rest of the pass: **Fit screen** is the default under 700 px and it MEASURES the window rather
+than trusting 393 x 852, fitting by width and height and taking the smaller, and re-fitting on
+rotate (coalesced to one frame, the rule `js/viewport.js` holds every game to). The toolbar folded
+from six rows to two, with everything but draw, rotate, duplicate, delete and undo behind **More**.
+Every control keeps a 44 px tap target. Nothing scrolls sideways.
+
+Verified with real touch events: dragging a part moves it exactly (385, 270) -> (465, 330), and a
+resize handle can be grabbed and dragged with a finger.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
