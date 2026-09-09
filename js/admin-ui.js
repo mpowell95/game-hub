@@ -143,17 +143,19 @@ function ensureCss() {
   .adm-annbar { height: 8px; margin: 6px 0 var(--gh-sp-2); border-radius: 999px;
                 background: var(--gh-surface-2); border: 1px solid var(--gh-border); overflow: hidden; }
   .adm-annbar > span { display: block; height: 100%; background: #ffce3a; }
-  .adm-annline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 3px 0; }
-  .adm-annlbl { flex: none; min-width: 62px; font-size: var(--gh-fs-xs); font-weight: 800;
+  .adm-annlbl { display: block; margin-top: var(--gh-sp-2); font-size: var(--gh-fs-xs); font-weight: 800;
                 text-transform: uppercase; letter-spacing: .04em; color: var(--gh-muted); }
-  .adm-annnames { flex: 1 1 60%; min-width: 0; font-size: var(--gh-fs-sm); line-height: 1.45; }
-  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px; padding: 3px 0;
-                           display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .adm-annlbl b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
+  .adm-annlist { margin: 2px 0 0; padding: 0 0 0 var(--gh-sp-3); list-style: none;
+                 font-size: var(--gh-fs-sm); line-height: 1.7; }
+  .adm-annempty { margin: 2px 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); }
+  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px;
+                           display: flex; align-items: center; gap: 6px; }
   .adm-annfold > summary::-webkit-details-marker { display: none; }
+  .adm-annfold > summary .adm-annlbl { margin-top: 0; }
   .adm-annfold > summary::after { content: '\\203a'; margin-left: auto; color: var(--gh-muted); font-size: 18px; }
   .adm-annfold[open] > summary::after { content: '\\2039'; }
-  .adm-annfold > p { margin: 2px 0 0; padding-left: 70px; font-size: var(--gh-fs-sm);
-                     line-height: 1.45; color: var(--gh-muted); }
+  .adm-annfold .adm-annlist { color: var(--gh-muted); }
   .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   /* --- players --- */
   .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
@@ -362,7 +364,12 @@ function announceSectionHTML() {
   const rows = [...people.values()].sort((a, b) =>
     (a.name || '\uffff').localeCompare(b.name || '\uffff'));
   const lang = getLang();
-  const names = (list) => list.map((p) => esc(p.name || t('adm_sc_unnamed'))).join(', ');
+  // ONE NAME PER LINE. Matt: *"just say Seen: and list players who have seen it. One name above
+  // another. It's impossible to read as a paragraph, idk why you'd choose that format."* He is
+  // right - a comma-run of names is prose, and nobody reads prose to find out whether their sister
+  // is on a list. A stacked list is scanned. The count on the heading is what keeps it short.
+  const names = (list) => `<ul class="adm-annlist">${
+    list.map((p) => `<li>${esc(p.name || t('adm_sc_unnamed'))}</li>`).join('')}</ul>`;
 
   // TWO STATES AND A BAR, after three goes at this. What made the earlier versions unreadable was
   // not the layout, it was the TAXONOMY: a third bucket ("no answer yet" - a phone that has not
@@ -397,14 +404,11 @@ function announceSectionHTML() {
         <span class="adm-anncount">${esc(t('adm_ann_seenof', { n: yes.length, all: rows.length }))}</span>
       </div>
       ${bar(yes.length, rows.length)}
-      <div class="adm-annline">
-        <span class="adm-annlbl">${esc(t('adm_ann_seen'))}</span>
-        <span class="adm-annnames">${yes.length ? names(yes) : esc(t('adm_ann_nobody'))}</span>
-      </div>
+      <div class="adm-annlbl">${esc(t('adm_ann_seen'))} <b>${yes.length}</b></div>
+      ${yes.length ? names(yes) : `<p class="adm-annempty">${esc(t('adm_ann_nobody'))}</p>`}
       ${no.length ? `<details class="adm-annfold">
-        <summary><span class="adm-annlbl">${esc(t('adm_ann_notyet'))}</span>
-          <span class="adm-annnames">${esc(t('adm_ann_npeople', { n: no.length }))}</span></summary>
-        <p>${names(no)}</p>
+        <summary><span class="adm-annlbl">${esc(t('adm_ann_notyet'))} <b>${no.length}</b></span></summary>
+        ${names(no)}
       </details>` : ''}
     </div>`;
   }).join('');
