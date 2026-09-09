@@ -562,6 +562,7 @@ class GolfGame {
         <button type="button" class="gf-btn gf-tutbtn${needTutorial ? ' is-cta' : ''}" data-role="tutorial">
           <span>${esc(needTutorial ? t('tutorial_cta') : t('tutorial_again'))}</span></button>
         ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`}
+        ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="board"><span>${esc(t('board'))}</span></button>`}
         <div class="gf-ladder">${esc(t('ladder_progress', ladder))}</div>
       </div>`;
     this.rootEl.appendChild(el);
@@ -591,6 +592,11 @@ class GolfGame {
     // buttons and read as a broken game rather than as a ladder.
     const prac = el.querySelector('[data-role="practice"]');
     if (prac) this._on(prac, 'click', () => this._askDiscard(() => this._renderHoleSelect()));
+    // THE BOARD DOES NOT DISCARD A SAVED ROUND. It is a screen you look at and close, so it is not
+    // behind `_askDiscard` the way starting something is - a player checking where they stand
+    // mid-round must not be asked to throw that round away to do it.
+    const board = el.querySelector('[data-role="board"]');
+    if (board) this._on(board, 'click', () => this._openBoard());
     this._on(el.querySelector('[data-role="tutorial"]'), 'click',
       () => this._askDiscard(() => this._startTutorial()));
   }
@@ -872,6 +878,39 @@ class GolfGame {
   }
 
   // ---------------------------------------------------------------- play ----
+  /** GOLF'S OWN LEADERBOARD (golf/js/board.js, HANDOFF-GOLF-LAUNCH.md job C3).
+   *
+   *  The read is paid for HERE rather than inside the board, so the button can say it is working:
+   *  `readPlayersOnce` is a network call and on a weak connection it is seconds of nothing. The
+   *  module itself is loaded lazily for the same reason the hub lazy-loads its overlays - a player
+   *  who never opens this screen never downloads it, and it pulls in the aggregation layer. */
+  async _openBoard() {
+    if (this._boardBusy) return;
+    this._boardBusy = true;
+    const btn = this.rootEl && this.rootEl.querySelector('[data-role="board"]');
+    const span = btn && btn.querySelector('span');
+    const was = span ? span.textContent : '';
+    if (span) span.textContent = t('board_loading');
+    try {
+      const [{ openBoard }, net] = await Promise.all([
+        import('./board.js'),
+        import('../../js/stats-net.js'),
+      ]);
+      const players = await net.readPlayersOnce();
+      if (this.destroyed || !this.rootEl) return;
+      openBoard(this.rootEl, {
+        players,
+        courseId: this.course.id,
+        mode: this.settings.lastMode || 3,
+      });
+    } catch (err) {
+      console.error('[golf] the leaderboard could not open', err);
+    } finally {
+      this._boardBusy = false;
+      if (span) span.textContent = was;
+    }
+  }
+
   /** Start a scored round: a course plus the slice of its holes this round plays. */
   _startRound(roundId) {
     this.roundId = roundId;

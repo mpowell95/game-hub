@@ -2802,5 +2802,99 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     && !!STRINGS.en.picked_up_in && !!STRINGS.es.picked_up_in);
 }
 
+// =================================================================================================
+// 24. GOLF'S OWN LEADERBOARD (2026-09-09, HANDOFF-GOLF-LAUNCH.md job C3)
+//
+// Matt: *"Since the golf leaderboard is likely a lot, maybe we have the more specific info within
+// the golf game itself?"* The hub board keeps ONE number (best 1-3 on Pine Valley, to par, lower
+// wins) and this screen is every other round. Skeeball set the precedent: one number on the hub,
+// the full picture on the machine's own backboard.
+//
+// The ranking is pure and lives in `boardRows`, so it is checked here rather than through a
+// browser. What the DOM does with it is checked structurally below.
+// =================================================================================================
+{
+  console.log('\n-- 24. golf\'s own leaderboard --');
+  const BD = await import('./board.js');
+  const IDG = await import('../../js/players-agg.js');
+  const P = (name, code, best) => ({ profile: { name, playerId: code },
+    stats: { games: { golf: { total: { played: 1, won: 1 }, gf: { rounds: 1, bestRoundByCourse: best } } } } });
+  const fam = {
+    a: P('Anita Bonita', 'PA', { pinevalley3: 11, pinevalley18: 80 }),
+    m: P('MattyIce', 'MM', { pinevalley3: 12, pinevalley9: 34 }),
+    l: P('Lili', 'LL', { pinevalley3: 12 }),
+    u: P('Unai', 'UU', { pinevalley3: 15 }),
+    z: P('zzztest', 'ZZ', { pinevalley3: 3 }),
+  };
+  // THE VIEWER'S KEY IS ASKED FOR, NOT SPELLED OUT. `identityKey` prefers the CODE form, but the
+  // union in `buildIdentity` can canonicalise a group onto its NAME form - Anita's group key is
+  // `name:anita bonita`, not `code:PA`. A hardcoded key here passes only by luck and fails the day
+  // the graph merges differently, which is exactly what it did the first time this ran.
+  const meKey = IDG.buildIdentity(fam).keyFor({ name: 'Anita Bonita', playerId: 'PA' }, 'dev1');
+  const rows = BD.boardRows(fam, 'pinevalley3', meKey);
+  ok('everyone with a score on that round is listed', rows.length === 4, `${rows.length} rows`);
+  ok('a test account is not', !rows.some((r) => /zzz/i.test(r.name)));
+  // LOWER WINS - the only metric in this app where that is true, and the reason the hub board
+  // needed its own sort direction. Par on 1-3 is 12, so 11 is -1 and 15 is +3.
+  ok('lower wins', rows.map((r) => r.name).join(',') === 'Anita Bonita,Lili,MattyIce,Unai',
+    rows.map((r) => `${r.name} ${r.toPar}`).join(' | '));
+  ok('...as a score to PAR, not strokes', rows[0].toPar === -1 && rows[3].toPar === 3);
+  // A TIE IS A TIE. Two players on level par are both 2nd and the next is 4th - not 2nd and 3rd.
+  ok('a tie shares its rank and the next rank skips',
+    rows.map((r) => r.rank).join(',') === '1,2,2,4', rows.map((r) => r.rank).join(','));
+  ok('the viewer\'s own row is marked', rows[0].isMe === true && rows[1].isMe === false);
+
+  // NEVER PLAYED IS NOT ZERO. Only Matt has a front nine; nobody has a back nine.
+  ok('a round only lists the people who have played IT',
+    BD.boardRows(fam, 'pinevalley9', '').length === 1);
+  ok('...and an unplayed round is empty, not a list of zeros',
+    BD.boardRows(fam, 'pinevalley9b', '').length === 0);
+  // LENGTHS ARE NEVER MERGED (rule 4): the 18 is its own board and its own par.
+  ok('an 18-hole best is its own measurement', (() => {
+    const r = BD.boardRows(fam, 'pinevalley18', '');
+    return r.length === 1 && r[0].toPar === 8;          // 80 against par 72
+  })());
+
+  // [KNOWN-BUG PROBE] `golfBestAt` subtracts `GOLF_COURSE_PAR[key] || 0`, so on a key the par table
+  // has never heard of it returns raw STROKES dressed as a score to par - a number that looks like
+  // a wonderful round. THE LAW rule 4: a dash, never a fabricated figure.
+  ok('[KNOWN-BUG PROBE] a round key with no par row is refused, not shown as raw strokes',
+    BD.hasPar('pinevalley3') === true && BD.hasPar('nosuchround99') === false
+    && BD.boardRows({ x: P('X', 'XX', { nosuchround99: 4 }) }, 'nosuchround99', '').length === 0);
+  ok('...and a missing value prints a dash', BD.toParText(null) === '\u2013' && BD.toParText(NaN) === '\u2013');
+  ok('level par prints as E, not 0', BD.toParText(0) === 'E');
+  ok('...and the sign is always shown', BD.toParText(3) === '+3' && BD.toParText(-2) === '-2');
+
+  const src = fs.readFileSync(new URL('./board.js', import.meta.url), 'utf8');
+  // ONE AGGREGATION. A second answer to "who has played what" would drift from the hub board's.
+  ok('it reads the people the way the hub board does',
+    /aggregatePlayers/.test(src) && /golfBestAt/.test(src) && !/bestRoundByCourse\[/.test(src));
+  // [KNOWN-BUG PROBE] The setup screen owns `data-mode`/`data-round` and is still in the DOM behind
+  // this overlay, so those names here make a document-wide query find ITS chip - which is exactly
+  // what happened the first time this screen was driven: a tap landed on a locked button on a
+  // screen nobody could see.
+  ok('[KNOWN-BUG PROBE] its chips do not share the setup screen\'s attribute names',
+    /data-bmode=/.test(src) && /data-bround=/.test(src)
+    && !/data-mode=/.test(src) && !/data-round=/.test(src));
+  // The list is the ONLY thing that scrolls, and it contains its own scroll: no game may scroll.
+  ok('the list contains its own scroll', /\.gf-board__list[^}]*overscroll-behavior: contain/.test(src));
+  ok('the chip rows contain theirs too', /\.gf-board__row[^}]*overscroll-behavior: contain/.test(src));
+  // It is opaque: at 94 % the setup screen's own "Best:" figures showed through a screen that is
+  // itself a list of scores.
+  ok('the overlay is opaque', /\.gf-board \{[^}]*background: #0c1207/.test(src));
+  // The negative is on the CALL, not on the string appearing anywhere: board.js's own header
+  // explains why it does not use the hub's key, and naming it there is the documentation. A probe
+  // that fails because a comment mentions the thing it is warning about is a probe that gets
+  // deleted by the next person who meets it.
+  ok('golf owns its own level-par string',
+    /t\('board_even'\)/.test(src) && !/t\('lb_golf_even'\)/.test(src));
+
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('the setup screen offers it', /data-role="board"/.test(ui) && /this\._openBoard\(\)/.test(ui));
+  // Looking at the board is not starting something, so it must not go through the discard prompt.
+  ok('...and looking at it cannot discard a saved round', !/_askDiscard\(\(\) => this\._openBoard/.test(ui));
+  ok('...and both modules are lazy', /await Promise\.all\(\[\s*import\('\.\/board\.js'\)/.test(ui));
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);
