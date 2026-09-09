@@ -2207,3 +2207,30 @@ pieces that must be kept in sync by hand whenever their canonical source changes
   profile at setup (name/emoji/opponents/skill as each game's setup uses them), and Parchís's
   single-file build carries its own inlined reader (see `parchis/CLAUDE.md`). The per-game
   precedence rule above (own saved settings beat profile beats defaults) applies in each.
+
+### An announcement can wait for its game to be live (2026-09-09)
+
+Matt, releasing golf: *"I want a popup on the gamehub itself saying something like new game! Golf...
+It should only appear once per phone. It can't be attached to the v# because other sessions are
+updating other games and we'll be updating golf still."*
+
+Both of those are what this layer already was - the seen-list is keyed by the entry's own id and has
+no relationship to `sw.js`'s `CACHE`, so a game can be redeployed any number of times and nobody
+sees its notice twice. What was missing is the TIMING.
+
+**`requiresGame` is a hub id, and `js/hub.js`'s `_maybeAnnounce` holds the entry back until
+`isGameLive` says everyone can actually see that tile.** It exists because the alternative is a
+trap: golf's announcement had to be written and deployed while golf was still `live: false`, and
+shipping it ungated would have told the whole family about a game none of them could find. Gating it
+`adminOnly` instead works exactly once and then needs a SECOND deploy to un-gate on the right day -
+a thing to remember, which is the kind of thing that gets forgotten (the bug-report entry needed
+precisely that, which is why `test-bug-report.mjs` prints a NOTE on every run naming any entry still
+gated).
+
+This way the popup turns itself on the moment the game is released from the admin page: no deploy,
+no timing, and the same one-per-device guarantee. **The check returns BEFORE `showAnnouncement`,
+which is what preserves it** - that call is what marks an entry seen, so a held announcement leaves
+every device untouched and lands fresh for everyone on release day.
+
+An entry's `action` is also wired for this: `play-golf` calls `hub.launch('golf')`, so the popup's
+button opens the game rather than leaving the player to find the tile they were just told about.

@@ -26,6 +26,39 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  form straight from the popup's own button. */
 export const ANNOUNCEMENTS = [
   {
+    // GOLF. Matt, 2026-09-09: *"I want a popup on the gamehub itself saying something like new
+    // game! Golf... It should only appear once per phone. It can't be attached to the v# because
+    // other sessions are updating other games and we'll be updating golf still."*
+    //
+    // Both of those are what this module already is: the seen-list is keyed by this ID and nothing
+    // else, so it is one per device for ever, and it has no relationship to `sw.js`'s CACHE - golf
+    // can be redeployed twenty more times and no one sees this twice.
+    //
+    // `requiresGame` HOLDS IT UNTIL GOLF IS ACTUALLY LIVE (js/hub.js's `_maybeAnnounce`). It has to
+    // ship while golf is still admin-only, and telling the family about a game none of them can
+    // find is worse than saying nothing. This way the popup turns itself on the moment the game is
+    // released on the admin page - no second deploy, nothing to remember.
+    //
+    // No `shots`: those are "here is where the button lives" pictures for a control nobody would
+    // find on their own. A new game is a new TILE on the launcher they are already looking at.
+    id: 'golf-2026-09-09',
+    from: '2026-09-09',
+    until: '2026-11-15',
+    requiresGame: 'golf',
+    icon: '\u26F3',
+    badge: true,
+    action: 'play-golf',
+    title: { en: 'New game: Golf', es: 'Juego nuevo: Golf' },
+    // Short on purpose. The tile is on the screen behind this popup, so the popup's whole job is
+    // to point at it - and the one thing worth saying is that there is a lesson first, because the
+    // rest of the course is locked until it is done and that would otherwise read as broken.
+    body: {
+      en: ['Eighteen holes at Pine Valley. Play the tutorial first, then holes unlock three at a time as you shoot par.'],
+      es: ['Dieciocho hoyos en Pine Valley. Juega primero el tutorial y los hoyos se van abriendo de tres en tres al hacer par.'],
+    },
+    cta: { en: 'Play', es: 'Jugar' },
+  },
+  {
     id: 'bug-report-2026-08-11',
     from: '2026-08-11',
     until: '2026-10-15',
