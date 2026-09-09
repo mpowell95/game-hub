@@ -459,7 +459,22 @@ class Hub {
     // The app-wide admin config (which games are live, which Skeeball machines are open). The
     // launcher has ALREADY painted from the cached copy - this refresh only re-renders when the
     // fetched value actually differs, so the common case costs one background read and no repaint.
-    this._adminUnsub = onAdminConfig(() => { if (!this.current) this.render(); });
+    // ...AND THE ANNOUNCEMENT GETS ANOTHER GO (2026-09-09). Matt: *"ana said she's played golf. Why
+    // does it still say she hasn't seen the popup?"* Because on the load where a game FIRST becomes
+    // live for a device, the popup was skipped in silence. `_maybeAnnounce` runs from `_afterPaint`
+    // above, and `isGameLive` is a synchronous read of the CACHED config - which on that load still
+    // said golf was admin-only. The refresh landed a moment later, the tile appeared, she played
+    // it, and nothing ever asked about the announcement again: it is once per PAGE LOAD, and its
+    // one chance had already been spent before the answer arrived.
+    //
+    // So the very players a release notice is FOR - everyone whose device had not already cached
+    // "golf is live" - were exactly the ones who could not be shown it. `_announced` is only set
+    // when the popup actually shows, so re-asking here costs nothing and cannot double up.
+    this._adminUnsub = onAdminConfig(() => {
+      if (this.current) return;
+      this.render();
+      this._maybeAnnounce();
+    });
     refreshAdminConfig();
     // Is THIS device on the admins allowlist? One read per load, cached, so the profile page and
     // the Messages screen can both gate synchronously. A console change lands on the next load.
@@ -1279,6 +1294,10 @@ class Hub {
     this.el.profile.hidden = false;
     if (this.el.topRight) this.el.topRight.hidden = false;
     this._syncStats();   // a game may have just updated the stats
+    // Coming back from a game is the other moment a still-owed announcement can be shown. It is
+    // the half that catches the player who opened the app, watched the new tile appear as the
+    // config landed, and went straight into the game - see the note on `onAdminConfig` in _boot.
+    this._maybeAnnounce();
     this._drainBugReports();   // and the connection may have come back while they played
     // A new build that landed WHILE they were playing was deliberately held (never interrupt a
     // game). They are on the launcher now, so it is safe to take it.
