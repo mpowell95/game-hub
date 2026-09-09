@@ -438,7 +438,13 @@ SIDE_YELLOW.concat(SIDE_YELLOW.map(([x, y]) => [M - x, y]))
 // are deleted. Paint, no footprint.
 P.push({ type: 'saucer', name: 'saucer_left',  at: [85, 110],  y0: Y2, levels: [] });
 P.push({ type: 'saucer', name: 'saucer_right', at: [901, 110], y0: Y2, levels: [] });
-[[[155, 940], [30, 60]], [[831, 940], [-30, 60]], [[140, 1325], [45, 35]], [[805, 1315], [-45, 35]]].forEach(([tip, d], i) =>
+// THE ARROWS POINT UP THE LANE THEY BELONG TO. Matt: *"arrows aren't pointing in the righ tdirection".*
+// They were aimed by eye and then the ramp mouths moved 84 px inboard underneath them, so the two by
+// the ramps were pointing at bare wood.  runs from the TIP to the base, so it is the lane heading
+// negated: the lane leaves each mouth 26 degrees off vertical, toward the side wall, which is the
+// (-0.44, -0.90) taken from the ramp spine in js/table-design.js. They are longer than they are wide
+// now (26 x 78 rather than 30 x 60), because a stubby triangle reads as a wedge and not as an arrow.
+[[[170, 930], [34, 70]], [[816, 930], [-34, 70]], [[140, 1325], [45, 35]], [[805, 1315], [-45, 35]]].forEach(([tip, d], i) =>
   P.push({ type: 'wedge', name: `insert_green_wedge_${i + 1}`, tip, d, y0: Y1, levels: [] }));
 P.push({ type: 'teardrop', name: 'decal_teardrop', y0: Y1, levels: [] });
 
