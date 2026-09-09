@@ -232,9 +232,12 @@ class GolfGame {
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'gf-root';
     this.inHub = !!container.closest('.hub-game');
-    // The hub's floating back button lives in the top-left, so the HUD's own top row moves down
-    // out from under it. Standalone there is nothing there and no pad is needed.
-    if (this.inHub) this.rootEl.style.setProperty('--gf-top-pad', '46px');
+    // THE TOP PAD AND THE BOTTOM SAFE AREA ARE BOTH MEASURED IN `_fit()`, not assumed here.
+    // This used to be a flat `--gf-top-pad: 46px` in the hub, on the grounds that "the hub's
+    // floating back button lives in the top-left, so the HUD's own top row moves down out from
+    // under it". Measured 2026-09-09 in the real hub at 393x852: the back pill runs 54..89 and the
+    // game area starts at 98 - it sits ABOVE the game with 9 px to spare and has never overlapped
+    // it. So 46 px of a 714 px game area was reserved for nothing. See `_fitInsets`.
     container.appendChild(this.rootEl);
 
     this.offViewport = onViewportResize(() => this._fit());
@@ -304,6 +307,10 @@ class GolfGame {
     const over = Math.round(document.documentElement.scrollHeight - vh);
     if (over > 0) { h = Math.max(320, h - over); el.style.height = `${h}px`; }
 
+    // BEFORE the no-op early return below: the insets depend on where we ended up on the page, not
+    // on whether our own height changed, and a rotation can move the chrome without resizing us.
+    this._fitInsets();
+
     // Setting our own height resizes us, and the ResizeObserver watches for exactly that - so a
     // no-op must stay a no-op or the two chase each other for ever.
     if (`${h}px` === prev) return;
@@ -317,6 +324,45 @@ class GolfGame {
       for (const cv of this.stripEl.querySelectorAll('[data-hole-art]')) delete cv.dataset.painted;
       this._paintHoleStrip(this.stripEl);
     }
+  }
+
+  /** HOW MUCH ROOM THE HOST'S OWN CHROME ACTUALLY TAKES, measured every fit.
+   *
+   *  Matt, with a screenshot of the live game beside an edit of his own: *"I moved the HUD higher
+   *  up and lower on the screen, creating more room for the golfer."* He was pointing at two
+   *  paddings that were each guarding against something that is not there:
+   *
+   *  **The top.** `--gf-top-pad` was a flat 46 px whenever the game was mounted in the hub, to
+   *  keep the HUD out from under the floating back pill. Measured in the real hub at 393x852: the
+   *  pill runs 54..89 and the game area starts at 98. It is ABOVE the game with 9 px clear, and a
+   *  scan of every positioned element outside the game found NOTHING overlapping it at either
+   *  phone height. The pad is measured now, so it is 0 when the pill is clear and exactly enough
+   *  when it is not - and it cannot go stale the next time the hub's chrome moves.
+   *
+   *  **The bottom.** Every bottom inset added `env(safe-area-inset-bottom)`. That is a VIEWPORT
+   *  inset, not an element one, so it is the same number wherever the element sits - and in the
+   *  hub the game already stops 40 px above the viewport bottom, so the home indicator was being
+   *  paid for twice. `--gf-gap-b` is how far our own bottom edge already sits above the viewport,
+   *  and the CSS subtracts it from the inset, floored at zero. Standalone the game is full bleed,
+   *  the gap is 0, and the safe area is honoured in full exactly as before. */
+  _fitInsets() {
+    const el = this.rootEl;
+    const r = el.getBoundingClientRect();
+    // The hub's back pill is the only thing that has ever sat over this game. Asking for it by
+    // name is a reach into the host, which is why it is a MEASUREMENT and not a constant: if it
+    // is absent, hidden or clear of us, the pad is simply 0.
+    let pad = 0;
+    if (this.inHub) {
+      const back = document.querySelector('.hub-back');
+      if (back && !back.hidden && back.offsetParent !== null) {
+        const b = back.getBoundingClientRect();
+        // Only when it genuinely reaches into us, and only by as much as it does, plus a little air.
+        if (b.bottom > r.top && b.right > r.left && b.left < r.right) pad = Math.ceil(b.bottom - r.top) + 6;
+      }
+    }
+    el.style.setProperty('--gf-top-pad', `${Math.max(0, pad)}px`);
+    const vh = window.innerHeight || 720;
+    el.style.setProperty('--gf-gap-b', `${Math.max(0, Math.round(vh - r.bottom))}px`);
   }
 
   _sizeCanvas() {

@@ -95,6 +95,12 @@
 .gf-root .gf-btn > span { pointer-events: none; }
 
 /* --- HUD: corner-anchored, floating over the art, nothing in flow -------------------------- */
+/* THE BOTTOM SAFE AREA, MINUS WHAT THE HOST ALREADY PAID. `env(safe-area-inset-bottom)` is a
+   VIEWPORT inset - the same number wherever the element sits - so adding it inside a game that
+   already stops above the home indicator charges for it twice. `--gf-gap-b` is how far our own
+   bottom edge sits above the viewport, measured in ui.js's `_fitInsets` every fit; standalone it
+   is 0 and this is the plain inset, exactly as before. */
+.gf-root { --gf-safe-b: max(0px, calc(env(safe-area-inset-bottom) - var(--gf-gap-b, 0px))); }
 .gf-root .gf-hud { position: absolute; inset: 0; pointer-events: none; }
 .gf-root .gf-hud > * { pointer-events: auto; }
 
@@ -151,7 +157,7 @@
 .gf-root .gf-bl {
   position: absolute;
   left: max(10px, env(safe-area-inset-left));
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: calc(10px + var(--gf-safe-b));
   display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
 }
 .gf-root .gf-aimrow { display: flex; align-items: stretch; gap: 6px; }
@@ -182,7 +188,7 @@
 .gf-root .gf-br {
   position: absolute;
   right: max(10px, env(safe-area-inset-right));
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: calc(10px + var(--gf-safe-b));
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
 }
 .gf-root .gf-meter { display: block; }
@@ -217,7 +223,7 @@
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px;
-  padding: calc(14px + var(--gf-top-pad, 0px)) 18px calc(14px + env(safe-area-inset-bottom));
+  padding: calc(14px + var(--gf-top-pad, 0px)) 18px calc(14px + var(--gf-safe-b));
   background: linear-gradient(180deg, #33501d 0%, #4a6b28 100%);
   overflow: hidden;
   overscroll-behavior: contain;
@@ -367,7 +373,7 @@
 /* --- the "ball is live" veil --------------------------------------------------------------- */
 .gf-root .gf-skip {
   position: absolute; left: 50%; transform: translateX(-50%);
-  bottom: calc(112px + env(safe-area-inset-bottom));
+  bottom: calc(112px + var(--gf-safe-b));
   font-size: 12px; color: var(--gf-dim);
   background: var(--gf-panel); border: 1px solid rgba(255,255,255,.5);
   padding: 5px 10px;
@@ -602,12 +608,12 @@
    you glance at - but this carries a sentence over a mown, speckled, tree-lined fairway, and read
    in a real browser the course showed straight through the words. */
 .gf-root[data-tut="1"] .gf-bl,
-.gf-root[data-tut="1"] .gf-br { bottom: calc(10px + 30px + env(safe-area-inset-bottom)); }
+.gf-root[data-tut="1"] .gf-br { bottom: calc(10px + 30px + var(--gf-safe-b)); }
 
 .gf-root .gf-tut__rail {
   position: absolute; left: 0; right: 0; bottom: 0;
-  height: calc(30px + env(safe-area-inset-bottom));
-  padding: 0 10px env(safe-area-inset-bottom); pointer-events: auto;
+  height: calc(30px + var(--gf-safe-b));
+  padding: 0 10px var(--gf-safe-b); pointer-events: auto;
   display: flex; align-items: center; justify-content: center;
   background: rgba(10, 14, 8, .94);
   border-top: 2px solid #ffce3a;
