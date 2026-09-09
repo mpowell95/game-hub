@@ -9,7 +9,8 @@
   duplicate objects as well... It should show me the entire screen thats displayed on my phone, not
   just the game board."* Then: *"let me select multiple objects at once to move them together."* Then:
   *"I need the ability to inset or draw objects and rotate objects."* Then, after a deploy reloaded
-  the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"*
+  the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"* Then, on a phone:
+  *"Please make it mobile friendly."*
 
   NOTHING YOU DO HERE IS EVER HELD ONLY IN MEMORY. Every change is written to localStorage on the
   spot, and the page reloads into exactly what you left. It shipped without that, so a reload - a
@@ -56,6 +57,25 @@
   button.on { border-color: var(--accent); color: var(--accent); background: #2a2413; }
   label.chk { display: inline-flex; gap: 7px; align-items: center; }
   main { display: flex; gap: 16px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
+  /* THE BOARD COMES FIRST ON A PHONE and the panel goes under it, which is what flex-wrap already
+     does - but the board has to FIT, so nothing here may be wider than the screen. */
+  html, body { max-width: 100%; overflow-x: hidden; }
+  #stage { max-width: 100%; }
+  #phone { max-width: 100%; height: auto; }
+  @media (max-width: 700px) {
+    header { padding: 8px 10px; gap: 7px; }
+    header h1 { width: 100%; margin: 0 0 2px; font-size: 13px; color: var(--dim); }
+    /* Every control keeps a 44 px tap target - the UX floor this repo holds every game to - but
+       the text shrinks so the toolbar is three rows rather than six. */
+    button, select, label.chk { padding: 8px 10px; font-size: 13px; min-height: 44px; }
+    main { padding: 10px; gap: 12px; }
+    aside { max-width: 100%; }
+    .card { padding: 10px 12px; }
+    .row span:first-child { width: 72px; font-size: 13px; }
+    .row input { min-height: 44px; }
+    #list { max-height: 38vh; }
+    #list li { padding: 11px 8px; }
+  }
   #stage { background: #000; border-radius: 26px; padding: 0; overflow: hidden;
     box-shadow: 0 12px 40px #0009; flex: 0 0 auto; }
   #phone { display: block; touch-action: none; }
@@ -68,7 +88,8 @@
   .row span:first-child { color: var(--dim); width: 84px; flex: 0 0 auto; }
   .row input { flex: 1; background: #12101a; border: 1px solid var(--line); color: var(--ink);
     border-radius: 7px; padding: 7px 9px; font: inherit; min-height: 38px; }
-  #list { max-height: 320px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  #list { max-height: 320px; overflow: auto; margin: 0; padding: 0; list-style: none;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   #list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px;
     justify-content: space-between; }
   #list li:hover { background: #262336; }
@@ -78,6 +99,14 @@
     font-size: 12px; }
   p.help { color: var(--dim); margin: 6px 0; font-size: 13px; }
   .saved { color: var(--ok); font-size: 12px; letter-spacing: .06em; align-self: center; }
+  #more { width: 100%; }
+  #drawkind { max-width: 46vw; }
+  #more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center;
+    min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--dim); }
+  #more > summary::-webkit-details-marker { display: none; }
+  #more[open] > summary { border-color: var(--accent); color: var(--accent); }
+  .more-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; }
   .restored { margin: 0 14px; padding: 10px 14px; border-radius: 10px; background: #17331f;
     border: 1px solid #46d39a; color: #ccf6e6; font-size: 13px; }
   /* THE SELECTION FURNITURE MUST NOT SWALLOW CLICKS. The dashed box is drawn OVER the parts, so
@@ -105,34 +134,40 @@
   <button id="undo" disabled>Undo</button>
   <button id="draw">Draw</button>
   <select id="drawkind">
-    <option value="post">Post (circle)</option>
-    <option value="disc">Disc (circle)</option>
-    <option value="bumper">Bumper (circle)</option>
-    <option value="saucer">Saucer (circle)</option>
-    <option value="wall">Wall (drag a line)</option>
-    <option value="rect">Rectangle (drag a box)</option>
-    <option value="poly">Polygon (tap corners, Enter to close)</option>
+    <option value="post">Post</option>
+    <option value="disc">Disc</option>
+    <option value="bumper">Bumper</option>
+    <option value="saucer">Saucer</option>
+    <option value="wall">Wall (drag)</option>
+    <option value="rect">Rect (drag)</option>
+    <option value="poly">Polygon (taps)</option>
   </select>
   <button id="rotL" disabled>&#8634; 15&deg;</button>
   <button id="rotR" disabled>&#8635; 15&deg;</button>
-  <button id="all">Select all shown</button>
-  <button id="clear" disabled>Deselect</button>
-  <button id="reset">Reset all</button>
-  <span id="saved" class="saved">saved</span>
-  <button id="svg" class="go">Export SVG</button>
-  <button id="json" class="go">Export edits</button>
-  <select id="levels">
-    <option value="all">Both levels</option>
-    <option value="1">Level 1 only (playfield)</option>
-    <option value="2">Level 2 only (upper deck)</option>
-  </select>
-  <label class="chk"><input type="checkbox" id="snap" checked> Snap to 5 px</label>
-  <select id="zoom">
-    <option value="1">Actual phone size</option>
-    <option value="1.4" selected>1.4x</option>
-    <option value="1.8">1.8x</option>
-    <option value="2.4">2.4x</option>
-  </select>
+  <details id="more">
+    <summary>More</summary>
+    <div class="more-row">
+      <button id="all">Select all shown</button>
+      <button id="clear" disabled>Deselect</button>
+      <button id="reset">Reset all</button>
+      <button id="svg" class="go">Export SVG</button>
+      <button id="json" class="go">Export edits</button>
+      <select id="levels">
+        <option value="all">Both levels</option>
+        <option value="1">Level 1 only (playfield)</option>
+        <option value="2">Level 2 only (upper deck)</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="snap" checked> Snap to 5 px</label>
+      <select id="zoom">
+        <option value="fit">Fit screen</option>
+        <option value="1">Actual phone size</option>
+        <option value="1.4">1.4x</option>
+        <option value="1.8">1.8x</option>
+        <option value="2.4">2.4x</option>
+      </select>
+      <span id="saved" class="saved">saved</span>
+    </div>
+  </details>
 </header>
 
 <main>
@@ -410,6 +445,22 @@ const NS = 'http://www.w3.org/2000/svg';
 const svg = document.getElementById('phone');
 const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 
+/**
+ * THE GRIPS ARE SIZED IN SCREEN PIXELS, NOT BOARD PIXELS.
+ *
+ * A handle of "r 22" is 22 REFERENCE pixels, and the board is drawn at about 0.31 of that inside a
+ * viewBox that is itself scaled to whatever width the page gives it - so on a phone at fit width
+ * those handles came out about 7 CSS pixels across. Nothing you could hit with a finger, and the
+ * reason the first browser tests of the drag had to reach for the element by name rather than by
+ * pointing at it.
+ *
+ * `S2B` converts a size you want ON SCREEN into the board units the overlay is drawn in, so a grip
+ * stays a 44 px target at every zoom - the tap-target floor `docs/BUILDING-A-GAME.md` holds every
+ * game in this hub to.
+ */
+let ZF = 1;                      // css pixels per viewBox unit
+const S2B = (css) => css / (SCALE * ZF);
+
 const BOARD_TOP = 176, BOARD_H = 620;
 const SCALE = BOARD_H / BH;
 const BOARD_X = (393 - BW * SCALE) / 2;
@@ -504,6 +555,7 @@ function drawSel(marquee, poly, ghost) {
     overlayG.appendChild(el('rect', {
       x: Math.min(marquee.x0, marquee.x1), y: Math.min(marquee.y0, marquee.y1),
       width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), class: 'marquee',
+      'stroke-width': S2B(1.4), 'stroke-dasharray': `${S2B(5)} ${S2B(4)}`,
     }));
   }
   // THE GHOST: what the shape you are drawing looks like so far.
@@ -516,7 +568,7 @@ function drawSel(marquee, poly, ghost) {
   }
   if (poly && poly.pts.length) {
     overlayG.appendChild(el('path', { d: 'M ' + poly.pts.map((q) => q.join(' ')).join(' L '), class: 'draw-ghost' }));
-    for (const q of poly.pts) overlayG.appendChild(el('circle', { cx: q[0], cy: q[1], r: 12, class: 'rot-grip' }));
+    for (const q of poly.pts) overlayG.appendChild(el('circle', { cx: q[0], cy: q[1], r: S2B(9), class: 'rot-grip' }));
   }
   const list = chosen();
   if (!list.length) return;
@@ -524,19 +576,21 @@ function drawSel(marquee, poly, ghost) {
   if (list.length > 1) {
     for (const it of list) {
       const b = bbox(it);
-      overlayG.appendChild(el('rect', { x: b.x0 - 5, y: b.y0 - 5, width: b.x1 - b.x0 + 10, height: b.y1 - b.y0 + 10, class: 'sel-one' }));
+      overlayG.appendChild(el('rect', { x: b.x0 - 5, y: b.y0 - 5, width: b.x1 - b.x0 + 10, height: b.y1 - b.y0 + 10, class: 'sel-one', 'stroke-width': S2B(1.4) }));
     }
   }
   // ...and one dashed box with handles round the lot, which is the thing you drag.
   const g = groupBox(list), w = g.x1 - g.x0, h = g.y1 - g.y0;
-  overlayG.appendChild(el('rect', { x: g.x0 - 10, y: g.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline' }));
+  overlayG.appendChild(el('rect', { x: g.x0 - 10, y: g.y0 - 10, width: w + 20, height: h + 20, class: 'sel-outline',
+    'stroke-width': S2B(2), 'stroke-dasharray': `${S2B(6)} ${S2B(4)}` }));
   // THE ROTATE GRIP, on a stalk above the box.
   const gx = g.x0 - 10 + (w + 20) / 2, gy = g.y0 - 10;
-  overlayG.appendChild(el('path', { d: `M ${gx} ${gy} L ${gx} ${gy - 70}`, class: 'rot-stalk' }));
-  overlayG.appendChild(el('circle', { cx: gx, cy: gy - 70, r: 24, class: 'rot-grip', 'data-rot': '1' }));
+  const grip = S2B(22), stalk = S2B(38);
+  overlayG.appendChild(el('path', { d: `M ${gx} ${gy} L ${gx} ${gy - stalk}`, class: 'rot-stalk', 'stroke-width': S2B(2) }));
+  overlayG.appendChild(el('circle', { cx: gx, cy: gy - stalk, r: grip, class: 'rot-grip', 'data-rot': '1', 'stroke-width': S2B(1) }));
   for (const [k, fx, fy] of HANDLES) {
     overlayG.appendChild(el('circle', {
-      cx: g.x0 - 10 + (w + 20) * fx, cy: g.y0 - 10 + (h + 20) * fy, r: 22, class: 'handle', 'data-h': k,
+      cx: g.x0 - 10 + (w + 20) * fx, cy: g.y0 - 10 + (h + 20) * fy, r: grip, class: 'handle', 'data-h': k, 'stroke-width': S2B(1),
     }));
   }
 }
@@ -915,8 +969,34 @@ $('json').onclick = () => {
 
 // The SVG viewBox stays 393 x 852 whatever the zoom - the export is always the phone screen at its
 // real size, and only the thing on your desk gets bigger.
-const setZoom = () => { const z = +$('zoom').value; svg.setAttribute('width', 393 * z); svg.setAttribute('height', 852 * z); };
-$('zoom').onchange = setZoom;
+/**
+ * FIT is the default on anything phone-shaped: it measures the window rather than trusting a
+ * number, because 393 x 852 is one phone and every other one is a different one. It fits by WIDTH
+ * and by HEIGHT and takes the smaller, so the machine is never cropped.
+ */
+function zoomFactor() {
+  const v = $('zoom').value;
+  if (v !== 'fit') return +v;
+  const w = (innerWidth - 24) / 393;
+  const h = (innerHeight - 150) / 852;
+  return Math.max(0.42, Math.min(w, h, 2.4));
+}
+const setZoom = () => {
+  const z = zoomFactor();
+  svg.setAttribute('width', Math.round(393 * z));
+  svg.setAttribute('height', Math.round(852 * z));
+  ZF = z;
+};
+$('zoom').value = innerWidth < 700 ? 'fit' : '1.4';
+if (innerWidth >= 700) $('more').open = true;
+// A phone rotates, and a fitted board has to re-fit when it does. Coalesced to one frame, the
+// same rule js/viewport.js holds every game in this hub to.
+let refit = 0;
+addEventListener('resize', () => {
+  if (refit || $('zoom').value !== 'fit') return;
+  refit = requestAnimationFrame(() => { refit = 0; setZoom(); draw(); });
+});
+$('zoom').onchange = () => { setZoom(); draw(); };
 setZoom();
 
 // RESTORE, then say what happened. A banner rather than a silent restore: coming back to work you
