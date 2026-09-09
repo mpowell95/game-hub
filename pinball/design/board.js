@@ -225,7 +225,11 @@ P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN,
  * on is the layer system's business, not a collider's.
  */
 P.push({
-  type: 'poly', name: 'deck_L2', mat: 'deckwood', y0: Y2, d: 0.010, levels: [],
+  // ITS TOP FACE IS Y2, SO IT IS THE SURFACE.  builds upward from y0, so y0: Y2 put the
+  // deck ABOVE the level it defines - the paddles, bumpers and the ramp tops all sit AT Y2 and were
+  // left under a 10 mm slab. Starting 10 mm lower makes the top face the deck, which is what every
+  // other level-2 part is already measured against, and it is what lets a ramp top arrive flush.
+  type: 'poly', name: 'deck_L2', mat: 'deckwood', y0: Y2 - 0.010, d: 0.010, levels: [],
   pts: [
     [45, 40], [941, 40], [941, 596], [836, 596], [836, 760],
     [545, 760], [545, 724], [455, 724], [455, 760],
