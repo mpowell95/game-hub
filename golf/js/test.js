@@ -425,12 +425,56 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
         r === 'power' && s.power > 0, `got ${r} with power ${s.power}`);
     }
     {
-      // Every other club has deadMs 0, so only the degenerate same-millisecond case is refused.
+      // THE RULE GOT WIDER ON 2026-09-09 AND THIS ASSERTION MOVED WITH IT. It used to read "a
+      // driver tap 40 ms in still sets a real power", on the reasoning that a club with deadMs 0
+      // is only ever refused in the degenerate same-millisecond case. That reasoning closed the
+      // dead zone's own case and left the millisecond either side of it open - a putt tapped
+      // 251-293 ms in locks a power under 3 %, the ball moves under three inches, and the stroke
+      // is charged. The guard is `MIN_TAP_POS` now (the needle's own drawn width), so a driver is
+      // refused for its first ~43 ms too. What has NOT changed is the thing this block exists to
+      // prove: a refused tap leaves the backswing running, so the next one sets a real power.
       const d = CL.swingTempo(CLUBS[0]);
       const s = new SW.Swing();
       s.setTempo(d);
       s.tap(0);
-      ok('a driver tap 40 ms in still sets a real power', s.tap(40) === 'power' && s.power > 0);
+      const early = s.tap(SW.MIN_TAP_POS * d.upMs * 0.9);
+      ok('a driver tap before the needle has moved its own width does nothing',
+        early === null && s.power === 0 && s.phase === SW.PHASE.BACK, `got ${early}`);
+      const late = s.tap(SW.MIN_TAP_POS * d.upMs * 1.5);
+      ok('...and the backswing is still live, so the next tap sets a real power',
+        late === 'power' && s.power > 0, `got ${late} with power ${s.power}`);
+    }
+    {
+      // [KNOWN-BUG PROBE] THE FLOOR IS THE NEEDLE'S OWN DRAWN WIDTH, not a number somebody liked.
+      // The needle's key is 5 CSS px (ui.js's `needleAt(read.pos, 5, 2, ...)`) and the accuracy
+      // bar is a trapezoid 33.4 px along its inner edge and 51.5 px along its outer for the whole
+      // 2 * BAR_HALF window, so 5 px is 0.027 power units at the wide end. The floor is that wide
+      // end - refuse only while the needle has CERTAINLY not moved by its own width.
+      const A0 = SW.ARC_A0_DEG * Math.PI / 180, D = SW.ARC_DEG_PER_UNIT * Math.PI / 180;
+      const OUT_R = 54, BAND = 19, IN_R = OUT_R - BAND;
+      const polar = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
+      const ang = (v) => A0 + v * D;
+      const [tlx, tly] = polar(IN_R, ang(SW.BAR_HALF));
+      const [trx, tryy] = polar(IN_R, ang(-SW.BAR_HALF));
+      const [blx, bly] = polar(OUT_R, ang(SW.BAR_HALF));
+      const [brx, bry] = polar(OUT_R, ang(-SW.BAR_HALF));
+      const wide = Math.max(Math.hypot(trx - tlx, tryy - tly), Math.hypot(brx - blx, bry - bly));
+      const need = 5 / wide * 2 * SW.BAR_HALF;
+      ok('[KNOWN-BUG PROBE] the minimum tap is the needle\'s own width on the bar',
+        Math.abs(SW.MIN_TAP_POS - need) < 0.004,
+        `MIN_TAP_POS ${SW.MIN_TAP_POS} vs a ${wide.toFixed(1)} px bar = ${need.toFixed(4)}`);
+      // ...and the ui.js it is measured against still draws the needle that wide.
+      ok('...and ui.js still draws the needle 5 px wide',
+        /needleAt\(read\.pos, 5, 2,/.test(fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8')));
+      // [KNOWN-BUG PROBE] The defect itself: a putt struck at the floor must actually move the
+      // ball. Under the old `> 0` guard the same tap moved it 0.000 ft and cost a stroke.
+      const holeT = PINE_VALLEY.holes[0];
+      const ballT = [holeT.pin[0], holeT.pin[1] - 1];
+      const res = SH.simulatePutt({ hole: holeT, from: ballT, aimRad: 0,
+        power: SW.MIN_TAP_POS, rangeFt: SH.puttRangeFt() });
+      const movedFt = Math.hypot(res.rest[0] - ballT[0], res.rest[1] - ballT[1]) * 3;
+      ok('[KNOWN-BUG PROBE] the weakest putt the meter can be stopped at still moves the ball',
+        movedFt > 0.1, `${movedFt.toFixed(3)} ft`);
     }
   }
   ok('...and that speed is the Swing\'s own default',
@@ -1967,8 +2011,15 @@ console.log('\n-- 16a. the OTHER way out of a round is not silent either (2026-0
     && /openBugReport\(\{ gameId: 'golf' \}\)/.test(ui));
   // [KNOWN-BUG PROBE] `_frame` keeps running behind an overlay, so a swing left live while the
   // menu is open fires itself and charges a stroke for a shot nobody saw.
+  //
+  // IT MUST BE `reset()`, NOT `settle()`. Settle carries LOCK_MS (1.4 s) - the lock after a ball
+  // has been STRUCK - and nothing is struck here, so it left the swing button dead for 1.4 s after
+  // the player resumed and swallowed their first tap (measured in a browser: resume, tap swing,
+  // phase still `idle`). And it is guarded on `!this.anim`, because a ball already in the air owns
+  // its own phase and its own lock through `_settleShot`.
   ok('[KNOWN-BUG PROBE] opening the pause menu cancels a live swing',
-    /_pauseMenu\(\)\s*\{[\s\S]{0,120}?this\.swing\.settle\(/.test(ui));
+    /_pauseMenu\(\)\s*\{[\s\S]{0,900}?if \(!this\.anim\) this\.swing\.reset\(\)/.test(ui)
+    && !/_pauseMenu\(\)\s*\{[\s\S]{0,900}?this\.swing\.settle\(/.test(ui));
   // ...but a PRACTICE hole is not a round and must still leave instantly, or the prompt that
   // matters becomes the one the player has learned to dismiss. That is why the quit button has its
   // own narrower test rather than reusing the hub's `isInProgress()`, which answers true for one.

@@ -2361,7 +2361,13 @@ class GolfGame {
    *  is resolved either way and interrupting it is the one thing that could lose it. */
   _pauseMenu() {
     if (this.pauseEl) return;
-    this.swing.settle(performance.now());
+    // `reset()`, NOT `settle()`. Settle carries `LOCK_MS` (1.4 s), which is the lock after a ball
+    // has been STRUCK - and nothing was struck here, so it left the swing button dead for 1.4 s
+    // after the player resumed and swallowed their first tap. Measured in a browser: resume, tap
+    // swing, phase still `idle`. A ball already in the AIR keeps its own phase and its own lock,
+    // because `_settleShot` owns those and `_tap` already skips the animation rather than
+    // starting a swing.
+    if (!this.anim) this.swing.reset();
     this._paintHud();
     const el = document.createElement('div');
     this.pauseEl = el;

@@ -118,6 +118,30 @@ export const UP_MS = 1585;
 export const DOWN_MS = 1080;
 
 /** Input is dead for this long after the ball is struck. [MEASURED: 1.33-1.54 s across three shots] */
+/** THE NEEDLE HAS TO HAVE VISIBLY MOVED BEFORE A TAP CAN STOP IT, and this is how far that is.
+ *
+ *  MEASURED off the meter's own geometry rather than picked: the needle's key is drawn 5 CSS px
+ *  wide (`needleAt(read.pos, 5, 2, ...)` in ui.js), and the accuracy bar is a trapezoid running
+ *  33.4 px along its inner edge and 51.5 px along its outer for the whole 2 * BAR_HALF window. So
+ *  5 px is 0.041 power units at the narrow end and 0.027 at the wide one, and the floor is the
+ *  WIDE end - the tap is refused only while the needle has CERTAINLY not moved by its own width
+ *  anywhere on the bar.
+ *
+ *  WHY IT EXISTS. `tap()` used to refuse a second tap only when the needle was at EXACTLY zero,
+ *  which closed the case it was written for (the putter's dead zone locking power 0.0000) and
+ *  left the millisecond either side of it open. Found 2026-09-09 by playing the tutorial hole
+ *  with a thumb that has a real timing error: a putt tapped 251-293 ms in locks a power under
+ *  3 %, which at PUTT_GAMMA 1.6 is a ball that moves less than three inches - and `_settleShot`
+ *  charges a stroke for it. Measured across ~780 holes, it hit about 3 % of them, almost all of
+ *  them on the two slower player models. It is the same "I swung and nothing happened" this file
+ *  has now closed three times; this is the version of the rule that closes it by width instead of
+ *  by an exact zero.
+ *
+ *  REFUSING IS STRICTLY BETTER THAN FIRING. The backswing carries on, so the player's next tap
+ *  sets a bigger power than they meant - a bad shot, but a shot. The alternative is a stroke gone
+ *  and the ball where it was, which no amount of playing better can avoid. */
+export const MIN_TAP_POS = 0.027;
+
 export const LOCK_MS = 1400;
 
 export const PHASE = {
@@ -481,9 +505,15 @@ export class Swing {
       //
       // There is nothing to stop while the needle has not started, so the tap does nothing and
       // the backswing carries on. `tap()` already returns null for "this tap did nothing" and
-      // ui.js's caller handles it. Every club with `deadMs: 0` is unaffected except for the
-      // degenerate two-taps-in-the-same-millisecond case, which this closes too.
-      if (!(b.pos > 0)) return null;
+      // ui.js's caller handles it.
+      //
+      // THE TEST IS `MIN_TAP_POS`, NOT `> 0`, SINCE 2026-09-09. Exactly-zero closed the dead
+      // zone's own case and left the millisecond either side of it open: a putt tapped 251-293 ms
+      // in locks a power under 3 %, the ball moves under three inches, and the stroke is charged
+      // anyway. The floor is the needle's own drawn width - see MIN_TAP_POS above for the
+      // measurement and for why refusing beats firing. A club with `deadMs: 0` is now refused for
+      // its first ~43 ms too, which is the same rule and the same reason.
+      if (!(b.pos >= MIN_TAP_POS)) return null;
       this.power = b.pos; this.phase = PHASE.DOWN; this.t0 = now;
       return 'power';
     }
