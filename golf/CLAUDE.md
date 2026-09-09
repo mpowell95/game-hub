@@ -4872,3 +4872,58 @@ withdrawn once).
 
 **Still open, unchanged and pre-existing:** only 2 of the aim ladder's dots are on screen at address
 with a driver, which this file already records as a feel call for Matt.
+
+## The HUD was paying twice for chrome that was not there (2026-09-09)
+
+Matt, with a screenshot of the live game beside an edit of his own: *"I moved the HUD higher up and
+lower on the screen, creating more room for the golfer."* He was pointing at two paddings, and each
+was guarding against something that does not exist.
+
+### The top: a 46 px pad for a button that sits ABOVE the game
+
+`ui.js` set `--gf-top-pad: 46px` whenever the game was mounted in the hub, with the comment *"the
+hub's floating back button lives in the top-left, so the HUD's own top row moves down out from
+under it."* **Measured in the real hub at 393x852: the back pill runs 54..89 and the game area
+starts at 98.** It is above the game with 9 px to spare, and a scan of every positioned element
+outside `.gf-root` found NOTHING overlapping the game rect at either phone height. 46 px of a 714 px
+game area - 6.4 % of the screen - was reserved for a collision that cannot happen.
+
+### The bottom: the home indicator, charged twice
+
+Every bottom inset was `calc(10px + env(safe-area-inset-bottom))`. **`env()` is a VIEWPORT inset,
+not an element one** - the same number wherever the element sits - and in the hub the game already
+stops 40 px above the viewport bottom, so on a phone with a 34 px home indicator the controls were
+pushed up by an inset the host had already paid.
+
+### Both are MEASURED now, in `_fitInsets()`
+
+- `--gf-top-pad` is `max(0, backPill.bottom - root.top) + 6`, so it is 0 when the pill is clear and
+  exactly enough when it is not. Asking for `.hub-back` by name is a reach into the host, which is
+  precisely why it is a measurement and not a constant: absent, hidden or clear, the pad is 0.
+- `--gf-gap-b` is how far our own bottom edge already sits above the viewport, and the CSS does
+  `--gf-safe-b: max(0px, calc(env(safe-area-inset-bottom) - var(--gf-gap-b, 0px)))`. Standalone the
+  game is full bleed, the gap is 0, and the safe area is honoured in full exactly as before.
+
+It runs BEFORE `_fit`'s no-op early return, because the insets depend on where we landed on the
+page, not on whether our own height changed - a rotation can move the host's chrome without
+resizing us at all.
+
+**Measured after**, open course between the top and bottom clusters, tutorial hole:
+
+| | before | after |
+|---|---|---|
+| hub 393x852 | 303 px | **349 px** |
+| hub 390x664 | 115 px | **161 px** |
+| standalone | 487 px | 487 px (unchanged - it never had the pad) |
+
+`test-visual.mjs`'s four fit checks and `check-no-scroll.mjs` stay green in both hosts at both
+heights.
+
+### Found while measuring, NOT fixed here, and not caused by this
+
+**The top-left and top-centre clusters overlap on narrow phones.** The gap between `.gf-tl`'s right
+edge and `.gf-tc`'s left edge: **+8 px at 393, +7 px at 390, -8 px at 360, -28 px at 320.** It is a
+WIDTH problem and it measures identically at a 46 px pad and a 0 px pad, so it is pre-existing and
+untouched by this change. It is invisible to the suites because both of them drive golf at 393x852
+and 390x664 only, and it starts below 390 - which is an iPhone SE and most of Android. Raised as
+its own task rather than widened into this one.
