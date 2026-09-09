@@ -2293,8 +2293,12 @@ open the app. So it folds into Not yet, and **one sentence at the top of the sec
 plain words, once** - which is the same caveat, in the one form that can actually explain itself
 rather than needing a glossary.
 
-What is left per announcement is a **title, a bar, and two lines**: who has seen it (named, because
-that list is short) and how many have not (a count that expands to the names). The BAR is the "at a
+What is left per announcement is a **title, a bar, and two stacked lists**: who has seen it (named,
+because that list is short) and how many have not (a count that expands to its own list). **One name
+per line, never a comma run.** Matt: *"just say Seen: and list players who have seen it. One name
+above another. It's impossible to read as a paragraph, idk why you'd choose that format."* A
+comma-run of names is prose, and nobody reads prose to find out whether one particular person is on
+a list; a stacked list is scanned. The count on the heading is what keeps it short enough to stack. The BAR is the "at a
 glance" part and is the thing three attempts at text rows kept missing - you had to READ them to
 learn the answer. It is a MAGNITUDE, not a category, so the number beside it carries the meaning and
 the colourblind rule needs no shape.
