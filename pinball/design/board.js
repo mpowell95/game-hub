@@ -206,6 +206,32 @@ P.push({ type: 'band', name: 'arch_centre', outer: CENTRE_OUT, inner: CENTRE_IN,
 // (the two ledge extensions were part of that lip and are gone with it - see the deck edge above)
 // THE BUTTON IN THE MOUTH OF THE CENTRE ARCH. A real capture hole, not decoration: it carries a
 // footprint so the engine can score it, and it sits under the third band's crown.
+/**
+ * THE UPPER DECK'S FLOOR. There was not one.
+ *
+ * Matt: *"Things overlap... it's just messy."* The reason is this, and it is not a placement
+ * problem: LEVEL 2 HAD NO SURFACE. The deck was a set of parts floating at Y2 over open air, so
+ * every arch, ramp and rail on level 1 showed straight through the middle of it and the whole top
+ * half read as one pile. It is also why the ramps appear to end in mid-air - there was literally
+ * nothing up there for them to arrive on.
+ *
+ * The outline follows what is actually on the deck:
+ *  - full cabinet width, x 45..941, down to py 596, which is where both ramps deliver;
+ *  - narrowed to x 150..836 below that, because the outer strips are the ramps themselves;
+ *  - front edge at py 760, the line design.js drops a ball off;
+ *  - with the DROP HOLE cut out of that edge, x 455..545 up to py 724.
+ *
+ * `levels: []` because it is a floor, not an obstacle - a ball rolls ON it, and which deck it is
+ * on is the layer system's business, not a collider's.
+ */
+P.push({
+  type: 'poly', name: 'deck_L2', mat: 'deckwood', y0: Y2, d: 0.010, levels: [],
+  pts: [
+    [45, 40], [941, 40], [941, 596], [836, 596], [836, 760],
+    [545, 760], [545, 724], [455, 724], [455, 760],
+    [150, 760], [150, 596], [45, 596],
+  ],
+});
 // THE UPPER DECK HAS AN EDGE, AND THE EDGE IS TILTED.
 //
 // Matt: *"if it's a separate level, by definition it has an edge. Are you talking about a wall or
@@ -565,6 +591,14 @@ function smoothChain(pts, passes = 4) {
     const rec = LAYOUT[part.name];
     if (rec) setShape(part, rec);
   }
+  // A PART ON LEVEL 2 IS DRAWN AT DECK HEIGHT. The editor sets which LEVEL a part belongs to; it
+  // knows nothing about height, so a part Matt moved to level 2 kept the y0 it was built with. That
+  // did not show while there was no deck - now there is one, and the four magenta inserts he moved
+  // up were being drawn UNDERNEATH it. Level and height are the same fact, so they follow each other.
+  for (const part of P) {
+    if (part.levels && part.levels.length === 1 && part.levels[0] === 2 && part.y0 !== undefined && part.y0 < Y2) part.y0 = Y2;
+  }
+
   // ...and every band gets the tremor taken out of it, whether it came from the editor or not.
   for (const part of P) {
     if (part.type !== 'band') continue;
@@ -706,7 +740,12 @@ export function buildBoard(THREE) {
   const mk = (name, color, o = {}) => Object.assign(new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0, ...o }), { name });
   const MAT = {
     maple: mk('maple', 0xC58B3E, { roughness: 0.8 }),
-    deckwood: mk('deck_maple', 0xB47B36, { roughness: 0.8, transparent: true, opacity: 0.62 }),
+    // The deck reads as a FLOOR now, not a tint. It was 0.62, which was fine while nothing used
+    // it - the deck surface itself was never built, so this material was unused. With a real deck in
+    // place 0.62 let every arch and rail on level 1 show through, and that is a large part of what
+    // Matt means by *"Things overlap... it is just messy."* 0.9 keeps a hint of what runs underneath
+    // without the two levels reading as one.
+    deckwood: mk('deck_maple', 0xB47B36, { roughness: 0.8, transparent: true, opacity: 0.9 }),
     darkwood: mk('walnut', 0x5A3817, { roughness: 0.75 }),
     black: mk('black_paint', 0x17130F),
     cream: mk('cream', 0xF1E5C4, { roughness: 0.5 }),
