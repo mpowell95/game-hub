@@ -23,6 +23,20 @@ const UPPER_HOLD = 0.22;
 const RAMP_CLIMB = 0.55;
 /** How long a ball takes to drop through the hole in the deck. A hole is quick. */
 const DROP_FALL = 0.18;
+/**
+ * How long a slingshot coil takes to reset, for ANY slingshot on the board.
+ *
+ * Matt: *"the ball just got stuck bouncing between the triangles above the bumpers for
+ * infinity."* The two slingshots face each other across the gap above the flippers, and a
+ * `kick` GUARANTEES an outgoing speed rather than adding to one - so two of them trade a ball
+ * back and forth with no energy lost anywhere, for ever. Wiring up kickN made each face live on
+ * one side only, which is correct and necessary, and did not fix this: the live faces are the
+ * two that point at each other.
+ *
+ * A real coil cannot refire instantly. With one shared cooldown the second slingshot in a rally
+ * catches a dead face, the ball bounces off it at e = 0.5 instead, and gravity has it.
+ */
+const SLING_RESET = 0.6;
 const SAVE_SECS = 7;
 const GRAVITY = 515;
 const SAUCER_HOLD = 0.9;
@@ -51,6 +65,7 @@ export class DesignPinball {
 
   reset() {
     this.down = new Set();
+    this._slingCool = 0;
     this._rebuild();
     this.balls = [];
     this.phase = 'attract';
@@ -85,6 +100,15 @@ export class DesignPinball {
     this.colliders = this.levels[1].colliders;
     // ui.js and the renderer read ONE list; the two buttons drive all four paddles.
     this.flippers = [...this.levels[1].flippers, ...this.levels[2].flippers];
+    // Held so the cooldown above can reach them; `_kick0` remembers the built strength.
+    this._slingFaces = [];
+    for (const n of [1, 2]) {
+      for (const c of this.levels[n].colliders) {
+        if (!/slingshot.*face_live/.test(c.id || '')) continue;
+        if (c._kick0 === undefined) c._kick0 = c.kick;
+        this._slingFaces.push(c);
+      }
+    }
   }
 
   emit(e) { this.events.push(e); }
@@ -266,6 +290,10 @@ export class DesignPinball {
   update(dt) {
     dt = Math.min(dt, 0.05);
     this.time += dt;
+    // The slingshot coils, resetting. Doing it on the collider means the KICK itself is gone,
+    // not merely the score - the rally is broken in the solver, where it happens.
+    this._slingCool = Math.max(0, this._slingCool - dt);
+    for (const c of this._slingFaces || []) c.kick = this._slingCool > 0 ? 0 : c._kick0;
     this._upperFlippers(dt);
     this._kickers();
     this._rampRide(dt);
@@ -420,6 +448,7 @@ export class DesignPinball {
     }
     // `face_live` is whichever edge board.js found to be the hypotenuse - see its sling case.
     if (/slingshot.*face_live/.test(id)) {
+      this._slingCool = SLING_RESET;
       this._award(PTS.sling, x, y);
       this.emit({ type: 'sling', id: /left/.test(id) ? 'slingL' : 'slingR', x, y });
       return;

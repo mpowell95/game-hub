@@ -47,6 +47,23 @@ const PLUNGER_TRAVEL = 26 * 0.000527;
 const SURFACE_Y = 0.020 * 666.67;   // 13.33 - the lower playfield's top face
 
 /**
+ * THE BALL BRIGHTENS WHEN IT GOES UNDER THE DECK.
+ *
+ * Matt: *"the ball disappeared when going down a ramp. then popped back into existence."*
+ *
+ * It is not a gap in the physics - probed over 14 driven games, `live` is never false, `lift`
+ * never leaves 0..1, and the only one-frame jump in drawn height is a new ball arriving on the
+ * plunger. It is the deck. deck_L2 covers x 150..836 down to py 760, the arch bands live on
+ * LEVEL 1 underneath it, and a ball shot up the middle passes through that whole region - under
+ * 0.78-opacity wood, so barely a fifth of it reaches the eye. It reappears when it comes back out.
+ *
+ * Dropping the deck opacity is the wrong lever: at 0.62 Matt said everything beneath it competed
+ * with what was on it. So the BALL gets brighter for the stretch it is hidden, and only then.
+ */
+const DECK_COVER = { x0: 150, x1: 836, y1: 760 };   // the deck footprint, in reference pixels
+const BALL_GLOW = 1.35;                             // emissive while it is under there
+
+/**
  * THE INSERTS LIGHT UP.
  *
  * Matt: *"each color is it's own group. When the ball passes over a circle, it should light up.
@@ -194,6 +211,14 @@ export class DesignRenderer extends Renderer {
       sh.position.set(b.x, SURFACE_Y + 0.9 + lift, tz(b.y));
       sh.scale.setScalar(1);
       sh.material.opacity = 1;
+      // Under the deck? Then lift it out of the gloom.
+      if (m.material.emissive) {
+        if (m.userData.glow0 === undefined) m.userData.glow0 = m.material.emissiveIntensity;
+        const bx = b.x / px(1), by = b.y / px(1);
+        const hidden = (b.layer | 0) === 1
+          && bx > DECK_COVER.x0 && bx < DECK_COVER.x1 && by < DECK_COVER.y1;
+        m.material.emissiveIntensity = hidden ? BALL_GLOW : m.userData.glow0;
+      }
     }
     for (let i = n; i < P.balls.length; i++) { P.balls[i].visible = false; P.ballShadows[i].visible = false; }
 
