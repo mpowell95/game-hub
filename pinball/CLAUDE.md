@@ -1521,6 +1521,30 @@ Two consequences worth stating, because neither is obvious from the diff:
   so the printed wood sits 20 px right and 40 px high of the frame around it. If that was a stray
   drag rather than an intention, it is one line to put back.
 
+#### A tap was a drag, so parts crept (2026-09-09)
+
+Matt, on finding `playfield_L1` had moved (+20, -40) without meaning it: *"It is difficult to not
+accidentally move stuff around."*
+
+**A tap on a phone is never perfectly still**, and every touch on a part started a drag on the first
+pixel - so a tap meant to SELECT also moved the thing a few pixels, every time. That is how a sheet
+the size of the whole board walked twenty pixels sideways with nobody noticing.
+
+Two rules now, and the sheet is put back:
+
+- **A drag needs 8 CSS pixels of travel before it starts.** Below that it is a tap: it selects and
+  nothing moves. Nothing goes on the undo stack until the drag arms either, or undo fills with
+  no-ops that each look like a change.
+- **The sheets and the cabinet are LOCKED.** `playfield_L1`, `deck_L2`, `cabinet_floor` and the four
+  cabinet walls are the size of the board, so they sit under your finger everywhere and a tap meant
+  for a post lands on one of them. Locked parts still select, duplicate and delete; they do not
+  drag, resize, rotate or nudge. The **Lock** button toggles it for anything, and the list marks a
+  locked part with a padlock.
+
+Verified with real touch events on a phone viewport: a 3 px tap selects and does not move; a 40 px
+drag moves (228, 880) -> (393, 1005); a 5 px wobble afterwards does not; and the locked playfield
+cannot be dragged at all.
+
 ## The second board: ROYAL FLUSH, imported (2026-08-29)
 
 Matt, on STARHUB: *"our pinball is FAR from being finished. Sure, it might have all those things,
