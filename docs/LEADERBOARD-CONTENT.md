@@ -149,5 +149,7 @@ negative, and level par reads as "E" rather than 0.
   still count in every cross-game total on By Player, and anyone who has played it still sees their
   own record of it on their player page. Release the game again and its row returns with its whole
   history.
-- Pool appears twice: the current game, and a retired earlier build kept on the board so the games
-  played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
+- Pool is on the leaderboard twice: the current game and a retired earlier build. That is why the
+  leaderboard knows 24 games while the app hosts 23. **Right now only the RETIRED one shows** — the
+  current Pool is admin-only and therefore hidden, while the retired build has no launcher tile to
+  be hidden from and is deliberately kept so the games played on it stay visible.
