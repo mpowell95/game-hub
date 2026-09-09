@@ -2276,6 +2276,1150 @@ owes them one. **A device that has not synced since this shipped reports nothing
 honesty rule as `read-install-state.mjs`'s `(not seen yet)`, and it is not retroactive: everyone
 reads as unknown until their next hub load.
 
+**TWO STATES AND A BAR, after three goes at it.** What made the earlier versions unreadable was not
+the layout, it was the TAXONOMY. The screen shipped with two groups (Seen it / Not yet) and put
+everyone whose phone had never reported into Not yet - which on day one was 24 of 26 people, so the
+bug-report notice from August read as unseen by almost everybody. They HAD seen it; that dismissal
+lived on their phone and was never uploaded until the mirror existed. Matt read it exactly that way
+(*"Only Unai has seen it?"*). Giving "no answer" its own third group fixed the lie and made the
+screen worse - he could neither act on that bucket nor decode it: *"What does this mean? SEEN IT /
+NOT YET / NO ANSWER YET?"* and *"think harder instead of just moving words around."*
+
+He was right both times, and the resolution is that **the third bucket should never have been a
+bucket**. It is an artefact of WHEN the tracking shipped, it is most of the list on day one, it
+shrinks to nothing on its own, and the action it implies is identical to Not yet: wait for them to
+open the app. So it folds into Not yet, and **one sentence at the top of the section says so in
+plain words, once** - which is the same caveat, in the one form that can actually explain itself
+rather than needing a glossary.
+
+What is left per announcement is a **title, a bar, and two lines**: who has seen it (named, because
+that list is short) and how many have not (a count that expands to the names). The BAR is the "at a
+glance" part and is the thing three attempts at text rows kept missing - you had to READ them to
+learn the answer. It is a MAGNITUDE, not a category, so the number beside it carries the meaning and
+the colourblind rule needs no shape.
+
+## Who is on the installed app, and who is in a browser tab (2026-08-11)
+
+Matt: *"I found out 2 days ago that Ana never did that. She never saved it to her Home Screen...
+She just dismissed the notice early on."* Every game here is built for the installed route, and
+nothing anywhere recorded which route a person was actually on.
+
+- **`js/stats-net.js`'s `syncMyStats()` now mirrors `installState()` to `players/<id>/device`.** It
+  rides the EXISTING mirror rather than getting its own write, so every device answers on the beats
+  it already syncs on (load, tab-hide, return-to-launcher, reconnect) instead of only the ones that
+  file a bug report. Additive: a new child node, read by no gameplay or stats path, incapable of
+  moving a counter.
+- **It carries the BUILD too** (`device.build`, e.g. `v295`, from `appVersion()` - the same
+  GET_VERSION message the version pill uses, so a report and the sync can never name different
+  builds for one device). Matt asked whether the app auto-updates for people who never tap the
+  pill: it does (`skipWaiting` + `clients.claim`, and the fetch handler is network-first), so
+  nobody should be more than one launch behind. This turns "should" into a fact, and it is the
+  only thing that catches a device whose SHELL INSTALL FAILED - that one sits on an old build
+  indefinitely and looks completely normal from the outside. **This is why an auto-reload on
+  `controllerchange` was NOT added**: it would fire on first-ever load (claim gives an
+  uncontrolled page a controller), it can yank the app out from under someone mid-form, and it
+  fixes nothing for the stranded case. Measure first.
+- **`node read-install-state.mjs`** lists it, browser tabs first, and prints every build in the
+  wild on the last line.
+- **It is NOT retroactive, and the tool says so.** A device shows `(not seen yet)` until it next
+  opens the hub on a build that has this. That is missing data, not a browser tab, and the two must
+  never be reported as the same thing. There is no record of how anyone played before this shipped.
+- **`a2hsDismissed` is in the object on purpose**: it distinguishes someone who was asked to install
+  and said no (Ana's case) from someone who was never asked.
+
+## The Device details button, retired (2026-08-11)
+
+Matt: *"That was built specifically for a one time use. Now that we have the report a bug feature
+it's redundant and obsolete."* Retired, not deleted:
+
+- **`js/device-report.js` stays and is still load-bearing** - `gatherDeviceReport()` is layer 2 of
+  every bug report. Only the profile page's BUTTON, its modal and its strings are gone.
+- **`uploadDeviceReport()` is now dormant** with no caller. Left in place deliberately (same status
+  as `leaderboard-rank.js`'s rating exports): do not delete it as "unused".
+- **`deviceReports/` in Firebase is untouched**, and `read-device-reports.mjs` still reads it. The
+  archive of what was already collected stays exactly where it is.
+- The announcement's profile screenshot had to be re-shot, since it showed the button being removed.
+
+## Hiding test/debug accounts from the leaderboard (2026-07-29, widened 2026-07-31)
+
+`js/leaderboard-ui.js` decides who renders in `visibleRecords()` (device ids) and `isHiddenRow()`
+(names), both read by `currentBody()`. Nothing here ever deletes anything (THE LAW rule 5) — a
+hidden record's plays stay in Firebase and still show on that device's own My Stats; only the
+shared leaderboard omits the row.
+
+- **`HIDDEN_PREFIX`** — deviceId prefixes, for specific old records already identified by hand
+  (`'4392d978'`, `'f8ad1b82'`, `'zzz-prev'`). Only hides devices that existed when the prefix was
+  added; a fresh test pass (new browser/incognito/profile) mints a new deviceId every time, so this
+  list does not stay ahead of new testing on its own.
+- **`HIDDEN_NAMES` + `HIDDEN_NAME_PREFIX`** — profile names (case-insensitive, trimmed), for
+  durable use: a name stays hidden no matter how many new device ids use it. The name rule was an
+  exact set holding only `zzztest` until 2026-07-31, which is why **"Tester" kept coming back** —
+  only the single device `4392d978` was hidden, so the same name in any new browser was a brand-new
+  visible row. Matt: *"No test accounts should ever appear on the leaderboard."* It is now a PREFIX
+  rule — any name starting with **`test`** (Test, Tester, test1, testing) or **`zzz`**, plus the
+  exact names `qa`, `dev`, `demo`, `preview`, `prueba`. **The standing QA name is still `zzztest`**;
+  reusing one name also makes `players-agg.js` collapse repeat test runs into one group rather than
+  piling up rows. The rule is deliberately blunt — a real player is not called "Testxyz" — but it is
+  a prefix, not a substring, so "Contest" and "Tess" are safe. Regression cases (both directions)
+  are in `test-leaderboard-rank.mjs`'s "who is allowed on the board" block, which MIRRORS
+  `isHiddenRow()`; keep the two in step.
+- **Nameless devices are hidden too, as of 2026-07-31** — see "Nameless devices" below, which
+  supersedes the 2026-07-30 entry in "Sync health". This is only safe because `js/name-gate.js`
+  now makes a nameless device impossible to create; do not carry one change without the other.
+
+**Only test1, test2 and MattyIce ever run test rounds (Matt, 2026-08-26).** He said it after a
+session looked at `*TP*` - the board's most-played account, a REAL player - and called it a test
+account because of the initials. (An older line in the root CLAUDE.md lists a `TP` record found on
+2026-07-29; that was a different, device-id-matched record and is NOT this person.) Never infer
+"test" from a name's shape, its initials, an odd play count, or unfamiliarity. Every name in this
+family is a real person until Matt says otherwise, and hiding one makes their entire history vanish
+from the board - rule 1, against somebody who did nothing but play. A name joins `HIDDEN_NAMES`
+only when he names it.
+
+**The rule lives in `js/hidden-players.js` since 2026-09-09, and the copies are gone.** It had three
+hand-kept sites (leaderboard-ui.js canonical, messages.js, and test-leaderboard-rank.mjs's
+deliberate mirror), duplicated for a real reason messages.js's own header recorded: importing the
+canonical copy meant pulling the whole leaderboard overlay onto the launcher's start-up path just to
+paint a badge. A FOURTH consumer is what changed the trade - `js/admin-ui.js`'s Announcements
+section, where ~100 pre-gate nameless devices buried the four real people (Matt: *"the announcement
+page has like 100 'unnamed player's"*) - and a dependency-free twenty-line module costs that path
+nothing. `leaderboard-ui.js`'s `isHiddenRow(g)` is now a one-line delegate and stays the canonical
+CALLER; `test-leaderboard-rank.mjs` still mirrors the rule by hand, deliberately, because a test
+that imports the thing it is checking checks nothing.
+
+If a new stray test/debug record turns up by device id instead (e.g. found via
+`node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
+`You` records were found on 2026-07-29), add its id to `HIDDEN_PREFIX` rather than guessing a name
+match — a name-only fix would miss it if the record used a different name.
+
+### Nameless devices — the gate, and why hiding them is not rule 1 again (2026-07-31)
+
+**This supersedes "Fixed (2026-07-30)" under "Sync health" below.** Both halves are load-bearing;
+read them as one change.
+
+Matt, seeing ~20 "Unnamed player" rows the day after the 07-30 fix shipped: *"The app should not be
+playable without entering a name."*
+
+What produced those rows: **the first-run gate only ever covered the hub.** Every game also ships a
+standalone page (`<game>/index.html`, precached in `sw.js` and reachable by direct URL), plus
+Monopoly Deal and Parchís as whole classic-script apps — all ungated. A device could play there
+indefinitely, record real plays, and mirror them to `players/<statsId>` with `profile.name: ''`
+(`stats-net.js` writes whatever the profile holds, and `hub.js` syncs on load *before* the gate is
+answered, so even closing the tab on the gate left a permanent nameless record). `players-agg.js`
+cannot prove two nameless, code-less devices are one person, so each stayed its own row forever —
+20 devices, 20 rows, unmergeable.
+
+The fix is a pair:
+
+1. **`js/name-gate.js`** (+ `css/name-gate.css`, `js/name-gate-auto.js`) — the gate moved OUT of
+   `hub.js` and became the one shared implementation, called by every entry point. `hub.js`'s
+   `initFirstRun()` is now just a call site; each module game's standalone page does
+   `await requireName()` **before** `init()`, so the game never mounts; the two classic-script apps
+   load `name-gate-auto.js` as a deferred module, which overlays them (they boot but cannot be
+   played). The overlay has no close button, no scrim handler and no Escape — that is the point.
+   Offline it accepts the name locally and claims it on a later sync, exactly as the hub's gate
+   always behaved.
+2. **`isHiddenRow()`** in `leaderboard-ui.js` stops rendering nameless (and `'You'`-named) rows.
+
+**Why this is not the stored-but-invisible bug again.** A nameless record can no longer be
+*created*, so every one that exists is pre-gate history — and its owner is gated into naming
+themselves the next time they open anything. The instant they do, `players-agg.js`'s identity graph
+attaches that same untouched record to their real row and every play reappears on the board.
+Nothing is deleted, nothing stops syncing, and in the meantime the owner still sees all of it on
+their own My Stats. The 07-30 fix was right *for a world where a nameless device was reachable*;
+this closes that world instead. `test-leaderboard-rank.mjs` asserts the round trip (hidden while
+nameless → every play on the board, in the right person's row, once named).
+
+**If you ever remove the gate, restore the 07-30 behaviour first** — hiding nameless rows without
+it is the exact rule 1 violation `59f8e9b` fixed.
+
+Two caveats worth knowing:
+
+- **Parchís is built from the sibling `../Parchís/` folder** (root CLAUDE.md), which is not in this
+  repo. Its gate `<script>` tag lives in the built `parchis/index.html` here and **will be lost on
+  the next build** unless the same line is added to the source.
+- **Monopoly Deal's nested SW is the exclusive controller of its page's fetches**, so the gate's
+  root-scope module graph is listed in `business-deal/sw.js`'s own `ASSETS` (same reasoning as its
+  in-scope `game-stats-global.js` copy, ARCH-REVIEW.md S4-1) — otherwise the gate would silently
+  fail to load offline and BD would be ungated there.
+
+---
+
+## `GAME_META` is a registry, and a missing row zeroes a whole game (2026-08-11)
+
+`js/leaderboard-ui.js`'s `GAME_META` is the leaderboard's own list of games, **separate from
+`js/hub.js`'s `GAMES` and from `js/game-stats-ui.js`'s `TABS`**, keyed by STATS id. `ALL_IDS`,
+`COMP_IDS`, `SOLO_IDS`, `winsOf()`, `playedOf()`, `labelOf()` and the whole By Game segment are all
+derived from it. A game with no row here is not *partly* on the leaderboard — it is worth **zero
+wins and zero plays** on every screen of it, while its own My Stats page shows the real numbers.
+
+That is the worst shape a bug can take under THE LAW rule 1: nothing is lost, everything syncs, and
+the player is simply told their history does not count. **Yahtzee shipped with no row** and stayed
+that way until the first real report to arrive through Report a bug:
+
+> "MY WINS ARE NOT COUNTING TO MY TOTAL WINS ON LEADERBOARD" — 14 wins in 15 Yahtzee matches,
+> local store correct, `syncHealth` `ok` at 266 plays local and remote, My Stats showing all of it.
+
+Believing him took thirty seconds (rule 8) and the fix was one line. Finding it needed the report,
+because **no other surface shows the absence** — not the game, not My Stats, not sync health.
+`players-agg.test.mjs`'s second `[KNOWN-BUG PROBE]` block now closes that: it reads the stats ids
+out of `game-stats.js` and fails unless each one has a `GAME_META` row, or sits in `OFF_THE_BOARD`
+with a reason. It was verified born red against the missing Yahtzee row.
+
+**Since 2026-08-24 `OFF_THE_BOARD` is EMPTY, and should stay that way.** It used to hold games that
+were `devOnly` in `js/hub.js`, on the reasoning that releasing one was a commit that would add the
+row in the same breath. The admin control page ended that reasoning: `devOnly` is now only a
+DEFAULT, and Matt can release a game to everyone from inside the app with no commit and no deploy,
+so a game held off the board "until it ships" would ship without a row and zero every score on it
+from the first minute. Pinball therefore has a row while still being admin-only — it costs nothing,
+because every leaderboard surface only renders a game somebody has actually played.
+
+One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
+because the game has no difficulty setting at all. `tierOf('ai')` is `null`, so those wins count in
+full under the **All** filter (the default, and where the cross-game number lives) and do not appear
+under Easy/Medium/Hard/Expert. That is the documented behaviour for unrankable buckets, and it is
+the honest one — mapping `ai` onto a tier would invent a difficulty claim the game never made.
+
+## The leaderboard's rating model (2026-07-22)
+
+**2026-07-23 redesign (wins-only display, rating retired from the UI):** Matt's call, third
+mockup round approved same day (`HANDOFF-LEADERBOARD-REDESIGN.md`, now superseded by this section).
+The Leaderboard overlay no longer shows W-L, win rate, or the 0-100 rating anywhere — every screen
+leads with ONE big **wins** number (or a solo game's own metric: obstacles/longest/solved), because
+Matt (the app's own builder) couldn't read the old four-table-per-game layout. **Losses and full
+records stay visible on My Stats** (`game-stats-ui.js`) — that screen is what satisfies THE LAW
+rule 1 for the raw breakdown now; the leaderboard is the bragging wall, not the ledger.
+
+**The rating model is retired from display, not from the repo.** `js/leaderboard-rank.js` (Wilson
+scoring, difficulty weighting, `rankPlayers`/`ratePlayer`/`soloRating`) and `test-leaderboard-rank.mjs`
+are untouched and still green — kept in place for a possible future dedicated rating page. Only its
+UI caller is gone. `js/leaderboard-ui.js` now imports just `bucketsOf`/`tierMix` from it, to sum wins
+and detect which tiers a player has played; **do not delete leaderboard-rank.js's rating exports as
+"unused"** — they are intentionally dormant, not dead.
+
+**Everything here is still a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>`
+are read-only to this feature — nothing is stored, migrated or normalized.
+
+- **A draw is NOT a win** (Matt, 2026-07-28: "Tictactoe ties are being counted as wins. That's
+  wrong."). `record()`/`bucketsOf()` in `js/leaderboard-rank.js` return the STORED `won` counter,
+  clamped, and nothing more; the old rule derived `wins = played - losses`, which promoted every
+  tie. **This reversed the previous "a draw counts as a win" design** — do not reinstate it, and
+  do not treat the reconciliation argument it rested on (that W + L should equal Plays) as a
+  constraint: plays now legitimately exceed wins + losses by the draw count. Most visible in Tic
+  Tac Toe (Classic Pro is unbeatable by design, so it is draw-heavy and a stalemate streak read as
+  a winning streak), but the rule was and is shared by every competitive game. **Draws are NOT
+  given their own leaderboard number** (Matt's call, same day): they stay visible on My Stats,
+  which already renders explicit W/L/T for Tic Tac Toe, Dots and Boxes and Boggle straight from
+  each game's own sub-counter — that is the rule-1 surface for them. Second site, kept in step by
+  hand: `ttVariantWins()` in `js/leaderboard-ui.js`, the Ultimate/Classic split on Tic Tac Toe's
+  own leaderboard card, which reads `tt.<variant>.won` (the `tt` sub-counter stores `tied`
+  explicitly, so nothing is derived there). **DISPLAY-only, as ever — no stored counter changed**,
+  no migration, no recorder edit. **Solo games (Ball Run/Snake/Nuts &
+  Bolts) are counted and labeled as RUNS, separately from wins — not folded into the wins number
+  (Matt, 2026-07-28, HANDOFF-LB-SOLO-RUNS.md).** `winsAtTier()` itself is unchanged and still
+  works generically across every game's `total`/`byDiff` shape (solo games populate it identically
+  to competitive ones, `lost` just never touched); what changed is which game ids the CALLERS feed
+  it. `js/leaderboard-ui.js` derives two lists from `ALL_IDS`: `COMP_IDS` (competitive games,
+  drives the cross-game wins number, the By Player sort, and the win tiles) and `SOLO_IDS`
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb, summed via `runsAtTier()` into a separate "N runs" line on the
+  same card, via `playsAtTier`). `SOLO` in `js/players-agg.js` is the single source of that game
+  membership — both id lists are derived from it, never hardcoded a second time. The By Player
+  list FILTER still stays on `ALL_IDS` (a solo-only player is still listed, showing 0 wins plus
+  their runs — narrowing that filter would make a real player vanish, THE LAW rule 1). My Stats'
+  overview (`game-stats-ui.js`'s `overviewTotals`) makes the same split: a third "Runs" tally,
+  shown only when > 0. **This is a DISPLAY split only — no stored counter changed**, no migration,
+  no new storage key, no recorder edit; `recordBallRun`/`recordSnake`/`recordNutsBolts` and every
+  stored `won` counter are byte-identical before and after. Each solo game's own game page (By
+  Game row, game detail screen, "who leads what" chips) is untouched and still ranks by its real
+  metric (best obstacles / longest / solved) — the fix was confined to the cross-game number that
+  let volume alone top the board. The bullet that used to stand here ("solo volume inflates win
+  counts... trading precision for legibility") described the OLD, now-fixed behavior; do not
+  revive it as a design goal.
+- **Difficulty is a single-select FILTER, chosen from a DROPDOWN (2026-07-29, HANDOFF-LB-FILTER-
+  SORT.md — the old 5-pill row is gone).** All (default), Easy, Medium, Hard, Expert —
+  shared between By Player and By Game and carried into a game's own page; resets to All every
+  time the overlay opens (not persisted, D7). Ski-slope shapes (circle/square/diamond/
+  double-diamond, `diffShapeSVG()` in leaderboard-ui.js) still carry the tier on each menu item,
+  color is secondary (colorblind rule); the selected item is marked by `aria-checked` plus a
+  trailing checkmark (`.lb-mitem.is-sel::after`), never by hue alone. **Legacy/unknown buckets
+  (`tierOf()` returns null) count in All ONLY** and appear under no tier item — dropping them from
+  All would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
+  `difficulty-tiers.js` itself is untouched.
+- **DIFFICULTY OUTRANKS SCORE on a game's own board (2026-09-08).** Matt's spec: *"a player can
+  only outrank someone by matching or beating their difficulty tier. A higher score in a lower
+  tier never beats a lower score in a higher tier."* **Scope is a game's own board** - the list you
+  get by tapping into a game (its rows, its rank badges, and By Game's leader row, which must name
+  the person the board puts at #1). It applies to EVERY game, not the one in the example: the
+  machinery is the generic tier machinery. By Player's cross-game list is untouched, and so is the
+  tier-WEIGHTED rating model, which is a different mechanism for the same idea.
+  - **THE NUMBER A ROW SHOWS IS THE SCORE AT ITS OWN TIER.** This is the whole of it, and the first
+    pass got it wrong: it ranked by tier but still printed and tie-broke on the ALL-TIER number, so
+    Snake's live board put King of Games first at **51 - a score he set on Easy** - while ranking
+    him as a Hard player off a Hard best of **6**. Matt, from the board: *"the 'longest' has the king
+    of games in first place, but... he's only ever played on easy. So what the hell?"* A board
+    cannot rank on one number and print another. `boardMetricOf(g, id)` = `gameMetricAt(g, id,
+    boardTierOf(g, id))` is now the single source of the headline, the sort and the rank badge.
+  - **A row's tier is the highest tier it has BOTH PLAYED AT AND SCORED AT** -
+    `boardRankTier(metricAt, id, playsAt)` in `js/leaderboard-rank.js` (pure, tested headless; the
+    caller passes both accessors). **Both are required and each closes a real bug:**
+    - **The SCORE half** stops attendance counting as achievement: plays alone would rank someone
+      at Hard off fifty Hard games they never won, above a Medium player with forty wins, and print
+      a 0 beside their name.
+    - **The PLAYS half is what proves the game HAS a difficulty axis at all**, and it was missed on
+      the first two passes. `gameMetricAt` IGNORES its tier argument for Skeeball (its metric is
+      machine-scoped) and Golf (course-scoped), so "is there a score at tier 4" is trivially yes and
+      **all three of Skeeball, Golf and Hill Climb printed EXPERT on every row** (measured on the
+      real boards, 2026-09-08). Their difficulty buckets are keyed by MACHINE / COURSE / STAGE,
+      `tierOf()` maps none of those to a tier, so `playsAt` is 0 at every tier and the answer is
+      `null` - which is the truth.
+  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Pinball, Golf, Hill Climb -
+    every row is null, so those three boards rank on their plain number exactly as they did before
+    any of this) and legacy/unmapped history in a game that has one. Those rows keep the all-tier
+    number and sort below the tiered rows. **Nothing leaves the board**: the other tiers are still
+    on the card's tier tiles, the difficulty filter still shows any tier's own numbers, Standing
+    Records still names the all-time best (King of Games' 51 is still printed on that same screen),
+    and the player detail still has the full per-tier table (rule 1).
+  - **Hill Climb's four stages ARE a difficulty axis and this board deliberately does NOT rank by
+    them.** `hcBestAt` slices by `HC_TIER_KEYS` (countryside/desert/arctic/moon, in unlock order),
+    so tier-first ranking there *works* - but it labels moon "Expert", and that board's difficulty
+    filter offers no tiers at all (`tierOf('countryside')` is null), so the chip would claim a tier
+    the screen cannot filter by. Ranking it by stage needs its own vocabulary in the chip and the
+    filter; until then it is untiered, like Skeeball. Do not "fix" it by dropping the plays gate.
+  - **By Game's leader row carries the same tier as a wordless SHAPE** (`tierMarkHTML`): that row
+    prints the leader's score AT THEIR TIER, because it has to name the person the board puts at #1,
+    so without a marker it reads as the game's all-time record. **The chip is suppressed entirely
+    while a difficulty FILTER is selected** - the control right above the list already says
+    "Showing: Easy", and repeating it on every row reads as if the tier varied per row.
+  - **Every card names the tier it ranks at** (`tierChipHTML`, the ski-slope shape plus the word,
+    **on the NAME line**, spaced by `.lb-pid`'s own gap so it costs no height) and the generic card
+    **outlines the tile of that tier**. It started on the subline beside the plays count, where
+    "22 played  MEDIUM" read as "22 games played on Medium" - attached to the name it says what it
+    means: this PLAYER is ranked at this tier. Without it the board prints "6" under a name with nothing saying the 6 is
+    a Hard score - which is exactly how the first pass managed to look sorted while being ranked on
+    something else.
+  - **GAMES PLAYED IS A VOLUME ORDER AND KNOWS NOTHING ABOUT DIFFICULTY** (2026-09-08, Matt:
+    *"Number of games played shouldn't be based on difficulty at all. But the wins should be."*).
+    The Games sort orders by plays and settles a tie with `comparePlainMetric` - the all-tier
+    number, no tier anywhere in it. The plays COUNT was never tier-scoped without a filter; what
+    made it look like it was, was the tier chip sitting beside it, which is why the chip now rides
+    the NAME line (see above).
+  - **THE BOARD HAS ONE ORDER, `boardMetricCmp(id)`**, and the rows, the rank badges and By Game's
+    leader row all sort through it - so #1 on the board, the "1" chip and the By Game name are the
+    same person by construction. They had drifted, and **Tic Tac Toe is where it showed**: its rows
+    were ordered Ultimate -> Classic while its badges were numbered off the generic wins count, so
+    a real board read **3, 2, 1, T4, T4, 7, 6, T8** down the page (Matt: *"The leaderboard is
+    weird."*). Its bespoke order lives INSIDE that function now, not in a branch of `sortRows`.
+    The comparator deliberately carries no plays/recency tie-break: those decide which of two
+    equally-ranked rows draws first, and a badge must call that pair TIED.
+  - **A selected difficulty FILTER makes that tier everyone's tier**, so a filtered board is the
+    pure score board it always was.
+  - **Rank badges call a tie by the comparator, not by the number** (`rankMap`'s `cmp` path). Two
+    players on the same score in different tiers are #1 and #2, not a shared #1. Golf is unaffected.
+  - The comparison is `compareTierFirst(ta, tb, va, vb, id)`, which defers to `compareBoardMetric`
+    inside a tier (that is what keeps golf ascending). `compareBoardRow(a, b, id)` in
+    `js/leaderboard-ui.js` is **the one comparator all six metric sort sites go through**;
+    `test-leaderboard-rank.mjs` counts them and pins each wiring site.
+  - **Tic Tac Toe is the one board whose two numbers cannot follow the tier**: its `tt` sub-counter
+    has no per-tier storage (it splits by VARIANT), so the Ultimate/Classic pair stays all-tier and
+    only the row's order and chip carry the tier.
+- **Ball Run, Snake and Hill Climb are the places "wins at a tier" and "the game's own metric"
+  diverge** — their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`/
+  `bestDistanceByStage`), not a play count, so `leaderboard-ui.js` special-cases
+  `brBestAt()`/`snBestAt()`/`hcBestAt()` for them. Hill Climb's per-tier bucket is keyed by STAGE
+  id rather than a difficulty word, because its four stages ARE its difficulty axis (1:1, in unlock
+  order — `HC_STAGES` in `js/game-stats.js`); every other game (including
+  Nuts & Bolts — a solve always increments both `played` and `won` by exactly 1) uses the generic
+  `winsAtTier()`/`gameMetricAt()` path.
+- **Everyone with any recorded play at the selected filter is listed** (`plays > 0` at that tier;
+  under All, any play at all) — the same visibility bar as the old rating-based board, now applied
+  per-filter instead of once. A Beginner-only player must still be visible under the default (All).
+- **Sort is now a SEPARATE dropdown, also anchored under its trigger (D4), with three orders**
+  (2026-07-29, HANDOFF-LB-FILTER-SORT.md; replaces the old single fixed wins-desc order):
+
+  | Sort | By Player order | Game board order |
+  |---|---|---|
+  | Alphabetical | name → wins desc → `updatedAt` desc | name → this game's metric desc → `updatedAt` desc |
+  | Games Played | `playedOf` desc → wins desc → `updatedAt` desc | plays desc → metric desc → `updatedAt` desc |
+  | Wins (= the game's own metric on a board) | wins desc → **`playedOf` asc** (fewer plays wins ties) → `updatedAt` desc | untouched from before this redesign: Tic Tac Toe's ultimate→classic→recency; every other game's metric→plays→recency |
+
+  By Player's `playedOf`/`winsOf` are thin wrappers (`playsAtTier`/`winsAtTier` over
+  `ALL_IDS`/`COMP_IDS` respectively — see the solo-runs paragraph above for why they stay two
+  different id lists). **Sort choice PERSISTS** (`gamehub.lb.sort.v1`, `{version,sort,updatedAt}`,
+  a THE-LAW-rule-2-preference same class as favorites/theme/language — D6), unlike the difficulty
+  filter. **By Game's top-level tab has no sort control at all** (D3) — it stays alphabetical by
+  title, as it always has; a game's own drill-in board gets both filter AND sort, the third sort
+  option labeled by that game's own metric (`unitKeyOf(id)` → the matching `lb_sort_*` string).
+  Tic Tac Toe's and Snake's two-number split cards (`ttCardHTML`/`snCardHTML`) are left
+  structurally alone — no big/small swap — but Alphabetical/Games Played still reorder them.
+- **The card itself is two rows now** (`playerCardHTML`, replacing the old three-ish stack): row 1
+  is rank/avatar/name/the metric CURRENTLY SORTED BY (large, its unit stacked underneath); row 2 is
+  the tier tiles (unchanged — always wins-per-tier, never follows the sort) plus the OTHER metric,
+  small and muted, right-aligned. The old **`N games · N runs` line is off this screen** (Matt,
+  2026-07-29: "just don't show it on this screen") — `metaLine()` and `runsAtTier()` are UNUSED but
+  left in place per THE LAW rule 9's spirit (nothing deleted, just not rendered; the helper is
+  there if it's ever wanted back). The card's "played" number (`playedOf`) counts **all** plays,
+  competitive + solo runs — this does **not** revive the pre-`HANDOFF-LB-SOLO-RUNS.md` behavior of
+  folding runs into WINS; `winsOf` stays competitive-only, unchanged. The player detail screen
+  (no sort control there) always leads with wins (D1's default) and shows a single `N played`
+  meta line (`lb_played_count`) in `metaLine`'s place.
+
+**`js/game-art.js`** is the single source for every hub-launcher tile's inline SVG art, keyed by the
+HUB registry id (`GAMES[].id]` — moved out of `js/hub.js`'s GAMES array so the Leaderboard's By Game
+screen can show the SAME real tile art as a thumbnail without importing hub.js itself (a
+side-effectful module: it boots stats sync and first-run gates on import). `hub.js` now reads
+`GAME_ART[id]`; `leaderboard-ui.js` and `game-stats-ui.js` both read `GAME_ART[hubIdOf(statsId)]`
+via `hubIdOf`/`unitKeyOf`, which live in `game-stats-ui.js` (single source since the 2026-07-24
+game-list redesign below) and are imported by `leaderboard-ui.js` — verify the underlying `HUB_ID`
+map against the real `GAMES` registry if either changes ids.
+
+**The unified chrome band spec** (hub top bar, Leaderboard overlay, My Stats overlay — Matt called
+out that the three banners were clearly built independently): three CSS custom properties in
+`css/hub.css`'s `:root`, consumed by all three (with a literal fallback, since Escoba-style
+standalone pages never open the overlays but defensive costs nothing):
+`--gh-band-title: 44px` (17px/600-weight title, `.hub-top-info` / `.lb-top-row` / `.gs-top-row` —
+note the overlay's OUTER `.lb-top`/`.gs-top` only adds safe-area clearance and horizontal padding;
+the measured 44px band is the INNER `-row` wrapper, mirroring how `.hub-top-info` is the measured
+band inside the outer `.hub-top`), `--gh-band-controls: 36px` (the segmented pills — `.hub-top-right`,
+`.lb-segs`), `--gh-band-filter: 34px` (the difficulty pill row, `.lb-pills`). If a future band
+measures wrong, check whether the container still carries its OWN vertical padding on top of the
+shared `min-height` — that was the bug the first draft of this redesign shipped with.
+
+UI conventions worth keeping: two fixed segments (By Player / By Game, renamed from Standings/Games),
+never the old plays-sorted tab strip — it re-ordered itself between visits and anything past the
+fourth tab was undiscoverable. Games are alphabetical by title, matching the launcher. By Game's
+number/unit stack is FIXED-WIDTH and right-aligned (`min-width:56px` on `.lb-gnum`) — the old
+free-form gray metric text made the column ragged. "Who leads what" chips (`textureHTML`, unchanged
+maths) are now tinted (amber/teal/blue rotation, `.lb-chip-a/b/c`) rather than plain cards, and are
+filter-INDEPENDENT (several — Chinchón closes, Boggle words — have no per-tier storage at all).
+
+**Those chips are the "Standing records" grid since 2026-08-25, and filter-independence now has one
+exception: SKEEBALL.** Matt, on the board filtered to BRICKCITY: *"none of these stats on the bottom
+are specific to brickcity. They're all skeeball combined. That shouldn't be the case."* Skeeball's
+filter is a MACHINE, not a difficulty, and `sk.boards[<machine>]` really does store `plays`,
+`points`, `best` and `bestThrow` per machine — every other number on that screen (the header's games
+count, each card's best and plays) already read from it, so the records were the one block answering
+a different question. A `TEXTURE` spec may now carry a `machine: (g, mid) => number` getter beside
+its lifetime `get`; while a machine is selected, `recordsHTML` reads the machine getter and **drops
+any spec that has none**, rather than printing a lifetime figure under a machine's heading. The
+heading itself names the machine, since the block sits far below the filter button.
+
+The one spec dropped that way is **`lb_tex_sk_hundreds`**: `sk.hundreds` is a lifetime counter with
+no per-machine breakdown anywhere in the store (the per-board record keeps `slotHits` keyed by each
+machine's own hole ids, and turning those into "how many 100s" would mean importing that board's
+geometry into the hub shell to learn which hole is worth 100). Deriving it would be rule 4; it is
+still shown in full under All machines and on My Stats. **Add the counter to the writer before
+showing a number per machine — never derive one here.** The tier-filtered boards are unchanged: a
+difficulty filter still never touches their records, for the original reason.
+
+**`lb_tex_sk_sweeps` ("All 4 colors", `sk.colorSweeps`) was removed from this grid the same day** —
+Matt: *"I have no idea what color sweep is. Delete that."* It was POPONGO's all-four-colors
+objective wearing a label that meant nothing on a board showing every machine. **The counter is
+untouched**: `recordSkeeball` still writes it, `players-agg.js` still merges it, `skeeball/js/goals.js`
+still reads it for POPONGO's rail, and My Stats still shows it as "Color sweeps" in the lifetime
+block where the machine context makes it legible. Only the leaderboard record and its two i18n
+strings are gone.
+
+### My Stats and the leaderboard's player page — the shared game-list drill-down (2026-07-24)
+
+HANDOFF-FB2-STATS-NAV.md. Matt: the old My Stats 13-tab strip was "useless… difficult
+understanding what info is even being shown," and the leaderboard's player detail was "a single,
+scrollable screen, with every game and stat listed. This is very very bad." Both are now the SAME
+structure the leaderboard's By Game screen already used: an identity header + a list (one row per
+game WITH recorded plays — art thumbnail, title, a headline stat, chevron), alphabetical by
+displayed title; tapping a row drills into that game's own tailored `screenFor` screen with a
+`← Games` back row. Games with zero plays are omitted from the list (never shown as a padded
+zero-row); nothing about the per-game `screenFor` screens themselves changed.
+
+- **`gameListHTML(games)`, exported from `js/game-stats-ui.js`, is the ONE list builder both
+  overlays use** — fed either the local viewer's `st.games` (My Stats) or an aggregated player's
+  `games` (`players-agg.js`, the leaderboard's player detail), since both are the same canonical
+  shape. `leaderboard-ui.js` imports it aliased as `gsGameListHTML` — **do not import it as a bare
+  `gameListHTML`**, that name collides with leaderboard-ui.js's own pre-existing top-level By Game
+  list builder (a real bug hit once during this milestone: the naming collision threw a
+  module-load `SyntaxError` that silently broke every button opening the overlay, with no console
+  error surfaced by the hub's own click handlers — always smoke-test a dynamic import in the
+  browser console directly after touching either file's imports).
+- **`hubIdOf`/`unitKeyOf` now live in `game-stats-ui.js`** (moved out of `leaderboard-ui.js`,
+  which used to keep its own identical copy) — single source for the stats-id→hub-id art lookup
+  and the per-game headline unit (`lb_unit_obstacles`/`lb_unit_longest`/`lb_unit_solved`, default
+  `lb_unit_wins`), so My Stats and the leaderboard can never disagree on a game's thumbnail or
+  unit label again.
+- **My Stats' overview** (`overviewHTML`/`overviewTotals` in `game-stats-ui.js`): profile emoji +
+  name, then two headline tallies — total games played and total wins — summed across every
+  visible game via `record()` (imported from `js/leaderboard-rank.js`, the same maths the
+  leaderboard uses: `wins` is the stored `won` counter, and a draw is NOT a win). Solo games
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb) count toward `plays` the same as competitive games, but their
+  wins are shown as a separate third "Runs" tally rather than folded in (see "The leaderboard's
+  rating model" above).
+- **A game's presence in the list uses its OWN empty-state gate**, not a generic `total.played`
+  check (`hasPlays()` in `game-stats-ui.js` mirrors each `screenFor` variant's own condition:
+  Connect 4 sums `c4Totals(grid)`, Ball Run also checks the legacy-meters archive, Snake/Nuts &
+  Bolts read their own sub-counter) — THE LAW rule 1: the visibility bar for "does this game show
+  up" must match the bar each screen already uses to decide its own empty state, or a game could
+  vanish from the list while its screen would still render real numbers if opened directly.
+- **Leaderboard's player detail** (`playerDetail` in `leaderboard-ui.js`) gained its own drill
+  state, `_playerGame` — independent of the top-level By Game drill's `_game`, since a viewer can
+  be inside a player's detail AND that player's own game screen at once. `Esc` backs out
+  game-first, then player, then closes, mirroring the top-level game/close order.
+- Both overlays already inject the same `#gs-css` stylesheet (`ensureStatsCss` re-injection,
+  id-guarded), so the new `.gs-glist`/`.gs-grow` list markup and `.gs-overview` header render
+  identically in both, no new CSS mechanism needed. Light/dark: no new `:root.gh-dark` overrides
+  were needed either — every new rule follows the existing `var(--hub-surface, #fff)`-style
+  fallback pattern the rest of `#gs-css` already uses.
+
+### Overlay scrolling — why the two overlays felt "glitchy" (2026-08-02)
+
+Matt: *"sluggish and glitchy (esp. with scrolling on various screens)."* The service-worker half of
+that report is in the root `CLAUDE.md`; this is the DOM half. Three separate causes, all in the
+shared overlays, all display-only (no stored field, counter or key was touched):
+
+1. **Scroll chaining.** `.lb-overlay` and `.gs-overlay` are `position:fixed; inset:0;
+   overflow-y:auto` — a full-screen scroll container sitting on top of a scrollable hub, which is
+   exactly the case a browser chains by default. A flick that reached either end kept going and
+   scrolled the launcher underneath, so the board rubber-banded, the page behind moved, and closing
+   the overlay landed somewhere the viewer never chose. **`overscroll-behavior: contain`** now sits
+   on both, plus `.gh-overlay`/`.gh-modal` in `css/ui.css` (every game's how-to-play and win/lose
+   modal), `.hub-confirm`, and `.ng-root`. The repo had exactly ONE `overscroll-behavior` before
+   this (Monopoly Deal's) — when adding a new overlay, it is not optional.
+2. **The live subscription rebuilt the whole board on every remote push.** `openLeaderboard()`
+   subscribes with `watchPlayers` to the ENTIRE `players/` node, and `stats-net.js` re-mirrors each
+   device on every hub load, tab-hide, return-to-launcher and reconnect — so in a family with
+   several devices the callback fires often, and MOST of those pushes change nothing this screen
+   renders. Each one used to `innerHTML`-replace the entire list. Mid-scroll that destroys and
+   recreates every node under the reader's finger: momentum scrolling breaks and a tap in flight
+   lands on nothing. `rerender()` now compares against the last rendered markup and does nothing at
+   all when it matches.
+3. **Scroll position was lost on the pushes that DID change something.** `rerender({ fromData:
+   true })` (the `watchPlayers` callback, and only it) preserves `_host.scrollTop` across the swap —
+   the container survives, but the browser clamps scrollTop while the replaced content momentarily
+   has zero height, which is what threw the viewer back to the top of a long board. Navigation
+   re-renders deliberately still start at the top; that is what drilling into a screen should do.
+
+**`window.addEventListener('resize', …)` is a scroll-jank bug on mobile, and `js/viewport.js` now
+exists so no game writes it again.** Eleven games each subscribed raw and re-laid-out the board
+SYNCHRONOUSLY in the handler. On a desktop that fires a handful of times while you drag a window
+edge; on a phone the browser fires `resize` continuously while the URL bar slides in and out — which
+is to say, on essentially every scroll — so each of those games ran a full board re-layout on the
+main thread several times per frame while the user was mid-scroll. Dominoes additionally subscribed
+to `visualViewport`'s own resize, which fires on every frame of that animation and on every keyboard
+show/hide. `onViewportResize(cb)` folds all three event sources into one callback, coalesces it to at
+most once per animation frame, and skips it entirely when neither dimension actually changed. It is
+semantically transparent because every one of these handlers is an idempotent "re-fit to whatever the
+size is now" — running it once with the settled size is strictly better than five times with
+intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool, poolv2,
+Nuts & Bolts, Uno, and Hill Climb. The unsubscribe it returns must be called in `destroy()`.
+
+**This rule, and the two below it, are now ENFORCED by `test-game-conventions.mjs`, and the reason
+is worth knowing.** Hill Climb was written in a parallel session and shipped the raw-resize pattern
+on the same day it was removed from every other game — not through carelessness, but because this
+file only auto-loads for a session working inside `js/`. A session creating `newgame/` loads the
+root `CLAUDE.md` and its own (nonexistent) game file, and nothing else. So the rule now lives in
+BOTH places: a "USE WHAT EXISTS" table in the always-loaded root file, and a test that fails.
+**When you change a convention here, update that table too** — it is the copy a new-game session
+will actually read.
+
+**A non-passive `touchmove` on `document` is a page-wide tax, not a local guard.** Snake installed
+one to stop a D-pad drag panning the page. It works, but it tells the browser
+that any touch scroll ANYWHERE might be cancelled, so compositor-thread scrolling is off for the
+whole page, on every screen, for as long as the game is mounted. It is now bound to the game's
+own root element instead, which loses no coverage (a `touchmove` is dispatched at the element the
+touch STARTED on and bubbles from there). See `snake/CLAUDE.md` for the full note. If a future game
+needs a scroll guard, scope it to the game root — never to `document`.
+
+### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
+
+A player asked where their game history had gone: they were not on the leaderboard. The leaderboard
+was correct. Their data was intact on their own device and had **never reached Firebase at all**.
+
+`syncMyStats()` ended in a bare `catch { return false; }`, and `hub.js`'s `_syncStats()` called it
+without `await` inside another bare `catch {}`. So a device that could not mirror - offline, blocked
+anonymous auth, private browsing, a rejected write - failed **silently, every time, forever**. Nothing
+reported it: not the device, not the hub, not the leaderboard. The first signal anyone got was a
+person asking why they were missing. That is THE LAW rule 6 violated in the single place it matters
+most, and rule 1 as a consequence (history that reaches no screen reads as deleted).
+
+Now, per rule 6's own reference pattern:
+
+- **Every attempt is recorded locally** in `gamehub.syncHealth.v1`, readable via `syncHealth()`:
+  `{ ok, lastOkAt, lastErrAt, lastErr, localPlays, remotePlays }`. A silently-failing device can be
+  diagnosed **from that device** instead of by noticing a gap on someone else's board.
+- **Every failure path logs loudly** (`console.error`) and names the cost: how many local plays are
+  not mirrored, and that the history is still safe locally.
+- **The write is verified by a fresh re-read.** A resolved promise is not proof the data landed; the
+  check compares total plays that landed against total plays stored, and fails the sync if short.
+- **Retry on reconnect.** `hub.js` syncs on load, tab-hide, return-to-launcher, and now the `online`
+  event. `syncMyStats` mirrors the whole store every time, so any retry repairs a missed period.
+
+### A dev server never writes to the family database (2026-08-22)
+
+`stats-net.js` refuses every WRITE when `location.hostname` is localhost - `syncMyStats`,
+`claimUsername` and `adminReleaseUsername` all return false before touching the network.
+**Reads stay on**, because a leaderboard with no data in it cannot be checked.
+
+Written after it happened three times in one day. `test-visual.mjs`'s PLAY probes mint a fresh
+deviceId per run and had left 17 throwaway "Visual Test" players on the board; then two sessions
+verifying UI changes in a localhost preview seeded a scratch profile, loaded the hub, and
+`syncMyStats()` mirrored the scratch store straight onto the real leaderboard, where Matt found it
+and asked twice. **`syncMyStats()` sends `loadStats()` wholesale, so ANY local store becomes a
+public record on the next hub load.** Cleaning up afterwards is not a fix: it depends on the person
+who made the mess noticing it.
+
+- The skip is **not silent** (rule 6): it `console.warn`s what was blocked and why, and writes
+  `lastErr: 'dev-origin-blocked'` into `gamehub.syncHealth.v1`.
+- **Not covered, deliberately**: a dev server reached over the LAN by IP (phone to laptop). Every
+  incident so far has been localhost, and guessing at private ranges is the worse trade.
+- To test the sync itself, opt in per browser instead of editing the file:
+  `localStorage.setItem('gamehub.devAllowSync.v1', '1')`.
+- Cleaning up what did leak: `delete-test-players.mjs` at the repo root, which refuses any node
+  that has an h2h, is somebody's recorded opponent, or owns a username.
+
+**Diagnosing "my history is missing" (do this before suspecting the leaderboard):** on the player's
+own device, open the hub and run `JSON.parse(localStorage['gamehub.syncHealth.v1'])`. `ok:false`, or
+`localPlays` well above `remotePlays`, means the data is fine locally and the SYNC is the problem.
+`gamehub.stats` is the source of truth and is never touched by any of this.
+
+**Warning, from an incident (2026-07-24, HANDOFF-FB2-STATS-NAV.md verification):** `hub.js` calls
+`_syncStats()` unconditionally on every page load, with no gate for "this is a test/preview
+browser" - there isn't one. Seeding fake `gamehub.stats`/`gamehub.profile` into `localStorage` to
+eyeball a UI change (My Stats, the leaderboard, anything that reads stats) and then loading the
+page **mirrors that fake data straight to the real production `players/<deviceId>` node** the
+instant the page runs, exactly like a real device's play. This happened once: a fake profile named
+"Matt" with invented stats synced and briefly rode the `matt`→`mattyice` name-alias union before
+being overwritten by a follow-up sync under a harmless name; it was caught, backed up
+(`node backups/rtdb-backup.mjs`), and removed by hand (zero the local store, reload, confirm the
+remote node re-mirrors as empty, then delete the now-empty node with a name+play-count guard,
+verifying with `players-agg.js` that no other player's row moved). **Never seed fake player stats
+into a browser that can reach the real Firebase config** (`js/firebase-config.js`'s
+`databaseURL`, which is this hub's only backend - there is no separate dev/staging project).
+Seed only with sync unreachable (offline, or Firebase blocked in devtools) or inside a headless
+test (`node run-all-tests.mjs`'s suites construct `gamehub.stats`-shaped fixtures directly in
+Node, never through a browser that can reach the network).
+
+**Fixed (2026-07-30), then SUPERSEDED (2026-07-31)** — read this entry together with "Nameless
+devices" above, which reverses the display half of it. The diagnosis below is still correct and is
+why the gate now exists; what changed is that a nameless device is no longer reachable, so the
+leaderboard hides these rows again instead of labelling them:
+
+the leaderboard used to list only players with a profile name
+(`(g.name || '').trim()` gate in `currentBody()`, predating the 2026-07-22 overhaul). A device
+that recorded real plays (e.g. Dots and Boxes wins vs the computer) without ever setting a
+profile name was mirrored to Firebase but appeared on no screen at all - stored-but-invisible,
+rule 1, and the reported symptom was literally "I won a bunch of times but it's not on the
+leaderboard." `currentBody()` no longer filters on name presence (only `HIDDEN_NAMES`, the
+test/debug list, still excludes a row); `rankName()` now returns the `lb_unnamed_player`
+string ("Unnamed player" / "Jugador sin nombre") for a blank name instead of `''`, so a nameless
+device's row renders with a `?` avatar and that label rather than being silently dropped by the
+By Player and By Game lists (`currentBody()`'s `list` feeds both). **Display-time fix only** - no
+stored field changed, no migration, `players-agg.js` untouched; the moment that device's owner
+sets a real profile name, their existing rows already carry the same identity key and just relabel
+themselves next render. The device still keeps whatever it recorded under `HIDDEN_NAMES` if a
+name is later set to one of those (e.g. `zzztest`).
+
+### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
+
+`players-agg.js` has two hand-maintained maps for a person whose devices disagree about their name:
+
+- **`NAME_ALIAS`** (lowercased → lowercased) folds alternate spellings into one identity, used by
+  `nameOf()` so the identity graph unions those devices. Currently `matt → mattyice`,
+  `lill → lili`.
+- **`DISPLAY_NAME`** (canonical lowercased → preferred label) pins what the merged row is CALLED.
+  Grouping alone is not enough: `grp.name` takes the most recently active device's raw name, so a
+  merged row would otherwise flip between spellings depending on which phone synced last. Currently
+  `lili → 'Lili'`. A name with no entry displays exactly as the device wrote it, which is why
+  `mattyice` has none — its behaviour is unchanged.
+
+**Lili is the reason this section exists.** She appeared twice, "Lili" and "Lill". It was corrected
+once by editing the record in Firebase, and it came back within days. That is not a fluke and it
+will happen to any server-side rename: **`stats-net.js`'s `syncMyStats()` mirrors each device's OWN
+`localStorage` profile up on every hub load, tab-hide, return-to-launcher and reconnect.** The phone
+still spelling it "Lill" simply rewrote `players/<id>/profile.name` back to "Lill" the next time it
+opened the app. The remote record is a MIRROR, not a master — nothing server-side survives contact
+with the device that owns it.
+
+So there are exactly three durable fixes, and only the first needs no access to her phone:
+
+1. **Alias it here** (what was done) — read-time, applied on every render, immune to resync.
+2. **Rename the profile ON the device** (profile page), so the device stops pushing the old spelling.
+3. **Link both devices to one player code**, which makes the name irrelevant to grouping entirely.
+
+Regression cases (both sync orderings, case/whitespace, and "Lilian" NOT being swallowed) are in
+`players-agg.test.mjs`. When adding an alias, add its test alongside — a wrong alias silently merges
+two real people, which is the one failure mode here that loses information.
+
+### The Ana/Natalia correction (2026-07-23) — what was done, and how certain it actually is
+
+Ana and Natalia shared one physical device (`players/1f75ff86-...`, code `89N3N`, "Anita Bonita")
+for about a week before Natalia got her own phone. `js/game-stats.js` stores only running per-device
+totals, so every play either of them made landed in the same counters and **there is no per-play log
+to split them by.** Separately `usernames/natalia` held `{ code: "89N3N" }` — Ana's code — which is
+why Natalia's brand-new phone answered "Taken. Use that code instead." the first time she tried to
+claim her own name.
+
+**Root cause of the stale registry entry** — `js/hub.js`'s first-run "fr-save" handler called
+`claimUsername(name, code, '')`, a hardcoded empty *previous name*, so the gate could register a new
+name but could never release the one it replaced. It only fired when a device's local profile was
+reset and re-claimed through the hub's gate rather than the profile page (`profile/index.html`'s
+rename flow always passed the real previous name and released correctly). **Fixed in `cdefd6c`
+(2026-07-24)**, which started passing `cur.name || ''`; that fix moved with the gate into
+`js/name-gate.js` (2026-07-31) and is still there — an earlier version of this paragraph said "still
+unfixed" and was stale. `js/stats-net.js` exports `adminReleaseUsername(name)` for repairing a
+registry entry already stranded by the old behaviour; nothing in the UI calls it.
+
+**What was actually written** (`fix-natalia-record.mjs`, applied and verified):
+`players/660e7098-85cf-4293-96ad-888dabc50773` = Natalia, player code **`C5PXN`**, holding 8 plays;
+`usernames/natalia` repointed to `C5PXN`; the dev/test device `f8ad1b82-...` had `profile.name`
+cleared so its 4 plays stop showing as a "test" row on the board (the old name is archived to
+`profile.nameArchived`, **not** destroyed — a new, inert field, additive per rule 5).
+
+**Ana was deliberately not touched.** An earlier version of this plan subtracted Natalia's share from
+Ana's counters; Matt reversed it. So this was a pure ADDITION — no counter anywhere was decremented,
+which is why rules 2 and 4 hold by construction and there was never a moment where a play existed
+nowhere. **The accepted consequence: those 8 plays are now counted twice family-wide**, once inside
+Ana's blended row and once in Natalia's. That is a known, deliberate tradeoff, not an error to
+"fix" — and it is the strongest argument for the profile-code-keyed stats rework below.
+
+**How certain the split is — do not overstate this.** Only two of the eight have real evidence:
+
+| Attribution | Basis |
+|---|---|
+| Escoba 1 → Natalia | `escobaSettings.humanName: "Natalia"` and the in-progress `escobaSave` both name her (verified in that device's own Device Details report) |
+| Chinchón 2 → Ana (left in place) | `chinchonSettings.humanName: "Ana"` in the same report |
+| Boggle 1, Dots and Boxes 1, Filler 2, Mancala 1, Nuts & Bolts 1, Parchís 1 → Natalia | **No name tag exists.** Those games' settings keys carry no `humanName` field at all. Assigned by Matt's standing date rule (any play on that device between Natalia's 2026-07-18 username claim and the morning of 2026-07-22 is hers). **This is a policy decision, not a recovered fact.** |
+
+Even the two "firm" tags are the *last configured* value for that game, not per-play provenance.
+Two further gaps are known and unresolved, and any future work here must not paper over them:
+**Ball Run 8** was left with Ana on timing alone, with no firmer evidence; and **Connect Four shows
+zero plays ever** on every device tied to Ana despite the challenge system requiring real Connect
+Four losses by design — most likely `connect-four/js/ui.js`'s `_statsDisqualified` flag excluded
+them, which means **Ana's true lifetime total is higher than any counter can show.** Do not present
+any total built on this ledger as complete.
+
+**Prevention: done, same day.** See the next section — the store is now keyed by the active
+profile's player code, and the `claimUsername(name, code, '')` release bug above is fixed.
+
+### Whose stats are these — the per-player store split (2026-07-23)
+
+The structural fix for the incident above. The full rationale lives in `js/game-stats.js`'s
+"WHOSE stats these are" block; this is the summary and the rules a future session must not break.
+
+**One rule makes the whole change free for every device that already exists:** the FIRST player code
+ever seen on a device becomes its **owner** and keeps `gamehub.stats` and the `players/<deviceId>`
+node, exactly as before. **Nothing is migrated, copied, moved or re-keyed.** There is no migration to
+get wrong and no window where history is anywhere but where it already was, so THE LAW rules 1, 3 and
+5 hold *by construction* rather than by careful handling — which, given rule 7's history in this repo,
+was the whole point of choosing this shape over "copy the store into a new key".
+
+| Concept | Where |
+|---|---|
+| `gamehub.stats` | unchanged: the OWNER's store on that device (and the only store on a device with no player code) |
+| `gamehub.stats.p.<CODE>` | a second (third, …) player's own store on the same device |
+| `gamehub.stats.owner.v1` | `{ code, name, at }` — who owns the device's original store. Claimed once, by the first code seen |
+| `gamehub.stats.forks.v1` | append-only log of every additional player who has recorded here (`{code, at, prevKey, prevPlays}`). Diagnostic only; never pruned |
+| `statsKey()` / `statsId()` | the resolved local key and the `players/<id>` sync node. `statsId()` is `deviceId()` for the owner, `<deviceId>-<CODE>` for anyone else |
+
+- **No game's `recordX()` call site changed.** Every game already went through `loadStats()`/`persist()`,
+  so the resolution happens entirely inside `game-stats.js`. Keep it that way: a game that reaches for
+  a storage key directly re-opens exactly the hole this closed.
+- **`deviceId()` is still the multiplayer identity** (`net.js` rooms, `recordHeadToHead` opponents) —
+  that is genuinely per-device. Only the STATS node moved to `statsId()`. Callers updated:
+  `stats-net.js`, `game-stats-ui.js`, `leaderboard-ui.js`, `device-report.js`.
+- **The device-wide legacy stores (`chinchon-stats`, `bd-stats`) belong to the owner and are never
+  folded into a forked store** — that would hand a second player the first player's history, the exact
+  blending this prevents. `latchLegacyGuards`/`latchChinchonSeed` set the fold-once guards without
+  folding. The legacy keys themselves are untouched (rule 5).
+- **`js/game-stats-global.js` (and its verbatim-after-header BD copy (enforced by `test-recorder-contract.mjs`)) resolves the same key**, read-only: it
+  never claims ownership, because it is a secondary writer. When no owner is recorded it uses the
+  device-wide store, which is what the ES-module recorder does at the moment it claims — so the two
+  always agree. This is a fourth must-stay-synced point between the two recorders.
+- **`js/hub.js`'s first-run gate** reuses the owner's code when the name typed matches the owner's own
+  name (the same person setting up again after losing their profile — minting a new code would fork
+  them from their own history) and mints a fresh one otherwise (a different name is a different
+  person). It also now passes the real previous name to `claimUsername`.
+
+**Known gap, stated honestly:** if the SAME person loses their profile and is issued a brand-new code
+under a DIFFERENT name, they fork away from their own history. The old store is untouched on disk and
+the old node untouched in Firebase, and `players-agg.js` unions devices by name as well as by code, so
+My Stats and the leaderboard still show everything whenever the device is online; offline, the local
+view would show only the new store. Closing it completely means asking the player who they are, which
+is a product decision, not a storage one.
+
+`test-stats-identity.mjs` is the regression suite, and its rule 7 fixture is the real, unedited store
+read out of `players/1f75ff86-...` — the actual device the incident happened on.
+
+### Head-to-head capture
+
+`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a top-level
+`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. It was **capture only** from
+2026-07-22 to 2026-08-11, deliberately: the opponent's identity only exists while the multiplayer
+room is live, so it had to be stored long before there was a screen for it. Chinchón and Escoba both
+knew exactly who they had just played (`_mpNewState` accepted the room participant as a parameter and
+then *discarded* it) and threw it away at match end, so every MP match played before 2026-07-22 is
+permanently unrecoverable. Both now store the roster on `this.mp.opps`, refresh it from the live room
+in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and record **every** seat in
+`_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by construction, and
+`stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+
+### Multiplayer on the leaderboard: on the GAME'S page, per game (2026-08-11)
+
+**Shipped wrong first, corrected same day. Read this before adding anything h2h-shaped again.**
+
+The first attempt put a "Multiplayer wins against" block on the PLAYER DETAIL screen, built from
+`h2h` summed across every game. Matt: *"Why does it show the attached regardless of what game I
+look at... I don't give a fuck about generic multiplayer wins or losses. I care about game specific
+wins and losses."* He was right twice over: that screen is reached by drilling in from a game, so a
+number that ignores which game you came from reads as a bug, and a cross-game head-to-head total is
+not a fact anyone wanted. It was removed, along with `headToHeadRows()` and the `h2h`/`deviceIds`
+aggregation in `players-agg.js` that existed only to feed it.
+
+What replaced it is smaller and answers the actual question: **a fourth chip in the tier row on a
+game's own board** (`mpTileHTML` in `js/leaderboard-ui.js`), reading `byDiff.mp.won` for THAT game.
+
+- **It fixes a number that no longer added up.** `tierOf('mp')` is null, so a multiplayer win counts
+  in a card's TOTAL but appears in none of its tier chips. On Escoba that meant "31 wins" over chips
+  totalling 23, with the missing 8 explained nowhere — the documented unmapped-bucket convention,
+  reading as an error on the one screen where the numbers sit side by side.
+- **Labelled with a WORD, not a shape or a hue.** The tier chips' ski-slope shapes encode a 1-4
+  scale multiplayer is deliberately not on, so borrowing one would claim a difficulty this bucket
+  does not have. Colorblind-safe by construction for the same reason.
+- **Not rendered at all for a game nobody has played online** (`anyMpPlays`), rather than adding a
+  column of dashes to every card in every game. A player with no online plays in a game that HAS
+  them gets the same em-dash an unplayed tier gets.
+- **`h2h` is still WRITTEN** (`recordHeadToHead`) and is still the evidence the migration below
+  depends on. Only its display and its aggregation were removed. Do not remove the writer.
+
+### Extracting multiplayer plays back out of the AI bucket (2026-08-11)
+
+**The `'mp'` bucket is what makes head-to-head legible, and Escoba was not using it** until
+2026-08-11: `_commitStats` read `opp0.difficulty || 'normal'`, and a remote seat has no difficulty,
+so every online Escoba match was filed as an Intermediate win over the AI. Fixing the writer only
+helps future matches. Matt: *"Extract them and create a MP column for wins and losses."*
+
+`splitEscobaMp()` in `js/game-stats.js` does it, once per store, from `loadStats()`. **The whole
+question is what evidence exists**, and this is the part to understand before reusing the pattern:
+
+- **`h2h` IS the evidence, and it is exact.** `recordHeadToHead` was called from the SAME
+  `_commitStats` as the misfiled result, once per opponent, on every multiplayer match since h2h
+  shipped. Escoba's multiplayer was two-seat throughout that period, so exactly one h2h increment
+  exists per match and `sum(w)`/`sum(l)` across `h2h.escoba` IS that store's multiplayer record.
+  Nothing is inferred, apportioned or estimated — every play moved is one the store can PROVE was
+  multiplayer, which is the line rule 4 draws.
+- **Matches older than h2h capture are NOT touched, and that is the honest answer, not a gap left
+  open.** They left no trace on either device, so an Intermediate play that is really an old
+  multiplayer play is indistinguishable from a genuine one. They stay in `normal`, fully visible,
+  exactly where they have always been — nothing is archived away, so rule 3's "still SHOWN"
+  obligation is met by not moving them at all.
+- **`total` is never touched.** `byDiff` is a partition of it, so re-bucketing inside `byDiff`
+  cannot change a play count, and `verifyEscobaMpSplit()` proves it by FRESH RE-READ after the
+  write (rule 6) rather than trusting the object handed to `setItem`.
+- **Every move is clamped** to what `normal` actually holds, so no counter can go negative if the
+  two records ever disagree; the surplus is recorded as `esMpSplit.unresolved` and logged rather
+  than invented somewhere else.
+- **`escoba.esMpSplit`** archives the pre-migration numbers, the evidence used and anything
+  unresolved, and is never pruned (rule 5) — the migration is reversible by hand from what it
+  writes down.
+
+**Rule 7 was satisfied with the real thing, not a fixture.** `test-stats-replay.mjs`'s scenario D
+replays the ACTUAL escoba records of the only five devices in `players/` with any head-to-head
+history, read out of Firebase on the day this shipped and pasted in unedited. All five fit inside
+their own `normal` bucket with nothing unresolved: 32 matches recovered in total (5 + 15 + 9 + 2 + 1
+across the five devices). Scenario E covers the edges no real device happens to exercise.
+
+**Chinchón's `_commitStats` has the same `|| 'normal'` line**, so the same thing is true of its
+online matches. Out of scope for that session; the pattern above ports directly if it is ever
+wanted.
+
+### Nothing should ever be able to be lost (2026-08-11)
+
+Matt, on being told a multiplayer result could be dropped: *"Make it so that is impossible. Nothing
+should ever be able to be lost. That's the rule."* Two layers, both in this milestone:
+
+1. **Record at the moment of DECISION, from the engine.** `escoba/js/game.js`'s `checkMatchEnd()`
+   fires a synchronous `onDecided` hook in the same statement that sets `winner`; `_bindGame` points
+   it at `_commitStats`. There is no await, no `emit` and no abort check in between, so there is no
+   gap left for a result to fall into. This replaced a UI-event-hook commit that sat several awaits
+   and one human button-tap after the decision. **It required moving the escoba tally into the
+   engine** (`player.matchEscobas`, folded in `scoreRound()` — i.e. before `checkMatchEnd`), because
+   the UI's own accumulator was one round behind at exactly the moment the match was decided; a
+   result recorded there would have been correct except for its escoba count. **If you move a
+   game's recording earlier, check what else the recorder reads is ready that early.**
+2. **A write that fails is QUEUED, not dropped.** `persistOrQueue()` parks the result in
+   `gamehub.pendingResults.v1` — deliberately a tiny key separate from the stats blob, because the
+   case it exists for is "the big object would not fit" — and `loadStats()` replays it.
+   `drainPendingResults()` **does not clear the queue**; `clearPendingResults()` runs only after the
+   write that absorbed it succeeded. Clearing at drain time looked equivalent and was not: a load
+   whose own persist also fails (the likely case, since the queue exists because writes are failing)
+   would drop the queue and the results with it — the exact loss the mechanism exists to prevent,
+   reintroduced inside the fix. Caught by `test-stats-replay.mjs`'s scenario F, which drains once
+   under a still-failing write before letting one through.
+
+Wired into `recordEscoba` and `recordHeadToHead`. The queue is generic by shape
+(`game`/`diff`/`won`/`extras`/`h2h`) — **any other recorder can be moved onto it** by routing its
+failed `persist()` through `persistOrQueue()`, and should be.
+
+---
+
+---
+
+## The admin config (2026-08-24)
+
+The switches Matt can flip from inside the app, and the contract every reader depends on. The
+motivation and the LAW angles are in the root `CLAUDE.md` ("The admin control page"); this is the
+mechanism.
+
+**The node**, in the shared named `'stats'` Firebase app, at `adminConfig/v1`:
+
+```
+{ games:    { <hubId>:   { live: true|false, at: <ms>, by: '<deviceId>' } },
+  skeeball: { boards: { <boardId>: { open: true|false, testing: true|false,
+                                     at: <ms>, by: '<deviceId>' } } } }
+```
+
+A machine's two fields encode THREE states, resolved in one place by `resolveBoardMode()`:
+
+| stored | mode | what a player sees |
+|---|---|---|
+| `open: true` | `open` | playable now, no unlock needed |
+| `open: false, testing: false` | `unlockable` | live, earned the normal way (its goals or score) |
+| `testing: true` | `testing` | not playable yet; only a dev profile can open it |
+
+`testing` wins over `open`, so a half-applied write can never read as playable. Both fields are
+always written together (`setBoardMode()`), so a mode change cannot leave the previous mode's field
+behind. `testing` overrides `boards.js`'s `adminOnly` exactly as a game's `live` overrides
+`devOnly` — it is the field the first version of the page was missing, and without it "Earn it"
+could not make an `adminOnly` machine earnable at all (Matt caught it the same day).
+
+Versioned (`/v1`) so a future shape change never has to reinterpret this one. `by` is the writing
+device's `statsId()`, `at` is when — audit only, nothing reads them but the eye.
+
+**Reads are synchronous cache reads, on purpose.** `readCachedConfig()` parses
+`gamehub.adminConfig.v1` (memoized per page load) and every caller — `js/hub.js`'s card filter and
+Test pill, `js/game-stats-ui.js`'s tab gate, `skeeball/js/ui.js`'s three unlock gates — is a plain
+function call, no await. The launcher therefore paints from the last known config with no network on
+the critical path, and a phone in a drawer keeps behaving sensibly. `js/hub.js` fires one
+`refreshAdminConfig()` per load; it re-renders in place only when the fetched value actually differs
+from the cache, so the common case is a background read and no repaint.
+
+**An absent entry means the code default.** `resolveGameLive(cfg, id, codeDefault)` returns the
+override only when it is a real boolean; anything else — missing, malformed, `'yes'` — falls through
+to `!g.devOnly` from the registry. This is deliberate and is the whole reason the layer is safe: a
+config that is empty, wiped, half-written or unreachable leaves the app exactly as the source
+describes it. Hiding a game is only ever an explicit `live: false`.
+
+**Skeeball releases are additive at READ time and can never un-earn.** `isBoardReleased(id)` answers
+one question — has Matt opened this machine for everyone — and `skeeball/js/ui.js` ORs it with the
+player's own `isUnlocked(sk, id, DEFAULT_BOARD)`. Nothing in `js/admin-config.js` can write
+`sk.unlocked`, so a release grants nothing permanent and, more importantly, moving a machine back
+takes it away from exactly nobody who already earned it (THE LAW rule 2): `testing` makes the
+gallery DECLINE TO HONOR an earned unlock while it is set, and honor it again the moment it is not.
+`isBoardTesting(id, adminOnly)` is also what `_earnedUnlocks()` and `_ensureGoalUnlocks()` consult —
+reading the RESOLVED state rather than the raw flag is the whole difference between "Unlockable"
+being a real state and being a label. `test-admin-config.mjs` pins all of it structurally against
+the shipped `ui.js`.
+
+**Writes verify themselves** (rule 6): `writeOverride()` `update()`s the field, then re-reads the
+whole node and compares; anything unexpected returns `{ ok: false, error }` and logs, and the admin
+page shows the failure in its status line rather than repainting as if it worked. Clearing an
+override writes `null` to the field, so the code default takes back over and no tombstone is left
+behind. A dev origin refuses to write at all unless `gamehub.devAllowSync.v1` is set — the same
+guard, and the same opt-in key, as `js/stats-net.js`, for the same reason: this node is shared by
+every device in the family.
+
+**Adding a third switch** is four edits: a resolver + its `*Override` reader in
+`js/admin-config.js`, a `setX()` on top of `writeOverride()`, a section in `js/admin-ui.js`, and a
+case in `test-admin-config.mjs` (including the structural check that the READER is actually wired
+in — the resolvers are only worth anything if a caller consults them). Keep the new branch absent by
+default, and keep "absent means the code default" true; every safety property above rests on it.
+
+**Rules:** `database.rules.json` is `auth != null` for read and write across the whole DB, so no
+rules change was needed. That also means the node is not cryptographically Matt-only — the admin
+button is gated on `isAdmin()` (a profile-name hash, like the bug inbox), which is a screen, not a
+lock. This is the family's app on a wide-open database; if that ever changes, this node needs a rule
+of its own before anything else does.
+
+## Score corrections: "that machine was broken" (2026-08-24)
+
+Matt: *"Worried about people getting artificially high scores on a broken board. Which is exactly
+what happened to classic and basketball skeeball."* THE CLASSIC and BASKET FEVER each handed out
+scores while their physics were half-tuned, and those scores went into the family's real records.
+
+**Editing `players/<id>` by hand does not work, and cannot be made to.** `syncMyStats()` writes
+`stats: loadStats()` — the device's ENTIRE local store — to that node on every hub load, tab hide
+and reconnect, and `update()` replaces the whole `stats` child. Nothing ever reads server stats back
+into a device. So a console edit survives until that player next opens the app, and no amount of
+care changes that: the device is the source of truth for its own history.
+
+**So a correction is an overlay, not an edit.** It lives in `adminConfig/v1/corrections/skeeball/
+<statsId>/<boardId>` — the node the admin page owns and no phone writes — and it is applied every
+time a number is DISPLAYED. The raw record is untouched, which is both THE LAW rule 1 and the only
+honest answer to "why does my best say 0 when I remember 700": the 700 is still there, marked as not
+counting, with the date and reason beside it.
+
+**It is a BASELINE, not a subtraction.** A void stores the board's raw totals at that moment. Every
+later rack counts normally, so the correction never has to be edited again — and a best survives
+only if a LATER score beat the voided one, because a maximum cannot be un-summed (rule 4: reading 0
+is honest, inventing a lower number is not).
+
+**The admin page groups by PERSON, not by device.** A void loops over every `statsId` in that
+person's identity group (`buildIdentity().keyFor`) that has played the machine — correcting one
+device record only would be undone by their second phone's next sync, since its own numbers are
+still whole. The same section shows each person's objective progress by calling
+`skeeball/js/goals.js`'s `readGoals(boardId, sk)` against their CORRECTED record, so the page and
+the rails the player sees can never disagree.
+
+**Where it is applied**, and why each one matters:
+- `js/players-agg.js` — per SOURCE record, before the merge (corrections are keyed by `statsId`;
+  merging first would blend voided numbers where no per-device correction could reach them). This
+  one line covers the leaderboard, My Stats' combined view, and Skeeball's app-wide records.
+- `js/game-stats-ui.js` — also on the LOCAL first paint, or a voided score flashes up and vanishes.
+- `skeeball/js/ui.js` — the machine's own backboard, or the game shows a number no other screen does.
+
+**What it deliberately cannot do**, stated here so nobody rediscovers it as a bug:
+- A device that was offline through the bad build still holds those racks and uploads them later.
+  They land after the baseline, so they count. The admin page shows raw beside corrected so the
+  drift is visible, and re-voiding is one tap. A per-machine cutoff by build number would catch it
+  automatically; per-player was the ask (Matt, 2026-08-24), and this is its cost.
+- `sk.balls`, `hundreds`, `fifties`, `tens`..`forties` and `colorSweeps` have no per-machine
+  breakdown anywhere in the store, so a per-machine void leaves them exactly as they are (rule 4).
+
+**The other half is prevention.** A machine set to Testing on the admin page records to
+`sk.practice` (`js/game-stats.js`'s `recordSkeeball`, which returns before touching a single real
+counter) — kept, merged across devices, shown on its own labelled row in My Stats, and counted by
+nothing. Tuning a board can no longer contaminate anybody's record in the first place.
+
+## The shared profile — contract and consumers
+
+The summary and the defaults-only rule live in the root `CLAUDE.md` ("The shared profile");
+this is the full detail.
+
+### Contract (`localStorage["gamehub.profile"]`)
+
+```js
+{ version:1, name, emoji, preferredColor:"yellow"|"blue"|"red"|"green"|null,
+  opponents:[{name, emoji, skill:1|2|3}], message, messageAt, updatedAt }
+```
+
+- **The profile page is the primary writer; games stay read-only consumers.** One
+  documented exception: `js/hub.js`'s first-run gate (name-or-code prompt) also calls
+  `saveProfile()` to adopt a linked owner's name/emoji and mint/attach a `playerId` — this
+  predates the "only the profile page writes it" wording in an earlier version of this file,
+  which was simply stale. If you add another writer, update this line again rather than
+  letting it drift back out of sync with the code.
+- Readers **try/catch** and treat missing or malformed data as "no profile", falling back silently to
+  built-in defaults. A profile must never crash a game.
+- **Extend additively; never rename fields.** `skill` tolerates a future 4; the UI emits 1-3.
+- **`message`/`messageAt` (HANDOFF-PROFILE-MESSAGE.md, 2026-07-28):** a free-text field (max 80
+  chars), shown only on that player's own detail screen in the Leaderboard
+  (`playerDetail()` in `js/leaderboard-ui.js`). `messageAt` is a separate epoch-ms edit
+  stamp, NOT `rec.updatedAt` (the record's sync time) — `js/players-agg.js`'s merge picks the
+  message from whichever device has the **newest `messageAt`**, so a device that merely
+  re-syncs without touching the message (still `messageAt: 0`) can never blank out a message
+  set elsewhere. This is a **preference, not history**: THE LAW rule 2's carve-out applies
+  (same class as favorites/theme/language), so clearing the message to `''` with a newer
+  `messageAt` is expected to win — no tombstone, no soft-delete.
+
+### `js/profile-store.js`
+
+ES module: `loadProfile()` returns a validated object or `null`; `saveProfile(p)` normalizes and stamps
+`version`/`updatedAt`; `clearProfile()` deletes the key. In-hub module games `import` it directly;
+single-file or non-ESM games (Monopoly Deal, Parchís) inline the small read-only subset, kept in sync
+with this contract.
+
+### Monopoly Deal's must-stay-synced duplicates
+
+Monopoly Deal is global-JS, not ESM (a deliberate, bounded exception — see its games-table
+row), so it can't `import` the shared modules directly. It carries three small inlined/copied
+pieces that must be kept in sync by hand whenever their canonical source changes:
+
+1. **Profile reader** (`business-deal/js/ui.js`, near the top): a read-only subset of
+   `profile-store.js`'s `normalize()`. Already known to have drifted — its emoji fallback is
+   `'🧑'` vs the canonical `'🙂'`/`'🤖'`, and it slices 4 opponents vs the contract's 3. Not
+   worth fixing retroactively (bounded, cosmetic), but don't let it drift further: if the
+   profile contract's *shape* changes (new required field, renamed key), update this copy too.
+2. **Challenge crypto mirror** (`business-deal/js/challenge-hook.js`): inlines the
+   hash/obfuscate/deobfuscate logic and salts from the retired `js/challenge/{crypt,secrets}.js`,
+   explicitly commented as mirroring that file byte-for-byte. Changing the trigger hash, salt,
+   or code blob in one place without the other breaks Monopoly Deal's challenge hook silently.
+3. **Stats recorder** (`business-deal/js/game-stats-global.js`): a verbatim-after-header in-scope
+   copy of `js/game-stats-global.js` — a 15-line header ending in a marker line, then the canonical
+   file byte-for-byte; enforced by `test-recorder-contract.mjs`. Since 2026-07-23 that file also resolves WHICH player's
+   store to write (see "Whose stats are these"), so a drift here now risks landing one player's
+   Monopoly Deal plays in another player's store, not just a stale counter. It has to be a *copy*, not a shared reference, because
+   Monopoly Deal's page is exclusively controlled by its own nested service worker
+   (`business-deal/sw.js`) — a request for anything outside `business-deal/` (like the
+   original `../js/game-stats-global.js`) is still routed through BD's own SW's fetch
+   handler, so it can only be reachable offline if it's also in BD's own cache list. If you
+   change `js/game-stats-global.js`, copy the change into
+   `business-deal/js/game-stats-global.js` too and bump `business-deal/sw.js`'s `CACHE`.
+
+### Consuming it in a game
+
+- Read once at setup-screen load. **Precedence:** a game's own saved last-used settings (e.g.
+  `chinchon-settings`) beat the profile, which beats built-in defaults. Games never write it back.
+- **Skill maps 1:1** (1 Easy, 2 Medium, 3 Hard) onto each game's difficulty. Connect Four's 4th
+  "Expert" solver is not a profile tier (it is still chosen in Connect Four's own setup).
+- Use the profile name/emoji only where a game already shows player identity; do not add new avatar
+  surfaces to games that lack them.
+- Prefills today: **every game**. All eleven in-repo game modules read the
+  profile at setup (name/emoji/opponents/skill as each game's setup uses them), and Parchís's
+  single-file build carries its own inlined reader (see `parchis/CLAUDE.md`). The per-game
+  precedence rule above (own saved settings beat profile beats defaults) applies in each.
+
+### An announcement can wait for its game to be live (2026-09-09)
+
+Matt, releasing golf: *"I want a popup on the gamehub itself saying something like new game! Golf...
+It should only appear once per phone. It can't be attached to the v# because other sessions are
+updating other games and we'll be updating golf still."*
+
+Both of those are what this layer already was - the seen-list is keyed by the entry's own id and has
+no relationship to `sw.js`'s `CACHE`, so a game can be redeployed any number of times and nobody
+sees its notice twice. What was missing is the TIMING.
+
+**`requiresGame` is a hub id, and `js/hub.js`'s `_maybeAnnounce` holds the entry back until
+`isGameLive` says everyone can actually see that tile.** It exists because the alternative is a
+trap: golf's announcement had to be written and deployed while golf was still `live: false`, and
+shipping it ungated would have told the whole family about a game none of them could find. Gating it
+`adminOnly` instead works exactly once and then needs a SECOND deploy to un-gate on the right day -
+a thing to remember, which is the kind of thing that gets forgotten (the bug-report entry needed
+precisely that, which is why `test-bug-report.mjs` prints a NOTE on every run naming any entry still
+gated).
+
+This way the popup turns itself on the moment the game is released from the admin page: no deploy,
+no timing, and the same one-per-device guarantee. **The check returns BEFORE `showAnnouncement`,
+which is what preserves it** - that call is what marks an entry seen, so a held announcement leaves
+every device untouched and lands fresh for everyone on release day.
+
+An entry's `action` is also wired for this: `play-golf` calls `hub.launch('golf')`, so the popup's
+button opens the game rather than leaving the player to find the tile they were just told about.
+
+**An entry may show a GAME'S OWN TILE instead of screenshots** (`tile: { art, name }`, drawn from
+`js/game-art.js` by hub id). Matt, on golf's first version: *"Way too much text. The first sentence
+is useless... It's just supposed to say: New Game! / Golf / And show the thumbnail."* A new game's
+notice is pointing at a tile the player is about to go looking for, so the tile IS the explanation;
+`shots` remain the right tool for a control nobody would find on their own. `body`, `icon` and
+`badge` are all optional now - an entry with none of them renders heading, tile, name, button.
+`test-bug-report.mjs` fails on a `tile.art` that names no real game, because a wrong hub id is
+silent: the popup opens with a hole where the picture was.
+
+### Who has actually seen an announcement (2026-09-09)
+
+Matt, the day golf went live: *"i want a way to see who has seen the popup too."* The seen-list is a
+per-device preference that never left the phone, so the question had no answer anywhere.
+
+**`js/stats-net.js`'s `syncMyStats()` mirrors it to `players/<id>/announce` = `{ seen, at }`**, the
+same shape of addition as `device` (install state) and for the same reasons: a new child node, read
+by no gameplay or stats path, riding the mirror the device already performs on load, tab-hide,
+return-to-launcher and reconnect. **It is a REPORT, never a source** - nothing reads it back, so a
+stale or wiped copy cannot make a popup reappear or vanish on anybody's phone.
+
+`js/admin-ui.js`'s **Announcements** section reads it, one entry per announcement, filtered by
+`js/hidden-players.js` (the same people the leaderboard renders - it shipped unfiltered and ~100
+pre-gate nameless devices buried the real people) and **grouped by PERSON** (`buildIdentity().keyFor`, like the scores section): a popup is shown once per DEVICE, so
+somebody with two phones has seen it once they dismiss it on either, and their second phone still
+owes them one. **A device that has not synced since this shipped reports nothing, and nothing is not
+"not seen"** - a person whose phones have all gone quiet reads `no data yet`, never as a no. Same
+honesty rule as `read-install-state.mjs`'s `(not seen yet)`, and it is not retroactive: everyone
+reads as unknown until their next hub load.
+
 **THREE GROUPS, AND THE THIRD ONE IS THE WHOLE POINT.** The first version had two, Seen it and Not
 yet, and dropped everyone whose phones had never reported into Not yet - which on the day it shipped
 was 24 of 26 people, and read as a claim that nobody had seen the bug-report notice from August.
