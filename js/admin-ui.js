@@ -30,7 +30,7 @@ import { GAMES } from './hub.js';
 import { BOARDS, DEFAULT_BOARD, boardById } from '../skeeball/js/boards.js';
 import { readGoals } from '../skeeball/js/goals.js';
 import SK_STRINGS from '../skeeball/js/strings.js';
-import { statsId } from './game-stats.js';
+import { statsId, statsKey } from './game-stats.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import {
@@ -409,6 +409,7 @@ function deviceSectionHTML() {
       <button type="button" class="gh-btn gh-btn--sm" data-role="inbox">${esc(t('adm_inbox'))}</button>
       <button type="button" class="gh-btn gh-btn--sm" data-role="announce">${esc(t('adm_announce_reset'))}</button>
       <button type="button" class="gh-btn gh-btn--sm" data-role="copyid">${esc(t('adm_copy_id'))}</button>
+      <button type="button" class="gh-btn gh-btn--sm" data-role="golfreset">${esc(t('adm_golfreset'))}</button>
       ${isDevOrigin() ? `<button type="button" class="gh-btn gh-btn--sm" data-role="devwrites">${
         esc(t(devWritesOn() ? 'adm_devwrites_off' : 'adm_devwrites_on'))}</button>` : ''}
     </div>
@@ -501,6 +502,46 @@ function wire(card) {
     try { id = statsId() || ''; } catch { id = ''; }
     try { await navigator.clipboard.writeText(id); say(card, t('adm_copied'), 'ok'); }
     catch { say(card, id, ''); }
+  });
+  // CLEAR THIS DEVICE'S GOLF STATS. Matt, on the day golf released: *"remove all my test play stats
+  // or hide them or whatever, then make it live."* Measured first - exactly ONE device record in the
+  // whole database had non-zero golf data (his own, 13 rounds of testing); every other golf key was
+  // the all-zero skeleton `ensureGf` writes on first sync.
+  //
+  // THE DEVICE IS THE ONLY PLACE WORTH CLEARING, and that is not a shortcut. `syncMyStats()` mirrors
+  // this device's WHOLE local store to `players/<id>` on every hub load, and an `update()` on that
+  // key replaces the subtree - so deleting the server copy alone is undone by the next open, while
+  // clearing here fixes both halves with no Firebase write at all and nothing that can half-land.
+  // The same lesson is written up for Skeeball in the root CLAUDE.md ("it is not durable alone").
+  //
+  // TWO TAPS, and it names what it is about to do. This is the one button in this app that removes
+  // earned history, so it arms first and only the second tap writes - the same shape the bug
+  // inbox's delete uses. It is scoped to GOLF and to THIS DEVICE: no other game is touched, and
+  // nobody else's record is reachable from here.
+  let golfArmed = false;
+  on('golfreset', () => {
+    // `on()` hands the handler the click EVENT, not the element, so look the button up here.
+    const btn = card.querySelector('[data-role="golfreset"]');
+    if (!golfArmed) {
+      golfArmed = true;
+      if (btn) btn.textContent = t('adm_golfreset_arm');
+      say(card, t('adm_golfreset_warn'), '');
+      setTimeout(() => { golfArmed = false; if (btn) btn.textContent = t('adm_golfreset'); }, 6000);
+      return;
+    }
+    golfArmed = false;
+    if (btn) btn.textContent = t('adm_golfreset');
+    try {
+      const key = statsKey();
+      const raw = JSON.parse(localStorage.getItem(key) || 'null');
+      const had = !!(raw && raw.games && raw.games.golf);
+      if (raw && raw.games) delete raw.games.golf;
+      localStorage.setItem(key, JSON.stringify(raw || { version: 1, games: {} }));
+      // VERIFY BY FRESH RE-READ (THE LAW rule 6): a resolved write is not proof it landed.
+      const back = JSON.parse(localStorage.getItem(key) || 'null');
+      const gone = !(back && back.games && back.games.golf);
+      say(card, gone ? t(had ? 'adm_golfreset_done' : 'adm_golfreset_none') : t('adm_save_failed', { why: 'still there' }), gone ? 'ok' : 'err');
+    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
   });
   on('devwrites', () => {
     try {
