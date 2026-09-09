@@ -1,13 +1,13 @@
 # HANDOFF — Golf, the last three jobs before release
 
-Written 2026-09-09, at the end of a session that shipped the tutorial, the pause menu and the HUD
-layout. **Read `golf/CLAUDE.md` in full before touching anything** — it is long, and it is the
+Written 2026-09-09 and refreshed the same day, at the end of a session that shipped the tutorial,
+the pause menu and the HUD layout. **Read `golf/CLAUDE.md` in full before touching anything** — it is long, and it is the
 record of every decision that has been reversed once already. Read the root `CLAUDE.md` too; THE
 LAW governs job A completely.
 
 ## Where things stand
 
-Golf is **feature-complete and live on `main`** (v720 at the time of writing), but it is still
+Golf is **feature-complete and live on `main`** (v729 at the time of writing), but it is still
 `adminConfig/v1/games/golf → live: false`, so only a dev profile can see it. Releasing it is **one
 tap on the admin page**, not a deploy.
 
@@ -150,7 +150,18 @@ Build a leaderboard screen inside golf with tabs for **3 holes / front 9 / back 
 
 ---
 
-## Done after this doc was first written — the tutorial rail
+## Done after this doc was first written
+
+**None of the three jobs below has been started.** Everything since is tutorial polish, listed here
+so nobody re-does it: the swing is now HELD on the aim and club steps (a refused tap flashes the
+rings rather than doing nothing), the rings are thicker with a black key and clamped so they cannot
+sit inside the rail, the putting card now fires from the FRINGE as well as the green (`mustPutt`,
+not `lie === 'green'` - it was handing out a putter with no lesson), the bad-swing card's figures
+are Matt's 25 and 45 with the curves deliberately not to scale, the closing card shows the pause
+BUTTON and an arrow into the menu, and the club lesson sits on the second shot. Full write-ups are
+in `golf/CLAUDE.md`; the lesson was played end to end afterwards at 46 checks, 0 failed.
+
+### The tutorial rail
 
 Matt, 2026-09-09: *"in my screenshot I made the text on the very bottom larger. Add that. But
 extend it down. I don't want the bottom hud controls shifted up so make more room. And I don't want
