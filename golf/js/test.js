@@ -1268,16 +1268,31 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
 
 console.log('\n-- 12b2. LEAVING MID-ROUND IS NOT SILENT --');
 {
-  // [KNOWN-BUG PROBE] `isInProgress()` returned a flat false on the grounds that golf "will
-  // snapshot after every stroke in Stage C, so leaving is lossless". The snapshot does not exist -
-  // gamehub.golf.v1 holds the last course, round and length and nothing else - so the pair was no
-  // save AND no warning, and the hub took you out of the fifteenth hole of an eighteen without a
-  // word. Until the Stage C save lands this must report a round in progress so the hub can ask.
+  // [KNOWN-BUG PROBE], REWRITTEN 2026-09-09 WHEN THE SAVE LANDED - deliberately, and not deleted.
+  //
+  // What it caught: `isInProgress()` returned a flat `false` on the grounds that golf "will
+  // snapshot after every stroke in Stage C, so leaving is lossless". That snapshot did not exist,
+  // so the pair was NO SAVE AND NO WARNING and the hub took you out of the fifteenth hole of an
+  // eighteen without a word. The probe pinned `true` because true was the honest answer while
+  // there was nothing to resume.
+  //
+  // The defect was never "isInProgress must be true". It is "leaving must not lose the round", and
+  // there are exactly two acceptable pairs. This checks the pair rather than either half, so it
+  // still fails the day someone deletes the save and leaves `false` behind - which is the original
+  // bug, exactly.
+  //
+  //   no save   -> isInProgress() true, so the hub confirms
+  //   a save    -> isInProgress() false, and _saveRound/_clearRound/_resumeSaved all present
+  //
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
-  ok('[KNOWN-BUG PROBE] a round in progress is reported to the hub',
-    /isInProgress\(\)\s*\{\s*return\s*!!\(this\.hole/.test(ui)
-    && !/isInProgress\(\)\s*\{\s*return false;/.test(ui),
-    'a flat false means the hub discards the round with no confirm, and there is no save to resume');
+  const flatFalse = /isInProgress\(\)\s*\{\s*return false;/.test(ui);
+  const warns = /isInProgress\(\)\s*\{\s*return\s*!!\(this\.hole/.test(ui);
+  const hasSave = /_saveRound\(\)\s*\{/.test(ui) && /_clearRound\(\)\s*\{/.test(ui)
+    && /_resumeSaved\(\)\s*\{/.test(ui) && /from '\.\/save\.js'/.test(ui);
+  ok('[KNOWN-BUG PROBE] leaving mid-round either saves the round or warns about it',
+    (hasSave && flatFalse) || (warns && !flatFalse),
+    `save=${hasSave} flatFalse=${flatFalse} warns=${warns}`
+    + ' - a flat false with no save is the hub discarding the round in silence');
 }
 
 console.log('\n-- 12c. THE GOLFER STANDS STILL, AND THE VIEW DOES NOT SLIDE --');
