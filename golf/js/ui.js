@@ -172,6 +172,19 @@ const INTRO_HOLD_MS = 1000;
 const INTRO_MOVE_MS = 2600;
 // The meter's logical drawing box, in CSS pixels. The canvas itself is backed at devicePixelRatio
 // so the 3px band outline and the 13px tick numbers stay crisp on a phone.
+/** THE LESSON'S CARETS, in CSS px. `CARET_GAP` is how far the apex stands off the thing it names
+ *  (the band's outer rim, or the accuracy bar's lower edge), `CARET_LEN` how long the arrow is and
+ *  `CARET_HALF` half its base. They are named here rather than buried in the draw call because the
+ *  tick labels have to be pushed out by exactly `CARET_GAP + CARET_LEN` plus a little air whenever
+ *  a caret is on the dial, or the 100 % caret lands on the "100". */
+const CARET_GAP = 3;
+const CARET_LEN = 11;
+const CARET_HALF = 5.5;
+/** How close (in radians of the dial) a caret has to be to a tick before that tick's LABEL steps
+ *  out of its way. `CARET_HALF` is 5.5 px at the caret's base radius of ~68, which is 0.081 rad
+ *  of half-width; 0.16 rad is that plus the label's own half-width, so a caret and a number are
+ *  never asked to share the same spot and nothing else on the dial moves. */
+const CARET_NEAR = 0.16;
 const METER_W = 176;
 const METER_H = 150;
 
@@ -2075,6 +2088,10 @@ class GolfGame {
     c.lineCap = 'butt';
 
     const putting = opts.putting != null ? opts.putting : this._putting();
+    // Resolved HERE rather than where the carets are drawn, because the tick labels are painted
+    // long before that and have to know to stand out of the way.
+    const marks = opts.marks || (this.coach && this.coach.dialMarks && this.coach.dialMarks());
+    const hasMarks = !!(marks && marks.length);
     const cx = 88; const cy = 76;
     const OUT_R = 54; const BAND = 19;
     const R = OUT_R - BAND / 2;            // the band's centre radius
@@ -2179,7 +2196,15 @@ class GolfGame {
     c.font = '800 13px ui-monospace, "SF Mono", Menlo, monospace';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const v of [0.25, 0.5, 0.75, 1.0]) {
-      const [lx, ly] = polar(OUT_R + 11, ang(tickPow(v)));
+      // A LABEL ONLY MOVES IF A CARET IS ACTUALLY UNDER IT. Pushing all four out whenever the
+      // lesson is running shoved "75" hard against the top of the canvas (measured: 0.1 px of
+      // clearance at 13 px type) to make room for a caret that is nowhere near it. In practice the
+      // only collision is the 100 % mark, so the test is per label: is any caret within CARET_NEAR
+      // of this tick's own angle?
+      const ta = ang(tickPow(v));
+      const near = hasMarks && marks.some((m) => m.power != null
+        && Math.abs(((ang(m.power) - ta + Math.PI) % (2 * Math.PI)) - Math.PI) < CARET_NEAR);
+      const [lx, ly] = polar(OUT_R + (near ? CARET_GAP + CARET_LEN + 8 : 11), ta);
       c.lineWidth = 3.5; c.strokeStyle = '#0b0f07'; c.lineJoin = 'round';
       c.strokeText(String(v * 100), lx, ly);
       c.fillStyle = '#ffffff';
@@ -2267,20 +2292,39 @@ class GolfGame {
     // MARKS. Gold carets pointing at a power on the band and/or a spot in the accuracy bar. The
     // lesson uses them two ways: on the LIVE dial while it is teaching the swing, and inside its own
     // popups, which paint a still dial through this same function.
-    const marks = opts.marks || (this.coach && this.coach.dialMarks && this.coach.dialMarks());
-    if (marks && marks.length) {
+    if (hasMarks) {
+      // A CARET STANDS OFF THE METER AND POINTS AT IT. Matt, with a screenshot of the bad-swing
+      // card: "The small arrows on the power meter are ON the meter rather than outside the meter
+      // pointing at a spot on the meter." They were: the anchor was `OUT_R + 6` (r 60) but the
+      // triangle was drawn 9 to 19 px back along the pointing direction, so it occupied r 41-51 -
+      // inside a band that runs 35 to 54. It was a mark ON the thing it was labelling.
+      //
+      // Built from the two ends now rather than from an anchor plus a local shape, because that is
+      // what got it wrong: `apex` is the point being named and `base` is CARET_LEN further away
+      // from it, so the caret cannot end up on the wrong side of its own target however the
+      // rotation is read.
+      const tri = (ax, ay, bx, by) => {
+        const dx = bx - ax, dy = by - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        const px = -dy / len * CARET_HALF, py = dx / len * CARET_HALF;
+        c.beginPath();
+        c.moveTo(ax, ay); c.lineTo(bx + px, by + py); c.lineTo(bx - px, by - py); c.closePath();
+        c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineJoin = 'round'; c.stroke();
+      };
       const caret = (v, inBar, colour) => {
-        const [x, y] = inBar ? top(barPosOf(v)) : polar(OUT_R + 6, ang(v));
-        // The band caret points INWARD, at the band. A canvas triangle whose apex is at local
-        // (0,-9) points along `rotation - 90 deg`, so pointing at the ring's centre from outside it
-        // is `ang(v) - PI/2`, not `+`. With `+` it points away from the dial and lands on the "100"
-        // tick label, which is what the first render did.
-        const a = inBar ? Math.PI : ang(v) - Math.PI / 2;
-        c.save(); c.translate(x, y); c.rotate(a);
-        c.beginPath(); c.moveTo(0, -9); c.lineTo(6, -19); c.lineTo(-6, -19); c.closePath();
-        c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.stroke();
+        let ax, ay, bx, by;
+        if (inBar) {
+          // The bar sits in the ring's mouth, so "off it" is BELOW it: the apex touches the bar's
+          // outer edge and the caret hangs under it. `bot()` is that edge (`top()` is the inner
+          // one, which is where the old code put the apex - inside the bar).
+          const [ex, ey] = bot(barPosOf(v));
+          ax = ex; ay = ey + CARET_GAP; bx = ex; by = ay + CARET_LEN;
+        } else {
+          [ax, ay] = polar(OUT_R + CARET_GAP, ang(v));
+          [bx, by] = polar(OUT_R + CARET_GAP + CARET_LEN, ang(v));
+        }
+        tri(ax, ay, bx, by);
         c.fillStyle = colour || '#ffce3a'; c.fill();
-        c.restore();
       };
       for (const m of marks) {
         if (m.power != null) caret(m.power, false, m.colour);

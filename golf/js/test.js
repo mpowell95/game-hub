@@ -1407,6 +1407,37 @@ console.log('\n-- 12d. THE GREEN SLOPE READ, AND THE METER SCALE --');
     'a second colour table would let the tile show a green the course does not have');
   ok('...and the lie name survives for a screen reader',
     /setAttribute\('aria-label', t\(`lie_\$\{lie\}`\)\)/.test(ui));
+
+  // [KNOWN-BUG PROBE] A LESSON CARET STANDS OFF THE METER AND POINTS AT IT.
+  //
+  // Matt, 2026-09-09, with a screenshot of the bad-swing card: *"The small arrows on the power
+  // meter are ON the meter rather than outside the meter pointing at a spot on the meter."* They
+  // were. The anchor was `OUT_R + 6` (r 60), but the triangle was drawn 9 to 19 px BACK along the
+  // pointing direction, so it occupied r 41-51 - inside a band running 35 to 54. It was a mark on
+  // the thing it was labelling, on every step that carries one.
+  //
+  // Checked as GEOMETRY rather than as a shape: both ends of the caret must be outside `OUT_R`,
+  // and the base must be further out than the apex, so the arrow cannot point the wrong way or
+  // sit on the band however the rotation is read. That is what the old form got wrong.
+  {
+    const gap = Number((ui.match(/const CARET_GAP = ([\d.]+);/) || [])[1]);
+    const len = Number((ui.match(/const CARET_LEN = ([\d.]+);/) || [])[1]);
+    ok('[KNOWN-BUG PROBE] the lesson caret sits OUTSIDE the band, apex nearest it',
+      gap > 0 && len > 0
+      && /\[ax, ay\] = polar\(OUT_R \+ CARET_GAP, ang\(v\)\)/.test(ui)
+      && /\[bx, by\] = polar\(OUT_R \+ CARET_GAP \+ CARET_LEN, ang\(v\)\)/.test(ui),
+      `apex at OUT_R+${gap}, base at OUT_R+${gap + len}`);
+    // The bar sits in the ring's mouth, so "off it" is BELOW it - `bot()` is its outer edge.
+    // The old code anchored on `top()`, the INNER one, which put the caret inside the bar.
+    ok('...and the bar caret hangs UNDER the bar, not inside it',
+      /const \[ex, ey\] = bot\(barPosOf\(v\)\)/.test(ui)
+      && /ay = ey \+ CARET_GAP/.test(ui));
+    // A tick label steps aside only for a caret actually under it. Pushing all four out whenever
+    // the lesson runs put "75" 0.1 px from the top of the canvas at 13 px type.
+    ok('...and only a tick a caret is under moves out of its way',
+      /const near = hasMarks && marks\.some/.test(ui)
+      && /near \? CARET_GAP \+ CARET_LEN \+ 8 : 11/.test(ui));
+  }
 }
 
 console.log('\n-- 12e. THE COURSE ART PASS --');

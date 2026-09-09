@@ -4739,3 +4739,42 @@ air, and over the result card. The meter is cancelled in the two swing cases wit
 a flight keeps running and lands underneath the menu, `shotN` 1 -> 2, ball moved - lossless; the
 menu cannot open twice; and the ordinary quit route still asks, cancels back into the round and
 confirms out to the setup screen.
+
+## A lesson caret stands OFF the meter and points at it (2026-09-09)
+
+Matt, with a screenshot of the bad-swing card: *"The small arrows on the power meter (on all
+tutorial steps not just this one) are ON the meter rather than outside the meter pointing at a spot
+on the meter."*
+
+**They were, and the anchor looked right.** The caret was placed at `polar(OUT_R + 6, ang(v))` -
+r 60, genuinely outside a band that runs 35 to 54 - and then the triangle was drawn from a local
+shape whose points are at y = -9 and y = -19, both BACK along the pointing direction. So the
+drawn arrow occupied **r 41 to 51: inside the band**, at every step that carries a mark. The bar
+caret had the same fault one axis over - it anchored on `top()`, the bar's INNER edge, and drew
+downward into the bar.
+
+**It is built from its two ends now, not from an anchor plus a local shape.** `apex` is the point
+being named and `base` is `CARET_LEN` further AWAY from it, so the caret cannot end up on the
+wrong side of its own target however the rotation is read - which is exactly what the old form got
+wrong twice, in two different directions, and what the comment above it confidently described
+backwards.
+
+```
+band mark   apex  polar(OUT_R + CARET_GAP, ang(v))              r 57, just off the white rim
+            base  polar(OUT_R + CARET_GAP + CARET_LEN, ang(v))  r 68
+bar mark    apex  bot(barPosOf(v)) + CARET_GAP                  under the bar's OUTER edge
+            base  CARET_LEN below that
+```
+
+`test.js` section 12d checks it as GEOMETRY rather than as a shape: both ends outside `OUT_R`, the
+base further out than the apex, and the bar caret anchored on `bot()` and not `top()`.
+
+### Only the tick a caret is under steps aside
+
+The 100 % caret lands exactly where the "100" label is drawn (`OUT_R + 11`). The first fix pushed
+ALL FOUR labels out whenever the lesson was running, and measured on the real canvas that put
+**"75" 0.1 px from the top edge** at 13 px type - a clip waiting for a font metric to change, to
+make room for a caret nowhere near it. A label moves only when a caret is within `CARET_NEAR`
+(0.16 rad) of its own angle, which in practice is the 100 % mark and nothing else. Verified by
+rendering: 75, 50 and 25 sit where they always did, and the live dial, the good-swing card and the
+bad-swing card all fit their canvas.
