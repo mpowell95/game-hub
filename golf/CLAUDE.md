@@ -5156,3 +5156,90 @@ distance (measured 2026-09-06: +16.3 yds for nothing). A dead-centre strike at t
 
 Left alone. If it should cost less, `BLOCK_SPRAY_DEG` is the one number to move, and that is Matt's
 call to make rather than a session's.
+
+## Job A: a round survives leaving the app (2026-09-09)
+
+`HANDOFF-GOLF-LAUNCH.md`'s job A, and the only one of the three where a player LOSES something.
+
+**There was no mid-round save at all.** `gamehub.golf.v1` held the last course, round and length;
+`_recordRound` wrote nothing until a round was COMPLETE. So closing the app on the fifteenth hole
+of an eighteen destroyed the whole round. The only protection was a confirm on the two deliberate
+exits, and none of that survives iOS evicting the tab, which on a phone is routine.
+
+### The shape
+
+**One key, not two.** Root `CLAUDE.md` says so by name (*"Do not mint `gamehub.golf.save.v1`"*).
+The save is a `save` FIELD on the settings object. That instruction's stated reason was wrong when
+it was written - it said the key "already holds the round", which it did not, it held settings -
+so the reason is corrected here (rule 9): one key per game is the convention, and a second is a
+second thing to migrate, back up and reason about for ever. The instruction stands.
+
+`golf/js/save.js` is the VALIDATOR, and it is its own module so it can be hammered headlessly:
+`validateSave(raw, courses, rounds)` (pure), plus `resumePos` and `isComplete`. `ui.js` owns the
+reading and writing, because it owns the storage key.
+
+**Two departures from the handoff's field list, both NARROWING:**
+
+- **`recorded` / `newBest` are not stored.** A save exists only while a round is unrecorded -
+  `_recordRound` clears it on success - so a stored `recorded: true` is a state the code can never
+  be in. Storing a flag whose only legal value is `false` invites restoring into a round the player
+  has already been paid for.
+- **`tutorialRun`, and practice holes generally, are not saved.** A practice hole is ONE UNSCORED
+  HOLE: it writes no round best, its hole record lands the moment it is holed, and `_roundAtStake()`
+  already refuses to stop the player for one. Nothing to lose, so nothing to save - and every line
+  not written is a line that cannot restore a round wrong.
+
+### When it is written, and when it is dropped
+
+Saved on the four beats that change any of it: **entering a hole**, **the ball coming to REST**,
+**a hole being scored** (before the result card goes up, since that card is a place people leave
+from), and **a penalty drop** (which moves the ball and costs a stroke).
+
+AT REST is load-bearing. `this.ball` while `this.anim` runs is a point on a flight path; a save
+taken then would restore the ball into mid-air as if it were lying there.
+
+**The clear is on the WRITE, not on the round's end.** `_recordRound` clears it after verifying the
+best landed by fresh re-read. Clearing at the last putt looks equivalent and drops the round in
+exactly the case the save exists for - `js/game-stats.js`'s `drainPendingResults` /
+`clearPendingResults` split is the reference and says the same thing.
+
+### Resuming
+
+`_resumeSaved()` has three branches, and the hole at `pos` decides which:
+
+| state of `scores[pos]` | what it means | what happens |
+|---|---|---|
+| every hole scored | the round finished, only the WRITE was lost | `_recordRound()` now, clear, back to setup with the result banked |
+| `pos` already scored | killed with the hole's result card up | the NEXT hole, from its tee |
+| `pos` unscored | killed mid-hole | that hole, with the ball, `shotN`, aim and club put back |
+
+**`_resumeSaved` re-saves at the end, and that line is not optional.** `_enterHole` puts the ball on
+the tee and saves THAT, so without it a resume silently rewinds the file on disk to the tee and a
+second kill hands back a round the player has already partly replayed. Found by driving it in a
+browser, and pinned by a `[KNOWN-BUG PROBE]` in `golf/js/test.js` section 22.
+
+The setup screen offers a **Resume round** button above everything else, using `resume` - an orphan
+string that had been sitting in `strings.js` since the setup screen was written with nothing calling
+it. Its subtitle names the hole the resume will ACTUALLY land on (`resumePos`), not `pos`: a button
+that said "hole 1 of 3" and then opened hole 2 would be a small lie on the one screen a returning
+player uses to decide whether this is even their round.
+
+Starting a round, a practice hole or the tutorial goes through `_askDiscard` first.
+
+### Two things that changed with it, in the same commit
+
+- **`isInProgress()` is `false` again**, as both `CLAUDE.md` files said it should be once the save
+  existed. Leaving is lossless; the hub no longer needs to ask.
+- **The in-game quit prompt only warns when the save did NOT land.** `_roundAtStake()` checks
+  `saveOk` - the VERIFIED write, not the attempt - so a device that cannot write (storage full,
+  private mode) still gets the old warning, which is exactly when it is true again. Warning about a
+  loss that cannot happen is how a prompt becomes something people dismiss without reading, and
+  then it is not there on the day it matters.
+
+### What was checked
+
+Driven end to end in a real Chromium at 393x852: a shot, a reload, resume (ball and `shotN`
+byte-identical); a kill with the result card up (resumes on the next hole with the first hole's
+score kept); a complete three-hole round (recorded, best landed, save cleared, no resume offered
+after); and the discard prompt in all three of its outcomes. `golf/js/test.js` section 22 covers the
+validator (24 refusals and tolerances), `resumePos`/`isComplete`, and every call site structurally.

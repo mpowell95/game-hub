@@ -2618,5 +2618,99 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   }
 }
 
+// =================================================================================================
+// 22. THE MID-ROUND SAVE (2026-09-09)
+//
+// THE LAW: a round in progress is real work a player cannot recreate. Before this there was no
+// snapshot at all - `gamehub.golf.v1` held the last course, round and length - so being killed by
+// iOS on the fifteenth hole of an eighteen destroyed the round, and only the two deliberate exits
+// even asked. The half tested here is the VALIDATOR, because it is where a half-written save turns
+// into a WRONG round rather than no round, and a wrong round is permanent: a stored best only ever
+// improves (rule 2), so it can never be corrected by playing better.
+// =================================================================================================
+{
+  console.log('\n-- 22. the mid-round save --');
+  const SV = await import('./save.js');
+  const RD = { COURSES, ROUNDS };
+  const good = () => ({
+    v: SV.SAVE_V, courseId: 'pinevalley', roundId: 'quick3', holeIdxs: [0, 1, 2], pos: 1,
+    scores: [4, null, null], roundStats: { birdies: 0, eagles: 0, aces: 0, points: 2, longestDriveYd: 210 },
+    shotN: 2, ball: [3.5, 120.25], aimRad: 0.02, clubId: '7iron', at: 1,
+  });
+  const v = (patch) => SV.validateSave(Object.assign(good(), patch), RD.COURSES, RD.ROUNDS);
+
+  ok('a well-formed save validates', !!v({}));
+  ok('...and resolves its course and round', (() => { const r = v({}); return r.course.id === 'pinevalley' && r.round.id === 'quick3'; })());
+  ok('...and does not alias its own arrays', (() => {
+    const raw = good(); const r = SV.validateSave(raw, RD.COURSES, RD.ROUNDS);
+    r.scores[0] = 99; r.holeIdxs[0] = 9;
+    return raw.scores[0] === 4 && raw.holeIdxs[0] === 0;
+  })());
+
+  // EVERY ONE OF THESE WOULD RESTORE A ROUND THAT IS WRONG RATHER THAN ABSENT.
+  ok('a save from another version is refused', v({ v: 99 }) === null);
+  ok('an unknown course is refused', v({ courseId: 'nowhere' }) === null);
+  ok('an unknown round is refused', v({ roundId: 'quick7' }) === null);
+  ok('a hole index off the end of the course is refused', v({ holeIdxs: [0, 1, 999] }) === null);
+  ok('a pos outside the round is refused', v({ pos: 3 }) === null);
+  ok('a negative pos is refused', v({ pos: -1 }) === null);
+  ok('more scores than holes is refused', v({ scores: [4, 4, 4, 4] }) === null);
+  // A zero would go straight into a stored TOTAL and read as a hole played in no shots.
+  ok('a zero stroke count is refused', v({ scores: [0, null, null] }) === null);
+  ok('a fractional stroke count is refused', v({ scores: [4.5, null, null] }) === null);
+  ok('a stroke count as a string is refused', v({ scores: ['4', null, null] }) === null);
+  ok('an absurd stroke count is refused', v({ scores: [4000, null, null] }) === null);
+  ok('missing roundStats is refused', v({ roundStats: null }) === null);
+  ok('a NaN in roundStats is refused', v({ roundStats: { birdies: NaN, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 } }) === null);
+  ok('a negative counter in roundStats is refused', v({ roundStats: { birdies: -1, eagles: 0, aces: 0, points: 0, longestDriveYd: 0 } }) === null);
+  ok('shotN below 1 is refused', v({ shotN: 0 }) === null);
+  ok('a one-axis ball is refused', v({ ball: [3.5] }) === null);
+  ok('a NaN in the ball position is refused', v({ ball: [3.5, NaN] }) === null);
+  ok('a NaN aim is refused', v({ aimRad: NaN }) === null);
+  ok('junk is refused rather than thrown on', SV.validateSave('{{', RD.COURSES, RD.ROUNDS) === null
+    && SV.validateSave(null, RD.COURSES, RD.ROUNDS) === null);
+  // A missing club is the ONE field allowed to be absent: `_resumeSaved` falls back to the hole's
+  // own auto-pick, which is a playable state rather than a wrong one.
+  ok('a missing club is tolerated, not fatal', (() => { const r = v({ clubId: undefined }); return !!r && r.clubId === null; })());
+
+  // WHICH HOLE A RESUME LANDS ON. A save taken with the result card up has that hole SCORED, and
+  // replaying it with the ball sitting in the cup would be the wrong restore.
+  const at = (pos, scores) => SV.validateSave(Object.assign(good(), { pos, scores }), RD.COURSES, RD.ROUNDS);
+  ok('mid-hole resumes on that hole', SV.resumePos(at(1, [4, null, null])) === 1);
+  ok('a scored hole resumes on the NEXT one', SV.resumePos(at(0, [4, null, null])) === 1);
+  ok('...and never past the end of the round', SV.resumePos(at(2, [4, 5, 6])) === 2);
+  ok('a round with every hole scored is complete', SV.isComplete(at(2, [4, 5, 6])) === true);
+  ok('...and one with a gap is not', SV.isComplete(at(2, [4, null, 6])) === false);
+
+  // THE CALL SITES, structurally. The validator can be perfect and the feature still lose a round
+  // if the snapshot is not taken on every beat that changes it, or is dropped before the write.
+  const uiS = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('the save is taken when a hole is entered', /this\._enterHole\(\)[\s\S]{0,80}?/.test(uiS)
+    && /\n    this\._saveRound\(\);\n  \}/.test(uiS));
+  ok('the save is taken when the ball comes to REST', /_showDropPrompt\(\);\n[\s\S]{0,400}?this\._saveRound\(\);/.test(uiS));
+  ok('the save is taken when a hole is scored', /if \(last && !practice\) this\._recordRound\(\);[\s\S]{0,600}?this\._saveRound\(\);/.test(uiS));
+  // [KNOWN-BUG PROBE] `_resumeSaved` calls `_enterHole`, which puts the ball on the TEE and saves
+  // THAT. Without a re-save at the end, resuming silently rewinds the file on disk to the tee and a
+  // second kill hands back a round the player has already partly replayed. Found by driving it.
+  ok('[KNOWN-BUG PROBE] resuming re-saves, so it cannot rewind the file to the tee',
+    /this\._aimCamera\(true\);\n    this\._paintHud\(\);\n[\s\S]{0,600}?this\._saveRound\(\);\n    return true;/.test(uiS));
+  // THE CLEAR IS ON THE WRITE, NOT ON THE ROUND'S END. js/game-stats.js's drain/clear split is the
+  // reference and the reason: the two look equivalent and differ in exactly the failing case.
+  ok('the save is cleared only after the round is verified on disk',
+    /this\.newBest = Number\.isFinite\(after\)[\s\S]{0,600}?this\._clearRound\(\);/.test(uiS));
+  ok('a practice hole and the tutorial write no save',
+    /if \(!this\.hole \|\| this\.recorded \|\| !this\.roundId \|\| this\.roundId === 'practice'\) return false;/.test(uiS));
+  ok('starting anything else asks before discarding',
+    /_askDiscard\(\(\) => this\._startRound/.test(uiS) && /_askDiscard\(\(\) => this\._startTutorial/.test(uiS)
+    && /_askDiscard\(\(\) => this\._renderHoleSelect/.test(uiS));
+  // The handoff is explicit: isInProgress() goes back to false IN THE SAME COMMIT as the save.
+  ok('isInProgress() is false again now that leaving is lossless',
+    /isInProgress\(\) \{ return false; \}/.test(uiS));
+  ok('...and the quit prompt only warns when the save did NOT land',
+    /if \(this\.saveOk && readSave\(\)\) return false;/.test(uiS));
+  ok('the setup screen offers the round you left', /data-role="resume"/.test(uiS)
+    && /t\('resume'\)/.test(uiS) && /t\('resume_where'/.test(uiS));
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);

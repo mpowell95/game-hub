@@ -16,7 +16,8 @@ import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
-import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
+import { SAVE_V, validateSave, resumePos, isComplete } from './save.js';
+import { CLUBS, PUTTER, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -228,6 +229,62 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* best effort */ }
 }
 
+// =================================================================================================
+// THE MID-ROUND SAVE (2026-09-09). THE LAW: a round in progress is real, unrecreatable work, and
+// until this landed there was NO snapshot at all - `gamehub.golf.v1` held the last course, round
+// and length and nothing else, so closing the app on the fifteenth hole of an eighteen destroyed
+// the whole round. The two exits asked first; being killed by iOS, which on a phone is routine,
+// did not ask anything.
+//
+// ONE KEY, NOT TWO. Root CLAUDE.md names this: *"Do not mint `gamehub.golf.save.v1`."* The save is
+// a `save` FIELD on the settings object. (That instruction's stated reason - that the key "already
+// holds the round" - was wrong when it was written; it held settings. The instruction was right
+// anyway, so it stands with a corrected reason: one key per game is this repo's convention and a
+// second one is a second thing to migrate, back up and reason about for ever. Rule 9.)
+//
+// WHAT IS DELIBERATELY NOT IN IT, both departures from the handoff's list, both narrowing:
+//   * `recorded` / `newBest`. A save exists ONLY while a round is unrecorded - `_recordRound`
+//     clears it on success - so a stored `recorded: true` would be a state this code can never be
+//     in. Storing a flag whose only legal value is false is an invitation to restore into a round
+//     the player has already been paid for.
+//   * `tutorialRun`, and practice holes generally. A practice hole is ONE UNSCORED HOLE: it writes
+//     no round best, its hole record is written the moment it is holed, and `_roundAtStake()`
+//     already refuses to stop the player for one. There is nothing to lose, so there is nothing to
+//     save, and every line not written here is a line that cannot restore a round wrong.
+//
+// A HALF-WRITTEN SAVE MUST BE UNUSABLE RATHER THAN WRONG (rule 4 of the handoff, and the reason
+// `readSave` validates every field rather than trusting the shape). A save that restores a round
+// into a subtly wrong state is worse than no save at all, because nobody notices until the score
+// is stored - and a stored best only ever improves (THE LAW rule 2), so a wrong one is permanent.
+// =================================================================================================
+
+/** The round in progress, or null. `validateSave` (golf/js/save.js) is the gate and is its own
+ *  pure module so it can be hammered headlessly - see its header for why a half-written save has
+ *  to be UNUSABLE rather than repaired. */
+function readSave() {
+  try { return validateSave(loadSettings().save, COURSES, ROUNDS); } catch { return null; }
+}
+
+/** Write (or clear, with `null`) the save. Verified by fresh re-read - rule 6 - and it returns
+ *  whether the bytes are actually on disk, because `_quit` uses that to decide whether leaving
+ *  still needs a warning. A save that silently failed to write is the exact case the warning is
+ *  for. */
+function writeSave(sv) {
+  try {
+    const s = loadSettings();
+    if (sv) s.save = sv; else delete s.save;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    const back = loadSettings().save;
+    const ok = sv ? !!(back && back.v === SAVE_V && back.pos === sv.pos
+      && back.shotN === sv.shotN && back.roundId === sv.roundId) : !back;
+    if (!ok) console.error('[golf] the mid-round save did not land', { wrote: sv, read: back });
+    return ok;
+  } catch (e) {
+    console.error('[golf] writing the mid-round save FAILED', e);
+    return false;
+  }
+}
+
 /** Club-head art, drawn BIG enough to fill its tile.
  *
  *  The reference's club tile is mostly picture: a large club head across most of the tile's width
@@ -433,10 +490,27 @@ class GolfGame {
     // locked, because a ladder you cannot see is not a ladder. Matt's own rule for Skeeball's
     // machines, and the same reading here.
     const courses = COURSES.filter((k) => this._isDev() || !this._courseTesting(k.id));
+    // THE ROUND YOU LEFT, offered before anything else on the screen. `resume` has been sitting in
+    // strings.js unused since the setup screen was written - it was named for this and never had
+    // anything to call it.
+    const sv = readSave();
+    // The hole it will actually RESUME ON, which is not always `pos`: a save taken with the hole's
+    // result card up has that hole already scored, and `_resumeSaved` steps past it. A button that
+    // said "hole 1 of 3" and then opened hole 2 would be a small lie on the one screen a returning
+    // player uses to decide whether this is even their round.
+    const svNext = resumePos(sv);
+    const svLine = sv ? t('resume_where', {
+      course: t(`course_${sv.course.id}`),
+      range: roundRange(sv.round),
+      n: svNext + 1,
+      all: sv.holeIdxs.length,
+    }) : '';
     const el = document.createElement('div');
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
+      ${sv ? `<button type="button" class="gf-btn gf-resume is-cta" data-role="resume">
+        <span>${esc(t('resume'))}</span><small>${esc(svLine)}</small></button>` : ''}
       <div class="gf-coursepick gf-modepick">
         ${modes.map((m) => {
     const open = modeUnlocked(c, m, gf);
@@ -507,15 +581,18 @@ class GolfGame {
         this._renderSetup();
       });
     }
+    const resume = el.querySelector('[data-role="resume"]');
+    if (resume) this._on(resume, 'click', () => { if (!this._resumeSaved()) this._renderSetup(); });
     for (const b of el.querySelectorAll('[data-round]')) {
-      this._on(b, 'click', () => this._startRound(b.dataset.round));
+      this._on(b, 'click', () => this._askDiscard(() => this._startRound(b.dataset.round)));
     }
     // PRACTICE IS HIDDEN UNTIL THE TUTORIAL IS DONE, because before it there is nothing to
     // practise: every hole on the course is locked, so the screen would open on eighteen locked
     // buttons and read as a broken game rather than as a ladder.
     const prac = el.querySelector('[data-role="practice"]');
-    if (prac) this._on(prac, 'click', () => this._renderHoleSelect());
-    this._on(el.querySelector('[data-role="tutorial"]'), 'click', () => this._startTutorial());
+    if (prac) this._on(prac, 'click', () => this._askDiscard(() => this._renderHoleSelect()));
+    this._on(el.querySelector('[data-role="tutorial"]'), 'click',
+      () => this._askDiscard(() => this._startTutorial()));
   }
 
   /** THE PLAYER'S OWN GOLF RECORD, read fresh every time the setup screen is drawn.
@@ -952,6 +1029,7 @@ class GolfGame {
         this.coach.refresh();
       }
     }
+    this._saveRound();
   }
 
   /** Cut the opening flyover short. Any tap on the course does this, and so does any control that
@@ -1515,6 +1593,12 @@ class GolfGame {
     const openBefore = this._unlockedIds();
     this._recordHole(hole, strokes);
     if (last && !practice) this._recordRound();
+    // The score for THIS hole is now in `this.scores`, so the save has to move before the card
+    // goes up: the card is a place a player leaves the app from, and the hole they just finished
+    // must not have to be played twice. `_recordRound` has already cleared the save if the round
+    // ended here, and `_saveRound` returns early once `recorded` is set, so this cannot resurrect
+    // a round that is already banked.
+    this._saveRound();
     const gained = this._unlockedIds().filter((id) => !openBefore.includes(id));
     const unlockedNow = gained.length
       ? t('unlocked_now', { range: gained.map((id) => roundRange(id)).join(', ') })
@@ -1591,6 +1675,127 @@ class GolfGame {
    *  - A FAILED WRITE IS NOT SILENT (rule 6): the recorder itself queues and replays, and this
    *    verifies by fresh re-read and logs loudly if the best did not land.
    */
+  /** Starting anything else throws the saved round away, so it says so first. Only asks when there
+   *  is actually a save - which is never for a practice hole or the tutorial, and never once a
+   *  round has been recorded. */
+  _askDiscard(go) {
+    if (!readSave()) { go(); return; }
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel">
+        <button type="button" class="gf-result__x" data-role="d-no" aria-label="${esc(t('quit_no'))}">&times;</button>
+        <div class="gf-result__name">${esc(t('discard_title'))}</div>
+        <div class="gf-result__sub">${esc(t('discard_body'))}</div>
+        <div class="gf-actions">
+          <button type="button" class="gf-btn" data-role="d-no"><span>${esc(t('discard_no'))}</span></button>
+          <button type="button" class="gf-btn" data-role="d-yes"><span>${esc(t('discard_yes'))}</span></button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    for (const b of el.querySelectorAll('[data-role="d-no"]')) this._on(b, 'click', () => el.remove());
+    this._on(el.querySelector('[data-role="d-yes"]'), 'click', () => {
+      el.remove(); this._clearRound(); go();
+    });
+  }
+
+  /** SNAPSHOT THE ROUND. Called on every beat that changes any of it and at no other time: the
+   *  start of a round, entering a hole, a ball coming to REST, and a hole being scored.
+   *
+   *  AT REST is the load-bearing half of that list. `this.ball` while `this.anim` is running is a
+   *  point on a flight path, so a save taken mid-shot would restore the ball into the air as if it
+   *  were lying there. Every call site below is a settled state.
+   *
+   *  Practice and the tutorial are skipped by construction - see the header block on `readSave`. */
+  _saveRound() {
+    if (!this.hole || this.recorded || !this.roundId || this.roundId === 'practice') return false;
+    this.saveOk = writeSave({
+      v: SAVE_V,
+      courseId: this.course.id,
+      roundId: this.roundId,
+      holeIdxs: this.holeIdxs.slice(),
+      pos: this.pos,
+      // `scores` is sparse while a round is in play (holes not reached have no entry) and JSON
+      // turns a hole in an array into `null`, which is exactly what `readSave` accepts back.
+      scores: this.holeIdxs.map((_, i) => (Number.isFinite(this.scores[i]) ? this.scores[i] : null)),
+      roundStats: { ...this.roundStats },
+      shotN: this.shotN,
+      ball: [this.ball[0], this.ball[1]],
+      aimRad: this.aimRad,
+      clubId: this._activeClub().id,
+      at: Date.now(),
+    });
+    return this.saveOk;
+  }
+
+  /** Drop the save. ONLY after `_recordRound` has succeeded, or when the player has explicitly
+   *  chosen to start something else. Clearing it when the ROUND ends rather than when the WRITE
+   *  lands is the mistake `js/game-stats.js`'s drain/clear split exists to document: the two look
+   *  equivalent and differ in precisely the case the mechanism is for. */
+  _clearRound() { this.saveOk = false; writeSave(null); }
+
+  /** Put a saved round back on the screen. Returns false if there was nothing usable.
+   *
+   *  THE HOLE AT `pos` DECIDES WHICH OF TWO THINGS THIS IS. If it already has a score, the app was
+   *  killed while the hole's result card was up - so the honest restore is the NEXT hole from its
+   *  tee, not that hole replayed with the ball sitting in the cup. If every hole has a score the
+   *  round was finished and only the WRITE was lost, so it is written now (that is the whole point
+   *  of clearing on the write rather than on the round's end) and the player is put back on the
+   *  setup screen with their result banked. */
+  _resumeSaved() {
+    const sv = readSave();
+    if (!sv) return false;
+    this.course = sv.course;
+    this.settings.lastCourse = sv.course.id;
+    this.settings.lastRound = sv.round.id;
+    this.settings.lastMode = sv.round.mode;
+    saveSettings(this.settings);
+    this.roundId = sv.round.id;
+    this.holeIdxs = sv.holeIdxs.slice();
+    this.scores = sv.scores.map((v) => (Number.isFinite(v) ? v : undefined));
+    this.roundStats = { ...sv.roundStats };
+    this.recorded = false;
+    this.newBest = false;
+    this.tutorialRun = false;
+    this.pos = sv.pos;
+
+    if (isComplete(sv)) {
+      this.hole = this.course.holes[this.holeIdxs[this.pos]];
+      this._recordRound();
+      this.hole = null;
+      if (this.recorded) this._clearRound();
+      this._renderSetup();
+      return true;
+    }
+    if (resumePos(sv) !== sv.pos) {
+      this.pos = resumePos(sv);
+      this._enterHole();
+      return true;
+    }
+    // MID-HOLE. `_enterHole` builds the hole from its tee, then the four things the player had
+    // actually changed are put back over the top of it. The order matters: the club is set before
+    // `_syncTempo`, because the swing's tempo is per club and a putter restored at driver tempo
+    // would move the needle under the player's thumb on their very first tap back.
+    this._enterHole();
+    this.ball = [sv.ball[0], sv.ball[1]];
+    this.shotN = sv.shotN;
+    this.aimRad = sv.aimRad;
+    const c = sv.clubId ? clubById(sv.clubId) : null;
+    if (c) this.club = c;
+    this._syncTempo();
+    // No flyover on a resume: the player has seen this hole, and they are standing in the middle
+    // of it rather than on the tee, so the camera should simply be where the ball is.
+    this.intro = null;
+    this._aimCamera(true);
+    this._paintHud();
+    // RE-SAVE, AND THIS LINE IS NOT OPTIONAL. `_enterHole` above puts the ball on the TEE and saves
+    // that, so without this the file on disk says "hole 1, shot 1, at the tee" the moment a round
+    // is resumed - and a second kill would hand the player back a round they had already replayed
+    // part of. Found by driving it: one shot, reload, resume, and the save had silently rewound.
+    this._saveRound();
+    return true;
+  }
+
   _recordRound() {
     if (this.recorded || this.roundId === 'practice') return;
     if (this.holeIdxs.some((_, i) => !Number.isFinite(this.scores[i]))) return;
@@ -1618,6 +1823,10 @@ class GolfGame {
       console.error(`[golf] the round did not land: ${key} reads ${after} after writing ${strokes}`);
     }
     this.newBest = Number.isFinite(after) && (!Number.isFinite(before) || after < before);
+    // THE SAVE GOES NOW, NOT WHEN THE ROUND ENDED. The round is on disk; there is nothing left to
+    // resume. Clearing it any earlier - at the last putt, say - would drop the round in exactly
+    // the case the save exists for, which is `js/game-stats.js`'s drain/clear lesson.
+    this._clearRound();
   }
 
   /** Every round of the CURRENT course that is open to this player right now, as round ids. Used
@@ -1739,6 +1948,10 @@ class GolfGame {
     // and a ball in the trees was simply yours to deal with.
     if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
     else if (this._lie() === 'trees') this._showDropPrompt();
+    // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
+    // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
+    // into mid-air as if it were lying there.
+    this._saveRound();
   }
 
   /** The no-choice case: name what happened and clear itself. There is no button because there is
@@ -1783,6 +1996,7 @@ class GolfGame {
         this._syncTempo();
         this._aimCamera(false);
         this._paintHud();
+        this._saveRound();          // the drop moved the ball and cost a stroke: both are state
       }
       close();
     });
@@ -2529,7 +2743,7 @@ class GolfGame {
    *  only while a round is actually being played, and `recorded` is set the moment a round is
    *  written, so the last card and the setup screen do not nag. When the Stage C save lands this
    *  should go back to false in the same commit that adds it. */
-  isInProgress() { return !!(this.hole && !this.recorded); }
+  isInProgress() { return false; }
 
   /** IS THERE A SCORED ROUND HERE THAT LEAVING WOULD THROW AWAY?
    *
@@ -2538,6 +2752,13 @@ class GolfGame {
    *  round: it is one unscored hole that writes no `bestRoundByCourse` entry, so stopping the
    *  player to confirm it would only teach them to dismiss the prompt that matters. */
   _roundAtStake() {
+    // NOTHING IS AT STAKE WHEN THE SAVE LANDED (2026-09-09). Leaving is lossless now, so stopping
+    // the player to warn them about a loss that cannot happen is the way a prompt becomes something
+    // people dismiss without reading - and then it is not there for them on the day it matters.
+    // `saveOk` is the VERIFIED write from `_saveRound`, not the fact that we tried: a device that
+    // cannot write (storage full, private mode) still gets the old warning, which is exactly when
+    // it is true again.
+    if (this.saveOk && readSave()) return false;
     return !!(this.hole && this.roundId && this.roundId !== 'practice' && this.holeIdxs
       && this.scores.filter((v) => Number.isFinite(v)).length < this.holeIdxs.length);
   }

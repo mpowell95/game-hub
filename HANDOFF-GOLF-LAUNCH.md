@@ -22,7 +22,15 @@ weeks away. Do not delay the launch for job A; do finish it before anyone gets n
 
 ---
 
-## Job A — a round survives leaving the app (THE LAW)
+## Job A — a round survives leaving the app (THE LAW) — **DONE 2026-09-09**
+
+> **Shipped.** `golf/js/save.js` + the save/resume/discard path in `golf/js/ui.js`; `isInProgress()`
+> went back to `false` in the same commit, as required below. Two deliberate narrowings against the
+> field list here (`recorded`/`newBest` and `tutorialRun`/practice are NOT stored) and the reasons
+> are written up in `golf/CLAUDE.md`, "Job A: a round survives leaving the app". The rest of this
+> section is kept as the specification it was written as.
+
+## Job A — the original brief (THE LAW)
 
 **There is no mid-round save. At all.** `gamehub.golf.v1` (`SETTINGS_KEY` in `golf/js/ui.js`) holds
 only the last-used course, round and length. `_recordRound` writes nothing until a round is
