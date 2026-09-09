@@ -21,6 +21,8 @@ const BALLS = 3;
 const UPPER_HOLD = 0.22;
 /** How long a ball takes to climb a ramp. A real habitrail is about half a second of travel. */
 const RAMP_CLIMB = 0.55;
+/** How long a ball takes to drop through the hole in the deck. A hole is quick. */
+const DROP_FALL = 0.18;
 const SAVE_SECS = 7;
 const GRAVITY = 515;
 const SAUCER_HOLD = 0.9;
@@ -150,6 +152,29 @@ export class DesignPinball {
   }
 
   /**
+   * WALK A BALL DOWN THROUGH THE DROP HOLE. The mirror of _rampRide, and there for the same
+   * reason: nothing on this table may move the ball further in one frame than the solver could
+   * have. It is quick - a hole is a short drop, not a climb - and `lift` runs 1 to 0 so the
+   * renderer lowers the ball off the deck instead of blinking it there.
+   */
+  _dropFall(dt) {
+    for (const b of this.balls) {
+      if (b._drop === undefined || b._drop === null) continue;
+      b._drop = Math.min(1, b._drop + dt / DROP_FALL);
+      const e = b._drop * b._drop * (3 - 2 * b._drop);
+      b.x = b._dropFrom[0] + (T.DROP_HOLE.to.x - b._dropFrom[0]) * e;
+      b.y = b._dropFrom[1] + (T.DROP_HOLE.to.y - b._dropFrom[1]) * e;
+      b.vx = 0; b.vy = 0;
+      b.lift = 1 - e;
+      if (b._drop < 1) continue;
+      b._drop = null; b.held = false; b.holdT = 0; b.lift = 0;
+      b.layer = 1;
+      b.vy = 120;                       // it leaves the hole already moving down, as a fall does
+      this.emit({ type: 'rampexit', x: b.x, y: b.y });
+    }
+  }
+
+  /**
    * WALK A BALL UP A RAMP. The ball is held for RAMP_CLIMB seconds and moved along the ramp's own
    * centre line from the mouth (py 908) to the top (py 600), rising as it goes - `b.lift` is 0 on
    * the playfield and 1 on the deck, and js/render-design.js draws the ball at that height, so the
@@ -236,6 +261,7 @@ export class DesignPinball {
     this._upperFlippers(dt);
     this._kickers();
     this._rampRide(dt);
+    this._dropFall(dt);
     if (this.phase === 'over' || this.phase === 'attract') return;
     if (this.plungerHeld) this.plungerPower = Math.min(1, this.plungerPower + dt * 1.1);
     if (this.saveTimer > 0) {
@@ -311,8 +337,15 @@ export class DesignPinball {
         // it 140 px sideways through a solid wood wall.
       } else if (L === 2) {
         if (b.y > T.DROP_HOLE.y && b.x >= T.DROP_HOLE.x[0] && b.x <= T.DROP_HOLE.x[1]) {
-          b.layer = 1; b.lift = 0; b.y = T.DROP_HOLE.to.y;
-          this.emit({ type: 'rampexit', x: b.x, y: b.y });
+          // A BALL FALLS THROUGH THE HOLE, IT IS NOT PLACED BELOW IT. This used to set y straight
+          // to DROP_HOLE.to.y, which is 61 px lower - and a ball arriving with any speed was
+          // already past the line, so the move measured 84 px and the whole step 120. That is a
+          // visible skip, and test.js's "the ball never jumps" probe caught it at 2 jumps per four
+          // driven games. It is the same defect as the old ramp teleport and gets the same answer:
+          // hand it to a short scripted fall (_dropFall) that walks it down over DROP_MS.
+          b.held = true; b.holdT = 99;
+          b._drop = 0;
+          b._dropFrom = [b.x, b.y];
         } else if (b.y > T.px(760) && b.x < T.px(941)) {
           // A BALL LEAVING THE DECK OVER A RAMP LANE MUST NOT BE SCOOPED STRAIGHT BACK UP IT.
           // The deck front is py 760 and both ramp lanes pass under it, so a ball walking off
