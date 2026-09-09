@@ -40,11 +40,14 @@ export const DRAIN_Y = px(1880);
 export const AXIS = px(493);
 
 export const PLUNGER = { x: px(1020), y: px(1840) };
-/** Where the plunge delivers: over the top of the chute and onto the deck. */
-// INSIDE the board, not in the chute. The first build delivered at x 1020, which is the chute
-// itself: the ball arrived on the deck outside its walls, fell straight off the front and was
-// handed back to the plunger, and a 60-second driven game scored zero.
-export const LAUNCH_TO = { x: px(880), y: px(150), level: 2 };
+/** THERE IS NO LAUNCH DESTINATION ANY MORE, AND THAT IS THE POINT. The plunged ball is served
+ *  on LEVEL 2 and rides the shooter lane the whole way up under the solver; the board right wall
+ *  stops at py 300 on that level, so the ball rolls out of the lane and onto the deck through a
+ *  real opening. Two earlier builds teleported it instead - first into the chute itself (it fell
+ *  off the deck and a 60-second game scored zero), then 140 px sideways through a solid wall,
+ *  which is what Matt saw: "the ball goes up the launch chute then magically appears on the other
+ *  side of the wood wall." */
+export const LAUNCH_LEVEL = 2;
 
 /** The two ramp mouths, measured off the shot map rather than chosen - see the header of
  *  design/_shots.mjs. A ball reaching one is handed up to level 2. */
@@ -115,6 +118,6 @@ export const ROW_SIZE = { magenta: 4, blue: 9, red: 4 };
 export const DROP_IDS = ['target_bank'];
 
 export default {
-  NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_TO, RAMPS, DROP_HOLE, SAUCER,
+  NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, DROP_HOLE, SAUCER,
   SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS,
 };

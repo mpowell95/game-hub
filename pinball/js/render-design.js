@@ -63,10 +63,22 @@ export class DesignRenderer extends Renderer {
     const hud = game.hud();
     const P = this.parts3;
 
-    // The four paddles. The model names them, so this cannot drift out of order.
+    // THE FOUR PADDLES, AND TWO THINGS THAT BOTH HAVE TO BE RIGHT.
+    //
+    // Matt, on the shipped build: *"none of the paddles move."* Neither half was visible headlessly.
+    //
+    // 1. The mesh is not called what the footprint is called. board.js builds each flipper as a
+    //    pivot GROUP named `<name>_pivot`, so getObjectByName(f.id) returned undefined on every
+    //    frame and this loop did nothing at all, silently.
+    // 2. That group already carries the paddle's REST YAW. Assigning rotation.y throws it away
+    //    and points every paddle down +x. The swing is ADDED to the group's own base angle,
+    //    captured once - and it is subtracted, because a table angle t maps to rotation.y = -t:
+    //    board.js's yaw() is atan2(-dz, dx) against the footprint's own atan2(dz, dx).
     for (const f of game.flippers) {
-      const m = P.stage.getObjectByName(f.id);
-      if (m) m.rotation.y = -(f.angle - f.rest);
+      const m = P.stage.getObjectByName(f.id + '_pivot');
+      if (!m) continue;
+      if (m.userData.baseYaw === undefined) m.userData.baseYaw = m.rotation.y;
+      m.rotation.y = m.userData.baseYaw - (f.angle - f.rest);
     }
 
     let n = 0;

@@ -31,7 +31,26 @@ P.push({ type: 'base', name: 'cabinet_floor', levels: [] });
 P.push({ type: 'poly', name: 'playfield_L1', pts: [[45,40],[955,40],[955,1750],[891,1750],[891,1650],[600,1880],[390,1880],[45,1650]], y0: 0.004, d: Y1 - 0.004, mat: 'maple', levels: [] });
 P.push({ type: 'poly', name: 'deck_L2', pts: [[45,40],[955,40],[955,640],[782,640],[545,724],[455,724],[218,640],[45,640]], y0: Y2 - 0.012, d: 0.012, mat: 'deckwood', levels: [] });
 wall('wall_left',   [22.5, 0],   [22.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 2]);
-wall('wall_right',  [963.5, 0],  [963.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 2], 'the playing board ENDS here; its outboard face is the launch chute left wall');
+// THE BOARD'S RIGHT WALL, AND THE FEED GAP AT THE TOP OF IT.
+//
+// Matt, on the shipped build: *"The ball goes up the launch chute then magically appears on the
+// other side of the wood wall."* It did: the wall ran the full 1990 px, so the chute was a
+// closed tube and the only way out of it was to move the ball by hand.
+//
+// A real shooter lane is not a tube. It ends at the top of the cabinet and the ball rolls out of
+// it into the playfield over the top of the board's own side wall. So the wall stops at py 300
+// ON LEVEL 2 - the deck - and the ball rides the chute the whole way up under its own power,
+// meets the top wall, and turns left onto the deck through a real opening. Nothing is teleported.
+//
+// It stays FULL LENGTH ON LEVEL 1, because level 1 is the lower playfield and a ball down there
+// has no business in the shooter lane.
+wall('wall_right',       [963.5, 300], [963.5, 1990], 45 * S, 0.09, 0, 'darkwood', [1, 2], 'the playing board ENDS here; its outboard face is the launch chute left wall');
+wall('wall_right_upper', [963.5, 0],   [963.5, 300],  45 * S, 0.09, 0, 'darkwood', [1],    'closed on L1; open on L2, which is the shooter lane feed');
+// THE FEED ITSELF. A gap alone is not a feed: traced, a plunged ball rose the full length of the
+// chute at x 1020, hit the top wall square on and came straight back down, twelve times. Every
+// real machine has a curved guide across the top of the shooter lane that turns the ball into the
+// playfield, and this is it - a diagonal on level 2 only, so the lower playfield never sees it.
+wall('chute_feed', [1076, 210], [968, 60], 0.006, 0.03, Y2, 'steel', [2], 'turns a rising plunge left, out of the lane and onto the deck');
 wall('wall_top',    [0, 20],     [1100, 20],   40 * S, 0.09, 0, 'darkwood', [1, 2]);
 // THE DRAIN HAS TO BE A GAP, NOT A NOTE. This wall ran the full width with a comment saying the
 // band x 390..600 was the drain - so in the solver the ball landed on it and stopped. Played, that
@@ -165,7 +184,7 @@ P.push({ type: 'saucer', name: 'saucer_centre', at: [500, 656], y0: Y1, levels: 
 // from z 895 - a wall through the surface a ball is supposed to roll along. It now begins at
 // z 1005, just past the chute's foot, and the chute gets its own inner wall instead.
 // The launch chute's own walls and its stop. It is a plain channel outboard of the board.
-wall('chute_stop', [986, 1880], [1073, 1880], 0.008, 0.02, Y1, 'darkwood', [1], 'the plunger seat');
+wall('chute_stop', [986, 1880], [1073, 1880], 0.008, 0.02, Y1, 'darkwood', [1, 2], 'the plunger seat, on BOTH levels: a plunged ball rides the chute on level 2, so a weak plunge has to come back to a seat that is there');
 // right chute: shooter incline AND right ramp in one — plunger shots climb it onto the deck, deck balls roll down it into the shooter lane
 // THE RIGHT RAMP, and it lives INSIDE the board now that the chute has moved out of its way -
 // the mirror of the left one, in the 89 px lane between the arch's right leg and the board's right
@@ -198,8 +217,15 @@ wall('ramp_rail_right_out', [936, 640], [936, 908], 0.005, 0.026, Y1, 'steel', [
 // drain, so its top is a wall.
 wall('outlane_top_left',  [129, 908],  [250, 908], 0.005, 0.026, Y1, 'steel', [1]);
 wall('outlane_top_right', [750, 908], [866, 908], 0.005, 0.026, Y1, 'steel', [1]);
-wall('ramp_mouth_left',  [45, 908], [129, 908], 0.005, 0.026, Y1, 'steel', [1], 'L1 backstop');
-wall('ramp_mouth_right', [866, 908], [936, 908], 0.005, 0.026, Y1, 'steel', [1], 'L1 backstop');
+// NO WALL ACROSS EITHER RAMP MOUTH. There used to be one on each, called a backstop, and
+// together with outlane_top_left/right they made an unbroken bar across py 908 from x 45 to 250
+// and from 750 to 936. Matt: *"You added gates to block the ramps off completely."* He is right:
+// a ball cannot shoot a ramp whose entrance has a wall in it, whatever the wall is for.
+//
+// What the backstop guarded against is real - without it, level 1 has an open corridor up each
+// lane into the dead space above the arch. That is closed in js/design.js instead, where it
+// belongs: the ramp transition fires for ANY level-1 ball above the mouth line in the lane, not
+// only one still travelling upward, so there is nothing left up there to rest on.
 
 // THE LAUNCH CHUTE, outboard of the board's right wall. A plain channel: the plunger fires a ball
 // up it and over the top onto the deck. Nothing on the playfield shares its width.
