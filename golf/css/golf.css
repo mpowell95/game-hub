@@ -607,27 +607,58 @@
    (measured off the reference: the band composites over the grass), which is right for a readout
    you glance at - but this carries a sentence over a mown, speckled, tree-lined fairway, and read
    in a real browser the course showed straight through the words. */
+/* THE RAIL'S HEIGHT IS ONE NUMBER, AND THE CONTROLS RIDE EXACTLY THAT FAR UP. It used to be
+   written twice - `10px + 30px` for the controls and `30px` for the rail - which is how the two
+   drifted into leaving a 10 px strip of bare course between them.
+
+   Matt, 2026-09-09: *"I made the text on the very bottom larger. Add that. But extend it down. I
+   don't want the bottom hud controls shifted up so make more room."* The controls sit 40 px above
+   the root's bottom and they STILL DO: the rail grew 30 -> 40 px into the gap that was already
+   there, so the bar is a third taller and nothing above it moved by a pixel.
+
+   IT CANNOT GROW BEYOND THAT WITHOUT MOVING SOMETHING. Measured: the 40 px strip under the game in
+   the hub is `.hub-main.hub-main-immersive`'s own `padding-bottom`, which belongs to the hub and to
+   every other immersive game in it - not golf's to take. Past 40 px the only thing left to give is
+   the controls' own position, which is the one thing Matt ruled out.
+
+   `data-tut="1"` is set only while the lesson is running, and the rail only exists then, so a
+   NON-TUTORIAL hole is untouched by all of this - the controls keep their ordinary 10 px inset. */
+.gf-root { --gf-rail-h: 40px; }
 .gf-root[data-tut="1"] .gf-bl,
-.gf-root[data-tut="1"] .gf-br { bottom: calc(10px + 30px + var(--gf-safe-b)); }
+.gf-root[data-tut="1"] .gf-br { bottom: calc(var(--gf-rail-h) + var(--gf-safe-b)); }
 
 .gf-root .gf-tut__rail {
   position: absolute; left: 0; right: 0; bottom: 0;
-  height: calc(30px + var(--gf-safe-b));
+  /* BORDER-BOX so `--gf-rail-h` is the bar's REAL height. On content-box the 2 px gold top border
+     sat outside it, so the rail rendered 42 px against a 40 px offset for the controls and
+     overlapped them by exactly the border. One number has to mean one thing. */
+  box-sizing: border-box;
+  height: calc(var(--gf-rail-h) + var(--gf-safe-b));
   padding: 0 10px var(--gf-safe-b); pointer-events: auto;
   display: flex; align-items: center; justify-content: center;
   background: rgba(10, 14, 8, .94);
   border-top: 2px solid #ffce3a;
 }
 /* HOW MUCH LESSON IS LEFT, which is the one thing the old card never said and most of why a
-   tutorial feels long. Taken out of flow so the sentence sits on the screen's own centre line. */
-.gf-root .gf-tut__pips { position: absolute; left: 10px; display: flex; gap: 4px; }
+   tutorial feels long. */
+/* THE PIPS ARE A FLEX ITEM, NOT AN ABSOLUTE ONE. Absolutely positioned at the left, they were out
+   of flow - so the text had to be held off them by a hand-guessed 90 px of padding on BOTH sides,
+   which left about 190 px of a 393 px bar for the sentence. Measured at 15 px: the Spanish club
+   card wrapped to 2 lines at 393, 3 lines at 360 and overflowed the bar entirely. In the row they
+   simply cannot overlap and the text gets whatever is actually left. */
+.gf-root .gf-tut__pips { flex: none; display: flex; gap: 4px; }
 .gf-root .gf-tut__pips i {
   width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .28);
 }
 .gf-root .gf-tut__pips i.is-done { background: rgba(255, 206, 58, .55); }
 .gf-root .gf-tut__pips i.is-on { background: #ffce3a; }
 .gf-root .gf-tut__rail .gf-tut__text {
-  font-size: 13px; line-height: 1.3; text-align: center; padding: 0 58px;
+  /* 15px, up from 13 (Matt, 2026-09-09: "I made the text on the very bottom larger"). The bar is
+     40 px now, so a 1.3 line box is 19.5 px and even a two-line wrap (39 px) still fits inside it.
+     It is deliberately NOT `nowrap` with an ellipsis: clipping a tutorial instruction to make it
+     fit is worse than any layout problem it would solve. */
+  flex: 1; min-width: 0; padding: 0 4px;
+  font-size: 15px; line-height: 1.3; text-align: center;
 }
 
 /* --- the popups ---------------------------------------------------------------------------- */

@@ -199,7 +199,7 @@ export const STRINGS = {
     tut_ok: 'entendido',
     tut_your_turn: 'te toca',
     tut_aim: 'Toca una flecha para apuntar.',
-    tut_club: 'Toca arriba o abajo para cambiar de palo.',
+    tut_club: 'Toca las flechas para cambiar de palo.',
     tut_good_h: 'Un buen golpe',
     tut_good: 'Para la aguja en cada marca dorada.',
     tut_bad_h: 'Un mal golpe',
