@@ -5047,3 +5047,30 @@ and the rows from `.gf-pause__row`'s, so the picture cannot drift from the thing
 It is a REPLICA, not the real control: a live button inside a lesson popup would be a second way to
 press it. Heading and body are now "Please report bugs!" / "Tap pause mid-game, then Report a bug,
 if you notice anything." (Matt wrote "Click"; every other string in this game says Tap.)
+
+### The playthrough after those six: one thing left, and it was the rings
+
+Played end to end again at 393x852 - **46 checks, 0 failed**. Every step in order, the swing held on
+aim and club and free on the swing step, a held tap leaving `phase: idle` / `shotN: 1` with the
+rings flashing, nothing drawn off screen, no rail card or ring covering a control, nothing
+scrolling, no text under 11 px, and `bestHole['tutorial:1']` recorded at the end.
+
+**The fringe case was forced rather than waited for**, since a normal approach lands on the green:
+the ball was settled on the collar through the real `_settleShot`, and the lesson correctly went
+`lie: fringe` -> putter in hand -> `dial` -> "The putting dial". That is the bug Matt reported,
+verified in the exact situation.
+
+**The one thing found: the lowest ring sat 5 px INSIDE the rail.** The controls sit exactly on the
+rail's top edge (one number governs both), so `_place`'s 4 px outset had nowhere to go downward -
+and a gold ring meeting the rail's gold top border reads as one muddy band rather than a ring.
+
+Two fixes, and the second is the same trap the rail's own height had:
+
+- `_place` drops the outset on whichever side would cross the rail rather than shrinking the ring
+  all round, so the other three sides keep their full standoff.
+- **The ring is `box-sizing: border-box`.** On content-box its 3 px border was added on top of the
+  height `_place` sets, so a ring clamped to stop above the rail still crossed it by exactly the
+  border. Measured: 5 px over -> 4 px over -> **2 px clear**.
+
+Also measured and NOT a problem: the left aim ring's glow reaches to 1 px inside the root's left
+edge. Tight, but not clipped.

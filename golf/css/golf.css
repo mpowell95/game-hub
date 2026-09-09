@@ -740,6 +740,10 @@
    meter and the tree canopies need to hold their shape against grass. */
 .gf-root .gf-tut-ring {
   position: absolute; pointer-events: none; z-index: 39;
+  /* BORDER-BOX so the height `_place` sets is the height that renders. On content-box the 3 px
+     border was added on top, so a ring clamped to stop above the rail still crossed it by exactly
+     the border - the same trap the rail's own height had. */
+  box-sizing: border-box;
   border: 3px solid #ffce3a;
   box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 0 8px rgba(255, 206, 58, .38);
   animation: gf-tut-pulse 1.4s ease-in-out infinite;
