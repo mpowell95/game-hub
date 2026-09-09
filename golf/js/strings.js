@@ -11,6 +11,8 @@ export const STRINGS = {
     // setup
     play: 'play',
     practice: 'practice hole',
+    picked_up: 'Picked up',
+    picked_up_in: 'Picked up at {n}',
     resume: 'resume round',
     resume_where: '{course} {range}, hole {n} of {all}',
     discard_title: 'Start something else?',
@@ -263,6 +265,8 @@ export const STRINGS = {
     you: 'tú',
     saved_best: 'Nueva mejor vuelta',
     not_counted: 'Los hoyos sueltos no puntúan.',
+    picked_up: 'Recogida',
+    picked_up_in: 'Recogida en {n}',
     resume: 'seguir vuelta',
     resume_where: '{course} {range}, hoyo {n} de {all}',
     discard_title: '¿Empezar otra cosa?',

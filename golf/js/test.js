@@ -13,7 +13,7 @@ import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE
   greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
 import { RED_MESA } from '../courses/redmesa.js';
-import { COURSES, ROUNDS, MODES, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundRange, holeKey, stablefordPoints, maxStrokes } from './rounds.js';
 import { GOLF_COURSE_PAR, GOLF_BOARD_COURSE } from '../../js/leaderboard-rank.js';
 import { CLUBS, PUTTER, autoSelectClub, stepClub, lieOf, LIES, mustPutt, canPutt } from './clubs.js';
 import * as CL from './clubs.js';
@@ -1239,12 +1239,32 @@ console.log('\n-- 12b. THE STROKE COUNT, and the cup you can actually see --');
   // score was a stroke too low and an ace would have reported 0. This reads the shipped file: the
   // result screen must take `shotN` as it stands, never `shotN - 1`.
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  // UPDATED 2026-09-09 for the double-par-plus-one cap, deliberately and not deleted - the same
+  // call this file's own handoff note asked for. The RULE is unchanged: the result screen must
+  // never subtract one from `shotN`. The expression around it grew a second branch, because a
+  // hole can now also end by the player PICKING UP, and that branch does not read `shotN` at all.
   ok('[KNOWN-BUG PROBE] the result screen counts the shot that holed it',
-    /const strokes = this\.shotN;/.test(ui) && !/const strokes = this\.shotN - 1;/.test(ui),
+    /const strokes = this\.pickedUp \? maxStrokes\(hole\.par\) : this\.shotN;/.test(ui)
+    // The ban is on the SCORE subtracting one, not on the expression appearing anywhere: since the
+    // cap landed, `_capReached()` legitimately reads `this.shotN - 1` to count shots USED. Pinning
+    // the bare substring made this probe fail on correct code, which is the one thing a probe must
+    // never do - a test that cries wolf gets deleted by the next session that meets it.
+    && !/const strokes = this\.shotN - 1/.test(ui),
     'shotN is already the shot just played, because the holed path returns before it is incremented');
-  ok('...and `_showHoleResult` is still only reachable from the holed path',
-    (ui.match(/this\._showHoleResult\(\)/g) || []).length === 1,
-    'if it ever gets a second caller, "the shot just played" stops meaning "the shot that holed it"');
+  // ALSO UPDATED, and this one changed shape rather than wording. It used to require exactly ONE
+  // caller, because a second caller would have broken "shotN is the shot just played". There are
+  // two now - holing out, and the cap - and the invariant is preserved differently: the cap path
+  // never reads `shotN` for the score, it uses the allowance. So the rule is now that every caller
+  // is one of those two, which is what stops a third one quietly reintroducing the off-by-one.
+  const callers = (ui.match(/this\._showHoleResult\(\)/g) || []).length;
+  ok(`...and \`_showHoleResult\` is reachable only by holing out or picking up (${callers} callers)`,
+    callers === 2
+    && /if \(a\.res\.holed\)[\s\S]{0,400}?this\._showHoleResult\(\)/.test(ui)
+    // 1400 rather than a tight window: `_pickUp` carries the reasoning for both bugs found while
+    // driving it (the lesson stall and the unsaved shot), and a comment growing must not fail a
+    // structural probe about control flow. MEASURED at 947 chars when this was written.
+    && /_pickUp\(\)\s*\{[\s\S]{0,1400}?this\._showHoleResult\(\)/.test(ui),
+    'a third caller would have to prove for itself what `strokes` means');
 
   // [KNOWN-BUG PROBE] Matt: "the ball rolls over the hole without going in - and leaves a 1-3 ft
   // putt after", and "the hole ... is a tiny tiny dot ... that does not get bigger when you zoom
@@ -2729,6 +2749,57 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
     /if \(this\.saveOk && readSave\(\)\) return false;/.test(uiS));
   ok('the setup screen offers the round you left', /data-role="resume"/.test(uiS)
     && /t\('resume'\)/.test(uiS) && /t\('resume_where'/.test(uiS));
+}
+
+// =================================================================================================
+// 23. DOUBLE PAR PLUS ONE (2026-09-09)
+//
+// Matt: *"Double Par plus 1 should be each hole's max."* Par 3 -> 7, par 4 -> 9, par 5 -> 11. Real
+// golf (equitable stroke control), so it does not read as an arbitrary game limit - and THE HOLE
+// ENDS at the cap rather than the game going on asking for shots it has decided not to count.
+// =================================================================================================
+{
+  console.log('\n-- 23. a hole is capped at double par plus one --');
+  ok('par 3 caps at 7', maxStrokes(3) === 7);
+  ok('par 4 caps at 9', maxStrokes(4) === 9);
+  ok('par 5 caps at 11', maxStrokes(5) === 11);
+  ok('every hole on every course has a cap above its par', COURSES.every((c) =>
+    c.holes.every((h) => maxStrokes(h.par) > h.par)));
+  // The cap is a score like any other as far as Stableford is concerned - it lands in the same
+  // "double bogey or worse" bucket a blow-up has always landed in. Pinned so nobody later decides
+  // a picked-up hole should score differently and quietly changes what a round is worth.
+  ok('a capped hole scores the same as any double-bogey-or-worse', COURSES[0].holes.every((h) =>
+    stablefordPoints(maxStrokes(h.par), h.par) === stablefordPoints(h.par + 2, h.par)));
+
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  // `shotN` is the number of the shot ABOUT to be played, so `shotN - 1` have been used. A water
+  // penalty adds two at once, which is why the test is >= and the SCORE is the allowance rather
+  // than whatever the counter reached - measured in a browser, shotN hit 10 on a par 4 and the
+  // hole was worth 9.
+  ok('the cap is measured in shots USED, not in the shot counter',
+    /_capReached\(\)\s*\{[\s\S]{0,300}?this\.shotN - 1 >= maxStrokes\(this\.hole\.par\)/.test(ui));
+  ok('...and reaching it ends the hole', /if \(this\._capReached\(\)\) \{ this\._pickUp\(\); return; \}/.test(ui));
+  ok('...and the score is the allowance, not the counter',
+    /const strokes = this\.pickedUp \? maxStrokes\(hole\.par\) : this\.shotN;/.test(ui));
+  ok('the flag is cleared with the hole', /this\.holed = false;\n    this\.pickedUp = false;/.test(ui));
+  // The card has to SAY what happened. A 9 labelled "double bogey" on a hole nobody holed out is
+  // the game claiming a shot the player never played.
+  ok('the card says the player picked up', /this\.pickedUp \? t\('picked_up'\)/.test(ui)
+    && /t\('picked_up_in', \{ n: strokes \}\)/.test(ui));
+  // [KNOWN-BUG PROBE] The tutorial hole is a par 4, so its cap is 9 - reachable by a first-time
+  // player, which is exactly who is on it. The lesson's `sink` step waits on 'holed'; without the
+  // cap firing it too, the tutorial stalls on the one hole it cannot afford to stall on.
+  ok('[KNOWN-BUG PROBE] picking up ends the lesson\'s hole as well as the game\'s',
+    /_pickUp\(\)\s*\{[\s\S]{0,900}?this\._coach\('holed'\)/.test(ui));
+  // [KNOWN-BUG PROBE] `_settleShot` returns at the cap without reaching its own `_saveRound`, so
+  // the shot that hit the cap was not on disk and a kill inside the 700 ms before the card rewound
+  // the player one shot. Found by driving it.
+  ok('[KNOWN-BUG PROBE] the shot that hits the cap is saved before the card\'s beat',
+    /_pickUp\(\)\s*\{[\s\S]{0,1200}?this\._saveRound\(\);\n    setTimeout/.test(ui));
+  ok('...and a resume past the allowance finishes the hole instead of re-offering it',
+    /if \(this\._capReached\(\)\) \{ this\._pickUp\(\); return true; \}/.test(ui));
+  ok('the cap has both languages', !!STRINGS.en.picked_up && !!STRINGS.es.picked_up
+    && !!STRINGS.en.picked_up_in && !!STRINGS.es.picked_up_in);
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);

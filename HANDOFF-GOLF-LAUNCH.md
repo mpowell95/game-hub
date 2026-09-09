@@ -88,7 +88,15 @@ must discard it, and should say so.
 
 ---
 
-## Job B — a hole's maximum score is double par plus one
+## Job B — a hole's maximum score is double par plus one — **DONE 2026-09-09**
+
+> **Shipped.** `maxStrokes(par)` in `golf/js/rounds.js` plus the pick-up path in `golf/js/ui.js`.
+> Section 12b was updated deliberately (it now pins that every caller of `_showHoleResult` either
+> holes out or picks up), and two bugs found by driving it are pinned as their own probes. Full
+> write-up: `golf/CLAUDE.md`, "Job B: a hole's maximum score is double par plus one". The rest of
+> this section is kept as the specification it was written as.
+
+## Job B — the original brief
 
 Matt, 2026-09-09: *"Double Par plus 1 should be each hole's max."*
 

@@ -14,7 +14,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints } from './rounds.js';
+import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints, maxStrokes } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { SAVE_V, validateSave, resumePos, isComplete } from './save.js';
 import { CLUBS, PUTTER, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
@@ -982,6 +982,7 @@ class GolfGame {
     this.ball = [...hole.tee];
     this.shotN = 1;
     this.holed = false;
+    this.pickedUp = false;
     this.lastShotYd = null;
     this.anim = null;
     this.previewDx = 0;
@@ -1553,6 +1554,35 @@ class GolfGame {
    *  The full sunburst banner and the nine-column scorecard are Stage C; this is the honest
    *  minimum in the meantime - it names the score, shows the card so far, and offers the next
    *  hole. It gets a close (X) top-right, per the repo's win/lose popup rule. */
+  /** Has this hole used its whole allowance? `shotN - 1` shots have been played. */
+  _capReached() {
+    return !!(this.hole && !this.holed && this.shotN - 1 >= maxStrokes(this.hole.par));
+  }
+
+  /** THE PLAYER PICKS UP. Same beat as holing out (700 ms, so the ball is seen to stop before the
+   *  card arrives), same result card, and the score is the cap - never the stroke count that
+   *  overshot it, which a penalty can push past the cap by one.
+   *
+   *  It is a separate flag rather than "strokes = min(shotN, cap)" because the CARD has to be able
+   *  to say what happened. A 9 that reads "Double bogey" when the player never holed out is the
+   *  game quietly claiming a shot they did not play. */
+  _pickUp() {
+    if (this.pickedUp) return;
+    this.pickedUp = true;
+    this._paintHud();
+    // THE LESSON'S 'holed' STEP IS "THE HOLE IS OVER", NOT "THE BALL WENT IN". The tutorial hole is
+    // a par 4, so its cap is 9 - reachable by a first-time player, which is exactly who is on it.
+    // Without this the lesson's `sink` step would wait for a ball that is never going to drop and
+    // the tutorial would stall on the one hole it cannot afford to stall on.
+    this._coach('holed');
+    // SAVE BEFORE THE BEAT. `_settleShot` returns here without reaching its own `_saveRound`, so
+    // without this the shot that hit the cap is not on disk and a kill inside the next 700 ms
+    // rewinds the player one shot. It also puts `shotN` past the allowance in the file, which is
+    // what `_resumeSaved`'s own cap check reads to finish the hole instead of re-offering it.
+    this._saveRound();
+    setTimeout(() => { if (!this.destroyed) this._showHoleResult(); }, 700);
+  }
+
   /** The hole is over. Show what it cost, the card so far, and the way onward.
    *
    *  On the LAST hole of a scored round this is also where the round is written to the player's
@@ -1569,7 +1599,10 @@ class GolfGame {
     //
     // This function is only ever called from the holed path (`_settleShot`'s setTimeout), so
     // "the shot just played" and "the shot that holed it" are the same shot, always.
-    const strokes = this.shotN;
+    // THE CAP IS THE SCORE WHEN THE PLAYER PICKED UP (2026-09-09, `maxStrokes` in rounds.js). It is
+    // not `min(shotN, cap)`: a water penalty can push `shotN` past the cap by one, and the hole is
+    // worth its allowance, not whatever the counter happened to reach.
+    const strokes = this.pickedUp ? maxStrokes(hole.par) : this.shotN;
     this.scores[this.pos] = strokes;
 
     const d = strokes - hole.par;
@@ -1618,8 +1651,11 @@ class GolfGame {
       <div class="gf-result__card gf-panel">
         <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
         <div class="gf-result__name">${esc(this.tutorialRun ? t('tut_complete')
-    : last && !practice ? t('round_done') : this._scoreName(strokes, hole.par))}</div>
-        <div class="gf-result__sub">${esc(t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
+    : last && !practice ? t('round_done')
+      : this.pickedUp ? t('picked_up') : this._scoreName(strokes, hole.par))}</div>
+        <div class="gf-result__sub">${esc(this.pickedUp
+    ? t('picked_up_in', { n: strokes })
+    : t('holed_in', { n: strokes }))} &middot; ${esc(t('par_n', { n: hole.par }))}</div>
         ${practice ? '' : `<div class="gf-result__card-grid" data-n="${this.holeIdxs.length}">
           ${this.holeIdxs.map((hi, i) => {
             const sc = this.scores[i];
@@ -1780,6 +1816,11 @@ class GolfGame {
     this.ball = [sv.ball[0], sv.ball[1]];
     this.shotN = sv.shotN;
     this.aimRad = sv.aimRad;
+    // THE 700 ms BETWEEN THE CAP AND THE CARD IS A REAL WINDOW. `_pickUp` waits that long so the
+    // ball is seen to stop, and the save was written when it came to rest - with `shotN` already
+    // past the allowance. Restoring that literally would hand the player a shot the cap says does
+    // not exist, so the hole is finished here instead of being re-offered.
+    if (this._capReached()) { this._pickUp(); return true; }
     const c = sv.clubId ? clubById(sv.clubId) : null;
     if (c) this.club = c;
     this._syncTempo();
@@ -1905,6 +1946,11 @@ class GolfGame {
     }
     this.shotN += 1 + ((a.res && a.res.penalty) || 0);
     this.swing.settle(performance.now());
+    // DOUBLE PAR PLUS ONE, AND THE HOLE ENDS THERE. See `maxStrokes` in rounds.js for the rule and
+    // why it is real golf rather than an arbitrary limit. `shotN` is the number of the shot about
+    // to be played, so `shotN - 1` is how many have been used - and a water penalty can add two at
+    // once, which is why this is `>=` and the score is the cap rather than whatever shotN reached.
+    if (this._capReached()) { this._pickUp(); return; }
     // A LESSON CARD WAITS FOR THE BALL TO HAVE STOPPED, not for the frame it stops ON.
     //
     // Matt: "The club thing should only pop up once the ball has stopped moving." Measured at
