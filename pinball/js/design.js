@@ -175,6 +175,43 @@ export class DesignPinball {
     }
   }
 
+  /**
+   * THE ONE-WAY KICKERS. A small pad on level 1 just in front of each ramp mouth that adds speed
+   * to a ball ALREADY heading up the lane, and does nothing to one coming back down.
+   *
+   * Matt: *"maybe we put a little speed boost thing on level 1 just in front of the ramp so it
+   * can make it up the incline. This boost would have to be 1-way functional ONLY. And allow for
+   * the ball to roll down the ramp without being shot back up it."*
+   *
+   * ONE-WAY FALLS OUT OF THE MATHS, IT IS NOT A FLAG. The push is applied only when the ball's
+   * velocity resolved ALONG THE LANE already exceeds `minAlong`. A ball rolling back out of the
+   * mouth resolves NEGATIVE and is untouched, so it leaves the way a ball should. A ball drifting
+   * sideways over the pad resolves near zero and is untouched too, so the pad cannot be farmed.
+   *
+   * It fires ONCE PER VISIT, not once per frame. `_kick` is set on the ball and cleared only when
+   * it is well clear of the pad again - the same edge-detection discipline the ramp mouth needs,
+   * and for the same reason: without it a ball resting on the pad is accelerated every step.
+   */
+  _kickers() {
+    for (const b of this.balls) {
+      if (b.onPlunger || b.held || (b.layer | 0) !== 1) { b._kick = false; continue; }
+      let touching = false;
+      for (const k of T.KICKERS) {
+        const dx = b.x - k.x, dy = b.y - k.y;
+        if (dx * dx + dy * dy > k.r * k.r) continue;
+        touching = true;
+        if (b._kick) continue;
+        const along = b.vx * k.u[0] + b.vy * k.u[1];
+        if (along <= k.minAlong) continue;
+        b._kick = true;
+        b.vx += k.u[0] * k.boost;
+        b.vy += k.u[1] * k.boost;
+        this.emit({ type: 'kicker', id: k.id, x: b.x, y: b.y });
+      }
+      if (!touching) b._kick = false;
+    }
+  }
+
   /** Drop any upper paddle whose swing has run its course, however long the button is held. */
   _upperFlippers(dt) {
     for (const f of this.flippers) {
@@ -197,6 +234,7 @@ export class DesignPinball {
     dt = Math.min(dt, 0.05);
     this.time += dt;
     this._upperFlippers(dt);
+    this._kickers();
     this._rampRide(dt);
     if (this.phase === 'over' || this.phase === 'attract') return;
     if (this.plungerHeld) this.plungerPower = Math.min(1, this.plungerPower + dt * 1.1);
@@ -250,6 +288,13 @@ export class DesignPinball {
           // the dead space over the arch; that wall is gone (see design/board.js) and this is
           // what replaces it. The _ramp flag still makes it once per approach, not per bounce.
           if (b._ramp || (b.vy >= 0 && b.y > r.y)) continue;
+          // NO MINIMUM ENTRY SPEED, AND THAT IS A DELIBERATE TRADE. A gate here (measured at 330,
+          // below the median arrival of 697) makes the ramp a shot you can fail, which is what gives
+          // the kicker something to rescue. It also parks balls: the lane is FLAT with rails, so a
+          // ball that fails the gate simply sits in it. The rest sweep went from 155 resting points
+          // to 350 in 10 places the moment the gate went in. A stuck ball is the defect Matt has
+          // reported most, so the gate waits until the lane can roll a failed ball back out of its
+          // own mouth. RAMPS still carries minEntry, unused, so the experiment is one line away.
           b._ramp = true;
           // Hand the ball to the climb rather than moving it. _rampRide walks it up the ramp's own
           // centre line and lets it out at the top; nothing here changes its position.
@@ -269,6 +314,19 @@ export class DesignPinball {
           b.layer = 1; b.lift = 0; b.y = T.DROP_HOLE.to.y;
           this.emit({ type: 'rampexit', x: b.x, y: b.y });
         } else if (b.y > T.px(760) && b.x < T.px(941)) {
+          // A BALL LEAVING THE DECK OVER A RAMP LANE MUST NOT BE SCOOPED STRAIGHT BACK UP IT.
+          // The deck front is py 760 and both ramp lanes pass under it, so a ball walking off
+          // the edge there landed on level 1 INSIDE the lane, satisfied the mouth test on the
+          // next frame and was carried back to the deck. Measured on the shipped build: 36 of
+          // 59 ramp events in 20 driven games, 61%, were this and not a shot. A plunged ball
+          // could do it on its first trip, because the plunger sets layer 2 directly and never
+          // arms `_ramp`. Arming it here costs nothing else: it clears itself once the ball is
+          // back down the board past py 1208, exactly as it does after a real ramp.
+          // ...so it does not fall there at all. Arming _ramp instead was the first try and it made
+          // things worse: the ball landed in the lane, could not be taken up, and had no way out of
+          // the channel either - it rattled between the rails for the whole eight seconds of a rest
+          // sweep. The deck simply extends over the lane, which is what a real ramp passes under.
+          if (b.x < T.px(200) || b.x > T.px(786)) continue;
           // off the front of the deck anywhere else - but the SHOOTER LANE is not the front of
           // the deck. It runs the full length of the cabinet outboard of the board (x px
           // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v721';
+const CACHE = 'game-hub-v722';
 
 const ASSETS = [
   './',
@@ -624,10 +624,10 @@ const REST_MANIFEST = {
   './pinball/js/table-rainbow.js': 'cc0beb43cf',
   './pinball/js/rainbow.js': '9c6e1c5607',
   './pinball/js/render-rainbow.js': '63958b8657',
-  './pinball/js/table-design.js': 'd86f7c6328',
-  './pinball/js/design.js': 'cd4b48aee3',
+  './pinball/js/table-design.js': '2f715edf34',
+  './pinball/js/design.js': '8c65f00ea9',
   './pinball/js/render-design.js': 'de79b85569',
-  './pinball/design/board.js': 'cafe9c3b9c',
+  './pinball/design/board.js': 'fc72ec010d',
   './pinball/design/editor.html': '5cb2244282',
   './pinball/js/vendor/three.module.min.js': '86bcee248b',
   './pinball/js/vendor/three.core.min.js': '05b2609338',
