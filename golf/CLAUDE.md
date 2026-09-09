@@ -5076,3 +5076,83 @@ Two fixes, and the second is the same trap the rail's own height had:
 
 Also measured and NOT a problem: the left aim ring's glow reaches to 1 px inside the root's left
 edge. Tight, but not clipped.
+
+## Three from the first day it was live (2026-09-09)
+
+Matt, playing the released build. All three were MEASURED in a real browser before anything was
+changed, and one of them turned out to need no change at all.
+
+### 1. The putter's dead zone gave no sign it had heard you
+
+> *"the putting double tap bug is back. I have to click swing twice to get it to start moving."*
+
+**Measured, putter in hand, tap 1 at t=0:** the needle reads `pos 0` at t+43, t+125 and t+220, and
+first passes `MIN_TAP_POS` at about **t+272**. `PUTTER_DEAD_MS` (250 ms) is why, and it exists for
+a real, documented reason - see `clubs.js`, and note that the two obvious alternatives (a steeper
+power curve, a slower putter) were both tried and both reverted because each visibly changed the
+dial or the rhythm.
+
+So for a quarter of a second the meter is stone dead, and **the only cue was the swing button's own
+text label** changing to "Set power". Nobody watching the needle reads a caption on the button they
+are tapping. `ui.js`'s own comment claimed a second cue - *"the charge ring in `_drawMeter` below"* -
+and **there was no such code**: a comment describing a cue that was never written.
+
+**The cost is not one wasted tap.** The instinctive second tap is refused by `MIN_TAP_POS`
+(correctly - it would otherwise fire a 3 % putt and charge a stroke, which is the bug that rule
+closed on 2026-09-09), so the player is left ONE TAP OUT OF STEP: their next tap sets POWER when
+they believe it is setting accuracy. Every putt after the first mistimed one is wrong too.
+
+Two cues, and neither touches the dial, the tempo, the dead zone or any power number:
+
+- **The needle CHARGES.** `_chargeK()` is 1 at tap 1 and eases to 0 as the dead zone runs out;
+  `_drawMeter` draws the needle GOLD and fat over that window, easing back to its normal white. It
+  is unmistakably alive before it starts to climb. Off on the tutorial's still dial, which is handed
+  a fabricated `read` and has no clock.
+- **A refused tap KICKS the button** (`_refuseFlash`, `.gf-btn.is-refused`, 220 ms, motion only so
+  it cannot be confused with the armed state; reduced-motion gets a gold outline instead).
+  `swing.tap()` already returned `null` for "this tap did nothing" and nothing consumed it.
+
+### 2. The aim arrows: a tap is fine now, a hold is coarse
+
+> *"the aim arrows move the aim by a lot more than usual. I just hit the 2 iron and the 8 iron and a
+> single click moved the aim spot by a lot."*
+
+**MEASURED: nothing had changed it.** One tap was exactly **1.000 deg on every club** - driver,
+5 wood, 7 iron - and the camera frame is the same 95 yds wide with the same 4.137 px/yd whatever is
+in hand. The step had never been anything but 1.0.
+
+**What changed is what you can SEE.** Reclaiming the HUD's dead chrome earlier the same day made the
+canvas taller, and the frame's scale is set by its WIDTH - so a taller canvas shows further up the
+hole. The aim ladder's far dot, the one that swings the most, stopped being off the top of the
+screen on an iron. At a 2 iron's 175 yds, 1 deg is 3.1 yds of landing spot, and now you watch it
+move.
+
+A tap and a hold were being asked to be the same number and they want opposite things. They are
+split now: **`AIM_STEP_DEG` 0.35** for a tap (1.07 yds at 175, the resolution an approach needs) and
+**`AIM_STEP_HOLD_DEG` 1.4** once the repeat is at full speed, reached by handing `hold()`'s existing
+ramp position `k` to the callback. Measured after: a held arrow crosses the whole 60 deg arc in
+**3.6 s** (it was 5), and a tap is three times finer. Both ends got better. The club arrows
+deliberately do NOT take the ramp - there are fourteen clubs, and one tap is one club.
+
+### 3. The max-power drive that sprayed: working exactly as designed
+
+> *"I used a max power drive on the tutorial and aimed in the green but it still spun and was off
+> target. what's up with that?"*
+
+Nothing. That is `blockSpray`, and it is the thing the bad-swing card teaches:
+
+| power | spray | offline at 242 yds |
+|---|---|---|
+| 100 % | none | 0 |
+| 105 % | 1.1-1.7 deg | 5-7 yds |
+| 110 % | 2.3-3.4 deg | 10-15 yds |
+| 120.6 % (top of the arc) | 4.7-7.1 deg | **20-30 yds** |
+
+**"Max power" is 120.6 %, not 100 %** - the green line on the dial is 100, and the arc keeps going.
+The spray is **ADDED, not multiplied**, and it picks its own side, which is the entire point of it:
+a perfect accuracy tap has no miss to multiply, so without the addition an over-swing would be free
+distance (measured 2026-09-06: +16.3 yds for nothing). A dead-centre strike at the top of the arc is
+*supposed* to finish 20-30 yds offline. Aim is not the lever there; stopping at the green line is.
+
+Left alone. If it should cost less, `BLOCK_SPRAY_DEG` is the one number to move, and that is Matt's
+call to make rather than a session's.

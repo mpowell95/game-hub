@@ -87,6 +87,18 @@
 }
 .gf-root .gf-btn:active,
 .gf-root .gf-btn[data-down="1"] { background: #a83a00; transform: translate(1px, 1px); box-shadow: 2px 2px 0 rgba(0,0,0,.45); }
+
+/* A REFUSED TAP KICKS. `swing.tap()` returns null for "this tap did nothing", which on the putter
+   is any tap inside its 250 ms dead zone (clubs.js's PUTTER_DEAD_MS, plus swing.js's MIN_TAP_POS).
+   A control that silently does nothing reads as broken - Matt: *"I have to click swing twice to get
+   it to start moving"* - and worse, it leaves the player one tap out of step for the rest of the
+   stroke. Motion only, no colour change, so it cannot be confused with the armed state. */
+@keyframes gf-refuse { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 0); }
+                       75% { transform: translate(3px, 0); } }
+.gf-root .gf-btn.is-refused { animation: gf-refuse .22s steps(4, end) 1; }
+@media (prefers-reduced-motion: reduce) {
+  .gf-root .gf-btn.is-refused { animation: none; outline: 3px solid #ffce3a; outline-offset: -3px; }
+}
 .gf-root .gf-btn:disabled { opacity: .55; }
 /* The swing is UNDER WAY. The label already says which tap is next; this is the same fact in
    peripheral vision, for the 250 ms of the putter's dead zone when nothing on the meter moves. */
