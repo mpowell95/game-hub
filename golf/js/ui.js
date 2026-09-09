@@ -357,7 +357,6 @@ class GolfGame {
     el.className = 'gf-setup';
     this._themeSetup(el);
     el.innerHTML = `
-      <h1>${esc(t(`course_${c.id}`))}</h1>
       <div class="gf-coursepick gf-modepick">
         ${modes.map((m) => {
     const open = modeUnlocked(c, m, gf);
@@ -388,7 +387,6 @@ class GolfGame {
         <div class="gf-card-blurb">${esc(t(c.blurbKey))}</div>
       </div>
       <div class="gf-card">
-        <div class="gf-card-blurb gf-pickhead">${esc(rounds.length > 1 ? t('pick_set') : t('pick_round'))}</div>
         <div class="gf-rounds${rounds.length === 1 ? ' is-one' : ''}">
           ${rounds.map((r) => {
     const st = roundState(c, r.id, gf);
@@ -2199,25 +2197,12 @@ class GolfGame {
     if (read.power != null) needleAt(read.power, 5, 2, '#ffffff');
     needleAt(read.pos, 5, 2, '#ffffff');
 
-    // THE DEAD ZONE IS VISIBLE NOW. See `_paintSwingLabel` for the report this closes: while
-    // `tempo.deadMs` holds the putter's needle at zero, the meter used to be identical to its idle
-    // state, so the tap that started the swing left no mark anywhere on screen.
-    //
-    // A ring around the hub, sweeping clockwise from straight up and completing exactly as the
-    // needle starts to climb. It is drawn INSIDE the band's inner radius, so it cannot be mistaken
-    // for the needle or for the planted power marker, and it costs nothing on the other thirteen
-    // clubs - they have `deadMs: 0` and never enter this branch.
-    const dead = this.swing.tempo && this.swing.tempo.deadMs;
-    if (read.phase === PHASE.BACK && dead > 0) {
-      const q = Math.min(1, Math.max(0, (now - this.swing.t0) / dead));
-      if (q < 1) {
-        const r = IN_R - 9;
-        c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,0.55)';
-        c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); c.stroke();
-        c.lineWidth = 2.5; c.strokeStyle = '#ffce3a';
-        c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * q); c.stroke();
-      }
-    }
+    // NO CHARGE RING. One shipped here on 2026-09-09 - a gold arc sweeping the hub while the
+    // putter's `deadMs` held the needle at zero - and Matt's verdict the same day was "i hate the
+    // circle thing that appears when I go to putt. remove that thing." The report it was written
+    // for (the putter's first tap looking like it did nothing) is still closed, by the SWING
+    // BUTTON'S LABEL: `_paintSwingLabel` moves it to "set power" on the frame the tap lands, which
+    // is a word where the player is already looking rather than a new graphic on the dial.
 
     // --- the hub readout: how far the PREVIOUS shot travelled ----------------------------------
     if (this.lastShotYd != null) {

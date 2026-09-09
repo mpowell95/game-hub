@@ -298,6 +298,53 @@
    little more weight than the row under them. */
 .gf-root .gf-modepick { margin-bottom: 6px; }
 .gf-root .gf-modepick .gf-chip { font-weight: 800; }
+
+/* --- THE SETUP SCREEN LOOKS LIKE GOLF (2026-09-09) -------------------------------------------
+   Matt: *"I don't like the color scheme at all either. it doesn't look golf like at all."* He was
+   looking at TRAFFIC-CONE ORANGE tiles on khaki. The orange is the reference's own accent and it
+   stays on the PLAY screen, where it was measured (golf-reference-spec.md 15.1) - but the setup
+   screen is ours, was never in the footage, and had inherited the accent by default rather than by
+   decision.
+
+   What golf actually looks like from above: cut grass, and a cream scorecard on top of it. So the
+   ground is a fairway green rather than an olive, every tile is IVORY with deep-green ink, and the
+   selected one is the flag's gold - which is also the repo's standing selection accent (#ffce3a),
+   already paired with a border and a weight change because Matt is red/green colorblind and colour
+   alone may never carry a state.
+
+   Scoped to `.gf-setup` on purpose. The HUD's own panels, the swing meter and the swing button are
+   measured against the reference and are not touched by any of this. */
+/* NOTE: the ground colour is NOT set here. `ui.js` writes it inline from the course palette
+   (`THEMES[...].setupA/setupB` in render.js), so a rule in this file is silently overridden - which
+   cost a round of measuring on 2026-09-09. Change the palette, not this file. */
+.gf-root .gf-setup .gf-btn,
+.gf-root .gf-setup .gf-chip,
+.gf-root .gf-setup .gf-roundbtn {
+  background: #f2eddd;
+  color: #1b3a1e;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  text-shadow: none;
+}
+.gf-root .gf-setup .gf-chip { opacity: 1; background: #dfd9c6; color: #33502f; }
+.gf-root .gf-setup .gf-chip.is-on,
+.gf-root .gf-setup .gf-roundbtn.is-on {
+  background: #ffce3a; color: #2a2000;
+  border-color: #8a6a00;
+  box-shadow: 0 0 0 2px rgba(255, 206, 58, .45), var(--gf-shadow);
+}
+/* A locked tile is DIMMED GRASS, not a dimmed card: it has to read as "not yours yet" against six
+   ivory ones without becoming a second colour nobody can name. */
+.gf-root .gf-setup .gf-chip.is-locked,
+.gf-root .gf-setup .gf-roundbtn.is-locked {
+  background: rgba(255, 255, 255, 0.13); color: #d8e4d0; border-color: rgba(0, 0, 0, 0.3);
+}
+.gf-root .gf-setup .gf-roundbtn .gf-best { color: #7a5c00; }
+.gf-root .gf-setup .gf-roundbtn.is-on .gf-best { color: #4a3600; }
+.gf-root .gf-setup .gf-roundbtn small { opacity: .85; }
+/* ONE LINE, NEVER THREE. "Not open yet" wrapped inside a course chip and stood the whole row at
+   82px for two words; it is "locked" now, and the chip refuses to wrap whatever a translation
+   does - a course picker three lines tall is 38px stolen from the pictures below it. */
+.gf-root .gf-setup .gf-chip.is-locked small { white-space: nowrap; }
 /* THE TILES MUST NOT WRAP, OR THE TWO ROWS ARE DIFFERENT HEIGHTS. Matt, 2026-09-08, with a
    screenshot: *"Remove the yardage from these tiles so all the words and stuff are actually
    aligned."* The yardage went (`round_meta` is `par {par}` now), and that was not enough on its

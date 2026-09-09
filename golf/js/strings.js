@@ -27,7 +27,7 @@ export const STRINGS = {
     // --- the tutorial, and the unlock ladder -------------------------------------------------
     tutorial: 'Tutorial',
     tutorial_cta: 'Start the tutorial',
-    tutorial_again: 'Play the tutorial again',
+    tutorial_again: 'tutorial',
     tut_ok: 'got it',
     tut_your_turn: 'your turn',
     // FIVE CARDS, 25 WORDS IN TOTAL, and none is on screen during a swing (golf/js/tutorial.js).
@@ -44,7 +44,7 @@ export const STRINGS = {
     lock_tutorial: 'Play the tutorial',
     lock_par: 'Par or better on {range}',
     lock_unlock: 'Unlock {range}',
-    lock_course: 'Not open yet',
+    lock_course: 'locked',
     ladder_progress: '{done} of {total} unlocked',
     unlocked_now: 'Unlocked: holes {range}',
     blurb_pinevalley: 'Parkland. Tree lined, water on nine holes.',
@@ -177,7 +177,7 @@ export const STRINGS = {
     // --- the tutorial, and the unlock ladder -------------------------------------------------
     tutorial: 'Tutorial',
     tutorial_cta: 'Empezar el tutorial',
-    tutorial_again: 'Jugar el tutorial otra vez',
+    tutorial_again: 'tutorial',
     tut_ok: 'entendido',
     tut_your_turn: 'te toca',
     tut_welcome: 'Par 4. El resultado no cuenta.',
@@ -189,7 +189,7 @@ export const STRINGS = {
     lock_tutorial: 'Juega el tutorial',
     lock_par: 'Par o mejor en {range}',
     lock_unlock: 'Desbloquea {range}',
-    lock_course: 'Aún no disponible',
+    lock_course: 'bloqueado',
     ladder_progress: '{done} de {total} desbloqueados',
     unlocked_now: 'Desbloqueado: hoyos {range}',
     blurb_pinevalley: 'Parque. Árboles y agua en nueve hoyos.',

@@ -103,8 +103,12 @@ export const PALETTE = {
   pinPole: '#f4f4f4',
   // The two ends of the setup screen's backdrop. It is chrome rather than course, but it belongs
   // to the theme: a desert course behind a forest-green wash reads as the wrong game.
-  setupA: '#33501d',
-  setupB: '#4a6b28',
+  // THE SETUP SCREEN'S GROUND (2026-09-09). Matt: "I don't like the color scheme at all either. it
+  // doesn't look golf like at all." It was a khaki olive under traffic-cone orange tiles; this is
+  // cut grass, which is what the screen is standing on. The tiles themselves went ivory in
+  // golf.css - a cream scorecard on a fairway is what golf looks like from above.
+  setupA: '#1d4423',
+  setupB: '#326d33',
 };
 
 /** THE COURSE THEME. `PALETTE` above is Pine Valley's, and it stays the module's default so
@@ -143,8 +147,8 @@ export const THEMES = {
     waterBand: '#1a86bc',
     bank: '#8a4a24',             // the arroyo's own banks are the desert floor, cut
     bankMud: '#4a3020',
-    setupA: '#8a4a24',
-    setupB: '#b06a35',
+    setupA: '#7a3f1e',
+    setupB: '#a35f2d',
   },
 };
 
