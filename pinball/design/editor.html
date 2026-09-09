@@ -11,7 +11,8 @@
   *"I need the ability to inset or draw objects and rotate objects."* Then, after a deploy reloaded
   the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"* Then, on a phone:
   *"Please make it mobile friendly."* Then, on finding a part had moved on its own: *"It's
-  difficult to not accidentally move stuff around."*
+  difficult to not accidentally move stuff around."* Then: *"it should be symmetrical... I can't
+  figure out how to draw. I draw a polygon, but how do i get it to stay?"*
 
   NOTHING YOU DO HERE IS EVER HELD ONLY IN MEMORY. Every change is written to localStorage on the
   spot, and the page reloads into exactly what you left. It shipped without that, so a reload - a
@@ -144,6 +145,8 @@
     <option value="rect">Rect (drag)</option>
     <option value="poly">Polygon (taps)</option>
   </select>
+  <button id="mirror" disabled>Mirror</button>
+  <button id="pair" disabled>Match pair</button>
   <button id="rotL" disabled>&#8634; 15&deg;</button>
   <button id="rotR" disabled>&#8635; 15&deg;</button>
   <details id="more">
@@ -191,6 +194,7 @@
         <div class="row"><span>Width</span><input id="p-w" type="number" step="1"></div>
         <div class="row"><span>Height</span><input id="p-h" type="number" step="1"></div>
         <div class="row"><span>Rotate</span><input id="p-rot" type="number" step="5" value="0"></div>
+        <p class="help" id="pairnote" style="color:var(--ok)"></p>
         <p class="help" id="multi-note" hidden>
           These are the box around EVERYTHING selected. Moving it moves them all together, keeping
           their spacing; resizing it scales the whole arrangement.
@@ -231,6 +235,14 @@ const S = 0.000527;
 const m2px = (m) => m / S;
 const BUMPER_R = m2px(0.038), FLIP_R0 = m2px(0.012);
 const BW = 1100, BH = 1990;                 // the cabinet, in reference pixels
+/**
+ * THE MIRROR LINE IS x 493, AND IT IS MEASURED, NOT CHOSEN. Sixteen of the board's twenty-two
+ * left/right pairs sit exactly on it - the walls, both slingshots, the upper flippers, the pop
+ * bumpers, all five red post pairs, the guide rails, the saucer. It is NOT the middle of the
+ * cabinet (550): the launch chute takes the right-hand strip, so the PLAYING area is off-centre
+ * inside the box, exactly as `js/table-design.js` records with its own AXIS.
+ */
+const AXIS = 493;
 
 // board.js's material palette, so a part is the colour here that it is in the game.
 const MAT = {
@@ -428,6 +440,13 @@ function rotateSel(deg) {
   draw();
 }
 
+/** Reflect a shape about the mirror line. Points flip; a radius and a thickness do not. */
+function mirrorShape(sh) {
+  const out = JSON.parse(JSON.stringify(sh));
+  out.pts = out.pts.map(([x, y]) => [2 * AXIS - x, y]);
+  return out;
+}
+
 const snapOn = () => document.getElementById('snap').checked;
 const snap = (v) => snapOn() ? Math.round(v / 5) * 5 : Math.round(v);
 
@@ -578,7 +597,9 @@ function drawSel(marquee, poly, ghost) {
   }
   if (poly && poly.pts.length) {
     overlayG.appendChild(el('path', { d: 'M ' + poly.pts.map((q) => q.join(' ')).join(' L '), class: 'draw-ghost' }));
-    for (const q of poly.pts) overlayG.appendChild(el('circle', { cx: q[0], cy: q[1], r: S2B(9), class: 'rot-grip' }));
+    // The FIRST corner is drawn big: it is the thing you tap to close the shape.
+    poly.pts.forEach((q, i) => overlayG.appendChild(el('circle', {
+      cx: q[0], cy: q[1], r: S2B(i === 0 && poly.pts.length >= 3 ? 20 : 9), class: 'rot-grip' })));
   }
   const list = chosen();
   if (!list.length) return;
@@ -655,6 +676,8 @@ function addPart(kind, shape) {
 function endDraw() {
   drawing = null;
   document.getElementById('draw').classList.remove('on');
+  document.getElementById('draw').classList.remove('go');
+  document.getElementById('draw').textContent = 'Draw';
   svg.classList.remove('drawing');
   draw();
 }
@@ -675,7 +698,19 @@ svg.addEventListener('pointerdown', (e) => {
     const d = DRAW_DEFAULTS[kind];
     if (kind === 'poly') {
       drawing = drawing || { kind, pts: [] };
+      // TAPPING THE FIRST CORNER AGAIN CLOSES THE SHAPE. Enter was the only way to finish one, and
+      // a phone keyboard is not up while you are tapping a board - so a polygon could be started
+      // and never landed, which is exactly what happened: *"it keeps dropping new points until I
+      // click Draw again, but that also deletes everything i did."*
+      const first = drawing.pts[0];
+      if (first && drawing.pts.length >= 3 &&
+          Math.hypot(p.x - first[0], p.y - first[1]) < S2B(24)) {
+        addPart('poly', { k: 'poly', pts: drawing.pts.map((q) => q.slice()) });
+        endDraw();
+        svg.setPointerCapture(e.pointerId); e.preventDefault(); return;
+      }
       drawing.pts.push([snap(p.x), snap(p.y)]);
+      updateDrawBtn();
       drawSel(null, drawing);
     } else if (d.k === 'circle') {
       addPart(kind, { k: 'circle', pts: [[snap(p.x), snap(p.y)]], r: d.r });
@@ -824,6 +859,7 @@ function showProps() {
   $('clear').disabled = !list.length; $('undo').disabled = !history.length;
   $('rotL').disabled = !list.length; $('rotR').disabled = !list.length;
   $('lock').disabled = !list.length;
+  $('mirror').disabled = !list.length; $('pair').disabled = !list.length;
   const anyLocked = list.some((i) => i.locked);
   $('lock').textContent = anyLocked ? 'Unlock' : 'Lock';
   $('lock').classList.toggle('on', anyLocked);
@@ -905,9 +941,76 @@ $('lock').onclick = () => {
   for (const it of list) it.locked = to;
   draw();
 };
+/**
+ * MIRROR: copy everything selected to the other side of the board.
+ *
+ * The copy is a real new part, named `<name>_mirror`, so the export carries it as `added` and a
+ * session knows to write a second entry rather than move the first.
+ */
+$('mirror').onclick = () => {
+  const list = chosen(); if (!list.length) return;
+  push();
+  const made = [];
+  for (const it of list) {
+    const c = JSON.parse(JSON.stringify(it));
+    c.id = 'i' + (seq++);
+    // ONE substitution, not two: chaining left->right then right->left turned post_exit_left back
+    // into itself, and the copy came out as post_exit_left_mirror.
+    c.name = /_left/.test(it.name) ? it.name.replace('_left', '_right')
+      : /_right/.test(it.name) ? it.name.replace('_right', '_left')
+      : it.name + '_mirror';
+    c.copy = true; c.locked = false;
+    c.shape = mirrorShape(it.shape);
+    items.splice(items.indexOf(it) + 1, 0, c);
+    made.push(c.id);
+  }
+  sel = new Set(made);
+  draw();
+};
+
+/**
+ * MATCH PAIR: make a selection symmetric about x 493, taking the LEFT part as the master.
+ *
+ * Select two things and this reshapes the right-hand one into the exact mirror of the left-hand
+ * one - not a nudge, a replacement, so the pair is symmetric to the pixel. Select ONE thing and it
+ * centres it on the axis instead, which is the other half of "make this symmetrical".
+ */
+$('pair').onclick = () => {
+  const list = chosen(); if (!list.length) return;
+  push();
+  if (list.length === 1) {
+    const [cx] = boxCentre(groupBox(list));
+    shift(list[0], AXIS - cx, 0);
+    $('pairnote').textContent = `centred on x ${AXIS}`;
+  } else {
+    // Sort by centre x and fold the right half onto the mirror of the left half, pair by pair.
+    const withX = list.map((it) => ({ it, x: boxCentre(bbox(it))[0] })).sort((a, b) => a.x - b.x);
+    const n = Math.floor(withX.length / 2);
+    let fixed = 0;
+    for (let i = 0; i < n; i++) {
+      const master = withX[i].it, slave = withX[withX.length - 1 - i].it;
+      if (slave.locked) continue;
+      slave.shape = mirrorShape(master.shape);
+      fixed++;
+    }
+    $('pairnote').textContent = `${fixed} pair${fixed === 1 ? '' : 's'} matched about x ${AXIS}`;
+  }
+  draw();
+};
 $('rotL').onclick = () => rotateSel(-15);
 $('rotR').onclick = () => rotateSel(15);
+/** While a polygon has enough corners, the Draw button is a FINISH button. Pressing it used to
+ *  throw the shape away, which is the worst possible thing for it to do. */
+function updateDrawBtn() {
+  const ready = drawing && drawing.pts.length >= 3;
+  $('draw').textContent = ready ? `Finish (${drawing.pts.length})` : 'Draw';
+  $('draw').classList.toggle('go', !!ready);
+}
 $('draw').onclick = () => {
+  if (drawing && drawing.pts.length >= 3) {
+    addPart('poly', { k: 'poly', pts: drawing.pts.map((q) => q.slice()) });
+    endDraw(); return;
+  }
   const on = $('draw').classList.toggle('on');
   svg.classList.toggle('drawing', on);
   drawing = null;
