@@ -49,6 +49,7 @@ import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { STRINGS } from './strings.js';
 import { SWING_MAX, BAR_HALF } from './swing.js';
+import { PUTT_GAMMA } from './shot.js';
 
 const t = makeT(STRINGS);
 
@@ -125,6 +126,19 @@ export const GOOD_MARKS = [{ power: 1 }, { bar: 0 }];
  *  red/green colorblind, and gold against cyan is the pair this repo already uses. */
 export const BAD_MARKS = [{ power: SWING_MAX }, { power: 1, colour: '#5ec8f5' }, { bar: -BAR_HALF }];
 
+/** THE PUTTING CARD'S TWO CARETS, one on each dial, both pointing at that dial's OWN "25".
+ *
+ *  Matt: *"put arrows pointing at the 25% on both meters on the putting info popup."* This is the
+ *  card's whole argument made visible - the two carets sit at visibly different angles, which is
+ *  exactly the thing the sentence is claiming.
+ *
+ *  THE PUTTING ONE IS NOT AT POWER 0.25. A putt travels `range * power ** PUTT_GAMMA`, so the dial
+ *  draws its 25 % tick at `0.25 ** (1 / PUTT_GAMMA)` - about 43 % of the way round - and a caret at
+ *  0.25 would point at bare band a third of a turn short of the number it is naming. It is derived
+ *  from `PUTT_GAMMA` here rather than typed, so it moves if the curve is ever retuned. */
+export const FULL_TICK_MARK = [{ power: 0.25 }];
+export const PUTT_TICK_MARK = [{ power: Math.pow(0.25, 1 / PUTT_GAMMA) }];
+
 /** Every event kind the coach understands, exported so `golf/js/test.js` can check that each step
  *  waits on one of them (or on its own button) and the lesson cannot strand the player. */
 export const EVENTS = ['aim', 'club', 'tap-begin', 'tap-power', 'fire', 'settled', 'on-green', 'holed', 'result-closed'];
@@ -167,11 +181,28 @@ const SLICE_SVG = `<svg class="gf-tut__slice" viewBox="0 0 400 150" aria-hidden=
 </svg>`;
 
 /** The closing card points at the pause menu, so it shows one. */
-const PAUSE_ART = (tt) => `<div class="gf-tut__pause" aria-hidden="true">
-  <div class="gf-tut__pauseh">${esc(tt('paused'))}</div>
-  <div class="gf-tut__pauserow">${esc(tt('pause_resume'))}</div>
-  <div class="gf-tut__pauserow is-lit">${esc(tt('report_bug'))}</div>
-  <div class="gf-tut__pauserow">${esc(tt('quit'))}</div>
+/** THE CLOSING CARD SHOWS THE ROUTE, NOT JUST THE DESTINATION. Matt: *"The image should show the
+ *  pause button and the pause menu with the report a bug option."* It used to draw the menu alone,
+ *  which tells you what to look for and not where it lives - and the pause button is a small word
+ *  in the top-left corner that a new player has had no reason to press. So the card draws the
+ *  button, an arrow down from it, and then the menu it opens, with `report a bug` lit.
+ *
+ *  Both pieces are built from the same strings and the same `.gf-pause__row` look as the REAL menu
+ *  (`golf.css`), so the picture and the thing cannot drift apart. */
+const PAUSE_ART = (tt) => `<div class="gf-tut__route" aria-hidden="true">
+  <div class="gf-tut__fakebtn">${esc(tt('pause'))}</div>
+  <div class="gf-tut__routearrow">
+    <svg viewBox="0 0 24 30" width="24" height="30" aria-hidden="true">
+      <path d="M12 2 L12 20" stroke="#ffce3a" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <path d="M12 28 L4 17 L20 17 Z" fill="#ffce3a"/>
+    </svg>
+  </div>
+  <div class="gf-tut__pause">
+    <div class="gf-tut__pauseh">${esc(tt('paused'))}</div>
+    <div class="gf-tut__pauserow">${esc(tt('pause_resume'))}</div>
+    <div class="gf-tut__pauserow is-lit">${esc(tt('report_bug'))}</div>
+    <div class="gf-tut__pauserow">${esc(tt('quit'))}</div>
+  </div>
 </div>`;
 
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -237,6 +268,27 @@ export class Coach {
    *  drawn around an element that is no longer in the document. Called by ui.js after any re-render
    *  of the play screen. */
   refresh() { if (!this.finished) this._render(); }
+
+  /** IS THE LESSON HOLDING THE SWING? Matt: *"you shouldn't be able to swing without first tapping
+   *  the aim arrows."* The aim and club steps already refused to ADVANCE on anything but their own
+   *  control, but nothing stopped the player swinging straight past them - so the one lesson that
+   *  teaches by making you use a control could be walked around, and the card sat there while the
+   *  ball flew. `ui.js`'s `_tap` asks this before it starts a swing.
+   *
+   *  Only a step that RINGS a control gates: a card with nothing to press cannot be waiting on a
+   *  press. That keeps every silent waypoint and every popup out of it by construction. */
+  blocksSwing() {
+    const s = this.step;
+    return !!(s && !this.finished && s.rings && s.rings.length && s.advance !== 'tap-begin');
+  }
+
+  /** ...and when a held swing is tapped, say so LOUDLY rather than doing nothing. A control that
+   *  silently ignores you reads as broken - which is the same complaint the putter's dead zone got.
+   *  The rings flash and the rail pulses once; both clear themselves. */
+  nudge() {
+    for (const r of this.rings) { r.classList.remove('is-nudge'); void r.offsetWidth; r.classList.add('is-nudge'); }
+    if (this.el) { this.el.classList.remove('is-nudge'); void this.el.offsetWidth; this.el.classList.add('is-nudge'); }
+  }
 
   _next() {
     this.i += 1;
@@ -378,7 +430,8 @@ export class Coach {
     const kind = canvas.dataset.dial;
     this.onDial(canvas, {
       putting: kind === 'putt',
-      marks: kind === 'good' ? GOOD_MARKS : kind === 'bad' ? BAD_MARKS : null,
+      marks: kind === 'good' ? GOOD_MARKS : kind === 'bad' ? BAD_MARKS
+        : kind === 'full' ? FULL_TICK_MARK : kind === 'putt' ? PUTT_TICK_MARK : null,
     });
   }
 

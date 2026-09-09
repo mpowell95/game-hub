@@ -689,6 +689,19 @@
 .gf-root .gf-tut__two canvas { width: 100%; height: auto; }
 .gf-root .gf-tut__slice { width: 100%; height: auto; display: block; font-family: inherit; }
 /* The closing card points at a pause menu, so it shows one. */
+/* THE CLOSING CARD'S ROUTE: the pause button, an arrow, and the menu it opens. The button is a
+   REPLICA rather than the real one - the card is a picture of where to go, and a live control
+   inside a lesson popup would be a second way to press it. */
+.gf-root .gf-tut__route { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; }
+.gf-root .gf-tut__fakebtn {
+  align-self: flex-start;
+  /* The REAL pause button's own look (`.gf-btn`), so the picture matches what is on screen. */
+  font: inherit; font-size: 15px; font-weight: 700; letter-spacing: .02em; color: #fff;
+  padding: 7px 16px; background: var(--gf-orange);
+  border: 1px solid rgba(0, 0, 0, .55); box-shadow: var(--gf-shadow);
+}
+.gf-root .gf-tut__routearrow { line-height: 0; align-self: flex-start; margin-left: 22px; }
+
 .gf-root .gf-tut__pause {
   width: 100%; display: flex; flex-direction: column; gap: 5px; padding: 7px;
   background: rgba(0, 0, 0, .4); border: 1px solid rgba(255, 255, 255, .25);
@@ -721,10 +734,27 @@
 }
 .gf-root .gf-pause__row.is-lit { background: #ffce3a; color: #2a2000; border-color: #8a6a00; }
 
+/* MORE OBVIOUS THAN IT WAS (Matt, 2026-09-09: the aim and club rings "need to be more obvious").
+   A 2 px hairline at 28 % glow over a busy pixel-art course was easy to read past, so the ring is
+   3 px with a wider, brighter halo and a hard black key OUTSIDE it - the same trick the swing
+   meter and the tree canopies need to hold their shape against grass. */
 .gf-root .gf-tut-ring {
   position: absolute; pointer-events: none; z-index: 39;
-  border: 2px solid #ffce3a; box-shadow: 0 0 0 3px rgba(255, 206, 58, .28);
+  border: 3px solid #ffce3a;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 0 8px rgba(255, 206, 58, .38);
   animation: gf-tut-pulse 1.4s ease-in-out infinite;
+}
+/* A HELD SWING FLASHES THE THING IT IS WAITING FOR. `nudge()` re-adds this class, so the animation
+   restarts on every refused tap rather than only the first. */
+.gf-root .gf-tut-ring.is-nudge { animation: gf-tut-nudge .5s ease-out 2; }
+.gf-root .gf-tut.is-nudge .gf-tut__rail { animation: gf-tut-railnudge .5s ease-out 2; }
+@keyframes gf-tut-nudge {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 0 8px rgba(255, 206, 58, .38); }
+  50% { box-shadow: 0 0 0 3px rgba(0, 0, 0, .7), 0 0 0 14px rgba(255, 206, 58, .75); }
+}
+@keyframes gf-tut-railnudge {
+  0%, 100% { background: rgba(10, 14, 8, .94); }
+  50% { background: rgba(90, 72, 10, .96); }
 }
 /* GLOW, NEVER SCALE. The UX floor: a control that keeps changing size moves its own edge out from
    under a thumb already on the way down - and this ring sits on the swing button, which is the
@@ -736,5 +766,15 @@
 @media (prefers-reduced-motion: reduce) {
   /* Settled to its final pose, never `display: none` - the ring is what says WHICH control the
      card is talking about, so hiding it would remove information rather than motion. */
-  .gf-root .gf-tut-ring { animation: none; box-shadow: 0 0 0 4px rgba(255, 206, 58, .28); }
+  /* REDUCED MOTION KEEPS THE EMPHASIS, IT ONLY DROPS THE MOVEMENT (docs/BUILDING-A-GAME.md Part 0):
+     the ring holds its brightest state instead of pulsing, and a refused swing still changes it. */
+  .gf-root .gf-tut-ring {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 0 9px rgba(255, 206, 58, .45);
+  }
+  .gf-root .gf-tut-ring.is-nudge {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, .7), 0 0 0 14px rgba(255, 206, 58, .8);
+  }
+  .gf-root .gf-tut.is-nudge .gf-tut__rail { animation: none; background: rgba(90, 72, 10, .96); }
 }

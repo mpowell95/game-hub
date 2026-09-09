@@ -1256,6 +1256,12 @@ class GolfGame {
   _tap(atMs) {
     if (this.anim) { this._skipAnim(); return; }
     if (this.intro) this._endIntro();
+    // THE LESSON CAN HOLD THE SWING. Matt: *"you shouldn't be able to swing without first tapping
+    // the aim arrows."* The aim and club steps refused to advance on anything else, but the player
+    // could still swing straight past them, which made a lesson that teaches by USING a control
+    // into one you could ignore. The tap is refused and the rings flash instead - a control that
+    // quietly does nothing reads as broken, which is the exact complaint the putter's dead zone got.
+    if (this.coach && this.coach.blocksSwing()) { this.coach.nudge(); return; }
     if (this.holed) { this._renderSetup(); return; }
     // `atMs` is the input event's own timestamp when the caller has one - see the swing button's
     // binding. Everything downstream is a pure function of it, so the shot is resolved against
@@ -1666,7 +1672,14 @@ class GolfGame {
     // already waits before its result card, so the two beats in the game are the same beat.
     // `on-green` goes with it, in the same order, or the putting popup would overtake the card
     // that comes before it.
-    const onGreen = this._lie() === 'green';
+    // THE PUTTING LESSON FIRES WHEREVER THE PUTTER IS FORCED ON YOU, not only on the green itself.
+    // Matt: *"the putting one didn't popup now when i'm putting from the fringe. It gave me the
+    // putter, but the clues didn't come up."* `mustPutt` is the predicate that HANDED him the
+    // putter (green or fringe), and the lesson was testing a narrower one - so the collar gave him
+    // a club he had not been taught and no card explaining it. It still is not `settled`: the
+    // fairway and the rough do not force a putter, so a card there would tell a player standing in
+    // the fairway to putt. See golf/js/tutorial.js.
+    const onGreen = mustPutt(this._lie());
     setTimeout(() => {
       if (this.destroyed || !this.coach) return;
       this._coach('settled');
