@@ -18,8 +18,8 @@ player profile and a synced record of every game anyone plays on any of their de
 
 - Rank number (people who tie share a rank)
 - Name and emoji avatar, with a "You" marker on the viewer's own row
-- One number: their total in the selected category, or their total games played. That total is
-  wins in every category except No tier, where it is runs
+- One number: their total in the selected category, or their total games played. It is labelled
+  "wins" in the four difficulties and in Everything, "runs" in No tier, and "vs wins" in Versus
 - A breakdown by category — only as many as fit the line, chosen biggest-first with the selected
   one always kept, and then shown in difficulty order. Their own page shows all six
 
@@ -42,10 +42,14 @@ Header: the game's name and how many games everyone has played of it.
 Per row: rank (ties share a rank), name, avatar, the difficulty tier that player is ranked at,
 their games played, and the game's own number.
 
-Under that, a breakdown: one tile per difficulty the field has played, holding that player's number
-at that difficulty, with an em dash where they have none — and, once anyone has played the game
-against real people, a VS tile holding that player's wins against real people in it. The three games
-whose number cannot be split by difficulty (Skeeball, Pinball, Golf) have no tiles.
+Under that, on most games, a breakdown: one tile per difficulty the field has played, holding that
+player's number at that difficulty, with an em dash where they have none — and, once anyone has
+played the game against real people, a VS tile holding that player's wins against real people in it.
+
+**Five games have no tiles, for two different reasons.** Skeeball, Pinball and Golf because their
+number cannot be split by difficulty. Tic Tac Toe and Snake because their rows are a different shape
+entirely: two numbers side by side (Ultimate and Classic, Walls off and Walls on) and no tiles of any
+kind — so Tic Tac Toe shows no VS tile even though it is played against other people.
 
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
@@ -62,7 +66,8 @@ score, words found and longest word; Skeeball has best game, best throw, 100 cup
 time; Chinchón has chinchóns, closes and minus tens.
 
 Eleven games have them: Connect 4, Chinchón, Escoba, Nuts & Bolts, Ball Run, Dots and Boxes, Boggle,
-Snake, Hill Climb, Skeeball, Tic Tac Toe. On every other game the section is simply absent.
+Snake, Hill Climb, Skeeball, Tic Tac Toe. On every other game the section is simply absent — as it is
+on one of the eleven until somebody has a non-zero value for at least one of its records.
 
 ## A player's own page (opened from either view)
 
@@ -109,8 +114,9 @@ negative, and level par reads as "E" rather than 0.
 ## Games with more than one machine, map, mode or course
 
 - **Skeeball** — five machines: THE CLASSIC, HOT SHOT, HOT SHOT: BRICK CITY, HOT SHOT: RUNAWAY,
-  POPONGO. The board can be filtered to one machine, and plays, points and standing records are all
-  held per machine.
+  POPONGO. The board can be filtered to one machine, and plays, points, best game and best throw are
+  all held per machine. "100 cups hit" is not: it is a lifetime total across every machine, and it
+  drops out of the standing records entirely while a machine is selected.
 - **Snake** — two modes: Walls off and Walls on. Both numbers are shown for every player.
 - **Tic Tac Toe** — two variants: Classic and Ultimate. Both numbers are shown for every player.
 - **Ball Run** — two maps: Classic and Orbital. They share one combined number.
@@ -119,19 +125,23 @@ negative, and level par reads as "E" rather than 0.
 - **Pinball** — three table settings: Casual, Standard, Tournament. They are its difficulty, in
   that order. It is the one game with a difficulty but no per-difficulty score, so its number is
   one lifetime total.
-- **Golf** — three courses (Pine Valley, Red Mesa, Oasis Sands), each playable as 3, 9 or 18
-  holes: six three-hole sets, two nines, or the full eighteen. The board ranks one of those rounds
-  only — Pine Valley's first three holes.
+- **Golf** — three courses. Pine Valley and Red Mesa have eighteen holes each, playable as six
+  three-hole sets, two nines, or the full eighteen. Oasis Sands has nine, so it offers three
+  three-hole sets and one nine, and no eighteen. The board ranks one of those rounds only — Pine
+  Valley's first three holes.
 
 ## Also true
 
 - Everyone with any recorded play appears. Nobody is ever dropped for how they played.
 - One person can play on several phones; their devices are merged into one row.
 - Test and development accounts, and players who never chose a name, never appear at all.
-- Every number is a lifetime total or a personal best, so it only ever goes up — except that the
-  admin can void one player's scores on one Skeeball machine, which removes them from display
-  without touching the stored record.
+- Every number is a lifetime total or a personal best, so it only ever improves. For all but one
+  that means going up; Golf's is a score against par, so it improves downward. The one way a number
+  falls is the admin voiding a player's scores on one Skeeball machine, which removes them from
+  display without touching the stored record.
 - Two languages: English and Spanish.
-- Pinball is currently visible to the admin only.
+- Any game's visibility is an admin switch inside the app, so it can change with no code change.
+  Pinball is admin-only in the code itself; Golf carries no such flag and is hidden the other way,
+  by that switch. Check with the admin for what is actually released today.
 - Pool appears twice: the current game, and a retired earlier build kept on the board so the games
   played on it stay visible. That is why the leaderboard lists 24 games and the app hosts 23.
