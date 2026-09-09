@@ -47,7 +47,15 @@ const TABS = [
   { id: 'pool', labelKey: 'game_title_pool' },
   // retired: the rebuild was promoted to 'pool'. Kept so anything already recorded here stays
   // visible (THE LAW rules 1 and 5); hidden automatically for anyone with zero plays.
-  { id: 'poolv2', labelKey: 'game_title_poolv2' },
+  //
+  // `retired: true` (2026-09-09) means NO LAUNCHER ENTRY EXISTS for this id - it is not a game you
+  // can start, only a record of one you used to be able to. It is what `isGameOnLauncher` needs to
+  // answer honestly (its `isGameLive` default assumes a hub registry row, and this id has none, so
+  // it used to default to VISIBLE and put the retired build on the leaderboard while the current
+  // Pool was hidden). It also replaces gameChoices' hardcoded id check below, so one flag now
+  // drives all three surfaces. It deliberately does NOT hide the My Stats tab: that is the screen
+  // keeping those plays reachable, which is the whole reason the row exists.
+  { id: 'poolv2', labelKey: 'game_title_poolv2', retired: true },
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
@@ -89,9 +97,9 @@ export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
  *  game appears here the moment it is added there and can never be named differently. */
 export function gameChoices() {
   return TABS
-    // The retired Pool build: it stays in TABS so already-recorded plays remain visible (THE LAW
-    // rules 1 and 5), but nobody can be playing it today, so it is not a place a bug can happen.
-    .filter((tab) => tab.id !== 'poolv2')
+    // A retired build stays in TABS so already-recorded plays remain visible (THE LAW rules 1 and
+    // 5), but nobody can be playing it today, so it is not a place a bug can happen.
+    .filter((tab) => !tab.retired)
     .map((tab) => ({ id: tab.id, hubId: hubIdOf(tab.id), title: t(tab.labelKey) }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -119,8 +127,11 @@ function visibleTabs() {
 export function isGameOnLauncher(statsId) {
   let dev = false;
   try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
-  if (dev) return true;
   const tab = TABS.find((x) => x.id === statsId);
+  // A RETIRED build is never on the launcher, for anyone, dev included: there is no card to tap.
+  // Checked before the dev bypass for that reason.
+  if (tab && tab.retired) return false;
+  if (dev) return true;
   return isGameLive(hubIdOf(statsId), !(tab && tab.devOnly));
 }
 
