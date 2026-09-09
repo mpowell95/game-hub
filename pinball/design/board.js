@@ -262,9 +262,14 @@ P.push({
 // wrong: THE RAMPS ONLY GO UP. Nothing carries a ball back DOWN one, so the mouth is not an exit at
 // all - measured, every ball steered there simply stopped, 37% of the sweep. The deck's one real way
 // off is the open stretch under the paddles, drop hole included, so that is where these feed.
+// AND EACH RAIL STARTS ON THE RAMP'S INNER WALL, not in mid-air. x 150 is where the ramp's TOP is,
+// 134 px further up the board - down at py 730 the lane has already swung inboard, so a rail
+// beginning at 150 started INSIDE the lane and its outboard end hung over nothing. Solving the
+// ramp's own bend at py 730 puts that wall at x 180.4 (and 811.6 mirrored), so that is where they
+// begin: rail and ramp side are one continuous edge.
 const DECK_RAILS = [
-  { name: 'deck_lip_left', a: [150, 730], b: [330, 758] },   // feeds the open middle
-  { name: 'deck_lip_right', a: [836, 730], b: [656, 758] },  // feeds the open middle
+  { name: 'deck_lip_left', a: [180, 730], b: [330, 758] },   // from the left ramp wall, into the open middle
+  { name: 'deck_lip_right', a: [806, 730], b: [656, 758] },  // from the right ramp wall, into the open middle
 ];
 for (const r of DECK_RAILS) wall(r.name, r.a, r.b, 0.008, 0.014, Y2, 'steel', [2]);
 P.push({ type: 'saucer', name: 'saucer_centre', at: [500, 656], y0: Y1, levels: [1], capture: true, r: 0.016 });
@@ -749,14 +754,22 @@ export function buildBoard(THREE) {
     // place 0.62 let every arch and rail on level 1 show through, and that is a large part of what
     // Matt means by *"Things overlap... it is just messy."* 0.9 keeps a hint of what runs underneath
     // without the two levels reading as one.
-    deckwood: mk('deck_maple', 0xB47B36, { roughness: 0.8, transparent: true, opacity: 0.9 }),
+    // 0.78, NOT OPAQUE, AND THAT IS DELIBERATE. A LEVEL-1 BALL TRAVELS UNDER THIS DECK - the arch
+    // bands run py 250..775 on level 1 and the deck covers all of it - so a solid deck would make
+    // the ball disappear for that whole stretch. The original export called this surface
+    // semi-transparent for exactly that reason. 0.62 let everything beneath compete with what is
+    // ON the deck; 0.9 hid the ball. 0.78 keeps the ball readable and the structure quiet.
+    deckwood: mk('deck_maple', 0xB47B36, { roughness: 0.8, transparent: true, opacity: 0.78 }),
     darkwood: mk('walnut', 0x5A3817, { roughness: 0.75 }),
     black: mk('black_paint', 0x17130F),
     cream: mk('cream', 0xF1E5C4, { roughness: 0.5 }),
     red: mk('red_plastic', 0xC22020, { roughness: 0.45 }),
     steel: mk('steel', 0xC4C8CE, { roughness: 0.35, metalness: 0.3 }),
     ramp: mk('ramp_gray', 0x8E9194, { roughness: 0.55 }),
-    band: mk('band_gray', 0x7C7F83, { roughness: 0.6 }),
+    // The arch bands are DARKER than they were (0x7C7F83 -> 0x5C6167). Seen through the deck a
+    // light grey competes with the parts sitting on top of it, which is the other half of what
+    // Matt means by the top of the board looking messy; a darker band reads as structure beneath.
+    band: mk('band_gray', 0x5C6167, { roughness: 0.6 }),
     yellow: mk('insert_yellow', 0xE8E11C, { emissive: 0x7A7600, roughness: 0.4 }),
     magenta: mk('insert_magenta', 0xD634D6, { emissive: 0x6A106A, roughness: 0.4 }),
     blue: mk('insert_blue', 0x2F7DE6, { emissive: 0x0F3A80, roughness: 0.4 }),
