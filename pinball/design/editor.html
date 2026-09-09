@@ -12,7 +12,8 @@
   the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"* Then, on a phone:
   *"Please make it mobile friendly."* Then, on finding a part had moved on its own: *"It's
   difficult to not accidentally move stuff around."* Then: *"it should be symmetrical... I can't
-  figure out how to draw. I draw a polygon, but how do i get it to stay?"*
+  figure out how to draw. I draw a polygon, but how do i get it to stay?"* Then, on opening the
+  export in another drawing tool: *"why can't other svg editors recognize the objects and stuff?"*
 
   NOTHING YOU DO HERE IS EVER HELD ONLY IN MEMORY. Every change is written to localStorage on the
   spot, and the page reloads into exactly what you left. It shipped without that, so a reload - a
@@ -1069,14 +1070,98 @@ function save(name, text, mime) {
   setTimeout(() => URL.revokeObjectURL(u), 4000);
 }
 
+/**
+ * THE SVG EXPORT IS A DOCUMENT, NOT A SCREENSHOT.
+ *
+ * The first version handed the on-screen SVG straight to a file, and in any other drawing tool that
+ * arrives as ninety anonymous paths. Matt: *"why can't other svg editors recognize the objects and
+ * stuff?"* Four reasons, and this fixes all four:
+ *
+ *  1. NOTHING WAS NAMED. Each part carried `data-id="i37"`, a custom attribute every other editor
+ *     ignores, so the layer list read Path 1, Path 2, Path 3. Every element now carries an `id`, an
+ *     `inkscape:label` and a `<title>` - between them, every editor worth using shows the name.
+ *  2. NO LAYERS. One flat list with the phone chrome mixed into it. There are layers now, tagged
+ *     `inkscape:groupmode="layer"`, and inside each one the parts are grouped by TYPE.
+ *  3. HALF THE PARTS WERE STROKES. A wall was a two-point line with a 45-wide round cap - a LINE in
+ *     another editor, which reshapes strangely until you outline it. Every capsule is written as a
+ *     real closed outline now: two arcs and two sides, the same shape, editable as geometry.
+ *  4. EVERYTHING SAT INSIDE A SCALED GROUP, so the numbers another tool showed were not the board's
+ *     own. The layers carry NO transform: a coordinate in the file is a coordinate in `board.js`.
+ */
+const xmlSafe = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** A capsule as a real closed outline: a stadium. Two straight sides and two half-round ends. */
+function capsuleOutline(a, b, w) {
+  const r = Math.max(0.001, w / 2);
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len * r, ny = dx / len * r;
+  return `M ${a[0] + nx} ${a[1] + ny} L ${b[0] + nx} ${b[1] + ny}`
+    + ` A ${r} ${r} 0 0 1 ${b[0] - nx} ${b[1] - ny}`
+    + ` L ${a[0] - nx} ${a[1] - ny}`
+    + ` A ${r} ${r} 0 0 1 ${a[0] + nx} ${a[1] + ny} Z`;
+}
+
+function partSVG(it) {
+  const sh = it.shape;
+  const id = xmlSafe(it.name);
+  const common = `id="${id}" inkscape:label="${id}" fill="${it.colour}" stroke="#00000055" stroke-width="2"`;
+  const title = `<title>${id}</title>`;
+  if (sh.k === 'circle') {
+    return `<circle ${common} cx="${sh.pts[0][0]}" cy="${sh.pts[0][1]}" r="${sh.r}">${title}</circle>`;
+  }
+  if (sh.k === 'capsule') {
+    return `<path ${common} d="${capsuleOutline(sh.pts[0], sh.pts[1], sh.w)}">${title}</path>`;
+  }
+  const op = it.name === 'deck_L2' ? ' fill-opacity="0.5"' : '';
+  return `<path ${common}${op} d="M ${sh.pts.map((q) => q.join(' ')).join(' L ')} Z">${title}</path>`;
+}
+
+/** One layer, with the parts inside grouped by type so the tree reads like the board. */
+function layerSVG(id, label, parts) {
+  if (!parts.length) return '';
+  const byType = new Map();
+  for (const it of parts) {
+    if (!byType.has(it.type)) byType.set(it.type, []);
+    byType.get(it.type).push(it);
+  }
+  const groups = [...byType.entries()].map(([t, list]) =>
+    `  <g id="${id}-${t}" inkscape:label="${t}"><title>${t}</title>\n`
+    + list.map((it) => '    ' + partSVG(it)).join('\n')
+    + '\n  </g>').join('\n');
+  return `<g id="${id}" inkscape:groupmode="layer" inkscape:label="${label}">\n${groups}\n</g>`;
+}
+
 $('svg').onclick = () => {
-  // The WHOLE PHONE SCREEN, not the board alone: drawn fresh with nothing selected, so the export
-  // has no editing furniture in it.
-  const was = new Set(sel); sel = new Set(); draw();
-  const out = svg.cloneNode(true);
-  out.setAttribute('xmlns', NS);
-  save('foundry-screen.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + out.outerHTML, 'image/svg+xml');
-  sel = was; draw();
+  const both = items.filter((i) => i.levels.length === 2);
+  const one = items.filter((i) => i.levels.length === 1 && i.levels[0] === 1);
+  const two = items.filter((i) => i.levels.length === 1 && i.levels[0] === 2);
+
+  const cabinet = `<g id="cabinet" inkscape:groupmode="layer" inkscape:label="Cabinet">\n`
+    + `  <rect id="cabinet_box" inkscape:label="cabinet_box" x="0" y="0" width="${BW}" height="${BH}" fill="#2c1c0c"><title>cabinet_box</title></rect>\n`
+    + `  <rect id="playfield_sheet" inkscape:label="playfield_sheet" x="45" y="40" width="910" height="1900" fill="${MAT.maple}"><title>playfield_sheet</title></rect>\n`
+    + `</g>`;
+  const guides = `<g id="guides" inkscape:groupmode="layer" inkscape:label="Guides">\n`
+    + `  <path id="mirror_line" inkscape:label="mirror_line" fill="none" stroke="#46d39a" stroke-width="3" stroke-dasharray="26 18" d="M ${AXIS} 0 L ${AXIS} ${BH}"><title>mirror line x ${AXIS}</title></path>\n`
+    + `</g>`;
+
+  const body = [
+    cabinet,
+    layerSVG('both-levels', 'Both levels', both),
+    layerSVG('level-1', 'Level 1 - playfield', one),
+    layerSVG('level-2', 'Level 2 - upper deck', two),
+    guides,
+  ].filter(Boolean).join('\n');
+
+  const doc = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + `<svg xmlns="${NS}" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"`
+    + ` width="${BW}" height="${BH}" viewBox="0 0 ${BW} ${BH}">\n`
+    + `<title>FOUNDRY playfield</title>\n`
+    + `<desc>Reference pixels: x 0..${BW} across the cabinet, y 0..${BH} down it. The playing board is`
+    + ` x 45..941 and its mirror line is x ${AXIS}; the launch chute sits outside it at x 986..1055.</desc>\n`
+    + body + '\n</svg>';
+  save('foundry-board.svg', doc, 'image/svg+xml');
 };
 
 $('json').onclick = () => {
