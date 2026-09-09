@@ -34,10 +34,11 @@ const mirror2 = (fn) => fn(false) || fn(true);
 
 // cabinet
 P.push({ type: 'base', name: 'cabinet_floor', levels: [] });
-// MOVED (+20, -40) in the layout editor. This is the printed wood SHEET and it carries no
-// footprint, so nothing about the ball changes - but every wall, post and lane stayed where it
-// was, so the sheet now sits 20 px right and 40 px high of the cabinet it is inside.
-P.push({ type: 'poly', name: 'playfield_L1', pts: [[65,0],[975,0],[975,1710],[911,1710],[911,1610],[620,1840],[410,1840],[65,1610]], y0: 0.004, d: Y1 - 0.004, mat: 'maple', levels: [] });
+// PUT BACK where it was. It was moved (+20, -40) in the layout editor and Matt read that as a
+// stray drag rather than an intention - the sheet had ended up 20 px right and 40 px high of the
+// cabinet around it, because every wall and post stayed put. The editor is the thing that got
+// fixed, not this line: a tap on a phone was starting a drag.
+P.push({ type: 'poly', name: 'playfield_L1', pts: [[45,40],[955,40],[955,1750],[891,1750],[891,1650],[600,1880],[390,1880],[45,1650]], y0: 0.004, d: Y1 - 0.004, mat: 'maple', levels: [] });
 // THE UPPER DECK SLAB IS DELETED. It was the translucent sheet the top section stood on - render
 // only, `levels: []`, so level 2 still exists in the physics exactly as before and the ball still
 // rides it. What is gone is the floor you could see under it.

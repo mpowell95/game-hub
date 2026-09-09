@@ -10,7 +10,8 @@
   just the game board."* Then: *"let me select multiple objects at once to move them together."* Then:
   *"I need the ability to inset or draw objects and rotate objects."* Then, after a deploy reloaded
   the page under him: *"WHOA WHOA WHOA. WHERE ARE ALL THE CHANGES I JUST MADE???"* Then, on a phone:
-  *"Please make it mobile friendly."*
+  *"Please make it mobile friendly."* Then, on finding a part had moved on its own: *"It's
+  difficult to not accidentally move stuff around."*
 
   NOTHING YOU DO HERE IS EVER HELD ONLY IN MEMORY. Every change is written to localStorage on the
   spot, and the page reloads into exactly what you left. It shipped without that, so a reload - a
@@ -132,6 +133,7 @@
   <button id="dup" disabled>Duplicate</button>
   <button id="del" class="hot" disabled>Delete</button>
   <button id="undo" disabled>Undo</button>
+  <button id="lock" disabled>Lock</button>
   <button id="draw">Draw</button>
   <select id="drawkind">
     <option value="post">Post</option>
@@ -303,6 +305,11 @@ function build() {
       id: 'i' + (seq++), name: p.name, type: p.type,
       levels: (p.levels && p.levels.length) ? p.levels.slice() : [1, 2],
       colour: colourOf(p), shape: sh, from: p.name, copy: false,
+      // THE SHEETS AND THE CABINET ARE LOCKED. They are the size of the whole board, so they sit
+      // under your finger everywhere - a tap meant for a post lands on the playfield instead, and
+      // one of them did move on its own. Locked parts still select, duplicate and delete; they
+      // just do not drag, resize, rotate or nudge until you unlock them.
+      locked: /^(playfield_L1|deck_L2|cabinet_floor|wall_(left|right|top|bottom|right_upper)|chute_wall_outer)$/.test(p.name),
     });
   }
 }
@@ -417,7 +424,7 @@ function rotateSel(deg) {
   const list = chosen(); if (!list.length) return;
   push();
   const [cx, cy] = boxCentre(groupBox(list));
-  rotateGroup(list, deg * Math.PI / 180, cx, cy);
+  rotateGroup(list.filter((q) => !q.locked), deg * Math.PI / 180, cx, cy);
   draw();
 }
 
@@ -459,6 +466,9 @@ const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (cons
  * game in this hub to.
  */
 let ZF = 1;                      // css pixels per viewBox unit
+/** How far a finger must travel before a tap becomes a drag, in CSS pixels. Eight is the number
+ *  most touch UIs use; below it, a tap on a phone reads as a tiny drag. */
+const DRAG_START = 8;
 const S2B = (css) => css / (SCALE * ZF);
 
 const BOARD_TOP = 176, BOARD_H = 620;
@@ -681,10 +691,10 @@ svg.addEventListener('pointerdown', (e) => {
   if (rot && sel.size) {
     push();
     const c = boxCentre(groupBox(chosen()));
-    drag = { mode: 'rot', list: chosen(), c, from: Math.atan2(p.y - c[1], p.x - c[0]), acc: 0 };
+    drag = { mode: 'rot', list: chosen().filter((q) => !q.locked), c, from: Math.atan2(p.y - c[1], p.x - c[0]), acc: 0 };
   } else if (h && sel.size) {
     push();
-    drag = { mode: 'size', h, list: chosen(), start: p, box: groupBox(chosen()) };
+    drag = { mode: 'size', h, list: chosen().filter((q) => !q.locked), start: p, box: groupBox(chosen()) };
   } else if (id) {
     if (additive(e)) {
       // Shift-tap toggles ONE part in or out and never starts a drag, so you can build a set up
@@ -699,9 +709,13 @@ svg.addEventListener('pointerdown', (e) => {
     // Dragging a part that is ALREADY selected moves the whole set. Dragging one that is not
     // selects it alone first, which is what every drawing tool does.
     if (!sel.has(id)) { sel = new Set([id]); }
-    push();
     const list = chosen();
-    drag = { mode: 'move', list, start: p, from: list.map((it) => bbox(it)), acc: [0, 0] };
+    // A DRAG DOES NOT START UNTIL THE FINGER HAS TRAVELLED. On a phone a tap is never perfectly
+    // still, so every tap meant to SELECT was also a small drag, and parts crept. `armed` stays
+    // false until the pointer has moved DRAG_START css pixels; below that it is a tap and nothing
+    // moves. Nothing is pushed onto the undo stack until it arms either, or undo fills with
+    // no-ops that each look like a change.
+    drag = { mode: 'move', list: list.filter((q) => !q.locked), start: p, acc: [0, 0], armed: false };
     draw();
   } else {
     // Empty board: start a lasso. Shift keeps what is already selected and adds to it.
@@ -735,6 +749,11 @@ svg.addEventListener('pointermove', (e) => {
     return;
   }
   if (drag.mode === 'move') {
+    if (!drag.armed) {
+      if (Math.hypot(p.x - drag.start.x, p.y - drag.start.y) < S2B(DRAG_START)) return;
+      drag.armed = true;
+      push();
+    }
     const wantX = snap(p.x - drag.start.x), wantY = snap(p.y - drag.start.y);
     const dx = wantX - drag.acc[0], dy = wantY - drag.acc[1];
     if (dx || dy) { for (const it of drag.list) shift(it, dx, dy); drag.acc = [wantX, wantY]; }
@@ -804,6 +823,10 @@ function showProps() {
   $('dup').disabled = !list.length; $('del').disabled = !list.length;
   $('clear').disabled = !list.length; $('undo').disabled = !history.length;
   $('rotL').disabled = !list.length; $('rotR').disabled = !list.length;
+  $('lock').disabled = !list.length;
+  const anyLocked = list.some((i) => i.locked);
+  $('lock').textContent = anyLocked ? 'Unlock' : 'Lock';
+  $('lock').classList.toggle('on', anyLocked);
   $('nsel').textContent = list.length;
   $('multi-note').hidden = list.length < 2;
   if (!list.length) return;
@@ -820,12 +843,13 @@ for (const k of ['x', 'y', 'w', 'h']) {
     const list = chosen(); if (!list.length) return;
     push();
     const b = groupBox(list), [cx, cy] = boxCentre(b);
+    const movable = list.filter((q) => !q.locked);
     if (k === 'x' || k === 'y') {
       const dx = +$('p-x').value - cx, dy = +$('p-y').value - cy;
-      for (const it of list) shift(it, dx, dy);
+      for (const it of movable) shift(it, dx, dy);
     } else {
       // Only the field you typed in moves; the other axis is held, so Width does not drag Height.
-      sizeGroupTo(list, +$('p-w').value, +$('p-h').value, k !== 'w', k !== 'h');
+      sizeGroupTo(movable, +$('p-w').value, +$('p-h').value, k !== 'w', k !== 'h');
     }
     draw();
   });
@@ -836,7 +860,7 @@ function paintList() {
   for (const it of items) {
     const li = document.createElement('li');
     if (sel.has(it.id)) li.className = 'sel';
-    li.innerHTML = `<span>${it.name}</span><small>${it.type} · L${it.levels.join('')}</small>`;
+    li.innerHTML = `<span>${it.locked ? '&#128274; ' : ''}${it.name}</span><small>${it.type} · L${it.levels.join('')}</small>`;
     li.onclick = (e) => {
       // The list obeys the same rule as the board: plain tap replaces, shift/ctrl toggles.
       if (additive(e)) { if (sel.has(it.id)) sel.delete(it.id); else sel.add(it.id); }
@@ -874,6 +898,13 @@ $('del').onclick = remove;
 $('undo').onclick = undo;
 $('clear').onclick = () => { sel = new Set(); draw(); };
 $('all').onclick = () => { push(); sel = new Set(shown().map((i) => i.id)); draw(); };
+$('lock').onclick = () => {
+  const list = chosen(); if (!list.length) return;
+  push();
+  const to = !list.some((i) => i.locked);
+  for (const it of list) it.locked = to;
+  draw();
+};
 $('rotL').onclick = () => rotateSel(-15);
 $('rotR').onclick = () => rotateSel(15);
 $('draw').onclick = () => {
@@ -918,8 +949,11 @@ addEventListener('keydown', (e) => {
   const step = e.shiftKey ? 10 : 1;
   const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
   if (!d) return;
-  e.preventDefault(); push();
-  for (const it of list) shift(it, d[0], d[1]);
+  e.preventDefault();
+  const movable = list.filter((q) => !q.locked);
+  if (!movable.length) return;
+  push();
+  for (const it of movable) shift(it, d[0], d[1]);
   draw();
 });
 
