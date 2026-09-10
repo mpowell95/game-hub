@@ -107,7 +107,11 @@ export const RAMPS = [
  * and the footprint pass builds the walls from. Three copies would drift; this is the third
  * reader of one shape, not a fourth shape.
  */
-export function rampLift(x, y) {
+/**
+ * The lane under a point: its floor height (0 on the playfield, 1 at deck height) AND the x of
+ * its two walls there. null when the point is not inside a lane at all.
+ */
+export function rampLane(x, y) {
   for (const p of PARTS) {
     if (p.type !== 'ramp') continue;
     const xf = p.xFoot || p.x;
@@ -117,9 +121,15 @@ export function rampLift(x, y) {
     const x0 = xf[0] + (p.x[0] - xf[0]) * bend, x1 = xf[1] + (p.x[1] - xf[1]) * bend;
     const bx = x / px(1);
     if (bx < Math.min(x0, x1) || bx > Math.max(x0, x1)) continue;
-    return t * t * (3 - 2 * t);
+    return { lift: t * t * (3 - 2 * t), x0: Math.min(x0, x1), x1: Math.max(x0, x1) };
   }
   return null;
+}
+
+/** Just the height, for the many callers that only want that. */
+export function rampLift(x, y) {
+  const lane = rampLane(x, y);
+  return lane === null ? null : lane.lift;
 }
 
 export const KICKERS = [
@@ -236,6 +246,7 @@ export const DROP_IDS = [0, 1, 2, 3].map((i) => `target_bank_${i}`);
 
 export default {
   rampLift,
+  rampLane,
   NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
   SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS, deckEdge,
 };
