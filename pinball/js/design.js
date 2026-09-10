@@ -205,9 +205,15 @@ export class DesignPinball {
       b.x = b._dropFrom[0] + (to[0] - b._dropFrom[0]) * e;
       b.y = b._dropFrom[1] + (to[1] - b._dropFrom[1]) * e;
       b.vx = 0; b.vy = 0;
-      b.lift = 1 - e;
+      // A FALL CAN END SOMEWHERE OTHER THAN THE PLAYFIELD. `lift` used to run 1 to 0 no matter
+      // where the ball was going, and a ball stepping off the deck over a RAMP LANE is not going
+      // to the playfield - the lane floor under it is still most of the way up. See _levelChange
+      // for the measurement; this is the half that lets the fall stop at the lane.
+      const lift1 = b._dropLift == null ? 0 : b._dropLift;
+      b.lift = 1 + (lift1 - 1) * e;
       if (b._drop < 1) continue;
-      b._drop = null; b._dropTo = null; b.held = false; b.holdT = 0; b.lift = 0;
+      b._drop = null; b._dropTo = null; b.held = false; b.holdT = 0; b.lift = lift1;
+      b._dropLift = null;
       b.layer = 1;
       b.vy = 120;                       // it leaves the hole already moving down, as a fall does
       this.emit({ type: 'rampexit', x: b.x, y: b.y });
@@ -433,7 +439,29 @@ export class DesignPinball {
           //
           // The old version skipped these bands entirely and left the ball on level 2 - which,
           // now that the deck mesh is real, meant riding down past the flippers on nothing.
-          if (b.x < T.px(200) || b.x > T.px(786)) b._ramp = true;
+          // THE DECK EDGE OVER A RAMP LANE IS NOT A CLIFF, AND TREATING IT AS ONE IS WHY THE
+          // BALL KEPT VANISHING. Matt, a third time: *"It still disappears when going down the
+          // ramp."*
+          //
+          // Every ball leaving the deck was handed the same 46 px fall down to PLAYFIELD height.
+          // Outboard of x 150 the deck edge IS the top of a ramp, and the lane floor it lands on
+          // is still 95% of the way up to the deck - so for the whole 0.18 s of that fall the
+          // ball was drawn below the surface it was standing on, then snapped back up the moment
+          // _rampLift took over. Twenty-one frames under the ramp and a pop: exactly the
+          // *"disappeared... then popped back into existence"* he has been describing. The lift
+          // fix in v761 could not touch it, because a falling ball is skipped by _rampLift.
+          //
+          // So the fall now ends AT THE LANE, and its length is what is actually being fallen:
+          // the full 46 px in the open middle of the deck, nothing at all where the lane meets
+          // the deck edge flush, and the part of it in between where the deck overhangs the lane.
+          const lane = T.rampLift(b.x, b.y);
+          if (lane !== null) b._ramp = true;      // a ramp only goes UP: do not scoop it back
+          if (lane !== null && lane > 0.95) {
+            // flush with the top of the lane - there is nothing here to fall off
+            b.layer = 1; b.lift = lane;
+            this.emit({ type: 'rampexit', x: b.x, y: b.y });
+            continue;
+          }
           // off the front of the deck anywhere else - but the SHOOTER LANE is not the front of
           // the deck. It runs the full length of the cabinet outboard of the board (x px
           // 986..1055), so a ball riding up it is past py 760 for most of the trip. Without the
@@ -449,7 +477,8 @@ export class DesignPinball {
           b.held = true; b.holdT = 99;
           b._drop = 0;
           b._dropFrom = [b.x, b.y];
-          b._dropTo = [b.x, b.y + T.px(46)];
+          b._dropLift = lane === null ? 0 : lane;
+          b._dropTo = [b.x, b.y + T.px(46) * (1 - (lane === null ? 0 : lane))];
         }
       }
     }

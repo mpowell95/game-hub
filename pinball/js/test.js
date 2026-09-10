@@ -1237,6 +1237,51 @@ function launched(g) {
     ok('[FOUNDRY] every rail that runs into a paddle hands the ball on without a step',
       off.length === 0, off.length ? off.join('; ') : 'every paddle sits 6 to 12 px proud of its guide');
   }
+  // [KNOWN-BUG PROBE] COMING DOWN A RAMP, THE BALL IS NEVER DRAWN UNDER THE RAMP.
+  //
+  // Matt reported this three times - *"the ball went through the ramp and disappeared"*, *"then
+  // popped back into existence"*, *"It still disappears when going down the ramp"* - and two
+  // fixes missed it because they watched the wrong frames. The first brightened the ball under
+  // the deck, which is not where it went. The second gave a level-1 ball in a lane the lane's
+  // own height, which is right and still could not reach this: a ball stepping off the deck is
+  // part-way through a SCRIPTED FALL, and a falling ball is skipped by that rule and is still on
+  // layer 2 - so every probe that filtered on layer 1 measured a clean descent and reported zero.
+  //
+  // Measured on the build that shipped: 90 px under the surface at x 90, py 642 - nearly two ball
+  // widths - for 1,542 of 14,354 frames, with 167 one-frame jumps in drawn height of up to 93 px.
+  // This walks balls off the deck across both lanes and watches the DRAWN height against the lane
+  // under it the whole way down, fall frames included.
+  {
+    const LIFT_PX = 95, BALL = 51;      // px(95) is the gap between the decks; a ball is 51 px
+    let worst = 0, at = 0, jump = 0, hidden = 0;
+    for (const x of [60, 100, 140, 180, 820, 860, 900]) {
+      for (const vx of [-60, 0, 60]) for (const vy of [20, 120]) {
+        const g = new DesignPinball({ rand: () => 0.5 });
+        g.start();
+        const b = g.balls[0];
+        b.onPlunger = false; b.held = false; b.layer = 2; b.lift = 1;
+        b.x = DT.px(x); b.y = DT.px(560); b.vx = vx; b.vy = vy;
+        let prev = null;
+        for (let i = 0; i < 120 * 5; i++) {
+          g.update(1 / 120);
+          const q = g.balls[0]; if (!q || q.onPlunger) break;
+          const surf = DT.rampLift(q.x, q.y);
+          if (surf === null) { prev = null; continue; }
+          const drawn = (q.lift || 0) * LIFT_PX;
+          const sink = surf * LIFT_PX - drawn;
+          if (sink > worst) { worst = sink; at = Math.round(q.y / DT.px(1)); }
+          if (sink > BALL) hidden++;
+          if (prev !== null) jump = Math.max(jump, Math.abs(drawn - prev));
+          prev = drawn;
+        }
+      }
+    }
+    const clean = worst < 12 && jump < 12;
+    ok('[FOUNDRY] a ball coming down a ramp is never drawn under it', clean,
+      clean ? 'never sinks into the lane, and no jump in drawn height'
+        : worst.toFixed(0) + ' px under the surface at py ' + at + ', ' + hidden
+          + ' frames out of sight, worst one-frame jump ' + jump.toFixed(0) + ' px');
+  }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.
   {
