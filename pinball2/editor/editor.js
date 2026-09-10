@@ -1,0 +1,742 @@
+// The editor. It loads the MACHINE'S OWN engine, so Play is the real game and not a preview of it.
+// Nothing here writes a game file: you export, and a session applies the export. That keeps a
+// gameplay fix from ever landing on top of unsaved editing work.
+
+import { CONFIG, TUNABLES, cloneConfig, gravity } from '../machines/testbox/config.js';
+import { World } from '../machines/testbox/physics.js';
+import { makeTable, toJSON, fromJSON, newId } from '../machines/testbox/table.js';
+import { draw, fitView, toTable, toScreen } from '../machines/testbox/render.js';
+import { playable, distToShape, checkGaps, tunnelProbe, restSweep, drainTime } from '../probes/checks.js';
+
+const SAVE = 'pinball2.editor.v1';
+const DEG = 180 / Math.PI;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const panel = document.getElementById('panel');
+const hud = document.getElementById('hud');
+const zones = document.getElementById('touchzones');
+const launchBtn = document.getElementById('launch');
+
+const app = {
+  table: makeTable(),
+  cfg: cloneConfig(),
+  mode: 'play',
+  sel: new Set(),
+  view: null,
+  world: null,
+  trail: [],
+  marks: [],
+  mask: null,
+  grid: 0.005,
+  snap: true,
+  undo: [],
+  redo: [],
+  slowmo: 1,
+  running: true,
+  lastT: 0,
+};
+
+// ------------------------------------------------------------------ persistence
+
+function save() {
+  try {
+    localStorage.setItem(SAVE, JSON.stringify({ table: JSON.parse(toJSON(app.table)), cfg: app.cfg }));
+  } catch (e) { /* a full or blocked store must never stop the tool working */ }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.table) app.table = fromJSON(d.table);
+    if (d.cfg) app.cfg = cloneConfig(d.cfg);
+  } catch (e) { /* a corrupt autosave falls back to the shipped table rather than a blank screen */ }
+}
+
+function pushUndo() {
+  app.undo.push(toJSON(app.table));
+  if (app.undo.length > 100) app.undo.shift();
+  app.redo.length = 0;
+}
+
+function doUndo() {
+  if (!app.undo.length) return;
+  app.redo.push(toJSON(app.table));
+  app.table = fromJSON(app.undo.pop());
+  app.sel.clear();
+  afterEdit();
+}
+
+function doRedo() {
+  if (!app.redo.length) return;
+  app.undo.push(toJSON(app.table));
+  app.table = fromJSON(app.redo.pop());
+  app.sel.clear();
+  afterEdit();
+}
+
+function afterEdit() {
+  app.mask = null;
+  app.marks = [];
+  save();
+  renderPanel();
+}
+
+// ------------------------------------------------------------------ canvas sizing
+
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(r.width * dpr);
+  canvas.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const keep = app.view;
+  app.view = fitView(app.table, r.width, r.height);
+  if (keep) { app.view.zoom = keep.zoom; app.view.px = keep.px; app.view.py = keep.py; }
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+
+// ------------------------------------------------------------------ play
+
+function newBall() {
+  app.world = new World(app.table, app.cfg);
+  app.world.addBall(app.table.launch, { x: 0, y: 0.1 });
+  app.trail = [];
+}
+
+function ensureWorld() {
+  if (!app.world || !app.world.balls.some((b) => b.alive)) newBall();
+}
+
+function stepPlay(dt) {
+  if (!app.world) return;
+  const n = Math.min(8, Math.max(1, Math.round((dt * app.slowmo) / app.cfg.DT)));
+  for (let i = 0; i < n; i++) app.world.step(app.cfg.DT);
+  const b = app.world.balls.find((x) => x.alive);
+  if (b) {
+    app.trail.push({ x: b.p.x, y: b.p.y });
+    if (app.trail.length > 90) app.trail.shift();
+  }
+}
+
+function setFlipper(side, on) {
+  if (app.world) app.world.setFlipper(side, on);
+}
+
+// ------------------------------------------------------------------ hit testing
+
+function shapeAt(p) {
+  let best = null;
+  let bestD = Infinity;
+  for (const sh of app.table.shapes) {
+    const d = distToShape(sh, p);
+    const pick = sh.kind === 'drain' ? (d <= 0.001 ? 0.001 : Infinity) : d;
+    if (pick < 0.012 && pick < bestD) { bestD = pick; best = sh; }
+  }
+  return best;
+}
+
+function handlesFor(sh) {
+  const out = [];
+  if (sh.kind === 'seg') {
+    out.push({ key: 'a', at: sh.a });
+    out.push({ key: 'b', at: sh.b });
+  } else if (sh.kind === 'arc') {
+    out.push({ key: 'c', at: sh.c });
+    out.push({ key: 'r', at: { x: sh.c.x + sh.radius * Math.cos(sh.a0), y: sh.c.y + sh.radius * Math.sin(sh.a0) } });
+    out.push({ key: 'r1', at: { x: sh.c.x + sh.radius * Math.cos(sh.a1), y: sh.c.y + sh.radius * Math.sin(sh.a1) } });
+  } else if (sh.kind === 'circle') {
+    out.push({ key: 'c', at: sh.c });
+  } else if (sh.kind === 'flipper') {
+    out.push({ key: 'pivot', at: sh.pivot });
+    out.push({ key: 'tip', at: { x: sh.pivot.x + sh.len * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * Math.sin(sh.restAng) } });
+  } else if (sh.kind === 'drain') {
+    out.push({ key: 'tl', at: { x: sh.x, y: sh.y } });
+    out.push({ key: 'br', at: { x: sh.x + sh.w, y: sh.y + sh.h } });
+  }
+  return out;
+}
+
+function snap(p) {
+  if (!app.snap) return p;
+  const g = app.grid;
+  return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+}
+
+function moveShape(sh, dx, dy) {
+  if (sh.kind === 'seg') { sh.a.x += dx; sh.a.y += dy; sh.b.x += dx; sh.b.y += dy; }
+  else if (sh.kind === 'arc' || sh.kind === 'circle') { sh.c.x += dx; sh.c.y += dy; }
+  else if (sh.kind === 'flipper') { sh.pivot.x += dx; sh.pivot.y += dy; }
+  else if (sh.kind === 'drain') { sh.x += dx; sh.y += dy; }
+}
+
+// ------------------------------------------------------------------ pointer
+
+const drag = { mode: null, id: null, key: null, last: null, start: null, box: null, moved: false };
+const touches = new Map();
+
+function localPt(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  const s = localPt(e);
+  if (app.mode === 'play') {
+    touches.set(e.pointerId, s.x);
+    setFlipper(s.x < canvas.getBoundingClientRect().width / 2 ? 'L' : 'R', true);
+    return;
+  }
+  const p = toTable(app.view, s);
+  drag.moved = false;
+  drag.last = p;
+  drag.start = p;
+
+  for (const id of app.sel) {
+    const sh = app.table.shapes.find((x) => x.id === id);
+    if (!sh) continue;
+    for (const h of handlesFor(sh)) {
+      const hs = toScreen(app.view, h.at);
+      if (Math.hypot(hs.x - s.x, hs.y - s.y) < 18) {
+        pushUndo();
+        drag.mode = 'handle'; drag.id = id; drag.key = h.key;
+        return;
+      }
+    }
+  }
+
+  const hit = shapeAt(p);
+  if (hit) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      if (app.sel.has(hit.id)) app.sel.delete(hit.id); else app.sel.add(hit.id);
+    } else if (!app.sel.has(hit.id)) {
+      app.sel.clear();
+      app.sel.add(hit.id);
+    }
+    pushUndo();
+    drag.mode = 'move';
+    renderPanel();
+  } else {
+    if (!(e.shiftKey || e.ctrlKey || e.metaKey)) app.sel.clear();
+    drag.mode = 'lasso';
+    drag.box = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    renderPanel();
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (app.mode === 'play') return;
+  if (!drag.mode) return;
+  const p = toTable(app.view, localPt(e));
+  drag.moved = true;
+  if (drag.mode === 'lasso') { drag.box.x1 = p.x; drag.box.y1 = p.y; return; }
+
+  if (drag.mode === 'handle') {
+    const sh = app.table.shapes.find((x) => x.id === drag.id);
+    if (!sh) return;
+    const q = snap(p);
+    if (sh.kind === 'seg') { sh[drag.key] = q; }
+    else if (sh.kind === 'arc') {
+      if (drag.key === 'c') sh.c = q;
+      else {
+        const ang = Math.atan2(p.y - sh.c.y, p.x - sh.c.x);
+        if (drag.key === 'r') { sh.radius = Math.max(0.01, Math.hypot(p.x - sh.c.x, p.y - sh.c.y)); sh.a0 = ang; }
+        else sh.a1 = ang;
+      }
+    } else if (sh.kind === 'circle') { sh.c = q; }
+    else if (sh.kind === 'flipper') {
+      if (drag.key === 'pivot') sh.pivot = q;
+      else {
+        sh.len = Math.max(0.02, Math.hypot(p.x - sh.pivot.x, p.y - sh.pivot.y));
+        const a = Math.atan2(p.y - sh.pivot.y, p.x - sh.pivot.x);
+        const swing = sh.endAng - sh.restAng;
+        sh.restAng = a;
+        sh.endAng = a + swing;
+      }
+    } else if (sh.kind === 'drain') {
+      if (drag.key === 'tl') { sh.w += sh.x - q.x; sh.h += sh.y - q.y; sh.x = q.x; sh.y = q.y; }
+      else { sh.w = Math.max(0.01, q.x - sh.x); sh.h = Math.max(0.01, q.y - sh.y); }
+    }
+    return;
+  }
+
+  if (drag.mode === 'move') {
+    let dx = p.x - drag.last.x;
+    let dy = p.y - drag.last.y;
+    if (app.snap) {
+      const t = snap({ x: p.x, y: p.y });
+      const l = snap({ x: drag.last.x, y: drag.last.y });
+      dx = t.x - l.x; dy = t.y - l.y;
+      if (dx === 0 && dy === 0) return;
+      drag.last = { x: l.x + dx, y: l.y + dy };
+    } else {
+      drag.last = p;
+    }
+    for (const id of app.sel) {
+      const sh = app.table.shapes.find((x) => x.id === id);
+      if (sh) moveShape(sh, dx, dy);
+    }
+  }
+});
+
+function endDrag(e) {
+  if (app.mode === 'play') {
+    touches.delete(e.pointerId);
+    const w = canvas.getBoundingClientRect().width;
+    let l = false;
+    let r = false;
+    for (const x of touches.values()) { if (x < w / 2) l = true; else r = true; }
+    setFlipper('L', l);
+    setFlipper('R', r);
+    return;
+  }
+  if (drag.mode === 'lasso' && drag.box) {
+    const b = drag.box;
+    const x0 = Math.min(b.x0, b.x1);
+    const x1 = Math.max(b.x0, b.x1);
+    const y0 = Math.min(b.y0, b.y1);
+    const y1 = Math.max(b.y0, b.y1);
+    if (Math.abs(x1 - x0) > 0.004 || Math.abs(y1 - y0) > 0.004) {
+      for (const sh of app.table.shapes) {
+        const c = centreOf(sh);
+        if (c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1) app.sel.add(sh.id);
+      }
+    }
+  }
+  if (drag.mode && drag.moved) afterEdit();
+  drag.mode = null; drag.box = null;
+  renderPanel();
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const k = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  app.view.zoom = Math.min(6, Math.max(0.5, app.view.zoom * k));
+}, { passive: false });
+
+function centreOf(sh) {
+  if (sh.kind === 'seg') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
+  if (sh.kind === 'arc' || sh.kind === 'circle') return sh.c;
+  if (sh.kind === 'flipper') return sh.pivot;
+  return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
+}
+
+// ------------------------------------------------------------------ keyboard
+
+window.addEventListener('keydown', (e) => {
+  const typing = e.target && /input|select|textarea/i.test(e.target.tagName);
+  if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) doRedo(); else doUndo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && app.mode === 'edit') {
+    e.preventDefault();
+    for (const sh of app.table.shapes) app.sel.add(sh.id);
+    renderPanel();
+    return;
+  }
+  if (app.mode === 'play') {
+    if (e.key === 'z' || e.key === 'Z' || e.key === 'ArrowLeft') setFlipper('L', true);
+    if (e.key === 'm' || e.key === 'M' || e.key === 'ArrowRight') setFlipper('R', true);
+    if (e.key === ' ') { e.preventDefault(); newBall(); }
+    return;
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); }
+  if (e.key === 'd' && app.sel.size) duplicateSel();
+  const nudge = e.shiftKey ? app.grid * 5 : app.grid;
+  const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  if (map[e.key] && app.sel.size) {
+    e.preventDefault();
+    pushUndo();
+    for (const id of app.sel) {
+      const sh = app.table.shapes.find((x) => x.id === id);
+      if (sh) moveShape(sh, map[e.key][0] * nudge, map[e.key][1] * nudge);
+    }
+    afterEdit();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (app.mode !== 'play') return;
+  if (e.key === 'z' || e.key === 'Z' || e.key === 'ArrowLeft') setFlipper('L', false);
+  if (e.key === 'm' || e.key === 'M' || e.key === 'ArrowRight') setFlipper('R', false);
+});
+
+// ------------------------------------------------------------------ edit actions
+
+function deleteSel() {
+  if (!app.sel.size) return;
+  pushUndo();
+  app.table.shapes = app.table.shapes.filter((s) => !app.sel.has(s.id));
+  app.sel.clear();
+  afterEdit();
+}
+
+function duplicateSel() {
+  if (!app.sel.size) return;
+  pushUndo();
+  const made = [];
+  for (const id of app.sel) {
+    const sh = app.table.shapes.find((x) => x.id === id);
+    if (!sh) continue;
+    const copy = JSON.parse(JSON.stringify(sh));
+    copy.id = newId(sh.kind[0]);
+    moveShape(copy, app.grid * 4, app.grid * 4);
+    app.table.shapes.push(copy);
+    made.push(copy.id);
+  }
+  app.sel = new Set(made);
+  afterEdit();
+}
+
+function addShape(kind) {
+  pushUndo();
+  const cx = app.table.w / 2;
+  const cy = app.table.h / 2;
+  let sh;
+  if (kind === 'seg') sh = { id: newId('w'), kind: 'seg', a: { x: cx - 0.06, y: cy }, b: { x: cx + 0.06, y: cy }, r: 0.008 };
+  else if (kind === 'arc') sh = { id: newId('a'), kind: 'arc', c: { x: cx, y: cy }, radius: 0.06, a0: Math.PI, a1: Math.PI * 1.5, r: 0.008 };
+  else if (kind === 'circle') sh = { id: newId('p'), kind: 'circle', c: { x: cx, y: cy }, r: 0.012 };
+  else if (kind === 'flipper') sh = { id: newId('f'), kind: 'flipper', side: 'L', pivot: { x: cx, y: cy }, len: 0.07, r0: 0.012, r1: 0.007, restAng: 25 / DEG, endAng: -27 / DEG };
+  else sh = { id: newId('d'), kind: 'drain', x: cx - 0.06, y: cy, w: 0.12, h: 0.05 };
+  app.table.shapes.push(sh);
+  app.sel = new Set([sh.id]);
+  afterEdit();
+}
+
+// ------------------------------------------------------------------ panels
+
+function el(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html.trim();
+  return d.firstElementChild;
+}
+
+function numRow(label, value, step, onChange) {
+  const r = el(`<div class="row"><label>${label}</label><input type="number" step="${step}" value="${value}"></div>`);
+  r.querySelector('input').addEventListener('change', (e) => {
+    pushUndo();
+    onChange(parseFloat(e.target.value));
+    afterEdit();
+  });
+  return r;
+}
+
+function renderPanel() {
+  panel.innerHTML = '';
+  panel.classList.remove('hidden');
+  if (app.mode === 'play') return renderPlayPanel();
+  if (app.mode === 'edit') return renderEditPanel();
+  if (app.mode === 'tune') return renderTunePanel();
+  return renderCheckPanel();
+}
+
+function renderPlayPanel() {
+  const r = el('<div class="row"></div>');
+  const nb = el('<button class="primary">New ball</button>');
+  nb.onclick = newBall;
+  const slow = el('<button>Slow motion</button>');
+  slow.onclick = () => { app.slowmo = app.slowmo === 1 ? 0.25 : 1; slow.textContent = app.slowmo === 1 ? 'Slow motion' : 'Full speed'; };
+  const pause = el('<button>Pause</button>');
+  pause.onclick = () => { app.running = !app.running; pause.textContent = app.running ? 'Pause' : 'Resume'; };
+  const stepb = el('<button>Step frame</button>');
+  stepb.onclick = () => { app.running = false; pause.textContent = 'Resume'; stepPlay(1 / 60); };
+  r.append(nb, slow, pause, stepb);
+  panel.append(r);
+  panel.append(el('<div class="note">Hold the left or right half of the table to flip, or Z and M on a keyboard. Space drops a new ball.</div>'));
+}
+
+function renderEditPanel() {
+  const add = el('<div class="row"></div>');
+  for (const [k, name] of [['seg', '+ Wall'], ['arc', '+ Arc'], ['circle', '+ Post'], ['flipper', '+ Flipper'], ['drain', '+ Drain']]) {
+    const b = el(`<button>${name}</button>`);
+    b.onclick = () => addShape(k);
+    add.append(b);
+  }
+  panel.append(add);
+
+  const ops = el('<div class="row"></div>');
+  const dup = el('<button>Duplicate</button>'); dup.onclick = duplicateSel; dup.disabled = !app.sel.size;
+  const del = el('<button class="danger">Delete</button>'); del.onclick = deleteSel; del.disabled = !app.sel.size;
+  const un = el('<button>Undo</button>'); un.onclick = doUndo; un.disabled = !app.undo.length;
+  const re = el('<button>Redo</button>'); re.onclick = doRedo; re.disabled = !app.redo.length;
+  const sn = el(`<button>Snap ${app.snap ? 'on' : 'off'}</button>`);
+  sn.onclick = () => { app.snap = !app.snap; renderPanel(); };
+  ops.append(dup, del, un, re, sn);
+  panel.append(ops);
+
+  const io = el('<div class="row"></div>');
+  const exp = el('<button>Export JSON</button>');
+  exp.onclick = () => {
+    const blob = new Blob([toJSON(app.table)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${app.table.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  const imp = el('<button>Import</button>');
+  imp.onclick = () => {
+    const i = document.createElement('input');
+    i.type = 'file';
+    i.accept = 'application/json,.json';
+    i.onchange = () => {
+      const f = i.files && i.files[0];
+      if (!f) return;
+      f.text().then((t) => { pushUndo(); app.table = fromJSON(t); app.sel.clear(); resize(); afterEdit(); });
+    };
+    i.click();
+  };
+  const reset = el('<button class="danger">Reset table</button>');
+  reset.onclick = () => {
+    if (!confirm('Throw away every edit and reload the table as it ships?')) return;
+    pushUndo();
+    app.table = makeTable();
+    app.sel.clear();
+    resize();
+    afterEdit();
+  };
+  io.append(exp, imp, reset);
+  panel.append(io);
+
+  if (app.sel.size === 0) {
+    panel.append(el('<div class="note">Tap a part to select it. Drag empty space to lasso. Shift adds to the selection. Arrow keys nudge, shift-arrow nudges further.</div>'));
+    return;
+  }
+  if (app.sel.size > 1) {
+    panel.append(el(`<div class="note">${app.sel.size} parts selected. Drag to move them together.</div>`));
+    return;
+  }
+  const sh = app.table.shapes.find((x) => app.sel.has(x.id));
+  if (!sh) return;
+  panel.append(el(`<h2>${sh.kind} ${sh.id}</h2>`));
+  const mm = (v) => Math.round(v * 10000) / 10;   // metres shown as millimetres, one decimal
+
+  if (sh.kind === 'seg') {
+    panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
+    panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
+    panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
+    panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
+    panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
+    panel.append(numRow('Bounce', sh.e != null ? sh.e : app.cfg.BALL_E, 0.01, (v) => { sh.e = v; }));
+  } else if (sh.kind === 'arc') {
+    panel.append(numRow('Centre x', mm(sh.c.x), 1, (v) => { sh.c.x = v / 1000; }));
+    panel.append(numRow('Centre y', mm(sh.c.y), 1, (v) => { sh.c.y = v / 1000; }));
+    panel.append(numRow('Radius', mm(sh.radius), 1, (v) => { sh.radius = v / 1000; }));
+    panel.append(numRow('From (deg)', Math.round(sh.a0 * DEG), 1, (v) => { sh.a0 = v / DEG; }));
+    panel.append(numRow('To (deg)', Math.round(sh.a1 * DEG), 1, (v) => { sh.a1 = v / DEG; }));
+    panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
+  } else if (sh.kind === 'circle') {
+    panel.append(numRow('Centre x', mm(sh.c.x), 1, (v) => { sh.c.x = v / 1000; }));
+    panel.append(numRow('Centre y', mm(sh.c.y), 1, (v) => { sh.c.y = v / 1000; }));
+    panel.append(numRow('Radius', mm(sh.r), 0.5, (v) => { sh.r = v / 1000; }));
+  } else if (sh.kind === 'flipper') {
+    const side = el(`<div class="row"><label>Side</label><select><option value="L">Left</option><option value="R">Right</option></select></div>`);
+    side.querySelector('select').value = sh.side;
+    side.querySelector('select').onchange = (e) => { pushUndo(); sh.side = e.target.value; afterEdit(); };
+    panel.append(side);
+    panel.append(numRow('Pivot x', mm(sh.pivot.x), 1, (v) => { sh.pivot.x = v / 1000; }));
+    panel.append(numRow('Pivot y', mm(sh.pivot.y), 1, (v) => { sh.pivot.y = v / 1000; }));
+    panel.append(numRow('Length', mm(sh.len), 1, (v) => { sh.len = v / 1000; }));
+    panel.append(numRow('Pivot end r', mm(sh.r0), 0.5, (v) => { sh.r0 = v / 1000; }));
+    panel.append(numRow('Tip r', mm(sh.r1), 0.5, (v) => { sh.r1 = v / 1000; }));
+    panel.append(numRow('Rest (deg)', Math.round(sh.restAng * DEG), 1, (v) => { sh.restAng = v / DEG; }));
+    panel.append(numRow('Flipped (deg)', Math.round(sh.endAng * DEG), 1, (v) => { sh.endAng = v / DEG; }));
+  } else if (sh.kind === 'drain') {
+    panel.append(numRow('x', mm(sh.x), 1, (v) => { sh.x = v / 1000; }));
+    panel.append(numRow('y', mm(sh.y), 1, (v) => { sh.y = v / 1000; }));
+    panel.append(numRow('Width', mm(sh.w), 1, (v) => { sh.w = v / 1000; }));
+    panel.append(numRow('Height', mm(sh.h), 1, (v) => { sh.h = v / 1000; }));
+  }
+}
+
+function renderTunePanel() {
+  panel.append(el('<div class="note">Every physics constant this machine has. Drag while a ball is in play. Copy config writes the block for config.js.</div>'));
+  for (const t of TUNABLES) {
+    if (app.cfg[t.key] == null) continue;
+    const row = el(`<div class="row"><label>${t.label}</label><input type="range" min="${t.min}" max="${t.max}" step="${t.step}" value="${app.cfg[t.key]}"><span class="val">${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}</span></div>`);
+    const input = row.querySelector('input');
+    const out = row.querySelector('.val');
+    input.addEventListener('input', () => {
+      app.cfg[t.key] = parseFloat(input.value);
+      out.textContent = `${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}`;
+      save();
+    });
+    panel.append(row);
+  }
+  const r = el('<div class="row"></div>');
+  const copy = el('<button>Copy config</button>');
+  copy.onclick = () => {
+    const lines = Object.keys(app.cfg).map((k) => `  ${k}: ${app.cfg[k]},`).join('\n');
+    const text = `export const CONFIG = {\n${lines}\n};`;
+    navigator.clipboard.writeText(text).then(() => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy config'; }, 1200); },
+      () => { copy.textContent = 'Copy failed'; });
+  };
+  const back = el('<button class="danger">Back to defaults</button>');
+  back.onclick = () => { app.cfg = cloneConfig(); save(); renderPanel(); };
+  r.append(copy, back);
+  panel.append(r);
+  panel.append(el(`<div class="note">Gravity down the playfield is ${gravity(app.cfg).toFixed(3)} m/s2, which is g times sin(tilt).</div>`));
+}
+
+function renderCheckPanel() {
+  panel.append(el('<div class="note">Three questions, answered on the table as it stands right now. Results are drawn ON the table as red marks, not summarised as a percentage.</div>'));
+  const r = el('<div class="row"></div>');
+  const bTraps = el('<button class="primary">Find traps</button>');
+  const bTunnel = el('<button>Tunnel test</button>');
+  const bGaps = el('<button>Gap rule</button>');
+  const bMask = el('<button>Show reachable</button>');
+  const bClear = el('<button>Clear marks</button>');
+  r.append(bTraps, bTunnel, bGaps, bMask, bClear);
+  panel.append(r);
+  const out = el('<pre id="report"></pre>');
+  panel.append(out);
+
+  const fall = drainTime(app.table, app.cfg);
+  const err = fall.seconds == null ? 1 : Math.abs(fall.seconds - fall.analytic) / fall.analytic;
+  out.textContent = `gravity    ${gravity(app.cfg).toFixed(3)} m/s2\n`
+    + `free fall  ${fall.seconds == null ? 'never drained' : fall.seconds.toFixed(3) + ' s'} against ${fall.analytic.toFixed(3)} s analytic (${(err * 100).toFixed(1)}% off)\n`
+    + `ball life  ${fall.alive == null ? 'over 60 s' : fall.alive.toFixed(1) + ' s'} released into the top left corner`;
+
+  bClear.onclick = () => { app.marks = []; app.mask = null; };
+  bMask.onclick = () => {
+    const play = playable(app.table, app.cfg);
+    app.mask = { step: play.step, cells: play.cells() };
+  };
+  bGaps.onclick = () => {
+    const flags = checkGaps(app.table, app.cfg);
+    const real = flags.filter((f) => f.kind === 'gap');
+    app.marks = real.map((f) => ({ at: f.at, kind: 'gap' }));
+    out.textContent = real.length
+      ? `${real.length} gap(s) near one ball wide, which is where a ball wedges:\n`
+        + real.map((f) => `  ${f.a} to ${f.b}: ${(f.gap * 1000).toFixed(1)} mm (ball is ${(app.cfg.BALL_R * 2000).toFixed(1)} mm)`).join('\n')
+      : `No ambiguous gaps. ${flags.length} deliberate overlap(s), which is how you SHUT a gap.`;
+  };
+  bTunnel.onclick = () => {
+    out.textContent = 'firing...';
+    setTimeout(() => {
+      const r2 = tunnelProbe(app.table, app.cfg, { angles: 16 });
+      app.marks = r2.fails.map((f) => ({ at: f.end, kind: 'tunnel' }));
+      out.textContent = r2.fails.length
+        ? `${r2.fails.length} of ${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s went through something.`
+        : `${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s from every angle. None got through.`;
+    }, 30);
+  };
+  bTraps.onclick = () => {
+    out.textContent = 'dropping balls...';
+    setTimeout(() => {
+      const r2 = restSweep(app.table, app.cfg, { step: 0.016, seconds: 5 });
+      app.marks = r2.stuck.map((s) => ({ at: s.at, kind: 'trap' }));
+      const spots = [];
+      for (const s of r2.stuck) {
+        if (!spots.some((q) => Math.hypot(q.at.x - s.at.x, q.at.y - s.at.y) < 0.008)) spots.push(s);
+      }
+      out.textContent = r2.stuck.length
+        ? `${r2.stuck.length} of ${r2.drops} drops never reached the drain, in ${spots.length} place(s):\n`
+          + spots.map((s) => `  (${(s.at.x * 1000).toFixed(0)}, ${(s.at.y * 1000).toFixed(0)}) mm on ${s.on || 'nothing'}`).join('\n')
+        : `${r2.drops} drops, every one reached the drain. No traps.`;
+    }, 30);
+  };
+}
+
+// ------------------------------------------------------------------ modes
+
+function setMode(m) {
+  app.mode = m;
+  for (const k of ['play', 'edit', 'tune', 'check']) {
+    document.getElementById(`tab-${k}`).setAttribute('aria-pressed', String(k === m));
+  }
+  zones.classList.toggle('on', false);
+  launchBtn.style.display = m === 'play' ? '' : 'none';
+  if (m === 'play') { ensureWorld(); app.running = true; }
+  app.marks = [];
+  renderPanel();
+}
+for (const k of ['play', 'edit', 'tune', 'check']) {
+  document.getElementById(`tab-${k}`).onclick = () => setMode(k);
+}
+launchBtn.onclick = newBall;
+
+// ------------------------------------------------------------------ loop
+
+function frame(t) {
+  const dt = app.lastT ? Math.min(0.05, (t - app.lastT) / 1000) : 0;
+  app.lastT = t;
+  if (app.mode === 'play' && app.running && dt > 0) stepPlay(dt);
+
+  const angles = {};
+  if (app.world) for (const f of app.world.flippers) angles[f.def.id] = f.ang;
+
+  draw(ctx, app.table, app.view, {
+    balls: app.world ? app.world.balls : [],
+    ballR: app.cfg.BALL_R,
+    trail: app.mode === 'play' ? app.trail : null,
+    flipperAngles: angles,
+    grid: app.mode === 'edit' && app.snap ? app.grid * 4 : 0,
+    marks: app.marks,
+    mask: app.mask,
+  });
+
+  if (app.mode === 'edit') drawSelection();
+
+  const b = app.world && app.world.balls.find((x) => x.alive);
+  hud.textContent = app.mode === 'play'
+    ? `${b ? (Math.hypot(b.v.x, b.v.y)).toFixed(2) + ' m/s' : 'drained'}${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
+    : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
+
+  requestAnimationFrame(frame);
+}
+
+function drawSelection() {
+  ctx.save();
+  for (const id of app.sel) {
+    const sh = app.table.shapes.find((x) => x.id === id);
+    if (!sh) continue;
+    ctx.strokeStyle = '#ffce3a';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    const c = toScreen(app.view, centreOf(sh));
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const h of handlesFor(sh)) {
+      const s = toScreen(app.view, h.at);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffce3a';
+      ctx.fill();
+      ctx.strokeStyle = '#21180a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+  if (drag.mode === 'lasso' && drag.box) {
+    const a = toScreen(app.view, { x: drag.box.x0, y: drag.box.y0 });
+    const b = toScreen(app.view, { x: drag.box.x1, y: drag.box.y1 });
+    ctx.strokeStyle = '#7fd8ff';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------ go
+
+load();
+resize();
+newBall();
+setMode('play');
+requestAnimationFrame(frame);
+
+window.__pb2 = app;   // the browser probes drive the real tool through this, never a copy of it

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v770';
+const CACHE = 'game-hub-v771';
 
 const ASSETS = [
   './',
@@ -253,6 +253,17 @@ const ASSETS = [
   './pinball/design/board.js',
   './pinball/design/layout.js',
   './pinball/design/editor.html',
+
+  // pinball2: the new engine and its editor. Not a hub game yet (no GAMES entry) - step 2 of the
+  // plan in docs/PINBALL2-PLAN.md, which is the bare box the ball feel is judged on.
+  './pinball2/index.html',
+  './pinball2/editor/index.html',
+  './pinball2/editor/editor.js',
+  './pinball2/machines/testbox/config.js',
+  './pinball2/machines/testbox/physics.js',
+  './pinball2/machines/testbox/table.js',
+  './pinball2/machines/testbox/render.js',
+  './pinball2/probes/checks.js',
   './pinball/js/vendor/three.module.min.js',
   './pinball/js/vendor/three.core.min.js',
   './pinball/js/store.js',
@@ -634,6 +645,14 @@ const REST_MANIFEST = {
   './pinball/design/board.js': '0d1e7c903d',
   './pinball/design/layout.js': 'd1860f5854',
   './pinball/design/editor.html': '5cb2244282',
+  './pinball2/index.html': '6d09047aef',
+  './pinball2/editor/index.html': '04181e033c',
+  './pinball2/editor/editor.js': '361fc5e45e',
+  './pinball2/machines/testbox/config.js': 'a1a5cf04f9',
+  './pinball2/machines/testbox/physics.js': 'e268474de6',
+  './pinball2/machines/testbox/table.js': '17f57f5ef8',
+  './pinball2/machines/testbox/render.js': '67630168b8',
+  './pinball2/probes/checks.js': 'cd5385f485',
   './pinball/js/vendor/three.module.min.js': '86bcee248b',
   './pinball/js/vendor/three.core.min.js': '05b2609338',
   './pinball/js/store.js': 'ee5077e114',

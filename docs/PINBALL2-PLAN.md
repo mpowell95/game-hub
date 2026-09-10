@@ -19,7 +19,7 @@ proves it. That is the whole plan: **nothing ships on "feels better now."**
 
 | Complaint | Cause | Fix | Proof |
 |---|---|---|---|
-| Falls like a vertical wall | Gravity is a tuned table-units number, not a tilted plane | `g x sin(TILT)`, TILT 6.5 deg, real metres. About 1.11 m/s², a ninth of a free fall | Ball released at the top of an empty playfield reaches the drain in 2.4 to 3.0 s, the real-machine figure |
+| Falls like a vertical wall | Gravity is a tuned table-units number, not a tilted plane | `g x sin(TILT)`, TILT 6.5 deg, real metres. About 1.11 m/s2, a ninth of a free fall | Measured free fall matches `sqrt(2h/g sin tilt)` to within 5%. **Corrected 2026-09-10**: this row first said 2.4 to 3.0 s, which is how long a ball LIVES on a real machine, not how long it falls. A ball with nothing in its way crosses this playfield in 1.31 s and the analytic value is the honest assertion |
 | Goes through objects | Step-then-push-out. Small steps make it rare, not impossible | Swept collision: solve the exact time of first contact, move the ball there, bounce, repeat | Fire the ball at every collider at max speed from 24 angles. Zero crossings, at any speed |
 | Vanishes / teleports | Level transitions delete the ball and re-create it at a fixed point, and post-step position corrections fling it | No transitions exist. No position corrections exist, because the ball is never inside anything | Frame-to-frame position jump never exceeds distance travelled. Ball count is always 1 |
 | Gets stuck everywhere | Two surfaces just under a ball apart form a stable parking space | Resting contacts slide instead of bounce, plus an exhaustive author-time trap sweep | `sweep-rests` finds 0 resting places outside the drain. This tool already took RAINBOW from 252 to 1 |
@@ -114,15 +114,17 @@ applies it. Matt's call, and it also means shipping a gameplay fix cannot wipe u
 ## Build order
 
 1. **This document. Approve it before anything is written.**
-2. **Engine core, editor shell, and exactly three objects: wall, flipper, drain.** No table content.
-   The deliverable is Matt flipping a ball around a bare box and saying whether the ball feels right.
-   Nothing else is built until that is a yes. Numbers due at this step: the drain-time figure, the
-   tunnel probe at zero, and a clean trap sweep.
+2. **Engine core, editor shell, and exactly three objects: wall, flipper, drain.** DONE 2026-09-10,
+   live at `/pinball2/editor/`. The deliverable is Matt flipping a ball around a bare box and saying
+   whether the ball feels right. Nothing else is built until that is a yes. Numbers delivered:
+   gravity 0.1% off analytic, 883 shots at 8 m/s with 0 through, 0 ambiguous gaps, 2913 drops with
+   0 stuck. Details and the traps the sweep found in this table's own first layout: `pinball2/CLAUDE.md`.
 3. **The rest of the objects, one at a time**, each with its panel and its own probe.
 4. **Ribbons and the second level**, once the flat game feels right.
-5. **Save and load, then build the first table** in the editor. The starting layout is FOUNDRY's,
-   re-authored in the new format, since Matt liked that layout and only its play was bad. If he
-   would rather start from a blank table, say so and step 5 gets shorter.
+5. **Save and load, then build the first table** in the editor. **A brand new layout**, designed for
+   fun. Matt, asked whether to start from FOUNDRY's: *"can you create a brand new one for me? I'm not
+   committed to the current layouts. I just want it to be fun."* No existing machine is the starting
+   point.
 
 Steps 2 through 5 are each their own session with its own approval. This document is the handoff
 between them.
