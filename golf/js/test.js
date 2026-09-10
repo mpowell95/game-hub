@@ -2073,7 +2073,23 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
     // par with a 90-100 % birdie rate. Matt: "I don't even know if there's a single hole here I
     // wouldn't birdie."
     const worst = Math.min(...vp);
-    ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
+    // NAMED GAP, 2026-09-10, and it is not silent. OASIS SANDS HOLE 4 IS A PAR 5 OF 451 YARDS - a
+    // driver and a 3 wood cover 442, so it is reachable in two and plays as a birdie hole. It sat
+    // just inside this line already; the mishit rework (dead centre dead straight, symmetric
+    // distance loss) tipped it onto the line exactly, and taking 12 yds off every drive with the
+    // 250 ceiling did not move it, which is what a hole that short for its par looks like.
+    //
+    // The claim is right and the HOLE is what is wrong, so it is exempted here rather than the
+    // physics retuned around one hole - and OASIS SANDS IS NOT RELEASED. Matt, on this holding up a
+    // deploy: *"dude fuck oasis sands. it's not open yet. Pine Valley ONLY."* Pine Valley is the
+    // course people play and its easiest hole measures -0.13. Fix the hole before that course
+    // opens, and delete this branch when you do.
+    if (c.id === 'oasissands' && worst <= -0.75 && worst > -0.9) {
+      console.log('  NAMED GAP: oasissands hole 4 plays ' + (-worst).toFixed(2)
+        + ' under par - it is a par 5 of 451 yds, reachable in two (see the note in 15c, 2026-09-10)');
+    } else {
+      ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
+    }
   }
 }
 
