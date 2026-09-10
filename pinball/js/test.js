@@ -1237,6 +1237,137 @@ function launched(g) {
     ok('[FOUNDRY] every rail that runs into a paddle hands the ball on without a step',
       off.length === 0, off.length ? off.join('; ') : 'every paddle sits 6 to 12 px proud of its guide');
   }
+  // [KNOWN-BUG PROBE] COMING DOWN A RAMP, THE BALL IS NEVER DRAWN UNDER THE RAMP.
+  //
+  // Matt reported this three times - *"the ball went through the ramp and disappeared"*, *"then
+  // popped back into existence"*, *"It still disappears when going down the ramp"* - and two
+  // fixes missed it because they watched the wrong frames. The first brightened the ball under
+  // the deck, which is not where it went. The second gave a level-1 ball in a lane the lane's
+  // own height, which is right and still could not reach this: a ball stepping off the deck is
+  // part-way through a SCRIPTED FALL, and a falling ball is skipped by that rule and is still on
+  // layer 2 - so every probe that filtered on layer 1 measured a clean descent and reported zero.
+  //
+  // Measured on the build that shipped: 90 px under the surface at x 90, py 642 - nearly two ball
+  // widths - for 1,542 of 14,354 frames, with 167 one-frame jumps in drawn height of up to 93 px.
+  // This walks balls off the deck across both lanes and watches the DRAWN height against the lane
+  // under it the whole way down, fall frames included.
+  {
+    const LIFT_PX = 95, BALL = 51;      // px(95) is the gap between the decks; a ball is 51 px
+    let worst = 0, at = 0, jump = 0, hidden = 0;
+    for (const x of [60, 100, 140, 180, 820, 860, 900]) {
+      for (const vx of [-60, 0, 60]) for (const vy of [20, 120]) {
+        const g = new DesignPinball({ rand: () => 0.5 });
+        g.start();
+        const b = g.balls[0];
+        b.onPlunger = false; b.held = false; b.layer = 2; b.lift = 1;
+        b.x = DT.px(x); b.y = DT.px(560); b.vx = vx; b.vy = vy;
+        let prev = null;
+        for (let i = 0; i < 120 * 5; i++) {
+          g.update(1 / 120);
+          const q = g.balls[0]; if (!q || q.onPlunger) break;
+          const surf = DT.rampLift(q.x, q.y);
+          if (surf === null) { prev = null; continue; }
+          const drawn = (q.lift || 0) * LIFT_PX;
+          const sink = surf * LIFT_PX - drawn;
+          if (sink > worst) { worst = sink; at = Math.round(q.y / DT.px(1)); }
+          if (sink > BALL) hidden++;
+          if (prev !== null) jump = Math.max(jump, Math.abs(drawn - prev));
+          prev = drawn;
+        }
+      }
+    }
+    const clean = worst < 12 && jump < 12;
+    ok('[FOUNDRY] a ball coming down a ramp is never drawn under it', clean,
+      clean ? 'never sinks into the lane, and no jump in drawn height'
+        : worst.toFixed(0) + ' px under the surface at py ' + at + ', ' + hidden
+          + ' frames out of sight, worst one-frame jump ' + jump.toFixed(0) + ' px');
+  }
+  // [KNOWN-BUG PROBE] THE RAMPS CAN BE SHOT, AND NOTHING ENDS UP BEHIND THE ARCH.
+  //
+  // Two defects that turned out to be one driven game apart. Matt: *"the ball is not permitted to
+  // get onto level 2. it goes up the ramp and acts like it hit a wall, then comes back down."*
+  // The `_ramp` latch, which stops a ball rattling on a mouth being counted as forty ramps,
+  // cleared only once the ball was 300 px BELOW the mouth - py 1233 - and the speed-boost pad
+  // sits at py 1059, above that line. So a ball that came down a lane was kicked straight back up
+  // while still latched and met the one-way top cap as a wall. Measured: the latch was on for 47%
+  // of all frames, and 44 of 44 arrivals at a mouth moving up were turned away by it.
+  //
+  // Fixing that made the SECOND one reachable for the first time. A ball stepping off the deck at
+  // x 145 was handed to level 1 sitting 36 px inside the lane's inner rail - a level-2 ball cannot
+  // see a level-1 rail - and the solver ejected it 69 px in one frame, over the top cap and into
+  // the dead space behind the arch: *"it should not be able to go behind that large semi-circle
+  // thing."* 604 frames of it on the left, 71 on the right, and none of it was reachable while the
+  // ramps did not work, which is why every earlier probe of that space read zero.
+  {
+    let climbs = 0, behind = 0, frames = 0;
+    for (let gi = 0; gi < 8; gi++) {
+      let sd = 77 + gi * 7919;
+      const rnd = () => (sd = (sd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const g = new DesignPinball({ rand: rnd });
+      g.start();
+      const climbing = new Map();
+      for (let i = 0; i < 120 * 240 && g.phase !== 'over'; i++) {
+        g.setFlipper('left', rnd() < 0.03);
+        g.setFlipper('right', rnd() < 0.03);
+        if (g.balls.some((q) => q.onPlunger) && !g.plungerHeld) { g.plungerDown(); g.plungerPower = 0.35 + rnd() * 0.65; g.plungerUp(); }
+        g.update(1 / 120); frames++;
+        for (const b of g.balls) {
+          if (b._climbR && !climbing.get(b)) climbs++;
+          climbing.set(b, !!b._climbR);
+          if (b.onPlunger || (b.layer | 0) !== 1) continue;
+          const bx = b.x / DT.px(1), by = b.y / DT.px(1);
+          // outboard of the arch, either side, above where its legs end
+          if (by < 575 && (bx < 128 || bx > 858)) behind++;
+        }
+      }
+    }
+    ok('[FOUNDRY] the ramps can actually be shot', climbs >= 8,
+      climbs + ' ramp climbs in 8 driven games (the latched build managed 1)');
+    ok('[FOUNDRY] no ball ever gets behind the arch on level 1', behind === 0,
+      behind === 0 ? 'never outboard of the arch' : behind + ' frames of ' + frames + ' outboard of the arch');
+  }
+  // [KNOWN-BUG PROBE] A RAMP DELIVERS THE BALL ONTO THE DECK, NOT ONTO ITS LIP.
+  //
+  // Matt: *"now it goes up the ramp, hits the rail immediately, and falls back down to level 1."*
+  // Two things were wrong at once and both are about what happens at the TOP.
+  //
+  // The exit was a FIXED velocity, `vx: 150, vy: -150` - every ball, however hard it was hit, left
+  // at a speed of 212. Against gravity 515 that is a rise of 20.7 units, 59 px: the ramp lets go
+  // at py 596 and the ball got to py 537. And it was aimed at 45 degrees, straight into
+  // guide_rail_upper_left, which crosses that line at (197, 491).
+  //
+  // Now the speed is the shot's own and the aim is up the outside, past post_red_left_4. Measured
+  // over 90 shots: best py 537 -> 75, mean py 537 -> 137, which is the whole height of the deck.
+  {
+    let made = 0, best = 9999, sum = 0;
+    for (const r of DT.RAMPS) {
+      for (const dx of [-25, 0, 25]) for (const sp of [300, 420, 560, 720, 900]) {
+        const g = new DesignPinball({ rand: () => 0.5 });
+        g.start();
+        const b = g.balls[0];
+        b.onPlunger = false; b.held = false; b.layer = 1; b.lift = 0;
+        b.x = r.foot + DT.px(dx); b.y = r.y + DT.px(90);
+        const lean = ((r.id === 'rampL' ? -26 : 26)) * Math.PI / 180;
+        b.vx = Math.sin(lean) * sp; b.vy = -Math.cos(lean) * sp;
+        let up = false, high = 9999, top = 0;
+        for (let i = 0; i < 120 * 6; i++) {
+          g.update(1 / 120);
+          const q = g.balls[0]; if (!q || q.onPlunger) break;
+          if (!up && (q.layer | 0) === 2) { up = true; top = i; }
+          if (!up) continue;
+          high = Math.min(high, q.y / DT.px(1));
+          if ((q.layer | 0) === 1 || i - top > 120 * 3) break;
+        }
+        if (!up) continue;
+        made++; sum += high; best = Math.min(best, high);
+      }
+    }
+    const mean = made ? sum / made : 9999;
+    ok('[FOUNDRY] a ramp delivers the ball ONTO the deck, not onto its lip',
+      made > 0 && mean < 350,
+      made + ' shots made a ramp; up the deck to py ' + best.toFixed(0) + ' at best, '
+        + mean.toFixed(0) + ' on average (the mouth lets go at py 596; the fixed-speed build managed 537)');
+  }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.
   {

@@ -69,9 +69,19 @@ export const LAUNCH_LEVEL = 2;
 // crossing of py 908 landed in it, and none at all in the right one, out of 21 upward crossings
 // at that height anywhere on the board. The mouth measured off the reference photo is 84 px
 // further inboard and catches 15 of those 21.
+// AND `top.vx/vy` IS A DIRECTION, NOT A SPEED - THE SPEED IS THE SHOT'S OWN (see _rampRide).
+//
+// It also has to point UP the deck rather than across it. Matt: *"now it goes up the ramp, hits
+// the rail immediately, and falls back down to level 1."* At the old 45 degrees a ball leaving
+// the left ramp at (92, 596) ran straight into guide_rail_upper_left, which crosses that line at
+// (197, 491). The only clear route out of a ramp mouth is up the outside, past post_red_left_4
+// at (150, 440) - anything leaning more than about 10 units of vx per 150 is caught by that post
+// or by the rail behind it. Swept: at vx 150, 90, 40 the ball reached py 517, 494, 471 and came
+// straight back; at vx 10 it reaches py 75 at best and py 137 on average, which is the whole
+// height of the deck.
 export const RAMPS = [
-  { id: 'rampL', x: [px(129), px(231)], y: px(933), foot: px(180), minEntry: 330, top: { x: px(92),  y: px(596), vx: 150, vy: -150 } },
-  { id: 'rampR', x: [px(755), px(857)], y: px(933), foot: px(806), minEntry: 330, top: { x: px(894), y: px(596), vx: -150, vy: -150 } },
+  { id: 'rampL', x: [px(129), px(231)], y: px(933), foot: px(180), minEntry: 330, top: { x: px(92),  y: px(596), vx: 10, vy: -150 } },
+  { id: 'rampR', x: [px(755), px(857)], y: px(933), foot: px(806), minEntry: 330, top: { x: px(894), y: px(596), vx: -10, vy: -150 } },
 ];
 
 /**
@@ -107,7 +117,11 @@ export const RAMPS = [
  * and the footprint pass builds the walls from. Three copies would drift; this is the third
  * reader of one shape, not a fourth shape.
  */
-export function rampLift(x, y) {
+/**
+ * The lane under a point: its floor height (0 on the playfield, 1 at deck height) AND the x of
+ * its two walls there. null when the point is not inside a lane at all.
+ */
+export function rampLane(x, y) {
   for (const p of PARTS) {
     if (p.type !== 'ramp') continue;
     const xf = p.xFoot || p.x;
@@ -117,9 +131,15 @@ export function rampLift(x, y) {
     const x0 = xf[0] + (p.x[0] - xf[0]) * bend, x1 = xf[1] + (p.x[1] - xf[1]) * bend;
     const bx = x / px(1);
     if (bx < Math.min(x0, x1) || bx > Math.max(x0, x1)) continue;
-    return t * t * (3 - 2 * t);
+    return { lift: t * t * (3 - 2 * t), x0: Math.min(x0, x1), x1: Math.max(x0, x1) };
   }
   return null;
+}
+
+/** Just the height, for the many callers that only want that. */
+export function rampLift(x, y) {
+  const lane = rampLane(x, y);
+  return lane === null ? null : lane.lift;
 }
 
 export const KICKERS = [
@@ -236,6 +256,7 @@ export const DROP_IDS = [0, 1, 2, 3].map((i) => `target_bank_${i}`);
 
 export default {
   rampLift,
+  rampLane,
   NAME, W, H, DRAIN_Y, AXIS, PLUNGER, LAUNCH_LEVEL, RAMPS, KICKERS, DROP_HOLE, SAUCER,
   SWITCHES, ROW_NAMES, ROW_SIZE, DROP_IDS, buildLevel, BALL_R, U, px, TRANSITIONS, deckEdge,
 };
