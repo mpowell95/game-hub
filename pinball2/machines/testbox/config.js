@@ -21,10 +21,16 @@ export const CONFIG = {
   MAX_SPEED: 8.0,          // gameplay bound only. It can be raised without losing the ball
 
   // flipper
-  FLIP_UP_TIME: 0.030,     // seconds from rest to the top stop
+  FLIP_UP_TIME: 0.020,     // seconds from rest to the top stop. Measured: 30ms was a weak shot
   FLIP_DOWN_TIME: 0.055,
   FLIP_E: 0.55,            // rubber at a dead stop
   FLIP_E_FADE: 0.16,       // restitution lost per m/s of impact speed
+  FLIP_E_MIN: 0.05,        // however hard it is hit, the rubber is never a dead wall
+  // Left at 0 on purpose. It was added to break the tie that glued the ball to the bat, and then
+  // the contact-episode fix in physics.js turned out to be the real cause: measured, the kick
+  // changed a mid bat flip by 1mm in 924. It stays as a slider because it is the honest lever for
+  // "flips should feel punchier" if that is ever wanted, and it is a gameplay model, not physics.
+  FLIP_KICK: 0,
   FLIP_MU: 0.28,
   CRADLE_DAMP: 6.0,        // velocity decay per second for a slow ball on a held flipper
 
@@ -48,6 +54,8 @@ export const TUNABLES = [
   { key: 'FLIP_DOWN_TIME', label: 'Flip time down', unit: 's', min: 0.01, max: 0.2, step: 0.005 },
   { key: 'FLIP_E', label: 'Rubber bounce', unit: '', min: 0, max: 0.95, step: 0.01 },
   { key: 'FLIP_E_FADE', label: 'Rubber fade', unit: '/m/s', min: 0, max: 0.4, step: 0.01 },
+  { key: 'FLIP_E_MIN', label: 'Rubber floor', unit: '', min: 0, max: 0.6, step: 0.01 },
+  { key: 'FLIP_KICK', label: 'Flipper kick', unit: '', min: 0, max: 1.2, step: 0.01 },
   { key: 'FLIP_MU', label: 'Rubber grip', unit: '', min: 0, max: 0.9, step: 0.01 },
   { key: 'CRADLE_DAMP', label: 'Cradle damping', unit: '/s', min: 0, max: 20, step: 0.5 },
 ];
