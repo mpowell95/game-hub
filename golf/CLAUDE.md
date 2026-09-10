@@ -5512,3 +5512,61 @@ were counted shows a dash rather than a fabricated average (rule 4).
 
 **Left alone on purpose:** the per-hole record row scrolls sideways and shows about eleven of the
 eighteen on a phone. Matt: *"ignore"*.
+
+
+## The fairway roll was 2.25x what Matt approved, and every drive was 22 yards long (2026-09-10)
+
+Matt, looking at a player's record showing a **293 yd longest drive**: *"How tf is that possible? a
+100% swing should only go 215."* Then, when the arithmetic came back: *"we agreed on a table with
+precise and specific numbers for each club. And you just completely ignored that?"*
+
+He had. `golf-reference-spec.md` §21.3 is dated 2026-09-03, is headed **APPROVED (Matt)**, and the
+decisions above it say in one line: **"Roll after landing: fairway ~8 % of carry, green ~2 %, rough
+~3 %, bunker 0."** `clubs.js` shipped `fairway.roll = 0.145`, which `rollFactor` then multiplies by
+the club's loft term (1.24 for a driver) to **0.180**. Measured through the real engine:
+
+| | Approved | Shipped |
+|---|---|---|
+| Clean 100 % drive | 215 + 17 = **232** | 215 + 39 = **254** |
+| Max over-swing | 237 + 19 = **255** | 242 + 44 = **286** |
+| ...with a max tailwind | n/a | **302** |
+
+**The change was not even justified by its own reasoning.** `shot.js`'s rollout comment, written to
+argue for MORE roll, says *"4.3 yd/s^2 puts a driver's 17 yd rollout at 2.8 s, which lands in the
+reference's range"* - 17 yd is exactly the approved 8 %. The deceleration was set from the
+reference and the DISTANCE was not.
+
+**What changed.** `tee` and `fairway` roll: 0.145 -> **0.0645**, which times the driver's 1.24 loft
+term is 0.080 exactly. Nothing else moved: the green (0.090) and the collar were raised LATER, by
+Matt, against measured scoring, and those decisions stand over the spec's original 2 %. The swing
+was not touched either - `BLOCK_KEEPS_DIST` and `BLOCK_SPRAY_DEG` are his own calibrated numbers, so
+the over-swing still pays 12.8 % rather than the spec's 10 %, and a maxed drive is 262 rather than
+255. Now: 100 % = **232.2**, max over-swing = **261.9**, with a full tailwind **276.2**.
+
+**Two tests were pinning the drift and are retired here, not deleted.** A `[KNOWN-BUG PROBE]`
+required a 3 wood to run out at least 16.4 % of its carry, measured off the reference footage - flatly
+incompatible with the approved 8 %. Asked to choose, Matt chose the spec (*"yes, fix it to spec and
+deploy"*), and the measurement is recorded as OVERRULED in the test file, with the note that a
+reference bag running out 16 % may simply have been an upgraded one - the same doubt that already
+keeps its 287 yd drive out of our stock ladder. What both probes now assert is the SHAPE they were
+really about: a wood arrives shallow and runs, a wedge drops and sits.
+
+**One knock-on, fixed here.** `groundPoint`'s hop had a 1.2 yd floor, added so an approach pitching
+on a green still visibly bounced. With the shortest run-outs in the bag now around a yard, that
+floor made a lob wedge **hop higher than it rolled** - a leap, the exact thing the cap exists to
+prevent. The floor is gone; the green's own roll was not touched, so approach bounces on the putting
+surface are unchanged (the floor only ever bound under 2.7 yd).
+
+**What this does NOT fix, and it is Matt's call.** Every golf score already on the leaderboard was
+set with drives running 22 yards further than the approved ladder gives. Matt: *"somebody has
+already played every available hole and every available option. So now if he goes back, the game is
+different. This changes what's fair to include in the Leaderboard."* Nothing here touches a stored
+score (THE LAW), and no correction was applied. The options, unchosen as of this commit: leave them
+and accept that pre-2026-09-10 bests are easier records; label them; or void them per player through
+the same read-time overlay Skeeball uses (`js/stats-corrections.js`), which today has no golf path.
+
+**The lesson, and it is the same one three sections of this file already record.** An APPROVED table
+in the spec is a decision, not a starting point. When a later measurement disagrees with it, the
+measurement goes in the doc and the decision goes to Matt - it does not quietly become the shipped
+number. This one survived a week of playtests because the test suite had been updated to assert the
+drifted value, so the thing that should have caught it was pinning it in place instead.

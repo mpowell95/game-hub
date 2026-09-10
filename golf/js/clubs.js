@@ -90,8 +90,23 @@ export function clubById(id) {
  *  to move with them.
  *  ============================================================================================ */
 export const LIES = {
-  tee: { power: 1.00, zone: 1.00, roll: 0.145 },
-  fairway: { power: 1.00, zone: 1.00, roll: 0.145 },
+  // BACK ON SPEC (2026-09-10). `golf-reference-spec.md` §21.3's decisions say, in the same breath
+  // as the approved club ladder: **"Roll after landing: fairway ~8 % of carry, green ~2 %, rough
+  // ~3 %, bunker 0."** This row said 0.145, and `rollFactor` then multiplies it by the club's loft
+  // term (1.24 for the driver), so a drive ran out **18 % of its carry - 39 yds** and a clean 100 %
+  // swing finished 254 yds from the tee against the 232 the approved numbers give. Matt, on a
+  // player's 293 yd drive: *"we agreed on a table with precise and specific numbers for each club.
+  // And you just completely ignored that?"* He had: the spec is dated 2026-09-03 and this number
+  // was never his.
+  //
+  // The change was not even justified by its own reasoning - `shot.js`'s rollout comment argues for
+  // a driver rollout of **17 yds**, which IS the approved 8 %, while the number here delivered 39.
+  //
+  // 0.0645 x the driver's 1.24 loft term = 0.080 exactly. Shorter clubs roll less, as they did.
+  // Every other surface is LEFT ALONE: the green (0.090) and the collar were each raised later, by
+  // Matt, against measured scoring, and those decisions stand over the spec's original 2 %.
+  tee: { power: 1.00, zone: 1.00, roll: 0.0645 },
+  fairway: { power: 1.00, zone: 1.00, roll: 0.0645 },
   // The collar around every green. Added 2026-09-04 after Matt's playtest: hole 1's light-rough
   // corridor stopped short of the green, so a missed green landed in `base` - HEAVY ROUGH, the
   // harshest lie in the game (82 % power, 65 % band) - on all four sides. Every real course has a

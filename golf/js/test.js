@@ -627,18 +627,36 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   // MEASURED 2026-09-04 (clubs.js's rollFactor has the arithmetic): the reference's 3 wood carried
   // 196 and MUST have run at least 32 more, because the ball started 253.2 from the pin and
   // finished 25.0 from it. That is >= 16.4 % of carry; ours was 9.3 %.
-  near('a driver runs out about 18 % of its carry on a fairway', r.rollYd / r.carry, 0.180, 0.003);
+  // THE APPROVED NUMBER, not the shipped one: golf-reference-spec.md §21.3's decisions say a
+  // fairway rolls about 8 % of carry. This assertion pinned 18 % and so pinned the drift in place.
+  near('a driver runs out about 8 % of its carry on a fairway', r.rollYd / r.carry, 0.080, 0.003);
   {
     const w3 = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[1], power: 1, mishitDeg: 0 });
-    ok('[KNOWN-BUG PROBE] a 3 wood clears the reference\'s 16.4 % run-out floor',
-      w3.rollYd / w3.carry >= 0.164,
-      'shot 2 of the reference footage travelled >= 228.2 yds against a 196.0 carry readout');
+    const mid = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[8], power: 1, mishitDeg: 0 });
+    const lw = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
+    // THE 16.4 % FLOOR IS RETIRED (2026-09-10), and this is the one place it is written down.
+    // It came from the reference footage - shot 2 travelled >= 228.2 yds against a 196.0 carry
+    // readout - and it is flatly incompatible with the ladder Matt APPROVED on 2026-09-03, whose
+    // decisions read "Roll after landing: fairway ~8 % of carry". Asked to choose between the two
+    // on 2026-09-10, having found a 293 yd drive in a player's record, he chose the spec: "yes, fix
+    // it to spec and deploy." The measurement is not deleted, it is overruled - and a reference bag
+    // that ran out 16 % may simply have been an upgraded one, the same doubt that already keeps its
+    // 287 yd drive out of our stock ladder.
+    //
+    // What survives is the SHAPE the measurement was really about: a wood arrives shallow and runs,
+    // a wedge drops and sits, so the bag must not roll as one lump.
+    ok('a 3 wood runs out more, proportionally, than a mid iron and far more than a wedge',
+      w3.rollYd / w3.carry > mid.rollYd / mid.carry && mid.rollYd / mid.carry > lw.rollYd / lw.carry,
+      `3w ${(100 * w3.rollYd / w3.carry).toFixed(1)}% vs 7i ${(100 * mid.rollYd / mid.carry).toFixed(1)}% vs lw ${(100 * lw.rollYd / lw.carry).toFixed(1)}%`);
   }
   {
     const wedge = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: CLUBS[13], power: 1, mishitDeg: 0 });
-    ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs 38 yds',
-      wedge.rollYd < 4 && r.rollYd > 35,
-      'the surface-only model rolled the wedge 4 yds and the driver 17, so nothing in the bag behaved like itself');
+    // The driver's number moved from 38 to about 17 when the fairway went back on the approved 8 %
+    // (2026-09-10); the RULE this probe was written for did not move at all - a lob wedge must sit
+    // and a driver must run, by a wide margin, or nothing in the bag behaves like itself.
+    ok('[KNOWN-BUG PROBE] a LOB WEDGE barely runs at all, where the driver runs many times further',
+      wedge.rollYd < 2 && r.rollYd > 15 && r.rollYd > 8 * wedge.rollYd,
+      `wedge ${wedge.rollYd.toFixed(1)} yd, driver ${r.rollYd.toFixed(1)} yd`);
     const totals = CLUBS.map((c) => {
       const s2 = SH.resolveShot({ hole: CALM, from: h1.tee, aimRad: 0.04, club: c, power: 1, mishitDeg: 0 });
       return s2.rollYd;
