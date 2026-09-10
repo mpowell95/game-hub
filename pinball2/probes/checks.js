@@ -159,6 +159,97 @@ export function playable(table, cfg, step) {
   };
 }
 
+/** WHAT DOES A FLIPPER DO TO A BALL THAT IS ALREADY TOUCHING IT?
+ *
+ *  The bat is the only driven part, so it is the only thing that can move a ball the ball did not
+ *  move itself, and every other probe here starts with the flippers at rest. This one holds a
+ *  flipper up on the first tick with the ball already in its path, over a grid of positions and a
+ *  few speeds, and asks whether the ball is still in the machine afterwards.
+ *
+ *  Born red: a ball caught between the bat and the outer rail was pushed clear of the BAT without
+ *  anything checking where it landed, so it went through the rail and out of the cabinet. */
+export function flipProbe(table, cfg, opts) {
+  const step = (opts && opts.step) || 0.004;
+  const flippers = table.shapes.filter((s2) => s2.kind === 'flipper');
+  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const fails = [];
+  let shots = 0;
+  for (const f of flippers) {
+    const reach = f.len + f.r0 + cfg.BALL_R * 3;
+    for (let dx = -reach; dx <= reach; dx += step) {
+      for (let dy = -reach; dy <= reach; dy += step) {
+        const p = { x: f.pivot.x + dx, y: f.pivot.y + dy };
+        if (p.x < cfg.BALL_R || p.x > table.w - cfg.BALL_R || p.y < cfg.BALL_R || p.y > table.h - cfg.BALL_R) continue;
+        let legal = true;
+        for (const o of solid) if (distToShape(o, p) < cfg.BALL_R + 2e-4) { legal = false; break; }
+        if (!legal) continue;
+        for (const v of [{ x: 0, y: 0 }, { x: 0, y: 1.5 }, { x: -1.5, y: 1.0 }, { x: 1.5, y: 1.0 }]) {
+          shots++;
+          const w = new World(table, cfg);
+          const b = w.addBall(p, v);
+          w.setFlipper(f.side, true);
+          for (let k = 0; k < 90 && b.alive; k++) w.step(cfg.DT);
+          w.setFlipper(f.side, false);
+          for (let k = 0; k < 270 && b.alive; k++) w.step(cfg.DT);
+          if (w.escapes) fails.push({ flipper: f.id, from: p, v, end: { x: b.p.x, y: b.p.y } });
+        }
+      }
+    }
+  }
+  return { shots, fails };
+}
+
+/** CAN A BALL LEAVE THE MACHINE? Fired hard from everywhere it can legally be, at every angle,
+ *  with the flippers working, and run long enough to get out.
+ *
+ *  This is the probe that matters most, because it is the one that would have caught what Matt
+ *  found by playing, and the three checks that shipped before it all missed:
+ *    - the tunnel probe watched a quarter of a second, and the ball took two
+ *    - the rest sweep starts every ball at rest, and this needs speed
+ *    - a static "is the cabinet closed" test passed the broken table outright, which is why it is
+ *      not in this file: a check that says OK about a table a ball can leave is worse than none
+ *
+ *  It leans on the solver counting its own escapes (`World.escapes`) rather than on a geometric
+ *  argument, so it cannot be fooled by a hole nobody thought to look for. */
+export function escapeProbe(table, cfg, opts) {
+  const step = (opts && opts.step) || 0.02;
+  const angles = (opts && opts.angles) || 12;
+  const speeds = (opts && opts.speeds) || [4, cfg.MAX_SPEED];
+  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const play = (opts && opts.play) || playable(table, cfg);
+  const fails = [];
+  let shots = 0;
+  for (let x = cfg.BALL_R; x < table.w; x += step) {
+    for (let y = cfg.BALL_R; y < table.h; y += step) {
+      // Reachable AND legal, both. The first run of this probe reported 532 escapes and every one
+      // started at (14, 14) mm, the dead corner BEHIND the corner rail. Third time this file has
+      // learned it: a ball that was never in play has not escaped anything.
+      if (!play.at({ x, y })) continue;
+      let legal = true;
+      for (const o of solid) if (distToShape(o, { x, y }) < cfg.BALL_R + 2e-4) { legal = false; break; }
+      if (!legal) continue;
+      for (let a = 0; a < angles; a++) {
+        const ang = (a / angles) * Math.PI * 2;
+        for (const sp of speeds) {
+          for (const hold of [null, 'L', 'R']) {
+            shots++;
+            const w = new World(table, cfg);
+            const b = w.addBall({ x, y }, { x: Math.cos(ang) * sp, y: Math.sin(ang) * sp });
+            if (hold) w.setFlipper(hold, true);
+            for (let k = 0; k < 240 && b.alive; k++) {
+              if (hold && k === 40) w.setFlipper(hold, false);
+              if (hold && k === 90) w.setFlipper(hold, true);
+              w.step(cfg.DT);
+            }
+            if (w.escapes) fails.push({ from: { x, y }, deg: Math.round((ang * 180) / Math.PI), speed: sp, hold, end: { x: b.p.x, y: b.p.y } });
+          }
+        }
+      }
+    }
+  }
+  return { shots, fails };
+}
+
 /** Ambiguous gaps: a space near one ball wide is where a ball wedges. A gap must be clearly shut
  *  or clearly open. Overlaps are reported separately and are often deliberate (a rail meeting a
  *  flipper pivot is how you SHUT a gap), so they are a note, not a failure. */

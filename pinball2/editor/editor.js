@@ -99,6 +99,15 @@ function resize() {
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 
+// The canvas is laid out by flex, so switching tabs changes its height without any window resize:
+// Play's panel is shorter than Edit's. Listening only to `resize` left the backing store and the
+// view transform describing the PREVIOUS height, which stretched the picture and put every tap out
+// by exactly that difference. Matt, on the first build: "it's like it thinks I'm selecting
+// something an inch above where my finger actually is."
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => resize()).observe(canvas);
+}
+
 // ------------------------------------------------------------------ play
 
 function newBall() {
@@ -128,13 +137,16 @@ function setFlipper(side, on) {
 
 // ------------------------------------------------------------------ hit testing
 
+/** Tolerance is a FINGER, so it is measured in screen pixels and converted, not fixed in metres.
+ *  At the default fit a millimetre is under a pixel, so the old 12 mm reach was 8 px. */
 function shapeAt(p) {
+  const reach = 22 / (app.view.s * app.view.zoom);
   let best = null;
   let bestD = Infinity;
   for (const sh of app.table.shapes) {
     const d = distToShape(sh, p);
-    const pick = sh.kind === 'drain' ? (d <= 0.001 ? 0.001 : Infinity) : d;
-    if (pick < 0.012 && pick < bestD) { bestD = pick; best = sh; }
+    const pick = sh.kind === 'drain' ? (d <= 0.002 ? 0.002 : Infinity) : d;
+    if (pick < reach && pick < bestD) { bestD = pick; best = sh; }
   }
   return best;
 }
@@ -689,7 +701,9 @@ function frame(t) {
 
   const b = app.world && app.world.balls.find((x) => x.alive);
   hud.textContent = app.mode === 'play'
-    ? `${b ? (Math.hypot(b.v.x, b.v.y)).toFixed(2) + ' m/s' : 'drained'}${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
+    ? `${b ? (Math.hypot(b.v.x, b.v.y)).toFixed(2) + ' m/s' : 'drained'}`
+      + `${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
+      + `${app.world && app.world.escapes ? '   LEFT THE TABLE ' + app.world.escapes : ''}`
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
 
   requestAnimationFrame(frame);

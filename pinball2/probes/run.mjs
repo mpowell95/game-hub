@@ -4,7 +4,7 @@
 
 import { makeTable } from '../machines/testbox/table.js';
 import { CONFIG } from '../machines/testbox/config.js';
-import { drainTime, tunnelProbe, restSweep, checkGaps } from './checks.js';
+import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe } from './checks.js';
 
 const which = process.argv[2] || 'all';
 const table = makeTable();
@@ -29,6 +29,24 @@ if (which === 'tunnel' || which === 'all') {
   console.log(`tunnel probe    ${r.shots} shots at ${cfg.MAX_SPEED} m/s, ${r.fails.length} got through   ${r.fails.length ? 'FAIL' : 'OK'}`);
   for (const f of r.fails.slice(0, 10)) {
     console.log(`   ${f.shape}: from (${f.from.x.toFixed(3)}, ${f.from.y.toFixed(3)}) ended (${f.end.x.toFixed(3)}, ${f.end.y.toFixed(3)}) ${f.out ? 'OFF TABLE' : 'INSIDE ' + f.inside}`);
+  }
+  if (r.fails.length) bad++;
+}
+
+if (which === 'flip' || which === 'all') {
+  const r = flipProbe(table, cfg);
+  console.log(`flipper push    ${r.shots} balls flipped from rest against the bat, ${r.fails.length} left the machine   ${r.fails.length ? 'FAIL' : 'OK'}`);
+  for (const f of r.fails.slice(0, 6)) {
+    console.log(`   ${f.flipper}: from (${(f.from.x * 1000).toFixed(0)}, ${(f.from.y * 1000).toFixed(0)}) mm ended (${(f.end.x * 1000).toFixed(0)}, ${(f.end.y * 1000).toFixed(0)}) mm`);
+  }
+  if (r.fails.length) bad++;
+}
+
+if (which === 'escape' || which === 'all') {
+  const r = escapeProbe(table, cfg);
+  console.log(`escape probe    ${r.shots} balls fired hard from everywhere, ${r.fails.length} left the machine   ${r.fails.length ? 'FAIL' : 'OK'}`);
+  for (const f of r.fails.slice(0, 6)) {
+    console.log(`   from (${(f.from.x * 1000).toFixed(0)}, ${(f.from.y * 1000).toFixed(0)}) mm at ${f.deg} deg ${f.speed} m/s${f.hold ? ' holding ' + f.hold : ''} ended (${(f.end.x * 1000).toFixed(0)}, ${(f.end.y * 1000).toFixed(0)}) mm`);
   }
   if (r.fails.length) bad++;
 }

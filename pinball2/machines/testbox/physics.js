@@ -151,6 +151,64 @@ function shapeImpact(sh, p, v, br, tmax) {
   return best;
 }
 
+/** How deep a ball is inside a STATIC collider, and the shortest way out.
+ *
+ *  "The ball is never inside anything" is the invariant this engine is built on, and it is exact
+ *  for a ball that ARRIVES somewhere: an impact is a root, not a sample. What it did not cover is a
+ *  ball that is inside a collider ALREADY, and the impact tests are worse than useless there: one
+ *  returns null because the ball is inside the outer surface, the other because it is outside the
+ *  inner surface, so the collider becomes invisible and the ball drifts straight through it.
+ *
+ *  It happens where two rails meet FLUSH. A ball riding up the left rail arrives exactly tangent to
+ *  the corner arc, which is what flush means and is what it should do, and a fraction of a
+ *  millimetre either way puts its centre inside the arc's band. Matt found it in about a minute:
+ *  "the ball bounces and flies right over the left flipper and below the wall, out of the machine."
+ *
+ *  So this is the net, and `rescues` counts every time it fires, because it firing at all means the
+ *  geometry has a graze in it that is worth looking at. It is not a position correction of the
+ *  solver's own work: it never runs on a ball the solver placed. */
+function staticPenetration(sh, p, br) {
+  if (sh.kind === 'seg') {
+    const d = sub(sh.b, sh.a);
+    const L2 = dot(d, d);
+    const u = L2 < EPS ? 0 : Math.max(0, Math.min(1, dot(sub(p, sh.a), d) / L2));
+    const on = add(sh.a, mul(d, u));
+    const away = sub(p, on);
+    const dist = len(away);
+    const rad = sh.r + br;
+    if (dist >= rad) return null;
+    return { depth: rad - dist, n: dist < EPS ? { x: 0, y: -1 } : mul(away, 1 / dist) };
+  }
+  if (sh.kind === 'circle') {
+    const away = sub(p, sh.c);
+    const dist = len(away);
+    const rad = sh.r + br;
+    if (dist >= rad) return null;
+    return { depth: rad - dist, n: dist < EPS ? { x: 0, y: -1 } : mul(away, 1 / dist) };
+  }
+  if (sh.kind === 'arc') {
+    const rel = sub(p, sh.c);
+    const dist = len(rel);
+    const rad = sh.r + br;
+    if (dist > EPS && angleInSpan(Math.atan2(rel.y, rel.x), sh.a0, sh.a1)) {
+      const radial = dist - sh.radius;
+      if (Math.abs(radial) < rad) {
+        const dir = radial >= 0 ? 1 : -1;              // out through the nearer face of the band
+        return { depth: rad - Math.abs(radial), n: mul(rel, dir / dist) };
+      }
+      return null;
+    }
+    for (const a of [sh.a0, sh.a1]) {
+      const c = { x: sh.c.x + sh.radius * Math.cos(a), y: sh.c.y + sh.radius * Math.sin(a) };
+      const away = sub(p, c);
+      const dist2 = len(away);
+      if (dist2 < rad) return { depth: rad - dist2, n: dist2 < EPS ? { x: 0, y: -1 } : mul(away, 1 / dist2) };
+    }
+    return null;
+  }
+  return null;
+}
+
 /** How deep a resting ball is inside a shape, and which way is out. Used only to let a swinging
  *  flipper move a ball that is in its way, never to correct the solver's own work. */
 function penetration(sh, p, br, flip) {
@@ -243,6 +301,8 @@ export class World {
     this.drains = table.shapes.filter((s) => s.kind === 'drain');
     this.events = [];
     this.jams = 0;                 // contacts budget exhausted: a diagnostic, never a silent fix
+    this.escapes = 0;              // a ball that left the table. Always a bug, never routine
+    this.rescues = 0;              // a ball found inside a static. Rare by design, counted, not hidden
     this.time = 0;
   }
 
@@ -284,12 +344,31 @@ export class World {
       const sp = len(b.v);
       if (sp > cfg.MAX_SPEED) b.v = mul(b.v, cfg.MAX_SPEED / sp);
 
+      // The net. A ball inside a static is invisible to the impact tests, so it is caught here
+      // BEFORE the step rather than discovered after it has left the table.
+      for (const sh of this.statics) {
+        const pen = staticPenetration(sh, b.p, cfg.BALL_R);
+        if (!pen) continue;
+        const to = add(b.p, mul(pen.n, pen.depth + cfg.SKIN));
+        if (this.isFree(to)) { b.p = to; this.rescues++; }
+        const vn = dot(b.v, pen.n);
+        if (vn < 0) this.resolve(b, pen.n, { x: 0, y: 0 }, sh, -vn);
+      }
+
       // A driven bat can arrive where the ball already is. Let the ball out along the bat's own
       // normal and give it the bat's surface velocity. Never a velocity from the correction.
       for (const f of this.flippers) {
         const pen = penetration(f.def, b.p, cfg.BALL_R, f);
         if (!pen) continue;
-        b.p = add(b.p, mul(pen.n, pen.depth + cfg.SKIN));
+        // The push is the one position write in this file that the ball did not travel, so it is
+        // CHECKED. Squeezed between the bat and a rail, an unchecked push puts the ball through the
+        // rail and out of the cabinet, which is exactly what "it flies over the left flipper and
+        // below the wall, out of the machine" was. If the destination is not free the ball stays
+        // where it is and takes only the velocity: it is briefly overlapped, which the next micro
+        // step resolves, and being overlapped for 4 ms is not a bug a player can see. Being outside
+        // the machine is.
+        const to = add(b.p, mul(pen.n, pen.depth + cfg.SKIN));
+        if (this.isFree(to)) b.p = to;
         const u = f.surfaceVel(pen.at);
         const vn = dot(sub(b.v, u), pen.n);
         if (vn < 0) this.resolve(b, pen.n, u, f.def, -vn);
@@ -333,6 +412,27 @@ export class World {
 
       this.checkDrain(b);
     }
+  }
+
+  /** Is a ball centred here clear of every static collider? Used only to vet the flipper push. */
+  isFree(p) {
+    const br = this.cfg.BALL_R;
+    for (const sh of this.statics) {
+      if (sh.kind === 'seg') {
+        const d = sub(sh.b, sh.a);
+        const L2 = d.x * d.x + d.y * d.y;
+        const u = L2 < EPS ? 0 : Math.max(0, Math.min(1, dot(sub(p, sh.a), d) / L2));
+        if (len(sub(p, add(sh.a, mul(d, u)))) < sh.r + br) return false;
+      } else if (sh.kind === 'circle') {
+        if (len(sub(p, sh.c)) < sh.r + br) return false;
+      } else if (sh.kind === 'arc') {
+        const rel = sub(p, sh.c);
+        const dist = len(rel);
+        if (Math.abs(dist - sh.radius) < sh.r + br
+            && angleInSpan(Math.atan2(rel.y, rel.x), sh.a0, sh.a1)) return false;
+      }
+    }
+    return true;
   }
 
   firstImpact(b, tmax) {
@@ -397,6 +497,17 @@ export class World {
         this.events.push({ type: 'drain', id: d.id });
         return;
       }
+    }
+    // A ball outside the cabinet is a hole in the table, not a drain. It is counted and shown
+    // rather than quietly removed: Matt found the first one by playing ("flies right over the left
+    // flipper and below the wall, out of the machine") because the side rails stopped 20 mm above
+    // the drain and the drain's own rectangle began at x = 0, so a ball leaving to the left of
+    // that was in no zone at all and fell for ever.
+    const m = this.cfg.BALL_R * 3;
+    if (b.p.x < -m || b.p.x > this.table.w + m || b.p.y < -m || b.p.y > this.table.h + m) {
+      b.alive = false;
+      this.escapes++;
+      this.events.push({ type: 'escape', at: { x: b.p.x, y: b.p.y } });
     }
   }
 }
