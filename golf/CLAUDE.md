@@ -5621,3 +5621,100 @@ both powers. With the band shrinking, 0.9 is an ORANGE stop at 100 % and a RED o
 the assertion was comparing the multiplier AND two different qualities of strike. The multiplier
 never moved. It now measures halfway into the green band at each power, which is the same strike at
 any width.
+
+
+## Dead centre is dead straight, and nothing beats it for distance (2026-09-10)
+
+Matt swept the aim a hundredth at a time at max power, from 0.21 into orange on one side to 0.21 on
+the other, and asked whether the numbers made any sense. They did not. Three separate faults, all
+now fixed in `mishit`.
+
+**1. A perfect strike was punished.** `blockSpray` ADDED 4.7-7.1 deg of random push at the top of
+the arc no matter how the ball was struck: measured, **0 of 4000 max-power drives finished within
+5 yds of the aim line**. Matt: *"why are you penalizing perfectly aimed shots???? If the dead center
+of the green aiming bar is hit - it SHOULD NOT be offline by 32 yards."*
+
+It came from a misreading of his own 2026-09-05 note, and the misreading is worth recording because
+a previous session built a whole mechanic on it:
+
+> *"The max carry at the farthest past 100% and spot on should only be 240-245. I want it to go
+> 20-30 yards offline. high risk."*
+
+Read as one thought, "spot on" governs both clauses and a perfect max swing sprays. His correction:
+*"That is NOT what that statement by me means... I want [a poorly aimed shot at max power] to go
+20-30 yards offline."* The carry clause is about the carry; the offline clause is about a bad aim.
+**The spray, `BLOCK_SPRAY_DEG`, `BLOCK_SPRAY_JITTER` and `mishit`'s `seed` argument are all deleted**
+- a struck ball now carries no randomness whatsoever - and the 20-30 yds is delivered by the
+over-swing's mishit ramp against a band that shrinks (`overZone`), both of which the player drives.
+Measured at the top of the arc: mid-orange is 23 yds offline, the orange edge 34.
+
+**2. The longest drive in the game was a MISS.** The green band's distance loss was SIGNED - left of
+centre multiplied distance UP to 1.09, right multiplied DOWN to 0.91, the idea being heavy against
+thin. So at max power a miss to the left went **285 yds against a perfect strike's 262**. It is now
+symmetric: `1 - GREEN_DIST_LOSS * (off / green)`, peaking at 1.000 dead centre and only falling.
+
+The note that argued for the signed version said a one-sided shortfall is "a bias a player clubs up
+once to erase". It is not, once the loss depends on HOW FAR off the strike was: the size of the next
+miss is unknown when the club is chosen, so there is nothing fixed to club out.
+
+**3. The green/orange boundary was a cliff, and on one side it ran backwards.** Orange's distance
+ramp restarted at 1.00 while green's had walked away from it, so crossing the edge lost 24 yds on
+the left and **GAINED 23 yds on the right** - aiming worse made the ball go further. The bands hand
+off continuously now: green 1.00 -> 0.91, orange 0.91 -> 0.83, red 0.83 -> 0.60 (the calibrated end
+point, unmoved).
+
+### The bug this created, and the test that caught it
+
+Deleting the `seed` parameter silently repurposed the argument at that position: `mishit`'s fifth
+parameter is now the green-band FLOOR, and `test.js`'s simulated player was still passing a seed
+there. A floor of several million makes every strike land in "green" at `off / green` of nearly
+zero, so **every shot came back perfect and the robot aced par 3s 24 times out of 24** - five holes
+across the three courses averaging exactly par-2. Section 15c's `[KNOWN-BUG PROBE] no hole plays a
+full shot under par` is what caught it. **Removing a parameter is not a safe refactor when callers
+pass positionally**; the compiler cannot see it and the numbers still look plausible.
+
+### Where the difficulty landed
+
+With the caller fixed, Pine Valley's easiest hole is -0.13 and Red Mesa's -0.08, both comfortably
+inside the guard. **Oasis Sands hole 4 sits at exactly -0.75 against a threshold of -0.75.** That
+hole is a **par 5 of 451 yards** - a driver and a 3 wood cover 442, so it is reachable in two and
+plays as a birdie hole. The physics change did not create that; it tipped a hole that was already
+against the line. Open with Matt as of this commit: lengthen it, call it a par 4, or record it as a
+named gap.
+
+### The tool
+
+A phone tool for this lives as an artifact: the meter with both needles DRAGGABLE (no swinging, no
+timing), the ball's path from above, and sliders for the band shrink, the base band and the miss
+multiplier. Its aim slider reads in Matt's own units, **-0.21 to +0.21**, minus left. It runs the
+game's own model, verified against `mishit` at eleven aim positions to the digit - if the two ever
+disagree the tool is worthless, which is why that check exists rather than a screenshot.
+
+
+## 250 is the ceiling, and the free buffer under it is closed (2026-09-10)
+
+Matt, reading the shot tool: *"those distances are still way too far. the farthest a max power drive
+should ever go is 250 (with this club, right now. do not add this as some insane hard rule game
+wide like you usually do)."* It was 262.
+
+**The yards were coming from the 100 % to 107.6 % band, which paid IN FULL.** `payingPower` only
+started diminishing at `BLOCK_FROM`, so the first 7.6 % past a clean swing was free distance - which
+is the same free lunch a 2026-09-06 session measured at *"+16.3 yards for NOTHING"*. It closed that
+with the random spray; the spray is gone (see the section above), so it is closed with the distance
+instead. The return now diminishes from **100 %**, and `BLOCK_KEEPS_DIST` is 0.372:
+
+| Power | Carry | Total |
+|---|---|---|
+| 100 % | 215.0 | 232.2 |
+| 107.6 % (block edge) | 221.1 | 238.8 |
+| 120.6 % (top of arc) | 231.5 | **250.0** |
+
+**It is a multiplier, not a cap.** Nothing clamps a distance anywhere; every club keeps its own
+ladder and the same curve applies to all of them, which is what Matt's parenthesis was about.
+`BLOCK_FROM` still marks where the meter draws its orange and red block - that is a DRAWING, and the
+distance curve no longer keys off it.
+
+**And the answer to "what is the most offline a shot could be?": 45.4 yards.** Swept over every
+power and every needle stop: the worst possible driver shot is a full red miss at the top of the arc
+(16.0 deg), carrying 139 and finishing 155 from the tee. At a clean 100 % the worst is 20.9 yds
+offline. The 12 fewer yards of carry did NOT move Oasis Sands hole 4, which still measures -0.75.

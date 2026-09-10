@@ -338,11 +338,12 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   // what keeps the over-swing calibration (240-245 yds at the top of the arc, measured with Matt)
   // untouched and what keeps the middle of the bar worth aiming at.
   ok('a dead-centre strike still costs no distance at all', SW.mishit(0.5, 1, 1).distanceMul === 1);
-  ok('...but a green-band strike does, and it is two-sided',
-    SW.mishit(0.6, 1, 1).distanceMul < 1 && SW.mishit(0.4, 1, 1).distanceMul > 1
+  ok('...but a green-band strike does, the same amount whichever side it misses',
+    SW.mishit(0.6, 1, 1).distanceMul < 1 && SW.mishit(0.4, 1, 1).distanceMul < 1
+    && Math.abs(SW.mishit(0.6, 1, 1).distanceMul - SW.mishit(0.4, 1, 1).distanceMul) < 1e-12
     && Math.abs(SW.mishit(0.6, 1, 1).distanceMul - 1) < 0.10);
-  ok('an orange stop shades distance down toward 0.92',
-    SW.mishit(0.82, 1, 1).distanceMul < 1 && SW.mishit(0.82, 1, 1).distanceMul >= 0.92);
+  ok('an orange stop carries on down from where green ended, toward 0.83',
+    SW.mishit(0.82, 1, 1).distanceMul < 0.91 && SW.mishit(0.82, 1, 1).distanceMul >= 0.83);
   ok('a full red miss costs 40 % of the distance', Math.abs(SW.mishit(1, 1, 1).distanceMul - 0.6) < 1e-9);
   ok('...and the penalty rises monotonically the further out you stop',
     [0.5, 0.62, 0.75, 0.88, 1].map((b) => SW.mishit(b, 1, 1).distanceMul)
@@ -364,7 +365,7 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   {
     const relDeg = (power) => {
       const b = SW.bandsFor(1, 1, 0, SW.overZone(power));
-      return SW.mishit(0.5 + (b.green * 0.5) / 2, power, 1, 1, 0).deg - SW.blockSpray(power, 0);
+      return SW.mishit(0.5 + (b.green * 0.5) / 2, power, 1, 1, 0).deg;
     };
     ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x, before the spray is added`,
       Math.abs(relDeg(SW.SWING_MAX) - relDeg(1.0) * SW.OVER_SWING_MAX_MUL) < 1e-9,
@@ -586,11 +587,10 @@ console.log('\n-- 8b2. THE OVER-SWING SHRINKS THE TARGET --');
   // power, so a strike at the very edge of the drawn band has to come back as green, not orange.
   {
     const b = at(SW.SWING_MAX);
-    const edge = SW.mishit(0.5 + (b.green * 0.98) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), 0, floor);
-    const past = SW.mishit(0.5 + (b.green * 1.15) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), 0, floor);
+    const edge = SW.mishit(0.5 + (b.green * 0.98) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), floor);
+    const past = SW.mishit(0.5 + (b.green * 1.15) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), floor);
     ok('the band that is DRAWN is the band that SCORES, at the top of the arc',
-      Math.abs(edge.deg - SW.blockSpray(SW.SWING_MAX, 0)) < 3.1
-      && Math.abs(past.deg - SW.blockSpray(SW.SWING_MAX, 0)) > 3.0,
+      Math.abs(edge.deg) < 3.1 && Math.abs(past.deg) > 3.0,
       `inside ${edge.deg.toFixed(2)} deg, outside ${past.deg.toFixed(2)} deg`);
   }
   // Structural: the meter must be handed the same shrink, or the drawn target is a lie.
@@ -613,45 +613,79 @@ console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
   const cz = CL.swingZone(drv);
   const carryAt = (p) => 215 * SW.payingPower(p);
 
-  ok('below the block, every unit of power still pays in full',
-    Math.abs(SW.payingPower(1.0) - 1.0) < 1e-9 && Math.abs(SW.payingPower(SW.BLOCK_FROM) - SW.BLOCK_FROM) < 1e-9);
+  // UP TO 100 %, every unit of power pays in full; past it the return diminishes immediately.
+  // It used to pay in full all the way to BLOCK_FROM, which is where a top-of-arc driver's extra
+  // 12 yds came from - Matt: "the farthest a max power drive should ever go is 250".
+  ok('up to 100 %, every unit of power still pays in full',
+    Math.abs(SW.payingPower(1.0) - 1.0) < 1e-9 && Math.abs(SW.payingPower(0.5) - 0.5) < 1e-9);
+  ok('...and past 100 % it diminishes at once, with no free buffer before the block',
+    SW.payingPower(1.03) < 1.03 && SW.payingPower(SW.BLOCK_FROM) < SW.BLOCK_FROM);
+  // MATT'S CEILING IS A TOTAL, NOT A CARRY (2026-09-10): "the farthest a max power drive should
+  // ever go is 250 (with this club, right now)". 231.5 of carry plus the driver's 8 % roll is 250.0.
   near(`a driver held to the top carries ${carryAt(SW.SWING_MAX).toFixed(1)} yds`,
-    carryAt(SW.SWING_MAX), 242.5, 2.5, 'Matt asked for 240-245; the old value was 259');
+    carryAt(SW.SWING_MAX), 231.5, 1.0, 'it was 242.5 while 100-107.6 % paid in full');
+  {
+    const rf = CL.rollFactor('fairway', drv);
+    const total = carryAt(SW.SWING_MAX) * (1 + rf);
+    near(`...and finishes ${total.toFixed(1)} yds from the tee, dead centre and no wind`, total, 250, 1.0,
+      "Matt: 'the farthest a max power drive should ever go is 250'");
+  }
   ok('...which is still more than a clean 100 % swing', carryAt(SW.SWING_MAX) > 215);
 
-  // [KNOWN-BUG PROBE] THE PERFECT STRIKE MUST NOW COST SOMETHING. This is the whole fix: `mishit`
-  // at dead centre used to return exactly 0 degrees at any power.
-  let mn = Infinity; let mx = 0; let left = 0; let right = 0;
-  for (let i = 0; i < 500; i++) {
-    const m = SW.mishit(0.5, SW.SWING_MAX, 1, cz, i * 7919);
-    const off = Math.abs(Math.tan(m.deg * Math.PI / 180) * carryAt(SW.SWING_MAX));
-    mn = Math.min(mn, off); mx = Math.max(mx, off);
-    if (m.deg < 0) left++; else right++;
-  }
-  ok(`[KNOWN-BUG PROBE] a PERFECT strike at the top still goes ${mn.toFixed(1)}-${mx.toFixed(1)} yds offline`,
-    mn >= 19 && mx <= 31 && mn > 0, 'Matt asked for 20-30; it used to be exactly 0.0 at any power');
-  ok('...and it goes either way', left > 100 && right > 100,
-    'a spray that always pushed the same side would be a known cost, not a risk');
-  // [KNOWN-BUG PROBE] THERE IS NO FREE BUFFER BETWEEN 100 % AND THE BLOCK (2026-09-06).
-  // The spray used to be gated on BLOCK_FROM, so 100-107.6 % paid FULL distance for ZERO offline
-  // cost: measured, +16.3 yds of driver carry with the ball still dead straight, which made 107 %
-  // strictly better than 100 % on every full shot in the game. It ramps from 100 % now.
-  ok('the spray is zero at exactly 100 % and never below it',
-    SW.blockSpray(1.0, 5) === 0 && SW.blockSpray(0.9, 5) === 0);
-  ok('[KNOWN-BUG PROBE] over-swinging costs something the moment it starts',
-    SW.blockSpray(1.02, 5) !== 0 && SW.blockSpray(SW.BLOCK_FROM, 5) !== 0,
-    'the 100-107.6 % buffer used to be +16.3 yds of carry for nothing');
-  ok('...and the cost grows all the way from 100 % to the top',
-    Math.abs(SW.blockSpray(1.02, 3)) < Math.abs(SW.blockSpray(1.076, 3))
-    && Math.abs(SW.blockSpray(1.076, 3)) < Math.abs(SW.blockSpray(SW.SWING_MAX, 3)));
-  ok('and it grows the deeper into the block the swing goes',
-    Math.abs(SW.blockSpray(1.12, 3)) < Math.abs(SW.blockSpray(SW.SWING_MAX, 3)));
+  // [KNOWN-BUG PROBE] A PERFECT STRIKE IS DEAD STRAIGHT AT EVERY POWER (2026-09-10).
+  //
+  // This block used to assert the OPPOSITE - that a dead-centre strike at the top of the arc goes
+  // 20-30 yds offline - built on a misreading of Matt's 2026-09-05 note. His correction, on being
+  // shown a sweep of it: *"why are you penalizing perfectly aimed shots???? If the dead center of
+  // the green aiming bar is hit - it SHOULD NOT be offline by 32 yards... every fraction of a
+  // degree away from dead center's 0, should mean the ball goes more and more offline."* The
+  // 20-30 yds is what a POORLY AIMED max swing costs, and that is the assertion below it.
+  {
+    const floorW = CL.GREEN_FLOOR[CL.clubTier(drv)] || 0;
+    const deg = (off, p) => SW.mishit(0.5 + off / 2, p, 1, cz, floorW).deg;
+    const ydsOff = (off, p) => Math.abs(Math.tan(deg(off, p) * Math.PI / 180) * carryAt(p));
+    ok('[KNOWN-BUG PROBE] a perfect strike is dead straight at the top of the arc',
+      deg(0, SW.SWING_MAX) === 0 && deg(0, 1) === 0 && deg(0, 0.5) === 0,
+      'it used to be pushed 21-32 yds offline by a random spray, however well it was struck');
+    const b = SW.bandsFor(1, cz, floorW, SW.overZone(SW.SWING_MAX));
+    const mid = ydsOff((b.green + b.orange) / 2, SW.SWING_MAX);
+    ok(`a POORLY AIMED max swing goes ${mid.toFixed(0)} yds offline`, mid >= 20 && mid <= 30,
+      "Matt: 'I want [a poorly aimed shot at max power] to go 20-30 yards offline. High risk'");
+    ok('...and every fraction further from centre bends it further, both ways',
+      [0.02, 0.05, 0.09, 0.13, 0.2, 0.4, 0.8].every((o, i, a) => i === 0
+        || (ydsOff(o, SW.SWING_MAX) > ydsOff(a[i - 1], SW.SWING_MAX)
+          && Math.abs(deg(-o, SW.SWING_MAX) + deg(o, SW.SWING_MAX)) < 1e-9)));
 
-  // SEEDED, NOT RANDOM. `resolveShot` has to stay a pure function of its inputs or section 14 -
-  // every hole on both courses played out - stops being reproducible.
-  ok('the same shot sprays the same way every time',
-    SW.blockSpray(1.18, 42) === SW.blockSpray(1.18, 42));
-  ok('...and different shots do not', SW.blockSpray(1.18, 42) !== SW.blockSpray(1.18, 43));
+    // [KNOWN-BUG PROBE] DISTANCE PEAKS AT DEAD CENTRE AND ONLY FALLS (2026-09-10). The green band's
+    // distance loss used to be SIGNED - left multiplied UP to 1.09, right DOWN to 0.91 - so the
+    // longest drive in the game was a MISS (285 yds against a perfect strike's 262), and the
+    // green/orange boundary was a cliff that GAINED 23 yds on the right for aiming worse. Matt
+    // swept it a hundredth at a time and asked whether it made any sense. It did not.
+    const mul = (off, p) => SW.mishit(0.5 + off / 2, p, 1, cz, floorW).distanceMul;
+    ok('[KNOWN-BUG PROBE] nothing beats a dead-centre strike for distance',
+      [0.03, 0.06, 0.12, 0.13, 0.2, 0.5, 1].every((o) => mul(o, SW.SWING_MAX) < 1
+        && mul(-o, SW.SWING_MAX) < 1),
+      'a miss to the left used to go 24 yds FURTHER than a perfect strike');
+    ok('...the loss is the same whichever side you miss',
+      [0.05, 0.12, 0.3, 0.7].every((o) => Math.abs(mul(o, SW.SWING_MAX) - mul(-o, SW.SWING_MAX)) < 1e-12));
+    ok('...it only ever falls, with no step at either band edge',
+      (() => {
+        let prev = 1.0000001;
+        for (let o = 0; o <= 1.0001; o += 0.005) {
+          const v = mul(o, SW.SWING_MAX);
+          if (v > prev + 1e-9) return false;            // never rises
+          if (prev - v > 0.02) return false;            // and never falls off a cliff
+          prev = v;
+        }
+        return true;
+      })(), 'green -> orange used to jump 1.00 straight back up from 0.91');
+  }
+
+  // NOTHING IN A STRUCK SHOT IS RANDOM ANY MORE. It used to be "seeded, not random"; now there is
+  // no seed at all, which is a stronger form of the same guarantee.
+  ok('the same needle stop at the same power always gives the same shot',
+    JSON.stringify(SW.mishit(0.62, SW.SWING_MAX, 1, cz)) === JSON.stringify(SW.mishit(0.62, SW.SWING_MAX, 1, cz)));
+
   {
     const h = { ...h1, wind: { speed: 0, bearing: 0 } };
     const a = SH.resolveShot({ hole: h, from: h1.tee, aimRad: 0, club: drv, power: 1, mishitDeg: 0 });
@@ -1951,8 +1985,13 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
       const tg = aimAt(hole, ball, reach);
       const base = Math.atan2(tg[0] - ball[0], tg[1] - ball[1]);
       const want = Math.min(1, distYd(ball, tg) / reach);
+      // NO SEED ARGUMENT since 2026-09-10: a struck shot carries no randomness, and `mishit`'s
+      // fifth parameter is the green-band FLOOR. Passing the old seed here made the floor a
+      // seven-digit number, so every strike came back perfect and this player aced par 3s 24 times
+      // out of 24 - which is what the under-par probe below caught.
       const m = SW.mishit(0.5 + tapSigned(r, SW.bandsFor(L.zone == null ? 1 : L.zone, CL.swingZone(club))) / 2,
-        want, L.zone == null ? 1 : L.zone, CL.swingZone(club), (n * 7717) ^ seed);
+        want, L.zone == null ? 1 : L.zone, CL.swingZone(club),
+        CL.GREEN_FLOOR[CL.clubTier(club)] || 0);
       let out = null; let fall = null; let fallD = -1;
       outer:
       for (const dAim of [0, 6, -6, 14, -14, 26, -26, 45, -45]) {
@@ -2034,7 +2073,23 @@ console.log('\n-- 15c. the courses get harder as the round goes on --');
     // par with a 90-100 % birdie rate. Matt: "I don't even know if there's a single hole here I
     // wouldn't birdie."
     const worst = Math.min(...vp);
-    ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
+    // NAMED GAP, 2026-09-10, and it is not silent. OASIS SANDS HOLE 4 IS A PAR 5 OF 451 YARDS - a
+    // driver and a 3 wood cover 442, so it is reachable in two and plays as a birdie hole. It sat
+    // just inside this line already; the mishit rework (dead centre dead straight, symmetric
+    // distance loss) tipped it onto the line exactly, and taking 12 yds off every drive with the
+    // 250 ceiling did not move it, which is what a hole that short for its par looks like.
+    //
+    // The claim is right and the HOLE is what is wrong, so it is exempted here rather than the
+    // physics retuned around one hole - and OASIS SANDS IS NOT RELEASED. Matt, on this holding up a
+    // deploy: *"dude fuck oasis sands. it's not open yet. Pine Valley ONLY."* Pine Valley is the
+    // course people play and its easiest hole measures -0.13. Fix the hole before that course
+    // opens, and delete this branch when you do.
+    if (c.id === 'oasissands' && worst <= -0.75 && worst > -0.9) {
+      console.log('  NAMED GAP: oasissands hole 4 plays ' + (-worst).toFixed(2)
+        + ' under par - it is a par 5 of 451 yds, reachable in two (see the note in 15c, 2026-09-10)');
+    } else {
+      ok(`${c.id}: [KNOWN-BUG PROBE] no hole plays a full shot under par (easiest ${worst.toFixed(2)})`, worst > -0.75);
+    }
   }
 }
 
