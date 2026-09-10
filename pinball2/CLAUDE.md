@@ -171,6 +171,52 @@ the tool. It needs `node server.mjs` running and SKIPs without Chromium.
 **The lesson worth keeping: a frozen frame and a stuck ball look identical, and the tell is the
 geometry.** If a ball is at rest touching nothing, stop looking at the physics.
 
+## The ball stuck to the flipper, and it was the grip, charged per contact
+
+Matt, first real gameplay report: *"The ball sticks to the flipper on a lot of shots. Like a magnet
+or something."*
+
+Measured by asking the one question a player cares about, **how far up the table does the ball go
+after one flip**, against where it sits on the bat (u = 0 at the pivot, 1 at the tip):
+
+```
+                        u=0.30   u=0.50   u=0.70   u=0.90
+as Matt played it        35mm     40mm     46mm    924mm
+```
+
+Only the very tip threw the ball at all. And travel was pinned at 35 to 46mm no matter what: faster
+flips, bouncier rubber, an explicit kick, all changed the ball's top SPEED (1.8 to 6.4 m/s) and none
+of them changed how far it went. **A number that does not move when you change its supposed cause is
+telling you the cause is somewhere else.** Three fixes were tried and rejected on measurement before
+the control run named it:
+
+```
+no flipper friction      48mm     55mm    924mm    922mm
+```
+
+**It was the grip.** A ball riding a surface touches it again every fraction of a millimetre, and
+how often that happens is a property of the solver, not of the table: 14 to 22 contacts per tick
+against the flipper. Friction was charged at every one of them, so the bat gripped the ball about
+fourteen times harder than physics says and carried it round instead of letting it slide off.
+
+The fix is a **contact EPISODE**: the first touch of a surface in a tick is an impact and is paid
+for in full, and every touch after it only keeps the ball out of the surface. No restitution, no
+friction, no second helping of either. Both paths that can resolve a flipper contact share the map,
+because the flipper push runs before the sweep and would otherwise pay twice.
+
+```
+after the fix            46mm     53mm    924mm    922mm
+```
+
+**This is the third time this exact bug has appeared in this file**: rolling drag was charged per
+contact, then friction inside a micro step, now friction across a tick. If you add anything that
+costs the ball energy, ask what it is charged PER. Per contact is almost always wrong.
+
+Still weak, and known: the inner third of the bat (u below about 0.5) only moves the ball 50mm even
+with the grip removed entirely, so that is geometry rather than the contact model. On a real machine
+a ball at the flipper base is a weak shot too, so this may be right, but it has not been checked
+against anything and should not be assumed correct.
+
 ## The editor's touch was offset, and the cause is worth knowing
 
 Matt: *"the editor can't tell what I'm selecting, it's like it thinks I'm selecting something an

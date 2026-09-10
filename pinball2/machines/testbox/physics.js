@@ -308,7 +308,7 @@ export class World {
   }
 
   addBall(p, v) {
-    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false };
+    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, touched: new Map() };
     this.balls.push(b);
     return b;
   }
@@ -321,6 +321,15 @@ export class World {
    *  going, because the ball's motion is solved exactly rather than sampled. */
   step(dt) {
     const cfg = this.cfg;
+    // A contact EPISODE, not a contact event. The ball riding a surface touches it again every
+    // fraction of a millimetre, and how often that happens is a property of the solver: measured,
+    // 14 to 22 times per tick against the flipper. Restitution and friction are paid ONCE per
+    // episode, on the first touch. Everything after it only keeps the ball out of the surface.
+    //
+    // Charging grip at every one of them is what glued the ball to the flipper. Matt: "the ball
+    // sticks to the flipper on a lot of shots, like a magnet." Measured with the grip removed
+    // entirely, a mid bat flip went from 46 mm up the table to 924 mm, which is what named it.
+    for (const b of this.balls) b.touched = new Map();
     let tipSpeed = 0;
     for (const f of this.flippers) {
       if (!f.atStop()) tipSpeed = Math.max(tipSpeed, Math.abs(f.rate(cfg)) * f.def.len);
@@ -372,12 +381,27 @@ export class World {
         if (this.isFree(to)) b.p = to;
         const u = f.surfaceVel(pen.at);
         const vn = dot(sub(b.v, u), pen.n);
-        if (vn < 0) this.resolve(b, pen.n, u, f.def, -vn);
+        if (vn < 0) {
+          const again = b.touched.get(f.def.id) > 0;
+          b.touched.set(f.def.id, (b.touched.get(f.def.id) || 0) + 1);
+          if (again) b.v = add(b.v, mul(pen.n, -vn));
+          else this.resolve(b, pen.n, u, f.def, -vn);
+        }
       }
 
       let left = h;
       let events = 0;
       b.resting = false;
+      // How many times each collider has already been resolved in THIS micro step. A ball riding
+      // along a surface generates a contact every few tenths of a millimetre, and the count is a
+      // property of the solver, not of the table: measured, a ball grazing the flipper produced 22
+      // contacts in one tick. Charging friction at each of them removed a full metre per second of
+      // speed per tick, so a flipped ball died on the bat and sat there. Matt: "the ball sticks to
+      // the flipper on a lot of shots, like a magnet."
+      //
+      // The FIRST contact with a surface in a micro step is an impact and is paid for in full.
+      // Anything after it is the same sustained contact seen again, so the ball is only kept out of
+      // the surface: no restitution, no friction, no second helping of either.
       while (left > EPS && events < cfg.MAX_EVENTS) {
         const hit = this.firstImpact(b, left);
         if (!hit) {
@@ -389,7 +413,15 @@ export class World {
         b.p = add(b.p, mul(hit.n, cfg.SKIN));
         const u = hit.flipper ? hit.flipper.surfaceVel(b.p) : { x: 0, y: 0 };
         const closing = -dot(sub(b.v, u), hit.n);
-        this.resolve(b, hit.n, u, hit.shape, closing);
+        const again = b.touched.get(hit.shape.id) > 0;
+        b.touched.set(hit.shape.id, (b.touched.get(hit.shape.id) || 0) + 1);
+        if (again) {
+          const vn = dot(sub(b.v, u), hit.n);
+          if (vn < 0) b.v = add(b.v, mul(hit.n, -vn));   // stay out of it, and nothing else
+          b.resting = true;
+        } else {
+          this.resolve(b, hit.n, u, hit.shape, closing);
+        }
         if (hit.flipper) {
           if (hit.flipper.held && closing < cfg.REST_SPEED) {
             const k = Math.max(0, 1 - cfg.CRADLE_DAMP * hit.t);
@@ -471,7 +503,7 @@ export class World {
     if (isFlip) {
       // Real flipper rubber gives back less the harder it is hit, so a hard shot is thrown by the
       // bat's own motion rather than trampolined off it.
-      e = Math.max(0.05, cfg.FLIP_E - cfg.FLIP_E_FADE * Math.abs(vn));
+      e = Math.max(cfg.FLIP_E_MIN, cfg.FLIP_E - cfg.FLIP_E_FADE * Math.abs(vn));
     } else {
       e = shape.e != null ? shape.e : cfg.BALL_E;
     }
@@ -492,6 +524,28 @@ export class World {
     b.spin += (jt * 2.5) / cfg.BALL_R;     // I = 2/5 m r^2 for a solid sphere
 
     if (resting) b.resting = true;   // rolling drag is charged per SECOND in micro(), not per contact
+
+    // THE RUBBER KICK, and it is a gameplay model rather than a claim about rigid bodies.
+    //
+    // The bat creeps into the ball a fraction of a millimetre per micro step, so a flip is not one
+    // impact but twenty tiny ones, and twenty tiny impulses leave the ball at EXACTLY the bat's
+    // surface speed however elastic the rubber is. A ball moving at the bat's surface speed has the
+    // same angular rate about the pivot as the bat, so it rides the bat all the way up and is still
+    // sitting on it at the top. That is what Matt saw: "the ball sticks to the flipper on a lot of
+    // shots, like a magnet." Measured: a mid bat flip moved the ball 40 mm up the table. Restitution
+    // cannot fix it, because the tie is exact and (1 + e) times a vanishing approach is vanishing.
+    //
+    // So a driven bat guarantees the ball leaves faster than the bat's own surface. One constant,
+    // on a slider, and the ball's angular rate is then (1 + FLIP_KICK) times the bat's, which is
+    // the condition for it to get away.
+    if (isFlip) {
+      const un = dot(surfVel, n);
+      if (un > 0) {
+        const want = (1 + cfg.FLIP_KICK) * un;
+        const have = dot(nv, n);
+        if (have < want) nv = add(nv, mul(n, want - have));
+      }
+    }
 
     const sp2 = len(nv);
     if (sp2 > cfg.MAX_SPEED) nv = mul(nv, cfg.MAX_SPEED / sp2);
