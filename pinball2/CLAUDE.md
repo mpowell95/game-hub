@@ -63,6 +63,7 @@ the old engine (`pinball/CLAUDE.md`, "The ramps were unreachable").
 | `editor/index.html`, `editor/editor.js` | the tool: Play, Edit, Tune, Check |
 | `probes/checks.js` | the three checks, written ONCE and run from both the editor and node |
 | `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|flip\|escape\|gaps\|rests\|all]`, about 2.5 min for all |
+| `probes/test-editor.mjs` | does the TOOL work. Touch accuracy after a tab switch, and the NaN freeze. Needs `node server.mjs`; SKIPs without Chromium |
 
 **One engine file per machine, forked, never shared.** A second machine copies
 `machines/testbox/` and edits its copy. That is the repo rule and it is why a shared fix cannot
@@ -131,6 +132,44 @@ most of that, and it is worth every second of it.
 as one.** Three seconds is how long a ball LIVES on a real machine, and it lives that long because
 it keeps hitting things. A ball with nothing in its way over this playfield takes 1.31 s, which is
 `sqrt(2h/g sin tilt)` and nothing else. The honest assertion is against that analytic number.
+
+## The app froze, and it looked exactly like a physics bug
+
+Matt filmed it: a ball resting in mid air at 0.00 m/s, touching nothing, for the last four seconds
+of the recording. *"You are really not giving me much confidence."*
+
+It was not physics. Measured from the recording, the ball's rest position is 43 mm from the feed
+rail's end cap and 27 mm from the flipper's pivot, and a ball is 27 mm across, so it could not have
+been touching both: **a ball resting on nothing is not a rest, it is a frozen frame.**
+
+The chain, reproduced in a browser in one run:
+
+1. a number field in the property panel is empty for one keystroke
+2. `parseFloat('')` is `NaN`, and the handler put it straight into the geometry
+3. the ball's position goes non-finite
+4. `createRadialGradient` **throws** on a non-finite argument rather than drawing nothing
+5. the exception comes out of the `requestAnimationFrame` callback, so **rAF is never called
+   again** and the page sits on its last painted frame for ever
+6. the autosave had already written it, so a reload and a force quit did not help either
+
+Four fixes, because any one alone leaves the hole open:
+
+- **The loop is scheduled in a `finally`.** Nothing inside a frame can stop the app, and the error
+  is printed in the corner instead of the app going quietly still. This is the one that matters:
+  whatever else breaks, the app must keep running and say what happened.
+- **A field cannot inject a non-number.** An empty or non-numeric box restores the previous value.
+- **The autosave is never written when the table has a bad number, and a stored table is repaired
+  on load.** A phone that already stored one heals on the next visit rather than needing its site
+  data cleared. **`null` is rejected as hard as `NaN`**: JSON has no NaN, so a stored NaN comes back
+  as null, and null in arithmetic is 0, which silently teleports a rail to the edge of the table.
+- **The solver kills a ball whose numbers stop being numbers** (`World.broken`) and the renderer
+  skips it, so one bad ball cannot spread NaN through every contact it touches.
+
+`probes/test-editor.mjs` is the regression net, and every case in it is something Matt hit by using
+the tool. It needs `node server.mjs` running and SKIPs without Chromium.
+
+**The lesson worth keeping: a frozen frame and a stuck ball look identical, and the tell is the
+geometry.** If a ball is at rest touching nothing, stop looking at the physics.
 
 ## The editor's touch was offset, and the cause is worth knowing
 

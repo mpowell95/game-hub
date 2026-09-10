@@ -173,6 +173,7 @@ export function draw(ctx, table, v, state) {
 
   for (const b of st.balls || []) {
     if (!b.alive) continue;
+    if (!Number.isFinite(b.p.x) || !Number.isFinite(b.p.y)) continue;   // createRadialGradient THROWS on these
     const c = toScreen(v, b.p);
     const r = st.ballR * S(v);
     ctx.beginPath();
