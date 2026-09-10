@@ -1282,6 +1282,50 @@ function launched(g) {
         : worst.toFixed(0) + ' px under the surface at py ' + at + ', ' + hidden
           + ' frames out of sight, worst one-frame jump ' + jump.toFixed(0) + ' px');
   }
+  // [KNOWN-BUG PROBE] THE RAMPS CAN BE SHOT, AND NOTHING ENDS UP BEHIND THE ARCH.
+  //
+  // Two defects that turned out to be one driven game apart. Matt: *"the ball is not permitted to
+  // get onto level 2. it goes up the ramp and acts like it hit a wall, then comes back down."*
+  // The `_ramp` latch, which stops a ball rattling on a mouth being counted as forty ramps,
+  // cleared only once the ball was 300 px BELOW the mouth - py 1233 - and the speed-boost pad
+  // sits at py 1059, above that line. So a ball that came down a lane was kicked straight back up
+  // while still latched and met the one-way top cap as a wall. Measured: the latch was on for 47%
+  // of all frames, and 44 of 44 arrivals at a mouth moving up were turned away by it.
+  //
+  // Fixing that made the SECOND one reachable for the first time. A ball stepping off the deck at
+  // x 145 was handed to level 1 sitting 36 px inside the lane's inner rail - a level-2 ball cannot
+  // see a level-1 rail - and the solver ejected it 69 px in one frame, over the top cap and into
+  // the dead space behind the arch: *"it should not be able to go behind that large semi-circle
+  // thing."* 604 frames of it on the left, 71 on the right, and none of it was reachable while the
+  // ramps did not work, which is why every earlier probe of that space read zero.
+  {
+    let climbs = 0, behind = 0, frames = 0;
+    for (let gi = 0; gi < 8; gi++) {
+      let sd = 77 + gi * 7919;
+      const rnd = () => (sd = (sd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const g = new DesignPinball({ rand: rnd });
+      g.start();
+      const climbing = new Map();
+      for (let i = 0; i < 120 * 240 && g.phase !== 'over'; i++) {
+        g.setFlipper('left', rnd() < 0.03);
+        g.setFlipper('right', rnd() < 0.03);
+        if (g.balls.some((q) => q.onPlunger) && !g.plungerHeld) { g.plungerDown(); g.plungerPower = 0.35 + rnd() * 0.65; g.plungerUp(); }
+        g.update(1 / 120); frames++;
+        for (const b of g.balls) {
+          if (b._climbR && !climbing.get(b)) climbs++;
+          climbing.set(b, !!b._climbR);
+          if (b.onPlunger || (b.layer | 0) !== 1) continue;
+          const bx = b.x / DT.px(1), by = b.y / DT.px(1);
+          // outboard of the arch, either side, above where its legs end
+          if (by < 575 && (bx < 128 || bx > 858)) behind++;
+        }
+      }
+    }
+    ok('[FOUNDRY] the ramps can actually be shot', climbs >= 8,
+      climbs + ' ramp climbs in 8 driven games (the latched build managed 1)');
+    ok('[FOUNDRY] no ball ever gets behind the arch on level 1', behind === 0,
+      behind === 0 ? 'never outboard of the arch' : behind + ' frames of ' + frames + ' outboard of the arch');
+  }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.
   {

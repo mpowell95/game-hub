@@ -24,6 +24,27 @@ const RAMP_CLIMB = 0.55;
 /** How long a ball takes to drop through the hole in the deck. A hole is quick. */
 const DROP_FALL = 0.18;
 /**
+ * How long after taking a ramp before the same ball may take one again.
+ *
+ * The `_ramp` latch exists so a ball rattling on a mouth is not counted as forty ramps, and it
+ * used to do that job by POSITION: it cleared only once the ball was 300 px below the mouth. That
+ * line is py 1233, and the speed-boost pad sits at py 1059 - ABOVE it. So a ball that came down a
+ * lane rolled out of the mouth, was kicked straight back up by the pad while still latched, and
+ * met the lane's one-way top cap as a solid wall. Matt: *"the ball isn't permitted to get onto
+ * level 2. it goes up the ramp and acts like it hit a wall, then comes back down."*
+ *
+ * Measured on the shipped build: the latch was on for 47% of all frames, set 23 times in 8 games
+ * and every one of them at py 555..608 - the top of a lane, where a ball steps off the deck - and
+ * it stayed on a median of 5.3 s and once for 25.3 s. Every single arrival at a mouth moving up,
+ * 44 of 44 over 40 driven games, was turned away by it.
+ *
+ * So the latch now clears just BELOW the mouth rather than 300 px down the table, and the
+ * anti-rattle job it was really doing moves to this cooldown, where it belongs. A rattling ball
+ * cannot re-take a ramp within RAMP_RETAKE however it bounces; a ball that has genuinely come
+ * back down and been fed at the lane again can go straight up.
+ */
+const RAMP_RETAKE = 0.6;
+/**
  * How long a slingshot coil takes to reset, for ANY slingshot on the board.
  *
  * Matt: *"the ball just got stuck bouncing between the triangles above the bumpers for
@@ -380,12 +401,13 @@ export class DesignPinball {
         // clear of the mouth again.
         for (const r of T.RAMPS) {
           const near = b.y <= r.y + BALL_R * 3 && b.x >= r.x[0] && b.x <= r.x[1];
-          if (!near) { if (b.y > r.y + 300) b._ramp = false; continue; }
+          if (!near) { if (b.y > r.y + BALL_R * 7) b._ramp = false; continue; }
           // ANY ball in the lane above the mouth line goes up, not only one still climbing. The
           // mouth used to be a WALL as well, which stopped a stalling ball dead and parked it in
           // the dead space over the arch; that wall is gone (see design/board.js) and this is
           // what replaces it. The _ramp flag still makes it once per approach, not per bounce.
           if (b._ramp || (b.vy >= 0 && b.y > r.y)) continue;
+          if (this.time - (b._rampT === undefined ? -99 : b._rampT) < RAMP_RETAKE) continue;
           // NO MINIMUM ENTRY SPEED, AND THAT IS A DELIBERATE TRADE. A gate here (measured at 330,
           // below the median arrival of 697) makes the ramp a shot you can fail, which is what gives
           // the kicker something to rescue. It also parks balls: the lane is FLAT with rails, so a
@@ -393,7 +415,7 @@ export class DesignPinball {
           // to 350 in 10 places the moment the gate went in. A stuck ball is the defect Matt has
           // reported most, so the gate waits until the lane can roll a failed ball back out of its
           // own mouth. RAMPS still carries minEntry, unused, so the experiment is one line away.
-          b._ramp = true;
+          b._ramp = true; b._rampT = this.time;
           // Hand the ball to the climb rather than moving it. _rampRide walks it up the ramp's own
           // centre line and lets it out at the top; nothing here changes its position.
           b.held = true; b.holdT = 99; b._climb = 0; b._climbR = r;
@@ -454,10 +476,33 @@ export class DesignPinball {
           // So the fall now ends AT THE LANE, and its length is what is actually being fallen:
           // the full 46 px in the open middle of the deck, nothing at all where the lane meets
           // the deck edge flush, and the part of it in between where the deck overhangs the lane.
-          const lane = T.rampLift(b.x, b.y);
+          // ...AND IT IS PUT IN THE LANE, NOT ON THE RAIL BESIDE IT.
+          //
+          // The deck front runs to py 596 for the whole of x 45..150, and the lane's inner rail
+          // is AT x 150 - so a ball stepping off the deck at x 145 was handed to level 1 sitting
+          // 36 px inside that rail. A level-2 ball cannot see a level-1 rail, so nothing stopped
+          // it arriving there; the solver then ejected it the way it ejects anything deeply
+          // overlapped, 69 px in a single frame, up and over the lane's one-way top cap and into
+          // the dead space behind the arch. Traced four times over 24 driven games, always the
+          // same shape: (145, 596) layer 2, then (97, 546) layer 1 with the velocity reversed.
+          //
+          // That is also the whole of *"it should not be able to go behind that large
+          // semi-circle thing"* on a board whose ramps now work - level 1 above the arch was
+          // unreachable while they did not.
+          //
+          // So the ball slides into the CLEAR CHANNEL between the rails, and the slide is the
+          // same scripted move the fall already uses, which walks x as well as y. No jump.
+          const laneAt = T.rampLane(b.x, b.y);
+          const lane = laneAt === null ? null : laneAt.lift;
           if (lane !== null) b._ramp = true;      // a ramp only goes UP: do not scoop it back
-          if (lane !== null && lane > 0.95) {
-            // flush with the top of the lane - there is nothing here to fall off
+          let intoX = b.x;
+          if (laneAt) {
+            // the clear channel: each rail centre, plus that rail radius, plus the ball radius
+            const lo = T.px(laneAt.x0) + (BALL_R + 5.33), hi = T.px(laneAt.x1) - (BALL_R + 5.33);
+            intoX = hi > lo ? Math.max(lo, Math.min(hi, b.x)) : (T.px(laneAt.x0) + T.px(laneAt.x1)) / 2;
+          }
+          if (lane !== null && lane > 0.95 && Math.abs(intoX - b.x) < T.px(2)) {
+            // flush with the top of the lane and already clear of both rails: nothing to fall off
             b.layer = 1; b.lift = lane;
             this.emit({ type: 'rampexit', x: b.x, y: b.y });
             continue;
@@ -478,7 +523,7 @@ export class DesignPinball {
           b._drop = 0;
           b._dropFrom = [b.x, b.y];
           b._dropLift = lane === null ? 0 : lane;
-          b._dropTo = [b.x, b.y + T.px(46) * (1 - (lane === null ? 0 : lane))];
+          b._dropTo = [intoX, b.y + T.px(46) * (1 - (lane === null ? 0 : lane))];
         }
       }
     }
