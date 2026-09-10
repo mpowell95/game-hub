@@ -355,9 +355,21 @@ ok('the bar position is LINEAR in the needle position, the way the reference mea
   ok('over-100 % power multiplies the miss, and more the further past you go',
     SW.mishit(0.9, 1.05, 1).deg > SW.mishit(0.9, 1.0, 1).deg
     && SW.mishit(0.9, 1.15, 1).deg > SW.mishit(0.9, 1.05, 1).deg);
-  ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x, before the spray is added`,
-    Math.abs((SW.mishit(0.9, SW.SWING_MAX, 1, 1, 0).deg - SW.blockSpray(SW.SWING_MAX, 0))
-      - SW.mishit(0.9, 1.0, 1).deg * SW.OVER_SWING_MAX_MUL) < 1e-9);
+  // MEASURED AT THE SAME PLACE IN THE BAND, NOT AT THE SAME PLACE ON THE BAR (2026-09-10). This
+  // used to compare bar position 0.9 at both powers, which stopped meaning anything the day the
+  // over-swing started shrinking the band (`OVER_ZONE_LOSS`): 0.9 is an ORANGE stop at 100 % and a
+  // RED one at the top of the arc, so it was comparing the multiplier AND a different quality of
+  // strike, and failed. The multiplier itself did not move. Halfway into the green band is the same
+  // strike at any power, so what is left in the comparison is the multiplier alone.
+  {
+    const relDeg = (power) => {
+      const b = SW.bandsFor(1, 1, 0, SW.overZone(power));
+      return SW.mishit(0.5 + (b.green * 0.5) / 2, power, 1, 1, 0).deg - SW.blockSpray(power, 0);
+    };
+    ok(`at the top of the arc it is ${SW.OVER_SWING_MAX_MUL}x, before the spray is added`,
+      Math.abs(relDeg(SW.SWING_MAX) - relDeg(1.0) * SW.OVER_SWING_MAX_MUL) < 1e-9,
+      `${relDeg(1.0).toFixed(4)} deg at 100 %, ${relDeg(SW.SWING_MAX).toFixed(4)} at the top`);
+  }
   ok('and exactly 100 % costs nothing extra',
     Math.abs(SW.mishit(0.9, 1.0, 1).deg - SW.mishit(0.9, 0.999999, 1).deg) < 1e-4);
   // The spec's own sanity check on the model.
@@ -546,6 +558,46 @@ console.log('\n-- 8b. ONE TEMPO, AND A GREEN BAND THAT NARROWS WITH THE CLUB --'
     near('from a clean lie GREEN itself is about 4.8 frames, as the reference measured',
       b.green * SW.BAR_HALF * t.downMs / FRAME, 4.84, 0.35);
   }
+}
+
+console.log('\n-- 8b2. THE OVER-SWING SHRINKS THE TARGET --');
+// Matt, 2026-09-10: "it's incredibly easy to hit a max over swing driver perfectly aimed off the
+// tee. the green section is huge." A driver from the tee is 0.545 x 1.00 x 0.62 = 0.338, so 68 % of
+// the accuracy bar was a perfect strike, and it stayed that wide at any power. `OVER_ZONE_LOSS` is
+// the number he settled on by swinging a bench copy of the meter on his phone against a slider.
+{
+  const drv = CLUBS[0];
+  const floor = CL.GREEN_FLOOR[CL.clubTier(drv)] || 0;
+  const at = (p, zone) => SW.bandsFor(zone == null ? 1 : zone, CL.swingZone(drv), floor, SW.overZone(p));
+  near('at 100 % the band is exactly what it always was', at(1).green, 0.338, 0.002);
+  ok('nothing below 100 % is touched', at(0.5).green === at(1).green && at(0.25).green === at(1).green);
+  near('at the top of the arc a driver keeps a quarter of the bar', at(SW.SWING_MAX).green, 0.122, 0.004);
+  ok('the shrink is a RAMP, not a step at the block edge',
+    at(1).green > at(SW.BLOCK_FROM).green && at(SW.BLOCK_FROM).green > at(SW.SWING_MAX).green
+    && at(1.03).green < at(1).green,
+    `100 % ${at(1).green.toFixed(3)}, block ${at(SW.BLOCK_FROM).green.toFixed(3)}, top ${at(SW.SWING_MAX).green.toFixed(3)}`);
+  // [KNOWN-BUG PROBE] A bad lie has ALREADY collapsed the band to its tier floor; multiplying that
+  // by the over-swing would compute 0.058 - about 6 device px under a 6 px needle, which is the
+  // invisible-target bug GREEN_FLOOR exists to prevent, reached from the other direction.
+  ok('[KNOWN-BUG PROBE] a bad lie AND a full over-swing still leave a target you can see',
+    at(SW.SWING_MAX, LIES.heavyRough.zone).green >= SW.OVER_MIN - 1e-9,
+    `heavy rough at the top of the arc: ${at(SW.SWING_MAX, LIES.heavyRough.zone).green.toFixed(3)}`);
+  // The band the METER paints and the band that SCORES must be the same one. `mishit` takes the
+  // power, so a strike at the very edge of the drawn band has to come back as green, not orange.
+  {
+    const b = at(SW.SWING_MAX);
+    const edge = SW.mishit(0.5 + (b.green * 0.98) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), 0, floor);
+    const past = SW.mishit(0.5 + (b.green * 1.15) / 2, SW.SWING_MAX, 1, CL.swingZone(drv), 0, floor);
+    ok('the band that is DRAWN is the band that SCORES, at the top of the arc',
+      Math.abs(edge.deg - SW.blockSpray(SW.SWING_MAX, 0)) < 3.1
+      && Math.abs(past.deg - SW.blockSpray(SW.SWING_MAX, 0)) > 3.0,
+      `inside ${edge.deg.toFixed(2)} deg, outside ${past.deg.toFixed(2)} deg`);
+  }
+  // Structural: the meter must be handed the same shrink, or the drawn target is a lie.
+  const uiSrc = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('ui.js paints the bands with overZone() from the marker it is drawing',
+    /bandsFor\([\s\S]{0,220}?overZone\(/.test(uiSrc) && /overZone/.test(uiSrc.slice(0, 4000)),
+    'the meter and mishit must be handed the same shrink or the drawn target is a lie');
 }
 
 console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
