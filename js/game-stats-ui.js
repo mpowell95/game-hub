@@ -648,6 +648,26 @@ const GOLF_COURSES = {
 };
 function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
 
+/** A GOLF ORDER, NOT AN ALPHABETICAL ONE (2026-09-10). Matt, on his own Best rounds table: holes
+ *  10-12 sat above holes 4-6, because the rows were sorted by their DISPLAY NAME and "10" sorts
+ *  before "4". A scorecard reads longest first and then in hole order, so that is what this does:
+ *  course by name, then 18, front 9, back 9, then each three-hole set from the first tee to the
+ *  last. A key this cannot parse keeps its row (rule 1) and lands at the end of its course. */
+const GOLF_ROUND_RANK = { '18': 0, '9': 1, '9b': 2, '3': 3, '3b': 4, '3c': 5, '3d': 6, '3e': 7, '3f': 8 };
+function golfRoundParts(id) {
+  const m = /^([a-z]+?)(18|9b|9|3[b-f]?)$/.exec(String(id));
+  if (!m) return { course: String(id), rank: 99 };
+  const rank = GOLF_ROUND_RANK[m[2]];
+  return { course: m[1], rank: Number.isFinite(rank) ? rank : 99 };
+}
+function compareGolfRounds(a, b) {
+  const pa = golfRoundParts(a);
+  const pb = golfRoundParts(b);
+  const na = GOLF_COURSES[pa.course] || pa.course;
+  const nb = GOLF_COURSES[pb.course] || pb.course;
+  return na.localeCompare(nb) || (pa.rank - pb.rank) || String(a).localeCompare(String(b));
+}
+
 /** HOW MANY HOLES A COURSE HAS, for the per-hole record row. Not derived from the records: a hole
  *  nobody has played yet has to show as an empty slot, which is the whole point of the row. An id
  *  with no entry gets 18, the shape every course had when this row was written.
@@ -733,8 +753,15 @@ function golfScreen(rec) {
   if (!(gf.rounds | 0)) return emptyState('Golf');
   const pts = gf.points | 0;
   const skill = pts >= 0 ? `+${pts}` : String(pts);
-  const avg = gf.rounds > 0 ? (gf.strokes / gf.rounds).toFixed(1) : '–';
-  const courseIds = Object.keys(gf.bestRoundByCourse || {}).sort((a, b) => golfCourseName(a).localeCompare(golfCourseName(b)));
+  // AVERAGE PER HOLE, NOT PER ROUND (2026-09-10). This tile used to divide lifetime strokes by
+  // lifetime ROUNDS, and a round here is three, nine or eighteen holes - so it averaged a 3-hole
+  // round against an 18-hole one and produced a number that described nothing (measured on a real
+  // record: 16.4, from 21 rounds that were mostly threes). Holes are already counted (`gf.holes`),
+  // so this needs no new stored field: strokes per hole is the same measurement whatever length a
+  // player chooses. A record from before holes were counted shows a dash rather than a fabricated
+  // average (rule 4).
+  const avg = (gf.holes | 0) > 0 ? (gf.strokes / gf.holes).toFixed(1) : '–';
+  const courseIds = Object.keys(gf.bestRoundByCourse || {}).sort(compareGolfRounds);
   // TO PAR SITS BESIDE THE STROKES, IT DOES NOT REPLACE THEM (queued 2026-09-03, done 2026-09-06).
   // The leaderboard shows a best round as a score to par and this table showed raw strokes, so the
   // two screens described the same round with two different numbers. Par is subtracted at DISPLAY
