@@ -45,6 +45,26 @@ const DROP_FALL = 0.18;
  */
 const RAMP_RETAKE = 0.6;
 /**
+ * What a ramp hands back at the top: how much of the shot survives the climb, and the least it
+ * may ever let go with.
+ *
+ * Matt: *"now it goes up the ramp, hits the rail immediately, and falls back down to level 1."*
+ *
+ * The exit was a FIXED velocity - RAMPS carries `vx: 150, vy: -150` - so every ball, however hard
+ * it was hit, left the top at a speed of 212. Against this table's gravity of 515 that buys a
+ * rise of 20.7 units, which is 59 px: the ramp let go at py 596, the ball got to py 537, and the
+ * deck slopes, so it came straight back over the edge and down the lane it had just climbed.
+ * Measured before this: 90 of 90 balls that made a ramp fell back to level 1, every one of them,
+ * with a best of py 537 and a mean of py 537.
+ *
+ * A ramp is not a brake. The ball now leaves with the speed it ARRIVED with, less what the climb
+ * costs, in the direction the ramp points - so a hard shot goes round the top of the deck and a
+ * soft one dribbles on and comes back, which is the difference between the two that was missing.
+ * The floor is what it takes to get properly onto the deck rather than balance on its lip: 424
+ * reaches py 100, 327 reaches py 300, and 380 is between them.
+ */
+const RAMP_KEEP = 0.82, RAMP_EXIT_MIN = 380;
+/**
  * How long a slingshot coil takes to reset, for ANY slingshot on the board.
  *
  * Matt: *"the ball just got stuck bouncing between the triangles above the bumpers for
@@ -262,7 +282,12 @@ export class DesignPinball {
       b.lift = e;
       if (b._climb < 1) continue;
       b._climbR = null; b.held = false; b.holdT = 0; b.lift = 1;
-      b.layer = 2; b.vx = r.top.vx; b.vy = r.top.vy;
+      b.layer = 2;
+      // `top.vx/vy` is the DIRECTION the ramp points; the speed is the shot's own.
+      const dl = Math.hypot(r.top.vx, r.top.vy) || 1;
+      const sp = Math.max(RAMP_EXIT_MIN, (b._climbV || 0) * RAMP_KEEP);
+      b.vx = r.top.vx / dl * sp; b.vy = r.top.vy / dl * sp;
+      b._climbV = 0;
       this.emit({ type: 'rampexit', x: b.x, y: b.y });
     }
   }
@@ -419,6 +444,7 @@ export class DesignPinball {
           // Hand the ball to the climb rather than moving it. _rampRide walks it up the ramp's own
           // centre line and lets it out at the top; nothing here changes its position.
           b.held = true; b.holdT = 99; b._climb = 0; b._climbR = r;
+          b._climbV = Math.hypot(b.vx, b.vy);      // the ramp gives this back at the top
           b._climbFrom = [b.x, b.y];
           this.ramps++; this.stats.ramps++;
           this._award(PTS.ramp, b.x, b.y, 'ramp');

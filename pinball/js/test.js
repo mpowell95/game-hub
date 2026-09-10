@@ -1326,6 +1326,48 @@ function launched(g) {
     ok('[FOUNDRY] no ball ever gets behind the arch on level 1', behind === 0,
       behind === 0 ? 'never outboard of the arch' : behind + ' frames of ' + frames + ' outboard of the arch');
   }
+  // [KNOWN-BUG PROBE] A RAMP DELIVERS THE BALL ONTO THE DECK, NOT ONTO ITS LIP.
+  //
+  // Matt: *"now it goes up the ramp, hits the rail immediately, and falls back down to level 1."*
+  // Two things were wrong at once and both are about what happens at the TOP.
+  //
+  // The exit was a FIXED velocity, `vx: 150, vy: -150` - every ball, however hard it was hit, left
+  // at a speed of 212. Against gravity 515 that is a rise of 20.7 units, 59 px: the ramp lets go
+  // at py 596 and the ball got to py 537. And it was aimed at 45 degrees, straight into
+  // guide_rail_upper_left, which crosses that line at (197, 491).
+  //
+  // Now the speed is the shot's own and the aim is up the outside, past post_red_left_4. Measured
+  // over 90 shots: best py 537 -> 75, mean py 537 -> 137, which is the whole height of the deck.
+  {
+    let made = 0, best = 9999, sum = 0;
+    for (const r of DT.RAMPS) {
+      for (const dx of [-25, 0, 25]) for (const sp of [300, 420, 560, 720, 900]) {
+        const g = new DesignPinball({ rand: () => 0.5 });
+        g.start();
+        const b = g.balls[0];
+        b.onPlunger = false; b.held = false; b.layer = 1; b.lift = 0;
+        b.x = r.foot + DT.px(dx); b.y = r.y + DT.px(90);
+        const lean = ((r.id === 'rampL' ? -26 : 26)) * Math.PI / 180;
+        b.vx = Math.sin(lean) * sp; b.vy = -Math.cos(lean) * sp;
+        let up = false, high = 9999, top = 0;
+        for (let i = 0; i < 120 * 6; i++) {
+          g.update(1 / 120);
+          const q = g.balls[0]; if (!q || q.onPlunger) break;
+          if (!up && (q.layer | 0) === 2) { up = true; top = i; }
+          if (!up) continue;
+          high = Math.min(high, q.y / DT.px(1));
+          if ((q.layer | 0) === 1 || i - top > 120 * 3) break;
+        }
+        if (!up) continue;
+        made++; sum += high; best = Math.min(best, high);
+      }
+    }
+    const mean = made ? sum / made : 9999;
+    ok('[FOUNDRY] a ramp delivers the ball ONTO the deck, not onto its lip',
+      made > 0 && mean < 350,
+      made + ' shots made a ramp; up the deck to py ' + best.toFixed(0) + ' at best, '
+        + mean.toFixed(0) + ' on average (the mouth lets go at py 596; the fixed-speed build managed 537)');
+  }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.
   {
