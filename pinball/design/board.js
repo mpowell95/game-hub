@@ -24,6 +24,11 @@ function r4(v) { return Math.round(v * 1e4) / 1e4; }
 // levels: [1], [2], [1,2] = colliding on those levels; [] = decoration
 const P = [];
 const wall  = (name, a, b, t, h, y0, mat, levels, note) => P.push({ type: 'wall', name, a, b, t, h, y0, mat, levels, note });
+// The paddle is a tapered capsule: FLIP_R0 at the pivot, FLIP_R1 at the tip. Declared here
+// rather than beside the other footprint radii because the layout block below runs at module
+// load and needs the pivot radius, and a const declared later in the file is in the temporal
+// dead zone at that point - a ReferenceError a parse check passes cleanly.
+const FLIP_R0 = 0.012, FLIP_R1 = 0.007;
 /** A ONE-WAY GATE: a wall that only exists for a ball travelling the forbidden way. `oneWay` is a
  *  unit normal in TABLE axes (+x right, +y down-field); the gate blocks a ball whose velocity has
  *  a positive component along it and is not there at all for one going the other way. This is the
@@ -635,7 +640,22 @@ function smoothChain(pts, passes = 4) {
     const rec = LAYOUT[part.name];
     if (rec) setShape(part, rec);
   }
-  // The two inlane guides are extended to their own flipper's pivot - see the note by DECK_RAILS.
+  // A RAIL MEETS THE PADDLE'S SURFACE, NOT ITS PIVOT POINT.
+  //
+  // Matt, a third time: *"the paddles STILL are not flush with the rails connected to them."*
+  // Running each rail to the pivot was not enough, and the measurement says why. A ball is not
+  // carried ON a guide rail, it is carried BESIDE it: rolling down the left inlane its centre
+  // tracks the rail's axis plus the rail's own radius plus its own - 30.6 px out from a 4.7 mm
+  // rail. The paddle's pivot cap is 12 mm, so the surface the ball meets there is 48.4 px out.
+  // The rail ended at the pivot POINT, so its last 18 px were buried inside that cap and the
+  // ball ran straight into the side of it. An 18 px step, at the exact spot the ball is meant to
+  // roll on, is the bounce he has now reported three times.
+  //
+  // So the end lands on the pivot cap's own surface instead, offset by the difference of the
+  // two radii along the paddle's ball-side normal. Rail face and paddle face are then the same
+  // line at the junction, which is what flush means and what a real inlane guide does. Solved
+  // per rail from that rail's own thickness, so a rail Matt redraws thinner or thicker in the
+  // editor still lands on the surface.
   for (const part of P) {
     if (part.type !== 'wall' || !part.a || !part.b) continue;
     for (const f of P) {
@@ -645,9 +665,16 @@ function smoothChain(pts, passes = 4) {
       // he then found again up here: *"The bumpers on level 2 are not flush with the rails
       // they're connected to. same bumping problem."*
       if (f.type !== 'flipper') continue;
-      const end = Math.hypot(part.b[0] - f.pivot[0], part.b[1] - f.pivot[1]) < 60 ? 'b'
-        : Math.hypot(part.a[0] - f.pivot[0], part.a[1] - f.pivot[1]) < 60 ? 'a' : null;
-      if (end) part[end] = f.pivot.slice();
+      const end = Math.hypot(part.b[0] - f.pivot[0], part.b[1] - f.pivot[1]) < 90 ? 'b'
+        : Math.hypot(part.a[0] - f.pivot[0], part.a[1] - f.pivot[1]) < 90 ? 'a' : null;
+      if (!end) continue;
+      // the paddle at rest, and the normal to it on the side the ball plays from (up-field, -y)
+      const dx = f.tip[0] - f.pivot[0], dy = f.tip[1] - f.pivot[1];
+      const len = Math.hypot(dx, dy) || 1;
+      let nx = dy / len, ny = -dx / len;
+      if (ny > 0) { nx = -nx; ny = -ny; }
+      const off = (FLIP_R0 - part.t / 2) / S;      // both radii in reference px
+      part[end] = [r4(f.pivot[0] + nx * off), r4(f.pivot[1] + ny * off)];
     }
   }
   // A PART ON LEVEL 2 IS DRAWN AT DECK HEIGHT. The editor sets which LEVEL a part belongs to; it
@@ -814,7 +841,7 @@ const FP = { 1: [], 2: [] };
 const addFP = (levels, fp) => levels.forEach(l => FP[l].push(fp));
 const circleFP = (name, levels, at, r, extra) => addFP(levels, { name, shape: 'circle', c: PX(...at), r: r4(r), ...extra });
 const capsuleFP = (name, levels, a, b, r, extra) => addFP(levels, { name, shape: 'capsule', a: PX(...a), b: PX(...b), r: r4(r), ...extra });
-const BUMPER_R = 0.038, FLIP_R0 = 0.012, FLIP_R1 = 0.007, SLING_POST_R = 0.006;
+const BUMPER_R = 0.038, SLING_POST_R = 0.006;
 for (const p of P) {
   // A RAMP HAS NO  AND STILL NEEDS WALLS.  means "not a flat obstacle on either
   // deck", which is true of the SURFACE - you roll along it, not into it - but it skipped the whole

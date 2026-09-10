@@ -1189,6 +1189,43 @@ function launched(g) {
     ok('[FOUNDRY] the ball never jumps: no one-frame move the solver could not have made',
       jumps === 0, jumps ? `${jumps} jumps, biggest ${biggest.toFixed(0)} px` : 'no jump over 90 px');
   }
+  // [KNOWN-BUG PROBE] EVERY RAIL THAT RUNS INTO A PADDLE MEETS ITS SURFACE.
+  //
+  // Matt reported this three times over two days - *"the rails that connect to the paddles are
+  // not flush with the paddles"*, then *"same bumping problem"* about the upper pair, then *"the
+  // paddles STILL are not flush with the rails connected to them."* Twice it was fixed by moving
+  // the rail end to the flipper PIVOT, and twice that was the wrong point: a ball is carried
+  // BESIDE a guide rail, so its centre tracks the rail axis plus both radii, and the paddle's
+  // 12 mm pivot cap puts its surface a full 18 px further out than a 4.7 mm rail does. The ball
+  // ran into the side of the cap.
+  //
+  // This checks the geometry rather than the symptom, because the symptom needs a rolling ball
+  // and this needs none: for every wall ending near a flipper, the perpendicular distance from
+  // the pivot to the rail's BALL-SIDE FACE must equal the cap radius. That is what flush means.
+  {
+    const off = [];
+    for (const lv of [1, 2]) {
+      const L = DT.buildLevel(lv);
+      for (const f of L.flippers) {
+        const fr = f.r, pv = [f.px, f.py];
+        const dx = Math.cos(f.rest), dy = Math.sin(f.rest);
+        let nx = dy, ny = -dx;
+        if (ny > 0) { nx = -nx; ny = -ny; }
+        for (const c of L.colliders) {
+          if (c.t !== 'seg' || /flipper|apron|sling/.test(c.id || '')) continue;
+          for (const e of [[c.ax, c.ay], [c.bx, c.by]]) {
+            if (Math.hypot(e[0] - pv[0], e[1] - pv[1]) > fr * 4) continue;
+            // the rail face on the ball side, and how far the pivot cap reaches past it
+            const face = (e[0] - pv[0]) * nx + (e[1] - pv[1]) * ny + c.r;
+            const step = Math.abs(face - fr) / DT.px(1);
+            if (step > 3) off.push(`${c.id} is ${step.toFixed(0)} px out of flush with ${f.id}`);
+          }
+        }
+      }
+    }
+    ok('[FOUNDRY] every rail that runs into a paddle is flush with its pivot cap',
+      off.length === 0, off.length ? off.join('; ') : 'no rail end steps into a paddle');
+  }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.
   {
