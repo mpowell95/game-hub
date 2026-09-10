@@ -1540,10 +1540,9 @@ class GolfGame {
     // it rather than re-derived from a clock: re-reading `performance.now()` here would resolve
     // the shot a few milliseconds after the finger landed, which is the whole bug this fixes.
     const { pos, power } = { pos: this.swing.pos, power: this.swing.power };
-    // The over-swing spray needs a seed: unpredictable to the player, reproducible for the tests.
-    // The ball's own position and the exact needle stop are what the shot already turns on.
-    const seed = Math.round(this.ball[0] * 977) ^ Math.round(this.ball[1] * 31) ^ Math.round(pos * 1e5);
-    const m = mishit(barPosOf(pos), power, zone, clubZone, seed, GREEN_FLOOR[clubTier(this._activeClub())] || 0);
+    // NO SEED. A struck ball carries no randomness at all since 2026-09-10 (see swing.js's `mishit`):
+    // where it goes is the power and the needle stop, and nothing else.
+    const m = mishit(barPosOf(pos), power, zone, clubZone, GREEN_FLOOR[clubTier(this._activeClub())] || 0);
 
     // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
     // fairway and the tee, which is exactly the case this split exists for.

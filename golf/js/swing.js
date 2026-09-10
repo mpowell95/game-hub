@@ -228,7 +228,7 @@ export function barPosOf(pos) {
  *  other candidate (*"maybe the white line thing speeds up"*) and which this repo has twice been
  *  told not to touch.
  *
- *  `sprayDepth` already measures how deep into the over-swing a power is (0 at 100 %, 1 at
+ *  `overDepth` already measures how deep into the over-swing a power is (0 at 100 %, 1 at
  *  `SWING_MAX`), so the band rides the same curve as the spray. At the top of the arc a driver's
  *  green band falls 0.338 -> 0.122: from two thirds of the bar to a quarter of it. `OVER_ZONE_LOSS`
  *  is the number Matt picked by swinging it on his phone against a slider, on a bench copy of this
@@ -238,9 +238,17 @@ export function barPosOf(pos) {
  *  the trees at the top of the arc would otherwise compute 0.058, about 6 device px under a 6 px
  *  needle, which is the invisible-target bug `GREEN_FLOOR` exists to prevent, arrived at from the
  *  other direction. */
+/** HOW DEEP INTO THE OVER-SWING A POWER IS: 0 at 100 %, 1 at the top of the arc. It was named
+ *  `sprayDepth` while the random spray existed and rode this same curve; the spray is gone
+ *  (see `mishit`) and this is now only what `overZone` and the mishit ramp read. */
+export function overDepth(power) {
+  if (power <= 1) return 0;
+  return Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
+}
+
 export const OVER_ZONE_LOSS = 0.64;
 export const OVER_MIN = 0.10;
-export function overZone(power) { return 1 - OVER_ZONE_LOSS * sprayDepth(power); }
+export function overZone(power) { return 1 - OVER_ZONE_LOSS * overDepth(power); }
 
 export function bandsFor(zone = 1, clubZone = 1, floor = 0, over = 1) {
   // `clubZone` is the CLUB's own difficulty (clubs.js's `swingZone`): a driver's green band is
@@ -320,51 +328,16 @@ export const OVER_SWING_MAX_MUL = 2.0;
 //   BLOCK_KEEPS_DIST  how much of the over-swing's extra power becomes yards. 0.40 puts a
 //                     top-of-the-arc driver at 242 yds against 215 for a clean 100 % - inside the
 //                     240-245 he asked for, where the old value of 1.00 gave 259.
-//   BLOCK_SPRAY_DEG   a push offline that DOES NOT CARE how well the ball was struck. 5.9 deg at
-//                     the top works out at 25 yds on that 242 yd carry.
 //
-// THE SPRAY IS THE HALF THAT MATTERS, because it is the only one a good player cannot simply
-// out-skill. It is jittered +/- 20 % and takes a random side, so the top of the arc costs 20 to 30
-// yards left or right - Matt's range - rather than a fixed, learnable 25.
-//
-// ITS RANDOMNESS IS SEEDED FROM THE SHOT ITSELF, not from Math.random. The player cannot predict
-// it, and `resolveShot` stays a pure function of its inputs - which is what lets golf/js/test.js
-// play out all 36 holes and get the same answer every run.
+// THE SECOND RULE WAS A RANDOM SPRAY, AND IT IS GONE (2026-09-10). `BLOCK_SPRAY_DEG` pushed the
+// ball 5.9 deg offline at the top of the arc WITHOUT CARING how well it was struck, so a perfect
+// max swing finished 21-32 yds off line - measured, 0 of 4000 came back within 5 yds of the aim
+// line. It came from reading the note above as one thought. Matt, correcting it: *"That is NOT what
+// that statement by me means... I want [a poorly aimed shot at max power] to go 20-30 yards
+// offline."* The 20-30 yards belongs to a BAD AIM, and it is delivered now by the over-swing's own
+// mishit ramp and by the green band shrinking (see `overZone`) - both of which the player controls.
+// Dead centre is dead straight at every power. See `mishit`.
 export const BLOCK_KEEPS_DIST = 0.40;
-export const BLOCK_SPRAY_DEG = 5.9;
-export const BLOCK_SPRAY_JITTER = 0.20;
-
-/** How far into the over-swing block a swing went, 0 at its edge to 1 at the top of the arc. */
-export function blockDepth(power) {
-  if (power <= BLOCK_FROM) return 0;
-  return Math.min(1, (power - BLOCK_FROM) / Math.max(1e-6, SWING_MAX - BLOCK_FROM));
-}
-
-/** THE SPRAY STARTS AT 100 %, NOT AT THE BLOCK'S EDGE (2026-09-06, and this is a real bug fix).
- *
- *  Matt: *"You've been trying to make over swinging easy - all reward and no risk - but I've
- *  fought you on that at every decision point."* He was right to check. Measured on the shipped
- *  code, driver from the fairway, needle stopped dead centre:
- *
- *      100.0 %  215.0 yds   0.0 offline        106.0 %  227.9 yds   0.0 offline
- *      102.0 %  219.3 yds   0.0 offline        107.6 %  231.3 yds   0.0 offline
- *      104.0 %  223.6 yds   0.0 offline        109.0 %  232.5 yds   3.1 offline
- *
- *  +16.3 yards for NOTHING. `payingPower` pays in full below `BLOCK_FROM`, `blockSpray` was
- *  gated on `BLOCK_FROM`, and the `OVER_SWING_MAX_MUL` ramp multiplies the STRIKE error, which is
- *  zero on a dead-centre strike - two times zero is zero, the exact failure the spray was added to
- *  close, reopened in the buffer between 100 % and the block. So stopping at 107 % was strictly
- *  better than stopping at 100 % on every full shot in the game.
- *
- *  The spray now ramps from 100 % instead. Nothing Matt calibrated moves: `BLOCK_SPRAY_DEG` is
- *  unchanged, so the top of the arc is still 5.9 deg (20-30 yds offline on a 242 yd carry), and
- *  `payingPower` still starts paying its 40 % at `BLOCK_FROM`, so the top-of-arc carry is still
- *  242.5. Only the free buffer is priced: 107.6 % now costs about 8.8 yds offline for its 16.3. */
-export function sprayDepth(power) {
-  if (power <= 1) return 0;
-  return Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
-}
-
 /** The power that actually becomes DISTANCE. Below the block it is the power itself; inside it,
  *  only `BLOCK_KEEPS_DIST` of every extra unit pays. */
 export function payingPower(power) {
@@ -372,19 +345,6 @@ export function payingPower(power) {
   return BLOCK_FROM + (power - BLOCK_FROM) * BLOCK_KEEPS_DIST;
 }
 
-/** The spray, in degrees, signed. `seed` makes it unpredictable to the player and reproducible to
- *  the tests; pass the shot's own numbers. */
-export function blockSpray(power, seed) {
-  const d = sprayDepth(power);
-  if (d <= 0) return 0;
-  let a = (seed | 0) + 0x9E3779B9;
-  a = Math.imul(a ^ (a >>> 16), 2246822507);
-  a = Math.imul(a ^ (a >>> 13), 3266489909);
-  const r = ((a ^ (a >>> 16)) >>> 0) / 4294967296;      // 0..1
-  const mag = 1 - BLOCK_SPRAY_JITTER + r * (2 * BLOCK_SPRAY_JITTER);
-  const side = r < 0.5 ? -1 : 1;
-  return BLOCK_SPRAY_DEG * d * mag * side;
-}
 
 /** THE PUTTER'S OWN ACCURACY, and why it needs its own two numbers.
  *
@@ -441,7 +401,7 @@ export function puttMishit(barPos, zone = 1) {
   return { deg: m.deg * PUTT_LINE_K, paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
 }
 
-export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 0) {
+export function mishit(barPos, power, zone = 1, clubZone = 1, floor = 0) {
   const signed = (barPos - 0.5) * 2;                 // -1 left .. +1 right
   const off = Math.min(1, Math.abs(signed));
   // THE SAME `floor` THE METER IS PAINTED WITH. `_drawMeter` and this function must be handed
@@ -457,37 +417,52 @@ export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 
     deg = (off / b.green) * 1.5;
     // DISTANCE VARIES INSIDE THE GREEN BAND TOO. It used to be exactly 1.000 anywhere in green,
     // which meant a decent strike had PERFECT distance control - and that, not the courses, is
-    // most of why Matt could birdie every hole on both of them. Measured before this: a 130 yd
+    // most of why Matt could birdie every hole on both of them. Measured before that: a 130 yd
     // approach finished within 13 yds of its target 94 % of the time and a 100 yd approach 95 %,
-    // against a scratch golfer's real 78 % and 88 %. Every green was hittable, so every hole was
-    // two shots and a putt.
+    // against a scratch golfer's real 78 % and 88 %.
     //
-    // A dead-centre strike is still exactly 1.000 - that is what keeps the over-swing calibration
-    // (240-245 yds of carry at the top of the arc, measured with Matt) untouched, and it is what
-    // makes the middle of the bar worth aiming at. The penalty grows across the band and meets the
-    // orange ramp continuously at its edge.
-    // TWO-SIDED, and that matters. A one-sided shortfall is not dispersion, it is a bias: every
-    // decent strike lands the same amount short, so a player simply clubs up once and it is gone.
-    // Measured, it even made the game EASIER, because it cancelled the roll that used to carry an
-    // approach past the pin. Which SIDE of the bar you stop on decides whether the strike is heavy
-    // or thin, so the miss is short one way and long the other and cannot be clubbed out.
-    distanceMul = 1 - GREEN_DIST_LOSS * (off / Math.max(1e-6, b.green)) * Math.sign(signed || 1);
+    // THE LOSS IS SYMMETRIC (2026-09-10). It used to be SIGNED - stopping LEFT of centre multiplied
+    // the distance UP to 1.09 and right multiplied it DOWN to 0.91, the idea being heavy against
+    // thin. Swept a hundredth at a time at the top of the arc, that produced three results nobody
+    // would defend, and Matt swept it: **a miss to the left went 285 yds against a perfect
+    // strike's 262** - the longest drive in the game was a mis-hit - and the green/orange boundary
+    // was a cliff in both directions, 24 yds lost crossing it on the left and 23 yds GAINED on the
+    // right, so aiming worse made the ball go further.
+    //
+    // The old note argued a one-sided shortfall is a bias a player "clubs up once" to erase. It is
+    // not, once the loss depends on HOW FAR off you are: the size of the next miss is unknown when
+    // the club is chosen, so there is nothing fixed to club out. What a signed loss actually did
+    // was make the middle of the bar the wrong place to aim.
+    distanceMul = 1 - GREEN_DIST_LOSS * (off / Math.max(1e-6, b.green));
   } else if (off <= b.orange) {
     const q = (off - b.green) / Math.max(1e-6, b.orange - b.green);
     deg = 1.5 + q * 2.5;
-    distanceMul = 1 - 0.08 * q;                      // 1.00 at the green edge -> 0.92 at red
+    // CONTINUOUS AT THE BOUNDARY: it starts where green ended (0.91), not back at 1.00.
+    distanceMul = (1 - GREEN_DIST_LOSS) - 0.08 * q;  // 0.91 at the green edge -> 0.83 at red
   } else {
     const q = (off - b.orange) / Math.max(1e-6, b.red - b.orange);
     deg = 4 + q * 4;
-    distanceMul = 0.92 - 0.32 * q;                   // 0.92 just into red -> 0.60 at a full miss
+    distanceMul = (1 - GREEN_DIST_LOSS - 0.08) - (1 - GREEN_DIST_LOSS - 0.08 - 0.60) * q;
+    // 0.83 just into red -> 0.60 at a full miss, which is the calibrated end point and unmoved.
   }
   if (power > 1) {
     const q = Math.min(1, (power - 1) / Math.max(1e-6, SWING_MAX - 1));
     deg *= 1 + (OVER_SWING_MAX_MUL - 1) * q;
   }
-  // The spray is ADDED, not multiplied, and it keeps its own side - that is the whole point of it:
-  // a perfect strike has no miss to multiply, so a multiplier can never make one dangerous.
-  const signedDeg = deg * Math.sign(signed || 1) + blockSpray(power, seed);
+  // THE RANDOM SPRAY IS GONE (2026-09-10). `blockSpray` used to be ADDED here, so a max over-swing
+  // finished 21-32 yds offline even on a dead-centre strike - 0 of 4000 measured shots came back
+  // within 5 yds of the aim line. It was built from a misreading of Matt's 2026-09-05 note:
+  // *"The max carry at the farthest past 100% and spot on should only be 240-245. I want it to go
+  // 20-30 yards offline. high risk."* Read as one thought it says a PERFECT max swing sprays;
+  // read as he meant it, "spot on" belongs to the carry and the 20-30 yds offline is what a POORLY
+  // AIMED max swing costs. His words on finding it: *"That is NOT what that statement by me means...
+  // I want [a poorly aimed shot at max power] to go 20-30 yards offline."*
+  //
+  // So the rule is now the simple one: **dead centre is dead straight at every power**, and every
+  // fraction away from it bends the ball further. The 20-30 yds still exists - it is what missing
+  // the (now much smaller) band at the top of the arc costs, which is the `OVER_SWING_MAX_MUL` ramp
+  // above doing it through the player's own aim rather than a dice roll.
+  const signedDeg = deg * Math.sign(signed || 1);
   return { deg: signedDeg, distanceMul };
 }
 
