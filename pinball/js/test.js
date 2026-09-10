@@ -1208,23 +1208,34 @@ function launched(g) {
       const L = DT.buildLevel(lv);
       for (const f of L.flippers) {
         const fr = f.r, pv = [f.px, f.py];
-        const dx = Math.cos(f.rest), dy = Math.sin(f.rest);
-        let nx = dy, ny = -dx;
-        if (ny > 0) { nx = -nx; ny = -ny; }
         for (const c of L.colliders) {
           if (c.t !== 'seg' || /flipper|apron|sling/.test(c.id || '')) continue;
           for (const e of [[c.ax, c.ay], [c.bx, c.by]]) {
-            if (Math.hypot(e[0] - pv[0], e[1] - pv[1]) > fr * 4) continue;
-            // the rail face on the ball side, and how far the pivot cap reaches past it
-            const face = (e[0] - pv[0]) * nx + (e[1] - pv[1]) * ny + c.r;
-            const step = Math.abs(face - fr) / DT.px(1);
-            if (step > 3) off.push(`${c.id} is ${step.toFixed(0)} px out of flush with ${f.id}`);
+            if (Math.hypot(e[0] - pv[0], e[1] - pv[1]) > fr * 2) continue;
+            // THE INVARIANT IS A BAND, NOT ZERO, AND BOTH EDGES OF IT ARE MEASURED.
+            //
+            // How far the pivot cap stands proud of the guide face is the one number that sets
+            // both halves of this. Too proud and the cap juts into the lane and the ball runs
+            // into the side of it - the shipped board was 18 px proud and threw the ball back a
+            // mean of 15.9 px. Dead flush and the ball GRAZES the paddle instead of meeting it,
+            // and fed rolls reaching the paddle fell to 43.6% with the rest going down the
+            // middle. Swept at 1,152 fed rolls a setting, 9 px is the knee: mean throw-back
+            // 4.3 px, 81.3% delivery. The band below is that knee with room either side.
+            //
+            // Measured off the rail's OWN axis, because the rail and the paddle are not
+            // parallel - the upper pair meet at 14 degrees - so a distance taken along the
+            // PADDLE's normal is only the same number where they happen to line up, and that
+            // is what let the upper pair ship 5 px out while the test read green.
+            const vx = c.bx - c.ax, vy = c.by - c.ay, vl = Math.hypot(vx, vy) || 1;
+            const d = Math.abs((pv[0] - c.ax) * (vy / vl) - (pv[1] - c.ay) * (vx / vl));
+            const proud = (fr - c.r - d) / DT.px(1);
+            if (proud < 6 || proud > 12) off.push(`${f.id} stands ${proud.toFixed(1)} px proud of ${c.id}, outside 6..12`);
           }
         }
       }
     }
-    ok('[FOUNDRY] every rail that runs into a paddle is flush with its pivot cap',
-      off.length === 0, off.length ? off.join('; ') : 'no rail end steps into a paddle');
+    ok('[FOUNDRY] every rail that runs into a paddle hands the ball on without a step',
+      off.length === 0, off.length ? off.join('; ') : 'every paddle sits 6 to 12 px proud of its guide');
   }
   // ...and the gate that makes the first of those true is a ONE-WAY, not a wall: a plain wall there
   // would trap the launch in its own lane.

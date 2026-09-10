@@ -656,6 +656,7 @@ function smoothChain(pts, passes = 4) {
   // line at the junction, which is what flush means and what a real inlane guide does. Solved
   // per rail from that rail's own thickness, so a rail Matt redraws thinner or thicker in the
   // editor still lands on the surface.
+  const lips = [];
   for (const part of P) {
     if (part.type !== 'wall' || !part.a || !part.b) continue;
     for (const f of P) {
@@ -668,15 +669,82 @@ function smoothChain(pts, passes = 4) {
       const end = Math.hypot(part.b[0] - f.pivot[0], part.b[1] - f.pivot[1]) < 90 ? 'b'
         : Math.hypot(part.a[0] - f.pivot[0], part.a[1] - f.pivot[1]) < 90 ? 'a' : null;
       if (!end) continue;
-      // the paddle at rest, and the normal to it on the side the ball plays from (up-field, -y)
+      // The paddle at rest, and the normal to it on the side the ball plays from (up-field, -y).
+      // Used only to tell the lane side of the rail from the outboard side.
       const dx = f.tip[0] - f.pivot[0], dy = f.tip[1] - f.pivot[1];
-      const len = Math.hypot(dx, dy) || 1;
-      let nx = dy / len, ny = -dx / len;
+      const flen = Math.hypot(dx, dy) || 1;
+      let nx = dy / flen, ny = -dx / flen;
       if (ny > 0) { nx = -nx; ny = -ny; }
-      const off = (FLIP_R0 - part.t / 2) / S;      // both radii in reference px
-      part[end] = [r4(f.pivot[0] + nx * off), r4(f.pivot[1] + ny * off)];
+      //
+      // FLUSH IS TANGENCY, AND THE FIRST VERSION OF THIS SOLVED IT AGAINST THE WRONG NORMAL.
+      // The rail is not parallel to the paddle - the upper pair sit 14 degrees apart - so "offset
+      // the end along the PADDLE's normal" only lines the two faces up where they happen to be
+      // parallel, and left the upper rails 5 px proud. What has to be true is that the rail's own
+      // LINE runs tangent to the pivot cap, at radius FLIP_R0 minus the rail's own half-width.
+      // Then the rail's face grazes the cap's face and there is no step, whatever angle they meet
+      // at. That is solved exactly here rather than nudged.
+      //
+      // ...AND THE RAIL KEEPS ITS REACH. The end is placed where that tangent line is LEVEL WITH
+      // THE PIVOT, not at the tangency point. Stopping at the tangency pulled the guide 14 px
+      // up-field, and balls slipped between the rail end and the paddle base into the drain:
+      // measured on 3,600 fed rolls, balls reaching the paddle fell from 74% to 56% on the lower
+      // pair while the untouched drain rose from 23% to 34% - a worse defect than the bounce it
+      // was fixing. Reaching the base is also what makes the crook a cradle needs.
+      // THE LAST STRETCH RUNS PARALLEL TO THE PADDLE, AND THAT IS THE WHOLE POINT.
+      //
+      // Two earlier versions of this made the FACES line up and made DELIVERY worse, which is a
+      // trade nobody wants: a ball that drains without ever touching a paddle is a worse defect
+      // than one that bounces off it. Measured on 3,600 fed rolls, balls reaching the paddle went
+      // 74% -> 56% moving the end along the paddle normal, then 56% -> 44% solving the rail as a
+      // tangent from the end Matt drew.
+      //
+      // The reason is the ANGLE, not the offset. The drawn rail runs at 33 degrees and the paddle
+      // sits at 38, so a ball released along the rail leaves the paddle face at 5 degrees, misses
+      // the tip and goes out between the two paddles. The old build hid this: its rail ended AT
+      // the pivot, so the cap stuck 18 px into the lane and batted every ball into the paddle. It
+      // delivered well BECAUSE of the step Matt can feel.
+      //
+      // So Matt's rail keeps its own line, and a short LIP carries the last stretch: parallel to
+      // the paddle, offset by the two radii so its face and the cap's face are the same line, and
+      // running 30 px past the pivot so the ball is still being steered along the paddle when it
+      // arrives. The paddle tapers, so the lip stands 2 px clear of it by its far end and touches
+      // at the pivot - flush where it matters and never buried.
+      const A = part[end === 'b' ? 'a' : 'b'];       // the end Matt drew, which does not move
+      const ufx = dx / flen, ufy = dy / flen;        // along the paddle, pivot to tip
+      // AND THE PADDLE STANDS A LITTLE PROUD OF THE LIP - DEAD FLUSH IS WRONG, AND MEASURED.
+      //
+      // Flush to the last pixel means the ball GRAZES the paddle instead of meeting it, and a
+      // grazed paddle is a missed paddle: fed rolls that reached it fell to 43.6% and better
+      // than half of them drained straight down the middle. The old build sat at the other end,
+      // 18 px proud, where the cap stuck into the lane and batted the ball into the paddle - it
+      // delivered 90.5% BECAUSE of the step Matt can feel, and threw the ball back a mean of
+      // 15.9 px, over half a ball width on 55% of contacts.
+      //
+      // Swept, 1,152 fed rolls per setting, mean throw-back against delivery:
+      //
+      //     proud    0     6     8     9    10    12    14    18
+      //     mean   8.0   3.0   3.3   4.3   5.8   7.4  10.2  15.9  px
+      //     reach 43.6  72.0  78.0  81.3  82.8  83.3  86.7  90.5  %
+      //
+      // 9 px is the knee: the ball is pressed gently onto the paddle rather than run into the
+      // side of it. Mean throw-back 4.3 px and 81.3% delivery. Do not read the "thrown back more
+      // than a ball" COUNT off this - it is threshold noise and it has a false minimum at 13.
+      const LIP_PROUD = 9;
+      const R = (FLIP_R0 - part.t / 2) / S - LIP_PROUD;
+      const LIP_BACK = 60, LIP_FWD = 30;
+      const hub = [f.pivot[0] + nx * R, f.pivot[1] + ny * R];
+      const lipA = [r4(hub[0] - ufx * LIP_BACK), r4(hub[1] - ufy * LIP_BACK)];
+      const lipB = [r4(hub[0] + ufx * LIP_FWD), r4(hub[1] + ufy * LIP_FWD)];
+      // ...and only if the lip really is forward of where the rail already runs, so a rail that
+      // arrives from somewhere unexpected is left alone rather than doubled back on itself.
+      if ((lipA[0] - A[0]) * (f.pivot[0] - A[0]) + (lipA[1] - A[1]) * (f.pivot[1] - A[1]) <= 0) continue;
+      part[end] = lipA.slice();
+      lips.push({ type: 'wall', name: `${part.name}_lip`, a: lipA, b: lipB, t: part.t, h: part.h,
+        y0: part.y0, mat: part.mat, levels: part.levels.slice(),
+        note: 'the inlane guide\'s last stretch, parallel to the paddle and flush with its cap' });
     }
   }
+  for (const l of lips) if (!P.some((q) => q.name === l.name)) P.push(l);
   // A PART ON LEVEL 2 IS DRAWN AT DECK HEIGHT. The editor sets which LEVEL a part belongs to; it
   // knows nothing about height, so a part Matt moved to level 2 kept the y0 it was built with. That
   // did not show while there was no deck - now there is one, and the four magenta inserts he moved
