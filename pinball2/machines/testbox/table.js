@@ -18,16 +18,18 @@ export function makeTable() {
   const arc = (c, radius, a0, a1, r) => shapes.push({ id: id('a'), kind: 'arc', c, radius, a0, a1, r: r || wr });
 
   // outer rails, with real arcs at the top corners rather than a chain of short straights
-  seg({ x: 0.008, y: 0.098 }, { x: 0.008, y: 0.985 });
-  seg({ x: 0.507, y: 0.098 }, { x: 0.507, y: 0.985 });
+  seg({ x: 0.008, y: 0.098 }, { x: 0.008, y: 1.030 });
+  seg({ x: 0.507, y: 0.098 }, { x: 0.507, y: 1.030 });
   seg({ x: 0.098, y: 0.008 }, { x: 0.417, y: 0.008 });
   arc({ x: 0.098, y: 0.098 }, 0.090, 180 * D, 270 * D);
   arc({ x: 0.417, y: 0.098 }, 0.090, 270 * D, 360 * D);
 
-  // The outer rails run the WHOLE length. The first attempt at fixing the wedge below stopped them
-  // at the feed rail, which opened the bottom corners: a ball that drifted past x = 0 was outside
-  // the drain's own rectangle and fell for ever, 96 of them in one sweep. The sides of a table are
-  // not optional.
+  // The outer rails run PAST THE DRAIN LINE, not to it. Two bugs came from getting this wrong.
+  // Stopping them at the feed rail opened the bottom corners and 96 balls in one sweep fell out
+  // sideways. Stopping them at y = 985, twenty millimetres above the drain at y = 1005, left a
+  // band with rails on neither side: Matt found that one by playing, and it is the reason a ball
+  // could leave the machine over the left flipper. They end below the drain now, so there is no
+  // height at which a ball can reach the side of the cabinet without a rail there.
   //
   // Rails that feed each flipper. They stop WELL SHORT of the flipper pivot on purpose: the first
   // draft ran them into it, and the rest sweep found the V that made, 1759 of 2803 drops resting

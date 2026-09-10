@@ -36,6 +36,16 @@ hope, which is what every symptom in Matt's list came from:
 | "objects overlap" | nothing checked | the gap rule runs in the editor and in `probes/run.mjs` |
 | "rails not smooth", "curves look mouse drawn" | curves were chains of short straights | an arc is a first-class collider AND an SVG-style arc in the renderer, from one shape list |
 
+**There was one case the invariant did not cover, and Matt found it in about a minute.** A ball
+already INSIDE a collider is invisible to both impact tests: one returns null because the ball is
+inside the outer surface, the other because it is outside the inner surface. So the collider is not
+there and the ball sails through. It happens where two rails meet FLUSH, which is everywhere you
+want them to: a ball riding up the left rail arrives exactly tangent to the corner arc, and a
+fraction of a millimetre either way puts its centre inside the arc's band. Traced: `nearest a4 at
+13.3mm (ball r 13.5)` on one tick, `-4.7mm` three ticks later. `staticPenetration()` is the net,
+and `World.rescues` counts every time it fires, because it firing at all means some junction has a
+graze worth looking at.
+
 The single exception, and it is deliberate: **a flipper swinging into a ball does move it.** A driven
 paddle has to. Its micro step is bounded so the overlap is at most a quarter of a ball radius, and
 the ball takes the PADDLE SURFACE velocity, never a velocity derived from the correction distance
@@ -52,7 +62,7 @@ the old engine (`pinball/CLAUDE.md`, "The ramps were unreachable").
 | `machines/testbox/render.js` | canvas 2D. Calls the solver's own flipper decomposition, so what is drawn and what is hit cannot drift |
 | `editor/index.html`, `editor/editor.js` | the tool: Play, Edit, Tune, Check |
 | `probes/checks.js` | the three checks, written ONCE and run from both the editor and node |
-| `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|gaps\|rests\|all]`, about 6 s |
+| `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|flip\|escape\|gaps\|rests\|all]`, about 2.5 min for all |
 
 **One engine file per machine, forked, never shared.** A second machine copies
 `machines/testbox/` and edits its copy. That is the repo rule and it is why a shared fix cannot
@@ -68,6 +78,17 @@ do not sample:
   question: did it reach the drain? Everything else is a trap, listed by coordinate.
 - **`tunnelProbe`** fires a ball at every collider from 24 angles at the speed cap and fails if any
   ends up somewhere it could not have travelled to.
+- **`escapeProbe`** fires a ball hard from every reachable point at every angle, with the flippers
+  working, and asks whether it is still in the machine two seconds later. **This is the one that
+  matters most**, because it is the one that catches a ball leaving the table, and the three checks
+  that shipped before it all missed exactly that: the tunnel probe watched a quarter of a second
+  and the ball took two, the rest sweep starts every ball at rest and this needs speed, and a
+  static "is the cabinet closed" test passed the broken table outright. That third one was written,
+  measured against the real defect, found to give a false OK, and DELETED rather than shipped. A
+  check that says OK about a table a ball can leave is worse than no check.
+- **`flipProbe`** holds a flipper up with a ball already against the bat, over a grid of positions.
+  The bat is the only driven part, so it is the only thing that can move a ball the ball did not
+  move itself, and every other probe starts with the flippers at rest.
 - **`checkGaps`** flags any space between two parts that is near ONE BALL wide, which is where a
   ball wedges. A gap must be clearly shut or clearly open. Overlaps are a note, not a failure: an
   overlap is how you SHUT a gap.
@@ -86,20 +107,46 @@ function's comments and each is a shape of mistake worth knowing:
    BOTH reachability (the mask) and legality (the exact distance). Four shots launched from inside
    a rail were reported as tunnelling through it.
 
+**Every probe added since has had to relearn point 3.** The escape probe's first run reported 532
+escapes and all 532 started at (14, 14) mm, the dead corner behind the corner rail. If you add a
+probe to this file, filter its start positions through `playable()` before you believe a word of
+its output.
+
 ## Numbers as at 2026-09-10, on the bare box
 
 ```
-gravity      1.111 m/s2 = g sin(6.5 deg)
-free fall    1.312 s against 1.311 s analytic, 0.1% off
-tunnel       883 shots at 8 m/s from 24 angles, 0 got through
-gap rule     0 ambiguous gaps, 6 deliberate overlaps
-rest sweep   2913 drops, 0 never reached the drain
+gravity        1.111 m/s2 = g sin(6.5 deg)
+free fall      1.312 s against 1.311 s analytic, 0.1% off
+tunnel         883 shots at 8 m/s from 24 angles, 0 got through
+flipper push   22220 balls flipped from rest against the bat, 0 left the machine
+escape probe   76392 balls fired hard from everywhere reachable, 0 left the machine
+gap rule       0 ambiguous gaps, 6 deliberate overlaps
+rest sweep     2913 drops, 0 never reached the drain
 ```
+
+`node pinball2/probes/run.mjs` runs all of them in about two and a half minutes. The escape probe is
+most of that, and it is worth every second of it.
 
 **"About three seconds to drain" is not the gravity test, and the first draft of the probe used it
 as one.** Three seconds is how long a ball LIVES on a real machine, and it lives that long because
 it keeps hitting things. A ball with nothing in its way over this playfield takes 1.31 s, which is
 `sqrt(2h/g sin tilt)` and nothing else. The honest assertion is against that analytic number.
+
+## The editor's touch was offset, and the cause is worth knowing
+
+Matt: *"the editor can't tell what I'm selecting, it's like it thinks I'm selecting something an
+inch above where my finger actually is."*
+
+The canvas is laid out by flex and the bottom panel is a different height per tab, so switching from
+Play to Edit resizes the canvas with no window `resize` event at all. The backing store and the view
+transform still described the previous height, which stretched the picture and put every tap out by
+exactly that difference. A `ResizeObserver` on the canvas fixes it. **Any canvas in a flex layout
+needs one; `window.resize` is not enough and the failure looks like a hit-testing bug rather than a
+layout one.**
+
+The hit tolerance was wrong too, in a way that only shows on a phone: it was 12 mm in TABLE units,
+and at the default fit a millimetre is under a pixel, so the reach was 8 screen pixels. It is 22
+screen pixels now, converted to table units through the live zoom.
 
 ## The rest sweep found a trap in this table's own first layout
 
