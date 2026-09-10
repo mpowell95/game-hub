@@ -1267,31 +1267,53 @@ class Hub {
     // Tear down any previously mounted game first.
     await this.unmount();
 
+    // THE CHROME GOES UP BEFORE `init()` RUNS, AND THE IMPORT STAYS IN FRONT OF BOTH (2026-09-10).
+    // Golf drew itself into a strip in the top half of the screen, with this page's background
+    // below it, on two different phones. It could not be reproduced here at any viewport size,
+    // scrolled or not, with the CPU slowed 4x and 8x - which fits, because what was wrong was the
+    // ORDER, and this machine always won the race.
+    //
+    // `init()` used to be called while `.hub-game` was still `hidden`, so a game measuring the room
+    // it has - every immersive game here does, and it is the documented way to fit one screen
+    // (docs/BUILDING-A-GAME.md, Part 3) - took its first reading inside a `display: none` box,
+    // where every rectangle is zero and the page's own height is the launcher's. Games compensate
+    // by measuring again on the next frame, so on a fast device nobody ever sees the first answer.
+    // A game that acts on the first reading before that frame arrives keeps it.
+    //
+    // The import stays FIRST so the launcher, not an empty frame, is what a player looks at while a
+    // game downloads. Only the mount itself moved.
+    let module;
     try {
-      const module = await import(game.module);
-      module.init(this.el.game);
-      this.current = { module, id };
-      this.el.title.textContent = titleText(game);
-      this.el.back.hidden = false;
-      this.el.grid.hidden = true;
-      if (this.el.extra) this.el.extra.hidden = true;
-      this.el.game.hidden = false;
-      this.el.profile.hidden = true;
-      if (this.el.topRight) this.el.topRight.hidden = true;
-      if (this.el.top) this.el.top.classList.add('hub-top-ingame');
-      this._setImmersive(!!game.immersive);
+      module = await import(game.module);
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
+      this._enterGameChrome(game);
       this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
-      this.el.game.hidden = false;
-      this.el.grid.hidden = true;
-      if (this.el.extra) this.el.extra.hidden = true;
-      this.el.back.hidden = false;
-      this.el.profile.hidden = true;
-      if (this.el.topRight) this.el.topRight.hidden = true;
-      if (this.el.top) this.el.top.classList.add('hub-top-ingame');
-      this._setImmersive(!!game.immersive);
+      return;
     }
+
+    this._enterGameChrome(game);
+    try {
+      module.init(this.el.game);
+      this.current = { module, id };
+    } catch (e) {
+      console.error(`Failed to start game "${id}"`, e);
+      this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
+    }
+  }
+
+  /** Put the shell into its in-game state: launcher away, game area shown and MEASURABLE, top bar
+   *  in its in-game form. Called before a game's `init()` so the first thing it measures is real. */
+  _enterGameChrome(game) {
+    this.el.title.textContent = titleText(game);
+    this.el.back.hidden = false;
+    this.el.grid.hidden = true;
+    if (this.el.extra) this.el.extra.hidden = true;
+    this.el.game.hidden = false;
+    this.el.profile.hidden = true;
+    if (this.el.topRight) this.el.topRight.hidden = true;
+    if (this.el.top) this.el.top.classList.add('hub-top-ingame');
+    this._setImmersive(!!game.immersive);
   }
 
   /** Toggle the floating-back-button chrome for immersive games (see hub.css). */
