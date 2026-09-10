@@ -5689,3 +5689,32 @@ timing), the ball's path from above, and sliders for the band shrink, the base b
 multiplier. Its aim slider reads in Matt's own units, **-0.21 to +0.21**, minus left. It runs the
 game's own model, verified against `mishit` at eleven aim positions to the digit - if the two ever
 disagree the tool is worthless, which is why that check exists rather than a screenshot.
+
+
+## 250 is the ceiling, and the free buffer under it is closed (2026-09-10)
+
+Matt, reading the shot tool: *"those distances are still way too far. the farthest a max power drive
+should ever go is 250 (with this club, right now. do not add this as some insane hard rule game
+wide like you usually do)."* It was 262.
+
+**The yards were coming from the 100 % to 107.6 % band, which paid IN FULL.** `payingPower` only
+started diminishing at `BLOCK_FROM`, so the first 7.6 % past a clean swing was free distance - which
+is the same free lunch a 2026-09-06 session measured at *"+16.3 yards for NOTHING"*. It closed that
+with the random spray; the spray is gone (see the section above), so it is closed with the distance
+instead. The return now diminishes from **100 %**, and `BLOCK_KEEPS_DIST` is 0.372:
+
+| Power | Carry | Total |
+|---|---|---|
+| 100 % | 215.0 | 232.2 |
+| 107.6 % (block edge) | 221.1 | 238.8 |
+| 120.6 % (top of arc) | 231.5 | **250.0** |
+
+**It is a multiplier, not a cap.** Nothing clamps a distance anywhere; every club keeps its own
+ladder and the same curve applies to all of them, which is what Matt's parenthesis was about.
+`BLOCK_FROM` still marks where the meter draws its orange and red block - that is a DRAWING, and the
+distance curve no longer keys off it.
+
+**And the answer to "what is the most offline a shot could be?": 45.4 yards.** Swept over every
+power and every needle stop: the worst possible driver shot is a full red miss at the top of the arc
+(16.0 deg), carrying 139 and finishing 155 from the tee. At a clean 100 % the worst is 20.9 yds
+offline. The 12 fewer yards of carry did NOT move Oasis Sands hole 4, which still measures -0.75.

@@ -325,9 +325,16 @@ export const OVER_SWING_MAX_MUL = 2.0;
 // should only be 240-245. I want it to go 20-30 yards offline. high risk."* Two new rules, both
 // active only past BLOCK_FROM and both scaling with how far into the block the swing went:
 //
-//   BLOCK_KEEPS_DIST  how much of the over-swing's extra power becomes yards. 0.40 puts a
-//                     top-of-the-arc driver at 242 yds against 215 for a clean 100 % - inside the
-//                     240-245 he asked for, where the old value of 1.00 gave 259.
+//   BLOCK_KEEPS_DIST  how much of the over-swing's extra power becomes yards.
+//
+// IT NOW BITES FROM 100 %, NOT FROM THE BLOCK EDGE (2026-09-10). Matt, on the numbers coming out of
+// the shot tool: *"those distances are still way too far. the farthest a max power drive should
+// ever go is 250 (with this club, right now)."* It was 262. Everything between 100 % and
+// `BLOCK_FROM` used to pay IN FULL, which is both where those yards came from and a free lunch a
+// previous session had already measured at "+16.3 yards for NOTHING" - it closed that with the
+// random spray, and the spray is gone, so this closes it with the distance instead. At 0.372 a
+// driver reads 232 at 100 %, 239 at the block edge and **exactly 250.0 at the top of the arc**,
+// which is his ceiling. It is a per-club multiplier, not a cap: every club keeps its own ladder.
 //
 // THE SECOND RULE WAS A RANDOM SPRAY, AND IT IS GONE (2026-09-10). `BLOCK_SPRAY_DEG` pushed the
 // ball 5.9 deg offline at the top of the arc WITHOUT CARING how well it was struck, so a perfect
@@ -337,12 +344,12 @@ export const OVER_SWING_MAX_MUL = 2.0;
 // offline."* The 20-30 yards belongs to a BAD AIM, and it is delivered now by the over-swing's own
 // mishit ramp and by the green band shrinking (see `overZone`) - both of which the player controls.
 // Dead centre is dead straight at every power. See `mishit`.
-export const BLOCK_KEEPS_DIST = 0.40;
+export const BLOCK_KEEPS_DIST = 0.372;
 /** The power that actually becomes DISTANCE. Below the block it is the power itself; inside it,
  *  only `BLOCK_KEEPS_DIST` of every extra unit pays. */
 export function payingPower(power) {
-  if (power <= BLOCK_FROM) return power;
-  return BLOCK_FROM + (power - BLOCK_FROM) * BLOCK_KEEPS_DIST;
+  if (power <= 1) return power;
+  return 1 + (power - 1) * BLOCK_KEEPS_DIST;
 }
 
 

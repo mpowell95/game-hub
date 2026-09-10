@@ -613,10 +613,23 @@ console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
   const cz = CL.swingZone(drv);
   const carryAt = (p) => 215 * SW.payingPower(p);
 
-  ok('below the block, every unit of power still pays in full',
-    Math.abs(SW.payingPower(1.0) - 1.0) < 1e-9 && Math.abs(SW.payingPower(SW.BLOCK_FROM) - SW.BLOCK_FROM) < 1e-9);
+  // UP TO 100 %, every unit of power pays in full; past it the return diminishes immediately.
+  // It used to pay in full all the way to BLOCK_FROM, which is where a top-of-arc driver's extra
+  // 12 yds came from - Matt: "the farthest a max power drive should ever go is 250".
+  ok('up to 100 %, every unit of power still pays in full',
+    Math.abs(SW.payingPower(1.0) - 1.0) < 1e-9 && Math.abs(SW.payingPower(0.5) - 0.5) < 1e-9);
+  ok('...and past 100 % it diminishes at once, with no free buffer before the block',
+    SW.payingPower(1.03) < 1.03 && SW.payingPower(SW.BLOCK_FROM) < SW.BLOCK_FROM);
+  // MATT'S CEILING IS A TOTAL, NOT A CARRY (2026-09-10): "the farthest a max power drive should
+  // ever go is 250 (with this club, right now)". 231.5 of carry plus the driver's 8 % roll is 250.0.
   near(`a driver held to the top carries ${carryAt(SW.SWING_MAX).toFixed(1)} yds`,
-    carryAt(SW.SWING_MAX), 242.5, 2.5, 'Matt asked for 240-245; the old value was 259');
+    carryAt(SW.SWING_MAX), 231.5, 1.0, 'it was 242.5 while 100-107.6 % paid in full');
+  {
+    const rf = CL.rollFactor('fairway', drv);
+    const total = carryAt(SW.SWING_MAX) * (1 + rf);
+    near(`...and finishes ${total.toFixed(1)} yds from the tee, dead centre and no wind`, total, 250, 1.0,
+      "Matt: 'the farthest a max power drive should ever go is 250'");
+  }
   ok('...which is still more than a clean 100 % swing', carryAt(SW.SWING_MAX) > 215);
 
   // [KNOWN-BUG PROBE] A PERFECT STRIKE IS DEAD STRAIGHT AT EVERY POWER (2026-09-10).
