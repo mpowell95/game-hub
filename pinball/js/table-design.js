@@ -69,9 +69,19 @@ export const LAUNCH_LEVEL = 2;
 // crossing of py 908 landed in it, and none at all in the right one, out of 21 upward crossings
 // at that height anywhere on the board. The mouth measured off the reference photo is 84 px
 // further inboard and catches 15 of those 21.
+// AND `top.vx/vy` IS A DIRECTION, NOT A SPEED - THE SPEED IS THE SHOT'S OWN (see _rampRide).
+//
+// It also has to point UP the deck rather than across it. Matt: *"now it goes up the ramp, hits
+// the rail immediately, and falls back down to level 1."* At the old 45 degrees a ball leaving
+// the left ramp at (92, 596) ran straight into guide_rail_upper_left, which crosses that line at
+// (197, 491). The only clear route out of a ramp mouth is up the outside, past post_red_left_4
+// at (150, 440) - anything leaning more than about 10 units of vx per 150 is caught by that post
+// or by the rail behind it. Swept: at vx 150, 90, 40 the ball reached py 517, 494, 471 and came
+// straight back; at vx 10 it reaches py 75 at best and py 137 on average, which is the whole
+// height of the deck.
 export const RAMPS = [
-  { id: 'rampL', x: [px(129), px(231)], y: px(933), foot: px(180), minEntry: 330, top: { x: px(92),  y: px(596), vx: 150, vy: -150 } },
-  { id: 'rampR', x: [px(755), px(857)], y: px(933), foot: px(806), minEntry: 330, top: { x: px(894), y: px(596), vx: -150, vy: -150 } },
+  { id: 'rampL', x: [px(129), px(231)], y: px(933), foot: px(180), minEntry: 330, top: { x: px(92),  y: px(596), vx: 10, vy: -150 } },
+  { id: 'rampR', x: [px(755), px(857)], y: px(933), foot: px(806), minEntry: 330, top: { x: px(894), y: px(596), vx: -10, vy: -150 } },
 ];
 
 /**
