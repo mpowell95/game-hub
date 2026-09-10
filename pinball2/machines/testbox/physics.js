@@ -308,7 +308,7 @@ export class World {
   }
 
   addBall(p, v) {
-    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, touched: new Map() };
+    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, cradling: false, touched: new Map() };
     this.balls.push(b);
     return b;
   }
@@ -422,16 +422,23 @@ export class World {
         } else {
           this.resolve(b, hit.n, u, hit.shape, closing);
         }
-        if (hit.flipper) {
-          if (hit.flipper.held && closing < cfg.REST_SPEED) {
-            const k = Math.max(0, 1 - cfg.CRADLE_DAMP * hit.t);
-            b.v = mul(b.v, k);                    // a held bat lets the ball settle, so it can be aimed
-          }
-        }
+        // A CRADLE is a ball settling on a bat that has finished moving. It is NOT a brake to run
+        // during the swing, and that is what this was: the test is "held, and closing slowly", and
+        // while you hold the button through a flip both are true, so every flip was fighting it.
+        // Measured at mid bat: the ball reached 2.56 m/s straight up, which is enough to reach the
+        // top of the table, and was down to 1.11 m/s four milliseconds later with no impact in
+        // between. The bat has to be AT ITS STOP and the ball has to be slow, and it is charged
+        // per second below, never per contact.
+        if (hit.flipper && hit.flipper.held && hit.flipper.atStop()) b.cradling = true;
         left -= hit.t;
         events++;
       }
       if (events >= cfg.MAX_EVENTS) this.jams++;
+
+      if (b.cradling && len(b.v) < cfg.CRADLE_MAX) {
+        b.v = mul(b.v, Math.max(0, 1 - cfg.CRADLE_DAMP * h));
+      }
+      b.cradling = false;
 
       // Rolling resistance, charged by time. Per contact it would depend on how often the ball
       // happened to touch, which is a solver detail and not something a player can feel.

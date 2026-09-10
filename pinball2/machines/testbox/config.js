@@ -33,6 +33,7 @@ export const CONFIG = {
   FLIP_KICK: 0,
   FLIP_MU: 0.28,
   CRADLE_DAMP: 6.0,        // velocity decay per second for a slow ball on a held flipper
+  CRADLE_MAX: 0.6,         // and only below this speed. Above it the ball is in play, not settling
 
   // solver
   DT: 1 / 240,
@@ -58,6 +59,7 @@ export const TUNABLES = [
   { key: 'FLIP_KICK', label: 'Flipper kick', unit: '', min: 0, max: 1.2, step: 0.01 },
   { key: 'FLIP_MU', label: 'Rubber grip', unit: '', min: 0, max: 0.9, step: 0.01 },
   { key: 'CRADLE_DAMP', label: 'Cradle damping', unit: '/s', min: 0, max: 20, step: 0.5 },
+  { key: 'CRADLE_MAX', label: 'Cradle below', unit: 'm/s', min: 0.1, max: 2, step: 0.05 },
 ];
 
 /** Playfield gravity. A tilted plane pulls at g sin(tilt), about a ninth of a free fall at 6.5

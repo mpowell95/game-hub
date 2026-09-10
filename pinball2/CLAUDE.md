@@ -212,10 +212,42 @@ after the fix            46mm     53mm    924mm    922mm
 contact, then friction inside a micro step, now friction across a tick. If you add anything that
 costs the ball energy, ask what it is charged PER. Per contact is almost always wrong.
 
-Still weak, and known: the inner third of the bat (u below about 0.5) only moves the ball 50mm even
-with the grip removed entirely, so that is geometry rather than the contact model. On a real machine
-a ball at the flipper base is a weak shot too, so this may be right, but it has not been checked
-against anything and should not be assumed correct.
+### Still broken: the inner two thirds of the bat, and where the search has got to
+
+Matt, on a second recording: *"Look at the first and third flipper hits."* The trails show every
+contact producing a small hop, not a shot. Everything below is measured, and none of it is a fix.
+
+```
+                        u=0.30   u=0.50   u=0.70   u=0.90
+travel up the table       56mm     53mm    922mm    921mm
+```
+
+**The ball never leaves the bat during a swing.** Instrumented, the gap between ball and bat is
+0.0mm for the whole 20ms, so it is carried rather than struck, and the speed it ends with is the
+bat's surface speed at wherever it happens to be sitting.
+
+**What ends the shot is `again`, the branch that keeps a ball out of a surface it is already
+touching.** Instrumented at mid bat: `CLAMP 2.82 -> 1.16 m/s, n=(0.39, 0.92)`. The normal points
+DOWN: the bat is above the ball, pushing it back down. It gets there because that same clamp holds
+the ball at exactly the bat's surface speed, so the ball's angular rate about the pivot equals the
+bat's and the outer half of the bat sweeps over the top of it.
+
+**Four things have been tried and all four were rejected on measurement**, which is worth recording
+so nobody spends the time again:
+
+1. faster flip (30ms to 8ms): top speed 1.8 to 6.4 m/s, travel unchanged
+2. bouncier rubber, a higher restitution floor, a gentler fade: travel unchanged
+3. an explicit `FLIP_KICK` so the ball leaves faster than the bat: worth 1mm in 924
+4. restitution applied on the re-contact clamp as well: no better, and slightly worse near the pivot
+
+**The number that matters is TRAVEL, not top speed.** Three of those four moved the ball's peak
+speed and none moved how far it went, which is the whole reason they were rejected. A number that
+does not move when you change its supposed cause is telling you the cause is elsewhere.
+
+What has not been tried yet: letting the ball SLIDE OUTWARD along the bat as it is struck, which is
+what a real ball does and what would take it past the tip instead of under the bat. The grip is
+currently what stops it, but removing the grip entirely only reaches 54mm, so that is not the whole
+answer either.
 
 ## The editor's touch was offset, and the cause is worth knowing
 
