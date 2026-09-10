@@ -5488,3 +5488,27 @@ FIRST reading is a floor reading, for two independent reasons, and that no mecha
 correct it. If a strip is reported again, ask which screen and whether backing out to the hub and
 reopening clears it - a reopen that clears it is this bug; a reopen that does not is the device
 measuring its own viewport wrong, which is the section above.
+
+
+## My Stats: a golf order, and an average that means something (2026-09-10)
+
+Matt, looking at another player's golf record: *"Does this seem correct/what we want?"* Two things
+were not.
+
+**Best rounds were in alphabetical order.** The rows were sorted by their DISPLAY NAME, so "Pine
+Valley (holes 10-12)" sorted above "(holes 4-6)" and the table read 18, back 9, front 9, 1-3,
+10-12, 13-15, 16-18, 4-6, 7-9. `compareGolfRounds` in `js/game-stats-ui.js` now parses the round
+key into its course and its length (`pinevalley3d` -> Pine Valley + the fourth three-hole set) and
+sorts course by name, then 18, front 9, back 9, then each three-hole set from the first tee to the
+last, the way a scorecard reads. A key the regex cannot parse keeps its row and lands at the end of
+its course (rule 1).
+
+**"Avg strokes" divided lifetime strokes by lifetime ROUNDS**, and a round here is three, nine or
+eighteen holes - so it averaged a 3-hole round against an 18-hole one. On the record Matt sent it
+read **16.4**, a number that describes nothing (21 rounds, mostly threes, one eighteen). It is now
+**avg per hole**: `gf.holes` was already being counted, so this needed no new stored field, and
+strokes per hole is the same measurement whatever length a player picks. A record from before holes
+were counted shows a dash rather than a fabricated average (rule 4).
+
+**Left alone on purpose:** the per-hole record row scrolls sideways and shows about eleven of the
+eighteen on a phone. Matt: *"ignore"*.
