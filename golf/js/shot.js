@@ -95,7 +95,13 @@ export function groundPoint(p, rollYd, apex, landedOn) {
   // `apex * 0.22 + 1.2`, and the cap given a floor of 1.2 yd, because the cap is what was killing
   // the bounce on exactly the shots a player watches most closely: an approach that lands on a
   // green runs only a few yards, and a ball landing on a green plainly bounces.
-  const hopH = noHop ? 0 : Math.min(apex * 0.22 + 1.2, Math.max(1.2, rollYd * 0.45));
+  // THE 1.2 yd FLOOR IS GONE (2026-09-10). It was added so an approach pitching on a green - which
+  // runs only a few yards - still visibly bounced. With the fairway back on the approved 8 % run-out
+  // (clubs.js's LIES), the shortest run-outs in the bag are now around a yard, and a fixed 1.2 yd
+  // floor made a lob wedge HOP HIGHER THAN IT ROLLED: a leap, which is the exact thing the cap
+  // exists to prevent. A green's own roll was not touched by that change, so approach bounces on
+  // the putting surface are unaffected - the floor only ever bound on run-outs under 2.7 yd.
+  const hopH = noHop ? 0 : Math.min(apex * 0.22 + 1.2, rollYd * 0.45);
   const share = noHop ? 0 : HOP_SHARE;
   const tHop = noHop ? 0 : HOP_TIME;
 
