@@ -3449,3 +3449,23 @@ first attempt at compressing it put each group behind its own `<details>`, which
 still (*"This is more difficult to read"*) and he was right: three tappable rows per announcement is
 TALLER than the bullet list they replaced, and it hid the two SHORT answers behind the same control
 as the long one. Four lines per announcement now, nothing to tap for the part you came for.
+
+
+## `launch()` puts the chrome up BEFORE a game's `init()` (2026-09-10)
+
+`js/hub.js`'s `launch()` used to call `module.init(this.el.game)` and only then hide the launcher
+and unhide `.hub-game`. Every immersive game here measures the room it has been given inside its
+constructor (`docs/BUILDING-A-GAME.md`, Part 3), so that first measurement was taken inside a
+`display: none` box: every rectangle zero, and `document.documentElement.scrollHeight` reporting the
+LAUNCHER's height. Measured during golf's mount at 432x950: `top: 0`, page 1,621 px, which drives
+golf's `_fit` straight onto its 320 px floor.
+
+Games compensate by measuring again on the next frame, which is why nothing ever failed here - but
+a game that acts on the first answer, or whose correction path never fires, keeps it. Two people
+reported golf drawn as a strip across the top of the screen; this was one of its two causes (the
+other is in `golf/CLAUDE.md`).
+
+The order now is: **import, then chrome, then `init()`**. The import stays in front so the launcher,
+not an empty frame, is what a player looks at while a game downloads; only the mount moved. The
+chrome itself is one method, `_enterGameChrome(game)`, shared with the load-failure path so the two
+cannot drift apart.

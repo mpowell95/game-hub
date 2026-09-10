@@ -5448,3 +5448,43 @@ once, restore it and fire NO resize event at all. Before: 44 % fill and it staye
 **Not confirmed with TP.** He was never asked what phone he is on, whether the app was in
 split-screen, or whether force-closing fixed it. The arithmetic is strong and the fix is cheap and
 safe either way, but if it happens again, ask those three questions first.
+
+
+## The strip, second look: the first measurement is taken before the game has its own CSS (2026-09-10)
+
+The half-viewport theory in the section above was wrong, or at least not the whole story: it
+happened on Matt's phone too, and his phone was not in split-screen. Matt: *"I think it's probably
+your second bullet"* - the mount race.
+
+**What the trace shows.** Instrumenting every `_fit()` call through a real mount in the hub:
+
+```
+FITLOG {"vh":950,"top":98,"shCollapsed":3053,"rootOverflowY":"visible"}   <- first fit
+FITLOG {"vh":950,"top":98,"shCollapsed":950,"rootOverflowY":"hidden"}     <- and every one after
+```
+
+`golf.css` is a `<link>` appended to the head, which loads ASYNCHRONOUSLY, so the first `_fit()`
+runs against a root with none of its own rules: `overflow-y` is `visible`, the setup screen's whole
+content spills out of the collapsed root, and the PAGE measures 3,053 px against a 950 px viewport.
+`_fit` reads that as "the page overflows by 2,103" and hands every pixel back, which floors the
+game at its 320 px minimum. 320 px of game under a 98 px top bar is **44 % of the screen** - the
+strip, to the pixel.
+
+**And the hub was making the first reading worse.** `js/hub.js`'s `launch()` called `module.init()`
+BEFORE unhiding `.hub-game`, so the first fit also ran inside a `display: none` box: measured
+`top: 0`, `hidden: true`, page height 1,621 (the launcher's). Both halves are fixed - the chrome
+now goes up before `init()`, and the import still runs first so the launcher, not an empty frame,
+is what a player looks at while a game downloads.
+
+**Why nothing recovered.** The ResizeObserver in the constructor watches the CONTAINER, and neither
+a stylesheet applying nor a page-height change resizes the container. On the setup screen nothing
+else asks for a fit either. So whatever the first reading said is what stays on screen.
+`ensureCSS()` now takes a callback and `init()` re-fits on it.
+
+**Honest limits.** This was never reproduced end to end: on this machine golf recovers to 96 % fill
+in every probe, including one that delays `golf.css` by three seconds, because something in the
+setup render asks for another fit within about a second. What is measured and certain is that the
+FIRST reading is a floor reading, for two independent reasons, and that no mechanism existed to
+correct it. If a strip is reported again, ask which screen and whether backing out to the hub and
+reopening clears it - a reopen that clears it is this bug; a reopen that does not is the device
+measuring its own viewport wrong, which is the section above.

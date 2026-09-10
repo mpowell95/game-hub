@@ -210,12 +210,35 @@ const CARET_NEAR = 0.16;
 const METER_W = 176;
 const METER_H = 150;
 
-function ensureCSS() {
+/** Put this game's stylesheet in the page, and CALL BACK WHEN IT HAS ACTUALLY APPLIED.
+ *
+ *  THE CALLBACK IS THE POINT (2026-09-10). A `<link>` in the head loads ASYNCHRONOUSLY, so the
+ *  first `_fit()` runs against a root that has none of its own rules yet. Measured, at the moment
+ *  of that first fit: `overflow-y` reads `visible` instead of `hidden`, so the setup screen's full
+ *  content spills out of the collapsed root and the PAGE measures 3,053 px tall against a 950 px
+ *  viewport. `_fit` reads that as "the page overflows by 2,103" and hands it all back, which
+ *  floors the game at its 320 px minimum: 320 px of game under a 98 px top bar is 44 % of the
+ *  screen - the shape of the strip two people reported.
+ *
+ *  Nothing about a stylesheet arriving changes the CONTAINER's size, so the ResizeObserver in the
+ *  constructor cannot see it. This callback is the path back to the truth. */
+function ensureCSS(onReady) {
   const href = new URL('../css/golf.css', import.meta.url).href;
-  if (document.querySelector(`link[href="${href}"]`)) return;
+  const done = () => { try { onReady && onReady(); } catch { /* a re-fit is best effort */ } };
+  const existing = document.querySelector(`link[href="${href}"]`);
+  if (existing) {
+    // A second mount: usually applied already, but a mount DURING the first load is possible.
+    if (existing.sheet) done();
+    else existing.addEventListener('load', done, { once: true });
+    return;
+  }
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;
+  // An error gets the callback too: a game that cannot load its CSS should still be measured
+  // against the truth rather than left on a floor reading taken mid-flight.
+  link.addEventListener('load', done, { once: true });
+  link.addEventListener('error', done, { once: true });
   document.head.appendChild(link);
 }
 
@@ -2985,7 +3008,9 @@ class GolfGame {
 let instance = null;
 
 export function init(container) {
-  ensureCSS();
+  // The stylesheet's arrival is a RE-MEASURE, not just a repaint - see `ensureCSS`. The instance is
+  // read at callback time, so a mount torn down before the sheet lands re-fits nothing.
+  ensureCSS(() => { if (instance && !instance.destroyed) instance._fit(); });
   if (instance) instance.destroy();
   instance = new GolfGame(container);
   if (typeof window !== 'undefined') window.__gfTest = instance;   // test-visual.mjs's PLAY probe
