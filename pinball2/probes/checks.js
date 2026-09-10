@@ -1,0 +1,292 @@
+// The three checks, written once and run from two places: the editor's Check panel and the node
+// CLI. One implementation is the point. A check that only runs in a terminal is a check nobody
+// runs, and a check that only runs in the browser cannot gate a deploy.
+//
+// They report PLACES, not percentages. Four soaks passed a table that was unplayable in thirty
+// seconds, because a soak samples where it happens to go. These do not sample.
+
+import { World } from '../machines/testbox/physics.js';
+import { gravity } from '../machines/testbox/config.js';
+
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const len = (a) => Math.hypot(a.x, a.y);
+
+/** Distance from a point to a shape's solid surface. Negative means inside it. */
+export function distToShape(sh, p) {
+  if (sh.kind === 'seg') {
+    const d = sub(sh.b, sh.a);
+    const L2 = d.x * d.x + d.y * d.y;
+    const u = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - sh.a.x) * d.x + (p.y - sh.a.y) * d.y) / L2));
+    const on = { x: sh.a.x + d.x * u, y: sh.a.y + d.y * u };
+    return len(sub(p, on)) - sh.r;
+  }
+  if (sh.kind === 'circle') return len(sub(p, sh.c)) - sh.r;
+  if (sh.kind === 'arc') {
+    const rel = sub(p, sh.c);
+    const ang = Math.atan2(rel.y, rel.x);
+    const twoPi = Math.PI * 2;
+    let da = (ang - sh.a0) % twoPi; if (da < 0) da += twoPi;
+    let span = (sh.a1 - sh.a0) % twoPi; if (span <= 0) span += twoPi;
+    if (da <= span) return Math.abs(len(rel) - sh.radius) - sh.r;
+    let best = Infinity;
+    for (const a of [sh.a0, sh.a1]) {
+      const e = { x: sh.c.x + sh.radius * Math.cos(a), y: sh.c.y + sh.radius * Math.sin(a) };
+      best = Math.min(best, len(sub(p, e)) - sh.r);
+    }
+    return best;
+  }
+  if (sh.kind === 'flipper') {
+    const tip = { x: sh.pivot.x + sh.len * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * Math.sin(sh.restAng) };
+    const d = sub(tip, sh.pivot);
+    const L2 = d.x * d.x + d.y * d.y;
+    const u = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - sh.pivot.x) * d.x + (p.y - sh.pivot.y) * d.y) / L2));
+    const on = { x: sh.pivot.x + d.x * u, y: sh.pivot.y + d.y * u };
+    return len(sub(p, on)) - (sh.r0 + (sh.r1 - sh.r0) * u);
+  }
+  if (sh.kind === 'drain') {
+    const dx = Math.max(sh.x - p.x, 0, p.x - (sh.x + sh.w));
+    const dy = Math.max(sh.y - p.y, 0, p.y - (sh.y + sh.h));
+    return Math.hypot(dx, dy);
+  }
+  return Infinity;
+}
+
+function surfacePoints(sh, n) {
+  const out = [];
+  if (sh.kind === 'seg') {
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      out.push({ x: sh.a.x + (sh.b.x - sh.a.x) * u, y: sh.a.y + (sh.b.y - sh.a.y) * u });
+    }
+  } else if (sh.kind === 'circle') {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      out.push({ x: sh.c.x + sh.r * Math.cos(a), y: sh.c.y + sh.r * Math.sin(a) });
+    }
+  } else if (sh.kind === 'arc') {
+    let span = (sh.a1 - sh.a0) % (Math.PI * 2); if (span <= 0) span += Math.PI * 2;
+    for (let i = 0; i <= n; i++) {
+      const a = sh.a0 + span * (i / n);
+      out.push({ x: sh.c.x + sh.radius * Math.cos(a), y: sh.c.y + sh.radius * Math.sin(a) });
+    }
+  } else if (sh.kind === 'flipper') {
+    for (const ang of [sh.restAng, sh.endAng]) {
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
+        out.push({ x: sh.pivot.x + sh.len * u * Math.cos(ang), y: sh.pivot.y + sh.len * u * Math.sin(ang) });
+      }
+    }
+  }
+  return out;
+}
+
+/** Where a ball can actually BE. Every cell whose centre is a legal ball position, flood filled
+ *  from the launch point, so the pockets behind a rail are excluded.
+ *
+ *  Both probes below need this and the first drafts did without it. The tunnel probe reported 64
+ *  balls flying off the table, every one of them fired from the dead triangle behind an outer
+ *  rail: the ball was never in play, so of course it left. A probe that cannot tell the playfield
+ *  from the space behind it reports the table's own edges as bugs. */
+export function playable(table, cfg, step) {
+  const s = step || 0.003;
+  const nx = Math.ceil(table.w / s);
+  const ny = Math.ceil(table.h / s);
+  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const drains = table.shapes.filter((s2) => s2.kind === 'drain');
+  const free = new Uint8Array(nx * ny);
+  const sink = new Uint8Array(nx * ny);
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const p = { x: (i + 0.5) * s, y: (j + 0.5) * s };
+      if (p.x < cfg.BALL_R || p.x > table.w - cfg.BALL_R || p.y < cfg.BALL_R || p.y > table.h - cfg.BALL_R) continue;
+      let ok = true;
+      for (const o of solid) if (distToShape(o, p) < cfg.BALL_R) { ok = false; break; }
+      if (!ok) continue;
+      free[j * nx + i] = 1;
+      // The drain absorbs. Without this the fill runs along the bottom of the table and back up
+      // behind the rails, and every dead pocket down there is reported as part of the playfield.
+      for (const d of drains) {
+        if (p.x >= d.x && p.x <= d.x + d.w && p.y >= d.y && p.y <= d.y + d.h) { sink[j * nx + i] = 1; break; }
+      }
+    }
+  }
+  const seen = new Uint8Array(nx * ny);
+  const start = { i: Math.floor(table.launch.x / s), j: Math.floor(table.launch.y / s) };
+  const stack = [start.j * nx + start.i];
+  seen[stack[0]] = 1;
+  while (stack.length) {
+    const k = stack.pop();
+    if (sink[k]) continue;
+    const i = k % nx;
+    const j = (k - i) / nx;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di;
+      const b = j + dj;
+      if (a < 0 || b < 0 || a >= nx || b >= ny) continue;
+      const m = b * nx + a;
+      if (seen[m] || !free[m]) continue;
+      seen[m] = 1;
+      stack.push(m);
+    }
+  }
+  return {
+    step: s, nx, ny, mask: seen,
+    at(p) {
+      const i = Math.floor(p.x / s);
+      const j = Math.floor(p.y / s);
+      if (i < 0 || j < 0 || i >= nx || j >= ny) return false;
+      return seen[j * nx + i] === 1;
+    },
+    // A grid cell is 3 mm and a ball can legally sit half a cell from a rail, so asking whether a
+    // ball has ESCAPED has to allow for the rounding. Asking whether to fire a shot FROM a point
+    // does not, which is why the strict test above is kept as well.
+    near(p) {
+      const h = s * 0.6;
+      return this.at(p) || this.at({ x: p.x + h, y: p.y }) || this.at({ x: p.x - h, y: p.y })
+        || this.at({ x: p.x, y: p.y + h }) || this.at({ x: p.x, y: p.y - h });
+    },
+    sunk(p) {
+      const i = Math.floor(p.x / s);
+      const j = Math.floor(p.y / s);
+      if (i < 0 || j < 0 || i >= nx || j >= ny) return false;
+      return sink[j * nx + i] === 1;
+    },
+    cells() {
+      const out = [];
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (seen[j * nx + i]) out.push({ x: (i + 0.5) * s, y: (j + 0.5) * s });
+      return out;
+    },
+  };
+}
+
+/** Ambiguous gaps: a space near one ball wide is where a ball wedges. A gap must be clearly shut
+ *  or clearly open. Overlaps are reported separately and are often deliberate (a rail meeting a
+ *  flipper pivot is how you SHUT a gap), so they are a note, not a failure. */
+export function checkGaps(table, cfg) {
+  const d = cfg.BALL_R * 2;
+  const lo = d * 0.75;
+  const hi = d * 1.15;
+  const solid = table.shapes.filter((s) => s.kind !== 'drain');
+  const flags = [];
+  for (let i = 0; i < solid.length; i++) {
+    for (let j = i + 1; j < solid.length; j++) {
+      const A = solid[i];
+      const B = solid[j];
+      let best = Infinity;
+      let at = null;
+      for (const p of surfacePoints(A, 24)) {
+        const g = distToShape(B, p) - (A.r != null ? 0 : 0);
+        if (g < best) { best = g; at = p; }
+      }
+      const gap = best - (A.r != null ? A.r : Math.max(A.r0 || 0, A.r1 || 0));
+      if (gap > lo && gap < hi) flags.push({ kind: 'gap', a: A.id, b: B.id, gap, at });
+      else if (gap < -1e-4) flags.push({ kind: 'overlap', a: A.id, b: B.id, gap, at, note: true });
+    }
+  }
+  return flags;
+}
+
+/** Is gravity a TILTED PLANE and is anything secretly braking the ball?
+ *
+ *  A ball dropped straight down the middle of an empty table meets nothing, so its time is pure
+ *  free fall: sqrt(2h/g sin tilt), 1.31 s over this playfield. That analytic number is the honest
+ *  assertion. "It should take about three seconds" is not: three seconds is how long a ball lives
+ *  on a real machine, and it lives that long because it keeps hitting things, not because gravity
+ *  is weak. The two were confused when this file was written, so it is written down.
+ *
+ *  `alive` is the feel number beside it: released into the top left corner, so the ball rides the
+ *  rails and the flippers the way a real one does. It is reported, never gated. */
+export function drainTime(table, cfg) {
+  const g = gravity(cfg);
+  const drop = table.shapes.find((s) => s.kind === 'drain');
+  const y0 = 0.05;
+  const h = (drop ? drop.y : table.h) - y0;
+  const w = new World(table, cfg);
+  const b = w.addBall({ x: table.w / 2, y: y0 }, { x: 0, y: 0 });
+  let t = 0;
+  while (b.alive && t < 20) { w.step(cfg.DT); t += cfg.DT; }
+
+  const w2 = new World(table, cfg);
+  const b2 = w2.addBall({ x: 0.032, y: 0.08 }, { x: 0, y: 0 });
+  let t2 = 0;
+  while (b2.alive && t2 < 60) { w2.step(cfg.DT); t2 += cfg.DT; }
+
+  return {
+    seconds: b.alive ? null : t,
+    analytic: Math.sqrt((2 * h) / g),
+    alive: b2.alive ? null : t2,
+    gravity: g,
+    jams: w.jams + w2.jams,
+  };
+}
+
+/** Fire a ball at every collider, hard, from every side. Anything that ends up outside the
+ *  playfield or inside a solid went THROUGH something. */
+export function tunnelProbe(table, cfg, opts) {
+  const angles = (opts && opts.angles) || 24;
+  const speed = (opts && opts.speed) || cfg.MAX_SPEED;
+  const play = (opts && opts.play) || playable(table, cfg);
+  const fails = [];
+  let shots = 0;
+  const solid = table.shapes.filter((s) => s.kind !== 'drain');
+  for (const sh of solid) {
+    for (const p of surfacePoints(sh, 6)) {
+      for (let i = 0; i < angles; i++) {
+        const a = (i / angles) * Math.PI * 2;
+        const dir = { x: Math.cos(a), y: Math.sin(a) };
+        const from = { x: p.x - dir.x * 0.06, y: p.y - dir.y * 0.06 };
+        // Two tests, and both are needed. The mask says the point is REACHABLE, which a bare
+        // clearance test cannot (it would happily fire from a sealed pocket). The exact distance
+        // says the point is LEGAL, which the mask cannot: a 3 mm cell can sit a millimetre inside
+        // a rail and still round to free, and four shots launched from inside a rail were reported
+        // as tunnelling through it.
+        if (!play.at(from)) continue;
+        let legal = true;
+        for (const o of solid) if (distToShape(o, from) < cfg.BALL_R + 2e-4) { legal = false; break; }
+        if (!legal) continue;
+        shots++;
+        const w = new World(table, cfg);
+        const b = w.addBall(from, { x: dir.x * speed, y: dir.y * speed });
+        for (let k = 0; k < 60 && b.alive; k++) w.step(cfg.DT);
+        if (!b.alive) continue;
+        let inside = null;
+        for (const o of solid) if (distToShape(o, b.p) < cfg.BALL_R - 5e-4) { inside = o.id; break; }
+        const escaped = !play.near(b.p);
+        if (escaped || inside) fails.push({ shape: sh.id, from, dir, end: { x: b.p.x, y: b.p.y }, out: escaped, inside });
+      }
+    }
+  }
+  return { shots, fails };
+}
+
+/** Every place a ball can come to rest that is not the drain. A list of coordinates, because a
+ *  percentage tells you nothing about where to go and fix the table. */
+export function restSweep(table, cfg, opts) {
+  const step = (opts && opts.step) || 0.012;
+  const seconds = (opts && opts.seconds) || 6;
+  const play = (opts && opts.play) || playable(table, cfg);
+  const stuck = [];
+  let drops = 0;
+  for (let x = cfg.BALL_R; x < table.w; x += step) {
+    for (let y = cfg.BALL_R; y < table.h; y += step) {
+      const p = { x, y };
+      if (!play.at(p)) continue;
+      let legal = true;
+      for (const o of table.shapes) if (o.kind !== 'drain' && distToShape(o, p) < cfg.BALL_R + 2e-4) { legal = false; break; }
+      if (!legal) continue;
+      drops++;
+      const w = new World(table, cfg);
+      const b = w.addBall(p, { x: 0, y: 0 });
+      const ticks = Math.round(seconds / cfg.DT);
+      for (let k = 0; k < ticks && b.alive; k++) w.step(cfg.DT);
+      if (b.alive) {
+        let on = null;
+        for (const o of table.shapes) {
+          if (o.kind !== 'drain' && distToShape(o, b.p) < cfg.BALL_R + 0.002) on = o.id;
+        }
+        stuck.push({ from: p, at: { x: b.p.x, y: b.p.y }, speed: Math.hypot(b.v.x, b.v.y), on });
+      }
+    }
+  }
+  return { drops, stuck };
+}
