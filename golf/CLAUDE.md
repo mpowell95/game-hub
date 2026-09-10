@@ -5409,3 +5409,42 @@ shape the player already knows.
 
 Also: the overlay is fully opaque. At 94 % the setup screen's own "Best:" figures showed through a
 screen that is itself a list of scores.
+
+## "It's messed up for me": half a viewport, and two readings of it (2026-09-10)
+
+TP sent Matt a screenshot: golf drawn into the TOP 40 % of his screen, the hub's background
+filling the rest. Nobody else saw it, and no viewport size reproduces it - golf measures 95-96 %
+fill at all six sizes tested, and `check-no-scroll.mjs` and `test-visual.mjs`'s `fit` probes were
+green through the whole investigation.
+
+**What the screenshot itself says.** Golf's bottom edge sat exactly where `_fit()` puts it if
+`window.innerHeight` had reported about HALF the real viewport: 51 % at device pixel ratio 2,
+51 % at 2.5, 51 % at 3. The answer being the same at every plausible DPR is what makes this a
+finding rather than a guess - the arithmetic does not depend on knowing his phone. Half a viewport
+is what Android split-screen gives you, and a foldable's cover screen is near enough.
+
+**Why nothing recovered on its own.** `_fit()` is called by things that change SIZE. If the
+viewport doubles while this page is not the one on screen, the resize can arrive before the game
+exists, or not at all, and then nothing re-measures - the element's own size never changed.
+
+**The fix is two readings of one number.** `_fit()` now takes the LARGER of
+`window.innerHeight` and `document.documentElement.clientHeight`. They are two paths to the same
+layout viewport, so one can be stale while the other is not, and larger is the safe direction:
+too small is exactly what the report looks like, while too large is corrected on the very next
+line, where the page's own overflow is measured and handed straight back. Plus a
+`visibilitychange` re-fit (coming back to the app is a re-measure) and an underfill backstop: if
+the fill lands under 88 %, ask again on the next frame and at 250/750/1500 ms, one burst per
+episode, re-armed only when the fill comes good.
+
+**The first version of the guard was worthless and the probe is why we know.** It compared the
+fill against the same `innerHeight` it had been misled by, so with the height halved it computed
+exactly 88 % and never fired. A guard cannot detect a lie using the liar as its yardstick. That is
+what pushed the fix down to the measurement itself.
+
+`_uf.mjs` (scratch) drove it: mount golf normally, make `innerHeight` report half, call `_fit()`
+once, restore it and fire NO resize event at all. Before: 44 % fill and it stayed there. After:
+96 %, unchanged throughout, because a stale `innerHeight` can no longer shrink the game at all.
+
+**Not confirmed with TP.** He was never asked what phone he is on, whether the app was in
+split-screen, or whether force-closing fixed it. The arithmetic is strong and the fix is cheap and
+safe either way, but if it happens again, ask those three questions first.

@@ -325,6 +325,12 @@ class GolfGame {
       this.ro.observe(container);
       if (container.parentElement) this.ro.observe(container.parentElement);
     }
+    // THE APP COMING BACK IS A RE-MEASURE (2026-09-09). A phone that changes the viewport while
+    // this page is not on screen - leaving Android split-screen, unfolding a foldable, dismissing
+    // the keyboard, an app-switcher animation - does not always deliver a resize this game can act
+    // on, and nothing else here re-measures. See `_fit`'s underfill guard for the report.
+    this._onVis = () => { if (document.visibilityState === 'visible') this._fit(); };
+    document.addEventListener('visibilitychange', this._onVis);
     this._renderSetup();
     this._fit();
     requestAnimationFrame(() => this._fit());
@@ -360,7 +366,20 @@ class GolfGame {
     if (this.destroyed || !this.rootEl) return;
     const el = this.rootEl;
     const prev = el.style.height;
-    const vh = window.innerHeight || 720;
+    // TWO YARDSTICKS FOR ONE VIEWPORT (2026-09-09). TP: *"it's messed up for me"* - a screenshot
+    // with golf drawn into the top 40 % of the screen and the hub's background below it. Measured
+    // off that screenshot, and the answer is the same at every plausible device pixel ratio, which
+    // is what makes it a finding rather than a guess: golf's bottom edge sat exactly where `_fit`
+    // puts it if `window.innerHeight` had reported about HALF the real viewport. 51 % at DPR 2,
+    // 51 % at 2.5, 51 % at 3. Half a viewport is what Android split-screen gives you, and a
+    // foldable's cover screen is near enough.
+    //
+    // `innerHeight` and the documentElement's `clientHeight` are two readings of the same layout
+    // viewport, taken through different paths, so one can be stale while the other is not. Taking
+    // the LARGER is the safe direction: too small is what the report looks like (a game in a strip
+    // with dead space under it), and too large is corrected on the very next line, where the page's
+    // own overflow is measured and given straight back.
+    const vh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0) || 720;
 
     // Pass 1: collapse ourselves and read where our top actually sits. With the game at zero the
     // page cannot be scrolled by our own overflow, which is what makes this viewport-relative
@@ -382,6 +401,27 @@ class GolfGame {
     // BEFORE the no-op early return below: the insets depend on where we ended up on the page, not
     // on whether our own height changed, and a rotation can move the chrome without resizing us.
     this._fitInsets();
+
+    // THE UNDERFILL GUARD, the backstop to the two yardsticks above. If BOTH readings are short -
+    // a layout that has not settled, an app-switcher animation still running - nothing here can
+    // tell, so instead of trying to detect the lie we simply ask again shortly. One burst per
+    // episode, spread over a second and a half rather than chained frame to frame (four frames are
+    // over in 64 ms, shorter than the animation this is trying to survive), re-armed only once the
+    // fill comes good. Measured fill at six viewport sizes is 95-96 %, so 88 % sits comfortably
+    // below anything legitimate - the gap is the bottom safe area.
+    const fill = (top + h) / Math.max(1, vh);
+    if (fill < 0.88) {
+      if (!this._underfill) {
+        this._underfill = 1;
+        const again = () => { if (!this.destroyed) this._fit(); };
+        requestAnimationFrame(again);
+        setTimeout(again, 250);
+        setTimeout(again, 750);
+        setTimeout(again, 1500);
+      }
+    } else {
+      this._underfill = 0;
+    }
 
     // Setting our own height resizes us, and the ResizeObserver watches for exactly that - so a
     // no-op must stay a no-op or the two chase each other for ever.
@@ -2804,6 +2844,7 @@ class GolfGame {
   _stopLoop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   destroy() {
+    if (this._onVis) { document.removeEventListener('visibilitychange', this._onVis); this._onVis = null; }
     this.destroyed = true;
     this._stopLoop();
     this._offAll();
