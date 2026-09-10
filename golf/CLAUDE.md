@@ -5570,3 +5570,54 @@ in the spec is a decision, not a starting point. When a later measurement disagr
 measurement goes in the doc and the decision goes to Matt - it does not quietly become the shipped
 number. This one survived a week of playtests because the test suite had been updated to assert the
 drifted value, so the thing that should have caught it was pinning it in place instead.
+
+
+## The over-swing shrinks the target (2026-09-10)
+
+Matt, on a 293 yd drive in a player's record and then on the meter itself: *"right now, it's
+incredibly easy to hit a max over swing driver perfectly aimed off the tee. the green section is
+huge."*
+
+It was. A driver from the tee is `0.545 x 1.00 x 0.62` = **0.338**, so counting both sides of the
+bar, **68 % of it was a perfect strike** - and it stayed exactly that wide whether the needle
+stopped at 100 % or at the top of the arc. The only thing over-swinging cost was `blockSpray`, which
+is random and lands after the fact. **The player's own input never got harder**, so holding for the
+top of the arc was free in skill terms and just paid 27 more yards.
+
+His fix: *"by over-swinging, the green aim section at the bottom of the power meter instantly got
+smaller and more difficult to hit accurately."* `bandsFor` takes an `over` factor now, and
+`overZone(power)` rides the curve `sprayDepth` already computes, so the band shrinks live as the
+needle climbs past 100 % and stops the instant the player plants it:
+
+| Power | Green band | Share of the bar |
+|---|---|---|
+| 100 % | 0.338 | 68 % (unchanged) |
+| 107.6 % (block edge) | 0.258 | 52 % |
+| 120.6 % (top of arc) | 0.122 | 24 % |
+
+**The other candidate was the tempo** - Matt: *"maybe the white line thing speeds up and goes down
+the meter faster?"* - and it was the wrong one twice over. A faster needle is a difficulty the player
+cannot read, against this file's own rule ("a smaller target is simply a smaller target, and the
+player can SEE it before committing"), and the tempo is something this repo has twice been told not
+to touch.
+
+**`OVER_ZONE_LOSS = 0.64` is Matt's number, picked by swinging it.** A bench copy of the real meter
+was published as an artifact - the game's own `bandsFor`, `payingPower`, `blockSpray`, `mishit` and
+tempo, with a slider on the shrink - so he could test it on his phone before anything shipped. Two
+things that bench got wrong are worth remembering, because both were about INPUT rather than the
+model: binding the swing to `click` (which arrives after touchend on a phone, so every tap read
+late) and reading `performance.now()` inside the handler instead of the event's own timestamp. The
+game does neither - see `evNow` and the touchstart binding in `ui.js`. He noticed immediately: *"It's
+delayed or something so i can't tell the feel."*
+
+**`OVER_MIN = 0.10`** stops a bad lie and a full over-swing together from shrinking the band under
+the needle's own width - a driver from the trees at the top of the arc would otherwise compute
+0.058, about 6 device px under a 6 px needle, which is the invisible-target bug `GREEN_FLOOR` exists
+to prevent, reached from the other direction.
+
+**One existing test had to be rewritten and it is worth knowing why.** Section 8c asserted that the
+over-swing multiplies the miss by exactly 2x at the top of the arc, comparing bar position 0.9 at
+both powers. With the band shrinking, 0.9 is an ORANGE stop at 100 % and a RED one at the top, so
+the assertion was comparing the multiplier AND two different qualities of strike. The multiplier
+never moved. It now measures halfway into the green band at each power, which is the same strike at
+any width.

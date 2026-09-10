@@ -212,7 +212,37 @@ export function barPosOf(pos) {
  *
  *  The bar is always full and the needle always sweeps at the same speed for a given club, so a
  *  smaller target is simply a smaller target, and the player can SEE it before committing. */
-export function bandsFor(zone = 1, clubZone = 1, floor = 0) {
+/** THE OVER-SWING SHRINKS THE TARGET, LIVE (2026-09-10).
+ *
+ *  Matt: *"right now, it's incredibly easy to hit a max over swing driver perfectly aimed off the
+ *  tee. the green section is huge."* It was: a driver from the tee is `0.545 x 1.00 x 0.62` =
+ *  **0.338**, so with both sides of the bar counted, **68 % of it was a perfect strike** - and it
+ *  stayed exactly that wide whether the needle stopped at 100 % or at the top of the arc. The only
+ *  thing over-swinging cost was `blockSpray`, which is random and lands after the fact. The
+ *  player's own input got no harder at all, so the top of the arc was free in skill terms.
+ *
+ *  His fix, and it is the right one: *"by over-swinging, the green aim section at the bottom of the
+ *  power meter instantly got smaller and more difficult to hit accurately."* It also matches this
+ *  file's own rule for how difficulty is expressed - "a smaller target is simply a smaller target,
+ *  and the player can SEE it before committing" - and it leaves the TEMPO alone, which was the
+ *  other candidate (*"maybe the white line thing speeds up"*) and which this repo has twice been
+ *  told not to touch.
+ *
+ *  `sprayDepth` already measures how deep into the over-swing a power is (0 at 100 %, 1 at
+ *  `SWING_MAX`), so the band rides the same curve as the spray. At the top of the arc a driver's
+ *  green band falls 0.338 -> 0.122: from two thirds of the bar to a quarter of it. `OVER_ZONE_LOSS`
+ *  is the number Matt picked by swinging it on his phone against a slider, on a bench copy of this
+ *  meter, before any of it shipped.
+ *
+ *  `OVER_MIN` keeps a target visible when a bad lie has ALREADY collapsed the band: a driver from
+ *  the trees at the top of the arc would otherwise compute 0.058, about 6 device px under a 6 px
+ *  needle, which is the invisible-target bug `GREEN_FLOOR` exists to prevent, arrived at from the
+ *  other direction. */
+export const OVER_ZONE_LOSS = 0.64;
+export const OVER_MIN = 0.10;
+export function overZone(power) { return 1 - OVER_ZONE_LOSS * sprayDepth(power); }
+
+export function bandsFor(zone = 1, clubZone = 1, floor = 0, over = 1) {
   // `clubZone` is the CLUB's own difficulty (clubs.js's `swingZone`): a driver's green band is
   // narrower than a lob wedge's from the very same lie. Matt: "Driver off the fairway shouldn't be
   // super easy to hit."
@@ -224,7 +254,11 @@ export function bandsFor(zone = 1, clubZone = 1, floor = 0) {
   // `floor` is the tier's own minimum (clubs.js's `GREEN_FLOOR`). On a clean lie the product is
   // already well above it and nothing changes; on rough, sand or trees the product collapses to
   // 8-12 % and the floor is what keeps a visible, hittable target under each tier.
-  const green = Math.max(floor, 0.545 * zone * clubZone);
+  const base = Math.max(floor, 0.545 * zone * clubZone);
+  // The floor is applied FIRST and the over-swing then eats into it: the floor answers "this LIE
+  // has collapsed the band", the shrink answers "you chose to swing past the top", and a choice is
+  // allowed to cost more than a lie hands you. `OVER_MIN` is the backstop under both.
+  const green = over < 1 ? Math.max(OVER_MIN, base * over) : base;
   const rest = 1 - green;
   const orangeShare = 0.30 + 0.10 * Math.min(1, Math.max(0, zone));
   return { green, orange: green + rest * orangeShare, red: 1 };
@@ -413,7 +447,10 @@ export function mishit(barPos, power, zone = 1, clubZone = 1, seed = 0, floor = 
   // THE SAME `floor` THE METER IS PAINTED WITH. `_drawMeter` and this function must be handed
   // identical arguments or the band a player aims at is not the band that scores the strike, which
   // is the drift this whole file is built to avoid.
-  const b = bandsFor(zone, clubZone, floor);
+  // The SAME over-swing shrink the meter is painted with - `_drawMeter` passes `overZone(power)`
+  // from the marker it is drawing, this reads it from the power that struck the ball, and the two
+  // must be the same number or the band a player aimed at is not the band that scored the strike.
+  const b = bandsFor(zone, clubZone, floor, overZone(power));
   let deg;
   let distanceMul = 1;
   if (off <= b.green) {

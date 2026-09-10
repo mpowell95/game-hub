@@ -18,7 +18,7 @@ import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, ro
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { SAVE_V, validateSave, resumePos, isComplete } from './save.js';
 import { CLUBS, PUTTER, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
-import { Swing, PHASE, bandsFor, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
+import { Swing, PHASE, bandsFor, overZone, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
@@ -2737,8 +2737,15 @@ class GolfGame {
       c.closePath(); c.stroke();
     };
     const bClub = opts.club || this._activeClub();
+    // THE BAND SHRINKS AS THE NEEDLE CLIMBS PAST 100 % (2026-09-10), which is why the power is read
+    // BEFORE the bands are computed rather than after. During the backswing `read.power` is the live
+    // marker, so the target visibly narrows while a player holds for more distance and stops
+    // narrowing the instant they plant it; through the downswing it is the locked value, which is
+    // the same number `mishit` scores the strike with. Null (before tap 2, and on the tutorial's
+    // fabricated still dial) means no over-swing yet and the band is drawn at full width.
+    const preRead = opts.read || this.swing.read(now);
     const b = bandsFor(lieOf(opts.lie || this._lie()).zone, swingZone(bClub),
-      GREEN_FLOOR[clubTier(bClub)] || 0);
+      GREEN_FLOOR[clubTier(bClub)] || 0, overZone(preRead && preRead.power ? preRead.power : 0));
     outline(7, '#0b0f07');
     outline(3.5, '#fffdfc');
     quad(0, (1 - b.orange) / 2, '#fd0001');
@@ -2752,7 +2759,7 @@ class GolfGame {
     // A radial line at `ang(v)`, black-edged so it reads on the band, the block or the bar alike.
     // The needle lands inside the bar when |pos| <= BAR_HALF and on the band otherwise, from the
     // same expression - the whole point of putting both on one scale.
-    const read = opts.read || this.swing.read(now);
+    const read = preRead;
     const needleAt = (v, wOuter, wInner, colour) => {
       const inBar = Math.abs(v) <= BAR_HALF;
       const [x0, y0] = inBar ? top(barPosOf(v)) : polar(IN_R - 1, ang(v));
