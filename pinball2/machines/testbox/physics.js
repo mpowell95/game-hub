@@ -303,6 +303,7 @@ export class World {
     this.jams = 0;                 // contacts budget exhausted: a diagnostic, never a silent fix
     this.escapes = 0;              // a ball that left the table. Always a bug, never routine
     this.rescues = 0;              // a ball found inside a static. Rare by design, counted, not hidden
+    this.broken = 0;               // a ball whose position stopped being a number
     this.time = 0;
   }
 
@@ -408,6 +409,15 @@ export class World {
           const drop = Math.min(sp, cfg.ROLL_DECEL * h);
           b.v = mul(b.v, (sp - drop) / sp);
         }
+      }
+
+      // A ball whose numbers stopped being numbers is removed and COUNTED. Letting it live spreads
+      // NaN into every contact it touches and, in the browser, into the canvas calls that draw it.
+      if (!Number.isFinite(b.p.x) || !Number.isFinite(b.p.y) || !Number.isFinite(b.v.x) || !Number.isFinite(b.v.y)) {
+        b.alive = false;
+        this.broken++;
+        this.events.push({ type: 'broken' });
+        continue;
       }
 
       this.checkDrain(b);

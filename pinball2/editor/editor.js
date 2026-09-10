@@ -35,12 +35,44 @@ const app = {
   slowmo: 1,
   running: true,
   lastT: 0,
+  errors: 0,
+  lastError: '',
+  repaired: 0,
 };
+
+/** Every number in a table must be finite. A single NaN freezes the app (see `frame`), and the
+ *  autosave writes it to the phone, so it survives a reload and a force quit: the only way out was
+ *  clearing site data. A part that fails this is dropped and counted, never loaded. */
+function tableIsFinite(t) {
+  const ok = (v) => {
+    if (typeof v === 'number') return Number.isFinite(v);
+    if (typeof v === 'string' || typeof v === 'boolean') return true;
+    // null is REJECTED, and that is the whole point of this line. JSON has no NaN, so a NaN that
+    // reaches the autosave comes back as null, and null in arithmetic is 0: the freeze turns into a
+    // rail silently teleported to the edge of the table on the next load. Neither is acceptable.
+    if (v === null || v === undefined) return false;
+    if (Array.isArray(v)) return v.every(ok);
+    if (typeof v === 'object') return Object.keys(v).every((k) => ok(v[k]));
+    return false;
+  };
+  return ok(t);
+}
+
+function repairTable(t) {
+  const good = t.shapes.filter((sh) => tableIsFinite(sh));
+  const dropped = t.shapes.length - good.length;
+  t.shapes = good;
+  if (!tableIsFinite({ w: t.w, h: t.h, launch: t.launch })) {
+    t.w = 0.515; t.h = 1.067; t.launch = { x: 0.452, y: 0.14 };
+  }
+  return dropped;
+}
 
 // ------------------------------------------------------------------ persistence
 
 function save() {
   try {
+    if (!tableIsFinite(app.table)) return;      // never write a table that would freeze the app
     localStorage.setItem(SAVE, JSON.stringify({ table: JSON.parse(toJSON(app.table)), cfg: app.cfg }));
   } catch (e) { /* a full or blocked store must never stop the tool working */ }
 }
@@ -50,8 +82,16 @@ function load() {
     const raw = localStorage.getItem(SAVE);
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (d.table) app.table = fromJSON(d.table);
-    if (d.cfg) app.cfg = cloneConfig(d.cfg);
+    if (d.table) {
+      const t = fromJSON(d.table);
+      app.repaired = repairTable(t);            // an already poisoned phone heals on this load
+      app.table = t;
+    }
+    if (d.cfg) {
+      const c = cloneConfig(d.cfg);
+      for (const k of Object.keys(c)) if (!Number.isFinite(c[k]) && typeof CONFIG[k] === 'number') c[k] = CONFIG[k];
+      app.cfg = c;
+    }
   } catch (e) { /* a corrupt autosave falls back to the shipped table rather than a blank screen */ }
 }
 
@@ -88,6 +128,7 @@ function afterEdit() {
 
 function resize() {
   const r = canvas.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return;      // mid layout, and a zero box makes a useless view
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.round(r.width * dpr);
   canvas.height = Math.round(r.height * dpr);
@@ -434,9 +475,12 @@ function el(html) {
 
 function numRow(label, value, step, onChange) {
   const r = el(`<div class="row"><label>${label}</label><input type="number" step="${step}" value="${value}"></div>`);
-  r.querySelector('input').addEventListener('change', (e) => {
+  const input = r.querySelector('input');
+  input.addEventListener('change', (e) => {
+    const v = parseFloat(e.target.value);
+    if (!Number.isFinite(v)) { e.target.value = value; return; }   // an empty box is not a number
     pushUndo();
-    onChange(parseFloat(e.target.value));
+    onChange(v);
     afterEdit();
   });
   return r;
@@ -503,7 +547,16 @@ function renderEditPanel() {
     i.onchange = () => {
       const f = i.files && i.files[0];
       if (!f) return;
-      f.text().then((t) => { pushUndo(); app.table = fromJSON(t); app.sel.clear(); resize(); afterEdit(); });
+      f.text().then((t) => {
+        pushUndo();
+        const nt = fromJSON(t);
+        const dropped = repairTable(nt);
+        if (dropped) alert(`${dropped} part(s) in that file had numbers that are not numbers, and were left out.`);
+        app.table = nt;
+        app.sel.clear();
+        resize();
+        afterEdit();
+      });
     };
     i.click();
   };
@@ -679,7 +732,26 @@ launchBtn.onclick = newBall;
 
 // ------------------------------------------------------------------ loop
 
+/** The loop is scheduled in a `finally`, so nothing that happens inside it can stop the app.
+ *
+ *  This is the bug Matt filmed. A NaN reached `createRadialGradient`, which THROWS rather than
+ *  drawing nothing, the exception came out of `frame()`, and `requestAnimationFrame` was never
+ *  called again. The page then sat on its last painted frame for ever: a ball resting in mid air at
+ *  0.00 m/s, touching nothing, with the buttons still working because they are event handlers. It
+ *  read as a physics bug and was not one. Whatever else is wrong, the app must keep running and say
+ *  what happened. */
 function frame(t) {
+  try {
+    frameBody(t);
+  } catch (e) {
+    app.errors++;
+    app.lastError = String((e && e.message) || e);
+  } finally {
+    requestAnimationFrame(frame);
+  }
+}
+
+function frameBody(t) {
   const dt = app.lastT ? Math.min(0.05, (t - app.lastT) / 1000) : 0;
   app.lastT = t;
   if (app.mode === 'play' && app.running && dt > 0) stepPlay(dt);
@@ -705,8 +777,8 @@ function frame(t) {
       + `${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
       + `${app.world && app.world.escapes ? '   LEFT THE TABLE ' + app.world.escapes : ''}`
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
-
-  requestAnimationFrame(frame);
+  if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
+  if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
 }
 
 function drawSelection() {
