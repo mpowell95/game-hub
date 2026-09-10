@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "game-audio": {
+      "source": "playableintelligence/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/game-audio/SKILL.md",
+      "computedHash": "6375c20972b4c59831ea21be26136851738f46f7902e1bcbba9e350806dd81b3"
+    },
+    "game-designer": {
+      "source": "playableintelligence/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/game-designer/SKILL.md",
+      "computedHash": "051d3e1e033f0beffeaef7a82af944d23102ef82fc6606aca4064f1100be95b7"
+    },
+    "game-qa": {
+      "source": "playableintelligence/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/game-qa/SKILL.md",
+      "computedHash": "afcc914a5e307f4058917097c65d7cb1bde160a5b27b76cda9cd07594f758045"
+    },
+    "make-game": {
+      "source": "opusgamelabs/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/make-game/SKILL.md",
+      "computedHash": "6b006785ee25a4fd09b53e006bbcc0003772e39dc461afc5ed8a106c0863c123"
+    },
+    "phaser": {
+      "source": "playableintelligence/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/phaser/SKILL.md",
+      "computedHash": "2e8bd40c41fc4b367678e86f02b0eb4ba7aaa1770ad42cfe30b7ce74c4913364"
+    },
+    "threejs-game": {
+      "source": "playableintelligence/game-creator",
+      "sourceType": "github",
+      "skillPath": "skills/threejs-game/SKILL.md",
+      "computedHash": "b0e412bbc67447342750ee7765cb9585e86c883ce16475645a1a99f9101ebb9f"
+    }
+  }
+}
