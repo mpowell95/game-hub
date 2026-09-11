@@ -283,6 +283,41 @@ differ it turns red and reads `v777 -> v778`; tapping it updates the worker and 
 already installed on a phone is still the old one until it updates, so the tool says so out loud
 rather than leaving it to be guessed from how the ball behaves.
 
+## The build chip told the truth and the table was still hours old
+
+Matt, 2026-09-11, a screenshot of the tool on his phone: the chip reading **v782**, the current
+build, and on the canvas the original bare box - no bumpers, no slingshots, no ramp. *"Is this what
+it's supposed to look like?"*
+
+The chip reads the SERVICE WORKER's cache version against `version.json`. It was right. What it
+cannot see is which copy of each MODULE the page ended up with, and there are three separate places
+an old one can come from: the browser's own HTTP cache, the service worker's cache, and the
+slow-connection latch, which serves a cached copy even on a network-first path once the link has
+proved slower than `NET_TIMEOUT_MS`. `DEV_FRESH` took this tool off the cache-first list; it did not
+and could not make those three impossible.
+
+**A URL with the build in it is a different URL, and no cache belonging to an older build can answer
+one.** `pinball2/editor/index.html` fetches `version.json` with `cache: 'no-store'`, installs an
+**import map** stamping `?v=<build>` onto every module in the graph, and only then appends the
+module script (itself versioned, because an import map remaps specifiers resolved inside modules and
+never the `src` of a script tag).
+
+**It has to be the import map and not `import('...?v=')` inside `editor.js`.** That would version
+only the five modules `editor.js` names. `render.js` imports `physics.js`; `checks.js` imports
+`physics.js` and `config.js`. Those relative specifiers would resolve unversioned and could still
+come back stale - a MIXED build, which is worse than the original bug, because the renderer and the
+solver would then disagree about the geometry they share. An import map keyed on the resolved URLs
+catches the transitive edges, which is the whole graph.
+
+Offline the fetch fails, no map is installed, and the tool loads from cache exactly as before. A
+hung request cannot leave a blank screen either: a 4 s timer starts the unversioned load.
+
+`test-editor.mjs`'s last case asserts on the NETWORK LOG, not on the source - all six modules
+fetched with the deployed build in the URL. Born red against the plain `<script type="module">`.
+
+**And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
+flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
+
 ## The editor's touch was offset, and the cause is worth knowing
 
 Matt: *"the editor can't tell what I'm selecting, it's like it thinks I'm selecting something an
