@@ -27,6 +27,9 @@
   header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); flex: none; }
   header h1 { font-size: 13px; margin: 0 6px 0 0; font-weight: 700; letter-spacing: .04em; color: var(--dim); white-space: nowrap; }
   .tabs { display: flex; gap: 4px; margin-left: auto; }
+  #build { min-height: 26px; padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px;
+           border: 1px solid var(--line); background: #101a2e; color: var(--dim); }
+  #build.stale { background: #5c2b36; border-color: #8a3d4d; color: #ffd7d7; }
   .tab { min-height: 34px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: #101a2e; color: var(--dim); font-size: 13px; font-weight: 600; }
   .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #21180a; }
   #stage { position: relative; flex: 1; min-height: 0; }
@@ -65,6 +68,7 @@
 <div id="app">
   <header>
     <h1>PINBALL 2</h1>
+    <button id="build" title="which build is running">...</button>
     <div class="tabs">
       <button class="tab" id="tab-play" aria-pressed="true">Play</button>
       <button class="tab" id="tab-edit" aria-pressed="false">Edit</button>

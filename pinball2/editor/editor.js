@@ -817,6 +817,60 @@ function drawSelection() {
   ctx.restore();
 }
 
+// ------------------------------------------------------------------ which build is this?
+//
+// Matt, 2026-09-11: "It's perfect when I open it within the Claude app. But when I open it in the
+// chrome app it's the old one with the holes." The Claude app has no service worker; Chrome had one
+// and served this tool's code from its cache. sw.js now keeps pinball2 network-first, but a worker
+// ALREADY INSTALLED on a phone is the old one until it updates, so the tool says out loud which
+// build it is running rather than leaving "is this fixed yet" to be guessed from how it plays.
+
+async function showBuild() {
+  const el = document.getElementById('build');
+  if (!el) return;
+  let deployed = null;
+  try {
+    const r = await fetch('../../version.json', { cache: 'no-store' });
+    deployed = (await r.json()).cache;
+  } catch (e) { /* offline: nothing to compare against, so say nothing */ }
+
+  let running = null;
+  const sw = navigator.serviceWorker;
+  if (sw && sw.controller) {
+    running = await new Promise((resolve) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (ev) => resolve(ev.data && ev.data.version);
+      setTimeout(() => resolve(null), 1500);
+      try { sw.controller.postMessage({ type: 'GET_VERSION' }, [ch.port2]); } catch (e) { resolve(null); }
+    });
+  }
+
+  if (!deployed) { el.textContent = 'offline'; return; }
+  const short = (v) => String(v).replace('game-hub-', '');
+  if (!running || running === deployed) {
+    el.textContent = short(deployed);
+    el.classList.remove('stale');
+    el.onclick = () => location.reload();
+    return;
+  }
+  el.textContent = `${short(running)} \u2192 ${short(deployed)}`;
+  el.classList.add('stale');
+  el.title = 'This device is running an older build. Tap to update and reload.';
+  el.onclick = async () => {
+    el.textContent = 'updating';
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    } catch (e) { /* fall through to the reload, which is the useful half anyway */ }
+    setTimeout(() => location.reload(true), 1200);
+  };
+}
+
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.getRegistration().then((reg) => { if (reg) reg.update(); }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => showBuild());
+}
+
 // ------------------------------------------------------------------ go
 
 load();
@@ -824,5 +878,6 @@ resize();
 newBall();
 setMode('play');
 requestAnimationFrame(frame);
+showBuild();
 
 window.__pb2 = app;   // the browser probes drive the real tool through this, never a copy of it

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v777';
+const CACHE = 'game-hub-v778';
 
 const ASSETS = [
   './',
@@ -646,8 +646,8 @@ const REST_MANIFEST = {
   './pinball/design/layout.js': 'd1860f5854',
   './pinball/design/editor.html': '5cb2244282',
   './pinball2/index.html': '6d09047aef',
-  './pinball2/editor/index.html': '04181e033c',
-  './pinball2/editor/editor.js': 'ca75081ee4',
+  './pinball2/editor/index.html': '7ca6ca7832',
+  './pinball2/editor/editor.js': 'a8c2438be9',
   './pinball2/machines/testbox/config.js': '2e29fae2b9',
   './pinball2/machines/testbox/physics.js': 'f17f00767a',
   './pinball2/machines/testbox/table.js': '305e19f252',
@@ -1058,8 +1058,20 @@ const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 // offline and past the deadline; it is now briefly true online too. The warm finishes in seconds
 // and the next open is the new build. Two point two megabytes per open, on a phone, was the worse
 // bargain.
+//
+// pinball2 IS THE EXCEPTION, and it is excluded by path. Matt, 2026-09-11: "It's perfect when I open
+// it within the Claude app. But when I open it in the chrome app it's the old one with the holes."
+// The Claude app has no service worker registered, so it fetched the new build; Chrome had one, and
+// cache-first handed it the previous build's physics from cache. The bargain above is the right one
+// for a RELEASED game, where the code changes rarely and the saving is 2.2 MB per open. It is the
+// wrong one for a tool that is being changed several times an hour and judged by how it plays: a
+// stale build there is not a slower open, it is the wrong answer to "is this fixed yet". It goes
+// back to network-first, which still falls back to the cache offline and past the deadline.
+const DEV_FRESH = /^\.\/pinball2\//;
 const CACHE_FIRST_PATHS = new Set(
-  [...REST, ...SHELL_CACHE_FIRST].map((p) => new URL(p, self.location.href).pathname));
+  [...REST, ...SHELL_CACHE_FIRST]
+    .filter((p) => !DEV_FRESH.test(p))
+    .map((p) => new URL(p, self.location.href).pathname));
 
 // How long a code/markup request waits on the network before the cached copy is served instead.
 // Long enough that a merely-average connection still wins the race (and the player keeps getting
