@@ -10,8 +10,13 @@ existing machines: *"none of them are even remotely playable... maybe it's bette
 from scratch."* `pinball/` is untouched by anything in here. Whether it is ever replaced is a
 decision for after this one is judged.
 
+**`pinball2/HANDOFF.md` is the complete reference** - every file, every field of the data model,
+every constant, every editor control, every check, and the landmines in one list. Read it before
+changing anything here. THIS file is the incident log beside it: what went wrong, and why each fix
+is shaped the way it is.
+
 The plan this is built against, including the interview it came from and the acceptance numbers, is
-`docs/PINBALL2-PLAN.md`. Read it first.
+`docs/PINBALL2-PLAN.md`.
 
 ## Where it is
 
@@ -63,6 +68,7 @@ the old engine (`pinball/CLAUDE.md`, "The ramps were unreachable").
 | `editor/index.html`, `editor/editor.js` | the tool: Play, Edit, Tune, Check |
 | `probes/checks.js` | the three checks, written ONCE and run from both the editor and node |
 | `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|flip\|power\|escape\|gaps\|rests\|all]`, about 2 min for all |
+| `HANDOFF.md` | the complete reference for a session that has never seen this tool |
 | `probes/test-editor.mjs` | does the TOOL work. Touch accuracy after a tab switch, and the NaN freeze. Needs `node server.mjs`; SKIPs without Chromium |
 
 **One engine file per machine, forked, never shared.** A second machine copies
