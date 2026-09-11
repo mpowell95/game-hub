@@ -4,7 +4,7 @@
 
 import { makeTable } from '../machines/testbox/table.js';
 import { CONFIG } from '../machines/testbox/config.js';
-import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe, flipPower } from './checks.js';
+import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe, flipPower, rampProbe } from './checks.js';
 
 const which = process.argv[2] || 'all';
 const table = makeTable();
@@ -50,6 +50,19 @@ if (which === 'power' || which === 'all') {
   for (const r of rows) byU[r.u] = Math.min(byU[r.u] == null ? Infinity : byU[r.u], r.travel);
   console.log('   ' + Object.keys(byU).map((u) => `u=${u}: ${(byU[u] * 1000).toFixed(0)}mm`).join('   '));
   if (weak.length) bad++;
+}
+
+if (which === 'ramp' || which === 'all') {
+  const r = rampProbe(table, cfg);
+  console.log(`ramps           ${r.runs.length} shots at the mouth, ${r.fails.length} problem(s)   ${r.fails.length ? 'FAIL' : 'OK'}`);
+  for (const f of r.fails.slice(0, 8)) console.log(`   ${f.ramp}${f.speed ? ' at ' + f.speed + ' m/s' : ''}: ${f.why}`);
+  const back = r.runs.filter((x) => x.exitEnd === 'near').map((x) => x.speed);
+  const round = r.runs.filter((x) => x.exitEnd === 'far').map((x) => x.speed);
+  const never = r.runs.filter((x) => !x.got).map((x) => x.speed);
+  console.log(`   too slow to get on: ${never.join(', ') || 'none'} m/s`);
+  console.log(`   climbs and rolls back out: ${back.join(', ') || 'none'} m/s`);
+  console.log(`   makes it all the way round: ${round.join(', ') || 'none'} m/s`);
+  if (r.fails.length) bad++;
 }
 
 if (which === 'escape' || which === 'all') {

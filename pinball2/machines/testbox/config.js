@@ -47,6 +47,13 @@ export const CONFIG = {
   SLING_TRIP: 0.25,
   SLING_COOL: 0.06,
 
+  // ramps (ribbons). A ramp is a lane with a height, and a ball on one is simulated ALONG it and
+  // ACROSS it rather than in playfield x/y, so entering one is a change of coordinates and not a
+  // move. There is no code that can put a ball somewhere it did not travel to.
+  RAMP_ENTER: 0.9,         // m/s along the lane needed at the mouth to get on at all
+  RAMP_DRAG: 0.25,         // m/s per second lost to the lane, which is rougher than the playfield
+  RAMP_WALL_E: 0.30,       // bounce off the lane's side walls
+
   // solver
   DT: 1 / 240,
   MAX_EVENTS: 64,          // contacts resolved in one tick before the ball is declared jammed
@@ -76,6 +83,8 @@ export const TUNABLES = [
   { key: 'BUMPER_TRIP', label: 'Bumper trip', unit: 'm/s', min: 0, max: 1, step: 0.05 },
   { key: 'SLING_KICK', label: 'Slingshot kick', unit: 'm/s', min: 0, max: 6, step: 0.1 },
   { key: 'SLING_TRIP', label: 'Slingshot trip', unit: 'm/s', min: 0, max: 1, step: 0.05 },
+  { key: 'RAMP_ENTER', label: 'Ramp entry speed', unit: 'm/s', min: 0.1, max: 4, step: 0.05 },
+  { key: 'RAMP_DRAG', label: 'Ramp drag', unit: 'm/s2', min: 0, max: 1.5, step: 0.05 },
 ];
 
 /** Playfield gravity. A tilted plane pulls at g sin(tilt), about a ninth of a free fall at 6.5

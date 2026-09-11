@@ -5,11 +5,15 @@
 // They report PLACES, not percentages. Four soaks passed a table that was unplayable in thirty
 // seconds, because a soak samples where it happens to go. These do not sample.
 
-import { World } from '../machines/testbox/physics.js';
+import { World, ribbonGeom, ribbonAt, ribbonWorld } from '../machines/testbox/physics.js';
 import { gravity } from '../machines/testbox/config.js';
 
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
 const len = (a) => Math.hypot(a.x, a.y);
+
+/** On the floor and in the way. A drain is a sensor and a ribbon is a ramp overhead, so neither is
+ *  something a ball rolling along the playfield can hit. */
+const isSolid = (o) => o.kind !== 'drain' && o.kind !== 'ribbon';
 
 /** Distance from a point to a shape's solid surface. Negative means inside it. */
 export function distToShape(sh, p) {
@@ -43,6 +47,9 @@ export function distToShape(sh, p) {
     const on = { x: sh.pivot.x + d.x * u, y: sh.pivot.y + d.y * u };
     return len(sub(p, on)) - (sh.r0 + (sh.r1 - sh.r0) * u);
   }
+  // A ribbon is a RAMP: it is above the playfield and has no footprint on it at all. A ball on the
+  // floor passes underneath. It is not "unknown", it is deliberately nowhere near everything.
+  if (sh.kind === 'ribbon') return Infinity;
   if (sh.kind === 'drain') {
     const dx = Math.max(sh.x - p.x, 0, p.x - (sh.x + sh.w));
     const dy = Math.max(sh.y - p.y, 0, p.y - (sh.y + sh.h));
@@ -94,7 +101,7 @@ export function playable(table, cfg, step) {
   const s = step || 0.003;
   const nx = Math.ceil(table.w / s);
   const ny = Math.ceil(table.h / s);
-  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const solid = table.shapes.filter(isSolid);
   const drains = table.shapes.filter((s2) => s2.kind === 'drain');
   const free = new Uint8Array(nx * ny);
   const sink = new Uint8Array(nx * ny);
@@ -174,7 +181,7 @@ export function playable(table, cfg, step) {
 export function flipProbe(table, cfg, opts) {
   const step = (opts && opts.step) || 0.004;
   const flippers = table.shapes.filter((s2) => s2.kind === 'flipper');
-  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const solid = table.shapes.filter(isSolid);
   const fails = [];
   let shots = 0;
   for (const f of flippers) {
@@ -218,7 +225,7 @@ export function escapeProbe(table, cfg, opts) {
   const step = (opts && opts.step) || 0.02;
   const angles = (opts && opts.angles) || 12;
   const speeds = (opts && opts.speeds) || [4, cfg.MAX_SPEED];
-  const solid = table.shapes.filter((s2) => s2.kind !== 'drain');
+  const solid = table.shapes.filter(isSolid);
   const play = (opts && opts.play) || playable(table, cfg);
   const fails = [];
   let shots = 0;
@@ -292,6 +299,98 @@ export function flipPower(table, cfg, opts) {
   return out;
 }
 
+/** THE RAMP PROBE. A ramp is the one place the old game lost balls, so this asks the hard questions.
+ *
+ *  Structural, on the geometry itself:
+ *    - both ends are at z = 0, because a ball leaving a mouth in mid air has nowhere honest to land
+ *    - NO SEGMENT IS LEVEL. A run flat in height and square to the table has no force along it, so
+ *      a ball that stops there stops for ever. The first ramp built here had a flat top and the
+ *      rest sweep parked three balls on it.
+ *
+ *  Then it fires a ball at the mouth across the whole speed range and checks, for every shot:
+ *    - the ball still exists at the end. Never vanished
+ *    - its world position never JUMPS. Getting on and off a ramp is a change of coordinates, and
+ *      this is the assertion that says so: no step may move the ball further than it travelled
+ *    - a shot too slow to climb rolls back out of the mouth it came in
+ *    - a shot with enough speed reaches the far end and comes out there
+ *    - it is never still on the ramp when the clock runs out */
+export function rampProbe(table, cfg, opts) {
+  const tilt = (cfg.TILT_DEG * Math.PI) / 180;
+  const g = gravity(cfg);
+  const fails = [];
+  const runs = [];
+  for (const sh of table.shapes.filter((s2) => s2.kind === 'ribbon')) {
+    const geom = ribbonGeom(sh);
+    const first = sh.pts[0];
+    const last = sh.pts[sh.pts.length - 1];
+    if ((first.z || 0) > 1e-6) fails.push({ ramp: sh.id, why: `starts at z = ${first.z}, not 0` });
+    if ((last.z || 0) > 1e-6) fails.push({ ramp: sh.id, why: `ends at z = ${last.z}, not 0` });
+    // A CREST IS ALLOWED; A PLATEAU IS NOT. Along-lane force is the table's own slope resolved
+    // along the lane minus the cost of the climb, and at the top of a ramp those balance - which is
+    // just a hilltop, and a ball balanced on a hilltop is a knife edge, not a trap. What cannot be
+    // allowed is a RUN of it: a stretch where nothing moves a ball that stops, which is where three
+    // balls parked in the first version. So the run length is what gets measured.
+    let flat = 0;
+    let worstFlat = 0;
+    for (const sg of geom.segs) {
+      const as = g * sg.dir.y - cfg.G * Math.cos(tilt) * sg.slope;
+      flat = Math.abs(as) < 0.05 ? flat + sg.L : 0;
+      if (flat > worstFlat) worstFlat = flat;
+    }
+    if (worstFlat > 0.040) {
+      fails.push({ ramp: sh.id, why: `${(worstFlat * 1000).toFixed(0)}mm of lane where nothing moves a ball that stops on it (40mm allowed, a crest is a point)` });
+    }
+    // No kinks. A junction turns the lane's sideways axis, so a sharp one MOVES a ball riding off
+    // the centre line, by q times the turn, in a single step. A real wireform cannot kink.
+    for (let i = 1; i < geom.segs.length; i++) {
+      const a = geom.segs[i - 1].dir;
+      const b = geom.segs[i].dir;
+      const turn = Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y))) * 180 / Math.PI;
+      if (turn > 20) fails.push({ ramp: sh.id, why: `a ${turn.toFixed(0)} degree kink at s = ${geom.segs[i].s0.toFixed(3)}, over the 20 degree limit` });
+    }
+
+    // Fire at the mouth, from just outside it, straight up the lane.
+    const at = ribbonAt(geom, 0);
+    const speeds = (opts && opts.speeds) || [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0];
+    for (const sp of speeds) {
+      const from = { x: at.x - at.dir.x * 0.05, y: at.y - at.dir.y * 0.05 };
+      const w = new World(table, cfg);
+      const b = w.addBall(from, { x: at.dir.x * sp, y: at.dir.y * sp });
+      let got = false;
+      let maxJump = 0;
+      let prev = { x: b.p.x, y: b.p.y };
+      let exitEnd = null;
+      for (let k = 0; k < 1800 && b.alive; k++) {
+        const wasOn = !!b.ribbon;
+        // The speed BEFORE the tick matters as much as the speed after it. A ball can leave a ramp
+        // at 3.86 m/s, travel the 15mm that entitles it to, and hit something before the tick ends:
+        // measured against its END speed of 1.89 that reads as a 3.2mm teleport, and it is not one.
+        // What it may never do is cover more ground than its fastest speed during the tick allows.
+        const vBefore = Math.hypot(b.v.x, b.v.y);
+        w.step(cfg.DT);
+        if (b.ribbon) got = true;
+        if (wasOn && !b.ribbon) exitEnd = b.s <= 0 ? 'near' : 'far';
+        const moved = Math.hypot(b.p.x - prev.x, b.p.y - prev.y);
+        const could = Math.max(vBefore, Math.hypot(b.v.x, b.v.y)) * cfg.DT + 0.004;
+        if (moved - could > maxJump) maxJump = moved - could;
+        prev = { x: b.p.x, y: b.p.y };
+      }
+      const ridingSpeed = b.ribbon ? Math.abs(b.vs) : 0;
+      runs.push({ ramp: sh.id, speed: sp, got, exitEnd, maxJump, stillOn: !!b.ribbon, riding: ridingSpeed, alive: b.alive, escapes: w.escapes, broken: w.broken });
+      if (maxJump > 0.001) fails.push({ ramp: sh.id, speed: sp, why: `position jumped ${(maxJump * 1000).toFixed(1)}mm further than it travelled` });
+      if (w.escapes) fails.push({ ramp: sh.id, speed: sp, why: 'left the machine' });
+      if (w.broken) fails.push({ ramp: sh.id, speed: sp, why: 'its numbers stopped being numbers' });
+      // Still ON the ramp is fine if it is still MOVING: a ball can shuttle up and back down one
+      // for a while, and that is a ramp doing its job. Still on it and stopped is a trap.
+      if (b.ribbon && ridingSpeed < 0.05) fails.push({ ramp: sh.id, speed: sp, why: `parked on the ramp at s = ${b.s.toFixed(3)}` });
+    }
+    const onRamp = runs.filter((r) => r.ramp === sh.id && r.got);
+    if (!onRamp.some((r) => r.exitEnd === 'far')) fails.push({ ramp: sh.id, why: 'no shot at any speed made it all the way round' });
+    if (!onRamp.some((r) => r.exitEnd === 'near')) fails.push({ ramp: sh.id, why: 'no shot was weak enough to roll back out of the mouth' });
+  }
+  return { runs, fails };
+}
+
 /** Ambiguous gaps: a space near one ball wide is where a ball wedges. A gap must be clearly shut
  *  or clearly open. Overlaps are reported separately and are often deliberate (a rail meeting a
  *  flipper pivot is how you SHUT a gap), so they are a note, not a failure. */
@@ -299,7 +398,7 @@ export function checkGaps(table, cfg) {
   const d = cfg.BALL_R * 2;
   const lo = d * 0.75;
   const hi = d * 1.15;
-  const solid = table.shapes.filter((s) => s.kind !== 'drain');
+  const solid = table.shapes.filter(isSolid);
   const flags = [];
   for (let i = 0; i < solid.length; i++) {
     for (let j = i + 1; j < solid.length; j++) {
@@ -366,7 +465,7 @@ export function tunnelProbe(table, cfg, opts) {
   const play = (opts && opts.play) || playable(table, cfg);
   const fails = [];
   let shots = 0;
-  const solid = table.shapes.filter((s) => s.kind !== 'drain');
+  const solid = table.shapes.filter(isSolid);
   for (const sh of solid) {
     for (const p of surfacePoints(sh, 6)) {
       for (let i = 0; i < angles; i++) {
@@ -411,7 +510,7 @@ export function restSweep(table, cfg, opts) {
       const p = { x, y };
       if (!play.at(p)) continue;
       let legal = true;
-      for (const o of table.shapes) if (o.kind !== 'drain' && distToShape(o, p) < cfg.BALL_R + 2e-4) { legal = false; break; }
+      for (const o of table.shapes) if (isSolid(o) && distToShape(o, p) < cfg.BALL_R + 2e-4) { legal = false; break; }
       if (!legal) continue;
       drops++;
       const w = new World(table, cfg);
@@ -426,7 +525,7 @@ export function restSweep(table, cfg, opts) {
         const speed = Math.hypot(b.v.x, b.v.y);
         let on = null;
         for (const o of table.shapes) {
-          if (o.kind !== 'drain' && distToShape(o, b.p) < cfg.BALL_R + 0.002) on = o.id;
+          if (isSolid(o) && distToShape(o, b.p) < cfg.BALL_R + 0.002) on = o.id;
         }
         const rec = { from: p, at: { x: b.p.x, y: b.p.y }, speed, on };
         if (speed < 0.05) stuck.push(rec); else alive.push(rec);

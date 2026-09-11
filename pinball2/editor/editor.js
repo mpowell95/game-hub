@@ -181,12 +181,29 @@ function setFlipper(side, on) {
 
 /** Tolerance is a FINGER, so it is measured in screen pixels and converted, not fixed in metres.
  *  At the default fit a millimetre is under a pixel, so the old 12 mm reach was 8 px. */
+/** How far a point is from a ramp's centre line. `distToShape` deliberately answers Infinity for a
+ *  ribbon, because a ramp is above the playfield and nothing rolling along the floor can hit it.
+ *  Tapping one in the editor is a different question, so it gets its own answer here. */
+function distToRibbon(sh, p) {
+  let best = Infinity;
+  for (let i = 0; i + 1 < sh.pts.length; i++) {
+    const a = sh.pts[i];
+    const b = sh.pts[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const L2 = dx * dx + dy * dy;
+    const u = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2));
+    best = Math.min(best, Math.hypot(p.x - (a.x + dx * u), p.y - (a.y + dy * u)) - sh.w / 2);
+  }
+  return best;
+}
+
 function shapeAt(p) {
   const reach = 22 / (app.view.s * app.view.zoom);
   let best = null;
   let bestD = Infinity;
   for (const sh of app.table.shapes) {
-    const d = distToShape(sh, p);
+    const d = sh.kind === 'ribbon' ? distToRibbon(sh, p) : distToShape(sh, p);
     const pick = sh.kind === 'drain' ? (d <= 0.002 ? 0.002 : Infinity) : d;
     if (pick < reach && pick < bestD) { bestD = pick; best = sh; }
   }
@@ -210,6 +227,9 @@ function handlesFor(sh) {
   } else if (sh.kind === 'flipper') {
     out.push({ key: 'pivot', at: sh.pivot });
     out.push({ key: 'tip', at: { x: sh.pivot.x + sh.len * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * Math.sin(sh.restAng) } });
+  } else if (sh.kind === 'ribbon') {
+    out.push({ key: 'm0', at: sh.pts[0] });
+    out.push({ key: 'm1', at: sh.pts[sh.pts.length - 1] });
   } else if (sh.kind === 'drain') {
     out.push({ key: 'tl', at: { x: sh.x, y: sh.y } });
     out.push({ key: 'br', at: { x: sh.x + sh.w, y: sh.y + sh.h } });
@@ -227,6 +247,7 @@ function moveShape(sh, dx, dy) {
   if (sh.kind === 'seg' || sh.kind === 'sling') { sh.a.x += dx; sh.a.y += dy; sh.b.x += dx; sh.b.y += dy; }
   else if (sh.kind === 'arc' || sh.kind === 'circle' || sh.kind === 'bumper') { sh.c.x += dx; sh.c.y += dy; }
   else if (sh.kind === 'flipper') { sh.pivot.x += dx; sh.pivot.y += dy; }
+  else if (sh.kind === 'ribbon') { for (const q of sh.pts) { q.x += dx; q.y += dy; } }
   else if (sh.kind === 'drain') { sh.x += dx; sh.y += dy; }
 }
 
@@ -314,6 +335,11 @@ canvas.addEventListener('pointermove', (e) => {
         sh.restAng = a;
         sh.endAng = a + swing;
       }
+    } else if (sh.kind === 'ribbon') {
+      const anchor = drag.key === 'm0' ? sh.pts[0] : sh.pts[sh.pts.length - 1];
+      const dx2 = q.x - anchor.x;
+      const dy2 = q.y - anchor.y;
+      for (const pt of sh.pts) { pt.x += dx2; pt.y += dy2; }
     } else if (sh.kind === 'drain') {
       if (drag.key === 'tl') { sh.w += sh.x - q.x; sh.h += sh.y - q.y; sh.x = q.x; sh.y = q.y; }
       else { sh.w = Math.max(0.01, q.x - sh.x); sh.h = Math.max(0.01, q.y - sh.y); }
@@ -381,6 +407,7 @@ function centreOf(sh) {
   if (sh.kind === 'seg' || sh.kind === 'sling') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
   if (sh.kind === 'arc' || sh.kind === 'circle' || sh.kind === 'bumper') return sh.c;
   if (sh.kind === 'flipper') return sh.pivot;
+  if (sh.kind === 'ribbon') return sh.pts[Math.floor(sh.pts.length / 2)];
   return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
 }
 
@@ -604,6 +631,14 @@ function renderEditPanel() {
     panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
     panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
     panel.append(numRow('Kick (m/s)', sh.kick != null ? sh.kick : app.cfg.SLING_KICK, 0.1, (v) => { sh.kick = v; }));
+  } else if (sh.kind === 'ribbon') {
+    const zmax = Math.max(...sh.pts.map((q) => q.z || 0));
+    panel.append(numRow('Lane width', mm(sh.w), 1, (v) => { sh.w = v / 1000; }));
+    panel.append(numRow('Height', mm(zmax), 1, (v) => {
+      const k = zmax > 1e-6 ? (v / 1000) / zmax : 0;
+      for (const q of sh.pts) q.z = (q.z || 0) * k;
+    }));
+    panel.append(el(`<div class="note">${sh.pts.length} points, ${(sh.w * 1000).toFixed(0)}mm wide, rising to ${(zmax * 1000).toFixed(0)}mm. Drag either end dot to move the whole ramp. Both ends must stay at zero height, and the Check panel will tell you if they do not.</div>`));
   } else if (sh.kind === 'seg') {
     panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
     panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));

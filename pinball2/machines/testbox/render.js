@@ -167,6 +167,29 @@ export function draw(ctx, table, v, state) {
     ctx.fillStyle = hot ? '#fff' : '#0e2038'; ctx.fill();
   }
 
+  // RAMPS. Height is drawn as a LIFT up the screen plus a shadow left on the playfield, which is
+  // how a raised lane reads on a top-down table. The shadow is the part that sells it.
+  const LIFT = 0.55;                       // screen metres of lift per metre of height
+  for (const sh of table.shapes) {
+    if (sh.kind !== 'ribbon') continue;
+    const lift = (p, z) => toScreen(v, { x: p.x, y: p.y - (z || 0) * LIFT });
+    const wpx = sh.w * S(v);
+    const line = (fn, width, style) => {
+      ctx.beginPath();
+      sh.pts.forEach((p, i) => { const q = fn(p); if (i === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); });
+      ctx.strokeStyle = style; ctx.lineWidth = width; ctx.lineJoin = 'round'; ctx.stroke();
+    };
+    line((p) => toScreen(v, p), wpx * 0.9, 'rgba(0,0,0,0.35)');                 // the shadow, on the deck
+    line((p) => lift(p, p.z), wpx + 6, 'rgba(10,16,28,0.9)');                   // the lane's own edge
+    line((p) => lift(p, p.z), wpx, '#2b4a72');                                  // the lane floor
+    line((p) => lift(p, p.z), Math.max(1, wpx * 0.12), 'rgba(180,220,255,0.35)');
+    for (const end of [sh.pts[0], sh.pts[sh.pts.length - 1]]) {
+      const q = lift(end, end.z);
+      ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(3, wpx * 0.22), 0, Math.PI * 2);
+      ctx.fillStyle = '#7fd8ff'; ctx.fill();
+    }
+  }
+
   const angles = st.flipperAngles || {};
   for (const sh of table.shapes) {
     if (sh.kind !== 'flipper') continue;
@@ -201,11 +224,15 @@ export function draw(ctx, table, v, state) {
   for (const b of st.balls || []) {
     if (!b.alive) continue;
     if (!Number.isFinite(b.p.x) || !Number.isFinite(b.p.y)) continue;   // createRadialGradient THROWS on these
-    const c = toScreen(v, b.p);
+    const z = b.z || 0;
+    const c = toScreen(v, { x: b.p.x, y: b.p.y - z * 0.55 });
+    const ground = toScreen(v, b.p);
     const r = st.ballR * S(v);
+    // On a ramp the shadow stays on the playfield and the ball lifts away from it. That gap IS the
+    // height: without it a raised ball just looks like a ball somewhere else.
     ctx.beginPath();
-    ctx.arc(c.x + r * 0.25, c.y + r * 0.45, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.ellipse(ground.x + r * 0.25, ground.y + r * 0.45, r * (1 - z * 2), r * 0.75 * (1 - z * 2), 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,0,0,${0.45 - z * 3})`;
     ctx.fill();
     const g = ctx.createRadialGradient(c.x - r * 0.35, c.y - r * 0.4, r * 0.1, c.x, c.y, r);
     g.addColorStop(0, '#ffffff');
