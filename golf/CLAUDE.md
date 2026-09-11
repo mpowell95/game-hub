@@ -41,7 +41,16 @@ Where things actually stand:
 2. **Oasis Sands hole 4** is a par 5 of 451 yards, reachable in two, and plays 0.75 under par. It is
    a NAMED GAP in `test.js` section 15c, printed on every run. Fix the hole before that course opens.
 3. **Golf's HUD top row overlaps on phones 360 px wide and narrower.** Untouched.
-4. **Club upgrade tiers are designed but NOT built and NOT in the spec.** `clubs.js` carries an
+4. **Three playtest asks from 2026-09-11, written up in full in `HANDOFF-GOLF-WATER-AND-SAND.md`
+   at the repo root**: a ball that lands in water must go IN it and be out of sight until the camera
+   reaches the drop (today `resolveShot` overwrites `rest` with the drop spot, so the ball visibly
+   slides there and never enters the water); the player picks between dropping before the water and
+   playing from the previous spot, same penalty either way (new UI, and it reverses `shot.js`'s own
+   "it needs no UI"); and a ball on the EDGE of a bunker should be able to run out, because both
+   bunker lies carry `roll: 0.00` and sit in `groundPoint`'s `noHop` list, so sand stops a ball dead
+   100 % of the time however it arrives. Matt: *"having it stop in the sand 100% of the time doesn't
+   feel realistic."*
+5. **Club upgrade tiers are designed but NOT built and NOT in the spec.** `clubs.js` carries an
    `upgraded` carry per club and `golf-reference-spec.md` §21.3 names four tiers (stock, pro, tour,
    champion) while deliberately leaving the middle two unspecified. Matt's constraint, from working
    through it: upgrades must not turn every par 5 into an eagle look, and today's play is nearer the
