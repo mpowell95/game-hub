@@ -82,6 +82,26 @@ export function solveBoard(grid, trieRoot) {
 // of boards and leaves the rest of the authentic distribution alone.
 export const BOARD_QUALITY = { minWords: 60, minShortWords: 35, minVowels: 4, maxAttempts: 12 };
 
+// Spanish gets its OWN thresholds, measured the same way (tune-boggle-es.mjs),
+// because the two languages do not put the same words on a board. Two real
+// differences, neither of them a flaw in the dice: Spanish words are longer on
+// average, and this dictionary deliberately carries no conjugated verb forms
+// (build-boggle-es.mjs), which is exactly where a language's short words live
+// -- "come", "vive", "canta" are all conjugations. So a Spanish board finds
+// noticeably fewer SHORT words than an English one at the same quality, and
+// reusing English's minShortWords: 35 here would reject good boards over and
+// over until maxAttempts gave up and shipped whatever it had -- a gate that
+// fires on everything is the same as no gate at all, only slower. These are
+// the measured 25th percentile of the Spanish distribution, the same rule that
+// set the English numbers.
+export const BOARD_QUALITY_ES = { minWords: 60, minShortWords: 50, minVowels: 4, maxAttempts: 12 };
+
+/** The quality gate for a language id ('en' | 'es'). Unknown falls back to
+ *  English, matching game.js's `diceFor`. */
+export function qualityFor(lang) {
+  return lang === 'es' ? BOARD_QUALITY_ES : BOARD_QUALITY;
+}
+
 const VOWEL_FACES = new Set(['A', 'E', 'I', 'O', 'U', 'QU']);
 
 function countVowels(tiles) {
@@ -92,12 +112,14 @@ function countVowels(tiles) {
  *  Returns `{ board, solved, attempts }`. Never loops forever and never fails:
  *  after `maxAttempts` it returns the best board seen (most findable words),
  *  so a freak run of bad shakes still yields the best of them rather than
- *  hanging or throwing. */
-export function shakePlayableBoard(trieRoot, rng = Math.random, quality = BOARD_QUALITY) {
+ *  hanging or throwing. `dieFaces` is the language's parsed dice table
+ *  (`diceFor(lang)` in game.js); left undefined it shakes the English set. */
+export function shakePlayableBoard(trieRoot, rng = Math.random, quality = BOARD_QUALITY,
+  dieFaces = undefined) {
   const q = { ...BOARD_QUALITY, ...quality };
   let best = null;
   for (let attempt = 1; attempt <= q.maxAttempts; attempt++) {
-    const board = newBoard(rng);
+    const board = newBoard(rng, dieFaces);
     const solved = solveBoard(board.grid, trieRoot);
     const shortWords = solved.reduce((n, e) => n + (e.word.length <= 5 ? 1 : 0), 0);
     if (!best || solved.length > best.solved.length) best = { board, solved, attempts: attempt };
@@ -109,4 +131,4 @@ export function shakePlayableBoard(trieRoot, rng = Math.random, quality = BOARD_
   return best;
 }
 
-export default { solveBoard, shakePlayableBoard, BOARD_QUALITY };
+export default { solveBoard, shakePlayableBoard, BOARD_QUALITY, BOARD_QUALITY_ES, qualityFor };

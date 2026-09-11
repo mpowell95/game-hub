@@ -4,10 +4,13 @@
 // English for anything missing). Difficulty ids (beginner/intermediate/pro) are storage
 // vocabulary and stay canonical — only display labels translate.
 //
-// UI chrome translates; gameplay (ENABLE word list, classic English dice) stays English on
-// purpose — see boggle/CLAUDE.md and js/CLAUDE.md "Language support". The es invalid-word
-// feedback and the help sheet both say so explicitly, since that is the fix for Ana's
-// 2026-07-23 report of "words" showing up that the dictionary rejected.
+// UI chrome and GAMEPLAY are two separate choices (2026-09-11). The hub language sets this
+// file; the setup screen's Dictionary row sets which word list and dice a round is played
+// with (English ENABLE + the classic dice, or Spanish + DICE_ES) — see boggle/CLAUDE.md.
+// So `feedback_invalid` takes a {lang} parameter and NAMES the dictionary the round is
+// actually being scored against: it used to hardcode "las palabras válidas son en inglés",
+// which was the 2026-07-23 fix for Ana's report of words the dictionary rejected with no
+// explanation, and would now be a lie on a Spanish board. Keep it naming the real one.
 
 export const STRINGS = {
   en: {
@@ -19,6 +22,9 @@ export const STRINGS = {
     computer: 'Computer',
     row_timer: 'Timer',
     row_difficulty: 'Difficulty',
+    row_wordlang: 'Dictionary',
+    wordlang_en: 'English',
+    wordlang_es: 'Spanish',
     timer_1: '1 min',
     timer_1_5: '1 min 30 s',
     timer_2: '2 min',
@@ -41,7 +47,7 @@ export const STRINGS = {
     give_up: 'Give up',
     feedback_valid: (p) => `${p.word}: ${p.n} point${p.n === 1 ? '' : 's'}`,
     feedback_duplicate: 'Already found {word}',
-    feedback_invalid: '"{word}" is not in the dictionary',
+    feedback_invalid: '"{word}" is not in the {lang} dictionary',
     tie_game: 'Tie game!',
     you_win: 'You win!',
     opp_wins: '{opp} wins',
@@ -111,6 +117,9 @@ export const STRINGS = {
     computer: 'Ordenador',
     row_timer: 'Tiempo',
     row_difficulty: 'Dificultad',
+    row_wordlang: 'Diccionario',
+    wordlang_en: 'Inglés',
+    wordlang_es: 'Español',
     timer_1: '1 min',
     timer_1_5: '1 min 30 s',
     timer_2: '2 min',
@@ -133,7 +142,7 @@ export const STRINGS = {
     give_up: 'Rendirse',
     feedback_valid: (p) => `${p.word}: ${p.n} punto${p.n === 1 ? '' : 's'}`,
     feedback_duplicate: 'Ya encontraste {word}',
-    feedback_invalid: '"{word}" no está en el diccionario (las palabras válidas son en inglés)',
+    feedback_invalid: '"{word}" no está en el diccionario ({lang})',
     tie_game: '¡Empate!',
     you_win: '¡Ganaste!',
     opp_wins: '{opp} gana',

@@ -238,10 +238,20 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
 - **Live-switch policy**: language changes apply to newly rendered UI. Games read `t()` at
   render time and MAY subscribe via `onLangChange` for live re-labeling (Snake does); they are
   not required to.
-- **Known content caveat**: Boggle's UI translates (as of 2026-07-23), but its gameplay
-  dictionary and dice stay English — a real Spanish Boggle needs a Spanish word list and letter
-  distribution (separate, larger task, deferred). The Spanish invalid-word feedback and the
-  how-to-play sheet both say the dictionary is English, so this stays discoverable in-game.
+- **Boggle has TWO language choices, and they are deliberately separate** (2026-09-11; this bullet
+  used to record the opposite as a "known content caveat" — the "separate, larger task" it deferred
+  was done). The hub's language sets Boggle's chrome like every other game; its setup screen's
+  **Dictionary** row sets which WORD LIST AND DICE the round is played on (English ENABLE + the
+  authentic 1987 dice, or a generated Spanish list + `DICE_ES`). The hub language supplies the
+  DEFAULT only, and only until this player has chosen once — a stored `wordLang` always wins, so
+  switching the hub to English never moves somebody off the Spanish board they were playing.
+  **Do not "simplify" this into one setting**: a Spanish-speaking player may reasonably want an
+  English board to play someone who does not read Spanish, and the reverse is just as reasonable.
+  The Spanish invalid-word feedback still names the dictionary in play, but it is now
+  PARAMETERISED by the round's language rather than hardcoded to English — hardcoding was the
+  right 2026-07-23 fix for Ana's report and would now be a lie on a Spanish board. Full write-up,
+  including why the word list is generated rather than found and what is deliberately left out of
+  it: `boggle/CLAUDE.md`, "Spanish gameplay".
   Parchís keeps its own in-game language setting (`parchis_r2_prefs.lang`), which
   wins over the hub preference on that page; wiring it to read `gamehub.lang.v1` as its default
   goes through the sibling `../Parchís/` source rebuild, deferred with the big extraction.

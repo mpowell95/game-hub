@@ -9,7 +9,7 @@ Hub integration: in-hub `module:`.
 
 ## Notes
 
-Timed word search vs AI on a 4x4 grid shaken from the real 16 classic Boggle dice (`boggle/js/game.js`'s `DICE`, shuffled into position then one random face each; random-letter boards are frequently unplayable, so this repo does not generate one). **The solver is the AI, not a separate opponent**: one exhaustive DFS against the dictionary trie (`boggle/js/solver.js`) produces the scoring word list, the end-of-round reveal, AND the opponent all from a single algorithm — `boggle/js/ai.js` has no search of its own, it just samples a difficulty-scaled slice of the solver's own output (beginner ~20% biased toward short words, intermediate ~45% unbiased, pro ~70% biased toward long/high-scoring words), so every AI word is provably a genuine board find, never invented. Dictionary is the public-domain **ENABLE** word list, ~170k words (`boggle/data/words.txt` + `boggle/data/CREDITS.md`) — **the first game in this repo to ship a large non-image data asset**; like any code file it must be in `sw.js`'s `ASSETS` precache list or the game silently breaks offline, and any future word game following this pattern should precache its own word list the same way. Fetched once, lazily, on first game start, and parsed into a trie of nested `Map`s (deliberately not a `Set` of every prefix, which would duplicate ~170k strings many times over) cached in module scope so hub navigation never re-fetches or rebuilds it (`boggle/js/dict.js`). The `Qu` tile is a single tile worth two letters and must advance the trie by both in one board step — the classic Boggle solver bug is getting this wrong, and `boggle/js/test.js` asserts it directly (a board with the Qu tile must find "QUIT" and must never produce a malformed "QIT"). A round is a shared-board timed sprint (2/3/5 minute settings, not turn-based): both sides score independently against the same board with no duplicate cancellation (real Boggle cancels words both sides found; against a solver-backed opponent that would gut the human's score every round), higher total wins, and ties are real. **Input is swipe-to-trace** (drag through the letters without lifting, release to submit, slide back over the previous tile to undo a letter): tapping each letter then pressing a submit button was too slow to be worth playing against a clock (Matt, 2026-07-22). Tap-to-select is kept alongside it, not as a dead fallback but as the path that keeps the board usable by keyboard and screen reader, since every tile is still a real `<button>`. Three things make the swipe work and are easy to break: the board sets `touch-action: none` (without it a drag scrolls the page instead of spelling), tracing hit-tests against tile rects **cached at gesture start** rather than `elementFromPoint` (so backtracking still works over tiles that are `disabled` for being illegal next steps), and a drag patches the board in place via `_updateBoardVisuals()` instead of re-rendering (an `innerHTML` rebuild mid-drag destroys the element under the finger and breaks pointer capture). The synthetic `click` a browser fires after a tap is ignored by **timestamp**, never by a boolean flag: ending a trace can re-render the board, leaving that click aimed at a detached node the delegated handler never sees, which would strand a flag `true` and silently swallow the next keyboard activation. The tracing rules themselves live in `game.js`'s pure `pathAction()` so they unit-test with no DOM. **Boards are quality-gated** (`solver.js`'s `shakePlayableBoard`/`BOARD_QUALITY`, the same regenerate-rather-than-ship-a-bad-one idea as `nuts-bolts/js/generator.js`): the authentic dice are kept, but a shake is rejected and re-rolled if it falls under 60 findable words, 35 short words, or 4 vowels. Measured over 3000 real shakes, the rare letters are NOT over-represented (J/X/Q/Z/K each sit on exactly one face of one die, so ~60% of authentic boards carry one and that is correct) — the actual problem was vowel-starved boards with nothing findable, ~9% of shakes. Gating clears in 1.39 shakes on average (~0.8ms, a solve is ~0.6ms) and drops boards under 40 words from 7.4% to 0%. Settings in `gamehub.boggle.v1`. Results via `recordBoggle(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `bg` breakdown (`{played,won,lost,tied,words,bestScore,longestWord}`) — `tied` is explicit (a round can genuinely tie), `words` is the human's cumulative found-word count (additive), `bestScore` is `Math.max` only, and `longestWord` (`{word,len}`) is replaced only when strictly longer, never by a shorter word even on a winning round. `isInProgress()` is the autosave/resume meaning (Escoba/Mancala's) since the 2026-07-23 resume batch below: leaving mid-round is lossless, so it always returns `false`.
+Timed word search vs AI on a 4x4 grid shaken from the real 16 classic Boggle dice (`boggle/js/game.js`'s `DICE`, shuffled into position then one random face each; random-letter boards are frequently unplayable, so this repo does not generate one). **The solver is the AI, not a separate opponent**: one exhaustive DFS against the dictionary trie (`boggle/js/solver.js`) produces the scoring word list, the end-of-round reveal, AND the opponent all from a single algorithm — `boggle/js/ai.js` has no search of its own, it just samples a difficulty-scaled slice of the solver's own output (beginner ~20% biased toward short words, intermediate ~45% unbiased, pro ~70% biased toward long/high-scoring words), so every AI word is provably a genuine board find, never invented. Dictionary is the public-domain **ENABLE** word list, ~170k words (`boggle/data/words.txt` + `boggle/data/CREDITS.md`) — joined 2026-09-11 by a generated **Spanish** list of the same shape and size (`words-es.txt`, 159,778 words; see "Spanish gameplay" below, and note the dice are per-language too) — **the first game in this repo to ship a large non-image data asset**; like any code file it must be in `sw.js`'s `ASSETS` precache list or the game silently breaks offline, and any future word game following this pattern should precache its own word list the same way. Fetched once, lazily, on first game start, and parsed into a trie of nested `Map`s (deliberately not a `Set` of every prefix, which would duplicate ~170k strings many times over) cached in module scope so hub navigation never re-fetches or rebuilds it (`boggle/js/dict.js`). The `Qu` tile is a single tile worth two letters and must advance the trie by both in one board step — the classic Boggle solver bug is getting this wrong, and `boggle/js/test.js` asserts it directly (a board with the Qu tile must find "QUIT" and must never produce a malformed "QIT"). A round is a shared-board timed sprint (2/3/5 minute settings, not turn-based): both sides score independently against the same board with no duplicate cancellation (real Boggle cancels words both sides found; against a solver-backed opponent that would gut the human's score every round), higher total wins, and ties are real. **Input is swipe-to-trace** (drag through the letters without lifting, release to submit, slide back over the previous tile to undo a letter): tapping each letter then pressing a submit button was too slow to be worth playing against a clock (Matt, 2026-07-22). Tap-to-select is kept alongside it, not as a dead fallback but as the path that keeps the board usable by keyboard and screen reader, since every tile is still a real `<button>`. Three things make the swipe work and are easy to break: the board sets `touch-action: none` (without it a drag scrolls the page instead of spelling), tracing hit-tests against tile rects **cached at gesture start** rather than `elementFromPoint` (so backtracking still works over tiles that are `disabled` for being illegal next steps), and a drag patches the board in place via `_updateBoardVisuals()` instead of re-rendering (an `innerHTML` rebuild mid-drag destroys the element under the finger and breaks pointer capture). The synthetic `click` a browser fires after a tap is ignored by **timestamp**, never by a boolean flag: ending a trace can re-render the board, leaving that click aimed at a detached node the delegated handler never sees, which would strand a flag `true` and silently swallow the next keyboard activation. The tracing rules themselves live in `game.js`'s pure `pathAction()` so they unit-test with no DOM. **Boards are quality-gated** (`solver.js`'s `shakePlayableBoard`/`BOARD_QUALITY`, the same regenerate-rather-than-ship-a-bad-one idea as `nuts-bolts/js/generator.js`): the authentic dice are kept, but a shake is rejected and re-rolled if it falls under 60 findable words, 35 short words, or 4 vowels. Measured over 3000 real shakes, the rare letters are NOT over-represented (J/X/Q/Z/K each sit on exactly one face of one die, so ~60% of authentic boards carry one and that is correct) — the actual problem was vowel-starved boards with nothing findable, ~9% of shakes. Gating clears in 1.39 shakes on average (~0.8ms, a solve is ~0.6ms) and drops boards under 40 words from 7.4% to 0%. Settings in `gamehub.boggle.v1`. Results via `recordBoggle(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `bg` breakdown (`{played,won,lost,tied,words,bestScore,longestWord}`) — `tied` is explicit (a round can genuinely tie), `words` is the human's cumulative found-word count (additive), `bestScore` is `Math.max` only, and `longestWord` (`{word,len}`) is replaced only when strictly longer, never by a shorter word even on a winning round. `isInProgress()` is the autosave/resume meaning (Escoba/Mancala's) since the 2026-07-23 resume batch below: leaving mid-round is lossless, so it always returns `false`.
 
 ## Autosave/resume (2026-07-23, batch 9 of the feedback arc)
 
@@ -216,7 +216,116 @@ an old match already underway when this shipped can't throw. The `toggle-solve` 
 previously hardcoded to solo's `openEndOverlay()`, now re-opens whichever overlay is live
 (`this._mpRevealResults`, stashed by `_mpOpenReveal` for exactly this re-render).
 
-## i18n (2026-07-23) — UI translates, gameplay stays English
+## Spanish gameplay (2026-09-11) — the dictionary is now a SETTING
+
+Matt: *"Can we make boggle available in Spanish?"* The section below this one records the
+2026-07-23 decision that gameplay stays English — **that decision is superseded.** The UI half of
+it still stands and is still the fix for Ana's report; what changed is that a round can now be
+PLAYED in Spanish, with its own word list and its own dice.
+
+**UI language and GAMEPLAY language are two separate choices, and conflating them would be a worse
+answer to both.** The hub's language (`js/i18n.js`) sets the chrome; the setup screen's new
+**Dictionary / Diccionario** row sets which word list and dice the round runs on. The hub language
+supplies only the DEFAULT, and only until this player has chosen once — a stored `wordLang` always
+wins, so switching the hub to English never moves somebody off the Spanish board they have been
+playing. A Spanish-speaking player may reasonably want an English board (to play someone who does
+not read Spanish), and the reverse is just as reasonable.
+
+- **The word list is GENERATED, not found.** English ships ENABLE, already a flat public-domain
+  list of exactly the forms a word game wants. Spanish has no equivalent. `build-boggle-es.mjs`
+  (repo root) fetches **RLA-ES** — the LibreOffice/OpenOffice es_ES spelling dictionary, 57k
+  hunspell lemmas plus an affix rule file — and expands the subset Boggle plays with. Licence is
+  the reason this source and not another: RLA-ES is tri-licensed GPL-3+/LGPL-3+/**MPL 1.1+**, and
+  we ship under the MPL, whose notice lives in `boggle/data/CREDITS.md`. Re-run the generator to
+  pick up a newer RLA-ES release, then `validate-sw-assets.mjs`, then commit both files.
+- **What is in it, which is MATT'S SCOPE CALL and not a shortcut taken quietly.** Verbs carry the
+  **infinitive, gerund and participle only** — no conjugated forms at all. Expanding hunspell's four
+  verb paradigms (2,183 rules) would roughly triple the list with forms nobody traces on a 4x4
+  board, and every one of them is a word the solver must search and the reveal screen must list.
+  Participles DO inflect, because they are adjectives (hablado/hablada/hablados/habladas,
+  roto/rota/rotos/rotas). Nouns and adjectives carry their plural (hunspell flag `S`) and both
+  genders (flag `G`). Proper nouns are excluded, matching ENABLE. `test-boggle-es.mjs` asserts both
+  edges: the everyday words are present AND `HABLO`/`HABLASTE`/`COMEREMOS` are absent, so a future
+  change that quietly widens the scope fails loudly rather than tripling the download.
+- **No accents, and N stands in for Ñ** (also Matt's call). Every word is folded to A-Z on the way
+  in: `canción` → `CANCION`, `mañana` → `MANANA`. That keeps the alphabet at 26 letters, which
+  means the dice, the trie, the solver, the `Qu` tile and the scoring are all **identical** to
+  English's — the Spanish support adds a data file and a dice table, not a second engine. The
+  accepted cost: a few thousand distinct Spanish spellings collapse onto the same board word. The
+  fold MERGES words, it never invents them.
+- **Result: 159,778 words, 1.61 MB** — near-identical to ENABLE's 170,398 / 1.70 MB, so the phone
+  cost of the second list is the same as the first's. Trie build measured at **~75-95ms** in a real
+  browser, the same as English's ~76ms.
+
+### The Spanish dice (`DICE_ES`), derived and then measured
+
+There is no authentic Spanish Boggle distribution this repo can cite the way the English 1987 set
+is cited, so `DICE_ES` was **derived** — 96 faces allocated by letter frequency in the generated
+word list, weighted toward the 3-6 letter words that carry a round, dealt so every die gets its
+share of vowels — and then **measured**, because a derived distribution is a guess until it is.
+`tune-boggle-es.mjs` is that measurement and the tool to re-run after any change to the dice, the
+gate or the generator. It reports English in the same run on purpose: the Spanish numbers mean
+nothing on their own, only beside the set already known to play well.
+
+Measured over 2000 real shakes each, AFTER the playability gate (which is what a player actually
+gets — the gate re-shakes a bad board, so the raw distribution never reaches a screen):
+
+| | words p10 | p25 | median | p90 | under 40 words | shakes needed | cost |
+|---|---|---|---|---|---|---|---|
+| English (authentic dice) | 68 | 81 | 104 | 171 | 0.0% | 1.40 | 0.54ms |
+| Spanish (`DICE_ES`) | 69 | 84 | 111 | 195 | 0.0% | 1.31 | 0.64ms |
+
+Three Spanish facts are baked into the set. **The `Qu` tile carries over unchanged** (Q never
+appears without U in Spanish, so the English tile is already correct). **K and W get no face at
+all** — they occur in essentially nothing but loanwords, and a K face would be a dead tile wherever
+it landed. **Ñ gets no face**, per the folding above.
+
+**Spanish has its own quality gate, `BOARD_QUALITY_ES`, and the difference is real rather than
+cosmetic.** Spanish words are longer on average, and this dictionary deliberately carries no
+conjugations — which is exactly where a language's SHORT words live ("come", "vive", "canta" are
+all conjugated). So a Spanish board finds fewer short words at the same quality: measured p25 is
+53 against English's 57-60. Reusing English's `minShortWords: 35`… would have been fine, but the
+threshold is set from the Spanish distribution's own 25th percentile (the same rule that set the
+English numbers), because a gate calibrated on the wrong distribution either fires on everything —
+which is the same as no gate, only slower, since `maxAttempts` then ships whatever it had — or on
+nothing.
+
+### What had to thread through the app
+
+- **`dict.js` caches PER LANGUAGE.** It used to hold ONE module-scope promise; with two lists that
+  hands whichever language loaded first to every round afterwards, so a Spanish board would be
+  solved and scored against ENABLE with nothing on screen to say so. `test-boggle-es.mjs` carries
+  a `[KNOWN-BUG PROBE]` for exactly this. `dictLang()` maps any unrecognised value onto English —
+  a round that cannot start is worse than a round in the wrong language.
+- **The autosave carries the round's OWN language** (`gamehub.boggle.save.v1` gained a `wordLang`
+  field, additively). Resuming has to rebuild the same board against the same dictionary it was
+  scored against, or every word already found reads as invalid. **A save written before this
+  shipped has no `wordLang` and is read as English** rather than failing validation (THE LAW rule
+  3). Same for the settings key and the MP snapshot: new field, nothing renamed, nothing
+  repurposed (rule 5).
+- **In MP the HOST's dictionary decides the match.** It travels in the room config beside
+  `timerMinutes`, for the same reason the timer does: the guest must score against the identical
+  word list, or each side's words look invalid on the other's reveal card and the two scores are
+  not comparable at all. The guest plays the host's language whatever its own setup row says, and
+  both lobbies show which dictionary is in play *before* the round starts rather than at the first
+  rejected word. A room record written before this shipped carries no `wordLang` and reads as
+  English everywhere.
+- **The invalid-word feedback NAMES the dictionary the round is on.** It used to hardcode *"las
+  palabras válidas son en inglés"* — which was the right fix in 2026-07-23 and would now be a lie
+  on a Spanish board. It takes a `{lang}` parameter. Keep it naming the real one.
+- **Stats are ONE bucket, deliberately not split by language.** A Spanish win is a Boggle win.
+  Splitting would mean a new sub-counter, a `players-agg.js` branch and a My Stats renderer
+  (checklist item 7) for no benefit anyone asked for, and a `bestScore` that silently stopped
+  counting the other language's history would be a rule 1 failure.
+
+**Verified in a real browser, not just headless**: hub set to Spanish, setup row reads
+*Diccionario / Español*, the Spanish list loads (159,778 words), a board shakes in one attempt with
+110 words findable, a real pointer trace of `EROSIONADO` (a participle — the form Matt asked for)
+scores 11 points, and an invalid trace reports *"MSA" no está en el diccionario (Español)*. English
+is unchanged end to end: default row reads English, ENABLE loads, a full round plays out to the AI
+result card.
+
+## i18n (2026-07-23) — UI translates, gameplay stays English (gameplay half SUPERSEDED 2026-09-11)
 
 Ana reported two things the same afternoon: garbled board tiles ("sometimes instead of one
 letter you have several or even a word") and an all-English screen despite her hub language
@@ -232,9 +341,10 @@ trace to one root cause, fixed together:
   tile aria-label. `ui.js` builds `const t = makeT(STRINGS)` and calls it at RENDER time, same
   pattern as every other bilingual game (reference: `snake/`). No `onLangChange` subscription:
   Boggle re-renders constantly on its own, so the next render is enough.
-- **Gameplay stays English on purpose** — the ENABLE word list and the classic English dice are
-  untouched; a real Spanish Boggle (Spanish word list + dice distribution) is a separate, larger
-  project, Matt's call. The Spanish UI says so explicitly where it matters: the invalid-word
+- **Gameplay stayed English on purpose** — until 2026-09-11, when the "separate, larger project"
+  named here was actually done; see the section above. The rest of this bullet is kept as written
+  because it is the record of why the exclusion existed, and the invalid-word feedback it describes
+  is still live, just parameterised by the round's language instead of hardcoded to English. The Spanish UI says so explicitly where it matters: the invalid-word
   feedback names the dictionary language (`"{word}" no está en el diccionario (las palabras
   válidas son en inglés)` — this is the fix for a likely silent third symptom, a Spanish-minded
   player tracing Spanish words the ENABLE dictionary was always going to reject with no

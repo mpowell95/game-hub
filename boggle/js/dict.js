@@ -19,9 +19,32 @@
 
 const TERMINAL = Symbol('terminal');
 
-const WORDS_URL = new URL('../data/words.txt', import.meta.url).href;
+// One word list per gameplay language. English is ENABLE; Spanish is
+// GENERATED from RLA-ES by build-boggle-es.mjs (boggle/data/CREDITS.md has the
+// provenance and the licence of each). Both are the same on-the-wire format --
+// uppercase A-Z, one word per line -- so everything below this map is
+// language-blind: the trie, the solver, the scoring and the validator never
+// learn which list they are holding.
+const WORDS_URLS = {
+  en: new URL('../data/words.txt', import.meta.url).href,
+  es: new URL('../data/words-es.txt', import.meta.url).href,
+};
 
-let dictPromise = null;
+export const DICT_LANGS = Object.keys(WORDS_URLS);
+
+/** The gameplay language for any input, English for anything unrecognised.
+ *  A bad stored value must never be able to stop a round from starting. */
+export function dictLang(lang) {
+  return Object.prototype.hasOwnProperty.call(WORDS_URLS, lang) ? lang : 'en';
+}
+
+// Cached PER LANGUAGE, not globally. A single module-scope promise would hand
+// the Spanish board the English trie for the rest of the session the moment
+// anyone played English first. Both entries can legitimately be live at once
+// (a player switches language between rounds), and neither is ever evicted:
+// re-fetching and re-parsing 1.6 MB on every switch is the exact cost this
+// cache exists to avoid.
+const dictPromises = new Map();
 
 function now() {
   return (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -74,23 +97,28 @@ async function fetchWords(url) {
   return text.split('\n').map((w) => w.trim()).filter(Boolean);
 }
 
-/** Lazily fetch and parse the dictionary into a trie, once, caching the
- *  in-flight/resolved promise in module scope -- hub navigation away from and
- *  back into Boggle must never re-fetch the ~1.6MB word list or rebuild the
- *  trie. Returns `{ root, wordCount, buildMs }`; `buildMs` is the trie
+/** Lazily fetch and parse one language's dictionary into a trie, once,
+ *  caching the in-flight/resolved promise per language in module scope -- hub
+ *  navigation away from and back into Boggle must never re-fetch the ~1.6MB
+ *  word list or rebuild the trie.
+ *  Returns `{ root, wordCount, buildMs, lang }`; `buildMs` is the trie
  *  construction time alone (excludes the fetch), for the perf checkpoint in
  *  the build handoff. */
-export function loadDictionary(url = WORDS_URL) {
-  if (!dictPromise) {
-    dictPromise = (async () => {
-      const words = await fetchWords(url);
+export function loadDictionary(lang = 'en', url = undefined) {
+  const key = dictLang(lang);
+  const src = url || WORDS_URLS[key];
+  if (!dictPromises.has(key)) {
+    dictPromises.set(key, (async () => {
+      const words = await fetchWords(src);
       const t0 = now();
       const root = buildTrieFromWords(words);
       const buildMs = now() - t0;
-      return { root, wordCount: words.length, buildMs };
-    })().catch((err) => { dictPromise = null; throw err; });
+      return { root, wordCount: words.length, buildMs, lang: key };
+    })().catch((err) => { dictPromises.delete(key); throw err; }));
   }
-  return dictPromise;
+  return dictPromises.get(key);
 }
 
-export default { step, isWord, buildTrieFromWords, isValidWord, loadDictionary };
+export default {
+  step, isWord, buildTrieFromWords, isValidWord, loadDictionary, dictLang, DICT_LANGS,
+};
