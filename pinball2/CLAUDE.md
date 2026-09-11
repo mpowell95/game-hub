@@ -346,10 +346,20 @@ has a real SHOOTER LANE between w2 and w6, and a ball dropped at the top of a la
 drain has precisely one place to go. **A feature that is correct for every table you have tested
 against is not a feature that is correct.**
 
-A table may now carry `launchV`, a velocity. Absent means the old drop, so nothing existing changes;
-BOARDWALK fires up its lane at 3.2 m/s, which clears the top corner and rides arc a5 into play.
-Measured: every speed from 2.0 m/s up does the same, so the number sits inside a band rather than on
-its edge. A real plunger with a pull-back meter is still its own object, still on the list.
+A table may now carry `launchV`, a velocity. Absent means the old drop, so nothing existing changes.
+
+**And then I shipped the wrong number and Matt had to tell me again:** *"you clearly didn't test it.
+Now the ball goes up the right side, then along the top wall, and then down the left wall and off
+the board. Just shoots straight out."* He was right. 3.2 m/s crests the top corner with so much
+speed left that the ball skims the entire top rail, hugs the left rail and drains in one second
+having touched no bumper, no slingshot and neither flipper.
+
+**The test I wrote could not have caught it, and that is the real lesson.** It asked "did the ball
+reach the playfield" - and the ball did reach the playfield, at 0.32 s, on its way past everything.
+A launch is not a position, it is an OUTCOME: `test-checks.mjs` now fails a launch that touches
+fewer than two things that can hit back, or that drains inside four seconds. Measured properly, the
+band is 1.55 to 1.95 m/s, choppy inside itself, and 1.65 gives 13.3 seconds across all four bumpers,
+a slingshot and both flippers. Everything at or above 2.0 is the highway to the left drain.
 
 **And the near miss worth keeping.** The first version had `fromJSON` write `launchV: null` for a
 table without one. `tableIsFinite` REJECTS null on purpose - JSON has no NaN, so a NaN comes back as

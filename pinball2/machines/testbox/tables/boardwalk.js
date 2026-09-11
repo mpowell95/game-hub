@@ -19,18 +19,27 @@ const TABLE = {
   "name": "BOARDWALK",
   "w": 0.515,
   "h": 1.067,
-  // The plunger. BOARDWALK has a real shooter lane down the right side, between w2 and w6, and a
-  // ball dropped into it with no push rolls straight back down and drains without ever reaching the
-  // playfield. So the ball starts at the BOTTOM of the lane and is fired up it: 3.2 m/s clears the
-  // top corner and rides arc a5 into play, measured, with every speed from 2.0 m/s up doing the
-  // same, so this is comfortably inside the band rather than balanced on its edge.
+  // The plunger, and the number is MEASURED THROUGH THE REAL ENGINE, not guessed. BOARDWALK has a
+  // shooter lane down the right side and a ball dropped into it just rolls back down and drains.
+  //
+  // The band is NARROW and the first attempt sat miles outside it. At 3.2 m/s the ball crests the
+  // top corner with so much speed left that it skims the whole top rail, hugs the left rail and
+  // drains in one second having touched no bumper, no slingshot and neither flipper - Matt's words,
+  // "just shoots straight out". Every speed at or above 2.0 m/s does that. Below about 1.5 it never
+  // leaves the lane at all.
+  //
+  // 1.65 m/s, measured: 13.3 seconds in play, all four bumpers, a slingshot and both flippers.
+  // The band is 1.55 to 1.95 and it is CHOPPY inside that (1.75 is a dud, 1.85 is 10 seconds),
+  // because a pinball is chaotic and a millimetre at the top corner is a different table by the
+  // bumpers. Re-measure after ANY change to the lane, arc a5 or the top rail: this number belongs
+  // to that geometry and nothing else.
   "launch": {
     "x": 0.4795,
     "y": 0.97
   },
   "launchV": {
     "x": 0,
-    "y": -3.2
+    "y": -1.65
   },
   "shapes": [
     {
