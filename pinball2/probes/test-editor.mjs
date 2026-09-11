@@ -63,6 +63,7 @@ const taps = await page.evaluate(async () => {
     if (sh.kind === 'arc') return { x: sh.c.x + sh.radius * Math.cos((sh.a0 + sh.a1) / 2), y: sh.c.y + sh.radius * Math.sin((sh.a0 + sh.a1) / 2) };
     if (sh.kind === 'circle' || sh.kind === 'bumper') return sh.c;
     if (sh.kind === 'flipper') return { x: sh.pivot.x + sh.len * 0.5 * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * 0.5 * Math.sin(sh.restAng) };
+    if (sh.kind === 'ribbon') return sh.pts[Math.floor(sh.pts.length / 2)];
     if (sh.kind === 'drain') return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
     throw new Error('this test does not know the shape kind ' + sh.kind);
   };

@@ -300,6 +300,8 @@ export class World {
     this.statics = table.shapes.filter((s) => s.kind === 'seg' || s.kind === 'arc' || s.kind === 'circle'
       || s.kind === 'bumper' || s.kind === 'sling');
     this.fired = new Map();        // shape id -> world time it last kicked, for the cooldown
+    this.ribbons = new Map();      // shape id -> precomputed geometry
+    for (const sh of table.shapes) if (sh.kind === 'ribbon') this.ribbons.set(sh.id, ribbonGeom(sh));
     this.drains = table.shapes.filter((s) => s.kind === 'drain');
     this.events = [];
     this.jams = 0;                 // contacts budget exhausted: a diagnostic, never a silent fix
@@ -310,7 +312,8 @@ export class World {
   }
 
   addBall(p, v) {
-    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, cradling: false, touched: new Map() };
+    const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, cradling: false, touched: new Map(),
+      ribbon: null, s: 0, q: 0, vs: 0, vq: 0, z: 0 };
     this.balls.push(b);
     return b;
   }
@@ -352,6 +355,11 @@ export class World {
     for (const b of this.balls) {
       if (!b.alive) continue;
 
+      // A ball on a ramp is not in the playfield solver at all, which is why it passes over
+      // everything down there. It is on exactly one surface at any moment: the floor, or one ribbon.
+      if (b.ribbon) { this.ribbonStep(b, h, g); continue; }
+
+      const p0 = { x: b.p.x, y: b.p.y };
       b.v.y += g * h;
       const sp = len(b.v);
       if (sp > cfg.MAX_SPEED) b.v = mul(b.v, cfg.MAX_SPEED / sp);
@@ -454,7 +462,126 @@ export class World {
         continue;
       }
 
+      this.enterRibbon(b, p0);
+      if (b.ribbon) continue;
+
       this.checkDrain(b);
+    }
+  }
+
+  /** Is this ball at a ramp's mouth, heading in with enough speed to get on?
+   *
+   *  Getting on is a CHANGE OF COORDINATES. The ball's world position is unchanged: at the mouth,
+   *  path(s) + q * perp(s) is exactly where it already is, so s and q are read off it rather than
+   *  assigned. Nothing here moves a ball. */
+  enterRibbon(b, p0) {
+    const cfg = this.cfg;
+    for (const sh of this.table.shapes) {
+      if (sh.kind !== 'ribbon') continue;
+      const geom = this.ribbons.get(sh.id);
+      if (!geom || !geom.segs.length) continue;
+      const half = sh.w / 2 - cfg.BALL_R;
+      for (const end of [0, 1]) {
+        const s0 = end === 0 ? 0 : geom.total;
+        const at = ribbonAt(geom, s0);
+        const inward = end === 0 ? at.dir : { x: -at.dir.x, y: -at.dir.y };
+        const rel = sub(b.p, at);
+        const along = dot(rel, inward);
+        // GETTING ON IS A CROSSING, NOT A WINDOW. The first version asked whether the ball was
+        // within a ball and a half of the mouth, and a ball at 6 m/s covers 25mm in a tick: it
+        // stepped straight over the window and the ramp probe reported it as "too slow to get on".
+        // What matters is whether the ball crossed the mouth during this step, so the position
+        // BEFORE the step is what decides it. How far past it ended up is kept, because that is
+        // distance it really travelled.
+        const before = p0 ? dot(sub(p0, at), inward) : along;
+        if (along < 0 || before > 0) continue;            // not crossed inward during this step
+        const n = perp(at.dir);
+        const q = dot(rel, n);
+        if (Math.abs(q) > half) continue;                                // not within the lane
+        const vs = dot(b.v, inward);
+        if (vs < cfg.RAMP_ENTER) continue;                               // not enough to climb on
+        b.ribbon = sh.id;
+        b.s = end === 0 ? along : geom.total - along;
+        b.q = q;
+        b.vs = end === 0 ? vs : -vs;
+        b.vq = dot(b.v, n);
+        b.z = at.z;
+        this.events.push({ type: 'ramp', id: sh.id, on: true });
+        return;
+      }
+    }
+  }
+
+  /** One micro step for a ball riding a ramp. Along the lane and across it: the same physics, in
+   *  the lane's own coordinates. */
+  ribbonStep(b, h, g) {
+    const cfg = this.cfg;
+    const sh = this.table.shapes.find((x) => x.id === b.ribbon);
+    const geom = sh && this.ribbons.get(sh.id);
+    if (!geom) { b.ribbon = null; return; }
+    // Sub-step by ARC LENGTH, not by time. A ball at 8 m/s covers 33mm in a tick, which is several
+    // segments of a curved lane, and the lane's sideways axis turns across all of them at once: an
+    // off-centre ball is then moved by q times the whole turn in one step, measured at 3.3mm. The
+    // ball is genuinely following the curve, but a step that big is not a faithful account of it.
+    const need = Math.ceil(Math.abs(b.vs) * h / 0.008);
+    if (need > 1 && need < 64) {
+      const hh = h / need;
+      for (let i = 0; i < need && b.ribbon && b.alive; i++) this.ribbonStepOnce(b, hh, g, geom, sh);
+      return;
+    }
+    this.ribbonStepOnce(b, h, g, geom, sh);
+  }
+
+  ribbonStepOnce(b, h, g, geom, sh) {
+    const cfg = this.cfg;
+    const at = ribbonAt(geom, b.s);
+    const n = perp(at.dir);
+
+    // Gravity has two jobs here: the playfield's own downhill pull, resolved along and across the
+    // lane, and the cost of the CLIMB, which is what makes a weak shot roll back out.
+    const tilt = (cfg.TILT_DEG * Math.PI) / 180;
+    const as = g * at.dir.y - cfg.G * Math.cos(tilt) * at.slope;
+    const aq = g * n.y;
+    b.vs += as * h;
+    b.vq += aq * h;
+
+    const sp = Math.abs(b.vs);
+    if (sp > EPS) b.vs -= Math.sign(b.vs) * Math.min(sp, cfg.RAMP_DRAG * h);
+
+    b.s += b.vs * h;
+    b.q += b.vq * h;
+
+    const half = sh.w / 2 - cfg.BALL_R;
+    if (b.q > half) { b.q = half; if (b.vq > 0) b.vq = -b.vq * cfg.RAMP_WALL_E; }
+    if (b.q < -half) { b.q = -half; if (b.vq < 0) b.vq = -b.vq * cfg.RAMP_WALL_E; }
+
+    // Off the end, either end. The world position and velocity are read out of the lane
+    // coordinates, so again nothing is assigned a place it did not travel to.
+    if (b.s <= 0 || b.s >= geom.total) {
+      // The OVERSHOOT is kept. Placing the ball at the mouth and throwing away how far past it had
+      // already travelled is a move, however small, and the probe measures it: up to 2.5mm.
+      const sEnd = b.s <= 0 ? 0 : geom.total;
+      const over = b.s <= 0 ? -b.s : b.s - geom.total;
+      const w = ribbonWorld(geom, sEnd, b.q);
+      const d = w.dir;
+      const m = perp(d);
+      const outward = b.s <= 0 ? -1 : 1;
+      b.p = { x: w.x + d.x * over * outward, y: w.y + d.y * over * outward };
+      b.v = { x: d.x * b.vs + m.x * b.vq, y: d.y * b.vs + m.y * b.vq };
+      b.z = 0;
+      b.ribbon = null;
+      this.events.push({ type: 'ramp', id: sh.id, on: false });
+      this.checkDrain(b);
+      return;
+    }
+
+    const w = ribbonWorld(geom, b.s, b.q);
+    b.p = { x: w.x, y: w.y };
+    b.z = w.z;
+    b.v = { x: w.dir.x * b.vs + perp(w.dir).x * b.vq, y: w.dir.y * b.vs + perp(w.dir).y * b.vq };
+    if (!Number.isFinite(b.p.x) || !Number.isFinite(b.p.y)) {
+      b.alive = false;
+      this.broken++;
     }
   }
 
@@ -628,3 +755,109 @@ export class World {
 }
 
 export const _geom = { toiPointSeg, toiPointCircleOut, toiPointCircleIn, taperedParts, shapeImpact };
+
+// ==================================================================== RAMPS, AS RIBBONS
+//
+// THE SECOND LEVEL, AND WHY IT CANNOT LOSE A BALL.
+//
+// Matt asked for two levels: "even if that means just objects like a roller-coaster type thing for
+// the ball. Every pinball game I've ever played has had at least that." The old game did it with
+// TRANSITIONS: the ball crossed a line, was deleted, and was re-created somewhere else moving a set
+// direction. That is where "it teleports" and "it vanishes" came from, and it is why this engine
+// was written with one rule above all others - no code assigns a ball a position it did not travel
+// to.
+//
+// So a ramp here is a RIBBON: a lane with a centre path, a width, and a height. A ball on one is
+// simulated ALONG the lane (s) and ACROSS it (q), which is just a curved coordinate system laid
+// over the same playfield. At the mouth the two descriptions coincide exactly:
+//
+//     world position  ==  path(s) + q * perpendicular(s)
+//
+// so getting on and off is a CHANGE OF COORDINATES, not a move. The ball's x and y do not jump by
+// a millimetre. There is no hand-off to write and therefore none to drop a ball in.
+//
+// What the player gets from that, for free, because it falls out of the maths rather than being
+// special-cased:
+//   - a weak shot climbs, slows, stops and rolls back out of the mouth it came in
+//   - a good shot crests and runs down the far side
+//   - the ball drifts to the low side of the lane on the way round, and rides the wall
+//   - while it is up there it passes OVER everything on the playfield, because it is not in the
+//     playfield solver at all
+//
+// The one limit in this version, asserted by `rampProbe` and by the editor: a ribbon must come back
+// to z = 0 at BOTH ends. A ball leaving a mouth that is still in the air would need a real flight
+// model, and inventing a landing spot for it is exactly the teleport this design exists to avoid.
+
+/** Precomputed geometry for one ribbon: per segment direction, length, slope and cumulative s. */
+export function ribbonGeom(sh) {
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i + 1 < sh.pts.length; i++) {
+    const a = sh.pts[i];
+    const b = sh.pts[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const L = Math.hypot(dx, dy);
+    if (L < EPS) continue;
+    segs.push({
+      a, b, L, s0: total,
+      dir: { x: dx / L, y: dy / L },
+      slope: ((b.z || 0) - (a.z || 0)) / L,
+    });
+    total += L;
+  }
+  return { segs, total };
+}
+
+/** How much arc length a corner is rounded over. A junction between two straight runs turns the
+ *  lane's sideways axis INSTANTLY, and a ball riding 20mm off the centre line is then moved by
+ *  `q` times the turn, which the ramp probe caught as a 4mm position jump. A real wireform has no
+ *  such corner, so neither does this: the direction is blended across a short window either side of
+ *  a junction, which is a rounded corner expressed in the lane's own coordinates. */
+const RIBBON_BLEND = 0.030;
+
+/** Where is arc length s on the ribbon, which way is it heading, and how high is it? */
+export function ribbonAt(geom, s) {
+  const segs = geom.segs;
+  if (!segs.length) return null;
+  let i = 0;
+  while (i < segs.length - 1 && s > segs[i].s0 + segs[i].L) i++;
+  const sg = segs[i];
+  const u = Math.max(0, Math.min(sg.L, s - sg.s0));
+
+  let dir = sg.dir;
+  const near = Math.min(u, RIBBON_BLEND);
+  if (u < RIBBON_BLEND && i > 0) {
+    const k = 0.5 * (1 - smooth(u / RIBBON_BLEND));        // 0.5 at the junction, 0 a window away
+    dir = blend(sg.dir, segs[i - 1].dir, k);
+  } else if (sg.L - u < RIBBON_BLEND && i < segs.length - 1) {
+    const k = 0.5 * (1 - smooth((sg.L - u) / RIBBON_BLEND));
+    dir = blend(sg.dir, segs[i + 1].dir, k);
+  }
+
+  return {
+    x: sg.a.x + sg.dir.x * u,
+    y: sg.a.y + sg.dir.y * u,
+    z: (sg.a.z || 0) + sg.slope * u,
+    dir,
+    slope: sg.slope,
+  };
+}
+
+function smooth(t) { return t * t * (3 - 2 * t); }
+
+function blend(a, b, k) {
+  const x = a.x * (1 - k) + b.x * k;
+  const y = a.y * (1 - k) + b.y * k;
+  const L = Math.hypot(x, y);
+  return L < EPS ? a : { x: x / L, y: y / L };
+}
+
+/** The world position of a ball at (s, q) on a ribbon. This is the identity that makes getting on
+ *  and off a change of coordinates rather than a move. */
+export function ribbonWorld(geom, s, q) {
+  const at = ribbonAt(geom, s);
+  if (!at) return null;
+  const n = perp(at.dir);
+  return { x: at.x + n.x * q, y: at.y + n.y * q, z: at.z, dir: at.dir, slope: at.slope };
+}

@@ -339,6 +339,31 @@ and the sweep found four dead stops in the pockets that made between the two of 
 A real lower third is one continuous line from the wall down to the flipper, so that is what this
 is, and nothing can get behind it.
 
+## Step 3b: ramps, and the second level (2026-09-11)
+
+The thing the old game got catastrophically wrong. Full design and the four rules: `HANDOFF.md`,
+"Ramps, and why they cannot lose a ball". The short version is that a ball on a ramp is simulated
+along the lane and across it, so a mouth is a change of coordinates and not a move, and there is no
+code that could drop a ball because there is no hand-off.
+
+**Five defects, and every one was caught by the probe's own jump assertion rather than by playing:**
+
+1. entry threw away how far past the mouth the ball was and started it at s = 0: a 9mm move
+2. exit threw away the overshoot the same way: 2.5mm
+3. a 24 degree kink in a hand-placed path swung an off-centre ball 6.6mm sideways in one step
+4. a fast ball crossed several segments of the curve in one tick and the whole turn landed at once
+5. the entry test was a WINDOW, so a ball at 6 m/s stepped straight over it and the probe reported
+   it as "too slow to get on"
+
+**And the assertion itself was wrong once**, which is worth as much as the rest: a ball leaving a
+ramp at 3.86 m/s travels the 15mm that entitles it to and can hit something before the tick ends,
+finishing at 1.89 m/s. Measured against its END speed that reads as a 3.2mm teleport and is not one.
+It compares against the fastest speed during the tick now.
+
+**The behaviour, measured:** below 1 m/s a ball cannot get on at all, 1 to 1.5 climbs and rolls back
+out of the mouth it came in, and 2 and above makes it all the way round. Nobody wrote any of those
+three cases. They fall out of the ramp having a height.
+
 ## Where this goes next
 
 Step 3 of the plan: the remaining object types, one at a time, each with its property panel and its
