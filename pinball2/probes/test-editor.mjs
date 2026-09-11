@@ -152,63 +152,168 @@ const afterHeal = await framesIn(400);
 ok(afterHeal > 5, `the loop runs after loading a poisoned autosave (${afterHeal} frames per 400ms)`);
 ok(errors.length === 0, 'no page errors', errors.join('\n      '));
 
-// ------------------------------------------------------ [KNOWN-BUG PROBE] a new build must show
-// Matt opened a build with bumpers, slingshots and a ramp in it and saw the bare box he had saved a
-// build earlier: "Where are all the updates you just did?" The editor restores this device's saved
-// table, which is right for work in progress and wrong the day the machine ships new parts.
-await page.evaluate(() => {
-  const old = { table: { name: 'OLD', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
-    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] },
-    cfg: {}, shipped: 'an older build', edited: false };
-  localStorage.setItem('pinball2.editor.v1', JSON.stringify(old));
-});
-await page.reload({ waitUntil: 'networkidle' });
-await page.waitForTimeout(600);
-const fresh = await page.evaluate(() => ({
-  parts: window.__pb2.table.shapes.length,
-  kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
-}));
-ok(fresh.parts > 1 && fresh.kinds.includes('ribbon'),
-  `an UNEDITED save from an older build is replaced by the shipped table (${fresh.parts} parts: ${fresh.kinds})`);
+// ------------------------------------------------- [KNOWN-BUG PROBE] a new build must show
+// Three builds in a row produced the same symptom - Matt opening the tool and seeing an old table -
+// and the last cause was the persistence layer GUESSING. One autosave slot plus an `edited` flag:
+// keep an edited save, drop an unedited one, print a grey warning line when it guessed "keep". It
+// worked as designed and the design was the problem.
+//
+// There is no guess now. Default is not stored at all, so it is the current build by construction,
+// and the library is only ever written by an explicit Save as. These cases pin both halves.
 
-await page.evaluate(() => {
-  const mine = { table: { name: 'MINE', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
-    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] },
-    cfg: {}, shipped: 'an older build', edited: true };
-  localStorage.setItem('pinball2.editor.v1', JSON.stringify(mine));
-});
-await page.reload({ waitUntil: 'networkidle' });
-await page.waitForTimeout(600);
-const kept = await page.evaluate(() => ({
-  name: window.__pb2.table.name,
-  stale: !!window.__pb2.staleTable,
-  hud: document.getElementById('hud').textContent,
-}));
-ok(kept.name === 'MINE' && kept.stale, 'an EDITED save is kept, not thrown away');
-ok(/Reset table/.test(kept.hud), 'and the corner says the shipped table has moved on', kept.hud);
+const LIBKEY = 'pinball2.editor.tables';
 
-// The case the first version of the check could not handle: a save from BEFORE the fingerprint
-// existed, which is exactly what every device in the wild had.
-await page.evaluate(() => {
-  const ancient = { table: { name: 'ANCIENT', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
-    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] }, cfg: {} };
-  localStorage.setItem('pinball2.editor.v1', JSON.stringify(ancient));   // no `shipped`, no `edited`
-});
+// 1. DEFAULT IS THE BUILD'S TABLE, whatever else is in storage. The old code had to reason about
+//    this; now there is nothing for a stale save to overwrite, because Default is never read from
+//    storage at all.
+await page.evaluate((k) => {
+  localStorage.setItem(k, JSON.stringify({
+    'Old thing': { table: { name: 'OLD', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
+      shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] }, cfg: {}, savedAt: 1 },
+  }));
+  localStorage.removeItem('pinball2.editor.current');
+}, LIBKEY);
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
-const ancient = await page.evaluate(() => ({
-  name: window.__pb2.table.name,
+const def = await page.evaluate(() => ({
+  name: window.__pb2.tableName,
   kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
-  backedUp: !!localStorage.getItem('pinball2.editor.v1.replaced'),
+  options: [...document.getElementById('tablesel').options].map((o) => o.textContent),
 }));
-ok(ancient.name !== 'ANCIENT' && ancient.kinds.includes('ribbon'),
-  `a save with NO fingerprint is replaced by the shipped table (${ancient.kinds})`);
-ok(ancient.backedUp, 'and the replaced table is kept under its own key rather than deleted');
+ok(def.name === null && def.kinds.includes('ribbon'),
+  `Default is the table this build ships, whatever is stored (${def.kinds})`);
+ok(def.options[0].startsWith('Default') && def.options.includes('Old thing'),
+  `the selector lists Default first, then every saved name (${def.options.join(' | ')})`);
+
+// 2. EDITING DEFAULT IS A WORKING COPY and is never written. This is the line the whole redesign
+//    turns on: Default cannot be silently overwritten, so it cannot go stale.
+// A REAL edit, through the palette, so the whole save path runs exactly as it does for a person.
+const addPart = async (label) => page.evaluate(async (l) => {
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 150));
+  const b = [...document.querySelectorAll('.palette button')].find((x) => x.textContent.trim() === l);
+  if (!b) return false;
+  b.click();
+  await new Promise((q) => setTimeout(q, 150));
+  return true;
+}, label);
+
+const scratch = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), LIBKEY);
+const addedOk = await addPart('Post');
+const nBefore = await page.evaluate(() => window.__pb2.table.shapes.length);
+const afterLib = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), LIBKEY);
+ok(addedOk, 'the palette adds a part');
+ok(JSON.stringify(scratch) === JSON.stringify(afterLib), 'editing Default writes nothing to the library',
+  Object.keys(afterLib).join(', '));
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+const nAfter = await page.evaluate(() => window.__pb2.table.shapes.length);
+ok(nAfter < nBefore, `and those edits are gone on the next load (${nBefore} parts became ${nAfter})`);
+
+// 3. SAVE AS names it, and from then on it is yours. A new build never touches it.
+const saved = await page.evaluate(async (k) => {
+  const a = window.__pb2;
+  a.table.shapes.push({ id: 'zz2', kind: 'circle', c: { x: 0.3, y: 0.6 }, r: 0.01 });
+  window.prompt = () => 'BOARDWALK';
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 150));
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => /Save as/i.test(b.textContent));
+  if (!btn) return { found: false };
+  btn.click();
+  await new Promise((q) => setTimeout(q, 150));
+  const lib = JSON.parse(localStorage.getItem(k) || '{}');
+  return { found: true, name: a.tableName, inLib: 'BOARDWALK' in lib, has: !!(lib.BOARDWALK && lib.BOARDWALK.table.shapes.some((s) => s.id === 'zz2')) };
+}, LIBKEY);
+ok(saved.found, 'the Table group has a Save as button');
+ok(saved.name === 'BOARDWALK' && saved.inLib && saved.has, 'Save as stores the working table under that name', JSON.stringify(saved));
+
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const reopened = await page.evaluate(() => ({
+  name: window.__pb2.tableName,
+  has: window.__pb2.table.shapes.some((s) => s.id === 'zz2'),
+}));
+ok(reopened.name === 'BOARDWALK' && reopened.has, 'and it is what you get back on the next load', JSON.stringify(reopened));
+
+// Editing a NAMED table does persist to that name: picking it up again is the point of naming it.
+const namedBefore = await page.evaluate(() => window.__pb2.table.shapes.length);
+await addPart('Post');
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const namedAfter = await page.evaluate(() => window.__pb2.table.shapes.length);
+ok(namedAfter === namedBefore + 1,
+  `editing a named table keeps the change in that name (${namedBefore} then ${namedAfter})`);
+
+// Switching to Default and back must not disturb the save.
+const roundTrip = await page.evaluate(async () => {
+  const sel = document.getElementById('tablesel');
+  sel.value = ''; sel.dispatchEvent(new Event('change'));
+  await new Promise((q) => setTimeout(q, 150));
+  const onDefault = { name: window.__pb2.tableName, has: window.__pb2.table.shapes.some((s) => s.id === 'zz2') };
+  sel.value = 'BOARDWALK'; sel.dispatchEvent(new Event('change'));
+  await new Promise((q) => setTimeout(q, 150));
+  return { onDefault, back: window.__pb2.table.shapes.some((s) => s.id === 'zz2') };
+});
+ok(roundTrip.onDefault.name === null && !roundTrip.onDefault.has, 'switching to Default shows the build, not your save');
+ok(roundTrip.back, 'and switching back gives your table again');
+
+// 4. THE LEGACY AUTOSAVE becomes a named save rather than being thrown away, once, and the old key
+//    is left exactly where it is so nobody has to trust the migration got it right.
+await page.evaluate((k) => {
+  localStorage.clear();
+  localStorage.setItem('pinball2.editor.v1', JSON.stringify({
+    table: { name: 'MINE', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
+      shapes: [{ id: 'q1', kind: 'circle', c: { x: 0.2, y: 0.4 }, r: 0.01 },
+               { id: 'q2', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] },
+    cfg: {}, shipped: 'older', edited: true,
+  }));
+}, LIBKEY);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const mig = await page.evaluate((k) => {
+  const lib = JSON.parse(localStorage.getItem(k) || '{}');
+  return {
+    names: Object.keys(lib),
+    carried: !!(lib['My table'] && lib['My table'].table.shapes.some((s) => s.id === 'q1')),
+    legacyIntact: !!localStorage.getItem('pinball2.editor.v1'),
+    showing: window.__pb2.tableName,
+    kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
+  };
+}, LIBKEY);
+ok(mig.carried, `the old one-slot autosave is migrated to "My table" (${mig.names.join(', ')})`);
+ok(mig.legacyIntact, 'and the old key is left alone rather than deleted');
+ok(mig.showing === null && mig.kinds.includes('ribbon'),
+  'while the tool opens on Default, which is the build - the whole point of the change');
+
+// Delete removes one named save and never touches Default.
+const deleted = await page.evaluate(async (k) => {
+  const sel = document.getElementById('tablesel');
+  sel.value = 'My table'; sel.dispatchEvent(new Event('change'));
+  await new Promise((q) => setTimeout(q, 150));
+  window.confirm = () => true;
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 150));
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => /Delete\.\.\./i.test(b.textContent));
+  if (!btn) return { found: false };
+  btn.click();
+  await new Promise((q) => setTimeout(q, 150));
+  return {
+    found: true,
+    names: Object.keys(JSON.parse(localStorage.getItem(k) || '{}')),
+    showing: window.__pb2.tableName,
+    kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
+  };
+}, LIBKEY);
+ok(deleted.found && deleted.names.length === 0, 'Delete removes that named save', JSON.stringify(deleted));
+ok(deleted.showing === null && deleted.kinds.includes('ribbon'), 'and drops you back on Default');
 
 await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
-const forced = await page.evaluate(() => [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','));
-ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored (${forced})`);
+const forced = await page.evaluate(() => ({
+  name: window.__pb2.tableName,
+  kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
+}));
+ok(forced.name === null && forced.kinds.includes('ribbon'), `?fresh still means Default (${forced.kinds})`);
 
 // ------------------------------------------------------------- precision: zoom, hold, magnifier
 // Matt: "When I select an object, the slingshot for example, and I want to extend or shorten it, I
@@ -419,7 +524,7 @@ ok(!pageScrolls.v && !pageScrolls.h, 'the page does not scroll, only the dock do
 // layout overhaul, found by the text a person reads, in the mode it belongs to.
 const WANT_CTL = {
   play: ['New ball', 'Slow motion', 'Pause', 'Step frame'],
-  edit: ['Wall', 'Arc', 'Post', 'Bumper', 'Sling', 'Flipper', 'Drain', 'Export JSON', 'Import', 'Reset table'],
+  edit: ['Wall', 'Arc', 'Post', 'Bumper', 'Sling', 'Flipper', 'Drain', 'Save as', 'Delete', 'Revert', 'Export JSON', 'Import'],
   tune: ['Copy config', 'Back to defaults'],
   check: ['Find traps', 'Tunnel test', 'Gap rule', 'Show reachable', 'Clear marks'],
 };
