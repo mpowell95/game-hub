@@ -49,10 +49,14 @@ const app = {
   lastError: '',
   hot: {},
   repaired: 0,
-  placing: null,          // a prefab name, armed and waiting for a tap on the table
+  // An armed prefab, waiting for a tap on the table: `{ name, shapes }`. It carries its own WORKING
+  // COPY of the shapes rather than a name to look up, because the turn and scale tools act on it
+  // before it lands and a stored prefab must not change when you turn the one you are about to drop.
+  placing: null,
   tableName: null,        // null is Default: the table this BUILD ships, never stored
   migrated: null,
   tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
+  xstep: 2,                // index into XFORM_STEPS: how far one tap of the turn/scale row goes
 };
 
 /** Every number in a table must be finite. A single NaN freezes the app (see `frame`), and the
@@ -385,6 +389,129 @@ function moveShape(sh, dx, dy) {
   else if (sh.kind === 'drain') { sh.x += dx; sh.y += dy; }
 }
 
+// ------------------------------------------------------------------ turn and scale
+//
+// Handles reshape ONE part. This reshapes a SELECTION, which is the thing the prefab library made
+// necessary: a bumper nest saved flat is wanted at an angle, and rebuilding it at that angle by
+// dragging five handles is exactly the typing the library exists to avoid.
+//
+// BOTH TURN AND SCALE ABOUT THE SELECTION'S OWN CENTROID, the same anchor a prefab is stored
+// against. That is not an arbitrary pick: a prefab lands centred on the tap, so turning it about
+// its centroid keeps it where the tap put it, and turning about anything else would walk it away
+// from the finger every time.
+//
+// ANGLES ARE NOT SNAPPED and neither are the positions a turn produces. Snapping a turned part to
+// the 5 mm grid moves its two ends by different amounts, which does not rotate a rail, it BENDS it.
+
+const XFORM_STEPS = [{ deg: 1, pct: 1 }, { deg: 5, pct: 5 }, { deg: 15, pct: 10 }, { deg: 45, pct: 25 }];
+const MIN_DIM = 0.0005;                 // 0.5 mm - a part smaller than this is a part you cannot find
+
+function anchorOf(shapes) {
+  let x = 0;
+  let y = 0;
+  for (const sh of shapes) { const c = centreOf(sh); x += c.x; y += c.y; }
+  return { x: x / shapes.length, y: y / shapes.length };
+}
+
+// The stored angles (`a0`/`a1` on an arc, `restAng`/`endAng` on a flipper) are atan2 in the SAME
+// frame as the coordinates, where y runs down the table. So a rotation that adds `ang` to a point's
+// atan2 adds exactly `ang` to those fields too, and one sign convention covers both.
+function rotateShape(sh, a, ang) {
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  const rot = (q) => {
+    const dx = q.x - a.x;
+    const dy = q.y - a.y;
+    q.x = a.x + dx * cos - dy * sin;
+    q.y = a.y + dx * sin + dy * cos;
+  };
+  if (sh.kind === 'seg' || sh.kind === 'sling') { rot(sh.a); rot(sh.b); }
+  else if (sh.kind === 'circle' || sh.kind === 'bumper') rot(sh.c);
+  else if (sh.kind === 'arc') { rot(sh.c); sh.a0 += ang; sh.a1 += ang; }
+  else if (sh.kind === 'flipper') { rot(sh.pivot); sh.restAng += ang; sh.endAng += ang; }
+  else if (sh.kind === 'ribbon') { for (const q of sh.pts) rot(q); }
+  else if (sh.kind === 'drain') {
+    // A drain is an axis-aligned rectangle and the data model has nowhere to put an angle, so its
+    // CENTRE turns with the group and the box stays square to the table. Inventing a rotated drain
+    // would mean a sixth kind for physics.js, checks.js and every probe to learn.
+    const c = { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
+    rot(c);
+    sh.x = c.x - sh.w / 2;
+    sh.y = c.y - sh.h / 2;
+  }
+}
+
+// UNIFORM: distances from the anchor AND every thickness scale by the same k. Scaling positions
+// without thicknesses looks right for one step and is wrong by the third, because the gaps between
+// the parts move and the parts themselves do not, so a cluster checked clear at 100% is a wedge at
+// 60%. A ramp's `z` is height off the playfield, a different axis, and is left alone.
+function scaleShape(sh, a, k) {
+  const sc = (q) => { q.x = a.x + (q.x - a.x) * k; q.y = a.y + (q.y - a.y) * k; };
+  if (sh.kind === 'seg' || sh.kind === 'sling') { sc(sh.a); sc(sh.b); sh.r *= k; }
+  else if (sh.kind === 'circle' || sh.kind === 'bumper') { sc(sh.c); sh.r *= k; }
+  else if (sh.kind === 'arc') { sc(sh.c); sh.radius *= k; sh.r *= k; }
+  else if (sh.kind === 'flipper') { sc(sh.pivot); sh.len *= k; sh.r0 *= k; sh.r1 *= k; }
+  else if (sh.kind === 'ribbon') { for (const q of sh.pts) sc(q); sh.w *= k; sh.r *= k; }
+  else if (sh.kind === 'drain') {
+    const c = { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
+    sc(c);
+    sh.w *= k;
+    sh.h *= k;
+    sh.x = c.x - sh.w / 2;
+    sh.y = c.y - sh.h / 2;
+  }
+}
+
+/** The smallest thickness or span in a selection, so a scale that would shrink a part to nothing is
+ *  refused whole rather than clamped per part (clamping one part breaks the group's proportions). */
+function minDimOf(shapes) {
+  let m = Infinity;
+  for (const sh of shapes) {
+    for (const v of [sh.r, sh.radius, sh.len, sh.r0, sh.r1, sh.w, sh.h]) {
+      if (typeof v === 'number' && v > 0) m = Math.min(m, v);
+    }
+  }
+  return m;
+}
+
+/** What a turn or scale acts on: an armed prefab if there is one, otherwise the selection. An armed
+ *  prefab is turned BEFORE it is dropped, which is the case the brief asked for. */
+function xformTarget() {
+  if (app.placing) return app.placing.shapes;
+  return app.table.shapes.filter((sh) => app.sel.has(sh.id));
+}
+
+function applyXform(fn) {
+  const target = xformTarget();
+  if (!target.length) return false;
+  // Transform a COPY and check it before committing anything. A NaN reaches the renderer as a frame
+  // that throws, and this app schedules its next frame in a `finally` precisely because that once
+  // froze it dead. Half a transformed selection would be worse than none, too.
+  const next = JSON.parse(JSON.stringify(target));
+  const a = anchorOf(next);
+  for (const sh of next) fn(sh, a);
+  if (!tableIsFinite(next)) return false;
+  // An armed prefab is not on the table yet, so there is nothing for undo to restore and nothing to
+  // autosave: it is a working copy, discarded on Escape.
+  const live = !app.placing;
+  if (live) pushUndo();
+  for (let i = 0; i < target.length; i++) Object.assign(target[i], next[i]);
+  if (live) afterEdit();
+  renderPanel();
+  return true;
+}
+
+function turnSel(deg) {
+  return applyXform((sh, a) => rotateShape(sh, a, (deg * Math.PI) / 180));
+}
+
+function scaleSel(k) {
+  const target = xformTarget();
+  if (!target.length) return false;
+  if (minDimOf(target) * k < MIN_DIM) return false;
+  return applyXform((sh, a) => scaleShape(sh, a, k));
+}
+
 // ------------------------------------------------------------------ pointer
 
 const drag = { mode: null, id: null, key: null, last: null, start: null, box: null, moved: false, at: null, fine: false, holdT: 0 };
@@ -501,10 +628,10 @@ canvas.addEventListener('pointerdown', (e) => {
   // A PREFAB IS ARMED AND WAITING FOR THIS TAP. It goes before the handle, select and lasso logic
   // on purpose: while placing, the tap means one thing and one thing only.
   if (app.mode === 'edit' && app.placing) {
-    const name = app.placing;
+    const armed = app.placing;
     app.placing = null;
     drag.mode = null;
-    placePrefab(name, snap(p));
+    placePrefab(armed, snap(p));
     return;
   }
 
@@ -849,17 +976,25 @@ function deletePrefab(name) {
   if (!(name in d)) return false;
   delete d[name];
   writePrefabs(d);
-  if (app.placing === name) app.placing = null;
+  if (app.placing && app.placing.name === name) app.placing = null;
   renderPanel();
   return true;
 }
 
-function placePrefab(name, at) {
+/** Arm a prefab: take a working copy out of storage so the turn and scale tools can act on it
+ *  before it lands without touching what is saved. */
+function armPrefab(name) {
   const p = readPrefabs()[name];
-  if (!p || !Array.isArray(p.shapes) || !p.shapes.length) return 0;
+  if (!p || !Array.isArray(p.shapes) || !p.shapes.length) return false;
+  app.placing = { name, shapes: JSON.parse(JSON.stringify(p.shapes)) };
+  return true;
+}
+
+function placePrefab(armed, at) {
+  if (!armed || !Array.isArray(armed.shapes) || !armed.shapes.length) return 0;
   pushUndo();
   const made = [];
-  for (const s of p.shapes) {
+  for (const s of armed.shapes) {
     const c = JSON.parse(JSON.stringify(s));
     c.id = newId(String(c.kind || 'x')[0]);
     moveShape(c, at.x, at.y);
@@ -920,7 +1055,9 @@ function numRow(label, value, step, onChange) {
 function renderPanel() {
   dockA.innerHTML = '';
   dockB.innerHTML = '';
-  document.getElementById('panel').classList.toggle('sel', app.mode === 'edit' && app.sel.size > 0);
+  // An armed prefab counts as a selection for this: what you want to reach next is the turn and
+  // scale rows in the Inspector, not the palette you armed it from.
+  document.getElementById('panel').classList.toggle('sel', app.mode === 'edit' && (app.sel.size > 0 || !!app.placing));
   syncTableSel();
   panel = dockA;
   syncObjBar();
@@ -1018,6 +1155,25 @@ obDup.onclick = duplicateSel;
 obDel.onclick = deleteSel;
 obSnap.onclick = () => { app.snap = !app.snap; renderPanel(); };
 
+const obXform = document.getElementById('obxform');
+const obRotL = document.getElementById('ob-rot-l');
+const obRotR = document.getElementById('ob-rot-r');
+const obStep = document.getElementById('ob-step');
+const obSmaller = document.getElementById('ob-smaller');
+const obBigger = document.getElementById('ob-bigger');
+
+const xstep = () => XFORM_STEPS[app.xstep] || XFORM_STEPS[2];
+
+// Anticlockwise ON SCREEN is a NEGATIVE angle here, because y runs down the table: adding to atan2
+// turns +x toward +y, which is rightward toward the drain, which is clockwise to look at.
+obRotL.onclick = () => turnSel(-xstep().deg);
+obRotR.onclick = () => turnSel(xstep().deg);
+obSmaller.onclick = () => scaleSel(1 / (1 + xstep().pct / 100));
+obBigger.onclick = () => scaleSel(1 + xstep().pct / 100);
+// ONE chip for both, not two. Coarse and fine is a state of mind, not a per-axis setting, and a
+// phone's bar has room for five buttons.
+obStep.onclick = () => { app.xstep = (app.xstep + 1) % XFORM_STEPS.length; syncObjBar(); };
+
 /** The object bar reflects what is actually possible right now. Play mode has nothing to undo and
  *  nothing selected, so the whole bar goes quiet rather than offering dead buttons. */
 function syncObjBar() {
@@ -1028,6 +1184,12 @@ function syncObjBar() {
   obSnap.disabled = !editing;
   obDup.disabled = !editing || !app.sel.size;
   obDel.disabled = !editing || !app.sel.size;
+  // The turn/scale row appears only when there is something to turn, so the bar is one row the rest
+  // of the time rather than two with half of them dead. An armed prefab counts: turning it before it
+  // lands is the case the prefab library created.
+  const s = xstep();
+  obStep.textContent = `${s.deg}° · ${s.pct}%`;
+  obXform.hidden = !(editing && (app.sel.size || app.placing));
   objbar.style.opacity = editing ? '' : '.5';
 }
 
@@ -1097,9 +1259,10 @@ function renderEditPanel() {
     for (const name of pf) {
       const row = el('<div class="row"></div>');
       row.append(el(`<label style="flex:1">${esc(name)}</label>`));
-      const place = el(`<button${app.placing === name ? ' class="primary"' : ''}>${app.placing === name ? 'Cancel' : 'Place'}</button>`);
+      const armed = !!app.placing && app.placing.name === name;
+      const place = el(`<button${armed ? ' class="primary"' : ''}>${armed ? 'Cancel' : 'Place'}</button>`);
       place.onclick = () => {
-        app.placing = app.placing === name ? null : name;
+        if (armed) app.placing = null; else armPrefab(name);
         renderPanel();
       };
       const del = el('<button class="danger">X</button>');
@@ -1111,7 +1274,9 @@ function renderEditPanel() {
       row.append(place, del);
       panel.append(row);
     }
-    if (app.placing) panel.append(el(`<div class="note">Tap the table to drop <b>${esc(app.placing)}</b>.</div>`));
+    if (app.placing) {
+      panel.append(el(`<div class="note">Tap the table to drop <b>${esc(app.placing.name)}</b>. It is drawn in the middle of the table so you can turn it with the bar below before you place it.</div>`));
+    }
   });
 
   // THE TABLE GROUP. Open by default: which table you are looking at, and how to keep one, is the
@@ -1221,13 +1386,50 @@ function renderPlacements() {
   });
 }
 
+/** Exact turn and scale, for the amounts the bar's fixed steps cannot reach without counting taps.
+ *  It acts on the same target as the bar (the selection, or an armed prefab) about the same anchor,
+ *  so the two controls cannot disagree about what "turn this" means. */
+function renderXformRows() {
+  panel.append(el('<div class="note">Turns and scales about the middle of the selection. The bar below does the same in steps.</div>'));
+
+  const rot = el('<div class="row"><label>Turn by (deg)</label><input type="number" step="1" value="15"></div>');
+  const ri = rot.querySelector('input');
+  const rl = el('<button title="turn anticlockwise">&#8634;</button>');
+  const rr = el('<button title="turn clockwise">&#8635;</button>');
+  const deg = () => { const v = parseFloat(ri.value); return Number.isFinite(v) ? v : 0; };
+  rl.onclick = () => turnSel(-deg());
+  rr.onclick = () => turnSel(deg());
+  rot.append(rl, rr);
+  panel.append(rot);
+
+  const sca = el('<div class="row"><label>Scale to (%)</label><input type="number" step="1" value="100"></div>');
+  const si = sca.querySelector('input');
+  const go = el('<button>Apply</button>');
+  go.onclick = () => {
+    const v = parseFloat(si.value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    // A percentage of what is on the table RIGHT NOW, then back to 100: two taps of "80%" is 64%,
+    // which is what a person who taps it twice means.
+    if (scaleSel(v / 100)) si.value = '100';
+  };
+  sca.append(go);
+  panel.append(sca);
+}
+
 function renderInspector() {
-  if (app.sel.size === 0) {
+  if (app.sel.size === 0 && !app.placing) {
     panel.append(el('<div class="note">Nothing selected. Tap a part on the table.</div>'));
+    return;
+  }
+  if (app.placing) {
+    panel.append(el(`<h2>${esc(app.placing.name)}</h2>`));
+    panel.append(el('<div class="note">Armed, drawn in the middle of the table. Turn or scale it here, then tap the table to drop it.</div>'));
+    renderXformRows();
     return;
   }
   if (app.sel.size > 1) {
     panel.append(el(`<div class="note">${app.sel.size} parts selected. Drag to move them together.</div>`));
+    renderXformRows();
     return;
   }
   const sh = app.table.shapes.find((x) => app.sel.has(x.id));
@@ -1294,6 +1496,10 @@ function renderInspector() {
     panel.append(numRow('Width', mm(sh.w), 1, (v) => { sh.w = v / 1000; }));
     panel.append(numRow('Height', mm(sh.h), 1, (v) => { sh.h = v / 1000; }));
   }
+  // Collapsed for ONE part, because most of what it does a single part already has its own rows for
+  // (a rail has Angle, an arc has From and To). What it adds here is scaling, which nothing else
+  // offers, and turning a part about its own middle rather than about one of its ends.
+  inGroup('Turn and scale', false, false, renderXformRows);
 }
 
 /** The kinds of part currently selected, so the Tune tab can show the numbers that govern them.
@@ -1521,7 +1727,7 @@ function frameBody(t) {
   });
 
   if (app.mode === 'edit' || app.mode === 'tune') drawSelection();
-  if (app.mode === 'edit') drawLoupe();
+  if (app.mode === 'edit') { drawGhost(); drawLoupe(); }
 
   const b = app.world && app.world.balls.find((x) => x.alive);
   hud.textContent = app.mode === 'play'
@@ -1531,7 +1737,7 @@ function frameBody(t) {
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`
       + `${app.view && Math.abs(app.view.zoom - 1) > 0.01 ? '   zoom ' + Math.round(app.view.zoom * 100) + '%' : ''}`;
   hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
-  if (app.placing) hud.textContent += `\nTAP THE TABLE to place "${app.placing}"`;
+  if (app.placing) hud.textContent += `\nTAP THE TABLE to place "${app.placing.name}"`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
 }
@@ -1640,6 +1846,64 @@ function drawSelection(view) {
     ctx.setLineDash([]);
   }
   ctx.restore();
+}
+
+// AN ARMED PREFAB IS DRAWN BEFORE IT LANDS, in the middle of whatever you can see. Turning one
+// before you place it is otherwise blind: a phone has no hover, so a preview that follows the
+// pointer shows nothing at all to the person who most needs it, and the alternative (drop it, look
+// at it, turn it, move it back) is the rebuilding the prefab library exists to avoid.
+//
+// It is an OUTLINE in the selection accent, dashed, so it cannot be mistaken for a part that is
+// really there. Centrelines only: this answers "which way is it pointing", not "how thick is it".
+function drawGhost() {
+  if (!app.placing || !app.view) return;
+  const r = canvas.getBoundingClientRect();
+  const at = toTable(app.view, { x: r.width / 2, y: r.height / 2 });
+  ctx.save();
+  ctx.strokeStyle = '#ffce3a';
+  ctx.globalAlpha = 0.8;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  for (const s of app.placing.shapes) {
+    const sh = JSON.parse(JSON.stringify(s));
+    moveShape(sh, at.x, at.y);
+    ghostPath(sh);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function ghostPath(sh) {
+  const v = app.view;
+  const P = (p) => toScreen(v, p);
+  const sc = v.s * v.zoom;
+  const R = (m) => Math.max(2, m * sc);
+  ctx.beginPath();
+  if (sh.kind === 'seg' || sh.kind === 'sling') {
+    const a = P(sh.a);
+    const b = P(sh.b);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  } else if (sh.kind === 'circle' || sh.kind === 'bumper') {
+    const c = P(sh.c);
+    ctx.arc(c.x, c.y, R(sh.r), 0, Math.PI * 2);
+  } else if (sh.kind === 'arc') {
+    // Both frames run y down, so the stored atan2 angles are the canvas's angles unchanged.
+    const c = P(sh.c);
+    let span = (sh.a1 - sh.a0) % (Math.PI * 2);
+    if (span < 0) span += Math.PI * 2;
+    ctx.arc(c.x, c.y, R(sh.radius), sh.a0, sh.a0 + span);
+  } else if (sh.kind === 'flipper') {
+    const p = P(sh.pivot);
+    const t = P({ x: sh.pivot.x + Math.cos(sh.restAng) * sh.len, y: sh.pivot.y + Math.sin(sh.restAng) * sh.len });
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(t.x, t.y);
+  } else if (sh.kind === 'ribbon') {
+    sh.pts.forEach((q, i) => { const s = P(q); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
+  } else if (sh.kind === 'drain') {
+    const a = P({ x: sh.x, y: sh.y });
+    ctx.rect(a.x, a.y, sh.w * sc, sh.h * sc);
+  }
 }
 
 // ------------------------------------------------------------------ which build is this?

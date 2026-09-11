@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v793';
+const CACHE = 'game-hub-v794';
 
 const ASSETS = [
   './',
@@ -646,8 +646,8 @@ const REST_MANIFEST = {
   './pinball/design/layout.js': 'd1860f5854',
   './pinball/design/editor.html': '5cb2244282',
   './pinball2/index.html': '6d09047aef',
-  './pinball2/editor/index.html': '00c7af5486',
-  './pinball2/editor/editor.js': 'b287daf950',
+  './pinball2/editor/index.html': '57e39d1a18',
+  './pinball2/editor/editor.js': 'a0a75d12fa',
   './pinball2/machines/testbox/config.js': '8608551675',
   './pinball2/machines/testbox/physics.js': '20cbe81b16',
   './pinball2/machines/testbox/table.js': '17790ae63c',

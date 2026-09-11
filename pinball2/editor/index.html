@@ -81,8 +81,13 @@
 
   /* Object controls, every mode. They used to be inside the Edit panel, which meant undo was
      unreachable the moment you switched to Tune to see what a slider did. */
-  #objbar { grid-area: objbar; display: flex; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--line); background: #101a2e; overflow-x: auto; }
+  #objbar { grid-area: objbar; display: flex; flex-direction: column; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--line); background: #101a2e; }
+  .obrow { display: flex; gap: 4px; overflow-x: auto; }
   #objbar button { flex: 1 0 auto; min-height: 34px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  /* The turn and scale row only exists while there is something to turn or scale, so the bar is one
+     row of five buttons the rest of the time rather than two rows of mostly dead ones. */
+  #obxform button { font-size: 15px; line-height: 1; }
+  #ob-step { font-size: 11px; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
   /* pre-wrap, not pre: the line naming what is on the table runs past the right edge of a phone
      otherwise, and a line you cannot finish reading is not a line that answers anything. */
   #hud { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); font-size: 11px; color: var(--dim); background: rgba(8,14,26,.66); padding: 4px 7px; border-radius: 6px; pointer-events: none; white-space: pre-wrap; }
@@ -167,6 +172,10 @@
     .tabs { width: auto; margin-left: 10px; }
     .tabs .tab { flex: 0 0 auto; }
     .palette { grid-template-columns: repeat(2, 1fr); }
+    /* A phone needs these five stretched to be thumb sized. A 1280px screen does not, and a
+       quarter-metre-wide button for one glyph reads as a mistake. */
+    #obxform { justify-content: center; }
+    #obxform button { flex: 0 0 auto; min-width: 92px; }
   }
 </style>
 </head>
@@ -196,11 +205,20 @@
     <button id="launch" class="primary">Launch</button>
   </div>
   <div id="objbar">
-    <button id="ob-undo">Undo</button>
-    <button id="ob-redo">Redo</button>
-    <button id="ob-snap">Snap on</button>
-    <button id="ob-dup">Duplicate</button>
-    <button id="ob-del" class="danger">Delete</button>
+    <div class="obrow">
+      <button id="ob-undo">Undo</button>
+      <button id="ob-redo">Redo</button>
+      <button id="ob-snap">Snap on</button>
+      <button id="ob-dup">Duplicate</button>
+      <button id="ob-del" class="danger">Delete</button>
+    </div>
+    <div class="obrow" id="obxform" hidden>
+      <button id="ob-rot-l" title="turn anticlockwise">&#8634;</button>
+      <button id="ob-rot-r" title="turn clockwise">&#8635;</button>
+      <button id="ob-step" title="how far one tap turns or scales">15&deg; &middot; 10%</button>
+      <button id="ob-smaller" title="scale down">&minus;</button>
+      <button id="ob-bigger" title="scale up">+</button>
+    </div>
   </div>
   <div id="panel"><div id="dockA"></div><div id="dockB"></div></div>
 </div>
