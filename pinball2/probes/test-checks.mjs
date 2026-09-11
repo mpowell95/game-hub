@@ -9,6 +9,8 @@
 
 import { CONFIG } from '../machines/testbox/config.js';
 import { checkGaps, restSweep } from './checks.js';
+import { World } from '../machines/testbox/physics.js';
+import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
 
 let pass = 0;
 let fail = 0;
@@ -121,6 +123,34 @@ const railAt = (x, y0, y1, r) => ({ id: `w${x}`, kind: 'seg', a: { x, y: y0 }, b
   const r = restSweep(open, CONFIG, { step: 0.030, seconds: 4 });
   ok(r.stuck.length === 0, `an open playfield has no dead stops (${r.drops} drops, ${r.stuck.length})`,
     JSON.stringify(r.stuck.slice(0, 3)));
+}
+
+// ------------------------------------------------- a launch has to put the ball INTO PLAY
+// The first version of the plunger was tested by asking "did the ball reach the playfield". It did,
+// and the table was still unplayable: at 3.2 m/s it crested the top corner with so much speed left
+// that it skimmed the whole top rail, hugged the left rail and drained in one second having touched
+// no bumper, no slingshot and neither flipper. Matt: "just shoots straight out."
+//
+// SO THE QUESTION IS NOT WHERE THE BALL GOT TO, IT IS WHETHER ANYTHING HAPPENED. A launch that
+// touches nothing that can hit back is a launch that failed, wherever the ball travelled.
+{
+  const KIND = {};
+  const t = makeBoardwalk();
+  for (const s of t.shapes) KIND[s.id] = s.kind;
+  const w = new World(t, CONFIG);
+  const b = w.addBall(t.launch, t.launchV || { x: 0, y: 0.1 });
+  const touched = new Set();
+  let secs = 0;
+  for (let k = 0; k < Math.round(20 / CONFIG.DT) && b.alive; k++) {
+    w.step(CONFIG.DT);
+    for (const ev of w.events) if (ev.id) touched.add(ev.id);
+    w.events.length = 0;
+    secs = k * CONFIG.DT;
+  }
+  const live = [...touched].filter((i) => ['bumper', 'sling', 'flipper'].includes(KIND[i]));
+  ok(t.launchV && t.launchV.y < 0, 'BOARDWALK has a plunger, firing UP its shooter lane');
+  ok(live.length >= 2, `and a launch puts the ball into PLAY, not just onto the playfield (hit ${live.join(', ') || 'NOTHING that hits back'})`);
+  ok(secs > 4, `the ball survives more than a moment (${secs.toFixed(1)}s before it drained)`);
 }
 
 console.log(`\nCheck tests: ${pass} passed, ${fail} failed.`);

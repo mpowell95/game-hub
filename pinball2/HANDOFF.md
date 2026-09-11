@@ -576,9 +576,23 @@ shooter lane: BOARDWALK's ball trickled down the right lane and drained on every
 never reaching the playfield.
 
 A table may carry **`launchV`**, a velocity. Absent means the old drop, so no existing table changes.
-BOARDWALK fires up its lane at 3.2 m/s; measured, every speed from 2.0 m/s up clears the top corner
-and rides arc a5 into play, so the number is inside a band rather than on its edge. A real plunger
-with a pull-back meter is its own object and is still on the list.
+BOARDWALK fires up its lane at **1.65 m/s**, and that number is MEASURED THROUGH THE REAL ENGINE.
+
+**The band is narrow and the first attempt sat miles outside it.** 3.2 m/s crested the top corner
+with so much speed left that the ball skimmed the whole top rail, hugged the left rail and drained
+in one second having touched no bumper, no slingshot and neither flipper. Matt, on the shipped
+build: *"the ball goes up the right side, then along the top wall, and then down the left wall and
+off the board. Just shoots straight out."* Every speed at or above 2.0 m/s does that; below about
+1.5 it never leaves the lane. 1.65 measures 13.3 s in play across all four bumpers, a slingshot and
+both flippers. The band 1.55-1.95 is CHOPPY inside itself (1.75 is a dud, 1.85 is ten seconds),
+because a pinball is chaotic and a millimetre at the top corner is a different table by the bumpers.
+**Re-measure after any change to the lane, arc a5 or the top rail.** A real plunger with a pull-back
+meter is its own object and is still on the list.
+
+**And the test that made this necessary was the wrong test.** It asked "did the ball reach the
+playfield", which it had. The question is not where the ball got to, it is WHETHER ANYTHING
+HAPPENED: `test-checks.mjs` now fails a launch that touches fewer than two things that can hit back,
+or that drains inside four seconds.
 
 **An optional field is OMITTED, never written as null.** `tableIsFinite` rejects null on purpose
 (JSON has no NaN, so a NaN comes back as null, and null in arithmetic is 0), so the first version of
