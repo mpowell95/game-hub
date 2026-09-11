@@ -12,7 +12,6 @@ node_modules/
 !.claude/skills/
 
 # Local working docs (not for the public repo)
-HANDOFF.md
 
 # Reference screenshots of other apps (design reference only, not for the public repo)
 mancala/reference/

@@ -152,6 +152,41 @@ const afterHeal = await framesIn(400);
 ok(afterHeal > 5, `the loop runs after loading a poisoned autosave (${afterHeal} frames per 400ms)`);
 ok(errors.length === 0, 'no page errors', errors.join('\n      '));
 
+// ------------------------------------------------------ [KNOWN-BUG PROBE] a new build must show
+// Matt opened a build with bumpers, slingshots and a ramp in it and saw the bare box he had saved a
+// build earlier: "Where are all the updates you just did?" The editor restores this device's saved
+// table, which is right for work in progress and wrong the day the machine ships new parts.
+await page.evaluate(() => {
+  const old = { table: { name: 'OLD', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
+    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] },
+    cfg: {}, shipped: 'an older build', edited: false };
+  localStorage.setItem('pinball2.editor.v1', JSON.stringify(old));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const fresh = await page.evaluate(() => ({
+  parts: window.__pb2.table.shapes.length,
+  kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
+}));
+ok(fresh.parts > 1 && fresh.kinds.includes('ribbon'),
+  `an UNEDITED save from an older build is replaced by the shipped table (${fresh.parts} parts: ${fresh.kinds})`);
+
+await page.evaluate(() => {
+  const mine = { table: { name: 'MINE', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
+    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] },
+    cfg: {}, shipped: 'an older build', edited: true };
+  localStorage.setItem('pinball2.editor.v1', JSON.stringify(mine));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const kept = await page.evaluate(() => ({
+  name: window.__pb2.table.name,
+  stale: !!window.__pb2.staleTable,
+  hud: document.getElementById('hud').textContent,
+}));
+ok(kept.name === 'MINE' && kept.stale, 'an EDITED save is kept, not thrown away');
+ok(/Reset table/.test(kept.hud), 'and the corner says the shipped table has moved on', kept.hud);
+
 await browser.close();
 console.log(`\nEditor tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
