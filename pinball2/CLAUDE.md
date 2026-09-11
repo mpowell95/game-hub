@@ -318,6 +318,43 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## Turning something you cannot see yet
+
+Step 5 of the overhaul, and the last of it: turn and scale a SELECTION, where handles only ever
+reshaped one part. The brief named the case it exists for - "you'll often want to rotate a saved
+bumper cluster before dropping it, rather than rebuilding it at an angle."
+
+**Before dropping it.** That half is where the work was. Rotating something already on the table is
+a loop closed by looking at it; rotating something that has not landed is blind, and blind on a
+phone in particular, because there is no hover and so no preview that can follow a pointer. Three
+ways out, and only one of them is any good:
+
+- Report the pending angle as a number. Honest, and useless: nobody can picture a saved cluster at
+  30 degrees from the word "30".
+- Drop it, turn it, drag it back. This is the rebuilding the prefab library was built to stop.
+- **Draw it before it lands.** A dashed outline in the selection accent, in the middle of whatever
+  is on screen, redrawn as you turn it.
+
+The third one costs about forty lines (`drawGhost` / `ghostPath`) and cannot reuse the renderer,
+because `draw()` clears the canvas and paints a playfield first - the loupe gets away with calling
+it because the loupe redraws everything. So the ghost is centrelines only, in the editor's own
+vocabulary, which is the right answer anyway: it is there to say WHICH WAY IS THIS POINTING, not
+how thick anything is.
+
+The other half is a data change with a rule behind it: **`app.placing` now carries the prefab's
+SHAPES, not its name.** An armed prefab is a working copy. Turning the one you are about to drop
+must not touch the one in the library, and looking a name up at drop time would have made those the
+same object. The test that pins it reads the stored prefab back out of localStorage after two taps
+of the turn button and asserts it has not moved.
+
+Two smaller things worth not re-deriving. **Anticlockwise on screen is a negative angle** here,
+because y runs down the table - and because the stored angles (`a0`/`a1`, `restAng`/`endAng`) are
+atan2 in that same frame, one `+= ang` turns a part's geometry and its spans together, which is
+what stops an arc being drawn one way and collided another. And **scale is uniform, thicknesses
+included**: scaling positions alone looks right for one step and is wrong by the third, because the
+gaps between parts move and the parts themselves do not, so a cluster this repo measured clear at
+100% is a wedge at 60%.
+
 ## A panel that shuts itself under your finger
 
 Step 4 of the overhaul is the placements list: every part on the table, by kind and id, tap one to
@@ -612,9 +649,14 @@ three cases. They fall out of the ramp having a height.
 
 ## Where this goes next
 
-Step 3 of the plan: the remaining object types, one at a time, each with its property panel and its
-own probe. Then ribbons and the second level, then save/load and the first real table, which Matt
-wants designed for fun rather than copied from any existing machine.
+**The editor overhaul is finished** (2026-09-11, all five steps: one workspace, the table library,
+prefabs, the placements list, turn and scale). What is left is the GAME, not the tool.
+
+The remaining object types, one at a time, each with its property panel and its own probe: drop
+targets, a spinner, rollover lanes, a kicker or saucer, a plunger. Then the first real table, which
+Matt wants designed for fun rather than copied from any existing machine. BOARDWALK - 44 parts, no
+gaps, no dead stops, no escapes in 40,536 shots - exists as JSON in a scratchpad and has never been
+imported into the tool; that import is a decision waiting on Matt, not a task waiting on a session.
 
 **Two levels are real geometry here, never a transition.** A ramp will be a ribbon with a floor
 height and a slope; the ball rolls up it and either crests or rolls back out of the mouth. There is

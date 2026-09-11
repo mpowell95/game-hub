@@ -176,8 +176,9 @@ carries the old field across so a saved override is not lost.)
 4. `render.js` `draw()` — how it is drawn
 5. `probes/checks.js` `distToShape()` and `surfacePoints()` — or every probe is blind to it
 
-Plus the editor: `handlesFor`, `moveShape`, `centreOf`, `addShape`, the add button row, and the
-property panel. And `test-editor.mjs`'s own `centre()` helper.
+Plus the editor: `handlesFor`, `moveShape`, `rotateShape`, `scaleShape`, `ghostPath`, `centreOf`,
+`addShape`, `PART_ICONS`, the add button row, and the property panel. And `test-editor.mjs`'s own
+`centre()` helper.
 
 `distToShape` now **throws** on an unknown kind rather than returning `Infinity`, because
 `Infinity` reads as "nowhere near" and bumpers spent a whole build invisible to every check.
@@ -566,6 +567,51 @@ another one, off the visible area, or two millimetres wide.
   does. Without it, the panel re-renders on every drag frame and a list you opened shuts itself
   under your finger. A group that is open BECAUSE something is selected still wins over the
   remembered state, so Tune's tapped-part group keeps opening itself.
+
+### Turn and scale (2026-09-11)
+
+Handles reshape ONE part. These reshape a SELECTION, which is what the prefab library made
+necessary: a bumper nest saved flat is wanted at an angle, and rebuilding it at that angle by
+dragging five handles is exactly the typing the library exists to avoid.
+
+Two controls, one mechanism (`turnSel` / `scaleSel` → `applyXform`):
+
+- **A second row in the object bar** — `↺` `↻`, a step chip, `−` `+` — which appears only while
+  there is something to turn. The chip cycles 1°/1%, 5°/5%, 15°/10%, 45°/25%: ONE chip for both,
+  because coarse and fine is a state of mind rather than a per-axis setting, and a phone's bar has
+  room for five buttons.
+- **Exact fields in the Inspector** (`Turn by (deg)`, `Scale to (%)`) for the amounts the fixed
+  steps cannot reach without counting taps. Same target, same anchor, so the two cannot disagree.
+
+The load-bearing details:
+
+- **The anchor is the selection's own centroid**, the same anchor a prefab is stored against. A
+  prefab lands centred on the tap, so turning it about its centroid keeps it where the tap put it;
+  turning about anything else walks it away from the finger every time.
+- **Angles turn with positions.** An arc's `a0`/`a1` and a flipper's `restAng`/`endAng` are atan2
+  in the same y-down frame as the coordinates, so one `+= ang` covers both. Move the position and
+  leave the angle and the part is drawn one way and collided another.
+- **Anticlockwise on screen is a NEGATIVE angle here**, because y runs down the table.
+- **Scale is UNIFORM**: distances from the anchor AND every thickness by the same factor. Scaling
+  positions alone looks right for one step and is wrong by the third, because the gaps move and the
+  parts do not, so a cluster measured clear at 100% is a wedge at 60%. A ramp's `z` is a different
+  axis and is left alone.
+- **Nothing is snapped.** Snapping a turned rail to the 5 mm grid moves its two ends by different
+  amounts, which does not rotate it, it BENDS it.
+- **A drain turns its CENTRE and stays square to the table.** It is an axis-aligned rectangle and
+  the data model has nowhere to put an angle; inventing a rotated one would be a sixth kind for
+  `physics.js`, `checks.js` and every probe to learn.
+- **The transform runs on a COPY and is checked before it commits.** A NaN reaching the renderer
+  freezes the app, and half a transformed selection is worse than none.
+- **A scale that would take any dimension below 0.5 mm is refused WHOLE**, not clamped per part:
+  clamping one part of a group silently breaks the group's proportions.
+
+**`app.placing` carries the prefab's shapes, not its name.** That is what lets an armed prefab be
+turned before it lands without editing what is saved, and `armPrefab(name)` is where the working
+copy is taken. The armed prefab is **drawn as a dashed outline in the middle of what you can see**
+(`drawGhost`): a phone has no hover, so a preview that follows the pointer shows nothing to the
+person who most needs it, and the alternative (drop it, look, turn, move it back) is the rebuilding
+the library exists to avoid.
 
 ### Two things to know before editing `editor.js`
 

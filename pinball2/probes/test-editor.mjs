@@ -728,7 +728,7 @@ const placed = await page.evaluate(async () => {
   if (!btn) return { found: false };
   btn.click();
   await new Promise((q) => setTimeout(q, 150));
-  const armed = a.placing;
+  const armed = a.placing && a.placing.name;
   // tap a spot well away from where the flippers live
   const target = { x: 0.25, y: 0.35 };
   const v = a.view;
@@ -792,12 +792,196 @@ const escaped = await page.evaluate(async () => {
   const btn = [...document.querySelectorAll('#panel button')].find((b) => b.textContent.trim() === 'Place');
   btn.click();
   await new Promise((q) => setTimeout(q, 120));
-  const armed = window.__pb2.placing;
+  const armed = window.__pb2.placing && window.__pb2.placing.name;
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await new Promise((q) => setTimeout(q, 120));
   return { armed, after: window.__pb2.placing };
 });
 ok(escaped.armed === 'Lower third' && escaped.after === null, 'Escape cancels an armed prefab');
+
+// ------------------------------------------------------------------ turn and scale a selection
+// Handles reshape ONE part. This reshapes a selection, which is what the prefab library made
+// necessary: a bumper nest saved flat is wanted at an angle, and rebuilding it at that angle by
+// dragging five handles is the typing the library exists to avoid.
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.click('#tab-edit');
+await page.waitForTimeout(300);
+
+const angOf = (s) => Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x) * 180 / Math.PI;
+
+const barGate = await page.evaluate(async () => {
+  const a = window.__pb2;
+  a.sel.clear();
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 120));
+  const empty = document.getElementById('obxform').hidden;
+  a.sel = new Set([a.table.shapes.find((s) => s.kind === 'sling').id]);
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 120));
+  return { empty, withSel: document.getElementById('obxform').hidden };
+});
+ok(barGate.empty && !barGate.withSel,
+  'the turn/scale row appears only when there is something to turn');
+
+// ONE tap is ONE step, in the direction the glyph shows. y runs DOWN the table, so clockwise to look
+// at is a POSITIVE angle in the data: get that backwards and every button turns the wrong way.
+const oneTap = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const id = a.table.shapes.find((s) => s.kind === 'sling').id;
+  a.sel = new Set([id]);
+  const at = () => { const s = a.table.shapes.find((x) => x.id === id); return { ...s }; };
+  const before = at();
+  document.getElementById('ob-rot-r').click();
+  await new Promise((q) => setTimeout(q, 100));
+  const cw = at();
+  document.getElementById('ob-rot-l').click();
+  await new Promise((q) => setTimeout(q, 100));
+  return { before, cw, back: at(), step: document.getElementById('ob-step').textContent };
+});
+const dCW = angOf(oneTap.cw) - angOf(oneTap.before);
+ok(Math.abs(dCW - 15) < 1e-6, `one clockwise tap turns it by exactly the step (${dCW.toFixed(3)} of 15 deg)`);
+ok(Math.abs(angOf(oneTap.back) - angOf(oneTap.before)) < 1e-9,
+  'and the anticlockwise tap puts it back exactly, with no drift');
+ok(/15°/.test(oneTap.step) && /10%/.test(oneTap.step), 'the step chip says what one tap does');
+
+// THE ANCHOR IS THE SELECTION'S OWN CENTROID, the same anchor a prefab is stored against. Turning
+// about anything else would walk a prefab away from the tap that placed it.
+const group = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const ids = a.table.shapes.filter((s) => s.kind === 'sling').map((s) => s.id);
+  a.sel = new Set(ids);
+  const mid = () => {
+    const ss = a.table.shapes.filter((x) => a.sel.has(x.id));
+    return {
+      x: ss.reduce((m, s) => m + (s.a.x + s.b.x) / 2, 0) / ss.length,
+      y: ss.reduce((m, s) => m + (s.a.y + s.b.y) / 2, 0) / ss.length,
+    };
+  };
+  const one = () => ({ ...a.table.shapes.find((x) => x.id === ids[0]) });
+  const before = { mid: mid(), one: one() };
+  document.getElementById('ob-rot-r').click();
+  await new Promise((q) => setTimeout(q, 100));
+  return { before, after: { mid: mid(), one: one() } };
+});
+const midMoved = Math.hypot(group.after.mid.x - group.before.mid.x, group.after.mid.y - group.before.mid.y) * 1000;
+ok(midMoved < 1e-6, `turning a group leaves its middle where it was (${midMoved.toFixed(4)}mm)`);
+ok(Math.abs(angOf(group.after.one) - angOf(group.before.one) - 15) < 1e-6,
+  'and every part in it turns by the full step');
+
+// An arc and a flipper store ANGLES as well as positions. Turn the position and leave the angles and
+// the part is drawn one way and collided another, which is the one bug this repo refuses to allow.
+const spans = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const arc = a.table.shapes.find((s) => s.kind === 'arc');
+  const fl = a.table.shapes.find((s) => s.kind === 'flipper');
+  a.sel = new Set([arc.id, fl.id]);
+  const snap = () => {
+    const A = a.table.shapes.find((x) => x.id === arc.id);
+    const F = a.table.shapes.find((x) => x.id === fl.id);
+    return { a0: A.a0, a1: A.a1, rest: F.restAng, end: F.endAng };
+  };
+  const before = snap();
+  document.getElementById('ob-rot-r').click();
+  await new Promise((q) => setTimeout(q, 100));
+  return { before, after: snap() };
+});
+const D = 15 * Math.PI / 180;
+ok(Math.abs(spans.after.a0 - spans.before.a0 - D) < 1e-9 && Math.abs(spans.after.a1 - spans.before.a1 - D) < 1e-9,
+  "an arc's own span turns with it, so what is drawn and what is hit stay the same thing");
+ok(Math.abs(spans.after.rest - spans.before.rest - D) < 1e-9 && Math.abs(spans.after.end - spans.before.end - D) < 1e-9,
+  "and a flipper's two stops turn with it");
+
+// UNIFORM. Scaling positions without thicknesses looks right for one step and is wrong by the third:
+// the gaps between the parts move and the parts themselves do not, so a cluster measured clear at
+// 100% is a wedge at 60%.
+const scaled = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const ids = a.table.shapes.filter((s) => s.kind === 'bumper').map((s) => s.id);
+  a.sel = new Set(ids);
+  const snap = () => {
+    const ss = ids.map((i) => a.table.shapes.find((x) => x.id === i));
+    return { gap: Math.hypot(ss[0].c.x - ss[1].c.x, ss[0].c.y - ss[1].c.y), r: ss[0].r };
+  };
+  const before = snap();
+  document.getElementById('ob-smaller').click();
+  await new Promise((q) => setTimeout(q, 100));
+  return { before, after: snap() };
+});
+const kGap = scaled.after.gap / scaled.before.gap;
+const kR = scaled.after.r / scaled.before.r;
+ok(Math.abs(kGap - kR) < 1e-9 && Math.abs(kGap - 1 / 1.1) < 1e-9,
+  `scale is uniform: spacing and thickness both by ${kGap.toFixed(4)}`);
+
+// A part scaled to nothing is a part you cannot find again, and the refusal is WHOLE rather than
+// per part: clamping one part of a group breaks the group's proportions silently.
+const floor = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const id = a.table.shapes.find((s) => s.kind === 'circle' || s.kind === 'bumper').id;
+  a.sel = new Set([id]);
+  const r0 = a.table.shapes.find((x) => x.id === id).r;
+  for (let i = 0; i < 200; i++) document.getElementById('ob-smaller').click();
+  await new Promise((q) => setTimeout(q, 150));
+  return { r0, r1: a.table.shapes.find((x) => x.id === id).r };
+});
+ok(floor.r1 >= 0.0005, `200 taps of smaller cannot shrink a part below half a millimetre (${(floor.r1 * 1000).toFixed(3)}mm)`);
+
+// ONE tap, ONE undo. A transform that pushed a snapshot per shape would need five undos to take back
+// one button press.
+const undone = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const id = a.table.shapes.find((s) => s.kind === 'sling').id;
+  a.sel = new Set([id]);
+  const at = () => ({ ...a.table.shapes.find((x) => x.id === id) });
+  const before = at();
+  document.getElementById('ob-rot-r').click();
+  await new Promise((q) => setTimeout(q, 100));
+  const turned = at();
+  const dis = document.getElementById('ob-undo').disabled;
+  document.getElementById('ob-undo').click();
+  await new Promise((q) => setTimeout(q, 150));
+  return { before, turned, after: at(), dis, n: a.undo.length };
+});
+ok(Math.abs(angOf(undone.after) - angOf(undone.before)) < 0.02, 'one undo takes back one turn, to the precision the save codec keeps',
+  `was ${angOf(undone.before).toFixed(3)}, turned to ${angOf(undone.turned).toFixed(3)}, undo left ${angOf(undone.after).toFixed(3)}`
+  + ` (undo button disabled: ${undone.dis}, stack ${undone.n})`);
+
+// TURNING AN ARMED PREFAB MUST NOT TOUCH WHAT IS SAVED. `app.placing` carries its own working copy
+// for exactly this: turn the one you are about to drop, and the library still holds the original.
+const armedTurn = await page.evaluate(async () => {
+  const a = window.__pb2;
+  a.sel = new Set(a.table.shapes.filter((s) => s.kind === 'sling').map((s) => s.id));
+  window.prompt = () => 'Pair';
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 200));
+  [...document.querySelectorAll('#panel button')].find((b) => /Save selection/i.test(b.textContent)).click();
+  await new Promise((q) => setTimeout(q, 200));
+  a.sel.clear();
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 200));
+  // By the name, not by "the first Place button": there is more than one prefab saved by now.
+  const row = [...document.querySelectorAll('#panel .row')].find((r) => r.querySelector('label') && r.querySelector('label').textContent.trim() === 'Pair');
+  [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Place').click();
+  await new Promise((q) => setTimeout(q, 200));
+  const armedRow = !document.getElementById('obxform').hidden;
+  const pick = (list) => list.find((s) => s.kind === 'sling');
+  const before = { ...pick(a.placing.shapes) };
+  const undos0 = a.undo.length;
+  document.getElementById('ob-rot-r').click();
+  document.getElementById('ob-rot-r').click();
+  await new Promise((q) => setTimeout(q, 150));
+  const stored = pick(JSON.parse(localStorage.getItem('pinball2.editor.prefabs')).Pair.shapes);
+  return { armedRow, before, after: { ...pick(a.placing.shapes) }, stored: { ...stored }, added: a.undo.length - undos0 };
+});
+ok(armedTurn.armedRow, 'an armed prefab counts: the turn/scale row is there before it lands');
+ok(Math.abs(angOf(armedTurn.after) - angOf(armedTurn.before) - 30) < 1e-6,
+  'two taps turn the armed prefab by two steps');
+ok(Math.abs(angOf(armedTurn.stored) - angOf(armedTurn.before)) < 1e-9,
+  'and the SAVED prefab is untouched: you turned the copy you are about to drop');
+ok(armedTurn.added === 0, 'turning something that is not on the table yet adds nothing to undo');
 
 // ------------------------------------------------------------------------ Tune tunes ONE part
 // Matt: "when I'm on the Tune tab, I should be able to select an object and see the tune objects for
