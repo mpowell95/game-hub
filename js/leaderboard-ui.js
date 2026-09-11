@@ -1417,7 +1417,7 @@ function ttVariantWins(v) { return Math.max(0, Math.min((v && v.won) | 0, (v && 
 // filter/sort redesign (HANDOFF-LB-FILTER-SORT.md §3.5): no big/small swap, no secondary number.
 // They still sit under the new control row, and Alphabetical/Games Played still reorder them
 // (see sortRows below) — only the "wins" sort (this game's own metric) keeps its bespoke order.
-function ttCardHTML(g, chip) {
+function ttCardHTML(g, chip, bSort) {
   const me = g.key === _meKey ? ' is-me' : '';
   // The `tt` sub-counter has NO per-tier storage (see the note above ttVariantWins), so unlike
   // every other board these two numbers cannot be read at one tier. The chip still names the tier
@@ -1431,6 +1431,19 @@ function ttCardHTML(g, chip) {
   // nobody may fall off the board (rule 1), so show the generic wins number as a third, honestly
   // labeled fallback value instead of a silent zero.
   const fallback = hasTt ? '' : `<span class="lb-tt-val is-fallback"><b>${winsAtTier(g, ['tictactoe'], null)}</b><span>${esc(t('lb_wins_unit'))}</span></span>`;
+  // THE HEADLINE IS WHAT YOU SORTED BY (2026-09-11). Under "Games" the generic card above leads
+  // with the play count and demotes the score to the subline; this card and Snake's took no sort
+  // at all, so they went on leading with the score. Matt, on the Snake board sorted by Games:
+  // rank 1 printed 39 and rank 3 printed 43, with the 307 plays that actually set that order in
+  // small grey type. Nothing is hidden either way (rule 1) - the split moves to the subline.
+  if (bSort === 'played') {
+    const split = hasTt
+      ? `${ultimate} ${t('lb_tt_ultimate')} \u00b7 ${classic} ${t('lb_tt_classic')}`
+      : `${winsAtTier(g, ['tictactoe'], null)} ${t('lb_wins_unit')}`;
+    return playerCardHTML(g, chip,
+      { val: boardPlaysOf(g, 'tictactoe'), unit: unitWord('lb_played_count') },
+      split, '', '', tierChipHTML(rowTier));
+  }
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
@@ -1449,13 +1462,21 @@ function ttCardHTML(g, chip) {
 // template: two numbers per card instead of one, no toggle. Unlike TT's variants, Snake's bests
 // ARE per-tier storage, so this one respects the board's own difficulty filter (`_tier`), unlike ttCardHTML.
 // Same "leave structurally alone" note as ttCardHTML above applies here (§3.5).
-function snCardHTML(g, chip) {
+function snCardHTML(g, chip, bSort) {
   const me = g.key === _meKey ? ' is-me' : '';
   // At the tier this row is RANKED at (2026-09-08), not the all-tier best: this card is the one
   // Matt caught printing a 51 set on Easy beside a Hard ranking.
   const rowTier = boardTierOf(g, 'snake');
   const off = snBestAtWalls(g, rowTier, 'off');
   const on = snBestAtWalls(g, rowTier, 'on');
+  // THE HEADLINE IS WHAT YOU SORTED BY - see the same block in ttCardHTML above; this is the
+  // card Matt was looking at when he said the board made no sense.
+  if (bSort === 'played') {
+    return playerCardHTML(g, chip,
+      { val: boardPlaysOf(g, 'snake'), unit: unitWord('lb_played_count') },
+      `${off} ${t('lb_sn_walls_off')} \u00b7 ${on} ${t('lb_sn_walls_on')}`,
+      '', '', tierChipHTML(rowTier));
+  }
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
@@ -1546,8 +1567,8 @@ function gameDetail(list, id) {
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
         const chip = rankChipHTML(rankOf[g.key], tiedAt(g.key));
-        if (id === 'tictactoe') return ttCardHTML(g, chip);
-        if (id === 'snake') return snCardHTML(g, chip);
+        if (id === 'tictactoe') return ttCardHTML(g, chip, bSort);
+        if (id === 'snake') return snCardHTML(g, chip, bSort);
         // The row's OWN tier, and the score at it - never the all-tier number, which is how a
         // Hard-ranked player printed an Easy 51 on the live board.
         const rowTier = boardTierOf(g, id);
