@@ -39,6 +39,8 @@ const app = {
   lastError: '',
   hot: {},
   repaired: 0,
+  edited: false,
+  staleTable: false,
 };
 
 /** Every number in a table must be finite. A single NaN freezes the app (see `frame`), and the
@@ -71,10 +73,24 @@ function repairTable(t) {
 
 // ------------------------------------------------------------------ persistence
 
+/** A cheap fingerprint of the table the MACHINE ships, so the editor can tell whether what is
+ *  stored on this device was made from the same starting point. */
+function shippedSig() {
+  try {
+    const t = makeTable();
+    return `${t.shapes.length}:${t.shapes.map((sh) => sh.kind).join('')}:${Math.round(t.w * 1e4)}`;
+  } catch (e) { return '?'; }
+}
+
 function save() {
   try {
     if (!tableIsFinite(app.table)) return;      // never write a table that would freeze the app
-    localStorage.setItem(SAVE, JSON.stringify({ table: JSON.parse(toJSON(app.table)), cfg: app.cfg }));
+    localStorage.setItem(SAVE, JSON.stringify({
+      table: JSON.parse(toJSON(app.table)),
+      cfg: app.cfg,
+      shipped: shippedSig(),
+      edited: app.edited,
+    }));
   } catch (e) { /* a full or blocked store must never stop the tool working */ }
 }
 
@@ -83,10 +99,26 @@ function load() {
     const raw = localStorage.getItem(SAVE);
     if (!raw) return;
     const d = JSON.parse(raw);
+    // THE AUTOSAVE MUST NOT HIDE A NEW BUILD. The editor restores whatever this device last had,
+    // which is right for work in progress and badly wrong the day the machine ships new parts:
+    // Matt opened a build with bumpers, slingshots and a ramp in it and saw the bare box he had
+    // saved a build earlier. "Where are all the updates you just did?"
+    //
+    // So the save records the fingerprint of the table it started from. If the shipped table has
+    // changed since, an UNEDITED save is simply dropped and the new one loaded, and an edited one
+    // is kept with a line in the corner saying the shipped table moved on.
+    const sig = shippedSig();
     if (d.table) {
-      const t = fromJSON(d.table);
-      app.repaired = repairTable(t);            // an already poisoned phone heals on this load
-      app.table = t;
+      const stale = d.shipped && d.shipped !== sig;
+      if (stale && !d.edited) {
+        app.table = makeTable();                // nothing of theirs to lose: take the new build
+      } else {
+        const t = fromJSON(d.table);
+        app.repaired = repairTable(t);          // an already poisoned phone heals on this load
+        app.table = t;
+        app.edited = !!d.edited;
+        if (stale) app.staleTable = true;
+      }
     }
     if (d.cfg) {
       const c = cloneConfig(d.cfg);
@@ -119,6 +151,7 @@ function doRedo() {
 }
 
 function afterEdit() {
+  app.edited = true;
   app.mask = null;
   app.marks = [];
   save();
@@ -599,8 +632,12 @@ function renderEditPanel() {
     pushUndo();
     app.table = makeTable();
     app.sel.clear();
+    app.edited = false;
+    app.staleTable = false;
     resize();
     afterEdit();
+    app.edited = false;                         // reset means "back to the shipped table", not an edit
+    save();
   };
   io.append(exp, imp, reset);
   panel.append(io);
@@ -842,6 +879,7 @@ function frameBody(t) {
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
+  if (app.staleTable) hud.textContent += '\nthis is YOUR edited table. The shipped one has new parts: Edit then Reset table';
 }
 
 function drawSelection() {
