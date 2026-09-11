@@ -8,10 +8,10 @@
 // was hours old.
 import { CONFIG, TUNABLES, KIND_NAMES, cloneConfig, gravity } from '../machines/testbox/config.js';
 import { World } from '../machines/testbox/physics.js';
-import { makeTable, toJSON, fromJSON, newId } from '../machines/testbox/table.js';
+import { makeTable, toJSON, fromJSON, newId, buildRamp, rampPoints, RAMP_DEFAULTS } from '../machines/testbox/table.js';
 import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
 import { draw, fitView, toTable, toScreen } from '../machines/testbox/render.js';
-import { playable, distToShape, checkGaps, tunnelProbe, restSweep, drainTime } from '../probes/checks.js';
+import { playable, distToShape, checkGaps, tunnelProbe, restSweep, drainTime, rampProbe } from '../probes/checks.js';
 
 const SAVE = 'pinball2.editor.v1';
 const DEG = 180 / Math.PI;
@@ -54,6 +54,10 @@ const app = {
   // COPY of the shapes rather than a name to look up, because the turn and scale tools act on it
   // before it lands and a stored prefab must not change when you turn the one you are about to drop.
   placing: null,
+  // Laying a ramp path: `{ pts: [] }`. A ramp is the one part that cannot be made by dropping a
+  // default in the middle and dragging its ends, because its shape IS a path - so the Ramp button
+  // starts a mode instead of adding a shape.
+  drawing: null,
   tableName: null,        // the LIBRARY save being edited, or null for a table this build ships
   builtin: null,          // which shipped table, when tableName is null: null means Default
   migrated: null,
@@ -408,8 +412,16 @@ function handlesFor(sh) {
     out.push({ key: 'pivot', at: sh.pivot });
     out.push({ key: 'tip', at: { x: sh.pivot.x + sh.len * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * Math.sin(sh.restAng) } });
   } else if (sh.kind === 'ribbon') {
-    out.push({ key: 'm0', at: sh.pts[0] });
-    out.push({ key: 'm1', at: sh.pts[sh.pts.length - 1] });
+    // A ramp laid with the Ramp tool is handled by its CONTROL POINTS: dragging one reshapes the
+    // curve. Move the whole ramp by dragging its body instead. A ramp with no stored control points
+    // (anything built before the tool existed) keeps the old pair of end handles, which move the
+    // whole thing - it has no control points to offer and inventing some would be a guess.
+    if (sh.ctrl && sh.ctrl.length >= 2) {
+      sh.ctrl.forEach((c, i) => out.push({ key: 'c' + i, at: c }));
+    } else {
+      out.push({ key: 'm0', at: sh.pts[0] });
+      out.push({ key: 'm1', at: sh.pts[sh.pts.length - 1] });
+    }
   } else if (sh.kind === 'drain') {
     out.push({ key: 'tl', at: { x: sh.x, y: sh.y } });
     out.push({ key: 'br', at: { x: sh.x + sh.w, y: sh.y + sh.h } });
@@ -427,7 +439,12 @@ function moveShape(sh, dx, dy) {
   if (sh.kind === 'seg' || sh.kind === 'sling') { sh.a.x += dx; sh.a.y += dy; sh.b.x += dx; sh.b.y += dy; }
   else if (sh.kind === 'arc' || sh.kind === 'circle' || sh.kind === 'bumper') { sh.c.x += dx; sh.c.y += dy; }
   else if (sh.kind === 'flipper') { sh.pivot.x += dx; sh.pivot.y += dy; }
-  else if (sh.kind === 'ribbon') { for (const q of sh.pts) { q.x += dx; q.y += dy; } }
+  // A ramp's CONTROL POINTS move with its path or the two fall out of step, and the next drag of a
+  // control handle would snap the whole ramp back to where the control points still thought it was.
+  else if (sh.kind === 'ribbon') {
+    for (const q of sh.pts) { q.x += dx; q.y += dy; }
+    if (sh.ctrl) for (const q of sh.ctrl) { q.x += dx; q.y += dy; }
+  }
   else if (sh.kind === 'drain') { sh.x += dx; sh.y += dy; }
 }
 
@@ -471,7 +488,7 @@ function rotateShape(sh, a, ang) {
   else if (sh.kind === 'circle' || sh.kind === 'bumper') rot(sh.c);
   else if (sh.kind === 'arc') { rot(sh.c); sh.a0 += ang; sh.a1 += ang; }
   else if (sh.kind === 'flipper') { rot(sh.pivot); sh.restAng += ang; sh.endAng += ang; }
-  else if (sh.kind === 'ribbon') { for (const q of sh.pts) rot(q); }
+  else if (sh.kind === 'ribbon') { for (const q of sh.pts) rot(q); if (sh.ctrl) for (const q of sh.ctrl) rot(q); }
   else if (sh.kind === 'drain') {
     // A drain is an axis-aligned rectangle and the data model has nowhere to put an angle, so its
     // CENTRE turns with the group and the box stays square to the table. Inventing a rotated drain
@@ -493,7 +510,7 @@ function scaleShape(sh, a, k) {
   else if (sh.kind === 'circle' || sh.kind === 'bumper') { sc(sh.c); sh.r *= k; }
   else if (sh.kind === 'arc') { sc(sh.c); sh.radius *= k; sh.r *= k; }
   else if (sh.kind === 'flipper') { sc(sh.pivot); sh.len *= k; sh.r0 *= k; sh.r1 *= k; }
-  else if (sh.kind === 'ribbon') { for (const q of sh.pts) sc(q); sh.w *= k; sh.r *= k; }
+  else if (sh.kind === 'ribbon') { for (const q of sh.pts) sc(q); if (sh.ctrl) for (const q of sh.ctrl) sc(q); sh.w *= k; sh.r *= k; }
   else if (sh.kind === 'drain') {
     const c = { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
     sc(c);
@@ -667,6 +684,16 @@ canvas.addEventListener('pointerdown', (e) => {
   drag.raw = p;                         // where the finger is
   drag.virt = p;                        // where the HANDLE is, which a fine drag separates from it
 
+  // LAYING A RAMP PATH. Like an armed prefab, this goes before handles, select and lasso: while a
+  // path is open, a tap on the table means one thing.
+  if (app.mode === 'edit' && app.drawing) {
+    const q = snap(p);
+    app.drawing.pts.push({ x: q.x, y: q.y });
+    drag.mode = null;
+    renderPanel();
+    return;
+  }
+
   // A PREFAB IS ARMED AND WAITING FOR THIS TAP. It goes before the handle, select and lasso logic
   // on purpose: while placing, the tap means one thing and one thing only.
   if (app.mode === 'edit' && app.placing) {
@@ -781,10 +808,16 @@ canvas.addEventListener('pointermove', (e) => {
         sh.endAng = a + swing;
       }
     } else if (sh.kind === 'ribbon') {
-      const anchor = drag.key === 'm0' ? sh.pts[0] : sh.pts[sh.pts.length - 1];
-      const dx2 = q.x - anchor.x;
-      const dy2 = q.y - anchor.y;
-      for (const pt of sh.pts) { pt.x += dx2; pt.y += dy2; }
+      if (drag.key[0] === 'c' && sh.ctrl) {
+        const i = parseInt(drag.key.slice(1), 10);
+        if (sh.ctrl[i]) { sh.ctrl[i].x = q.x; sh.ctrl[i].y = q.y; rebuildRamp(sh); }
+      } else {
+        const anchor = drag.key === 'm0' ? sh.pts[0] : sh.pts[sh.pts.length - 1];
+        const dx2 = q.x - anchor.x;
+        const dy2 = q.y - anchor.y;
+        for (const pt of sh.pts) { pt.x += dx2; pt.y += dy2; }
+        if (sh.ctrl) for (const c of sh.ctrl) { c.x += dx2; c.y += dy2; }
+      }
     } else if (sh.kind === 'drain') {
       if (drag.key === 'tl') { sh.w += sh.x - q.x; sh.h += sh.y - q.y; sh.x = q.x; sh.y = q.y; }
       else { sh.w = Math.max(0.01, q.x - sh.x); sh.h = Math.max(0.01, q.y - sh.y); }
@@ -880,6 +913,8 @@ window.addEventListener('keydown', (e) => {
   const typing = e.target && /input|select|textarea/i.test(e.target.tagName);
   if (typing) return;
   // An armed prefab is a mode, and every mode needs a way out that is not "find the button again".
+  if (e.key === 'Escape' && app.drawing) { cancelRamp(); return; }
+  if (e.key === 'Enter' && app.drawing) { finishRamp(); return; }
   if (e.key === 'Escape' && app.placing) { app.placing = null; renderPanel(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -947,6 +982,10 @@ function duplicateSel() {
 }
 
 function addShape(kind) {
+  // A RAMP IS A PATH, so the button starts a mode rather than dropping a default. There is no
+  // sensible default ramp: one in the middle of the table pointing nowhere is a shape you would
+  // delete rather than edit, and its ends have to land where a ball can reach them.
+  if (kind === 'ribbon') { startRamp(); return; }
   pushUndo();
   const cx = app.table.w / 2;
   const cy = app.table.h / 2;
@@ -961,6 +1000,55 @@ function addShape(kind) {
   app.table.shapes.push(sh);
   app.sel = new Set([sh.id]);
   afterEdit();
+}
+
+// ------------------------------------------------------------------ the ramp tool
+//
+// Every other part is two or three numbers you can drag. A ramp is a PATH, and three rules have to
+// hold along it that freehand dragging breaks instantly: both ends at zero height, no kink over 20
+// degrees, and no level run (a ball that stops on one stops for ever). So you lay CONTROL POINTS and
+// the curve, the spacing and the height profile are generated - by `buildRamp` in `table.js`, the
+// same function the shipped table calls, never a copy of it here.
+//
+// The control points are STORED on the shape, which is what makes a ramp re-editable. Re-fitting
+// them out of the hundred-odd generated points would be guesswork, and a ramp you cannot reshape is
+// a ramp you delete and lay again.
+
+const RAMP_MIN_PTS = 3;      // two points is a straight line, which is a wall, not a ramp
+
+function startRamp() {
+  app.placing = null;
+  app.drawing = { pts: [] };
+  app.sel.clear();
+  renderPanel();
+}
+
+function cancelRamp() {
+  app.drawing = null;
+  renderPanel();
+}
+
+function finishRamp() {
+  const d = app.drawing;
+  if (!d || d.pts.length < RAMP_MIN_PTS) return false;
+  const sh = buildRamp(newId('r'), d.pts);
+  if (!sh.pts.length || !tableIsFinite(sh)) { cancelRamp(); return false; }
+  pushUndo();
+  app.table.shapes.push(sh);
+  app.drawing = null;
+  app.sel = new Set([sh.id]);
+  afterEdit();
+  return true;
+}
+
+/** Rebuild a ramp's path from its control points, keeping whatever width and height it already has.
+ *  Called after a control handle moves and after the width or height fields change, so the geometry
+ *  the ball hits is always the generator's output and never something edited by hand. */
+function rebuildRamp(sh) {
+  if (!sh.ctrl || sh.ctrl.length < RAMP_MIN_PTS) return;
+  const zmax = Math.max(...sh.pts.map((q) => q.z || 0), 0) || RAMP_DEFAULTS.zmax;
+  const pts = rampPoints(sh.ctrl, { zmax, w: sh.w, r: sh.r });
+  if (pts.length >= 2) sh.pts = pts;
 }
 
 // ------------------------------------------------------------------ the prefab library
@@ -1203,6 +1291,15 @@ obDup.onclick = duplicateSel;
 obDel.onclick = deleteSel;
 obSnap.onclick = () => { app.snap = !app.snap; renderPanel(); };
 
+const obDraw = document.getElementById('obdraw');
+const obDrawUndo = document.getElementById('ob-draw-undo');
+const obDrawDone = document.getElementById('ob-draw-done');
+const obDrawCancel = document.getElementById('ob-draw-cancel');
+
+obDrawUndo.onclick = () => { if (app.drawing) { app.drawing.pts.pop(); renderPanel(); } };
+obDrawDone.onclick = () => finishRamp();
+obDrawCancel.onclick = () => cancelRamp();
+
 const obXform = document.getElementById('obxform');
 const obRotL = document.getElementById('ob-rot-l');
 const obRotR = document.getElementById('ob-rot-r');
@@ -1237,7 +1334,14 @@ function syncObjBar() {
   // lands is the case the prefab library created.
   const s = xstep();
   obStep.textContent = `${s.deg}° · ${s.pct}%`;
-  obXform.hidden = !(editing && (app.sel.size || app.placing));
+  const n = app.drawing ? app.drawing.pts.length : 0;
+  obDraw.hidden = !(editing && app.drawing);
+  obDrawUndo.disabled = n === 0;
+  obDrawDone.disabled = n < RAMP_MIN_PTS;
+  obDrawDone.textContent = n < RAMP_MIN_PTS ? `Done (${n} of ${RAMP_MIN_PTS})` : `Done (${n} points)`;
+  // While a path is open the turn and scale row would act on a selection that is not the thing you
+  // are working on, so it stands down until the ramp lands.
+  obXform.hidden = !(editing && !app.drawing && (app.sel.size || app.placing));
   objbar.style.opacity = editing ? '' : '.5';
 }
 
@@ -1257,7 +1361,7 @@ const PART_ICONS = {
 
 function renderPalette() {
   const grid = el('<div class="palette"></div>');
-  for (const [k, name] of [['seg', 'Wall'], ['arc', 'Arc'], ['circle', 'Post'], ['bumper', 'Bumper'], ['sling', 'Sling'], ['flipper', 'Flipper'], ['drain', 'Drain']]) {
+  for (const [k, name] of [['seg', 'Wall'], ['arc', 'Arc'], ['circle', 'Post'], ['bumper', 'Bumper'], ['sling', 'Sling'], ['flipper', 'Flipper'], ['ribbon', 'Ramp'], ['drain', 'Drain']]) {
     const b = el(`<button title="add a ${name.toLowerCase()}">${PART_ICONS[k] || ''}<span>${name}</span></button>`);
     b.onclick = () => addShape(k);
     grid.append(b);
@@ -1504,12 +1608,22 @@ function renderInspector() {
     panel.append(numRow('Bounce (m/s)', sh.bounce != null ? sh.bounce : app.cfg.SLING_BOUNCE, 0.1, (v) => { sh.bounce = v; }));
   } else if (sh.kind === 'ribbon') {
     const zmax = Math.max(...sh.pts.map((q) => q.z || 0));
-    panel.append(numRow('Lane width', mm(sh.w), 1, (v) => { sh.w = v / 1000; }));
+    panel.append(numRow('Lane width', mm(sh.w), 1, (v) => { sh.w = v / 1000; if (sh.ctrl) rebuildRamp(sh); }));
     panel.append(numRow('Height', mm(zmax), 1, (v) => {
+      if (sh.ctrl) {
+        // Regenerate rather than scale, so the profile is always the generator's and the crest stays
+        // where the rules need it. Scaling every z by the same factor happens to preserve the shape,
+        // but it is a second way of producing the geometry and the two would drift.
+        const pts = rampPoints(sh.ctrl, { zmax: v / 1000, w: sh.w, r: sh.r });
+        if (pts.length >= 2) sh.pts = pts;
+        return;
+      }
       const k = zmax > 1e-6 ? (v / 1000) / zmax : 0;
       for (const q of sh.pts) q.z = (q.z || 0) * k;
     }));
-    panel.append(el(`<div class="note">${sh.pts.length} points, ${(sh.w * 1000).toFixed(0)}mm wide, rising to ${(zmax * 1000).toFixed(0)}mm. Drag either end dot to move the whole ramp. Both ends must stay at zero height, and the Check panel will tell you if they do not.</div>`));
+    panel.append(el(`<div class="note">${sh.pts.length} points, ${(sh.w * 1000).toFixed(0)}mm wide, rising to ${(zmax * 1000).toFixed(0)}mm.`
+      + `${sh.ctrl ? ` Drag any of its ${sh.ctrl.length} dots to reshape the curve, or drag the ramp itself to move it.` : ' Drag either end dot to move the whole ramp. It was built before the Ramp tool existed, so it has no control points to reshape.'}`
+      + ` Run <b>Ramps</b> on the Check tab after changing it.</div>`));
   } else if (sh.kind === 'seg') {
     panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
     panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
@@ -1649,9 +1763,14 @@ function renderCheckPanel() {
   const bTraps = el('<button class="primary">Find traps</button>');
   const bTunnel = el('<button>Tunnel test</button>');
   const bGaps = el('<button>Gap rule</button>');
+  // RAMPS. This probe was node-only until the Ramp tool shipped, which was fine while the only ramps
+  // in existence were written in code and checked once. The moment a person can lay one by hand, a
+  // check that lives in a terminal is a check that never runs: you would build a broken ramp and
+  // find out by playing.
+  const bRamps = el('<button>Ramps</button>');
   const bMask = el('<button>Show reachable</button>');
   const bClear = el('<button>Clear marks</button>');
-  r.append(bTraps, bTunnel, bGaps, bMask, bClear);
+  r.append(bTraps, bTunnel, bGaps, bRamps, bMask, bClear);
   panel.append(r);
 
   // The report goes in the OTHER half of the dock. It used to sit under the buttons in one column,
@@ -1681,6 +1800,19 @@ function renderCheckPanel() {
       ? `${real.length} gap(s) near one ball wide, which is where a ball wedges:\n`
         + real.map((f) => `  ${f.a} to ${f.b}: ${(f.gap * 1000).toFixed(1)} mm (ball is ${(app.cfg.BALL_R * 2000).toFixed(1)} mm)`).join('\n')
       : `No ambiguous gaps. ${flags.length} deliberate overlap(s), which is how you SHUT a gap.`;
+  };
+  bRamps.onclick = () => {
+    const ramps = app.table.shapes.filter((x) => x.kind === 'ribbon');
+    if (!ramps.length) { out.textContent = 'No ramps on this table.'; app.marks = []; return; }
+    out.textContent = 'rolling...';
+    setTimeout(() => {
+      const r2 = rampProbe(app.table, app.cfg);
+      app.marks = (r2.fails || []).filter((f) => f.at).map((f) => ({ at: f.at, kind: 'ramp' }));
+      const lines = (r2.fails || []).map((f) => `  ${f.ramp}: ${f.why}`);
+      out.textContent = lines.length
+        ? `${lines.length} problem(s) on ${ramps.length} ramp(s):\n${lines.join('\n')}`
+        : `${ramps.length} ramp(s), ${(r2.runs || []).length} shots at the mouth. Both ends at zero height,\nno kink over 20 degrees, no level run, and every one both makes it round and rolls back out.`;
+    }, 20);
   };
   bTunnel.onclick = () => {
     out.textContent = 'firing...';
@@ -1719,7 +1851,7 @@ function setMode(m) {
   zones.classList.toggle('on', false);
   launchBtn.style.display = m === 'play' ? '' : 'none';
   if (m === 'play') { ensureWorld(); app.running = true; }
-  if (m !== 'edit') app.placing = null;           // armed only while Edit is the tab you are on
+  if (m !== 'edit') { app.placing = null; app.drawing = null; }   // both live only while Edit is open
   if (m === 'tune') app.tuneAll = false;          // arriving on Tune asks about whatever is selected
   app.marks = [];
   renderPanel();
@@ -1778,7 +1910,7 @@ function frameBody(t) {
   });
 
   if (app.mode === 'edit' || app.mode === 'tune') drawSelection();
-  if (app.mode === 'edit') { drawGhost(); drawLoupe(); }
+  if (app.mode === 'edit') { drawGhost(); drawRampPath(); drawLoupe(); }
 
   const b = app.world && app.world.balls.find((x) => x.alive);
   hud.textContent = app.mode === 'play'
@@ -1789,6 +1921,11 @@ function frameBody(t) {
       + `${app.view && Math.abs(app.view.zoom - 1) > 0.01 ? '   zoom ' + Math.round(app.view.zoom * 100) + '%' : ''}`;
   hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
   if (app.placing) hud.textContent += `\nTAP THE TABLE to place "${app.placing.name}"`;
+  if (app.drawing) {
+    const n = app.drawing.pts.length;
+    hud.textContent += `\nTAP THE TABLE to lay the ramp path (${n} point${n === 1 ? '' : 's'}`
+      + `${n < RAMP_MIN_PTS ? `, ${RAMP_MIN_PTS - n} more needed` : ', Done when ready'})`;
+  }
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
 }
@@ -1921,6 +2058,56 @@ function drawGhost() {
     ghostPath(sh);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+// THE PATH YOU ARE LAYING, drawn as the real generated curve rather than as the dots you tapped.
+// Tapping four points and being shown four points tells you nothing about the ramp you are actually
+// making: the curve bulges where you did not put a point, and that bulge is what a ball rides.
+function drawRampPath() {
+  const d = app.drawing;
+  if (!d || !app.view) return;
+  const v = app.view;
+  ctx.save();
+  if (d.pts.length >= RAMP_MIN_PTS) {
+    const pts = rampPoints(d.pts, {});
+    if (pts.length >= 2) {
+      // THE ACCENT, not the ramp blue. The first version drew the preview in the same colours a
+      // finished ramp uses, and laying one beside an existing ramp made the two indistinguishable -
+      // you could not tell what you were drawing from what was already there.
+      ctx.strokeStyle = 'rgba(255,206,58,0.30)';
+      ctx.lineWidth = Math.max(2, RAMP_DEFAULTS.w * v.s * v.zoom);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pts.forEach((q, i) => { const t = toScreen(v, q); if (i) ctx.lineTo(t.x, t.y); else ctx.moveTo(t.x, t.y); });
+      ctx.stroke();
+      ctx.strokeStyle = '#ffce3a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  } else if (d.pts.length === 2) {
+    const a = toScreen(v, d.pts[0]);
+    const b = toScreen(v, d.pts[1]);
+    ctx.strokeStyle = '#ffce3a';
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // The taps themselves, numbered by size: the first is the mouth a ball enters.
+  d.pts.forEach((q, i) => {
+    const t = toScreen(v, q);
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, i === 0 ? 8 : 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffce3a';
+    ctx.fill();
+    ctx.strokeStyle = '#21180a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
   ctx.restore();
 }
 

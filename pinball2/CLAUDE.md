@@ -334,6 +334,38 @@ read, which is the whole reason this repo reports coordinates instead of percent
 `test-checks.mjs` pins it from both sides: a ball in a cup is still named, and an open playfield with
 nothing but its outer walls reports nothing.
 
+## The ramp tool, and the check that had to move with it
+
+Matt: *"why can't i add ribbons?"* There was no reason beyond nobody having built it. The honest
+version of the answer is that a ramp is the one part that does not fit the editor's shape: everything
+else is two or three numbers you drag, and a ramp is a PATH with three rules running along it.
+
+So the tool lays CONTROL POINTS and generates the rest, through `buildRamp` in `table.js` - **the
+same function the shipped table already called.** That was the one decision worth making carefully.
+A curve in the editor and a curve in the table file would agree on the day they were written and
+drift the first time somebody fixed one of them, and the thing they would disagree about is the
+geometry a ball rides.
+
+Three things fell out of building it that were not obvious going in:
+
+**The resampling had to change.** The old code put a fixed eight points on every control segment,
+which is fine for a path written by hand with evenly spaced points and wrong for one a person taps:
+long segments come out coarse, and coarse is exactly where a kink appears. It resamples by distance
+now, so the turn between consecutive points depends on the curve's radius and nothing else. TEST
+BOX's own ramp was re-measured through `rampProbe` afterwards rather than assumed.
+
+**A ramp's handles had to become its control points,** which changes what the two end dots do on any
+ramp that has them. A ramp built before the tool has no control points and keeps the old behaviour,
+because inventing some for it would be a guess. **This is a deliberate change to an existing
+control, not a side effect** - flagging it here because that is the kind of thing I have shipped
+silently before.
+
+**And the ramp probe had to move into the app.** It was node-only, which was defensible while every
+ramp in existence was written in code and checked once by whoever wrote it. The moment a person can
+lay one by hand, a check that lives in a terminal is a check that never runs, and the failure mode
+is building a broken ramp and finding out by playing. Shipping the tool without the check would have
+been shipping half of it.
+
 ## There was no plunger, and BOARDWALK has a shooter lane
 
 Matt filmed it: tap Launch on BOARDWALK, the ball trickles down the right lane at half a metre a

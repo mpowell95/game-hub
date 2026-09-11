@@ -11,6 +11,8 @@ import { CONFIG } from '../machines/testbox/config.js';
 import { checkGaps, restSweep } from './checks.js';
 import { World } from '../machines/testbox/physics.js';
 import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
+import { buildRamp, rampPoints, RAMP_DEFAULTS } from '../machines/testbox/table.js';
+import { rampProbe } from './checks.js';
 
 let pass = 0;
 let fail = 0;
@@ -151,6 +153,74 @@ const railAt = (x, y0, y1, r) => ({ id: `w${x}`, kind: 'seg', a: { x, y: y0 }, b
   ok(t.launchV && t.launchV.y < 0, 'BOARDWALK has a plunger, firing UP its shooter lane');
   ok(live.length >= 2, `and a launch puts the ball into PLAY, not just onto the playfield (hit ${live.join(', ') || 'NOTHING that hits back'})`);
   ok(secs > 4, `the ball survives more than a moment (${secs.toFixed(1)}s before it drained)`);
+}
+
+// ------------------------------------------------- the ramp builder, which the Ramp tool lays with
+// A ramp is the one part a person cannot make by dragging two ends, because its shape IS a path and
+// three rules have to hold along it. The tool lays CONTROL POINTS and this generates the rest, so
+// these check the generator rather than any one ramp: whatever somebody taps, the output has to be
+// a legal ramp or the tool is handing them a trap.
+{
+  const CTRL = [
+    { x: 0.440, y: 0.720 }, { x: 0.460, y: 0.450 }, { x: 0.370, y: 0.240 },
+    { x: 0.200, y: 0.260 }, { x: 0.110, y: 0.400 }, { x: 0.090, y: 0.520 },
+  ];
+  const sh = buildRamp('rT', CTRL);
+
+  ok(Array.isArray(sh.ctrl) && sh.ctrl.length === CTRL.length,
+    `the control points are STORED on the shape, which is what makes it re-editable (${sh.ctrl && sh.ctrl.length})`);
+  ok(sh.pts.length > 20, `and the path is generated from them (${sh.pts.length} points)`);
+
+  // RULE 1. A ball leaving a mouth that is still in the air would need a flight model, and inventing
+  // a landing spot for it is the teleport this whole engine exists to avoid.
+  ok((sh.pts[0].z || 0) === 0 && (sh.pts[sh.pts.length - 1].z || 0) === 0,
+    `both ends land at zero height by construction (${sh.pts[0].z}, ${sh.pts[sh.pts.length - 1].z})`);
+
+  // RULE 2. A kink MOVES a ball riding off the centre line sideways, all at once. This is why the
+  // builder resamples by DISTANCE: a path somebody taps has segments of wildly different lengths,
+  // and a fixed number of steps per segment makes the long ones coarse, which is where kinks appear.
+  let maxTurn = 0;
+  for (let i = 1; i < sh.pts.length - 1; i++) {
+    const a1 = Math.atan2(sh.pts[i].y - sh.pts[i - 1].y, sh.pts[i].x - sh.pts[i - 1].x);
+    const a2 = Math.atan2(sh.pts[i + 1].y - sh.pts[i].y, sh.pts[i + 1].x - sh.pts[i].x);
+    let d = Math.abs(((a2 - a1 + Math.PI) % (Math.PI * 2)) - Math.PI) * 180 / Math.PI;
+    if (d > maxTurn) maxTurn = d;
+  }
+  ok(maxTurn <= 20, `no kink over the 20 degree limit (worst is ${maxTurn.toFixed(1)})`);
+
+  // EVEN SPACING is what makes that true, so check it directly rather than trusting the result.
+  let maxGap = 0;
+  for (let i = 1; i < sh.pts.length; i++) {
+    maxGap = Math.max(maxGap, Math.hypot(sh.pts[i].x - sh.pts[i - 1].x, sh.pts[i].y - sh.pts[i - 1].y));
+  }
+  ok(maxGap <= RAMP_DEFAULTS.step * 1.35,
+    `points are evenly spaced (widest gap ${(maxGap * 1000).toFixed(1)}mm against a ${(RAMP_DEFAULTS.step * 1000).toFixed(0)}mm step)`);
+
+  // RULE 3, and the one the whole engine is measured against: it has to be a REAL ramp a ball rides.
+  const t = { name: 'R', w: 0.515, h: 1.067, launch: { x: 0.25, y: 0.1 }, shapes: [drain, sh] };
+  const r = rampProbe(t, CONFIG);
+  ok(r.fails.length === 0, `a hand-laid path passes the ramp probe outright (${r.runs.length} shots)`,
+    r.fails.map((f) => f.why).join('; '));
+}
+{
+  // Under two points there is no curve, and the tool must get an empty list rather than a shape made
+  // of NaN. A NaN reaching the renderer freezes the app.
+  ok(rampPoints([], {}).length === 0 && rampPoints([{ x: 0.1, y: 0.1 }], {}).length === 0,
+    'fewer than two control points makes no path at all, rather than a broken one');
+  const dup = rampPoints([{ x: 0.2, y: 0.5 }, { x: 0.2, y: 0.5 }], {});
+  ok(dup.every((q) => Number.isFinite(q.x) && Number.isFinite(q.y) && Number.isFinite(q.z)),
+    `two identical points produce no NaN (${dup.length} points)`);
+}
+{
+  // A path that only ever heads DOWN the table never turns back, so its apex is its first point and
+  // the crest would sit at zero: one long fall with nothing on the other side, and a division by
+  // zero besides. The builder puts the crest in the middle instead.
+  const down = buildRamp('rD', [{ x: 0.20, y: 0.20 }, { x: 0.25, y: 0.40 }, { x: 0.30, y: 0.60 }, { x: 0.32, y: 0.80 }]);
+  const zs = down.pts.map((q) => q.z);
+  ok(zs.every((z) => Number.isFinite(z) && z >= 0) && Math.max(...zs) > 0,
+    `a path that never turns back up the table still gets a real height profile (peak ${(Math.max(...zs) * 1000).toFixed(0)}mm)`);
+  ok((down.pts[0].z || 0) === 0 && (down.pts[down.pts.length - 1].z || 0) === 0,
+    'and both of its ends are still at zero');
 }
 
 console.log(`\nCheck tests: ${pass} passed, ${fail} failed.`);
