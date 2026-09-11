@@ -250,6 +250,45 @@ export function escapeProbe(table, cfg, opts) {
   return { shots, fails };
 }
 
+/** DOES A FLIP ACTUALLY HIT THE BALL? Measured as TRAVEL, not speed.
+ *
+ *  A ball is placed at rest on the bat, the flipper is tapped, and the probe reports how far UP the
+ *  table the ball gets. Travel is the number a player feels and it is the only one that stayed
+ *  honest: while this was broken, a faster flip, bouncier rubber, a higher restitution floor and an
+ *  explicit kick all moved the ball's top SPEED from 1.8 to 6.4 m/s and not one of them moved how
+ *  far it went. Four candidate fixes were rejected on that basis before the real cause was found.
+ *
+ *  Born red at 56 / 53 / 922 / 921 mm: only the outer third of the bat threw the ball at all. */
+export function flipPower(table, cfg, opts) {
+  const spots = (opts && opts.spots) || [0.3, 0.5, 0.7, 0.9];
+  const out = [];
+  for (const f of table.shapes.filter((s2) => s2.kind === 'flipper')) {
+    for (const u of spots) {
+      const dir = { x: Math.cos(f.restAng), y: Math.sin(f.restAng) };
+      const nrm = { x: -dir.y, y: dir.x };
+      const sign = f.side === 'L' ? -1 : 1;
+      const rad = f.r0 + (f.r1 - f.r0) * u + cfg.BALL_R;
+      const p = {
+        x: f.pivot.x + dir.x * f.len * u + sign * nrm.x * rad,
+        y: f.pivot.y + dir.y * f.len * u + sign * nrm.y * rad,
+      };
+      const w = new World(table, cfg);
+      const b = w.addBall(p, { x: 0, y: 0 });
+      for (let k = 0; k < 24 && b.alive; k++) w.step(cfg.DT);
+      const y0 = b.p.y;
+      w.setFlipper(f.side, true);
+      let top = b.p.y;
+      for (let k = 0; k < 720 && b.alive; k++) {
+        if (k === 20) w.setFlipper(f.side, false);
+        w.step(cfg.DT);
+        if (b.p.y < top) top = b.p.y;
+      }
+      out.push({ flipper: f.id, side: f.side, u, travel: y0 - top });
+    }
+  }
+  return out;
+}
+
 /** Ambiguous gaps: a space near one ball wide is where a ball wedges. A gap must be clearly shut
  *  or clearly open. Overlaps are reported separately and are often deliberate (a rail meeting a
  *  flipper pivot is how you SHUT a gap), so they are a note, not a failure. */

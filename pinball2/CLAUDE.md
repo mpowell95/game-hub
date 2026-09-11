@@ -62,7 +62,7 @@ the old engine (`pinball/CLAUDE.md`, "The ramps were unreachable").
 | `machines/testbox/render.js` | canvas 2D. Calls the solver's own flipper decomposition, so what is drawn and what is hit cannot drift |
 | `editor/index.html`, `editor/editor.js` | the tool: Play, Edit, Tune, Check |
 | `probes/checks.js` | the three checks, written ONCE and run from both the editor and node |
-| `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|flip\|escape\|gaps\|rests\|all]`, about 2.5 min for all |
+| `probes/run.mjs` | `node pinball2/probes/run.mjs [drain\|tunnel\|flip\|power\|escape\|gaps\|rests\|all]`, about 2 min for all |
 | `probes/test-editor.mjs` | does the TOOL work. Touch accuracy after a tab switch, and the NaN freeze. Needs `node server.mjs`; SKIPs without Chromium |
 
 **One engine file per machine, forked, never shared.** A second machine copies
@@ -212,42 +212,46 @@ after the fix            46mm     53mm    924mm    922mm
 contact, then friction inside a micro step, now friction across a tick. If you add anything that
 costs the ball energy, ask what it is charged PER. Per contact is almost always wrong.
 
-### Still broken: the inner two thirds of the bat, and where the search has got to
+### And then the real cause: the bat was in the swept contact set
 
-Matt, on a second recording: *"Look at the first and third flipper hits."* The trails show every
-contact producing a small hop, not a shot. Everything below is measured, and none of it is a fix.
+Matt, on a second recording: *"Look at the first and third flipper hits."* Every contact in it is a
+small hop.
 
 ```
                         u=0.30   u=0.50   u=0.70   u=0.90
-travel up the table       56mm     53mm    922mm    921mm
+before                    56mm     53mm    922mm    921mm
+after                    924mm    925mm    921mm    924mm
 ```
 
-**The ball never leaves the bat during a swing.** Instrumented, the gap between ball and bat is
-0.0mm for the whole 20ms, so it is carried rather than struck, and the speed it ends with is the
-bat's surface speed at wherever it happens to be sitting.
+**The flipper is no longer swept against.** A swept contact tests the bat's two flanks and its two
+end circles separately, and it can return a normal belonging to the FAR side of the bat. One did:
+with the ball measurably on top of the bat (side +20.7mm, instrumented inside the micro steps) the
+keep-out clamp fired with a normal of `(0.39, 0.92)`, pointing straight down INTO it, and took the
+ball from 2.82 m/s to 1.16 m/s in a single call at the instant the bat reached its stop.
 
-**What ends the shot is `again`, the branch that keeps a ball out of a surface it is already
-touching.** Instrumented at mid bat: `CLAMP 2.82 -> 1.16 m/s, n=(0.39, 0.92)`. The normal points
-DOWN: the bat is above the ball, pushing it back down. It gets there because that same clamp holds
-the ball at exactly the bat's surface speed, so the ball's angular rate about the pivot equals the
-bat's and the outer half of the bat sweeps over the top of it.
+`penetration()` cannot do that, because it measures from the bat's CENTRELINE: the normal is the
+ball minus the closest point on that line, so it can only point from the bat towards the ball. The
+flipper is resolved there and only there now, before and after each micro step's advance. A micro
+step is bounded by the bat's tip travel, so the ball crosses at most a few millimetres inside one,
+and the 22220-ball flipper push probe confirms nothing gets through.
 
-**Four things have been tried and all four were rejected on measurement**, which is worth recording
-so nobody spends the time again:
+**Six candidate fixes were tried and rejected on measurement first**, which is the part worth
+keeping:
 
 1. faster flip (30ms to 8ms): top speed 1.8 to 6.4 m/s, travel unchanged
 2. bouncier rubber, a higher restitution floor, a gentler fade: travel unchanged
-3. an explicit `FLIP_KICK` so the ball leaves faster than the bat: worth 1mm in 924
-4. restitution applied on the re-contact clamp as well: no better, and slightly worse near the pivot
+3. an explicit `FLIP_KICK`: worth 1mm in 924
+4. restitution on the re-contact clamp: no better, slightly worse near the pivot
+5. a floor holding the ball at the bat's speed on re-contact: unchanged
+6. easing the bat into its stop instead of stopping dead: helped at mid bat only by halving the
+   flipper's power everywhere else
 
-**The number that matters is TRAVEL, not top speed.** Three of those four moved the ball's peak
-speed and none moved how far it went, which is the whole reason they were rejected. A number that
-does not move when you change its supposed cause is telling you the cause is elsewhere.
+**Every one of those moved the ball's top SPEED and not one moved how far it TRAVELLED.** That is
+the whole lesson: a number that will not move when you change its supposed cause is telling you the
+cause is somewhere else, and the number to watch is the one a player feels.
 
-What has not been tried yet: letting the ball SLIDE OUTWARD along the bat as it is struck, which is
-what a real ball does and what would take it past the tip instead of under the bat. The grip is
-currently what stops it, but removing the grip entirely only reaches 54mm, so that is not the whole
-answer either.
+`flipPower` in `probes/checks.js` is the tripwire, and it measures travel. It covers BOTH flippers,
+which none of the hand-written traces did.
 
 ## The editor's touch was offset, and the cause is worth knowing
 

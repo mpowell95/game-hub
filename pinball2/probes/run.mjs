@@ -4,7 +4,7 @@
 
 import { makeTable } from '../machines/testbox/table.js';
 import { CONFIG } from '../machines/testbox/config.js';
-import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe } from './checks.js';
+import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe, flipPower } from './checks.js';
 
 const which = process.argv[2] || 'all';
 const table = makeTable();
@@ -40,6 +40,16 @@ if (which === 'flip' || which === 'all') {
     console.log(`   ${f.flipper}: from (${(f.from.x * 1000).toFixed(0)}, ${(f.from.y * 1000).toFixed(0)}) mm ended (${(f.end.x * 1000).toFixed(0)}, ${(f.end.y * 1000).toFixed(0)}) mm`);
   }
   if (r.fails.length) bad++;
+}
+
+if (which === 'power' || which === 'all') {
+  const rows = flipPower(table, cfg);
+  const weak = rows.filter((r) => r.travel < 0.30);
+  console.log(`flipper power   ${rows.length} flips, ${weak.length} moved the ball less than 300mm up the table   ${weak.length ? 'FAIL' : 'OK'}`);
+  const byU = {};
+  for (const r of rows) byU[r.u] = Math.min(byU[r.u] == null ? Infinity : byU[r.u], r.travel);
+  console.log('   ' + Object.keys(byU).map((u) => `u=${u}: ${(byU[u] * 1000).toFixed(0)}mm`).join('   '));
+  if (weak.length) bad++;
 }
 
 if (which === 'escape' || which === 'all') {
