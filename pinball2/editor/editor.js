@@ -49,6 +49,7 @@ const app = {
   lastError: '',
   hot: {},
   repaired: 0,
+  placing: null,          // a prefab name, armed and waiting for a tap on the table
   tableName: null,        // null is Default: the table this BUILD ships, never stored
   migrated: null,
   tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
@@ -485,6 +486,16 @@ canvas.addEventListener('pointerdown', (e) => {
   drag.raw = p;                         // where the finger is
   drag.virt = p;                        // where the HANDLE is, which a fine drag separates from it
 
+  // A PREFAB IS ARMED AND WAITING FOR THIS TAP. It goes before the handle, select and lasso logic
+  // on purpose: while placing, the tap means one thing and one thing only.
+  if (app.mode === 'edit' && app.placing) {
+    const name = app.placing;
+    app.placing = null;
+    drag.mode = null;
+    placePrefab(name, snap(p));
+    return;
+  }
+
   // TUNE SELECTS, IT NEVER MOVES. Tapping a part here is how you ask for its sliders, and a tap on
   // a phone always drags a few pixels, so sharing Edit's handler would quietly nudge the geometry
   // every time - an edit nobody asked for, on a tab where nobody is watching the table for changes.
@@ -687,6 +698,8 @@ function centreOf(sh) {
 window.addEventListener('keydown', (e) => {
   const typing = e.target && /input|select|textarea/i.test(e.target.tagName);
   if (typing) return;
+  // An armed prefab is a mode, and every mode needs a way out that is not "find the button again".
+  if (e.key === 'Escape' && app.placing) { app.placing = null; renderPanel(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     if (e.shiftKey) doRedo(); else doUndo();
@@ -767,6 +780,84 @@ function addShape(kind) {
   app.table.shapes.push(sh);
   app.sel = new Set([sh.id]);
   afterEdit();
+}
+
+// ------------------------------------------------------------------ the prefab library
+//
+// A pop bumper nest is five parts placed against each other, and a lower third is eight. Building
+// one is fiddly and building the SAME one twice is worse, so a selection can be saved under a name
+// and dropped anywhere.
+//
+// Stored RELATIVE to an anchor, which is the centroid of the selection's own centres: placing one
+// centres it on the tap rather than dropping it by a corner nobody was thinking about. The maths is
+// `moveShape`, the same function a drag uses, so a prefab cannot move differently from a drag.
+//
+// A placed prefab is NOT a group. Each part gets its own fresh id and is selected, editable,
+// movable and deletable from the moment it lands: the library is a way of not typing, not a new
+// kind of object for the engine to know about.
+
+const PREFABS = 'pinball2.editor.prefabs';   // { name: { shapes, savedAt } } - never per table
+
+function readPrefabs() {
+  try {
+    const d = JSON.parse(localStorage.getItem(PREFABS) || '{}');
+    return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+  } catch (e) { return {}; }
+}
+
+function writePrefabs(d) {
+  try { localStorage.setItem(PREFABS, JSON.stringify(d)); return true; } catch (e) { return false; }
+}
+
+function prefabNames() {
+  return Object.keys(readPrefabs()).sort((x, y) => x.localeCompare(y));
+}
+
+function savePrefab(name) {
+  const picked = app.table.shapes.filter((sh) => app.sel.has(sh.id));
+  if (!name || !picked.length) return false;
+  let ax = 0;
+  let ay = 0;
+  for (const sh of picked) { const c = centreOf(sh); ax += c.x; ay += c.y; }
+  ax /= picked.length;
+  ay /= picked.length;
+  const shapes = picked.map((sh) => {
+    const c = JSON.parse(JSON.stringify(sh));
+    moveShape(c, -ax, -ay);
+    return c;
+  });
+  if (!tableIsFinite(shapes)) return false;   // never store parts that would freeze the app
+  const d = readPrefabs();
+  d[name] = { shapes, savedAt: Date.now() };
+  return writePrefabs(d);
+}
+
+function deletePrefab(name) {
+  const d = readPrefabs();
+  if (!(name in d)) return false;
+  delete d[name];
+  writePrefabs(d);
+  if (app.placing === name) app.placing = null;
+  renderPanel();
+  return true;
+}
+
+function placePrefab(name, at) {
+  const p = readPrefabs()[name];
+  if (!p || !Array.isArray(p.shapes) || !p.shapes.length) return 0;
+  pushUndo();
+  const made = [];
+  for (const s of p.shapes) {
+    const c = JSON.parse(JSON.stringify(s));
+    c.id = newId(String(c.kind || 'x')[0]);
+    moveShape(c, at.x, at.y);
+    if (!tableIsFinite(c)) continue;
+    app.table.shapes.push(c);
+    made.push(c.id);
+  }
+  app.sel = new Set(made);
+  afterEdit();
+  return made.length;
 }
 
 // ------------------------------------------------------------------ panels
@@ -961,6 +1052,47 @@ function renderPlayPanel() {
 
 function renderEditPanel() {
   renderPalette();
+
+  // THE PREFAB GROUP. Open exactly when it is useful: when there is a selection to save, or
+  // something saved to place.
+  const pf = prefabNames();
+  inGroup('Prefabs', !!(app.sel.size || pf.length), !!app.placing, () => {
+    const r = el('<div class="row"></div>');
+    const add = el('<button>Save selection...</button>');
+    add.disabled = !app.sel.size;
+    add.onclick = () => {
+      const name = (prompt(`Save these ${app.sel.size} part(s) as a prefab called:`, '') || '').trim();
+      if (!name) return;
+      if (name in readPrefabs() && !confirm(`Overwrite the prefab "${name}"?`)) return;
+      if (!savePrefab(name)) { alert('Could not save: this device is out of storage, or a selected part has a broken number in it.'); return; }
+      renderPanel();
+    };
+    r.append(add);
+    panel.append(r);
+
+    if (!pf.length) {
+      panel.append(el('<div class="note">Select some parts and save them here. A saved prefab can be dropped anywhere, on any table, and lands as ordinary parts you can edit one by one.</div>'));
+      return;
+    }
+    for (const name of pf) {
+      const row = el('<div class="row"></div>');
+      row.append(el(`<label style="flex:1">${esc(name)}</label>`));
+      const place = el(`<button${app.placing === name ? ' class="primary"' : ''}>${app.placing === name ? 'Cancel' : 'Place'}</button>`);
+      place.onclick = () => {
+        app.placing = app.placing === name ? null : name;
+        renderPanel();
+      };
+      const del = el('<button class="danger">X</button>');
+      del.title = `delete the prefab ${name}`;
+      del.onclick = () => {
+        if (!confirm(`Delete the prefab "${name}"? No table is changed.`)) return;
+        deletePrefab(name);
+      };
+      row.append(place, del);
+      panel.append(row);
+    }
+    if (app.placing) panel.append(el(`<div class="note">Tap the table to drop <b>${esc(app.placing)}</b>.</div>`));
+  });
 
   // THE TABLE GROUP. Open by default: which table you are looking at, and how to keep one, is the
   // first question this tool has to answer out loud rather than by implication.
@@ -1282,6 +1414,7 @@ function setMode(m) {
   zones.classList.toggle('on', false);
   launchBtn.style.display = m === 'play' ? '' : 'none';
   if (m === 'play') { ensureWorld(); app.running = true; }
+  if (m !== 'edit') app.placing = null;           // armed only while Edit is the tab you are on
   if (m === 'tune') app.tuneAll = false;          // arriving on Tune asks about whatever is selected
   app.marks = [];
   renderPanel();
@@ -1350,6 +1483,7 @@ function frameBody(t) {
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`
       + `${app.view && Math.abs(app.view.zoom - 1) > 0.01 ? '   zoom ' + Math.round(app.view.zoom * 100) + '%' : ''}`;
   hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
+  if (app.placing) hud.textContent += `\nTAP THE TABLE to place "${app.placing}"`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
 }
