@@ -210,6 +210,185 @@ await page.waitForTimeout(500);
 const forced = await page.evaluate(() => [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','));
 ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored (${forced})`);
 
+// ------------------------------------------------------------- precision: zoom, hold, magnifier
+// Matt: "When I select an object, the slingshot for example, and I want to extend or shorten it, I
+// need an enlarge option. If I hold it down I can precisely move stuff or a smaller enlarged window
+// comes up or something."
+//
+// At the default fit a millimetre of table is under a pixel and a finger is about 9mm across, so an
+// end handle is smaller than the finger reaching for it AND hidden under it once reached. Three
+// answers, all tested here against the real tool.
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.click('#tab-edit');
+await page.waitForTimeout(400);
+
+const selectSling = () => page.evaluate(async () => {
+  const a = window.__pb2;
+  const sh = a.table.shapes.find((x) => x.kind === 'sling');
+  a.sel.clear();
+  a.sel.add(sh.id);
+  await new Promise((q) => setTimeout(q, 60));
+  return sh.id;
+});
+
+// 1. LENGTH AND ANGLE: the one edit four coordinates cannot express. Shortening a line that is not
+//    square to the table means recomputing both ends by hand, and getting its angle slightly wrong.
+const slingId = await selectSling();
+await page.evaluate(() => window.__pb2 && document.getElementById('tab-edit').click());
+await page.waitForTimeout(300);
+const lenRow = await page.evaluate((id) => {
+  const a = window.__pb2;
+  a.sel.clear(); a.sel.add(id);
+  return null;
+}, slingId);
+await page.click('#tab-play');
+await page.click('#tab-edit');
+await page.waitForTimeout(300);
+const shortened = await page.evaluate(async (id) => {
+  const before = JSON.parse(JSON.stringify(window.__pb2.table.shapes.find((x) => x.id === id)));
+  const rows = [...document.querySelectorAll('#panel .row')];
+  const row = rows.find((r) => /Length/.test(r.querySelector('label') ? r.querySelector('label').textContent : ''));
+  if (!row) return { found: false };
+  const input = row.querySelector('input');
+  const was = parseFloat(input.value);
+  input.value = String(was - 20);
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  await new Promise((q) => setTimeout(q, 60));
+  const sh = window.__pb2.table.shapes.find((x) => x.id === id);
+  const L = (s) => Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
+  const ang = (s) => Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x);
+  return {
+    found: true, was,
+    lenNow: L(sh) * 1000,
+    angMoved: Math.abs(ang(sh) - ang(before)) * 180 / Math.PI,
+    aMoved: Math.hypot(sh.a.x - before.a.x, sh.a.y - before.a.y) * 1000,
+  };
+}, slingId);
+ok(shortened.found, 'a slingshot has a Length row, so it can be shortened without solving for both ends');
+ok(shortened.found && Math.abs(shortened.lenNow - (shortened.was - 20)) < 0.2,
+  `shortening it by 20mm shortens it by 20mm (${shortened.lenNow && shortened.lenNow.toFixed(1)}mm from ${shortened.was && shortened.was.toFixed(1)})`);
+ok(shortened.found && shortened.angMoved < 0.01 && shortened.aMoved < 0.01,
+  'and it keeps its angle and its anchored end exactly where they were', JSON.stringify(shortened));
+
+// 2. ZOOM. There was no way to zoom on a phone at all: the wheel handler is a desktop control.
+const zoomed = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const start = a.view.zoom;
+  const btns = [...document.querySelectorAll('#panel button')];
+  const plus = btns.find((b) => b.textContent === '+');
+  if (!plus) return { found: false };
+  plus.click(); plus.click();
+  await new Promise((q) => setTimeout(q, 60));
+  const inz = a.view.zoom;
+  const fit = [...document.querySelectorAll('#panel button')].find((b) => b.textContent === 'Fit');
+  fit.click();
+  await new Promise((q) => setTimeout(q, 60));
+  return { found: true, start, inz, back: a.view.zoom };
+});
+ok(zoomed.found, 'the Edit panel has zoom controls');
+ok(zoomed.found && zoomed.inz > zoomed.start * 1.5, `+ zooms in (${zoomed.start} to ${zoomed.inz})`);
+ok(zoomed.found && Math.abs(zoomed.back - 1) < 1e-9, 'and Fit puts it back');
+
+// Pinching must zoom AND must not leave the part the first finger was on somewhere else. A
+// two-finger gesture always starts as one finger landing, and that finger can land on a part.
+const pinched = await page.evaluate(async (id) => {
+  const a = window.__pb2;
+  const canvas = document.getElementById('c');
+  const r = canvas.getBoundingClientRect();
+  const sh = a.table.shapes.find((x) => x.id === id);
+  const before = { a: { ...sh.a }, b: { ...sh.b } };
+  const mid = { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
+  const v = a.view;
+  const s0 = { x: v.ox + (mid.x * v.s + v.px) * v.zoom, y: v.oy + (mid.y * v.s + v.py) * v.zoom };
+  const ev = (type, id2, x, y) => canvas.dispatchEvent(new PointerEvent(type, { pointerId: id2, bubbles: true, clientX: r.left + x, clientY: r.top + y }));
+  const z0 = a.view.zoom;
+  ev('pointerdown', 1, s0.x, s0.y);
+  ev('pointermove', 1, s0.x + 8, s0.y + 8);          // the first finger drags a little, as fingers do
+  ev('pointerdown', 2, s0.x + 40, s0.y);
+  for (let k = 1; k <= 6; k++) { ev('pointermove', 2, s0.x + 40 + k * 12, s0.y); }
+  ev('pointerup', 2, s0.x + 112, s0.y);
+  ev('pointerup', 1, s0.x + 8, s0.y + 8);
+  await new Promise((q) => setTimeout(q, 80));
+  const now = a.table.shapes.find((x) => x.id === id);
+  // In millimetres. The restore round-trips through toJSON, which rounds to 0.1mm, so that is the
+  // honest tolerance here and it is the same one every undo in this tool has.
+  const moved = Math.max(
+    Math.hypot(now.a.x - before.a.x, now.a.y - before.a.y),
+    Math.hypot(now.b.x - before.b.x, now.b.y - before.b.y),
+  ) * 1000;
+  return { z0, z1: a.view.zoom, moved };
+}, slingId);
+ok(pinched.z1 > pinched.z0 * 1.4, `a pinch zooms in (${pinched.z0.toFixed(2)} to ${pinched.z1.toFixed(2)})`);
+ok(pinched.moved <= 0.11, `and the part the first finger landed on is put back where it was (moved ${pinched.moved.toFixed(3)}mm)`);
+
+// 3. HOLD FOR A FINE DRAG, WITH A MAGNIFIER. A tap that moves straight away is a normal drag; one
+//    held still first moves the handle a quarter as far, so a grid step is reachable on a phone.
+const fine = await page.evaluate(async (id) => {
+  const a = window.__pb2;
+  a.view.zoom = 1; a.view.px = 0; a.view.py = 0;
+  a.sel.clear(); a.sel.add(id);
+  const canvas = document.getElementById('c');
+  const r = canvas.getBoundingClientRect();
+  const v = a.view;
+  const scr = (p) => ({ x: v.ox + (p.x * v.s + v.px) * v.zoom, y: v.oy + (p.y * v.s + v.py) * v.zoom });
+  const ev = (type, x, y) => canvas.dispatchEvent(new PointerEvent(type, { pointerId: 9, bubbles: true, clientX: r.left + x, clientY: r.top + y }));
+
+  const run = async (holdMs) => {
+    const sh = a.table.shapes.find((x) => x.id === id);
+    const b0 = { x: sh.b.x, y: sh.b.y };
+    const s = scr(b0);
+    ev('pointerdown', s.x, s.y);
+    await new Promise((q) => setTimeout(q, holdMs));
+    const seen = [];
+    for (let k = 1; k <= 8; k++) {
+      ev('pointermove', s.x + k * 6, s.y);
+      seen.push(a.__loupe === undefined ? null : a.__loupe);
+    }
+    const moved = Math.abs(a.table.shapes.find((x) => x.id === id).b.x - b0.x) * 1000;
+    ev('pointerup', s.x + 48, s.y);
+    await new Promise((q) => setTimeout(q, 40));
+    return moved;
+  };
+  a.snap = false;                                   // the grid would quantise both runs to the same
+  const quick = await run(0);
+  const held = await run(520);
+  return { quick, held };
+}, slingId);
+ok(fine.quick > 1, `a quick drag moves the handle the whole way (${fine.quick.toFixed(1)}mm)`);
+ok(fine.held < fine.quick * 0.5,
+  `holding first makes it a fine drag, about a quarter as far (${fine.held.toFixed(1)}mm against ${fine.quick.toFixed(1)}mm)`);
+
+// The magnifier is drawn onto the canvas, so the test looks at PIXELS: with a drag in progress, the
+// far top corner must stop being empty background.
+const loupe = await page.evaluate(async (id) => {
+  const a = window.__pb2;
+  const canvas = document.getElementById('c');
+  const ctx2 = canvas.getContext('2d');
+  const r = canvas.getBoundingClientRect();
+  const dpr = canvas.width / r.width;
+  const sh = a.table.shapes.find((x) => x.id === id);
+  const v = a.view;
+  const s = { x: v.ox + (sh.b.x * v.s + v.px) * v.zoom, y: v.oy + (sh.b.y * v.s + v.py) * v.zoom };
+  const ev = (type, x, y) => canvas.dispatchEvent(new PointerEvent(type, { pointerId: 7, bubbles: true, clientX: r.left + x, clientY: r.top + y }));
+  const corner = () => {
+    // the loupe sits in the top corner AWAY from the finger, 14px in, radius 62
+    const cx = s.x < r.width / 2 ? r.width - 76 : 76;
+    const d = ctx2.getImageData(Math.round(cx * dpr), Math.round(76 * dpr), 1, 1).data;
+    return `${d[0]},${d[1]},${d[2]}`;
+  };
+  const idle = corner();
+  ev('pointerdown', s.x, s.y);
+  ev('pointermove', s.x + 5, s.y + 5);
+  await new Promise((q) => requestAnimationFrame(() => requestAnimationFrame(q)));
+  const during = corner();
+  ev('pointerup', s.x + 5, s.y + 5);
+  await new Promise((q) => requestAnimationFrame(() => requestAnimationFrame(q)));
+  const after = corner();
+  return { idle, during, after };
+}, slingId);
+ok(loupe.during !== loupe.idle, `a magnifier appears in the far corner while dragging (${loupe.idle} to ${loupe.during})`);
+ok(loupe.after === loupe.idle, 'and it goes away when the finger lifts');
+
 // ------------------------------------------------------------------------ Tune tunes ONE part
 // Matt: "when I'm on the Tune tab, I should be able to select an object and see the tune objects for
 // only that object." Twenty two sliders in one list is a list you scroll rather than read.
@@ -219,7 +398,13 @@ ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored
 // drift under the person tuning it.
 await page.click('#tab-tune');
 await page.waitForTimeout(300);
-const tuneAll = await page.evaluate(() => document.querySelectorAll('#panel input[type=range]').length);
+const tuneAll = await page.evaluate(async () => {
+  window.__pb2.sel.clear();                       // the baseline is the UNFILTERED list
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-tune').click();
+  await new Promise((q) => setTimeout(q, 80));
+  return document.querySelectorAll('#panel input[type=range]').length;
+});
 
 const tapKind = async (kind) => page.evaluate(async (k) => {
   const a = window.__pb2;

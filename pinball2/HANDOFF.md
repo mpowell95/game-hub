@@ -396,6 +396,29 @@ frame. The HUD top-left shows ball speed, and any jams, escapes or draw errors.
 **Hit tolerance is measured in SCREEN PIXELS** (22) and converted through the live zoom. It was
 fixed in table units once, which is about 8 pixels on a phone, and a finger is not 8 pixels.
 
+**Precision, added 2026-09-11.** At the default fit a millimetre of table is under a screen pixel
+and a finger is about 9mm across, so an end handle is smaller than the finger reaching for it and
+hidden under it once reached.
+
+- **Zoom**: pinch, two fingers to pan, or the `-` / `+` / Fit row. Zoom is about the pinch midpoint
+  (`zoomAbout`), never the origin. `ZOOM_MIN` 0.5, `ZOOM_MAX` 12.
+- **A second finger cancels the first finger's edit and restores it** (`cancelDragForPinch`), from
+  the snapshot `pushUndo` already took. Without this a pinch leaves the part moved by however far
+  the first finger travelled on its way to being joined.
+- **Hold still, then drag, and the handle moves a quarter as far** (`FINE_HOLD_MS` 400,
+  `FINE_RATIO` 0.25). Fine engages on the first MOVEMENT, not on a timer. The drag tracks two
+  points from then on: `drag.raw` is the finger, `drag.virt` is the handle.
+- **A magnifier** (`drawLoupe`, `LOUPE_MAG` 4, `LOUPE_R` 62) in whichever top corner the finger is
+  not in, drawn by calling the real `draw()` into a clipped circle with its own view. It follows
+  the HANDLE, not the finger, and reads the handle's position back off the shape: an arc's radius
+  handle and a flipper's tip are derived, not set.
+- **A wall and a slingshot have Length and Angle rows** (`lengthAndAngle`). Length holds A and
+  slides B along the line; Angle holds A and swings B round it.
+
+**`setPointerCapture` is wrapped in try/catch and must stay that way.** It throws "no active pointer
+with the given id" readily, it is the first line of `pointerdown`, and an exception there means the
+tap does nothing at all, which is indistinguishable from a dead hit-testing bug.
+
 ### Tune
 **Tap a part on the table and the panel filters to the numbers that govern it**, with the table-wide
 ones (tilt, speed cap, rolling drag, rest threshold) always underneath, because they govern it too.
@@ -501,6 +524,8 @@ positions through `playable()` before you believe a word of its output.**
 8. **Keep the `ResizeObserver`.** Without it, tapping is offset after every tab switch.
 8a. **A new tunable needs a `kinds` entry in `TUNABLES`**, or the Tune tab only ever shows it
     under Show all. And say what it DOES: bounce, grip, push. Not kick.
+8c. **Keep `setPointerCapture` in its try/catch.** It throws readily, it is the first line of
+    `pointerdown`, and an exception there kills the whole gesture.
 8b. **A new module under `pinball2/` goes in `MODULES` in `editor/index.html`**, or it is the one
     file in the graph a stale cache can still answer. Nothing fails loudly if you forget.
 9. **Watch the number that matters.** Chasing the flipper bug, four separate fixes moved the ball's

@@ -55,6 +55,11 @@ number cannot be split by difficulty. Tic Tac Toe and Snake because their rows a
 entirely: two numbers side by side (Ultimate and Classic, Walls off and Walls on) and no tiles of any
 kind — so Tic Tac Toe shows no VS tile even though it is played against other people.
 
+On every game, the number the rows are sorted by is the one the row leads with, and the other number
+moves to the smaller line under the name. Sorting by Games leads with the games played; sorting by
+the game's own number leads with that. This holds on Tic Tac Toe and Snake too, where the pair of
+numbers becomes that smaller line.
+
 Ranking: difficulty tier first, score second. A higher score at a lower difficulty never outranks
 a lower score at a higher one.
 
