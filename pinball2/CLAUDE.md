@@ -318,6 +318,34 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## The stale table, ended: a library instead of one slot and a guess
+
+Matt, after the third build in a row showed him an old table: *"This is an ongoing issue I've asked
+you to address multiple times. What is going on? Why isn't this fixed?"*
+
+Three different causes had produced the same symptom, and the last one was this layer trying to be
+clever. It was ONE autosave slot plus an `edited` flag, and on load it GUESSED whether a new build's
+table should replace what was stored: keep an edited save, drop an unedited one, print a grey
+warning line when it guessed "keep". **It worked exactly as designed and the design was the
+problem.** One slot, a guess, and seeing a new build required noticing a line of grey text and then
+finding a button called "Reset table". Worse, `afterEdit()` set `edited` on ANY drag, so the taps
+Matt made while testing the fine drag marked his save as precious work.
+
+**The fix is not a better guess. It is having nothing to guess about**, by making the two things
+separate objects:
+
+- **Default is not stored at all.** It is whatever `table.js` ships in the build you are running, so
+  it is current by construction. Editing it is a working copy written nowhere.
+- **The library** is every table explicitly named and saved. A new build never touches it.
+
+`edited`, `shippedSig()`, the grey line and the compare-against-shipped logic are all gone. The old
+one-slot key is migrated once into a save called "My table" and then **left where it is** rather
+than deleted, so nobody has to trust the migration got it right.
+
+**The general lesson, which is the reason this is written down:** a mechanism that has to GUESS what
+somebody meant will be wrong often enough to be noticed, and every fix will be a better guess. Three
+attempts here were better guesses. The fourth changed the question.
+
 ## The workspace: four full-page modes became one that never moves
 
 Matt's brief, 2026-09-11: *"Switching modes replaces the whole screen, so the table view resizes and

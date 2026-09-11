@@ -67,6 +67,11 @@
 
   /* The zoom cluster lives in the top bar now, so it is reachable in every mode rather than only
      while the Edit panel happens to be open. */
+  /* The title is decoration and a phone has no room for it: the tab strip and the table selector
+     both say where you are, and the selector needs the space more. */
+  @media (max-width: 620px) { header h1 { display: none; } }
+  #tablesel { min-width: 0; flex: 1 1 120px; max-width: 190px; height: 30px; padding: 3px 6px; font-size: 12px;
+              background: #101a2e; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
   #zoombar { display: flex; align-items: center; gap: 4px; margin-left: auto; }
   #zoombar button { min-height: 28px; min-width: 34px; padding: 4px 8px; font-size: 13px; }
   #zoomval { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
@@ -161,6 +166,7 @@
   <header>
     <h1>PINBALL 2</h1>
     <button id="build" title="which build is running">...</button>
+    <select id="tablesel" title="which table you are editing"></select>
     <div id="zoombar">
       <span id="zoomval">100%</span>
       <button id="zoom-out" title="zoom out">&minus;</button>

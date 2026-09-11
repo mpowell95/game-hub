@@ -489,9 +489,39 @@ Runs the real checks on the table as it stands and draws the results **on the ta
 not as a percentage. Find traps, Tunnel test, Gap rule, Show reachable, Clear marks. It also prints
 gravity, the free-fall time against its analytic value, and how long a ball lives.
 
-### Persistence
+### Persistence: the table library (rebuilt 2026-09-11)
 
-`localStorage['pinball2.editor.v1']` holds `{ table, cfg }` and autosaves on every edit.
+**There are two kinds of table and they are different objects. There is no guess anywhere.**
+
+- **Default is not stored at all.** It is whatever `machines/testbox/table.js` ships in the build you
+  are running, so it is current BY CONSTRUCTION. Editing it is a working copy that is written
+  nowhere: leave, or take a new build, and those edits are gone exactly as if you had never saved.
+  **Default means "what is actually in this build", full stop** - never "what I was last poking at".
+- **The library** is `localStorage['pinball2.editor.tables']`, a dict of
+  `{ name: { table, cfg, savedAt } }`. Only an explicit **Save as** writes to it. **A new build never
+  touches it. Ever.** Editing a NAMED table does autosave into that name, because picking it up
+  again is what naming it was for.
+- `localStorage['pinball2.editor.current']` is the name last selected, absent for Default. A named
+  selection is restored on the next load, because it was an explicit choice; Default is not a
+  memory of anything.
+
+**What this replaced, and why.** It was ONE autosave slot plus an `edited` flag, and on load it
+guessed whether a new build's table should replace what was stored: keep an edited save, drop an
+unedited one, print a grey warning line when it guessed "keep". Three builds in a row produced the
+same symptom - Matt opening the tool and seeing an old table - from three different causes, and this
+was the last of them. It worked as designed and the design was the problem: one slot, a guess, and
+seeing a new build required noticing a line of grey text and then finding "Reset table".
+`edited`, `shippedSig()`, the grey line and the compare-against-shipped logic are all **gone**, and
+`test-editor.mjs` pins the replacement from both ends.
+
+**The old key is migrated once and then left alone.** `migrateLegacy()` copies
+`pinball2.editor.v1` into the library as **"My table"** on first load, sets
+`pinball2.editor.migrated`, and does **not** delete the old key: it costs nothing and nobody has to
+trust the migration got it right. The tool then opens on **Default**, which is the whole point.
+
+**Controls.** The selector is in the top bar (Default first, then every saved name). Save as,
+Delete, Revert, Export JSON and Import are in the **Table** group in Edit, open by default. Revert
+reloads the current selection from its source: the build for Default, the library for a name.
 
 - A table with any non-finite number is **never** written.
 - A stored table with a bad number is **repaired on load**: the offending part is dropped and the
@@ -593,6 +623,9 @@ positions through `playable()` before you believe a word of its output.**
 8. **Keep the `ResizeObserver`.** Without it, tapping is offset after every tab switch.
 8a. **A new tunable needs a `kinds` entry in `TUNABLES`**, or the Tune tab only ever shows it
     under Show all. And say what it DOES: bounce, grip, push. Not kick.
+8e. **Default is never written to storage, and a new build never touches the library.** Those two
+    sentences are the whole persistence design. Anything that "helpfully" saves the working copy
+    over Default brings back the bug three builds in a row could not shake.
 8d. **Keep `user-select: none` app-wide.** The fine drag starts with a long press, which is the
     OS gesture for selecting text; without this every precise drag highlights the page.
 8c. **Keep `setPointerCapture` in its try/catch.** It throws readily, it is the first line of

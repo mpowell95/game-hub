@@ -49,8 +49,8 @@ const app = {
   lastError: '',
   hot: {},
   repaired: 0,
-  edited: false,
-  staleTable: false,
+  tableName: null,        // null is Default: the table this BUILD ships, never stored
+  migrated: null,
   tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
 };
 
@@ -92,71 +92,141 @@ function tableKinds() {
   return Object.keys(n).sort().map((k) => `${n[k]} ${k}`).join(', ');
 }
 
-/** A cheap fingerprint of the table the MACHINE ships, so the editor can tell whether what is
- *  stored on this device was made from the same starting point. */
-function shippedSig() {
+// ------------------------------------------------------------------ the table library
+//
+// THREE BUILDS IN A ROW PRODUCED THE SAME SYMPTOM - Matt opening the tool and seeing an old table -
+// from three different causes, and the last of them was this layer trying to be clever. It was ONE
+// autosave slot plus an `edited` flag, and on load it GUESSED whether a new build's table should
+// replace what was stored: keep an edited save, drop an unedited one, and print a grey warning line
+// when it guessed "keep". That worked as designed and the design was the problem. It is one slot,
+// it is a guess, and seeing a new build required noticing a line of grey text and then finding
+// "Reset table".
+//
+// There is no guess here any more, because the two things are separate objects:
+//
+//   DEFAULT is not stored at all. It is whatever `machines/testbox/table.js` ships in the build you
+//   are running, so it is current BY CONSTRUCTION. Editing it is a working copy and is not written
+//   anywhere: leave, or take a new build, and those edits are gone, exactly as if you had never
+//   saved. Default means "what is actually in this build", full stop.
+//
+//   THE LIBRARY is every table you have explicitly named and saved, under its own key. A new build
+//   never touches it. Ever. Editing a NAMED table does autosave into that name, because that is
+//   what picking it up again means.
+//
+// `edited`, the fingerprint, the grey line and the compare-against-shipped logic are all gone.
+// None of them is needed once Default cannot be silently overwritten and every save is explicit.
+
+const LIB = 'pinball2.editor.tables';       // { name: { table, cfg, savedAt } }
+const CURRENT = 'pinball2.editor.current';  // the name last selected, or absent for Default
+const MIGRATED = 'pinball2.editor.migrated';
+
+function readLib() {
   try {
-    const t = makeTable();
-    return `${t.shapes.length}:${t.shapes.map((sh) => sh.kind).join('')}:${Math.round(t.w * 1e4)}`;
-  } catch (e) { return '?'; }
+    const d = JSON.parse(localStorage.getItem(LIB) || '{}');
+    return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+  } catch (e) { return {}; }
 }
 
+function writeLib(d) {
+  try { localStorage.setItem(LIB, JSON.stringify(d)); return true; } catch (e) { return false; }
+}
+
+function libNames() {
+  return Object.keys(readLib()).sort((x, y) => x.localeCompare(y));
+}
+
+/** Save the working table under a name. Named saves are the only thing ever written. */
+function saveAs(name) {
+  if (!name) return false;
+  if (!tableIsFinite(app.table)) return false;    // never store a table that would freeze the app
+  const d = readLib();
+  d[name] = { table: JSON.parse(toJSON(app.table)), cfg: app.cfg, savedAt: Date.now() };
+  if (!writeLib(d)) return false;
+  app.tableName = name;
+  try { localStorage.setItem(CURRENT, name); } catch (e) {}
+  return true;
+}
+
+/** Autosave, which now means one thing only: keep a NAMED table up to date. On Default it is a
+ *  deliberate no-op, and that is the whole fix. */
 function save() {
+  if (!app.tableName) return;
+  saveAs(app.tableName);
+}
+
+function deleteTable(name) {
+  const d = readLib();
+  if (!(name in d)) return false;
+  delete d[name];
+  writeLib(d);
+  if (app.tableName === name) selectTable(null);
+  else renderPanel();
+  return true;
+}
+
+/** Load a table by name, or Default when `name` is null. This is the ONLY way the working table is
+ *  replaced, and it is always something a person asked for. */
+function selectTable(name) {
+  const d = readLib();
+  if (name && d[name] && d[name].table) {
+    const t = fromJSON(d[name].table);
+    app.repaired = repairTable(t);                // an already poisoned save heals on this load
+    app.table = t;
+    app.cfg = cleanCfg(d[name].cfg);
+    app.tableName = name;
+  } else {
+    app.table = makeTable();                      // the build's own table, never stored
+    app.cfg = cloneConfig();
+    app.tableName = null;
+    name = null;
+  }
   try {
-    if (!tableIsFinite(app.table)) return;      // never write a table that would freeze the app
-    localStorage.setItem(SAVE, JSON.stringify({
-      table: JSON.parse(toJSON(app.table)),
-      cfg: app.cfg,
-      shipped: shippedSig(),
-      edited: app.edited,
-    }));
-  } catch (e) { /* a full or blocked store must never stop the tool working */ }
+    if (name) localStorage.setItem(CURRENT, name); else localStorage.removeItem(CURRENT);
+  } catch (e) {}
+  app.sel.clear();
+  app.undo.length = 0;
+  app.redo.length = 0;
+  app.marks = [];
+  app.mask = null;
+  app.world = null;
+  resize();
+  renderPanel();
+}
+
+function cleanCfg(raw) {
+  const c = cloneConfig(raw || {});
+  for (const k of Object.keys(c)) if (!Number.isFinite(c[k]) && typeof CONFIG[k] === 'number') c[k] = CONFIG[k];
+  return c;
+}
+
+/** The one-slot autosave every device already has becomes a named save called "My table", once.
+ *  The old key is left exactly where it is rather than deleted: it costs nothing and nobody has to
+ *  trust this migration got it right. */
+function migrateLegacy() {
+  try {
+    if (localStorage.getItem(MIGRATED)) return null;
+    localStorage.setItem(MIGRATED, '1');
+    const raw = localStorage.getItem(SAVE);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !d.table || !Array.isArray(d.table.shapes) || !d.table.shapes.length) return null;
+    const lib = readLib();
+    let name = 'My table';
+    for (let i = 2; name in lib; i++) name = `My table ${i}`;
+    lib[name] = { table: d.table, cfg: d.cfg || {}, savedAt: Date.now() };
+    writeLib(lib);
+    return name;
+  } catch (e) { return null; }
 }
 
 function load() {
-  try {
-    // An escape hatch that needs no explaining over chat: open the editor with ?fresh on the end.
-    if (/[?&]fresh\b/.test(location.search)) { localStorage.removeItem(SAVE); return; }
-    const raw = localStorage.getItem(SAVE);
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    // THE AUTOSAVE MUST NOT HIDE A NEW BUILD. The editor restores whatever this device last had,
-    // which is right for work in progress and badly wrong the day the machine ships new parts:
-    // Matt opened a build with bumpers, slingshots and a ramp in it and saw the bare box he had
-    // saved a build earlier. "Where are all the updates you just did?"
-    //
-    // So the save records the fingerprint of the table it started from. If the shipped table has
-    // changed since, an UNEDITED save is simply dropped and the new one loaded, and an edited one
-    // is kept with a line in the corner saying the shipped table moved on.
-    const sig = shippedSig();
-    if (d.table) {
-      // A SAVE WITH NO FINGERPRINT PREDATES THE FINGERPRINT, so it is old by definition. The first
-      // version of this check read `d.shipped && d.shipped !== sig`, which is false when the field
-      // is missing - so it kept the old table, which is the ONE case the check was written for.
-      // Matt, on the build that was meant to fix it: "All I have is a stale bare bones tool from
-      // hours ago."
-      const stale = d.shipped !== sig;
-      // An unfingerprinted save is also one whose `edited` flag was never tracked, so it cannot be
-      // trusted either. The shipped table wins and the old one is kept under its own key rather
-      // than deleted, so nothing is actually lost.
-      const trustEdited = d.shipped != null && d.edited;
-      if (stale && !trustEdited) {
-        try { localStorage.setItem(SAVE + '.replaced', JSON.stringify(d)); } catch (e) {}
-        app.table = makeTable();                // take the new build
-      } else {
-        const t = fromJSON(d.table);
-        app.repaired = repairTable(t);          // an already poisoned phone heals on this load
-        app.table = t;
-        app.edited = !!d.edited;
-        if (stale) app.staleTable = true;
-      }
-    }
-    if (d.cfg) {
-      const c = cloneConfig(d.cfg);
-      for (const k of Object.keys(c)) if (!Number.isFinite(c[k]) && typeof CONFIG[k] === 'number') c[k] = CONFIG[k];
-      app.cfg = c;
-    }
-  } catch (e) { /* a corrupt autosave falls back to the shipped table rather than a blank screen */ }
+  app.migrated = migrateLegacy();
+  // ?fresh means Default, which is now simply the ordinary starting point rather than an escape
+  // hatch. It is kept because it has been given out over chat.
+  if (/[?&]fresh\b/.test(location.search)) { selectTable(null); return; }
+  let want = null;
+  try { want = localStorage.getItem(CURRENT); } catch (e) {}
+  selectTable(want && readLib()[want] ? want : null);
 }
 
 function pushUndo() {
@@ -182,7 +252,6 @@ function doRedo() {
 }
 
 function afterEdit() {
-  app.edited = true;
   app.mask = null;
   app.marks = [];
   save();
@@ -702,6 +771,11 @@ function addShape(kind) {
 
 // ------------------------------------------------------------------ panels
 
+/** A table name is typed by a person and then put into HTML. Escape it. */
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function el(html) {
   const d = document.createElement('div');
   d.innerHTML = html.trim();
@@ -744,6 +818,7 @@ function renderPanel() {
   dockA.innerHTML = '';
   dockB.innerHTML = '';
   document.getElementById('panel').classList.toggle('sel', app.mode === 'edit' && app.sel.size > 0);
+  syncTableSel();
   panel = dockA;
   syncObjBar();
   syncZoom();
@@ -775,6 +850,35 @@ function inGroup(title, open, selected, build) {
 // Zoom and the object controls used to live inside the Edit panel, which meant undo was unreachable
 // the moment you switched to Tune to see what a slider had done, and the only zoom on a phone was a
 // pinch you had to know about. Both are chrome now: always present, in every mode.
+
+// THE TABLE SELECTOR, in the top bar, because "which table am I looking at" is a question the tool
+// has to answer without being asked. Default is always first and always the current build.
+const tableSel = document.getElementById('tablesel');
+
+function syncTableSel() {
+  if (!tableSel) return;
+  const names = libNames();
+  tableSel.innerHTML = '';
+  const d = document.createElement('option');
+  d.value = '';
+  d.textContent = 'Default (this build)';
+  tableSel.append(d);
+  for (const n of names) {
+    const o = document.createElement('option');
+    o.value = n;
+    o.textContent = n;
+    tableSel.append(o);
+  }
+  tableSel.value = app.tableName || '';
+}
+
+if (tableSel) {
+  tableSel.onchange = () => {
+    const name = tableSel.value || null;
+    app.migrated = null;                          // the one-time note is answered by switching
+    selectTable(name);
+  };
+}
 
 const zoomVal = document.getElementById('zoomval');
 
@@ -858,14 +962,48 @@ function renderPlayPanel() {
 function renderEditPanel() {
   renderPalette();
 
-  inGroup('File', false, false, () => {
-    const io = el('<div class="row"></div>');
+  // THE TABLE GROUP. Open by default: which table you are looking at, and how to keep one, is the
+  // first question this tool has to answer out loud rather than by implication.
+  inGroup('Table', true, false, () => {
+    if (app.migrated) {
+      panel.append(el(`<div class="note">Your previous edits are kept as <b>${esc(app.migrated)}</b> in the table list. This is the table the current build ships.</div>`));
+    }
+    panel.append(el(`<div class="note">${app.tableName ? `Editing <b>${esc(app.tableName)}</b>. Changes are saved to it as you work.` : 'Editing <b>Default</b>, the table this build ships. Changes here are a working copy and are NOT kept: use Save as to name one.'}</div>`));
+
+    const r1 = el('<div class="row"></div>');
+    const sa = el('<button class="primary">Save as...</button>');
+    sa.onclick = () => {
+      const suggested = app.tableName || app.table.name || 'My table';
+      const name = (prompt('Save this table as:', suggested) || '').trim();
+      if (!name) return;
+      const lib = readLib();
+      if (name in lib && !confirm(`Overwrite "${name}"?`)) return;
+      if (!saveAs(name)) { alert('Could not save: this device is out of storage, or the table has a broken number in it.'); return; }
+      renderPanel();
+    };
+    const dl = el('<button class="danger">Delete...</button>');
+    dl.disabled = !app.tableName;
+    dl.onclick = () => {
+      if (!app.tableName) return;
+      if (!confirm(`Delete the saved table "${app.tableName}"? The build's Default is never affected.`)) return;
+      deleteTable(app.tableName);
+    };
+    r1.append(sa, dl);
+    panel.append(r1);
+
+    const r2 = el('<div class="row"></div>');
+    const revert = el('<button>Revert</button>');
+    revert.onclick = () => {
+      const what = app.tableName ? `"${app.tableName}" as last saved` : "the build's Default";
+      if (!confirm(`Throw away the changes since you last loaded, and reload ${what}?`)) return;
+      selectTable(app.tableName);
+    };
     const exp = el('<button>Export JSON</button>');
     exp.onclick = () => {
       const blob = new Blob([toJSON(app.table)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${app.table.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+      a.download = `${(app.tableName || app.table.name).toLowerCase().replace(/\s+/g, '-')}.json`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     };
@@ -890,21 +1028,8 @@ function renderEditPanel() {
       };
       i.click();
     };
-    const reset = el('<button class="danger">Reset table</button>');
-    reset.onclick = () => {
-      if (!confirm('Throw away every edit and reload the table as it ships?')) return;
-      pushUndo();
-      app.table = makeTable();
-      app.sel.clear();
-      app.edited = false;
-      app.staleTable = false;
-      resize();
-      afterEdit();
-      app.edited = false;                       // reset means "back to the shipped table", not an edit
-      save();
-    };
-    io.append(exp, imp, reset);
-    panel.append(io);
+    r2.append(revert, exp, imp);
+    panel.append(r2);
   });
 
   inGroup('How to', false, false, () => {
@@ -1227,7 +1352,6 @@ function frameBody(t) {
   hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
-  if (app.staleTable) hud.textContent += '\nthis is YOUR edited table. The shipped one has new parts: Edit then Reset table';
 }
 
 // THE MAGNIFIER. Matt: "I want to extend or shorten it, I need an enlarge option... a smaller
