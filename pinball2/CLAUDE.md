@@ -318,6 +318,48 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## A finger covers the thing it is placing
+
+Matt, 2026-09-11: *"When I select an object, the slingshot for example, and I want to extend or
+shorten it, I need an enlarge option. If I hold it down I can precisely move stuff or a smaller
+enlarged window comes up or something."*
+
+At the default fit a millimetre of table is under a screen pixel and a finger is about 9mm across.
+So an end handle is SMALLER THAN THE FINGER REACHING FOR IT, and hidden under it once reached: you
+find out where you put it when you lift off. Four answers, because they are different problems
+wearing the same complaint:
+
+- **Zoom, which did not exist on a phone at all.** The only zoom control was a `wheel` handler,
+  which is a desktop mouse. There is now pinch to zoom, two fingers to pan, and a `-` / `+` / Fit
+  row in the Edit panel (a control you can see beats one you have to know about, and a phone held
+  one-handed has one thumb). Zoom is about the pinch MIDPOINT, never the origin: zooming about the
+  origin is what makes a pinch feel like the table is running away.
+- **A second finger cancels the first finger's edit and puts it back.** Every two-finger gesture
+  starts as one finger landing, and that finger can land on a part. Without the restore, a zoom
+  would leave the part moved by however far the first finger travelled on its way to being joined.
+  The snapshot `pushUndo` already took is what it is restored from, so the tolerance is `toJSON`'s
+  own 0.1mm, the same one every undo here has.
+- **Hold still, then drag, and the handle moves a QUARTER as far as the finger** (`FINE_HOLD_MS`
+  400, `FINE_RATIO` 0.25). Fine mode engages on the first movement rather than on a timer, so
+  nothing moves under a finger that is not moving. The drag tracks two points from then on:
+  `drag.raw` is the finger and `drag.virt` is the handle.
+- **A magnifier, drawn with the real renderer at 4x**, in whichever top corner the finger is NOT in.
+  A magnifier under the hand is the original problem with an extra step. It follows the HANDLE, not
+  the finger, which in a fine drag are deliberately different places, and it reads the handle's
+  position back off the shape rather than assuming the pointer: an arc's radius handle and a
+  flipper's tip are derived, not set.
+
+**And a wall or a slingshot now has Length and Angle rows**, which is the edit four coordinates
+cannot express. "Extend or shorten it" on a line that is not square to the table meant recomputing
+both ends by hand and getting the angle slightly wrong every time. Length holds A and slides B along
+the line; Angle holds A and swings B round it.
+
+**`setPointerCapture` is in a try/catch now, and that is not defensive clutter.** It throws "no
+active pointer with the given id" readily, it was the first line of `pointerdown`, and an exception
+there means the tap does nothing at all - indistinguishable from the dead hit-testing bug this tool
+already had once. Capture is a convenience (it keeps a drag alive off-canvas); it is never worth the
+whole gesture.
+
 ## Say what the number does, and show me only the ones for this part
 
 Matt, 2026-09-11: *"Fix the terminology. 'Slingshot kick' is so vague. Say bounce. And when I'm on

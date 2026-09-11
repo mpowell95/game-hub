@@ -311,26 +311,104 @@ function moveShape(sh, dx, dy) {
 
 // ------------------------------------------------------------------ pointer
 
-const drag = { mode: null, id: null, key: null, last: null, start: null, box: null, moved: false };
+const drag = { mode: null, id: null, key: null, last: null, start: null, box: null, moved: false, at: null, fine: false, holdT: 0 };
 const touches = new Map();
+const edits = new Map();                // pointers down in Edit/Tune, for pinch
+
+// HOW FAR DOES THE HANDLE MOVE PER MILLIMETRE OF FINGER. Matt: "if I hold it down I can precisely
+// move stuff." A drag that has been held still first is a FINE drag: the finger moves a centimetre
+// and the handle moves two and a half millimetres, which is how you shorten a slingshot by one grid
+// step on a phone without zooming in first.
+const FINE_HOLD_MS = 400;
+const FINE_RATIO = 0.25;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 12;
+const LOUPE_MAG = 4;                    // the magnifier's own zoom, on top of the view's
+const LOUPE_R = 62;                     // screen px
 
 function localPt(e) {
   const r = canvas.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
+/** Zoom about a screen point, so the thing under the fingers stays under the fingers. Zooming about
+ *  the origin instead is what makes a pinch feel like the table is running away. */
+function zoomAbout(sx, sy, factor) {
+  const v = app.view;
+  const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.zoom * factor));
+  if (nz === v.zoom) return;
+  const X = (sx - v.ox) / v.zoom - v.px;
+  const Y = (sy - v.oy) / v.zoom - v.py;
+  v.px = ((X + v.px) * v.zoom) / nz - X;
+  v.py = ((Y + v.py) * v.zoom) / nz - Y;
+  v.zoom = nz;
+}
+
+function panBy(dx, dy) {
+  app.view.px += dx / app.view.zoom;
+  app.view.py += dy / app.view.zoom;
+}
+
+function fitAll() {
+  app.view.zoom = 1;
+  app.view.px = 0;
+  app.view.py = 0;
+}
+
+/** A second finger means PINCH, never a second edit. Anything the first finger had already dragged
+ *  is put back: a two-finger zoom must not leave a part moved by however far the first finger
+ *  travelled on its way to being joined. */
+function cancelDragForPinch() {
+  if (drag.mode === 'handle' || drag.mode === 'move') {
+    const snap = app.undo.pop();          // pushUndo ran when the drag started
+    if (snap) { app.table = fromJSON(snap); save(); }
+  }
+  drag.mode = null;
+  drag.box = null;
+  drag.at = null;
+  drag.fine = false;
+}
+
+const pinch = { on: false, d: 0, mid: null };
+
+function pinchState() {
+  const pts = [...edits.values()];
+  if (pts.length < 2) return null;
+  const [a, b] = pts;
+  return { d: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+}
+
 canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
+  // Capture is a CONVENIENCE: it keeps a drag alive when the finger leaves the canvas. It throws
+  // ("no active pointer with the given id") often enough to matter, and an exception on the first
+  // line of this handler means the tap does nothing at all, which reads exactly like the dead
+  // hit-testing bug this tool already had once. It is never worth the whole gesture.
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* drag still works, just not off-canvas */ }
   const s = localPt(e);
   if (app.mode === 'play') {
     touches.set(e.pointerId, s.x);
     setFlipper(s.x < canvas.getBoundingClientRect().width / 2 ? 'L' : 'R', true);
     return;
   }
+  edits.set(e.pointerId, s);
+  const two = pinchState();
+  if (two) {
+    cancelDragForPinch();
+    pinch.on = true;
+    pinch.d = two.d;
+    pinch.mid = two.mid;
+    renderPanel();
+    return;
+  }
   const p = toTable(app.view, s);
   drag.moved = false;
   drag.last = p;
   drag.start = p;
+  drag.at = s;
+  drag.fine = false;
+  drag.holdT = performance.now();
+  drag.raw = p;                         // where the finger is
+  drag.virt = p;                        // where the HANDLE is, which a fine drag separates from it
 
   // TUNE SELECTS, IT NEVER MOVES. Tapping a part here is how you ask for its sliders, and a tap on
   // a phone always drags a few pixels, so sharing Edit's handler would quietly nudge the geometry
@@ -379,10 +457,39 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (app.mode === 'play') return;
+  const s = localPt(e);
+  if (edits.has(e.pointerId)) edits.set(e.pointerId, s);
+
+  // PINCH TO ZOOM, TWO FINGERS TO PAN. There was no way to zoom on a phone at all: the wheel
+  // handler is a desktop control, and at the default fit a millimetre of table is under a pixel, so
+  // a slingshot's end handle was smaller than the finger reaching for it.
+  if (pinch.on) {
+    const two = pinchState();
+    if (two) {
+      if (pinch.d > 1) zoomAbout(two.mid.x, two.mid.y, two.d / pinch.d);
+      panBy(two.mid.x - pinch.mid.x, two.mid.y - pinch.mid.y);
+      pinch.d = two.d;
+      pinch.mid = two.mid;
+    }
+    return;
+  }
   if (!drag.mode) return;
-  const p = toTable(app.view, localPt(e));
+  drag.at = s;
+
+  // HOLD STILL, THEN DRAG, AND THE HANDLE MOVES A QUARTER AS FAR AS THE FINGER. Engaged on the
+  // first movement rather than on a timer, so nothing changes under a finger that is not moving.
+  if (!drag.moved && performance.now() - drag.holdT > FINE_HOLD_MS) drag.fine = true;
+
+  const raw = toTable(app.view, s);
+  const ratio = drag.fine ? FINE_RATIO : 1;
+  drag.virt = {
+    x: drag.virt.x + (raw.x - drag.raw.x) * ratio,
+    y: drag.virt.y + (raw.y - drag.raw.y) * ratio,
+  };
+  drag.raw = raw;
+  const p = drag.virt;
   drag.moved = true;
-  if (drag.mode === 'lasso') { drag.box.x1 = p.x; drag.box.y1 = p.y; return; }
+  if (drag.mode === 'lasso') { drag.box.x1 = raw.x; drag.box.y1 = raw.y; return; }
 
   if (drag.mode === 'handle') {
     const sh = app.table.shapes.find((x) => x.id === drag.id);
@@ -462,16 +569,30 @@ function endDrag(e) {
     }
   }
   if (drag.mode && drag.moved) afterEdit();
-  drag.mode = null; drag.box = null;
+  drag.mode = null; drag.box = null; drag.at = null; drag.fine = false;
   renderPanel();
 }
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('pointerup', (e) => {
+  if (app.mode !== 'play') {
+    edits.delete(e.pointerId);
+    // The pinch ends when the SECOND finger lifts, not when the count drops to one: carrying on as
+    // a one-finger drag from wherever that finger happens to be would drag a part across the table.
+    if (pinch.on) { if (edits.size < 2) { pinch.on = false; renderPanel(); } return; }
+  }
+  endDrag(e);
+});
+canvas.addEventListener('pointercancel', (e) => {
+  if (app.mode !== 'play') {
+    edits.delete(e.pointerId);
+    if (pinch.on) { if (edits.size < 2) { pinch.on = false; renderPanel(); } return; }
+  }
+  endDrag(e);
+});
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
-  const k = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  app.view.zoom = Math.min(6, Math.max(0.5, app.view.zoom * k));
+  const s = localPt(e);
+  zoomAbout(s.x, s.y, e.deltaY < 0 ? 1.12 : 1 / 1.12);
 }, { passive: false });
 
 function centreOf(sh) {
@@ -577,6 +698,25 @@ function el(html) {
   return d.firstElementChild;
 }
 
+/** LENGTH AND ANGLE, for the one edit four coordinates cannot express. Matt, on a slingshot: "I
+ *  want to extend or shorten it." With only A and B, shortening a line that is not square to the
+ *  table means recomputing both ends by hand and getting its angle slightly wrong every time.
+ *  Length holds A and slides B along the line; Angle holds A and swings B round it. */
+function lengthAndAngle(sh, mm) {
+  const dx = sh.b.x - sh.a.x;
+  const dy = sh.b.y - sh.a.y;
+  const L = Math.hypot(dx, dy);
+  const ang = Math.atan2(dy, dx);
+  panel.append(numRow('Length (mm)', mm(L), 1, (v) => {
+    const n = Math.max(0.001, v / 1000);
+    sh.b = { x: sh.a.x + Math.cos(ang) * n, y: sh.a.y + Math.sin(ang) * n };
+  }));
+  panel.append(numRow('Angle (deg)', Math.round(ang * DEG * 10) / 10, 1, (v) => {
+    const t = v / DEG;
+    sh.b = { x: sh.a.x + Math.cos(t) * L, y: sh.a.y + Math.sin(t) * L };
+  }));
+}
+
 function numRow(label, value, step, onChange) {
   const r = el(`<div class="row"><label>${label}</label><input type="number" step="${step}" value="${value}"></div>`);
   const input = r.querySelector('input');
@@ -622,6 +762,25 @@ function renderEditPanel() {
     add.append(b);
   }
   panel.append(add);
+
+  // ENLARGE. There was no way to zoom on a phone at all, and at the default fit a millimetre of
+  // table is under a pixel: a slingshot's end handle is smaller than the finger reaching for it.
+  // Pinch does the same thing; these are here because a control you can see beats one you have to
+  // know about, and because a phone held one-handed has one thumb.
+  const zoomRow = el('<div class="row"></div>');
+  const zLabel = el(`<label>Zoom ${Math.round(app.view ? app.view.zoom * 100 : 100)}%</label>`);
+  const bump = (k) => {
+    const r = canvas.getBoundingClientRect();
+    zoomAbout(r.width / 2, r.height / 2, k);
+    zLabel.textContent = `Zoom ${Math.round(app.view.zoom * 100)}%`;
+  };
+  const zOut = el('<button>&minus;</button>'); zOut.onclick = () => bump(1 / 1.4);
+  const zIn = el('<button>+</button>'); zIn.onclick = () => bump(1.4);
+  const zFit = el('<button>Fit</button>');
+  zFit.onclick = () => { fitAll(); zLabel.textContent = 'Zoom 100%'; };
+  zoomRow.append(zLabel, zOut, zIn, zFit);
+  panel.append(zoomRow);
+  panel.append(el('<div class="note">Pinch to zoom, two fingers to pan. Press and hold a part or a handle for half a second before dragging and it moves a quarter as far as your finger, with a magnifier in the corner.</div>'));
 
   const ops = el('<div class="row"></div>');
   const dup = el('<button>Duplicate</button>'); dup.onclick = duplicateSel; dup.disabled = !app.sel.size;
@@ -698,12 +857,13 @@ function renderEditPanel() {
     panel.append(numRow('Centre y', mm(sh.c.y), 1, (v) => { sh.c.y = v / 1000; }));
     panel.append(numRow('Radius', mm(sh.r), 1, (v) => { sh.r = v / 1000; }));
     panel.append(numRow('Bounce (m/s)', sh.bounce != null ? sh.bounce : app.cfg.BUMPER_BOUNCE, 0.1, (v) => { sh.bounce = v; }));
-    panel.append(el('<div class="note">Kick is the speed the ball LEAVES at, not a bounciness. A slow roll into a bumper comes out just as fast, which is what a real one does.</div>'));
+    panel.append(el('<div class="note">Bounce is the speed the ball LEAVES at, not a bounciness. A slow roll into a bumper comes out just as fast, which is what a real one does.</div>'));
   } else if (sh.kind === 'sling') {
     panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
     panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
     panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
     panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
+    lengthAndAngle(sh, mm);
     panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
     panel.append(numRow('Bounce (m/s)', sh.bounce != null ? sh.bounce : app.cfg.SLING_BOUNCE, 0.1, (v) => { sh.bounce = v; }));
   } else if (sh.kind === 'ribbon') {
@@ -719,6 +879,7 @@ function renderEditPanel() {
     panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
     panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
     panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
+    lengthAndAngle(sh, mm);
     panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
     panel.append(numRow('Bounce', sh.e != null ? sh.e : app.cfg.BALL_E, 0.01, (v) => { sh.e = v; }));
   } else if (sh.kind === 'arc') {
@@ -960,20 +1121,92 @@ function frameBody(t) {
   });
 
   if (app.mode === 'edit' || app.mode === 'tune') drawSelection();
+  if (app.mode === 'edit') drawLoupe();
 
   const b = app.world && app.world.balls.find((x) => x.alive);
   hud.textContent = app.mode === 'play'
     ? `${b ? (Math.hypot(b.v.x, b.v.y)).toFixed(2) + ' m/s' : 'drained'}`
       + `${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
       + `${app.world && app.world.escapes ? '   LEFT THE TABLE ' + app.world.escapes : ''}`
-    : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
+    : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`
+      + `${app.view && Math.abs(app.view.zoom - 1) > 0.01 ? '   zoom ' + Math.round(app.view.zoom * 100) + '%' : ''}`;
   hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
   if (app.staleTable) hud.textContent += '\nthis is YOUR edited table. The shipped one has new parts: Edit then Reset table';
 }
 
-function drawSelection() {
+// THE MAGNIFIER. Matt: "I want to extend or shorten it, I need an enlarge option... a smaller
+// enlarged window comes up or something."
+//
+// A finger is about 9 mm across and covers the exact thing it is placing, which is why dragging an
+// end handle on a phone is guesswork: you find out where you put it when you lift off. So while a
+// handle or a part is being dragged, a circle in the far corner shows that spot at four times the
+// view's zoom, drawn with the real renderer so it is the same picture and not a sketch of one.
+//
+// It follows the HANDLE, not the finger, and in a fine drag those are different places on purpose.
+// It sits in whichever top corner the finger is not in, because a magnifier under the hand is the
+// original problem with an extra step.
+function drawLoupe() {
+  if (!drag.mode || drag.mode === 'lasso' || !drag.at || !drag.virt) return;
+  const v = app.view;
+  const target = drag.mode === 'handle' ? handleAt() : drag.virt;
+  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return;
+
+  const w = canvas.getBoundingClientRect().width;
+  const cx = drag.at.x < w / 2 ? w - LOUPE_R - 14 : LOUPE_R + 14;
+  const cy = LOUPE_R + 14;
+
+  const z2 = v.zoom * LOUPE_MAG;
+  const lv = {
+    s: v.s,
+    zoom: z2,
+    px: v.px,
+    py: v.py,
+    ox: cx - (target.x * v.s + v.px) * z2,
+    oy: cy - (target.y * v.s + v.py) * z2,
+  };
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, LOUPE_R, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = '#0a1220';
+  ctx.fillRect(cx - LOUPE_R, cy - LOUPE_R, LOUPE_R * 2, LOUPE_R * 2);
+  draw(ctx, app.table, lv, { balls: [], ballR: app.cfg.BALL_R, grid: app.snap ? app.grid * 4 : 0 });
+  drawSelection(lv);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 12, cy);
+  ctx.moveTo(cx, cy - 12); ctx.lineTo(cx, cy + 12);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, LOUPE_R, 0, Math.PI * 2);
+  ctx.strokeStyle = drag.fine ? '#ffce3a' : 'rgba(180,220,255,0.75)';
+  ctx.lineWidth = drag.fine ? 3 : 2;
+  ctx.stroke();
+  ctx.font = '600 10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = drag.fine ? '#ffce3a' : 'rgba(200,225,255,0.9)';
+  ctx.fillText(drag.fine ? 'FINE' : `${LOUPE_MAG}x`, cx, cy + LOUPE_R - 6);
+  ctx.restore();
+}
+
+/** Where the handle being dragged actually IS now, read back off the shape rather than assumed from
+ *  the pointer: an arc's radius handle and a flipper's tip are derived, not set. */
+function handleAt() {
+  const sh = app.table.shapes.find((x) => x.id === drag.id);
+  if (!sh) return null;
+  for (const h of handlesFor(sh)) if (h.key === drag.key) return h.at;
+  return null;
+}
+
+function drawSelection(view) {
+  const vw = view || app.view;
   ctx.save();
   for (const id of app.sel) {
     const sh = app.table.shapes.find((x) => x.id === id);
@@ -981,13 +1214,13 @@ function drawSelection() {
     ctx.strokeStyle = '#ffce3a';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 4]);
-    const c = toScreen(app.view, centreOf(sh));
+    const c = toScreen(vw, centreOf(sh));
     ctx.beginPath();
     ctx.arc(c.x, c.y, 16, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     for (const h of handlesFor(sh)) {
-      const s = toScreen(app.view, h.at);
+      const s = toScreen(vw, h.at);
       ctx.beginPath();
       ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
       ctx.fillStyle = '#ffce3a';
@@ -998,8 +1231,8 @@ function drawSelection() {
     }
   }
   if (drag.mode === 'lasso' && drag.box) {
-    const a = toScreen(app.view, { x: drag.box.x0, y: drag.box.y0 });
-    const b = toScreen(app.view, { x: drag.box.x1, y: drag.box.y1 });
+    const a = toScreen(vw, { x: drag.box.x0, y: drag.box.y0 });
+    const b = toScreen(vw, { x: drag.box.x1, y: drag.box.y1 });
     ctx.strokeStyle = '#7fd8ff';
     ctx.setLineDash([4, 4]);
     ctx.lineWidth = 1.5;
