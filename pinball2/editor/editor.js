@@ -318,9 +318,23 @@ if (typeof ResizeObserver === 'function') {
 
 // ------------------------------------------------------------------ play
 
+// THE PLUNGER. `launch` alone is enough for a table whose launch point sits in open play - drop a
+// ball there and gravity does the rest, which is what TEST BOX has always done.
+//
+// It is NOT enough for a table with a SHOOTER LANE. Matt filmed BOARDWALK: tap Launch, the ball
+// trickles down the right lane at half a metre a second, drains, over and over, never once reaching
+// the playfield. Nothing was broken - there was simply no plunger, and a ball dropped at the top of
+// a lane that runs to the drain has exactly one place to go.
+//
+// So a table may carry `launchV`, a velocity. Absent means the old drop, so no existing table
+// changes. A real plunger with a pull-back meter is its own object and is still on the list; this
+// is the one number that makes a shooter lane work in the meantime.
+const DROP_V = { x: 0, y: 0.1 };        // no plunger: just enough to get a ball off the mark
+
 function newBall() {
   app.world = new World(app.table, app.cfg);
-  app.world.addBall(app.table.launch, { x: 0, y: 0.1 });
+  const v = app.table.launchV || DROP_V;
+  app.world.addBall(app.table.launch, { x: v.x, y: v.y });
   app.trail = [];
 }
 

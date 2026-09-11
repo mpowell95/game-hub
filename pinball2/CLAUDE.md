@@ -334,6 +334,30 @@ read, which is the whole reason this repo reports coordinates instead of percent
 `test-checks.mjs` pins it from both sides: a ball in a cup is still named, and an open playfield with
 nothing but its outer walls reports nothing.
 
+## There was no plunger, and BOARDWALK has a shooter lane
+
+Matt filmed it: tap Launch on BOARDWALK, the ball trickles down the right lane at half a metre a
+second, drains, over and over, never once reaching the playfield. Six seconds, four launches, four
+drains.
+
+Nothing was broken. `newBall` has always dropped a ball at `table.launch` with 0.1 m/s and let
+gravity have it, which is exactly right for TEST BOX, whose launch point sits in open play. BOARDWALK
+has a real SHOOTER LANE between w2 and w6, and a ball dropped at the top of a lane that runs to the
+drain has precisely one place to go. **A feature that is correct for every table you have tested
+against is not a feature that is correct.**
+
+A table may now carry `launchV`, a velocity. Absent means the old drop, so nothing existing changes;
+BOARDWALK fires up its lane at 3.2 m/s, which clears the top corner and rides arc a5 into play.
+Measured: every speed from 2.0 m/s up does the same, so the number sits inside a band rather than on
+its edge. A real plunger with a pull-back meter is still its own object, still on the list.
+
+**And the near miss worth keeping.** The first version had `fromJSON` write `launchV: null` for a
+table without one. `tableIsFinite` REJECTS null on purpose - JSON has no NaN, so a NaN comes back as
+null and null in arithmetic is 0 - so every save on every table silently failed its own guard and
+went nowhere. One existing test caught it ("editing a named table keeps the change in that name",
+15 then 15), which is the entire argument for that test existing. **An optional field is omitted,
+never nulled.**
+
 ## A built-in table is code, not a file on a phone
 
 Matt: "make sure boardwalk is available in the tool." The tempting way to do that is to seed it into

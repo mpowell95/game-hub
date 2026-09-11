@@ -168,7 +168,12 @@ function roundDeep(v) {
 }
 
 export function toJSON(table) {
-  return JSON.stringify(roundDeep({ name: table.name, w: table.w, h: table.h, launch: table.launch, shapes: table.shapes }), null, 2);
+  // launchV is OMITTED when a table has none, never written as null. `tableIsFinite` rejects null
+  // on purpose (JSON has no NaN, so a NaN comes back as null and null in arithmetic is 0), so a
+  // null here fails the autosave's own guard and every save goes silently nowhere.
+  const out = { name: table.name, w: table.w, h: table.h, launch: table.launch, shapes: table.shapes };
+  if (table.launchV) out.launchV = table.launchV;
+  return JSON.stringify(roundDeep(out), null, 2);
 }
 
 export function fromJSON(text) {
@@ -190,6 +195,11 @@ export function fromJSON(text) {
     w: t.w || 0.515,
     h: t.h || 1.067,
     launch: t.launch || { x: 0.452, y: 0.140 },
+    // THE PLUNGER, as a velocity. Absent means the old behaviour: drop the ball where `launch` says
+    // and let gravity have it, which is right for a table whose launch point is in open play. A
+    // table with a SHOOTER LANE needs the ball fired UP it, or it rolls back down and drains
+    // without ever reaching the playfield - which is what BOARDWALK did on every single launch.
+    ...(t.launchV && Number.isFinite(t.launchV.x) && Number.isFinite(t.launchV.y) ? { launchV: t.launchV } : {}),
     shapes: t.shapes,
   };
 }

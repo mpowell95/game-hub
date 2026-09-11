@@ -568,6 +568,23 @@ another one, off the visible area, or two millimetres wide.
   under your finger. A group that is open BECAUSE something is selected still wins over the
   remembered state, so Tune's tapped-part group keeps opening itself.
 
+### The plunger (2026-09-11)
+
+`newBall` drops a ball at `table.launch` with 0.1 m/s and lets gravity have it. That is right for a
+table whose launch point sits in open play, which TEST BOX's does, and WRONG for a table with a
+shooter lane: BOARDWALK's ball trickled down the right lane and drained on every single launch,
+never reaching the playfield.
+
+A table may carry **`launchV`**, a velocity. Absent means the old drop, so no existing table changes.
+BOARDWALK fires up its lane at 3.2 m/s; measured, every speed from 2.0 m/s up clears the top corner
+and rides arc a5 into play, so the number is inside a band rather than on its edge. A real plunger
+with a pull-back meter is its own object and is still on the list.
+
+**An optional field is OMITTED, never written as null.** `tableIsFinite` rejects null on purpose
+(JSON has no NaN, so a NaN comes back as null, and null in arithmetic is 0), so the first version of
+this - `fromJSON` setting `launchV: null` - made every save on every table fail its own guard and go
+silently nowhere.
+
 ### Tables this build SHIPS (2026-09-11)
 
 `Default` was never the only one it could be. `BUILTINS` in `editor.js` maps a name to a factory,
