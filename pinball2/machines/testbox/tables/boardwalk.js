@@ -19,9 +19,18 @@ const TABLE = {
   "name": "BOARDWALK",
   "w": 0.515,
   "h": 1.067,
+  // The plunger. BOARDWALK has a real shooter lane down the right side, between w2 and w6, and a
+  // ball dropped into it with no push rolls straight back down and drains without ever reaching the
+  // playfield. So the ball starts at the BOTTOM of the lane and is fired up it: 3.2 m/s clears the
+  // top corner and rides arc a5 into play, measured, with every speed from 2.0 m/s up doing the
+  // same, so this is comfortably inside the band rather than balanced on its edge.
   "launch": {
     "x": 0.4795,
-    "y": 0.3
+    "y": 0.97
+  },
+  "launchV": {
+    "x": 0,
+    "y": -3.2
   },
   "shapes": [
     {

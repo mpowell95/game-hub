@@ -232,7 +232,26 @@ const biReopened = await page.evaluate(() => ({
 }));
 ok(biReopened.builtin === 'BOARDWALK' && biReopened.parts === 44,
   `reopening lands back on it, freshly from code (${biReopened.name}, ${biReopened.parts} parts, the edit gone)`);
+// THE PLUNGER. Matt filmed this: tap Launch on BOARDWALK, the ball trickles down the right shooter
+// lane at half a metre a second and drains, over and over, never once reaching the playfield.
+// Nothing was broken - there was no plunger, and a ball dropped at the top of a lane that runs to
+// the drain has exactly one place to go. `launchV` fires it UP the lane instead.
+const plunged = await page.evaluate(async () => {
+  document.getElementById('tab-play').click();
+  await new Promise((q) => setTimeout(q, 250));
+  const a = window.__pb2;
+  const v = a.table.launchV;
+  document.getElementById('launch').click();
+  await new Promise((q) => setTimeout(q, 1200));
+  const b = a.world && a.world.balls[0];
+  return { v, x: b ? b.p.x : null, y: b ? b.p.y : null, alive: b ? b.alive : null, reached: a.trail ? a.trail.length : 0 };
+});
+ok(plunged.v && plunged.v.y < 0, `BOARDWALK carries a plunger, firing UP the shooter lane (${JSON.stringify(plunged.v)})`);
+ok(plunged.x != null && plunged.x < 0.44,
+  `and a launched ball reaches the PLAYFIELD, not just the lane (x ${plunged.x == null ? 'no ball' : plunged.x.toFixed(3)}, the lane is x > 0.452)`);
+
 await page.evaluate(() => {
+  document.getElementById('tab-edit').click();
   const sel = document.getElementById('tablesel');
   sel.value = '';
   sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -301,12 +320,14 @@ ok(reopened.name === 'BOARDWALK' && reopened.has, 'and it is what you get back o
 
 // Editing a NAMED table does persist to that name: picking it up again is the point of naming it.
 const namedBefore = await page.evaluate(() => window.__pb2.table.shapes.length);
-await addPart('Post');
+const addedNamed = await addPart('Post');
+const midCount = await page.evaluate(() => ({ n: window.__pb2.table.shapes.length, name: window.__pb2.tableName, bi: window.__pb2.builtin }));
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
 const namedAfter = await page.evaluate(() => window.__pb2.table.shapes.length);
 ok(namedAfter === namedBefore + 1,
-  `editing a named table keeps the change in that name (${namedBefore} then ${namedAfter})`);
+  `editing a named table keeps the change in that name (${namedBefore} then ${namedAfter})`,
+  `addPart returned ${addedNamed}, mid ${JSON.stringify(midCount)}`);
 
 // Switching to Default and back must not disturb the save.
 const roundTrip = await page.evaluate(async () => {
