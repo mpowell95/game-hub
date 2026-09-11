@@ -28,7 +28,10 @@ import {
 } from './build-boggle-es.mjs';
 import { DICE, DICE_ES, parseDiceFaces, diceFor, newBoard } from './boggle/js/game.js';
 import { buildTrieFromWords, isValidWord, dictLang, DICT_LANGS } from './boggle/js/dict.js';
-import { solveBoard, BOARD_QUALITY, BOARD_QUALITY_ES, qualityFor } from './boggle/js/solver.js';
+import {
+  solveBoard, shakePlayableBoard, BOARD_QUALITY, BOARD_QUALITY_ES, qualityFor,
+} from './boggle/js/solver.js';
+import { selectAiWords, totalScore, tierPctFor } from './boggle/js/ai.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 let passed = 0; const failures = [];
@@ -123,6 +126,78 @@ const CONJUGATED = ['HABLO', 'HABLASTE', 'HABLARIA', 'COMEREMOS', 'VIVIRIAN'];
 const leaked = CONJUGATED.filter((w) => isValidWord(trieEs, w));
 ok('no conjugated verb forms (infinitive, gerund and participle only)',
   leaked.length === 0, `found: ${leaked.join(', ')}`);
+
+// [KNOWN-BUG PROBE] Born red against the first shipped list, which carried
+// 9,934 words that do not exist in Spanish -- 6% of it. The generator ran the
+// PLURAL rules over the output of the FEMININE rules, but the feminine rule set
+// already emits both feminine forms, so every feminine plural got pluralised a
+// second time: rojas -> ROJASES, altas -> ALTASES, arenosas -> ARENOSASES. The
+// hunspell rule doing it is real and correct in its place (autobus ->
+// autobuses); it was being applied to a word that was already a plural.
+//
+// It is a quiet failure in exactly the way that matters: the list still looked
+// like Spanish, still had every real word in it, and still passed every other
+// assertion in this file. Only reading the solver's output on a real board
+// showed it.
+const FAKE_PLURALS = ['ROJASES', 'ALTASES', 'ARENOSASES', 'DEPORTIVASES', 'SALIASES', 'CASASES'];
+const fakes = FAKE_PLURALS.filter((w) => isValidWord(trieEs, w));
+ok('[KNOWN-BUG PROBE] no double-pluralised feminines (rojas -> ROJASES)',
+  fakes.length === 0, `found: ${fakes.join(', ')}`);
+// ...while the real words of that shape stay, so the fix is not a blunt filter
+// on the ending: these are genuine singulars-in-s that DO take -es.
+const REAL_ASES = ['CLASES', 'FASES', 'GASES', 'FRASES', 'BASES', 'ENVASES'];
+const lostReal = REAL_ASES.filter((w) => !isValidWord(trieEs, w));
+ok('...but genuine -ases plurals are kept (CLASES, FASES, ENVASES)',
+  lostReal.length === 0, `missing: ${lostReal.join(', ')}`);
+// The blast radius, bounded: a regression here would put thousands back.
+const asesCount = words.filter((w) => w.endsWith('ASES')).length;
+ok(`only a handful of words end in -ASES (${asesCount})`, asesCount < 60,
+  `${asesCount} words end in -ASES; the bug produced 9,934`);
+
+// --- 2b. is the OPPONENT the same difficulty in both languages? ----------------
+//
+// [KNOWN-BUG PROBE] Born red against the first Spanish release. ai.js takes a
+// fixed PERCENTAGE of the solver's output, and Boggle's scoring is superlinear
+// in word length (3-4 letters 1 point, 7 gets 5, 8+ gets 11). Spanish words are
+// longer, so English's percentages made Spanish MEDIUM (115 avg) a harder
+// opponent than English HARD (129), and Spanish HARD 58% above it -- the
+// difficulty label meant something different depending on the language. The fix
+// is ai.js's per-language TIER_PCT_BY_LANG; this is what stops it drifting back
+// after a change to the dice, the gate or the word list.
+//
+// A BAND, not a point: this is a stochastic measurement, so it is deliberately
+// loose enough not to flake and tight enough that "Medium is really Hard" fails.
+
+{
+  const enWords = fs.readFileSync(path.join(ROOT, 'boggle/data/words.txt'), 'utf8')
+    .split('\n').map((w) => w.trim()).filter(Boolean);
+  const trieEn = buildTrieFromWords(enWords);
+  const SHAKES = 150;
+  const tierAvg = (root, lang, tier) => {
+    let sum = 0;
+    for (let i = 0; i < SHAKES; i++) {
+      const s = shakePlayableBoard(root, Math.random, qualityFor(lang), diceFor(lang));
+      sum += totalScore(selectAiWords(s.solved, tier, Math.random, lang));
+    }
+    return sum / SHAKES;
+  };
+  for (const tier of ['beginner', 'intermediate', 'pro']) {
+    const en = tierAvg(trieEn, 'en', tier);
+    const es = tierAvg(trieEs, 'es', tier);
+    const gap = Math.abs(es - en) / en;
+    ok(`[KNOWN-BUG PROBE] "${tier}" is the same opponent in both languages `
+      + `(EN ${Math.round(en)}, ES ${Math.round(es)})`,
+      gap < 0.25, `${(gap * 100).toFixed(0)}% apart - re-run: node tune-boggle-es.mjs --ai`);
+  }
+  ok('the two languages really do use different tier percentages',
+    JSON.stringify(tierPctFor('en')) !== JSON.stringify(tierPctFor('es')));
+  ok('tierPctFor falls back to English for an unknown language',
+    JSON.stringify(tierPctFor('fr')) === JSON.stringify(tierPctFor('en')));
+  // The pre-existing single-argument call must behave exactly as it always did.
+  const sample = shakePlayableBoard(trieEn, Math.random, BOARD_QUALITY, diceFor('en')).solved;
+  ok('selectAiWords without a language still works (unchanged legacy API)',
+    Array.isArray(selectAiWords(sample, 'intermediate')));
+}
 
 // --- 3. the dice and the language seam ---------------------------------------
 

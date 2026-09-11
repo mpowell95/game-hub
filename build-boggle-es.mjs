@@ -243,14 +243,17 @@ export function buildWordSet(entries, sfx) {
     // paradigms, and an entry can legitimately be both (decir/S the noun-ish
     // entry vs decir/X the verb), which the union above already merged.
     if (flags.has('S')) for (const w of applySuffix(lemma, sfx.get('S'))) add(w);
-    if (flags.has('G')) {
-      for (const w of applySuffix(lemma, sfx.get('G'))) {
-        add(w);
-        // A feminine form pluralises too; G already emits both, but the
-        // masculine plural comes from S, so a G-only entry needs this.
-        for (const p of applySuffix(w, sfx.get('S'))) add(p);
-      }
-    }
+    // G is applied to the LEMMA only, and its output is never fed back through
+    // S. The G rule set already carries BOTH feminine forms (nine singular
+    // rules -- o->a, e->a, an->ana -- and nine plural ones -- o->as, e->as,
+    // an->anas), so running S over a form that is already a plural produces
+    // garbage: S's "add -es to a word ending in s" rule exists for autobus ->
+    // autobuses, and applied to `rojas` it yields `rojases`. The first version
+    // of this file did exactly that and put 9,934 non-words into the list --
+    // ROJASES, ALTASES, ARENOSASES, DEPORTIVASES -- about 6% of it. Anything
+    // that looks like it needs a second affix pass almost certainly does not;
+    // test-boggle-es.mjs asserts these specific shapes stay out.
+    if (flags.has('G')) for (const w of applySuffix(lemma, sfx.get('G'))) add(w);
   }
   return out;
 }
