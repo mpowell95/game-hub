@@ -718,7 +718,20 @@ function sortItemsFor(id) {
 /** `_sort` is ONE value shared by By Player and every game board, and 'high' means something on
  *  exactly one of them. Everywhere else it resolves to the metric sort, so a saved default of
  *  'high' can never leave a screen with no pill lit and no order anybody asked for. */
-function effectiveSort(id) { return _sort === 'high' && id !== 'skeeball' ? 'wins' : _sort; }
+/** A BOARD'S SORT IS ITS OWN, AND IT RESETS EVERY TIME YOU OPEN ONE (2026-09-11). Matt: *"if I
+ *  click into a game, it should be on the Longest, High Score, wins. Whatever the leftmost option
+ *  is."* `_boardSort` is set from `sortItemsFor(id)[0]` on the way in, so it follows that list
+ *  rather than restating it - move the metric out of first place and this default moves with it.
+ *
+ *  It is deliberately SEPARATE from `_sort`, which By Player still owns and still persists (the
+ *  saved default view, `gamehub.lb.sort.v1`). They were one value, so landing on a board used to
+ *  inherit whatever By Player was sorted by - and, worse, changing a board's sort silently rewrote
+ *  the persisted By Player preference. The 'high' guard stays: it is Skeeball's alone, and a
+ *  `_boardSort` carried into a game that does not offer it would light no pill at all. */
+function effectiveSort(id) {
+  if (id == null) return _sort;
+  return _boardSort === 'high' && id !== 'skeeball' ? 'wins' : _boardSort;
+}
 // By Game's own three orders, remembered the same way By Player's are (saved default view).
 // 'fav' reads js/favorites.js, the launcher's own favorites list, keyed by HUB id.
 const GAME_SORTS = [
@@ -1683,7 +1696,8 @@ let _cat = 'all';           // 'all' | 1-4 | 'NT' | 'VS' - By Player's category 
 let _tier = null;           // null (All) | 1-4 - a GAME BOARD's own difficulty filter, reset per board
 let _machine = 'all';       // 'all' | a Skeeball machine id - that board's filter, deliberately not persisted
 let _sort = 'wins';         // 'alpha' | 'played' | 'wins' (or a game's own metric on a game board) - persisted, see loadView/saveView
-let _gameSort = 'alpha';    // 'alpha' | 'popular' | 'fav' - By Game's own order, persisted the same way
+let _gameSort = 'popular';  // 'alpha' | 'popular' | 'fav' - By Game's own order; the leaderboard OPENS on this
+let _boardSort = 'wins';    // a game board's own sort, reset to that board's leftmost pill on every entry
 let _saved = { sort: 'wins', cat: 'all' };   // what "Make this my default view" last stored, for the row's own label
 let _panel = null;          // null | 'cat' | 'machine' - which in-place select panel is open
 let _all = {};
@@ -1768,6 +1782,9 @@ function onClick(e) {
   const pill = e.target.closest('[data-sort],[data-gsort]');
   if (pill) {
     if (pill.dataset.gsort) { _gameSort = pill.dataset.gsort; saveView({ sort: _sort, cat: _cat, gameSort: _gameSort }); }
+    // On a board this is that board's own sort and nothing else: it is not persisted, and it does
+    // not touch the By Player preference the saved default view owns.
+    else if (_game) { _boardSort = pill.dataset.sort; }
     else { _sort = pill.dataset.sort; saveSort(_sort); saveView({ sort: _sort, cat: _cat, gameSort: _gameSort }); }
     rerender();
     return;
@@ -1830,7 +1847,13 @@ function onClick(e) {
   const gsRow = e.target.closest('.gs-grow[data-game]');
   if (gsRow && _player) { _playerGame = gsRow.dataset.game; rerender(); return; }
   const row = e.target.closest('.lb-grow');
-  if (row && row.dataset.game) { _game = row.dataset.game; _tier = null; _machine = 'all'; rerender(); }
+  if (row && row.dataset.game) {
+    _game = row.dataset.game;
+    // Always the game's own number - Longest, Points, Wins, whatever that board calls it. See
+    // effectiveSort for why this is read off the pill list rather than hardcoded.
+    _boardSort = sortItemsFor(_game)[0].sort;
+    _tier = null; _machine = 'all'; rerender();
+  }
 }
 
 export function closeLeaderboard() {
@@ -1845,16 +1868,20 @@ export async function openLeaderboard() {
   ensureCss();
   ensureStatsCss();   // the player detail screen reuses My Stats' gs-* renderers/markup verbatim
   closeLeaderboard();
-  _seg = 'players';
+  // THE LEADERBOARD OPENS ON BY GAME, MOST PLAYED (2026-09-11, Matt's ask, in those words). Fixed,
+  // not remembered: it is where he wants to land every time, so the stored `gameSort` is no longer
+  // read here. The key still carries it (rule 5 - never repurposed, and the pill still writes it),
+  // it simply no longer decides where an open begins.
+  _seg = 'games';
+  _gameSort = 'popular';
   _game = null;
   _player = null;
   _playerGame = null;
-  // The saved default view (2026-08-25): By Player opens on the sort + category this device chose,
-  // By Game on its own saved order. A board's own filters are per-visit and start clean.
+  // The saved default view (2026-08-25) still owns BY PLAYER's sort + category, which is what it
+  // was for. A board's own sort and filters are per-visit and start clean.
   const view = loadView();
   _sort = view.sort;
   _cat = view.cat;
-  _gameSort = view.gameSort;
   _saved = { sort: view.sort, cat: view.cat };
   _tier = null;
   _machine = 'all';

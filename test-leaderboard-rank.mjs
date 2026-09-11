@@ -591,6 +591,16 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] My Stats keeps its OWN, more permissive rule, so your own history stays',
     /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| dev \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
     'unifying visibleTabs with isGameOnLauncher would hide a player\'s own record of a pulled game');
+  // WHERE THE LEADERBOARD OPENS, and where a board opens (2026-09-11, Matt).
+  ok('the overlay opens on By Game, Most played, whatever was saved before',
+    /_seg = 'games';\s*\n\s*_gameSort = 'popular';/.test(src)
+    && !/_gameSort = view\.gameSort;/.test(src));
+  ok('a board opens on its OWN leftmost pill, read off the list rather than hardcoded',
+    /_boardSort = sortItemsFor\(_game\)\[0\]\.sort;/.test(src));
+  ok('[KNOWN-BUG PROBE] a board\'s sort is separate from By Player\'s persisted one',
+    /function effectiveSort\(id\) \{\s*\n\s*if \(id == null\) return _sort;/.test(src)
+    && /else if \(_game\) \{ _boardSort = pill\.dataset\.sort; \}/.test(src),
+    'they were one value, so a board visit silently rewrote the saved By Player preference');
   ok('By Game\'s leader row marks the tier its number belongs to',
     /\$\{tierMarkHTML\(boardTierOf\(lead, meta\.id\)\)\}/.test(src) && /\.lb-tiermark\{/.test(src));
   ok('the chip is suppressed while a difficulty filter is selected, which already says it once',

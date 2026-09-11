@@ -36,7 +36,8 @@ Category filter: Everything, Easy, Medium, Hard, Expert, No tier, Versus.
 - That leader's number, and what the number counts
 - Whether the game is one of the viewer's favorites
 
-Sorts: A to Z, Most played, Favorites. A game nobody has played says so and has no leader.
+Sorts: A to Z, Most played, Favorites — the leaderboard opens here, on Most played. A game nobody
+has played says so and has no leader.
 
 ## A game's own board (opened from By Game)
 
@@ -58,7 +59,8 @@ Ranking: difficulty tier first, score second. A higher score at a lower difficul
 a lower score at a higher one.
 
 Sorts: the game's own number (named after it — Wins, Obstacles, Longest, Solved, Distance, Points,
-Best round), Games, Name. Skeeball has one more, High score.
+Best round), Games, Name. Skeeball has one more, High score. A board always opens on the game's own
+number, whichever game it is.
 Difficulty filter: only tiers somebody has actually played. Skeeball has a machine filter in its
 place, and only once the field has played more than one machine. The games with no difficulty have
 neither.
