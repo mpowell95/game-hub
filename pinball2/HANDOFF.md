@@ -376,6 +376,41 @@ permanently.
 
 One file, `editor/editor.js`. Four modes, switched by the header tabs.
 
+### The workspace (rebuilt 2026-09-11)
+
+**A grid whose canvas row is a FIXED size.** Everything docks around it and the table never moves
+or resizes when you switch modes. That is not tidiness: the canvas used to be a flex child that
+grew and shrank with whatever the panel below happened to contain, so switching tabs resized it
+with no window `resize` event, the view transform still described the previous height, and every
+tap landed an inch from the finger. A `ResizeObserver` patches that. A fixed row means there is
+nothing to patch, and `test-editor.mjs` measures the canvas box in all four modes and fails if they
+ever differ (393x477@81 on a phone).
+
+`--stage-h` is **56svh**, and svh is deliberate: `dvh` changes as a phone's URL bar slides, which
+would resize the canvas on every scroll - the same bug wearing a different hat.
+
+```
+  header    title, build chip, ZOOM (- + Fit), tab strip
+  stage     the canvas, fixed height, never reflows
+  objbar    Undo, Redo, Snap, Duplicate, Delete - EVERY mode
+  dock      #panel > #dockA + #dockB, scrolls inside its own row
+```
+
+**The dock has two halves and the tabs swap only their contents.** `#dockA` is the primary column
+(palette / play controls / tune groups / check buttons) and `#dockB` the secondary (inspector /
+results). A renderer just appends to `panel`, which is pointed at whichever half it is filling.
+
+**On a phone they stack in one scroller; at `min-width: 900px` they become the left and right docks
+either side of the table.** `#panel { display: contents }` drops the wrapper out of the grid so the
+two halves land in it directly - same DOM, same code, two shapes. With a part selected, `#panel.sel`
+gives `#dockB` `order: -1` so the inspector is above the palette on a phone; on the wide layout the
+grid places both and order is moot.
+
+**Zoom and the object controls are chrome, not panel content.** They were inside the Edit panel,
+which meant undo was unreachable the moment you switched to Tune to see what a slider had done, and
+the only zoom on a phone was a pinch you had to know about. `syncObjBar()` greys the whole bar in
+Play, where there is nothing selected and nothing to undo.
+
 ### Play
 The real engine. Hold the left or right half of the table to flip, or **Z** and **M** (or the arrow
 keys) on a keyboard. **Space** drops a new ball. The panel has New ball, Slow motion, Pause and Step
@@ -390,8 +425,10 @@ frame. The HUD top-left shows ball speed, and any jams, escapes or draw errors.
 - **Arrow keys** nudge by one grid step, **Shift+arrow** by five. **Delete**/**Backspace** deletes,
   **D** duplicates.
 - **Ctrl/Cmd+Z** undo, **Ctrl/Cmd+Shift+Z** redo. 100 levels, stored as whole-table JSON snapshots.
-- Buttons: add Wall, Arc, Post, Bumper, Sling, Flipper, Drain. Duplicate, Delete, Undo, Redo, Snap
-  on/off. Export JSON, Import, Reset table.
+- **The parts palette** is an icon grid (`PART_ICONS`, one inline SVG per kind) at the top of dock
+  A: Wall, Arc, Post, Bumper, Sling, Flipper, Drain. Export JSON, Import and Reset table are in a
+  collapsed **File** group below it, with the how-to notes in **How to**.
+- Duplicate, Delete, Undo, Redo and Snap are in the **object bar**, present in every mode.
 - The property panel is generated per selected kind, in **millimetres** and **degrees**, so the
   numbers are the ones you would read off a drawing.
 
@@ -402,7 +439,7 @@ fixed in table units once, which is about 8 pixels on a phone, and a finger is n
 and a finger is about 9mm across, so an end handle is smaller than the finger reaching for it and
 hidden under it once reached.
 
-- **Zoom**: pinch, two fingers to pan, or the `-` / `+` / Fit row. Zoom is about the pinch midpoint
+- **Zoom**: pinch, two fingers to pan, or the `-` / `+` / Fit cluster **in the top bar**. Zoom is about the pinch midpoint
   (`zoomAbout`), never the origin. `ZOOM_MIN` 0.5, `ZOOM_MAX` 12.
 - **A second finger cancels the first finger's edit and restores it** (`cancelDragForPinch`), from
   the snapshot `pushUndo` already took. Without this a pinch leaves the part moved by however far
@@ -427,6 +464,11 @@ with the given id" readily, it is the first line of `pointerdown`, and an except
 tap does nothing at all, which is indistinguishable from a dead hit-testing bug.
 
 ### Tune
+**The sliders are collapsible groups, one per part kind, not one flat list of 22.** `group()` and
+`inGroup()` build them; the group belonging to the selected part opens itself and is outlined in the
+accent colour. Copy config and Back to defaults moved to dock B, away from the sliders, so a thumb
+reaching for Ramp drag cannot land on Back to defaults.
+
 **Tap a part on the table and the panel filters to the numbers that govern it**, with the table-wide
 ones (tilt, speed cap, rolling drag, rest threshold) always underneath, because they govern it too.
 **Show all** puts the full list back, and tapping another part filters again. Nothing selected shows
@@ -440,6 +482,9 @@ Sliders are live while a ball is in play. **Copy config** puts the whole block o
 pasting into `config.js`. **Back to defaults** restores.
 
 ### Check
+**The buttons are in dock A and the report in dock B.** In one column a long result pushed the
+buttons off the bottom of the screen, so you could not re-run the check you were reading.
+
 Runs the real checks on the table as it stands and draws the results **on the table as red marks**,
 not as a percentage. Find traps, Tunnel test, Gap rule, Show reachable, Clear marks. It also prints
 gravity, the free-fall time against its analytic value, and how long a ball lives.

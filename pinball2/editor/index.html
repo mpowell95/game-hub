@@ -15,6 +15,8 @@
     --accent: #ffce3a;
     --ok: #35c07a;
     --bad: #ff5a5a;
+    /* The table's row height. Everything else takes what is left, and the dock scrolls inside it. */
+    --stage-h: 56svh;
   }
   /* NOTHING IN THIS TOOL IS TEXT TO BE SELECTED. Matt, on the press-and-hold fine drag: "it also
      selects everything, the whole page, as if I was going to copy something."
@@ -37,22 +39,59 @@
     font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     overscroll-behavior: none;
   }
-  #app { display: flex; flex-direction: column; height: 100%; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); flex: none; }
-  header h1 { font-size: 13px; margin: 0 6px 0 0; font-weight: 700; letter-spacing: .04em; color: var(--dim); white-space: nowrap; }
-  .tabs { display: flex; gap: 4px; margin-left: auto; }
+  /* THE WORKSPACE IS A GRID AND THE CANVAS ROW IS A FIXED SIZE. That is the whole point of this
+     layout, and it is not only tidiness: the canvas used to be a flex child that grew and shrank
+     with whatever the panel below it happened to contain, so switching tabs resized it with no
+     window resize event, the view transform still described the previous height, and every tap
+     landed an inch from the finger. A ResizeObserver patches that; a fixed row means there is
+     nothing to patch. The dock scrolls INSIDE its own row and cannot push the table around.
+
+     svh, not vh or dvh: dvh changes as the phone's URL bar slides and would resize the canvas on
+     every scroll, which is the bug again wearing a different hat. */
+  #app {
+    display: grid;
+    grid-template-rows: auto var(--stage-h) auto minmax(0, 1fr);
+    grid-template-areas: "hdr" "stage" "objbar" "dock";
+    height: 100%; height: 100svh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { grid-area: hdr; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 13px; margin: 0 4px 0 0; font-weight: 700; letter-spacing: .04em; color: var(--dim); white-space: nowrap; }
+  .tabs { display: flex; gap: 4px; width: 100%; }
+  .tabs .tab { flex: 1; }
   #build { min-height: 26px; padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px;
            border: 1px solid var(--line); background: #101a2e; color: var(--dim); }
   #build.stale { background: #5c2b36; border-color: #8a3d4d; color: #ffd7d7; }
   .tab { min-height: 34px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: #101a2e; color: var(--dim); font-size: 13px; font-weight: 600; }
   .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #21180a; }
-  #stage { position: relative; flex: 1; min-height: 0; }
+
+  /* The zoom cluster lives in the top bar now, so it is reachable in every mode rather than only
+     while the Edit panel happens to be open. */
+  #zoombar { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  #zoombar button { min-height: 28px; min-width: 34px; padding: 4px 8px; font-size: 13px; }
+  #zoomval { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
+
+  #stage { grid-area: stage; position: relative; min-height: 0; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+
+  /* Object controls, every mode. They used to be inside the Edit panel, which meant undo was
+     unreachable the moment you switched to Tune to see what a slider did. */
+  #objbar { grid-area: objbar; display: flex; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--line); background: #101a2e; overflow-x: auto; }
+  #objbar button { flex: 1 0 auto; min-height: 34px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
   /* pre-wrap, not pre: the line naming what is on the table runs past the right edge of a phone
      otherwise, and a line you cannot finish reading is not a line that answers anything. */
   #hud { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); font-size: 11px; color: var(--dim); background: rgba(8,14,26,.66); padding: 4px 7px; border-radius: 6px; pointer-events: none; white-space: pre-wrap; }
-  #panel { flex: none; max-height: 46%; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); background: var(--panel); padding: 8px; }
+  /* ONE dock on a phone, holding both halves stacked and scrolling as one. On a wide screen the
+     same two halves become the left and right docks: `display: contents` drops this wrapper out of
+     the layout so its children land in the grid directly. Same DOM, same code, two shapes. */
+  #panel { grid-area: dock; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); background: var(--panel); }
+  /* With a part selected, the inspector is the thing you came to the dock for, so on a phone it
+     jumps above the palette. On a wide screen the grid places both halves and order is moot. */
+  #panel.sel #dockB { order: -1; }
   #panel.hidden { display: none; }
+  #dockA, #dockB { padding: 8px; }
+  #dockB:empty { display: none; }
+  #dockA:not(:empty) + #dockB:not(:empty) { border-top: 1px solid var(--line); }
   .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
   .row > label { font-size: 11px; color: var(--dim); min-width: 74px; }
   input[type=number], input[type=text], select {
@@ -78,6 +117,43 @@
   #tz-l { left: 0; } #tz-r { right: 0; }
   #launch { position: absolute; right: 10px; bottom: 10px; }
   h2 { font-size: 12px; margin: 10px 0 6px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+
+  /* The parts palette: an icon per kind, so a part is recognised rather than read. */
+  .palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; margin-bottom: 8px; }
+  .palette button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 54px; padding: 6px 4px; font-size: 11px; }
+  .palette svg { width: 26px; height: 18px; display: block; }
+
+  /* Collapsible groups. Tune was one unbroken list of 22 sliders, so reaching Ramp drag meant
+     scrolling past everything else on the table. */
+  details.grp { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: #101a2e; }
+  details.grp > summary { list-style: none; cursor: pointer; padding: 9px 10px; font-size: 12px; font-weight: 700;
+                          color: var(--dim); text-transform: uppercase; letter-spacing: .05em; display: flex; align-items: center; gap: 6px; }
+  details.grp > summary::-webkit-details-marker { display: none; }
+  details.grp > summary::after { content: '+'; margin-left: auto; font-size: 15px; color: var(--dim); }
+  details.grp[open] > summary::after { content: '\2212'; }
+  details.grp[open] > summary { border-bottom: 1px solid var(--line); color: var(--accent); }
+  details.grp .grp-body { padding: 8px 10px 2px; }
+  details.grp.sel > summary { color: var(--accent); }
+  details.grp.sel { border-color: var(--accent); }
+
+  /* WIDE SCREEN: the docks the brief asked for. The canvas is still a fixed box that never moves;
+     the two dock halves simply sit either side of it instead of stacked underneath. */
+  @media (min-width: 900px) {
+    #app {
+      grid-template-columns: 210px minmax(0, 1fr) 320px;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-areas: "hdr hdr hdr" "dockA stage dockB" "objbar objbar objbar";
+    }
+    #panel { display: contents; }
+    #dockA { grid-area: dockA; overflow-y: auto; overscroll-behavior: contain; border-right: 1px solid var(--line); background: var(--panel); }
+    #dockB { grid-area: dockB; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid var(--line); background: var(--panel); }
+    #dockA:not(:empty) + #dockB:not(:empty) { border-top: 0; }
+    #dockB:empty { display: block; }
+    #stage { background: #0a1220; }
+    .tabs { width: auto; margin-left: 10px; }
+    .tabs .tab { flex: 0 0 auto; }
+    .palette { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -85,6 +161,12 @@
   <header>
     <h1>PINBALL 2</h1>
     <button id="build" title="which build is running">...</button>
+    <div id="zoombar">
+      <span id="zoomval">100%</span>
+      <button id="zoom-out" title="zoom out">&minus;</button>
+      <button id="zoom-in" title="zoom in">+</button>
+      <button id="zoom-fit">Fit</button>
+    </div>
     <div class="tabs">
       <button class="tab" id="tab-play" aria-pressed="true">Play</button>
       <button class="tab" id="tab-edit" aria-pressed="false">Edit</button>
@@ -98,7 +180,14 @@
     <div id="touchzones"><div id="tz-l"></div><div id="tz-r"></div></div>
     <button id="launch" class="primary">Launch</button>
   </div>
-  <div id="panel"></div>
+  <div id="objbar">
+    <button id="ob-undo">Undo</button>
+    <button id="ob-redo">Redo</button>
+    <button id="ob-snap">Snap on</button>
+    <button id="ob-dup">Duplicate</button>
+    <button id="ob-del" class="danger">Delete</button>
+  </div>
+  <div id="panel"><div id="dockA"></div><div id="dockB"></div></div>
 </div>
 <!-- EVERY MODULE IN THIS TOOL IS FETCHED WITH THE BUILD VERSION IN ITS URL, and that is not
      decoration.

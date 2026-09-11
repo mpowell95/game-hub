@@ -17,7 +17,13 @@ const DEG = 180 / Math.PI;
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const panel = document.getElementById('panel');
+// The dock has two halves. On a phone they stack in one scroller; on a wide screen they become the
+// left and right docks either side of the table. The renderers below just append to `panel`, which
+// is pointed at whichever half they are filling, so the same code builds both shapes.
+const dockA = document.getElementById('dockA');
+const dockB = document.getElementById('dockB');
+let panel = dockA;
+const objbar = document.getElementById('objbar');
 const hud = document.getElementById('hud');
 const zones = document.getElementById('touchzones');
 const launchBtn = document.getElementById('launch');
@@ -735,12 +741,103 @@ function numRow(label, value, step, onChange) {
 }
 
 function renderPanel() {
-  panel.innerHTML = '';
-  panel.classList.remove('hidden');
+  dockA.innerHTML = '';
+  dockB.innerHTML = '';
+  document.getElementById('panel').classList.toggle('sel', app.mode === 'edit' && app.sel.size > 0);
+  panel = dockA;
+  syncObjBar();
+  syncZoom();
   if (app.mode === 'play') return renderPlayPanel();
   if (app.mode === 'edit') return renderEditPanel();
   if (app.mode === 'tune') return renderTunePanel();
   return renderCheckPanel();
+}
+
+/** A labelled, collapsible group. Open by default unless told otherwise; `sel` marks the one that
+ *  belongs to whatever is selected on the table. */
+function group(title, open, selected) {
+  const d = el(`<details class="grp${selected ? ' sel' : ''}"${open ? ' open' : ''}><summary>${title}</summary><div class="grp-body"></div></details>`);
+  panel.append(d);
+  return d.querySelector('.grp-body');
+}
+
+/** Build into a group's body and put `panel` back afterwards, so a renderer can nest without
+ *  having to remember to restore anything. */
+function inGroup(title, open, selected, build) {
+  const keep = panel;
+  panel = group(title, open, selected);
+  build();
+  panel = keep;
+}
+
+// ------------------------------------------------------------------ the persistent bars
+//
+// Zoom and the object controls used to live inside the Edit panel, which meant undo was unreachable
+// the moment you switched to Tune to see what a slider had done, and the only zoom on a phone was a
+// pinch you had to know about. Both are chrome now: always present, in every mode.
+
+const zoomVal = document.getElementById('zoomval');
+
+function syncZoom() {
+  if (zoomVal && app.view) zoomVal.textContent = `${Math.round(app.view.zoom * 100)}%`;
+}
+
+function zoomStep(k) {
+  const r = canvas.getBoundingClientRect();
+  zoomAbout(r.width / 2, r.height / 2, k);
+  syncZoom();
+}
+
+document.getElementById('zoom-out').onclick = () => zoomStep(1 / 1.4);
+document.getElementById('zoom-in').onclick = () => zoomStep(1.4);
+document.getElementById('zoom-fit').onclick = () => { fitAll(); syncZoom(); };
+
+const obUndo = document.getElementById('ob-undo');
+const obRedo = document.getElementById('ob-redo');
+const obSnap = document.getElementById('ob-snap');
+const obDup = document.getElementById('ob-dup');
+const obDel = document.getElementById('ob-del');
+
+obUndo.onclick = doUndo;
+obRedo.onclick = doRedo;
+obDup.onclick = duplicateSel;
+obDel.onclick = deleteSel;
+obSnap.onclick = () => { app.snap = !app.snap; renderPanel(); };
+
+/** The object bar reflects what is actually possible right now. Play mode has nothing to undo and
+ *  nothing selected, so the whole bar goes quiet rather than offering dead buttons. */
+function syncObjBar() {
+  const editing = app.mode !== 'play';
+  obSnap.textContent = `Snap ${app.snap ? 'on' : 'off'}`;
+  obUndo.disabled = !editing || !app.undo.length;
+  obRedo.disabled = !editing || !app.redo.length;
+  obSnap.disabled = !editing;
+  obDup.disabled = !editing || !app.sel.size;
+  obDel.disabled = !editing || !app.sel.size;
+  objbar.style.opacity = editing ? '' : '.5';
+}
+
+// ------------------------------------------------------------------ the parts palette
+// An icon per kind, drawn from the same vocabulary the renderer uses, so a part is recognised
+// rather than read.
+const PART_ICONS = {
+  seg: '<svg viewBox="0 0 26 18"><line x1="3" y1="14" x2="23" y2="4" stroke="#9fb6d8" stroke-width="4" stroke-linecap="round"/></svg>',
+  arc: '<svg viewBox="0 0 26 18"><path d="M3 16 A 13 13 0 0 1 23 16" fill="none" stroke="#9fb6d8" stroke-width="4" stroke-linecap="round"/></svg>',
+  circle: '<svg viewBox="0 0 26 18"><circle cx="13" cy="9" r="5" fill="#9fb6d8"/></svg>',
+  bumper: '<svg viewBox="0 0 26 18"><circle cx="13" cy="9" r="7.5" fill="#2f7fd0"/><circle cx="13" cy="9" r="3" fill="#0b1220"/></svg>',
+  sling: '<svg viewBox="0 0 26 18"><line x1="4" y1="15" x2="22" y2="4" stroke="#e0532f" stroke-width="4.5" stroke-linecap="round"/></svg>',
+  flipper: '<svg viewBox="0 0 26 18"><path d="M4 6 L21 11 L21 14 L4 11 Z" fill="#ffce3a"/><circle cx="5" cy="8" r="2.4" fill="#5a4408"/></svg>',
+  drain: '<svg viewBox="0 0 26 18"><line x1="2" y1="9" x2="24" y2="9" stroke="#ff5a5a" stroke-width="3" stroke-dasharray="4 3" stroke-linecap="round"/></svg>',
+};
+
+function renderPalette() {
+  const grid = el('<div class="palette"></div>');
+  for (const [k, name] of [['seg', 'Wall'], ['arc', 'Arc'], ['circle', 'Post'], ['bumper', 'Bumper'], ['sling', 'Sling'], ['flipper', 'Flipper'], ['drain', 'Drain']]) {
+    const b = el(`<button title="add a ${name.toLowerCase()}">${PART_ICONS[k] || ''}<span>${name}</span></button>`);
+    b.onclick = () => addShape(k);
+    grid.append(b);
+  }
+  panel.append(grid);
 }
 
 function renderPlayPanel() {
@@ -759,92 +856,69 @@ function renderPlayPanel() {
 }
 
 function renderEditPanel() {
-  const add = el('<div class="row"></div>');
-  for (const [k, name] of [['seg', '+ Wall'], ['arc', '+ Arc'], ['circle', '+ Post'], ['bumper', '+ Bumper'], ['sling', '+ Sling'], ['flipper', '+ Flipper'], ['drain', '+ Drain']]) {
-    const b = el(`<button>${name}</button>`);
-    b.onclick = () => addShape(k);
-    add.append(b);
-  }
-  panel.append(add);
+  renderPalette();
 
-  // ENLARGE. There was no way to zoom on a phone at all, and at the default fit a millimetre of
-  // table is under a pixel: a slingshot's end handle is smaller than the finger reaching for it.
-  // Pinch does the same thing; these are here because a control you can see beats one you have to
-  // know about, and because a phone held one-handed has one thumb.
-  const zoomRow = el('<div class="row"></div>');
-  const zLabel = el(`<label>Zoom ${Math.round(app.view ? app.view.zoom * 100 : 100)}%</label>`);
-  const bump = (k) => {
-    const r = canvas.getBoundingClientRect();
-    zoomAbout(r.width / 2, r.height / 2, k);
-    zLabel.textContent = `Zoom ${Math.round(app.view.zoom * 100)}%`;
-  };
-  const zOut = el('<button>&minus;</button>'); zOut.onclick = () => bump(1 / 1.4);
-  const zIn = el('<button>+</button>'); zIn.onclick = () => bump(1.4);
-  const zFit = el('<button>Fit</button>');
-  zFit.onclick = () => { fitAll(); zLabel.textContent = 'Zoom 100%'; };
-  zoomRow.append(zLabel, zOut, zIn, zFit);
-  panel.append(zoomRow);
-  panel.append(el('<div class="note">Pinch to zoom, two fingers to pan. Press and hold a part or a handle for half a second before dragging and it moves a quarter as far as your finger, with a magnifier in the corner.</div>'));
-
-  const ops = el('<div class="row"></div>');
-  const dup = el('<button>Duplicate</button>'); dup.onclick = duplicateSel; dup.disabled = !app.sel.size;
-  const del = el('<button class="danger">Delete</button>'); del.onclick = deleteSel; del.disabled = !app.sel.size;
-  const un = el('<button>Undo</button>'); un.onclick = doUndo; un.disabled = !app.undo.length;
-  const re = el('<button>Redo</button>'); re.onclick = doRedo; re.disabled = !app.redo.length;
-  const sn = el(`<button>Snap ${app.snap ? 'on' : 'off'}</button>`);
-  sn.onclick = () => { app.snap = !app.snap; renderPanel(); };
-  ops.append(dup, del, un, re, sn);
-  panel.append(ops);
-
-  const io = el('<div class="row"></div>');
-  const exp = el('<button>Export JSON</button>');
-  exp.onclick = () => {
-    const blob = new Blob([toJSON(app.table)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${app.table.name.toLowerCase().replace(/\s+/g, '-')}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  };
-  const imp = el('<button>Import</button>');
-  imp.onclick = () => {
-    const i = document.createElement('input');
-    i.type = 'file';
-    i.accept = 'application/json,.json';
-    i.onchange = () => {
-      const f = i.files && i.files[0];
-      if (!f) return;
-      f.text().then((t) => {
-        pushUndo();
-        const nt = fromJSON(t);
-        const dropped = repairTable(nt);
-        if (dropped) alert(`${dropped} part(s) in that file had numbers that are not numbers, and were left out.`);
-        app.table = nt;
-        app.sel.clear();
-        resize();
-        afterEdit();
-      });
+  inGroup('File', false, false, () => {
+    const io = el('<div class="row"></div>');
+    const exp = el('<button>Export JSON</button>');
+    exp.onclick = () => {
+      const blob = new Blob([toJSON(app.table)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${app.table.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     };
-    i.click();
-  };
-  const reset = el('<button class="danger">Reset table</button>');
-  reset.onclick = () => {
-    if (!confirm('Throw away every edit and reload the table as it ships?')) return;
-    pushUndo();
-    app.table = makeTable();
-    app.sel.clear();
-    app.edited = false;
-    app.staleTable = false;
-    resize();
-    afterEdit();
-    app.edited = false;                         // reset means "back to the shipped table", not an edit
-    save();
-  };
-  io.append(exp, imp, reset);
-  panel.append(io);
+    const imp = el('<button>Import</button>');
+    imp.onclick = () => {
+      const i = document.createElement('input');
+      i.type = 'file';
+      i.accept = 'application/json,.json';
+      i.onchange = () => {
+        const f = i.files && i.files[0];
+        if (!f) return;
+        f.text().then((t) => {
+          pushUndo();
+          const nt = fromJSON(t);
+          const dropped = repairTable(nt);
+          if (dropped) alert(`${dropped} part(s) in that file had numbers that are not numbers, and were left out.`);
+          app.table = nt;
+          app.sel.clear();
+          resize();
+          afterEdit();
+        });
+      };
+      i.click();
+    };
+    const reset = el('<button class="danger">Reset table</button>');
+    reset.onclick = () => {
+      if (!confirm('Throw away every edit and reload the table as it ships?')) return;
+      pushUndo();
+      app.table = makeTable();
+      app.sel.clear();
+      app.edited = false;
+      app.staleTable = false;
+      resize();
+      afterEdit();
+      app.edited = false;                       // reset means "back to the shipped table", not an edit
+      save();
+    };
+    io.append(exp, imp, reset);
+    panel.append(io);
+  });
+
+  inGroup('How to', false, false, () => {
+    panel.append(el('<div class="note">Tap a part to select it. Drag empty space to lasso. Shift adds to the selection. Arrow keys nudge, shift-arrow nudges further.</div>'));
+    panel.append(el('<div class="note">Pinch to zoom, two fingers to pan, or use the zoom buttons in the top bar. Press and hold a part or a handle for half a second before dragging and it moves a quarter as far as your finger, with a magnifier in the corner.</div>'));
+  });
+
+  // The inspector is the other half of the dock: its own column on a wide screen, and underneath on
+  // a phone. It is the thing you look at while dragging, so it never shares space with the palette.
+  panel = dockB;
+  panel.append(el('<h2>Inspector</h2>'));
 
   if (app.sel.size === 0) {
-    panel.append(el('<div class="note">Tap a part to select it. Drag empty space to lasso. Shift adds to the selection. Arrow keys nudge, shift-arrow nudges further.</div>'));
+    panel.append(el('<div class="note">Nothing selected. Tap a part on the table.</div>'));
     return;
   }
   if (app.sel.size > 1) {
@@ -965,23 +1039,33 @@ function renderTunePanel() {
     let any = 0;
     for (const k of kinds) {
       const rows = rowsFor(k);
-      if (kinds.length > 1 && rows.length) panel.append(el(`<div class="note">${KIND_NAMES[k] || k}</div>`));
-      for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); any++; }
+      if (!rows.length) continue;
+      // The selected part's own group is OPEN and marked, which is the whole point of tapping it.
+      inGroup(KIND_NAMES[k] || k, true, true, () => {
+        for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); any++; }
+      });
     }
     if (!any) panel.append(el(`<div class="note">A ${names.join(' or ')} has no numbers of its own. The table-wide ones below still govern it.</div>`));
-    panel.append(el('<div class="note">The whole table</div>'));
-    for (const t of wide) panel.append(tuneRow(t));
+    inGroup('The whole table', true, false, () => {
+      for (const t of wide) panel.append(tuneRow(t));
+    });
   } else {
-    panel.append(el('<div class="note">Tap a part on the table to tune just that part. Drag a slider while a ball is in play. Copy config writes the block for config.js.</div>'));
-    for (const t of wide) panel.append(tuneRow(t));
+    panel.append(el('<div class="note">Tap a part on the table to open just its numbers. Drag a slider while a ball is in play.</div>'));
+    inGroup('The whole table', true, false, () => {
+      for (const t of wide) panel.append(tuneRow(t));
+    });
     for (const k of Object.keys(KIND_NAMES)) {
       const rows = rowsFor(k);
       if (!rows.length) continue;
-      panel.append(el(`<div class="note">${KIND_NAMES[k]}</div>`));
-      for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); }
+      inGroup(KIND_NAMES[k], false, false, () => {
+        for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); }
+      });
     }
   }
 
+  // Dock B: the things that act on the whole config, kept away from the sliders so a thumb reaching
+  // for Ramp drag cannot land on Back to defaults.
+  panel = dockB;
   const r = el('<div class="row"></div>');
   const copy = el('<button>Copy config</button>');
   copy.onclick = () => {
@@ -994,7 +1078,7 @@ function renderTunePanel() {
   back.onclick = () => { app.cfg = cloneConfig(); save(); renderPanel(); };
   r.append(copy, back);
   panel.append(r);
-  panel.append(el(`<div class="note">Gravity down the playfield is ${gravity(app.cfg).toFixed(3)} m/s2, which is g times sin(tilt).</div>`));
+  panel.append(el(`<div class="note">Copy config writes the block for config.js. Gravity down the playfield is ${gravity(app.cfg).toFixed(3)} m/s2, which is g times sin(tilt).</div>`));
 }
 
 function renderCheckPanel() {
@@ -1007,6 +1091,12 @@ function renderCheckPanel() {
   const bClear = el('<button>Clear marks</button>');
   r.append(bTraps, bTunnel, bGaps, bMask, bClear);
   panel.append(r);
+
+  // The report goes in the OTHER half of the dock. It used to sit under the buttons in one column,
+  // so a long result pushed the buttons off the bottom of the screen and you could not re-run the
+  // check you were reading.
+  panel = dockB;
+  panel.append(el('<h2>Results</h2>'));
   const out = el('<pre id="report"></pre>');
   panel.append(out);
 
