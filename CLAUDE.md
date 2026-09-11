@@ -276,6 +276,30 @@ a fast desktop connection and misbehaved on a phone with poor service. The full 
   `js/profile-store.js` and made `js/hub.js`'s `stats-net.js` and `name-gate.js` imports lazy -
   without that, `js/admin-config.js`'s static edge to `game-stats.js` kept 91 KB on the critical
   path regardless of what the cache did.
+- **(2026-09-11) A third tier: LAZY — in `ASSETS`, but never downloaded until somebody opens the
+  game that needs it.** Matt, on Boggle's two word lists: *"Can we make the dictionary only
+  download when you go to play the game? Seems like a lot for most people to download when they'll
+  never use it ever."* Measured: the REST tier is **11.92 MB across 255 files, and
+  `boggle/data/words.txt` + `words-es.txt` are 3.23 MB of it — 27%** of everything a device warms,
+  for ONE game, paid by every install whether or not anyone ever taps Boggle. The other two tiers
+  both do the wrong thing here, which is why it needed a third: leaving them in REST downloads
+  3.23 MB nobody asked for, while taking them OUT of `ASSETS` entirely would stop the download but
+  also drop them out of `REST_MANIFEST` and `CACHE_FIRST_PATHS` — so a player who DOES play Boggle
+  would re-download 1.6 MB on their next open after **every** deploy (~13/day). So a LAZY path
+  keeps everything `ASSETS` membership buys (`validate-sw-assets.mjs` still fails a deploy if the
+  file is missing, it still carries a content hash, it is still cache-first and cached on demand by
+  the fetch handler) and loses exactly one thing: **`warmRest()` never FETCHES it.** It still
+  CARRIES IT FORWARD across a `CACHE` bump if the device already has a copy — the `isLazyAsset`
+  check sits deliberately BELOW the carry-forward in the warm loop, and `test-sw-strategy.mjs` has
+  a `[KNOWN-BUG PROBE]` for exactly that ordering. Pay once, on first play, then never again.
+  **The cost, real and accepted: a device that has never opened Boggle can no longer play it
+  OFFLINE** — the first round needs a connection. The failure path was already there and already
+  translated (the fetch was always lazy at the JS level, so `renderLoadError` / `load_error` has
+  always handled it); it just becomes reachable. **Only put a file in `LAZY` if it is BOTH large
+  AND useless to anyone not playing that one game — never game CODE**, which is what a launcher
+  tile opens, is small, and would undo the 2026-09-01 cache-first win. Verified in a real browser:
+  a full hub load + warm caches 418 entries and makes **zero** word-list requests; opening Boggle
+  then fetches it exactly once (`fromSW=false`, 1.66 MB) and caches it.
 - **(2026-08-23) Old caches are deleted at the END of the warm, not at activate.** They are the
   carry-forward copy source AND the fetch handler's fallback while the warm runs - the old
   delete-at-activate behaviour opened a window on every deploy (seconds on wifi, minutes on a

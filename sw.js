@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v799';
+const CACHE = 'game-hub-v800';
 
 const ASSETS = [
   './',
@@ -447,6 +447,44 @@ function isShellAsset(p) {
 }
 const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
+
+// --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-11) --
+//
+// Matt, on Boggle's two word lists: "Can we make the dictionary only download when you go to play
+// the game? Seems like a lot for most people to download when they'll never use it ever."
+//
+// He is right about the size. Measured against this ASSETS list: the REST tier is 11.92 MB across
+// 255 files, and `boggle/data/words.txt` + `words-es.txt` are 3.23 MB of it - 27% of everything a
+// device warms, for ONE game, paid by every install whether or not anyone ever taps Boggle.
+//
+// A third tier is the honest fix, because the other two both do the wrong thing here. Leaving them
+// in REST downloads 3.23 MB nobody asked for. Taking them OUT OF ASSETS ENTIRELY would stop the
+// download, but it would also drop them out of `REST_MANIFEST` and `CACHE_FIRST_PATHS` - so a
+// player who DOES play Boggle would re-download 1.6 MB on their next open after every single
+// deploy (this repo deploys ~13 times a day), which is worse for them than today.
+//
+// So a LAZY path stays in ASSETS and keeps everything that membership buys - validate-sw-assets.mjs
+// still fails a deploy if the file is missing, it still carries a content hash, it is still served
+// cache-first and cached on demand by the fetch handler - and loses exactly one thing: warmRest()
+// never FETCHES it. It still CARRIES IT FORWARD across a CACHE bump if this device already has a
+// copy, which is the whole point: pay once, on first play, then never again.
+//
+// THE COST, AND IT IS REAL: a device that has never opened Boggle can no longer play it OFFLINE.
+// The first round has to be started with a connection. After that it is cached like anything else.
+// Boggle already renders an honest, translated "couldn't load the dictionary, check your
+// connection" screen (`renderLoadError` / the `load_error` string) because the fetch was always
+// lazy at the JS level, so the failure path this opens up is one that already existed and is
+// already handled - it just becomes reachable for a first-time offline player.
+//
+// ONLY put a file here if it is BOTH large AND useless to anyone not playing that one game. Game
+// CODE must never be lazy: a game's modules are what the launcher tile opens, they are small, and
+// making them lazy would just move the 2026-09-01 cache-first win back off a phone.
+const LAZY_REST = /^\.\/boggle\/data\/words[a-z-]*\.txt$/;
+const isLazyAsset = (p) => LAZY_REST.test(p);
+
+const LAZY = REST.filter(isLazyAsset);
+// What warmRest() actually downloads on a fresh install: REST minus the lazy tier.
+const WARMED = REST.filter((p) => !isLazyAsset(p));
 
 // --- the shell's own split: always-fresh vs cache-first (2026-09-01) ----------------------------
 //
@@ -937,6 +975,11 @@ async function warmRest() {
           if (copied) continue;
           // No old copy to carry (interrupted previous warm): fall through to a real fetch.
         }
+        // A LAZY asset is never fetched by the warm - it is downloaded by the fetch handler the
+        // first time the game that needs it actually asks for it, and cached on demand there. Note
+        // this sits BELOW the carry-forward above on purpose: a device that already has the file
+        // keeps it across every deploy for free. Not a failure, so it is not reported as one.
+        if (isLazyAsset(path)) continue;
         const res = await fetch(new Request(path, { cache: 'reload' }));
         if (res && res.ok) await cache.put(path, res.clone());
         else failed.push(path);
@@ -945,7 +988,7 @@ async function warmRest() {
   };
   await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
   if (failed.length) {
-    console.warn(`[sw] ${CACHE}: ${failed.length}/${REST.length} non-shell assets could not be precached`
+    console.warn(`[sw] ${CACHE}: ${failed.length}/${WARMED.length} non-shell assets could not be precached`
       + ' (they will be cached on demand when first opened online):', failed);
   }
   // Record what this warm was built against, THEN retire every other cache. Order matters: the

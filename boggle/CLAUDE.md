@@ -257,6 +257,36 @@ not read Spanish), and the reverse is just as reasonable.
   cost of the second list is the same as the first's. Trie build measured at **~75-95ms** in a real
   browser, the same as English's ~76ms.
 
+### The dictionaries download on FIRST PLAY, not on install (2026-09-11)
+
+Matt, straight after the Spanish list shipped: *"Can we make the dictionary only download when you
+go to play the game? Seems like a lot for most people to download when they'll never use it ever."*
+
+He was right about the size. The two word lists are **3.23 MB of an 11.92 MB REST tier — 27% of
+everything a device precaches**, for one game, paid by every install whether or not anyone ever
+taps Boggle. **The fetch was always lazy at the JS level** (`loadDictionary()` runs on first game
+start, not on mount); what was not lazy was the SERVICE WORKER, which warmed both lists into the
+cache on every install.
+
+`sw.js` grew a third tier for it — `LAZY`, alongside `SHELL` and `REST`; full rationale in the root
+`CLAUDE.md`'s service-worker section and in `sw.js`'s own comment. The two word lists are its only
+members. They stay in `ASSETS` (so they are still hash-tracked, still cache-first, still guarded by
+`validate-sw-assets.mjs`) and simply are not fetched by the warm. Once a device has one, every
+later deploy carries it forward for free.
+
+**The cost, and it is real: a device that has never opened Boggle can no longer play it OFFLINE.**
+The first round needs a connection; after that the list is cached like anything else. The screen
+this produces is the one that already existed — `renderLoadError` and the translated `load_error`
+string — because a failed dictionary fetch was always possible. It just becomes reachable for a
+first-time offline player. **If that ever bites someone, the fix is not to un-lazy the tier**
+(that puts 3.3 MB back on every install); it is to offer the download explicitly, which is a
+different feature.
+
+A player who only ever plays one language only ever downloads that one: switching to Spanish for
+the first time fetches `words-es.txt` at that moment, and an English-only player never has it at
+all. Verified in a real browser — a full hub load and warm caches 418 entries with **zero**
+word-list requests; opening Boggle then fetches exactly one list, once.
+
 ### The Spanish dice (`DICE_ES`), derived and then measured
 
 There is no authentic Spanish Boggle distribution this repo can cite the way the English 1987 set
