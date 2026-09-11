@@ -524,7 +524,7 @@ ok(!pageScrolls.v && !pageScrolls.h, 'the page does not scroll, only the dock do
 // layout overhaul, found by the text a person reads, in the mode it belongs to.
 const WANT_CTL = {
   play: ['New ball', 'Slow motion', 'Pause', 'Step frame'],
-  edit: ['Wall', 'Arc', 'Post', 'Bumper', 'Sling', 'Flipper', 'Drain', 'Save as', 'Delete', 'Revert', 'Export JSON', 'Import'],
+  edit: ['Wall', 'Arc', 'Post', 'Bumper', 'Sling', 'Flipper', 'Drain', 'Save as', 'Delete', 'Revert', 'Export JSON', 'Import', 'Save selection'],
   tune: ['Copy config', 'Back to defaults'],
   check: ['Find traps', 'Tunnel test', 'Gap rule', 'Show reachable', 'Clear marks'],
 };
@@ -601,6 +601,116 @@ const menu = await page.evaluate(() => {
   return e.defaultPrevented;
 });
 ok(menu, 'and it cannot raise the context menu over the table');
+
+// ------------------------------------------------------------------------ the prefab library
+// A pop bumper nest is five parts placed against each other and a lower third is eight. Building
+// the SAME one twice is the thing this removes.
+const PFKEY = 'pinball2.editor.prefabs';
+
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.evaluate((k) => localStorage.removeItem(k), PFKEY);
+await page.click('#tab-edit');
+await page.waitForTimeout(350);
+
+// Save the two flippers as a prefab. Two parts, so the anchor maths has something to average.
+const madePf = await page.evaluate(async (k) => {
+  const a = window.__pb2;
+  const flippers = a.table.shapes.filter((s) => s.kind === 'flipper');
+  a.sel = new Set(flippers.map((s) => s.id));
+  window.prompt = () => 'Lower third';
+  document.getElementById('tab-play').click();
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 200));
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => /Save selection/i.test(b.textContent));
+  if (!btn) return { found: false };
+  btn.click();
+  await new Promise((q) => setTimeout(q, 200));
+  const lib = JSON.parse(localStorage.getItem(k) || '{}');
+  return { found: true, names: Object.keys(lib), n: lib['Lower third'] ? lib['Lower third'].shapes.length : 0 };
+}, PFKEY);
+ok(madePf.found, 'a selection can be saved as a prefab');
+ok(madePf.n === 2, `and it stores every selected part (${madePf.n} of 2)`, JSON.stringify(madePf));
+
+// RELATIVE, so it can be dropped anywhere. Placing centres the group on the tap: the anchor is the
+// centroid of the selection's own centres, not a corner nobody was thinking about.
+const placed = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const beforeIds = new Set(a.table.shapes.map((s) => s.id));
+  const n0 = a.table.shapes.length;
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => b.textContent.trim() === 'Place');
+  if (!btn) return { found: false };
+  btn.click();
+  await new Promise((q) => setTimeout(q, 150));
+  const armed = a.placing;
+  // tap a spot well away from where the flippers live
+  const target = { x: 0.25, y: 0.35 };
+  const v = a.view;
+  const s = { x: v.ox + (target.x * v.s + v.px) * v.zoom, y: v.oy + (target.y * v.s + v.py) * v.zoom };
+  const cv = document.getElementById('c');
+  const r = cv.getBoundingClientRect();
+  for (const t of ['pointerdown', 'pointerup']) {
+    cv.dispatchEvent(new PointerEvent(t, { pointerId: 1, bubbles: true, clientX: r.left + s.x, clientY: r.top + s.y }));
+  }
+  await new Promise((q) => setTimeout(q, 200));
+  const fresh = a.table.shapes.filter((x) => !beforeIds.has(x.id));
+  const cx = fresh.reduce((m, x) => m + x.pivot.x, 0) / (fresh.length || 1);
+  const cy = fresh.reduce((m, x) => m + x.pivot.y, 0) / (fresh.length || 1);
+  return {
+    found: true, armed, added: a.table.shapes.length - n0,
+    ids: fresh.map((x) => x.id), selected: fresh.every((x) => a.sel.has(x.id)),
+    offX: Math.abs(cx - target.x) * 1000, offY: Math.abs(cy - target.y) * 1000,
+    stillArmed: a.placing,
+  };
+});
+ok(placed.found && placed.armed === 'Lower third', 'Place arms it and waits for a tap on the table');
+ok(placed.added === 2, `the tap drops every part (${placed.added} of 2)`);
+ok(placed.offX < 6 && placed.offY < 6,
+  `and lands centred on the tap (${placed.offX.toFixed(1)}mm, ${placed.offY.toFixed(1)}mm off, grid is 5mm)`);
+ok(placed.stillArmed === null, 'placing disarms itself, so the next tap selects as usual');
+
+// NOT A GROUP. Every part is its own shape with its own new id, selected and editable the moment it
+// lands: the library is a way of not typing, not a new kind of object for the engine to know about.
+const ids = await page.evaluate(() => {
+  const a = window.__pb2;
+  const all = a.table.shapes.map((s) => s.id);
+  return { unique: new Set(all).size === all.length, count: all.length };
+});
+ok(ids.unique, `every id on the table is still unique after placing (${ids.count} parts)`);
+ok(placed.selected, 'the placed parts are selected, so they can be moved or deleted straight away');
+
+const oneGone = await page.evaluate(async (id) => {
+  const a = window.__pb2;
+  a.sel = new Set([id]);
+  document.getElementById('ob-del').click();
+  await new Promise((q) => setTimeout(q, 150));
+  return { gone: !a.table.shapes.some((s) => s.id === id), left: a.table.shapes.length };
+}, placed.ids[0]);
+ok(oneGone.gone, 'and one of them can be deleted on its own, without the other');
+
+// A prefab belongs to the TOOL, not to a table: it survives a reload and switching tables.
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+const survived = await page.evaluate((k) => ({
+  names: Object.keys(JSON.parse(localStorage.getItem(k) || '{}')),
+  tables: Object.keys(JSON.parse(localStorage.getItem('pinball2.editor.tables') || '{}')),
+}), PFKEY);
+ok(survived.names.includes('Lower third'), 'a prefab survives a reload');
+ok(!JSON.stringify(survived.tables).includes('Lower third'), 'and is stored apart from any one table');
+
+// Escape is the way out of an armed prefab, because every mode needs one that is not "find the
+// button again".
+const escaped = await page.evaluate(async () => {
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 200));
+  const btn = [...document.querySelectorAll('#panel button')].find((b) => b.textContent.trim() === 'Place');
+  btn.click();
+  await new Promise((q) => setTimeout(q, 120));
+  const armed = window.__pb2.placing;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await new Promise((q) => setTimeout(q, 120));
+  return { armed, after: window.__pb2.placing };
+});
+ok(escaped.armed === 'Lower third' && escaped.after === null, 'Escape cancels an armed prefab');
 
 // ------------------------------------------------------------------------ Tune tunes ONE part
 // Matt: "when I'm on the Tune tab, I should be able to select an object and see the tune objects for

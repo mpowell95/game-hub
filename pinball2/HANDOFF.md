@@ -529,6 +529,27 @@ reloads the current selection from its source: the build for Default, the librar
 - `null` is rejected as hard as `NaN`. JSON has no NaN, so a stored NaN comes back as `null`, and
   `null` in arithmetic is 0 — which silently teleports a rail to the edge of the table.
 
+### The prefab library (2026-09-11)
+
+A pop bumper nest is five parts placed against each other and a lower third is eight. Building one
+is fiddly; building the SAME one twice is worse.
+
+`localStorage['pinball2.editor.prefabs']` is `{ name: { shapes, savedAt } }`, stored **apart from
+any one table** so a prefab can be dropped on any of them.
+
+- **Save selection...** stores the selected parts RELATIVE to an anchor, which is the **centroid of
+  their own centres**. Placing therefore centres the group on the tap rather than dropping it by a
+  corner nobody was thinking about.
+- The offsetting both ways is `moveShape`, the same function a drag uses, so **a prefab cannot move
+  differently from a drag**.
+- **Place** arms it (`app.placing`) and the next tap on the table drops it. The armed branch sits
+  at the top of `pointerdown`, before handles, select and lasso: while placing, a tap means one
+  thing. It disarms itself on the drop, on **Escape**, on tapping Cancel, and on leaving Edit.
+- **A placed prefab is NOT a group.** Each part gets a fresh `newId` and lands selected, so it is
+  editable, movable and deletable one part at a time from the moment it appears. The library is a
+  way of not typing, never a new kind of object for the engine to know about - nothing in
+  `physics.js`, `checks.js` or the data model knows prefabs exist.
+
 ### Two things to know before editing `editor.js`
 
 - **The animation loop is scheduled in a `finally`.** Nothing inside a frame can stop the app. Keep

@@ -318,6 +318,22 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## Prefabs are a way of not typing, not a new kind of object
+
+Step 3 of the overhaul. The temptation with a "save a group of parts" feature is to make the group a
+THING - an object with its own id that the engine, the checks and the data model all have to learn
+about. That would have been a new shape kind in `physics.js`, a branch in `distToShape`, a case in
+every probe, and a question ("what happens when a ball hits a group?") with no good answer.
+
+**So a prefab exists only in the editor's storage.** Placing one runs `newId` per part and pushes
+ordinary shapes. From the instant it lands it is indistinguishable from parts placed by hand:
+selected, editable, movable, deletable one at a time. Nothing in `physics.js`, `checks.js` or the
+data model knows prefabs exist, and no probe needed a line changing.
+
+The two details worth keeping: the anchor is the **centroid of the selection's own centres**, so a
+prefab lands centred on the tap rather than by a corner; and the offsetting is `moveShape` in both
+directions, the same function a drag uses, so a prefab cannot move differently from a drag.
+
 ## The stale table, ended: a library instead of one slot and a guess
 
 Matt, after the third build in a row showed him an old table: *"This is an ongoing issue I've asked
