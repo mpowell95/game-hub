@@ -187,6 +187,29 @@ const kept = await page.evaluate(() => ({
 ok(kept.name === 'MINE' && kept.stale, 'an EDITED save is kept, not thrown away');
 ok(/Reset table/.test(kept.hud), 'and the corner says the shipped table has moved on', kept.hud);
 
+// The case the first version of the check could not handle: a save from BEFORE the fingerprint
+// existed, which is exactly what every device in the wild had.
+await page.evaluate(() => {
+  const ancient = { table: { name: 'ANCIENT', w: 0.515, h: 1.067, launch: { x: 0.452, y: 0.14 },
+    shapes: [{ id: 'd1', kind: 'drain', x: 0, y: 1.005, w: 0.515, h: 0.06 }] }, cfg: {} };
+  localStorage.setItem('pinball2.editor.v1', JSON.stringify(ancient));   // no `shipped`, no `edited`
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const ancient = await page.evaluate(() => ({
+  name: window.__pb2.table.name,
+  kinds: [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','),
+  backedUp: !!localStorage.getItem('pinball2.editor.v1.replaced'),
+}));
+ok(ancient.name !== 'ANCIENT' && ancient.kinds.includes('ribbon'),
+  `a save with NO fingerprint is replaced by the shipped table (${ancient.kinds})`);
+ok(ancient.backedUp, 'and the replaced table is kept under its own key rather than deleted');
+
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+const forced = await page.evaluate(() => [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','));
+ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored (${forced})`);
+
 await browser.close();
 console.log(`\nEditor tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
