@@ -71,7 +71,9 @@ if (which === 'gaps' || which === 'all') {
 
 if (which === 'rests' || which === 'all') {
   const r = restSweep(table, cfg, { step: 0.012 });
-  console.log(`rest sweep      ${r.drops} drops, ${r.stuck.length} never reached the drain   ${r.stuck.length ? 'FAIL' : 'OK'}`);
+  console.log(`rest sweep      ${r.drops} drops, ${r.stuck.length} came to a dead stop   ${r.stuck.length ? 'FAIL' : 'OK'}`);
+  if (r.alive && r.alive.length) console.log(`   ${r.alive.length} still in play and moving, which is what bumpers are for (not a failure)`);
+  if (r.edges && r.edges.length) console.log(`   ${r.edges.length} knife edge(s): balanced, but the smallest nudge drains them (not a failure)`);
   const seen = [];
   for (const s of r.stuck) {
     if (seen.some((q) => Math.hypot(q.x - s.at.x, q.y - s.at.y) < 0.008)) continue;

@@ -35,6 +35,18 @@ export const CONFIG = {
   CRADLE_DAMP: 6.0,        // velocity decay per second for a slow ball on a held flipper
   CRADLE_MAX: 0.6,         // and only below this speed. Above it the ball is in play, not settling
 
+  // pop bumper: a post that hits back. The kick is a fixed speed away from its centre, not a
+  // restitution, because that is what a real bumper does: it fires a solenoid ring downward and the
+  // ball leaves at the coil's speed regardless of how gently it arrived.
+  BUMPER_KICK: 2.6,        // m/s the ball leaves at
+  BUMPER_TRIP: 0.15,       // m/s of approach needed to fire it at all, so a resting ball is not a machine gun
+  BUMPER_COOL: 0.06,       // s before the same bumper can fire again
+
+  // slingshot: the same idea on a straight face
+  SLING_KICK: 3.0,
+  SLING_TRIP: 0.25,
+  SLING_COOL: 0.06,
+
   // solver
   DT: 1 / 240,
   MAX_EVENTS: 64,          // contacts resolved in one tick before the ball is declared jammed
@@ -60,6 +72,10 @@ export const TUNABLES = [
   { key: 'FLIP_MU', label: 'Rubber grip', unit: '', min: 0, max: 0.9, step: 0.01 },
   { key: 'CRADLE_DAMP', label: 'Cradle damping', unit: '/s', min: 0, max: 20, step: 0.5 },
   { key: 'CRADLE_MAX', label: 'Cradle below', unit: 'm/s', min: 0.1, max: 2, step: 0.05 },
+  { key: 'BUMPER_KICK', label: 'Bumper kick', unit: 'm/s', min: 0, max: 6, step: 0.1 },
+  { key: 'BUMPER_TRIP', label: 'Bumper trip', unit: 'm/s', min: 0, max: 1, step: 0.05 },
+  { key: 'SLING_KICK', label: 'Slingshot kick', unit: 'm/s', min: 0, max: 6, step: 0.1 },
+  { key: 'SLING_TRIP', label: 'Slingshot trip', unit: 'm/s', min: 0, max: 1, step: 0.05 },
 ];
 
 /** Playfield gravity. A tilted plane pulls at g sin(tilt), about a ninth of a free fall at 6.5

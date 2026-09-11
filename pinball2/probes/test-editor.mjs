@@ -56,12 +56,15 @@ const taps = await page.evaluate(async () => {
   const a = window.__pb2;
   const canvas = document.getElementById('c');
   const out = [];
+  // Every kind the table can hold. A kind missing here falls through to the drain branch and
+  // produces NaN coordinates, which is how this test failed loudly the day bumpers were added.
   const centre = (sh) => {
-    if (sh.kind === 'seg') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
+    if (sh.kind === 'seg' || sh.kind === 'sling') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
     if (sh.kind === 'arc') return { x: sh.c.x + sh.radius * Math.cos((sh.a0 + sh.a1) / 2), y: sh.c.y + sh.radius * Math.sin((sh.a0 + sh.a1) / 2) };
-    if (sh.kind === 'circle') return sh.c;
+    if (sh.kind === 'circle' || sh.kind === 'bumper') return sh.c;
     if (sh.kind === 'flipper') return { x: sh.pivot.x + sh.len * 0.5 * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * 0.5 * Math.sin(sh.restAng) };
-    return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
+    if (sh.kind === 'drain') return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
+    throw new Error('this test does not know the shape kind ' + sh.kind);
   };
   const toScreen = (v, q) => ({ x: v.ox + (q.x * v.s + v.px) * v.zoom, y: v.oy + (q.y * v.s + v.py) * v.zoom });
   for (const sh of a.table.shapes) {

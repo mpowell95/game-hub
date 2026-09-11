@@ -13,14 +13,14 @@ const len = (a) => Math.hypot(a.x, a.y);
 
 /** Distance from a point to a shape's solid surface. Negative means inside it. */
 export function distToShape(sh, p) {
-  if (sh.kind === 'seg') {
+  if (sh.kind === 'seg' || sh.kind === 'sling') {
     const d = sub(sh.b, sh.a);
     const L2 = d.x * d.x + d.y * d.y;
     const u = L2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - sh.a.x) * d.x + (p.y - sh.a.y) * d.y) / L2));
     const on = { x: sh.a.x + d.x * u, y: sh.a.y + d.y * u };
     return len(sub(p, on)) - sh.r;
   }
-  if (sh.kind === 'circle') return len(sub(p, sh.c)) - sh.r;
+  if (sh.kind === 'circle' || sh.kind === 'bumper') return len(sub(p, sh.c)) - sh.r;
   if (sh.kind === 'arc') {
     const rel = sub(p, sh.c);
     const ang = Math.atan2(rel.y, rel.x);
@@ -48,17 +48,20 @@ export function distToShape(sh, p) {
     const dy = Math.max(sh.y - p.y, 0, p.y - (sh.y + sh.h));
     return Math.hypot(dx, dy);
   }
-  return Infinity;
+  // A kind this function has not been taught is INVISIBLE to every probe in this file and to the
+  // editor's hit testing, silently, because Infinity reads as "nowhere near". Bumpers and
+  // slingshots spent one build in exactly that state. Add the kind here when you add the kind.
+  throw new Error(`distToShape does not know the shape kind "${sh.kind}"`);
 }
 
 function surfacePoints(sh, n) {
   const out = [];
-  if (sh.kind === 'seg') {
+  if (sh.kind === 'seg' || sh.kind === 'sling') {
     for (let i = 0; i <= n; i++) {
       const u = i / n;
       out.push({ x: sh.a.x + (sh.b.x - sh.a.x) * u, y: sh.a.y + (sh.b.y - sh.a.y) * u });
     }
-  } else if (sh.kind === 'circle') {
+  } else if (sh.kind === 'circle' || sh.kind === 'bumper') {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       out.push({ x: sh.c.x + sh.r * Math.cos(a), y: sh.c.y + sh.r * Math.sin(a) });
@@ -331,7 +334,12 @@ export function drainTime(table, cfg) {
   const drop = table.shapes.find((s) => s.kind === 'drain');
   const y0 = 0.05;
   const h = (drop ? drop.y : table.h) - y0;
-  const w = new World(table, cfg);
+  // Gravity is a property of the CONFIG, not of the table, so it is measured on a table with
+  // nothing in it but the drain. Measuring it on the real one worked until the day the table got a
+  // pop bumper in the middle of the drop, and then reported NEVER DRAINED: a true statement about
+  // a ball bouncing happily between three bumpers, and nothing at all about gravity.
+  const bare = { w: table.w, h: table.h, launch: table.launch, shapes: drop ? [drop] : [] };
+  const w = new World(bare, cfg);
   const b = w.addBall({ x: table.w / 2, y: y0 }, { x: 0, y: 0 });
   let t = 0;
   while (b.alive && t < 20) { w.step(cfg.DT); t += cfg.DT; }
@@ -396,6 +404,7 @@ export function restSweep(table, cfg, opts) {
   const seconds = (opts && opts.seconds) || 6;
   const play = (opts && opts.play) || playable(table, cfg);
   const stuck = [];
+  const alive = [];
   let drops = 0;
   for (let x = cfg.BALL_R; x < table.w; x += step) {
     for (let y = cfg.BALL_R; y < table.h; y += step) {
@@ -410,13 +419,37 @@ export function restSweep(table, cfg, opts) {
       const ticks = Math.round(seconds / cfg.DT);
       for (let k = 0; k < ticks && b.alive; k++) w.step(cfg.DT);
       if (b.alive) {
+        // STILL ALIVE IS NOT STUCK, and it stopped being the same question the day this table got
+        // bumpers. A ball ricocheting between three pop bumpers at 2.8 m/s has not reached the
+        // drain in six seconds and never will on that timescale, which is the POINT of a bumper. A
+        // trap is a ball that has stopped: the speed is what separates them, not the clock.
+        const speed = Math.hypot(b.v.x, b.v.y);
         let on = null;
         for (const o of table.shapes) {
           if (o.kind !== 'drain' && distToShape(o, b.p) < cfg.BALL_R + 0.002) on = o.id;
         }
-        stuck.push({ from: p, at: { x: b.p.x, y: b.p.y }, speed: Math.hypot(b.v.x, b.v.y), on });
+        const rec = { from: p, at: { x: b.p.x, y: b.p.y }, speed, on };
+        if (speed < 0.05) stuck.push(rec); else alive.push(rec);
       }
     }
   }
-  return { drops, stuck };
+  // A KNIFE EDGE IS NOT A TRAP. A ball balanced on the apex of a post or along the spine of a bat
+  // is a real equilibrium in the maths and an impossible one on a table: the smallest disturbance
+  // ends it, and a real machine has nothing but disturbances. So every survivor is re-run with a
+  // nudge no bigger than a nudge, and the ones that then drain are reported separately. This is
+  // the same call `sweep-pinball-rests.mjs` makes for the old game, and for the same reason.
+  const real = [];
+  const edges = [];
+  for (const st of stuck) {
+    let freed = 0;
+    for (const push of [{ x: 0.05, y: 0 }, { x: -0.05, y: 0 }]) {
+      const w = new World(table, cfg);
+      const b = w.addBall(st.at, push);
+      const ticks = Math.round(seconds / cfg.DT);
+      for (let k = 0; k < ticks && b.alive; k++) w.step(cfg.DT);
+      if (!b.alive) freed++;
+    }
+    if (freed === 2) edges.push(st); else real.push(st);
+  }
+  return { drops, stuck: real, edges, alive };
 }
