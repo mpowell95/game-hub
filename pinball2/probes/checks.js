@@ -61,6 +61,20 @@ export function distToShape(sh, p) {
   throw new Error(`distToShape does not know the shape kind "${sh.kind}"`);
 }
 
+/** Points along a shape's CENTRELINE, not its surface.
+ *
+ *  That distinction is the whole contract, and getting it wrong made `checkGaps` lie. Its caller
+ *  measures `distToShape(other, p)`, which is already a distance to the OTHER shape's surface, and
+ *  then subtracts this shape's own radius once. So the points handed back have to be un-inflated:
+ *  the seg's a-to-b line, the arc's radius circle, the flipper's pivot-to-tip line, and - the case
+ *  that was wrong - a circle or bumper's CENTRE.
+ *
+ *  Returning the circle's surface instead subtracted its radius twice, so every clearance next to a
+ *  post read up to 9mm short and every clearance next to a bumper up to 25mm short. Both directions
+ *  are bad: a 47mm lane beside a bumper reported as 22mm and failed a table that was fine, and a
+ *  real one-ball gap reported as NEGATIVE, which this function's caller files as a deliberate
+ *  overlap and does not flag at all. The check existed to find wedges and could not see the ones
+ *  next to the parts a ball spends most of its time hitting. */
 function surfacePoints(sh, n) {
   const out = [];
   if (sh.kind === 'seg' || sh.kind === 'sling') {
@@ -69,10 +83,7 @@ function surfacePoints(sh, n) {
       out.push({ x: sh.a.x + (sh.b.x - sh.a.x) * u, y: sh.a.y + (sh.b.y - sh.a.y) * u });
     }
   } else if (sh.kind === 'circle' || sh.kind === 'bumper') {
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      out.push({ x: sh.c.x + sh.r * Math.cos(a), y: sh.c.y + sh.r * Math.sin(a) });
-    }
+    out.push({ x: sh.c.x, y: sh.c.y });        // its centreline IS its centre
   } else if (sh.kind === 'arc') {
     let span = (sh.a1 - sh.a0) % (Math.PI * 2); if (span <= 0) span += Math.PI * 2;
     for (let i = 0; i <= n; i++) {

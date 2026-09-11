@@ -318,6 +318,31 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## The gap rule was measuring gaps wrong, and the wrong direction was the dangerous one
+
+Found while laying out a second table: `checkGaps` kept failing clearances that were plainly wide
+enough, and every one of them was next to a post or a bumper.
+
+`surfacePoints` is supposed to return a shape's CENTRELINE, because its caller measures
+`distToShape(other, p)` - already a distance to the OTHER shape's surface - and then subtracts this
+shape's own radius once. It did that for a seg, an arc and a flipper. For a circle it returned the
+SURFACE, so the radius came off twice.
+
+**Every clearance next to a post read 9mm short and every clearance next to a bumper read 25mm
+short.** The visible half was false alarms: a 47mm lane beside a bumper reported as 22mm and failed
+a table that was fine. **The half that matters is the other one.** A real one-ball gap beside a post
+measured 27 - 9 = 18mm, under the 0.75-ball floor, so it was not flagged at all - and anything that
+came out NEGATIVE was filed as a deliberate overlap, which is a note rather than a failure. The
+check written to find wedges was blind to the ones next to the parts a ball spends most of its time
+hitting.
+
+`pinball2/probes/test-checks.mjs` pins it, against gaps whose size is known by construction. Born
+red on four of seven, including "a one-ball gap beside a post is found": MISSED.
+
+**The lesson for the next probe, not just this one: a measurement that disagrees with the design is
+not automatically the design's fault.** Six of the thirteen gaps that layout was failing on did not
+exist.
+
 ## A finger covers the thing it is placing
 
 Matt, 2026-09-11: *"When I select an object, the slingshot for example, and I want to extend or
