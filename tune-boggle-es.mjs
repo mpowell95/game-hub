@@ -3,6 +3,7 @@
 // reports what a player would actually find.
 //
 //   node tune-boggle-es.mjs [--lang es|en] [--shakes 3000] [--faces "A15 O9 ..."]
+//   node tune-boggle-es.mjs --ai            # is "Medium" the same opponent in both languages?
 //
 // WHY THIS EXISTS
 // ---------------
@@ -24,6 +25,17 @@
 //
 // `--faces` re-runs the whole measurement against a candidate face multiset
 // without editing game.js, which is how DICE_ES was chosen.
+//
+// `--ai` IS A DIFFERENT QUESTION AND THE ONE THAT BIT US. The dice can be
+// perfect and the game still be wrong, because the opponent takes a fixed
+// PERCENTAGE of the solver's output (ai.js) while Boggle's scoring is
+// SUPERLINEAR in word length: 3-4 letters is 1 point, 7 is 5, 8+ is 11. Spanish
+// words are longer, so English's percentages made the same difficulty label a
+// far harder opponent - measured at 37 / 115 / 204 against English's 27 / 76 /
+// 129, i.e. Spanish MEDIUM beat English HARD. `--ai` measures each tier's
+// average score per language through the real sampler and solves for the
+// percentages that make them agree. Re-run it after any change to the dice, the
+// gate, the word list or scoreForWord, and put the result in TIER_PCT_BY_LANG.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,6 +45,7 @@ import { newBoard, DICE, DICE_ES, parseDiceFaces } from './boggle/js/game.js';
 import {
   solveBoard, shakePlayableBoard, BOARD_QUALITY, BOARD_QUALITY_ES,
 } from './boggle/js/solver.js';
+import { selectAiWords, totalScore, tierPctFor } from './boggle/js/ai.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -142,7 +155,84 @@ function report(label, m, quality) {
   console.log(`  rarest faces, share of boards carrying one:  ${rare}`);
 }
 
+const TIERS = ['beginner', 'intermediate', 'pro'];
+const TIER_LABEL = { beginner: 'Easy', intermediate: 'Medium', pro: 'Hard' };
+
+function loadTrie(lang) {
+  const file = lang === 'en' ? 'boggle/data/words.txt' : 'boggle/data/words-es.txt';
+  const words = fs.readFileSync(path.join(ROOT, file), 'utf8')
+    .split('\n').map((w) => w.trim()).filter(Boolean);
+  return { root: buildTrieFromWords(words), count: words.length, file };
+}
+
+/** Is a difficulty label the same opponent in both languages? Shakes gated
+ *  boards in each, runs the real sampler at each tier, and prints the average
+ *  score a player would be up against - plus, for Spanish, the percentage that
+ *  would match English if they have drifted apart. */
+async function measureAi(shakes) {
+  const boards = {};
+  for (const lang of ['en', 'es']) {
+    const { root, count, file } = loadTrie(lang);
+    console.log(`${file}: ${count} words`);
+    boards[lang] = [];
+    for (let i = 0; i < shakes; i++) {
+      boards[lang].push(
+        shakePlayableBoard(root, Math.random, lang === 'en' ? BOARD_QUALITY : BOARD_QUALITY_ES,
+          parseDiceFaces(lang === 'en' ? DICE : DICE_ES)).solved,
+      );
+    }
+  }
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const tierScore = (lang, tier) =>
+    mean(boards[lang].map((s) => totalScore(selectAiWords(s, tier, Math.random, lang))));
+
+  console.log(`\nAI strength by tier, ${shakes} gated boards each`);
+  console.log('  tier            EN pct  EN score   ES pct  ES score   gap');
+  for (const tier of TIERS) {
+    const en = tierScore('en', tier);
+    const es = tierScore('es', tier);
+    const gap = ((es - en) / en) * 100;
+    console.log(`  ${TIER_LABEL[tier].padEnd(8)}${tier.padEnd(8)}`
+      + `${String(tierPctFor('en')[tier]).padStart(5)}${String(Math.round(en)).padStart(10)}`
+      + `${String(tierPctFor('es')[tier]).padStart(9)}${String(Math.round(es)).padStart(10)}`
+      + `${(gap >= 0 ? '+' : '') + gap.toFixed(0)}%`.padStart(7));
+  }
+  console.log('\n  A gap over about 10% means the same label is a different opponent in the two');
+  console.log('  languages. Percentages that would close it, for TIER_PCT_BY_LANG in ai.js:');
+  // Re-solve from scratch rather than nudging the current values, so a bad
+  // starting point cannot hide in the answer.
+  const W = {
+    beginner: (e) => (e.word.length <= 4 ? 4 : 1),
+    intermediate: () => 1,
+    pro: (e) => e.score,
+  };
+  const sampleAt = (solved, tier, pct) => {
+    const n = Math.min(solved.length, Math.round(pct * solved.length));
+    if (n <= 0) return [];
+    if (n >= solved.length) return solved.slice();
+    const w = W[tier];
+    return solved
+      .map((e) => ({ e, k: Math.pow(Math.random(), 1 / Math.max(w(e), 1e-6)) }))
+      .sort((a, b) => b.k - a.k).slice(0, n).map((x) => x.e);
+  };
+  for (const tier of TIERS) {
+    const target = tierScore('en', tier);
+    let best = null;
+    for (let p = 0.02; p <= 0.95; p += 0.01) {
+      const v = mean(boards.es.map((s) => totalScore(sampleAt(s, tier, p))));
+      if (!best || Math.abs(v - target) < Math.abs(best.v - target)) best = { p: +p.toFixed(2), v };
+    }
+    console.log(`    ${tier.padEnd(13)} es: ${best.p}   (would score ${Math.round(best.v)} `
+      + `against English's ${Math.round(target)})`);
+  }
+}
+
 async function main() {
+  const shakesArg = Number(arg('shakes', 3000));
+  if (process.argv.includes('--ai')) {
+    await measureAi(Math.min(shakesArg, 400));
+    return;
+  }
   const lang = arg('lang', 'es');
   const shakes = Number(arg('shakes', 3000));
   const facesSpec = arg('faces', null);

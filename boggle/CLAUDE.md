@@ -253,9 +253,40 @@ not read Spanish), and the reverse is just as reasonable.
   English's — the Spanish support adds a data file and a dice table, not a second engine. The
   accepted cost: a few thousand distinct Spanish spellings collapse onto the same board word. The
   fold MERGES words, it never invents them.
-- **Result: 159,778 words, 1.61 MB** — near-identical to ENABLE's 170,398 / 1.70 MB, so the phone
-  cost of the second list is the same as the first's. Trie build measured at **~75-95ms** in a real
+- **Result: 149,873 words, 1.49 MB** — comparable to ENABLE's 170,398 / 1.70 MB, so the phone cost
+  of the second list is about the same as the first's. Trie build measured at **~75-95ms** in a real
   browser, the same as English's ~76ms.
+
+### Two bugs the first release shipped, and how they were found (2026-09-11)
+
+Both were found by ASKING A DIFFERENT QUESTION than the one the tests answered — not by a failing
+test, but by printing the words the solver actually finds on a real board and reading them, and by
+measuring the opponent rather than the board. **The board measurements were all correct and all
+beside the point.** Worth remembering the next time a language or a word list is added.
+
+- **9,934 words that do not exist in Spanish (6% of the list).** The generator ran the PLURAL rules
+  over the output of the FEMININE rules — but the feminine rule set already emits both feminine
+  forms, so every feminine plural was pluralised a second time: `rojas` → ROJASES, `altas` →
+  ALTASES, `arenosas` → ARENOSASES. The hunspell rule doing it is real and correct in its place
+  (`autobús` → `autobuses`); it was being applied to a word that was already a plural. It passed
+  every assertion in `test-boggle-es.mjs` because the list still contained every real word and
+  still looked like Spanish. **Anything that looks like it needs a second affix pass almost
+  certainly does not.** Now a `[KNOWN-BUG PROBE]`, paired with an assertion that the genuine
+  `-ases` plurals (CLASES, FASES, ENVASES) are still there, so the fix can never become a blunt
+  filter on the ending.
+- **The AI was a completely different difficulty in Spanish.** `ai.js` takes a fixed PERCENTAGE of
+  the solver's output, and Boggle's scoring is **superlinear in word length** (3-4 letters 1 point,
+  7 gets 5, 8+ gets 11). Spanish words are longer, so the same fraction of a board is worth far
+  more: measured at **37 / 115 / 204** average AI score against English's **27 / 76 / 129** —
+  Spanish *Medium* was a harder opponent than English *Hard*, and Spanish *Hard* was 58% above it.
+  Board word COUNT was not the reason (129 vs 121 per board, near-identical), which is why the dice
+  measurements showed nothing. Fixed with per-language tier percentages
+  (`TIER_PCT_BY_LANG` in `ai.js`: `es` is 0.16 / 0.33 / 0.44 against `en`'s 0.20 / 0.45 / 0.70),
+  solved numerically against the English averages. Now within 1-5% at every tier.
+  **`node tune-boggle-es.mjs --ai` is the measurement**; re-run it after any change to the dice,
+  the gate, the word list or `scoreForWord`, and note that ANY future language will hit this —
+  a flat percentage is a promise about how much of the board the AI takes, and a difficulty label
+  is a promise about how hard it plays. Those are different promises.
 
 ### The dictionaries download on FIRST PLAY, not on install (2026-09-11)
 

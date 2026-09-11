@@ -1717,7 +1717,11 @@ class BoggleUI {
       this._mpFinishRound(humanWords, humanScore, longestWord);
       return;
     }
-    const aiWords = selectAiWords(this._solved, this._setup.difficulty);
+    // The AI's share of the board is per language: Spanish words are longer and
+    // scoring is superlinear in length, so English's percentages make the same
+    // difficulty label a much harder opponent (see ai.js's TIER_PCT_BY_LANG).
+    const aiWords = selectAiWords(this._solved, this._setup.difficulty, Math.random,
+      this._roundWordLang());
     const aiScore = totalScore(aiWords);
     const won = humanScore === aiScore ? null : humanScore > aiScore;
     const extras = { words: humanWords.length, score: humanScore, longestWord };
