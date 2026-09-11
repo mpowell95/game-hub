@@ -589,6 +589,10 @@ canvas.addEventListener('pointercancel', (e) => {
   endDrag(e);
 });
 
+// A long press on a canvas also raises the OS context menu ("Copy image", "Save image"), and a
+// fine drag begins with a long press by definition. CSS alone does not stop this one.
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const s = localPt(e);

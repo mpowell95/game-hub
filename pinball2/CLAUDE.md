@@ -354,6 +354,18 @@ cannot express. "Extend or shorten it" on a line that is not square to the table
 both ends by hand and getting the angle slightly wrong every time. Length holds A and slides B along
 the line; Angle holds A and swings B round it.
 
+**And the press-and-hold selected the whole page**, which Matt found within minutes of it shipping:
+*"it also selects everything, the whole page, as if I was going to copy something."* A long press IS
+the OS gesture for "select this text", and a fine drag begins with one BY DEFINITION, so this tool
+could not have the second without killing the first. `user-select: none` and `-webkit-touch-callout:
+none` app-wide, with `input, textarea, select` given it back (a number field you cannot select
+inside is one you cannot correct), plus a `contextmenu` preventDefault on the canvas, which CSS
+alone does not stop. The test asserts on the COMPUTED style, because a stylesheet that fails to
+apply reads exactly like one that was never written.
+
+**Any new gesture that holds still needs this checked.** The selection highlight also repaints the
+whole page mid-drag, which is the worst possible moment for it.
+
 **`setPointerCapture` is in a try/catch now, and that is not defensive clutter.** It throws "no
 active pointer with the given id" readily, it was the first line of `pointerdown`, and an exception
 there means the tap does nothing at all - indistinguishable from the dead hit-testing bug this tool

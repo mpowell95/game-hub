@@ -415,6 +415,11 @@ hidden under it once reached.
 - **A wall and a slingshot have Length and Angle rows** (`lengthAndAngle`). Length holds A and
   slides B along the line; Angle holds A and swings B round it.
 
+**Text selection is off app-wide and must stay off** (`user-select: none`, `-webkit-touch-callout:
+none` in `editor/index.html`, with `input, textarea, select` exempted, plus a `contextmenu`
+preventDefault on the canvas). A long press is the OS "select this text" gesture and the fine drag
+begins with one, so the tool cannot have the drag without this.
+
 **`setPointerCapture` is wrapped in try/catch and must stay that way.** It throws "no active pointer
 with the given id" readily, it is the first line of `pointerdown`, and an exception there means the
 tap does nothing at all, which is indistinguishable from a dead hit-testing bug.
@@ -524,6 +529,8 @@ positions through `playable()` before you believe a word of its output.**
 8. **Keep the `ResizeObserver`.** Without it, tapping is offset after every tab switch.
 8a. **A new tunable needs a `kinds` entry in `TUNABLES`**, or the Tune tab only ever shows it
     under Show all. And say what it DOES: bounce, grip, push. Not kick.
+8d. **Keep `user-select: none` app-wide.** The fine drag starts with a long press, which is the
+    OS gesture for selecting text; without this every precise drag highlights the page.
 8c. **Keep `setPointerCapture` in its try/catch.** It throws readily, it is the first line of
     `pointerdown`, and an exception there kills the whole gesture.
 8b. **A new module under `pinball2/` goes in `MODULES` in `editor/index.html`**, or it is the one

@@ -16,7 +16,21 @@
     --ok: #35c07a;
     --bad: #ff5a5a;
   }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* NOTHING IN THIS TOOL IS TEXT TO BE SELECTED. Matt, on the press-and-hold fine drag: "it also
+     selects everything, the whole page, as if I was going to copy something."
+     A long press is the OS gesture for "select this text", and it fires on the way to every fine
+     drag by definition, so the tool cannot have one without the other unless selection is off. The
+     highlight also repaints the whole page mid-drag, which is the worst possible moment.
+     Inputs are the exception and get it back below: a number field you cannot select inside is a
+     number field you cannot correct. */
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;        /* and no "Copy / Look Up" bubble either */
+  }
+  input, textarea, select { -webkit-user-select: text; user-select: text; }
   html, body {
     margin: 0; height: 100%; overflow: hidden;
     background: var(--bg); color: var(--ink);

@@ -389,6 +389,45 @@ const loupe = await page.evaluate(async (id) => {
 ok(loupe.during !== loupe.idle, `a magnifier appears in the far corner while dragging (${loupe.idle} to ${loupe.during})`);
 ok(loupe.after === loupe.idle, 'and it goes away when the finger lifts');
 
+// ------------------------------------------- [KNOWN-BUG PROBE] the long press selected the page
+// Matt, on the fine drag that had just shipped: "it also selects everything, the whole page, as if
+// I was going to copy something." A long press is the OS gesture for "select this text", and a fine
+// drag begins with one by definition, so the tool cannot have the second without killing the first.
+// Asserted on the COMPUTED style, not the source: a stylesheet that fails to apply reads the same
+// as one that was never written.
+const selectable = await page.evaluate(() => {
+  const bad = [];
+  const check = (el, label) => {
+    const cs = getComputedStyle(el);
+    const v = cs.userSelect || cs.webkitUserSelect;
+    if (v !== 'none') bad.push(`${label}: ${v}`);
+  };
+  check(document.body, 'body');
+  check(document.getElementById('c'), 'canvas');
+  check(document.getElementById('panel'), 'panel');
+  const h2 = document.querySelector('#panel h2') || document.querySelector('#panel .note');
+  if (h2) check(h2, 'panel text');
+  // A number field must stay selectable, or a value you cannot select is a value you cannot correct.
+  const inp = document.querySelector('#panel input[type=number]');
+  // 'auto' counts: the requirement is that it is SELECTABLE, not that one particular keyword set
+  // it. This guards against the global rule above swallowing the inputs, not against a spelling.
+  const iv = inp ? (getComputedStyle(inp).userSelect || getComputedStyle(inp).webkitUserSelect) : null;
+  const inputOk = inp ? (iv === 'text' || iv === 'auto') : null;
+  return { bad, inputOk };
+});
+ok(selectable.bad.length === 0, 'a long press cannot select the page', selectable.bad.join(', '));
+ok(selectable.inputOk !== false, 'but a number field is still selectable, so a value can be corrected');
+
+// And the long press must not raise the OS context menu over the table either. CSS does not stop
+// that one; only a preventDefault on the canvas does.
+const menu = await page.evaluate(() => {
+  const c = document.getElementById('c');
+  const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+  c.dispatchEvent(e);
+  return e.defaultPrevented;
+});
+ok(menu, 'and it cannot raise the context menu over the table');
+
 // ------------------------------------------------------------------------ Tune tunes ONE part
 // Matt: "when I'm on the Tune tab, I should be able to select an object and see the tune objects for
 // only that object." Twenty two sliders in one list is a list you scroll rather than read.
