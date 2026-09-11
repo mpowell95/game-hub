@@ -367,27 +367,7 @@ export class World {
 
       // A driven bat can arrive where the ball already is. Let the ball out along the bat's own
       // normal and give it the bat's surface velocity. Never a velocity from the correction.
-      for (const f of this.flippers) {
-        const pen = penetration(f.def, b.p, cfg.BALL_R, f);
-        if (!pen) continue;
-        // The push is the one position write in this file that the ball did not travel, so it is
-        // CHECKED. Squeezed between the bat and a rail, an unchecked push puts the ball through the
-        // rail and out of the cabinet, which is exactly what "it flies over the left flipper and
-        // below the wall, out of the machine" was. If the destination is not free the ball stays
-        // where it is and takes only the velocity: it is briefly overlapped, which the next micro
-        // step resolves, and being overlapped for 4 ms is not a bug a player can see. Being outside
-        // the machine is.
-        const to = add(b.p, mul(pen.n, pen.depth + cfg.SKIN));
-        if (this.isFree(to)) b.p = to;
-        const u = f.surfaceVel(pen.at);
-        const vn = dot(sub(b.v, u), pen.n);
-        if (vn < 0) {
-          const again = b.touched.get(f.def.id) > 0;
-          b.touched.set(f.def.id, (b.touched.get(f.def.id) || 0) + 1);
-          if (again) b.v = add(b.v, mul(pen.n, -vn));
-          else this.resolve(b, pen.n, u, f.def, -vn);
-        }
-      }
+      this.flipperContacts(b, cfg);
 
       let left = h;
       let events = 0;
@@ -418,6 +398,17 @@ export class World {
         if (again) {
           const vn = dot(sub(b.v, u), hit.n);
           if (vn < 0) b.v = add(b.v, mul(hit.n, -vn));   // stay out of it, and nothing else
+          // A MOVING bat must never leave the ball slower than the bat is throwing it. Without this
+          // the keep-out clamp pins the ball to exactly the bat's surface speed, its angular rate
+          // about the pivot equals the bat's, and the bat can never let go of it.
+          if (hit.flipper && !hit.flipper.atStop()) {
+            const un = dot(u, hit.n);
+            if (un > 0) {
+              const want = (1 + cfg.FLIP_KICK) * un;
+              const have = dot(b.v, hit.n);
+              if (have < want) b.v = add(b.v, mul(hit.n, want - have));
+            }
+          }
           b.resting = true;
         } else {
           this.resolve(b, hit.n, u, hit.shape, closing);
@@ -434,6 +425,8 @@ export class World {
         events++;
       }
       if (events >= cfg.MAX_EVENTS) this.jams++;
+
+      this.flipperContacts(b, cfg);   // again after moving, since the bat is not swept against
 
       if (b.cradling && len(b.v) < cfg.CRADLE_MAX) {
         b.v = mul(b.v, Math.max(0, 1 - cfg.CRADLE_DAMP * h));
@@ -464,6 +457,25 @@ export class World {
   }
 
   /** Is a ball centred here clear of every static collider? Used only to vet the flipper push. */
+  /** Every flipper contact, resolved from the centreline so the normal is never ambiguous. */
+  flipperContacts(b, cfg) {
+    for (const f of this.flippers) {
+      const pen = penetration(f.def, b.p, cfg.BALL_R, f);
+      if (!pen) continue;
+      const to = add(b.p, mul(pen.n, pen.depth + cfg.SKIN));
+      if (this.isFree(to)) b.p = to;
+      const u = f.surfaceVel(pen.at);
+      const vn = dot(sub(b.v, u), pen.n);
+      if (vn < 0) {
+        const again = b.touched.get(f.def.id) > 0;
+        b.touched.set(f.def.id, (b.touched.get(f.def.id) || 0) + 1);
+        if (again) b.v = add(b.v, mul(pen.n, -vn));
+        else this.resolve(b, pen.n, u, f.def, -vn);
+      }
+      if (f.held && f.atStop()) b.cradling = true;
+    }
+  }
+
   isFree(p) {
     const br = this.cfg.BALL_R;
     for (const sh of this.statics) {
@@ -484,15 +496,23 @@ export class World {
     return true;
   }
 
+  /** THE FLIPPER IS NOT IN HERE, AND THAT IS THE POINT.
+   *
+   *  A swept contact against the bat's flanks and end circles can return a normal for the far side
+   *  of the bat, and one did: with the ball measurably ON TOP of the bat (side +20.7mm) the clamp
+   *  fired with a normal of (0.39, 0.92), pointing straight down INTO it, and took the ball from
+   *  2.82 m/s to 1.16 m/s in a single call at the exact instant the bat reached its stop. That is
+   *  what a flipped ball was losing.
+   *
+   *  `penetration()` cannot do that. It measures from the bat's CENTRELINE, so the normal is
+   *  `ball - closest point on the centreline` and can only ever point from the bat towards the
+   *  ball. The flipper is resolved there and only there, before and after each micro step's
+   *  advance, and a micro step is bounded so the ball crosses at most a few millimetres inside it. */
   firstImpact(b, tmax) {
     const br = this.cfg.BALL_R;
     let best = null;
     for (const s of this.statics) {
       const r = shapeImpact(s, b.p, b.v, br, tmax);
-      if (r && (!best || r.t < best.t)) best = r;
-    }
-    for (const f of this.flippers) {
-      const r = f.impact(b.p, b.v, br, tmax);
       if (r && (!best || r.t < best.t)) best = r;
     }
     return best;
