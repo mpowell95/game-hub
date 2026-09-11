@@ -680,6 +680,30 @@ console.log('\n--- the REST_MANIFEST matches the deployed bytes ---');
     stale.length === 0, `stale entries: ${stale.slice(0, 5).join(', ')}${stale.length > 5 ? ` (+${stale.length - 5} more)` : ''}`);
 }
 
+// --- [KNOWN-BUG PROBE] a tool under active development is never served stale ----------------------
+//
+// Matt, 2026-09-11, on the pinball2 editor: "It's perfect when I open it within the Claude app. But
+// when I open it in the chrome app it's the old one with the holes." The Claude app has no service
+// worker; Chrome had one, and the REST tier is cache-first, so it served the previous build's
+// physics from cache. Cache-first is right for a released game and wrong for a tool being changed
+// several times an hour and judged by how it plays.
+{
+  const src = SW_SRC;
+  const devFresh = src.match(/const DEV_FRESH = (\/.*\/);/);
+  ok('sw.js keeps a DEV_FRESH exclusion from the cache-first set', !!devFresh);
+  if (devFresh) {
+    const re = new RegExp(devFresh[1].slice(1, devFresh[1].lastIndexOf('/')), devFresh[1].slice(devFresh[1].lastIndexOf('/') + 1));
+    const assets = [...src.matchAll(/'(\.\/[^']+)'/g)].map((m) => m[1]);
+    const pb2 = assets.filter((a) => a.startsWith('./pinball2/'));
+    ok('pinball2 files are in ASSETS at all', pb2.length > 0);
+    ok('every pinball2 file is excluded from cache-first', pb2.every((a) => re.test(a)),
+      pb2.filter((a) => !re.test(a)).join(', '));
+    const pb1 = assets.filter((a) => a.startsWith('./pinball/'));
+    ok('the released pinball is NOT excluded, so it keeps its cache-first open',
+      pb1.length > 0 && pb1.every((a) => !re.test(a)));
+  }
+}
+
 // --- summary -----------------------------------------------------------------------------------
 
 console.log(`\nSW strategy tests: ${passed} passed, ${failures.length} failed.`);

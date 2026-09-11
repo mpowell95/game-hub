@@ -253,6 +253,30 @@ cause is somewhere else, and the number to watch is the one a player feels.
 `flipPower` in `probes/checks.js` is the tripwire, and it measures travel. It covers BOTH flippers,
 which none of the hand-written traces did.
 
+## Chrome served the old build, and the Claude app did not
+
+Matt, 2026-09-11: *"It's perfect when I open it within the Claude app. But when I open it in the
+chrome app it's the old one with the holes."*
+
+Not a physics bug and not a deploy failure. The hub's service worker serves the REST tier
+**cache-first** (`sw.js`, 2026-09-01), and this tool's files are in that tier, so Chrome, which has
+the worker registered, handed back the previous build's `physics.js` from its cache. The Claude app
+has no service worker at all, so it fetched the new build over the network. Two browsers, two
+builds, same URL.
+
+**Cache-first is the right bargain for a released game** - it took opening Skeeball from 2,188 KB to
+19 KB - **and the wrong one for a tool being changed several times an hour and judged by how it
+plays.** A stale build here is not a slower open, it is the wrong answer to "is this fixed yet", and
+it costs a round trip with Matt every time. `DEV_FRESH` in `sw.js` excludes `./pinball2/` from the
+cache-first set, so this tool is network-first with the cache as an offline fallback. The released
+`pinball/` keeps its cache-first open, and `test-sw-strategy.mjs` asserts both halves.
+
+**The editor now says which build it is running**, in the header, next to the title. It compares the
+active worker's cache version (`GET_VERSION`) against the deployed `version.json`, and when they
+differ it turns red and reads `v777 -> v778`; tapping it updates the worker and reloads. A worker
+already installed on a phone is still the old one until it updates, so the tool says so out loud
+rather than leaving it to be guessed from how the ball behaves.
+
 ## The editor's touch was offset, and the cause is worth knowing
 
 Matt: *"the editor can't tell what I'm selecting, it's like it thinks I'm selecting something an
