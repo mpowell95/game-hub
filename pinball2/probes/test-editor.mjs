@@ -210,6 +210,29 @@ await page.waitForTimeout(500);
 const forced = await page.evaluate(() => [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','));
 ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored (${forced})`);
 
+// ------------------------------------------------------------ [KNOWN-BUG PROBE] a stale module
+// Matt, on a build whose version chip read v782: a screenshot of the bare box from hours earlier,
+// with no bumpers, no slingshots and no ramp. The chip reads the service worker and was telling the
+// truth; the MODULE GRAPH was older. index.html now installs an import map that stamps the build
+// onto every module URL, so a cache belonging to an older build cannot answer one.
+//
+// The TRANSITIVE edges are the half that a `import('...?v=')` inside editor.js would have missed,
+// and missing them is worse than the original bug because the build would then be MIXED: render.js
+// imports physics.js, and checks.js imports physics.js and config.js. So this asserts on the actual
+// network log, not on the source.
+const vpage = await browser.newPage();
+const seen = [];
+vpage.on('request', (r) => { if (/\/pinball2\/.*\.js/.test(r.url())) seen.push(r.url().split('/pinball2/')[1]); });
+await vpage.goto(URL, { waitUntil: 'networkidle' });
+await vpage.waitForTimeout(400);
+const build = await vpage.evaluate(() => fetch('../../version.json', { cache: 'no-store' }).then((r) => r.json()).then((j) => j.cache));
+const WANT = ['editor/editor.js', 'machines/testbox/config.js', 'machines/testbox/physics.js',
+  'machines/testbox/table.js', 'machines/testbox/render.js', 'probes/checks.js'];
+const missing = WANT.filter((m) => !seen.some((u) => u === `${m}?v=${build}`));
+ok(missing.length === 0, `every module is fetched with the build in its URL (${seen.length} requests, ${build})`,
+  missing.length ? 'unversioned or absent: ' + missing.join(', ') + '\n      saw: ' + seen.join(', ') : '');
+await vpage.close();
+
 await browser.close();
 console.log(`\nEditor tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

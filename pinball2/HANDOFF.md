@@ -116,6 +116,23 @@ worker for its cache version and compares it with the deployed `version.json`. M
 `v779`. Behind shows a red `v778 → v779`, and tapping it updates the worker and reloads. If someone
 reports odd behaviour, ask what the chip says before debugging anything else.
 
+**4. Every module is loaded with the build stamped into its URL, by an import map in
+`pinball2/editor/index.html`.** The chip only knows about the service worker, and it was right on
+the day Matt photographed a v782 chip above the bare box from hours earlier. Three separate layers
+can hand back an old module - the browser's HTTP cache, the service worker's cache, and the
+slow-connection latch, which serves a cached copy even on a network-first path. So `index.html`
+fetches `version.json` with `cache: 'no-store'`, installs an import map rewriting every module URL
+to `...js?v=<build>`, and only then appends the module script (versioned by hand, because an import
+map remaps specifiers resolved inside modules and never a script tag's `src`).
+
+**This must stay an import map; a versioned `import()` inside `editor.js` is not the same thing.**
+That versions only the modules `editor.js` names. `render.js` imports `physics.js`, and `checks.js`
+imports `physics.js` and `config.js`; those would resolve unversioned and could still be stale, so
+the renderer and the solver could end up disagreeing about the geometry they share. **If you add a
+module under `pinball2/`, add it to `MODULES` in `index.html`** - nothing fails loudly if you
+forget, which is why it is on the landmine list. `test-editor.mjs`'s last case asserts on the real
+network log.
+
 ---
 
 ## 4. The data model
@@ -465,6 +482,8 @@ positions through `playable()` before you believe a word of its output.**
    per contact event.
 7. **Keep the animation loop's `finally`.** Anything else can break; the loop cannot.
 8. **Keep the `ResizeObserver`.** Without it, tapping is offset after every tab switch.
+8b. **A new module under `pinball2/` goes in `MODULES` in `editor/index.html`**, or it is the one
+    file in the graph a stale cache can still answer. Nothing fails loudly if you forget.
 9. **Watch the number that matters.** Chasing the flipper bug, four separate fixes moved the ball's
    top SPEED from 1.8 to 6.4 m/s and not one moved how far it TRAVELLED. A number that will not move
    when you change its supposed cause is telling you the cause is elsewhere.

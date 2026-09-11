@@ -2,6 +2,10 @@
 // Nothing here writes a game file: you export, and a session applies the export. That keeps a
 // gameplay fix from ever landing on top of unsaved editing work.
 
+// These are plain static imports and they stay that way. The build version is stamped onto every
+// one of them by the IMPORT MAP that index.html installs before this file is fetched. See the
+// comment there: it is the fix for a build whose version chip read v782 while the table on screen
+// was hours old.
 import { CONFIG, TUNABLES, cloneConfig, gravity } from '../machines/testbox/config.js';
 import { World } from '../machines/testbox/physics.js';
 import { makeTable, toJSON, fromJSON, newId } from '../machines/testbox/table.js';
@@ -72,6 +76,14 @@ function repairTable(t) {
 }
 
 // ------------------------------------------------------------------ persistence
+
+/** What is actually on the table, in the corner, so nobody has to guess whether they are looking at
+ *  the current build. One line, and it would have answered the question outright. */
+function tableKinds() {
+  const n = {};
+  for (const sh of app.table.shapes) n[sh.kind] = (n[sh.kind] || 0) + 1;
+  return Object.keys(n).sort().map((k) => `${n[k]} ${k}`).join(', ');
+}
 
 /** A cheap fingerprint of the table the MACHINE ships, so the editor can tell whether what is
  *  stored on this device was made from the same starting point. */
@@ -889,6 +901,7 @@ function frameBody(t) {
       + `${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
       + `${app.world && app.world.escapes ? '   LEFT THE TABLE ' + app.world.escapes : ''}`
     : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`;
+  hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
   if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
   if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
   if (app.staleTable) hud.textContent += '\nthis is YOUR edited table. The shipped one has new parts: Edit then Reset table';

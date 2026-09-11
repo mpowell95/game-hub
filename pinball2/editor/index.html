@@ -84,6 +84,69 @@
   </div>
   <div id="panel"></div>
 </div>
-<script type="module" src="./editor.js"></script>
+<!-- EVERY MODULE IN THIS TOOL IS FETCHED WITH THE BUILD VERSION IN ITS URL, and that is not
+     decoration.
+
+     Matt, on a build whose version chip read v782: a screenshot of the bare box from hours earlier,
+     with none of the bumpers, slingshots or the ramp in it. The chip was telling the truth about
+     the service worker; the MODULE GRAPH was older. Between the browser's own HTTP cache, the
+     service worker's cache, and the slow-connection latch that can serve a cached copy even on a
+     network-first path, there are three separate places a stale table.js can come from, and the
+     version chip can see none of them.
+
+     A URL with the build in it is a different URL, so no cache belonging to an older build can
+     answer it. It has to be done HERE rather than with `import(...?v=)` inside editor.js, because
+     that would only version the five modules editor.js names itself: render.js imports physics.js
+     and checks.js imports physics.js and config.js, and those relative specifiers would resolve
+     unversioned and could still come back stale, which is worse than the original bug because the
+     build would then be MIXED. An import map keyed on the resolved URLs catches the transitive
+     ones too, which is the whole module graph.
+
+     The map must be installed before any module loads, hence the classic script and the module tag
+     being appended rather than written inline. Offline, version.json cannot be read and the map is
+     skipped entirely: the tool then loads exactly as it did before any of this, from cache. -->
+<script>
+(function () {
+  var base = new URL('../', location.href).href;                    // .../pinball2/
+  var MODULES = [
+    'machines/testbox/config.js',
+    'machines/testbox/physics.js',
+    'machines/testbox/table.js',
+    'machines/testbox/render.js',
+    'probes/checks.js',
+  ];
+
+  function start(build) {
+    var q = build ? '?v=' + encodeURIComponent(build) : '';
+    if (build) {
+      var map = { imports: {} };
+      for (var i = 0; i < MODULES.length; i++) {
+        map.imports[base + MODULES[i]] = base + MODULES[i] + q;
+      }
+      var im = document.createElement('script');
+      im.type = 'importmap';
+      im.textContent = JSON.stringify(map);
+      document.head.appendChild(im);
+    }
+    // editor.js is NOT in the map: an import map remaps specifiers resolved INSIDE modules, never
+    // the src of a script tag, so the entry point has to carry the version itself.
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = './editor.js' + q;
+    document.body.appendChild(s);
+  }
+
+  var done = false;
+  function once(build) { if (!done) { done = true; start(build); } }
+
+  // A hung request must never leave the tool blank, so the unversioned load is the fallback.
+  setTimeout(function () { once(null); }, 4000);
+
+  fetch('../../version.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) { once(j && j.cache ? String(j.cache) : null); })
+    .catch(function () { once(null); });
+})();
+</script>
 </body>
 </html>
