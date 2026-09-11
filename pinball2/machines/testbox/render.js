@@ -118,8 +118,18 @@ export function draw(ctx, table, v, state) {
 
   ctx.lineCap = 'round';
   for (const sh of table.shapes) {
-    if (sh.kind !== 'seg' && sh.kind !== 'arc' && sh.kind !== 'circle') continue;
+    if (sh.kind !== 'seg' && sh.kind !== 'arc' && sh.kind !== 'circle' && sh.kind !== 'sling') continue;
     const wpx = sh.r * 2 * S(v);
+    if (sh.kind === 'sling') {
+      const a = toScreen(v, sh.a);
+      const b2 = toScreen(v, sh.b);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y);
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = wpx + 4; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y);
+      const hot = st.hot && st.hot[sh.id];
+      ctx.strokeStyle = hot ? '#ffe9a3' : '#e0532f'; ctx.lineWidth = wpx; ctx.stroke();
+      continue;
+    }
     if (sh.kind === 'circle') {
       railPath(ctx, sh, v);
       ctx.fillStyle = '#9fb4cc';
@@ -138,6 +148,23 @@ export function draw(ctx, table, v, state) {
       ctx.lineWidth = Math.max(1, wpx * 0.3);
       ctx.stroke();
     }
+  }
+
+  for (const sh of table.shapes) {
+    if (sh.kind !== 'bumper') continue;
+    const c = toScreen(v, sh.c);
+    const R = sh.r * S(v);
+    const hot = st.hot && st.hot[sh.id];
+    ctx.beginPath(); ctx.arc(c.x, c.y + R * 0.18, R, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+    const g = ctx.createRadialGradient(c.x - R * 0.3, c.y - R * 0.35, R * 0.15, c.x, c.y, R);
+    g.addColorStop(0, hot ? '#ffffff' : '#7fd8ff');
+    g.addColorStop(1, hot ? '#ffce3a' : '#1f5fa8');
+    ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = hot ? '#fff6d5' : '#0d2f57'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.42, 0, Math.PI * 2);
+    ctx.fillStyle = hot ? '#fff' : '#0e2038'; ctx.fill();
   }
 
   const angles = st.flipperAngles || {};

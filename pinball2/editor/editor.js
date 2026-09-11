@@ -37,6 +37,7 @@ const app = {
   lastT: 0,
   errors: 0,
   lastError: '',
+  hot: {},
   repaired: 0,
 };
 
@@ -201,8 +202,11 @@ function handlesFor(sh) {
     out.push({ key: 'c', at: sh.c });
     out.push({ key: 'r', at: { x: sh.c.x + sh.radius * Math.cos(sh.a0), y: sh.c.y + sh.radius * Math.sin(sh.a0) } });
     out.push({ key: 'r1', at: { x: sh.c.x + sh.radius * Math.cos(sh.a1), y: sh.c.y + sh.radius * Math.sin(sh.a1) } });
-  } else if (sh.kind === 'circle') {
+  } else if (sh.kind === 'circle' || sh.kind === 'bumper') {
     out.push({ key: 'c', at: sh.c });
+  } else if (sh.kind === 'sling') {
+    out.push({ key: 'a', at: sh.a });
+    out.push({ key: 'b', at: sh.b });
   } else if (sh.kind === 'flipper') {
     out.push({ key: 'pivot', at: sh.pivot });
     out.push({ key: 'tip', at: { x: sh.pivot.x + sh.len * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * Math.sin(sh.restAng) } });
@@ -220,8 +224,8 @@ function snap(p) {
 }
 
 function moveShape(sh, dx, dy) {
-  if (sh.kind === 'seg') { sh.a.x += dx; sh.a.y += dy; sh.b.x += dx; sh.b.y += dy; }
-  else if (sh.kind === 'arc' || sh.kind === 'circle') { sh.c.x += dx; sh.c.y += dy; }
+  if (sh.kind === 'seg' || sh.kind === 'sling') { sh.a.x += dx; sh.a.y += dy; sh.b.x += dx; sh.b.y += dy; }
+  else if (sh.kind === 'arc' || sh.kind === 'circle' || sh.kind === 'bumper') { sh.c.x += dx; sh.c.y += dy; }
   else if (sh.kind === 'flipper') { sh.pivot.x += dx; sh.pivot.y += dy; }
   else if (sh.kind === 'drain') { sh.x += dx; sh.y += dy; }
 }
@@ -292,7 +296,7 @@ canvas.addEventListener('pointermove', (e) => {
     const sh = app.table.shapes.find((x) => x.id === drag.id);
     if (!sh) return;
     const q = snap(p);
-    if (sh.kind === 'seg') { sh[drag.key] = q; }
+    if (sh.kind === 'seg' || sh.kind === 'sling') { sh[drag.key] = q; }
     else if (sh.kind === 'arc') {
       if (drag.key === 'c') sh.c = q;
       else {
@@ -300,7 +304,7 @@ canvas.addEventListener('pointermove', (e) => {
         if (drag.key === 'r') { sh.radius = Math.max(0.01, Math.hypot(p.x - sh.c.x, p.y - sh.c.y)); sh.a0 = ang; }
         else sh.a1 = ang;
       }
-    } else if (sh.kind === 'circle') { sh.c = q; }
+    } else if (sh.kind === 'circle' || sh.kind === 'bumper') { sh.c = q; }
     else if (sh.kind === 'flipper') {
       if (drag.key === 'pivot') sh.pivot = q;
       else {
@@ -374,8 +378,8 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function centreOf(sh) {
-  if (sh.kind === 'seg') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
-  if (sh.kind === 'arc' || sh.kind === 'circle') return sh.c;
+  if (sh.kind === 'seg' || sh.kind === 'sling') return { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 };
+  if (sh.kind === 'arc' || sh.kind === 'circle' || sh.kind === 'bumper') return sh.c;
   if (sh.kind === 'flipper') return sh.pivot;
   return { x: sh.x + sh.w / 2, y: sh.y + sh.h / 2 };
 }
@@ -458,6 +462,8 @@ function addShape(kind) {
   if (kind === 'seg') sh = { id: newId('w'), kind: 'seg', a: { x: cx - 0.06, y: cy }, b: { x: cx + 0.06, y: cy }, r: 0.008 };
   else if (kind === 'arc') sh = { id: newId('a'), kind: 'arc', c: { x: cx, y: cy }, radius: 0.06, a0: Math.PI, a1: Math.PI * 1.5, r: 0.008 };
   else if (kind === 'circle') sh = { id: newId('p'), kind: 'circle', c: { x: cx, y: cy }, r: 0.012 };
+  else if (kind === 'bumper') sh = { id: newId('b'), kind: 'bumper', c: { x: cx, y: cy }, r: 0.026 };
+  else if (kind === 'sling') sh = { id: newId('s'), kind: 'sling', a: { x: cx - 0.06, y: cy - 0.05 }, b: { x: cx + 0.06, y: cy + 0.05 }, r: 0.008 };
   else if (kind === 'flipper') sh = { id: newId('f'), kind: 'flipper', side: 'L', pivot: { x: cx, y: cy }, len: 0.07, r0: 0.012, r1: 0.007, restAng: 25 / DEG, endAng: -27 / DEG };
   else sh = { id: newId('d'), kind: 'drain', x: cx - 0.06, y: cy, w: 0.12, h: 0.05 };
   app.table.shapes.push(sh);
@@ -512,7 +518,7 @@ function renderPlayPanel() {
 
 function renderEditPanel() {
   const add = el('<div class="row"></div>');
-  for (const [k, name] of [['seg', '+ Wall'], ['arc', '+ Arc'], ['circle', '+ Post'], ['flipper', '+ Flipper'], ['drain', '+ Drain']]) {
+  for (const [k, name] of [['seg', '+ Wall'], ['arc', '+ Arc'], ['circle', '+ Post'], ['bumper', '+ Bumper'], ['sling', '+ Sling'], ['flipper', '+ Flipper'], ['drain', '+ Drain']]) {
     const b = el(`<button>${name}</button>`);
     b.onclick = () => addShape(k);
     add.append(b);
@@ -585,7 +591,20 @@ function renderEditPanel() {
   panel.append(el(`<h2>${sh.kind} ${sh.id}</h2>`));
   const mm = (v) => Math.round(v * 10000) / 10;   // metres shown as millimetres, one decimal
 
-  if (sh.kind === 'seg') {
+  if (sh.kind === 'bumper') {
+    panel.append(numRow('Centre x', mm(sh.c.x), 1, (v) => { sh.c.x = v / 1000; }));
+    panel.append(numRow('Centre y', mm(sh.c.y), 1, (v) => { sh.c.y = v / 1000; }));
+    panel.append(numRow('Radius', mm(sh.r), 1, (v) => { sh.r = v / 1000; }));
+    panel.append(numRow('Kick (m/s)', sh.kick != null ? sh.kick : app.cfg.BUMPER_KICK, 0.1, (v) => { sh.kick = v; }));
+    panel.append(el('<div class="note">Kick is the speed the ball LEAVES at, not a bounciness. A slow roll into a bumper comes out just as fast, which is what a real one does.</div>'));
+  } else if (sh.kind === 'sling') {
+    panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
+    panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
+    panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
+    panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
+    panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
+    panel.append(numRow('Kick (m/s)', sh.kick != null ? sh.kick : app.cfg.SLING_KICK, 0.1, (v) => { sh.kick = v; }));
+  } else if (sh.kind === 'seg') {
     panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
     panel.append(numRow('A y (mm)', mm(sh.a.y), 1, (v) => { sh.a.y = v / 1000; }));
     panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
@@ -758,6 +777,14 @@ function frameBody(t) {
 
   const angles = {};
   if (app.world) for (const f of app.world.flippers) angles[f.def.id] = f.ang;
+  if (app.world) {
+    for (const ev of app.world.events) if (ev.type === 'kick') app.hot[ev.id] = performance.now();
+    app.world.events.length = 0;
+  }
+  const hot = {};
+  for (const k of Object.keys(app.hot)) {
+    if (performance.now() - app.hot[k] < 110) hot[k] = true; else delete app.hot[k];
+  }
 
   draw(ctx, app.table, app.view, {
     balls: app.world ? app.world.balls : [],
@@ -767,6 +794,7 @@ function frameBody(t) {
     grid: app.mode === 'edit' && app.snap ? app.grid * 4 : 0,
     marks: app.marks,
     mask: app.mask,
+    hot,
   });
 
   if (app.mode === 'edit') drawSelection();

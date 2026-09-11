@@ -302,6 +302,37 @@ between the two. The fix after that one opened the bottom corners (the outer rai
 shortened), and 96 balls fell out of the table sideways past the drain's own rectangle. Both are
 recorded in `table.js` beside the geometry.
 
+## Step 3: pop bumpers and slingshots (2026-09-11)
+
+The first parts that HIT BACK. Both are solenoid driven on a real machine, so both are modelled as
+a fixed OUTGOING SPEED along the contact normal rather than as a very bouncy wall: a dead slow roll
+into a bumper still comes out fast, which is exactly what a real one does and the opposite of what
+restitution gives you. A minimum approach speed stops a ball resting against one from turning it
+into a machine gun, and a cooldown is the other half of that.
+
+Three bugs came out of adding them, and each is a shape worth knowing:
+
+- **A new shape kind is INVISIBLE to every probe until `distToShape` is taught it.** It returned
+  `Infinity` for anything it did not recognise, which reads as "nowhere near", so bumpers and
+  slingshots spent one build unseen by the playable-area fill, the gap rule and every sweep. It
+  THROWS on an unknown kind now. The editor's own hit testing uses the same function, which is why
+  `test-editor.mjs` caught it: five parts could not be tapped.
+- **"Still alive" stopped meaning "stuck" the day the table got bumpers.** The rest sweep failed
+  with balls "resting" at 2.8 m/s: a ball ricocheting between three bumpers has not reached the
+  drain in six seconds and is not going to, which is the POINT of a bumper. Speed separates a trap
+  from play, not the clock. A **knife edge** is separated too: every survivor is re-run with a
+  nudge, and the ones that then drain are reported rather than failed, the same call
+  `sweep-pinball-rests.mjs` makes for the old game.
+- **Gravity is a property of the config, not of the table.** The free-fall check dropped a ball down
+  the middle of the real table and reported NEVER DRAINED once a bumper stood there: a true
+  statement about the ball and nothing at all about gravity. It builds a bare table for that one
+  measurement now.
+
+**The slingshot IS the feed rail.** The first version put a slingshot beside a separate feed rail
+and the sweep found four dead stops in the pockets that made between the two of them and the wall.
+A real lower third is one continuous line from the wall down to the flipper, so that is what this
+is, and nothing can get behind it.
+
 ## Where this goes next
 
 Step 3 of the plan: the remaining object types, one at a time, each with its property panel and its

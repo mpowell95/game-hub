@@ -31,14 +31,11 @@ export function makeTable() {
   // could leave the machine over the left flipper. They end below the drain now, so there is no
   // height at which a ball can reach the side of the cabinet without a rail there.
   //
-  // Rails that feed each flipper. They stop WELL SHORT of the flipper pivot on purpose: the first
-  // draft ran them into it, and the rest sweep found the V that made, 1759 of 2803 drops resting
-  // in the crook between the rail's end cap and the fat end of the bat. A real table has the same
-  // trap if it is built the same way. The ball is delivered ONTO the bat, or it goes down the
-  // outlane outside it, and there is no notch between the two.
-  seg({ x: 0.008, y: 0.820 }, { x: 0.128, y: 0.905 });
-  seg({ x: 0.507, y: 0.820 }, { x: 0.387, y: 0.905 });
-
+  // THE SLINGSHOT IS THE FEED, and it is anchored to the wall. The first version put a slingshot
+  // beside a separate feed rail, and the rest sweep found four dead stops in the pockets that made
+  // between the two of them and the wall. A real lower third has one continuous line from the wall
+  // down to the flipper, so that is what this is: nothing can get behind it, and the wedge that
+  // was catching balls is not a space any more.
   shapes.push({
     id: id('f'), kind: 'flipper', side: 'L',
     pivot: { x: 0.1666, y: 0.9554 }, len: 0.070, r0: 0.012, r1: 0.007,
@@ -49,6 +46,19 @@ export function makeTable() {
     pivot: { x: 0.3484, y: 0.9554 }, len: 0.070, r0: 0.012, r1: 0.007,
     restAng: 155 * D, endAng: 207 * D,
   });
+
+  // Three pop bumpers in the classic triangle, high enough that a ball rattling between them is
+  // being sent back UP the table rather than fed to the drain.
+  const bump = (x, y, r) => shapes.push({ id: id('b'), kind: 'bumper', c: { x, y }, r: r || 0.026 });
+  bump(0.195, 0.300);
+  bump(0.320, 0.300);
+  bump(0.2575, 0.395);
+
+  // Slingshots: the angled faces above each flipper that kick a ball back across the table, and
+  // the only route from the upper table down to the bat. One segment rather than the
+  // three-post-and-three-face assembly a real one is built from.
+  shapes.push({ id: id('s'), kind: 'sling', a: { x: 0.008, y: 0.755 }, b: { x: 0.152, y: 0.885 }, r: 0.008 });
+  shapes.push({ id: id('s'), kind: 'sling', a: { x: 0.507, y: 0.755 }, b: { x: 0.363, y: 0.885 }, r: 0.008 });
 
   shapes.push({ id: id('d'), kind: 'drain', x: 0.0, y: 1.005, w: W, h: H - 1.005 });
 

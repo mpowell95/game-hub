@@ -121,11 +121,11 @@ function shapeImpact(sh, p, v, br, tmax) {
   let best = null;
   const take = (r) => { if (r && (!best || r.t < best.t)) best = r; };
 
-  if (sh.kind === 'seg') {
+  if (sh.kind === 'seg' || sh.kind === 'sling') {
     const { flanks, circles } = taperedParts(sh.a, sh.r + br, sh.b, sh.r + br);
     for (const f of flanks) take(toiPointSeg(p, v, f.A, f.B, tmax));
     for (const c of circles) take(toiPointCircleOut(p, v, c.c, c.R, tmax));
-  } else if (sh.kind === 'circle') {
+  } else if (sh.kind === 'circle' || sh.kind === 'bumper') {
     take(toiPointCircleOut(p, v, sh.c, sh.r + br, tmax));
   } else if (sh.kind === 'arc') {
     const outR = sh.radius + sh.r + br;
@@ -168,7 +168,7 @@ function shapeImpact(sh, p, v, br, tmax) {
  *  geometry has a graze in it that is worth looking at. It is not a position correction of the
  *  solver's own work: it never runs on a ball the solver placed. */
 function staticPenetration(sh, p, br) {
-  if (sh.kind === 'seg') {
+  if (sh.kind === 'seg' || sh.kind === 'sling') {
     const d = sub(sh.b, sh.a);
     const L2 = dot(d, d);
     const u = L2 < EPS ? 0 : Math.max(0, Math.min(1, dot(sub(p, sh.a), d) / L2));
@@ -179,7 +179,7 @@ function staticPenetration(sh, p, br) {
     if (dist >= rad) return null;
     return { depth: rad - dist, n: dist < EPS ? { x: 0, y: -1 } : mul(away, 1 / dist) };
   }
-  if (sh.kind === 'circle') {
+  if (sh.kind === 'circle' || sh.kind === 'bumper') {
     const away = sub(p, sh.c);
     const dist = len(away);
     const rad = sh.r + br;
@@ -297,7 +297,9 @@ export class World {
     this.cfg = cfg;
     this.balls = [];
     this.flippers = table.shapes.filter((s) => s.kind === 'flipper').map((s) => new Flipper(s));
-    this.statics = table.shapes.filter((s) => s.kind === 'seg' || s.kind === 'arc' || s.kind === 'circle');
+    this.statics = table.shapes.filter((s) => s.kind === 'seg' || s.kind === 'arc' || s.kind === 'circle'
+      || s.kind === 'bumper' || s.kind === 'sling');
+    this.fired = new Map();        // shape id -> world time it last kicked, for the cooldown
     this.drains = table.shapes.filter((s) => s.kind === 'drain');
     this.events = [];
     this.jams = 0;                 // contacts budget exhausted: a diagnostic, never a silent fix
@@ -571,6 +573,28 @@ export class World {
         const want = (1 + cfg.FLIP_KICK) * un;
         const have = dot(nv, n);
         if (have < want) nv = add(nv, mul(n, want - have));
+      }
+    }
+
+    // A BUMPER AND A SLINGSHOT DO NOT BOUNCE THE BALL, THEY HIT IT.
+    //
+    // Both are solenoid driven on a real machine: the ring or the arm fires and the ball leaves at
+    // the coil's speed, which is why a dead-slow roll into a bumper still comes out fast. Modelling
+    // them as very bouncy walls gets that backwards - it makes a hard hit huge and a soft one
+    // nothing. So the kick is a fixed OUTGOING SPEED along the contact normal, floored rather than
+    // added, and it needs a minimum approach to fire so a ball resting against one is not a machine
+    // gun. The cooldown is the other half of that.
+    if (shape.kind === 'bumper' || shape.kind === 'sling') {
+      const isB = shape.kind === 'bumper';
+      const trip = isB ? cfg.BUMPER_TRIP : cfg.SLING_TRIP;
+      const cool = isB ? cfg.BUMPER_COOL : cfg.SLING_COOL;
+      const kick = shape.kick != null ? shape.kick : (isB ? cfg.BUMPER_KICK : cfg.SLING_KICK);
+      const last = this.fired.get(shape.id);
+      if (-vn >= trip && (last == null || this.time - last >= cool)) {
+        this.fired.set(shape.id, this.time);
+        const out = dot(nv, n);
+        if (out < kick) nv = add(nv, mul(n, kick - out));
+        this.events.push({ type: 'kick', id: shape.id, at: { x: b.p.x, y: b.p.y } });
       }
     }
 
