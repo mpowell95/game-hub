@@ -62,11 +62,6 @@ link to the room every time."* He plays it on a phone, from a chat thread, and s
 find the URL is friction every single time. It costs one line. He has already had to ask "Where is
 it?" once when a session answered a question about the tool without including it.
 
-**PUT THAT LINK AT THE END OF EVERY MESSAGE TO MATT.** His instruction, 2026-09-11: *"Resend the
-link to the room every time."* He plays it on a phone, from a chat thread, and scrolling back to
-find the URL is friction every single time. It costs one line. He has already had to ask "Where is
-it?" once when a session answered a question about the tool without including it.
-
 **Local:**
 ```
 node server.mjs                 # serves the repo root on http://localhost:8123
@@ -160,15 +155,16 @@ collide with a new part.
 |---|---|---|
 | `seg` | `a {x,y}`, `b {x,y}`, `r`, optional `e`, `mu` | a straight rail. `r` is its HALF thickness, so the drawn width is `2r`. It is a capsule: the ends are round |
 | `arc` | `c {x,y}`, `radius`, `a0`, `a1`, `r` | a curved rail. A real arc, not a polyline. `radius` is the centreline, `r` the half thickness, `a0`→`a1` the span, always counter-clockwise in the maths frame. It is a solid BAND: a ball can be inside the hole or outside the ring |
-| `circle` | `c {x,y}`, `r` | a post. Solid, no kick |
-| `bumper` | `c {x,y}`, `r`, optional `kick` | a pop bumper. Hits back at a fixed speed |
-| `sling` | `a {x,y}`, `b {x,y}`, `r`, optional `kick` | a slingshot. A `seg` that hits back |
+| `circle` | `c {x,y}`, `r` | a post. Solid, it does not hit back |
+| `bumper` | `c {x,y}`, `r`, optional `bounce` | a pop bumper. Hits back at a fixed speed |
+| `sling` | `a {x,y}`, `b {x,y}`, `r`, optional `bounce` | a slingshot. A `seg` that hits back |
 | `ribbon` | `pts [{x,y,z}]`, `w`, `r` | a RAMP. A lane with a centre path, a width and a height. It has NO footprint on the playfield: a ball on the floor passes underneath it |
 | `flipper` | `pivot {x,y}`, `len`, `r0`, `r1`, `restAng`, `endAng`, `side` | the bat. Tapered: `r0` at the pivot, `r1` at the tip. `side` is `'L'` or `'R'` and is what the input binds to. `restAng`/`endAng` are its two stops |
 | `drain` | `x`, `y`, `w`, `h` | a rectangle. A SENSOR, not a wall. A ball whose centre enters it is lost |
 
-`e` overrides the ball's restitution for that part, `mu` its friction, `kick` its outgoing speed.
-Omit them and the config default applies.
+`e` overrides the ball's restitution for that part, `mu` its friction, `bounce` its outgoing speed.
+Omit them and the config default applies. (`bounce` was called `kick` until 2026-09-11; `fromJSON`
+carries the old field across so a saved override is not lost.)
 
 **Adding a new kind is a five-place edit.** Miss one and the failure is silent:
 
@@ -194,6 +190,17 @@ else** — if you find a bare number in `physics.js` that a player could feel, i
 `TUNABLES` is the list the Tune panel's sliders are generated from. A constant with no row there
 cannot be tuned by hand; a row with no constant is a mistake.
 
+Each `TUNABLES` row also carries `kinds`, the shape kinds it governs, which is what lets the Tune
+tab show the two numbers belonging to the bumper you just tapped instead of all twenty two. **A new
+tunable needs a `kinds` entry, or it only ever appears in the Show all list.** A row with no `kinds`
+is table wide and belongs to no part.
+
+**Say what the number DOES.** Matt, 2026-09-11: *"'Slingshot kick' is so vague. Say bounce."* The
+vocabulary is BOUNCE for how fast a ball comes off something, GRIP for how much sideways hold a
+surface has, and PUSH for a gameplay lever that adds speed no real part would add. `FLIP_KICK`,
+`BUMPER_KICK` and `SLING_KICK` were all renamed then, and `cloneConfig` carries a tune saved under
+the old names across rather than dropping it.
+
 | constant | value | what it means |
 |---|---|---|
 | `TABLE_W`, `TABLE_H` | 0.515, 1.067 | a Williams-body playfield, in metres |
@@ -210,20 +217,21 @@ cannot be tuned by hand; a row with no constant is a mistake.
 | `FLIP_E` | 0.55 | flipper rubber at a dead stop |
 | `FLIP_E_FADE` | 0.16 | restitution lost per m/s of impact speed, the way real rubber softens |
 | `FLIP_E_MIN` | 0.05 | the floor, so the rubber is never a dead wall |
-| `FLIP_KICK` | 0 | a gameplay lever, not physics: how much faster than the bat's own surface the ball leaves. Left at 0 because the real fix made it worth 1 mm in 924 |
+| `FLIP_PUSH` | 0 | a gameplay lever, not physics: how much faster than the bat's own surface the ball leaves. Left at 0 because the real fix made it worth 1 mm in 924 |
 | `FLIP_MU` | 0.28 | the rubber's grip |
 | `CRADLE_DAMP` | 6.0 | velocity decay per second for a ball settling on a HELD bat that is AT ITS STOP |
 | `CRADLE_MAX` | 0.6 | and only below this speed. Above it the ball is in play, not settling |
-| `BUMPER_KICK` | 2.6 | the speed a ball LEAVES a pop bumper at |
+| `BUMPER_BOUNCE` | 2.6 | the speed a ball LEAVES a pop bumper at, in m/s, not a 0-to-1 ratio |
 | `BUMPER_TRIP` | 0.15 | approach speed needed to fire it, so a resting ball is not a machine gun |
 | `BUMPER_COOL` | 0.06 | seconds before the same bumper fires again |
-| `SLING_KICK` / `TRIP` / `COOL` | 3.0 / 0.25 / 0.06 | the same three for a slingshot |
+| `SLING_BOUNCE` / `TRIP` / `COOL` | 3.0 / 0.25 / 0.06 | the same three for a slingshot |
+| `RAMP_ENTER` / `RAMP_DRAG` / `RAMP_WALL_E` | 0.9 / 0.25 / 0.30 | speed needed at a ramp mouth, the lane's drag, and its side walls' bounce |
 | `DT` | 1/240 | one solver tick |
 | `MAX_EVENTS` | 64 | contacts resolved in one tick before the ball is called jammed |
 | `SKIN` | 2e-5 | metres of clearance left after a contact so the same one is not re-solved |
 | `FLIP_TIP_STEP` | 0.25 | how many ball radii a flipper tip may cross in one micro step |
 
-**A bumper's kick is an outgoing SPEED, not a bounciness.** A dead-slow roll into one comes out
+**A bumper's bounce is an outgoing SPEED, not a bounciness.** A dead-slow roll into one comes out
 just as fast, which is what a real solenoid does. Modelling it as a very bouncy wall gets it exactly
 backwards.
 
@@ -389,8 +397,17 @@ frame. The HUD top-left shows ball speed, and any jams, escapes or draw errors.
 fixed in table units once, which is about 8 pixels on a phone, and a finger is not 8 pixels.
 
 ### Tune
-Every constant in `TUNABLES` as a live slider, adjustable while a ball is in play. **Copy config**
-puts the whole block on the clipboard for pasting into `config.js`. **Back to defaults** restores.
+**Tap a part on the table and the panel filters to the numbers that govern it**, with the table-wide
+ones (tilt, speed cap, rolling drag, rest threshold) always underneath, because they govern it too.
+**Show all** puts the full list back, and tapping another part filters again. Nothing selected shows
+everything, grouped by kind.
+
+**A tap on this tab selects, it never moves.** A tap on a phone drags a few pixels and Edit's
+handler turns that into a move, so sharing it would nudge the geometry every time somebody asked for
+a slider, on the one tab where nobody is watching the table for changes.
+
+Sliders are live while a ball is in play. **Copy config** puts the whole block on the clipboard for
+pasting into `config.js`. **Back to defaults** restores.
 
 ### Check
 Runs the real checks on the table as it stands and draws the results **on the table as red marks**,
@@ -482,6 +499,8 @@ positions through `playable()` before you believe a word of its output.**
    per contact event.
 7. **Keep the animation loop's `finally`.** Anything else can break; the loop cannot.
 8. **Keep the `ResizeObserver`.** Without it, tapping is offset after every tab switch.
+8a. **A new tunable needs a `kinds` entry in `TUNABLES`**, or the Tune tab only ever shows it
+    under Show all. And say what it DOES: bounce, grip, push. Not kick.
 8b. **A new module under `pinball2/` goes in `MODULES` in `editor/index.html`**, or it is the one
     file in the graph a stale cache can still answer. Nothing fails loudly if you forget.
 9. **Watch the number that matters.** Chasing the flipper bug, four separate fixes moved the ball's

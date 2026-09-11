@@ -6,7 +6,7 @@
 // one of them by the IMPORT MAP that index.html installs before this file is fetched. See the
 // comment there: it is the fix for a build whose version chip read v782 while the table on screen
 // was hours old.
-import { CONFIG, TUNABLES, cloneConfig, gravity } from '../machines/testbox/config.js';
+import { CONFIG, TUNABLES, KIND_NAMES, cloneConfig, gravity } from '../machines/testbox/config.js';
 import { World } from '../machines/testbox/physics.js';
 import { makeTable, toJSON, fromJSON, newId } from '../machines/testbox/table.js';
 import { draw, fitView, toTable, toScreen } from '../machines/testbox/render.js';
@@ -45,6 +45,7 @@ const app = {
   repaired: 0,
   edited: false,
   staleTable: false,
+  tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
 };
 
 /** Every number in a table must be finite. A single NaN freezes the app (see `frame`), and the
@@ -330,6 +331,19 @@ canvas.addEventListener('pointerdown', (e) => {
   drag.moved = false;
   drag.last = p;
   drag.start = p;
+
+  // TUNE SELECTS, IT NEVER MOVES. Tapping a part here is how you ask for its sliders, and a tap on
+  // a phone always drags a few pixels, so sharing Edit's handler would quietly nudge the geometry
+  // every time - an edit nobody asked for, on a tab where nobody is watching the table for changes.
+  if (app.mode === 'tune') {
+    const pick = shapeAt(p);
+    drag.mode = null;                             // no handle, no move, no lasso on this tab
+    app.sel.clear();
+    if (pick) app.sel.add(pick.id);
+    app.tuneAll = false;                          // a new selection means "show me this one"
+    renderPanel();
+    return;
+  }
 
   for (const id of app.sel) {
     const sh = app.table.shapes.find((x) => x.id === id);
@@ -683,7 +697,7 @@ function renderEditPanel() {
     panel.append(numRow('Centre x', mm(sh.c.x), 1, (v) => { sh.c.x = v / 1000; }));
     panel.append(numRow('Centre y', mm(sh.c.y), 1, (v) => { sh.c.y = v / 1000; }));
     panel.append(numRow('Radius', mm(sh.r), 1, (v) => { sh.r = v / 1000; }));
-    panel.append(numRow('Kick (m/s)', sh.kick != null ? sh.kick : app.cfg.BUMPER_KICK, 0.1, (v) => { sh.kick = v; }));
+    panel.append(numRow('Bounce (m/s)', sh.bounce != null ? sh.bounce : app.cfg.BUMPER_BOUNCE, 0.1, (v) => { sh.bounce = v; }));
     panel.append(el('<div class="note">Kick is the speed the ball LEAVES at, not a bounciness. A slow roll into a bumper comes out just as fast, which is what a real one does.</div>'));
   } else if (sh.kind === 'sling') {
     panel.append(numRow('A x (mm)', mm(sh.a.x), 1, (v) => { sh.a.x = v / 1000; }));
@@ -691,7 +705,7 @@ function renderEditPanel() {
     panel.append(numRow('B x (mm)', mm(sh.b.x), 1, (v) => { sh.b.x = v / 1000; }));
     panel.append(numRow('B y (mm)', mm(sh.b.y), 1, (v) => { sh.b.y = v / 1000; }));
     panel.append(numRow('Thickness', mm(sh.r * 2), 0.5, (v) => { sh.r = v / 2000; }));
-    panel.append(numRow('Kick (m/s)', sh.kick != null ? sh.kick : app.cfg.SLING_KICK, 0.1, (v) => { sh.kick = v; }));
+    panel.append(numRow('Bounce (m/s)', sh.bounce != null ? sh.bounce : app.cfg.SLING_BOUNCE, 0.1, (v) => { sh.bounce = v; }));
   } else if (sh.kind === 'ribbon') {
     const zmax = Math.max(...sh.pts.map((q) => q.z || 0));
     panel.append(numRow('Lane width', mm(sh.w), 1, (v) => { sh.w = v / 1000; }));
@@ -738,20 +752,71 @@ function renderEditPanel() {
   }
 }
 
-function renderTunePanel() {
-  panel.append(el('<div class="note">Every physics constant this machine has. Drag while a ball is in play. Copy config writes the block for config.js.</div>'));
-  for (const t of TUNABLES) {
-    if (app.cfg[t.key] == null) continue;
-    const row = el(`<div class="row"><label>${t.label}</label><input type="range" min="${t.min}" max="${t.max}" step="${t.step}" value="${app.cfg[t.key]}"><span class="val">${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}</span></div>`);
-    const input = row.querySelector('input');
-    const out = row.querySelector('.val');
-    input.addEventListener('input', () => {
-      app.cfg[t.key] = parseFloat(input.value);
-      out.textContent = `${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}`;
-      save();
-    });
-    panel.append(row);
+/** The kinds of part currently selected, so the Tune tab can show the numbers that govern them.
+ *  Returns an empty array when nothing is selected, which means "show the lot". */
+function selectedKinds() {
+  const out = [];
+  for (const id of app.sel) {
+    const sh = app.table.shapes.find((x) => x.id === id);
+    if (sh && !out.includes(sh.kind)) out.push(sh.kind);
   }
+  return out;
+}
+
+function tuneRow(t) {
+  const row = el(`<div class="row"><label>${t.label}</label><input type="range" min="${t.min}" max="${t.max}" step="${t.step}" value="${app.cfg[t.key]}"><span class="val">${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}</span></div>`);
+  const input = row.querySelector('input');
+  const out = row.querySelector('.val');
+  input.addEventListener('input', () => {
+    app.cfg[t.key] = parseFloat(input.value);
+    out.textContent = `${app.cfg[t.key]}${t.unit ? ' ' + t.unit : ''}`;
+    save();
+  });
+  return row;
+}
+
+// TAP A PART AND TUNE THAT PART. Twenty two sliders in one list is a list you scroll rather than
+// read, and the three that matter for the thing you are looking at are somewhere in the middle of
+// it. Each TUNABLES row names the shape kinds it governs, so a selection filters the panel down to
+// them. Nothing is hidden permanently: Show all is one tap, and the table-wide numbers (tilt, speed
+// cap, rolling drag) are always at the bottom because they govern the part too.
+function renderTunePanel() {
+  const kinds = app.tuneAll ? [] : selectedKinds();
+  // Walls, arcs and posts share Bounce off walls and Grip on walls, so a row is rendered under the
+  // FIRST group that claims it. A slider that appears twice is two sliders as far as the eye is
+  // concerned, and dragging one would leave the other reading the old number.
+  const done = new Set();
+  const rowsFor = (k) => TUNABLES.filter((t) => t.kinds && t.kinds.includes(k) && app.cfg[t.key] != null && !done.has(t.key));
+  const wide = TUNABLES.filter((t) => !t.kinds && app.cfg[t.key] != null);
+
+  if (kinds.length) {
+    const names = kinds.map((k) => KIND_NAMES[k] || k);
+    const head = el('<div class="row"></div>');
+    head.append(el(`<label style="flex:1">${names.join(' + ')}</label>`));
+    const all = el('<button>Show all</button>');
+    all.onclick = () => { app.tuneAll = true; renderPanel(); };
+    head.append(all);
+    panel.append(head);
+    let any = 0;
+    for (const k of kinds) {
+      const rows = rowsFor(k);
+      if (kinds.length > 1 && rows.length) panel.append(el(`<div class="note">${KIND_NAMES[k] || k}</div>`));
+      for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); any++; }
+    }
+    if (!any) panel.append(el(`<div class="note">A ${names.join(' or ')} has no numbers of its own. The table-wide ones below still govern it.</div>`));
+    panel.append(el('<div class="note">The whole table</div>'));
+    for (const t of wide) panel.append(tuneRow(t));
+  } else {
+    panel.append(el('<div class="note">Tap a part on the table to tune just that part. Drag a slider while a ball is in play. Copy config writes the block for config.js.</div>'));
+    for (const t of wide) panel.append(tuneRow(t));
+    for (const k of Object.keys(KIND_NAMES)) {
+      const rows = rowsFor(k);
+      if (!rows.length) continue;
+      panel.append(el(`<div class="note">${KIND_NAMES[k]}</div>`));
+      for (const t of rows) { done.add(t.key); panel.append(tuneRow(t)); }
+    }
+  }
+
   const r = el('<div class="row"></div>');
   const copy = el('<button>Copy config</button>');
   copy.onclick = () => {
@@ -837,6 +902,7 @@ function setMode(m) {
   zones.classList.toggle('on', false);
   launchBtn.style.display = m === 'play' ? '' : 'none';
   if (m === 'play') { ensureWorld(); app.running = true; }
+  if (m === 'tune') app.tuneAll = false;          // arriving on Tune asks about whatever is selected
   app.marks = [];
   renderPanel();
 }
@@ -874,7 +940,7 @@ function frameBody(t) {
   const angles = {};
   if (app.world) for (const f of app.world.flippers) angles[f.def.id] = f.ang;
   if (app.world) {
-    for (const ev of app.world.events) if (ev.type === 'kick') app.hot[ev.id] = performance.now();
+    for (const ev of app.world.events) if (ev.type === 'bounce') app.hot[ev.id] = performance.now();
     app.world.events.length = 0;
   }
   const hot = {};
@@ -893,7 +959,7 @@ function frameBody(t) {
     hot,
   });
 
-  if (app.mode === 'edit') drawSelection();
+  if (app.mode === 'edit' || app.mode === 'tune') drawSelection();
 
   const b = app.world && app.world.balls.find((x) => x.alive);
   hud.textContent = app.mode === 'play'

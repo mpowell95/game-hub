@@ -210,6 +210,93 @@ await page.waitForTimeout(500);
 const forced = await page.evaluate(() => [...new Set(window.__pb2.table.shapes.map((s) => s.kind))].sort().join(','));
 ok(forced.includes('ribbon'), `?fresh loads the shipped table whatever is stored (${forced})`);
 
+// ------------------------------------------------------------------------ Tune tunes ONE part
+// Matt: "when I'm on the Tune tab, I should be able to select an object and see the tune objects for
+// only that object." Twenty two sliders in one list is a list you scroll rather than read.
+//
+// Tapping on this tab must NEVER move the part. A tap on a phone drags a few pixels, and Edit's
+// handler turns that into a move: on a tab where nobody is watching the table, the geometry would
+// drift under the person tuning it.
+await page.click('#tab-tune');
+await page.waitForTimeout(300);
+const tuneAll = await page.evaluate(() => document.querySelectorAll('#panel input[type=range]').length);
+
+const tapKind = async (kind) => page.evaluate(async (k) => {
+  const a = window.__pb2;
+  const sh = a.table.shapes.find((x) => x.kind === k);
+  const c = k === 'bumper' ? sh.c
+    : k === 'sling' ? { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 }
+      : { x: sh.pivot.x + sh.len * 0.5 * Math.cos(sh.restAng), y: sh.pivot.y + sh.len * 0.5 * Math.sin(sh.restAng) };
+  const before = JSON.stringify(sh);
+  const v = a.view;
+  const s = { x: v.ox + (c.x * v.s + v.px) * v.zoom, y: v.oy + (c.y * v.s + v.py) * v.zoom };
+  const canvas = document.getElementById('c');
+  const r = canvas.getBoundingClientRect();
+  // down, a real finger's worth of drift, then up
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, bubbles: true, clientX: r.left + s.x, clientY: r.top + s.y }));
+  canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, bubbles: true, clientX: r.left + s.x + 6, clientY: r.top + s.y + 6 }));
+  canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true, clientX: r.left + s.x + 6, clientY: r.top + s.y + 6 }));
+  await new Promise((q) => setTimeout(q, 60));
+  return {
+    selected: a.sel.has(sh.id),
+    moved: JSON.stringify(a.table.shapes.find((x) => x.id === sh.id)) !== before,
+    labels: [...document.querySelectorAll('#panel .row label')].map((n) => n.textContent),
+    sliders: document.querySelectorAll('#panel input[type=range]').length,
+  };
+}, kind);
+
+const bump = await tapKind('bumper');
+ok(bump.selected, 'tapping a bumper on the Tune tab selects it');
+ok(!bump.moved, 'and tapping it does NOT move it, even with a finger that drifts');
+ok(bump.sliders < tuneAll, `the panel is filtered to that part (${bump.sliders} sliders, was ${tuneAll})`);
+ok(bump.labels.some((l) => /Bumper bounce/.test(l)) && !bump.labels.some((l) => /Slingshot|Rubber|Ramp/.test(l)),
+  'and it shows the bumper numbers and nobody else\'s', bump.labels.join(' | '));
+ok(bump.labels.some((l) => /Tilt/.test(l)), 'the table-wide numbers are still there, because they govern it too');
+
+const sling = await tapKind('sling');
+ok(sling.labels.some((l) => /Slingshot bounce/.test(l)) && !sling.labels.some((l) => /Bumper/.test(l)),
+  'tapping a slingshot swaps the panel to the slingshot numbers', sling.labels.join(' | '));
+
+const flip = await tapKind('flipper');
+ok(flip.labels.some((l) => /Rubber bounce/.test(l)), 'and a flipper shows the flipper numbers', flip.labels.join(' | '));
+
+// "Kick" was Matt's actual complaint, so the word is the assertion.
+const anyKick = await page.evaluate(() => document.getElementById('panel').textContent);
+ok(!/kick/i.test(anyKick), 'the word "kick" appears nowhere in the Tune panel');
+
+const shown = await page.evaluate(async () => {
+  [...document.querySelectorAll('#panel button')].find((b) => b.textContent === 'Show all').click();
+  await new Promise((q) => setTimeout(q, 60));
+  return document.querySelectorAll('#panel input[type=range]').length;
+});
+ok(shown === tuneAll, `Show all puts every slider back (${shown} of ${tuneAll})`);
+
+// A slider rendered twice is two sliders as far as the eye is concerned, and dragging one leaves
+// the other reading the old number. Bounce off walls belongs to walls, arcs AND posts.
+const dupes = await page.evaluate(() => {
+  const seen = {};
+  for (const n of document.querySelectorAll('#panel .row label')) seen[n.textContent] = (seen[n.textContent] || 0) + 1;
+  return Object.keys(seen).filter((k) => seen[k] > 1);
+});
+ok(dupes.length === 0, 'no slider is rendered twice in the full list', dupes.join(', '));
+
+// Every row must name a constant that exists, or it is a slider that does nothing.
+const orphans = await page.evaluate(async () => {
+  const m = await import('../machines/testbox/config.js');
+  return m.TUNABLES.filter((t) => !(t.key in m.CONFIG)).map((t) => t.key);
+});
+ok(orphans.length === 0, 'every TUNABLES row names a real constant', orphans.join(', '));
+
+// A tune stored before the rename still uses SLING_KICK. Dropping a number somebody dialled in by
+// hand because a label got clearer would be the tool losing work.
+const carried = await page.evaluate(async () => {
+  const m = await import('../machines/testbox/config.js');
+  const c = m.cloneConfig({ SLING_KICK: 4.4, BUMPER_KICK: 1.2, FLIP_KICK: 0.3 });
+  return { s: c.SLING_BOUNCE, b: c.BUMPER_BOUNCE, f: c.FLIP_PUSH };
+});
+ok(carried.s === 4.4 && carried.b === 1.2 && carried.f === 0.3,
+  'a tune saved under the old names is carried across, not dropped', JSON.stringify(carried));
+
 // ------------------------------------------------------------ [KNOWN-BUG PROBE] a stale module
 // Matt, on a build whose version chip read v782: a screenshot of the bare box from hours earlier,
 // with no bumpers, no slingshots and no ramp. The chip reads the service worker and was telling the

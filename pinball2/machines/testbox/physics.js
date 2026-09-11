@@ -414,7 +414,7 @@ export class World {
           if (hit.flipper && !hit.flipper.atStop()) {
             const un = dot(u, hit.n);
             if (un > 0) {
-              const want = (1 + cfg.FLIP_KICK) * un;
+              const want = (1 + cfg.FLIP_PUSH) * un;
               const have = dot(b.v, hit.n);
               if (have < want) b.v = add(b.v, mul(hit.n, want - have));
             }
@@ -681,7 +681,7 @@ export class World {
 
     if (resting) b.resting = true;   // rolling drag is charged per SECOND in micro(), not per contact
 
-    // THE RUBBER KICK, and it is a gameplay model rather than a claim about rigid bodies.
+    // THE RUBBER PUSH, and it is a gameplay model rather than a claim about rigid bodies.
     //
     // The bat creeps into the ball a fraction of a millimetre per micro step, so a flip is not one
     // impact but twenty tiny ones, and twenty tiny impulses leave the ball at EXACTLY the bat's
@@ -692,12 +692,12 @@ export class World {
     // cannot fix it, because the tie is exact and (1 + e) times a vanishing approach is vanishing.
     //
     // So a driven bat guarantees the ball leaves faster than the bat's own surface. One constant,
-    // on a slider, and the ball's angular rate is then (1 + FLIP_KICK) times the bat's, which is
+    // on a slider, and the ball's angular rate is then (1 + FLIP_PUSH) times the bat's, which is
     // the condition for it to get away.
     if (isFlip) {
       const un = dot(surfVel, n);
       if (un > 0) {
-        const want = (1 + cfg.FLIP_KICK) * un;
+        const want = (1 + cfg.FLIP_PUSH) * un;
         const have = dot(nv, n);
         if (have < want) nv = add(nv, mul(n, want - have));
       }
@@ -708,20 +708,20 @@ export class World {
     // Both are solenoid driven on a real machine: the ring or the arm fires and the ball leaves at
     // the coil's speed, which is why a dead-slow roll into a bumper still comes out fast. Modelling
     // them as very bouncy walls gets that backwards - it makes a hard hit huge and a soft one
-    // nothing. So the kick is a fixed OUTGOING SPEED along the contact normal, floored rather than
+    // nothing. So the bounce is a fixed OUTGOING SPEED along the contact normal, floored rather than
     // added, and it needs a minimum approach to fire so a ball resting against one is not a machine
     // gun. The cooldown is the other half of that.
     if (shape.kind === 'bumper' || shape.kind === 'sling') {
       const isB = shape.kind === 'bumper';
       const trip = isB ? cfg.BUMPER_TRIP : cfg.SLING_TRIP;
       const cool = isB ? cfg.BUMPER_COOL : cfg.SLING_COOL;
-      const kick = shape.kick != null ? shape.kick : (isB ? cfg.BUMPER_KICK : cfg.SLING_KICK);
+      const bounce = shape.bounce != null ? shape.bounce : (isB ? cfg.BUMPER_BOUNCE : cfg.SLING_BOUNCE);
       const last = this.fired.get(shape.id);
       if (-vn >= trip && (last == null || this.time - last >= cool)) {
         this.fired.set(shape.id, this.time);
         const out = dot(nv, n);
-        if (out < kick) nv = add(nv, mul(n, kick - out));
-        this.events.push({ type: 'kick', id: shape.id, at: { x: b.p.x, y: b.p.y } });
+        if (out < bounce) nv = add(nv, mul(n, bounce - out));
+        this.events.push({ type: 'bounce', id: shape.id, at: { x: b.p.x, y: b.p.y } });
       }
     }
 

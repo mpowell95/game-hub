@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v785';
+const CACHE = 'game-hub-v786';
 
 const ASSETS = [
   './',
@@ -646,13 +646,13 @@ const REST_MANIFEST = {
   './pinball/design/layout.js': 'd1860f5854',
   './pinball/design/editor.html': '5cb2244282',
   './pinball2/index.html': '6d09047aef',
-  './pinball2/editor/index.html': '5319ca8858',
-  './pinball2/editor/editor.js': '3a5a9f87d8',
-  './pinball2/machines/testbox/config.js': '1bd9ea851a',
-  './pinball2/machines/testbox/physics.js': 'a55c9fd3e7',
-  './pinball2/machines/testbox/table.js': 'fe71c52954',
+  './pinball2/editor/index.html': '8d07acf62d',
+  './pinball2/editor/editor.js': 'cc80de4ae4',
+  './pinball2/machines/testbox/config.js': '8608551675',
+  './pinball2/machines/testbox/physics.js': '20cbe81b16',
+  './pinball2/machines/testbox/table.js': '17790ae63c',
   './pinball2/machines/testbox/render.js': '329e654bb9',
-  './pinball2/probes/checks.js': 'fb6724f78d',
+  './pinball2/probes/checks.js': 'f8c4059c88',
   './pinball/js/vendor/three.module.min.js': '86bcee248b',
   './pinball/js/vendor/three.core.min.js': '05b2609338',
   './pinball/js/store.js': 'ee5077e114',

@@ -34,7 +34,9 @@
   .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #21180a; }
   #stage { position: relative; flex: 1; min-height: 0; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
-  #hud { position: absolute; left: 8px; top: 8px; font-size: 11px; color: var(--dim); background: rgba(8,14,26,.66); padding: 4px 7px; border-radius: 6px; pointer-events: none; white-space: pre; }
+  /* pre-wrap, not pre: the line naming what is on the table runs past the right edge of a phone
+     otherwise, and a line you cannot finish reading is not a line that answers anything. */
+  #hud { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); font-size: 11px; color: var(--dim); background: rgba(8,14,26,.66); padding: 4px 7px; border-radius: 6px; pointer-events: none; white-space: pre-wrap; }
   #panel { flex: none; max-height: 46%; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); background: var(--panel); padding: 8px; }
   #panel.hidden { display: none; }
   .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }

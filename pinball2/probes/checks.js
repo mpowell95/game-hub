@@ -265,7 +265,7 @@ export function escapeProbe(table, cfg, opts) {
  *  A ball is placed at rest on the bat, the flipper is tapped, and the probe reports how far UP the
  *  table the ball gets. Travel is the number a player feels and it is the only one that stayed
  *  honest: while this was broken, a faster flip, bouncier rubber, a higher restitution floor and an
- *  explicit kick all moved the ball's top SPEED from 1.8 to 6.4 m/s and not one of them moved how
+ *  explicit push all moved the ball's top SPEED from 1.8 to 6.4 m/s and not one of them moved how
  *  far it went. Four candidate fixes were rejected on that basis before the real cause was found.
  *
  *  Born red at 56 / 53 / 922 / 921 mm: only the outer third of the bat threw the ball at all. */
