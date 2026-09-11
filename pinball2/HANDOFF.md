@@ -43,6 +43,7 @@ pinball2/
   probes/
     checks.js             every check, importable by both the editor and node
     run.mjs               the node CLI for those checks
+    test-checks.mjs       headless tests for the checks themselves (the gap rule's maths)
     test-editor.mjs       browser tests for the TOOL itself
 ```
 
@@ -73,6 +74,7 @@ A plain file:// open will NOT work. ES modules need real HTTP.
 ```
 node pinball2/probes/run.mjs            # all of them, about 95 seconds
 node pinball2/probes/run.mjs power      # one: drain,tunnel,flip,power,ramp,escape,gaps,rests
+node pinball2/probes/test-checks.mjs    # are the checks themselves right? headless, under a second
 node pinball2/probes/test-editor.mjs    # the browser tests; needs `node server.mjs` running
 ```
 `test-editor.mjs` SKIPs cleanly when playwright-core or Chromium is missing. That is not a pass.
@@ -485,6 +487,23 @@ pinball's docs record four soaks passing a table that was unplayable in thirty s
 | `checkGaps` | any space between two parts that is near ONE BALL wide, which is where a ball wedges | 0 ambiguous |
 | `rampProbe` | the four ramp rules above, structurally, then a ball at the mouth across the whole speed range: does it ever vanish, does its position ever JUMP further than it travelled, does a weak shot roll back out, does a strong one get all the way round | 12 shots, 0 problems |
 | `restSweep` | drop a ball at rest on a grid. Did it reach the drain? | 2781 drops, 0 dead stops |
+
+### The gap rule, and the contract inside it
+
+`checkGaps` flags any clearance between **0.75 and 1.15 ball widths** (20.3mm to 31.1mm against a
+27mm ball). Under that is SHUT, over it is OPEN, and there is no third option: design a layout so
+every clearance is clearly one or the other.
+
+It is built on `surfacePoints`, whose contract is **CENTRELINE points, never surface points**,
+because `checkGaps` subtracts the shape's own radius afterwards. A circle's centreline is its
+centre. Returning its surface subtracted the radius twice and made every clearance next to a post
+read 9mm short and next to a bumper 25mm short - which both failed good tables AND hid real
+one-ball gaps as "overlaps". Fixed 2026-09-11; `test-checks.mjs` pins it.
+
+**A legally shut gap can still have a wedge sitting on top of it.** What holds a ball is the V
+above a join, not the join. A post welded to a rail, or a rail leaning into an arc, passes the gap
+rule and still parks balls - `restSweep` is the check that finds those, and it is the one to run
+after moving anything.
 
 ### `playable()` underpins the sweeps, and three drafts got it wrong
 
