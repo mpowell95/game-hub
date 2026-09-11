@@ -568,6 +568,42 @@ another one, off the visible area, or two millimetres wide.
   under your finger. A group that is open BECAUSE something is selected still wins over the
   remembered state, so Tune's tapped-part group keeps opening itself.
 
+### Tables this build SHIPS (2026-09-11)
+
+`Default` was never the only one it could be. `BUILTINS` in `editor.js` maps a name to a factory,
+and every entry behaves exactly like Default and for the same reason: **never stored, so current by
+construction**, editing one is a working copy written nowhere, and Save as is how you keep one under
+your own name. `machines/testbox/tables/boardwalk.js` is the first.
+
+- **They are not seeded into the library on first run.** That is the obvious alternative and it is
+  the stale-table bug rebuilt from scratch: a device that seeded this build's BOARDWALK would still
+  be showing you this build's BOARDWALK in December.
+- **Selector values are prefixed** (`builtin:BOARDWALK`), so a built-in and a save can share a name
+  without either shadowing the other, and `pinball2.editor.current` remembers which you were on.
+- `app.tableName` still means "the LIBRARY save being edited, or null", which is what keeps `save()`
+  from autosaving into a shipped table. `app.builtin` says WHICH shipped table when it is null.
+- **`probes/run.mjs` takes `--table <name>`.** Every table this build ships has to pass the probes,
+  not just the box: a built-in is code, and a file in this repo that no probe looks at is a file
+  that rots.
+
+**BOARDWALK's probe results as shipped** (`node pinball2/probes/run.mjs all --table boardwalk`,
+~260 s): gaps OK (0 ambiguous, 19 deliberate overlaps), rest sweep OK (1588 drops, 0 dead stops),
+escape probe OK (40,536 balls fired hard, 0 left), flipper push OK (19,484 balls, 0 left), free fall
+0.1% off analytic. **Three are red and they are not the same kind of thing:**
+
+1. **flipper power: 4 of 8 flips moved the ball under 300 mm.** Real, and it is TUNING - the bat
+   angles and the config's push against this table's geometry. Matt asked to do this half himself.
+2. **ramps: r42 has no shot weak enough to roll back out of its mouth, and none at all at the low
+   end.** Also tuning: the mouth's entry angle and the ramp's rise.
+3. **tunnel probe: 6 of 2325.** This one is most likely the PROBE, not the table. `escaped` is
+   `!play.near(b.p)`, and `playable()` is a 3 mm floor flood needing `BALL_R` clearance - on lanes
+   deliberately built at the gap rule's 1.15-ball edge, the band of legal ball CENTRES is about
+   4 mm wide, which a 3 mm grid can miss entirely. Measured: a ball put at rest at (0.358, 0.830),
+   one of the reported "OFF TABLE" endpoints, **rolls to the drain in under ten seconds**. Nothing
+   is escaping. Before treating it as a table defect, fix the question: tunnelling is "inside a
+   solid", and "off the table" should mean outside the table rectangle, neither of which needs the
+   reachability approximation. The same mask is what `Show reachable` draws, so it is worth doing.
+
 ### Turn and scale (2026-09-11)
 
 Handles reshape ONE part. These reshape a SELECTION, which is what the prefab library made

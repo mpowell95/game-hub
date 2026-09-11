@@ -93,7 +93,7 @@ if (offenders.length) {
 // sibling ../Parchís/ repo; only its index.html lives in this repo and is already precached.
 const SCAN_DIRS = [
   'connect-four', 'chinchon', 'escoba', 'filler', 'mancala', 'nuts-bolts', 'ball-run', 'tic-tac-toe',
-  'js', 'profile', 'css', 'golf',
+  'js', 'profile', 'css', 'golf', 'pinball2',
 ];
 const SCAN_EXT = new Set(['.js', '.css', '.html']);
 

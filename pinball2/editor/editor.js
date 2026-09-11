@@ -9,6 +9,7 @@
 import { CONFIG, TUNABLES, KIND_NAMES, cloneConfig, gravity } from '../machines/testbox/config.js';
 import { World } from '../machines/testbox/physics.js';
 import { makeTable, toJSON, fromJSON, newId } from '../machines/testbox/table.js';
+import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
 import { draw, fitView, toTable, toScreen } from '../machines/testbox/render.js';
 import { playable, distToShape, checkGaps, tunnelProbe, restSweep, drainTime } from '../probes/checks.js';
 
@@ -53,7 +54,8 @@ const app = {
   // COPY of the shapes rather than a name to look up, because the turn and scale tools act on it
   // before it lands and a stored prefab must not change when you turn the one you are about to drop.
   placing: null,
-  tableName: null,        // null is Default: the table this BUILD ships, never stored
+  tableName: null,        // the LIBRARY save being edited, or null for a table this build ships
+  builtin: null,          // which shipped table, when tableName is null: null means Default
   migrated: null,
   tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
   xstep: 2,                // index into XFORM_STEPS: how far one tap of the turn/scale row goes
@@ -125,6 +127,21 @@ const LIB = 'pinball2.editor.tables';       // { name: { table, cfg, savedAt } }
 const CURRENT = 'pinball2.editor.current';  // the name last selected, or absent for Default
 const MIGRATED = 'pinball2.editor.migrated';
 
+// TABLES THIS BUILD SHIPS. Default is one of them; BOARDWALK is the second, and there will be more.
+// They behave EXACTLY like Default and for the same reason: never stored, so current by
+// construction, and editing one is a working copy written nowhere until Save as gives it a name.
+//
+// They are NOT seeded into the library on first run, which is the obvious alternative and is the
+// stale-table bug rebuilt from scratch: a device that seeded v794's BOARDWALK would still be
+// showing you v794's BOARDWALK in December.
+//
+// Selector values are prefixed so a built-in and a save can never collide. A person is free to have
+// their own table called BOARDWALK; it is a different entry and neither shadows the other.
+const BUILTIN = 'builtin:';
+const BUILTINS = { BOARDWALK: makeBoardwalk };
+
+const builtinOf = (v) => (v && v.startsWith(BUILTIN) && BUILTINS[v.slice(BUILTIN.length)] ? v.slice(BUILTIN.length) : null);
+
 function readLib() {
   try {
     const d = JSON.parse(localStorage.getItem(LIB) || '{}');
@@ -173,20 +190,31 @@ function deleteTable(name) {
  *  replaced, and it is always something a person asked for. */
 function selectTable(name) {
   const d = readLib();
-  if (name && d[name] && d[name].table) {
+  const bi = builtinOf(name);
+  if (bi) {
+    app.table = BUILTINS[bi]();                   // a table this build ships, never stored
+    app.cfg = cloneConfig();
+    app.tableName = null;                         // so `save()` writes nothing: this is a copy
+    app.builtin = bi;
+  } else if (name && d[name] && d[name].table) {
     const t = fromJSON(d[name].table);
     app.repaired = repairTable(t);                // an already poisoned save heals on this load
     app.table = t;
     app.cfg = cleanCfg(d[name].cfg);
     app.tableName = name;
+    app.builtin = null;
   } else {
     app.table = makeTable();                      // the build's own table, never stored
     app.cfg = cloneConfig();
     app.tableName = null;
+    app.builtin = null;
     name = null;
   }
   try {
-    if (name) localStorage.setItem(CURRENT, name); else localStorage.removeItem(CURRENT);
+    // A built-in is remembered by its prefixed value, so reopening the tool puts you back on the
+    // table you were looking at. It still reloads from CODE, so it is still this build's copy.
+    const keep = bi ? BUILTIN + bi : name;
+    if (keep) localStorage.setItem(CURRENT, keep); else localStorage.removeItem(CURRENT);
   } catch (e) {}
   app.sel.clear();
   app.undo.length = 0;
@@ -231,7 +259,7 @@ function load() {
   if (/[?&]fresh\b/.test(location.search)) { selectTable(null); return; }
   let want = null;
   try { want = localStorage.getItem(CURRENT); } catch (e) {}
-  selectTable(want && readLib()[want] ? want : null);
+  selectTable(builtinOf(want) || (want && readLib()[want]) ? want : null);
 }
 
 function pushUndo() {
@@ -1110,13 +1138,19 @@ function syncTableSel() {
   d.value = '';
   d.textContent = 'Default (this build)';
   tableSel.append(d);
+  for (const n of Object.keys(BUILTINS)) {
+    const o = document.createElement('option');
+    o.value = BUILTIN + n;
+    o.textContent = `${n} (this build)`;
+    tableSel.append(o);
+  }
   for (const n of names) {
     const o = document.createElement('option');
     o.value = n;
     o.textContent = n;
     tableSel.append(o);
   }
-  tableSel.value = app.tableName || '';
+  tableSel.value = app.builtin ? BUILTIN + app.builtin : (app.tableName || '');
 }
 
 if (tableSel) {
@@ -1285,7 +1319,10 @@ function renderEditPanel() {
     if (app.migrated) {
       panel.append(el(`<div class="note">Your previous edits are kept as <b>${esc(app.migrated)}</b> in the table list. This is the table the current build ships.</div>`));
     }
-    panel.append(el(`<div class="note">${app.tableName ? `Editing <b>${esc(app.tableName)}</b>. Changes are saved to it as you work.` : 'Editing <b>Default</b>, the table this build ships. Changes here are a working copy and are NOT kept: use Save as to name one.'}</div>`));
+    const shipped = app.builtin || 'Default';
+    panel.append(el(`<div class="note">${app.tableName
+      ? `Editing <b>${esc(app.tableName)}</b>. Changes are saved to it as you work.`
+      : `Editing <b>${esc(shipped)}</b>, a table this build ships. Changes here are a working copy and are NOT kept: use Save as to name one.`}</div>`));
 
     const r1 = el('<div class="row"></div>');
     const sa = el('<button class="primary">Save as...</button>');
@@ -1311,9 +1348,9 @@ function renderEditPanel() {
     const r2 = el('<div class="row"></div>');
     const revert = el('<button>Revert</button>');
     revert.onclick = () => {
-      const what = app.tableName ? `"${app.tableName}" as last saved` : "the build's Default";
+      const what = app.tableName ? `"${app.tableName}" as last saved` : `the build's ${shipped}`;
       if (!confirm(`Throw away the changes since you last loaded, and reload ${what}?`)) return;
-      selectTable(app.tableName);
+      selectTable(app.builtin ? BUILTIN + app.builtin : app.tableName);
     };
     const exp = el('<button>Export JSON</button>');
     exp.onclick = () => {

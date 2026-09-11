@@ -185,6 +185,60 @@ ok(def.name === null && def.kinds.includes('ribbon'),
 ok(def.options[0].startsWith('Default') && def.options.includes('Old thing'),
   `the selector lists Default first, then every saved name (${def.options.join(' | ')})`);
 
+// 1b. TABLES THIS BUILD SHIPS. Default is one; BOARDWALK is the second. They behave exactly like
+//     Default and for the same reason - never stored, so current by construction. Seeding one into
+//     the library on first run is the obvious alternative and is the stale-table bug rebuilt: a
+//     device that seeded this build's copy would still be showing it in December.
+const builtin = await page.evaluate(async (k) => {
+  const sel = document.getElementById('tablesel');
+  const opt = [...sel.options].find((o) => o.value === 'builtin:BOARDWALK');
+  if (!opt) return { found: false, options: [...sel.options].map((o) => o.value) };
+  sel.value = 'builtin:BOARDWALK';
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await new Promise((q) => setTimeout(q, 400));
+  const a = window.__pb2;
+  const kinds = {};
+  for (const s of a.table.shapes) kinds[s.kind] = (kinds[s.kind] || 0) + 1;
+  const libBefore = JSON.parse(localStorage.getItem(k) || '{}');
+  const parts = a.table.shapes.length;
+  // edit it, the same way a person would
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 150));
+  [...document.querySelectorAll('.palette button')].find((x) => x.textContent.trim() === 'Post').click();
+  await new Promise((q) => setTimeout(q, 200));
+  return {
+    found: true, label: opt.textContent, name: a.table.name, parts, kinds,
+    tableName: a.tableName, builtin: a.builtin,
+    libSame: JSON.stringify(libBefore) === localStorage.getItem(k),
+    current: localStorage.getItem('pinball2.editor.current'),
+  };
+}, LIBKEY);
+ok(builtin.found, 'BOARDWALK is in the table selector', JSON.stringify(builtin.options));
+ok(builtin.name === 'BOARDWALK' && builtin.parts === 44,
+  `and picking it loads the real table (${builtin.name}, ${builtin.parts} parts)`);
+ok(builtin.kinds.bumper === 4 && builtin.kinds.ribbon === 2 && builtin.kinds.flipper === 2,
+  `with the parts it was designed with (${Object.entries(builtin.kinds || {}).map(([k2, v]) => `${v} ${k2}`).join(', ')})`);
+ok(builtin.tableName === null && builtin.builtin === 'BOARDWALK',
+  'it is a shipped table, not a save: nothing autosaves into it');
+ok(builtin.libSame, 'editing it writes nothing to the library, exactly like Default');
+ok(builtin.current === 'builtin:BOARDWALK', `and it is remembered by a prefixed key (${builtin.current})`);
+
+// A reload puts you back on it, FROM CODE. That is the difference from a seeded save: what comes
+// back is this build's copy, not the copy some earlier build left on the phone.
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const biReopened = await page.evaluate(() => ({
+  builtin: window.__pb2.builtin, name: window.__pb2.table.name, parts: window.__pb2.table.shapes.length,
+}));
+ok(biReopened.builtin === 'BOARDWALK' && biReopened.parts === 44,
+  `reopening lands back on it, freshly from code (${biReopened.name}, ${biReopened.parts} parts, the edit gone)`);
+await page.evaluate(() => {
+  const sel = document.getElementById('tablesel');
+  sel.value = '';
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+});
+await page.waitForTimeout(400);
+
 // 2. EDITING DEFAULT IS A WORKING COPY and is never written. This is the line the whole redesign
 //    turns on: Default cannot be silently overwritten, so it cannot go stale.
 // A REAL edit, through the palette, so the whole save path runs exactly as it does for a person.
@@ -226,6 +280,16 @@ const saved = await page.evaluate(async (k) => {
 }, LIBKEY);
 ok(saved.found, 'the Table group has a Save as button');
 ok(saved.name === 'BOARDWALK' && saved.inLib && saved.has, 'Save as stores the working table under that name', JSON.stringify(saved));
+
+// AND IT DOES NOT SHADOW THE BUILT-IN OF THE SAME NAME. The selector's values are prefixed exactly
+// so a person can keep their own table called BOARDWALK without losing the one this build ships.
+const bothNames = await page.evaluate(() => {
+  const sel = document.getElementById('tablesel');
+  return { values: [...sel.options].map((o) => o.value), on: sel.value };
+});
+ok(bothNames.values.includes('BOARDWALK') && bothNames.values.includes('builtin:BOARDWALK'),
+  `a save and a built-in can share a name (${bothNames.values.join(' | ')})`);
+ok(bothNames.on === 'BOARDWALK', `and the selector is on the SAVE you just made, not the built-in (${bothNames.on})`);
 
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
@@ -815,15 +879,26 @@ const barGate = await page.evaluate(async () => {
   document.getElementById('tab-play').click();
   document.getElementById('tab-edit').click();
   await new Promise((q) => setTimeout(q, 120));
-  const empty = document.getElementById('obxform').hidden;
+  // COMPUTED STYLE, not the `hidden` property. `.obrow { display: flex }` is a class selector and
+  // beats the UA's `[hidden] { display: none }`, so the first version of this row set hidden
+  // correctly and stayed on screen anyway, dead buttons and all, in Play mode.
+  const shown = (id) => getComputedStyle(document.getElementById(id)).display !== 'none';
+  const empty = shown('obxform');
   a.sel = new Set([a.table.shapes.find((s) => s.kind === 'sling').id]);
   document.getElementById('tab-play').click();
   document.getElementById('tab-edit').click();
   await new Promise((q) => setTimeout(q, 120));
-  return { empty, withSel: document.getElementById('obxform').hidden };
+  const withSel = shown('obxform');
+  document.getElementById('tab-play').click();
+  await new Promise((q) => setTimeout(q, 120));
+  const inPlay = shown('obxform');
+  document.getElementById('tab-edit').click();
+  await new Promise((q) => setTimeout(q, 120));
+  return { empty, withSel, inPlay };
 });
-ok(barGate.empty && !barGate.withSel,
+ok(!barGate.empty && barGate.withSel,
   'the turn/scale row appears only when there is something to turn');
+ok(!barGate.inPlay, 'and it is really gone in Play mode, not just marked hidden');
 
 // ONE tap is ONE step, in the direction the glyph shows. y runs DOWN the table, so clockwise to look
 // at is a POSITIVE angle in the data: get that backwards and every button turns the wrong way.
@@ -1093,7 +1168,7 @@ await vpage.goto(URL, { waitUntil: 'networkidle' });
 await vpage.waitForTimeout(400);
 const build = await vpage.evaluate(() => fetch('../../version.json', { cache: 'no-store' }).then((r) => r.json()).then((j) => j.cache));
 const WANT = ['editor/editor.js', 'machines/testbox/config.js', 'machines/testbox/physics.js',
-  'machines/testbox/table.js', 'machines/testbox/render.js', 'probes/checks.js'];
+  'machines/testbox/table.js', 'machines/testbox/tables/boardwalk.js', 'machines/testbox/render.js', 'probes/checks.js'];
 const missing = WANT.filter((m) => !seen.some((u) => u === `${m}?v=${build}`));
 ok(missing.length === 0, `every module is fetched with the build in its URL (${seen.length} requests, ${build})`,
   missing.length ? 'unversioned or absent: ' + missing.join(', ') + '\n      saw: ' + seen.join(', ') : '');

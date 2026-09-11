@@ -83,6 +83,9 @@
      unreachable the moment you switched to Tune to see what a slider did. */
   #objbar { grid-area: objbar; display: flex; flex-direction: column; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--line); background: #101a2e; }
   .obrow { display: flex; gap: 4px; overflow-x: auto; }
+  /* A class selector beats the UA's `[hidden] { display: none }`, so without this the turn/scale row
+     stays on screen in Play mode with every button dead. */
+  .obrow[hidden] { display: none; }
   #objbar button { flex: 1 0 auto; min-height: 34px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
   /* The turn and scale row only exists while there is something to turn or scale, so the bar is one
      row of five buttons the rest of the time rather than two rows of mostly dead ones. */
@@ -250,6 +253,7 @@
     'machines/testbox/config.js',
     'machines/testbox/physics.js',
     'machines/testbox/table.js',
+    'machines/testbox/tables/boardwalk.js',
     'machines/testbox/render.js',
     'probes/checks.js',
   ];

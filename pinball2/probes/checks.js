@@ -538,8 +538,14 @@ export function restSweep(table, cfg, opts) {
         for (const o of table.shapes) {
           if (isSolid(o) && distToShape(o, b.p) < cfg.BALL_R + 0.002) on = o.id;
         }
-        const rec = { from: p, at: { x: b.p.x, y: b.p.y }, speed, on };
-        if (speed < 0.05) stuck.push(rec); else alive.push(rec);
+        const rec = { from: p, at: { x: b.p.x, y: b.p.y }, speed, on, ribbon: b.ribbon || null };
+        // SOMETHING HAS TO BE HOLDING IT. Gravity along this playfield is a constant 1.111 m/s2, so
+        // a ball touching no solid and riding no ramp is accelerating by definition: it is at the
+        // apex of an arc, not at rest, and six seconds of clock happened to end there. Reported as
+        // dead stops, those were two coordinates on BOARDWALK that a re-drop from the same spot
+        // rolled straight out of - a probe crying wolf is a probe whose FAIL line stops being read.
+        const held = on || b.ribbon;
+        if (speed < 0.05 && held) stuck.push(rec); else alive.push(rec);
       }
     }
   }
