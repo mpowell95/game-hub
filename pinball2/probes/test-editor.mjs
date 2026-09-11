@@ -271,23 +271,24 @@ ok(shortened.found && shortened.angMoved < 0.01 && shortened.aMoved < 0.01,
   'and it keeps its angle and its anchored end exactly where they were', JSON.stringify(shortened));
 
 // 2. ZOOM. There was no way to zoom on a phone at all: the wheel handler is a desktop control.
+// The buttons live in the TOP BAR, not in a panel: they were in the Edit panel, which meant you
+// could not zoom while playing or while tuning, and the dock is exactly where a thumb is not.
 const zoomed = await page.evaluate(async () => {
   const a = window.__pb2;
   const start = a.view.zoom;
-  const btns = [...document.querySelectorAll('#panel button')];
-  const plus = btns.find((b) => b.textContent === '+');
-  if (!plus) return { found: false };
+  const plus = document.getElementById('zoom-in');
+  const fit = document.getElementById('zoom-fit');
+  if (!plus || !fit || plus.closest('#panel')) return { found: false };
   plus.click(); plus.click();
   await new Promise((q) => setTimeout(q, 60));
   const inz = a.view.zoom;
-  const fit = [...document.querySelectorAll('#panel button')].find((b) => b.textContent === 'Fit');
   fit.click();
   await new Promise((q) => setTimeout(q, 60));
-  return { found: true, start, inz, back: a.view.zoom };
+  return { found: true, start, inz, back: a.view.zoom, readout: document.getElementById('zoomval').textContent };
 });
-ok(zoomed.found, 'the Edit panel has zoom controls');
+ok(zoomed.found, 'the zoom controls are in the top bar, reachable in every mode');
 ok(zoomed.found && zoomed.inz > zoomed.start * 1.5, `+ zooms in (${zoomed.start} to ${zoomed.inz})`);
-ok(zoomed.found && Math.abs(zoomed.back - 1) < 1e-9, 'and Fit puts it back');
+ok(zoomed.found && Math.abs(zoomed.back - 1) < 1e-9, `and Fit puts it back (readout ${zoomed.readout})`);
 
 // Pinching must zoom AND must not leave the part the first finger was on somewhere else. A
 // two-finger gesture always starts as one finger landing, and that finger can land on a part.
@@ -388,6 +389,74 @@ const loupe = await page.evaluate(async (id) => {
 }, slingId);
 ok(loupe.during !== loupe.idle, `a magnifier appears in the far corner while dragging (${loupe.idle} to ${loupe.during})`);
 ok(loupe.after === loupe.idle, 'and it goes away when the finger lifts');
+
+// ------------------------------------------------------- the workspace, and what must not move
+// The canvas used to be a flex child that grew and shrank with whatever the panel below happened
+// to contain, so switching tabs resized it with no window resize event and every tap landed an
+// inch from the finger. It is a fixed grid row now. This measures the box in all four modes: if
+// they ever differ again, that whole class of bug is back.
+const boxes = {};
+for (const m of ['play', 'edit', 'tune', 'check']) {
+  await page.click('#tab-' + m);
+  await page.waitForTimeout(250);
+  boxes[m] = await page.evaluate(() => {
+    const r = document.getElementById('c').getBoundingClientRect();
+    return `${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.top)}`;
+  });
+}
+const same = new Set(Object.values(boxes));
+ok(same.size === 1, `the table is the same box in every mode (${[...same].join(' | ')})`, JSON.stringify(boxes));
+
+// The page itself must never scroll. The dock scrolls inside its own row; if the page scrolls, the
+// layout has overflowed and the table can be pushed off screen.
+const pageScrolls = await page.evaluate(() => ({
+  v: document.documentElement.scrollHeight > window.innerHeight + 1,
+  h: document.documentElement.scrollWidth > window.innerWidth + 1,
+}));
+ok(!pageScrolls.v && !pageScrolls.h, 'the page does not scroll, only the dock does', JSON.stringify(pageScrolls));
+
+// NOTHING WAS SILENTLY DROPPED IN THE REORGANISATION. Every control that existed before the
+// layout overhaul, found by the text a person reads, in the mode it belongs to.
+const WANT_CTL = {
+  play: ['New ball', 'Slow motion', 'Pause', 'Step frame'],
+  edit: ['Wall', 'Arc', 'Post', 'Bumper', 'Sling', 'Flipper', 'Drain', 'Export JSON', 'Import', 'Reset table'],
+  tune: ['Copy config', 'Back to defaults'],
+  check: ['Find traps', 'Tunnel test', 'Gap rule', 'Show reachable', 'Clear marks'],
+};
+const ALWAYS = ['Undo', 'Redo', 'Duplicate', 'Delete', 'Fit'];
+const missingCtl = [];
+for (const m of Object.keys(WANT_CTL)) {
+  await page.click('#tab-' + m);
+  await page.waitForTimeout(250);
+  const seen = await page.evaluate(() => {
+    const out = [];
+    for (const b of document.querySelectorAll('button, summary')) out.push(b.textContent.trim());
+    return out;
+  });
+  for (const w of WANT_CTL[m].concat(ALWAYS)) {
+    if (!seen.some((t) => t === w || t.includes(w))) missingCtl.push(`${m}: ${w}`);
+  }
+}
+ok(missingCtl.length === 0, 'every control from before the overhaul is still there', missingCtl.join(', '));
+
+// Tune's 22 sliders were one unbroken list. They are collapsible groups now, and the group
+// belonging to whatever is selected opens itself.
+await page.evaluate(() => {
+  const a = window.__pb2;
+  const sh = a.table.shapes.find((x) => x.kind === 'bumper');
+  a.sel.clear(); a.sel.add(sh.id);
+});
+await page.click('#tab-play');
+await page.click('#tab-tune');
+await page.waitForTimeout(300);
+const grp = await page.evaluate(() => {
+  const all = [...document.querySelectorAll('details.grp')];
+  const open = all.filter((d) => d.open).map((d) => d.querySelector('summary').textContent.trim());
+  return { count: all.length, open, marked: all.filter((d) => d.classList.contains('sel')).length };
+});
+ok(grp.count >= 2, `Tune is collapsible groups, not one list (${grp.count} groups)`);
+ok(grp.open.some((t) => /BUMPER/i.test(t)), `the selected part's group opens itself (open: ${grp.open.join(', ')})`);
+ok(grp.marked === 1, `and is the one marked as the selection (${grp.marked} marked)`);
 
 // ------------------------------------------- [KNOWN-BUG PROBE] the long press selected the page
 // Matt, on the fine drag that had just shipped: "it also selects everything, the whole page, as if

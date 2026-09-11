@@ -318,6 +318,41 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## The workspace: four full-page modes became one that never moves
+
+Matt's brief, 2026-09-11: *"Switching modes replaces the whole screen, so the table view resizes and
+every panel disappears and reappears... The tool works, but it feels disposable, not like something
+you'd want to keep coming back to for the next table."*
+
+**The canvas is a fixed grid row now**, and that is the load-bearing part rather than the tidy part.
+It used to be a flex child that grew and shrank with whatever the panel below it contained, so
+switching tabs resized it with no window `resize` event - which is exactly the bug that made every
+tap land an inch from the finger, patched at the time with a `ResizeObserver`. A fixed row means
+there is nothing to patch. `test-editor.mjs` measures the canvas box in all four modes and fails if
+they ever differ again.
+
+`--stage-h: 56svh`, not `dvh`: `dvh` changes as a phone's URL bar slides, which would resize the
+canvas on every scroll.
+
+**The brief asked for four docks round the canvas, and that was the one thing to push back on.** At
+393px wide, a left dock and a right dock leave the table 199px - smaller than before, and it would
+have made the magnifier and the fine drag pointless. So: one dock on a phone holding both halves
+stacked, and at `min-width: 900px` the same two halves become the left and right docks the brief
+described. `#panel { display: contents }` drops the wrapper out of the grid. Same DOM, same code.
+Every GOAL in the brief survived; only the arrangement changed, and Matt approved the swap before a
+line was written.
+
+**Zoom and the object controls left the panel and became chrome.** Undo was unreachable the moment
+you switched to Tune to see what a slider had done, and the only zoom on a phone was a pinch you had
+to know about.
+
+**Tune's 22 sliders became collapsible groups**, the selected part's group opening itself and
+outlined in the accent colour, which is what makes "tap a part, tune that part" visible rather than
+inferred.
+
+**Nothing was dropped, and that is asserted rather than claimed**: a test walks all four modes and
+fails if any control that existed before the overhaul has gone missing.
+
 ## The gap rule was measuring gaps wrong, and the wrong direction was the dangerous one
 
 Found while laying out a second table: `checkGaps` kept failing clearances that were plainly wide
