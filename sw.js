@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v798';
+const CACHE = 'game-hub-v799';
 
 const ASSETS = [
   './',
@@ -225,6 +225,7 @@ const ASSETS = [
   './boggle/js/ai.js',
   './boggle/js/mp-round.js',
   './boggle/data/words.txt',
+  './boggle/data/words-es.txt',
   './snake/',
   './snake/index.html',
   './snake/css/snake.css',
@@ -612,14 +613,15 @@ const REST_MANIFEST = {
   './boggle/': '5108b97a57',
   './boggle/index.html': '5108b97a57',
   './boggle/css/boggle.css': 'a28c01724c',
-  './boggle/js/ui.js': '858d0b4b80',
-  './boggle/js/strings.js': 'a4d3879908',
-  './boggle/js/game.js': '1a8eed4437',
-  './boggle/js/dict.js': 'd690a3c1d4',
-  './boggle/js/solver.js': '0aa4eea38c',
+  './boggle/js/ui.js': 'd17977687d',
+  './boggle/js/strings.js': '23479392ca',
+  './boggle/js/game.js': '663b06d7a8',
+  './boggle/js/dict.js': '20433bac4e',
+  './boggle/js/solver.js': '94e9421d2c',
   './boggle/js/ai.js': '853eb93e2c',
   './boggle/js/mp-round.js': 'a44ccf9426',
   './boggle/data/words.txt': '8df790b20b',
+  './boggle/data/words-es.txt': '50e5a7331d',
   './snake/': '3937ec95a2',
   './snake/index.html': '3937ec95a2',
   './snake/css/snake.css': 'f8b4ecbde6',

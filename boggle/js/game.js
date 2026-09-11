@@ -17,6 +17,10 @@
 // Qu), one face short of a real cube. Cross-referenced against the published
 // 1987+ distribution, the die is `HIMNUQu` (6 faces: H, I, M, N, U, Qu) --
 // used here so every die has the same 6 faces as the other 15.
+//
+// SPANISH USES A SECOND, DERIVED SET (`DICE_ES`) -- see its own comment below.
+// A board is always shaken from ONE language's dice; `newBoard` takes the
+// parsed face table, so nothing here has to know which language is in play.
 
 export const BOARD_SIZE = 4;
 export const MIN_WORD_LEN = 3;
@@ -40,14 +44,52 @@ function parseDieFaces(dieStr) {
   return faces;
 }
 
-const DIE_FACES = DICE.map(parseDieFaces);
+// The Spanish dice. There is no authentic Spanish Boggle distribution this
+// repo can cite the way the English one is cited above, so this set was
+// DERIVED and then MEASURED: 96 faces allocated by letter frequency in
+// boggle/data/words-es.txt (weighted toward the 3-6 letter words that carry a
+// round), dealt so that every die carries its share of vowels, then run
+// through thousands of real shakes against the real solver by
+// `tune-boggle-es.mjs`. The numbers that justify it are in boggle/CLAUDE.md;
+// re-run that tool after ANY change here.
+//
+// Three Spanish-specific facts are baked in. Q never appears without U in
+// Spanish, so the Qu tile carries over from the English set unchanged. K and W
+// occur in essentially nothing but loanwords and get no face at all -- a K
+// face would be a dead tile wherever it landed. And N-TILDE HAS NO FACE: every
+// word in the list is folded to plain N (build-boggle-es.mjs), so ANO and
+// MANANA are spelled with the ordinary N die, which keeps the alphabet at 26
+// and the trie, solver and scoring identical to English's.
+export const DICE_ES = [
+  'AOETLR', 'OAECTN', 'EIOMCD', 'IEAPML',
+  'UAOBPT', 'QuOAGBC', 'AESFGR', 'OIAVSN',
+  'EARHNS', 'IOAZRD', 'UEAJDS', 'AINYLR',
+  'OADSTR', 'EOARCS', 'IEANMS', 'UALDSR',
+];
+
+/** Parse a whole 16-die letter table into face arrays (the `Qu` face handled
+ *  by `parseDieFaces`). Exported so tools and tests build the table with the
+ *  engine's own parser rather than a copy that could drift from it. */
+export function parseDiceFaces(dice) {
+  return dice.map(parseDieFaces);
+}
+
+const DIE_FACES = parseDiceFaces(DICE);
+const DIE_FACES_ES = parseDiceFaces(DICE_ES);
+
+/** The parsed face table for a language id ('en' | 'es'). Anything unknown
+ *  falls back to English: a bad language value must never be able to stop a
+ *  board from being shaken. */
+export function diceFor(lang) {
+  return lang === 'es' ? DIE_FACES_ES : DIE_FACES;
+}
 
 /** The faces (in a stable order, not shuffled) of die `dieIndex`. Exported
  *  for test.js so it can verify a shaken tile's face genuinely belongs to
  *  the die newBoard() says landed there, using the same parse the engine
  *  itself uses (not a re-implementation that could quietly drift from it). */
-export function facesForDie(dieIndex) {
-  return DIE_FACES[dieIndex].slice();
+export function facesForDie(dieIndex, dieFaces = DIE_FACES) {
+  return dieFaces[dieIndex].slice();
 }
 
 function shuffle(arr, rng) {
@@ -63,15 +105,16 @@ function shuffle(arr, rng) {
  *  a random face from each. Returns { grid, tiles } -- `grid[r][c]` and the
  *  flat `tiles` list both point at the same tile objects
  *  `{ r, c, face, dieIndex }`; `dieIndex` (which physical die landed here)
- *  is kept so tests can verify a tile's face actually belongs to its die. */
-export function newBoard(rng = Math.random) {
-  const order = shuffle([...Array(DICE.length).keys()], rng);
+ *  is kept so tests can verify a tile's face actually belongs to its die.
+ *  `dieFaces` is a PARSED face table (`diceFor(lang)`), English by default. */
+export function newBoard(rng = Math.random, dieFaces = DIE_FACES) {
+  const order = shuffle([...Array(dieFaces.length).keys()], rng);
   const grid = Array.from({ length: BOARD_SIZE }, () => new Array(BOARD_SIZE).fill(null));
   const tiles = [];
   for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
     const r = Math.floor(i / BOARD_SIZE), c = i % BOARD_SIZE;
     const dieIndex = order[i];
-    const faces = DIE_FACES[dieIndex];
+    const faces = dieFaces[dieIndex];
     const face = faces[Math.floor(rng() * faces.length)];
     const tile = { r, c, face, dieIndex };
     grid[r][c] = tile;
@@ -161,6 +204,7 @@ export function scoreForWord(word) {
 }
 
 export default {
-  BOARD_SIZE, MIN_WORD_LEN, DICE, newBoard, neighbors, isAdjacent,
+  BOARD_SIZE, MIN_WORD_LEN, DICE, DICE_ES, parseDiceFaces, diceFor,
+  newBoard, neighbors, isAdjacent,
   isValidPath, pathAction, wordForPath, scoreForWord, facesForDie,
 };

@@ -28,14 +28,14 @@
 // pathAction(), not here, so they are unit-testable without a DOM.
 
 import {
-  BOARD_SIZE, neighbors, pathAction, wordForPath, scoreForWord, MIN_WORD_LEN,
+  BOARD_SIZE, neighbors, pathAction, wordForPath, scoreForWord, MIN_WORD_LEN, diceFor,
 } from './game.js';
-import { loadDictionary, isValidWord } from './dict.js';
-import { shakePlayableBoard, solveBoard } from './solver.js';
+import { loadDictionary, isValidWord, dictLang, DICT_LANGS } from './dict.js';
+import { shakePlayableBoard, solveBoard, qualityFor } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
-import { makeT } from '../../js/i18n.js';
+import { makeT, getLang } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -87,6 +87,16 @@ const MP_DIFFICULTY = 'mp';
 // inside the render functions, same pattern as every other bilingual game.
 const TIMERS = [1, 1.5, 2];
 const TIMER_LABEL_KEY = { 1: 'timer_1', 1.5: 'timer_1_5', 2: 'timer_2' };
+// THE GAMEPLAY LANGUAGE (2026-09-11) -- which word list and which dice a round
+// is played with. Kept SEPARATE from the hub's UI language (js/i18n.js) on
+// purpose: the two are different questions, and conflating them is a worse
+// answer to both. A Spanish-speaking player who wants their app in Spanish may
+// still want to play English Boggle against someone who does not read Spanish,
+// and the reverse is just as reasonable -- so the hub language only supplies
+// the DEFAULT, and the setup row is what decides. Storage vocabulary, so the
+// ids are 'en'/'es' and never translated.
+const WORD_LANGS = DICT_LANGS;
+const WORD_LANG_LABEL_KEY = { en: 'wordlang_en', es: 'wordlang_es' };
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Easy/Medium/Hard) -- do not invent
 // new tier names here.
@@ -161,6 +171,10 @@ function saveGame(ui) {
       remainingSec: ui._remainingSec,
       timerMinutes: ui._setup.timerMinutes,
       difficulty: ui._setup.difficulty,
+      // The round's OWN language, not whatever the setup screen says now:
+      // resuming has to rebuild the same board against the same dictionary it
+      // was scored against, or every word already found reads as invalid.
+      wordLang: ui._setup.wordLang,
     }));
   } catch { /* a full quota must never break the round */ }
 }
@@ -187,6 +201,11 @@ function loadGame() {
     if (!TIMERS.includes(raw.timerMinutes) || !DIFFICULTIES.includes(raw.difficulty)) return null;
     return {
       faces: raw.faces, found, remainingSec, timerMinutes: raw.timerMinutes, difficulty: raw.difficulty,
+      // A save written before the Spanish list shipped carries no wordLang and
+      // is English by definition -- it must still resume, so this defaults
+      // rather than failing validation (THE LAW rule 3: carry forward
+      // everything that CAN be carried).
+      wordLang: WORD_LANGS.includes(raw.wordLang) ? raw.wordLang : 'en',
     };
   } catch { return null; }
 }
@@ -337,12 +356,21 @@ class BoggleUI {
     return {
       timerMinutes: TIMERS.includes(saved.timerMinutes) ? saved.timerMinutes : 1.5,
       difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
+      // The hub's language is the DEFAULT only, and only until this player has
+      // chosen once: a stored choice always wins, so switching the hub to
+      // English never silently moves somebody off the Spanish board they have
+      // been playing. `dictLang` maps any unsupported hub language (there is
+      // none today, but i18n.js may grow one) onto English rather than
+      // fetching a word list that does not exist.
+      wordLang: WORD_LANGS.includes(saved.wordLang) ? saved.wordLang : dictLang(getLang()),
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(SETTINGS_KEY, { timerMinutes: s.timerMinutes, difficulty: s.difficulty });
+    saveJSON(SETTINGS_KEY, {
+      timerMinutes: s.timerMinutes, difficulty: s.difficulty, wordLang: s.wordLang,
+    });
   }
 
   /** Identity is read fresh from the profile every render (never persisted),
@@ -432,6 +460,18 @@ class BoggleUI {
     return this._seg('set-diff', s.difficulty, DIFFICULTIES, DIFF_LABEL_KEY, true);
   }
 
+  /** The gameplay language of the round in front of the player: in MP that is
+   *  the HOST's choice carried in the room config, never this device's setup
+   *  row, so the feedback line cannot name a dictionary the board is not being
+   *  scored against. */
+  _roundWordLang() {
+    return dictLang(this.mp ? this.mp.wordLang : this._setup.wordLang);
+  }
+
+  _wordLangContent() {
+    return this._seg('set-wordlang', this._setup.wordLang, WORD_LANGS, WORD_LANG_LABEL_KEY);
+  }
+
   _modeSeg() {
     return this._seg('set-mode', this._mode, ['solo', 'host', 'join'], { solo: 'mode_solo', host: 'mode_host', join: 'mode_join' });
   }
@@ -468,6 +508,7 @@ class BoggleUI {
       </div>`}
       <div class="bg-summary">
         ${this._row('timer', esc(t('row_timer')), t(TIMER_LABEL_KEY[s.timerMinutes]), this._timerContent())}
+        ${this._row('wordlang', esc(t('row_wordlang')), t(WORD_LANG_LABEL_KEY[s.wordLang]), this._wordLangContent())}
         ${hosting ? '' : this._row('difficulty', esc(t('row_difficulty')), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
       </div>
       ${hosting
@@ -515,7 +556,7 @@ class BoggleUI {
         <div class="bg-mp-oppslot">${guest
           ? `<span class="bg-mp-oppav">${esc(guest.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(guest.name || '')}</span>`
           : `<span class="bg-mp-oppempty">${esc(t('mp_waiting_opponent'))}</span>`}</div>
-        <p class="bg-mp-summary">${esc(t(TIMER_LABEL_KEY[this._setup.timerMinutes]))}</p>
+        <p class="bg-mp-summary">${esc(`${t(TIMER_LABEL_KEY[this._setup.timerMinutes])} · ${t(WORD_LANG_LABEL_KEY[this._setup.wordLang])}`)}</p>
         <p class="bg-mp-msg" data-role="mp-msg">${esc(msg)}</p>
         <button type="button" class="bg-btn bg-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${esc(t('mp_start_btn'))}</button>
         ${back}
@@ -524,6 +565,9 @@ class BoggleUI {
     const room = this._mpLobbyRoom;
     const host = room && room.host;
     const timerMinutes = room && room.config && room.config.timerMinutes;
+    // The guest is about to play the HOST's dictionary, so say which one while
+    // they are still waiting rather than at the first rejected word.
+    const joinedLang = dictLang(room && room.config && room.config.wordLang);
     return `<div class="bg-mp-lobby">
       <span class="bg-mp-label">${esc(t('mp_code_aria'))}</span>
       <div class="bg-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(this._mpJoinedCode || '')}</div>
@@ -531,7 +575,7 @@ class BoggleUI {
       <div class="bg-mp-oppslot">${host
         ? `<span class="bg-mp-oppav">${esc(host.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(host.name || '')}</span>`
         : `<span class="bg-mp-oppempty">&ndash;</span>`}</div>
-      ${TIMERS.includes(timerMinutes) ? `<p class="bg-mp-summary">${esc(t(TIMER_LABEL_KEY[timerMinutes]))}</p>` : ''}
+      ${TIMERS.includes(timerMinutes) ? `<p class="bg-mp-summary">${esc(`${t(TIMER_LABEL_KEY[timerMinutes])} · ${t(WORD_LANG_LABEL_KEY[joinedLang])}`)}</p>` : ''}
       <p class="bg-mp-msg" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
       ${back}
     </div>`;
@@ -574,7 +618,13 @@ class BoggleUI {
     if (this._mpBusy) return;
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
-    const config = { timerMinutes: this._setup.timerMinutes };
+    // The HOST's dictionary decides the match. It has to travel in the room
+    // config next to the timer, for the same reason the timer does: the guest
+    // must score against the identical word list, or each side's words look
+    // invalid on the other's reveal card and the two scores are not
+    // comparable at all. A room record written before this shipped has no
+    // wordLang and is read as English everywhere below.
+    const config = { timerMinutes: this._setup.timerMinutes, wordLang: this._setup.wordLang };
     const res = await net.createRoom('boggle', config, this._myIdentity());
     this._mpBusy = false;
     if (this._dead) return;
@@ -601,7 +651,8 @@ class BoggleUI {
     this.mp = {
       role: 'host', code, opp: room.guest, gameNum: 0, reportedN: 0,
       statsCommittedGameNum: 0, series: { wins: 0, losses: 0, ties: 0 },
-      startedAt: 0, timerMinutes: this._setup.timerMinutes, myResult: null,
+      startedAt: 0, timerMinutes: this._setup.timerMinutes,
+      wordLang: dictLang(this._setup.wordLang), myResult: null,
     };
     this._mpHostStartRound(1);
   }
@@ -647,6 +698,10 @@ class BoggleUI {
       role: 'guest', code: this._mpJoinedCode, opp: room.host, gameNum: 0, reportedN: 0,
       statsCommittedGameNum: 0, series: { wins: 0, losses: 0, ties: 0 },
       startedAt: 0, timerMinutes: (room.config && room.config.timerMinutes) || this._setup.timerMinutes,
+      // The guest PLAYS THE HOST'S LANGUAGE, whatever its own setup row says --
+      // one board, one dictionary, or the scores mean nothing. dictLang()
+      // makes an absent value (a room from before this shipped) English.
+      wordLang: dictLang(room.config && room.config.wordLang),
       myResult: null,
     };
     this._mpApplyRoundRecord(room.round);
@@ -722,9 +777,10 @@ class BoggleUI {
     this.closeOverlays();
     this.view = 'loading';
     this.renderLoading();
+    const lang = dictLang(mp.wordLang);
     let dict;
     try {
-      dict = await loadDictionary();
+      dict = await loadDictionary(lang);
     } catch (err) {
       if (this._dead || !this.mp) return;
       console.error('[Boggle] MP dictionary load failed (host)', err);
@@ -733,7 +789,7 @@ class BoggleUI {
     }
     if (this._dead || !this.mp) return;
     this._trieRoot = dict.root;
-    const shake = shakePlayableBoard(this._trieRoot);
+    const shake = shakePlayableBoard(this._trieRoot, Math.random, qualityFor(lang), diceFor(lang));
     const faces = shake.board.grid.map((row) => row.map((tile) => tile.face));
     const startedAt = Date.now();
     try {
@@ -760,8 +816,10 @@ class BoggleUI {
     if (!mp || !round) return;
     mp.gameNum = round.n;
     mp.startedAt = round.dealer;
-    const cfgTimer = this._mpLobbyRoom && this._mpLobbyRoom.config && this._mpLobbyRoom.config.timerMinutes;
+    const cfg = (this._mpLobbyRoom && this._mpLobbyRoom.config) || null;
+    const cfgTimer = cfg && cfg.timerMinutes;
     mp.timerMinutes = TIMERS.includes(cfgTimer) ? cfgTimer : mp.timerMinutes;
+    if (cfg && WORD_LANGS.includes(cfg.wordLang)) mp.wordLang = cfg.wordLang;
     mp.myResult = null;
     this._path = [];
     this._found = new Map();
@@ -775,7 +833,7 @@ class BoggleUI {
     this.renderLoading();
     let dict;
     try {
-      dict = await loadDictionary();
+      dict = await loadDictionary(dictLang(mp.wordLang));
     } catch (err) {
       if (this._dead || !this.mp) return;
       console.error('[Boggle] MP dictionary load failed (guest)', err);
@@ -1015,6 +1073,7 @@ class BoggleUI {
         statsCommittedGameNum: mp.statsCommittedGameNum | 0,
         series: { wins: mp.series.wins | 0, losses: mp.series.losses | 0, ties: mp.series.ties | 0 },
         timerMinutes: mp.timerMinutes,
+        wordLang: mp.wordLang,
         at: Date.now(),
       });
     } catch { /* private mode / quota */ }
@@ -1057,6 +1116,10 @@ class BoggleUI {
         ties: (save.series && save.series.ties) | 0,
       },
       startedAt: 0, timerMinutes: TIMERS.includes(save.timerMinutes) ? save.timerMinutes : 1.5,
+      // A best guess only: _mpApplyRoundRecord re-reads the room's own config
+      // below and overwrites it, which is the authoritative answer. This value
+      // matters solely for the window before the room record lands.
+      wordLang: dictLang(save.wordLang),
       myResult: null,
     };
     net.heartbeat(code, role);
@@ -1121,9 +1184,10 @@ class BoggleUI {
     this._result = null;
     this.view = 'loading';
     this.renderLoading();
+    const lang = dictLang(this._setup.wordLang);
     let dict;
     try {
-      dict = await loadDictionary();
+      dict = await loadDictionary(lang);
     } catch (err) {
       if (this._dead) return;
       console.error('[Boggle] dictionary load failed', err);
@@ -1131,12 +1195,15 @@ class BoggleUI {
       return;
     }
     if (this._dead) return;
-    console.log(`[Boggle] dictionary ready: ${dict.wordCount.toLocaleString()} words, trie built in ${dict.buildMs.toFixed(1)}ms`);
+    console.log(`[Boggle] ${lang} dictionary ready: ${dict.wordCount.toLocaleString()} words, trie built in ${dict.buildMs.toFixed(1)}ms`);
     this._trieRoot = dict.root;
     // Shake until the board is actually worth playing (see solver.js's
     // BOARD_QUALITY): the dice stay authentic, but a vowel-starved board with
-    // nothing findable on it gets re-shaken rather than dealt.
-    const shake = shakePlayableBoard(this._trieRoot);
+    // nothing findable on it gets re-shaken rather than dealt. Dice AND
+    // thresholds are per language -- the Spanish set and its own measured gate
+    // live beside the English ones (game.js's DICE_ES, solver.js's
+    // BOARD_QUALITY_ES).
+    const shake = shakePlayableBoard(this._trieRoot, Math.random, qualityFor(lang), diceFor(lang));
     this._board = shake.board;
     this._solved = shake.solved;
     console.log(`[Boggle] board ready after ${shake.attempts} shake(s): ${this._solved.length} words findable`);
@@ -1164,7 +1231,7 @@ class BoggleUI {
     this.renderLoading();
     let dict;
     try {
-      dict = await loadDictionary();
+      dict = await loadDictionary(dictLang(save.wordLang));
     } catch (err) {
       if (this._dead) return;
       console.error('[Boggle] dictionary load failed (resume)', err);
@@ -1186,6 +1253,7 @@ class BoggleUI {
     this._result = null;
     this._setup.timerMinutes = save.timerMinutes;
     this._setup.difficulty = save.difficulty;
+    this._setup.wordLang = dictLang(save.wordLang);
     this._tapMode = false;
     this._tracing = false;
     this._traceMoved = false;
@@ -1576,7 +1644,8 @@ class BoggleUI {
     if (!f) return '<p class="bg-feedback" aria-live="polite"></p>';
     if (f.type === 'valid') return `<p class="bg-feedback is-good" aria-live="polite"><span aria-hidden="true">&check;</span> ${esc(t('feedback_valid', { word: f.word, n: f.score }))}</p>`;
     if (f.type === 'duplicate') return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> ${esc(t('feedback_duplicate', { word: f.word }))}</p>`;
-    return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> ${esc(t('feedback_invalid', { word: f.word }))}</p>`;
+    const lang = t(WORD_LANG_LABEL_KEY[this._roundWordLang()]);
+    return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> ${esc(t('feedback_invalid', { word: f.word, lang }))}</p>`;
   }
 
   renderGame() {
@@ -1793,6 +1862,10 @@ class BoggleUI {
       this.renderSetup();
     } else if (action === 'set-diff') {
       this._setup.difficulty = btn.dataset.v;
+      this._saveSetup();
+      this.renderSetup();
+    } else if (action === 'set-wordlang') {
+      this._setup.wordLang = btn.dataset.v;
       this._saveSetup();
       this.renderSetup();
     } else if (action === 'set-mode') {

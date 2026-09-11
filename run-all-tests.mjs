@@ -91,6 +91,7 @@ const SUITES = [
   { file: 'test-stats-identity.mjs' },
   { file: 'test-mp-lockstep.mjs' },
   { file: 'test-boggle-mp.mjs' },
+  { file: 'test-boggle-es.mjs' },
   // jsdom-dependent smoke suites (optional)
   { file: 'smoke-match.mjs', optionalDep: 'jsdom' },
   { file: 'smoke-ui.mjs', optionalDep: 'jsdom' },
