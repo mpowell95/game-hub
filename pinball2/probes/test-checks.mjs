@@ -8,7 +8,7 @@
 // and if the measurement is wrong the design is wrong everywhere at once.
 
 import { CONFIG } from '../machines/testbox/config.js';
-import { checkGaps } from './checks.js';
+import { checkGaps, restSweep } from './checks.js';
 
 let pass = 0;
 let fail = 0;
@@ -85,6 +85,42 @@ const railAt = (x, y0, y1, r) => ({ id: `w${x}`, kind: 'seg', a: { x, y: y0 }, b
   const f = checkGaps(table([postAt(0.200, 0.500, 0.020), railAt(0.210, 0.400, 0.600, 0.010)]), CONFIG);
   ok(f.length === 1 && f[0].kind === 'overlap', 'two parts driven into each other are an overlap, not a gap',
     JSON.stringify(f.map((x) => x.kind)));
+}
+
+// ------------------------------------------------- a dead stop needs something holding the ball
+// BOARDWALK reported two dead stops, both "on nothing", and a re-drop from each of those exact
+// coordinates rolled straight out. They were balls at the APEX OF AN ARC when the six second clock
+// ran out: momentarily slow, touching nothing, and accelerating the whole time. Gravity along this
+// playfield is a constant, so a ball held by no solid and riding no ramp cannot be at rest - and a
+// FAIL line that cries wolf is a FAIL line that stops being read.
+//
+// The rule has to keep catching the real thing, which is what these two pin from both sides.
+{
+  const BR = CONFIG.BALL_R;
+  // A CUP: two walls and a floor, tight enough that a ball dropped in cannot climb out. This is the
+  // shape of every trap this repo has ever found, and the probe must still name it.
+  const cup = table([
+    { id: 'cl', kind: 'seg', a: { x: 0.230, y: 0.400 }, b: { x: 0.230, y: 0.500 }, r: 0.006 },
+    { id: 'cr', kind: 'seg', a: { x: 0.230 + BR * 2.2, y: 0.400 }, b: { x: 0.230 + BR * 2.2, y: 0.500 }, r: 0.006 },
+    { id: 'cf', kind: 'seg', a: { x: 0.220, y: 0.500 }, b: { x: 0.320, y: 0.500 }, r: 0.006 },
+  ]);
+  const r = restSweep(cup, CONFIG, { step: 0.010, seconds: 4 });
+  const inCup = r.stuck.filter((s) => s.at.y > 0.44 && s.at.x > 0.22 && s.at.x < 0.32);
+  ok(inCup.length > 0, `a ball in a cup is still reported as a dead stop (${inCup.length} of ${r.stuck.length})`,
+    `drops ${r.drops}, edges ${r.edges.length}`);
+  ok(r.stuck.every((s) => s.on || s.ribbon), 'and every dead stop names the thing holding the ball',
+    JSON.stringify(r.stuck.filter((s) => !s.on).map((s) => s.at)));
+}
+{
+  // NOTHING TO REST ON. An open table with only its outer walls: every ball reaches the drain, and
+  // any that has not in four seconds is in flight, never stuck.
+  const open = table([
+    { id: 'wl', kind: 'seg', a: { x: 0.008, y: 0.02 }, b: { x: 0.008, y: 1.00 }, r: 0.008 },
+    { id: 'wr', kind: 'seg', a: { x: 0.507, y: 0.02 }, b: { x: 0.507, y: 1.00 }, r: 0.008 },
+  ]);
+  const r = restSweep(open, CONFIG, { step: 0.030, seconds: 4 });
+  ok(r.stuck.length === 0, `an open playfield has no dead stops (${r.drops} drops, ${r.stuck.length})`,
+    JSON.stringify(r.stuck.slice(0, 3)));
 }
 
 console.log(`\nCheck tests: ${pass} passed, ${fail} failed.`);

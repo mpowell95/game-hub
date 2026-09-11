@@ -318,6 +318,43 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## A dead stop needs something holding the ball
+
+BOARDWALK reported two dead stops, both `on nothing`, and a re-drop from each of those exact
+coordinates rolled straight out - one of them all the way to the drain. They were balls at the APEX
+OF AN ARC when the six second clock ran out: momentarily under 0.05 m/s, touching nothing, and
+accelerating the entire time.
+
+The rule is not a judgement call. Gravity along this playfield is a constant 1.111 m/s2, so **a ball
+held by no solid and riding no ramp cannot be at rest**, and `restSweep` now requires a holder
+before it calls something a dead stop. Not a workaround to make a table pass - the old test was
+simply asking the wrong question, and a FAIL line that cries wolf is a FAIL line that stops being
+read, which is the whole reason this repo reports coordinates instead of percentages.
+
+`test-checks.mjs` pins it from both sides: a ball in a cup is still named, and an open playfield with
+nothing but its outer walls reports nothing.
+
+## A built-in table is code, not a file on a phone
+
+Matt: "make sure boardwalk is available in the tool." The tempting way to do that is to seed it into
+the table library on first run. **That is the stale-table bug rebuilt from scratch** - a device that
+seeded this build's copy would still be showing you this build's copy in December, which is exactly
+the shape of the thing the library was written to end.
+
+So BOARDWALK ships the way Default does: as a module, in `BUILTINS`, never stored, current by
+construction. Open it and you are looking at this build's copy; edit it and you are editing a working
+copy written nowhere; Save as is how you keep one. Selector values are prefixed (`builtin:BOARDWALK`)
+so a person can have their own save called BOARDWALK and neither shadows the other.
+
+The knock-on worth keeping: `probes/run.mjs` takes `--table` now. **A file in this repo that no probe
+looks at is a file that rots**, and a shipped table is a file in this repo.
+
+And one caught in passing: **`validate-sw-assets.mjs`'s `SCAN_DIRS` never included `pinball2`**, so
+its "every deployed .js is precached" check was blind to this whole folder, and `boardwalk.js` went
+into a build without a precache entry while the validator printed OK. `pinball2` is in the list now.
+The root `CLAUDE.md` calls a missing precache entry "the one thing a deploy cannot survive"; a
+hand-maintained list of folders to look in is how that happens quietly.
+
 ## Turning something you cannot see yet
 
 Step 5 of the overhaul, and the last of it: turn and scale a SELECTION, where handles only ever
@@ -653,10 +690,13 @@ three cases. They fall out of the ramp having a height.
 prefabs, the placements list, turn and scale). What is left is the GAME, not the tool.
 
 The remaining object types, one at a time, each with its property panel and its own probe: drop
-targets, a spinner, rollover lanes, a kicker or saucer, a plunger. Then the first real table, which
-Matt wants designed for fun rather than copied from any existing machine. BOARDWALK - 44 parts, no
-gaps, no dead stops, no escapes in 40,536 shots - exists as JSON in a scratchpad and has never been
-imported into the tool; that import is a decision waiting on Matt, not a task waiting on a session.
+targets, a spinner, rollover lanes, a kicker or saucer, a plunger.
+
+**BOARDWALK ships as a built-in** and is Matt's to tune. Three probes are red on it and two of them
+are his tuning, not a session's: the flippers move the ball under 300 mm on half the power range,
+and r42's mouth takes no shot weak enough to roll back out. The third, the tunnel probe's 6 of 2325
+"OFF TABLE", is most likely the probe - see `HANDOFF.md`, "Tables this build SHIPS", which records
+the measurement that says nothing is escaping and what question to fix instead.
 
 **Two levels are real geometry here, never a transition.** A ramp will be a ribbon with a floor
 height and a slope; the ball rolls up it and either crests or rolls back out of the mouth. There is

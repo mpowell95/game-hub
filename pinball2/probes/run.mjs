@@ -1,13 +1,24 @@
-// node pinball2/probes/run.mjs [drain|tunnel|rests|gaps|all]
-// The same three checks the editor's Check panel runs, from a terminal, so a deploy can be gated
-// on them.
+// node pinball2/probes/run.mjs [drain|tunnel|rests|gaps|all] [--table boardwalk]
+// The same checks the editor's Check panel runs, from a terminal, so a deploy can be gated on them.
+//
+// `--table` picks which of the build's tables to run them against. Every table this build SHIPS has
+// to pass, not just the box: a built-in is code, so a change to it is a change to a file in this
+// repo, and a file in this repo that no probe looks at is a file that rots.
 
 import { makeTable } from '../machines/testbox/table.js';
+import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
 import { CONFIG } from '../machines/testbox/config.js';
 import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe, flipPower, rampProbe } from './checks.js';
 
-const which = process.argv[2] || 'all';
-const table = makeTable();
+const TABLES = { default: makeTable, boardwalk: makeBoardwalk };
+
+const args = process.argv.slice(2);
+const ti = args.indexOf('--table');
+const pick = ti >= 0 ? String(args[ti + 1] || '').toLowerCase() : 'default';
+if (!TABLES[pick]) { console.error(`unknown table "${pick}" - one of: ${Object.keys(TABLES).join(', ')}`); process.exit(2); }
+const which = (ti === 0 ? null : args[0]) || 'all';
+const table = TABLES[pick]();
+console.log(`table           ${table.name} (${table.shapes.length} parts)`);
 const cfg = CONFIG;
 let bad = 0;
 
