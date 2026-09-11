@@ -318,6 +318,37 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## Say what the number does, and show me only the ones for this part
+
+Matt, 2026-09-11: *"Fix the terminology. 'Slingshot kick' is so vague. Say bounce. And when I'm on
+the Tune tab, I should be able to select an object and see the tune objects for only that object."*
+
+**Kick was one word for three different things.** A bumper's and a slingshot's is a fixed OUTGOING
+SPEED in m/s; a flipper's was a fraction added on top of the bat's own surface speed. Naming them
+the same thing hides that, and none of the three names says what moving the slider does. The
+vocabulary now, and the one to keep: **BOUNCE** for how fast a ball comes off something, **GRIP**
+for how much sideways hold a surface has, **PUSH** for a gameplay lever that adds speed no real part
+would add. So `SLING_KICK` -> `SLING_BOUNCE`, `BUMPER_KICK` -> `BUMPER_BOUNCE`, `FLIP_KICK` ->
+`FLIP_PUSH`, and a bumper's per-part `kick` field -> `bounce`.
+
+**A rename must not drop a number somebody dialled in.** `cloneConfig` carries the old keys across
+and `fromJSON` carries the old per-part field across. A tune is a preference, not earned history, but
+losing somebody's work because a label got clearer is still the tool being worse.
+
+**The Tune tab now filters to what you tapped.** Twenty two sliders in one list is a list you scroll
+rather than read, and the two that matter for the thing you are looking at are somewhere in the
+middle of it. Each `TUNABLES` row names the shape kinds it governs; tapping a bumper leaves six
+sliders (its two, plus the four table-wide ones, which are kept because they govern it too). Show
+all is one tap and nothing is hidden permanently.
+
+**Tapping on that tab selects and never moves.** A tap on a phone drags a few pixels, and Edit's
+handler turns that into a move: on the one tab where nobody is watching the table for changes, the
+geometry would drift under the person tuning it. The test drives a tap WITH six pixels of drift and
+asserts the part is byte-for-byte unchanged.
+
+**And the HUD wraps now.** The line naming what is on the table ran off the right edge of a phone,
+which is a line that cannot answer the question it was added for.
+
 ## The editor's touch was offset, and the cause is worth knowing
 
 Matt: *"the editor can't tell what I'm selecting, it's like it thinks I'm selecting something an

@@ -54,7 +54,7 @@ export function makeTable() {
   bump(0.320, 0.300);
   bump(0.2575, 0.395);
 
-  // Slingshots: the angled faces above each flipper that kick a ball back across the table, and
+  // Slingshots: the angled faces above each flipper that bounce a ball back across the table, and
   // the only route from the upper table down to the bat. One segment rather than the
   // three-post-and-three-face assembly a real one is built from.
   shapes.push({ id: id('s'), kind: 'sling', a: { x: 0.008, y: 0.755 }, b: { x: 0.152, y: 0.885 }, r: 0.008 });
@@ -180,6 +180,11 @@ export function fromJSON(text) {
     if (Number.isFinite(n) && n > max) max = n;
   }
   nextId = max + 1;
+  // A bumper or slingshot's per-part override was called `kick` until 2026-09-11. Carry the number
+  // across rather than silently reverting that part to the table default.
+  for (const s of t.shapes) {
+    if (s && s.kick != null && s.bounce == null) s.bounce = s.kick;
+  }
   return {
     name: t.name || 'TABLE',
     w: t.w || 0.515,
