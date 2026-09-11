@@ -425,6 +425,18 @@ function panBy(dx, dy) {
   app.view.py += dy / app.view.zoom;
 }
 
+/** Put a table point in the middle of the canvas. The reverse direction of tapping the table: you
+ *  pick a part from a list and the view goes to it. */
+function panTo(p, minZoom) {
+  const v = app.view;
+  if (!v) return;
+  const r = canvas.getBoundingClientRect();
+  if (minZoom && v.zoom < minZoom) v.zoom = minZoom;
+  v.px = (r.width / 2 - v.ox) / v.zoom - p.x * v.s;
+  v.py = (r.height / 2 - v.oy) / v.zoom - p.y * v.s;
+  syncZoom();
+}
+
 function fitAll() {
   app.view.zoom = 1;
   app.view.px = 0;
@@ -919,10 +931,17 @@ function renderPanel() {
   return renderCheckPanel();
 }
 
-/** A labelled, collapsible group. Open by default unless told otherwise; `sel` marks the one that
- *  belongs to whatever is selected on the table. */
+// A group a person opened stays open. Every selection change re-renders the dock, so without this
+// the Parts list closes itself the instant you use it, which is the one moment it has to stay.
+const groupOpen = new Map();
+
+/** A labelled, collapsible group. `open` is the default; a choice already made overrides it; and
+ *  `selected` (the group belonging to whatever is selected) always wins, because the whole point of
+ *  tapping a part is that its numbers appear. */
 function group(title, open, selected) {
-  const d = el(`<details class="grp${selected ? ' sel' : ''}"${open ? ' open' : ''}><summary>${title}</summary><div class="grp-body"></div></details>`);
+  const want = selected || (groupOpen.has(title) ? groupOpen.get(title) : open);
+  const d = el(`<details class="grp${selected ? ' sel' : ''}"${want ? ' open' : ''}><summary>${title}</summary><div class="grp-body"></div></details>`);
+  d.addEventListener('toggle', () => groupOpen.set(title, d.open));
   panel.append(d);
   return d.querySelector('.grp-body');
 }
@@ -1023,6 +1042,7 @@ const PART_ICONS = {
   sling: '<svg viewBox="0 0 26 18"><line x1="4" y1="15" x2="22" y2="4" stroke="#e0532f" stroke-width="4.5" stroke-linecap="round"/></svg>',
   flipper: '<svg viewBox="0 0 26 18"><path d="M4 6 L21 11 L21 14 L4 11 Z" fill="#ffce3a"/><circle cx="5" cy="8" r="2.4" fill="#5a4408"/></svg>',
   drain: '<svg viewBox="0 0 26 18"><line x1="2" y1="9" x2="24" y2="9" stroke="#ff5a5a" stroke-width="3" stroke-dasharray="4 3" stroke-linecap="round"/></svg>',
+  ribbon: '<svg viewBox="0 0 26 18"><path d="M4 16 A 11 11 0 0 1 22 16" fill="none" stroke="#3d6ea8" stroke-width="6" stroke-linecap="round"/><path d="M4 16 A 11 11 0 0 1 22 16" fill="none" stroke="#9fb6d8" stroke-width="1.4"/></svg>',
 };
 
 function renderPalette() {
@@ -1173,7 +1193,35 @@ function renderEditPanel() {
   // a phone. It is the thing you look at while dragging, so it never shares space with the palette.
   panel = dockB;
   panel.append(el('<h2>Inspector</h2>'));
+  renderInspector();
+  renderPlacements();
+}
 
+// THE PLACEMENTS LIST: the reverse direction of tapping the table. Once a table has forty small
+// parts on it, finding the one you want by eye is worse than reading its name off a list, and a
+// part hidden under a ramp cannot be tapped at all.
+function renderPlacements() {
+  const shapes = app.table.shapes.slice().sort((a, b) => {
+    const k = (KIND_NAMES[a.kind] || a.kind).localeCompare(KIND_NAMES[b.kind] || b.kind);
+    return k || String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+  });
+  inGroup(`Parts (${shapes.length})`, false, false, () => {
+    panel.append(el('<div class="note">Tap one to select it and bring the view to it.</div>'));
+    for (const sh of shapes) {
+      const on = app.sel.has(sh.id);
+      const b = el(`<button class="plrow${on ? ' on' : ''}">${PART_ICONS[sh.kind] || ''}<span>${KIND_NAMES[sh.kind] || sh.kind}</span><em>${esc(sh.id)}</em></button>`);
+      b.onclick = () => {
+        app.sel = new Set([sh.id]);
+        const c = centreOf(sh);
+        if (Number.isFinite(c.x) && Number.isFinite(c.y)) panTo(c, 2);
+        renderPanel();
+      };
+      panel.append(b);
+    }
+  });
+}
+
+function renderInspector() {
   if (app.sel.size === 0) {
     panel.append(el('<div class="note">Nothing selected. Tap a part on the table.</div>'));
     return;

@@ -138,6 +138,15 @@
   details.grp[open] > summary::after { content: '\2212'; }
   details.grp[open] > summary { border-bottom: 1px solid var(--line); color: var(--accent); }
   details.grp .grp-body { padding: 8px 10px 2px; }
+
+  /* A placements row: icon, kind, id. Wide and shallow, because it is a list you scan. */
+  .plrow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 5px 8px;
+           margin-bottom: 4px; font-size: 12px; font-weight: 600; text-align: left; }
+  .plrow svg { width: 22px; height: 15px; flex: none; }
+  .plrow span { flex: 1; }
+  .plrow em { font-style: normal; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .plrow.on { border-color: var(--accent); color: var(--accent); }
+  .plrow.on em { color: var(--accent); }
   details.grp.sel > summary { color: var(--accent); }
   details.grp.sel { border-color: var(--accent); }
 

@@ -318,6 +318,28 @@ fetched with the deployed build in the URL. Born red against the plain `<script 
 **And the corner of the screen now says what is on the table** (`2 arc, 3 bumper, 1 drain, 2
 flipper, 1 ribbon, 3 seg, 2 sling`). One line, and the question would never have needed asking.
 
+## A panel that shuts itself under your finger
+
+Step 4 of the overhaul is the placements list: every part on the table, by kind and id, tap one to
+select it and bring the view to it. The list itself was twenty lines. The bug was in the mechanism
+it sits in.
+
+`renderPanel()` runs on every edit frame, and `group()` built each `<details>` with its open state
+passed in as a literal. So a group you opened re-rendered SHUT on the next drag, the next nudge, the
+next anything. Nobody had noticed, because until now every group was either short enough to leave
+open or opened by a selection. A long list you scroll through is the first thing that made it
+obvious, and it made the feature useless rather than annoying: tap a row, the part moves, the list
+you were working down closes.
+
+The fix is a module-level `groupOpen` Map keyed on title, written by the `toggle` event, read on the
+next render. **A group that should be open because something is SELECTED still overrides it** - Tune
+opens the tapped part's group whether or not you shut it last time, which is the behaviour that
+answers "show me only the ones for this part" and must not regress.
+
+The general lesson, and this repo has now met it twice in this editor: **a panel that re-renders
+wholesale on every frame has to carry the state that lives in the DOM back out of the DOM.** Scroll
+position is the next one of these waiting to happen.
+
 ## Prefabs are a way of not typing, not a new kind of object
 
 Step 3 of the overhaul. The temptation with a "save a group of parts" feature is to make the group a

@@ -602,6 +602,93 @@ const menu = await page.evaluate(() => {
 });
 ok(menu, 'and it cannot raise the context menu over the table');
 
+// ------------------------------------------------------------------ the placements list
+// The reverse direction of tapping the table. Once a table has forty small parts on it, finding
+// one by eye is worse than reading its name off a list - and a part hidden under a ramp cannot be
+// tapped at all, so for those it is the only way in.
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.click('#tab-edit');
+await page.waitForTimeout(350);
+
+const plist = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const grp = [...document.querySelectorAll('details.grp')].find((d) => /^Parts \(/.test(d.querySelector('summary').textContent));
+  if (!grp) return { found: false };
+  grp.open = true;
+  await new Promise((q) => setTimeout(q, 80));
+  const rows = [...grp.querySelectorAll('.plrow')];
+  return {
+    found: true,
+    title: grp.querySelector('summary').textContent.trim(),
+    rows: rows.length,
+    parts: a.table.shapes.length,
+    ids: rows.map((r) => r.querySelector('em').textContent),
+  };
+});
+ok(plist.found, 'the Inspector dock has a Parts list');
+ok(plist.rows === plist.parts, `it lists every part on the table (${plist.rows} rows, ${plist.parts} parts)`);
+ok(plist.title === `Parts (${plist.parts})`, `and says how many (${plist.title})`);
+ok(new Set(plist.ids).size === plist.ids.length, 'each row names one part by id');
+
+// Tapping a row selects that part AND brings the view to it. A part off the side of a zoomed-in
+// view is no easier to find in a list than on the table if the list does not move the view.
+const jumped = await page.evaluate(async () => {
+  const a = window.__pb2;
+  // zoom right in on the bottom of the table, so the target is nowhere near the screen
+  a.view.zoom = 4;
+  a.view.px = 0; a.view.py = -900;
+  const target = a.table.shapes.find((s) => s.kind === 'bumper');
+  const grp = [...document.querySelectorAll('details.grp')].find((d) => /^Parts \(/.test(d.querySelector('summary').textContent));
+  grp.open = true;
+  await new Promise((q) => setTimeout(q, 80));
+  const row = [...grp.querySelectorAll('.plrow')].find((r) => r.querySelector('em').textContent === target.id);
+  if (!row) return { found: false };
+  row.click();
+  await new Promise((q) => setTimeout(q, 150));
+  const v = a.view;
+  const r = document.getElementById('c').getBoundingClientRect();
+  const c = target.c;
+  const s = { x: v.ox + (c.x * v.s + v.px) * v.zoom, y: v.oy + (c.y * v.s + v.py) * v.zoom };
+  return {
+    found: true,
+    selected: a.sel.has(target.id) && a.sel.size === 1,
+    offX: Math.abs(s.x - r.width / 2),
+    offY: Math.abs(s.y - r.height / 2),
+    onScreen: s.x > 0 && s.x < r.width && s.y > 0 && s.y < r.height,
+  };
+});
+ok(jumped.found && jumped.selected, 'tapping a row selects that one part');
+ok(jumped.onScreen && jumped.offX < 2 && jumped.offY < 2,
+  `and centres the view on it (${jumped.offX.toFixed(1)}px, ${jumped.offY.toFixed(1)}px from the middle)`);
+
+// Zoomed right out, the list zooms in far enough that a 9mm post is actually visible.
+const zoomedIn = await page.evaluate(async () => {
+  const a = window.__pb2;
+  a.view.zoom = 1;
+  const target = a.table.shapes.find((s) => s.kind === 'circle') || a.table.shapes[0];
+  const grp = [...document.querySelectorAll('details.grp')].find((d) => /^Parts \(/.test(d.querySelector('summary').textContent));
+  grp.open = true;
+  await new Promise((q) => setTimeout(q, 80));
+  [...grp.querySelectorAll('.plrow')].find((r) => r.querySelector('em').textContent === target.id).click();
+  await new Promise((q) => setTimeout(q, 150));
+  return a.view.zoom;
+});
+ok(zoomedIn >= 2, `and zooms in if you were too far out to see it (zoom ${zoomedIn})`);
+
+// A GROUP A PERSON OPENED STAYS OPEN. Every selection change re-renders the dock, so without this
+// the Parts list closes itself the instant you use it - the one moment it has to stay.
+const sticky = await page.evaluate(async () => {
+  const find = () => [...document.querySelectorAll('details.grp')].find((d) => /^Parts \(/.test(d.querySelector('summary').textContent));
+  find().open = true;
+  find().dispatchEvent(new Event('toggle'));
+  await new Promise((q) => setTimeout(q, 80));
+  const rows = [...find().querySelectorAll('.plrow')];
+  rows[1].click();
+  await new Promise((q) => setTimeout(q, 150));
+  return !!(find() && find().open);
+});
+ok(sticky, 'and the list stays open after you use it, instead of closing itself');
+
 // ------------------------------------------------------------------------ the prefab library
 // A pop bumper nest is five parts placed against each other and a lower third is eight. Building
 // the SAME one twice is the thing this removes.
