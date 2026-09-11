@@ -98,7 +98,7 @@ export function makeTable() {
  *       down the table, and the two forces add instead of fighting.
  */
 function makeRamp(rid) {
-  const ctrl = [
+  return buildRamp(rid, [
     { x: 0.440, y: 0.720 },
     { x: 0.468, y: 0.580 },
     { x: 0.462, y: 0.430 },
@@ -110,25 +110,82 @@ function makeRamp(rid) {
     { x: 0.112, y: 0.366 },
     { x: 0.092, y: 0.440 },
     { x: 0.090, y: 0.505 },
-  ];
-  const ZMAX = 0.060;
+  ]);
+}
 
-  const path = [];
+export const RAMP_DEFAULTS = { zmax: 0.060, w: 0.050, r: 0.006, step: 0.008 };
+
+/** BUILD A RAMP FROM CONTROL POINTS. The ONE implementation: the table's own ramp calls it, and so
+ *  does the editor's Ramp tool. A second copy of this in the editor would be two curves that agree
+ *  until somebody fixes one of them.
+ *
+ *  It also STORES the control points on the shape (`ctrl`), which is what makes a ramp re-editable.
+ *  The 100-odd `pts` it generates are output, not input: re-fitting control points back out of them
+ *  is guesswork, and a ramp you cannot reshape is a ramp you have to delete and lay again.
+ *
+ *  Three rules have to hold and `rampProbe` checks all three. Two of them are structural here:
+ *  both ends land at z = 0 by construction, and the crest sits at the APEX of the path (the point
+ *  where it stops heading up the table) so the climb always fights the ball and the descent always
+ *  helps it. Get the crest wrong and the table's own slope and the ramp's descent CANCEL over a
+ *  whole run, which parked three balls in one sweep. The third rule, no kink over 20 degrees, is
+ *  why this RESAMPLES BY DISTANCE rather than by a fixed number of steps per control segment: a
+ *  path a person taps has segments of wildly different lengths, and a fixed step count makes the
+ *  long ones coarse, which is exactly where a kink appears. */
+export function buildRamp(rid, ctrl, opts) {
+  const o = Object.assign({}, RAMP_DEFAULTS, opts || {});
+  const pts = rampPoints(ctrl, o);
+  return { id: rid, kind: 'ribbon', w: o.w, r: o.r, ctrl: ctrl.map((c) => ({ x: r4(c.x), y: r4(c.y) })), pts };
+}
+
+/** The curve and the height profile alone, so the editor can draw a live preview of a path that is
+ *  not a shape yet. Returns [] for anything under two control points. */
+export function rampPoints(ctrl, opts) {
+  const o = Object.assign({}, RAMP_DEFAULTS, opts || {});
+  if (!Array.isArray(ctrl) || ctrl.length < 2) return [];
+
+  // Catmull-Rom through every control point, sampled finely, then resampled by arc length.
   const at = (i) => ctrl[Math.max(0, Math.min(ctrl.length - 1, i))];
+  const fine = [];
   for (let i = 0; i < ctrl.length - 1; i++) {
     const p0 = at(i - 1); const p1 = at(i); const p2 = at(i + 1); const p3 = at(i + 2);
-    const steps = 8;
+    const steps = 24;
     for (let k = 0; k < steps; k++) {
       const t = k / steps;
       const t2 = t * t;
       const t3 = t2 * t;
-      path.push({
+      fine.push({
         x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
         y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
       });
     }
   }
-  path.push(ctrl[ctrl.length - 1]);
+  fine.push({ x: at(ctrl.length - 1).x, y: at(ctrl.length - 1).y });
+
+  // EVEN SPACING. Walk the fine curve and drop a point every `step` metres, so the turn between
+  // consecutive points depends on the curve's radius and nothing else.
+  const path = [fine[0]];
+  let carry = 0;
+  for (let i = 1; i < fine.length; i++) {
+    let seg = Math.hypot(fine[i].x - fine[i - 1].x, fine[i].y - fine[i - 1].y);
+    if (seg < 1e-12) continue;
+    let used = 0;
+    while (carry + (seg - used) >= o.step) {
+      const need = o.step - carry;
+      used += need;
+      const f = used / seg;
+      path.push({ x: fine[i - 1].x + (fine[i].x - fine[i - 1].x) * f, y: fine[i - 1].y + (fine[i].y - fine[i - 1].y) * f });
+      carry = 0;
+    }
+    carry += seg - used;
+  }
+  const last = fine[fine.length - 1];
+  const tail = path[path.length - 1];
+  // The final point is the path's real end, not wherever the walk happened to stop. If the leftover
+  // is a sliver, MOVE the last point rather than adding one: a stub shorter than the step is a
+  // sharper turn than the rest of the curve, which is the kink rule's own failure mode.
+  if (Math.hypot(last.x - tail.x, last.y - tail.y) < o.step * 0.5 && path.length > 1) path.pop();
+  path.push({ x: last.x, y: last.y });
+  if (path.length < 2) return [];
 
   let total = 0;
   const cum = [0];
@@ -136,6 +193,8 @@ function makeRamp(rid) {
     total += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
     cum.push(total);
   }
+  if (total < 1e-9) return [];
+
   // THE HEIGHT CREST SITS AT THE TOP OF THE LOOP, where the path stops heading up the table. Put
   // it anywhere else and the two along-lane forces fight: the table's own slope pulls a ball back
   // down while the descent pushes it on, and at one particular combination they CANCEL over a whole
@@ -145,13 +204,16 @@ function makeRamp(rid) {
   // allowed. What is not allowed is a level RUN, and `rampProbe` measures exactly that.
   let apex = 0;
   for (let i = 1; i < path.length; i++) if (path[i].y < path[apex].y) apex = i;
-  const crest = cum[apex] / total;
-  const pts = path.map((p, i) => {
+  let crest = cum[apex] / total;
+  // A crest at either END would make the whole ramp one long climb or one long fall with nothing on
+  // the other side, and dividing by zero besides. A path that never turns back down the table gets
+  // its crest in the middle.
+  if (crest < 0.05 || crest > 0.95) crest = 0.5;
+  return path.map((pt, i) => {
     const f = cum[i] / total;
-    const z = f <= crest ? ZMAX * (f / crest) : ZMAX * (1 - (f - crest) / (1 - crest));
-    return { x: r4(p.x), y: r4(p.y), z: r4(Math.max(0, z)) };
+    const z = f <= crest ? o.zmax * (f / crest) : o.zmax * (1 - (f - crest) / (1 - crest));
+    return { x: r4(pt.x), y: r4(pt.y), z: r4(Math.max(0, z)) };
   });
-  return { id: rid, kind: 'ribbon', w: 0.050, r: 0.006, pts };
 }
 
 const r4 = (n) => Math.round(n * 1e4) / 1e4;

@@ -884,6 +884,145 @@ const escaped = await page.evaluate(async () => {
 });
 ok(escaped.armed === 'Lower third' && escaped.after === null, 'Escape cancels an armed prefab');
 
+// ------------------------------------------------------------------ the ramp tool
+// A ramp is the one part that cannot be made by dropping a default and dragging its ends, because
+// its shape IS a path. Matt: "why can't i add ribbons?" - the answer was that nobody had built a way.
+await page.goto(URL + '?fresh', { waitUntil: 'networkidle' });
+await page.click('#tab-edit');
+await page.waitForTimeout(300);
+
+const tapTable = async (tx, ty) => page.evaluate(async (t) => {
+  const a = window.__pb2;
+  const v = a.view;
+  const cv = document.getElementById('c');
+  const r = cv.getBoundingClientRect();
+  const s2 = { x: v.ox + (t.tx * v.s + v.px) * v.zoom, y: v.oy + (t.ty * v.s + v.py) * v.zoom };
+  for (const ev of ['pointerdown', 'pointerup']) {
+    cv.dispatchEvent(new PointerEvent(ev, { pointerId: 1, bubbles: true, clientX: r.left + s2.x, clientY: r.top + s2.y }));
+  }
+  await new Promise((q) => setTimeout(q, 70));
+}, { tx, ty });
+
+const PATH = [[0.440, 0.720], [0.460, 0.450], [0.370, 0.240], [0.200, 0.260], [0.110, 0.400], [0.090, 0.520]];
+
+const rampStart = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const n0 = a.table.shapes.length;
+  [...document.querySelectorAll('.palette button')].find((b) => b.textContent.trim() === 'Ramp').click();
+  await new Promise((q) => setTimeout(q, 200));
+  const shown = (id) => getComputedStyle(document.getElementById(id)).display !== 'none';
+  return { drawing: !!a.drawing, added: a.table.shapes.length - n0, row: shown('obdraw'), xform: shown('obxform') };
+});
+ok(rampStart.drawing && rampStart.added === 0,
+  'the Ramp button starts a path instead of dropping a shape you would have to delete');
+ok(rampStart.row, 'and the Done / Cancel row appears while a path is open');
+ok(!rampStart.xform, 'the turn and scale row stands down, so it cannot act on the wrong thing');
+
+// The Done button has to REFUSE a path too short to be a ramp. Two points is a straight line, which
+// is a wall.
+const tooShort = await page.evaluate(() => ({ txt: document.getElementById('ob-draw-done').textContent, off: document.getElementById('ob-draw-done').disabled }));
+ok(tooShort.off && /0 of 3/.test(tooShort.txt), `Done is refused until there are enough points (${tooShort.txt})`);
+
+for (const [x, y] of PATH) await tapTable(x, y);
+await page.waitForTimeout(200);
+const laid = await page.evaluate(() => ({
+  n: window.__pb2.drawing.pts.length,
+  added: window.__pb2.table.shapes.filter((s) => s.kind === 'ribbon').length,
+  done: document.getElementById('ob-draw-done').disabled,
+}));
+ok(laid.n === PATH.length, `each tap lays one control point (${laid.n} of ${PATH.length})`);
+ok(laid.added === 1, 'and nothing is added to the table until Done', `${laid.added} ramps already`);
+ok(!laid.done, 'Done is available once the path is long enough');
+
+const built = await page.evaluate(async () => {
+  const a = window.__pb2;
+  document.getElementById('ob-draw-done').click();
+  await new Promise((q) => setTimeout(q, 300));
+  const rs = a.table.shapes.filter((s) => s.kind === 'ribbon');
+  const sh = rs[rs.length - 1];
+  return {
+    ramps: rs.length, drawing: a.drawing, id: sh.id, pts: sh.pts.length,
+    ctrl: sh.ctrl ? sh.ctrl.length : null, sel: a.sel.has(sh.id),
+    endZ: [sh.pts[0].z || 0, sh.pts[sh.pts.length - 1].z || 0],
+  };
+});
+ok(built.ramps === 2 && built.drawing === null, `Done builds the ramp and closes the mode (${built.ramps} ramps)`);
+ok(built.ctrl === PATH.length,
+  `and the CONTROL POINTS are stored on it, which is what makes it re-editable (${built.ctrl})`);
+ok(built.pts > 20 && built.endZ[0] === 0 && built.endZ[1] === 0,
+  `the generated path is a legal ramp (${built.pts} points, ends at ${built.endZ.join(' and ')})`);
+ok(built.sel, 'and it lands selected, so it can be moved or deleted straight away');
+
+// ITS HANDLES ARE ITS CONTROL POINTS. Deliberate, and it changes what the two end dots used to do:
+// on a ramp with control points they reshape the curve rather than move the whole ramp. Moving it is
+// a drag of the ramp itself. A ramp built before the tool existed has no control points and keeps
+// the old pair of end handles, because inventing some for it would be a guess.
+const rampHandles = await page.evaluate(() => {
+  const a = window.__pb2;
+  const sh = a.table.shapes.find((s) => a.sel.has(s.id));
+  const before = JSON.stringify(sh.pts);
+  const c = sh.ctrl[2];
+  const was = { x: c.x, y: c.y };
+  // drag that control point 30mm to the left, through the real handle path
+  const v = a.view;
+  const cv = document.getElementById('c');
+  const r = cv.getBoundingClientRect();
+  const at = (q) => ({ x: r.left + v.ox + (q.x * v.s + v.px) * v.zoom, y: r.top + v.oy + (q.y * v.s + v.py) * v.zoom });
+  const p0 = at(was);
+  const p1 = at({ x: was.x - 0.030, y: was.y });
+  cv.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 3, bubbles: true, clientX: p0.x, clientY: p0.y }));
+  cv.dispatchEvent(new PointerEvent('pointermove', { pointerId: 3, bubbles: true, clientX: p1.x, clientY: p1.y }));
+  cv.dispatchEvent(new PointerEvent('pointerup', { pointerId: 3, bubbles: true, clientX: p1.x, clientY: p1.y }));
+  const moved = Math.abs(sh.ctrl[2].x - was.x) * 1000;
+  return { moved, reshaped: JSON.stringify(sh.pts) !== before, ends: [sh.pts[0].z || 0, sh.pts[sh.pts.length - 1].z || 0] };
+});
+ok(rampHandles.moved > 20, `dragging a control point moves it (${rampHandles.moved.toFixed(0)}mm)`);
+ok(rampHandles.reshaped, 'and the whole curve is regenerated from it, not edited point by point');
+ok(rampHandles.ends[0] === 0 && rampHandles.ends[1] === 0,
+  'a reshaped ramp still lands at zero height at both ends');
+
+// MOVING A RAMP MUST CARRY ITS CONTROL POINTS. If the two fall out of step, the next drag of a
+// control handle snaps the whole ramp back to where the control points still thought it was.
+const rampMoved = await page.evaluate(() => {
+  const a = window.__pb2;
+  const sh = a.table.shapes.find((s) => a.sel.has(s.id));
+  const p0 = { x: sh.pts[0].x, y: sh.pts[0].y };
+  const c0 = { x: sh.ctrl[0].x, y: sh.ctrl[0].y };
+  a.sel = new Set([sh.id]);
+  // turn the selection with the object bar, which is the one path that touches every coordinate
+  document.getElementById('ob-rot-r').click();
+  const dPts = Math.hypot(sh.pts[0].x - p0.x, sh.pts[0].y - p0.y);
+  const dCtrl = Math.hypot(sh.ctrl[0].x - c0.x, sh.ctrl[0].y - c0.y);
+  return { dPts: dPts * 1000, dCtrl: dCtrl * 1000 };
+});
+ok(rampMoved.dPts > 1 && Math.abs(rampMoved.dPts - rampMoved.dCtrl) < 1,
+  `turning a ramp carries its control points with its path (${rampMoved.dPts.toFixed(1)}mm and ${rampMoved.dCtrl.toFixed(1)}mm)`);
+
+// Escape is the way out, and it must leave the table exactly as it was.
+const rampEsc = await page.evaluate(async () => {
+  const a = window.__pb2;
+  const n0 = a.table.shapes.length;
+  [...document.querySelectorAll('.palette button')].find((b) => b.textContent.trim() === 'Ramp').click();
+  await new Promise((q) => setTimeout(q, 150));
+  const armed = !!a.drawing;
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await new Promise((q) => setTimeout(q, 150));
+  return { armed, after: a.drawing, added: a.table.shapes.length - n0 };
+});
+ok(rampEsc.armed && rampEsc.after === null && rampEsc.added === 0,
+  'Escape abandons a path and adds nothing');
+
+// THE CHECK TAB HAS TO BE ABLE TO CHECK ONE. A ramp probe that only runs in a terminal is a probe
+// nobody runs, and you would lay a broken ramp and find out by playing.
+const rampCheck = await page.evaluate(async () => {
+  document.getElementById('tab-check').click();
+  await new Promise((q) => setTimeout(q, 250));
+  return [...document.querySelectorAll('#panel button')].map((b) => b.textContent.trim());
+});
+ok(rampCheck.includes('Ramps'), `the Check tab can run the ramp rules (${rampCheck.join(', ')})`);
+await page.click('#tab-edit');
+await page.waitForTimeout(200);
+
 // ------------------------------------------------------------------ turn and scale a selection
 // Handles reshape ONE part. This reshapes a selection, which is what the prefab library made
 // necessary: a bumper nest saved flat is wanted at an angle, and rebuilding it at that angle by
