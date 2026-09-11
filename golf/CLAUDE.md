@@ -4,45 +4,63 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-## Status: BEING REBUILT (Stage B + two courses of eighteen holes, 2026-09-04)
+## Status (2026-09-11): BUILT AND SHIPPED, admin-only right now, Pine Valley the only open course
 
-**`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
-anything here. It is the written record of a commercial mobile golf game reconstructed from five
-screen recordings, plus the decisions that turn it into the game we are actually building. Where
-it is silent, ask, or decide and write it down there.
+**Read this block before anything else in this file.** For a week it still said "BEING REBUILT" and
+described `js/ui.js` as "a placeholder that renders one screen saying the game is being rebuilt",
+which was true on 2026-09-04 and has been false since 2026-09-09. It is the first thing a new
+session reads, so it is the first thing that has to be true.
 
-The 3D game that used to live in this folder — three.js + cannon-es rigid bodies, aim/power/spin
-on three separate meters, Modified Stableford scoring, a course called Harbor Links — **is gone.**
-Matt's verdict on it: *"It's terrible and this is a MAJOR overhaul... I don't trust anything that
-the current build does."* Do not carry its decisions, tuning numbers, physics constants, course
-design or UI forward, and do not go looking for them in git history to "restore" something.
+Where things actually stand:
 
-Deleted in Stage A: `js/render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`,
-`flight.js`, `meters.js`, `game.js`, `clubs.js`, `test.js`, `js/vendor/` (cannon-es + two three.js
-bundles, ~1.1 MB), `courses/`, `tools/`, `DECISIONS.md`, `docs/GOLF-HANDOFF.md`,
-`docs/GOLF-PART9.md`. **The three deleted documents were specs for the old game and would mislead
-the next session; that is why they went rather than being left "for reference".**
+- **The game is complete and has been live to the family.** Setup screen, tutorial hole, unlock
+  ladder, three-tap swing, full flight and putting, scorecard, mid-round save, per-hole and
+  per-round records, its own leaderboard. Every stage in the table below is done.
+- **It is ADMIN-ONLY as of 2026-09-10**, set by Matt from the admin page while the swing is retuned.
+  Nobody but a dev profile sees the card. That is a config flip, not a code flag - do not "fix" it
+  by editing `devOnly`.
+- **Only Pine Valley is open.** `COURSE_OPEN_BY_DEFAULT` in `progress.js` is `{ pinevalley: true }`.
+  Matt has said this more than once, most bluntly when an unreleased course held up a deploy:
+  *"dude fuck oasis sands. it's not open yet. Pine Valley ONLY."* Red Mesa and Oasis Sands exist,
+  are finished, and are not released - so a test or a difficulty measurement that fails ONLY on
+  those two is not a reason to hold anything up.
+- **The swing physics were rebuilt on 2026-09-10.** Four sections at the end of this file carry it:
+  the roll back to the approved 8 %, the over-swing shrinking the target, dead centre being dead
+  straight with nothing random in a struck ball, and the 250 yd ceiling. If you are about to change
+  a number in `swing.js` or `clubs.js`, read all four first - each one is a reversal of something a
+  previous session did without asking.
 
-What is here now is a placeholder: `js/ui.js` renders one screen saying the game is being rebuilt,
-and keeps the three module-contract exports so nothing in the repo carries a broken import.
+**Open, and each one is Matt's call, not yours:**
 
-### Where the rebuild is
+1. **The leaderboard.** Every golf score on it was set under physics that no longer exist - an 18 %
+   fairway roll, a random spray on every over-swing, and a signed distance loss where a miss could
+   go further than a perfect strike. Those records are not comparable to anything set from today.
+   Leave them, label them, or void them per player through `js/stats-corrections.js` (which has no
+   golf path yet). **Nothing has been deleted or changed - THE LAW - and nothing should be without
+   him saying so.**
+2. **Oasis Sands hole 4** is a par 5 of 451 yards, reachable in two, and plays 0.75 under par. It is
+   a NAMED GAP in `test.js` section 15c, printed on every run. Fix the hole before that course opens.
+3. **Golf's HUD top row overlaps on phones 360 px wide and narrower.** Untouched.
+4. **Club upgrade tiers are designed but NOT built and NOT in the spec.** `clubs.js` carries an
+   `upgraded` carry per club and `golf-reference-spec.md` §21.3 names four tiers (stock, pro, tour,
+   champion) while deliberately leaving the middle two unspecified. Matt's constraint, from working
+   through it: upgrades must not turn every par 5 into an eagle look, and today's play is nearer the
+   TOP of that ladder than the bottom.
 
-| Stage | Contents | State |
-|---|---|---|
-| A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
-| — | The hole-data format, written down before anything is built against it | **done** |
-| B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
-| C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round and the drop prompt are done**; the sunburst banner is not |
-| D | Stats wiring, this file, `sw.js`, the full test sweep, release | **done** (My Stats' to-par landed 2026-09-06); release is a tap on the admin page |
-| — | Thirty-three more holes: Pine Valley 4-18, and Red Mesa, a whole second course | **done** |
+**How Matt wants changes made here, learned the hard way on 2026-09-10.** He stopped a session
+mid-edit: *"you shouldn't be touching anything. you should tell me which idea is better, how you
+would implement it, then when we agree on something, you present mockups."* For a feel change -
+anything that moves the swing, the meter, a distance or a difficulty - propose it with numbers,
+agree it, show it, and only then build. The tempo, `BLOCK_KEEPS_DIST` and `BLOCK_SPRAY_DEG` are
+numbers he calibrated himself, and two separate sessions have been caught changing his approved
+values without asking. An APPROVED table in the spec is a decision, not a starting point.
 
-**Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
-the flight before Stage C is built on top of them. Expect the numbers below to move.
+**And measure rather than argue.** The engine suite plays every hole 24 times and reports each one
+against par; `test.js` section 15c is where a difficulty claim gets settled. The simulated player is
+not a person and its scores are a floor, never evidence about real play - but a BEFORE and AFTER of
+the same robot is real evidence, and it is what caught a change of mine that made the game easier.
 
-The stages map onto `golf-reference-spec.md` §16's phases, with three approved changes: the
-leaderboard metric change moved forward into Stage A, the `test-visual.mjs` entry gets written at
-the start of Stage B, and the hole-data format is decided before Stage B rather than during it.
+### The stages, as built
 
 ## Harbor Links is gone from the product, but its keys are not
 
