@@ -148,9 +148,10 @@ const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SRC)[1];
 // The real ASSETS/SHELL/REST arrays, pulled from the file itself so the tests describe the shipped
 // list rather than a guess at it (the same extraction trick validate-sw-assets.mjs uses).
 const buildSrc = SW_SRC.slice(SW_SRC.indexOf('const ASSETS = ['), SW_SRC.indexOf("self.addEventListener('install'"));
-const { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY, NETWORK_FIRST, SHELL_CACHE_FIRST } =
-  new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY, `
-    + `NETWORK_FIRST, SHELL_CACHE_FIRST };`)();
+const {
+  ASSETS, SHELL, REST, LAZY, WARMED, REST_MANIFEST, MANIFEST_KEY, NETWORK_FIRST, SHELL_CACHE_FIRST,
+} = new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST, LAZY, WARMED, REST_MANIFEST, `
+  + `MANIFEST_KEY, NETWORK_FIRST, SHELL_CACHE_FIRST };`)();
 
 /** The warm is fire-and-forget from activate, so probes wait for its own completion signal:
  *  the manifest it writes as its second-to-last act (cleanup of old caches is the last). */
@@ -497,9 +498,9 @@ console.log('\n--- [KNOWN-BUG PROBE] a CACHE bump carries unchanged REST files f
   await w1.fire('install');
   await w1.fire('activate');
   ok('deploy 1: the fresh-install warm completes', await drainWarm(w1, CACHE_NAME));
-  const restFetches1 = netPaths.filter((p) => REST.some((r) => keyOf(r) === ORIGIN + p)).length;
-  ok('deploy 1: a fresh device fetches the whole REST tier (nothing to carry yet)',
-    restFetches1 >= REST.length - 1, `fetched ${restFetches1} of ${REST.length}`);
+  const restFetches1 = netPaths.filter((p) => WARMED.some((r) => keyOf(r) === ORIGIN + p)).length;
+  ok('deploy 1: a fresh device fetches the whole WARMED tier (nothing to carry yet)',
+    restFetches1 >= WARMED.length - 1, `fetched ${restFetches1} of ${WARMED.length}`);
 
   // Deploy 2: CACHE bumped, manifest UNCHANGED (the overwhelmingly common deploy).
   const bumped = SW_SRC.replace(/const CACHE = 'game-hub-v(\d+)'/, (_, n) => `const CACHE = 'game-hub-v${Number(n) + 1000}'`);
@@ -512,8 +513,8 @@ console.log('\n--- [KNOWN-BUG PROBE] a CACHE bump carries unchanged REST files f
   const restFetches2 = netPaths.filter((p) => REST.some((r) => keyOf(r) === ORIGIN + p)).length;
   eq('[KNOWN-BUG PROBE] deploy 2 re-downloads ZERO unchanged REST files (was: all 292)', restFetches2, 0);
   const newCache = w2.caches.get(BUMPED_NAME);
-  ok('every REST entry was carried into the new cache anyway',
-    REST.every((p) => newCache.map.has(keyOf(p))),
+  ok('every WARMED entry was carried into the new cache anyway',
+    WARMED.every((p) => newCache.map.has(keyOf(p))),
     'carried-forward entries must be present, not merely skipped');
   ok('the old cache is deleted once the warm is done (still exactly one generation at rest)',
     !w2.caches.has(CACHE_NAME));
@@ -522,7 +523,7 @@ console.log('\n--- [KNOWN-BUG PROBE] a CACHE bump carries unchanged REST files f
   // must be re-fetched. A manifest that carried a CHANGED file forward would serve stale bytes
   // to the cache-first image path forever, which is the one invariant the old full re-download
   // bought; this probe is what proves the manifest keeps it.
-  const changedPath = REST.find((p) => REST_MANIFEST[p]);
+  const changedPath = WARMED.find((p) => REST_MANIFEST[p]);
   const bumped3 = bumped
     .replace(/const CACHE = '([^']+)'/, `const CACHE = 'game-hub-v99999'`)
     .replace(`'${changedPath}': '${REST_MANIFEST[changedPath]}'`, `'${changedPath}': 'aaaaaaaaaa'`);
@@ -535,6 +536,105 @@ console.log('\n--- [KNOWN-BUG PROBE] a CACHE bump carries unchanged REST files f
   eq('a changed hash re-fetches exactly that file', restFetches3.length, 1);
   ok('...and it is the changed file', restFetches3[0] === new URL(keyOf(changedPath)).pathname,
     `fetched ${restFetches3[0]}`);
+}
+
+// --- 7b. the LAZY tier: big per-game data is never warmed, but is free once you have it --------
+//
+// Matt, 2026-09-11, about Boggle's dictionaries: "Can we make the dictionary only download when
+// you go to play the game? Seems like a lot for most people to download when they'll never use it
+// ever." Measured against the shipped ASSETS list, the two word lists are 3.23 MB of an 11.92 MB
+// REST tier - 27% of everything a device warms, for one game.
+//
+// The tier only works if BOTH halves hold, and they pull in opposite directions, which is why
+// each gets its own probe: never fetched by the warm (or nothing is saved), and still carried
+// forward across a CACHE bump once the device has a copy (or a Boggle player re-downloads 1.6 MB
+// after every one of this repo's ~13 daily deploys, which is worse than before the change).
+
+console.log('\n--- the lazy tier: downloaded on first play, never by the warm ---');
+
+ok('there IS a lazy tier to test', LAZY.length > 0, 'LAZY is empty');
+ok('every lazy path is in ASSETS (so validate-sw-assets still guards it existing)',
+  LAZY.every((p) => ASSETS.includes(p)));
+ok('every lazy path carries a content hash (so it can be carried forward)',
+  LAZY.every((p) => !!REST_MANIFEST[p]), 'a lazy file with no hash re-downloads every deploy');
+ok('LAZY + WARMED partition REST exactly',
+  LAZY.length + WARMED.length === REST.length
+  && new Set([...LAZY, ...WARMED]).size === new Set(REST).size);
+ok('no lazy path is shell', LAZY.every((p) => !SHELL.includes(p)));
+// Game CODE must never be lazy: those modules are what a launcher tile opens, they are small, and
+// making them lazy would undo the 2026-09-01 cache-first win.
+ok('no JS or CSS is lazy - only data files',
+  LAZY.every((p) => !/\.(js|css|html)$/.test(p)), LAZY.join(', '));
+
+{
+  // Half one: a fresh install must not fetch it.
+  const netPaths = [];
+  const w = bootWorker({ net: async (req) => { netPaths.push(new URL(req.url).pathname); return new FakeResponse('x'); } });
+  await w.fire('install');
+  await w.fire('activate');
+  ok('the warm completes', await drainWarm(w, CACHE_NAME));
+
+  const lazyFetched = LAZY.filter((p) => netPaths.includes(new URL(keyOf(p)).pathname));
+  eq('a fresh install fetches ZERO lazy assets', lazyFetched.length, 0);
+  ok('...while it does fetch the warmed tier',
+    netPaths.length >= WARMED.length - 1, `fetched ${netPaths.length}, warmed tier is ${WARMED.length}`);
+
+  const cache = w.caches.get(CACHE_NAME);
+  ok('a lazy asset is not in the cache after a fresh install',
+    LAZY.every((p) => !cache.map.has(keyOf(p))));
+  ok('the warm did not report the skipped lazy assets as failures',
+    !w.logs.some((l) => /could not be precached/.test(String(l))), w.logs.join(' | '));
+}
+
+{
+  // Half two: requesting it caches it on demand (the fetch handler's cache-first branch), and the
+  // NEXT deploy then carries it forward for free rather than re-downloading it.
+  let fetched = 0;
+  const net = async (req) => { fetched++; return new FakeResponse('WORDS'); };
+  const w1 = bootWorker({ net });
+  await w1.fire('install');
+  await w1.fire('activate');
+  await drainWarm(w1, CACHE_NAME);
+
+  const lazyPath = LAZY[0];
+  fetched = 0;
+  const res = await w1.fire('fetch', { request: new FakeRequest(lazyPath) });
+  eq('opening the game fetches the dictionary once', fetched, 1);
+  eq('...and the player gets it', res.body, 'WORDS');
+  const c1 = w1.caches.get(CACHE_NAME);
+  ok('...and it is cached on demand for next time', c1.map.has(keyOf(lazyPath)));
+
+  // Serve it again: now it must come from cache, no network at all.
+  fetched = 0;
+  const res2 = await w1.fire('fetch', { request: new FakeRequest(lazyPath) });
+  eq('a second open costs nothing', fetched, 0);
+  eq('...and still serves the dictionary', res2.body, 'WORDS');
+
+  // A CACHE bump. The lazy file's hash is unchanged, so it must be CARRIED, not re-fetched.
+  const bumped = SW_SRC.replace(/const CACHE = 'game-hub-v(\d+)'/, (_, n) => `const CACHE = 'game-hub-v${Number(n) + 2000}'`);
+  const BUMPED = /const CACHE = '([^']+)'/.exec(bumped)[1];
+  const netPaths2 = [];
+  const w2 = bootWorker({
+    net: async (req) => { netPaths2.push(new URL(req.url).pathname); return new FakeResponse('x'); },
+    src: bumped,
+    existingCaches: w1.caches,
+  });
+  await w2.fire('install');
+  await w2.fire('activate');
+  ok('the next deploy warms', await drainWarm(w2, BUMPED));
+  ok('[KNOWN-BUG PROBE] a deploy does NOT re-download a dictionary the device already has',
+    !netPaths2.includes(new URL(keyOf(lazyPath)).pathname),
+    'lazy must sit BELOW the carry-forward in warmRest, not above it');
+  const c2 = w2.caches.get(BUMPED);
+  ok('...it was carried into the new cache, so the player keeps it offline',
+    c2.map.has(keyOf(lazyPath)));
+  eq('...and it is the same bytes', (await c2.match(new FakeRequest(lazyPath))).body, 'WORDS');
+
+  // The other lazy file, which this device never asked for, must still be absent.
+  if (LAZY.length > 1) {
+    ok('a lazy asset the device never used is still not downloaded',
+      !c2.map.has(keyOf(LAZY[1])) && !netPaths2.includes(new URL(keyOf(LAZY[1])).pathname));
+  }
 }
 
 // --- 8. mid-warm, the previous deploy's cache still answers -------------------------------------
