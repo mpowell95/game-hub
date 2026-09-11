@@ -619,8 +619,20 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
   ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
     /const d = \(boardTierOf\(b, id\) \|\| 0\) - \(boardTierOf\(a, id\) \|\| 0\);\s*\n\s*if \(d\) return d;/.test(src));
+  // FIVE, not three, since 2026-09-11: the generic card, plus Tic Tac Toe's and Snake's cards in
+  // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
+  // Drop the chip from any one of them and this fails, which is the point.
   ok('every card still names the tier it ranks at',
-    (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 3 && /\.lb-tierchip\{/.test(src));
+    (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 5 && /\.lb-tierchip\{/.test(src));
+  // THE HEADLINE IS WHAT YOU SORTED BY, on the two games with a bespoke card as well. Matt, on the
+  // Snake board sorted by Games: rank 1 printed 39 and rank 3 printed 43, because these two cards
+  // took no sort argument and always led with the score.
+  ok('Tic Tac Toe and Snake take the board sort, so Games leads with the play count',
+    /function ttCardHTML\(g, chip, bSort\)/.test(src)
+    && /function snCardHTML\(g, chip, bSort\)/.test(src)
+    && /ttCardHTML\(g, chip, bSort\)/.test(src)
+    && /snCardHTML\(g, chip, bSort\)/.test(src)
+    && (src.match(/if \(bSort === 'played'\) \{\s*\n\s*(const split|return playerCardHTML)/g) || []).length === 2);
   ok('the rank badges call a tie by the comparator, so equal scores in different tiers are not tied',
     /const same = i > 0 && \(cmp \? cmp\(ranked\[i - 1\], g\) === 0 : v === prev\);/.test(src));
   ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',
