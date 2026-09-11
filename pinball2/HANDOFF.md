@@ -550,6 +550,23 @@ any one table** so a prefab can be dropped on any of them.
   way of not typing, never a new kind of object for the engine to know about - nothing in
   `physics.js`, `checks.js` or the data model knows prefabs exist.
 
+### The placements list (2026-09-11)
+
+Every part on the table, listed by kind and id, in a **Parts (N)** group under the Inspector. Tap a
+row and that part is selected and brought to the middle of the stage at 200% (`panTo(centre, 2)`).
+It is the reverse of tapping the canvas, and it is the only way to reach a part that is under
+another one, off the visible area, or two millimetres wide.
+
+- **Sorted by kind, then by id numerically**, so the list does not reshuffle when a part is edited
+  and two ids that differ by a digit do not sort `f10` before `f6`.
+- **The row shows the same icon as the palette button that makes that kind** (`PART_ICONS`), so a
+  kind is recognised without reading. A kind with no icon renders the name alone rather than a
+  blank, which is what `ribbon` did until it got one.
+- The group **remembers whether it is open** across re-renders (`groupOpen`), which every group now
+  does. Without it, the panel re-renders on every drag frame and a list you opened shuts itself
+  under your finger. A group that is open BECAUSE something is selected still wins over the
+  remembered state, so Tune's tapped-part group keeps opening itself.
+
 ### Two things to know before editing `editor.js`
 
 - **The animation loop is scheduled in a `finally`.** Nothing inside a frame can stop the app. Keep
