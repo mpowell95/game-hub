@@ -96,6 +96,8 @@ function save() {
 
 function load() {
   try {
+    // An escape hatch that needs no explaining over chat: open the editor with ?fresh on the end.
+    if (/[?&]fresh\b/.test(location.search)) { localStorage.removeItem(SAVE); return; }
     const raw = localStorage.getItem(SAVE);
     if (!raw) return;
     const d = JSON.parse(raw);
@@ -109,9 +111,19 @@ function load() {
     // is kept with a line in the corner saying the shipped table moved on.
     const sig = shippedSig();
     if (d.table) {
-      const stale = d.shipped && d.shipped !== sig;
-      if (stale && !d.edited) {
-        app.table = makeTable();                // nothing of theirs to lose: take the new build
+      // A SAVE WITH NO FINGERPRINT PREDATES THE FINGERPRINT, so it is old by definition. The first
+      // version of this check read `d.shipped && d.shipped !== sig`, which is false when the field
+      // is missing - so it kept the old table, which is the ONE case the check was written for.
+      // Matt, on the build that was meant to fix it: "All I have is a stale bare bones tool from
+      // hours ago."
+      const stale = d.shipped !== sig;
+      // An unfingerprinted save is also one whose `edited` flag was never tracked, so it cannot be
+      // trusted either. The shipped table wins and the old one is kept under its own key rather
+      // than deleted, so nothing is actually lost.
+      const trustEdited = d.shipped != null && d.edited;
+      if (stale && !trustEdited) {
+        try { localStorage.setItem(SAVE + '.replaced', JSON.stringify(d)); } catch (e) {}
+        app.table = makeTable();                // take the new build
       } else {
         const t = fromJSON(d.table);
         app.repaired = repairTable(t);          // an already poisoned phone heals on this load
