@@ -45,6 +45,10 @@ arcade register) and gives every mechanism a thing it actually is:
 | spinner | the **Lighthouse** |
 | top rollover lanes | **P·I·E·R** |
 | standup targets | **Ring Toss** |
+| second saucer / mode start | the **Fortune Teller** |
+| left-wall standups | the **Boathouse** |
+| mystery standup | the **Ticket Booth** |
+| right-orbit standups | the **Bait Shop** |
 
 ---
 
@@ -106,6 +110,67 @@ so a 30 mm lane is illegal by construction — it is exactly the width a ball we
 | 2 | Coaster ramp | mouth (196, 742); crest **z = 62 mm** over the centre; exits left inlane (120, 838) at z 0 |
 | 4 | Pier ramp | mouth (300, 716); **crest (360, 470)**, z = 55 mm; exits right inlane (368, 838) at z 0. *Crest moved inboard from (404, 470) on 2026-09-12: it passed directly over the Ring Toss plate and buried it. Found by drawing the table, not by a probe* |
 
+### Rev C — density (2026-09-12)
+
+Rev B could be touched in about 22 places. Everything below is an engine kind rev B already
+commits to building, so **rev C adds zero new engine kinds**. Coordinates are provisional in the
+same sense as everything above: placed to intent, cleared by hand against the 20.3–31.1 mm wedge
+band, and `checkGaps` is still the authority.
+
+#### Rubber posts — 14, r 6, rubber ring, **10 pts** (not derived: activity, same class as slings)
+
+| Pair | Posts | Purpose |
+|---|---|---|
+| Coaster mouth | (164, 752) · (228, 748) | 52 mm gate on a 40 mm mouth; a near-miss kicks live instead of rolling home |
+| Pier mouth | (270, 726) · (330, 722) | 48 mm gate on a 40 mm mouth, same job |
+| Fishing Dock caps | (96, 644) · (210, 570) | welded to the bank's ends (12.4 / 7.5 mm — shut, not ambiguous); protects the corners |
+| Sling tops | (88, 798) · (372, 790) | the classic sling-post cluster; both shut against their sling (10.1 / 16.2 mm) |
+| Ferris Wheel entry | (206, 494) · (258, 494) | a 40 mm gate into the lock saucer, each post shut against the r 23 rim |
+| Left dead band | (132, 432) · (124, 690) | the two ends of the strip the spinner and the Coaster mouth used to bracket with nothing between |
+| Lower centre | (244, 796) · (292, 788) | kills the bare rectangle between the ramp mouths and the slings |
+
+#### Targets on the empty walls
+
+| Key | Part | Geometry |
+|---|---|---|
+| K | **Boathouse** — 2 standups | (78, 452)→(98, 477) and (86, 483)→(106, 508), welded to the left orbit's inner guide, angled at the right flipper. 13.4 mm between them: shut, deliberately |
+| L | **Ticket Booth** — 1 standup | (250, 548)→(280, 552), facing the left flipper, clear of the wheel's eject path (57 mm) |
+| M | **Bait Shop** — 2 standups | (404, 274)→(404, 306) and (404, 316)→(404, 348), flush with the right orbit's inner guide, clipped by a ball running the lane |
+
+#### A second hole and a second spinner
+
+| Key | Part | Geometry |
+|---|---|---|
+| N | **Fortune Teller** scoop | centre (100, 570), r 23, mouth 44 mm facing the left flipper, welded to the left orbit's inner guide. Ejects 2.4 m/s at the left flipper. Same kind and same 2 s watchdog as the wheel |
+| P | **Coaster spinner** | across the Coaster mouth at (196, 742), span 38 mm. 250/rev, same kind as the Lighthouse |
+| Q | **Ball-save eject** | (232, 992), fires up the centre at 3.4 m/s while armed. Kickback class, second instance |
+
+**Two of the directive's own coordinates were unusable and moved**, both for the same reason — they
+sat inside the left orbit's 40..78 mm lane, which is a shot, not a wall:
+
+- Boathouse, given as the left rail face (34, 560)–(34, 640) → welded to the orbit's INNER guide at
+  x 78..106. The rail face is the far side of a live lane; a target there is in the ball's path
+  on every orbit.
+- Fortune Teller, given as (58, 660) → (100, 570). At (58, 660) an r 23 scoop fills the orbit lane
+  completely. **It then moved a second time, from (146, 530), because DRAWING it found the Coaster
+  ramp passing over it** — the ramp's left edge is x 161 at that y against the scoop's right edge at
+  169, an 8 mm overlap. That is the same failure as the Pier crest over the Ring Toss plate, on the
+  other side of the table, and again a probe would not have caught it because both parts were legal
+  on their own. **Three of the four errors in this design have been found by drawing it.**
+
+**The Bait Shop is inside the x 380..437 band the directive bans, on purpose.** That ban exists
+because three parts already share that width — but they share it at **y 484..610** (Ring Toss
+plate, Pier crest, shooter wall). The Bait Shop sits at **y 274..348**, where the band holds only
+the orbit lane and its guide, and "gives the right orbit a partial-credit outcome" cannot be
+satisfied anywhere else. Clearances at that y: guide face x 404 to shooter-lane wall inner face
+x 437 = 33 mm — the orbit's own lane, unchanged. Reported rather than quietly taken.
+
+**The left wall is the new suspect band** and gets the treatment the right side got. The spinner,
+the Boathouse, both left-band posts and the Fortune Teller now share **x 28..160, y 430..742**.
+Placing them moved four coordinates off their first values to stay out of the wedge band; the
+worst near-misses were the Fortune Teller against the left Ferris post at 25.9 mm and the same
+scoop under the Coaster ramp at an 8 mm overlap — one caught by arithmetic, one only by drawing. Draw it before building it.
+
 **The right-side stack is the one place to check clearances first.** The Ring Toss plate (out to
 x 426), the right orbit lane (34 mm clear) and the shooter-lane wall (inner face x 437) share about
 60 mm of width. The intent is that the ring targets are welded to the orbit's inner guide - a
@@ -113,13 +178,6 @@ deliberate overlap, which is how you SHUT a gap. **Two errors have already been 
 60 mm band**: the bullseye at x 426 sat inside the shooter-lane wall, and the Pier ramp's crest at
 (404, 470) passed directly over the Ring Toss plate. Both were caught by drawing, not by a probe.
 Treat this band as suspect until `checkGaps` has passed it.
-
-**The right-side stack is the one place to check clearances first.** The Ring Toss plate (out to
-x 426), the right orbit lane (34 mm clear) and the shooter-lane wall (inner face x 437) share about
-60 mm of width. The intent is that the ring targets are welded to the orbit's inner guide - a
-deliberate overlap, which is how you SHUT a gap. **The first draft of the drawing put the bullseye
-at x 426 and it sat inside the shooter-lane wall**; that is the error this note exists to stop
-happening again in the build.
 
 **Both ramps must obey the four ramp rules already enforced by `rampProbe`**: both ends at z=0, no
 kink over 20° per junction, no level run, and entry decided by a CROSSING rather than a window.
@@ -163,6 +221,28 @@ shot does rather than adding another static target.
 to the left-inlane position. A diverter stuck on the lock feed with no lock available is a ball with
 nowhere to go, which is the one failure this engine's whole thesis forbids.
 
+## 3b. The small game (rev C)
+
+The four mechanisms above all gate MAJOR shots. Nothing gated the small stuff, which is why a miss
+on rev B was a silent roll back to the flipper. These are rules only — **zero new geometry beyond
+§2's rev C block**.
+
+| Rule | What it does |
+|---|---|
+| **Hurry-up** | Clearing the Fishing Dock bank starts a 15 s countdown from **25,000**, collected at the Fortune Teller scoop. Provisional, robot-tunable |
+| **Timed ball save** | 8 s from plunge, the ball-save eject (Q) fires. Standard on every real machine since the 90s and absent from rev B |
+| **Lane change** | Either flipper button rotates which P·I·E·R lamp is lit. Costs nothing and adds the classic top-lane skill layer |
+| **Outlane trade** | Completing the Boathouse lights ONE outlane for **Last Cast** — big points for draining there. Lit state is shape + motion, never hue |
+| **Rattle** | Any two rubber-post hits inside 1 s scores **100** and chases the marquee bulbs. Pure flavour; it teaches that the ball is alive |
+
+**Two holes, two jobs.** The Ferris Wheel is now purely the LOCK hole and the Fortune Teller is the
+MODE-START hole (and the mystery collect, and the hurry-up collect). That is a cleaner rule than
+rev B's one saucer doing both, and it is the reason the second hole earns its place rather than
+just being a second hole.
+
+**The Ticket Booth is the mystery award**, cycling a visible 3-position prize wheel: points / light
+lock / light mode. The state is drawn as a pointer, per the art rules — never as text.
+
 ## 4. Scoring, derived
 
 Matt's rev-A note: *"Point values feel arbitrary... show the math, don't just assign numbers."* They
@@ -191,9 +271,29 @@ right (256, 941) - because that is where the ball leaves the bat.
 | Fishing Dock bank | 355 | 1.18 | 15.4° | 1.4 | 861 | **1,000** |
 | The Pier | 243 | 0.81 | 9.4° | 1.4 | 962 | **1,000** |
 | The Coaster | 208 | 0.69 | 11.0° | 1.4 | 706 | **500** |
+| Boathouse standup *(C)* | 489 | 1.63 | 3.7° | 1.4 | 4,877 | **5,000** |
+| Ticket Booth *(C)* | 395 | 1.32 | 4.3° | 1.4 | 3,390 | **3,500** |
+| Fortune Teller scoop *(C)* | 387 | 1.29 | 6.5° | 1.4 | 2,217 | **2,000** |
 
-The generator is `pts.mjs` in the scratch work; re-derive rather than hand-edit if any coordinate
-moves.
+The generator is **`docs/pier-nine-values.mjs`**; re-derive rather than hand-edit if any coordinate
+moves. Every rev C value above came out of it after placement, not before.
+
+**The Boathouse came out at 5,000, well above the 2,500–3,500 the rev C directive expected.** It is not
+adjusted to fit. It is a 489 mm cross-table shot at a 32 mm target — the second-longest on the
+table and the second-narrowest aperture — so the formula is right and the expectation was the
+guess. If 5,000 plays too rich it is the PLACEMENT that should move, not the number — and note that it
+already moved once, from y 470 up to y 452, when the Fortune Teller needed the room: the value went
+4,500 → 5,000 with it, which is the derivation working.
+
+**The Bait Shop is NOT derived, and this is where the formula meets its edge.** Derived straight it
+returns **8,500** — the highest value on the table, for a partial-credit consolation on a shot
+worth 3,000. The cause is the `D` term: it assumes free flight and charges a guided shot for every
+millimetre the lane carries it, which is wrong for a target sitting *inside* the right orbit. The
+ball is not aimed at the Bait Shop; it is aimed at the orbit mouth, and the lane does the rest.
+So the Bait Shop is valued as a **fraction of the shot it partially completes: 1,000 each, 2,000
+for both** — deliberately below the 3,000 for actually finishing the orbit, because partial credit
+that beats full credit is a scoring bug. **General rule this exposes: the formula applies to a
+target a flipper can aim at. A target inside a guided lane inherits its lane's difficulty.**
 
 **A cheap shot is not a bad shot.** The Coaster is worth 500 because it is close and wide, and that
 is the honest difficulty. It earns over a game through REPETITION - the combo chain and the mode
@@ -205,10 +305,12 @@ row. The bullseye is worth twelve times as much and you will hit it twice a game
 | Combo x2 … x5 | 2nd-5th major inside 3 s | 1,000 … 2,500 | 12,000 … 30,000 |
 | Mode x10 → x20 → x40 | the lit shot during its mode | 5,000 … 20,000 | 60,000 … 240,000 |
 
-**Three values are deliberately NOT derived**, and each has a stated reason:
+**Four groups of values are deliberately NOT derived**, and each has a stated reason:
 
-- **Pops 100, slings 50, inlanes 250, spinner 250/rev.** Nothing here is aimed at. They are
-  activity, not shots, so shot difficulty does not apply to them.
+- **Pops 100, slings 50, inlanes 250, both spinners 250/rev, rubber posts 10, Rattle 100.**
+  Nothing here is aimed at. They are activity, not shots, so shot difficulty does not apply to
+  them. The Coaster spinner shares the Lighthouse's rate for the same reason: a spinner's value is
+  per revolution, and how hard it was ripped is already the multiplier.
 - **Jackpot 25,000, super jackpot 100,000.** The difficulty in multiball is keeping three balls
   alive, not the shot. Flat, so that no ramp is the "wrong" jackpot to go for.
 - **Locks 5,000 / 10,000 / 15,000.** Escalating with the tension rather than with the geometry: it
@@ -312,6 +414,11 @@ Each phase ships and is playable on its own.
 | 7 | The rules: modes, locks, jackpots, combos, skill shot, bonus | robot-player score spread |
 | 8 | Tune on measurement | the table below |
 
+**Rev C adds no phases.** Posts → phase 6 (geometry with a score hook). Boathouse, Ticket Booth,
+Bait Shop, Coaster spinner → phase 2 kinds, phase 6 placement. Fortune Teller → phase 3 (saucer
+class, watchdog included). Ball save → phase 3 (kickback class, second instance). Hurry-up, lane
+change, outlane trade, Rattle → phase 7. The four density metrics → phase 8.
+
 ---
 
 ## 7. "Fun and competitive" as a number
@@ -329,6 +436,25 @@ until it meets them.
 | dead stops (`restSweep`) | 0 | non-negotiable |
 | balls leaving (`escapeProbe`) | 0 | non-negotiable |
 | ambiguous gaps (`checkGaps`) | 0 | non-negotiable |
+
+**Density, added in rev C.** The table above measures SHOTS and nothing in it measures whether a
+ball touches anything between them, which was the whole rev-B complaint.
+
+| Measure | Target | Why |
+|---|---|---|
+| bare-deck rectangles | no empty area larger than ~120 x 120 mm in the usable field above the slings | directly kills the "3 things" read |
+| contacts per ball (robot) | median ≥ 25 switch events | a ball that touches 8 things and drains is rev B |
+| non-shot points share | 10–25% of game score from posts, slings, pops, spinners, lanes | below 10% the small stuff is decoration; above 25% aiming stops mattering |
+| miss liveliness | ≥ 60% of failed major-shot attempts contact at least one scoring object before reaching a flipper | the real-table feel in one number |
+
+All four are robot-measured in phase 8. **Until the robot exists they are targets, not claims** —
+including the contact count below, which is a count of parts placed, not of parts hit.
+
+**Contacts after rev C: 22 → ~43.** 22 (rev B) + 14 posts + 5 standups + 1 scoop + 1 spinner +
+1 ball-save eject. The directive's "a WPC machine runs 40 to 60 switches" is **not quoted here as
+fact** — the directive flagged it as approximate itself, and nothing in this repo has checked it
+against a real switch matrix. The 43 is a real count of this table; the range it is compared
+against is not yet verified.
 
 **The robot player does not exist yet and is part of phase 7.** Without it, "make rate" and "score
 spread" are opinions. A soak that wanders is not a measurement — this project has the receipts on
