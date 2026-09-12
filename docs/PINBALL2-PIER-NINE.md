@@ -104,14 +104,15 @@ so a 30 mm lane is illegal by construction — it is exactly the width a ball we
 | J | One-way gate | (100, 146) → (142, 122), at the top of the left orbit |
 | 5 | Fishing Dock — 3 drop targets | (100,626)→(128,613), (136,609)→(164,596), (172,592)→(200,579). Angled at the right flipper |
 | 2 | Coaster ramp | mouth (196, 742); crest **z = 62 mm** over the centre; exits left inlane (120, 838) at z 0 |
-| 4 | Pier ramp | mouth (300, 716); crest **z = 55 mm**; exits right inlane (368, 838) at z 0 |
+| 4 | Pier ramp | mouth (300, 716); **crest (360, 470)**, z = 55 mm; exits right inlane (368, 838) at z 0. *Crest moved inboard from (404, 470) on 2026-09-12: it passed directly over the Ring Toss plate and buried it. Found by drawing the table, not by a probe* |
 
 **The right-side stack is the one place to check clearances first.** The Ring Toss plate (out to
 x 426), the right orbit lane (34 mm clear) and the shooter-lane wall (inner face x 437) share about
 60 mm of width. The intent is that the ring targets are welded to the orbit's inner guide - a
-deliberate overlap, which is how you SHUT a gap. **The first draft of the drawing put the bullseye
-at x 426 and it sat inside the shooter-lane wall**; that is the error this note exists to stop
-happening again in the build.
+deliberate overlap, which is how you SHUT a gap. **Two errors have already been found in this
+60 mm band**: the bullseye at x 426 sat inside the shooter-lane wall, and the Pier ramp's crest at
+(404, 470) passed directly over the Ring Toss plate. Both were caught by drawing, not by a probe.
+Treat this band as suspect until `checkGaps` has passed it.
 
 **Both ramps must obey the four ramp rules already enforced by `rampProbe`**: both ends at z=0, no
 kink over 20° per junction, no level run, and entry decided by a CROSSING rather than a window.

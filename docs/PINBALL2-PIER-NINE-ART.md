@@ -87,7 +87,38 @@ Three other things show state as GEOMETRY rather than as light, which is stronge
 | — | **Deck and railings** | planks down-table, sodium pools under each feature, white painted railing with posts every 140 mm | none |
 | — | **The drain** | open water with faint wave lines, below the deck's edge | none |
 
-## 5. What this does NOT specify
+## 5. What the engine cannot draw today
+
+Named rather than quietly skipped. Every one of these is why the render is currently a picture and
+not the game.
+
+| Gap | What it blocks |
+|---|---|
+| **No decorative layer.** `render.js` draws colliders and nothing else | Almost everything in §4: the wheel's rim, bulbs and cars, the tent stripes, the plank texture, the marquee, the railing posts, the water. Needs a `decor` list on the table - drawn, never collided, invisible to every probe |
+| **No lamp state.** There is a 110 ms `hot` flash map and nothing more | Cold / hot / mode / jackpot / spent. Needs a persistent per-shape lamp fed by `rules.js` |
+| **No animation clock** in the renderer | The pulse ring, the wheel turning, the beam sweeping, the marquee chase |
+| **Art bigger than its collider.** The wheel is drawn at r 44 against a saucer of r 23 | Correct for a Ferris wheel - the frame is around the hole, not the hole - and only possible once the decor layer exists. Until then the wheel can only be as big as its own hole |
+| **Scale.** The render is 440 px wide; a phone gives the table 306 | At 0.6 px/mm the twelve rim bulbs and the tent stripes are about 2 px each. They read as texture, not as countable parts. Nothing in the design depends on counting them |
+
+These belong in build phase 1 beside the scoring spine: **a decor list, a lamp state and a clock**
+are three small additions to `render.js`, and none of them touches the solver.
+
+## 5a. The Pier ramp moved, because the render found a collision
+
+Drawing it is what caught this. The Pier ramp's crest sat at **(404, 470)**, and the Ring Toss plate
+occupies **x 380..406, y 484..610**. The ramp passed directly over the target and buried it - the
+whole feature was invisible under the wireform.
+
+Crest moved inboard to **(360, 470)**. The lane's right edge is then x 378 against the plate's left
+edge at 380, so they touch rather than overlap.
+
+**`docs/PINBALL2-PIER-NINE.md` §2 carries the same correction.** The blueprint's own note already
+said the right-side stack was the first clearance to check; this is the second thing found there
+after the bullseye sitting inside the shooter-lane wall. **Two of the three errors in this design so
+far have been on the right side, in the 60 mm shared by the Ring Toss, the right orbit, the Pier
+ramp and the shooter lane.** Treat that band as suspect until a probe has passed it.
+
+## 6. What this does NOT specify
 
 Deliberately, so nobody treats a gap as an oversight:
 
