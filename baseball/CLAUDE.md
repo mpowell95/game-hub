@@ -4,6 +4,172 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 2 — mechanisms and simulator
+
+BB-2 (2026-09-12, same day as BB-1a) landed the three mechanisms the shipped engine still faked
+(out-zone defense, per-league CPU behavior, no fixed CPU team names/rosters) and a new pure season
+module plus `sim-baseball.mjs`, the repo-root simulator that measures the doc's five promises
+against the real engine. **It reports; it does not lock** — every retuned constant below is still
+Draft, now tagged "measured by `sim-baseball.mjs` 2026-09-12" instead of an invented Open item
+number, and several of the doc's own promises measure as FAILING under this build. That is the
+tool doing its job, not a bug in it: the scoreboard is pasted verbatim below for Matt to read and
+decide from.
+
+### What changed
+
+- **`baseball/js/engine/zones.js`** (new): out-zone geometry (doc §10, [Locked] — four infield
+  ground-out sectors, three outfield fly-out sectors) replacing `game.js`'s invented
+  `_defenseLevel01()` league-ordered ramp, which is gone. `outcomes.js`'s `resolveContact` now
+  takes a `zones` object and a `fenceFt` shape (piecewise-interpolated across the doc's five named
+  points via the new `fenceFtAt`) instead of a bare `fieldingSkill01` number, and there is no
+  "error" outcome anywhere in the engine any more — the real design's outcome list is
+  singles/doubles/triples/homers/outs (doc §10) and phase 1 invented the fifth one.
+  `SETTINGS.FIELD` is now per-league (`fenceFt`/`outZoneMult`/`fieldScale`); `FOUL_LINE_DEG` and
+  `PARK_GEOMETRY` hold the league-independent facts that used to live inside the old flat `FIELD`.
+  A "shifters" team (doc §9, [Locked]) genuinely rotates its zones now, toward a batter's own
+  recent spray tendency (`game.js`'s new `sprayHistory`, snapshotted, windowed by `SHIFT_WINDOW`
+  and clamped by `SHIFT_MAX_DEG`).
+- **`baseball/js/engine/agents.js`**: `CpuPitcher` draws from a real per-league `pitchMix` and aims
+  by `cornerBias`; at a league with `weakSpotWeight` above zero it sometimes aims at the batter's
+  own recent whiff locations (`game.js`'s new `weakZoneLog`, windowed by `WEAKSPOT_WINDOW`) — doc
+  §8, [Locked]: "Majors: attacks your weak spots." `CpuBatter` now actually reads
+  `view.pitchHistory` (`{type, x}` per entry, not a bare type string) through the existing
+  `PATTERN_WEIGHTS`/`patternWeight`: a repeated pitch SPEED narrows its timing spread, a changed
+  one widens it; a consistently-thrown LOCATION pulls its aim toward it. `settings.js`'s `CPU`
+  table carries these four new per-league fields for the first time — the prototype only ever
+  tuned `college`, and BB-1a copied that one tier to every other league as an explicit
+  placeholder; every row is spread for real now.
+- **`baseball/js/engine/teams.js`**: players carry no `name` any more — `jersey` (1-99) and `pos`
+  (one of the real nine defensive positions) instead, doc §9, [Locked]: "Players are shown by
+  jersey number and position... No names." `makeLeague(league)` is new: the doc's fixed
+  eight-team, one-style-each league (doc §9), ordered weakest to strongest (doc §8, [Locked]),
+  fixed forever by `hashSeed('bb-league', league, styleId)` — never by array position, so
+  reordering `TEAM_STYLES`' keys can never reseed a team. `makePlayerTeam({skills, hand})` is new:
+  nine clones of the one player who always bats and always pitches (doc §6, [Locked]).
+  **`RULES_V` bumped 2 → 3** for the player-shape change; an old snapshot's roster would carry a
+  field the UI no longer reads and be missing two it needs, so it is rejected outright
+  (`validateSnapshot`), never silently resumed.
+- **`baseball/js/engine/season.js`** (new): pure, no `game.js` dependency, reusable by a later
+  phase's real career loop. `makeSchedule(league, seasonSeed)` — 12 games over 8 opponents, every
+  opponent once then the four strongest a second time, weakest-to-strongest with the repeats late,
+  6 home/6 away shuffled by seed (doc §4, [Draft], confirmed by Matt). `scriptedStandings(teams,
+  playerResults)` — the 8 CPU teams' own round-robin is entirely determined by strength (doc §8,
+  [Locked]: "each CPU team beats every weaker CPU team"), no game actually played among them; the
+  player's real record folds in as a ninth row. `playoffs(standings)` — top 4, 1v4/2v3 semifinals,
+  the strongest team wins any semifinal it is in that the player is not also in (resolved by
+  actually playing it otherwise). `trophyFor(result)` — 0/1/2/3 per `baseball/CLAUDE.md`'s frozen
+  scale.
+- **`baseball/js/engine/agents.js`**: `ModelBatter`/`ModelPitcher` (new) — `sim-baseball.mjs`'s own
+  stand-in for a human at a given skill tier, same pluggable-agent call shape as every other agent.
+- **`sim-baseball.mjs`** (new, repo root): see "The simulator" below.
+- **`MECHANICS.doublePlayChance`**: 0.45 → **0.40**, measured by `sim-baseball.mjs` 2026-09-12
+  (puts a double play at roughly 1-in-8 grounders once P(runner on first, <2 outs) is folded in).
+- **`SKILL_EFFECT.hitAcc.contactRadiusInPerPt`**: 0.15 → **0.12**; **`.whiffReductionPerPt`**:
+  0.01 → **0.008**; **`SKILL_EFFECT.hitPow.exitVeloMphPerPt`**: 0.6 → **0.5** — all measured by
+  `sim-baseball.mjs` 2026-09-12 against the ten-point win-rate-gap experiment below.
+- **`CPU_LEVEL_SHORTFALL`**: `{little:0, highschool:0, college:1.5, minors:3.3, majors:5.3}` →
+  **`{little:0, highschool:0, college:3, minors:6, majors:9}`**, measured by `sim-baseball.mjs`
+  2026-09-12 — giving a strictly-rising effective-cap ladder of 10/14/15/16/17 (was
+  10/14/16.5/18.7/20.7). Pushed further in two intermediate attempts (shortfalls up to
+  `{college:6, minors:11, majors:15}`) trying to raise median-tier Gold odds; the effect measured
+  small (roughly +15 percentage points of gold rate for roughly 3x the shortfall), so the smaller,
+  ladder-preserving values below were kept instead of chasing the Gold thresholds by brute force.
+- **`CPU` table**: every row now carries `pitchMix`/`cornerBias`/`patternWeight`/`weakSpotWeight`
+  (see above); `cornerBias`/`patternWeight` were softened once from their first draft after the
+  same shortfall-chasing pass moved them too far in one commit — final values are in
+  `settings.js`, all tagged "Draft, measured by `sim-baseball.mjs` 2026-09-12."
+
+### The simulator (`sim-baseball.mjs`, repo root)
+
+`node sim-baseball.mjs [--league <id>] [--tier weak|median|strong] [--games N] [--seasons N]
+[--quick] [--set outZoneMult=0.9,1.0,1.1] [--json <path>] [--assert]`. Plays real games through the
+real `Game`, real agents, `makeLeague`, `makeSchedule` and `scriptedStandings` — nothing in its
+report is invented. For every league/team/tier it records wins, runs, hits/doubles/triples/homers,
+strikeouts, walks, pitches/at-bats per game and an estimated phone minutes (`FEEL.ui` pacing); for
+every league/tier it plays whole seasons and reports standings odds, trophy odds, expected seasons
+to Gold, points/season and seasons to cap. Two extra experiments: doc §8's "well-timed low-Power
+beats sloppy high-Power" as an A/B, and a `SKILL_EFFECT` sensitivity sweep (win rate at cap vs. ten
+points below). `MODEL_TIERS` (its own assumption, not game code — median 55ms timing sigma/0.22
+placement sigma/0.6 pitch variety, weak 85/0.35/0.3, strong 35/0.12/0.85) is printed at the top of
+every report and overridable with `--tier-sigma`. `--assert` exits non-zero on any FAIL — the phase
+gate, deliberately not wired into `run-all-tests.mjs` (same call as the Brick City suites: this is
+minutes, not seconds, and Matt's own instruction is not to run the full suite on games nobody is
+touching). Re-run after any change to `settings.js`'s CPU/CAPS/CPU_LEVEL_SHORTFALL/SKILL_EFFECT
+tables, `zones.js`, or `season.js`.
+
+### The promise scoreboard, as measured 2026-09-12 (`node sim-baseball.mjs`, full default sweep,
+### 400 games/cell, 300 seasons/cell, ~23s wall clock)
+
+```
+  [FAIL] GOLD_SEASONS_MAX_MEDIAN (median tier, every league): measured 4.05, threshold <= 2
+  [FAIL] GOLD_ONE_SEASON_MIN_MEDIAN: measured 0.247, threshold >= 0.35
+  [PASS] CHAMPION_GAME_WIN_MIN_MEDIAN: measured 0.503, threshold >= 0.4
+  [FAIL] LADDER_MONOTONE (win rate falls each league up): measured [0.597,0.529,0.557,0.516,0.486], threshold non-increasing
+  [FAIL] LADDER_MONOTONE (within-league, weakest..strongest opponent): noisy per-team, see the tool's own table
+  [FAIL] NUDGE_A_B (well-timed low-Power beats sloppy high-Power): measured [false,false,false,false,false], threshold true in every league
+  [FAIL] CAP_BINDS_ONLY (little/highschool cap within seasons): measured ["1.0","2.6"], threshold <= 2 (highschool misses by 0.6 seasons)
+  [PASS] CAP_BINDS_ONLY (college/minors/majors do NOT bind quickly): measured ["7.7","12.4","15.6"], threshold > 2
+  [PASS] SKILL_EFFECT sensitivity (reported, not gated pre-retune): measured ["0.085","0.037","0.008","0.090","0.020"], threshold <= 0.08
+```
+
+**Read plainly, these are the open items for Matt**, not bugs to be silently patched:
+
+1. **Gold is too rare at median skill.** A median-tier player's expected seasons to a first Gold
+   trophy is ~4-5, not the doc's own ≤2 target, and the per-season Gold rate (~20-25%) is well
+   under the ≥35% target. The lever tried (widening `CPU_LEVEL_SHORTFALL` up to 3x) moved this
+   only modestly — the real bottleneck is COMPOUND probability: reaching the playoffs is easy
+   (80-93% at median across leagues) but the championship is always against the single strongest
+   CPU team, so winning a semifinal AND that championship in the same season is a much harder
+   two-in-a-row than either single game. Loosening the two `GOLD_*` thresholds, or reworking how
+   Gold is reached (e.g. a bye, or a weaker semifinal opponent), are both on the table — this tool
+   does not choose between them.
+2. **The "well-timed low-Power beats sloppy high-Power" promise (doc §8, [Locked]) currently
+   FAILS in every league**, and by a wide margin — a Slugger swung with the WEAK tier's sloppy
+   timing wins 84-96% of games against a Table Setter swung with the STRONG tier's precise timing.
+   This is not a `settings.js` constant to retune: it is `swing.js`'s own contact-quality model
+   (untouched by this phase, per the handoff's scope), where raw exit velocity currently dominates
+   outcome far more than timing precision does. Flagged rather than "fixed" by inventing a
+   settings knob that doesn't actually govern this trade-off.
+3. **`CAP_BINDS_ONLY` misses at High School by 0.6 seasons** (2.6 measured against a 2.0
+   threshold) — `POINTS.highschool` is untouched Draft from BB-1a/the doc's own worked example and
+   was not in this phase's retune list; a median-tier player here simply earns fewer points per
+   season (~21) than the doc's own hypothetical 9-3 season (27) implies, because the real CPU
+   opposition (even after retuning) holds the win rate under what a 9-3 record needs.
+4. **Within-league ordering is noisy team to team** (a `sluggers`-style CPU is reliably the
+   hardest opponent in every league at every tier, sometimes harder than the schedule's own
+   "weakest to strongest by style-generation order" would predict) — `TEAM_STYLES`' weight vectors
+   (Open item 25) are still fully invented, and a proper reordering would need the SCHEDULE itself
+   built from measured per-team difficulty rather than fixed alphabetical/generation order. Not
+   attempted this phase.
+
+### Every settings.js constant, by source (updated for Phase 2)
+
+Everything Phase 1/BB-1a already sourced from the doc is unchanged (see the original table below,
+kept for history). Phase 2 changes, restated: `FIELD` restructured per-league (still Draft, Open
+item 7 — the doc leaves exact zone/fence sizes open); `FOUL_LINE_DEG`/`PARK_GEOMETRY`/`CARRY_SCALE`
+pulled out as their own top-level constants (unchanged values, just relocated so every magic number
+has one home — CLAUDE.md's own instruction); `SHIFT_WINDOW`/`SHIFT_MAX_DEG`/`WEAKSPOT_WINDOW` are
+new Draft constants with no doc citation; `CPU`'s four new fields per league are Draft, measured;
+`CPU_LEVEL_SHORTFALL`/`MECHANICS.doublePlayChance`/`SKILL_EFFECT.hitAcc.*`/`SKILL_EFFECT.hitPow.*`
+are Draft, measured (old values in "What changed" above); `MECHANICS.sacFlyMinDepthFt` (180) and
+`MECHANICS.groundEdgeMarginFt` (15) / `.beatOutPerPt` (0.02) are new Draft constants powering the
+sac-fly depth check and the grounder beat-out roll, neither of which existed before this phase.
+
+### Verification (Phase 2, in order)
+
+```
+node validate-sw-assets.mjs      # zones.js/season.js added to ASSETS; REST_MANIFEST/version.json for game-hub-v812
+node baseball/js/test.js         # 1317 assertions, 0 failed
+node sim-baseball.mjs --assert --quick   # FAILS - see the promise scoreboard above; this is the tool reporting, not a build break
+node test-game-conventions.mjs   # 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs      # re-run, unchanged
+node test-sw-strategy.mjs        # 107 passed, 0 failed
+```
+
+**`sim-baseball.mjs --assert` fails on real, reported game-design findings, not on a broken
+build.** Every other suite is green. The four open items above are Matt's to resolve; nothing in
+this phase invents a passing number to paper over them.
+
 ## Status: Phase 1 (BB-1) + BB-1a — the headless engine, now built against the real design doc
 
 Phase 1 (BB-1-phase-1-handoff.md, 2026-09-12) added a pure, deterministic, seeded game simulation
@@ -38,7 +204,9 @@ states the old and new value. Nothing under `js/`, `business-deal/js/game-stats-
 | `bases.js` | pure runner-advancement rules: `advanceAll` (hits), `advanceWalk` (forced advances only), `advanceSacFly`, `advanceDoublePlay` (BB-1a, doc §3), `emptyBases` |
 | `game.js` | `Game` — the whole match: async turn loop (`await agent.decidePitch/decideSwing(view)`), `onEvent`/`onDecided` hooks (Escoba's pattern), `snapshot()`/`static fromSnapshot()`/`validateSnapshot()` (`SNAP_V`, forward-only against `RULES_V` since BB-1a — see below) |
 | `agents.js` | `CpuPitcher`, `CpuBatter` (draw all their randomness from `view.rand01`, the same stream `game.js` snapshots — never `Math.random`; BB-1a wired them straight to the doc's own `swingIn`/`chase`/`timingSigmaMs`/`guess` fields), `ScriptedAgent` for deterministic test replay |
-| `teams.js` | `makeTeam(league, index)` — deterministic roster generation from a hashed seed (golf's `holegen.js` pattern: same seed in, byte-identical team out, nothing persisted); `effectiveCapFor(league)` = `CAPS[league] - CPU_LEVEL_SHORTFALL[league]` (doc §8, [Locked]: CPU teams are generated below the raw cap, never at it), `teamStrength()` |
+| `teams.js` | `makeTeam(league, index)` — deterministic roster generation from a hashed seed (golf's `holegen.js` pattern: same seed in, byte-identical team out, nothing persisted); `effectiveCapFor(league)` = `CAPS[league] - CPU_LEVEL_SHORTFALL[league]` (doc §8, [Locked]: CPU teams are generated below the raw cap, never at it), `teamStrength()`. Phase 2: `makeLeague(league)` (the fixed 8-style league, weakest to strongest), `makePlayerTeam({skills,hand})` (nine clones of the one player); players carry `jersey`/`pos`, never a `name` (doc §9) |
+| `zones.js` | Phase 2 (new): out-zone geometry (`zonesFor(league, shiftDeg)`, `angleSector`) - four infield ground-out sectors, three outfield fly-out sectors, scaled per league by `FIELD[league].outZoneMult`/`fieldScale`. Replaces `game.js`'s old `_defenseLevel01()` |
+| `season.js` | Phase 2 (new): pure season/standings/playoff model - `makeSchedule`, `scriptedStandings`, `playoffs`, `trophyFor`. No `game.js` dependency; reusable by a later phase's real career loop |
 
 **The three constraints, and their tests (unchanged by BB-1a):**
 
@@ -102,21 +270,27 @@ cap is explicitly a safety valve per the doc's own wording, never a stated rule)
 `PITCH_SKILL_IDS` (§6), `PRESETS.*` (§6, [Draft]), `TEAM_STYLES` NAMES (§9, [Locked] — the eight
 styles), `SHIFTERS_ADJUST_OUT_ZONES` (§9, [Locked], not yet consumed anywhere).
 
-Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own list stops at 15):
+Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own list stops at 15).
+**Rows marked "SUPERSEDED, Phase 2" describe what shipped in BB-1a; see the Phase 2 section above
+for what replaced them and the measured values now in place:**
 
 | Constant(s) | Open item | What it's for |
 |---|---|---|
 | `PITCH_TRAVEL_MULT.screwball/eephus/cutter` | 9 | doc explicitly leaves these three open |
-| `CPU.little/highschool/minors/majors` | 3 | copied placeholders of the prototype's one tested (`college`) tier |
-| `CPU_LEVEL_SHORTFALL.*` | 3 | per-skill, cumulative by league; for the phase 2 simulator to verify |
+| `CPU.little/highschool/minors/majors` | 3 | SUPERSEDED, Phase 2 — was a copied placeholder of `college`'s tier; every league now carries its own `pitchMix`/`cornerBias`/`patternWeight`/`weakSpotWeight`, measured by `sim-baseball.mjs` |
+| `CPU_LEVEL_SHORTFALL.*` | 3 | SUPERSEDED, Phase 2 — measured and retuned by `sim-baseball.mjs` (see above); still Draft |
 | `PATTERN_WEIGHTS` | — | doc gives the exact array (`[0.5,0.3,0.2]`), tagged [Draft] by the doc itself |
-| `FIELD.*`/`PARKS.*` | 7 | doc §10 explicitly leaves "exact zone sizes and fence distances per league" open; phase 1's invented placeholder distances are unchanged, just tagged |
-| `TEAM_STYLES`/`TEAM_STYLE_WEIGHTS` weight VECTORS | 25 | the doc names the 8 styles but gives no numbers for them at all |
-| `SKILL_EFFECT.*`/`SKILL_EFFECT_MAX_PER_POINT` | 4 | doc §6 explicitly leaves "how much each skill point changes each effect" open |
-| `MECHANICS.doublePlayChance` | 26 | doc locks that a double play CAN happen, not how often |
-| `outcomes.js`'s `CARRY_SCALE` (carryFt) | 23 | calibrated so a 105mph/30deg swing carries ~400ft (a real, commonly-cited Statcast home-run swing) |
-| `outcomes.js`'s ground/line/fly hit-through and drop-chance base rates | 24 | tuned by playing whole games out, not measured against anything |
-| `_defenseLevel01()` in game.js | 7 | a placeholder league-ordered ramp standing in for the doc's out-zone geometry, which does not exist yet |
+| `FIELD.*`/`PARKS.*` | 7 | `FIELD` restructured per-league in Phase 2 (`zones.js`'s geometry, `outZoneMult`/`fieldScale`) — still Draft, doc §10 still leaves "exact zone sizes and fence distances per league" fully open; `PARKS` itself is unchanged |
+| `TEAM_STYLES`/`TEAM_STYLE_WEIGHTS` weight VECTORS | 25 | the doc names the 8 styles but gives no numbers for them at all; Phase 2's "within-league ordering is noisy" open item traces back to this |
+| `SKILL_EFFECT.*`/`SKILL_EFFECT_MAX_PER_POINT` | 4 | doc §6 explicitly leaves "how much each skill point changes each effect" open; `hitAcc`/`hitPow` retuned by `sim-baseball.mjs` in Phase 2 (see above), the rest still untouched |
+| `MECHANICS.doublePlayChance` | 26 | SUPERSEDED, Phase 2 — measured by `sim-baseball.mjs` (0.45 → 0.40); doc still only locks that a double play CAN happen, not how often |
+| `outcomes.js`'s `CARRY_SCALE` (carryFt) | 23 | calibrated so a 105mph/30deg swing carries ~400ft (a real, commonly-cited Statcast home-run swing); moved into settings.js in Phase 2, value unchanged |
+| `outcomes.js`'s ground/line/fly hit-through and drop-chance base rates | 24 | SUPERSEDED, Phase 2 — the probabilistic through-chance/drop-chance model is gone; outs/hits are now decided by `zones.js`'s out-zone geometry instead |
+| `_defenseLevel01()` in game.js | 7 | REMOVED, Phase 2 — replaced by `zones.js`'s real out-zone geometry (still Draft; see above) |
+| `zones.js`'s `BASE_INFIELD_SECTORS`/`BASE_OUTFIELD_SECTORS` | 7 | new, Phase 2 — the actual invented sector geometry `outZoneMult`/`fieldScale` now scale; calibrated by hand against measured contact-carry distributions (median ~165-220ft for fly/line, ~20-40ft for grounders) rather than against anything real |
+| `SHIFT_WINDOW`/`SHIFT_MAX_DEG` | — | new, Phase 2 — how many recent balls-in-play a "shifters" team averages, and how far it may rotate its zones toward the result |
+| `MECHANICS.sacFlyMinDepthFt`/`.groundEdgeMarginFt`/`.beatOutPerPt` | — | new, Phase 2 — how deep a fly out must carry to be a sac fly, and the grounder beat-out roll (doc §6: "Batter Speed affects beating out grounders") |
+| `WEAKSPOT_WINDOW` | — | new, Phase 2 — how many recent whiffs a `weakSpotWeight` CpuPitcher remembers before aiming at them |
 
 ### Rules decided here, beyond what the doc and the handoffs' own text pre-decided
 

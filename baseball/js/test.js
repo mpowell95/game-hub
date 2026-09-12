@@ -12,11 +12,13 @@ import { fileURLToPath } from 'node:url';
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch } from './engine/pitch.js';
 import { swing } from './engine/swing.js';
-import { resolveContact, carryFt } from './engine/outcomes.js';
+import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
+import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ScriptedAgent } from './engine/agents.js';
-import { makeTeam, teamStrength, effectiveCapFor } from './engine/teams.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent } from './engine/agents.js';
+import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
+import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -127,7 +129,18 @@ for (const file of ENGINE_FILES) {
     ok(!code.includes(bad), `engine/${file} does not use ${bad} (outside comments)`);
   }
 }
-ok(ENGINE_FILES.length >= 9, `all nine engine modules present (found ${ENGINE_FILES.length})`);
+ok(ENGINE_FILES.length >= 11, `all eleven engine modules present, including Step 1/3's zones.js and season.js (found ${ENGINE_FILES.length})`);
+// [KNOWN-BUG PROBE] doc §10's outcome list is singles/doubles/triples/homers/outs - there is no
+// "error" outcome in the real design, and phase 1 invented one. Checks for the quoted OUTCOME
+// string specifically (never the bare substring "error", which legitimately appears in `Error`,
+// `console.error` and `timingErrorMs` throughout the engine).
+for (const file of ENGINE_FILES) {
+  const raw = fs.readFileSync(path.join(ENGINE_DIR, file), 'utf8');
+  const code = stripComments(raw);
+  ok(!code.includes("'error'"), `engine/${file} does not use the outcome string 'error' - the real design has none (doc §10)`);
+}
+ok(!fs.readFileSync(path.join(ENGINE_DIR, 'game.js'), 'utf8').includes('_defenseLevel01'),
+  'game.js\'s invented _defenseLevel01() league-ordered ramp is gone (replaced by zones.js, Step 1)');
 
 // ---------------------------------------------------------------------------------------------
 console.log('\n-- 3. rng.js: literal values and determinism --');
@@ -215,30 +228,51 @@ console.log('\n-- 5. swing.js --');
 }
 
 // ---------------------------------------------------------------------------------------------
-console.log('\n-- 6. outcomes.js --');
+console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error outcome) --');
 {
   ok(carryFt(100, 25) > carryFt(60, 25), 'more exit velocity carries further');
   ok(carryFt(90, 0) < carryFt(90, 25), 'a grounder carries less than a well-lofted ball at the same speed');
+  const zones = zonesFor('college', 0);
   const rng = mulberry32(21);
-  const homer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 0.5, SETTINGS,
-    SETTINGS.PARKS.bandbox, rng);
+  const homer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, zones, SETTINGS,
+    SETTINGS.PARKS.bandbox, 5, rng);
   ok(homer.result === 'hit' && homer.bases === 4, 'a hard, well-lofted, centered ball clears a small park');
-  const weakHomer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 0.5, SETTINGS,
-    SETTINGS.PARKS.canyon, mulberry32(21));
+  const weakHomer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, zones, SETTINGS,
+    SETTINGS.PARKS.canyon, 5, mulberry32(21));
   ok(!(weakHomer.result === 'hit' && weakHomer.bases === 4) || carryFt(105, 30) >= SETTINGS.PARKS.canyon.center,
     'the same swing is less likely to clear a deeper park (parks are not decoration)');
-  const foul = resolveContact({ exitVeloMph: 90, launchAngleDeg: 20, sprayAngleDeg: 80 }, 0.5, SETTINGS, SETTINGS.PARKS.default, mulberry32(1));
+  const foul = resolveContact({ exitVeloMph: 90, launchAngleDeg: 20, sprayAngleDeg: 80 }, zones, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
   ok(foul.isFoul === true && foul.result === 'out', 'a spray angle outside the foul lines is a foul out');
-  let sawOut = false, sawHit = false, sawError = false;
+  let sawOut = false, sawHit = false;
   const r3 = mulberry32(303);
   for (let i = 0; i < 400; i++) {
     const o = resolveContact({ exitVeloMph: 40 + r3() * 60, launchAngleDeg: r3() * 45, sprayAngleDeg: (r3() - 0.5) * 80 },
-      r3(), SETTINGS, SETTINGS.PARKS.default, r3);
+      zones, SETTINGS, SETTINGS.PARKS.default, 5, r3);
     if (o.result === 'out') sawOut = true;
     if (o.result === 'hit') sawHit = true;
-    if (o.result === 'error') sawError = true;
+    ok(o.result === 'out' || o.result === 'hit', 'resolveContact never returns an "error" result - the real design has none (doc §10)');
   }
-  ok(sawOut && sawHit && sawError, 'resolveContact produces outs, hits and errors over enough tries');
+  ok(sawOut && sawHit, 'resolveContact produces both outs and hits over enough tries');
+
+  // fenceFtAt: piecewise across the five named points, and a plain 3-point PARKS shape still works.
+  ok(fenceFtAt(0, SETTINGS.PARKS.default) === SETTINGS.PARKS.default.center, 'fenceFtAt(0) is dead center');
+  ok(fenceFtAt(-45, SETTINGS.PARKS.default) === SETTINGS.PARKS.default.left, 'fenceFtAt(-45) is the left line');
+  ok(fenceFtAt(45, SETTINGS.PARKS.default) === SETTINGS.PARKS.default.right, 'fenceFtAt(45) is the right line');
+  const fiveFence = { left: 300, leftCenter: 340, center: 400, rightCenter: 340, right: 300 };
+  ok(fenceFtAt(-22.5, fiveFence) === 340, 'fenceFtAt honors an explicit leftCenter point rather than only interpolating left/center');
+
+  // zonesFor/angleSector: every league's zones cover more ground each league up (doc §10:
+  // "out zones also grow"), and the shift stays inside the fair-territory bounds.
+  for (let i = 1; i < SETTINGS.LEAGUES.length; i++) {
+    const prev = zonesFor(SETTINGS.LEAGUES[i - 1]);
+    const cur = zonesFor(SETTINGS.LEAGUES[i]);
+    const depth = (z) => z.outfield.reduce((s, sec) => s + (sec.toFt - sec.fromFt), 0);
+    ok(depth(cur) >= depth(prev), `${SETTINGS.LEAGUES[i]}'s outfield zones cover at least as much ground as ${SETTINGS.LEAGUES[i - 1]}'s`);
+  }
+  const shifted = zonesFor('majors', 15);
+  ok(shifted.infield.every((s) => s.fromDeg >= -45 && s.toDeg <= 45), 'a shifted zone never rotates outside fair territory');
+  const sec = angleSector(0, zonesFor('majors').outfield);
+  ok(sec.fromDeg <= 0 && sec.toDeg >= 0, 'angleSector finds the sector containing a given angle');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -287,9 +321,14 @@ console.log('\n-- 8. teams.js --');
   const cap1 = effectiveCapFor('little');
   for (const p of t1.players) {
     for (const id of SETTINGS.SKILL_IDS) {
-      ok(p.skills[id] >= 0 && p.skills[id] <= cap1, `${p.name}'s ${id} is within little league's effective cap`);
+      ok(p.skills[id] >= 0 && p.skills[id] <= cap1, `#${p.jersey} ${p.pos}'s ${id} is within little league's effective cap`);
     }
   }
+  // doc §9, [Locked]: "Players are shown by jersey number and position... No names" (Step 3).
+  ok(t1.players.every((p) => typeof p.jersey === 'number' && p.jersey >= 1 && p.jersey <= 99),
+    'every player carries a jersey number 1-99, never a name');
+  ok(t1.players.every((p) => POSITIONS.includes(p.pos)), 'every player carries a real position');
+  ok(t1.players.every((p) => p.name === undefined), 'a generated player has no `name` field at all');
   const strength = teamStrength(t1);
   ok(strength.overall > 0, 'teamStrength reports a positive overall number');
   ok(SETTINGS.LEAGUES.includes(t1.styleId) === false && !!SETTINGS.TEAM_STYLES[t1.styleId],
@@ -309,6 +348,114 @@ console.log('\n-- 8. teams.js --');
   const capLadder = SETTINGS.LEAGUES.map((lg) => effectiveCapFor(lg));
   ok(capLadder.every((c, i) => i === 0 || c >= capLadder[i - 1]),
     `[KNOWN-BUG PROBE] the effective-cap ladder is non-decreasing by league: ${JSON.stringify(capLadder)}`);
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3) --');
+{
+  for (const lg of SETTINGS.LEAGUES) {
+    const league = makeLeague(lg);
+    ok(league.length === 8, `makeLeague('${lg}') returns exactly 8 teams (doc §9)`);
+    const styleIds = league.map((t) => t.styleId);
+    ok(new Set(styleIds).size === 8, `makeLeague('${lg}') gives every team a DISTINCT style`);
+    ok(styleIds.every((id) => !!SETTINGS.TEAM_STYLES[id]), `makeLeague('${lg}') only uses the doc's 8 named styles`);
+    const strengths = league.map((t) => teamStrength(t).overall);
+    ok(strengths.every((s, i) => i === 0 || s >= strengths[i - 1]),
+      `makeLeague('${lg}') is sorted weakest to strongest (doc §8, [Locked])`);
+    const league2 = makeLeague(lg);
+    ok(JSON.stringify(league) === JSON.stringify(league2), `makeLeague('${lg}') is byte-identical run to run`);
+  }
+  // "the same league at a higher league is stronger at the same style index" (doc §8, [Locked]:
+  // "each league's teams are generated at that league's expected player level").
+  const littleLeague = makeLeague('little').sort((a, b) => a.styleId.localeCompare(b.styleId));
+  const majorsLeague = makeLeague('majors').sort((a, b) => a.styleId.localeCompare(b.styleId));
+  ok(littleLeague.every((t, i) => teamStrength(majorsLeague[i]).overall >= teamStrength(t).overall),
+    'the same style is generated stronger in Majors than in Little League');
+
+  const skills = { hitAcc: 6, hitPow: 6, hitSpd: 6, pitchSpd: 6, pitchAcc: 6, pitchSpin: 6 };
+  const pt = makePlayerTeam({ skills, hand: 'L' });
+  ok(pt.players.length === 9, 'makePlayerTeam has 9 roster slots (doc §6: "one player who is all 9")');
+  ok(pt.players.every((p) => JSON.stringify(p.skills) === JSON.stringify(skills)), 'every slot is a clone of the same player\'s skills');
+  ok(pt.players.every((p) => p.bats === 'L' && p.throws === 'L'), 'every slot carries the same hand');
+  ok(new Set(pt.players.map((p) => p.pos)).size === 9, 'the 9 clones still cover 9 distinct positions');
+  ok(pt.pitcherId === pt.players[0].id, 'the player always pitches (doc §6, [Locked])');
+  ok(pt.battingOrder.length === 9 && new Set(pt.battingOrder).size === 9, 'a full, non-repeating batting order');
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 8c. settings.js CPU table (Step 2): every league carries the new behavior fields --');
+{
+  const NEW_FIELDS = ['pitchMix', 'cornerBias', 'patternWeight', 'weakSpotWeight'];
+  for (const lg of SETTINGS.LEAGUES) {
+    const cpu = SETTINGS.CPU[lg];
+    for (const field of NEW_FIELDS) {
+      ok(cpu[field] !== undefined, `CPU.${lg}.${field} exists`);
+    }
+    ok(typeof cpu.pitchMix === 'object' && Object.keys(cpu.pitchMix).length > 0, `CPU.${lg}.pitchMix names at least one pitch weight`);
+    ok(Object.keys(cpu.pitchMix).every((t) => SETTINGS.PITCH_UNLOCKS[lg].includes(t)),
+      `CPU.${lg}.pitchMix only weights pitches that are actually unlocked at ${lg}`);
+  }
+  // doc §8, [Locked]: each league up mixes pitches more (more distinct weighted types), works
+  // corners more, chases less, and reads patterns better.
+  const cornerBiases = SETTINGS.LEAGUES.map((lg) => SETTINGS.CPU[lg].cornerBias);
+  ok(cornerBiases.every((v, i) => i === 0 || v >= cornerBiases[i - 1]), 'cornerBias rises monotonically by league');
+  const patternWeights = SETTINGS.LEAGUES.map((lg) => SETTINGS.CPU[lg].patternWeight);
+  ok(patternWeights.every((v, i) => i === 0 || v >= patternWeights[i - 1]), 'patternWeight rises monotonically by league');
+  const chases = SETTINGS.LEAGUES.map((lg) => SETTINGS.CPU[lg].chase);
+  ok(chases.every((v, i) => i === 0 || v <= chases[i - 1]), 'chase falls monotonically by league (doc §8: "Majors: rarely chases")');
+  const pitchCounts = SETTINGS.LEAGUES.map((lg) => Object.keys(SETTINGS.CPU[lg].pitchMix).length);
+  ok(pitchCounts.every((v, i) => i === 0 || v >= pitchCounts[i - 1]), 'the pitch mix names more pitches each league up');
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 8d. season.js: schedule, standings, playoffs (Step 3) --');
+{
+  for (const lg of SETTINGS.LEAGUES) {
+    const sched = makeSchedule(lg, 42);
+    ok(sched.length === 12, `makeSchedule('${lg}') has 12 games (doc §4)`);
+    ok(sched.filter((g) => g.home).length === 6, 'exactly six home games');
+    ok(new Set(sched.map((g) => g.opponentIndex)).size === 8, 'every one of the 8 opponents appears at least once');
+    const counts = {};
+    for (const g of sched) counts[g.opponentIndex] = (counts[g.opponentIndex] || 0) + 1;
+    const repeats = Object.entries(counts).filter(([, c]) => c === 2).map(([idx]) => Number(idx));
+    ok(repeats.length === 4 && repeats.every((idx) => idx >= 4), 'the four STRONGEST opponents (index 4-7) are repeated; nobody else is');
+    const firstHalfAvg = mean(sched.slice(0, 6).map((g) => g.opponentIndex));
+    const secondHalfAvg = mean(sched.slice(6).map((g) => g.opponentIndex));
+    ok(secondHalfAvg >= firstHalfAvg, 'harder opponents (higher index) land later in the schedule, on average');
+    const sched2 = makeSchedule(lg, 42);
+    ok(JSON.stringify(sched) === JSON.stringify(sched2), 'the same (league, seed) is the same schedule every time');
+  }
+  function mean(a) { return a.reduce((s, x) => s + x, 0) / a.length; }
+
+  const league = makeLeague('majors');
+  const standings = scriptedStandings(league, { wins: 9, losses: 3 });
+  ok(standings.length === 9, 'scriptedStandings has 9 rows: 8 CPU teams plus the player');
+  ok(standings[0].id === league[league.length - 1].name || standings.some((r) => r.isPlayer && r === standings[0]),
+    'the strongest CPU team or the player (whichever has more wins) tops the table');
+  const cpuRows = standings.filter((r) => !r.isPlayer);
+  ok(cpuRows.every((r, i) => i === 0 || r.wins <= cpuRows[i - 1].wins), 'CPU rows are strictly ordered by strength (each beats every weaker team)');
+  ok(standings.filter((r) => r.isPlayer).length === 1, 'the player appears exactly once');
+
+  // [KNOWN-BUG PROBE] over many seeded seasons, the champion's OPPONENT (when the player is not
+  // the strongest seed) is always the strongest team in the league (doc §8, [Locked]).
+  let checked = 0;
+  for (let seed = 0; seed < 200; seed++) {
+    const st = scriptedStandings(league, { wins: seed % 13, losses: 12 - (seed % 13) });
+    const bracket = playoffs(st);
+    const playerRow = st.find((r) => r.isPlayer);
+    const playerSeed = st.indexOf(playerRow);
+    if (playerSeed >= 4) continue; // missed the playoffs this "season"
+    checked += 1;
+    const strongestCpu = cpuRows[0]; // scriptedStandings' CPU rows are already strength-sorted
+    if (!playerRow || bracket.seeds[0].id === playerRow.id) continue; // the player IS the strongest seed
+    ok(bracket.seeds[0].id === strongestCpu.id, 'the top seed (the champion\'s opponent, when the player is not it) is the strongest CPU team');
+  }
+  ok(checked > 0, 'the championship-opponent probe actually exercised at least one in-the-playoffs season');
+
+  ok(trophyFor({ wonChampionship: true }) === 3, 'winning the championship is Gold (3)');
+  ok(trophyFor({ reachedChampionship: true, wonChampionship: false }) === 2, 'losing the championship is Silver (2)');
+  ok(trophyFor({ reachedSemifinal: true, reachedChampionship: false }) === 1, 'losing the semifinal is Bronze (1)');
+  ok(trophyFor({}) === 0, 'missing the playoffs entirely is 0 (no trophy)');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -335,7 +482,54 @@ console.log('\n-- 9. the agent seam --');
   batter.decideSwing({ rand01: mulberry32(3), pitch }).then((d) => {
     ok(d.action === 'swing' || d.action === 'take', 'CpuBatter returns a legal action');
   });
+
+  // Step 4: ModelBatter/ModelPitcher - sim-baseball.mjs's stand-in for a human, same call shape.
+  const modelBatter = new ModelBatter({ timingSigmaMs: 55, placementSigma: 0.22 });
+  modelBatter.decideSwing({ rand01: mulberry32(6), pitch }).then((d) => {
+    ok(d.action === 'swing' || d.action === 'take', 'ModelBatter returns a legal action');
+  });
+  const modelPitcher = new ModelPitcher({ league: 'majors', settings: SETTINGS, variety: 0.6, cornerBias: 0.5, pitchMix: SETTINGS.CPU.majors.pitchMix });
+  modelPitcher.decidePitch({ rand01: mulberry32(7) }).then((d) => {
+    ok(SETTINGS.unlockedPitchesFor('majors').includes(d.type), 'ModelPitcher only ever offers an unlocked pitch for its league');
+    ok(typeof d.aim === 'number', 'ModelPitcher aims with a single lateral number');
+  });
 }
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 9b. CpuBatter reads pitchHistory ({type,x} per entry, doc §8) --');
+await (async () => {
+  // Repeated SPEED narrows the timing spread; a changed speed widens it (doc §8: "throw the same
+  // speed over and over and he times it... change speeds and he swings early or late"). Both
+  // draws share the same rand01 STREAM (fresh, same seed) so the only thing that differs between
+  // them is the pitch-history shape CpuBatter reads - a direct, deterministic comparison rather
+  // than a downstream whiff-rate measurement, which a single rng draw would make noisy.
+  const league = 'majors'; // highest patternWeight, easiest to see the effect
+  const skills = { hitAcc: 10, hitPow: 10, hitSpd: 10, pitchSpd: 10, pitchAcc: 10, pitchSpin: 10 };
+  const repeated = Array.from({ length: SETTINGS.PATTERN_WINDOW }, () => ({ type: 'fastball', x: 0 }));
+  const changed = [{ type: 'fastball', x: 0 }, { type: 'knuckleball', x: 0 }, { type: 'fastball', x: 0 }];
+
+  const r1 = mulberry32(42);
+  const p1 = flyPitch('fastball', 0, 1, SETTINGS, r1);
+  const d1 = await new CpuBatter({ league, skills, settings: SETTINGS }).decideSwing({ rand01: () => 0.001, pitch: p1, pitchHistory: repeated });
+  const r2 = mulberry32(42);
+  const p2 = flyPitch('fastball', 0, 1, SETTINGS, r2);
+  const d2 = await new CpuBatter({ league, skills, settings: SETTINGS }).decideSwing({ rand01: () => 0.001, pitch: p2, pitchHistory: changed });
+  ok(d1.action === 'swing' && d2.action === 'swing', 'both draws force a swing decision (rand01 forced below swingIn)');
+  ok(Math.abs(d1.timingErrorMs) <= Math.abs(d2.timingErrorMs) + 1e-9,
+    'a repeated pitch speed narrows (or does not widen) the timing error versus a changed one, same rng draw (doc §8)');
+
+  // LOCATION: leaning toward a consistently-thrown spot pulls the aim toward it (doc §8: "keep
+  // hitting one spot and he waits there").
+  const leanHist = Array.from({ length: SETTINGS.PATTERN_WINDOW }, () => ({ type: 'fastball', x: 0.8 }));
+  const noHist = [];
+  const r3 = mulberry32(9);
+  const p3 = flyPitch('fastball', 0, 1, SETTINGS, r3);
+  const dLean = await new CpuBatter({ league, skills, settings: SETTINGS }).decideSwing({ rand01: () => 0.001, pitch: p3, pitchHistory: leanHist });
+  const r4 = mulberry32(9);
+  const p4 = flyPitch('fastball', 0, 1, SETTINGS, r4);
+  const dNoHist = await new CpuBatter({ league, skills, settings: SETTINGS }).decideSwing({ rand01: () => 0.001, pitch: p4, pitchHistory: noHist });
+  ok(dLean.aimX > dNoHist.aimX, 'a batter leaning on a consistently-thrown location aims further toward it than one with no history');
+})();
 
 // ---------------------------------------------------------------------------------------------
 console.log('\n-- 10. rules correctness, played through the real engine --');
@@ -388,7 +582,7 @@ console.log('\n-- 10. rules correctness, played through the real engine --');
     g.bases = [null, null, 'runnerOnThird'];
     g.outs = 2;
     const before = g.bases.slice();
-    g._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false }, 'batterX', 'home');
+    g._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false, distanceFt: 250 }, 'batterX', 'home');
     ok(g.bases[2] === null || JSON.stringify(g.bases) === JSON.stringify(before),
       'a flyout with 2 outs never grants a sac fly (the batter simply makes the third out)');
     ok(g.outs === 3, 'the out was still recorded even when the sac fly was refused');
@@ -397,8 +591,18 @@ console.log('\n-- 10. rules correctness, played through the real engine --');
     const g2 = playGameOnce('majors', hashSeed('sacfly-probe-2'));
     g2.bases = [null, null, 'runnerOnThird'];
     g2.outs = 0;
-    g2._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false }, 'batterX', 'home');
-    ok(g2.bases[2] === null && g2.score.home === 1, 'a flyout with 0 outs and a runner on third scores a sac fly');
+    g2._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false, distanceFt: 250 }, 'batterX', 'home');
+    ok(g2.bases[2] === null && g2.score.home === 1, 'a flyout with 0 outs and a runner on third, deep enough, scores a sac fly');
+  }
+  {
+    // [KNOWN-BUG PROBE] a SHALLOW flyout must not be credited as a sac fly, even with 0 outs and
+    // a runner on third (doc §3, [Locked]: "Deep fly out scores the runner" - MECHANICS.
+    // sacFlyMinDepthFt is how deep, Step 1).
+    const g3 = playGameOnce('majors', hashSeed('sacfly-probe-3'));
+    g3.bases = [null, null, 'runnerOnThird'];
+    g3.outs = 0;
+    g3._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false, distanceFt: 50 }, 'batterX', 'home');
+    ok(g3.bases[2] === 'runnerOnThird' && g3.score.home === 0, 'a SHALLOW flyout does not score a sac fly, however many outs there are');
   }
 
   // doc §3, [Locked]: "every extra half-inning starts with a runner on second."
