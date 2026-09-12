@@ -132,6 +132,27 @@ message, where a future session needs it and Matt does not have to scroll past i
 
 This applies to every artifact, mockup, plan page and diagram, in every session.
 
+## Send the Claude.ai handoff files WITHOUT being asked
+
+Matt, 2026-09-12: *"you must send me the stuff for Claude ai at the end of these messages. stop
+makign me ask for them. Make sure he can see everything."*
+
+He runs a second Claude.ai conversation alongside this one and feeds it the work for review. **A
+claude.ai artifact URL is useless to it** - artifacts sit behind his account login, so there is
+nothing for another chat to fetch, and sharing does not change that.
+
+So whenever a turn produces or changes an artifact, a mockup, a diagram or a design doc, **end the
+turn by sending the files, unprompted**:
+
+- **the artifact as an IMAGE** (full page, not a crop) so the drawing survives - a markdown doc does
+  not contain the picture
+- **the artifact's own HTML file**, which is the literal complete thing
+- **the repo doc**, if there is one
+- **the public raw GitHub link** for anything on `main`, since that one a chat CAN read itself
+
+Watch the size: `SendUserFile` rejects about 1 MB. A dark page with gradients goes smaller as JPEG
+q90; a light page full of text goes smaller as PNG. Render full-page at `deviceScaleFactor: 1`.
+
 ## Answer about the game you were asked about
 
 Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
@@ -380,7 +401,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
-| `js/admin-config.js` | (2026-08-24) the app-wide **admin config** (`adminConfig/v1` in Firebase): which games are live for everyone and which Skeeball machines are open to everyone. Pure resolvers over a localStorage cache, so every reader is synchronous and offline-safe; an absent override always falls back to the code default |
+| `js/admin-config.js` | (2026-08-24) the app-wide **admin config** (`adminConfig/v1` in Firebase): which games are live for everyone and which Skeeball machines are open to everyone. Pure resolvers over a localStorage cache, so every reader is synchronous and offline-safe; an absent override always falls back to the code default. Since 2026-09-12 it also carries the **device reset** (`deviceResets/<statsId>`), the one thing in this repo that clears a player's history - see "Deleting a device's history" below |
 | `js/stats-corrections.js` | (2026-08-24) the read-time **score corrections** layer: "those scores were thrown on a machine that was broken at the time." Pure overlay maths applied when a number is DISPLAYED (leaderboard, My Stats, Skeeball's own backboard); the raw record is never touched, and a score thrown after the correction counts normally |
 | `js/admin-ui.js` | (2026-08-24) the **admin control page** itself (Matt only, lazily imported): the game live/admin-only switches, the Skeeball machine releases, and this-device tools. See "The admin control page" below |
 | `js/announce.js` | one-time launcher announcements: the entries, the seen-list (`gamehub.announce.v1`), and the pure "does this device still owe one" decision. Each entry's `until` date retires it |
@@ -466,6 +487,8 @@ weeks: **when a screen is removed, grep the module table for what fed it.**
 | `backups/rtdb-backup.mjs` | (2026-07-23) **Run this before ANY script that writes to Firebase, any rules change, any schema change.** Timestamped full-DB snapshot to `backups/rtdb-<ISO>.json` via the same no-dependency REST pattern; `node backups/rtdb-backup.mjs [path]`. Also exports `signInAnonymously`/`readPath`/`totalPlays` for other tools. Restoring is deliberately NOT automated - a restore is a destructive write and must be hand-driven. **The snapshots are gitignored** (`backups/*.json`): this is a public repo and they hold every player's real name, code and stats. |
 | `clear-skeeball-stats.mjs` | (2026-08-22) Matt-only, and the ONLY thing that permits it is that he asked for it in those words: deletes `players/*/stats/games/skeeball` on every node. Dry run by default, `--write` to apply; refuses to start without a same-day `backups/rtdb-*.json`, aborts if any node carries a `h2h.skeeball` branch it was not written against, and verifies by fresh re-read that zero skeeball records survive and every OTHER game object is untouched. **Applied 2026-08-22**: 55 nodes, 64 plays, top score 700 - all of it Matt/MattyIce test data, no family history. **It is not durable alone** - `syncMyStats()` mirrors the device's whole local store, so a device still holding local Skeeball data re-uploads it on its next hub load; the dev-only "Reset Skeeball stats" button is the device half. |
 | `delete-test-players.mjs` | (2026-08-22) Matt-only: removes whole `players/<id>` nodes belonging to a TEST HARNESS, never to a person - `test-visual.mjs`'s PLAY probes mint a fresh deviceId every run, so throwaway players accumulate. Dry run by default, `--write` to apply, `--name` for a harness other than the default "Visual Test". Per node it refuses unless ALL of: the profile name matches exactly (never a substring), the node has no `h2h` of its own, no other player names it as an opponent, and it owns no username - so a real person who picked the name is safe. Verifies by fresh re-read. **Applied 2026-08-22**: 17 nodes (5 with one Skeeball play each), 174 player nodes -> 157, every other player untouched. |
+| `delete-device-record.mjs` | (2026-09-12) Matt-only, and the ONLY thing that permits it is that he asked for it directly and overruled THE LAW to do so: **deletes one whole `players/<id>` record AND stamps the device reset that makes the delete stick.** Dry run by default, `--write` to apply; refuses without a same-day `backups/rtdb-*.json`, prints the full record before touching it, names any other player whose `h2h` references the device (those are NOT rewritten), and verifies by fresh re-read. **Both halves or neither** - `syncMyStats()` mirrors the device's whole local store over `players/<id>` on every hub load, so the delete alone lasts until that device next opens the hub. Re-running once the record is gone just re-stamps the reset. **Applied 2026-09-12**: `e8e6ba7c…` (*TP*, Windows), 4,839 plays - 4,725 of them a Tic Tac Toe bot; 263 device records -> 262, every other record untouched. See "Deleting a device's history" below |
+| `test-rate-guard.mjs` | (2026-09-12) headless tests for "No human plays this fast" (`js/game-stats.js`): the pure rate decision, the sliding window, the live recorders, and a STRUCTURAL sweep asserting every `record*` in `game-stats.js` guards BEFORE it reads the store (a recorder added later with no guard is the silent failure). **Most of it is about what must NOT be refused** - a threshold that costs a real player a real play is THE LAW rule 1, and worse than any bot getting through |
 | `fix-natalia-record.mjs` | (2026-07-23) The one-off Ana/Natalia leaderboard correction, kept for audit. Dry run by default, `--write` to apply; it backs up first, simulates the post-write leaderboard with the repo's real `players-agg.js`/`leaderboard-rank.js` and aborts if any other player's row would move, then verifies by fresh re-read and diffs every pre-existing device record. **Already applied; re-running is a no-op (it refuses to create a second Natalia).** |
 
 ### The module contract
@@ -680,6 +703,56 @@ Two knock-on effects, because a granted ancestor `.read` cascades and cannot be 
 **The rules are published by hand** (console → Realtime Database → Rules → paste → Publish); no
 script in this repo deploys them. Deploy the app first, the rules second: a device claims itself on
 its next hub load.
+
+## Deleting a device's history, and the rate gate (2026-09-12)
+
+A player (TP) told Matt he had cheated. Measured from `players/`, on ONE Windows laptop:
+**Tic Tac Toe 4,725 games played, 2,828 won, ONE loss, 1,896 draws** - a bot. On the same machine
+he edited Hill Climb's coins in devtools to buy every upgrade. His phone looked ordinary (200
+Beginner games with 5 losses and 2 draws) and his Connect Four was clean everywhere.
+
+Matt: *"we should delete all activity that took place on his windows device, and put safeguards in
+place to prevent him from doing it again. on either of these games - or any others."*
+
+**This session raised THE LAW and Matt overruled it, in these words:** *"It's my game, I control
+every aspect of it. if theres a rule somewhere that doesn't allow for it, i can change the rules.
+The rules are for YOU. so YOU cannot decide to do anything that violates the rules. I can decide to
+do anything I want."* That is the authority for the delete, and it is the ONLY thing that
+authorises it. **It does not generalise**: a session must still never delete player data on its own
+judgement, or to tidy something up, or because a cheat seems obvious. Matt asks, personally, per
+incident, or it does not happen. The restorable copy is `backups/rtdb-2026-09-12T22-08-55-909Z.json`.
+
+Three pieces, and the first two only work together:
+
+1. **The server-side delete** - `delete-device-record.mjs`, above.
+2. **The device reset** (`adminConfig/v1/deviceResets/<statsId>`, `js/admin-config.js`;
+   `applyDeviceReset()` in `js/stats-net.js`). Deleting `players/<id>` on its own achieves nothing
+   durable: `syncMyStats()` sends `stats: loadStats()`, the device's ENTIRE local store, and writes
+   it back over that node on the next hub load. So the device is told, through the config it
+   already reads once per load, to drop its own copy - and `applyDeviceReset()` runs INSIDE
+   `syncMyStats()`, before the record is built, because that is the only placement that guarantees
+   the ordering. It is a **stamp compared against a local ack**, not a flag: each stamp is acted on
+   exactly once, so the player can build a fresh history afterwards instead of being wiped on every
+   load for ever. It clears the ACTIVE player's stats store only - not the profile, not any game's
+   settings, not a second person's forked store on the same phone.
+3. **The rate gate** - "No human plays this fast", `js/game-stats.js`. **Rate is the only thing
+   every game here has in common.** Hill Climb could be checked properly because its coins have a
+   conservation law (`hill-climb/js/store.js`, "The books must balance"); a "win" in Tic Tac Toe is
+   just a counter and no arithmetic distinguishes a real one from a typed one - but a counter
+   cannot hide how fast it moved. 30 results per game per minute, refused before the store is read,
+   nothing queued. **The threshold is calibrated on the FASTEST HUMAN, not the slowest bot**: a
+   person sprinting at Beginner Tic Tac Toe takes 5-8 s a game, so the gate sits 3-4x above anyone
+   here. That headroom is deliberate and must not be narrowed - one honest play refused costs more
+   than a hundred bot results getting through (rule 1). Every refusal is counted and rides the
+   stats mirror as the `rate` child node, the same additive-diagnostic shape as `device` and
+   `announce`, so an attempt is VISIBLE even when a slower bot gets past.
+
+**Say plainly what this does not do.** A bot that sleeps two seconds between games walks past the
+gate, and nothing client-side can stop somebody typing a number straight into localStorage - there
+is no game server here, and every score is written by code the player controls. What exists now is
+a floor against unattended grinding, an arithmetic check where a real invariant exists, and the
+ability to see it and undo it afterwards. Do not describe any of it as making the hub cheat-proof.
+
 
 ## The admin control page (2026-08-24)
 

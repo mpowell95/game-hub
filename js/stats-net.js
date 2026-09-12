@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { statsId, loadStats } from './game-stats.js';
+import { statsId, statsKey, loadStats, rateReport } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
@@ -104,12 +104,71 @@ function remotePlayCount(rec) {
  *  fails QUIETLY either: every failure path logs loudly and is recorded in syncHealth(). The write is
  *  verified by a fresh re-read, because a resolved promise is not proof the data landed. Idempotent -
  *  it mirrors the whole store every time, so any retry naturally repairs a previously failed sync. */
+
+// --- DEVICE RESET: the device half -------------------------------------------------------------
+//
+// The server half is a delete of `players/<id>`; on its own it survives until this device's next
+// hub load, because the mirror below sends `stats: loadStats()` - the WHOLE local store - and
+// writes it straight back over that node. So the device has to drop its own copy first, and this
+// is the only place that can guarantee the ordering: syncMyStats() is the single uploader, and
+// this runs inside it, before the record is built.
+//
+// Why a STAMP compared against a local ack rather than a flag: a flag would clear this device on
+// every load for ever, so the player could never build a new history. An ack means each stamp is
+// acted on exactly once, and everything played afterwards is kept and synced normally.
+//
+// The full rationale, and Matt's explicit override of THE LAW that authorises it, are in
+// js/admin-config.js's "DEVICE RESET" block. Read that before touching this.
+const RESET_ACK_KEY = 'gamehub.statsResetAck.v1';
+
+function readResetAck() {
+  try { return +JSON.parse(localStorage.getItem(RESET_ACK_KEY) || '0') || 0; } catch { return 0; }
+}
+
+/**
+ * Clear this device's stats store if it has been told to, and say whether it did.
+ *
+ * Deliberately narrow: it clears the ACTIVE player's stats store and nothing else. The profile,
+ * the device id, every game's own settings key and any OTHER player's forked store on this same
+ * phone are untouched - a reset is aimed at one person's history on one device, and a second
+ * person who happens to play on the same laptop has nothing to do with it.
+ *
+ * Loud on both paths (rule 6's spirit, which outlives the override): a clear this size must never
+ * be something you can only infer afterwards.
+ */
+export async function applyDeviceReset() {
+  let at = 0;
+  try {
+    const { deviceResetAt } = await import('./admin-config.js');
+    at = deviceResetAt(statsId()) | 0;
+  } catch { return false; }
+  if (!at) return false;
+  if (at <= readResetAck()) return false;
+  const key = statsKey();
+  try {
+    localStorage.removeItem(key);
+    // Stamp the ack ONLY after the removal succeeded. Stamping first and failing to clear would
+    // mark the reset done on a device that still holds everything, and it would re-upload on the
+    // very next load with nothing left to trigger it again.
+    localStorage.setItem(RESET_ACK_KEY, JSON.stringify(at));
+    console.warn(`[stats-net] device reset ${new Date(at).toISOString()} applied: local stats store "${key}" cleared for players/${statsId()}.`);
+    return true;
+  } catch (err) {
+    console.error('[stats-net] device reset FAILED to clear the local store; it will be retried on the next load.', err);
+    return false;
+  }
+}
+
 export async function syncMyStats() {
   // statsId(), not deviceId(): the node is per (device, player). For the device's owner the two are
   // the same string, so every record that already exists keeps its exact key; a SECOND person playing
   // on the same phone syncs to `players/<deviceId>-<CODE>` instead of overwriting the first person's
   // node (see game-stats.js's "WHOSE stats these are" block).
   const id = statsId();
+  // BEFORE anything is read for upload: an admin may have told this device to clear itself, and
+  // the mirror below would otherwise write the whole local store straight back over the node the
+  // delete just emptied. See the DEVICE RESET block above.
+  await applyDeviceReset();
   const localPlays = localPlayCount();
   if (!writesAllowed('syncMyStats')) {
     writeSyncHealth({ ok: false, lastErrAt: Date.now(), lastErr: 'dev-origin-blocked', localPlays });
@@ -149,6 +208,13 @@ export async function syncMyStats() {
       // getting a write of its own. It is a REPORT, never a source - nothing reads it back, so a
       // wiped or stale copy cannot make a popup reappear or vanish on anybody's phone.
       announce: { seen: loadSeen(), at: Date.now() },
+      // ANYTHING THIS DEVICE REFUSED FOR BEING TOO FAST TO BE REAL (2026-09-12). See
+      // game-stats.js's "No human plays this fast". Same additive-diagnostic shape as the two
+      // above: a child node no gameplay or stats path reads, riding the mirror this device
+      // already performs. It is `null` (so the node stays absent) on every device that has never
+      // tripped the gate, which is every honest one. It is a REPORT, never a source - nothing
+      // reads it back, so it can never affect a counter on anybody's phone.
+      rate: rateReport(),
       updatedAt: _api.serverTimestamp(),
     };
     await _api.update(_api.ref(_db, 'players/' + id), rec);
@@ -248,4 +314,4 @@ export async function adminReleaseUsername(name) {
   catch { return false; }
 }
 
-export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername, writesAllowed };
+export default { init, syncMyStats, applyDeviceReset, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername, writesAllowed };
