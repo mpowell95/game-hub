@@ -826,6 +826,31 @@ const PLAY = {
       return { ok: true, why: 'aimed, confirmed with FIRE, and the shot announced its result' };
     },
   },
+  sudoku: {
+    what: 'start a puzzle, tap an empty cell, tap a digit, and it lands in the cell',
+    async run(page, cdp, tap) {
+      const start = await page.waitForSelector('[data-action="start"]', { timeout: 8000 }).catch(() => null);
+      if (!start) return { ok: false, why: 'no Start button on the setup screen' };
+      await tap(start);
+      await page.waitForSelector('.sd-board .sd-cell', { timeout: 8000 }).catch(() => null);
+      const before = await page.evaluate(() => (window.__sdTest ? window.__sdTest.state() : null));
+      if (!before) return { ok: false, why: 'the game exposed no state to drive (window.__sdTest)' };
+      const emptyIndex = before.cells.findIndex((v, i) => v === 0 && before.givens[i] === 0);
+      if (emptyIndex < 0) return { ok: false, why: 'no empty cell on a freshly generated board' };
+      const cell = await page.$(`.sd-cell[data-i="${emptyIndex}"]`);
+      if (!cell) return { ok: false, why: 'could not find the empty cell in the DOM' };
+      await tap(cell);
+      const digitBtn = await page.$('[data-digit="1"]');
+      if (!digitBtn) return { ok: false, why: 'no digit pad on screen' };
+      await tap(digitBtn);
+      await page.waitForTimeout(150);
+      const after = await page.evaluate(() => (window.__sdTest ? window.__sdTest.state() : null));
+      if (!after || after.cells[emptyIndex] === 0) {
+        return { ok: false, why: 'tapped an empty cell then a digit, and the cell is still blank' };
+      }
+      return { ok: true, why: `cell ${emptyIndex} went from blank to ${after.cells[emptyIndex]}` };
+    },
+  },
 };
 
 // --- harness ----------------------------------------------------------------------------------

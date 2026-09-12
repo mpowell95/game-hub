@@ -237,6 +237,29 @@ export const GAME_ART = {
     <circle cx="146" cy="64" r="7" fill="#2f4d5e"/>
     <circle cx="70" cy="26" r="5" fill="#43b6f5"/>
   </svg>`,
+  // Sudoku: a 9x9 grid drawn landscape, thick lines every 3 cells (the box boundaries), a handful
+  // of filled-in digits so it reads as "a puzzle" rather than "a grid", and one cell outlined in
+  // the app's standing selection accent (#ffce3a, root CLAUDE.md) the way the game itself marks a
+  // selected cell. Composed FOR 160x90, full-bleed, per checklist item 5.
+  'sudoku': `<svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#2a1440"/>
+    <g stroke="#6b3a86" stroke-width="0.75">
+      <path d="M44 9 V81 M52 9 V81 M60 9 V81 M76 9 V81 M84 9 V81 M100 9 V81 M108 9 V81"/>
+      <path d="M44 17 H116 M44 25 H116 M44 41 H116 M44 49 H116 M44 65 H116 M44 73 H116"/>
+    </g>
+    <g stroke="#c9a6e0" stroke-width="2">
+      <path d="M44 9 V81 M68 9 V81 M92 9 V81 M116 9 V81"/>
+      <path d="M44 9 H116 M44 33 H116 M44 57 H116 M44 81 H116"/>
+    </g>
+    <g fill="#efe3f5" font-family="system-ui, sans-serif" font-size="11" font-weight="700" text-anchor="middle">
+      <text x="48" y="30">5</text>
+      <text x="80" y="22">2</text>
+      <text x="104" y="46">9</text>
+      <text x="56" y="62">7</text>
+      <text x="112" y="78">4</text>
+    </g>
+    <rect x="68.5" y="33.5" width="15" height="15" fill="none" stroke="#ffce3a" stroke-width="2.5"/>
+  </svg>`,
   'nuts-bolts': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#3f4652"/>
             <g fill="#9aa7bd">

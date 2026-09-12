@@ -1,0 +1,298 @@
+/* sudoku/css/sudoku.css - every rule descendant-scoped under .sd-root (docs/BUILDING-A-GAME.md,
+ * "Adding a game" item 3). Chrome (buttons, cards, overlays) comes from css/ui.css's .gh-*
+ * primitives; only the grid, the pad and the HUD are bespoke here. */
+
+.sd-root {
+  --sd-bg: #f4f6fb;
+  --sd-surface: #ffffff;
+  --sd-line: #b8c2d4;
+  --sd-line-strong: #5b6b82;
+  --sd-ink: #16243a;
+  --sd-muted: #5b6b82;
+  --sd-given: #16243a;
+  --sd-player: #1769d4;
+  --sd-select: #ffce3a;
+  --sd-peer: rgba(31, 95, 168, .08);
+  --sd-same: rgba(23, 138, 122, .16);
+  --sd-conflict: #e0532f;
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  height: 100%;
+  background: var(--sd-bg);
+  color: var(--sd-ink);
+  font-family: var(--gh-font, system-ui, sans-serif);
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  gap: 8px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.sd-root * { box-sizing: border-box; }
+
+/* Tier 3/4's ski-slope diamond is drawn with an inline `fill="#1c2430"` (near-black,
+ * js/difficulty-tiers.js's TIER_COLOR) which reads as invisible on a dark background - the same
+ * fix css/hub.css applies for the launcher and leaderboard, needed again here because this game's
+ * standalone page never loads hub.css. */
+:root.gh-dark .lb-dshape-t3, :root.gh-dark .lb-dshape-t4 { fill: #e6e9f0; }
+
+:root.gh-dark .sd-root {
+  --sd-bg: #10192b;
+  --sd-surface: #17233b;
+  --sd-line: #2c3c58;
+  --sd-line-strong: #7d90ac;
+  --sd-ink: #eef2f8;
+  --sd-muted: #a9b7cc;
+  --sd-given: #eef2f8;
+  --sd-player: #6db2ff;
+  --sd-peer: rgba(109, 178, 255, .12);
+  --sd-same: rgba(66, 200, 178, .20);
+  /* css/ui.css's .gh-* primitives (the how-to card, the win modal) read --gh-surface/-ink/-muted,
+   * which are themselves declared ONCE at :root as `var(--hub-surface, #fff)` - that fallback
+   * resolves to a concrete value at :root itself (where --hub-surface is never set, since
+   * css/hub.css normally supplies it and this game's standalone page never loads hub.css) and
+   * then simply INHERITS, so redefining --hub-surface down here on .sd-root is too late to change
+   * it. Redefine --gh-* directly instead. */
+  --gh-surface: #17233b;
+  --gh-surface-2: #1e2c48;
+  --gh-ink: #eef2f8;
+  --gh-muted: #a9b7cc;
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+}
+
+/* --- menu / how-to screens: plain flex columns, no scrolling ------------------------------- */
+.sd-menu, .sd-howto-screen {
+  justify-content: center;
+  align-items: stretch;
+  max-width: 420px;
+  margin: 0 auto;
+  width: 100%;
+  gap: 14px;
+}
+.sd-menu-header { text-align: center; }
+.sd-menu-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
+.sd-menu-header p { margin: 0; color: var(--sd-muted); font-size: 14px; }
+
+.sd-seg-wrap {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.sd-seg {
+  flex: 1 1 40%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--gh-border, var(--sd-line));
+  border-radius: var(--gh-r-md, 12px);
+  background: var(--sd-surface);
+  color: var(--sd-ink);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sd-seg.is-selected { outline: 2px solid var(--sd-select); border-color: var(--sd-select); }
+.sd-seg-label { display: flex; align-items: center; gap: 6px; }
+.sd-seg svg.lb-dshape, .sd-hud-tier svg.lb-dshape { width: 15px; height: 15px; flex: none; }
+.sd-seg svg.lb-dshape-x2, .sd-hud-tier svg.lb-dshape-x2 { width: 26px; height: 15px; }
+
+.sd-howto-lead { margin: 0 0 10px; font-size: 15px; }
+.sd-howto-diagram { display: flex; justify-content: center; margin: 4px 0 10px; }
+.sd-howto-diagram svg { width: 100%; max-width: 260px; height: auto; }
+.sd-howto-caption { margin: 0 0 10px; font-size: 13px; color: var(--sd-muted); text-align: center; }
+.sd-howto-rules { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.sd-howto-rules li { margin-bottom: 4px; }
+
+/* --- HUD ------------------------------------------------------------------------------------- */
+.sd-hud {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.sd-iconbtn {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border: 1px solid var(--gh-border, var(--sd-line));
+  border-radius: 50%;
+  background: var(--sd-surface);
+  color: var(--sd-ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  flex: none;
+}
+.sd-iconbtn svg { width: 20px; height: 20px; }
+.sd-hud-mid { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.sd-hud-tier { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--sd-muted); }
+.sd-hud-timer { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sd-hud-mistakes { display: flex; align-items: baseline; gap: 4px; font-size: 13px; color: var(--sd-muted); flex: none; }
+.sd-hud-mistakes span[data-role="mistakes"] { font-size: 16px; font-weight: 700; color: var(--sd-ink); }
+.sd-hud-mistakes-label { font-size: 11px; }
+
+/* --- board ------------------------------------------------------------------------------------
+ * Colorblind-safe by construction (root CLAUDE.md accessibility rules): a GIVEN digit is heavier
+ * weight than a player digit (not just a color difference); the selected cell gets a thick
+ * outline; the same-digit highlight is a ring under the digit, not only a background fill; a
+ * conflict carries a strikethrough AND an aria-label, never color alone. */
+.sd-boardwrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.sd-board {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  background: var(--sd-line);
+  border: 2px solid var(--sd-line-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sd-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sd-surface);
+  border: 0.5px solid var(--sd-line);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  min-width: 0;
+  min-height: 0;
+}
+.sd-cell.sd-boxleft { border-left: 2px solid var(--sd-line-strong); }
+.sd-cell.sd-boxtop { border-top: 2px solid var(--sd-line-strong); }
+.sd-cell.sd-boxright { border-right: 2px solid var(--sd-line-strong); }
+.sd-cell.sd-boxbottom { border-bottom: 2px solid var(--sd-line-strong); }
+
+.sd-cell.sd-peer { background: var(--sd-peer); }
+.sd-cell.sd-same .sd-digit { text-decoration: underline; text-underline-offset: 3px; }
+.sd-cell.sd-selected {
+  outline: 3px solid var(--sd-select);
+  outline-offset: -3px;
+  z-index: 1;
+}
+.sd-cell.sd-conflict .sd-digit { text-decoration: line-through; text-decoration-color: var(--sd-conflict); }
+
+.sd-digit {
+  font-size: clamp(14px, 4vw, 26px);
+  font-weight: 400;
+  color: var(--sd-player);
+  line-height: 1;
+}
+.sd-cell.sd-given .sd-digit { font-weight: 800; color: var(--sd-given); }
+
+.sd-notesgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 88%;
+  height: 88%;
+}
+.sd-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 11px is the UX floor (docs/BUILDING-A-GAME.md Part 0) even for a pencil mark. */
+  font-size: 11px;
+  color: var(--sd-muted);
+  line-height: 1;
+}
+
+/* --- controls + number pad --------------------------------------------------------------------
+ * 44x44 minimum tap targets; a swipe-free control surface gets touch-action: manipulation.
+ */
+.sd-controls {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.sd-ctlbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  border: 1px solid var(--gh-border, var(--sd-line));
+  border-radius: var(--gh-r-md, 12px);
+  background: var(--sd-surface);
+  color: var(--sd-ink);
+  font-size: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sd-ctlbtn svg { width: 18px; height: 18px; }
+.sd-ctlbtn[aria-pressed="true"] { outline: 2px solid var(--sd-select); border-color: var(--sd-select); }
+/* Notes-on state carries a LABEL change too (ui.js sets the text), never color/icon alone. */
+
+.sd-pad {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+}
+.sd-padbtn {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid var(--gh-border, var(--sd-line));
+  border-radius: var(--gh-r-md, 10px);
+  background: var(--sd-surface);
+  color: var(--sd-ink);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sd-padbtn:active { background: var(--sd-peer); }
+
+/* Narrower phones: two rows of 5 + 4 rather than nine cramped columns (spec-allowed exception to
+ * the single-row layout, root CLAUDE.md's 44px tap-floor rule). */
+@media (max-width: 380px) {
+  .sd-pad {
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+  }
+  .sd-padbtn:nth-child(9) { grid-column: 3; grid-row: 2; }
+}
+
+/* --- new-puzzle confirm (a plain themed box; win uses css/ui.css's .gh-overlay/.gh-modal) ----- */
+.sd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(9, 16, 28, .55);
+  overscroll-behavior: contain;
+}
+.sd-confirm {
+  width: min(360px, 100%);
+  padding: 20px;
+  border-radius: var(--gh-r-lg, 16px);
+  background: var(--sd-surface);
+  color: var(--sd-ink);
+  box-shadow: var(--gh-sh-4, 0 16px 44px rgba(16,30,54,.22));
+}
+.sd-confirm p { margin: 0 0 12px; font-size: 14px; }
+
+/* `hidden` MUST outrank the display rule that shows an overlay, or it sits over the board from
+ * the first frame (pipes/CLAUDE.md documents this exact bug: `.pi-root .pi-done` at specificity
+ * (0,2,0) beat the UA's `[hidden] { display: none }` at (0,1,0), because an AUTHOR rule wins a
+ * specificity tie against a UA rule). `.sd-overlay` and css/ui.css's shared `.gh-overlay` both set
+ * `display: grid` unconditionally, so both need this override here. */
+.sd-overlay[hidden], .sd-root .gh-overlay[hidden] { display: none; }
+
+/* --- reduced motion: this game has no ongoing animation to gate, kept for completeness ------- */
+@media (prefers-reduced-motion: reduce) {
+  .sd-root * { transition-duration: 1ms !important; }
+}

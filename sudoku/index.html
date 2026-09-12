@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sudoku</title>
+  <link rel="stylesheet" href="../css/ui.css">
+  <link rel="stylesheet" href="css/sudoku.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #f4f6fb; }
+    #sudoku { min-height: 100vh; position: relative; }
+  </style>
+</head>
+<body>
+  <div id="sudoku"></div>
+  <script type="module">
+    // The app is not playable without a name (see js/name-gate.js): this standalone page is a
+    // door into the hub too, and an ungated one is where the leaderboard's nameless device
+    // records came from. `requireName()` is a no-op once this device has a name.
+    import { requireName } from '../js/name-gate.js';
+    import { init } from './js/ui.js';
+    await requireName();
+    init(document.getElementById('sudoku'));
+  </script>
+</body>
+</html>

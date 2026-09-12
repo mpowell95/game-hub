@@ -159,6 +159,7 @@ const GAME_META = [
   { id: 'business', labelKey: 'game_title_business' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
   { id: 'pipes', labelKey: 'game_title_pipes' },
+  { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
@@ -1296,6 +1297,13 @@ const TEXTURE = {
   ballrun: [
     { labelKey: 'lb_tex_best_obstacles', get: (g) => ((g.games.ballrun.br || {}).bestObstacles) | 0 },
     { labelKey: 'lb_tex_total_runs', get: (g) => ((g.games.ballrun.br || {}).runs) | 0 },
+  ],
+  // No fastest-time record on the leaderboard in v1 (deliberate - a TEXTURE `get` ranks
+  // higher-is-better everywhere else, and bestTimeMs is lower-is-better; see js/CLAUDE.md's
+  // sudoku section, root CLAUDE.md item 7).
+  sudoku: [
+    { labelKey: 'lb_tex_sd_solved', get: (g) => ((g.games.sudoku || {}).sd || {}).solved | 0 },
+    { labelKey: 'lb_tex_sd_perfect', get: (g) => ((g.games.sudoku || {}).sd || {}).perfect | 0 },
   ],
   dotsboxes: [
     { labelKey: 'lb_tex_boxes_claimed', get: (g) => ((g.games.dotsboxes.db || {}).boxes) | 0 },

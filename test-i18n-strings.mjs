@@ -21,6 +21,7 @@ const DICTS = [
   { name: 'tic-tac-toe/js/strings.js', path: './tic-tac-toe/js/strings.js' },
   { name: 'dots-boxes/js/strings.js', path: './dots-boxes/js/strings.js' },
   { name: 'nuts-bolts/js/strings.js', path: './nuts-bolts/js/strings.js' },
+  { name: 'sudoku/js/strings.js', path: './sudoku/js/strings.js' },
   { name: 'ball-run/js/strings.js', path: './ball-run/js/strings.js' },
   { name: 'connect-four/js/strings.js', path: './connect-four/js/strings.js' },
   { name: 'escoba/js/strings.js', path: './escoba/js/strings.js' },
