@@ -28,6 +28,7 @@ const REPO = new URL('.', import.meta.url).pathname;
 const PORT = 8137;
 const FROM = 'game-hub-v551';
 const TO = 'game-hub-v552';
+const SHORT = (v) => String(v).replace(/^game-hub-/, '');   // what the hub stores in _loadedVersion
 
 let chromium;
 try { ({ chromium } = await import('playwright-core')); }
@@ -164,6 +165,102 @@ const until = async (page, fn, ms = 30000, step = 500) => {
       : 'could not mount a game to test with (probe inconclusive, not a pass of the real check)');
   ok('a game was actually mounted for that check', opened === 'mounted',
     'no game card mounted, so the no-interrupt case above proved nothing');
+  await page.context().close();
+}
+
+// --- case 3: the worker is current but THIS PAGE is not (2026-09-12) -----------------------------
+//
+// Matt, with the launcher still drawing the old golf tile and the chip honestly reading the new
+// version: "Tapping the pill is already supposed to force the refetch from new cache. why isn't it
+// working". It was not. _forceUpdate compared the WORKER against version.json, found them equal,
+// said "Up to date" and returned - and neither of those two things is the PAGE. A page loads its
+// modules once, under whichever worker was in charge at that moment, and keeps them for life.
+//
+// _onNewBuildActive normally covers the gap, but it fires on a live `controllerchange`, and an
+// installed app on iOS is SUSPENDED while backgrounded: the swap lands with nothing listening.
+// This case reproduces exactly that end state - controller on the new build, page still on the old
+// one, no reload having happened - by stubbing the reload out while the swap occurs, then restores
+// it and taps the chip. The tap must reload.
+{
+  setVersion(FROM);
+  const page = await newPage();
+  await page.goto(BASE, { waitUntil: 'load' });
+  await until(page, async () => (await controller(page)) === FROM, 20000);
+  // LOAD IT AGAIN, UNDER THE WORKER. The very first visit to an origin has no controller while the
+  // document is fetched, so _loadedVersion is null by design (guard 1 in _onNewBuildActive: nothing
+  // about that page is stale, it came straight off the network). A real device on its second and
+  // every later open loads WITH a controller, which is the state this case is about.
+  await page.goto(BASE, { waitUntil: 'load' });
+  const knows = await until(page, async () => {
+    const v = await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion));
+    return v === SHORT(FROM);
+  }, 20000);
+  ok('the page recorded the build it loaded under', knows >= 0,
+    `_loadedVersion was ${JSON.stringify(await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion)))}`);
+
+  // Suspend the automatic reload (stand in for a backgrounded iOS app) and mark the document, so
+  // a later reload is detectable by the mark being gone.
+  await settle(page.evaluate(() => {
+    window.__mark = 'stale-page';
+    const hub = window.__ghHub;
+    hub.__realApply = hub._applyUpdate;
+    hub._applyUpdate = () => { window.__autoReloadSuppressed = true; };
+  }));
+
+  setVersion(TO);                                  // THE DEPLOY
+  await settle(page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())));
+  const swapped = await until(page, async () => (await controller(page)) === TO, 30000);
+  ok('the worker took over while the page stayed put', swapped >= 0,
+    `controller was ${await controller(page)} after 30s`);
+  const stalePage = await settle(page.evaluate(() => ({
+    mark: window.__mark,
+    loaded: window.__ghHub && window.__ghHub._loadedVersion,
+    suppressed: !!window.__autoReloadSuppressed,
+  })));
+  ok('the page is genuinely stale for the tap to act on',
+    !!stalePage && stalePage.mark === 'stale-page' && stalePage.loaded === SHORT(FROM),
+    `page state: ${JSON.stringify(stalePage)}`);
+
+  // Hand the reload back and tap the chip, exactly as Matt did.
+  await settle(page.evaluate(() => { const h = window.__ghHub; h._applyUpdate = h.__realApply; }));
+  await settle(page.evaluate(() => document.querySelector('[data-role="version"]').click()));
+
+  // [KNOWN-BUG PROBE] Before the fix the chip said "Up to date" and the old page stayed up for ever
+  // - on the one control a standalone PWA has, with no reload button anywhere else.
+  const reloaded = await until(page, async () => {
+    const gone = await settle(page.evaluate(() => window.__mark === undefined));
+    return gone === true;
+  }, 20000);
+  ok('[KNOWN-BUG PROBE] tapping the chip reloads a page whose worker has already moved on',
+    reloaded >= 0,
+    `20s after the tap the document was never replaced; the chip read ${JSON.stringify(await chip(page))} `
+    + `while the controller was ${await controller(page)} and the page had loaded on ${SHORT(FROM)}`);
+  ok('and the reloaded page reports the new version',
+    (await until(page, async () => (await chip(page)) === 'v552', 20000)) >= 0,
+    `chip: ${JSON.stringify(await chip(page))}`);
+  await page.context().close();
+}
+
+// --- case 4: a page whose worker has NOT moved must not reload on a tap --------------------------
+//
+// The other half of case 3: the 2026-09-01 loop was a tap that reloaded into the same screen, and
+// the fix for it must stay in force when nothing has actually changed.
+{
+  setVersion(TO);
+  const page = await newPage();
+  await page.goto(BASE, { waitUntil: 'load' });
+  await until(page, async () => (await controller(page)) === TO, 20000);
+  await page.goto(BASE, { waitUntil: 'load' });   // load under the worker, as case 3 does
+  await until(page, async () => {
+    const v = await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion));
+    return v === SHORT(TO);
+  }, 20000);
+  await settle(page.evaluate(() => { window.__mark = 'current-page'; }));
+  await settle(page.evaluate(() => document.querySelector('[data-role="version"]').click()));
+  await page.waitForTimeout(8000);
+  const survived = await settle(page.evaluate(() => window.__mark === 'current-page'));
+  ok('a tap on an up-to-date page does NOT reload it', survived === true,
+    'the page reloaded with nothing to update - the 2026-09-01 loop is back');
   await page.context().close();
 }
 
