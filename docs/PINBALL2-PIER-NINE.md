@@ -7,6 +7,11 @@ for how you would design a playable, fun, competitive, pinball board."*
 The visual blueprint (to-scale plan drawing, keyed schedules) is the companion to this file. This
 file is the buildable text. Where they disagree, this one wins and the drawing gets fixed.
 
+**`docs/PINBALL2-PIER-NINE-ART.md` is the third piece and it is not optional.** This file says where
+every part sits and what it scores; that one says what it LOOKS like - the palette, the state
+language, and a rendering of the table lit, in the same coordinates. Section 4a below is the summary
+of it; the art file is the source.
+
 ---
 
 ## 0. The finding that shapes everything
