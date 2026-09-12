@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v805';
+const CACHE = 'game-hub-v806';
 
 const ASSETS = [
   './',
@@ -702,12 +702,12 @@ const REST_MANIFEST = {
   './hill-climb/': '527615b38c',
   './hill-climb/index.html': '527615b38c',
   './hill-climb/css/hill-climb.css': '5b33ca4553',
-  './hill-climb/js/ui.js': 'db4010c86b',
+  './hill-climb/js/ui.js': '449654db43',
   './hill-climb/js/physics.js': 'f9a9689016',
   './hill-climb/js/terrain.js': '5bc901c361',
   './hill-climb/js/render.js': '623cbf7db4',
   './hill-climb/js/catalog.js': 'af37e0755a',
-  './hill-climb/js/store.js': 'b63beb6fd1',
+  './hill-climb/js/store.js': 'ba8e06d2a7',
   './hill-climb/js/strings.js': '2e12d1e4cd',
   './skeeball/': '0a8f7a9c7c',
   './skeeball/index.html': '0a8f7a9c7c',
