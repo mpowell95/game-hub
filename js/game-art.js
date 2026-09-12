@@ -690,17 +690,47 @@ export const GAME_ART = {
              <circle cx="80" cy="76" r="5.2" fill="#f6ecda"/>
              <circle cx="78.3" cy="74.3" r="1.7" fill="#fffdf5"/>
            </svg>`,
-  // §14 of GOLF-HANDOFF.md: full-bleed fairway green, a lighter fairway curving bottom-left to
-  // a green circle upper-right, a flag on the green, a white ball bottom-left. ~7 elements,
-  // deliberately plain next to Skeeball's - the brief asked for ~12 max, not a second machine.
+  // The hub tile (2026-09-12, replacing §14 of GOLF-HANDOFF.md's aerial sketch). Matt: on the old
+  // tile "the tee box is covered by the name of the game" and "the green barely fits and is covered
+  // by the heart". Both are the same defect - the tile has two permanent occupants and the art has
+  // to be composed around them: the "Golf" label at x 8-53 / y 66-86 and the favorite heart at
+  // x 118-158 / y 2-42 (viewBox units, measured at the real 174px phone tile). The old art put the
+  // green + flag at 111-145 / 4-41 and the ball at 12-24 / 72-84, i.e. under both. This is the hole
+  // in perspective from behind the tee - tee pad and ball bottom-CENTER-RIGHT, fairway running away
+  // to the green and pin at center, pond right, bunkers flanking the green, treeline and sky. Both
+  // keep-out zones hold nothing but plain sky and plain fairway.
   golf: `<svg viewBox="0 0 160 90" aria-hidden="true">
-           <rect width="160" height="90" fill="#2E7D4F"/>
-           <path d="M0 90 C 20 68, 30 55, 55 40 C 85 22, 105 14, 128 8 L 150 8 C 150 30, 140 46, 118 46 C 90 46, 70 60, 45 78 C 30 88, 12 90, 0 90 Z" fill="#4FAE72"/>
-           <circle cx="128" cy="24" r="17" fill="#7FCB9A"/>
-           <rect x="127" y="4" width="1.6" height="22" fill="#3a2416"/>
-           <path d="M128.6 5 L140 9 L128.6 13 Z" fill="#ffce3a"/>
-           <circle cx="18" cy="78" r="6" fill="#ffffff"/>
-           <circle cx="16" cy="76" r="1.6" fill="#f4f4f4"/>
+         <defs>
+         <linearGradient id="golfTileSky" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0" stop-color="#A9D6F2"/><stop offset="1" stop-color="#E4F2FB"/>
+         </linearGradient>
+         <linearGradient id="golfTileFair" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0" stop-color="#5CBE82"/><stop offset="1" stop-color="#47A76B"/>
+         </linearGradient>
+         </defs>
+         <rect width="160" height="90" fill="url(#golfTileSky)"/>
+         <ellipse cx="26" cy="12" rx="13" ry="4.5" fill="#ffffff" opacity="0.85"/>
+         <ellipse cx="38" cy="10" rx="8" ry="3.6" fill="#ffffff" opacity="0.85"/>
+         <path d="M0 42 L0 36 C 8 29, 14 34, 20 33 C 26 26, 34 31, 40 32 C 48 25, 56 31, 62 32 C 70 25, 78 31, 84 32 C 92 25, 100 31, 106 32 C 114 26, 122 31, 128 32 C 136 26, 148 31, 160 33 L160 42 Z" fill="#1E5C3B"/>
+         <rect y="40" width="160" height="50" fill="#2E7D4F"/>
+         <path d="M8 90 C 24 72, 44 56, 62 42 L98 42 C 118 56, 138 72, 152 90 Z" fill="url(#golfTileFair)"/>
+         <path d="M8 90 C 24 72, 44 56, 62 42 L98 42 C 118 56, 138 72, 152 90" fill="none" stroke="#3B935E" stroke-width="1.4"/>
+         <ellipse cx="59" cy="45" rx="8" ry="3" fill="#F0E3BE"/>
+         <ellipse cx="102" cy="45" rx="7" ry="2.8" fill="#F0E3BE"/>
+         <path d="M107 57 C 112 50, 128 47, 141 50 C 151 52.5, 154 59, 145 62.5 C 134 66.5, 113 66, 107.5 62 C 104.5 60, 104.5 58.5, 107 57 Z" fill="#2A7148"/>
+         <path d="M109 58 C 114 51.5, 128 49, 140 51.6 C 149 53.8, 151.5 59, 143.5 62 C 133.5 65.6, 114.5 65, 109.5 61.4 C 107 59.6, 107 59.2, 109 58 Z" fill="#2F7FA8"/>
+         <path d="M114 54.5 C 122 52.4, 132 52.2, 139 54" stroke="#6FB6D4" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+         <path d="M120 61 C 127 62.4, 135 62, 141 60.4" stroke="#6FB6D4" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.7"/>
+         <ellipse cx="80" cy="40.4" rx="22" ry="7.2" fill="#3E9A63"/>
+         <ellipse cx="80" cy="40" rx="20" ry="6.4" fill="#8FD8AA"/>
+         <circle cx="80" cy="40" r="1.5" fill="#1C4A33"/>
+         <rect x="79.3" y="22" width="1.5" height="18" fill="#2f2018"/>
+         <path d="M80.8 23 L91.5 26.5 L80.8 30 Z" fill="#ffce3a"/>
+         <path d="M88 78 L150 78 L158 90 L80 90 Z" fill="#63BE85"/>
+         <rect x="95" y="81" width="3" height="5" rx="1.4" fill="#f6f2e8"/>
+         <rect x="139" y="81" width="3" height="5" rx="1.4" fill="#f6f2e8"/>
+         <path d="M118 86 l0 -3" stroke="#f0f0f0" stroke-width="1.4"/>
+         <circle cx="118" cy="81" r="3.4" fill="#ffffff"/>
          </svg>`,
 
   // Phase 0 (BB-0-phase-0-handoff.md): a devOnly placeholder tile. Full-bleed dirt infield with a
