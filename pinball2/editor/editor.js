@@ -11,7 +11,7 @@ import { World } from '../machines/testbox/physics.js';
 import { makeTable, toJSON, fromJSON, newId, buildRamp, rampPoints, RAMP_DEFAULTS } from '../machines/testbox/table.js';
 import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
 import { draw, fitView, toTable, toScreen } from '../machines/testbox/render.js';
-import { playable, distToShape, checkGaps, tunnelProbe, restSweep, drainTime, rampProbe } from '../probes/checks.js';
+import { playable, distToShape, checkGaps, tunnelProbeGen, restSweepGen, drainTime, rampProbe } from '../probes/checks.js';
 
 const SAVE = 'pinball2.editor.v1';
 const DEG = 180 / Math.PI;
@@ -25,9 +25,21 @@ const dockA = document.getElementById('dockA');
 const dockB = document.getElementById('dockB');
 let panel = dockA;
 const objbar = document.getElementById('objbar');
-const hud = document.getElementById('hud');
+// THE STATUS BAR, which replaced a box that used to be drawn on top of the playfield. It covered
+// the top rail and two lanes of every table in every mode, on the one screen whose entire job is
+// letting you look at the table. Facts belong in a bar; the canvas belongs to the work.
+const statusBar = document.getElementById('status');
+// The toast is the ONE thing still allowed over the table, and only for a live instruction about
+// what the next tap will do ("tap the table to place this"). An instruction that is not where you
+// are looking is an instruction nobody follows. Never used for facts.
+const toast = document.getElementById('toast');
 const zones = document.getElementById('touchzones');
-const launchBtn = document.getElementById('launch');
+// The tool rail sits in the dead gutter beside the table: a 0.515 x 1.067 m playfield in a portrait
+// canvas is fitted by HEIGHT and leaves ~59% of the width as black margin, so chrome placed there
+// costs the table nothing. It is a real grid column rather than something floating over the canvas,
+// so no part of the table can ever end up underneath a button.
+const railTools = document.getElementById('railtools');
+let launchBtn = null;                    // built by the Play rail; see renderPlayRail()
 
 const app = {
   table: makeTable(),
@@ -61,7 +73,10 @@ const app = {
   tableName: null,        // the LIBRARY save being edited, or null for a table this build ships
   builtin: null,          // which shipped table, when tableName is null: null means Default
   migrated: null,
-  tuneAll: false,          // Tune shows the selected part's numbers unless Show all was tapped
+  tuneAll: false,
+  // The id of the in-flight chunked check, so leaving the Check tab can stop it rather than
+  // leaving a sweep running under whatever you do next.
+  checkRun: null,          // Tune shows the selected part's numbers unless Show all was tapped
   xstep: 2,                // index into XFORM_STEPS: how far one tap of the turn/scale row goes
 };
 
@@ -1190,6 +1205,7 @@ function renderPanel() {
   document.getElementById('panel').classList.toggle('sel', app.mode === 'edit' && (app.sel.size > 0 || !!app.placing));
   syncTableSel();
   panel = dockA;
+  renderRail();
   syncObjBar();
   syncZoom();
   if (app.mode === 'play') return renderPlayPanel();
@@ -1291,6 +1307,7 @@ obDup.onclick = duplicateSel;
 obDel.onclick = deleteSel;
 obSnap.onclick = () => { app.snap = !app.snap; renderPanel(); };
 
+const obMain = document.getElementById('obmain');
 const obDraw = document.getElementById('obdraw');
 const obDrawUndo = document.getElementById('ob-draw-undo');
 const obDrawDone = document.getElementById('ob-draw-done');
@@ -1335,14 +1352,23 @@ function syncObjBar() {
   const s = xstep();
   obStep.textContent = `${s.deg}° · ${s.pct}%`;
   const n = app.drawing ? app.drawing.pts.length : 0;
-  obDraw.hidden = !(editing && app.drawing);
+  const drawing = !!(editing && app.drawing);
+  obDraw.hidden = !drawing;
   obDrawUndo.disabled = n === 0;
   obDrawDone.disabled = n < RAMP_MIN_PTS;
   obDrawDone.textContent = n < RAMP_MIN_PTS ? `Done (${n} of ${RAMP_MIN_PTS})` : `Done (${n} points)`;
-  // While a path is open the turn and scale row would act on a selection that is not the thing you
-  // are working on, so it stands down until the ramp lands.
-  obXform.hidden = !(editing && !app.drawing && (app.sel.size || app.placing));
-  objbar.style.opacity = editing ? '' : '.5';
+  // ONE ROW, ALWAYS, AT A FIXED HEIGHT. The bar used to be a COLUMN that grew a second row the
+  // moment something was selected or a ramp path was open - which changed the canvas's height
+  // mid-edit with no window resize event, the exact class of bug the fixed-height layout exists to
+  // prevent. It went unnoticed because the regression test compares modes with nothing selected.
+  // Now the contextual controls REPLACE or EXTEND the row inside one scrolling track instead of
+  // stacking on top of it, and the canvas cannot move while you work.
+  obMain.hidden = drawing;
+  // While a path is open the turn and scale controls would act on a selection that is not the
+  // thing you are working on, so they stand down until the ramp lands.
+  obXform.hidden = !(editing && !drawing && (app.sel.size || app.placing));
+  objbar.style.opacity = editing ? '' : '.4';
+  objbar.scrollLeft = 0;
 }
 
 // ------------------------------------------------------------------ the parts palette
@@ -1359,6 +1385,83 @@ const PART_ICONS = {
   ribbon: '<svg viewBox="0 0 26 18"><path d="M4 16 A 11 11 0 0 1 22 16" fill="none" stroke="#3d6ea8" stroke-width="6" stroke-linecap="round"/><path d="M4 16 A 11 11 0 0 1 22 16" fill="none" stroke="#9fb6d8" stroke-width="1.4"/></svg>',
 };
 
+// ------------------------------------------------------------------ the tool rail
+//
+// THE RAIL IS THE MODE'S TOOLS; THE SHEET IS THE MODE'S DETAILS. A tool is something you reach for
+// again and again while looking at the table (a part to add, the transport, zoom), and burying
+// those in a scrolling panel under the table is what made this feel like a form rather than an
+// editor. Zoom is pinned to the bottom of the rail by CSS in every mode, so the rail is never
+// empty and the one control that belongs to all four modes is always in the same place.
+
+const RAIL_ICONS = {
+  ball:  '<svg viewBox="0 0 26 18"><circle cx="13" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10.6" cy="6.6" r="1.9" fill="currentColor"/></svg>',
+  slow:  '<svg viewBox="0 0 26 18"><circle cx="13" cy="9" r="6.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 5.2V9l2.6 1.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  pause: '<svg viewBox="0 0 26 18"><rect x="9" y="3.5" width="2.9" height="11" rx="1" fill="currentColor"/><rect x="14.1" y="3.5" width="2.9" height="11" rx="1" fill="currentColor"/></svg>',
+  play:  '<svg viewBox="0 0 26 18"><path d="M10 3.6 19 9l-9 5.4Z" fill="currentColor"/></svg>',
+  step:  '<svg viewBox="0 0 26 18"><path d="M8 3.6 16 9l-8 5.4Z" fill="currentColor"/><rect x="17.4" y="3.6" width="2.4" height="10.8" rx="1" fill="currentColor"/></svg>',
+};
+
+/** One rail button: an icon, and a label that is read out and searched for but not drawn. The
+ *  rail is 58px wide and "Slow motion" does not fit at the UX floor's 11px minimum, so the choice
+ *  is a clipped label or a shrunken one - and shrinking below 11px is the thing the floor forbids. */
+function railBtn(icon, label, onClick, title, short) {
+  // A VISIBLE WORD AND A FULL ONE. An icon-only rail is fine on a desktop, where a tooltip is one
+  // hover away; on a phone there is no hover and a tooltip is a control with no label at all. So
+  // every button shows a short word under its icon (the rail is 58px and 11px is the UX floor's
+  // minimum, which together allow about six characters) and carries the full name for a screen
+  // reader - which is also the name the browser test looks for, deliberately: what a person reads
+  // and what the contract checks should never be two different strings.
+  // ALWAYS render the visible word, even when it is the same string as the full label. The first
+  // version skipped it when they matched, which silently left Pause as a bare icon with no word
+  // under it while its three neighbours had one.
+  const vis = `<span aria-hidden="true">${esc(short || label)}</span>`;
+  const b = el(`<button class="railbtn" title="${esc(title || label)}">${icon}${vis}<span class="sr">${esc(label)}</span></button>`);
+  b.onclick = onClick;
+  return b;
+}
+
+// The rail's contents depend on the MODE and on nothing else, and `renderPanel()` runs on every
+// pointermove of a drag (through `afterEdit`). Rebuilding eight palette buttons per move is DOM
+// churn on the one path that has to stay smooth - and in Play it would throw away the Pause and
+// Slow buttons' own state every time. So the rail is rebuilt when the mode changes and not
+// otherwise.
+let railMode = null;
+
+function renderRail() {
+  if (railMode === app.mode) return;
+  railMode = app.mode;
+  railTools.innerHTML = '';
+  launchBtn = null;
+  if (app.mode === 'play') return renderPlayRail();
+  if (app.mode === 'edit') return renderPalette();
+}
+
+function renderPlayRail() {
+  // `launch` keeps its id: it was the floating button on the canvas, and it is the same control,
+  // moved somewhere it is not sitting on the playfield's bottom right corner (which on BOARDWALK
+  // is directly over the right outlane).
+  launchBtn = railBtn(RAIL_ICONS.ball, 'New ball', newBall, 'drop a new ball (Space)', 'Ball');
+  launchBtn.id = 'launch';
+  launchBtn.classList.add('primary');
+  const slow = railBtn(RAIL_ICONS.slow, 'Slow motion', () => {
+    app.slowmo = app.slowmo === 1 ? 0.25 : 1;
+    slow.classList.toggle('on', app.slowmo !== 1);
+    slow.querySelector('[aria-hidden]').textContent = app.slowmo === 1 ? 'Slow' : 'Full';
+    slow.querySelector('.sr').textContent = app.slowmo === 1 ? 'Slow motion' : 'Full speed';
+  }, 'quarter speed', 'Slow');
+  const pause = railBtn(RAIL_ICONS.pause, 'Pause', () => {
+    app.running = !app.running;
+    pause.innerHTML = (app.running ? RAIL_ICONS.pause : RAIL_ICONS.play)
+      + `<span aria-hidden="true">${app.running ? 'Pause' : 'Resume'}</span><span class="sr">${app.running ? 'Pause' : 'Resume'}</span>`;
+  }, 'pause the simulation', 'Pause');
+  const stepb = railBtn(RAIL_ICONS.step, 'Step frame', () => {
+    app.running = false;
+    pause.innerHTML = RAIL_ICONS.play + '<span aria-hidden="true">Resume</span><span class="sr">Resume</span>';
+    stepPlay(1 / 60);
+  }, 'advance one frame', 'Step');
+  railTools.append(launchBtn, slow, pause, stepb);
+}
+
 function renderPalette() {
   const grid = el('<div class="palette"></div>');
   for (const [k, name] of [['seg', 'Wall'], ['arc', 'Arc'], ['circle', 'Post'], ['bumper', 'Bumper'], ['sling', 'Sling'], ['flipper', 'Flipper'], ['ribbon', 'Ramp'], ['drain', 'Drain']]) {
@@ -1366,26 +1469,15 @@ function renderPalette() {
     b.onclick = () => addShape(k);
     grid.append(b);
   }
-  panel.append(grid);
+  railTools.append(grid);
 }
 
 function renderPlayPanel() {
-  const r = el('<div class="row"></div>');
-  const nb = el('<button class="primary">New ball</button>');
-  nb.onclick = newBall;
-  const slow = el('<button>Slow motion</button>');
-  slow.onclick = () => { app.slowmo = app.slowmo === 1 ? 0.25 : 1; slow.textContent = app.slowmo === 1 ? 'Slow motion' : 'Full speed'; };
-  const pause = el('<button>Pause</button>');
-  pause.onclick = () => { app.running = !app.running; pause.textContent = app.running ? 'Pause' : 'Resume'; };
-  const stepb = el('<button>Step frame</button>');
-  stepb.onclick = () => { app.running = false; pause.textContent = 'Resume'; stepPlay(1 / 60); };
-  r.append(nb, slow, pause, stepb);
-  panel.append(r);
-  panel.append(el('<div class="note">Hold the left or right half of the table to flip, or Z and M on a keyboard. Space drops a new ball.</div>'));
+  panel.append(el('<h2>Controls</h2>'));
+  panel.append(el('<div class="note">Hold the left or right half of the table to flip, or <b>Z</b> and <b>M</b> on a keyboard. <b>Space</b> drops a new ball.<br>The rail on the left has the transport: new ball, slow motion, pause and step.</div>'));
 }
 
 function renderEditPanel() {
-  renderPalette();
 
   // THE PREFAB GROUP. Open exactly when it is useful: when there is a selection to save, or
   // something saved to place.
@@ -1758,7 +1850,9 @@ function renderTunePanel() {
 }
 
 function renderCheckPanel() {
-  panel.append(el('<div class="note">Three questions, answered on the table as it stands right now. Results are drawn ON the table as red marks, not summarised as a percentage.</div>'));
+  // The copy used to say "Three questions" above what has been five buttons since the ramp probe
+  // moved in here. A tool that miscounts its own controls is a tool nobody trusts about a table.
+  panel.append(el('<div class="note">Answered on the table as it stands right now, and drawn ON it as red marks rather than summarised as a percentage. The two sweeps run on a coarser grid here than <code>probes/run.mjs</code> does, so the terminal is still the last word before a deploy.</div>'));
   const r = el('<div class="row"></div>');
   const bTraps = el('<button class="primary">Find traps</button>');
   const bTunnel = el('<button>Tunnel test</button>');
@@ -1778,8 +1872,59 @@ function renderCheckPanel() {
   // check you were reading.
   panel = dockB;
   panel.append(el('<h2>Results</h2>'));
+  const prog = el('<div id="progwrap"><div id="progbar"><i></i></div><button id="prog-cancel">Stop</button></div>');
+  panel.append(prog);
   const out = el('<pre id="report"></pre>');
   panel.append(out);
+  const bar = prog.querySelector('i');
+  prog.querySelector('#prog-cancel').onclick = () => cancelCheck();
+
+  /** Run a check generator ACROSS FRAMES instead of in one blocking call.
+   *
+   *  Matt's complaint that started this redesign is a UI one, but this is the half of it that is a
+   *  bug: the old handlers ran the whole sweep inside a `setTimeout`, so the page painted
+   *  "dropping balls..." and then died for 3.5 s on TEST BOX and 5.8 s on BOARDWALK - measured, on
+   *  a desktop; a phone is several times that. No progress, no way to stop, and nothing to tell it
+   *  apart from a crash. A tool that freezes when you use its main feature is a tool you stop
+   *  using.
+   *
+   *  The budget is per FRAME, not per iteration count: a drop on a 44-part table costs many times
+   *  what one on the bare box costs, so a fixed chunk size is fast on one table and a freeze on the
+   *  next. 12 ms leaves the frame its paint. */
+  function runChunked(label, gen, finish) {
+    cancelCheck();
+    out.textContent = `${label}...`;
+    prog.classList.add('on');
+    const BUDGET_MS = 20;
+    const tick = () => {
+      const t0 = performance.now();
+      let r;
+      do {
+        r = gen.next();
+        if (r.done) {
+          prog.classList.remove('on');
+          app.checkRun = null;
+          finish(r.value);
+          return;
+        }
+      } while (performance.now() - t0 < BUDGET_MS);
+      const v = r.value || {};
+      if (v.total) {
+        bar.style.width = `${Math.min(100, (v.done / v.total) * 100).toFixed(1)}%`;
+        out.textContent = `${label}... ${v.done} of ${v.total}${v.phase === 'nudge' ? ' (checking knife edges)' : ''}`;
+      }
+      app.checkRun = requestAnimationFrame(tick);
+    };
+    app.checkRun = requestAnimationFrame(tick);
+  }
+
+  function cancelCheck() {
+    if (app.checkRun == null) return;
+    cancelAnimationFrame(app.checkRun);
+    app.checkRun = null;
+    prog.classList.remove('on');
+    out.textContent = 'Stopped. Nothing was changed on the table.';
+  }
 
   const fall = drainTime(app.table, app.cfg);
   const err = fall.seconds == null ? 1 : Math.abs(fall.seconds - fall.analytic) / fall.analytic;
@@ -1815,19 +1960,17 @@ function renderCheckPanel() {
     }, 20);
   };
   bTunnel.onclick = () => {
-    out.textContent = 'firing...';
-    setTimeout(() => {
-      const r2 = tunnelProbe(app.table, app.cfg, { angles: 16 });
+    runChunked('Firing', tunnelProbeGen(app.table, app.cfg, { angles: 16 }), (r2) => {
       app.marks = r2.fails.map((f) => ({ at: f.end, kind: 'tunnel' }));
       out.textContent = r2.fails.length
-        ? `${r2.fails.length} of ${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s went through something.`
-        : `${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s from every angle. None got through.`;
-    }, 30);
+        ? `${r2.fails.length} of ${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s went through something.\n`
+          + `Run \`node pinball2/probes/run.mjs tunnel\` for the full 24-angle sweep.`
+        : `${r2.shots} shots at ${app.cfg.MAX_SPEED} m/s from 16 angles. None got through.\n`
+          + `The terminal sweep fires 24 angles; run it before a deploy.`;
+    });
   };
   bTraps.onclick = () => {
-    out.textContent = 'dropping balls...';
-    setTimeout(() => {
-      const r2 = restSweep(app.table, app.cfg, { step: 0.016, seconds: 5 });
+    runChunked('Dropping balls', restSweepGen(app.table, app.cfg, { step: 0.016, seconds: 5 }), (r2) => {
       app.marks = r2.stuck.map((s) => ({ at: s.at, kind: 'trap' }));
       const spots = [];
       for (const s of r2.stuck) {
@@ -1836,10 +1979,101 @@ function renderCheckPanel() {
       out.textContent = r2.stuck.length
         ? `${r2.stuck.length} of ${r2.drops} drops never reached the drain, in ${spots.length} place(s):\n`
           + spots.map((s) => `  (${(s.at.x * 1000).toFixed(0)}, ${(s.at.y * 1000).toFixed(0)}) mm on ${s.on || 'nothing'}`).join('\n')
-        : `${r2.drops} drops, every one reached the drain. No traps.`;
-    }, 30);
+        : `${r2.drops} drops, every one reached the drain. No traps.\n`
+          + `This grid is 16 mm; \`probes/run.mjs rests\` uses 12 mm and drops about twice as many.`;
+    });
   };
 }
+
+// ------------------------------------------------------------------ the sheet
+//
+// THE DOCK'S HEIGHT IS DRAGGABLE, WITH THREE DETENTS, AND IT IS THE SAME HEIGHT IN ALL FOUR MODES.
+//
+// This is the other half of the layout fix. The table is 0.515 x 1.067 m and a phone is portrait,
+// so the canvas fits by HEIGHT: the only way to draw a bigger table is a taller stage. At the
+// closed detent the work area is the whole screen minus the bands, and the table is drawn 333 x 690
+// on a 393 x 852 phone, against 230 x 477 before - the difference between squinting at a 12-pixel
+// ball and being able to see what you are building.
+//
+// ONE height for every mode, deliberately. A per-mode height would resize the canvas on a tab
+// switch with no window resize event, which is exactly the bug this layout was rebuilt to end, and
+// `test-editor.mjs` measures the canvas box in all four modes to keep it that way.
+
+const SHEET = 'pinball2.editor.sheet';
+const SHEET_MIN = 0;                       // closed: the grab handle alone
+const SHEET_PEEK = 172;
+const sheetEl = document.getElementById('sheet');
+const grabEl = document.getElementById('grab');
+
+const sheetMax = () => Math.round(Math.min(520, window.innerHeight * 0.56));
+/** The three detents, computed rather than stored, because the tall one depends on the screen. */
+const sheetDetents = () => [SHEET_MIN, SHEET_PEEK, sheetMax()];
+
+function setSheet(px, remember) {
+  const h = Math.max(SHEET_MIN, Math.min(sheetMax(), Math.round(px)));
+  document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+  if (remember !== false) { try { localStorage.setItem(SHEET, String(h)); } catch (e) { /* private mode */ } }
+  return h;
+}
+
+function sheetH() {
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-h'));
+  return Number.isFinite(v) ? v : SHEET_PEEK;
+}
+
+/** Tap the handle: OPEN or SHUT, nothing else. A drag is for a size in between.
+ *
+ *  The first version cycled through the three detents, and one tap on a peeking sheet made it the
+ *  TALLEST - which shrank the table from 242px wide to 95px, the exact opposite of what somebody
+ *  reaching for the handle wants. A tap has to do the obvious thing every time, and the obvious
+ *  thing is "get this out of my way" / "give it back". The height it gives back is the one you last
+ *  had open, so a sheet dragged to a size you liked is the size it returns to. */
+let lastOpenH = SHEET_PEEK;
+
+function cycleSheet() {
+  const now = sheetH();
+  if (now > 8) { lastOpenH = now; setSheet(SHEET_MIN); }
+  else setSheet(lastOpenH > 8 ? lastOpenH : SHEET_PEEK);
+}
+
+{
+  let from = null;
+  let startH = 0;
+  let moved = false;
+  grabEl.addEventListener('pointerdown', (e) => {
+    from = e.clientY; startH = sheetH(); moved = false;
+    grabEl.classList.add('on');
+    try { grabEl.setPointerCapture(e.pointerId); } catch (err) { /* throws readily; never worth the gesture */ }
+  });
+  grabEl.addEventListener('pointermove', (e) => {
+    if (from == null) return;
+    const dy = from - e.clientY;              // drag UP makes the sheet taller
+    if (Math.abs(dy) > 4) moved = true;
+    if (moved) setSheet(startH + dy);
+  });
+  const end = () => {
+    if (from == null) return;
+    from = null;
+    grabEl.classList.remove('on');
+    if (!moved) cycleSheet();
+    else {
+      // Snap to the nearest detent on release, so the sheet always ends somewhere deliberate.
+      const h = sheetH();
+      const d = sheetDetents();
+      setSheet(d.reduce((a, b) => (Math.abs(b - h) < Math.abs(a - h) ? b : a)));
+    }
+  };
+  grabEl.addEventListener('pointerup', end);
+  grabEl.addEventListener('pointercancel', end);
+}
+
+try {
+  const stored = parseFloat(localStorage.getItem(SHEET));
+  setSheet(Number.isFinite(stored) ? stored : SHEET_PEEK, false);
+} catch (e) { setSheet(SHEET_PEEK, false); }
+// A rotation changes what the tall detent means, so a sheet left at the old maximum has to come
+// back inside the new one rather than eating the whole screen.
+window.addEventListener('resize', () => setSheet(sheetH(), false));
 
 // ------------------------------------------------------------------ modes
 
@@ -1849,9 +2083,11 @@ function setMode(m) {
     document.getElementById(`tab-${k}`).setAttribute('aria-pressed', String(k === m));
   }
   zones.classList.toggle('on', false);
-  launchBtn.style.display = m === 'play' ? '' : 'none';
   if (m === 'play') { ensureWorld(); app.running = true; }
   if (m !== 'edit') { app.placing = null; app.drawing = null; }   // both live only while Edit is open
+  // A sweep is scheduled on animation frames, so it would otherwise keep running - and keep
+  // writing its own progress into a panel that no longer exists - after you left the tab.
+  if (app.checkRun != null) { cancelAnimationFrame(app.checkRun); app.checkRun = null; }
   if (m === 'tune') app.tuneAll = false;          // arriving on Tune asks about whatever is selected
   app.marks = [];
   renderPanel();
@@ -1859,7 +2095,6 @@ function setMode(m) {
 for (const k of ['play', 'edit', 'tune', 'check']) {
   document.getElementById(`tab-${k}`).onclick = () => setMode(k);
 }
-launchBtn.onclick = newBall;
 
 // ------------------------------------------------------------------ loop
 
@@ -1912,22 +2147,62 @@ function frameBody(t) {
   if (app.mode === 'edit' || app.mode === 'tune') drawSelection();
   if (app.mode === 'edit') { drawGhost(); drawRampPath(); drawLoupe(); }
 
-  const b = app.world && app.world.balls.find((x) => x.alive);
-  hud.textContent = app.mode === 'play'
-    ? `${b ? (Math.hypot(b.v.x, b.v.y)).toFixed(2) + ' m/s' : 'drained'}`
-      + `${app.world && app.world.jams ? '   jams ' + app.world.jams : ''}`
-      + `${app.world && app.world.escapes ? '   LEFT THE TABLE ' + app.world.escapes : ''}`
-    : `${app.table.shapes.length} parts   ${app.sel.size} selected   grid ${(app.grid * 1000).toFixed(0)} mm`
-      + `${app.view && Math.abs(app.view.zoom - 1) > 0.01 ? '   zoom ' + Math.round(app.view.zoom * 100) + '%' : ''}`;
-  hud.textContent += `\n${app.table.name}: ${tableKinds()}`;
-  if (app.placing) hud.textContent += `\nTAP THE TABLE to place "${app.placing.name}"`;
-  if (app.drawing) {
-    const n = app.drawing.pts.length;
-    hud.textContent += `\nTAP THE TABLE to lay the ramp path (${n} point${n === 1 ? '' : 's'}`
-      + `${n < RAMP_MIN_PTS ? `, ${RAMP_MIN_PTS - n} more needed` : ', Done when ready'})`;
+  drawStatus();
+}
+
+// ------------------------------------------------------------------ the status bar
+//
+// Facts, in a bar, in one fixed-height line. This replaced a three-line box drawn ON the playfield
+// that covered the top rail and two lanes of every table in every mode - on the one screen whose
+// entire job is letting you look at the table.
+//
+// It is built from SEGMENTS (a small grey key, a bright value) rather than a run of text, because a
+// status bar is scanned rather than read: you are looking for the one number that changed, and a
+// label in front of every number is what makes that possible without reading the rest.
+
+const stSeg = (k, v, warn) => `<span class="seg"><span class="k">${esc(k)}</span><span class="v${warn ? ' warn' : ''}">${esc(v)}</span></span>`;
+
+let lastStatus = '';
+
+function drawStatus() {
+  const segs = [];
+  if (app.mode === 'play') {
+    const b = app.world && app.world.balls.find((x) => x.alive);
+    segs.push(stSeg('speed', b ? `${Math.hypot(b.v.x, b.v.y).toFixed(2)} m/s` : 'drained'));
+    if (!app.running) segs.push(stSeg('', 'paused'));
+    if (app.slowmo !== 1) segs.push(stSeg('', `${Math.round(app.slowmo * 100)}% speed`));
+    // These four are diagnostics that should read zero for ever. They are shown only when they do
+    // not, so the bar stays quiet and a number appearing in it MEANS something.
+    if (app.world && app.world.jams) segs.push(stSeg('jams', String(app.world.jams), true));
+    if (app.world && app.world.rescues) segs.push(stSeg('rescues', String(app.world.rescues), true));
+    if (app.world && app.world.escapes) segs.push(stSeg('LEFT TABLE', String(app.world.escapes), true));
+    if (app.world && app.world.broken) segs.push(stSeg('broken', String(app.world.broken), true));
+  } else {
+    segs.push(stSeg('parts', String(app.table.shapes.length)));
+    segs.push(stSeg('sel', String(app.sel.size)));
+    if (app.mode === 'edit') segs.push(stSeg('grid', app.snap ? `${(app.grid * 1000).toFixed(0)} mm` : 'off'));
   }
-  if (app.errors) hud.textContent += `\n${app.errors} draw error(s): ${app.lastError}`;
-  if (app.repaired) hud.textContent += `\nrepaired ${app.repaired} broken part(s) on load`;
+  segs.push(stSeg('zoom', `${Math.round((app.view ? app.view.zoom : 1) * 100)}%`));
+  if (app.errors) segs.push(stSeg('draw errors', `${app.errors} · ${app.lastError}`, true));
+  if (app.repaired) segs.push(stSeg('repaired', `${app.repaired} broken part(s) on load`, true));
+  // The table's own name and contents go LAST and take whatever width is left, ellipsised: it is
+  // the one thing here that answers "am I looking at what I think I am", and it is also the one
+  // thing that can be arbitrarily long.
+  segs.push(`<span class="seg grow">${esc(app.table.name)} — ${esc(tableKinds())}</span>`);
+  const html = segs.join('');
+  // The loop runs at 60fps and innerHTML is not free. Only touch the DOM when the text changed.
+  if (html !== lastStatus) { statusBar.innerHTML = html; lastStatus = html; }
+
+  // THE TOAST: a live instruction about what the next tap does, and nothing else.
+  let msg = '';
+  if (app.placing) msg = `Tap the table to place "${app.placing.name}"`;
+  else if (app.drawing) {
+    const n = app.drawing.pts.length;
+    msg = `Tap to lay the ramp path — ${n} point${n === 1 ? '' : 's'}`
+      + (n < RAMP_MIN_PTS ? `, ${RAMP_MIN_PTS - n} more needed` : ', then Done');
+  }
+  if (msg !== toast.textContent) toast.textContent = msg;
+  toast.classList.toggle('on', !!msg);
 }
 
 // THE MAGNIFIER. Matt: "I want to extend or shorten it, I need an enlarge option... a smaller

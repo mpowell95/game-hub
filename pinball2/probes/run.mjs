@@ -16,7 +16,23 @@ const args = process.argv.slice(2);
 const ti = args.indexOf('--table');
 const pick = ti >= 0 ? String(args[ti + 1] || '').toLowerCase() : 'default';
 if (!TABLES[pick]) { console.error(`unknown table "${pick}" - one of: ${Object.keys(TABLES).join(', ')}`); process.exit(2); }
-const which = (ti === 0 ? null : args[0]) || 'all';
+// EVERY CHECK NAME, IN ONE PLACE, AND AN UNKNOWN ONE IS AN ERROR.
+//
+// Until 2026-09-12 a name this file did not recognise ran NOTHING and printed "all checks passed"
+// with exit code 0. `node pinball2/probes/run.mjs ramps` did exactly that - the editor's button is
+// labelled "Ramps" and the CLI wants `ramp` - so a gate meant to block a deploy could be walked
+// straight through by a typo, reporting green. A check runner that can say OK without checking
+// anything is worse than no check runner.
+const CHECKS = ['drain', 'tunnel', 'flip', 'power', 'ramp', 'escape', 'gaps', 'rests'];
+// The editor's buttons and everyday speech, mapped onto the names above, because the two drifting
+// apart is what made the silent pass reachable in the first place.
+const ALIASES = { ramps: 'ramp', traps: 'rests', rest: 'rests', gap: 'gaps', tunnels: 'tunnel', all: 'all' };
+const asked = (ti === 0 ? null : args[0]) || 'all';
+const which = ALIASES[String(asked).toLowerCase()] || String(asked).toLowerCase();
+if (which !== 'all' && !CHECKS.includes(which)) {
+  console.error(`unknown check "${asked}" - one of: ${CHECKS.join(', ')}, all`);
+  process.exit(2);
+}
 const table = TABLES[pick]();
 console.log(`table           ${table.name} (${table.shapes.length} parts)`);
 const cfg = CONFIG;

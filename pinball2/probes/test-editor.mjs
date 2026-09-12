@@ -1334,6 +1334,155 @@ ok(missing.length === 0, `every module is fetched with the build in its URL (${s
   missing.length ? 'unversioned or absent: ' + missing.join(', ') + '\n      saw: ' + seen.join(', ') : '');
 await vpage.close();
 
+
+// ================================================================ THE 2026-09-12 REDESIGN
+//
+// Matt: "This pinball tool is unusable. It's bad. Make it look like a polished, professional
+// editing software." Every case below is something that was measurably wrong when he said it, or
+// something the fix for it could break later.
+
+// ---------------------------------------------------------------- [KNOWN-BUG PROBE] the tap floor
+// docs/BUILDING-A-GAME.md Part 0: "Tap targets are 44x44px minimum" and "Minimum text size is
+// 11px". NOTHING HAD EVER CHECKED IT HERE, and the tool had never met it: measured on the build
+// Matt called unusable, 14 controls in Play alone were under 44px, and the first pass at the
+// redesign made several of them smaller still because a dense desktop screenshot looks right.
+// A rule that only lives in prose is advice, and advice loses.
+{
+  const tp = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await tp.goto(URL, { waitUntil: 'networkidle' });
+  await tp.waitForTimeout(500);
+  const under = [];
+  for (const m of ['play', 'edit', 'tune', 'check']) {
+    await tp.click('#tab-' + m);
+    await tp.waitForTimeout(250);
+    const bad = await tp.evaluate(() => {
+      const out = [];
+      for (const e of document.querySelectorAll('button, select, input, summary')) {
+        const r = e.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;            // genuinely not on screen
+        const label = (e.textContent || e.id || e.tagName).trim().slice(0, 20);
+        if (r.height < 44 || r.width < 44) out.push(`${label} ${Math.round(r.width)}x${Math.round(r.height)}`);
+        if (parseFloat(getComputedStyle(e).fontSize) < 11) out.push(`${label} text too small`);
+      }
+      return out;
+    });
+    for (const x of bad) under.push(`${m}: ${x}`);
+  }
+  ok(under.length === 0, 'every control meets the 44px tap floor and the 11px text floor on touch',
+    under.slice(0, 14).join(', '));
+  await tp.close();
+}
+
+// ---------------------------------------------------------------- [KNOWN-BUG PROBE] the rail fits
+// `#work` is a grid whose single row was implicitly `auto`, which means max-content: on a 360x640
+// phone the tool rail's eight parts plus the zoom cluster came to 557px, the row grew to fit them,
+// and the canvas grew with it - 557px tall inside a 267px slot, with the status bar, the object bar
+// and the whole sheet pushed off the bottom of the screen. It looked perfect at 393x852 purely
+// because the content happened to fit, which is exactly why this checks a SMALL phone and a phone
+// in LANDSCAPE rather than the one size that was being screenshotted.
+for (const [w, h, name] of [[360, 640, 'a small phone'], [852, 393, 'a phone in landscape']]) {
+  const sp = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sp.goto(URL, { waitUntil: 'networkidle' });
+  await sp.waitForTimeout(500);
+  await sp.click('#tab-edit');
+  await sp.waitForTimeout(350);
+  const r = await sp.evaluate(() => {
+    const box = (id) => document.getElementById(id).getBoundingClientRect();
+    const c = box('c');
+    return {
+      cw: Math.round(c.width), ch: Math.round(c.height),
+      // Fit is the control that undoes any zoom mistake, and it is the bottom of the rail.
+      fitOnScreen: box('zoom-fit').bottom <= window.innerHeight + 1,
+      canvasInside: c.bottom <= box('status').top + 1,
+      scrolls: document.documentElement.scrollHeight > window.innerHeight + 1
+        || document.documentElement.scrollWidth > window.innerWidth + 1,
+    };
+  });
+  ok(r.cw > 100 && r.ch > 100 && r.fitOnScreen && r.canvasInside && !r.scrolls,
+    `${name} (${w}x${h}) gets a real canvas with its chrome on screen (${r.cw}x${r.ch})`, JSON.stringify(r));
+  await sp.close();
+}
+
+// ---------------------------------------------------------------- [KNOWN-BUG PROBE] checks do not freeze
+// The Check tab's sweeps used to run in ONE blocking call inside a setTimeout: the panel painted
+// "dropping balls..." and the page was then dead for 3.5s on TEST BOX and 5.8s on BOARDWALK,
+// measured on a desktop - several times that on a phone - with no progress and no way to stop.
+// Three frames were rendered during the whole of it. They are generators driven across frames now.
+{
+  const cp = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await cp.goto(URL, { waitUntil: 'networkidle' });
+  await cp.waitForTimeout(500);
+  await cp.click('#tab-check');
+  await cp.waitForTimeout(250);
+  const run = await cp.evaluate(async () => {
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Find traps');
+    const out = document.getElementById('report');
+    let frames = 0;
+    let stop = false;
+    const tick = () => { frames++; if (!stop) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    const t0 = performance.now();
+    btn.click();
+    await new Promise((res) => {
+      const iv = setInterval(() => {
+        if (!document.getElementById('progwrap').classList.contains('on') && !/\.\.\./.test(out.textContent)) { clearInterval(iv); res(); }
+      }, 60);
+      setTimeout(() => { clearInterval(iv); res(); }, 120000);
+    });
+    stop = true;
+    return { frames, ms: Math.round(performance.now() - t0), text: out.textContent.slice(0, 80) };
+  });
+  // The old code managed 3 frames across a whole sweep. Anything in double figures means the page
+  // was alive; the threshold is deliberately far below what it actually measures (490).
+  ok(run.frames > 60, `the page keeps painting while a check runs (${run.frames} frames in ${run.ms}ms)`, run.text);
+  ok(/drops/.test(run.text), `and the check still produces its answer (${run.text.split('\n')[0]})`);
+
+  const stopped = await cp.evaluate(async () => {
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Find traps').click();
+    await new Promise((r) => setTimeout(r, 500));
+    document.getElementById('prog-cancel').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { text: document.getElementById('report').textContent, still: document.getElementById('progwrap').classList.contains('on') };
+  });
+  ok(!stopped.still && /Stopped/.test(stopped.text), 'and Stop really stops it', JSON.stringify(stopped));
+
+  // Leaving the tab must stop it too, or a sweep keeps running - and keeps writing progress into a
+  // panel that no longer exists - under whatever you do next.
+  const left = await cp.evaluate(async () => {
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Find traps').click();
+    await new Promise((r) => setTimeout(r, 400));
+    document.getElementById('tab-play').click();
+    await new Promise((r) => setTimeout(r, 500));
+    return window.__pb2.checkRun;
+  });
+  ok(left == null, 'and leaving the Check tab abandons an in-flight sweep', String(left));
+  await cp.close();
+}
+
+// ---------------------------------------------------------------- nothing is drawn on the table
+// The status box used to be absolutely positioned over the canvas, covering the top rail and two
+// lanes of every table in every mode. Facts live in the status bar now; the only thing allowed over
+// the canvas is the toast, and only while it is telling you what the next tap will do.
+{
+  const sp = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sp.goto(URL, { waitUntil: 'networkidle' });
+  await sp.waitForTimeout(500);
+  const over = await sp.evaluate(() => {
+    const c = document.getElementById('c').getBoundingClientRect();
+    const hit = [];
+    for (const e of document.querySelectorAll('#stage > *')) {
+      if (e.id === 'c' || e.id === 'touchzones') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (r.top < c.bottom && r.bottom > c.top) hit.push(`${e.id} ${Math.round(r.width)}x${Math.round(r.height)}`);
+    }
+    return { hit, statusHasFacts: /parts|speed/i.test(document.getElementById('status').textContent) };
+  });
+  ok(over.hit.length === 0, 'nothing is drawn over the table at rest', over.hit.join(', '));
+  ok(over.statusHasFacts, 'and the facts that used to be there are in the status bar');
+  await sp.close();
+}
+
 await browser.close();
 console.log(`\nEditor tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

@@ -750,6 +750,67 @@ It compares against the fastest speed during the tick now.
 out of the mouth it came in, and 2 and above makes it all the way round. Nobody wrote any of those
 three cases. They fall out of the ramp having a height.
 
+## "Unusable. It's bad." The editor looked like a settings page
+
+Matt, 2026-09-12, on the build the previous session had just called finished: *"This pinball tool is
+unusable. It's bad. Spend a bunch of time thinking and make it look like a polished, professional
+editing software."*
+
+He was right, and the interesting part is that every individual decision in it had been defensible.
+The measurements, taken before anything was changed:
+
+| | before | after |
+|---|---|---|
+| the table, drawn on a 393x852 phone | 230 x 477 | **306 x 635** (77% more area) |
+| covered by the status box | the top rail and two lanes, in every mode | nothing |
+| controls under the 44px tap floor, in Play alone | 14 | 0 |
+| frames rendered during Find traps on BOARDWALK | 3 | 235 |
+| the page, during that check | frozen 5.8 s, no progress, no way to stop | live, with a bar and a Stop |
+
+**The layout was starving the thing the tool exists to show.** The canvas was a fixed `56svh` row
+with the panel below it, and the table is 0.515 x 1.067 m - portrait, so it fits by HEIGHT and
+leaves ~59% of the canvas's width as black margin. So the screen was spending 44% of its height on
+a panel, and most of its width on nothing. Two changes, and the second is the one that mattered:
+**the tool rail moved INTO the dead gutter** (a real grid column, so no table can ever sit under a
+button), and **the dock became a draggable sheet with a shut detent**, which is what finally let the
+table have the whole screen.
+
+**The chrome was the visual language of a settings page.** 38-56px filled navy pills, 13-14px bold
+text, everything the same weight. An editor is quiet: hairlines, a surface ladder, tabular numerals,
+ONE accent used only for the current thing - which is also why `button.primary` stopped being a
+filled yellow slab. A filled accent on every panel trains the eye to ignore it, and then the one
+place it means something, the part you have selected, says nothing.
+
+**Three real bugs came out of it, and none was a rendering bug:**
+
+1. **The object bar was a COLUMN that grew a second row** whenever something was selected or a ramp
+   path was open - silently resizing the canvas mid-edit with no window resize event. That is the
+   exact class of bug the fixed-height workspace was built to end; it survived because
+   `test-editor.mjs` compares the four modes with nothing selected.
+2. **`#work`'s implicit grid row was `auto`**, so on a 360x640 phone the rail's own 557px of content
+   set the canvas's height and pushed the status bar, the object bar and the whole sheet off the
+   bottom of the screen. At 393x852 the content happened to fit, so it looked perfect. **A layout
+   measured at one size is not measured.**
+3. **A phone in landscape got a 794 x 58 canvas.** The stacked bands plus a sheet come to 334px of a
+   393px screen. It takes the four-column layout now, at `(min-width: 600px) and (max-height: 560px)`.
+
+**And the checks froze the page, which is the half of "unusable" that was not cosmetic.** They ran in
+one blocking call inside a `setTimeout`. The fix is a generator per slow check with the plain
+exported function draining it - **one implementation, two entry points**, because a chunked copy
+written beside the tested copy is a second answer to "is this table safe" and the two will diverge.
+Verified identical afterwards: 2781 drops, 956 shots, 73152 escapes, 528/920/927/933 mm.
+
+**The lesson worth keeping is about the tap floor.** `docs/BUILDING-A-GAME.md` Part 0 has required
+44x44 since it was written, and nothing in this tool had ever checked it - so it had never met it,
+and the first pass at this redesign made several controls *smaller*, because a dense desktop
+screenshot looks more professional and a screenshot has no fingers. Density has to come from
+removing rows and quietening fills. `test-editor.mjs` measures every control in all four modes now,
+plus a small phone and a landscape one, and it fails on a single 34px button.
+
+**`node pinball2/probes/run.mjs ramps` used to print "all checks passed" and exit 0**, having run
+nothing: the editor's button says Ramps and the CLI wanted `ramp`. A gate that can report green
+without checking anything is worse than no gate. Unknown names exit 2, and the obvious aliases work.
+
 ## Where this goes next
 
 **The editor overhaul is finished** (2026-09-11, all five steps: one workspace, the table library,
