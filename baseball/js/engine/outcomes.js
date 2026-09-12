@@ -1,21 +1,22 @@
-// outcomes.js : turn a batted ball (exit velocity, launch angle, spray angle) into a result -
-// out, error, or a hit of 1-4 bases. Pure function of its inputs; the only randomness is the
-// single `rand01` stream the caller passes in and owns.
+// outcomes.js : turn a batted ball (exit velocity, launch angle, spray angle) into a result - out
+// or a hit of 1-4 bases - using OUT-ZONE GEOMETRY (`zones.js`, doc §10) rather than phase 1's
+// invented `fieldingSkill01` ramp. The real design has no "error" outcome at all (doc §10's list
+// is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
+
+import { FOUL_LINE_DEG, CARRY_SCALE } from './settings.js';
+import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
  *  monotonic model (more speed and a mid-range angle carry further); not aerodynamically real,
  *  and not meant to be - there is no reference to calibrate against, so this stays a plain,
  *  reproducible function of its two inputs rather than a "realistic" model with invented drag
- *  coefficients. Draft [Open item 23]: the exact carry curve. */
+ *  coefficients. Draft [Open item 23]: the exact carry curve; CARRY_SCALE lives in settings.js. */
 export function carryFt(exitVeloMph, launchAngleDeg) {
   const clampedAngle = Math.max(0, Math.min(70, launchAngleDeg));
   // sin(2*angle) peaks at 45 degrees, which is where a real batted ball carries furthest for a
   // given speed - the same shape a real projectile's range curve has, without modeling drag.
   const angleFactor = Math.max(0, Math.sin((2 * clampedAngle * Math.PI) / 180));
   const speedFactor = Math.max(0, exitVeloMph - 30);
-  // CARRY_SCALE calibrated so a Statcast-typical 105mph/30deg batted ball (a real, well-struck
-  // home run swing) carries about 400ft: 6.2 -> (105-30) * sin(60deg) * 6.2 ~= 402ft.
-  const CARRY_SCALE = 6.2; // Draft [Open item 23]
   return Math.max(0, speedFactor * angleFactor * CARRY_SCALE);
 }
 
@@ -26,23 +27,35 @@ function battedBallKind(launchAngleDeg) {
   return 'popup';
 }
 
+/** Piecewise-linear fence distance at a spray angle, across the doc's five named points (doc §10:
+ *  fences differ left/left-center/center/right-center/right, and grow per league - `FIELD[league]
+ *  .fenceFt` in settings.js). A three-point park shape (the existing `PARKS` entries' plain
+ *  {left,center,right}) still works unmodified: the two center points are filled in by averaging
+ *  when absent, so no named ballpark needed to change for this to land. */
+export function fenceFtAt(sprayDeg, fenceFt) {
+  const left = fenceFt.left, center = fenceFt.center, right = fenceFt.right;
+  const leftCenter = fenceFt.leftCenter != null ? fenceFt.leftCenter : (left + center) / 2;
+  const rightCenter = fenceFt.rightCenter != null ? fenceFt.rightCenter : (center + right) / 2;
+  const pts = [left, leftCenter, center, rightCenter, right];
+  const t = Math.max(0, Math.min(1, (sprayDeg + FOUL_LINE_DEG) / (2 * FOUL_LINE_DEG)));
+  const segT = t * 4;
+  const i = Math.min(3, Math.floor(segT));
+  const frac = segT - i;
+  return pts[i] + (pts[i + 1] - pts[i]) * frac;
+}
+
 /**
  * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number}} batted
- * @param {number} fieldingSkill01 - 0..1, how good the responsible defense is. There is no
- *   per-player "fielding" skill in the real design (doc §6 names only hitAcc/hitPow/hitSpd and
- *   pitchSpd/pitchAcc/pitchSpin) - defense there is entirely OUT-ZONE GEOMETRY, sized per league
- *   (doc §10, "out zones also grow"). This parameter is this engine's own stand-in until that
- *   geometry is built (Draft [Open item 7], same tag as the invented FIELD/PARKS distances below).
+ * @param {{infield:Array, outfield:Array}} zones - `zonesFor(league, shiftDeg)` from zones.js
  * @param {object} settings
- * @param {{left:number,center:number,right:number}} parkFt - the wall distances in play
+ * @param {{left:number, leftCenter?:number, center:number, rightCenter?:number, right:number}} fenceFt
+ * @param {number} hitSpd - the batter's hitSpd skill points (doc §6, [Locked]: "Batter Speed
+ *   affects beating out grounders and stretching hits" - the beat-out half, this phase)
  * @param {function} rand01
- * @returns {{result:'out'|'error'|'hit', bases?:number, kind:string, distanceFt:number, isFoul:boolean}}
+ * @returns {{result:'out'|'hit', bases?:number, kind:string, distanceFt:number, isFoul:boolean}}
  */
-export function resolveContact(batted, fieldingSkill01, settings, parkFt, rand01) {
-  // Foul territory: spray angle beyond the foul lines. Half the swept spray range is foul on
-  // either side, symmetric with settings.FIELD.foulLineDeg defining the fair sector's half-width.
-  const fairHalfWidth = settings.FIELD.foulLineDeg;
-  const isFoul = Math.abs(batted.sprayAngleDeg) > fairHalfWidth;
+export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01) {
+  const isFoul = Math.abs(batted.sprayAngleDeg) > FOUL_LINE_DEG;
   if (isFoul) {
     return { result: 'out', bases: 0, kind: 'foulout', distanceFt: 0, isFoul: true };
   }
@@ -50,57 +63,46 @@ export function resolveContact(batted, fieldingSkill01, settings, parkFt, rand01
   const kind = battedBallKind(batted.launchAngleDeg);
   const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg);
 
-  const defense01 = Math.max(0, Math.min(1, fieldingSkill01 || 0));
-  const errorChance = Math.max(0.01, 0.06 - defense01 * 0.05); // Draft [Open item 7]
+  if (kind === 'popup') {
+    // doc §10, [Locked]: "Pop-ups in the infield are outs."
+    return { result: 'out', bases: 0, kind: 'popout', distanceFt, isFoul: false };
+  }
 
-  // Which fence this spray angle would need to clear - a simple lerp across left/center/right.
-  const t = (batted.sprayAngleDeg + fairHalfWidth) / (2 * fairHalfWidth); // 0 left .. 1 right
-  const wallFt = parkFt.left + (parkFt.center - parkFt.left) * Math.min(1, t * 2)
-    - Math.max(0, t - 0.5) * 2 * (parkFt.center - parkFt.right);
+  if (kind === 'ground') {
+    const sector = angleSector(batted.sprayAngleDeg, zones.infield);
+    if (distanceFt <= sector.toFt) {
+      // A close play at the edge of the sector's reach: doc §6, [Locked], "Batter Speed affects
+      // beating out grounders" - MECHANICS.beatOutPerPt/groundEdgeMarginFt name the roll.
+      const nearEdge = distanceFt > sector.toFt - settings.MECHANICS.groundEdgeMarginFt;
+      if (nearEdge) {
+        const beatOutChance = Math.min(0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
+        if (rand01() < beatOutChance) {
+          return { result: 'hit', bases: 1, kind: 'ground-single-beatout', distanceFt, isFoul: false };
+        }
+      }
+      return { result: 'out', bases: 0, kind: 'groundout', distanceFt, isFoul: false };
+    }
+    return { result: 'hit', bases: 1, kind: 'ground-single', distanceFt, isFoul: false };
+  }
 
+  // Line drives and non-homer flies. Check the fence before the out-zone: a ball that clears the
+  // wall was never catchable regardless of where the sector's reach ends.
+  const wallFt = fenceFtAt(batted.sprayAngleDeg, fenceFt);
   if (kind === 'fly' && distanceFt >= wallFt) {
     return { result: 'hit', bases: 4, kind: 'homer', distanceFt, isFoul: false };
   }
 
-  // An error can turn any ball in play into a free base, checked before the ordinary out/hit
-  // split so a misplayed routine grounder is possible at any fielding level.
-  if (rand01() < errorChance) {
-    return { result: 'error', bases: 1, kind: 'error', distanceFt, isFoul: false };
-  }
-
-  if (kind === 'ground') {
-    // A hard-hit, well-placed grounder can still get through; softer/more central ones are outs.
-    // Draft [Open item 24]: base rate tuned by playing out whole games rather than measured
-    // against a reference (none exists) - see baseball/CLAUDE.md's report for the numbers this
-    // produces (hit rate, walk rate, median game length per league).
-    const throughChance = Math.max(0.12, Math.min(0.62,
-      0.30 + (batted.exitVeloMph - 55) / 110 + Math.abs(batted.sprayAngleDeg) / 90 - defense01 * 0.2));
-    if (rand01() < throughChance) {
-      return { result: 'hit', bases: 1, kind: 'ground-single', distanceFt, isFoul: false };
-    }
-    return { result: 'out', bases: 0, kind: 'groundout', distanceFt, isFoul: false };
-  }
-
-  if (kind === 'popup') {
-    return { result: 'out', bases: 0, kind: 'popout', distanceFt, isFoul: false };
-  }
-
-  // Line drives and non-homer flies: outcome scales with how far it carried past a routine catch
-  // radius (roughly 280ft is "shallow", beyond ~360 is deep) and how well-defended that patch of
-  // outfield/infield is.
-  const routineFt = kind === 'line' ? 220 : 330;
-  const past = Math.max(0, distanceFt - routineFt) / 100;
-  // Draft [Open item 24] (same tuning pass as the grounder threshold above): a floor high enough
-  // that a routine-depth line drive or fly ball is still a real coin flip rather than an automatic
-  // out, which is closer to how those actually play than a near-zero floor is.
-  const dropChance = Math.max(0.30, Math.min(0.85, 0.22 + past * 0.7 - defense01 * 0.15));
-  if (rand01() >= dropChance) {
+  const sector = angleSector(batted.sprayAngleDeg, zones.outfield);
+  if (distanceFt <= sector.toFt) {
     return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
   }
+  // Through the outfield sector: a single through a gap, or a double/triple the deeper it carried
+  // (doc §10, [Locked]: "Doubles in the gaps and down the lines. Triples in deep corners and deep
+  // center" - the exact depth cutoffs are still invented, Open item 24, unchanged from phase 1).
   let bases = 1;
   if (distanceFt > 320) bases = 3;
   else if (distanceFt > 250) bases = 2;
   return { result: 'hit', bases, kind: `${kind}-hit`, distanceFt, isFoul: false };
 }
 
-export default { carryFt, resolveContact };
+export default { carryFt, fenceFtAt, resolveContact };
