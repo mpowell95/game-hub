@@ -760,9 +760,28 @@ ok('flight time grows with distance and is never instant', SH.flightMs(0) === 90
   near('a full swing from sand travels 75 % of the club', r.carry, 95 * 0.75, 0.01);
   // Roll belongs to the surface the ball comes DOWN on, not the one it was struck from - a bunker
   // shot that finishes on the green rolls like a ball on a green. A ball that LANDS in sand plugs.
-  const intoSand = SH.resolveShot({ hole: CALM, from: [0, 300], aimRad: 0, club: CLUBS[13], power: 0.8, mishitDeg: 0 });
-  ok('a ball that lands in sand does not roll', intoSand.landedOn !== 'greensideBunker' || intoSand.rollYd === 0);
-  ok('roll is read from the LANDING surface, not the lie played from', lieOf('greensideBunker').roll === 0);
+  // SAND NO LONGER STOPS EVERY BALL DEAD (2026-09-12). This assertion used to read "a ball that
+  // lands in sand does not roll", which was true of every club at every speed from every angle -
+  // Matt: *"having it stop in the sand 100% of the time doesn't feel realistic."* The rule that
+  // replaced it is the one actually wanted, pinned from BOTH ends so neither half can be undone
+  // quietly: a steep arrival still plugs, and a shallow fast one runs far enough to get out of the
+  // edge of a bunker. See clubs.js's LIES for the two numbers and the run-out table.
+  const sandRoll = (club) => club.carry * lieOf('fairwayBunker').roll * (1.6 - 1.2 * club.loft);
+  const wedgeSand = sandRoll(CLUBS[13]);
+  const driverSand = sandRoll(CLUBS[0]);
+  ok('a lob wedge dropping into sand still plugs', wedgeSand < 1, `${wedgeSand.toFixed(1)} yd`);
+  ok('...while a driver that catches sand runs far enough to get out of an edge',
+    driverSand > 6, `${driverSand.toFixed(1)} yd`);
+  ok('...and the split is wide, not a nudge', driverSand > 8 * wedgeSand);
+  ok('greenside sand always runs a ball less than fairway sand does',
+    lieOf('greensideBunker').roll < lieOf('fairwayBunker').roll && lieOf('greensideBunker').roll > 0);
+  ok('both bunkers still run a ball far less than a fairway does',
+    lieOf('fairwayBunker').roll < lieOf('fairway').roll * 0.6);
+  // ...and sand still does not BOUNCE a ball. `groundPoint`'s noHop list was deliberately left
+  // alone: what changed is that the ball runs, not that it starts skipping out of a bunker.
+  ok('sand does not bounce the ball', SH.groundPoint(0.02, 20, 30, 'fairwayBunker').height === 0);
+  ok('roll is read from the LANDING surface, not the lie played from',
+    CL.rollFactor('greensideBunker', CLUBS[13]) < CL.rollFactor('fairway', CLUBS[13]));
   const over = SH.resolveShot({ hole: CALM, from, aimRad: 0, club: CLUBS[11], power: 1.1, mishitDeg: 0 });
   ok('the player can still swing PAST 100 % from a bad lie', over.carry > r.carry);
   // Past the block's edge only BLOCK_KEEPS_DIST of each extra unit pays, so 110 % of the meter is
@@ -1044,6 +1063,10 @@ console.log('\n-- 10e. A PENALTY DROP MOVES THE BALL --');
 {
   const wedge = CLUBS.find((c) => c.id === 'pwedge');
   let tried = 0; let stuck = 0; let wet = 0; let out = 0; let worst = Infinity;
+  // 2026-09-12: the same sweep now also proves the shot TELLS somebody the ball went in. Until
+  // this landed, `rest` was overwritten with the drop and the splash point was computed and thrown
+  // away - so `ui.js` had no way to put the ball in the water and duly slid it across dry land.
+  let noWater = 0; let drySplash = 0; let beforeMismatch = 0; let prevMismatch = 0; let wetPrev = 0;
   for (const c of COURSES) for (const hole of c.holes) {
     const b = hole.bounds;
     for (let x = b.minX + 3; x <= b.maxX - 3; x += 7) {
@@ -1069,6 +1092,12 @@ console.log('\n-- 10e. A PENALTY DROP MOVES THE BALL --');
         if (moved < SH.MIN_DROP_YD - 0.01) stuck++;
         if (surfaceAt(hole, r.rest[0], r.rest[1]) === 'water') wet++;
         if (r.rest[0] < b.minX || r.rest[0] > b.maxX || r.rest[1] < b.minY || r.rest[1] > b.maxY) out++;
+        const w = r.water;
+        if (!w) { noWater++; continue; }
+        if (surfaceAt(hole, w.splash[0], w.splash[1]) !== 'water') drySplash++;
+        if (distYd(w.before, r.rest) > 0.001) beforeMismatch++;
+        if (distYd(w.prev, [x, y]) > 0.001) prevMismatch++;
+        if (surfaceAt(hole, w.prev[0], w.prev[1]) === 'water') wetPrev++;
       }
     }
   }
@@ -1076,6 +1105,14 @@ console.log('\n-- 10e. A PENALTY DROP MOVES THE BALL --');
     tried > 50 && stuck === 0, `${stuck} drops left the ball where it was struck`);
   ok('...and no drop is in the water', wet === 0, `${wet} wet drops`);
   ok('...and no drop is off the map', out === 0, `${out} drops outside the hole`);
+  // THE THREE PLACES A WATER SHOT HAS TO REPORT, one assertion each. A UI that hides the ball
+  // needs to know where it went in; a UI that offers a choice needs both candidates; and
+  // `before` must be the spot the engine is ACTUALLY going to use, or the prompt lies.
+  ok('every water shot reports its splash and both drop options', noWater === 0, `${noWater} said nothing`);
+  ok('...the splash point really is in the water', drySplash === 0, `${drySplash} splashed on dry land`);
+  ok('...`before` is exactly the resting place the engine chose', beforeMismatch === 0, `${beforeMismatch} disagreed`);
+  ok('...`prev` is exactly where the shot was played from', prevMismatch === 0, `${prevMismatch} disagreed`);
+  ok('...and playing again from there is never a drop into the lake', wetPrev === 0, `${wetPrev} wet`);
 }
 
 console.log('\n-- 10d. THE COLLAR HANDS OVER A CLUB THAT CAN REACH --');

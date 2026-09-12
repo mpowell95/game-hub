@@ -116,8 +116,43 @@ export const LIES = {
   fringe: { power: 0.97, zone: 0.80, roll: 0.075 },
   lightRough: { power: 0.92, zone: 0.22, roll: 0.054 },
   heavyRough: { power: 0.82, zone: 0.17, roll: 0.054 },
-  fairwayBunker: { power: 0.88, zone: 0.19, roll: 0.00 },
-  greensideBunker: { power: 0.75, zone: 0.167, roll: 0.00 },   // zone MEASURED
+  // SAND NO LONGER STOPS A BALL DEAD 100 % OF THE TIME (2026-09-12). Matt: *"If a shot lands in a
+  // bunker - a tee shot with driver especially, and it lands on just the edge, it shouldn't just
+  // stop. It should roll still and possibly roll out depending on the shot. But having it stop in
+  // the sand 100% of the time doesn't feel realistic."*
+  //
+  // The zero was deliberate and its reasoning was half right - a high wedge dropping into a
+  // greenside bunker genuinely does plug. What it got wrong is that `roll: 0.00` is not a rule
+  // about wedges, it is a rule about SAND: it applied identically to a driver clipping the edge at
+  // 215 yds and to a lob wedge falling in from 60.
+  //
+  // THE SPLIT NEEDS NO NEW MACHINERY, WHICH IS WHY IT IS TWO NUMBERS AND NOT A NEW BRANCH.
+  // `rollFactor` below is already `surface x (1.6 - 1.2 * loft)` and the roll it returns is
+  // multiplied by CARRY - so how steeply the ball arrives (a driver descends at 27 deg, a lob
+  // wedge at 58) and how fast it arrives are both already in the formula. A "steep arrivals plug,
+  // shallow ones skid" threshold would be a second, discontinuous copy of a thing the engine
+  // already does smoothly. Nothing random was added; nothing about the swing moved.
+  //
+  // Run-out after LANDING in sand, full swing, at these values (fairway is 0.0645 for scale):
+  //
+  //      driver 215 yd, 27 deg descent   8.0 yd fairway bunker   4.8 greenside
+  //      5 iron 148 yd, 40 deg           3.9                     2.3
+  //      p wedge 95 yd, 52 deg           1.6                     1.0
+  //      l wedge  50 yd, 58 deg          0.6                     0.4
+  //
+  // Pine Valley's fairway bunkers are r 6-8 yd, so 12-16 yds across: a driver that catches the
+  // edge runs 8 yds and can get out, the same driver in the middle cannot, and a wedge dropping in
+  // still plugs at well under a yard. That is the "possibly, depending on the shot" he asked for.
+  //
+  // The GREENSIDE number is the lower of the two because that sand is softer, deeper and raked,
+  // and because the shots that reach it are the steep ones - it must never become a surface an
+  // approach runs THROUGH.
+  //
+  // The TIMING needed no change: sand's `PUTT_DRAG` is 6.00 against the fairway's 1.90, so
+  // `rollMs` gives an 8 yd run-out 1.1 s. It reads as a skid, which is what it is. `groundPoint`'s
+  // `noHop` list is also untouched on purpose - sand does not bounce a ball, it runs it.
+  fairwayBunker: { power: 0.88, zone: 0.19, roll: 0.030 },
+  greensideBunker: { power: 0.75, zone: 0.167, roll: 0.018 },   // zone MEASURED
   trees: { power: 0.85, zone: 0.20, roll: 0.054 },
   // THE GREEN USED TO BE THE SLOWEST SURFACE IN THE GAME, AT 0.036 (raised 2026-09-08).
   //
