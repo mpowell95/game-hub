@@ -4,45 +4,66 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file. Rules 4 and 5 do real work in this game: see "Stored shape" below.
 
-## Status: BEING REBUILT (Stage B + two courses of eighteen holes, 2026-09-04)
+## Status (2026-09-11): BUILT AND SHIPPED, admin-only right now, Pine Valley the only open course
 
-**`golf-reference-spec.md` at the repo root is the only spec.** Read it in full before touching
-anything here. It is the written record of a commercial mobile golf game reconstructed from five
-screen recordings, plus the decisions that turn it into the game we are actually building. Where
-it is silent, ask, or decide and write it down there.
+**Read this block before anything else in this file.** For a week it still said "BEING REBUILT" and
+described `js/ui.js` as "a placeholder that renders one screen saying the game is being rebuilt",
+which was true on 2026-09-04 and has been false since 2026-09-09. It is the first thing a new
+session reads, so it is the first thing that has to be true.
 
-The 3D game that used to live in this folder — three.js + cannon-es rigid bodies, aim/power/spin
-on three separate meters, Modified Stableford scoring, a course called Harbor Links — **is gone.**
-Matt's verdict on it: *"It's terrible and this is a MAJOR overhaul... I don't trust anything that
-the current build does."* Do not carry its decisions, tuning numbers, physics constants, course
-design or UI forward, and do not go looking for them in git history to "restore" something.
+Where things actually stand:
 
-Deleted in Stage A: `js/render.js`, `camera.js`, `terrain.js`, `minimap.js`, `physics.js`,
-`flight.js`, `meters.js`, `game.js`, `clubs.js`, `test.js`, `js/vendor/` (cannon-es + two three.js
-bundles, ~1.1 MB), `courses/`, `tools/`, `DECISIONS.md`, `docs/GOLF-HANDOFF.md`,
-`docs/GOLF-PART9.md`. **The three deleted documents were specs for the old game and would mislead
-the next session; that is why they went rather than being left "for reference".**
+- **The game is complete and has been live to the family.** Setup screen, tutorial hole, unlock
+  ladder, three-tap swing, full flight and putting, scorecard, mid-round save, per-hole and
+  per-round records, its own leaderboard. Every stage in the table below is done.
+- **It is ADMIN-ONLY as of 2026-09-10**, set by Matt from the admin page while the swing is retuned.
+  Nobody but a dev profile sees the card. That is a config flip, not a code flag - do not "fix" it
+  by editing `devOnly`.
+- **Only Pine Valley is open.** `COURSE_OPEN_BY_DEFAULT` in `progress.js` is `{ pinevalley: true }`.
+  Matt has said this more than once, most bluntly when an unreleased course held up a deploy:
+  *"dude fuck oasis sands. it's not open yet. Pine Valley ONLY."* Red Mesa and Oasis Sands exist,
+  are finished, and are not released - so a test or a difficulty measurement that fails ONLY on
+  those two is not a reason to hold anything up.
+- **The swing physics were rebuilt on 2026-09-10.** Four sections at the end of this file carry it:
+  the roll back to the approved 8 %, the over-swing shrinking the target, dead centre being dead
+  straight with nothing random in a struck ball, and the 250 yd ceiling. If you are about to change
+  a number in `swing.js` or `clubs.js`, read all four first - each one is a reversal of something a
+  previous session did without asking.
 
-What is here now is a placeholder: `js/ui.js` renders one screen saying the game is being rebuilt,
-and keeps the three module-contract exports so nothing in the repo carries a broken import.
+**Open, and each one is Matt's call, not yours:**
 
-### Where the rebuild is
+1. **The leaderboard.** Every golf score on it was set under physics that no longer exist - an 18 %
+   fairway roll, a random spray on every over-swing, and a signed distance loss where a miss could
+   go further than a perfect strike. Those records are not comparable to anything set from today.
+   Leave them, label them, or void them per player through `js/stats-corrections.js` (which has no
+   golf path yet). **Nothing has been deleted or changed - THE LAW - and nothing should be without
+   him saying so.**
+2. **Oasis Sands hole 4** is a par 5 of 451 yards, reachable in two, and plays 0.75 under par. It is
+   a NAMED GAP in `test.js` section 15c, printed on every run. Fix the hole before that course opens.
+3. **Golf's HUD top row overlaps on phones 360 px wide and narrower.** Untouched.
+4. ~~Three playtest asks from 2026-09-11~~ **DONE, 2026-09-12** - see "The ball goes in the water"
+   and "Sand runs a ball now" at the end of this file. `HANDOFF-GOLF-WATER-AND-SAND.md` is the
+   original write-up and is now history, not a to-do list.
+5. **Club upgrade tiers are designed but NOT built and NOT in the spec.** `clubs.js` carries an
+   `upgraded` carry per club and `golf-reference-spec.md` §21.3 names four tiers (stock, pro, tour,
+   champion) while deliberately leaving the middle two unspecified. Matt's constraint, from working
+   through it: upgrades must not turn every par 5 into an eagle look, and today's play is nearer the
+   TOP of that ladder than the bottom.
 
-| Stage | Contents | State |
-|---|---|---|
-| A | Clear the ground; the leaderboard metric, sort and filter change | **done** |
-| — | The hole-data format, written down before anything is built against it | **done** |
-| B | Core loop: tilemap, ball + shadow, HUD, aim ladder, clubs, meters, three-tap, flight, putting | **done** |
-| C | Hazards and the drop prompt, the result banner, the scorecard, the round | **the round and the drop prompt are done**; the sunburst banner is not |
-| D | Stats wiring, this file, `sw.js`, the full test sweep, release | **done** (My Stats' to-par landed 2026-09-06); release is a tap on the admin page |
-| — | Thirty-three more holes: Pine Valley 4-18, and Red Mesa, a whole second course | **done** |
+**How Matt wants changes made here, learned the hard way on 2026-09-10.** He stopped a session
+mid-edit: *"you shouldn't be touching anything. you should tell me which idea is better, how you
+would implement it, then when we agree on something, you present mockups."* For a feel change -
+anything that moves the swing, the meter, a distance or a difficulty - propose it with numbers,
+agree it, show it, and only then build. The tempo, `BLOCK_KEEPS_DIST` and `BLOCK_SPRAY_DEG` are
+numbers he calibrated himself, and two separate sessions have been caught changing his approved
+values without asking. An APPROVED table in the spec is a decision, not a starting point.
 
-**Stage B is the playtest checkpoint**: Matt plays it and judges the feel of the swing, the aim and
-the flight before Stage C is built on top of them. Expect the numbers below to move.
+**And measure rather than argue.** The engine suite plays every hole 24 times and reports each one
+against par; `test.js` section 15c is where a difficulty claim gets settled. The simulated player is
+not a person and its scores are a floor, never evidence about real play - but a BEFORE and AFTER of
+the same robot is real evidence, and it is what caught a change of mine that made the game easier.
 
-The stages map onto `golf-reference-spec.md` §16's phases, with three approved changes: the
-leaderboard metric change moved forward into Stage A, the `test-visual.mjs` entry gets written at
-the start of Stage B, and the hole-data format is decided before Stage B rather than during it.
+### The stages, as built
 
 ## Harbor Links is gone from the product, but its keys are not
 
@@ -5718,3 +5739,141 @@ distance curve no longer keys off it.
 power and every needle stop: the worst possible driver shot is a full red miss at the top of the arc
 (16.0 deg), carrying 139 and finishing 155 from the tee. At a clean 100 % the worst is 20.9 yds
 offline. The 12 fewer yards of carry did NOT move Oasis Sands hole 4, which still measures -0.75.
+
+## The ball goes in the water, and the player picks the drop (2026-09-12)
+
+Matt, playtesting: *"When you land in the water, the ball doesn't go IN the water. It stops and
+slowly moves to the drop zone. The ball needs to go underwater. This can mean just disappearing. It
+should not be visible until after the camera moves to the drop zone. Then it can reappear as if it
+was dropped."* And: *"You should have the option to drop right before the water or from your
+previous location. Same penalty for either."*
+
+**There was never a bug in the water RULE. The shot simply never told anyone the ball got wet.**
+`resolveShot`'s penalty-drop block computed the splash point and then OVERWROTE `rest` with the
+drop, so the only resting place `ui.js` was ever handed was dry land - and it duly animated the
+run-out to it. That is the whole of the slide Matt filmed.
+
+**What changed in the engine is additive: one new field, `water`.** `rest` still means exactly what
+it meant, so every existing caller and every existing test kept its meaning and none needed editing.
+
+```
+water: { splash, before, beforeOn, prev, prevOn }
+```
+
+- `splash` - where the ball actually finished, in the lake.
+- `before` - the last dry point on the flight line. The old rule, and still the DEFAULT.
+- `prev` - `from` itself, where the shot was played from: stroke and distance.
+
+Three things about it are load-bearing and each is commented at its own line in `shot.js`:
+
+- **`before` is re-read from the FINAL `rest`**, after the off-the-map clamp and the
+  not-inside-a-tree push have both had their go. A prompt offering a spot the engine is not
+  actually going to use would be a prompt that lies.
+- **`prev` is `from` itself, not a drop near it.** That spot is known good - the player was standing
+  on it - and it is the floor the tee rule asks for, so this option can never finish behind where
+  the shot was struck.
+- **The off-the-map clamp populates `water` too.** It is the rare second way a shot earns a water
+  penalty (10 of the 4,087 wet shots the test sweep finds), and a penalty with no `water` on it is
+  a penalty the UI cannot play a splash for.
+
+**The beat, in `ui.js`, is a small state machine driven by `_frame` - not a chain of timers.** A
+chain of timers can leave the ball invisible with a callback still owing it after a pause, a
+re-render or a destroy. `waterBeat.phase` runs `splash` -> `ask` -> `move` -> `reveal`, and
+`WATER_HOLD_MS` / `WATER_RIPPLE_MS` / `WATER_MOVE_MS` / `WATER_REVEAL_MS` are its four durations.
+
+Four things the beat had to get right, each found by looking at a real screenshot:
+
+1. **The HUD is NOT repainted at the splash.** `_paintHud` reads `this.ball`, which is the middle of
+   a lake for most of the beat - the first build put `Water`, `Power: 100%` and a yardage measured
+   from open water on screen for a second and a half, describing a lie nobody was ever going to
+   play. It is painted once, in `_takeWaterDrop`, when the ball is somewhere real.
+2. **The golfer and the aim line are suppressed for the whole beat**, or he is drawn standing in
+   the lake.
+3. **The rings are sized in YARDS, not pixels.** The first draft topped out at a 4 yd radius, which
+   on a 95 yd frame is about 16 CSS px - it read as a target reticle sitting on the water rather
+   than as something going into it. They run to 10 yd now.
+4. **The input lock is re-armed twice** - once when the drop is chosen and once when the ball lands.
+   `swing.settle` runs `LOCK_MS` (1.4 s) from when it is CALLED, and a prompt can sit open for
+   eight seconds, so the original settle has long expired by the time the ball is travelling back.
+
+**The prompt reuses the in-the-trees card (`.gf-drop`) rather than inventing a second one.** The
+stroke is charged by `_settleShot` before the beat starts, so neither button changes the score -
+they only decide where the ball goes back down. Strings: `water_q`, `drop_before_water`,
+`drop_from_previous`, `drop_either_costs`, EN and ES.
+
+**It answers itself after `WATER_ASK_MS` (8 s), and it takes "before the water".** That is exactly
+what the game did before the prompt existed, so nothing new can happen to a player who is not
+looking - and the ball can never be left hidden and unplayable by a prompt nobody answered. **The
+default is never the risky option**: playing again from where you hit can put you straight back in
+the same trouble, and that one is only ever taken deliberately. (It is not a softlock either -
+`maxStrokes` still ends the hole at double par plus one, and the alternative was on screen.)
+
+**Nothing is saved while the beat runs, deliberately.** `_saveRound` writes `this.ball`, and every
+position the beat passes through is a place the ball is not really lying. A round killed mid-beat
+restores to the address before that swing and the player plays the shot again: one swing repeated,
+nothing lost, nothing incoherent. The save happens the instant the ball is on the ground at the
+chosen drop.
+
+**Two smaller truths came with it.** `lastShotYd` is now measured to the SPLASH, which is how far
+the ball actually went, and `longestDriveYd` explicitly skips a water shot - a drive in the lake is
+not a measured drive, however far it flew.
+
+Coverage: section 10e's sweep (4,087 shots into water across both courses) now also asserts every
+water shot reports a splash and both drop options, that the splash really is in water, that
+`before` is exactly the engine's chosen resting place, that `prev` is exactly where the shot was
+played from, and that playing again from there is never itself a drop into the lake.
+
+## Sand runs a ball now (2026-09-12)
+
+Matt: *"If a shot lands in a bunker - a tee shot with driver especially, and it lands on just the
+edge, it shouldn't just stop. It should roll still and possibly roll out depending on the shot. But
+having it stop in the sand 100% of the time doesn't feel realistic."*
+
+He was right about the 100 %, and it was two numbers. Both bunker lies carried `roll: 0.00`, so a
+driver clipping the edge at 215 yds and a lob wedge dropping in from 50 behaved identically: dead
+stop. The zero's reasoning was half right - a high wedge into a greenside bunker genuinely plugs -
+but `roll: 0.00` is not a rule about wedges, it is a rule about SAND.
+
+**The fix is two numbers and NO new machinery, which is the part worth keeping.** `rollFactor` is
+already `surface x (1.6 - 1.2 * loft)` and the roll it returns is multiplied by CARRY - so how
+steeply the ball arrives (a driver descends at 27 deg, a lob wedge at 58) and how fast it arrives
+are BOTH already in the formula. A "steep arrivals plug, shallow ones skid" threshold would have
+been a second, discontinuous copy of something the engine already does smoothly. **Nothing random
+was added; nothing about the swing moved.**
+
+    fairwayBunker    roll 0.00 -> 0.030
+    greensideBunker  roll 0.00 -> 0.018      (fairway is 0.0645 for scale)
+
+Run-out after LANDING in sand, full swing:
+
+| club | carry | descent | fwy bunker | greenside |
+|---|---|---|---|---|
+| driver | 215 | 27 deg | 8.0 yd | 4.8 |
+| 3 wood | 195 | 29 deg | 6.8 | 4.1 |
+| 5 iron | 148 | 40 deg | 3.9 | 2.3 |
+| 9 iron | 110 | 49 deg | 2.1 | 1.3 |
+| p wedge | 95 | 52 deg | 1.6 | 1.0 |
+| l wedge | 50 | 58 deg | 0.6 | 0.4 |
+
+Pine Valley's fairway bunkers are `r` 6-8 yd, so 12-16 yds across: a driver that catches the edge
+runs 8 yds and can get out, the same driver in the middle cannot, and a wedge dropping in still
+plugs at well under a yard. That is the "possibly, depending on the shot" that was asked for.
+
+**Two things deliberately did NOT change.** The TIMING needed nothing: sand's `PUTT_DRAG` is 6.00
+against the fairway's 1.90, so `rollMs` gives an 8 yd run-out 1.1 s - it reads as a skid, which is
+what it is. And `groundPoint`'s `noHop` list still holds both bunkers: what changed is that the
+ball RUNS, not that it starts bouncing out of sand.
+
+**Measured, not argued.** Section 15c, same 24 rounds of the same simulated player, before and
+after, Pine Valley's six three-hole blocks against par:
+
+    before   +0.3  +0.3  +1.5  +3.3  +3.1  +5.0
+    after    +0.4  +0.3  +1.5  +3.2  +3.1  +5.2
+
+Noise. The change makes sand a place you can sometimes escape; it does not make the course easier.
+
+`golf/js/test.js`'s old assertion - *"a ball that lands in sand does not roll"* - was REPLACED, not
+deleted, and the rule that replaced it is pinned from BOTH ends so neither half can be quietly
+undone: a lob wedge into sand still runs under a yard, a driver into the same sand runs over six,
+the split is at least eightfold, greenside always runs less than fairway sand, both run far less
+than a fairway, and sand still does not bounce the ball.

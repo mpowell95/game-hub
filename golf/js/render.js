@@ -695,7 +695,43 @@ export function drawFrame(ctx, map, hole, cam, st) {
   // THEM IS THE ENTIRE HEIGHT MODEL - there is no arc line, no trail, no dotted trajectory and no
   // height bar (§9.1). It is cheap, it reads perfectly, and it is the single most transferable
   // trick in the reference.
-  if (!st.holed) {
+  // --- the splash ------------------------------------------------------------
+  // THE BALL GOES IN. `st.splash` is `{ at: [x,y], p }` with `p` running 0..1 through the ripple,
+  // and it is drawn where the ball ACTUALLY finished - which until 2026-09-12 was a point the
+  // renderer was never told about, because `resolveShot` overwrote it with the drop spot.
+  //
+  // Three rings, staggered, each expanding and fading. Rings and not a particle burst: the whole
+  // view is top-down and the water is already drawn as flat horizontal ripple bands (see the water
+  // pass in `buildMap`), so concentric rings are the one shape that reads as "something went in
+  // there" without inventing a third visual language for this one event.
+  if (st.splash) {
+    const px = sx(st.splash.at[0]);
+    const py = sy(st.splash.at[1]);
+    const sp = Math.max(0, Math.min(1, st.splash.p));
+    ctx.save();
+    // THE RINGS ARE SIZED IN YARDS, NOT PIXELS, so they are the same splash at every zoom - and
+    // they are far bigger than the first draft's. That version topped out at a 4 yd radius, which
+    // on a 95 yd frame is about 16 CSS px: it read as a target reticle sitting on the water rather
+    // than as something going into it. A 10 yd ring is a splash you cannot miss from overhead,
+    // which is the only view this game has.
+    ctx.lineWidth = Math.max(2, cam.ppy * 0.5);
+    for (let i = 0; i < 3; i++) {
+      const q = sp * 1.6 - i * 0.3;             // staggered: ring 2 starts as ring 1 is widening
+      if (q <= 0 || q >= 1) continue;
+      ctx.globalAlpha = (1 - q) * 0.9;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(px, py, cam.ppy * (1 + q * 9), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // `hideBall` is the water beat: the ball is gone from the moment it goes under until the camera
+  // has reached the drop and put it back. Matt: *"It should not be visible until after the camera
+  // moves to the drop zone."* It is a separate flag from `holed` because the two mean different
+  // things to everything else that reads `holed` (the golfer, the aim line, the result card).
+  if (!st.holed && !st.hideBall) {
     const bx = Math.round(sx(st.ball[0]));
     const by = Math.round(sy(st.ball[1]));
     const lift = Math.round((st.height || 0) * cam.ppy * 0.55);

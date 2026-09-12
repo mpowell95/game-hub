@@ -201,7 +201,7 @@ export function makeTerrain(seed, stage) {
     // unreachable can ends the run, which makes it the one pickup that must never be a gamble.
     if (hash2(seed, ci * 13 + 5) < 0.62) {
       const fx = x0 + 10 + hash2(seed, ci * 13 + 6) * (CHUNK - 20);
-      items.push({ kind: 'fuel', x: fx, y: y(fx) + FUEL_LIFT, amount: 55, taken: false, r: 0.6 });
+      items.push({ kind: 'fuel', x: fx, y: y(fx) + FUEL_LIFT, amount: 44, taken: false, r: 0.6 });
     }
     return items;
   }

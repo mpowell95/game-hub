@@ -294,6 +294,7 @@ class HillClimb {
           <li>${esc(t('how_1'))}</li>
           <li>${esc(t('how_2'))}</li>
           <li>${esc(t('how_3'))}</li>
+          <li>${esc(t('how_nitro'))}</li>
           <li>${esc(t('how_4'))}</li>
         </ol>
         <button type="button" class="hc-btn hc-primary" data-act="help-close">${esc(t('how_close'))}</button>
