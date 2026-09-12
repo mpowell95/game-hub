@@ -521,9 +521,28 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   // crossing point rather than an arbitrary spot, and the tee is the floor, so a drop can never
   // finish behind where the shot was struck from. `penalty` is returned rather than applied here,
   // because strokes are the caller's business - `resolveShot` stays a pure function of its inputs.
+  //
+  // WHAT THE SHOT NOW TELLS THE CALLER, ADDED 2026-09-12. Matt, on watching a ball into a lake:
+  // *"When you land in the water, the ball doesn't go IN the water. It stops and slowly moves to
+  // the drop zone."* That was not a bug in this rule - it is that `rest` is OVERWRITTEN below, so
+  // the only resting place `ui.js` was ever told about was the DROP, and it duly animated the ball
+  // sliding there across dry land. The splash point was computed and thrown away.
+  //
+  // So `water` carries the three places that matter, and `rest` is LEFT at the before-the-water
+  // drop exactly as it was - every existing caller and every existing test keeps its meaning:
+  //
+  //   splash  where the ball actually finished, in the lake. The beat the player never saw.
+  //   before  the last dry point on the flight line: today's rule, and still the default.
+  //   prev    `from`, where the shot was played from - stroke and distance, the other real option.
+  //
+  // Matt: *"You should have the option to drop right before the water or from your previous
+  // location. Same penalty for either."* So BOTH are returned and neither is chosen here:
+  // `resolveShot` is pure and every test depends on that, so the question is `ui.js`'s to ask.
   let penalty = 0;
+  let water = null;
   if (restOn === 'water' && !rolled.holed) {
     penalty = 1;
+    const splash = [...rest];
     let found = null;
     for (let k = 40; k >= 0; k--) {
       const q = k / 40;
@@ -550,6 +569,16 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
       const moved = dropNear(hole, from, (k) => k === 'water');
       if (moved) { rest = moved.rest; restOn = moved.restOn; }
     }
+
+    // `prev` is `from` ITSELF, not a drop near it: playing again from where you played is stroke
+    // and distance, the ball goes back on the same spot, and that spot is known good - the player
+    // was standing on it. It is also the floor the handoff names, so this option can never finish
+    // behind where the shot was struck.
+    water = {
+      splash,
+      before: [...rest], beforeOn: restOn,
+      prev: [...from], prevOn: lieKind,
+    };
   }
 
   // THE BALL NEVER FINISHES OFF THE MAP. `hole.bounds` is the drawn extent of the hole, and the
@@ -573,6 +602,11 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
       // walks out of it the same way rather than leaving a ball sitting in a lake.
       if (restOn === 'water') {
         penalty = 1;
+        // AND THIS PATH REPORTS A SPLASH TOO. Rare - 10 shots in the 4,087 the test sweep finds -
+        // but a penalty with no `water` on it is a penalty `ui.js` cannot play the splash for, so
+        // the ball would blink to the drop on exactly those ten. The splash is the clamped point,
+        // which is where the ball is when it is found to be wet.
+        water = { splash: [cx, cy], before: null, beforeOn: null, prev: [...from], prevOn: lieKind };
         let out = null;
         for (let k = 1; k <= 30 && !out; k++) {
           for (const ang of [0, 90, 180, 270, 45, 135, 225, 315]) {
@@ -619,8 +653,14 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     }
   }
 
+  // AND `water.before` IS RE-READ FROM THE FINAL `rest`, not from where the drop rule left it. The
+  // two blocks above (the off-the-map clamp and the no-ball-rests-inside-a-tree push) both still
+  // move `rest` after the drop has been chosen, and a prompt offering a spot the ball is not
+  // actually going to be put on would be a prompt that lies. One line, and it cannot drift.
+  if (water) { water.before = [...rest]; water.beforeOn = restOn; }
+
   return {
-    carry, apex, sideYd, aimRad, blocked, wind, penalty,
+    carry, apex, sideYd, aimRad, blocked, wind, penalty, water,
     landing, landedOn, rollYd, rest, restOn,
     holed: rolled.holed,
     travelledYd: distYd(from, rest),

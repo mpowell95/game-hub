@@ -1,5 +1,10 @@
 # Handoff: golf's water drop and its bunker edges (2026-09-11)
 
+> **ALL THREE ARE DONE AND LIVE (2026-09-12).** Kept for the reasoning it records, which is still
+> accurate about what the code used to do and why. The result, and everything learned building it,
+> is in `golf/CLAUDE.md` - "The ball goes in the water, and the player picks the drop" and "Sand
+> runs a ball now". This file is history, not a to-do list.
+
 Three things Matt asked for, in his words, plus what the code does today and why - so the next
 session changes the right thing instead of rediscovering the reasoning.
 

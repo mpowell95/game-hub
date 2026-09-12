@@ -199,6 +199,36 @@ const INTRO_MOVE_MS = 2600;
  *  beat the holed path already waits before showing its result card - one pause in the game, not
  *  two different ones. It gates only the coach; play is not slowed by it. */
 const SETTLE_CARD_MS = 700;
+
+// THE WATER BEAT, in milliseconds. Matt, 2026-09-11: *"When you land in the water, the ball doesn't
+// go IN the water. It stops and slowly moves to the drop zone. The ball needs to go underwater.
+// This can mean just disappearing. It should not be visible until after the camera moves to the
+// drop zone. Then it can reappear as if it was dropped."*
+//
+// Four beats, and the ORDER is the whole point - the ball must be out of sight before anything
+// moves, or the player watches it slide across dry land again:
+//
+//   WATER_HOLD_MS     it sits on the surface where it went in, still visible.
+//   WATER_RIPPLE_MS   it is gone; three rings spread from the splash point (render.js).
+//   (the prompt)      which drop? - and the ball stays hidden for as long as that takes.
+//   WATER_REVEAL_MS   the camera has arrived; the ball drops back in from a yard and a half up.
+//
+// The camera move itself is not timed here: `_aimCamera(false)` already eases toward wherever
+// `this.ball` is at 0.18 a frame, which covers the gap in about 300 ms, so the reveal simply waits
+// for the ball to be near the middle of the frame rather than racing a second clock against it.
+const WATER_HOLD_MS = 250;
+const WATER_RIPPLE_MS = 700;
+const WATER_REVEAL_MS = 220;
+const WATER_MOVE_MS = 450;
+/** How long the drop prompt waits before taking the default on its own.
+ *
+ *  IT TAKES "BEFORE THE WATER", WHICH IS EXACTLY WHAT THE GAME DID BEFORE THERE WAS A PROMPT - so
+ *  nothing new can happen to a player who is not looking at the screen, and the ball can never be
+ *  left hidden and unplayable by a prompt nobody answered. (It also keeps an automated probe from
+ *  hanging on a modal.) The default is never the risky option: playing again from where you hit is
+ *  the choice that can put you straight back in the same trouble, and that one is only ever taken
+ *  deliberately. */
+const WATER_ASK_MS = 8000;
 const CARET_GAP = 3;
 const CARET_LEN = 11;
 const CARET_HALF = 5.5;
@@ -1103,6 +1133,9 @@ class GolfGame {
     // The prompt is a child of rootEl, and _renderPlay wipes rootEl - so a stale reference here
     // would leave `if (this.dropEl) return` blocking every later prompt in the round.
     this.dropEl = null;
+    // A new hole never inherits the last one's splash. `waterBeat` holds `hidden: true` for most of
+    // its life, so a stale one is a ball nobody can see on a hole that has not been played yet.
+    this.waterBeat = null;
     // Same reason: `_renderPlay` wipes rootEl, and a stale reference would make `_pauseMenu`'s own
     // "already open" guard refuse to open it again for the rest of the round.
     this.pauseEl = null;
@@ -2024,16 +2057,22 @@ class GolfGame {
     // it once the ball has moved. `golferAt` needs exactly the same value and already had this
     // problem (see "The golfer stands still"), so there is now one field both read.
     const from = a.from || this.ball;
-    this.ball = [...a.res.rest];
+    // THE BALL STOPS WHERE IT STOPPED. On a water shot that is the SPLASH, not the drop: the drop
+    // is where it will be PUT BACK, several beats later and only once the player has chosen which
+    // drop they want. Moving `this.ball` to the drop here is what made the camera slide there.
+    const wat = a.res && a.res.water;
+    this.ball = wat ? [...wat.splash] : [...a.res.rest];
     // THE HUB READOUT IS THE DISTANCE THE LAST SHOT TRAVELLED, and it is set HERE, when the ball
     // comes to rest. It used to be set in _fire(), which meant the third tap printed how far the
     // ball was ABOUT to go before it had gone anywhere - the ring told you the outcome while you
     // were still watching the flight (Matt's playtest, 2026-09-04).
-    this.lastShotYd = distYd(from, a.res.rest);
+    this.lastShotYd = distYd(from, wat ? wat.splash : a.res.rest);
     // LONGEST DRIVE is a lifetime best in the stored shape, so it is measured where a golfer
     // measures one: the TEE SHOT, and only when it was actually a driver. A holed 4 iron from the
     // fairway is not a drive, however far it went.
-    if (this.roundStats && this.shotN === 1 && a.type === 'flight' && a.club && a.club.id === 'driver') {
+    // ...and a drive into the lake is not a measured drive, however far it flew: `!wat` keeps a
+    // lifetime best off a ball nobody could play from where it landed.
+    if (this.roundStats && !wat && this.shotN === 1 && a.type === 'flight' && a.club && a.club.id === 'driver') {
       this.roundStats.longestDriveYd = Math.max(this.roundStats.longestDriveYd, this.lastShotYd);
     }
     // Any shot can be holed, not just a putt: a pitch that drops, a wood that rolls in.
@@ -2083,6 +2122,16 @@ class GolfGame {
       // `settled` would tell a player standing in the fairway to putt. See golf/js/tutorial.js.
       if (onGreen) this._coach('on-green');
     }, SETTLE_CARD_MS);
+    // THE WATER BEAT OWNS THE REST OF THIS SHOT. The aim, the club and the save below all need the
+    // ball's FINAL position, and on a water shot nobody knows that yet - the player has not chosen
+    // a drop. `_beginWaterBeat` runs the splash, asks, places the ball and then does all three.
+    //
+    // AND THE HUD IS NOT REPAINTED HERE. `_paintHud` reads `this.ball`, which is the SPLASH right
+    // now - so painting it would put "Water", a power penalty and a yardage measured from the
+    // middle of a lake on screen for the whole beat, describing a lie the player is never going to
+    // play. It is painted once, in `_takeWaterDrop`, when the ball is somewhere real.
+    if (wat) { this._beginWaterBeat(wat); return; }
+
     this.aimRad = this._bearingToPin();
     this.club = autoSelectClub(this._distToPin(), this._lie());
     this._syncTempo();
@@ -2098,6 +2147,121 @@ class GolfGame {
     // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
     // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
     // into mid-air as if it were lying there.
+    this._saveRound();
+  }
+
+  /** THE BALL GOES IN, AND STAYS GONE UNTIL IT IS DROPPED.
+   *
+   *  Runs as a small state machine driven by `_frame` rather than by a chain of timers, so that a
+   *  pause, a re-render or a destroy cannot leave the ball invisible with a timer still owing it.
+   *  `phase` is one of:
+   *
+   *    splash   the ball is on the surface, then gone, and the rings spread  (HOLD + RIPPLE)
+   *    ask      the prompt is up; nothing moves. The ball is hidden throughout.
+   *    move     the camera is easing to the chosen drop, ball still hidden   (WATER_MOVE_MS)
+   *    reveal   the ball drops back in from a yard and a half up             (WATER_REVEAL_MS)
+   *
+   *  NOT SAVED WHILE IT RUNS, deliberately. `_saveRound` writes `this.ball`, and every position
+   *  this beat passes through is a place the ball is not really lying - a lake, or nowhere at all.
+   *  A round killed mid-beat restores to the address before this swing and the player plays the
+   *  shot again: one swing repeated, nothing lost, nothing incoherent. The save happens the
+   *  instant the ball is on the ground at the chosen drop. */
+  _beginWaterBeat(w) {
+    this.waterBeat = { phase: 'splash', t0: performance.now(), w, hidden: false, height: 0 };
+  }
+
+  /** One frame of the beat. Returns nothing; it moves `this.ball`, `waterBeat.hidden` and
+   *  `waterBeat.height`, and `_frame` reads those straight into the renderer. */
+  _stepWaterBeat(now) {
+    const b = this.waterBeat;
+    if (!b) return;
+    const el = now - b.t0;
+    if (b.phase === 'splash') {
+      b.hidden = el >= WATER_HOLD_MS;
+      b.ripple = Math.max(0, Math.min(1, (el - WATER_HOLD_MS) / WATER_RIPPLE_MS));
+      if (el >= WATER_HOLD_MS + WATER_RIPPLE_MS) {
+        b.phase = 'ask';
+        b.t0 = now;
+        this._showWaterPrompt(b.w);
+      }
+      return;
+    }
+    if (b.phase === 'ask') {
+      // The prompt answers itself if nobody does - see WATER_ASK_MS. It takes the default, which
+      // is what the game did before this prompt existed.
+      if (el >= WATER_ASK_MS) this._takeWaterDrop('before');
+      return;
+    }
+    if (b.phase === 'move') {
+      if (el >= WATER_MOVE_MS) { b.phase = 'reveal'; b.t0 = now; b.hidden = false; }
+      return;
+    }
+    // reveal: the ball comes down the last yard and a half, so it reads as being DROPPED rather
+    // than switched on. Same height model as the flight - the gap to its own shadow.
+    const q = Math.min(1, el / WATER_REVEAL_MS);
+    b.height = 1.6 * (1 - q) * (1 - q);
+    if (q >= 1) {
+      this.waterBeat = null;
+      // The input lock is re-armed here, not when the ball went in: `swing.settle` runs LOCK_MS
+      // from the moment it is called, and this beat is longer than that on its own.
+      this.swing.settle(now);
+    }
+  }
+
+  /** THE CHOICE. Matt: *"You should have the option to drop right before the water or from your
+   *  previous location. Same penalty for either."*
+   *
+   *  It reverses a written decision in `shot.js` ("the rule is real golf's and it needs no UI"),
+   *  and it uses the SAME card as the in-the-trees prompt rather than inventing a second one - one
+   *  drop prompt, one look, one set of buttons. The stroke has already been charged by
+   *  `_settleShot` (`shotN += 1 + penalty`), so neither button changes the score: they only decide
+   *  where the ball is put back. */
+  _showWaterPrompt(w) {
+    if (this.dropEl) return;
+    const el = document.createElement('div');
+    el.className = 'gf-drop';
+    el.innerHTML = `
+      <div class="gf-drop__card gf-panel">
+        <div class="gf-drop__name">${esc(t('in_water'))}</div>
+        <div class="gf-drop__q">${esc(t('water_q'))}</div>
+        <div class="gf-drop__cost">${esc(t('drop_either_costs'))}</div>
+        <div class="gf-drop__actions">
+          <button type="button" class="gf-btn" data-role="water-before"><span>${esc(t('drop_before_water'))}</span></button>
+          <button type="button" class="gf-btn" data-role="water-prev"><span>${esc(t('drop_from_previous'))}</span></button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    this.dropEl = el;
+    this._on(el.querySelector('[data-role="water-before"]'), 'click', () => this._takeWaterDrop('before'));
+    this._on(el.querySelector('[data-role="water-prev"]'), 'click', () => this._takeWaterDrop('prev'));
+  }
+
+  /** Put the ball back. `which` is 'before' (the last dry point on the flight line, the default)
+   *  or 'prev' (where the shot was played from - stroke and distance).
+   *
+   *  Playing again from the previous spot CAN put the player straight back into the same trouble,
+   *  which is why it is never the automatic choice. It is not a softlock: `maxStrokes` still ends
+   *  the hole at double par plus one, and the player chose it with the alternative on screen. */
+  _takeWaterDrop(which) {
+    const b = this.waterBeat;
+    if (!b || (b.phase !== 'ask' && b.phase !== 'splash')) return;
+    if (this.dropEl) { this.dropEl.remove(); this.dropEl = null; }
+    const w = b.w;
+    this.ball = which === 'prev' ? [...w.prev] : [...w.before];
+    b.phase = 'move';
+    b.t0 = performance.now();
+    b.hidden = true;
+    // AND THE INPUT LOCK IS RE-ARMED FROM HERE. `swing.settle` runs LOCK_MS from when it is
+    // CALLED, and the last call was back when the ball went in - which, with a prompt that can sit
+    // open for eight seconds, has long expired. Without this a player could start a backswing
+    // while the ball was still hidden and travelling to the drop.
+    this.swing.settle(b.t0);
+    this.aimRad = this._bearingToPin();
+    this.club = autoSelectClub(this._distToPin(), this._lie());
+    this._syncTempo();
+    this._paintHud();
+    // THE BALL IS ON THE GROUND AGAIN, so this is the first point in the whole beat where a
+    // snapshot describes somewhere the ball really is. See `_beginWaterBeat`'s header.
     this._saveRound();
   }
 
@@ -2348,6 +2512,11 @@ class GolfGame {
       if (q >= 1) this._endIntro();
     }
 
+    // THE WATER BEAT. It runs with `this.anim` already null (the shot settled when the ball went
+    // in), so it sits beside the animation rather than inside it, and the ordinary
+    // `_aimCamera(false)` below is what eases the camera to the drop once one has been chosen.
+    if (this.waterBeat) this._stepWaterBeat(now);
+
     if (this.anim) {
       const el = now - this.anim.t0;
       // THE WINDUP. `t0` is when the BALL LEAVES, which is WINDUP_MS after the third tap, so `el`
@@ -2369,8 +2538,13 @@ class GolfGame {
           // used to jump straight to the rest position the instant it touched down, which is
           // exactly what Matt reported.
           const q = roll > 0 ? Math.min(1, (el - this.anim.dur) / roll) : 1;
-          const dx = r.rest[0] - r.landing[0];
-          const dy = r.rest[1] - r.landing[1];
+          // THE RUN-OUT ENDS WHERE THE BALL ACTUALLY ENDED, WHICH FOR A WATER SHOT IS THE LAKE.
+          // `r.rest` on a water shot is the DROP, and rolling the ball to it across dry land is
+          // precisely the slide Matt reported. `r.water.splash` is the real end of the roll - see
+          // shot.js's penalty-drop block, which computes it and, until 2026-09-12, threw it away.
+          const end = r.water ? r.water.splash : r.rest;
+          const dx = end[0] - r.landing[0];
+          const dy = end[1] - r.landing[1];
           const len = Math.hypot(dx, dy);
           const g = groundPoint(q, len, r.apex, r.landedOn);
           const u = len > 0 ? g.along / len : 0;
@@ -2438,6 +2612,7 @@ class GolfGame {
       if (Math.abs(this.previewDy) < 0.08) this.previewDy = 0;
       if (this.previewDx === 0 && this.previewDy === 0) this.returning = false;
     }
+    if (this.waterBeat) height = this.waterBeat.height || 0;
     const drawCam = { ...this.cam, x: this.cam.x + this.previewDx, y: this.cam.y + this.previewDy };
 
     const putting = this._putting();
@@ -2476,6 +2651,13 @@ class GolfGame {
       ball: ballPos,
       height,
       holed: this.holed,
+      // The ball is out of sight from the moment it goes under until the camera has reached the
+      // drop, which is the whole of what Matt asked for. The rings are drawn at the splash point
+      // and stop the instant the prompt goes up.
+      hideBall: !!(this.waterBeat && this.waterBeat.hidden),
+      splash: (this.waterBeat && this.waterBeat.phase === 'splash')
+        ? { at: this.waterBeat.w.splash, p: this.waterBeat.ripple || 0 }
+        : null,
       // THE GOLFER STANDS WHERE THE BALL WAS, NOT WHERE THE BALL IS. Matt: "when i swing, then
       // the cartoon golfer animation swing thing happens, the little guy runs forward. it's very
       // strange. He shouldn't move location on the screen." He was drawn at `st.ball`, which is
@@ -2491,11 +2673,14 @@ class GolfGame {
       // sprite is drawn AT the ball, so it covers the ball, the aim line and most of the way to the
       // cup - the three things a putt is entirely about. He comes back the instant the stroke
       // starts, which is when there is something to watch him do.
-      golfer: !this.holed && !(putting && !this.anim),
+      // ...and NOT during the water beat: `this.ball` is the splash point for most of it, so the
+      // golfer would be drawn standing in the lake, and after the drop he must not appear until
+      // the ball he is standing over does.
+      golfer: !this.holed && !this.waterBeat && !(putting && !this.anim),
       golferAt: this.ball,
       swingPose,
       aimRad: this.aimRad,
-      hideAim: !!this.anim || this.holed,
+      hideAim: !!this.anim || this.holed || !!this.waterBeat,
       aimDots: putting ? null : aimDots(this._activeClub(), this._lie()),
       // MEASURED FROM THE REFERENCE: on the green the dots run WELL PAST the cup - at 67.0 s of
       // hole 1, a 17 ft putt shows dots continuing off the green and into the trees. They are a
