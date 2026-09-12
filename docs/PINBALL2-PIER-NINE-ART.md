@@ -87,6 +87,23 @@ Three other things show state as GEOMETRY rather than as light, which is stronge
 | — | **Deck and railings** | planks down-table, sodium pools under each feature, white painted railing with posts every 140 mm | none |
 | — | **The drain** | open water with faint wave lines, below the deck's edge | none |
 
+### Rev C elements
+
+| Key | Element | Looks like | Moves |
+|---|---|---|---|
+| — | **Rubber posts** (14) | white-capped railing stubs with a dark rubber ring, the same language as the pier railing | none. **They are furniture and are never lit amber** — amber means "shoot this", and nobody shoots a post |
+| K | **The Boathouse** | a small clapboard face on the left rail, its two standups drawn as shuttered windows | a struck shutter flicks |
+| L | **The Ticket Booth** | a striped booth face, vermilion and cream. The 3-position mystery state is a visible **pointer wheel** on the booth front | the pointer steps one position per hit |
+| M | **The Bait Shop** | two hanging signs on the right orbit's guide, swinging from eyebolts | the signs swing when clipped |
+| N | **The Fortune Teller** | a curtained tent mouth set into the left wall at (100, 570), bulbs round the arch | lit = the arch bulbs **chase** around the curtain (motion), not just colour |
+| P | **The Coaster spinner** | a turnstile at the Coaster entry, which is exactly what it is | spins with the ball, the arms blurring with RPM |
+| Q | **The ball-save eject** | a lifebuoy on the deck edge at the drain mouth | glows while armed, dark once spent |
+
+Nothing here needs a shape primitive §5 does not already name. Every one of them is blocked on the
+same three additions: the **decor layer**, the **lamp state** and the **clock**. The pointer wheel,
+the chasing arch and the swinging signs are all clock work; the shutters and the lifebuoy are lamp
+state.
+
 ## 5. What the engine cannot draw today
 
 Named rather than quietly skipped. Every one of these is why the render is currently a picture and
@@ -117,6 +134,29 @@ said the right-side stack was the first clearance to check; this is the second t
 after the bullseye sitting inside the shooter-lane wall. **Two of the three errors in this design so
 far have been on the right side, in the 60 mm shared by the Ring Toss, the right orbit, the Pier
 ramp and the shooter lane.** Treat that band as suspect until a probe has passed it.
+
+## 5b. The left wall is the new suspect band
+
+The right-side 60 mm produced two of the three errors in this design, both caught by drawing.
+Rev C stacks the same density onto the LEFT: the Lighthouse spinner, two posts, the Boathouse bank
+and the Fortune Teller scoop now share **x 28..160, y 430..742**.
+
+Placing them moved five coordinates off their first values. Two of the rev C directive's own
+coordinates (Boathouse at the rail face, Fortune Teller at (58, 660)) were unusable as given
+because both sat inside the left orbit lane. Then the arithmetic caught the Fortune Teller against
+the left Ferris Wheel post at **25.9 mm**, squarely in the wedge band.
+
+**And then the render caught a third one, which the arithmetic could not.** At (146, 530) the
+scoop sat under the **Coaster ramp** — the ramp's left edge is x 161 at that y, the scoop's right
+edge x 169, an 8 mm overlap, with the whole feature buried under the wireform. Exactly §5a's Pier
+crest over the Ring Toss plate, on the opposite side of the table. Final position **(100, 570)**,
+welded to the orbit's inner guide, which pushed the Boathouse up to y 452..508 and its derived
+value from 4,500 to 5,000.
+
+**Three of the four errors in this design have been found by drawing it.** That is now the
+strongest argument in this file for the render existing at all.
+
+**Treat x 28..160 as suspect until `checkGaps` has passed it**, exactly as §5a says of the right.
 
 ## 6. What this does NOT specify
 
