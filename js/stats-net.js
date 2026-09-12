@@ -66,7 +66,7 @@ function isDevOrigin() {
 }
 /** True when this page may write. Loud and recorded when it may not - a skipped write that says
  *  nothing is the exact shape of the bug THE LAW rule 6 exists for, even when the skip is wanted. */
-function writesAllowed(what) {
+export function writesAllowed(what) {
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   console.warn(`[stats-net] ${what} BLOCKED: this is a dev origin (${location.hostname}) and dev never writes to the family database. `
@@ -248,4 +248,4 @@ export async function adminReleaseUsername(name) {
   catch { return false; }
 }
 
-export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername };
+export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername, writesAllowed };

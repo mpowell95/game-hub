@@ -198,7 +198,7 @@ function writesAllowed(what) {
 
 let _claimed = null;
 
-async function ensureAuthClaim(boot) {
+export async function ensureAuthClaim(boot) {
   const me = myCode();
   if (!me || !boot || !boot.uid) return null;
   if (_claimed === me) return me;
