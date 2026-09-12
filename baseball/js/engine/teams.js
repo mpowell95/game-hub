@@ -33,14 +33,19 @@ export function effectiveCapFor(league) {
 }
 
 /** Deterministically build one player's six skill values from a style's relative weights, each
- *  bounded by `effectiveCap`. Draft [Open item 25]: the exact formula, not just the weights. */
+ *  bounded by `effectiveCap`. Draft [Open item 25]: the exact formula, not just the weights.
+ *  `effectiveCap` can be fractional (CPU_LEVEL_SHORTFALL is per-skill and cumulative, e.g.
+ *  College's 16.5) - skill VALUES stay integers regardless, so the bound is floored only for the
+ *  clamp, never for the cap itself (which keeps its exact fractional value for the monotonicity
+ *  check in `effectiveCapFor`). */
 function allocateSkills(effectiveCap, style, rand01) {
   const skills = {};
+  const capInt = Math.floor(effectiveCap);
   const meanWeight = SKILL_IDS.reduce((s, id) => s + (style[id] || 1), 0) / SKILL_IDS.length;
   for (const id of SKILL_IDS) {
     const w = (style[id] || 1) / meanWeight;
     const raw = effectiveCap * 0.5 * w * (0.7 + rand01() * 0.6);
-    skills[id] = Math.max(0, Math.min(effectiveCap, Math.round(raw)));
+    skills[id] = Math.max(0, Math.min(capInt, Math.round(raw)));
   }
   return skills;
 }

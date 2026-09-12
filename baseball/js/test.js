@@ -300,6 +300,15 @@ console.log('\n-- 8. teams.js --');
     const expected = SETTINGS.CAPS[lg] - (SETTINGS.CPU_LEVEL_SHORTFALL[lg] || 0);
     ok(effectiveCapFor(lg) === Math.max(1, expected), `effectiveCapFor(${lg}) is CAPS minus CPU_LEVEL_SHORTFALL`);
   }
+  // [KNOWN-BUG PROBE] the effective-cap ladder must never regress. The BB-1a handoff's first pass
+  // at CPU_LEVEL_SHORTFALL ({little:0, highschool:0, college:9, minors:11, majors:12} - a TOTAL
+  // across all six skills, not per-skill, and not cumulative) produced 10, 14, 9, 11, 14: College's
+  // CPU teams generated WEAKER than Little League's, despite the ladder being harder each league up
+  // (doc §8, [Locked]). Corrected to per-skill, cumulative values; this asserts the ladder stays
+  // strictly non-decreasing so that regression cannot come back silently.
+  const capLadder = SETTINGS.LEAGUES.map((lg) => effectiveCapFor(lg));
+  ok(capLadder.every((c, i) => i === 0 || c >= capLadder[i - 1]),
+    `[KNOWN-BUG PROBE] the effective-cap ladder is non-decreasing by league: ${JSON.stringify(capLadder)}`);
 }
 
 // ---------------------------------------------------------------------------------------------

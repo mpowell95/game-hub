@@ -108,7 +108,7 @@ Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own li
 |---|---|---|
 | `PITCH_TRAVEL_MULT.screwball/eephus/cutter` | 9 | doc explicitly leaves these three open |
 | `CPU.little/highschool/minors/majors` | 3 | copied placeholders of the prototype's one tested (`college`) tier |
-| `CPU_LEVEL_SHORTFALL.*` | — | given directly by the BB-1a handoff text (not itself in the doc's running prose), not invented |
+| `CPU_LEVEL_SHORTFALL.*` | 3 | per-skill, cumulative by league; for the phase 2 simulator to verify |
 | `PATTERN_WEIGHTS` | — | doc gives the exact array (`[0.5,0.3,0.2]`), tagged [Draft] by the doc itself |
 | `FIELD.*`/`PARKS.*` | 7 | doc §10 explicitly leaves "exact zone sizes and fence distances per league" open; phase 1's invented placeholder distances are unchanged, just tagged |
 | `TEAM_STYLES`/`TEAM_STYLE_WEIGHTS` weight VECTORS | 25 | the doc names the 8 styles but gives no numbers for them at all |
@@ -136,12 +136,21 @@ Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own li
    playing whole games out** with the real CPU agents: the shipped values produce roughly a 24-27%
    hit rate and games finishing within a few innings of the scheduled length across all five
    leagues (see the report below).
-7. **`CPU_LEVEL_SHORTFALL`'s given numbers produce a NON-MONOTONIC effective-cap ladder** —
-   `little` 10, `highschool` 14, `college` 9, `minors` 11, `majors` 14 (`CAPS[lg] -
-   CPU_LEVEL_SHORTFALL[lg]`) — so College's CPU teams are generated WEAKER than Little League's and
-   tied with Minors below Majors, despite the ladder being harder each league up (doc §8, [Locked]).
-   Not silently corrected: the BB-1a handoff gave these exact shortfall numbers directly, so this is
-   flagged as a finding for Matt rather than second-guessed.
+7. **`CPU_LEVEL_SHORTFALL` was corrected (2026-09-12, same day) after its first version produced a
+   NON-MONOTONIC effective-cap ladder.** The BB-1a handoff's first pass at this table
+   (`{little:0, highschool:0, college:9, minors:11, majors:12}`) was a TOTAL across all six skills,
+   not per-skill, and did not accumulate league to league — it resolved to effective caps of
+   10, 14, 9, 11, 14: College's CPU teams generated WEAKER than Little League's, despite the ladder
+   being harder each league up (doc §8, [Locked]). Flagged as a finding rather than silently fixed;
+   Matt corrected it the same day to **per-skill, cumulative** values:
+   `{little:0, highschool:0, college:1.5, minors:3.3, majors:5.3}`, giving effective per-skill caps
+   of **10, 14, 16.5, 18.7, 20.7** — strictly rising. Still Draft, Open item 3 (the phase 2
+   simulator's job to verify), but the shape is now correct. `test.js` section 8 carries a
+   `[KNOWN-BUG PROBE]` asserting the effective-cap ladder is non-decreasing by league, so this
+   exact regression cannot come back silently. `teams.js`'s `allocateSkills` floors the (now
+   sometimes fractional, e.g. College's 16.5) effective cap only at the point it clamps an integer
+   skill value — `effectiveCapFor()` itself keeps the exact fractional number, which is what the
+   monotonicity check needs to be meaningful.
 8. Every rule inherited from phase 1's own report and unchanged: no baserunning between pitches
    this phase (no steals/leads/pickoffs — doc §3/§17 names these Locked FEATURES with reserved
    input slots for phase 6, see `RESERVED_PHASE_6` in settings.js); a hit of N bases advances
@@ -151,7 +160,7 @@ Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own li
 ### Verification
 
 ```
-node baseball/js/test.js        # 704 assertions, 0 failed
+node baseball/js/test.js        # 705 assertions, 0 failed
 node test-game-conventions.mjs  # 11 passed, 0 failed, no new known-gap entries
 node validate-sw-assets.mjs     # every engine/*.js file present in ASSETS; REST_MANIFEST/version.json regenerated for game-hub-v808
 node test-sw-strategy.mjs       # 107 passed, 0 failed

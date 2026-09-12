@@ -209,9 +209,16 @@ export const CPU = {
 
 // How far a CPU roster is generated below its league's raw CAPS (doc §8: "generated at the cap
 // minus shortfall, not at the raw cap... difficulty comes from behavior, not bigger stats").
-// Values given directly by the BB-1a handoff (not itself printed in the doc's running text, but
-// an authoritative decided number, not invented here).
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 9, minors: 11, majors: 12 };
+// PER-SKILL, cumulative league to league. Draft [Open item 3] - for the phase 2 simulator to
+// verify. (The BB-1a handoff's first pass at this table - {little:0, highschool:0, college:9,
+// minors:11, majors:12} - was a TOTAL across all six skills, not a per-skill number, and did not
+// accumulate league to league: it produced a non-monotonic effective-cap ladder (10, 14, 9, 11,
+// 14), where College's CPU teams were generated WEAKER than Little League's despite the ladder
+// being harder each league up (doc §8, [Locked]). Corrected here to the per-skill, cumulative
+// values below, which resolve to a strictly rising effective-cap ladder - see
+// `effectiveCapFor`/section 8's test in test.js, which now asserts that directly so this cannot
+// regress silently.)
+export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 1.5, minors: 3.3, majors: 5.3 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
