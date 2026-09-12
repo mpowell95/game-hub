@@ -403,6 +403,20 @@ export const GAMES = [
     accent: '#2E7D4F',
     art: GAME_ART["golf"],
   },
+  {
+    // Phase 0 (BB-0-phase-0-handoff.md): stats plumbing and a placeholder screen only, no game.
+    // devOnly, unlike Golf's admin-config gate - there is nothing behind this tile yet for the
+    // admin config's "live/testing" distinction to be meaningful about. No `released` date: that
+    // belongs to whichever phase actually ships the game.
+    id: 'baseball',
+    title: { en: 'Baseball', es: 'Béisbol' },
+    blurb: { en: 'Coming soon.', es: 'Próximamente.' },
+    module: '../baseball/js/ui.js',
+    immersive: true,
+    accent: '#4a8f3c',
+    art: GAME_ART["baseball"],
+    devOnly: true,
+  },
 ];
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back

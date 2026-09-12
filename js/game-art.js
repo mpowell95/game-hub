@@ -669,6 +669,20 @@ export const GAME_ART = {
            <circle cx="18" cy="78" r="6" fill="#ffffff"/>
            <circle cx="16" cy="76" r="1.6" fill="#f4f4f4"/>
          </svg>`,
+
+  // Phase 0 (BB-0-phase-0-handoff.md): a devOnly placeholder tile. Full-bleed dirt infield with a
+  // white diamond and a ball, plain like Golf's own tile.
+  baseball: `<svg viewBox="0 0 160 90" aria-hidden="true">
+           <rect width="160" height="90" fill="#4a8f3c"/>
+           <path d="M50 90 L120 90 L150 46 A100 100 0 0 0 20 46 Z" fill="#b5793f"/>
+           <path d="M85 24 L110 46 L85 68 L60 46 Z" fill="#e7d9b8"/>
+           <circle cx="85" cy="46" r="4.5" fill="#ffffff"/>
+           <circle cx="85" cy="24" r="4.5" fill="#ffffff"/>
+           <circle cx="110" cy="46" r="4.5" fill="#ffffff"/>
+           <circle cx="60" cy="46" r="4.5" fill="#ffffff"/>
+           <circle cx="22" cy="20" r="7" fill="#ffffff"/>
+           <path d="M17 15 A7 7 0 0 1 27 25" stroke="#e0532f" stroke-width="1" fill="none"/>
+         </svg>`,
 };
 
 export default GAME_ART;
