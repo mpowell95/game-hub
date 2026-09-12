@@ -74,6 +74,10 @@ const TABS = [
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
   { id: 'golf', labelKey: 'game_title_golf' },
+  // Phase 0 (BB-0-phase-0-handoff.md): stats plumbing only, no game. devOnly matches the hub
+  // card's gate (js/hub.js's `baseball` entry) so this tab renders only for a dev profile until
+  // there is a game behind it.
+  { id: 'baseball', labelKey: 'game_title_baseball', devOnly: true },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -1068,6 +1072,7 @@ function hasPlays(id, rec) {
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   if (id === 'golf') return !!(rec.gf && rec.gf.rounds);
+  if (id === 'baseball') return !!(rec.bb && rec.bb.careersStarted);
   return ((rec.total || {}).played | 0) > 0;
 }
 
@@ -1097,6 +1102,10 @@ function headlineOf(id, rec) {
   }
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
+  // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
+  // stated explicitly rather than left to the generic fallback below, since this list is read as
+  // the contract for what each game's headline number means.
+  if (id === 'baseball') return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
 }
 
@@ -1211,6 +1220,65 @@ function pinballScreen(rec) {
       <tbody>${PB_TABLES.map(([k, labelKey]) =>
         `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td></tr>`).join('')}</tbody>
     </table>`;
+}
+
+const BB_LEAGUE_LABEL = { little: 'Little League', highschool: 'High School', college: 'College', minors: 'Minors', majors: 'Majors' };
+const BB_TROPHY_LABEL = { 0: 'None', 1: 'Bronze', 2: 'Silver', 3: 'Gold' };
+
+/** Baseball (phase 0 - BB-0-phase-0-handoff.md). No game exists yet; this screen exists so every
+ *  counter `ensureBb`/`recordBaseball` can ever write is reachable somewhere (THE LAW rule 1) the
+ *  moment it starts being written, rather than needing a follow-up commit later. Reads `rec.bb`
+ *  literally, per the handoff's own instruction, so a rename of that sub-counter key breaks this
+ *  screen loudly rather than silently reading undefined. */
+function baseballScreen(rec) {
+  const bb = (rec && rec.bb) || {};
+  const leagues = Object.keys(BB_LEAGUE_LABEL).map((lg) => {
+    const trophy = (bb.bestTrophyByLeague && bb.bestTrophyByLeague[lg]) | 0;
+    return `<tr><th scope="row">${esc(BB_LEAGUE_LABEL[lg])}</th><td>${esc(BB_TROPHY_LABEL[trophy] || trophy)}</td></tr>`;
+  }).join('');
+  const historyRows = Object.values(bb.history || {})
+    .sort((a, b) => (b.endedAt | 0) - (a.endedAt | 0))
+    .map((row) => `<tr>
+        <td>${esc(row.careerId)}</td>
+        <td>${row.seasons | 0}</td>
+        <td>${row.won | 0}-${row.lost | 0}</td>
+        <td>${row.wsTitles | 0}</td>
+      </tr>`).join('');
+  return `
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${bb.careersStarted | 0}</b><span>Careers started</span></div>
+      <div class="gs-tally"><b>${bb.careersFinished | 0}</b><span>Careers finished</span></div>
+      <div class="gs-tally"><b>${bb.seasons | 0}</b><span>Seasons</span></div>
+      <div class="gs-tally"><b>${bb.wsTitles | 0}</b><span>World Series titles</span></div>
+      <div class="gs-tally"><b>${bb.perfectSeasons | 0}</b><span>Perfect seasons</span></div>
+      <div class="gs-tally"><b>${bb.forfeits | 0}</b><span>Forfeits</span></div>
+      <div class="gs-tally"><b>${bb.hits | 0}</b><span>Hits</span></div>
+      <div class="gs-tally"><b>${bb.doubles | 0}</b><span>Doubles</span></div>
+      <div class="gs-tally"><b>${bb.triples | 0}</b><span>Triples</span></div>
+      <div class="gs-tally"><b>${bb.homers | 0}</b><span>Home runs</span></div>
+      <div class="gs-tally"><b>${bb.atBats | 0}</b><span>At bats</span></div>
+      <div class="gs-tally"><b>${bb.runs | 0}</b><span>Runs</span></div>
+      <div class="gs-tally"><b>${bb.walksDrawn | 0}</b><span>Walks drawn</span></div>
+      <div class="gs-tally"><b>${bb.strikeoutsBatting | 0}</b><span>Strikeouts (batting)</span></div>
+      <div class="gs-tally"><b>${bb.bestRunsGame | 0}</b><span>Best runs, one game</span></div>
+      <div class="gs-tally"><b>${bb.runsAllowed | 0}</b><span>Runs allowed</span></div>
+      <div class="gs-tally"><b>${bb.hitsAllowed | 0}</b><span>Hits allowed</span></div>
+      <div class="gs-tally"><b>${bb.walksIssued | 0}</b><span>Walks issued</span></div>
+      <div class="gs-tally"><b>${bb.inningsPitchedOuts | 0}</b><span>Innings pitched (outs)</span></div>
+      <div class="gs-tally"><b>${bb.strikeoutsPitched | 0}</b><span>Strikeouts (pitched)</span></div>
+      <div class="gs-tally"><b>${bb.shutouts | 0}</b><span>Shutouts</span></div>
+      <div class="gs-tally"><b>${bb.bestStrikeoutsPitchedGame | 0}</b><span>Best strikeouts, one game</span></div>
+      <div class="gs-tally"><b>${bb.walkoffWins | 0}</b><span>Walkoff wins</span></div>
+      <div class="gs-tally"><b>${bb.extraInningGames | 0}</b><span>Extra-inning games</span></div>
+      <div class="gs-tally"><b>${bb.hand ? esc(bb.hand.v) : '–'}</b><span>Batting hand</span></div>
+    </div>
+    <h4 class="gs-tbl-h">Best trophy, per league</h4>
+    <table class="gs-tbl"><tbody>${leagues}</tbody></table>
+    ${historyRows ? `<h4 class="gs-tbl-h">Career history</h4>
+    <table class="gs-tbl">
+      <thead><tr><th scope="col">Career</th><th scope="col">Seasons</th><th scope="col">W-L</th><th scope="col">Titles</th></tr></thead>
+      <tbody>${historyRows}</tbody>
+    </table>` : ''}`;
 }
 
 function screenFor(id, st) {
