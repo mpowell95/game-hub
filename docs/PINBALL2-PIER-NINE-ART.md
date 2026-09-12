@@ -75,7 +75,7 @@ Three other things show state as GEOMETRY rather than as light, which is stronge
 
 | Key | Element | Looks like | Moves |
 |---|---|---|---|
-| 3 | **The Ferris Wheel** | teal frame, twelve bulbs round a 42 mm rim, three open cars, dark hub with an amber lamp | **rotates 120° per lock**; a loaded car is amber, an empty one is a slate outline; spins on release |
+| 3 | **The Ferris Wheel** | teal frame, twelve bulbs round a 44 mm rim, three open cars, dark hub with an amber lamp | **rotates 120° per lock**; a loaded car is amber, an empty one is a slate outline; spins on release |
 | 2 · H | **The Coaster** | a wooden coaster: cream sleepers between two vermilion rails, on a dark bed | **the diverter flap at the crest glows teal and swings** between its two positions |
 | 4 | **The Pier** | weathered grey planks across the lane, a thin teal rope-light down each side | none. It is the calm shot beside the Coaster's noise |
 | A | **The Arcade** | three striped tent caps, vermilion and cream, bulb at the centre | flash white on fire (the engine already does this) |
