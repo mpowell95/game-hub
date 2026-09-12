@@ -1158,7 +1158,92 @@ export function loadStats() {
 /** Record one finished game. `difficulty` is the game's own label (easy/normal/hard/expert, or
  *  beginner/intermediate/pro/expert, etc). `won` is true (human won), false (human lost), or null
  *  for a draw (counted in `played` only; draws = played - won - lost). Additive; never overwrites. */
+// --- NO HUMAN PLAYS THIS FAST (2026-09-12) ----------------------------------------------------
+//
+// A player botted Tic Tac Toe: 4,725 games, ONE loss, 1,896 draws, all on one laptop. Matt, after
+// it came to light: *"put safeguards in place to prevent him from doing it again... on either of
+// these games - or any others."* So this sits in the one place every game's result passes through.
+//
+// It is a RATE gate, not a cleverness gate, because rate is the only thing every game in this hub
+// has in common. Hill Climb could be checked properly (its coins have a conservation law - see
+// hill-climb/js/store.js); a "win" in Tic Tac Toe is just a counter, and no arithmetic can tell a
+// real one from a typed one. What a counter CANNOT hide is how fast it moved.
+//
+// RATE_MAX/RATE_WINDOW_MS is 30 results a minute, PER GAME - one every two seconds, sustained for
+// a full minute. The fastest game here is Beginner Tic Tac Toe, where a person sprinting takes
+// five to eight seconds a game, so the gate sits three to four times above the quickest human
+// anyone here could be. That headroom is the point: this must never cost a real player a real
+// play (THE LAW rule 1), and the cost of a bot getting a few results through is nil next to the
+// cost of one honest play refused.
+//
+// **Be honest about what it does not do.** A bot that sleeps two seconds between games walks
+// straight past it, and nothing client-side can stop somebody typing a number into localStorage
+// directly. It removes the thing that actually happened - an unattended script grinding thousands
+// of games - and it makes the attempt VISIBLE: every refusal is counted and rides the stats mirror
+// to Firebase (js/stats-net.js sends it as the `rate` child, the same additive-diagnostic shape as
+// `device` and `announce`), so a device doing this shows up in the data even if a later, slower
+// bot gets its results counted.
+//
+// **If you ever add a game that records a BATCH of results at once, this gate is what will eat
+// them.** Nothing here does that today (Skeeball records per rack, Pinball per game, and the
+// offline queue bypasses the recorders entirely) - but Baseball is the obvious candidate, since a
+// simulated season would bank a hundred-plus games in seconds and look exactly like a bot. Give a
+// batch writer its own path through bumpTotals(), the way drainPendingResults() does, rather than
+// raising RATE_MAX - the threshold is calibrated against how fast a PERSON can play, and moving it
+// to accommodate a simulator would quietly un-calibrate it for every other game.
+//
+// The refusal happens BEFORE the store is read or touched: each recorder returns null and mutates
+// nothing, the same signal recordResult() already gives for an unknown game. Nothing is queued
+// either - a throttled result is refused, not deferred - and drainPendingResults() applies the
+// offline queue through bumpTotals() directly rather than through these recorders, so a device
+// coming back online with a backlog is never mistaken for a bot.
+const RATE_KEY = 'gamehub.rate.v1';
+const RATE_WINDOW_MS = 60000;
+const RATE_MAX = 30;
+
+/** Pure: given the timestamps already seen for a game and `now`, is this one too fast?
+ *  Exported for the headless tests; the storage half is below. */
+export function rateDecision(stamps, now) {
+  const recent = (Array.isArray(stamps) ? stamps : []).filter((t) => Number.isFinite(t) && now - t < RATE_WINDOW_MS);
+  return { blocked: recent.length >= RATE_MAX, recent };
+}
+
+function tooFast(gameId) {
+  if (!gameId) return false;
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(RATE_KEY) || 'null'); } catch { rec = null; }
+  if (!rec || typeof rec !== 'object') rec = { seen: {}, blocked: {} };
+  if (!rec.seen || typeof rec.seen !== 'object') rec.seen = {};
+  if (!rec.blocked || typeof rec.blocked !== 'object') rec.blocked = {};
+  const now = Date.now();
+  const { blocked, recent } = rateDecision(rec.seen[gameId], now);
+  if (blocked) {
+    const b = rec.blocked[gameId] || { n: 0, firstAt: now };
+    b.n = (b.n | 0) + 1; b.lastAt = now; b.firstAt = b.firstAt || now;
+    rec.blocked[gameId] = b;
+    rec.seen[gameId] = recent;
+    try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* nothing to do */ }
+    console.warn(`[game-stats] "${gameId}" result REFUSED: ${RATE_MAX}+ results in ${RATE_WINDOW_MS / 1000}s is faster than anyone can play. Nothing was recorded.`);
+    return true;
+  }
+  recent.push(now);
+  rec.seen[gameId] = recent;
+  try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* a full disk must not block a real play */ }
+  return false;
+}
+
+/** What this device has refused, for the stats mirror (js/stats-net.js). `null` when nothing has
+ *  ever been refused, so the node stays absent on every ordinary device. */
+export function rateReport() {
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(RATE_KEY) || 'null'); } catch { return null; }
+  const b = rec && rec.blocked;
+  if (!b || typeof b !== 'object' || !Object.keys(b).length) return null;
+  return b;
+}
+
 export function recordResult(gameId, difficulty, won) {
+  if (tooFast(gameId)) return null;
   if (GAMES.indexOf(gameId) < 0) return null;
   const st = loadStats();
   bumpTotals(st.games[gameId], normDiff(difficulty), won);
@@ -1171,6 +1256,7 @@ export function recordResult(gameId, difficulty, won) {
  *  AND the who-moved-first grid. `firstMove` is 'player' or 'computer'; `difficulty` is the player's
  *  pick (easy/medium/hard/expert). A draw (won === null) counts in totals only, never in the grid. */
 export function recordConnect4(difficulty, firstMove, won) {
+  if (tooFast('connect4')) return null;
   const st = loadStats();
   const g = st.games.connect4;
   const d = normDiff(difficulty);
@@ -1189,6 +1275,7 @@ export function recordConnect4(difficulty, firstMove, won) {
 /** Chinchón: record a finished match. Maintains total/byDiff (as recordResult) AND the close-quality
  *  counters `cc` from this match's per-round tallies. `extras` = { closed, minusTen, chinchons }. */
 export function recordChinchon(difficulty, won, extras) {
+  if (tooFast('chinchon')) return null;
   const st = loadStats();
   const g = st.games.chinchon;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1214,6 +1301,7 @@ export function recordChinchon(difficulty, won, extras) {
  * `bestLevel` takes Math.max. There is no fewest-moves best on purpose; see ensurePi above.
  */
 export function recordPipes(level, moves, tier) {
+  if (tooFast('pipes')) return null;
   const st = loadStats();
   const g = st.games.pipes;
   ensurePi(g);
@@ -1235,6 +1323,7 @@ export function recordPipes(level, moves, tier) {
 }
 
 export function recordNutsBolts(level, moves, tier) {
+  if (tooFast('nutsbolts')) return null;
   const st = loadStats();
   const g = st.games.nutsbolts;
   ensureNb(g);
@@ -1258,6 +1347,7 @@ export function recordNutsBolts(level, moves, tier) {
 /** Escoba: record a finished match. Maintains total/byDiff (as recordResult) AND the escoba
  *  counter from this match. `extras` = { escobas }. Additive; never overwrites. */
 export function recordEscoba(difficulty, won, extras) {
+  if (tooFast('escoba')) return null;
   const st = loadStats();
   const g = st.games.escoba;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1279,6 +1369,7 @@ export function recordEscoba(difficulty, won, extras) {
  *  ONCE per finished game, the same contract every other recordX() in this file already holds.
  *  A write that fails is queued rather than dropped (persistOrQueue), same as recordEscoba above. */
 export function recordBaseball(league, won, extras) {
+  if (tooFast('baseball')) return null;
   const st = loadStats();
   const g = st.games.baseball;
   ensureBb(g);
@@ -1345,6 +1436,7 @@ export function recordBaseballCareerFinished(row) {
  *  regardless of map (an overall play count is still meaningful across maps), only the per-map
  *  best-score bucket (`br` for Classic, `brOrbital` for Orbital) is chosen by it. */
 export function recordBallRun(obstaclesPassed, difficulty, mapKey = 'classic') {
+  if (tooFast('ballrun')) return null;
   const st = loadStats();
   const g = st.games.ballrun;
   ensureBr(g);
@@ -1369,6 +1461,7 @@ export function recordBallRun(obstaclesPassed, difficulty, mapKey = 'classic') {
  *  `played` and `tied` only; `won`/`lost` are never touched for it. Additive; never
  *  overwrites. */
 export function recordTicTacToe(variant, difficulty, won) {
+  if (tooFast('tictactoe')) return null;
   const st = loadStats();
   const g = st.games.tictactoe;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1392,6 +1485,7 @@ export function recordTicTacToe(variant, difficulty, won) {
  *  capture run) only ever raises the stored best (Math.max), per THE LAW rule 2.
  *  Additive; never overwrites. */
 export function recordDotsBoxes(difficulty, won, extras) {
+  if (tooFast('dotsboxes')) return null;
   const st = loadStats();
   const g = st.games.dotsboxes;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1418,6 +1512,7 @@ export function recordDotsBoxes(difficulty, won, extras) {
  *  `longestWord` is replaced only when this round's word is STRICTLY longer
  *  than the stored one, per THE LAW rule 2. Additive; never overwrites. */
 export function recordBoggle(difficulty, won, extras) {
+  if (tooFast('boggle')) return null;
   const st = loadStats();
   const g = st.games.boggle;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1447,6 +1542,7 @@ export function recordBoggle(difficulty, won, extras) {
  *  `bestScore` only ever raises the stored best (Math.max), per THE LAW rule 2. Additive; never
  *  overwrites. */
 export function recordYahtzee(difficulty, won, extras) {
+  if (tooFast('yahtzee')) return null;
   const st = loadStats();
   const g = st.games.yahtzee;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1473,6 +1569,7 @@ export function recordYahtzee(difficulty, won, extras) {
  *  `points` (the human's final score) are added to the running totals; `bestRound` only ever
  *  raises the stored best (Math.max), per THE LAW rule 2. Additive; never overwrites. */
 export function recordDominoes(difficulty, won, extras) {
+  if (tooFast('dominoes')) return null;
   const st = loadStats();
   const g = st.games.dominoes;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1498,6 +1595,7 @@ export function recordDominoes(difficulty, won, extras) {
  *  Additive; the length bests only ever go up, in BOTH the combined legacy fields (still updated
  *  every run, per THE LAW rule 1) and their walls-mode-split counterparts. */
 export function recordSnake(length, difficulty, walls) {
+  if (tooFast('snake')) return null;
   const st = loadStats();
   const g = st.games.snake;
   ensureSn(g);
@@ -1523,6 +1621,7 @@ export function recordSnake(length, difficulty, walls) {
  *  HC_STAGES), so an unrecognized stage still records its play in `total`, just not per-tier.
  *  Additive; the bests only ever go up, the lifetime coin/flip counters only ever add. */
 export function recordHillClimb(distance, stage, extras) {
+  if (tooFast('hillclimb')) return null;
   const st = loadStats();
   const g = st.games.hillclimb;
   ensureHc(g);
@@ -1551,6 +1650,7 @@ export function recordHillClimb(distance, stage, extras) {
  *  `fewestShotsWin` only updates on a WIN, and only via the sentinel-aware Math.min below (0 =
  *  unset, never a real "won in 0 shots"). Additive; never overwrites. */
 export function recordBattleship(difficulty, won, extras) {
+  if (tooFast('battleship')) return null;
   const st = loadStats();
   const g = st.games.battleship;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1585,6 +1685,7 @@ export function recordBattleship(difficulty, won, extras) {
  *  counters, no bests, no unlock, and nothing for js/players-agg.js or the leaderboard to find.
  *  Mirrors recordSkeeball's own `e.practice` branch exactly. */
 export function recordGolf(difficulty, extras) {
+  if (tooFast('golf')) return null;
   const st = loadStats();
   if (!st.games.golf) st.games.golf = {};
   const g = st.games.golf;
@@ -1671,6 +1772,7 @@ export function recordGolf(difficulty, extras) {
  *  used only to pick the local day bucket, and is injectable so tests are not clock-dependent.
  */
 export function recordSkeeball(boardId, extras) {
+  if (tooFast('skeeball')) return null;
   const st = loadStats();
   const g = st.games.skeeball;
   const board = String(boardId || 'classic');
@@ -1751,6 +1853,7 @@ function ensurePb(g) {
  *  and `lost` is never touched (mirrors Ball Run / Snake / Hill Climb / Nuts & Bolts).
  *  Additive: the two bests only ever go up, every counter only ever adds. */
 export function recordPinball(score, difficulty, extras) {
+  if (tooFast('pinball')) return null;
   const st = loadStats();
   const g = st.games.pinball;
   const d = normDiff(difficulty);
