@@ -105,7 +105,8 @@ export function normalizeConfig(raw) {
   const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
   const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr }, golf: { courses } };
+  const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr }, golf: { courses }, deviceResets: resets };
 }
 
 /**
@@ -224,6 +225,38 @@ export function resolveCourseMode(cfg, courseId) {
 
 let _mem = null;   // last value read/written this page load, so repeated reads cost nothing
 
+// --- DEVICE RESET: clearing a device's history from the other side of the internet ------------
+//
+// 2026-09-12. A player told Matt he had botted Tic Tac Toe (4,725 games, one loss) and edited his
+// coins in devtools, both on his Windows laptop. Matt: *"we should delete all activity that took
+// place on his windows device."*
+//
+// Deleting `players/<id>` is one line and lasts about as long as it takes him to open the hub
+// again. js/stats-net.js's syncMyStats() sends `stats: loadStats()` - the device's ENTIRE local
+// store - and writes it over that node on every load, and the laptop still holds all 4,725 games
+// in its own localStorage. So the server-side delete is only half; the device has to be told to
+// drop its copy, and it can only be told through something it already reads.
+//
+// It already reads this config, once per hub load. So a reset is a TIMESTAMP per stats id here,
+// and the device compares it against its own local acknowledgement (see stats-net.js's
+// applyDeviceReset). Newer than the ack means "clear your store, then stamp the ack" - which
+// makes it happen exactly ONCE per stamp, not on every load for ever, so the player can go on to
+// build a fresh history that nothing keeps wiping.
+//
+// **This is the only thing in this repo that deletes a player's history, and it exists because
+// Matt explicitly overruled THE LAW for it** (root CLAUDE.md; his words: *"It's my game, I
+// control every aspect of it... The rules are for YOU"*). That authority is his and does not
+// generalise: do not reach for this to solve a problem he has not personally asked you to solve
+// this way, and do not quietly widen it. The restorable copy lives in `backups/rtdb-<date>.json`,
+// taken before the delete.
+
+/** When was this device told to clear itself? 0 when never. */
+export function resolveDeviceReset(cfg, statsIdOf) {
+  const v = normalizeConfig(cfg).deviceResets[statsIdOf];
+  const at = (v && typeof v === 'object') ? v.at : v;
+  return Number.isFinite(at) ? at : 0;
+}
+
 /** The cached config, normalized. Synchronous, never throws, `{}`-shaped when there is nothing. */
 export function readCachedConfig() {
   if (_mem) return _mem;
@@ -246,6 +279,9 @@ export function isGameLive(id, codeDefault) { return resolveGameLive(readCachedC
 
 /** Has this Skeeball machine been released to everyone? OR it with the earned unlock, never replace. */
 export function isBoardReleased(boardId) { return resolveBoardReleased(readCachedConfig(), boardId); }
+
+/** When this device was last told to clear its local history; 0 when never. See the block above. */
+export function deviceResetAt(statsIdOf) { return resolveDeviceReset(readCachedConfig(), statsIdOf); }
 
 /** Is this machine still in testing (nobody but a dev profile may open it)? `codeDefault` is its
  *  own `adminOnly` flag from boards.js. */
@@ -441,6 +477,20 @@ export function setGameLive(id, live) {
   return writeNode(`games/${id}`, { live: want }, (cfg) => gameOverride(cfg, id) === want);
 }
 
+/**
+ * Tell one device to clear its local stats store on its next hub load. See the DEVICE RESET block
+ * above for why this exists and why it is stamped rather than flagged.
+ *
+ * Pass `null` to withdraw an un-acted-on reset. Withdrawing after the device has already acted on
+ * it does nothing - the history is gone by then, and the only copy is the backup taken before the
+ * matching server-side delete.
+ */
+export function setDeviceReset(statsIdOf, at) {
+  const want = at === null ? null : (Number.isFinite(at) ? at : Date.now());
+  return writeNode(`deviceResets/${statsIdOf}`, { at: want },
+    (cfg) => resolveDeviceReset(cfg, statsIdOf) === (want === null ? 0 : want));
+}
+
 /** The two stored fields behind each mode. `testing` wins on read, but both are always written
  *  explicitly so a mode change can never leave the previous mode's field behind. */
 const MODE_FIELDS = {
@@ -513,6 +563,7 @@ export default {
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
   setGameLive, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
+  resolveDeviceReset, deviceResetAt, setDeviceReset,
   myBoardCorrections, setSkeeballCorrection,
   resolveCourseReleased, courseOverride, resolveCourseTesting, courseTestingOverride,
   resolveCourseMode, isCourseReleased, isCourseTesting, courseMode, setCourseMode,

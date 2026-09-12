@@ -53,13 +53,13 @@ const A = await import('./js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {} }, golf: { courses: {} } });
+  { games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -140,7 +140,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} } });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('pinball', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);
@@ -196,3 +196,18 @@ ok("js/leaderboard-ui.js has a row for the admin-only game, so releasing it cann
 
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }
+
+// --- the DEVICE RESET (2026-09-12) -------------------------------------------------------------
+// The one thing in this repo that clears a player's history, built because Matt explicitly
+// overruled THE LAW for it (js/admin-config.js's "DEVICE RESET" block). The stamp-vs-ack shape is
+// what keeps it a ONE-TIME clear rather than a device that wipes itself on every load for ever,
+// so these cases pin the resolver from both ends.
+console.log('\n--- the device reset ---');
+eq('no reset for a device that was never named', A.resolveDeviceReset({}, 'dev-1'), 0);
+eq('a reset reads back as its stamp', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: 1757000000000 } } }, 'dev-1'), 1757000000000);
+eq('a bare number is accepted too', A.resolveDeviceReset({ deviceResets: { 'dev-1': 1757000000000 } }, 'dev-1'), 1757000000000);
+eq('one device\'s reset never reaches another', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: 1757000000000 } } }, 'dev-2'), 0);
+eq('junk is not a reset', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: 'soon' } } }, 'dev-1'), 0);
+eq('a cleared reset reads as never', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: null } } }, 'dev-1'), 0);
+eq('normalizeConfig keeps the branch', A.normalizeConfig({ deviceResets: { x: { at: 1 } } }).deviceResets, { x: { at: 1 } });
+eq('a junk branch is replaced, not trusted', A.normalizeConfig({ deviceResets: 7 }).deviceResets, {});
