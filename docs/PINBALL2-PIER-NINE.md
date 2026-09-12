@@ -114,6 +114,13 @@ deliberate overlap, which is how you SHUT a gap. **Two errors have already been 
 (404, 470) passed directly over the Ring Toss plate. Both were caught by drawing, not by a probe.
 Treat this band as suspect until `checkGaps` has passed it.
 
+**The right-side stack is the one place to check clearances first.** The Ring Toss plate (out to
+x 426), the right orbit lane (34 mm clear) and the shooter-lane wall (inner face x 437) share about
+60 mm of width. The intent is that the ring targets are welded to the orbit's inner guide - a
+deliberate overlap, which is how you SHUT a gap. **The first draft of the drawing put the bullseye
+at x 426 and it sat inside the shooter-lane wall**; that is the error this note exists to stop
+happening again in the build.
+
 **Both ramps must obey the four ramp rules already enforced by `rampProbe`**: both ends at z=0, no
 kink over 20° per junction, no level run, and entry decided by a CROSSING rather than a window.
 
