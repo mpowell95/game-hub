@@ -27,7 +27,7 @@ import * as store from './store.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordHillClimb } from '../../js/game-stats.js';
+import { recordHillClimb, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -78,7 +78,15 @@ const PART_NOTE = {
 class HillClimb {
   constructor(container) {
     this.root = container;
-    this.save = store.load();
+    // The garage is loaded through the AUDIT (store.js, "The books must balance"), never through
+    // a bare load(). The witness it needs is the shared store's LIFETIME coin count, which ui.js
+    // writes from the same run result that banks the save - so `earned` has a second copy that is
+    // mirrored to Firebase and is not editable from this page's devtools alone. A failure to read
+    // it is not a reason to skip the audit: 0 simply turns the `earned` cross-check off and leaves
+    // the conservation law itself doing the work.
+    let lifetimeCoins = 0;
+    try { lifetimeCoins = ((loadStats().games.hillclimb || {}).hc || {}).coins | 0; } catch { lifetimeCoins = 0; }
+    this.save = store.loadVerified(lifetimeCoins);
     this.tab = 'vehicle';
     this.screen = 'garage';
     this.run = null;

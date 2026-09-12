@@ -67,15 +67,38 @@ export const GAME_ART = {
               <circle cx="80" cy="42" r="1.8" fill="#a9791b"/>
             </g>
           </svg>`,
+  // Repainted 2026-09-12, second pass: the first repaint invented an "action card" (a dark card
+  // with a lightning bolt) that matches nothing in the real deck or this game's own art — action
+  // cards here have no such look, so it read as a made-up fifth suit. This is a fan of five CASH
+  // bills instead, each its own color and denomination (1M-5M) — real Monopoly Deal vocabulary,
+  // nothing invented, and it still reads instantly as "a deck of money cards" at tile size.
   'business-deal': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#6a4cff"/>
-            <g transform="rotate(-24 30 48)"><rect x="18" y="27" width="24" height="42" rx="3" fill="#fff" stroke="#b9afe8" stroke-width="1.2"/><rect x="18" y="27" width="24" height="10" rx="3" fill="#e0532f"/></g>
-            <g transform="rotate(-12 55 44)"><rect x="43" y="23" width="24" height="42" rx="3" fill="#fff" stroke="#b9afe8" stroke-width="1.2"/><rect x="43" y="23" width="24" height="10" rx="3" fill="#178a7a"/></g>
-            <g transform="rotate(12 105 44)"><rect x="93" y="23" width="24" height="42" rx="3" fill="#fff" stroke="#b9afe8" stroke-width="1.2"/><rect x="93" y="23" width="24" height="10" rx="3" fill="#f2b705"/></g>
-            <g transform="rotate(24 130 48)"><rect x="118" y="27" width="24" height="42" rx="3" fill="#fff" stroke="#b9afe8" stroke-width="1.2"/><rect x="118" y="27" width="24" height="10" rx="3" fill="#8155ba"/></g>
-            <g><rect x="68" y="20" width="24" height="42" rx="3" fill="#fff" stroke="#b9afe8" stroke-width="1.2"/><rect x="68" y="20" width="24" height="10" rx="3" fill="#1f5fa8"/></g>
-            <circle cx="134" cy="70" r="12" fill="#f2b705" stroke="#a9791b" stroke-width="1.8"/>
-            <text x="134" y="75.5" font-size="15" font-weight="900" text-anchor="middle" fill="#7a5502" font-family="system-ui, -apple-system, sans-serif">$</text>
+            <g transform="rotate(-24 26 50)">
+              <rect x="14" y="29" width="24" height="42" rx="3" fill="#e0607a" stroke="#8f1f3c" stroke-width="1.2"/>
+              <rect x="17" y="32" width="18" height="12" rx="2" fill="#fdeaf0" opacity="0.9"/>
+              <text x="26" y="41.5" font-size="8" font-weight="900" text-anchor="middle" fill="#8f1f3c" font-family="system-ui, -apple-system, sans-serif">1M</text>
+            </g>
+            <g transform="rotate(-12 55 46)">
+              <rect x="43" y="25" width="24" height="42" rx="3" fill="#178a4f" stroke="#0d5c31" stroke-width="1.2"/>
+              <rect x="46" y="28" width="18" height="12" rx="2" fill="#e8f7ee" opacity="0.9"/>
+              <text x="55" y="37.5" font-size="8" font-weight="900" text-anchor="middle" fill="#0d5c31" font-family="system-ui, -apple-system, sans-serif">2M</text>
+            </g>
+            <g>
+              <rect x="68" y="18" width="24" height="46" rx="3" fill="#178a99" stroke="#0d4d55" stroke-width="1.2"/>
+              <rect x="71" y="21" width="18" height="12" rx="2" fill="#e6f6f8" opacity="0.9"/>
+              <text x="80" y="30.5" font-size="8" font-weight="900" text-anchor="middle" fill="#0d4d55" font-family="system-ui, -apple-system, sans-serif">3M</text>
+            </g>
+            <g transform="rotate(12 105 46)">
+              <rect x="93" y="25" width="24" height="42" rx="3" fill="#e8b53a" stroke="#8f6210" stroke-width="1.2"/>
+              <rect x="96" y="28" width="18" height="12" rx="2" fill="#fdf6e3" opacity="0.9"/>
+              <text x="105" y="37.5" font-size="8" font-weight="900" text-anchor="middle" fill="#8f6210" font-family="system-ui, -apple-system, sans-serif">4M</text>
+            </g>
+            <g transform="rotate(24 134 50)">
+              <rect x="122" y="29" width="24" height="42" rx="3" fill="#2f6fce" stroke="#153c6e" stroke-width="1.2"/>
+              <rect x="125" y="32" width="18" height="12" rx="2" fill="#e5f0ff" opacity="0.9"/>
+              <text x="134" y="41.5" font-size="8" font-weight="900" text-anchor="middle" fill="#153c6e" font-family="system-ui, -apple-system, sans-serif">5M</text>
+            </g>
           </svg>`,
   parchis: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#7a5a34"/>
@@ -142,17 +165,27 @@ export const GAME_ART = {
             <circle cx="101" cy="31" r="14" fill="#f2b705" stroke="#a9791b" stroke-width="1.8"/>
             <text x="101" y="37.5" font-size="16" font-weight="900" text-anchor="middle" fill="#7a5502" font-family="system-ui, -apple-system, sans-serif">15</text>
           </svg>`,
+  // Repainted 2026-09-12: the rainbow grid alone read as "some color game," with nothing showing
+  // the actual mechanic (two players' territory FLOODING toward each other from opposite
+  // corners). Two blocky staircase claims, one per player's seed corner, now sit over the same
+  // color grid — the grid still sells "pick a color," the staircases sell "and it spreads."
+  // Corners match the real engine (filler/js/game.js: P1_START is bottom-left, the human;
+  // P2_START is top-right, the computer) — an earlier draft of this had them swapped.
   filler: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#202a3c"/>
-            <g>
+            <g opacity="0.62">
               <rect x="2" y="1" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="22" y="1" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="42" y="1" width="16" height="16" rx="3.5" fill="#8155BA"/><rect x="62" y="1" width="16" height="16" rx="3.5" fill="#1F5FA8"/><rect x="82" y="1" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="102" y="1" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="122" y="1" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="142" y="1" width="16" height="16" rx="3.5" fill="#E0532F"/>
               <rect x="2" y="19" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="22" y="19" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="42" y="19" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="62" y="19" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="82" y="19" width="16" height="16" rx="3.5" fill="#1F5FA8"/><rect x="102" y="19" width="16" height="16" rx="3.5" fill="#8155BA"/><rect x="122" y="19" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="142" y="19" width="16" height="16" rx="3.5" fill="#1F5FA8"/>
               <rect x="2" y="37" width="16" height="16" rx="3.5" fill="#1F5FA8"/><rect x="22" y="37" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="42" y="37" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="62" y="37" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="82" y="37" width="16" height="16" rx="3.5" fill="#8155BA"/><rect x="102" y="37" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="122" y="37" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="142" y="37" width="16" height="16" rx="3.5" fill="#F2B705"/>
               <rect x="2" y="55" width="16" height="16" rx="3.5" fill="#8155BA"/><rect x="22" y="55" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="42" y="55" width="16" height="16" rx="3.5" fill="#1F5FA8"/><rect x="62" y="55" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="82" y="55" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="102" y="55" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="122" y="55" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="142" y="55" width="16" height="16" rx="3.5" fill="#8155BA"/>
               <rect x="2" y="73" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="22" y="73" width="16" height="16" rx="3.5" fill="#D06E9F"/><rect x="42" y="73" width="16" height="16" rx="3.5" fill="#178A7A"/><rect x="62" y="73" width="16" height="16" rx="3.5" fill="#E0532F"/><rect x="82" y="73" width="16" height="16" rx="3.5" fill="#1F5FA8"/><rect x="102" y="73" width="16" height="16" rx="3.5" fill="#F2B705"/><rect x="122" y="73" width="16" height="16" rx="3.5" fill="#8155BA"/><rect x="142" y="73" width="16" height="16" rx="3.5" fill="#178A7A"/>
             </g>
-            <circle cx="10" cy="9" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
-            <circle cx="150" cy="81" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+            <path d="M2 89 L82 89 L82 71 L62 71 L62 53 L42 53 L42 35 L22 35 L22 17 L2 17 Z"
+                  fill="#178A7A" fill-opacity="0.68" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M158 1 L78 1 L78 19 L98 19 L98 37 L118 37 L118 55 L138 55 L138 73 L158 73 Z"
+                  fill="#E0532F" fill-opacity="0.68" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="10" cy="81" r="5.5" fill="#178A7A" stroke="#ffffff" stroke-width="2.2"/>
+            <circle cx="150" cy="9" r="5.5" fill="#E0532F" stroke="#ffffff" stroke-width="2.2"/>
           </svg>`,
   mancala: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#b96f35"/>

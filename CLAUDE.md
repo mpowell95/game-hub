@@ -116,6 +116,22 @@ being ignored, which is what it was.
 This is not the same as asking permission and it does not mean abandoning the work. Answer, then
 carry on.
 
+## Mockups are sketches, not pitches
+
+Matt, 2026-09-12, on a Pier Nine blueprint stuffed with rationale: *"I need significantly less text.
+All of the below is wasteful, adds to clutter, and makes the whole thing more frustrating to see and
+use... You created this as if I'm going to pitch this in a meeting to other people. It's not a
+presentation. It's you giving me a quick mockup."*
+
+**A mockup is the thing itself and its numbers. Nothing else.** The drawing, the tables, the values.
+No lede, no framing paragraph, no "what this drawing is", no explaining why a decision was made, no
+sentence that would only exist to persuade somebody who was not in the conversation.
+
+The reasoning is not deleted, it is just not IN the mockup: put it in the repo doc or the commit
+message, where a future session needs it and Matt does not have to scroll past it.
+
+This applies to every artifact, mockup, plan page and diagram, in every session.
+
 ## Answer about the game you were asked about
 
 Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
