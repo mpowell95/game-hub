@@ -12,7 +12,10 @@ import {
   VEHICLES, STAGES, PARTS, MAX_LEVEL, upgradeCost, tunedSpec, vehicleById, stageById,
   normUpgrades, stageDiff,
 } from './catalog.js';
-import { blankSave, bankRun, buyVehicle, buyStage, buyUpgrade, selectVehicle, selectStage } from './store.js';
+import {
+  blankSave, bankRun, buyVehicle, buyStage, buyUpgrade, selectVehicle, selectStage,
+  spentOf, auditSave, rebuildHonest, effectiveEarned, TAMPER_SLACK,
+} from './store.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond) {
@@ -514,6 +517,120 @@ const modulated = (run) => {
   cycle = bankRun(cycle, 'countryside', { distance: 20, coins: 100 }).save;
   ok('lifetime earnings only ever rise across earn/spend/earn', cycle.earned === earnedAfterRun + 100);
   ok('the wallet really did go down when spending', cycle.coins < cycle.earned);
+}
+
+// --- THE BOOKS MUST BALANCE (2026-09-12) -------------------------------------------------------
+// The economy audit in store.js. Written against a real incident: a player opened devtools on the
+// desktop, typed a new number into `coins`, and bought every upgrade with money that never
+// existed. The invariant is `coins + spent === earned`, and the two halves of this block are the
+// two ways it can be got wrong - punishing a legitimate save, and letting an impossible one
+// through. The first half matters MORE: a false positive rebuilds a real player's garage, which
+// is a THE LAW rule 1 failure, and no amount of catching cheats pays for one.
+{
+  // --- what the audit must NEVER touch ---
+  ok('a fresh garage balances', auditSave(blankSave()).ok === true);
+
+  let honest = bankRun(blankSave(), 'countryside', { distance: 500, coins: 30000 }).save;
+  ok('a wallet full of earned coins balances', auditSave(honest).ok === true);
+  honest = buyVehicle(honest, 'bike');
+  ok('buying a vehicle keeps the books balanced', auditSave(honest).ok === true);
+  honest = buyStage(honest, 'desert');
+  ok('buying a stage keeps the books balanced', auditSave(honest).ok === true);
+  for (let i = 0; i < 4; i++) honest = buyUpgrade(honest, 'bike', 'tires');
+  ok('buying upgrades keeps the books balanced', auditSave(honest).ok === true);
+  ok('spentOf agrees with what the wallet actually lost',
+    spentOf(honest) === honest.earned - honest.coins);
+
+  // Spending everything down to zero is the most cheat-shaped an honest save ever looks: the
+  // wallet is empty and the garage is full. It must still pass.
+  let broke = bankRun(blankSave(), 'countryside', { distance: 9, coins: 2500 }).save;
+  broke = buyVehicle(broke, 'bike');
+  ok('an honest player who spent every coin still balances',
+    broke.coins === 0 && auditSave(broke).ok === true);
+
+  // A price CUT leaves a save owning things that now cost less than was paid. That reads as a
+  // negative gap, which is the player having LESS than they earned - never tampering.
+  const priceCut = { ...honest, earned: honest.earned + 50000 };
+  ok('a save that is under-spent is not tampering', auditSave(priceCut).ok === true);
+
+  // A rounding-scale wobble must be inert, or every future price tweak rebuilds every garage.
+  const wobble = { ...honest, coins: honest.coins + TAMPER_SLACK - 1 };
+  ok('a gap under the slack changes nothing', wobble.coins > honest.coins && auditSave(wobble).ok === true);
+
+  // --- what the audit must catch ---
+  // THE ACTUAL CHEAT: a typed wallet, then a shopping spree with it.
+  let cheat = bankRun(blankSave(), 'countryside', { distance: 500, coins: 3000 }).save;
+  cheat = { ...cheat, coins: 9999999 };
+  ok('a typed wallet is caught on its own', auditSave(cheat).ok === false);
+  const before = { ...cheat };
+  cheat = buyVehicle(cheat, 'rover');
+  cheat = buyStage(cheat, 'moon');
+  for (let i = 0; i < MAX_LEVEL; i++) cheat = buyUpgrade(cheat, 'rover', 'engine');
+  ok('a garage bought with it is caught too', auditSave(cheat).ok === false);
+  ok('the gap names the money that never existed',
+    auditSave(cheat).gap === (cheat.coins + spentOf(cheat)) - cheat.earned);
+  ok('spending the fake money does not launder it',
+    auditSave(cheat).gap === auditSave(before).gap);
+
+  // --- the rebuild ---
+  const fixed = rebuildHonest(cheat);
+  ok('the rebuilt save balances', auditSave(fixed).ok === true);
+  ok('the rebuild returns every coin actually EARNED', fixed.coins === cheat.earned);
+  ok('the rebuild keeps lifetime earnings (THE LAW rule 2)', fixed.earned === cheat.earned);
+  ok('the rebuild keeps every distance record (THE LAW rule 2)',
+    JSON.stringify(fixed.best) === JSON.stringify(cheat.best));
+  ok('the rebuild empties the garage', !fixed.owned.rover && !fixed.stages.moon);
+  ok('the rebuild resets the upgrades', fixed.upgrades.rover.engine === 0);
+  ok('the rebuild leaves the free car and stage', fixed.owned.jeep === true && fixed.stages.countryside === true);
+  ok('the rebuild puts you back in something you own',
+    fixed.owned[fixed.vehicle] === true && fixed.stages[fixed.stage] === true);
+  ok('the rebuild carries unknown keys forward (rule 5)',
+    rebuildHonest({ ...cheat, someFutureField: 7 }).someFutureField === 7);
+  ok('rebuilding an honest save is harmless',
+    JSON.stringify(auditSave(rebuildHonest(honest))) !== '' && auditSave(rebuildHonest(honest)).ok === true);
+  ok('the rebuild is idempotent', auditSave(rebuildHonest(fixed)).ok === true && rebuildHonest(fixed).coins === fixed.coins);
+
+  // --- the `earned` witness ---
+  // The shared store's lifetime coin count is written from the same run result as `earned`, so it
+  // is the same number twice - and the copy that is mirrored to Firebase.
+  const inflated = { ...honest, earned: honest.earned + 500000, coins: honest.coins + 500000 };
+  ok('inflating BOTH numbers consistently passes the audit - stated, accepted, not a bug',
+    auditSave(inflated).ok === true);
+
+  // [KNOWN-BUG PROBE] THE WITNESS ONLY EVER RAISES `earned`, NEVER LOWERS IT, and the whole
+  // reason is the legacy save below: `earned` was added after this game shipped, so saves exist
+  // whose `earned` is short by the price of a garage the player really bought. An audit against
+  // that understated ceiling calls real history impossible and empties a real garage - rule 1,
+  // and worse than any cheat getting through. Lowering would also mean trusting the witness to be
+  // complete, which a device with cleared shared stats is not. Both directions of that are pinned
+  // here; a session that "tightens" this by clamping downward breaks a real player, not a cheat.
+  ok('[KNOWN-BUG PROBE] a witness AHEAD of the save raises earnings (repairs a legacy save)',
+    effectiveEarned(honest, honest.earned + 100000) === honest.earned + 100000);
+  ok('[KNOWN-BUG PROBE] a witness BEHIND the save never lowers earnings (THE LAW rule 2)',
+    effectiveEarned(inflated, honest.earned) === inflated.earned);
+  ok('[KNOWN-BUG PROBE] a missing witness leaves earnings exactly alone',
+    effectiveEarned(honest, 0) === honest.earned);
+  ok('a raised ceiling can rescue an over-spent legacy save',
+    auditSave({ ...honest, earned: effectiveEarned({ ...honest, earned: 0 }, honest.earned) }).ok === true);
+
+  // [KNOWN-BUG PROBE] `earned` is seeded for a save written before the field existed, and the seed
+  // has to include what the garage already cost. Seeding it from the wallet balance alone (what
+  // load() did until 2026-09-12) makes every such save look overspent by the price of its own
+  // garage - so the audit would have called real history impossible and rebuilt it. load() reads
+  // localStorage, so the seed is exercised through its own arithmetic here.
+  const legacy = { ...honest };
+  delete legacy.earned;
+  const seeded = { ...legacy, earned: legacy.coins + spentOf(legacy) };
+  ok('[KNOWN-BUG PROBE] a pre-`earned` save seeds to wallet PLUS garage, and balances',
+    auditSave(seeded).ok === true);
+  ok('[KNOWN-BUG PROBE] seeding from the balance alone would have condemned it',
+    auditSave({ ...legacy, earned: legacy.coins }).ok === false);
+  // ...and a save ALREADY PERSISTED with that bad seed (written before 2026-09-12, so load()'s
+  // corrected seeding never gets a chance to run on it) is rescued by the witness instead. This
+  // pair is the belt and braces for the one false positive this feature could actually cause.
+  const condemned = { ...legacy, earned: legacy.coins };
+  ok('[KNOWN-BUG PROBE] and the witness rescues it anyway',
+    auditSave({ ...condemned, earned: effectiveEarned(condemned, honest.earned) }).ok === true);
 }
 
 console.log(`\nHill Climb engine tests: ${pass} passed, ${fail} failed.`);

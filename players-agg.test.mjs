@@ -169,6 +169,79 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('battleship: fewestShotsWin stays 0 when no device has ever won', aggregatePlayers(noWinsYet)[0].games.battleship.bs.fewestShotsWin, 0);
 }
 
+// ---- Baseball's bb sub-counter survives the cross-device combine (BB-0-phase-0-handoff.md step 2,
+// extended by its "final bb key list" amendment, 2026-09-12) ----
+// Five cases: a `hand` merge by the SMALLER timestamp (the earliest choice stands), a history row
+// that exists on only one device (must still appear on the combined record), a higher trophy
+// recorded on the second device (Math.max, never a sum), the new additive keys (including
+// bronzes/silvers/golds) summing across devices, and `bestWinStreak` merging to the LARGER value.
+{
+  const all = {
+    d1: rec({ playerId: 'BB111', name: 'Bud' }, {
+      baseball: {
+        total: { played: 3, won: 2, lost: 1 },
+        bb: {
+          careersStarted: 1, careersFinished: 0, seasons: 3, forfeits: 0, wsTitles: 0, perfectSeasons: 0,
+          hits: 10, doubles: 1, triples: 0, homers: 2, atBats: 30, runsScored: 8, walksDrawn: 3,
+          runsAllowed: 5, hitsAllowed: 9, walksIssued: 2, inningsPitchedOuts: 27,
+          strikeoutsBatting: 4, strikeoutsPitched: 6,
+          sacFlies: 1, sacBunts: 1, rbi: 6, stolenBases: 2, caughtStealing: 1, pickoffs: 0, homersAllowed: 1,
+          bronzes: 1, silvers: 0, golds: 0,
+          shutouts: 0, walkoffWins: 1, extraInningGames: 1,
+          noHitters: 0, perfectGames: 0, grandSlams: 1,
+          bestRunsGame: 4, bestStrikeoutsPitchedGame: 5, bestWinStreak: 5,
+          bestLeague: 2, bestTrophyByLeague: { little: 1, highschool: 0, college: 0, minors: 0, majors: 0 },
+          hand: { v: 'L', at: 500 },
+          history: { 'BB111-100-AAAA': { v: 1, careerId: 'BB111-100-AAAA', startedAt: 100, endedAt: 900, hand: 'L', finalLeague: 1, bestLeague: 1, bestTrophyByLeague: { little: 1 }, wsTitles: 0, perfectSeasons: 0, seasons: 1, played: 10, won: 6, lost: 4, forfeits: 0, rulesV: 1 } },
+        },
+      },
+    }, 1000),
+    d2: rec({ playerId: 'bb111', name: 'Bud' }, {
+      baseball: {
+        total: { played: 2, won: 1, lost: 1 },
+        bb: {
+          careersStarted: 1, careersFinished: 1, seasons: 2, forfeits: 1, wsTitles: 1, perfectSeasons: 1,
+          hits: 5, doubles: 0, triples: 1, homers: 0, atBats: 15, runsScored: 3, walksDrawn: 1,
+          runsAllowed: 2, hitsAllowed: 4, walksIssued: 1, inningsPitchedOuts: 12,
+          strikeoutsBatting: 2, strikeoutsPitched: 3,
+          sacFlies: 0, sacBunts: 2, rbi: 3, stolenBases: 1, caughtStealing: 0, pickoffs: 1, homersAllowed: 2,
+          bronzes: 0, silvers: 0, golds: 1,
+          shutouts: 1, walkoffWins: 0, extraInningGames: 0,
+          noHitters: 1, perfectGames: 0, grandSlams: 0,
+          bestRunsGame: 2, bestStrikeoutsPitchedGame: 8, bestWinStreak: 3,
+          bestLeague: 3, bestTrophyByLeague: { little: 0, highschool: 3, college: 0, minors: 0, majors: 0 },
+          // A hand chosen EARLIER on this device (at: 50) even though this device synced later --
+          // the earliest choice must win, not the later-synced one.
+          hand: { v: 'R', at: 50 },
+          history: { 'BB111-2000-BBBB': { v: 1, careerId: 'BB111-2000-BBBB', startedAt: 2000, endedAt: 5000, hand: 'R', finalLeague: 3, bestLeague: 3, bestTrophyByLeague: { highschool: 3 }, wsTitles: 1, perfectSeasons: 1, seasons: 2, played: 20, won: 12, lost: 7, forfeits: 1, rulesV: 1 } },
+        },
+      },
+    }, 2000),
+  };
+  const bb = aggregatePlayers(all)[0].games.baseball.bb;
+  eq('baseball: integer counters summed across devices', [bb.careersStarted, bb.careersFinished, bb.seasons, bb.forfeits, bb.wsTitles, bb.perfectSeasons],
+    [2, 1, 5, 1, 1, 1]);
+  eq('baseball: batting/pitching counters summed', [bb.hits, bb.doubles, bb.triples, bb.homers, bb.atBats, bb.runsScored, bb.walksDrawn],
+    [15, 1, 1, 2, 45, 11, 4]);
+  eq('baseball: pitching-against counters summed', [bb.runsAllowed, bb.hitsAllowed, bb.walksIssued, bb.inningsPitchedOuts, bb.strikeoutsBatting, bb.strikeoutsPitched, bb.shutouts, bb.walkoffWins, bb.extraInningGames],
+    [7, 13, 3, 39, 6, 9, 1, 1, 1]);
+  eq('baseball: the new additive keys (sacFlies..homersAllowed) summed across devices',
+    [bb.sacFlies, bb.sacBunts, bb.rbi, bb.stolenBases, bb.caughtStealing, bb.pickoffs, bb.homersAllowed],
+    [1, 3, 9, 3, 1, 1, 3]);
+  eq('baseball: bronzes/silvers/golds are TALLIES and sum across devices, not a max',
+    [bb.bronzes, bb.silvers, bb.golds], [1, 0, 1]);
+  eq('baseball: the new achievement counters (noHitters/perfectGames/grandSlams) summed',
+    [bb.noHitters, bb.perfectGames, bb.grandSlams], [1, 0, 1]);
+  eq('baseball: bestRunsGame is the max, not the sum', bb.bestRunsGame, 4);
+  eq('baseball: bestStrikeoutsPitchedGame is the max, not the sum', bb.bestStrikeoutsPitchedGame, 8);
+  eq('baseball: bestWinStreak merges to the LARGER value, not the sum', bb.bestWinStreak, 5);
+  eq('baseball: bestLeague is the max', bb.bestLeague, 3);
+  eq('baseball: bestTrophyByLeague takes the max PER LEAGUE, not a sum', bb.bestTrophyByLeague, { little: 1, highschool: 3, college: 0, minors: 0, majors: 0 });
+  eq('baseball: hand merges by the SMALLER (earliest) timestamp', bb.hand, { v: 'R', at: 50 });
+  ok('baseball: history has a row from BOTH devices, unioned by careerId', Object.keys(bb.history).length === 2
+    && !!bb.history['BB111-100-AAAA'] && !!bb.history['BB111-2000-BBBB']);
+}
+
 // ---- Boggle's bg sub-counter survives the cross-device combine (THE LAW rule 1) ----
 // `total` aggregating correctly is NOT enough: the Boggle Stats screen reads `bg` for
 // ties, best score, words found and the longest word. Before players-agg carried `bg`

@@ -38,6 +38,13 @@ unwritable.** That is the one new obligation this shape creates.
 | `admins` | readable by anyone signed in, **writable by nobody** - console only |
 | `msgAuth/<uid>` | readable and writable only by that same `auth.uid` |
 | `messages` | scoped, see below |
+| `careers/<CODE>` | readable by anyone signed in; writable only by the uid that claimed `<CODE>` in `msgAuth`, or an admin |
+
+`careers/<CODE>` is Baseball's career sync (BB-0-phase-0-handoff.md; `js/career-store.js`). It
+reuses the SAME `msgAuth/<uid> = "<CODE>"` claim `messages/` already relies on, rather than a
+second claim mechanism - a device that has claimed its code for Messages has already claimed it
+for this too. Until this branch is published (see "Deploy" below), every write here is denied and
+`js/career-store.js` says so loudly (`HEALTH_DENIED`) while continuing to play locally.
 
 ## How `messages/` is scoped
 
@@ -103,4 +110,5 @@ the three-dot menu → **Export JSON**. That runs as you, not anonymously.
 
 Keep `BRANCHES` in `backups/rtdb-backup.mjs` in step with this file. **A branch added here and
 forgotten there is silently missing from every future backup**, which is the worst shape a
-backup bug can take, because the backup is trusted.
+backup bug can take, because the backup is trusted. `careers` was added to `BRANCHES` in the same
+commit that added this branch (BB-0-phase-0-handoff.md).

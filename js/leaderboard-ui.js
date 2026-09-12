@@ -194,6 +194,11 @@ const GAME_META = [
   // the row costs nothing while nobody but the dev profile can play, and a row added later (after
   // someone already has plays) is exactly the Yahtzee bug this comment chain keeps citing.
   { id: 'golf', labelKey: 'game_title_golf' },
+  // Phase 0 (BB-0-phase-0-handoff.md): the row exists from the first commit for the same reason
+  // Pinball's does - a game with no row here is worth zero wins and zero plays on every screen of
+  // it (root CLAUDE.md, "GAME_META is a registry"), and `devOnly` games are only DEFAULTS now
+  // (the admin control page), so a game can go live from inside the app with no commit at all.
+  { id: 'baseball', labelKey: 'game_title_baseball' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);

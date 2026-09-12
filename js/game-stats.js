@@ -170,7 +170,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -224,6 +224,18 @@ export const SN_WALLS = ['on', 'off'];
 // separate picker), and hill-climb/js/catalog.js maps them 1:1 onto easy|medium|hard|expert for
 // byDiff, so the leaderboard's per-tier breakdown reads as the per-stage breakdown.
 export const HC_STAGES = ['countryside', 'desert', 'arctic', 'moon'];
+
+// Baseball (phase 0 - stats plumbing only, root CLAUDE.md / BB-0-phase-0-handoff.md). Leagues in
+// ladder order; trophies 0-3; leagues numbered 1-5 to match BB_LEAGUE_MIN/MAX; hands are the two
+// values `setBaseballHand` will ever accept.
+export const BB_LEAGUES = ['little', 'highschool', 'college', 'minors', 'majors'];
+export const BB_TROPHY_NONE = 0;
+export const BB_TROPHY_BRONZE = 1;
+export const BB_TROPHY_SILVER = 2;
+export const BB_TROPHY_GOLD = 3;
+export const BB_LEAGUE_MIN = 1;
+export const BB_LEAGUE_MAX = 5;
+export const BB_HANDS = ['L', 'R'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -661,6 +673,94 @@ function bumpHoleBests(g, map) {
   }
 }
 
+/** Baseball: career-mode counters (phase 0 - no game yet, see BB-0-phase-0-handoff.md and its
+ *  "final bb key list" amendment, 2026-09-12, which took this from 28 keys to 42). Integer
+ *  counters are additive lifetime totals; `bestRunsGame`/`bestStrikeoutsPitchedGame`/
+ *  `bestWinStreak` are Math.max only (THE LAW rule 2); `bestLeague` is the furthest ladder rung
+ *  (1-5) any career has reached, `bestTrophyByLeague` the best trophy earned per league, both
+ *  Math.max; `hand` is a one-tap preference written once (see setBaseballHand, never THE LAW's
+ *  subject); `history` holds one row per FINISHED career, keyed by careerId, and is never pruned
+ *  (rule 5) - the full career document lives under `careers/<CODE>/baseball/history/<careerId>`
+ *  in Firebase (js/career-store.js), this row is only the leaderboard/My-Stats-facing summary
+ *  written by recordBaseballCareerFinished.
+ *
+ *  Six facts pinned here rather than re-derived by a later session:
+ *  - `atBats` is plate appearances minus `walksDrawn` minus `sacFlies` minus `sacBunts`.
+ *  - `runsScored` is the player's OWN team; `runsAllowed` is the opponent's.
+ *  - `seasons` increments when a season RESOLVES: after the championship game, or when the
+ *    regular season ends with no playoff place. A missed playoff season still counts.
+ *  - `forfeits` is a breakout of `total.lost` (bumpTotals already counts a forfeit as a loss);
+ *    it exists so "how many of my losses were forfeits" doesn't need a second store to answer.
+ *  - `careersFinished` equals the number of `history` rows, and `bestLeague` is derivable from
+ *    `byDiff`. **Both are kept as stored and never recomputed from those sources - do not add a
+ *    third copy that has to agree with two others.**
+ *  - `bronzes`/`silvers`/`golds` count TROPHIES WON, additively, because `bestTrophyByLeague` is
+ *    a Math.max PER LEAGUE and loses every repeat (winning bronze in Minors twice only ever shows
+ *    once there). Missed-playoff seasons = `seasons` minus `(bronzes + silvers + golds)`. */
+function ensureBb(g) { if (!g.bb || typeof g.bb !== 'object') g.bb = {
+  careersStarted: 0, careersFinished: 0, seasons: 0, forfeits: 0, wsTitles: 0, perfectSeasons: 0,
+  hits: 0, doubles: 0, triples: 0, homers: 0, atBats: 0, runsScored: 0, walksDrawn: 0,
+  runsAllowed: 0, hitsAllowed: 0, walksIssued: 0, inningsPitchedOuts: 0,
+  strikeoutsBatting: 0, strikeoutsPitched: 0,
+  sacFlies: 0, sacBunts: 0, rbi: 0, stolenBases: 0, caughtStealing: 0, pickoffs: 0, homersAllowed: 0,
+  bronzes: 0, silvers: 0, golds: 0,
+  shutouts: 0, walkoffWins: 0, extraInningGames: 0,
+  noHitters: 0, perfectGames: 0, grandSlams: 0,
+  bestRunsGame: 0, bestStrikeoutsPitchedGame: 0, bestWinStreak: 0,
+  bestLeague: 0, bestTrophyByLeague: {}, hand: null, history: {},
+};
+  for (const k of ['careersStarted', 'careersFinished', 'seasons', 'forfeits', 'wsTitles', 'perfectSeasons',
+    'hits', 'doubles', 'triples', 'homers', 'atBats', 'runsScored', 'walksDrawn',
+    'runsAllowed', 'hitsAllowed', 'walksIssued', 'inningsPitchedOuts',
+    'strikeoutsBatting', 'strikeoutsPitched',
+    'sacFlies', 'sacBunts', 'rbi', 'stolenBases', 'caughtStealing', 'pickoffs', 'homersAllowed',
+    'bronzes', 'silvers', 'golds',
+    'shutouts', 'walkoffWins', 'extraInningGames',
+    'noHitters', 'perfectGames', 'grandSlams',
+    'bestRunsGame', 'bestStrikeoutsPitchedGame', 'bestWinStreak', 'bestLeague']) {
+    if (!Number.isFinite(g.bb[k])) g.bb[k] = 0;
+  }
+  if (!g.bb.bestTrophyByLeague || typeof g.bb.bestTrophyByLeague !== 'object') g.bb.bestTrophyByLeague = {};
+  for (const lg of BB_LEAGUES) if (!Number.isFinite(g.bb.bestTrophyByLeague[lg])) g.bb.bestTrophyByLeague[lg] = 0;
+  if (g.bb.hand !== null && (typeof g.bb.hand !== 'object' || BB_HANDS.indexOf(g.bb.hand.v) < 0)) g.bb.hand = null;
+  if (!g.bb.history || typeof g.bb.history !== 'object') g.bb.history = {};
+}
+
+// Every additive lifetime counter EXCEPT bronzes/silvers/golds, which are derived from `extras.trophy`
+// (see applyBaseball) rather than accepted as a generic named field - a caller cannot hand them a
+// number directly, only earn them through a trophy result.
+const BB_ADDITIVE_KEYS = ['careersStarted', 'careersFinished', 'seasons', 'forfeits', 'wsTitles', 'perfectSeasons',
+  'hits', 'doubles', 'triples', 'homers', 'atBats', 'runsScored', 'walksDrawn',
+  'runsAllowed', 'hitsAllowed', 'walksIssued', 'inningsPitchedOuts',
+  'strikeoutsBatting', 'strikeoutsPitched',
+  'sacFlies', 'sacBunts', 'rbi', 'stolenBases', 'caughtStealing', 'pickoffs', 'homersAllowed',
+  'shutouts', 'walkoffWins', 'extraInningGames',
+  'noHitters', 'perfectGames', 'grandSlams'];
+
+/** Fold one game's worth of `extras` into `g.bb`, additive counters plus the Math.max bests and
+ *  the league/trophy bests. Shared by recordBaseball and the pending-results replay so the two
+ *  paths cannot drift apart (same reasoning as bumpTotals). `bronzes`/`silvers`/`golds` are
+ *  written HERE, on the same call that raises `bestTrophyByLeague`, rather than accepted as a
+ *  generic extras field - see BB_ADDITIVE_KEYS's comment and ensureBb's header. */
+function applyBaseball(g, league, extras) {
+  ensureBb(g);
+  const e = extras || {};
+  for (const k of BB_ADDITIVE_KEYS) g.bb[k] += Math.max(0, e[k] | 0);
+  g.bb.bestRunsGame = Math.max(g.bb.bestRunsGame | 0, e.runsThisGame | 0);
+  g.bb.bestStrikeoutsPitchedGame = Math.max(g.bb.bestStrikeoutsPitchedGame | 0, e.strikeoutsPitchedThisGame | 0);
+  g.bb.bestWinStreak = Math.max(g.bb.bestWinStreak | 0, e.winStreak | 0);
+  const leagueIdx = BB_LEAGUES.indexOf(league);
+  if (leagueIdx >= 0) {
+    g.bb.bestLeague = Math.max(g.bb.bestLeague | 0, leagueIdx + 1);
+    if (Number.isFinite(e.trophy) && e.trophy > 0) {
+      g.bb.bestTrophyByLeague[league] = Math.max(g.bb.bestTrophyByLeague[league] | 0, e.trophy | 0);
+      if (e.trophy === BB_TROPHY_BRONZE) g.bb.bronzes += 1;
+      else if (e.trophy === BB_TROPHY_SILVER) g.bb.silvers += 1;
+      else if (e.trophy === BB_TROPHY_GOLD) g.bb.golds += 1;
+    }
+  }
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -688,6 +788,7 @@ function normalize(raw) {
   ensureBs(st.games.battleship);
   ensureSk(st.games.skeeball);
   ensureGf(st.games.golf);
+  ensureBb(st.games.baseball);
   return st;
 }
 
@@ -843,6 +944,9 @@ function drainPendingResults(st) {
     if (e.game === 'escoba') {
       ensureEs(st.games.escoba);
       st.games.escoba.es.escobas += ((e.extras && e.extras.escobas) | 0);
+    }
+    if (e.game === 'baseball') {
+      applyBaseball(st.games.baseball, normDiff(e.diff), e.extras);
     }
     applied++;
   }
@@ -1161,6 +1265,73 @@ export function recordEscoba(difficulty, won, extras) {
   g.es.escobas += (extras && extras.escobas) | 0;
   st.updatedAt = new Date().toISOString();
   persistOrQueue(st, { game: 'escoba', diff: difficulty, won, extras: { escobas: (extras && extras.escobas) | 0 } });
+  return st;
+}
+
+/** Baseball: record one finished game within a career (phase 0 - no game calls this yet). `league`
+ *  is the ladder id in play (one of BB_LEAGUES); `won` is true/false/null exactly as recordResult.
+ *  `extras` carries this one game's additive counters (see BB_ADDITIVE_KEYS) plus `runsThisGame`/
+ *  `strikeoutsPitchedThisGame`/`winStreak` (each folded into its matching Math.max-only best) and
+ *  `trophy` (folded into bestTrophyByLeague[league], raises bestLeague to this league's rung if
+ *  higher, and additively bumps bronzes/silvers/golds for whichever trophy this call reports).
+ *
+ *  IDEMPOTENCY CONTRACT: this writer never de-duplicates a game - the caller must call it AT MOST
+ *  ONCE per finished game, the same contract every other recordX() in this file already holds.
+ *  A write that fails is queued rather than dropped (persistOrQueue), same as recordEscoba above. */
+export function recordBaseball(league, won, extras) {
+  const st = loadStats();
+  const g = st.games.baseball;
+  ensureBb(g);
+  const d = normDiff(league);
+  bumpTotals(g, d, won);
+  applyBaseball(g, d, extras);
+  st.updatedAt = new Date().toISOString();
+  persistOrQueue(st, { game: 'baseball', diff: d, won, extras: extras || {} });
+  return st;
+}
+
+/** Baseball: set this device's batting hand once. Writes `{ v, at: Date.now() }` only when no
+ *  hand is stored yet (a one-tap preference the player picks once, not history that changes
+ *  hand-to-hand - THE LAW rule 2's carve-out does not even apply, since nothing here is ever
+ *  overwritten with less: it is simply never overwritten at all once set). Returns the stored
+ *  value either way, so a caller always learns what is now on record. Warns (never throws) when it
+ *  refused a later write, and rejects any value outside BB_HANDS. */
+export function setBaseballHand(hand) {
+  const st = loadStats();
+  const g = st.games.baseball;
+  ensureBb(g);
+  if (BB_HANDS.indexOf(hand) < 0) {
+    console.warn(`[game-stats] setBaseballHand: '${hand}' is not one of ${BB_HANDS.join('/')}; ignored`);
+    return g.bb.hand;
+  }
+  if (g.bb.hand) {
+    console.warn('[game-stats] setBaseballHand: hand already recorded; refusing to overwrite', g.bb.hand);
+    return g.bb.hand;
+  }
+  g.bb.hand = { v: hand, at: Date.now() };
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return g.bb.hand;
+}
+
+/** Baseball: fold one finished career's summary row into `bb.history`, keyed by its careerId, and
+ *  bump `careersFinished`. Additive/union only (THE LAW rules 2 and 5): an existing row for the
+ *  same careerId is replaced ONLY if the incoming row's `endedAt` is later, so a stale replay can
+ *  never regress a career's own recorded summary. `row` is the frozen history-row shape documented
+ *  in js/CLAUDE.md, "Career sync" - the full career document lives in Firebase
+ *  (careers/<CODE>/baseball/history/<careerId>), this is only the summary. */
+export function recordBaseballCareerFinished(row) {
+  const st = loadStats();
+  const g = st.games.baseball;
+  ensureBb(g);
+  if (!row || typeof row !== 'object' || !row.careerId) return st;
+  const existing = g.bb.history[row.careerId];
+  if (!existing || (row.endedAt | 0) > (existing.endedAt | 0)) {
+    g.bb.history[row.careerId] = row;
+  }
+  g.bb.careersFinished += 1;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
   return st;
 }
 

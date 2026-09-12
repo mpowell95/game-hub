@@ -589,6 +589,7 @@ export const STRINGS = {
     game_title_skeeball: 'Skeeball',
     game_title_pinball: 'Pinball',
     game_title_golf: 'Golf',
+    game_title_baseball: 'Baseball',
     lb_offline: 'The leaderboard needs a connection. It lights up when you are online.',
     // Shown INSTEAD of lb_offline when the browser says we are online but the first answer from
     // Firebase is slow (three cross-origin imports plus a sign-in). Never blames the connection.
@@ -1173,6 +1174,7 @@ export const STRINGS = {
     game_title_skeeball: 'Skeeball',
     game_title_pinball: 'Pinball',
     game_title_golf: 'Golf',
+    game_title_baseball: 'Béisbol',
     lb_offline: 'La clasificación necesita conexión. Se activa cuando estás en línea.',
     lb_slow: 'Cargando la clasificación. Puede tardar un momento si la conexión es lenta.',
     lb_back_games: '&larr; Juegos',

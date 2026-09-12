@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v805';
+const CACHE = 'game-hub-v808';
 
 const ASSETS = [
   './',
@@ -57,6 +57,10 @@ const ASSETS = [
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
   './js/messages-ui.js',
+  // Baseball's career sync (BB-0-phase-0-handoff.md step 9). SHELL for the same reason: it must be
+  // reachable offline the moment a career-mode game imports it, on the same device that just
+  // played offline.
+  './js/career-store.js',
   // The admin control page and the app-wide config it reads. admin-config.js is SHELL because every
   // device reads it on every launcher render (it decides which game cards exist); admin-ui.js sits
   // beside it because it is tiny and only Matt ever imports it.
@@ -339,6 +343,13 @@ const ASSETS = [
   './golf/courses/redmesa.js',
   './golf/courses/oasissands.js',
   './golf/courses/tutorial.js',
+
+  // Baseball, phase 0 (BB-0-phase-0-handoff.md): a devOnly placeholder tile, no game yet.
+  './baseball/',
+  './baseball/index.html',
+  './baseball/css/baseball.css',
+  './baseball/js/ui.js',
+  './baseball/js/strings.js',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -518,6 +529,9 @@ const NETWORK_FIRST = [
   // Reads or writes player data.
   './js/game-stats.js', './js/game-stats-global.js', './js/stats-net.js', './js/profile-store.js',
   './js/players-agg.js', './js/stats-corrections.js', './js/arcade-scores.js', './js/messages.js',
+  // Baseball's career sync (BB-0-phase-0-handoff.md step 9): reads/writes players/<code>'s own
+  // careers/ node, same freshness class as every other player-data module above.
+  './js/career-store.js',
   './js/bug-report.js', './js/device-report.js', './js/admin-config.js', './js/error-log.js',
   './js/net.js', './js/install-state.js', './js/firebase-boot.js', './js/firebase-config.js',
   // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
@@ -702,12 +716,12 @@ const REST_MANIFEST = {
   './hill-climb/': '527615b38c',
   './hill-climb/index.html': '527615b38c',
   './hill-climb/css/hill-climb.css': '5b33ca4553',
-  './hill-climb/js/ui.js': 'db4010c86b',
+  './hill-climb/js/ui.js': '449654db43',
   './hill-climb/js/physics.js': 'f9a9689016',
   './hill-climb/js/terrain.js': '5bc901c361',
   './hill-climb/js/render.js': '623cbf7db4',
   './hill-climb/js/catalog.js': 'af37e0755a',
-  './hill-climb/js/store.js': 'b63beb6fd1',
+  './hill-climb/js/store.js': 'ba8e06d2a7',
   './hill-climb/js/strings.js': '2e12d1e4cd',
   './skeeball/': '0a8f7a9c7c',
   './skeeball/index.html': '0a8f7a9c7c',
@@ -762,6 +776,11 @@ const REST_MANIFEST = {
   './golf/courses/redmesa.js': '4bd568276c',
   './golf/courses/oasissands.js': 'b26e3a67c2',
   './golf/courses/tutorial.js': '5f72833828',
+  './baseball/': '62e2408169',
+  './baseball/index.html': '62e2408169',
+  './baseball/css/baseball.css': '525dba5480',
+  './baseball/js/ui.js': '775f46fb69',
+  './baseball/js/strings.js': 'eec454237c',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': 'b7b65f248d',

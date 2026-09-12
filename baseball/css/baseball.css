@@ -1,0 +1,38 @@
+/* baseball.css - phase 0: placeholder-screen chrome only. No game yet (see baseball/CLAUDE.md).
+ * Everything is scoped under .bb-root, root CLAUDE.md's convention (a 2-3 letter game prefix). */
+
+.bb-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+  background: #eaeff7;
+  color: #16210f;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+:root.gh-dark .bb-root {
+  background: #0d1420;
+  color: #e7edf5;
+}
+
+.bb-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.bb-body {
+  font-size: 15px;
+  line-height: 1.4;
+  max-width: 340px;
+  margin: 0;
+  opacity: 0.85;
+}

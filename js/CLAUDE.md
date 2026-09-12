@@ -2035,6 +2035,59 @@ failed `persist()` through `persistOrQueue()`, and should be.
 
 ---
 
+## Career sync (2026-09-12, `js/career-store.js`)
+
+Baseball's shared career-mode store (BB-0-phase-0-handoff.md, phase 0: plumbing only, no game
+reads or writes through this yet). Full identifier freeze and the stats-shape half of this:
+`baseball/CLAUDE.md`.
+
+**The node**: `careers/<CODE>/baseball/{live, history/<careerId>, forks/<deviceId>-<time>}` in the
+shared named `'stats'` Firebase app (the same one `js/stats-net.js` and `js/net.js` share via
+`js/firebase-boot.js` — no second app). `live` sits ONE LEVEL DOWN from `baseball`, not directly
+on it, because an RTDB node is a document or a parent of documents, never both — `history` and
+`forks` are collections (one entry per careerId / per fork event), so `baseball` itself has to be
+a plain parent, and `live` needs its own child slot to be a document.
+
+**The document**: `{ v, code, careerId, seq, baseSeq, updatedAt, device, rulesV, state }`. `state`
+is opaque to this module — it belongs to whatever phase actually builds the game.
+
+**`reconcile(local, remote)`** is the whole of the sync decision, pure and headless-tested: `none`
+(neither side has moved past the shared `baseSeq` since they last agreed), `push` (only local has
+moved — write it up), `adopt` (only remote has moved — take it), `fork` (BOTH sides moved past
+`baseSeq` — genuine concurrent edits, e.g. two devices playing the same career offline at once).
+This is the same shape of decision `js/net.js`'s divergence recovery makes between two players'
+devices in a multiplayer room, applied here to one PERSON's own devices instead.
+
+**A fork archives the local copy under `forks/` BEFORE adopting remote** — nothing a player did on
+their own device is ever silently discarded (THE LAW rule 1); it is filed away under its own path
+instead of overwritten. `retireCareer(row)` is one multi-path Firebase `update()` writing
+`history/<careerId>` and nulling `live` TOGETHER, re-read to verify both landed, and only THEN does
+`recordBaseballCareerFinished(row)` fold the summary into the local `js/game-stats.js` store — in
+that order, so a career is never marked finished locally before Firebase actually agrees `live` is
+gone.
+
+**Sync health** (`gamehub.careerSync.v1`, `careerSyncHealth()`) follows `js/stats-net.js`'s own
+reference pattern (THE LAW rule 6): `HEALTH_OK`, `HEALTH_PULLING`, `HEALTH_OFFLINE_LOCAL`,
+`HEALTH_FORK`, `HEALTH_DENIED` — a permission-denied write records `HEALTH_DENIED` and logs at
+`console.error`, and nothing here ever throws into a caller; the store keeps playing locally
+regardless of what Firebase says. **Until `database.rules.json`'s `careers` branch is published**
+(Matt publishes rules by hand, app first — `database.rules.README.md`), every write is denied and
+this is exactly the state a device should see.
+
+**Guards**: every call resolves the player code through `myCode()` (`js/messages.js`) fresh, never
+at module scope, and calls `ensureAuthClaim()` (also `js/messages.js`, exported for this reuse)
+before every write — the same `msgAuth/<uid>` claim `messages/` already relies on, not a second
+claim mechanism. `writesAllowed()` (exported from `js/stats-net.js` for this reuse) gates every
+write the same way it gates `syncMyStats`/`claimUsername` — a dev origin never writes to the
+family database.
+
+**`test-career-sync.mjs`** drives the real `pullCareer`/`pushCareer`/`retireCareer` — not a mirror
+of their logic — against a fake `{db, api}` installed via a test-only
+`globalThis.__CAREER_TEST_BOOT__` seam that `boot()` checks before calling the real
+`getStatsApp()`. Never set that global outside a test process.
+
+---
+
 ## The admin config (2026-08-24)
 
 The switches Matt can flip from inside the app, and the contract every reader depends on. The
