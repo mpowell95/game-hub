@@ -74,6 +74,7 @@ A plain file:// open will NOT work. ES modules need real HTTP.
 ```
 node pinball2/probes/run.mjs            # all of them, about 95 seconds
 node pinball2/probes/run.mjs power      # one: drain,tunnel,flip,power,ramp,escape,gaps,rests
+                                        # an unknown name EXITS 2; `ramps`/`traps` are aliases
 node pinball2/probes/test-checks.mjs    # are the checks themselves right? headless, under a second
 node pinball2/probes/test-editor.mjs    # the browser tests; needs `node server.mjs` running
 ```
@@ -377,45 +378,86 @@ permanently.
 
 One file, `editor/editor.js`. Four modes, switched by the header tabs.
 
-### The workspace (rebuilt 2026-09-11)
+### The workspace (rebuilt 2026-09-11, redesigned 2026-09-12)
 
-**A grid whose canvas row is a FIXED size.** Everything docks around it and the table never moves
-or resizes when you switch modes. That is not tidiness: the canvas used to be a flex child that
-grew and shrank with whatever the panel below happened to contain, so switching tabs resized it
-with no window `resize` event, the view transform still described the previous height, and every
-tap landed an inch from the finger. A `ResizeObserver` patches that. A fixed row means there is
-nothing to patch, and `test-editor.mjs` measures the canvas box in all four modes and fails if they
-ever differ (393x477@81 on a phone).
-
-`--stage-h` is **56svh**, and svh is deliberate: `dvh` changes as a phone's URL bar slides, which
-would resize the canvas on every scroll - the same bug wearing a different hat.
+Matt, 2026-09-12: *"This pinball tool is unusable. It's bad. Make it look like a polished,
+professional editing software."*
 
 ```
-  header    title, build chip, ZOOM (- + Fit), tab strip
-  stage     the canvas, fixed height, never reflows
-  objbar    Undo, Redo, Snap, Duplicate, Delete - EVERY mode
-  dock      #panel > #dockA + #dockB, scrolls inside its own row
+  header    52   build chip, table selector
+  modebar   52   a SEGMENTED CONTROL: Play / Edit / Tune / Check
+  work     1fr   [ tool rail 58 | canvas ]
+  status    24   facts: one line, tabular numbers
+  objbar    54   ONE row, always, scrolling sideways
+  sheet     var  grab handle + #panel > #dockA + #dockB
 ```
 
-**The dock has two halves and the tabs swap only their contents.** `#dockA` is the primary column
-(palette / play controls / tune groups / check buttons) and `#dockB` the secondary (inspector /
-results). A renderer just appends to `panel`, which is pointed at whichever half it is filling.
+Five things about this, each of which was a defect before it was a layout:
 
-**On a phone they stack in one scroller; at `min-width: 900px` they become the left and right docks
-either side of the table.** `#panel { display: contents }` drops the wrapper out of the grid so the
-two halves land in it directly - same DOM, same code, two shapes. With a part selected, `#panel.sel`
-gives `#dockB` `order: -1` so the inspector is above the palette on a phone; on the wide layout the
-grid places both and order is moot.
+1. **THE TOOL RAIL IS IN THE DEAD GUTTER.** The table is 0.515 x 1.067 m and a phone is portrait, so
+   the canvas is fitted by HEIGHT and ~59% of its width is black margin. Chrome put there costs the
+   table nothing. It is a real grid COLUMN, not something floating over the canvas, so no part of a
+   table can ever end up under a button. It holds the mode's tools, and the **zoom cluster is pinned
+   to its bottom in every mode** - in its own non-scrolling grid row, because `margin-top: auto`
+   inside one scrolling box put Fit off the bottom of the screen on a 360x640 phone.
+2. **NOTHING IS DRAWN ON THE TABLE.** The old `#hud` was absolutely positioned over the canvas and
+   covered the top rail and two lanes of every table in every mode - on the one screen whose whole
+   job is letting you look at the table. Facts are in `#status` now. The only thing still allowed
+   over the canvas is `#toast`, and only while it is saying what the next tap will do.
+3. **THE SHEET IS DRAGGABLE, AND ITS HEIGHT IS SHARED BY ALL FOUR MODES.** Tap the handle to open or
+   shut (it returns to the height you last had open); drag it for anything in between; it snaps to
+   the nearest of three detents and remembers itself in `pinball2.editor.sheet`. Shut, the table is
+   drawn **306 x 635 on a 393 x 852 phone, against 230 x 477 before** - 77% more area. One height for
+   every mode is deliberate: a per-mode height resizes the canvas on a tab switch with no window
+   resize event, which is the bug this layout exists to prevent.
+4. **THE OBJECT BAR IS ONE ROW AT A FIXED HEIGHT.** It used to be a COLUMN that grew a second row
+   whenever something was selected or a ramp path was open - silently changing the canvas's height
+   mid-edit, the same class of bug, unnoticed because the regression test compares modes with
+   nothing selected. The contextual controls extend or replace the row inside one scrolling track.
+5. **44px IS THE FLOOR AND IT IS NOW TESTED.** `docs/BUILDING-A-GAME.md` Part 0 has always said so
+   and nothing here had ever checked: measured on the build Matt called unusable, **14 controls in
+   Play alone were under 44px**, and the first pass at this redesign made several smaller still,
+   because a dense desktop screenshot looks right. The band heights are 44-plus for that reason
+   alone. Density comes from removing rows and quietening fills, never from shrinking the target.
+   A mouse gets the dense treatment, scoped to `@media (pointer: fine)` so a touch device can never
+   take that branch however wide its screen.
 
-**Zoom and the object controls are chrome, not panel content.** They were inside the Edit panel,
-which meant undo was unreachable the moment you switched to Tune to see what a slider had done, and
-the only zoom on a phone was a pinch you had to know about. `syncObjBar()` greys the whole bar in
-Play, where there is nothing selected and nothing to undo.
+**On a phone the rail and the canvas are a column pair with the sheet underneath; at
+`min-width: 900px` - or on any screen wider than 600px and shorter than 560px, which is a phone in
+landscape - the same elements become the four-column desktop layout** (rail, left dock, canvas,
+right inspector). `#work`, `#sheet` and `#panel` all go `display: contents` so their children land
+in the grid directly: same DOM, same code, two shapes. Landscape needed it: stacked, the fixed bands
+plus a peeking sheet come to 334px, and the canvas measured **794 x 58**.
+
+**`#work` needs `grid-template-rows: minmax(0, 1fr)` and `#work > * { min-height: 0 }`.** Without
+them the single implicit row is `auto`, which means max-content: on a 360x640 phone the rail's eight
+tools plus the zoom cluster came to 557px, the row grew to fit them, and the canvas grew with it -
+557px tall in a 267px slot, with the status bar, the object bar and the whole sheet pushed off the
+bottom of the screen. It looked perfect at 393x852 purely because the content happened to fit, which
+is why `test-editor.mjs` now checks a SMALL phone and a LANDSCAPE one rather than the one size that
+was being screenshotted.
+
+**The rail's buttons show a short word AND carry the full one** (`railBtn`, `.sr`). An icon-only rail
+is fine where a tooltip is one hover away; on a phone there is no hover and a tooltip is a control
+with no label at all. The rail is 58px and 11px is the floor, which together allow about six
+characters, so "Slow motion" is visible as "Slow" and readable in full by a screen reader - which is
+also the string `test-editor.mjs` looks for, deliberately: what a person reads and what the contract
+checks should never be two different strings.
+
+**`renderRail()` rebuilds only when the MODE changes.** `renderPanel()` runs on every pointermove of
+a drag (through `afterEdit`), and rebuilding eight palette buttons per move is churn on the one path
+that has to stay smooth - and in Play it would throw away the Pause and Slow buttons' own state.
+
+`--sheet-h` is set in px from JS. `svh` is still used for the tall detent's cap, not `dvh`: `dvh`
+changes as a phone's URL bar slides, which would resize the canvas on every scroll.
 
 ### Play
 The real engine. Hold the left or right half of the table to flip, or **Z** and **M** (or the arrow
-keys) on a keyboard. **Space** drops a new ball. The panel has New ball, Slow motion, Pause and Step
-frame. The HUD top-left shows ball speed, and any jams, escapes or draw errors.
+keys) on a keyboard. **Space** drops a new ball. **The transport is in the rail**: New ball (which
+keeps the id `launch`, from when it was a button floating on the canvas over BOARDWALK's right
+outlane), Slow motion, Pause and Step frame. The status bar shows ball speed, and `jams`, `rescues`,
+`escapes` and `broken` **only when they are not zero**, so the bar stays quiet and a number appearing
+in it means something.
 
 ### Edit
 - **Tap** a part to select. **Shift/Ctrl/Cmd-tap** adds or removes. **Drag empty space** lassoes.
@@ -483,6 +525,17 @@ Sliders are live while a ball is in play. **Copy config** puts the whole block o
 pasting into `config.js`. **Back to defaults** restores.
 
 ### Check
+**The sweeps run ACROSS FRAMES, with a progress bar and a Stop button** (`runChunked`). They used
+to run in one blocking call inside a `setTimeout`: the panel painted "dropping balls..." and the page
+was then dead for 3.5 s on TEST BOX and 5.8 s on BOARDWALK - measured on a desktop, several times
+that on a phone - with three frames rendered in the whole of it, no progress and no way to stop.
+Leaving the tab abandons an in-flight sweep. The budget is per FRAME (20 ms), never a fixed chunk
+size: one drop on a 44-part table costs many times what one on the bare box costs.
+
+**The in-app sweeps use a COARSER grid than `probes/run.mjs`** (rest 16 mm against 12 mm, tunnel 16
+angles against 24), and both now SAY SO in their own result text. They did not, and a check whose
+answer is weaker than the one gating the deploy has to admit it.
+
 **The buttons are in dock A and the report in dock B.** In one column a long result pushed the
 buttons off the bottom of the screen, so you could not re-run the check you were reading.
 
@@ -738,6 +791,13 @@ browser tests to drive. The tests drive the real tool through it rather than a c
 A check that only runs in a terminal is a check nobody runs; one that only runs in a browser cannot
 gate a deploy.
 
+**Every slow check is a GENERATOR, and the plain function drains it** (`tunnelProbeGen` /
+`tunnelProbe`, `restSweepGen` / `restSweep`, both through `drain()`). ONE implementation with two
+entry points, never a fast copy beside a careful one: a chunked variant written alongside the tested
+one is a second implementation that will disagree with it eventually, and the thing they would
+disagree about is whether your table is safe. Verified after the refactor: the same 2781 drops, 956
+shots, 73152 escapes and 528/920/927/933 mm as before it.
+
 **They report COORDINATES, never percentages.** A soak samples where it happens to go; the old
 pinball's docs record four soaks passing a table that was unplayable in thirty seconds.
 
@@ -824,6 +884,14 @@ positions through `playable()` before you believe a word of its output.**
 9. **Watch the number that matters.** Chasing the flipper bug, four separate fixes moved the ball's
    top SPEED from 1.8 to 6.4 m/s and not one moved how far it TRAVELLED. A number that will not move
    when you change its supposed cause is telling you the cause is elsewhere.
+11. **44x44 is the tap floor and `test-editor.mjs` enforces it.** It is the one rule a redesign
+    breaks by accident every time, because a denser screenshot looks more professional and a
+    screenshot has no fingers. The `pointer: fine` branch is the only legitimate departure.
+12. **`#work` needs its grid row bounded** (`minmax(0, 1fr)` plus `min-height: 0` on the children),
+    or the rail's own height sets the canvas's and pushes the bottom half of the app off screen on
+    a small phone. It looks fine at 393x852.
+13. **A slow check is a generator; keep the plain function a drainer of it.** Two implementations
+    of a sweep is two answers about whether a table is safe.
 10. **Matt finds things in minutes that 76,000 automated balls miss.** Three of the four worst bugs
     here came from him playing it, not from a probe. Ship, then ask him to play it.
 

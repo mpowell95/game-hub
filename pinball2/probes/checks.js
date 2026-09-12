@@ -470,13 +470,29 @@ export function drainTime(table, cfg) {
 
 /** Fire a ball at every collider, hard, from every side. Anything that ends up outside the
  *  playfield or inside a solid went THROUGH something. */
-export function tunnelProbe(table, cfg, opts) {
+// A CHECK IS A GENERATOR, AND THE PLAIN FUNCTION DRAINS IT.
+//
+// These sweeps take seconds, and until 2026-09-12 the editor ran them in one blocking call inside a
+// setTimeout: it painted "dropping balls..." and then the whole page was dead for 3.5 s on TEST BOX
+// and 5.8 s on BOARDWALK, on a desktop - several times that on a phone - with no progress, no way
+// to stop it, and no way to tell it apart from a crash.
+//
+// The fix is a generator, so the caller decides how much to do before handing the frame back. It is
+// ONE implementation with two entry points rather than a fast copy and a careful copy: a chunked
+// variant written alongside the tested one is a second implementation that will disagree with it
+// eventually, and the thing they would disagree about is whether your table is safe.
+export function* tunnelProbeGen(table, cfg, opts) {
   const angles = (opts && opts.angles) || 24;
   const speed = (opts && opts.speed) || cfg.MAX_SPEED;
   const play = (opts && opts.play) || playable(table, cfg);
   const fails = [];
   let shots = 0;
   const solid = table.shapes.filter(isSolid);
+  // An UPPER BOUND on the shot count, for the progress bar only. The real count is whatever passes
+  // the reachable-and-legal pair below, and it is not knowable without doing the work; a bar that
+  // finishes early is better than one that has to be computed twice.
+  let est = 0;
+  for (const sh of solid) est += surfacePoints(sh, 6).length * angles;
   for (const sh of solid) {
     for (const p of surfacePoints(sh, 6)) {
       for (let i = 0; i < angles; i++) {
@@ -493,6 +509,7 @@ export function tunnelProbe(table, cfg, opts) {
         for (const o of solid) if (distToShape(o, from) < cfg.BALL_R + 2e-4) { legal = false; break; }
         if (!legal) continue;
         shots++;
+        yield { done: shots, total: est };
         const w = new World(table, cfg);
         const b = w.addBall(from, { x: dir.x * speed, y: dir.y * speed });
         for (let k = 0; k < 60 && b.alive; k++) w.step(cfg.DT);
@@ -507,15 +524,32 @@ export function tunnelProbe(table, cfg, opts) {
   return { shots, fails };
 }
 
+/** Fire at every collider from every angle at the speed cap. Did anything get through? */
+export function tunnelProbe(table, cfg, opts) {
+  return drain(tunnelProbeGen(table, cfg, opts));
+}
+
+/** Run a check generator to completion, ignoring its progress. This is what every caller outside
+ *  the editor uses, so the node CLI and the tests exercise the same code the editor does. */
+export function drain(gen) {
+  let r = gen.next();
+  while (!r.done) r = gen.next();
+  return r.value;
+}
+
 /** Every place a ball can come to rest that is not the drain. A list of coordinates, because a
  *  percentage tells you nothing about where to go and fix the table. */
-export function restSweep(table, cfg, opts) {
+export function* restSweepGen(table, cfg, opts) {
   const step = (opts && opts.step) || 0.012;
   const seconds = (opts && opts.seconds) || 6;
   const play = (opts && opts.play) || playable(table, cfg);
   const stuck = [];
   const alive = [];
   let drops = 0;
+  // WHERE THE BALLS GO IS WORKED OUT FIRST, and it is cheap: a mask lookup and a clearance test per
+  // cell, with no simulation. Doing it up front is what makes the progress bar honest - the count
+  // is the real number of drops, not an estimate that lands the bar at 60% and then stops.
+  const pts = [];
   for (let x = cfg.BALL_R; x < table.w; x += step) {
     for (let y = cfg.BALL_R; y < table.h; y += step) {
       const p = { x, y };
@@ -523,7 +557,13 @@ export function restSweep(table, cfg, opts) {
       let legal = true;
       for (const o of table.shapes) if (isSolid(o) && distToShape(o, p) < cfg.BALL_R + 2e-4) { legal = false; break; }
       if (!legal) continue;
+      pts.push(p);
+    }
+  }
+  {
+    for (const p of pts) {
       drops++;
+      yield { done: drops, total: pts.length };
       const w = new World(table, cfg);
       const b = w.addBall(p, { x: 0, y: 0 });
       const ticks = Math.round(seconds / cfg.DT);
@@ -556,7 +596,10 @@ export function restSweep(table, cfg, opts) {
   // the same call `sweep-pinball-rests.mjs` makes for the old game, and for the same reason.
   const real = [];
   const edges = [];
+  let nudged = 0;
   for (const st of stuck) {
+    nudged++;
+    yield { done: nudged, total: stuck.length, phase: 'nudge' };
     let freed = 0;
     for (const push of [{ x: 0.05, y: 0 }, { x: -0.05, y: 0 }]) {
       const w = new World(table, cfg);
@@ -568,4 +611,9 @@ export function restSweep(table, cfg, opts) {
     if (freed === 2) edges.push(st); else real.push(st);
   }
   return { drops, stuck: real, edges, alive };
+}
+
+/** Drop a ball at rest on a grid over the playfield. Did every one of them reach the drain? */
+export function restSweep(table, cfg, opts) {
+  return drain(restSweepGen(table, cfg, opts));
 }

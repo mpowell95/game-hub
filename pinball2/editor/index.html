@@ -6,18 +6,62 @@
 <link rel="icon" href="data:,">
 <title>Pinball 2 table editor</title>
 <style>
+  /* ================================================================= THE DESIGN LANGUAGE
+     Matt, 2026-09-12: "This pinball tool is unusable. It's bad. Make it look like a polished,
+     professional editing software."
+
+     What it looked like before: every control was a 38-56px filled navy pill with 13-14px bold
+     text, stacked in a scrolling column under a table that got 41% of the screen's width, with a
+     three-line status box sitting ON TOP of the playfield. That is the visual language of a
+     settings page, and a settings page is what it read as.
+
+     What an editor actually looks like, and what the rules below are for:
+       - THE WORK IS THE BIGGEST THING ON SCREEN. Everything else is a thin band around it.
+       - Chrome is QUIET: hairline borders, a neutral surface ladder, one accent colour used only
+         for the current thing.
+       - Numbers are TABULAR and never move as they change.
+       - Tools are ICONS in a rail; words are for the inspector.
+       - Nothing is ever drawn on top of the artwork. Facts live in a status bar.
+     ================================================================================= */
   :root {
-    --bg: #0b1220;
-    --panel: #16203a;
-    --line: #2a3856;
-    --ink: #e9eef7;
-    --dim: #9db0cd;
-    --accent: #ffce3a;
-    --ok: #35c07a;
-    --bad: #ff5a5a;
-    /* The table's row height. Everything else takes what is left, and the dock scrolls inside it. */
-    --stage-h: 56svh;
+    /* A surface LADDER, not two colours. Each step up is a thing that sits on the one below, which
+       is what lets hairlines do the separating instead of heavy fills. */
+    --bg:       #090d15;   /* the app ground */
+    --stage:    #05080e;   /* the cabinet the table sits in: darker than anything else */
+    --panel:    #111725;   /* docks and rails */
+    --raise:    #18202f;   /* a control's own fill */
+    --raise-2:  #202a3c;   /* a control being pressed, or a selected row */
+    --line:     #202a3d;   /* hairline. Low contrast on purpose: a border is a hint, not a wall */
+    --line-2:   #2d3a51;   /* a real divider between regions */
+    --ink:      #e8eef8;
+    --dim:      #92a6c4;
+    --faint:    #61748f;
+    --accent:   #ffce3a;   /* the repo's standing selection accent. ONE accent, used sparingly */
+    --accent-d: #2a2109;   /* ink on the accent */
+    --ok:       #35c07a;
+    --bad:      #ff5a5a;
+
+    /* Chrome bands. These are FIXED and the canvas takes what is left, which is what keeps the
+       canvas the same box in every mode - see #work below. */
+    /* THESE ARE 44-PLUS BECAUSE OF THE TAP TARGET FLOOR, not because the bands need the room.
+       docs/BUILDING-A-GAME.md Part 0: "Tap targets are 44x44px minimum, with a documented
+       exception." A first pass at this redesign had a 34px header, 26px tabs and 34px object-bar
+       buttons - dense and professional-looking on a desktop screenshot, and under the floor on the
+       device this tool is actually used on. Measured: 14 controls under 44px in Play alone. The
+       density comes from removing rows and quietening the fills, never from shrinking the target.
+       A mouse gets the denser treatment further down, scoped to `pointer: fine`. */
+    --h-header: 52px;
+    --h-modes:  52px;
+    --h-status: 24px;
+    --h-objbar: 54px;
+    --w-rail:   58px;
+    --grab:     18px;
+    /* The sheet's height, driven from JS by the drag handle. ONE value for all four modes: a
+       per-mode height is the canvas-resizes-when-you-switch-tabs bug wearing a new hat. */
+    --sheet-h:  172px;
+    --r:        7px;       /* the one corner radius. Two radii read as two design systems */
   }
+
   /* NOTHING IN THIS TOOL IS TEXT TO BE SELECTED. Matt, on the press-and-hold fine drag: "it also
      selects everything, the whole page, as if I was going to copy something."
      A long press is the OS gesture for "select this text", and it fires on the way to every fine
@@ -36,199 +80,393 @@
   html, body {
     margin: 0; height: 100%; overflow: hidden;
     background: var(--bg); color: var(--ink);
-    font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     overscroll-behavior: none;
   }
-  /* THE WORKSPACE IS A GRID AND THE CANVAS ROW IS A FIXED SIZE. That is the whole point of this
-     layout, and it is not only tidiness: the canvas used to be a flex child that grew and shrank
-     with whatever the panel below it happened to contain, so switching tabs resized it with no
-     window resize event, the view transform still described the previous height, and every tap
-     landed an inch from the finger. A ResizeObserver patches that; a fixed row means there is
-     nothing to patch. The dock scrolls INSIDE its own row and cannot push the table around.
+  /* Every number in this tool is a measurement, and a measurement that changes width as it counts
+     is the single loudest "amateur" signal a tool can give. */
+  .num, .val, input[type=number], #status, #zoomval, #report, .plrow em, #ob-step { font-variant-numeric: tabular-nums; }
 
-     svh, not vh or dvh: dvh changes as the phone's URL bar slides and would resize the canvas on
-     every scroll, which is the bug again wearing a different hat. */
+  /* A label only a screen reader reads. The transport buttons in the rail are icons, but the
+     control still has to announce itself - and the browser test finds controls by the text a
+     person reads, which is the same contract. This is the standard clip pattern, NOT an element
+     faded to opacity 0: it is meant to be in the accessibility tree (docs/BUILDING-A-GAME.md's
+     "nothing stays in the accessibility tree, invisible, after it's done" is about the opposite
+     case - decoration that hides something structural). */
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+  /* ================================================================= the frame */
   #app {
     display: grid;
-    grid-template-rows: auto var(--stage-h) auto minmax(0, 1fr);
-    grid-template-areas: "hdr" "stage" "objbar" "dock";
+    grid-template-rows: var(--h-header) var(--h-modes) minmax(0, 1fr) var(--h-status) var(--h-objbar) auto;
+    grid-template-areas: "hdr" "modes" "work" "status" "objbar" "sheet";
     height: 100%; height: 100svh;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
-  header { grid-area: hdr; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  header h1 { font-size: 13px; margin: 0 4px 0 0; font-weight: 700; letter-spacing: .04em; color: var(--dim); white-space: nowrap; }
-  .tabs { display: flex; gap: 4px; width: 100%; }
-  .tabs .tab { flex: 1; }
-  #build { min-height: 26px; padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 6px;
-           border: 1px solid var(--line); background: #101a2e; color: var(--dim); }
-  #build.stale { background: #5c2b36; border-color: #8a3d4d; color: #ffd7d7; }
-  .tab { min-height: 34px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: #101a2e; color: var(--dim); font-size: 13px; font-weight: 600; }
-  .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #21180a; }
 
-  /* The zoom cluster lives in the top bar now, so it is reachable in every mode rather than only
-     while the Edit panel happens to be open. */
-  /* The title is decoration and a phone has no room for it: the tab strip and the table selector
+  /* ---------------------------------------------------------------- header */
+  header {
+    grid-area: hdr; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    font-size: 11px; margin: 0; font-weight: 800; letter-spacing: .14em; color: var(--faint);
+    white-space: nowrap;
+  }
+  #build {
+    min-height: 44px; min-width: 48px; padding: 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    border-radius: 5px; border: 1px solid var(--line); background: var(--raise); color: var(--dim);
+  }
+  #build.stale { background: #4a2029; border-color: #7d3746; color: #ffd7d7; }
+  #tablesel {
+    min-width: 0; flex: 1 1 auto; max-width: 260px; height: 44px; padding: 0 24px 0 9px;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    background: var(--raise) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='7'><path d='M1 1l4 4 4-4' fill='none' stroke='%2392a6c4' stroke-width='1.6' stroke-linecap='round'/></svg>") no-repeat right 7px center;
+    border: 1px solid var(--line); border-radius: 5px; appearance: none; -webkit-appearance: none;
+  }
+  /* A title is decoration and a phone has no room for it: the tab strip and the table selector
      both say where you are, and the selector needs the space more. */
-  @media (max-width: 620px) { header h1 { display: none; } }
-  #tablesel { min-width: 0; flex: 1 1 120px; max-width: 190px; height: 30px; padding: 3px 6px; font-size: 12px;
-              background: #101a2e; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
-  #zoombar { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-  #zoombar button { min-height: 28px; min-width: 34px; padding: 4px 8px; font-size: 13px; }
-  #zoomval { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
+  @media (max-width: 560px) { header h1 { display: none; } }
 
-  #stage { grid-area: stage; position: relative; min-height: 0; }
+  /* ---------------------------------------------------------------- mode bar
+     A SEGMENTED CONTROL, not four buttons. Four separate pills read as four unrelated actions;
+     one track with a moving selection reads as one choice with four states, which is what it is. */
+  #modebar { grid-area: modes; display: flex; align-items: center; padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--line-2); }
+  .tabs { display: flex; width: 100%; background: #0b101a; border: 1px solid var(--line); border-radius: var(--r); padding: 2px; gap: 2px; }
+  .tabs .tab { flex: 1; }
+  .tab {
+    min-height: 44px; padding: 0 10px; border-radius: 5px; border: 0; background: transparent;
+    color: var(--dim); font-size: 12px; font-weight: 650; letter-spacing: .01em;
+  }
+  .tab[aria-pressed="true"] { background: var(--raise-2); color: var(--ink); box-shadow: inset 0 1px 0 #35435d; }
+
+  /* ---------------------------------------------------------------- the work area
+     [ tool rail | canvas ]. THE RAIL IS IN THE DEAD GUTTER, and that is the whole idea: the table
+     is 0.515 x 1.067 m, so in a portrait canvas it is fitted by HEIGHT and leaves ~59% of the
+     width as black margin. Chrome placed there costs the table nothing, and the rail being a real
+     grid column (rather than something floating over the canvas) means the canvas genuinely is
+     narrower and no part of the table can ever end up underneath a button. */
+  /* `grid-template-rows: minmax(0, 1fr)` IS LOAD-BEARING. Without it the single implicit row is
+     `auto`, which means max-content: on a 360x640 phone the rail's eight tools plus the zoom
+     cluster are 557px tall, the row grew to fit them, and the canvas grew with it - 557px tall
+     inside a 267px slot, with the status bar, the object bar and the sheet pushed off the bottom of
+     the screen. It looked correct on a 393x852 phone purely because the content happened to fit.
+     A grid child that must not exceed its track needs the track bounded AND `min-height: 0`. */
+  #work { grid-area: work; display: grid; grid-template-columns: var(--w-rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+  #work > * { min-height: 0; }
+  /* THE RAIL SCROLLS, BUT ZOOM NEVER DOES. Two rows: the tools take what is left and scroll inside
+     it, and the zoom cluster is a fixed row underneath. `margin-top: auto` inside one scrolling
+     box looked identical on a tall phone and was wrong: on a 360x640 screen, and on any phone in
+     landscape, eight palette buttons are taller than the rail, so Fit scrolled off the bottom -
+     and the whole point of putting zoom there was that it is in the same place in every mode. */
+  #railL {
+    display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; padding: 5px 5px 6px;
+    background: var(--panel); border-right: 1px solid var(--line-2);
+  }
+  /* A SCROLL SHADOW, so a rail with more tools below the fold says so. Eight parts are taller than
+     the rail on a short screen or with the sheet open, and a list that is silently cut off reads as
+     a list that ends there - Ramp and Drain were simply invisible. The classic `background-attachment:
+     local` pair: the two `local` layers scroll with the content and cover the two fixed shadows at
+     the ends, so the shadow appears only on the side that has something hidden, with no JS and no
+     scroll listener. */
+  #railtools {
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    background:
+      linear-gradient(var(--panel) 30%, rgba(17, 23, 37, 0)) top / 100% 16px no-repeat local,
+      linear-gradient(rgba(17, 23, 37, 0), var(--panel) 70%) bottom / 100% 16px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)) top / 100% 7px no-repeat,
+      radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)) bottom / 100% 7px no-repeat;
+  }
+  #railtools::-webkit-scrollbar { display: none; }
+  /* Zoom is pinned to the BOTTOM of the rail: it is the one control that belongs to every mode,
+     and the bottom of a rail is where a thumb already is. `margin-top: auto` does the pinning, so
+     it stays put whether the rail above it holds eight tools or none. */
+  #zoombar { display: flex; flex-direction: column; gap: 3px; padding-top: 6px; border-top: 1px solid var(--line); }
+  #zoombar button { min-height: 44px; font-size: 15px; padding: 0; }
+  #zoomval { font-size: 10px; color: var(--faint); text-align: center; letter-spacing: .02em; }
+  #stage { position: relative; min-width: 0; min-height: 0; background: var(--stage); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
 
-  /* Object controls, every mode. They used to be inside the Edit panel, which meant undo was
-     unreachable the moment you switched to Tune to see what a slider did. */
-  #objbar { grid-area: objbar; display: flex; flex-direction: column; gap: 4px; padding: 5px 8px; border-top: 1px solid var(--line); background: #101a2e; }
-  .obrow { display: flex; gap: 4px; overflow-x: auto; }
-  /* A class selector beats the UA's `[hidden] { display: none }`, so without this the turn/scale row
-     stays on screen in Play mode with every button dead. */
+  /* THE TOAST is the one thing allowed over the table, because it is a live instruction about what
+     the next tap will do ("tap the table to place this"), and an instruction that is not where you
+     are looking is an instruction nobody follows. It is bottom-centred, out of the play area, and
+     it is never used for facts - those are in the status bar. */
+  #toast {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+    max-width: calc(100% - 20px); padding: 5px 11px; border-radius: 999px;
+    background: rgba(255, 206, 58, .93); color: var(--accent-d);
+    font-size: 11px; font-weight: 750; letter-spacing: .01em; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; pointer-events: none; display: none;
+  }
+  #toast.on { display: block; }
+  #toast.bad { background: rgba(255, 90, 90, .93); color: #2a0b0b; }
+
+  /* ---------------------------------------------------------------- the status bar
+     This replaces the box that used to sit on the playfield covering the top rail and two lanes.
+     A status bar is where a tool puts facts: one line, always the same height, never in the way. */
+  #status {
+    grid-area: status; display: flex; align-items: center; gap: 0; padding: 0 8px;
+    background: var(--panel); border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line);
+    font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden;
+  }
+  #status .seg { display: flex; align-items: center; gap: 5px; padding: 0 9px; border-right: 1px solid var(--line); }
+  #status .seg:first-child { padding-left: 0; }
+  #status .seg:last-child { border-right: 0; }
+  #status .k { color: var(--faint); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+  #status .v { color: var(--ink); font-weight: 650; }
+  #status .grow { margin-left: auto; border-right: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 22px; color: var(--faint); }
+  #status .warn { color: var(--bad); font-weight: 750; }
+
+  /* ---------------------------------------------------------------- the object bar
+     ONE ROW, ALWAYS, at a fixed height, scrolling sideways when it holds more than fits.
+
+     It used to be a column that grew a second row whenever something was selected or a ramp path
+     was open. That silently changed the canvas's height mid-edit with no window resize event,
+     which is exactly the bug the fixed-height layout exists to prevent - it simply had not been
+     noticed yet because the test only compares modes with nothing selected. */
+  #objbar {
+    grid-area: objbar; display: flex; align-items: center; gap: 4px; padding: 0 8px;
+    background: var(--panel); border-bottom: 1px solid var(--line-2);
+    overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+  }
+  #objbar::-webkit-scrollbar { display: none; }
+  .obrow { display: flex; align-items: center; gap: 4px; }
+  /* A class selector beats the UA's `[hidden] { display: none }`, so without this a hidden row
+     stays on screen with every button dead. */
   .obrow[hidden] { display: none; }
-  #objbar button { flex: 1 0 auto; min-height: 34px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
-  /* The turn and scale row only exists while there is something to turn or scale, so the bar is one
-     row of five buttons the rest of the time rather than two rows of mostly dead ones. */
-  #obxform button { font-size: 15px; line-height: 1; }
-  #ob-step { font-size: 11px; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
-  /* pre-wrap, not pre: the line naming what is on the table runs past the right edge of a phone
-     otherwise, and a line you cannot finish reading is not a line that answers anything. */
-  #hud { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); font-size: 11px; color: var(--dim); background: rgba(8,14,26,.66); padding: 4px 7px; border-radius: 6px; pointer-events: none; white-space: pre-wrap; }
-  /* ONE dock on a phone, holding both halves stacked and scrolling as one. On a wide screen the
-     same two halves become the left and right docks: `display: contents` drops this wrapper out of
-     the layout so its children land in the grid directly. Same DOM, same code, two shapes. */
-  #panel { grid-area: dock; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); background: var(--panel); }
+  #objbar button { flex: 0 0 auto; min-height: 44px; padding: 0 11px; font-size: 12px; white-space: nowrap; }
+  .obsep { flex: 0 0 auto; width: 1px; align-self: stretch; margin: 5px 3px; background: var(--line); }
+  #obxform button { font-size: 15px; line-height: 1; min-width: 38px; padding: 0 6px; }
+  #ob-step { font-size: 10px; font-weight: 750; color: var(--dim); letter-spacing: .02em; }
+
+  /* ---------------------------------------------------------------- the sheet
+     The dock is DRAGGABLE, with three detents, and its height is shared by all four modes.
+
+     This is the other half of the layout fix. At the closed detent the table gets the whole work
+     area (measured: 333 x 690 on a 393 x 852 phone, against 230 x 477 before), which is the
+     difference between squinting at a 12px ball and actually seeing what you are building. */
+  #sheet { grid-area: sheet; display: grid; grid-template-rows: var(--grab) var(--sheet-h); background: var(--panel); border-top: 1px solid var(--line-2); }
+  #grab { display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+  #grab::before { content: ''; width: 40px; height: 4px; border-radius: 999px; background: var(--line-2); }
+  #grab:active { cursor: grabbing; }
+  #grab:active::before, #grab.on::before { background: var(--accent); }
+  #panel { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
   /* With a part selected, the inspector is the thing you came to the dock for, so on a phone it
      jumps above the palette. On a wide screen the grid places both halves and order is moot. */
   #panel.sel #dockB { order: -1; }
-  #panel.hidden { display: none; }
-  #dockA, #dockB { padding: 8px; }
-  #dockB:empty { display: none; }
+  #dockA, #dockB { padding: 8px 9px; }
+  #dockA:empty, #dockB:empty { display: none; }
   #dockA:not(:empty) + #dockB:not(:empty) { border-top: 1px solid var(--line); }
-  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-  .row > label { font-size: 11px; color: var(--dim); min-width: 74px; }
+
+  /* ---------------------------------------------------------------- controls */
+  .row { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; flex-wrap: wrap; }
+  .row > label { font-size: 11px; color: var(--dim); min-width: 78px; }
   input[type=number], input[type=text], select {
-    background: #0d1729; color: var(--ink); border: 1px solid var(--line);
-    border-radius: 6px; padding: 7px 8px; font-size: 13px; width: 88px; min-height: 34px;
+    background: #0b101a; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 5px; padding: 0 8px; font-size: 12px; font-weight: 600; width: 84px; min-height: 44px;
   }
-  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); height: 34px; }
+  input[type=number]:focus, input[type=text]:focus { outline: none; border-color: var(--accent); }
+  input[type=range] { flex: 1; min-width: 110px; accent-color: var(--accent); height: 44px; }
   button {
-    min-height: 38px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
-    background: #1d2b46; color: var(--ink); font-size: 13px; font-weight: 600;
+    min-height: 44px; padding: 0 11px; border-radius: 5px; border: 1px solid var(--line);
+    background: var(--raise); color: var(--ink); font-size: 12px; font-weight: 650;
   }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #21180a; }
-  button.danger { background: #3a1b24; border-color: #5c2b36; color: #ffb3b3; }
-  button:disabled { opacity: .45; }
-  .val { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--accent); min-width: 54px; text-align: right; }
-  .note { font-size: 11px; color: var(--dim); margin: 4px 0 8px; }
+  button:active { background: var(--raise-2); }
+  /* THE ACCENT IS FOR THE CURRENT THING, NOT FOR THE BIGGEST BUTTON. A filled yellow slab on
+     every panel trains the eye to ignore it, and then the one place it means something (the part
+     you have selected) says nothing. A primary action gets an accent EDGE and accent TEXT. */
+  button.primary { background: var(--raise); border-color: var(--accent); color: var(--accent); }
+  button.primary:active { background: #2b2410; }
+  button.danger { border-color: #5c2b36; color: #ff9b9b; }
+  button:disabled { opacity: .35; }
+  .val { font-size: 11px; color: var(--accent); min-width: 52px; text-align: right; font-weight: 700; }
+  .note { font-size: 11px; line-height: 1.45; color: var(--faint); margin: 2px 0 8px; }
   .fail { color: var(--bad); font-weight: 700; }
   .pass { color: var(--ok); font-weight: 700; }
-  pre#report { font-size: 11px; line-height: 1.45; white-space: pre-wrap; margin: 6px 0 0; color: var(--dim); }
+  pre#report { font-size: 11px; line-height: 1.5; white-space: pre-wrap; margin: 5px 0 0; color: var(--dim); }
+  h2 { font-size: 10px; margin: 9px 0 6px; color: var(--faint); text-transform: uppercase; letter-spacing: .1em; font-weight: 750; }
+  h2:first-child { margin-top: 0; }
+
+  /* A PROGRESS BAR, because a check that takes six seconds used to freeze the page with no sign of
+     life at all. See `runChunked` in editor.js. */
+  #progwrap { display: none; align-items: center; gap: 8px; margin: 6px 0 2px; }
+  #progwrap.on { display: flex; }
+  #progbar { flex: 1; height: 4px; border-radius: 999px; background: var(--raise-2); overflow: hidden; }
+  #progbar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s linear; }
+
   #touchzones { position: absolute; inset: 0; display: none; }
   #touchzones.on { display: block; }
   #touchzones div { position: absolute; bottom: 0; top: 40%; width: 46%; }
   #tz-l { left: 0; } #tz-r { right: 0; }
-  #launch { position: absolute; right: 10px; bottom: 10px; }
-  h2 { font-size: 12px; margin: 10px 0 6px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
 
-  /* The parts palette: an icon per kind, so a part is recognised rather than read. */
-  .palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; margin-bottom: 8px; }
-  .palette button { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 54px; padding: 6px 4px; font-size: 11px; }
-  .palette svg { width: 26px; height: 18px; display: block; }
+  /* ---------------------------------------------------------------- the tool rail's buttons
+     Icon over an 11px label (the UX floor's minimum, and these are the shortest words in the
+     tool). 44px of height is the floor's tap target; the rail is 58px wide so the widest label,
+     "Bumper", fits without shrinking the text. */
+  /* `#railtools` is a flex column so a bare rail button STRETCHES to the rail's width. Without it
+     the Play transport's four buttons were 30-38px wide - under the floor horizontally while being
+     44px tall, which is the kind of miss a height-only check never reports. */
+  #railtools { display: flex; flex-direction: column; gap: 4px; }
+  .palette { display: flex; flex-direction: column; gap: 4px; }
+  .palette button, .railbtn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 44px; padding: 4px 2px; font-size: 11px; font-weight: 600; line-height: 1;
+    color: var(--dim); border-color: transparent; background: transparent;
+  }
+  .palette button:active, .railbtn:active { background: var(--raise); border-color: var(--line); }
+  .palette svg, .railbtn svg { width: 24px; height: 17px; display: block; }
+  .railbtn.on { color: var(--accent); border-color: var(--accent); background: #221c08; }
 
   /* Collapsible groups. Tune was one unbroken list of 22 sliders, so reaching Ramp drag meant
      scrolling past everything else on the table. */
-  details.grp { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: #101a2e; }
-  details.grp > summary { list-style: none; cursor: pointer; padding: 9px 10px; font-size: 12px; font-weight: 700;
-                          color: var(--dim); text-transform: uppercase; letter-spacing: .05em; display: flex; align-items: center; gap: 6px; }
+  details.grp { border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 5px; background: #0e1421; }
+  details.grp > summary { list-style: none; cursor: pointer; min-height: 44px; padding: 8px 9px; font-size: 11px; font-weight: 750;
+                          color: var(--dim); text-transform: uppercase; letter-spacing: .07em; display: flex; align-items: center; gap: 6px; }
   details.grp > summary::-webkit-details-marker { display: none; }
-  details.grp > summary::after { content: '+'; margin-left: auto; font-size: 15px; color: var(--dim); }
+  details.grp > summary::after { content: '+'; margin-left: auto; font-size: 14px; color: var(--faint); }
   details.grp[open] > summary::after { content: '\2212'; }
-  details.grp[open] > summary { border-bottom: 1px solid var(--line); color: var(--accent); }
-  details.grp .grp-body { padding: 8px 10px 2px; }
+  details.grp[open] > summary { border-bottom: 1px solid var(--line); color: var(--ink); }
+  details.grp .grp-body { padding: 8px 9px 3px; }
+  details.grp.sel { border-color: var(--accent); }
+  details.grp.sel > summary { color: var(--accent); }
 
   /* A placements row: icon, kind, id. Wide and shallow, because it is a list you scan. */
-  .plrow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 5px 8px;
-           margin-bottom: 4px; font-size: 12px; font-weight: 600; text-align: left; }
-  .plrow svg { width: 22px; height: 15px; flex: none; }
+  .plrow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 4px 8px;
+           margin-bottom: 3px; font-size: 12px; font-weight: 600; text-align: left; }
+  .plrow svg { width: 21px; height: 15px; flex: none; }
   .plrow span { flex: 1; }
-  .plrow em { font-style: normal; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .plrow.on { border-color: var(--accent); color: var(--accent); }
+  .plrow em { font-style: normal; font-size: 11px; color: var(--faint); }
+  .plrow.on { border-color: var(--accent); color: var(--accent); background: #221c08; }
   .plrow.on em { color: var(--accent); }
-  details.grp.sel > summary { color: var(--accent); }
-  details.grp.sel { border-color: var(--accent); }
 
-  /* WIDE SCREEN: the docks the brief asked for. The canvas is still a fixed box that never moves;
-     the two dock halves simply sit either side of it instead of stacked underneath. */
-  @media (min-width: 900px) {
+  /* ---------------------------------------------------------------- a mouse is not a finger
+     44x44 is the floor for TOUCH (docs/BUILDING-A-GAME.md, "Part 0 - The UX floor"), and it is the
+     right floor: a fingertip is about 9mm across and cannot be aimed. A mouse pointer is one pixel
+     and can, which is why every desktop tool in this class runs at 26-30px. This is the floor's
+     "a real, verified, documented reason is how you depart from it" - the departure is scoped to
+     `pointer: fine`, so a touch device NEVER takes this branch no matter how wide its screen. */
+  @media (pointer: fine) {
+    button { min-height: 28px; font-size: 12px; }
+    #objbar button { min-height: 26px; }
+    .palette button, .railbtn { min-height: 38px; }
+    input[type=number], input[type=text], select { min-height: 28px; }
+    #zoombar button { min-height: 26px; }
+  }
+
+  /* ---------------------------------------------------------------- wide screen
+     The classic three-column editor: tools, work, inspector. The canvas is still a box that never
+     changes size between modes; the two dock halves simply sit either side of it.
+
+     THE SECOND CONDITION IS A PHONE IN LANDSCAPE, and it is not a nicety. Stacked, the fixed bands
+     plus a peeking sheet come to 334px, so at 852x393 the canvas was measured at 794x58 - a letter
+     box with no table in it, and the Fit button pushed off the bottom of the rail. A short viewport
+     has no vertical budget for a bottom sheet, and it has plenty of width for the columns the wide
+     layout puts the same panels in. Same DOM, same code, the shape that fits. */
+  @media (min-width: 900px), (min-width: 600px) and (max-height: 560px) {
     #app {
-      grid-template-columns: 210px minmax(0, 1fr) 320px;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      grid-template-areas: "hdr hdr hdr" "dockA stage dockB" "objbar objbar objbar";
+      grid-template-columns: var(--w-rail) 236px minmax(0, 1fr) 312px;
+      grid-template-rows: var(--h-header) var(--h-modes) minmax(0, 1fr) var(--h-objbar) var(--h-status);
+      grid-template-areas:
+        "hdr    hdr   hdr   hdr"
+        "modes  modes modes modes"
+        "rail   dockA stage dockB"
+        "objbar objbar objbar objbar"
+        "status status status status";
     }
+    /* `display: contents` drops the two wrappers out of the layout so their children land in the
+       grid directly. SAME DOM, SAME CODE, TWO SHAPES: the rail, the canvas and the two dock halves
+       are a column pair on a phone and four columns here, with nothing conditional in JS. */
+    #work { display: contents; }
+    #railL { grid-area: rail; border-right: 1px solid var(--line-2); }
+    #stage { grid-area: stage; }
+    #sheet { display: contents; }
+    #grab { display: none; }
     #panel { display: contents; }
-    #dockA { grid-area: dockA; overflow-y: auto; overscroll-behavior: contain; border-right: 1px solid var(--line); background: var(--panel); }
-    #dockB { grid-area: dockB; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid var(--line); background: var(--panel); }
+    #dockA { grid-area: dockA; overflow-y: auto; overscroll-behavior: contain; border-right: 1px solid var(--line-2); background: var(--panel); }
+    #dockB { grid-area: dockB; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid var(--line-2); background: var(--panel); }
+    #dockA:empty, #dockB:empty { display: block; }
     #dockA:not(:empty) + #dockB:not(:empty) { border-top: 0; }
-    #dockB:empty { display: block; }
-    #stage { background: #0a1220; }
-    .tabs { width: auto; margin-left: 10px; }
-    .tabs .tab { flex: 0 0 auto; }
-    .palette { grid-template-columns: repeat(2, 1fr); }
-    /* A phone needs these five stretched to be thumb sized. A 1280px screen does not, and a
-       quarter-metre-wide button for one glyph reads as a mistake. */
-    #obxform { justify-content: center; }
-    #obxform button { flex: 0 0 auto; min-width: 92px; }
+    .tabs { width: auto; }
+    .tabs .tab { flex: 0 0 auto; min-width: 96px; }
+    /* A phone needs these stretched to be thumb sized. A 1280px screen does not. */
+    #obxform button { min-width: 44px; }
+  }
+
+  /* A LANDSCAPE PHONE IS WIDE, NOT BIG. It takes the column layout above, but 236 + 312 of dock
+     either side of an 852px screen leaves the table 246px. The docks get what they need and no
+     more, and the bands come down to the tap floor exactly rather than sitting above it. */
+  @media (max-height: 560px) {
+    :root { --h-header: 48px; --h-modes: 48px; --h-objbar: 50px; }
+    #app { grid-template-columns: var(--w-rail) 190px minmax(0, 1fr) 230px; }
+    .tab { min-height: 44px; }
   }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <h1>PINBALL 2</h1>
+    <h1>PINBALL&nbsp;2</h1>
     <button id="build" title="which build is running">...</button>
     <select id="tablesel" title="which table you are editing"></select>
-    <div id="zoombar">
-      <span id="zoomval">100%</span>
-      <button id="zoom-out" title="zoom out">&minus;</button>
-      <button id="zoom-in" title="zoom in">+</button>
-      <button id="zoom-fit">Fit</button>
-    </div>
-    <div class="tabs">
+  </header>
+
+  <nav id="modebar">
+    <div class="tabs" role="tablist">
       <button class="tab" id="tab-play" aria-pressed="true">Play</button>
       <button class="tab" id="tab-edit" aria-pressed="false">Edit</button>
       <button class="tab" id="tab-tune" aria-pressed="false">Tune</button>
       <button class="tab" id="tab-check" aria-pressed="false">Check</button>
     </div>
-  </header>
-  <div id="stage">
-    <canvas id="c"></canvas>
-    <div id="hud"></div>
-    <div id="touchzones"><div id="tz-l"></div><div id="tz-r"></div></div>
-    <button id="launch" class="primary">Launch</button>
-  </div>
-  <div id="objbar">
-    <div class="obrow">
-      <button id="ob-undo">Undo</button>
-      <button id="ob-redo">Redo</button>
-      <button id="ob-snap">Snap on</button>
-      <button id="ob-dup">Duplicate</button>
-      <button id="ob-del" class="danger">Delete</button>
+  </nav>
+
+  <div id="work">
+    <aside id="railL">
+      <div id="railtools"></div>
+      <div id="zoombar">
+        <button id="zoom-in" title="zoom in">+</button>
+        <button id="zoom-out" title="zoom out">&minus;</button>
+        <span id="zoomval">100%</span>
+        <button id="zoom-fit" title="fit the whole table on screen">Fit</button>
+      </div>
+    </aside>
+    <div id="stage">
+      <canvas id="c"></canvas>
+      <div id="touchzones"><div id="tz-l"></div><div id="tz-r"></div></div>
+      <div id="toast"></div>
     </div>
-    <div class="obrow" id="obdraw" hidden>
-      <button id="ob-draw-undo">Undo point</button>
-      <button id="ob-draw-done" class="primary">Done</button>
-      <button id="ob-draw-cancel">Cancel</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="objbar">
+    <div class="obrow" id="obmain">
+      <button id="ob-undo" title="undo">Undo</button>
+      <button id="ob-redo" title="redo">Redo</button>
+      <button id="ob-snap">Snap on</button>
+      <span class="obsep"></span>
+      <button id="ob-dup" title="duplicate the selection">Duplicate</button>
+      <button id="ob-del" class="danger" title="delete the selection">Delete</button>
     </div>
     <div class="obrow" id="obxform" hidden>
+      <span class="obsep"></span>
       <button id="ob-rot-l" title="turn anticlockwise">&#8634;</button>
       <button id="ob-rot-r" title="turn clockwise">&#8635;</button>
       <button id="ob-step" title="how far one tap turns or scales">15&deg; &middot; 10%</button>
       <button id="ob-smaller" title="scale down">&minus;</button>
       <button id="ob-bigger" title="scale up">+</button>
     </div>
+    <div class="obrow" id="obdraw" hidden>
+      <button id="ob-draw-undo">Undo point</button>
+      <button id="ob-draw-done" class="primary">Done</button>
+      <button id="ob-draw-cancel">Cancel</button>
+    </div>
   </div>
-  <div id="panel"><div id="dockA"></div><div id="dockB"></div></div>
+
+  <div id="sheet">
+    <div id="grab" title="drag to resize, tap to open or close"></div>
+    <div id="panel"><div id="dockA"></div><div id="dockB"></div></div>
+  </div>
 </div>
 <!-- EVERY MODULE IN THIS TOOL IS FETCHED WITH THE BUILD VERSION IN ITS URL, and that is not
      decoration.

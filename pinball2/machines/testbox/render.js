@@ -210,15 +210,30 @@ export function draw(ctx, table, v, state) {
     ctx.fill();
   }
 
+  // THE TRAIL FADES INTO ITS TAIL, AND IT HAS TO.
+  //
+  // Drawn as one stroke at a flat 45% it read as a stray teal polyline crossing the table - the
+  // ball's path and a piece of geometry look identical when both are a uniform line, and on a tool
+  // whose whole job is showing you geometry that is the worst possible ambiguity. Fading it says
+  // "this is history, and that end is the recent end" without a legend.
+  //
+  // It is drawn as segments rather than one path because a single stroke can only have one alpha.
+  // The cost is one stroke per segment over at most 90 points, which is nothing next to the
+  // playfield underneath it.
   if (st.trail && st.trail.length > 1) {
-    ctx.beginPath();
-    for (let i = 0; i < st.trail.length; i++) {
-      const p = toScreen(v, st.trail[i]);
-      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 1; i < st.trail.length; i++) {
+      const t = i / (st.trail.length - 1);          // 0 at the oldest point, 1 at the ball
+      const a = toScreen(v, st.trail[i - 1]);
+      const b = toScreen(v, st.trail[i]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = `rgba(120,220,255,${(0.5 * t * t).toFixed(3)})`;
+      ctx.lineWidth = 0.8 + 1.7 * t;
+      ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(120,220,255,0.45)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
   }
 
   for (const b of st.balls || []) {
