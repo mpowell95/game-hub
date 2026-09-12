@@ -34,16 +34,20 @@ value states the old and new value.
 ## The stats shape (`js/game-stats.js`)
 
 `ensureBb(g)` builds `g.bb` with this exact key list — frozen, and the list `players-agg.js`'s
-merge branch must stay in step with:
+merge branch must stay in step with. **28 keys → 42** as of the phase 0 "final bb key list"
+amendment (2026-09-12): `runs` renamed to `runsScored`, ten new additive keys after
+`strikeoutsPitched`, three more after `extraInningGames`, and one new Math.max best.
 
-**Integer counters, additive, default 0:** `careersStarted`, `careersFinished`, `seasons`,
-`forfeits`, `wsTitles`, `perfectSeasons`, `hits`, `doubles`, `triples`, `homers`, `atBats` (plate
-appearances minus walks minus sacrifice flies), `runs` (scored), `walksDrawn`, `runsAllowed`,
-`hitsAllowed`, `walksIssued`, `inningsPitchedOuts`, `strikeoutsBatting`, `strikeoutsPitched`,
-`shutouts`, `walkoffWins`, `extraInningGames`.
+**Integer counters, additive, default 0, in this exact order:** `careersStarted`,
+`careersFinished`, `seasons`, `forfeits`, `wsTitles`, `perfectSeasons`, `hits`, `doubles`,
+`triples`, `homers`, `atBats`, `runsScored`, `walksDrawn`, `runsAllowed`, `hitsAllowed`,
+`walksIssued`, `inningsPitchedOuts`, `strikeoutsBatting`, `strikeoutsPitched`, `sacFlies`,
+`sacBunts`, `rbi`, `stolenBases`, `caughtStealing`, `pickoffs`, `homersAllowed`, `bronzes`,
+`silvers`, `golds`, `shutouts`, `walkoffWins`, `extraInningGames`, `noHitters`, `perfectGames`,
+`grandSlams`.
 
 **Max counters, Math.max only (THE LAW rule 2), default 0:** `bestRunsGame`,
-`bestStrikeoutsPitchedGame`.
+`bestStrikeoutsPitchedGame`, `bestWinStreak`.
 
 **Then:** `bestLeague` (0 until a career exists, the highest ladder rung 1-5 ever reached),
 `bestTrophyByLeague` (one key per `BB_LEAGUES` entry, 0, Math.max per league), `hand` (`null` or
@@ -51,10 +55,33 @@ appearances minus walks minus sacrifice flies), `runs` (scored), `walksDrawn`, `
 `setBaseballHand`), `history` (object keyed by careerId, empty until a career finishes, never
 pruned).
 
+**Six facts pinned in `ensureBb`'s own header comment, verbatim:**
+
+1. `atBats` is plate appearances minus `walksDrawn` minus `sacFlies` minus `sacBunts`.
+2. `runsScored` is the player's own team; `runsAllowed` is the opponent's.
+3. `seasons` increments when a season RESOLVES: after the championship game, or when the regular
+   season ends with no playoff place. A missed playoff season still counts.
+4. `forfeits` is a breakout of `total.lost` (`bumpTotals` already counts a forfeit as a loss) —
+   it exists so "how many of my losses were forfeits" doesn't need a second store to answer.
+5. **Derivable but stored, and never recomputed — do not add a third copy:** `careersFinished`
+   equals the number of `history` rows; `bestLeague` is derivable from `byDiff`. Both are kept as
+   their own stored fields because deriving them at read time would mean every reader (My Stats,
+   the leaderboard, a future admin screen) has to agree on the derivation, and a third copy that
+   has to agree with two others is exactly the trap rule 9 exists to name.
+6. **Derivable but stored, and never recomputed — the second such pair:** `bronzes`/`silvers`/
+   `golds` count TROPHIES WON, additively, because `bestTrophyByLeague` is a Math.max PER LEAGUE
+   and loses every repeat (winning bronze in Minors twice only ever shows once there). Missed
+   playoff seasons = `seasons` minus `(bronzes + silvers + golds)` — a fact worth knowing, not a
+   field to add, since deriving it needlessly would be the same trap as fact 5.
+
 `recordBaseball(league, won, extras)` is additive-only and idempotent BY CONTRACT ONLY: the
 CALLER must call it at most once per finished game. The writer itself never de-duplicates. A write
 that fails is queued (`gamehub.pendingResults.v1`) and replayed on the next load, same as every
-other recorder in that file.
+other recorder in that file. Internally it folds `extras` through `applyBaseball(g, league,
+extras)`, shared with the pending-results replay so the two paths cannot drift apart; `bronzes`/
+`silvers`/`golds` are written there, on the same call that raises `bestTrophyByLeague`, from
+`extras.trophy` — a caller cannot hand them a number directly, only earn them through a trophy
+result.
 
 `setBaseballHand(hand)` writes `{ v, at: Date.now() }` only when no hand is stored yet; it warns
 (`console.warn`) and returns the existing value on any later attempt, and rejects anything outside

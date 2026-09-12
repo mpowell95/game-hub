@@ -389,30 +389,42 @@ export function aggregatePlayers(all, corrections) {
           }
         }
       } else if (g === 'baseball' && src.bb) {
-        // BB-0-phase-0-handoff.md step 2. Integer counters ADD; bestLeague, each per-league
-        // trophy, and each best* field take Math.max (THE LAW rule 2); `hand` merges by the
-        // SMALLER `at` (the earliest choice a player made stands, so a later device syncing its
-        // own never-set-until-now hand cannot overwrite a hand chosen on day one); `history`
-        // unions by careerId with the LATER `endedAt` winning, same rule recordBaseballCareerFinished
-        // itself uses locally.
+        // BB-0-phase-0-handoff.md step 2, extended by its "final bb key list" amendment
+        // (2026-09-12, 28 keys to 42). Integer counters ADD, `bronzes`/`silvers`/`golds`
+        // included - they are earned-trophy TALLIES, not a max, so summing them across devices
+        // is exactly as correct as summing hits or homers. `bestLeague`, each per-league trophy,
+        // and each best* field (now including `bestWinStreak`) take Math.max (THE LAW rule 2);
+        // `hand` merges by the SMALLER `at` (the earliest choice a player made stands, so a later
+        // device syncing its own never-set-until-now hand cannot overwrite a hand chosen on day
+        // one); `history` unions by careerId with the LATER `endedAt` winning, same rule
+        // recordBaseballCareerFinished itself uses locally.
         if (!dst.bb) {
           dst.bb = {
             careersStarted: 0, careersFinished: 0, seasons: 0, forfeits: 0, wsTitles: 0, perfectSeasons: 0,
-            hits: 0, doubles: 0, triples: 0, homers: 0, atBats: 0, runs: 0, walksDrawn: 0,
+            hits: 0, doubles: 0, triples: 0, homers: 0, atBats: 0, runsScored: 0, walksDrawn: 0,
             runsAllowed: 0, hitsAllowed: 0, walksIssued: 0, inningsPitchedOuts: 0,
-            strikeoutsBatting: 0, strikeoutsPitched: 0, shutouts: 0, walkoffWins: 0, extraInningGames: 0,
-            bestRunsGame: 0, bestStrikeoutsPitchedGame: 0,
+            strikeoutsBatting: 0, strikeoutsPitched: 0,
+            sacFlies: 0, sacBunts: 0, rbi: 0, stolenBases: 0, caughtStealing: 0, pickoffs: 0, homersAllowed: 0,
+            bronzes: 0, silvers: 0, golds: 0,
+            shutouts: 0, walkoffWins: 0, extraInningGames: 0,
+            noHitters: 0, perfectGames: 0, grandSlams: 0,
+            bestRunsGame: 0, bestStrikeoutsPitchedGame: 0, bestWinStreak: 0,
             bestLeague: 0, bestTrophyByLeague: {}, hand: null, history: {},
           };
         }
         for (const k of ['careersStarted', 'careersFinished', 'seasons', 'forfeits', 'wsTitles', 'perfectSeasons',
-          'hits', 'doubles', 'triples', 'homers', 'atBats', 'runs', 'walksDrawn',
+          'hits', 'doubles', 'triples', 'homers', 'atBats', 'runsScored', 'walksDrawn',
           'runsAllowed', 'hitsAllowed', 'walksIssued', 'inningsPitchedOuts',
-          'strikeoutsBatting', 'strikeoutsPitched', 'shutouts', 'walkoffWins', 'extraInningGames']) {
+          'strikeoutsBatting', 'strikeoutsPitched',
+          'sacFlies', 'sacBunts', 'rbi', 'stolenBases', 'caughtStealing', 'pickoffs', 'homersAllowed',
+          'bronzes', 'silvers', 'golds',
+          'shutouts', 'walkoffWins', 'extraInningGames',
+          'noHitters', 'perfectGames', 'grandSlams']) {
           dst.bb[k] += src.bb[k] | 0;
         }
         dst.bb.bestRunsGame = Math.max(dst.bb.bestRunsGame | 0, src.bb.bestRunsGame | 0);
         dst.bb.bestStrikeoutsPitchedGame = Math.max(dst.bb.bestStrikeoutsPitchedGame | 0, src.bb.bestStrikeoutsPitchedGame | 0);
+        dst.bb.bestWinStreak = Math.max(dst.bb.bestWinStreak | 0, src.bb.bestWinStreak | 0);
         dst.bb.bestLeague = Math.max(dst.bb.bestLeague | 0, src.bb.bestLeague | 0);
         const srcTrophy = src.bb.bestTrophyByLeague || {};
         if (!dst.bb.bestTrophyByLeague) dst.bb.bestTrophyByLeague = {};
