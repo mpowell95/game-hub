@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v816';
+const CACHE = 'game-hub-v817';
 
 const ASSETS = [
   './',
@@ -181,6 +181,14 @@ const ASSETS = [
   './pipes/js/game.js',
   './pipes/js/generator.js',
   './pipes/js/strings.js',
+  './sudoku/',
+  './sudoku/index.html',
+  './sudoku/css/sudoku.css',
+  './sudoku/js/ui.js',
+  './sudoku/js/game.js',
+  './sudoku/js/generator.js',
+  './sudoku/js/solver.js',
+  './sudoku/js/strings.js',
   './nuts-bolts/css/nuts-bolts.css',
   './nuts-bolts/js/ui.js',
   './nuts-bolts/js/game.js',
@@ -631,6 +639,14 @@ const REST_MANIFEST = {
   './pipes/js/game.js': '1bccf9787e',
   './pipes/js/generator.js': '6a9107ccb3',
   './pipes/js/strings.js': '22f714a5c0',
+  './sudoku/': '802a47aafa',
+  './sudoku/index.html': '802a47aafa',
+  './sudoku/css/sudoku.css': 'a4ac49ba55',
+  './sudoku/js/ui.js': '4a679b0c15',
+  './sudoku/js/game.js': 'a49c5bbb46',
+  './sudoku/js/generator.js': '759ae04ca7',
+  './sudoku/js/solver.js': 'c12fe83ae8',
+  './sudoku/js/strings.js': 'ac311dcaab',
   './nuts-bolts/css/nuts-bolts.css': 'e5a74a7a3c',
   './nuts-bolts/js/ui.js': '93d5071c00',
   './nuts-bolts/js/game.js': '9116062404',

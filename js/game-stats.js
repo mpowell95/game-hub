@@ -161,6 +161,18 @@
 //                                                   // high-score TABLE anywhere: this is the one and
 //                                                   // only record of a pinball score, so it cannot
 //                                                   // disagree with itself; see recordPinball
+//       sudoku: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard|expert
+//         sd: { solved, perfect, hints, mistakes,
+//               bestTimeMs: { easy, medium, hard, expert } } },
+//                                                   // a solo puzzle: no opponent, no loss state, so a
+//                                                   // solve is played+1/won+1 same as nutsbolts/pipes.
+//                                                   // solved/hints/mistakes are lifetime additive
+//                                                   // counters; perfect is a solve with zero mistakes
+//                                                   // AND zero hints. bestTimeMs is LOWER-is-better and
+//                                                   // its zero is the "never set" sentinel (the same
+//                                                   // convention as battleship's fewestShotsWin) --
+//                                                   // never a real elapsed time. See recordSudoku
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -170,7 +182,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -211,6 +223,8 @@ const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
 /** Pipes uses the same four tiers as Nuts & Bolts; normDiff lowercases, so extraHard -> extrahard. */
 export const PI_TIERS = NB_TIERS;
+/** Sudoku's four tiers already sit lowercase, matching js/difficulty-tiers.js's MAP 1:1. */
+export const SD_TIERS = ['easy', 'medium', 'hard', 'expert'];
 // Ball Run difficulties (easy|medium|hard, no expert tier).
 export const BR_DIFFS = ['easy', 'medium', 'hard'];
 // Snake difficulties (easy|medium|hard — speed tiers; same axis shape as Ball Run, own constant
@@ -365,6 +379,22 @@ function ensurePi(g) {
   if (!Number.isFinite(g.pi.moves)) g.pi.moves = 0;
   if (!Number.isFinite(g.pi.bestLevel)) g.pi.bestLevel = 0;
   if (!g.pi.bestByTier || typeof g.pi.bestByTier !== 'object') g.pi.bestByTier = {};
+}
+
+/** Sudoku: the solo-puzzle counters. `bestTimeMs` is LOWER-is-better, unlike every other best in
+ *  this file - 0 is the "never set" sentinel (Battleship's `fewestShotsWin` is the precedent),
+ *  never a real elapsed time. `solved`/`perfect`/`hints`/`mistakes` are lifetime, additive
+ *  counters (THE LAW rule 2); `perfect` is a solve with zero mistakes AND zero hints. */
+function ensureSd(g) {
+  if (!g.sd || typeof g.sd !== 'object') {
+    g.sd = { solved: 0, perfect: 0, hints: 0, mistakes: 0, bestTimeMs: {} };
+  }
+  if (!Number.isFinite(g.sd.solved)) g.sd.solved = 0;
+  if (!Number.isFinite(g.sd.perfect)) g.sd.perfect = 0;
+  if (!Number.isFinite(g.sd.hints)) g.sd.hints = 0;
+  if (!Number.isFinite(g.sd.mistakes)) g.sd.mistakes = 0;
+  if (!g.sd.bestTimeMs || typeof g.sd.bestTimeMs !== 'object') g.sd.bestTimeMs = {};
+  for (const tier of SD_TIERS) if (!Number.isFinite(g.sd.bestTimeMs[tier])) g.sd.bestTimeMs[tier] = 0;
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -775,6 +805,7 @@ function normalize(raw) {
   ensureCc(st.games.chinchon);
   ensureNb(st.games.nutsbolts);
   ensurePi(st.games.pipes);
+  ensureSd(st.games.sudoku);
   ensureEs(st.games.escoba);
   ensureBr(st.games.ballrun);
   ensureBrOrbital(st.games.ballrun);
@@ -1316,6 +1347,42 @@ export function recordPipes(level, moves, tier) {
     g.byDiff[t].played += 1; g.byDiff[t].won += 1;
     if (!g.pi.bestByTier || typeof g.pi.bestByTier !== 'object') g.pi.bestByTier = {};
     g.pi.bestByTier[t] = Math.max(g.pi.bestByTier[t] | 0, level | 0);
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/**
+ * Sudoku: one solved puzzle. `tooFast` first, before the store is even read (test-rate-guard.mjs's
+ * structural sweep fails a recorder that reads before guarding). WRITES ARE ADDITIVE ONLY (THE
+ * LAW rule 2): counters increment, `bestTimeMs[tier]` takes Math.min but ONLY against a nonzero
+ * prior value - 0 means "never set", exactly Battleship's `fewestShotsWin` sentinel, and is never
+ * written as a real time.
+ */
+export function recordSudoku(tier, extras = {}) {
+  if (tooFast('sudoku')) return null;
+  const st = loadStats();
+  const g = st.games.sudoku;
+  ensureSd(g);
+  const timeMs = Math.max(0, extras.timeMs | 0);
+  const mistakes = Math.max(0, extras.mistakes | 0);
+  const hints = Math.max(0, extras.hints | 0);
+  g.total.played += 1;
+  g.total.won += 1;
+  g.sd.solved += 1;
+  if (mistakes === 0 && hints === 0) g.sd.perfect += 1;
+  g.sd.hints += hints;
+  g.sd.mistakes += mistakes;
+  const t = SD_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
+  if (t) {
+    if (!g.byDiff[t]) g.byDiff[t] = bucket();
+    g.byDiff[t].played += 1; g.byDiff[t].won += 1;
+    if (!g.sd.bestTimeMs || typeof g.sd.bestTimeMs !== 'object') g.sd.bestTimeMs = {};
+    if (timeMs > 0) {
+      const cur = g.sd.bestTimeMs[t] | 0;
+      g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
+    }
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

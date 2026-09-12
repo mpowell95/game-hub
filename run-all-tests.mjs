@@ -28,6 +28,7 @@ const SUITES = [
   { file: 'escoba/js/test.js' },
   { file: 'connect-four/js/test.js' },
   { file: 'nuts-bolts/js/test.js' },
+  { file: 'sudoku/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },
   { file: 'boggle/js/test.js' },

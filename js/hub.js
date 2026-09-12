@@ -180,6 +180,16 @@ export const GAMES = [
     art: GAME_ART['pipes'],
   },
   {
+    id: 'sudoku',
+    title: { en: 'Sudoku', es: 'Sudoku' },
+    blurb: { en: 'Classic 9x9. Four difficulties, notes, hints, and a timer.',
+      es: 'El clasico 9x9. Cuatro dificultades, notas, pistas y cronometro.' },
+    module: '../sudoku/js/ui.js',
+    accent: '#7a3b8f',
+    released: '2026-09-12',
+    art: GAME_ART['sudoku'],
+  },
+  {
     id: 'nuts-bolts',
     title: { en: 'Nuts & Bolts', es: 'Tuercas y Tornillos' },
     blurb: { en: 'Colour-sort puzzle. Stack matching nuts onto bolts.',

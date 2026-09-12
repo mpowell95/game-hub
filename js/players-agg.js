@@ -13,7 +13,7 @@ import { GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -179,6 +179,24 @@ export function aggregatePlayers(all, corrections) {
         const pbt = src.pi.bestByTier || {};
         for (const k of Object.keys(pbt)) {
           dst.pi.bestByTier[k] = Math.max(dst.pi.bestByTier[k] | 0, pbt[k] | 0);
+        }
+      } else if (g === 'sudoku' && src.sd) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without this branch
+        // every Sudoku counter reads ZERO the moment a person's second device syncs, while each
+        // device's own local store stays intact - THE LAW rule 1. Counters add; bestTimeMs is
+        // LOWER-is-better and merges per tier with the same zero-sentinel Math.min guard as the
+        // writer (js/game-stats.js's recordSudoku) - 0 never wins a merge.
+        if (!dst.sd) dst.sd = { solved: 0, perfect: 0, hints: 0, mistakes: 0, bestTimeMs: {} };
+        dst.sd.solved += src.sd.solved | 0;
+        dst.sd.perfect += src.sd.perfect | 0;
+        dst.sd.hints += src.sd.hints | 0;
+        dst.sd.mistakes += src.sd.mistakes | 0;
+        const sbt = src.sd.bestTimeMs || {};
+        if (!dst.sd.bestTimeMs) dst.sd.bestTimeMs = {};
+        for (const k of Object.keys(sbt)) {
+          const cur = dst.sd.bestTimeMs[k] | 0;
+          const val = sbt[k] | 0;
+          if (val > 0) dst.sd.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /

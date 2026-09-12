@@ -35,6 +35,7 @@ const TABS = [
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
   { id: 'pipes', labelKey: 'game_title_pipes' },
+  { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -91,7 +92,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -301,6 +302,44 @@ function pipesScreen(rec) {
       <div class="gs-tally"><b>${moves}</b><span>${t('gs_pi_moves')}</span></div>
       <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>${t('gs_pi_avg')}</span></div>
     </div>`;
+}
+
+const SD_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
+
+/** Sudoku: a solo puzzle like Nuts & Bolts/Pipes, so no wins/losses/win-rate. Four lifetime
+ *  tallies (solved, perfect, hints, mistakes) plus a per-tier table of solved count and best
+ *  time. `bestTimeMs` is 0's "never set" sentinel, shown as an em dash rather than "0:00" —
+ *  the same zero-glyph convention `skNum()` uses elsewhere on this screen. */
+function sudokuScreen(rec) {
+  const sd = (rec && rec.sd) || {};
+  const solved = sd.solved | 0;
+  if (!solved) return emptyState('Sudoku');
+  const byDiff = rec.byDiff || {};
+  const bestTimeMs = sd.bestTimeMs || {};
+  const rows = SD_DIFFS.map(([k, labelKey]) => {
+    const tierSolved = ((byDiff[k] || {}).won) | 0;
+    const best = bestTimeMs[k] | 0;
+    const bestStr = best > 0 ? fmtMmSs(best) : '&mdash;';
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${tierSolved}</td><td>${bestStr}</td></tr>`;
+  }).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_sd_solved')}</span></div>
+      <div class="gs-tally"><b>${sd.perfect | 0}</b><span>${t('gs_sd_perfect')}</span></div>
+      <div class="gs-tally"><b>${sd.hints | 0}</b><span>${t('gs_sd_hints')}</span></div>
+      <div class="gs-tally"><b>${sd.mistakes | 0}</b><span>${t('gs_sd_mistakes')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_sd_best_time')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function fmtMmSs(ms) {
+  const total = Math.max(0, Math.floor((ms | 0) / 1000));
+  const m = Math.floor(total / 60), s2 = total % 60;
+  return `${m}:${String(s2).padStart(2, '0')}`;
 }
 
 /** Escoba: the standard record-vs-AI screen, the escoba counter, and multiplayer on its own.
@@ -1070,6 +1109,7 @@ function hasPlays(id, rec) {
   if (id === 'pinball') return !!(rec.pb && rec.pb.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
+  if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   if (id === 'golf') return !!(rec.gf && rec.gf.rounds);
   if (id === 'baseball') return !!(rec.bb && rec.bb.careersStarted);
@@ -1102,6 +1142,7 @@ function headlineOf(id, rec) {
   }
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'sudoku') return { n: (rec.sd && rec.sd.solved) | 0, unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.
@@ -1350,6 +1391,7 @@ function screenFor(id, st) {
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
   if (id === 'pipes') return pipesScreen(rec);
+  if (id === 'sudoku') return sudokuScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);
