@@ -24,20 +24,37 @@ export const DT = 1 / 120;
 export const MAX_STEPS = 5;      // catch-up cap: never spiral on a slow frame
 const TAU = Math.PI * 2;
 
-/** Fuel burn: a slow always-on drain plus a throttle-proportional one, in fuel units per second. */
-const FUEL_IDLE = 2.4;
+/** Fuel burn: a slow always-on drain plus a throttle-proportional one, in fuel units per second.
+ *  Burn is TIME-based, so covering ground faster costs less fuel per meter — going fast is rewarded,
+ *  and crawling is punished by the idle drain. Tightened 2026-09 (TP: "no risk of running out"): the
+ *  old drain plus a can worth 55 every ~80 m meant fuel only ever climbed, so it was never a real
+ *  resource. */
+const FUEL_IDLE = 2.8;
 const FUEL_THROTTLE = 2.2;
-/** Coins awarded per completed airborne rotation. Matches the classic flip bonus. */
+/** Coins awarded per airborne rotation LANDED CLEAN. Crash mid-rotation and it pays nothing. */
 export const FLIP_BONUS = 50;
 
 // Nitro: the HUD's blue canister count and its BOOST dial. A charge is a short, flat forward shove
 // along the chassis' own forward axis, which is why using it while the nose is up launches you
 // rather than accelerating you. Fuel cans top the canisters back up, so nitro is a reason to
 // detour for a can you did not strictly need.
+// A visually complete flip lands a hair short of a strict 2*PI of AIRBORNE rotation: the car
+// launches slightly nose-up and its wheels touch down again before the chassis angle comes the
+// last few degrees around. So a rotation this close to complete is credited on a clean landing —
+// the head-in-dirt crash check already rejects a car that came down on its roof, so anything that
+// lands clean really is upright. Without this a genuine single flip never paid (TP, 2026-09).
+const FLIP_LAND_TOL = 0.6;   // radians (~34 deg)
+
 export const NITRO_START = 2;
 export const NITRO_MAX = 5;
 export const BOOST_TIME = 1.3;      // seconds of thrust per charge
 const BOOST_ACCEL = 15;             // m/s^2 added along forward while boosting
+
+// Air rotation control. High damping on purpose: gas spins the nose up fast toward a terminal
+// rate of airTorque/AIR_DAMP, and letting go settles it, so a player can rotate a full turn AND
+// bring the wheels back down to land it. The old value (0.35) let spin run away, so a flip could
+// be started but never leveled for a landing, which is why one never paid (TP, 2026-09).
+const AIR_DAMP = 3.5;
 
 export const RunState = { READY: 'ready', RUNNING: 'running', OVER: 'over' };
 /** Why a run ended. Shown on the game-over card, recorded nowhere else. */
@@ -67,7 +84,8 @@ export class Vehicle {
     }));
     this.airborne = false;
     this.airSpin = 0;      // signed radians accumulated since leaving the ground
-    this.flips = 0;
+    this.pendingFlips = 0; // full rotations completed this jump, PAID only on a clean landing
+    this.flips = 0;        // rotations actually landed (banked)
     this.crashed = false;
     this.boostT = 0;       // seconds of nitro thrust left
   }
@@ -180,12 +198,17 @@ export class Vehicle {
       this.av += (th * sp.reaction / sp.inertia) * dt;
       this.av -= this.av * 3.4 * dt;
     } else {
-      // Air control: the classic hill-climb midair rotation. Weaker than the grounded reaction,
-      // and barely damped, so a deliberate backflip stays possible.
+      // Air control: the classic hill-climb midair rotation. Gas spins the nose up (backflip),
+      // brake tucks it forward (frontflip). Strong torque against firm AIR_DAMP (see its comment):
+      // gas spins toward a terminal rate, letting go settles it, so a rotation both completes AND
+      // can be leveled to land. The old torque was so weak the best any car could turn in a ramp's
+      // ~1.1 s of air was a quarter turn — a flip was impossible and the bonus never paid (TP,
+      // 2026-09). The air clamp is higher than the grounded one because a full rotation in that
+      // time needs the nose swinging faster than balancing ever does.
       this.av += th * sp.airTorque * dt;
-      this.av -= this.av * 0.35 * dt;
+      this.av -= this.av * AIR_DAMP * dt;
     }
-    this.av = clamp(this.av, -9, 9);
+    this.av = clamp(this.av, anyGround ? -9 : -13, anyGround ? 9 : 13);
 
     // Light air drag, and a hard speed cap so a long downhill can't outrun the contact solver.
     this.vx -= this.vx * 0.06 * dt;
@@ -197,18 +220,17 @@ export class Vehicle {
     this.y += this.vy * dt;
     this.ang += this.av * dt;
 
-    // flip counting: rotation accumulated while every wheel is off the ground
+    // Flip counting: rotation accumulated while every wheel is off the ground. A completed
+    // rotation is PENDING until the car lands — a flip only pays if you land it clean, exactly as
+    // the player expects ("single flip, land it clean" — TP, 2026-09). Rotating your way onto the
+    // driver's head loses the pending bonus, which is what makes going for the double a real gamble.
     if (!anyGround) {
       if (!this.airborne) { this.airborne = true; this.airSpin = 0; }
       this.airSpin += this.av * dt;
-    } else if (this.airborne) {
-      this.airborne = false;
-      this.airSpin = 0;
-    }
-    let newFlips = 0;
-    while (Math.abs(this.airSpin) >= TAU) {
-      this.airSpin -= Math.sign(this.airSpin) * TAU;
-      this.flips++; newFlips++;
+      while (Math.abs(this.airSpin) >= TAU) {
+        this.airSpin -= Math.sign(this.airSpin) * TAU;
+        this.pendingFlips++;
+      }
     }
 
     // CRASH: the driver's head touching the dirt. The single fail condition, exactly as the real
@@ -217,7 +239,23 @@ export class Vehicle {
     const h = this.headPos();
     if (h.y - 0.20 <= tr.y(h.x)) this.crashed = true;
 
-    return newFlips;
+    // Touchdown: bank any pending flips if the landing was clean, then reset for the next jump.
+    let landedFlips = 0;
+    if (anyGround && this.airborne) {
+      this.airborne = false;
+      if (!this.crashed) {
+        // credit a rotation that all but came around as the wheels touched back down
+        if (Math.abs(this.airSpin) >= TAU - FLIP_LAND_TOL) this.pendingFlips++;
+        if (this.pendingFlips > 0) {
+          landedFlips = this.pendingFlips;
+          this.flips += landedFlips;
+        }
+      }
+      this.airSpin = 0;
+      this.pendingFlips = 0;
+    }
+
+    return landedFlips;
   }
 }
 
@@ -269,15 +307,15 @@ export class Run {
     if (this.state !== RunState.RUNNING) return;
     const d = dt == null ? DT : dt;
     const th = clamp(throttle, -1, 1);
-    const newFlips = this.car.step(th, d);
+    const landedFlips = this.car.step(th, d);   // rotations banked by a clean landing this step
 
     this.fuel = Math.max(0, this.fuel - (FUEL_IDLE + FUEL_THROTTLE * Math.abs(th)) * d);
     this.distance = Math.max(this.distance, this.car.x);
 
-    if (newFlips > 0) {
-      this.flips += newFlips;
-      this.coins += FLIP_BONUS * newFlips;
-      this.events.push({ kind: 'flip', x: this.car.x, y: this.car.y + 1.6, n: newFlips, value: FLIP_BONUS * newFlips });
+    if (landedFlips > 0) {
+      this.flips += landedFlips;
+      this.coins += FLIP_BONUS * landedFlips;
+      this.events.push({ kind: 'flip', x: this.car.x, y: this.car.y + 1.6, n: landedFlips, value: FLIP_BONUS * landedFlips });
     }
 
     // pickups: anything within a wheel-ish radius of the chassis center

@@ -315,24 +315,90 @@ const modulated = (run) => {
 }
 
 // --- physics: flips ------------------------------------------------------------------------------
+// A flip PAYS ON A CLEAN LANDING, not the instant the rotation completes (TP, 2026-09: "single
+// flip, land it clean" should award). So the test spins an airborne car through a full rotation and
+// then lets it come down onto its wheels — the payment must arrive at touchdown, not before.
 {
-  // hand-spin an airborne car: a full rotation with no wheel on the ground is one flip
   const terrain = makeTerrain(77, COUNTRY);
   const run = new Run(tunedSpec('bike', {}, COUNTRY), terrain);
   run.start();
-  run.car.y = terrain.y(0) + 14;      // well clear of the hill
-  run.car.av = 7;
-  let flips = 0;
-  for (let i = 0; i < 240 && run.state === RunState.RUNNING; i++) {
-    const before = run.flips;
-    run.car.y = terrain.y(run.car.x) + 14;   // hold it in the air
+  // hold it high and HOLD GAS so air control spins it past a full turn (with the responsive air
+  // damping, a free-spinning car stops quickly — sustaining rotation takes throttle, as in play)
+  run.car.y = terrain.y(0) + 14;
+  run.car.ang = 0; run.car.av = 0;
+  let sawFlipEvent = false, paidWhileAirborne = false;
+  for (let i = 0; i < 120 && run.car.pendingFlips < 1; i++) {
+    run.car.y = terrain.y(run.car.x) + 14;   // pin it in the air
     run.car.vy = 0;
-    run.step(0, DT);
-    if (run.flips > before) flips++;
+    run.step(1, DT);
+    if (run.coins > 0) paidWhileAirborne = true;
   }
-  ok('a full airborne rotation counts as a flip', flips >= 1);
-  ok('a flip pays coins', run.coins > 0);
-  ok('a flip raises an event for the HUD', run.events.some((e) => e.kind === 'flip'));
+  ok('a completed rotation is PENDING, not paid, while still airborne', run.coins === 0 && !paidWhileAirborne);
+  ok('the pending rotation is tracked', run.car.pendingFlips >= 1 && run.flips === 0);
+
+  // now level it and let it drop onto its wheels
+  run.car.av = 0; run.car.ang = 0;
+  for (let i = 0; i < 240 && run.state === RunState.RUNNING; i++) {
+    if (run.flips > 0) { sawFlipEvent = run.events.some((e) => e.kind === 'flip'); break; }
+    run.step(0, DT);
+  }
+  ok('a flip lands and banks', run.flips >= 1);
+  ok('a landed flip pays coins', run.coins >= 50);
+  ok('a landed flip raises an event for the HUD', sawFlipEvent);
+}
+
+// --- physics: a flip crashed mid-rotation pays nothing (the gamble) ------------------------------
+{
+  const terrain = makeTerrain(77, COUNTRY);
+  const run = new Run(tunedSpec('bike', {}, COUNTRY), terrain);
+  run.start();
+  run.car.y = terrain.y(0) + 14; run.car.ang = 0; run.car.av = 0;
+  for (let i = 0; i < 120 && run.car.pendingFlips < 1; i++) {
+    run.car.y = terrain.y(run.car.x) + 14; run.car.vy = 0; run.step(1, DT);
+  }
+  ok('a rotation is pending before the bad landing', run.car.pendingFlips >= 1 && run.coins === 0);
+  // slam it down inverted so the driver's head hits: a crash, not a clean landing
+  run.car.ang = Math.PI;
+  run.car.y = terrain.y(run.car.x) + 0.5;
+  run.step(0, DT);
+  ok('rotating onto your head is a crash', run.car.crashed === true);
+  ok('a crashed flip pays nothing', run.coins === 0 && run.flips === 0);
+}
+
+// --- physics: a flip is actually LANDABLE in play (the whole point) ------------------------------
+// The pending/land accounting above is exercised by pinning the car; this proves the physics let a
+// real launch complete a rotation AND come down on its wheels, which is what was broken (the old
+// air control could not turn the car more than a quarter of the way round in the air it had). A
+// launch + spin + level policy, the way a player drives it.
+{
+  const TAU2 = Math.PI * 2;
+  function landsSingle(vehicleId, vy) {
+    const terrain = makeTerrain(20260802, COUNTRY);
+    const run = new Run(tunedSpec(vehicleId, {}, COUNTRY), terrain);
+    run.start();
+    run.car.x = 3; run.car.y = terrain.y(3) + 3; run.car.vx = 18; run.car.vy = vy;
+    run.car.av = 0; run.car.ang = 0.25;
+    let phase = 'spin';
+    for (let i = 0; i < 1200 && run.state === RunState.RUNNING; i++) {
+      let th = 0;
+      if (run.car.airborne) {
+        const rot = run.car.pendingFlips + Math.abs(run.car.airSpin) / TAU2;
+        if (phase === 'spin' && rot >= 0.75) phase = 'level';
+        if (phase === 'spin') th = 1;
+        else {                                   // drive the nose to the nearest whole turn to land
+          const ta = Math.round(run.car.ang / TAU2) * TAU2;
+          th = Math.max(-1, Math.min(1, (ta - run.car.ang) * 6 - run.car.av * 0.9));
+        }
+      }
+      const before = run.flips;
+      run.step(th, DT);
+      if (run.flips > before) return true;
+      if (run.car.crashed) return false;
+    }
+    return false;
+  }
+  ok('the bike can launch, flip once and land it clean', landsSingle('bike', 12));
+  ok('the jeep can launch, flip once and land it clean', landsSingle('jeep', 14));
 }
 
 // --- physics: the crash probe is the driver's head -------------------------------------------
