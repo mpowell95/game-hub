@@ -935,6 +935,18 @@ class Hub {
     this._onController = () => this._onNewBuildActive();
     navigator.serviceWorker.addEventListener('controllerchange', this._onController);
 
+    // AND RE-CHECK ON RESUME (2026-09-12). `controllerchange` only reaches a page that is RUNNING.
+    // An installed app on iOS is suspended the moment it is backgrounded, so the swap to a new
+    // build routinely happens with this listener asleep: the app comes back holding the old
+    // modules, under the new worker, with no event left to tell it. That is how Matt's launcher
+    // kept drawing the old golf tile while the chip honestly read v815. _onNewBuildActive carries
+    // every guard this needs (page must have loaded under a worker, the version must actually have
+    // MOVED, once per page, never over a mounted game), so resume just calls it again.
+    this._onResume = () => { if (document.visibilityState === 'visible') this._onNewBuildActive(); };
+    document.addEventListener('visibilitychange', this._onResume);
+    // pageshow fires for a back-forward-cache restore, which visibilitychange does not cover.
+    window.addEventListener('pageshow', this._onResume);
+
     navigator.serviceWorker.getRegistration().then((reg) => {
       if (!reg || this._destroyed) return;
       this._reg = reg;
@@ -1132,6 +1144,32 @@ class Hub {
 
     // Already on the newest build - which, since this bug, is usually the real answer.
     if (running && latest && running === latest) {
+      // ...BUT THE WORKER BEING CURRENT DOES NOT MEAN THIS PAGE IS (2026-09-12). Matt, on the
+      // launcher still drawing the OLD golf tile with the chip reading v815: "Tapping the pill is
+      // already supposed to force the refetch from new cache. why isn't it working". It wasn't:
+      // this branch reported "up to date" and returned, because it only ever compared the WORKER
+      // against version.json. Neither of those is the page. A page loads its modules once, under
+      // whatever worker was in charge AT THAT MOMENT, and keeps them for its whole life - so when
+      // the swap happens after the load, the controller moves to the new build and the DOM stays
+      // on the old one. _onNewBuildActive is what normally reloads in that window, but it fires on
+      // a live `controllerchange` and an installed app on iOS is SUSPENDED while backgrounded, so
+      // the event can land with nothing listening. Nothing then re-checked on resume, and the one
+      // control a standalone PWA has - this pill - was the one thing that refused to look.
+      //
+      // _loadedVersion (set in _watchForUpdates) is the version THIS PAGE loaded under. If it has
+      // moved, the page is stale however current the worker is, and the tap does what the person
+      // tapping it means: get me the new build. This cannot reintroduce the 2026-09-01 reload loop
+      // - that came from reading the controller mid-install and calling a still-installing worker
+      // "stale"; this compares two settled facts and reloads at most once (_applyUpdate's own
+      // _reloaded latch, plus the reload itself re-reads _loadedVersion from the new controller).
+      if (this._loadedVersion && running !== this._loadedVersion) {
+        noteLifecycle(`tap: worker ${running} is current but this page loaded on ${this._loadedVersion}`);
+        el.textContent = t('hub_version_updating');
+        el.setAttribute('aria-label', t('hub_version_updating'));
+        el.disabled = false;
+        this._applyUpdate();
+        return;
+      }
       el.classList.remove('is-stale');
       el.textContent = t('hub_version_up_to_date');
       el.setAttribute('aria-label', t('hub_version_up_to_date'));
@@ -1383,6 +1421,10 @@ class Hub {
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
     if (this._onController) navigator.serviceWorker.removeEventListener('controllerchange', this._onController);
+    if (this._onResume) {
+      document.removeEventListener('visibilitychange', this._onResume);
+      window.removeEventListener('pageshow', this._onResume);
+    }
     if (this._themeUnsub) this._themeUnsub();
     this.root.innerHTML = '';
   }
