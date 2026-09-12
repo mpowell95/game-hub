@@ -61,6 +61,7 @@ const SUITES = [
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
+  { file: 'baseball/js/test.js' },
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'test-emoji.mjs' },

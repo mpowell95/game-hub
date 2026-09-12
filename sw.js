@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v806';
+const CACHE = 'game-hub-v807';
 
 const ASSETS = [
   './',
@@ -344,12 +344,24 @@ const ASSETS = [
   './golf/courses/oasissands.js',
   './golf/courses/tutorial.js',
 
-  // Baseball, phase 0 (BB-0-phase-0-handoff.md): a devOnly placeholder tile, no game yet.
+  // Baseball, phase 1 (BB-1-phase-1-handoff.md): the headless engine. Still a devOnly placeholder
+  // tile - nothing here is wired to the UI yet, so every engine/*.js file rides the precache with
+  // no player-visible change. baseball/js/test.js is deliberately NOT listed (a headless test
+  // suite, same as every other game's own test.js).
   './baseball/',
   './baseball/index.html',
   './baseball/css/baseball.css',
   './baseball/js/ui.js',
   './baseball/js/strings.js',
+  './baseball/js/engine/rng.js',
+  './baseball/js/engine/settings.js',
+  './baseball/js/engine/pitch.js',
+  './baseball/js/engine/swing.js',
+  './baseball/js/engine/outcomes.js',
+  './baseball/js/engine/bases.js',
+  './baseball/js/engine/game.js',
+  './baseball/js/engine/agents.js',
+  './baseball/js/engine/teams.js',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -781,6 +793,15 @@ const REST_MANIFEST = {
   './baseball/css/baseball.css': '525dba5480',
   './baseball/js/ui.js': '775f46fb69',
   './baseball/js/strings.js': 'eec454237c',
+  './baseball/js/engine/rng.js': '8119f3c46a',
+  './baseball/js/engine/settings.js': '09d481f84b',
+  './baseball/js/engine/pitch.js': '59bbf9ce51',
+  './baseball/js/engine/swing.js': '8da3ce51bf',
+  './baseball/js/engine/outcomes.js': '0c0d856a0e',
+  './baseball/js/engine/bases.js': '075ed67cea',
+  './baseball/js/engine/game.js': '82a6dc2a20',
+  './baseball/js/engine/agents.js': '7d25769c7d',
+  './baseball/js/engine/teams.js': '37d0c5a2f0',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': 'b7b65f248d',
