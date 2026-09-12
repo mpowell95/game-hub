@@ -23,6 +23,9 @@
 //   - A sacrifice fly (a flyout with a runner on third and fewer than 2 outs) scores that runner;
 //     no other runner may advance on it this phase (a real sac fly can also let a runner from
 //     first or second try for the next base - omitted rather than guessed at).
+//   - A ground-out double play (doc §3, [Locked]: possible with a runner on first and fewer than
+//     2 outs) removes ONLY the runner forced at second; nobody else moves, and the batter's own
+//     out is credited separately by the caller (game.js adds the second out itself).
 
 export function emptyBases() { return [null, null, null]; }
 
@@ -89,4 +92,12 @@ export function noAdvance(bases) {
   return { bases, runsScored: 0 };
 }
 
-export default { emptyBases, advanceAll, advanceWalk, advanceSacFly, noAdvance };
+/** A ground-out double play: the runner on first is forced out at second and removed; second and
+ *  third are untouched. Caller must have already confirmed a runner is on first. */
+export function advanceDoublePlay(bases) {
+  const next = bases.slice();
+  next[0] = null;
+  return next;
+}
+
+export default { emptyBases, advanceAll, advanceWalk, advanceSacFly, noAdvance, advanceDoublePlay };

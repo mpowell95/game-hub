@@ -4,158 +4,164 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
-## Status: Phase 1 — the headless engine only, still no UI
+## Status: Phase 1 (BB-1) + BB-1a — the headless engine, now built against the real design doc
 
-This milestone (BB-1-phase-1-handoff.md, 2026-09-12) adds a pure, deterministic, seeded game
-simulation engine under `baseball/js/engine/` — no DOM, no game-hub UI, no stats recording, no
-Firebase, and it does not run through the placeholder tile. `baseball/js/ui.js` is untouched and
-still renders the same one "coming soon" screen Phase 0 shipped. Phase 0's frozen stats shape,
-career sync store and rules branch are also untouched by this milestone.
+Phase 1 (BB-1-phase-1-handoff.md, 2026-09-12) added a pure, deterministic, seeded game simulation
+engine under `baseball/js/engine/` — no DOM, no game-hub UI, no stats recording, no Firebase, and
+it does not run through the placeholder tile. `baseball/js/ui.js` is untouched and still renders
+the same one "coming soon" screen Phase 0 shipped. Phase 0's frozen stats shape, career sync store
+and rules branch are also untouched.
 
-**"Baseball Game Design Doc v8" is still not present anywhere in this repository or session** —
-confirmed by exhaustive search before this phase's own settings file was written (the same search
-Phase 0 already recorded for v6). Every numeric table in `js/engine/settings.js` that is not
-already frozen elsewhere (the stats shape, the league ladder) is therefore an INVENTED Draft
-placeholder, tagged `// Draft [Open item N]` at the line it lives on — see that file's own header
-and the table below. Nothing about how the game FEELS should be assumed authoritative; a future
-phase with the real doc should replace every tagged line.
+**BB-1a (2026-09-12, same day) replaced every invented settings.js constant with the real ones.**
+"Baseball Game Design Doc v8" — cited by Phase 1's own handoff but never available in this repo or
+session — is now committed at **`docs/BASEBALL-DESIGN-DOC.md`**, byte-for-byte, and is the source
+of truth for every number below. Read it before touching `settings.js` again. Where the doc gives a
+value directly it is tagged with the doc's own status word ([Locked]/[Tested]/[Draft]) and section
+number; where the doc is silent, the constant is still invented and tagged `// Draft [Open item N]`
+(continuing past the doc's own numbered open-items list, which stops at 15).
 
-Matt's instructions for this phase: commit on the branch, do not push, do not open a PR. Named
+Matt's instructions for both milestones: commit on the branch, do not push, do not open a PR. Named
 constants everywhere, no magic numbers. Every commit that changes a numeric or versioned value
 states the old and new value. Nothing under `js/`, `business-deal/js/game-stats-global.js`,
 `baseball/js/ui.js`/`css/`/`strings.js`/`index.html`, another game's folder, or
-`database.rules.json` was touched — only `baseball/js/engine/*` (new), `baseball/js/test.js`
-(new), `sw.js` and `run-all-tests.mjs`.
+`database.rules.json` was touched by either milestone.
 
 ### The engine (`baseball/js/engine/`)
 
 | File | Role |
 |---|---|
 | `rng.js` | `mulberry32`/`stepRng` (seeded PRNG; `stepRng` is the pure step that makes the whole engine's randomness position resumable through a plain integer), `hashSeed`, `pickWeighted`, `gaussian`. The ONLY source of randomness anywhere in the engine |
-| `settings.js` | every named constant the engine plays by — leagues, season shape, point budgets, pitch types/unlocks/profiles, CPU tuning, pattern-memory window, field/park geometry, team-generation styles, skill effects, and the rules the (unavailable) doc doesn't settle. `RULES_V` is this file's own schema version |
-| `pitch.js` | `flyPitch()` — one pitch thrown, pure function of (type, aim, control skill, settings, a rand01 stream). Owns the strike zone (`ZONE`) |
-| `swing.js` | `swing()` — resolves one batter decision against an already-thrown pitch: take/whiff/foul/in-play, plus exit velocity/launch angle/spray angle when the ball is hit |
-| `outcomes.js` | `resolveContact()`/`carryFt()` — turns a batted ball into an out, an error, or a hit of 1-4 bases, reading the park's own wall distances |
-| `bases.js` | pure runner-advancement rules: `advanceAll` (hits), `advanceWalk` (forced advances only), `advanceSacFly`, `emptyBases` |
-| `game.js` | `Game` — the whole match: async turn loop (`await agent.decidePitch/decideSwing(view)`), `onEvent`/`onDecided` hooks (Escoba's pattern), `snapshot()`/`static fromSnapshot()`/`validateSnapshot()` (`SNAP_V`) |
-| `agents.js` | `CpuPitcher`, `CpuBatter` (draw all their randomness from `view.rand01`, the same stream `game.js` snapshots — never `Math.random`), `ScriptedAgent` for deterministic test replay |
-| `teams.js` | `makeTeam(league, index)` — deterministic roster generation from a hashed seed (golf's `holegen.js` pattern: same seed in, byte-identical team out, nothing persisted), `teamStrength()` |
+| `settings.js` | every named constant the engine plays by, sourced from `docs/BASEBALL-DESIGN-DOC.md` where the doc gives one — leagues, season/playoff shape, per-league point/cap/preset tables, pitch types/unlocks/travel multiples, the mph readout (display-only), CPU tuning, pattern-memory window, field/park geometry (still invented, Open item 7), team-generation styles, skill effects, and the real game rules (3 innings, extra-inning ghost runner, double plays, walk-off, foul-never-K3). `RULES_V` is this file's own schema version (2 as of BB-1a — the skill-id shape changed) |
+| `pitch.js` | `flyPitch()` — one pitch thrown, pure function of (type, aimX, pitchAcc skill, settings, a rand01 stream). **One flat plane** (doc §1, [Locked]): a pitch has ONE spatial coordinate (`x`, a fraction of the plate half-width), never a height axis — BB-1a dropped phase 1's invented 2-D zone. Owns `ZONE` (`{xMin:-1, xMax:1}`) |
+| `swing.js` | `swing()` — resolves one batter decision against an already-thrown pitch on TWO independent doc-given axes: timing (early/late, ms) decides contact quality AND pull direction; lateral placement (bat sweet-spot position vs. the pitch's actual `x`) decides hit type (centered = line/fly, off-center = grounder or pop-up) |
+| `outcomes.js` | `resolveContact()`/`carryFt()` — turns a batted ball into an out, an error, or a hit of 1-4 bases, reading the park's own wall distances. Takes a `fieldingSkill01` (0..1) rather than a per-player skill — the real design has no "fielding" stat at all (Open item 7) |
+| `bases.js` | pure runner-advancement rules: `advanceAll` (hits), `advanceWalk` (forced advances only), `advanceSacFly`, `advanceDoublePlay` (BB-1a, doc §3), `emptyBases` |
+| `game.js` | `Game` — the whole match: async turn loop (`await agent.decidePitch/decideSwing(view)`), `onEvent`/`onDecided` hooks (Escoba's pattern), `snapshot()`/`static fromSnapshot()`/`validateSnapshot()` (`SNAP_V`, forward-only against `RULES_V` since BB-1a — see below) |
+| `agents.js` | `CpuPitcher`, `CpuBatter` (draw all their randomness from `view.rand01`, the same stream `game.js` snapshots — never `Math.random`; BB-1a wired them straight to the doc's own `swingIn`/`chase`/`timingSigmaMs`/`guess` fields), `ScriptedAgent` for deterministic test replay |
+| `teams.js` | `makeTeam(league, index)` — deterministic roster generation from a hashed seed (golf's `holegen.js` pattern: same seed in, byte-identical team out, nothing persisted); `effectiveCapFor(league)` = `CAPS[league] - CPU_LEVEL_SHORTFALL[league]` (doc §8, [Locked]: CPU teams are generated below the raw cap, never at it), `teamStrength()` |
 
-**The three constraints, and their tests:**
+**The three constraints, and their tests (unchanged by BB-1a):**
 
 1. **Seeded RNG only.** Every draw goes through `rng.js`'s `stepRng`; nothing in `engine/` calls
    `Math.random`, `Date.now`, touches the DOM, storage or the network. Enforced by
    `baseball/js/test.js` section 2, which reads every engine file as text (comments stripped) and
    fails if a forbidden API appears.
-2. **Fixed timestep, no wall clock.** `FEEL.engine.dtS` is `1/120` and `maxSteps` is `5` — the same
-   pair Hill Climb's `physics.js` and Pinball's solver use — though this phase's turn-based match
-   loop does not itself need a per-frame integrator (there is no continuous physics to step yet);
-   the constants exist now so a future phase that animates a pitch/swing has them already
-   named and tested (section 1).
+2. **Fixed timestep, no wall clock.** `FEEL.engine.dtS` is `1/120` (doc §15, [Locked]: "matching
+   Golf and Hill Climb") and `maxSteps` is `5` — though this phase's turn-based match loop does not
+   itself need a per-frame integrator (there is no continuous physics to step yet); the constants
+   exist now so a future phase that animates a pitch/swing has them already named and tested.
 3. **Pluggable async agents.** `Game` never assumes who is deciding — `await agent.decidePitch(view)`
    / `await agent.decideSwing(view)`, and the engine legalizes whatever comes back (an unknown pitch
    type falls back to a fastball; a missing decision is treated as a take) rather than trusting it,
    the same discipline Escoba's `legalize()` applies to a human or AI move. `ScriptedAgent` proves
-   the seam works for a scripted replay; `CpuPitcher`/`CpuBatter` prove it for an AI. Section 9.
+   the seam works for a scripted replay; `CpuPitcher`/`CpuBatter` prove it for an AI.
 
-**Resumability** (section 12): because a pitch is thrown and its swing decided within one pass of
-`playAtBat`'s inner loop with no `await this.emit(...)` boundary the caller could act on in
-between, `abort()` is honored only BETWEEN passes — never mid-pitch. `Game` carries two one-shot
-resume flags (`_resumePending` for the at-bat's balls/strikes, `_resumeHalfPending` for the
-half-inning's outs), consumed the first time `playAtBat`/`playHalfInning` run after a
-`fromSnapshot()` restore, so the restored count/outs are never zeroed back out from under them —
-Escoba's `_resumeMidRound` pattern, one level lower (an at-bat, not a round). **This was found by
-the resume gate itself, born red twice before it passed**: the first defect was the mid-pitch
-abort point silently discarding a thrown-but-undecided pitch's random draws (a resumed game then
-drew a brand-new pitch instead of deciding the one already thrown, diverging from an uninterrupted
-game's draw sequence from that moment on); the second was `playAtBat`/`playHalfInning` unconditionally
-zeroing the count/outs they had just been handed by `fromSnapshot()`.
+**Resumability**: because a pitch is thrown and its swing decided within one pass of `playAtBat`'s
+inner loop with no `await this.emit(...)` boundary the caller could act on in between, `abort()` is
+honored only BETWEEN passes — never mid-pitch. `Game` carries two one-shot resume flags
+(`_resumePending` for the at-bat's balls/strikes, `_resumeHalfPending` for the half-inning's outs),
+consumed the first time `playAtBat`/`playHalfInning` run after a `fromSnapshot()` restore, so the
+restored count/outs are never zeroed back out from under them — Escoba's `_resumeMidRound` pattern,
+one level lower. **This was found by the resume gate itself, born red twice before it passed**: the
+first defect was the mid-pitch abort point silently discarding a thrown-but-undecided pitch's
+random draws (a resumed game then drew a brand-new pitch instead of deciding the one already
+thrown, diverging from an uninterrupted game's draw sequence from that moment on); the second was
+`playAtBat`/`playHalfInning` unconditionally zeroing the count/outs they had just been handed by
+`fromSnapshot()`. **BB-1a made this forward-only, per doc §15** ("`SNAP_V` is bumped and migrated
+forward-only, never reinterpreted"): `validateSnapshot()` now rejects any snapshot whose `rulesV`
+does not exactly match the running code's `RULES_V`, rather than merely checking it is a number.
 
 ### Units and conventions
 
-- Distances in FEET throughout (pitch/zone geometry, field/park dimensions, batted-ball carry).
-- Speeds in mph (pitch speed, exit velocity); pitch movement in inches; timing in milliseconds
-  (swing timing error) or seconds (`FEEL`'s durations).
+- Lateral positions (pitch/aim/bat placement) are FRACTIONS of the plate's half-width (doc §15,
+  [Locked]) — `x` in `[-1, 1]` is inside the strike zone. This replaced phase 1's invented 2-D,
+  feet-based zone: doc §1 is explicit that height never matters ("one flat plane").
+  Field/park distances (carry, wall placement) stay in FEET — a separate axis, untouched by the
+  1-D plate model.
+- Speeds are expressed as travel-time MULTIPLES of the fastball (`PITCH_TRAVEL_MULT`, doc §14),
+  not raw mph; `READOUT`'s mph table is DISPLAY ONLY and feeds nothing in the engine (doc §11,
+  [Locked]: "It is display only; how fast the ball actually travels is a separate tuned value").
+- Timing is in milliseconds (swing timing error, `FEEL.engine.timingWindow` etc.); engine-internal
+  durations (`dtS`) are in seconds.
 - A player id is a per-team slot string (`p0`..`p8`); `teams.js` never mints a game-wide unique id,
-  since nothing this phase needs one — a future phase touching stats would resolve identity the
-  way `js/game-stats.js` already does for every other game, not invent a second scheme here.
+  since nothing this phase needs one.
 - Every pure function takes its `rand01`/`rng` stream as an explicit parameter, never closes over
-  one implicitly — the same discipline that makes `pitch.js`/`swing.js`/`outcomes.js` independently
-  testable and keeps `game.js`'s `stepRng`-backed stream the only place a draw is ever consumed
-  from inside a full match.
+  one implicitly.
 
-### Every settings.js constant this phase invented, tagged Draft (no design doc to source it from)
+### Every settings.js constant, by source
+
+Doc-given values (status + section per `docs/BASEBALL-DESIGN-DOC.md`): `LEAGUES` (§4), `SEASON.*`
+except `gamesPerSeason` which is [Draft] §4, `START_POINTS_PER_SIDE`/`START_CAP`/`CAPS.*` (§6),
+`PITCH_UNLOCKS`/`TITLE_PITCH_UNLOCKS` (§11, [Locked]), `PITCH_TRAVEL_MULT` for
+fastball/changeup/curveball/slider/knuckleball ([Tested] §14), `READOUT.*` ([Draft] §11/§14),
+`FEEL.engine.*` and `FEEL.ui.*` (all [Tested] §14, the prototype's own tuned values), `CPU.college`
+([Tested] §14; the other four leagues are a copied placeholder), `PATTERN_WINDOW` ([Locked] §8),
+`LEFTY_RATE` (§9), `MECHANICS.walkoffEndsImmediately`/`extraInningRunnerOnSecond`/
+`doublePlayEnabled`/`foulNeverThirdStrike`/`maxExtraInnings` (all [Locked] §3 — the extra-innings
+cap is explicitly a safety valve per the doc's own wording, never a stated rule), `HIT_SKILL_IDS`/
+`PITCH_SKILL_IDS` (§6), `PRESETS.*` (§6, [Draft]), `TEAM_STYLES` NAMES (§9, [Locked] — the eight
+styles), `SHIFTERS_ADJUST_OUT_ZONES` (§9, [Locked], not yet consumed anywhere).
+
+Still invented, tagged Draft `[Open item N]` (my own numbering; the doc's own list stops at 15):
 
 | Constant(s) | Open item | What it's for |
 |---|---|---|
-| `SEASON.gamesPerSeason/inningsPerGame/playoffTeams` | 1-3 | season/career shape |
-| `POINTS.*` | 4 | per-league point budget |
-| `CAPS.perSkill` | 5 | max points in any one skill |
-| `PRESETS.*` | 6 | ready-made point allocations |
-| `PITCH_UNLOCKS.*` | 7 | which league unlocks which pitch |
-| `PITCH_PROFILE.*` | 8 | speed/movement/control per pitch type |
-| `READOUT.bands` | 9 | mph-band labels for a future UI |
-| `FEEL.engine.pitchFlightS/swingWindowMs/fieldingReactionS` | 10-12 | pitch/swing/fielding timing |
-| `FEEL.ui.*` | 13 | not consumed this phase; reserved for a UI phase |
-| `CPU.*` | 14 | per-league AI pitch control / swing discipline / contact skill |
-| `CPU_LEVEL_SHORTFALL` | 15 | not yet consumed (no CPU-vs-human point handicap wired this phase) |
-| `PATTERN_WINDOW`/`PATTERN_WEIGHTS` | 16 | pitch-history recency weighting |
-| `FIELD.*` | 17 | field geometry in feet |
-| `PARKS.*` | 18 | named ballpark wall-distance overrides |
-| `TEAM_STYLES.*`/`TEAM_STYLE_WEIGHTS.*` | 19 | team-generation archetypes and their per-league likelihood |
-| `LEFTY_RATE` | 20 | fraction of generated players who bat/throw left |
-| `SKILL_EFFECT.*` | 21 | how each bought skill point maps onto engine behavior |
-| `MECHANICS.maxExtraInnings` | 22 | a test/safety valve, not a rule exposed to a player |
-| `outcomes.js`'s `CARRY_SCALE` (carryFt) | 23 | calibrated so a 105mph/30deg swing carries ~400ft (a real, commonly-cited Statcast home-run swing) — the one invented number anchored to a real external reference rather than picked from nothing |
-| `outcomes.js`'s ground/line/fly hit-through and drop-chance base rates | 24 | tuned by PLAYING full games out (see below), not measured against anything, since nothing exists to measure them against |
+| `PITCH_TRAVEL_MULT.screwball/eephus/cutter` | 9 | doc explicitly leaves these three open |
+| `CPU.little/highschool/minors/majors` | 3 | copied placeholders of the prototype's one tested (`college`) tier |
+| `CPU_LEVEL_SHORTFALL.*` | — | given directly by the BB-1a handoff text (not itself in the doc's running prose), not invented |
+| `PATTERN_WEIGHTS` | — | doc gives the exact array (`[0.5,0.3,0.2]`), tagged [Draft] by the doc itself |
+| `FIELD.*`/`PARKS.*` | 7 | doc §10 explicitly leaves "exact zone sizes and fence distances per league" open; phase 1's invented placeholder distances are unchanged, just tagged |
+| `TEAM_STYLES`/`TEAM_STYLE_WEIGHTS` weight VECTORS | 25 | the doc names the 8 styles but gives no numbers for them at all |
+| `SKILL_EFFECT.*`/`SKILL_EFFECT_MAX_PER_POINT` | 4 | doc §6 explicitly leaves "how much each skill point changes each effect" open |
+| `MECHANICS.doublePlayChance` | 26 | doc locks that a double play CAN happen, not how often |
+| `outcomes.js`'s `CARRY_SCALE` (carryFt) | 23 | calibrated so a 105mph/30deg swing carries ~400ft (a real, commonly-cited Statcast home-run swing) |
+| `outcomes.js`'s ground/line/fly hit-through and drop-chance base rates | 24 | tuned by playing whole games out, not measured against anything |
+| `_defenseLevel01()` in game.js | 7 | a placeholder league-ordered ramp standing in for the doc's out-zone geometry, which does not exist yet |
 
-### Rules decided here, beyond what the handoff's own text pre-decided
+### Rules decided here, beyond what the doc and the handoffs' own text pre-decided
 
-1. **A walk-off ends the game immediately** the instant the winning run scores in the bottom of the
-   final scheduled inning or later — standard baseball, `MECHANICS.walkoffEndsImmediately`.
-2. **Extra innings play in full** (both sides bat) until a winner exists, capped only by
-   `MECHANICS.maxExtraInnings` as a safety valve for a headless/test context, never as a stated
-   in-game rule. No invented "runner starts on second" tiebreaker — the design doc might specify
-   one, and inventing it now would be exactly the kind of fabrication THE LAW's "never fabricate"
-   principle warns against carried into gameplay.
-3. **No baserunning between pitches this phase**: no steals, no leads, no pickoffs
-   (`bases.js`'s header). A runner only ever moves as a direct consequence of the play being
-   resolved.
-4. **A hit of N bases advances the batter and every runner by exactly N bases** (single=1 ..
-   homer=4) — a fixed simplification of real, speed-dependent baserunning, since nothing exists to
-   calibrate a "realistic" per-runner advance against.
-5. **A sacrifice fly** (a flyout with a runner on third and fewer than 2 outs) scores that runner and
-   moves nobody else; a fielding error advances the batter to first exactly like a single.
-6. **A pitcher's control skill is drawn from their `arm` point value** — the only one of the five
-   bought skills that plausibly maps onto "commands a pitch" without inventing a sixth skill the
-   real doc might name differently.
-7. **Fielding defense is a team-average**, not a per-position assignment — there is no defensive
-   alignment or per-position skill split this phase.
-8. **A pitch/swing cycle is the atomic unit a snapshot can interrupt between, never inside** — see
+1. **A pitch/swing cycle is the atomic unit a snapshot can interrupt between, never inside** — see
    "Resumability" above.
-9. **The ground/line/fly-ball hit-through and drop-chance constants (Open item 24) were tuned by
-   playing whole games out** with the real CPU agents rather than by any measurement, since there is
-   nothing to measure them against: the first pass produced a ~5% hit rate and most games running to
-   the extra-innings cap at 0-0 (verified: 40+ trial games, mostly ties); the shipped values produce
-   roughly a 24-27% hit rate and games finishing within a few innings of the scheduled length across
-   all five leagues (see the report below). Still a Draft placeholder, just no longer an unplayable
-   one.
+2. **A pitcher's control skill is `pitchAcc`** (doc §6: "lands closer to your aim... bigger Nice
+   zone, better pickoffs" — the Nice-zone and pickoff halves are not modeled this phase).
+3. **Which side of "off-center" is the bat's end vs. the handle** (`swing.js`'s sign convention) is
+   this engine's own invented choice — the doc states the qualitative rule ("grounder toward the
+   bat's end, pop-up toward the handle") but not which lateral direction that is.
+4. **CPU team skill allocation** (`teams.js`'s `allocateSkills`) — the doc names the 8 team styles
+   and locks that CPU teams are generated at `effectiveCapFor(league)`, but gives no formula for
+   turning a style's weights into six skill values under that ceiling (Open item 25).
+5. **`_defenseLevel01()`'s league-ordered ramp** stands in for the doc's real defense model (out-
+   zone geometry sized per league, §10) until that geometry is built (Open item 7).
+6. **The ground/line/fly-ball hit-through and drop-chance constants (Open item 24) were tuned by
+   playing whole games out** with the real CPU agents: the shipped values produce roughly a 24-27%
+   hit rate and games finishing within a few innings of the scheduled length across all five
+   leagues (see the report below).
+7. **`CPU_LEVEL_SHORTFALL`'s given numbers produce a NON-MONOTONIC effective-cap ladder** —
+   `little` 10, `highschool` 14, `college` 9, `minors` 11, `majors` 14 (`CAPS[lg] -
+   CPU_LEVEL_SHORTFALL[lg]`) — so College's CPU teams are generated WEAKER than Little League's and
+   tied with Minors below Majors, despite the ladder being harder each league up (doc §8, [Locked]).
+   Not silently corrected: the BB-1a handoff gave these exact shortfall numbers directly, so this is
+   flagged as a finding for Matt rather than second-guessed.
+8. Every rule inherited from phase 1's own report and unchanged: no baserunning between pitches
+   this phase (no steals/leads/pickoffs — doc §3/§17 names these Locked FEATURES with reserved
+   input slots for phase 6, see `RESERVED_PHASE_6` in settings.js); a hit of N bases advances
+   everyone exactly N bases; a sac fly scores only the runner from third; fielding defense has no
+   per-position split.
 
 ### Verification
 
 ```
-node baseball/js/test.js        # 603 assertions, 0 failed
+node baseball/js/test.js        # 704 assertions, 0 failed
 node test-game-conventions.mjs  # 11 passed, 0 failed, no new known-gap entries
-node validate-sw-assets.mjs     # every engine/*.js file present in ASSETS; REST_MANIFEST/version.json regenerated for game-hub-v807
+node validate-sw-assets.mjs     # every engine/*.js file present in ASSETS; REST_MANIFEST/version.json regenerated for game-hub-v808
 node test-sw-strategy.mjs       # 107 passed, 0 failed
 ```
 
 Measured median full-game time (40-game speed gate, majors): well under 1ms/game — this is a
-turn-based simulation with no per-frame rendering cost, so "speed" here means "resolves instantly
-enough that a phone could play through a whole season without a noticeable pause," not frame
-budget. Per-league median (8 seeds each, section 10): little 2ms, highschool/college/minors/majors
-1ms. `DETERMINISM_SEED = 424242`; `RESUME_SEED = 909090` (stopped after 15 pitches, restored, and
-proven to reach the exact same final `snapshot()` as an uninterrupted game with the same seed).
+turn-based simulation with no per-frame rendering cost. Per-league median (8 seeds each, section
+10): 0-1ms across all five leagues. `DETERMINISM_SEED = 424242`; `RESUME_SEED = 909090` (stopped
+after 15 pitches, restored, and proven to reach the exact same final `snapshot()` as an
+uninterrupted game with the same seed).
 
 ## Frozen identifiers (THE LAW rule 5 — never rename, never repurpose)
 
@@ -282,12 +288,12 @@ Shared, network-first, no DOM, no Firebase import at module scope (boots through
 
 ## Design doc
 
-`Baseball Game Design Doc v8` is cited by the phase-1 handoff as the source for everything about
-how the game will actually play (sections 3, 6-14 by that handoff's own references). **It is not
-present anywhere in this repository, in git history, or in any session to date** — confirmed by
-exhaustive search both when this line named v6 and again for phase 1's v8. Every value in
-`js/engine/settings.js` not already frozen by this file's own identifier table is therefore an
-invented Draft placeholder (tagged `// Draft [Open item N]`, listed in full above), not a
-transcription from a real source. Read the real doc before treating any of those numbers, or the
-rules-decided-here list above, as settled — and update this pointer and the settings file together
-the day it turns up.
+**`docs/BASEBALL-DESIGN-DOC.md`** ("Baseball Game Design Doc v8") is committed to this repo as of
+BB-1a (2026-09-12) and is the source of truth for `settings.js`. It was cited by the phase-1
+handoff but was not present anywhere in this repository, in git history, or in any session before
+that — confirmed by exhaustive search, twice (once for a "v6" citation, once for "v8"). Read it,
+not this file, for how the game is actually meant to play; this file records which `settings.js`
+constants come from it (with the doc's own [Locked]/[Tested]/[Draft] status and section number)
+and which are still invented (`// Draft [Open item N]`, listed above). If a future revision of the
+doc lands, update the committed copy, `settings.js`, and this pointer together in the same
+milestone.

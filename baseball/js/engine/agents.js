@@ -7,45 +7,41 @@
 //
 // DETERMINISM: every agent below draws its randomness from `view.rand01`, the SAME seeded stream
 // game.js itself advances and snapshots (see rng.js's `stepRng`). An agent that reached for
-// Math.random would make two runs of an identical seed diverge the moment it acted - which is
-// exactly the "seeded RNG only" constraint this phase is built to satisfy structurally, not just
-// by convention.
+// Math.random would make two runs of an identical seed diverge the moment it acted.
 
-import { CPU } from './settings.js';
+import { CPU, unlockedPitchesFor } from './settings.js';
 import { ZONE } from './pitch.js';
 
-/** A CPU pitcher. Picks from whatever pitches are unlocked for its league, aiming loosely at the
- *  zone's edges more often than its center (a CPU that always aims dead center would be trivially
- *  easy to read). */
+/** A CPU pitcher. Picks from whatever pitches are unlocked for its league (and, for a player's own
+ *  career opponent, their World Series titles - CPU rosters never carry titles, doc §8: "CPU stats
+ *  do not track or react to your stats", so `wsTitles` is always 0 for a CPU pitcher). Aims loosely
+ *  at the zone's edges more often than its center. */
 export class CpuPitcher {
   constructor({ league, settings }) {
     this.league = league;
     this.settings = settings;
   }
   async decidePitch(view) {
-    const unlocked = this.settings.PITCH_UNLOCKS[this.league] || this.settings.PITCH_UNLOCKS.majors;
+    const unlocked = unlockedPitchesFor(this.league, 0);
     const type = unlocked[Math.floor(view.rand01() * unlocked.length)];
     const zone = this.settings.ZONE || ZONE;
-    const cx = (zone.xMin + zone.xMax) / 2;
-    const cz = (zone.zMin + zone.zMax) / 2;
-    const spreadX = (zone.xMax - zone.xMin) / 2;
-    const spreadZ = (zone.zMax - zone.zMin) / 2;
+    const halfWidth = zone.xMax; // zone is symmetric about 0
     // Aim inside the zone about 65% of the time, clearly outside it the rest - a CPU that never
     // misses off the plate would give away every take decision for free. 1.7 puts most of that
-    // uniform spread genuinely outside the zone edges (rather than merely nudging up against
-    // them), which is what makes "take" a real decision rather than a near-certain strike anyway.
+    // uniform spread genuinely outside the zone edge (rather than merely nudging up against it).
     const inZoneBias = view.rand01() < 0.65 ? 0.55 : 1.7;
-    const aim = {
-      x: cx + (view.rand01() * 2 - 1) * spreadX * inZoneBias,
-      z: cz + (view.rand01() * 2 - 1) * spreadZ * inZoneBias,
-    };
-    return { type, aim };
+    const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
+    return { type, aim: aimX };
   }
 }
 
-/** A CPU batter. Swings more often at pitches it reads as strikes, and more often as its league's
- *  swing discipline rises; times its swing with an error that shrinks as its own contact skill
- *  rises. Sees the already-thrown pitch on `view.pitch`, same as a human agent would. */
+/** A CPU batter. Swings at strikes at its league's `swingIn` rate and chases pitches outside the
+ *  zone at its `chase` rate (both doc §14, [Tested] at the college tier, copied elsewhere as a
+ *  placeholder - see settings.js's CPU table). Times its swing with a Gaussian error of
+ *  `timingSigmaMs`, and aims the bat near the pitch's own lateral position with some miss-read
+ *  governed by `guess` (how much it leans toward a real read of your last few pitches - not yet
+ *  wired to `view.pitchHistory`; the seam exists, using it is Open item 3). Sees the already-
+ *  thrown pitch on `view.pitch`, same as a human agent would. */
 export class CpuBatter {
   constructor({ league, skills, settings }) {
     this.league = league;
@@ -53,22 +49,28 @@ export class CpuBatter {
     this.settings = settings;
   }
   async decideSwing(view) {
-    const cpu = this.settings.CPU[this.league] || CPU.majors;
+    const cpu = this.settings.CPU[this.league] || CPU.college;
     const pitch = view.pitch;
-    const zone = this.settings.ZONE || ZONE;
-    const inZone = pitch.x >= zone.xMin && pitch.x <= zone.xMax && pitch.z >= zone.zMin && pitch.z <= zone.zMax;
-    const swingChance = inZone
-      ? 0.55 + cpu.swingDiscipline * 0.35
-      : 0.10 + (1 - cpu.swingDiscipline) * 0.20;
+
+    const swingChance = pitch.isStrike ? cpu.swingIn : cpu.chase;
     if (view.rand01() >= swingChance) return { action: 'take' };
 
-    const contactPts = Math.max(0, Math.min(this.settings.CAPS.perSkill, this.skills.contact || 0));
-    const skillFrac = contactPts / this.settings.CAPS.perSkill;
-    const timingSpreadMs = 160 * (1 - cpu.contactSkill * 0.5) * (1 - skillFrac * 0.3);
-    const timingErrorMs = (view.rand01() * 2 - 1) * timingSpreadMs;
-    const power = 0.45 + view.rand01() * 0.35;
-    return { action: 'swing', timingErrorMs, power };
+    const timingErrorMs = gaussianLite(view.rand01) * cpu.timingSigmaMs;
+    const readNoise = (1 - cpu.guess) * 0.3;
+    const aimX = pitch.x + (view.rand01() * 2 - 1) * readNoise;
+    // The CPU never charges its swing this phase - doc's charge mechanic is a held-input UI
+    // concern (§12), and no CPU tuning field here says how often a CPU would choose to charge.
+    return { action: 'swing', aimX, timingErrorMs, charged: false };
   }
+}
+
+/** A cheap four-draw approximation of a standard normal (Irwin-Hall(4), mean 0, sd ~= 0.577),
+ *  used so CpuBatter's timing error does not need rng.js's full Box-Muller `gaussian` (which
+ *  wants an rng OBJECT, not a bound rand01 callback) threaded through here. Always consumes
+ *  exactly four draws from the stream, so its cost is fixed and its position in the RNG sequence
+ *  is as predictable as any other draw. */
+function gaussianLite(rand01) {
+  return (rand01() + rand01() + rand01() + rand01() - 2) / Math.sqrt(4 / 12);
 }
 
 /** Replays a fixed, pre-recorded script of decisions - one per call, in order - for deterministic

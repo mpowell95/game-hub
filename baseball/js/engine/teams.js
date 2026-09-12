@@ -1,15 +1,17 @@
 // teams.js : deterministic team generation. Same (league, index) -> byte-identical team, on any
 // device, every run - the same "emit the documented shape from a seed and nothing else" contract
 // golf/js/holegen.js's header describes for hole generation, applied here to rosters.
+//
+// CPU teams are generated at the league's cap MINUS its CPU_LEVEL_SHORTFALL (doc §8, [Locked]:
+// "generated at the player's expected level... not at the raw league cap. Generating at the cap
+// would leave the CPU 9 to 11 points above the player from College up, which contradicts
+// 'difficulty comes from behavior, not bigger stats'"). The exact per-skill allocation FORMULA
+// below (how a style's weights turn into six skill values under that ceiling) is not given by the
+// doc at all - Draft [Open item 25], the same tag TEAM_STYLES/TEAM_STYLE_WEIGHTS carry in
+// settings.js, since a style's numeric weights are equally undecided there.
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
-import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, POINTS } from './settings.js';
-
-const FIRST_NAMES = ['Alex', 'Sam', 'Jordan', 'Casey', 'Morgan', 'Riley', 'Drew', 'Jamie', 'Quinn',
-  'Reese', 'Avery', 'Rowan', 'Blair', 'Dana', 'Kai', 'Emerson', 'Finley', 'Harper', 'Skyler', 'Toby'];
-const LAST_NAMES = ['Rivera', 'Chen', 'Okafor', 'Novak', 'Hartley', 'Dubois', 'Kowalski', 'Silva',
-  'Nakamura', 'Petrov', 'Fontaine', 'Delgado', 'Whitfield', 'Osei', 'Larsen', 'Mercer', 'Vance',
-  'Iyer', 'Boone', 'Castellan'];
+import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL } from './settings.js';
 
 function nameFor(rand01) {
   const first = FIRST_NAMES[Math.floor(rand01() * FIRST_NAMES.length)];
@@ -17,20 +19,29 @@ function nameFor(rand01) {
   return `${first} ${last}`;
 }
 
-/** Deterministically build one player's skill points from a style's relative weights, spending a
- *  fixed total point budget. Not exactly the budget by construction (rounding), always <= CAPS. */
-function allocateSkills(budget, style, rand01) {
-  const weights = SKILL_IDS.map((id) => (style[id] || 1) * (0.8 + rand01() * 0.4));
-  const total = weights.reduce((a, b) => a + b, 0);
+const FIRST_NAMES = ['Alex', 'Sam', 'Jordan', 'Casey', 'Morgan', 'Riley', 'Drew', 'Jamie', 'Quinn',
+  'Reese', 'Avery', 'Rowan', 'Blair', 'Dana', 'Kai', 'Emerson', 'Finley', 'Harper', 'Skyler', 'Toby'];
+const LAST_NAMES = ['Rivera', 'Chen', 'Okafor', 'Novak', 'Hartley', 'Dubois', 'Kowalski', 'Silva',
+  'Nakamura', 'Petrov', 'Fontaine', 'Delgado', 'Whitfield', 'Osei', 'Larsen', 'Mercer', 'Vance',
+  'Iyer', 'Boone', 'Castellan'];
+
+/** How far below the league's raw cap a CPU team is generated (doc §8). */
+export function effectiveCapFor(league) {
+  const cap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
+  const shortfall = CPU_LEVEL_SHORTFALL[league] || 0;
+  return Math.max(1, cap - shortfall);
+}
+
+/** Deterministically build one player's six skill values from a style's relative weights, each
+ *  bounded by `effectiveCap`. Draft [Open item 25]: the exact formula, not just the weights. */
+function allocateSkills(effectiveCap, style, rand01) {
   const skills = {};
-  let spent = 0;
-  SKILL_IDS.forEach((id, i) => {
-    const raw = Math.round((weights[i] / total) * budget);
-    const val = Math.max(0, Math.min(CAPS.perSkill, raw));
-    skills[id] = val;
-    spent += val;
-  });
-  void spent;
+  const meanWeight = SKILL_IDS.reduce((s, id) => s + (style[id] || 1), 0) / SKILL_IDS.length;
+  for (const id of SKILL_IDS) {
+    const w = (style[id] || 1) / meanWeight;
+    const raw = effectiveCap * 0.5 * w * (0.7 + rand01() * 0.6);
+    skills[id] = Math.max(0, Math.min(effectiveCap, Math.round(raw)));
+  }
   return skills;
 }
 
@@ -41,7 +52,6 @@ function allocateSkills(budget, style, rand01) {
  * @param {object} [opts]
  * @param {string} [opts.name] - display name; a generated placeholder if omitted
  * @param {number} [opts.size] - roster size, default 9 (no bench this phase)
- * @param {object} [settingsIn] - override settings module (tests only)
  */
 export function makeTeam(league, index, opts = {}) {
   const size = opts.size || 9;
@@ -53,7 +63,7 @@ export function makeTeam(league, index, opts = {}) {
   const styleId = pickWeighted(rand01, styleIds, styleIds.map((id) => styleWeights[id]));
   const style = TEAM_STYLES[styleId];
 
-  const budget = POINTS[league] != null ? POINTS[league] : POINTS.majors;
+  const effectiveCap = effectiveCapFor(league);
 
   const players = [];
   for (let i = 0; i < size; i++) {
@@ -64,7 +74,7 @@ export function makeTeam(league, index, opts = {}) {
       name: nameFor(rand01),
       bats,
       throws: throwsArm,
-      skills: allocateSkills(budget, style, rand01),
+      skills: allocateSkills(effectiveCap, style, rand01),
     });
   }
 
@@ -79,8 +89,9 @@ export function makeTeam(league, index, opts = {}) {
   };
 }
 
-/** Aggregate team strength: mean of each skill across the roster, 0..CAPS.perSkill. Useful as a
- *  single sortable number (e.g. seeding a season bracket) without re-deriving it ad hoc elsewhere. */
+/** Aggregate team strength: mean of each skill across the roster, 0..effectiveCapFor(team.league).
+ *  Useful as a single sortable number (e.g. seeding a season bracket) without re-deriving it
+ *  elsewhere. */
 export function teamStrength(team) {
   const totals = {};
   SKILL_IDS.forEach((id) => { totals[id] = 0; });
@@ -94,4 +105,4 @@ export function teamStrength(team) {
   return { means, overall: sum / SKILL_IDS.length };
 }
 
-export default { makeTeam, teamStrength };
+export default { makeTeam, teamStrength, effectiveCapFor };

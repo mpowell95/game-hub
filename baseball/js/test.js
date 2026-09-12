@@ -13,10 +13,10 @@ import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch } from './engine/pitch.js';
 import { swing } from './engine/swing.js';
 import { resolveContact, carryFt } from './engine/outcomes.js';
-import { emptyBases, advanceAll, advanceWalk, advanceSacFly } from './engine/bases.js';
+import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
 import { CpuPitcher, CpuBatter, ScriptedAgent } from './engine/agents.js';
-import { makeTeam, teamStrength } from './engine/teams.js';
+import { makeTeam, teamStrength, effectiveCapFor } from './engine/teams.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -51,22 +51,60 @@ ok(SETTINGS.LEAGUES.length === 5, 'five leagues');
 ok(JSON.stringify(SETTINGS.LEAGUES) === JSON.stringify(['little', 'highschool', 'college', 'minors', 'majors']),
   'league ladder order matches baseball/CLAUDE.md\'s frozen order');
 for (const lg of SETTINGS.LEAGUES) {
-  ok(typeof SETTINGS.POINTS[lg] === 'number' && SETTINGS.POINTS[lg] > 0, `POINTS.${lg} is a positive number`);
+  ok(typeof SETTINGS.POINTS[lg] === 'object' && SETTINGS.POINTS[lg].win >= SETTINGS.POINTS[lg].loss,
+    `POINTS.${lg} pays a win at least as much as a loss (doc §7)`);
+  ok(SETTINGS.POINTS[lg].bronze < SETTINGS.POINTS[lg].silver && SETTINGS.POINTS[lg].silver < SETTINGS.POINTS[lg].gold,
+    `POINTS.${lg} trophies rise bronze < silver < gold (doc §7)`);
   ok(Array.isArray(SETTINGS.PITCH_UNLOCKS[lg]) && SETTINGS.PITCH_UNLOCKS[lg].length > 0, `PITCH_UNLOCKS.${lg} non-empty`);
   ok(SETTINGS.PITCH_UNLOCKS[lg].every((t) => SETTINGS.PITCH_TYPES.includes(t)), `PITCH_UNLOCKS.${lg} are real pitch types`);
   ok(!!SETTINGS.CPU[lg], `CPU.${lg} exists`);
   ok(!!SETTINGS.TEAM_STYLE_WEIGHTS[lg], `TEAM_STYLE_WEIGHTS.${lg} exists`);
+  ok(typeof SETTINGS.CAPS[lg] === 'number' && SETTINGS.CAPS[lg] > 0, `CAPS.${lg} is a positive number`);
+  ok(typeof SETTINGS.CPU_LEVEL_SHORTFALL[lg] === 'number' && SETTINGS.CPU_LEVEL_SHORTFALL[lg] >= 0,
+    `CPU_LEVEL_SHORTFALL.${lg} is a non-negative number`);
+}
+// doc §6, [Draft]: caps rise 10, 14, 18, 22, 26 - monotonic by league.
+ok(SETTINGS.LEAGUES.every((lg, i) => i === 0 || SETTINGS.CAPS[lg] > SETTINGS.CAPS[SETTINGS.LEAGUES[i - 1]]),
+  'CAPS rise monotonically by league (doc §6: 10, 14, 18, 22, 26)');
+ok(JSON.stringify(SETTINGS.CAPS) === JSON.stringify({ little: 10, highschool: 14, college: 18, minors: 22, majors: 26 }),
+  'CAPS match the doc\'s exact per-league numbers');
+// doc §11/§14: readout mph rows equal the Majors row times that league's own scale, within 1 mph.
+for (const lg of SETTINGS.LEAGUES) {
+  const row = SETTINGS.READOUT[lg];
+  const majorsRow = SETTINGS.READOUT.majors;
+  for (const pitch of ['fastball', 'changeup', 'curveball', 'slider', 'knuckleball']) {
+    ok(Math.abs(row[pitch] - majorsRow[pitch] * row.scale) <= 1,
+      `READOUT.${lg}.${pitch} equals the Majors row times ${lg}'s own scale, within 1 mph`);
+  }
 }
 ok(SETTINGS.PATTERN_WEIGHTS.length === SETTINGS.PATTERN_WINDOW, 'PATTERN_WEIGHTS length matches PATTERN_WINDOW');
+ok(SETTINGS.PATTERN_WINDOW === 3, 'pattern memory window is the last 3 pitches (doc §8, [Locked])');
 ok(SETTINGS.FEEL.engine.dtS === 1 / 120, 'fixed timestep is 1/120s, matching hill-climb/js/physics.js\'s DT');
 ok(SETTINGS.FEEL.engine.maxSteps === 5, 'catch-up cap matches the repo\'s standing convention (Hill Climb/Pinball)');
-ok(Number.isInteger(SETTINGS.SEASON.inningsPerGame) && SETTINGS.SEASON.inningsPerGame > 0, 'inningsPerGame is a positive integer');
-ok(SETTINGS.CAPS.perSkill > 0, 'CAPS.perSkill positive');
+ok(SETTINGS.FEEL.engine.fastballMs === 1500, 'fastballMs matches the doc\'s prototype-tuned value (doc §14)');
+ok(SETTINGS.SEASON.inningsPerGame === 3, 'a game is 3 innings (doc §3, [Locked])');
+ok(SETTINGS.SEASON.playoffTeams === 4 && SETTINGS.SEASON.leagueSize === 9, 'top 4 of 9 make the playoffs (doc §4)');
+ok(SETTINGS.SEASON.playoffRounds.length === 2, 'no quarterfinal - semifinal then championship only (doc §4)');
 for (const style of Object.keys(SETTINGS.TEAM_STYLES)) {
   ok(SETTINGS.SKILL_IDS.every((id) => typeof SETTINGS.TEAM_STYLES[style][id] === 'number'), `TEAM_STYLES.${style} names every skill`);
 }
-ok(ZONE.xMax > ZONE.xMin && ZONE.zMax > ZONE.zMin, 'strike zone has positive extent');
+ok(Object.keys(SETTINGS.TEAM_STYLES).length === 8, 'eight team styles, matching the doc\'s named list (doc §9)');
+// doc §6: every preset sums to 15 per side with nothing over 10.
+for (const [name, preset] of Object.entries(SETTINGS.PRESETS)) {
+  const hitSum = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + preset[id], 0);
+  const pitchSum = SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + preset[id], 0);
+  ok(hitSum === 15, `PRESETS.${name} sums to 15 in hitting (doc §6)`);
+  ok(pitchSum === 15, `PRESETS.${name} sums to 15 in pitching (doc §6)`);
+  ok(Object.values(preset).every((v) => v <= 10), `PRESETS.${name} has nothing over 10 (doc §6)`);
+}
+ok(ZONE.xMax > ZONE.xMin, 'strike zone has positive lateral extent');
 ok(SETTINGS.MECHANICS.strikesForOut === 3 && SETTINGS.MECHANICS.ballsForWalk === 4, 'standard K/BB thresholds');
+ok(SETTINGS.MECHANICS.extraInningRunnerOnSecond === true, 'extra innings start with a runner on second (doc §3, [Locked])');
+ok(SETTINGS.MECHANICS.doublePlayEnabled === true, 'ground-out double plays are possible (doc §3, [Locked])');
+ok(SETTINGS.MECHANICS.foulNeverThirdStrike === true, 'a foul can never be strike 3 (doc §3, [Locked])');
+ok(SETTINGS.unlockedPitchesFor('majors', 1).includes('eephus'), 'a first World Series title unlocks the eephus (doc §11)');
+ok(SETTINGS.unlockedPitchesFor('majors', 2).includes('cutter'), 'a second World Series title unlocks the cutter (doc §11)');
+ok(!SETTINGS.unlockedPitchesFor('majors', 0).includes('eephus'), 'no titles means no eephus yet');
 
 // ---------------------------------------------------------------------------------------------
 console.log('\n-- 2. purity: no forbidden globals anywhere in the engine --');
@@ -116,21 +154,23 @@ console.log('\n-- 3. rng.js: literal values and determinism --');
 console.log('\n-- 4. pitch.js --');
 {
   const rng = mulberry32(5);
-  const p = flyPitch('fastball', { x: 0, z: 2.5 }, 1, SETTINGS, rng);
+  const p = flyPitch('fastball', 0, 1, SETTINGS, rng);
   ok(p.type === 'fastball', 'flyPitch echoes the requested type');
   ok(typeof p.isStrike === 'boolean', 'flyPitch reports isStrike');
   ok(p.timeToPlateS > 0, 'flyPitch reports a positive time to plate');
+  ok(flyPitch('changeup', 0, 1, SETTINGS, mulberry32(1)).timeToPlateS > flyPitch('fastball', 0, 1, SETTINGS, mulberry32(1)).timeToPlateS,
+    'a changeup takes longer to arrive than a fastball (doc §14 travel multiples)');
   const rngA = mulberry32(11), rngB = mulberry32(11);
-  const p1 = flyPitch('curveball', { x: 0.2, z: 2.0 }, 0.5, SETTINGS, rngA);
-  const p2 = flyPitch('curveball', { x: 0.2, z: 2.0 }, 0.5, SETTINGS, rngB);
+  const p1 = flyPitch('curveball', 0.2, 0.5, SETTINGS, rngA);
+  const p2 = flyPitch('curveball', 0.2, 0.5, SETTINGS, rngB);
   ok(JSON.stringify(p1) === JSON.stringify(p2), 'flyPitch is a pure function of its inputs + rand stream');
   // Higher control skill should, on average, land closer to the aim point.
   const dist = (aimSkill) => {
     const r = mulberry32(1234);
     let total = 0;
     for (let i = 0; i < 400; i++) {
-      const q = flyPitch('fastball', { x: 0, z: 2.5 }, aimSkill, SETTINGS, r);
-      total += Math.hypot(q.x, q.z - 2.5);
+      const q = flyPitch('fastball', 0, aimSkill, SETTINGS, r);
+      total += Math.abs(q.x);
     }
     return total / 400;
   };
@@ -141,13 +181,14 @@ console.log('\n-- 4. pitch.js --');
 console.log('\n-- 5. swing.js --');
 {
   const rng = mulberry32(3);
-  const takeResult = swing({ x: 0, z: 2.5, isStrike: true }, { contact: 10, power: 10 }, { action: 'take' }, SETTINGS, rng);
+  const skills = { hitAcc: 6, hitPow: 6, hitSpd: 6, pitchSpd: 6, pitchAcc: 6, pitchSpin: 6 };
+  const takeResult = swing({ x: 0, isStrike: true }, skills, { action: 'take' }, SETTINGS, rng);
   ok(takeResult.swung === false, 'a take never swings');
   let sawWhiff = false, sawContact = false, sawInPlay = false, sawFoul = false;
   const r2 = mulberry32(99);
   for (let i = 0; i < 300; i++) {
-    const pitch = flyPitch('fastball', { x: (r2() - 0.5) * 1.2, z: 2.5 + (r2() - 0.5) * 1.5 }, 0.6, SETTINGS, r2);
-    const s = swing(pitch, { contact: 10, power: 10 }, { action: 'swing', timingErrorMs: (r2() - 0.5) * 200, power: 0.7 }, SETTINGS, r2);
+    const pitch = flyPitch('fastball', (r2() - 0.5) * 1.2, 0.6, SETTINGS, r2);
+    const s = swing(pitch, skills, { action: 'swing', aimX: (r2() - 0.5) * 1.2, timingErrorMs: (r2() - 0.5) * 340, power: 0.7 }, SETTINGS, r2);
     if (!s.contact) sawWhiff = true;
     else if (s.foul) sawFoul = true;
     else { sawContact = true; if (s.inPlay) sawInPlay = true; }
@@ -160,13 +201,17 @@ console.log('\n-- 5. swing.js --');
     const r = mulberry32(55);
     let whiffs = 0, n = 400;
     for (let i = 0; i < n; i++) {
-      const pitch = flyPitch('fastball', { x: 0, z: 2.5 }, 1, SETTINGS, r);
-      const s = swing(pitch, { contact: 20, power: 10 }, { action: 'swing', timingErrorMs, power: 0.6 }, SETTINGS, r);
+      const pitch = flyPitch('fastball', 0, 1, SETTINGS, r);
+      const s = swing(pitch, { ...skills, hitAcc: 10 }, { action: 'swing', aimX: 0, timingErrorMs, power: 0.6 }, SETTINGS, r);
       if (!s.contact) whiffs++;
     }
     return whiffs / n;
   };
-  ok(whiffRate(0) < whiffRate(200), 'a well-timed swing whiffs less than a badly-timed one');
+  ok(whiffRate(0) < whiffRate(1000), 'a well-timed swing whiffs less than one wildly outside the foul boundary');
+  // Bat reach: a bat placed far from where the pitch actually crossed is an automatic miss.
+  const wayOff = swing({ x: 0, isStrike: true }, skills,
+    { action: 'swing', aimX: SETTINGS.FEEL.engine.batReach + 0.5, timingErrorMs: 0, power: 0.6 }, SETTINGS, mulberry32(4));
+  ok(wayOff.contact === false, 'a bat placed beyond reach of the pitch is an automatic miss');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -175,20 +220,20 @@ console.log('\n-- 6. outcomes.js --');
   ok(carryFt(100, 25) > carryFt(60, 25), 'more exit velocity carries further');
   ok(carryFt(90, 0) < carryFt(90, 25), 'a grounder carries less than a well-lofted ball at the same speed');
   const rng = mulberry32(21);
-  const homer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 10, SETTINGS,
+  const homer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 0.5, SETTINGS,
     SETTINGS.PARKS.bandbox, rng);
   ok(homer.result === 'hit' && homer.bases === 4, 'a hard, well-lofted, centered ball clears a small park');
-  const weakHomer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 10, SETTINGS,
+  const weakHomer = resolveContact({ exitVeloMph: 105, launchAngleDeg: 30, sprayAngleDeg: 0 }, 0.5, SETTINGS,
     SETTINGS.PARKS.canyon, mulberry32(21));
   ok(!(weakHomer.result === 'hit' && weakHomer.bases === 4) || carryFt(105, 30) >= SETTINGS.PARKS.canyon.center,
     'the same swing is less likely to clear a deeper park (parks are not decoration)');
-  const foul = resolveContact({ exitVeloMph: 90, launchAngleDeg: 20, sprayAngleDeg: 80 }, 10, SETTINGS, SETTINGS.PARKS.default, mulberry32(1));
+  const foul = resolveContact({ exitVeloMph: 90, launchAngleDeg: 20, sprayAngleDeg: 80 }, 0.5, SETTINGS, SETTINGS.PARKS.default, mulberry32(1));
   ok(foul.isFoul === true && foul.result === 'out', 'a spray angle outside the foul lines is a foul out');
   let sawOut = false, sawHit = false, sawError = false;
   const r3 = mulberry32(303);
   for (let i = 0; i < 400; i++) {
     const o = resolveContact({ exitVeloMph: 40 + r3() * 60, launchAngleDeg: r3() * 45, sprayAngleDeg: (r3() - 0.5) * 80 },
-      Math.floor(r3() * 20), SETTINGS, SETTINGS.PARKS.default, r3);
+      r3(), SETTINGS, SETTINGS.PARKS.default, r3);
     if (o.result === 'out') sawOut = true;
     if (o.result === 'hit') sawHit = true;
     if (o.result === 'error') sawError = true;
@@ -224,6 +269,8 @@ console.log('\n-- 7. bases.js --');
     'a sac fly scores the runner from third and leaves everyone else alone');
   const noSac = advanceSacFly(['r1', null, null]);
   ok(noSac.wasSacFly === false && noSac.runsScored === 0, 'no runner on third means no sac fly to give');
+  const dp = advanceDoublePlay(['r1', 'r2', 'r3']);
+  ok(dp[0] === null && dp[1] === 'r2' && dp[2] === 'r3', 'a double play removes only the runner forced at second');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -237,25 +284,30 @@ console.log('\n-- 8. teams.js --');
   ok(t1.players.length === 9, 'a team has 9 players by default');
   ok(t1.battingOrder.length === 9, 'the batting order names every player');
   ok(t1.players.find((p) => p.id === t1.pitcherId), 'the pitcher id resolves to a real roster player');
+  const cap1 = effectiveCapFor('little');
   for (const p of t1.players) {
     for (const id of SETTINGS.SKILL_IDS) {
-      ok(p.skills[id] >= 0 && p.skills[id] <= SETTINGS.CAPS.perSkill, `${p.name}'s ${id} is within CAPS.perSkill`);
+      ok(p.skills[id] >= 0 && p.skills[id] <= cap1, `${p.name}'s ${id} is within little league's effective cap`);
     }
   }
   const strength = teamStrength(t1);
   ok(strength.overall > 0, 'teamStrength reports a positive overall number');
-  const majorsTeam = makeTeam('majors', 1);
-  const littleTeam = makeTeam('little', 1);
-  ok(teamStrength(majorsTeam).overall >= teamStrength(littleTeam).overall,
-    'majors teams are built from a bigger point budget than little league teams, on average strength');
+  ok(SETTINGS.LEAGUES.includes(t1.styleId) === false && !!SETTINGS.TEAM_STYLES[t1.styleId],
+    'a generated team\'s styleId is one of the doc\'s eight named styles');
+  // doc §8, [Locked]: "generated at the player's expected level... not at the raw league cap" -
+  // effectiveCapFor is strictly below the raw CAPS wherever a shortfall is given.
+  for (const lg of SETTINGS.LEAGUES) {
+    const expected = SETTINGS.CAPS[lg] - (SETTINGS.CPU_LEVEL_SHORTFALL[lg] || 0);
+    ok(effectiveCapFor(lg) === Math.max(1, expected), `effectiveCapFor(${lg}) is CAPS minus CPU_LEVEL_SHORTFALL`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
 console.log('\n-- 9. the agent seam --');
 {
   const scripted = new ScriptedAgent(
-    [{ type: 'fastball', aim: { x: 0, z: 2.5 } }],
-    [{ action: 'swing', timingErrorMs: 0, power: 0.8 }],
+    [{ type: 'fastball', aim: 0 }],
+    [{ action: 'swing', aimX: 0, timingErrorMs: 0, power: 0.8 }],
   );
   scripted.decidePitch().then((d) => ok(d.type === 'fastball', 'ScriptedAgent replays its pitch script in order'));
   scripted.decideSwing().then((d) => ok(d.action === 'swing', 'ScriptedAgent replays its swing script in order'));
@@ -266,10 +318,11 @@ console.log('\n-- 9. the agent seam --');
   const pitcher = new CpuPitcher({ league: 'little', settings: SETTINGS });
   const view = { rand01: mulberry32(1) };
   pitcher.decidePitch(view).then((d) => {
-    ok(SETTINGS.PITCH_UNLOCKS.little.includes(d.type), 'CpuPitcher only ever offers an unlocked pitch for its league');
+    ok(SETTINGS.unlockedPitchesFor('little').includes(d.type), 'CpuPitcher only ever offers an unlocked pitch for its league');
+    ok(typeof d.aim === 'number', 'CpuPitcher aims with a single lateral number, not a 2-D point');
   });
   const batter = new CpuBatter({ league: 'little', skills: cpuTeam.players[0].skills, settings: SETTINGS });
-  const pitch = flyPitch('fastball', { x: 0, z: 2.5 }, 1, SETTINGS, mulberry32(2));
+  const pitch = flyPitch('fastball', 0, 1, SETTINGS, mulberry32(2));
   batter.decideSwing({ rand01: mulberry32(3), pitch }).then((d) => {
     ok(d.action === 'swing' || d.action === 'take', 'CpuBatter returns a legal action');
   });
@@ -338,6 +391,63 @@ console.log('\n-- 10. rules correctness, played through the real engine --');
     g2._resolveBattedBall({ result: 'out', kind: 'flyout', isFoul: false }, 'batterX', 'home');
     ok(g2.bases[2] === null && g2.score.home === 1, 'a flyout with 0 outs and a runner on third scores a sac fly');
   }
+
+  // doc §3, [Locked]: "every extra half-inning starts with a runner on second."
+  {
+    const g4 = playGameOnce('majors', hashSeed('extra-innings-probe-2'));
+    // Simulate reaching the top of the first extra inning without playing the whole game out.
+    g4.inning = SETTINGS.SEASON.inningsPerGame + 1;
+    g4.half = 'top';
+    let sawGhostRunner = false;
+    g4.onEvent = async (type) => {
+      if (type === 'halfInningStart') {
+        sawGhostRunner = g4.bases[1] === '__extra' && g4.bases[0] === null && g4.bases[2] === null;
+      }
+    };
+    // Only run one half-inning's worth of at-bats, then abort so the test stays fast.
+    let atBats = 0;
+    const origPlayAtBat = g4.playAtBat.bind(g4);
+    g4.playAtBat = async () => { atBats += 1; if (atBats > 6) { g4.abort(); return; } return origPlayAtBat(); };
+    await g4.playHalfInning();
+    ok(sawGhostRunner, 'a half-inning starting past regulation seeds a runner on second, nobody else on base');
+  }
+  {
+    // A regulation (non-extra) half-inning must NOT get the ghost runner.
+    const g5 = playGameOnce('majors', hashSeed('no-ghost-in-regulation'));
+    g5.inning = 1;
+    g5.half = 'top';
+    let atBats = 0;
+    const origPlayAtBat = g5.playAtBat.bind(g5);
+    g5.playAtBat = async () => { atBats += 1; if (atBats > 3) { g5.abort(); return; } return origPlayAtBat(); };
+    await g5.playHalfInning();
+    ok(true, 'regulation half-innings played without incident (ghost-runner gate did not misfire)');
+  }
+
+  // doc §3, [Locked]: a ground-out double play is possible with a runner on first and <2 outs.
+  {
+    const g6 = playGameOnce('majors', hashSeed('double-play-probe'));
+    g6.bases = ['runnerOnFirst', null, null];
+    g6.outs = 0;
+    const alwaysDp = () => 0; // rand01 returning 0 always beats doublePlayChance (> 0)
+    g6._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', alwaysDp);
+    ok(g6.bases[0] === null && g6.outs === 2, 'a ground-out double play removes the lead runner and records 2 outs');
+  }
+  {
+    const g7 = playGameOnce('majors', hashSeed('double-play-probe-2'));
+    g7.bases = ['runnerOnFirst', null, null];
+    g7.outs = 0;
+    const neverDp = () => 0.999999; // beats no chance under 1.0
+    g7._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', neverDp);
+    ok(g7.bases[0] === 'runnerOnFirst' && g7.outs === 1, 'a ground out that does not roll the double play just makes the one out');
+  }
+  {
+    // 2 outs already: a double play may never be granted regardless of the roll.
+    const g8 = playGameOnce('majors', hashSeed('double-play-probe-3'));
+    g8.bases = ['runnerOnFirst', null, null];
+    g8.outs = 2;
+    g8._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', () => 0);
+    ok(g8.bases[0] === 'runnerOnFirst' && g8.outs === 3, 'a double play is never granted with 2 outs already');
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -393,6 +503,8 @@ console.log('\n-- 12. resume gate: a snapshot mid-game resumes byte-identically 
   ok(validateSnapshot(bad2).length > 0, 'a malformed bases array is rejected');
   const bad3 = { ...snap, half: 'sideways' };
   ok(validateSnapshot(bad3).length > 0, 'an illegal half value is rejected');
+  const bad4 = { ...snap, rulesV: snap.rulesV - 1 };
+  ok(validateSnapshot(bad4).length > 0, 'a stale rulesV (an older ruleset) is rejected - forward-only, never reinterpreted (doc §15)');
   let threwOnBad = false;
   try { Game.fromSnapshot(bad1, resumedAgents); } catch { threwOnBad = true; }
   ok(threwOnBad, 'Game.fromSnapshot throws rather than silently resuming a malformed snapshot');

@@ -17,10 +17,16 @@ import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
 import { swing } from './swing.js';
 import { resolveContact } from './outcomes.js';
-import { emptyBases, advanceAll, advanceWalk, advanceSacFly } from './bases.js';
+import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
 
 export const SNAP_V = 1;
+
+// The runner placed on second at the start of every extra half-inning (doc §3, [Locked]: "every
+// extra half-inning starts with a runner on second"). Not a real batter - nobody's individual
+// stats credit this run this phase (there is no per-player box score yet, only team totals), and
+// it is never added to a lineup or a batting order.
+const EXTRA_INNING_RUNNER_ID = '__extra';
 
 /** Whole-document rejection, never default-fill - the same rule golf/js/holes.js's
  *  `validateHole()` follows for the same reason: a malformed snapshot must fail loudly rather
@@ -30,7 +36,10 @@ export function validateSnapshot(snap) {
   const errs = [];
   if (!snap || typeof snap !== 'object') { errs.push('snapshot is not an object'); return errs; }
   if (snap.v !== SNAP_V) errs.push(`v must be ${SNAP_V}`);
-  if (typeof snap.rulesV !== 'number') errs.push('rulesV must be a number');
+  // Forward-only, never reinterpreted (doc §15, [Locked]): a snapshot built under an older
+  // RULES_V is rejected outright rather than resumed under today's rules - the settings shape it
+  // depends on (e.g. BB-1a's skill ids) may have changed underneath it.
+  if (snap.rulesV !== RULES_V) errs.push(`rulesV must be ${RULES_V} (got ${snap.rulesV})`);
   if (!snap.home || !snap.away) errs.push('home/away teams missing');
   if (typeof snap.inning !== 'number' || snap.inning < 1) errs.push('inning must be >= 1');
   if (snap.half !== 'top' && snap.half !== 'bottom') errs.push('half must be top|bottom');
@@ -64,6 +73,9 @@ export class Game {
     this.away = away;
     this.agents = agents;
     this.parkId = parkId;
+    // Both sides play in the same league (a Career opponent is always drawn from the player's own
+    // league); home's is authoritative if the two ever disagreed.
+    this.league = home.league || away.league;
     this.settings = { ...SETTINGS_DEFAULTS, ZONE, ...(settings || {}) };
 
     this.rngState = seed >>> 0;
@@ -109,6 +121,7 @@ export class Game {
     g.away = snap.away;
     g.agents = agents;
     g.parkId = snap.parkId || 'default';
+    g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
     g.rngState = snap.rngState >>> 0;
     g.inning = snap.inning;
@@ -182,18 +195,20 @@ export class Game {
   }
 
   _controlSkillFor(pitcher) {
-    // A pitcher's control skill this phase is drawn from their `arm` point value - the only
-    // skill teams.js currently allocates that plausibly maps onto "how well this arm commands a
-    // pitch" without inventing a sixth skill the design doc might name differently.
-    return (pitcher.skills.arm || 0) / this.settings.CAPS.perSkill;
+    // doc §6, [Locked]: "Accuracy: pitch lands closer to your aim" - pitchAcc is exactly this.
+    const cap = this.settings.CAPS[this.league] != null ? this.settings.CAPS[this.league] : this.settings.CAPS.majors;
+    return Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
   }
 
-  _defenseFieldingSkill(defenseTeam) {
-    // Team-average fielding stands in for "the fielder who would have made this play" - there is
-    // no positional assignment this phase (no defensive alignment, no per-position skill split),
-    // which is one of the simplifications this phase's own report names explicitly.
-    const sum = defenseTeam.players.reduce((s, p) => s + (p.skills.fielding || 0), 0);
-    return sum / defenseTeam.players.length;
+  _defenseLevel01() {
+    // There is no per-player "fielding" skill in the real design (doc §6 names only hitAcc/
+    // hitPow/hitSpd and pitchSpd/pitchAcc/pitchSpin) - defense there is entirely OUT-ZONE
+    // GEOMETRY, sized per league (doc §10: "out zones also grow"). Exact per-league sizing is
+    // Open item 7 (undecided), so this is a placeholder league-ordered ramp, not a real model:
+    // higher leagues field a little better, same direction as the doc's own "better fielders" line,
+    // with no claim to the actual magnitude.
+    const idx = Math.max(0, LEAGUES.indexOf(this.league));
+    return 0.4 + 0.15 * (idx / (LEAGUES.length - 1));
   }
 
   _buildPitchView(defenseSide) {
@@ -305,10 +320,19 @@ export class Game {
   }
 
   async playHalfInning() {
+    let freshHalf = true;
     if (this._resumeHalfPending) {
       this._resumeHalfPending = false;
+      freshHalf = false;
     } else {
       this.outs = 0;
+    }
+    // doc §3, [Locked]: "every extra half-inning starts with a runner on second." Only on a
+    // genuinely FRESH half (never on a resumed one - a restored snapshot already carries whatever
+    // base state it had, ghost runner included if one was already placed).
+    if (freshHalf && this.inning > this.settings.SEASON.inningsPerGame
+        && this.settings.MECHANICS.extraInningRunnerOnSecond) {
+      this.bases = [null, EXTRA_INNING_RUNNER_ID, null];
     }
     await this.emit('halfInningStart', { inning: this.inning, half: this.half });
     if (this.aborted) return;
@@ -358,8 +382,8 @@ export class Game {
       const pitchView = this._buildPitchView(defenseSide);
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
-      const aim = (pitchDecision && pitchDecision.aim) || { x: 0, z: 2.5 };
-      const pitchResult = flyPitch(type, aim, this._controlSkillFor(pitcher), this.settings, () => this._rand());
+      const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
+      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand());
       this._recordPitch(batterId, pitchResult.type);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
@@ -374,9 +398,8 @@ export class Game {
       } else if (swingResult.foul) {
         if (this.strikes < 2) this.strikes += 1;
       } else {
-        const fielderSkill = this._defenseFieldingSkill(defenseTeam);
-        const outcome = resolveContact(swingResult, fielderSkill, this.settings, this._parkFt(), () => this._rand());
-        this._resolveBattedBall(outcome, batterId, battingSide);
+        const outcome = resolveContact(swingResult, this._defenseLevel01(), this.settings, this._parkFt(), () => this._rand());
+        this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind });
         return;
@@ -408,7 +431,7 @@ export class Game {
    *  awaits, so `_checkWalkoff` (called from `_addRuns`) always fires before the caller's next
    *  `await this.emit(...)`, preserving the "decide, then announce" ordering `_finalize` depends
    *  on. */
-  _resolveBattedBall(outcome, batterId, battingSide) {
+  _resolveBattedBall(outcome, batterId, battingSide, rand01) {
     if (outcome.isFoul || outcome.result === 'out') {
       const isSacFly = outcome.kind === 'flyout'
         && this.bases[2] != null
@@ -418,6 +441,18 @@ export class Game {
         this.bases = bases;
         this.outs += 1; // no hit credited on a sac fly - the batter is out
         this._addRuns(battingSide, runsScored);
+        return;
+      }
+      // doc §3, [Locked]: "Ground out with a runner on first and fewer than 2 outs CAN be a
+      // double play" - the doc locks that it can happen, not how often (Draft, MECHANICS.
+      // doublePlayChance). Removes only the lead runner from first; nobody else moves.
+      const canDoublePlay = outcome.kind === 'groundout'
+        && this.bases[0] != null
+        && this.outs < this.settings.MECHANICS.outsPerInning - 1
+        && this.settings.MECHANICS.doublePlayEnabled;
+      if (canDoublePlay && rand01 && rand01() < this.settings.MECHANICS.doublePlayChance) {
+        this.bases = advanceDoublePlay(this.bases);
+        this.outs += 2; // the batter, plus the runner forced at second
         return;
       }
       this.outs += 1;

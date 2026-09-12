@@ -28,13 +28,17 @@ function battedBallKind(launchAngleDeg) {
 
 /**
  * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number}} batted
- * @param {{fielding:number}} defenseSkill - 0..CAPS.perSkill, the responsible fielder's aggregate
+ * @param {number} fieldingSkill01 - 0..1, how good the responsible defense is. There is no
+ *   per-player "fielding" skill in the real design (doc §6 names only hitAcc/hitPow/hitSpd and
+ *   pitchSpd/pitchAcc/pitchSpin) - defense there is entirely OUT-ZONE GEOMETRY, sized per league
+ *   (doc §10, "out zones also grow"). This parameter is this engine's own stand-in until that
+ *   geometry is built (Draft [Open item 7], same tag as the invented FIELD/PARKS distances below).
  * @param {object} settings
  * @param {{left:number,center:number,right:number}} parkFt - the wall distances in play
  * @param {function} rand01
  * @returns {{result:'out'|'error'|'hit', bases?:number, kind:string, distanceFt:number, isFoul:boolean}}
  */
-export function resolveContact(batted, defenseSkill, settings, parkFt, rand01) {
+export function resolveContact(batted, fieldingSkill01, settings, parkFt, rand01) {
   // Foul territory: spray angle beyond the foul lines. Half the swept spray range is foul on
   // either side, symmetric with settings.FIELD.foulLineDeg defining the fair sector's half-width.
   const fairHalfWidth = settings.FIELD.foulLineDeg;
@@ -46,10 +50,8 @@ export function resolveContact(batted, defenseSkill, settings, parkFt, rand01) {
   const kind = battedBallKind(batted.launchAngleDeg);
   const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg);
 
-  const fieldingPts = Math.max(0, Math.min(settings.CAPS.perSkill, defenseSkill || 0));
-  const fieldingSkill01 = fieldingPts / settings.CAPS.perSkill;
-  const errorReduction = fieldingPts * settings.SKILL_EFFECT.fielding.errorReductionPerPt;
-  const errorChance = Math.max(0.01, 0.06 - errorReduction);
+  const defense01 = Math.max(0, Math.min(1, fieldingSkill01 || 0));
+  const errorChance = Math.max(0.01, 0.06 - defense01 * 0.05); // Draft [Open item 7]
 
   // Which fence this spray angle would need to clear - a simple lerp across left/center/right.
   const t = (batted.sprayAngleDeg + fairHalfWidth) / (2 * fairHalfWidth); // 0 left .. 1 right
@@ -72,7 +74,7 @@ export function resolveContact(batted, defenseSkill, settings, parkFt, rand01) {
     // against a reference (none exists) - see baseball/CLAUDE.md's report for the numbers this
     // produces (hit rate, walk rate, median game length per league).
     const throughChance = Math.max(0.12, Math.min(0.62,
-      0.30 + (batted.exitVeloMph - 55) / 110 + Math.abs(batted.sprayAngleDeg) / 90 - fieldingSkill01 * 0.2));
+      0.30 + (batted.exitVeloMph - 55) / 110 + Math.abs(batted.sprayAngleDeg) / 90 - defense01 * 0.2));
     if (rand01() < throughChance) {
       return { result: 'hit', bases: 1, kind: 'ground-single', distanceFt, isFoul: false };
     }
@@ -91,7 +93,7 @@ export function resolveContact(batted, defenseSkill, settings, parkFt, rand01) {
   // Draft [Open item 24] (same tuning pass as the grounder threshold above): a floor high enough
   // that a routine-depth line drive or fly ball is still a real coin flip rather than an automatic
   // out, which is closer to how those actually play than a near-zero floor is.
-  const dropChance = Math.max(0.30, Math.min(0.85, 0.22 + past * 0.7 - fieldingSkill01 * 0.15));
+  const dropChance = Math.max(0.30, Math.min(0.85, 0.22 + past * 0.7 - defense01 * 0.15));
   if (rand01() >= dropChance) {
     return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
   }
