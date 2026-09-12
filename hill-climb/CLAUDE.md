@@ -210,6 +210,62 @@ that can go down is ever written into `gamehub.stats`.
 5). A selection pointing at something unowned falls back rather than launching a car you have not
 bought. `save()` logs loudly on failure (rule 6).
 
+### The books must balance (2026-09-12)
+
+A player told Matt he had opened devtools on the desktop, typed a new number into `coins`, and
+bought every upgrade with it. Matt: *"I want to reset all his upgrades and coins and prevent this
+going forward."*
+
+There is no server to ask - this save is localStorage and nothing else - but there is a
+**conservation law** sitting in the two money fields that nothing used to check:
+
+```
+coins + (everything you have bought)  ==  earned
+```
+
+`earned` only ever increments and is never spent from, so it is the honest ceiling on every coin
+that has ever existed for this player. `spentOf()` prices the garage a save claims (vehicles,
+stages, and every upgrade level, at today's prices), `auditSave()` compares, and `loadVerified()` -
+which is what `ui.js` mounts with, never a bare `load()` - rebuilds the garage when the books do
+not balance. For scale: maxing every part of every car and buying every stage costs **371,196**
+coins.
+
+**It is deliberately not a checksum.** A checksum's secret ships inside the very file being edited,
+so it costs one more look at the source and buys a false sense of safety in return. The
+conservation law holds whether or not you can read the code.
+
+**`rebuildHonest()` hands back every coin the player actually EARNED** and empties only the garage.
+That direction is the point: they really did drive those runs, and zeroing the wallet would punish
+the real play along with the fake purchases. `earned` and `best` - the two THE-LAW-governed fields
+above - are never touched, and the whole pre-rebuild save is archived verbatim under
+`gamehub.hillclimb.archive.v1` (rules 3 and 5). Nothing is deleted.
+
+**`earned` has a WITNESS, and it only ever RAISES it.** `ui.js` banks each run into this save and
+into `js/game-stats.js` in the same breath, so `hillclimb.hc.coins` in the shared store is the same
+running total written twice - and it is the copy mirrored to Firebase. `effectiveEarned()` takes
+the higher of the two. **Never change that to clamp downward**, and `js/test.js` has a
+`[KNOWN-BUG PROBE]` on both directions:
+
+- `earned` was added AFTER this game shipped, so saves exist whose `earned` was seeded from the
+  wallet balance alone and is short by the price of a garage the player really bought. Audited
+  against that understated ceiling they look impossible and the rebuild would empty a legitimate
+  garage - rule 1, and a far worse outcome than any cheat. The witness repairs them. (`load()`'s
+  own seeding was corrected at the same time, to `coins + spentOf(out)`, which is why `earned` is
+  now seeded LAST in that function - after the purchases it has to price.)
+- Lowering would mean trusting the witness to be COMPLETE, and a device whose shared stats were
+  cleared while this key survived would have its garage wrongly rebuilt on that evidence.
+
+**What this does NOT do, and must not be described as doing: prevent cheating.** Someone who edits
+`coins` *and* `earned` consistently, having read the shipped source, still passes. That is accepted
+- it cannot be closed from inside a file the cheater is already editing, and the discrepancy
+against the Firebase copy is visible to Matt regardless. It closes the casual edit, which is the
+one that actually happened, and makes anything past it self-correcting on the next mount.
+
+`TAMPER_SLACK` (400) is the dead band: the cheapest purchasable thing is a level-0 tire at 450, so
+a smaller gap can only be rounding or a future price tweak, and nothing happens at all below it. A
+NEGATIVE gap is never tampering - it is what a price cut looks like, and it means the player has
+less than they earned, not more.
+
 **No mid-run save key exists, on purpose** — see `isInProgress()` above.
 
 ## Stats (the shared store)
@@ -235,12 +291,15 @@ same shape as Ball Run and Snake.
 
 ## Tests
 
-`node hill-climb/js/test.js` (also inside `node run-all-tests.mjs`). 111 assertions covering
+`node hill-climb/js/test.js` (also inside `node run-all-tests.mjs`). 162 assertions covering
 terrain determinism/continuity/pad, world-object determinism and lazy chunking, the physics rest
 state, the throttle-tilt coupling (measured on the flat pad, where terrain slope cannot be the
 cause), upgrades and stage surfaces changing the outcome, both end conditions, distance never
 decreasing while reversing, pickups, nitro, flips, the head-crash probe, the whole economy, and
-the two LAW-governed save fields across a full earn/spend/earn cycle.
+the two LAW-governed save fields across a full earn/spend/earn cycle, plus the economy AUDIT (see
+"The books must balance") - which spends more assertions on what it must NOT flag than on what it
+must, because a false positive rebuilds a real player's garage and no number of caught cheats pays
+for one.
 
 Browser-verified 2026-08-02 (Chromium, 430x860 and 402x874 at dpr 3): garage, all four tabs, help,
 a full run to a crash, pause, the result card, the stats write and the hub tile. The garage preview
