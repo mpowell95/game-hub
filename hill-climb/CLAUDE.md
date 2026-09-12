@@ -142,6 +142,55 @@ leaderboard's per-tier breakdown reads as the per-stage breakdown and there is n
 picker to reconcile. The Moon's low gravity is the reason it is genuinely expert rather than merely
 slower: less weight on the wheels means less normal force, which means a smaller friction cone.
 
+## The flip + difficulty rebalance (2026-09-12, TP's report)
+
+TP reported five things: too easy (a light gas tap reached every fuel can, no risk of running out
+or tipping, never a reason to go fast); car upgrades felt like nothing; the cars felt identical; a
+single flip landed clean paid no bonus; and the bonus only ever seemed to want a double flip, which
+was impossible to land. Measured headless (the scripts under scratchpad, driving the real modules),
+**four of the five traced to one root: flips were physically impossible.**
+
+- **Flips never paid because a flip was unrotatable.** `airTorque` was 2.1-3.2 and the air damping
+  was 0.35, so in the ~1.1 s of air a countryside ramp gives, the best any car could turn was ~0.3
+  of a rotation. A flip needs a full `2*PI`. So the bonus code was never wrong — nothing ever
+  reached it. Fixed by making air rotation both **strong and responsive**: `airTorque` is now
+  17-38 per vehicle (`AIR_DAMP` = 3.5 in `physics.js`), so gas spins the nose toward a terminal
+  rate of `airTorque/AIR_DAMP` (~5-11 rad/s) AND letting go settles it — you can rotate a full turn
+  and then bring the wheels back down to LAND it. The air `av` clamp is `±13` (grounded stays `±9`).
+- **A flip now PAYS ON A CLEAN LANDING, not the instant the rotation completes.** `Vehicle.step()`
+  accumulates `pendingFlips` while airborne and banks them (returns `landedFlips`, Run pays coins +
+  the `flip` popup) only on touchdown when `!crashed`. Rotating onto the driver's head loses the
+  pending bonus — that is the gamble. This matches exactly what TP asked for ("single flip, land it
+  clean").
+- **A visually complete flip lands a HAIR short of a strict airborne `2*PI`** (the car launches
+  slightly nose-up and its wheels touch down before the last few degrees come round), and that
+  near-miss touchdown used to reset `airSpin` and throw the whole rotation away. So a clean landing
+  credits a rotation within `FLIP_LAND_TOL` (0.6 rad, ~34°) of complete. Safe because the
+  head-in-dirt crash check already rejects a car that came down on its roof — anything that lands
+  clean really is upright. **This one line is what actually made single flips pay**; without it a
+  full visual backflip still scored zero.
+- **Doubles are hard, not impossible.** On countryside a single is the normal trick and a double
+  needs a big launch (nitro off a hill); the **bike is the flip specialist** (highest `airTorque`)
+  and the **moon's** big air is where doubles are routine. Guarded by `test.js`: pending-vs-landed
+  accounting, crash-loses-the-bonus, and a **landability** case that launches the bike/jeep and
+  proves a single flip both completes and lands — so a future tuning change can't silently
+  re-break it.
+
+Difficulty (issue 1) and the "upgrades/cars feel the same" pair (2, 3) largely follow from the
+above — the physics is dynamic now, so careless speed flips you and upgrades visibly change the
+outcome (a maxed drivetrain roughly triples a countryside run). Two smaller changes on top:
+
+- **Fuel is a resource again.** A can was worth 55 and appears in ~62% of 50 m chunks, so fuel only
+  ever climbed and never mattered. Cans are now 44 (`terrain.js`) and idle burn is 2.8
+  (`FUEL_IDLE`). Burn is time-based, so **covering ground faster costs less fuel per meter** — going
+  fast is now rewarded, crawling is punished. Normal play is barely affected (a competent run still
+  ends around the same distance); what it kills is the infinite-accumulation ceiling a skilled
+  player had. `test.js`'s reachability guarantee (every can driven past is still collected) is
+  untouched.
+- **Suspension upgrades bite.** The damp coefficient went 0.12 → 0.20 and spring 0.10 → 0.13 per
+  level (`catalog.js`), so a maxed suspension visibly plants the car on landings ("still bounces the
+  same" — TP).
+
 ## Persistence
 
 **`gamehub.hillclimb.v1`** (`js/store.js`) — the garage save. Two of its fields are earned history
