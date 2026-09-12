@@ -132,6 +132,27 @@ message, where a future session needs it and Matt does not have to scroll past i
 
 This applies to every artifact, mockup, plan page and diagram, in every session.
 
+## Send the Claude.ai handoff files WITHOUT being asked
+
+Matt, 2026-09-12: *"you must send me the stuff for Claude ai at the end of these messages. stop
+makign me ask for them. Make sure he can see everything."*
+
+He runs a second Claude.ai conversation alongside this one and feeds it the work for review. **A
+claude.ai artifact URL is useless to it** - artifacts sit behind his account login, so there is
+nothing for another chat to fetch, and sharing does not change that.
+
+So whenever a turn produces or changes an artifact, a mockup, a diagram or a design doc, **end the
+turn by sending the files, unprompted**:
+
+- **the artifact as an IMAGE** (full page, not a crop) so the drawing survives - a markdown doc does
+  not contain the picture
+- **the artifact's own HTML file**, which is the literal complete thing
+- **the repo doc**, if there is one
+- **the public raw GitHub link** for anything on `main`, since that one a chat CAN read itself
+
+Watch the size: `SendUserFile` rejects about 1 MB. A dark page with gradients goes smaller as JPEG
+q90; a light page full of text goes smaller as PNG. Render full-page at `deviceScaleFactor: 1`.
+
 ## Answer about the game you were asked about
 
 Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
