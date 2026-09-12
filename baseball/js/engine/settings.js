@@ -13,9 +13,12 @@
 // in a way old snapshots would misread (see game.js's validateSnapshot). Bumped 1 -> 2 for BB-1a:
 // the five invented skill ids (contact/power/speed/arm/fielding) are replaced by the doc's real
 // six (hitAcc/hitPow/hitSpd/pitchSpd/pitchAcc/pitchSpin) - an old snapshot's player skill objects
-// would have the wrong keys entirely under the new shape.
+// would have the wrong keys entirely under the new shape. Bumped 2 -> 3 for phase 2 Step 3: a
+// team's player objects drop `name` and gain `jersey`/`pos` (doc §9, [Locked]: "shown by jersey
+// number and position... No names") - an old snapshot's roster would carry a field the UI no
+// longer reads and be missing two it needs.
 
-export const RULES_V = 2;
+export const RULES_V = 3;
 
 // ---------------------------------------------------------------------------------------------
 // Leagues (frozen: baseball/CLAUDE.md's ladder order and BB_LEAGUE_MIN/MAX in js/game-stats.js;
@@ -194,18 +197,51 @@ export const FIELD_SCALE = { outZoneMult: 1.0, fieldScale: 1.0 }; // [Tested] do
 // CPU: per-league AI parameters (doc sections 8 and 14). The prototype only ever tuned ONE tier -
 // copied here to all five leagues as an explicit placeholder, per BB-1a's own instruction, tagged
 // [Open item 3] except at `college`, which IS the prototype's own tested tier.
-const CPU_PROTOTYPE_TIER = { timingSigmaMs: 55, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.3 };
+// Step 2 (phase 2): doc §8's per-league behavior ladder, actually spread across the five leagues -
+// phase 1/BB-1a only ever tuned ONE tier (`college`) and copied it everywhere else as an explicit
+// placeholder. Every row below is Draft, measured/retuned by `sim-baseball.mjs` (Open item 3);
+// `college`'s five original fields keep the prototype's own [Tested] values as their starting
+// point, the four new per-league behavior fields (`pitchMix`, `cornerBias`, `patternWeight`,
+// `weakSpotWeight`) are new this phase.
+//
+//   pitchMix        - relative weight per PITCH_TYPES entry (only the league's currently-unlocked
+//                      types are ever drawn; `pickWeighted` normalizes). Doc §8, [Locked]:
+//                      "Little League: mostly fastballs down the middle... each league up mixes
+//                      pitches more."
+//   cornerBias       - 0..1, how often/far a CpuPitcher's aim leaves the middle of the zone. Doc
+//                      §8, [Locked]: "works the corners more" each league up.
+//   patternWeight    - 0..1, how strongly `view.pitchHistory` (doc §8's last-3-pitches memory,
+//                      PATTERN_WINDOW/PATTERN_WEIGHTS above) shifts a CpuBatter's timing AND aim
+//                      read. Doc §8, [Locked]: "The window is the same in every league; how
+//                      strongly it is used scales by league."
+//   weakSpotWeight   - 0..1, how often a CpuPitcher aims at this batter's own recently-weak zone
+//                      (WEAKSPOT_WINDOW below) instead of drawing an ordinary aim. Doc §8,
+//                      [Locked]: "Majors: attacks your weak spots."
 export const CPU = {
-  little: { ...CPU_PROTOTYPE_TIER },     // Draft [Open item 3] - copied placeholder, not yet spread by league
-  highschool: { ...CPU_PROTOTYPE_TIER }, // Draft [Open item 3]
-  college: { ...CPU_PROTOTYPE_TIER },    // [Tested] doc §14 - this IS the prototype's own tier
-  minors: { ...CPU_PROTOTYPE_TIER },     // Draft [Open item 3]
-  majors: { ...CPU_PROTOTYPE_TIER },     // Draft [Open item 3]
+  little:     { timingSigmaMs: 90, swingIn: 0.90, chase: 0.55, fool: 0.45, guess: 0.10,
+    pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.08, patternWeight: 0.04, weakSpotWeight: 0 },
+  highschool: { timingSigmaMs: 75, swingIn: 0.85, chase: 0.40, fool: 0.35, guess: 0.20,
+    pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
+  college:    { timingSigmaMs: 55, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // [Tested] doc §14 - the prototype's own tier, five original fields unchanged
+    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.33, patternWeight: 0.23, weakSpotWeight: 0.06 },
+  minors:     { timingSigmaMs: 45, swingIn: 0.72, chase: 0.18, fool: 0.18, guess: 0.45,
+    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.46, patternWeight: 0.36, weakSpotWeight: 0.20 },
+  majors:     { timingSigmaMs: 35, swingIn: 0.65, chase: 0.08, fool: 0.10, guess: 0.60,
+    // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
+    // react to your stats") actually has unlocked at Majors with 0 titles - eephus/cutter would
+    // sit in this table forever unused, since `unlockedPitchesFor('majors', 0)` never grants them.
+    pitchMix: { fastball: 1.5, changeup: 1.5, curveball: 1.5, slider: 1.5, knuckleball: 1.5, screwball: 1.5 },
+    cornerBias: 0.55, patternWeight: 0.52, weakSpotWeight: 0.40 },
 };
-// [Locked] doc §8: Little League throws mostly fastballs down the middle and swings at almost
-// anything; each league up mixes pitches more, works corners more, chases less; Majors attacks
-// weak spots and rarely chases. Encoding THAT per-league spread (phase 2's simulator's job, per
-// the doc's own "the phase 2 simulator spreads them") is Open item 3, not done here.
+// [Locked] doc §8: each league up mixes pitches more, works corners more, chases less, reads
+// patterns better; Majors rarely chases and attacks weak spots. Every number above is Draft,
+// measured by `sim-baseball.mjs` (Open item 3).
+
+// How many of a batter's own recent swing-and-miss pitch locations a "weak spot" CpuPitcher
+// (weakSpotWeight above) remembers, before aiming there. Draft, new (not in the doc's own
+// numbered open-items list) - a window rather than a single running average, same shape as
+// PATTERN_WINDOW, so a batter who has recently improved at a spot is not haunted by it forever.
+export const WEAKSPOT_WINDOW = 8;
 
 // How far a CPU roster is generated below its league's raw CAPS (doc §8: "generated at the cap
 // minus shortfall, not at the raw cap... difficulty comes from behavior, not bigger stats").
@@ -218,7 +254,17 @@ export const CPU = {
 // values below, which resolve to a strictly rising effective-cap ladder - see
 // `effectiveCapFor`/section 8's test in test.js, which now asserts that directly so this cannot
 // regress silently.)
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 1.5, minors: 3.3, majors: 5.3 };
+//
+// Draft, measured by sim-baseball.mjs 2026-09-12 (was {little:0, highschool:0, college:1.5,
+// minors:3.3, majors:5.3}, giving effective caps 10/14/16.5/18.7/20.7). Pushed further to weaken
+// CPU teams more from College up, aiming at GOLD_ONE_SEASON_MIN_MEDIAN/GOLD_SEASONS_MAX_MEDIAN -
+// measured effect was small (median-tier gold odds moved roughly 17-31% across two much larger
+// shortfall attempts), so the values below are a middle point that still keeps the effective-cap
+// ladder STRICTLY rising (10, 14, 15, 16, 17) per doc §8, [Locked]: "CPU teams must get better as
+// you move up." The Gold thresholds still FAIL at this setting (see baseball/CLAUDE.md's pasted
+// scoreboard) - open item for Matt: either loosen the two GOLD_* thresholds, or accept a much
+// flatter effective-cap ladder than doc §8 implies. Not resolved here.
+export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 6, majors: 9 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -228,16 +274,38 @@ export const PATTERN_WEIGHTS = [0.5, 0.3, 0.2];     // [Draft] doc §8, newest f
 
 // ---------------------------------------------------------------------------------------------
 // Field geometry, in feet (doc §15's units note), home plate at the origin, center field along +y.
-// Still entirely INVENTED - doc §10 explicitly leaves "exact zone sizes and fence distances per
-// league" open (Open item 7). Kept as phase 1 shipped it; tagged here rather than rebuilt, per
-// BB-1a's own instruction.
+// FOUL_LINE_DEG and PARK_GEOMETRY are league-independent facts about the diamond itself.
+export const FOUL_LINE_DEG = 45; // each foul line sits 45 degrees off the center-field axis
+export const PARK_GEOMETRY = { basePathFt: 90, pitcherDistFt: 60.5, infieldDirtRadiusFt: 95 };
+
+// Per-league field/defense geometry (doc §10, phase 2 - replaces phase 1's single invented
+// FIELD.outfieldWallFt and game.js's `_defenseLevel01()` league-ordered ramp). Still entirely
+// INVENTED - doc §10 explicitly leaves "exact zone sizes and fence distances per league" open
+// (Open item 7) - but now expressed as real geometry `zones.js` consumes, growing per league per
+// the doc's own "fields get bigger each league... out zones also grow" (§10, [Locked] that both
+// grow, Open item 7 for the exact numbers). `fenceFt` is the five-point named-distance shape
+// (left/left-center/center/right-center/right) `outcomes.js`'s `fenceFtAt` interpolates across;
+// `outZoneMult` scales how far a fielder's sector reaches (bigger league = better fielders =
+// smaller "through the infield" gaps, so groundouts/flyouts get a LARGER reach - see zones.js);
+// `fieldScale` scales the whole field (used to grow named PARKS distances too, in game.js's
+// `_parkFt()`, so a named ballpark still means something at every league).
+// `outZoneMult` scales a sector's COVERAGE DEPTH (zones.js), not its whole reach - kept in a
+// narrow band (0.75-1.05) on purpose: compounding it with `fieldScale` onto the sector's outer
+// edge directly, tried first, put a majors outfielder's reach past that league's own fence.
 export const FIELD = {                      // Draft [Open item 7]
-  basePathFt: 90,
-  pitcherDistFt: 60.5,
-  foulLineDeg: 45,               // each foul line sits 45 degrees off the center-field axis
-  outfieldWallFt: { left: 330, center: 400, right: 330 },
-  infieldDirtRadiusFt: 95,
+  little:     { fenceFt: { left: 180, leftCenter: 195, center: 210, rightCenter: 195, right: 180 }, outZoneMult: 0.75, fieldScale: 0.60 },
+  highschool: { fenceFt: { left: 300, leftCenter: 330, center: 360, rightCenter: 330, right: 300 }, outZoneMult: 0.85, fieldScale: 0.85 },
+  college:    { fenceFt: { left: 330, leftCenter: 365, center: 400, rightCenter: 365, right: 330 }, outZoneMult: 0.95, fieldScale: 1.00 },
+  minors:     { fenceFt: { left: 335, leftCenter: 370, center: 405, rightCenter: 370, right: 335 }, outZoneMult: 1.00, fieldScale: 1.05 },
+  majors:     { fenceFt: { left: 330, leftCenter: 375, center: 400, rightCenter: 375, right: 330 }, outZoneMult: 1.05, fieldScale: 1.10 },
 };
+
+// How wide the fair-territory pattern-memory/shift window is, and how far a "shifters" team may
+// rotate its out-zone sectors toward a batter's own spray tendency (doc §9, [Locked]: "some teams
+// shift their out zones toward where you tend to hit" - SHIFTERS_ADJUST_OUT_ZONES below names the
+// rule; these two numbers are how much, Draft, new (not in the doc's own open-items list).
+export const SHIFT_WINDOW = 10;   // Draft - last N balls in play, per batter, averaged for the shift
+export const SHIFT_MAX_DEG = 15;  // Draft - the shift can never rotate a sector past this many degrees
 
 // Named ballparks (doc §10's "Majors parks" - fictional names, shapes inspired by famous parks;
 // [Locked] that they exist and are wind/weather-free; [Open] which park FEATURES make v1). The
@@ -289,9 +357,9 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 // therefore still invented - Draft [Open item 4] - constrained only by the doc's qualitative
 // description of which effect each skill drives, renamed onto the six real skill ids.
 export const SKILL_EFFECT = {                // Draft [Open item 4]
-  hitAcc:    { contactRadiusInPerPt: 0.15, whiffReductionPerPt: 0.01 }, // "bigger timing window and sweet spot"
-  hitPow:    { exitVeloMphPerPt: 0.6 },                                  // "more distance, stronger charged swings"
-  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - unused this phase, no baserunning between pitches yet (see MECHANICS.reservedForPhase6 below)
+  hitAcc:    { contactRadiusInPerPt: 0.12, whiffReductionPerPt: 0.008 }, // "bigger timing window and sweet spot" - measured by sim-baseball.mjs 2026-09-12 (was 0.15/0.01; the SKILL_EFFECT sensitivity experiment measured several leagues' 10-point win-rate gap over NUDGE_MAX_WINRATE_GAP)
+  hitPow:    { exitVeloMphPerPt: 0.5 },                                  // "more distance, stronger charged swings" - measured by sim-baseball.mjs 2026-09-12 (was 0.6, same experiment)
+  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - sprintFtPerSPerPt/stealSuccessPerPt still unused (no steal/bunt this phase, see RESERVED_PHASE_6); the beat-out HALF is now wired, via MECHANICS.beatOutPerPt in outcomes.js
   pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
   pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - pickoff unused this phase
   pitchSpin: { breakPerPt: 0.02, changeupGapPerPt: 0.01 },               // "more bend on curve/slider/screwball; bigger changeup speed gap" - unused this phase, no steering modeled yet
@@ -306,14 +374,31 @@ export const MECHANICS = {
   walkoffEndsImmediately: true,     // [Locked] doc §3
   extraInningRunnerOnSecond: true,  // [Locked] doc §3 - "every extra half-inning starts with a runner on second"
   doublePlayEnabled: true,          // [Locked] doc §3 - "can be a double play" with a runner on first, <2 outs
-  doublePlayChance: 0.45,           // Draft [Open item 26] - the doc locks that it CAN happen, not how often
+  doublePlayChance: 0.40,           // Draft [Open item 26], measured by sim-baseball.mjs 2026-09-12 - the doc locks that it CAN happen, not how often; ~0.40 puts a double play at roughly 1-in-8 grounders once P(runner on first, <2 outs) is folded in (see baseball/CLAUDE.md)
   maxExtraInnings: 50,              // [Locked] doc §3 - explicitly a safety valve only, never a stated rule
   outsPerInning: 3,
   strikesForOut: 3,
   ballsForWalk: 4,
   foulNeverThirdStrike: true,       // [Locked] doc §3 - "a foul can never be strike 3" (already the engine's behavior)
   basesLoadedForceAll: true,
+  // How deep a fly out with a runner on third must carry to be a sac fly (doc §3, [Locked] that a
+  // "deep fly out" scores the runner - the doc names it deep, not automatic; this is how deep,
+  // Draft, new). Below it the runner holds - a shallow fly ball's throw home is live.
+  sacFlyMinDepthFt: 180,
+  // Step 1 (zones.js/outcomes.js): a grounder within this many feet of its infield sector's outer
+  // edge is a close play, eligible for the batter's hitSpd to beat out the throw (doc §6, [Locked]:
+  // "Batter Speed affects beating out grounders"). Draft, new.
+  groundEdgeMarginFt: 15,
+  // Chance PER hitSpd SKILL POINT that a close grounder (within groundEdgeMarginFt of the sector
+  // edge) beats the throw for a single, rather than being fielded. Draft, new - for the phase 2
+  // simulator to verify a reasonable beat-out rate results.
+  beatOutPerPt: 0.02,
 };
+
+// Calibrated so a Statcast-typical 105mph/30deg batted ball (a real, well-struck home run swing)
+// carries about 400ft: 6.2 -> (105-30) * sin(60deg) * 6.2 ~= 402ft. Draft [Open item 23] - moved
+// here from outcomes.js's own local const so every magic number in the engine has one home.
+export const CARRY_SCALE = 6.2;
 
 // Reserved for phase 6 (doc §3/§17 Open item 8): steal, bunt, and pickoff are [Locked] FEATURES
 // with reserved input slots, but "how each works in play" is undecided and no baserunning happens
@@ -325,8 +410,8 @@ export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
-  FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL,
-  PATTERN_WINDOW, PATTERN_WEIGHTS, FIELD, PARKS,
+  FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
+  PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, TEAM_STYLE_WEIGHTS, LEFTY_RATE,
-  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, MECHANICS, RESERVED_PHASE_6,
+  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, MECHANICS, RESERVED_PHASE_6,
 };

@@ -17,6 +17,7 @@ import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
 import { swing } from './swing.js';
 import { resolveContact } from './outcomes.js';
+import { zonesFor } from './zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
 
@@ -88,10 +89,18 @@ export class Game {
     this.score = { home: 0, away: 0 };
     this.lineupPos = { home: 0, away: 0 };
     this.totals = {
-      home: { hits: 0, runs: 0, errors: 0, strikeouts: 0, walks: 0 },
-      away: { hits: 0, runs: 0, errors: 0, strikeouts: 0, walks: 0 },
+      home: { hits: 0, runs: 0, strikeouts: 0, walks: 0 },
+      away: { hits: 0, runs: 0, strikeouts: 0, walks: 0 },
     };
     this.pitchHistory = Object.create(null); // batterId -> array of recent pitch types thrown to them
+    // batterId -> array of recent sprayAngleDeg for balls this batter has put in play, capped at
+    // SHIFT_WINDOW - the doc §9 "shifters" style reads this to rotate its out-zone geometry toward
+    // where a batter tends to hit (settings.js's SHIFTERS_ADJUST_OUT_ZONES, [Locked]).
+    this.sprayHistory = Object.create(null);
+    // batterId -> array of pitch x-locations this batter swung at and missed, capped at
+    // WEAKSPOT_WINDOW - what a `weakSpotWeight` CpuPitcher (doc §8: "Majors: attacks your weak
+    // spots") reads before aiming there. Step 2.
+    this.weakZoneLog = Object.create(null);
 
     this.over = false;
     this.winner = null;         // 'home' | 'away' | 'tie' | null
@@ -137,6 +146,8 @@ export class Game {
       away: { ...snap.totals.away },
     };
     g.pitchHistory = { ...(snap.pitchHistory || {}) };
+    g.sprayHistory = { ...(snap.sprayHistory || {}) };
+    g.weakZoneLog = { ...(snap.weakZoneLog || {}) };
     g.over = snap.over;
     g.winner = snap.winner || null;
     g.matchEndReason = snap.matchEndReason || null;
@@ -167,6 +178,8 @@ export class Game {
       lineupPos: { ...this.lineupPos },
       totals: { home: { ...this.totals.home }, away: { ...this.totals.away } },
       pitchHistory: { ...this.pitchHistory },
+      sprayHistory: { ...this.sprayHistory },
+      weakZoneLog: { ...this.weakZoneLog },
       rngState: this.rngState,
       over: this.over,
       winner: this.winner,
@@ -190,8 +203,17 @@ export class Game {
     return value;
   }
 
+  /** The park's fence distances, SCALED by the league's own FIELD.fieldScale (doc §10, [Locked]:
+   *  "Fields get bigger each league... Screen size stays the same; bigger fields just render
+   *  smaller"). A named PARKS entry keeps its own shape (Boston's short left stays short relative
+   *  to the rest) while the whole field grows with the league, rather than needing a second,
+   *  duplicated fence table per league. */
   _parkFt() {
-    return this.settings.PARKS[this.parkId] || this.settings.PARKS.default;
+    const base = this.settings.PARKS[this.parkId] || this.settings.PARKS.default;
+    const fieldScale = (this.settings.FIELD[this.league] || this.settings.FIELD.majors).fieldScale;
+    const scaled = {};
+    for (const k of Object.keys(base)) scaled[k] = base[k] * fieldScale;
+    return scaled;
   }
 
   _controlSkillFor(pitcher) {
@@ -200,15 +222,24 @@ export class Game {
     return Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
   }
 
-  _defenseLevel01() {
-    // There is no per-player "fielding" skill in the real design (doc §6 names only hitAcc/
-    // hitPow/hitSpd and pitchSpd/pitchAcc/pitchSpin) - defense there is entirely OUT-ZONE
-    // GEOMETRY, sized per league (doc §10: "out zones also grow"). Exact per-league sizing is
-    // Open item 7 (undecided), so this is a placeholder league-ordered ramp, not a real model:
-    // higher leagues field a little better, same direction as the doc's own "better fielders" line,
-    // with no claim to the actual magnitude.
-    const idx = Math.max(0, LEAGUES.indexOf(this.league));
-    return 0.4 + 0.15 * (idx / (LEAGUES.length - 1));
+  /** How far a "shifters" team (doc §9, [Locked]) rotates its out-zone geometry toward this
+   *  batter's own recent spray tendency. Every other style shifts nothing - `zonesFor`'s default
+   *  `shiftDeg` of 0 leaves the base geometry untouched. */
+  _shiftDegFor(defenseTeam, batterId) {
+    if (defenseTeam.styleId !== 'shifters') return 0;
+    const hist = this.sprayHistory[batterId];
+    if (!hist || !hist.length) return 0;
+    const mean = hist.reduce((s, v) => s + v, 0) / hist.length;
+    const max = this.settings.SHIFT_MAX_DEG;
+    return Math.max(-max, Math.min(max, mean));
+  }
+
+  _recordSpray(batterId, sprayAngleDeg) {
+    if (typeof sprayAngleDeg !== 'number') return;
+    const hist = this.sprayHistory[batterId] || (this.sprayHistory[batterId] = []);
+    hist.push(sprayAngleDeg);
+    const window = this.settings.SHIFT_WINDOW;
+    if (hist.length > window) hist.splice(0, hist.length - window);
   }
 
   _buildPitchView(defenseSide) {
@@ -224,6 +255,7 @@ export class Game {
       score: { ...this.score },
       batterId,
       pitchHistory: (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW),
+      weakZone: this._weakZoneFor(batterId),
       rand01: () => this._rand(),
     };
   }
@@ -282,10 +314,26 @@ export class Game {
     }
   }
 
-  _recordPitch(batterId, type) {
+  _recordPitch(batterId, type, x) {
     const hist = this.pitchHistory[batterId] || (this.pitchHistory[batterId] = []);
-    hist.push(type);
+    hist.push({ type, x });
     if (hist.length > PATTERN_WINDOW * 3) hist.splice(0, hist.length - PATTERN_WINDOW * 3);
+  }
+
+  /** doc §8, [Locked]: "Majors: attacks your weak spots" - a batter's own recent swing-and-miss
+   *  locations, averaged, or null with too few samples to mean anything. */
+  _weakZoneFor(batterId) {
+    const log = this.weakZoneLog[batterId];
+    if (!log || log.length < 2) return null;
+    return log.reduce((s, x) => s + x, 0) / log.length;
+  }
+
+  _recordWeak(batterId, x) {
+    if (typeof x !== 'number') return;
+    const log = this.weakZoneLog[batterId] || (this.weakZoneLog[batterId] = []);
+    log.push(x);
+    const window = this.settings.WEAKSPOT_WINDOW;
+    if (log.length > window) log.splice(0, log.length - window);
   }
 
   async playGame() {
@@ -384,7 +432,7 @@ export class Game {
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
       const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
       const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand());
-      this._recordPitch(batterId, pitchResult.type);
+      this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
       const swingView = this._buildSwingView(battingSide, pitchResult);
@@ -394,14 +442,18 @@ export class Game {
       if (!swingResult.swung) {
         if (pitchResult.isStrike) this.strikes += 1; else this.balls += 1;
       } else if (!swingResult.contact) {
+        this._recordWeak(batterId, pitchResult.x);
         this.strikes += 1;
       } else if (swingResult.foul) {
         if (this.strikes < 2) this.strikes += 1;
       } else {
-        const outcome = resolveContact(swingResult, this._defenseLevel01(), this.settings, this._parkFt(), () => this._rand());
-        this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
+        const shiftDeg = this._shiftDegFor(defenseTeam, batterId);
+        const zones = zonesFor(this.league, shiftDeg);
+        const outcome = resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
+        this._recordSpray(batterId, swingResult.sprayAngleDeg);
+        const { bases, runsScored } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind });
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored });
         return;
       }
 
@@ -412,7 +464,7 @@ export class Game {
         this.outs += 1;
         this.totals[battingSide].strikeouts += 1;
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout' });
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout', bases: 0, runsScored: 0 });
         return;
       }
       if (this.balls >= this.settings.MECHANICS.ballsForWalk) {
@@ -421,7 +473,7 @@ export class Game {
         this.totals[battingSide].walks += 1;
         this._addRuns(battingSide, runsScored);
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', runsScored });
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', bases: 1, runsScored });
         return;
       }
     }
@@ -433,15 +485,18 @@ export class Game {
    *  on. */
   _resolveBattedBall(outcome, batterId, battingSide, rand01) {
     if (outcome.isFoul || outcome.result === 'out') {
+      // doc §3, [Locked]: "Deep fly out scores the runner from third (sac fly)" - DEEP, not any
+      // fly out; MECHANICS.sacFlyMinDepthFt is how deep (Draft, new).
       const isSacFly = outcome.kind === 'flyout'
         && this.bases[2] != null
-        && this.outs < this.settings.MECHANICS.outsPerInning - 1;
+        && this.outs < this.settings.MECHANICS.outsPerInning - 1
+        && (outcome.distanceFt || 0) >= this.settings.MECHANICS.sacFlyMinDepthFt;
       if (isSacFly) {
         const { bases, runsScored } = advanceSacFly(this.bases);
         this.bases = bases;
         this.outs += 1; // no hit credited on a sac fly - the batter is out
         this._addRuns(battingSide, runsScored);
-        return;
+        return { bases: 0, runsScored };
       }
       // doc §3, [Locked]: "Ground out with a runner on first and fewer than 2 outs CAN be a
       // double play" - the doc locks that it can happen, not how often (Draft, MECHANICS.
@@ -453,23 +508,18 @@ export class Game {
       if (canDoublePlay && rand01 && rand01() < this.settings.MECHANICS.doublePlayChance) {
         this.bases = advanceDoublePlay(this.bases);
         this.outs += 2; // the batter, plus the runner forced at second
-        return;
+        return { bases: 0, runsScored: 0 };
       }
       this.outs += 1;
-      return;
+      return { bases: 0, runsScored: 0 };
     }
-    if (outcome.result === 'error') {
-      const { bases, runsScored } = advanceAll(this.bases, batterId, 1);
-      this.bases = bases;
-      this.totals[battingSide].errors += 1;
-      this._addRuns(battingSide, runsScored);
-      return;
-    }
-    // a hit
+    // a hit - doc §10's outcome list is singles/doubles/triples/homers/outs; there is no "error"
+    // outcome in the real design (phase 1's invented one is gone as of Step 1).
     const { bases, runsScored } = advanceAll(this.bases, batterId, outcome.bases);
     this.bases = bases;
     this.totals[battingSide].hits += 1;
     this._addRuns(battingSide, runsScored);
+    return { bases: outcome.bases, runsScored };
   }
 }
 
