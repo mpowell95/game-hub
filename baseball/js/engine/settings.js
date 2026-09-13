@@ -232,22 +232,35 @@ export const FIELD_SCALE = { outZoneMult: 1.0, fieldScale: 1.0 }; // [Tested] do
 //   weakSpotWeight   - 0..1, how often a CpuPitcher aims at this batter's own recently-weak zone
 //                      (WEAKSPOT_WINDOW below) instead of drawing an ordinary aim. Doc §8,
 //                      [Locked]: "Majors: attacks your weak spots."
+// BB-2c commit 2: `placementNoise` is new - the CpuBatter base bat-placement scatter, split OUT of
+// the old `readNoise = (1 - guess) * 0.3` formula (see `CPU_PLACEMENT_MIN`/`guess`'s own note
+// below for why). Every value here is at or above `CPU_PLACEMENT_MIN` (0.22, the median human's
+// own placement noise) - College/Minors/Majors are pinned exactly at the floor (their old
+// guess-derived values, 0.21/0.165/0.12, were all BELOW a median human's own placement precision);
+// Little/High School keep their old guess-derived values (0.27/0.24) since those already sat above
+// the floor on their own.
 export const CPU = {
-  little:     { timingSigmaMs: 90, swingIn: 0.90, chase: 0.55, fool: 0.45, guess: 0.10,
+  little:     { timingSigmaMs: 115, placementNoise: 0.27, swingIn: 0.90, chase: 0.55, fool: 0.45, guess: 0.10,
     pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.08, patternWeight: 0.04, weakSpotWeight: 0 },
-  highschool: { timingSigmaMs: 75, swingIn: 0.85, chase: 0.40, fool: 0.35, guess: 0.20,
+  highschool: { timingSigmaMs: 95, placementNoise: 0.24, swingIn: 0.85, chase: 0.40, fool: 0.35, guess: 0.20,
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
-  college:    { timingSigmaMs: 65, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2b commit 5 retune: 55 -> 65 (see CPU_SIGMA_FLOOR_MS - the floor already puts a league AT 55 at its sharpest allowed, so College leaves room below it for Minors/Majors to be tougher on this axis instead of tying with it)
+  college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.33, patternWeight: 0.23, weakSpotWeight: 0.06 },
-  minors:     { timingSigmaMs: 60, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,
+  minors:     { timingSigmaMs: 70, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.50, patternWeight: 0.42, weakSpotWeight: 0.28 },
-  majors:     { timingSigmaMs: 55, swingIn: 0.65, chase: 0.05, fool: 0.10, guess: 0.60,
+  majors:     { timingSigmaMs: 62, placementNoise: 0.22, swingIn: 0.65, chase: 0.05, fool: 0.10, guess: 0.60,   // BB-2c commit 2: timingSigmaMs 55 -> 62 (CPU_SIGMA_MIN_MS.majors); placementNoise floored (was 0.12)
     // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
     // react to your stats") actually has unlocked at Majors with 0 titles - eephus/cutter would
     // sit in this table forever unused, since `unlockedPitchesFor('majors', 0)` never grants them.
     pitchMix: { fastball: 1.5, changeup: 1.5, curveball: 1.5, slider: 1.5, knuckleball: 1.5, screwball: 1.5 },
     cornerBias: 0.68, patternWeight: 0.65, weakSpotWeight: 0.65 },
 };
+// BB-2c commit 2, doc §8, [Locked] (design doc v9): "CPU batters may never time or place better
+// than a median human, in any league or any slot." `guess` (0.10..0.60 by league) no longer feeds
+// `placementNoise` at all - it now drives ONLY how far a CpuBatter's aim leans toward its own
+// `locationLean` read (see `CpuBatter.decideSwing` in agents.js), which is a PATTERN-READING skill
+// (doc §8: "how much CPU leans to your recent spot"), not a placement-precision one. `guess`
+// pushing the bat's own BASE precision below a human's was Lever Two of BB-2c's own diagnosis.
 // [Locked] doc §8: each league up mixes pitches more, works corners more, chases less, reads
 // patterns better; Majors rarely chases and attacks weak spots. Every number above is Draft,
 // measured by `sim-baseball.mjs` (Open item 3).
@@ -411,7 +424,7 @@ export const STYLE_BEHAVIOR = {
 // BB-2b commit 3 (2026-09-13): restructured from a bare number per slot into `{ skill,
 // timingSigmaMs, chase }` - the `skill` column below is numerically UNCHANGED from BB-2a step 6;
 // see the full definition and rationale for the two new columns further down this file, next to
-// `CPU_SIGMA_FLOOR_MS`.
+// `CPU_SIGMA_MIN_MS`/`CPU_SIGMA_ABSOLUTE_FLOOR_MS`.
 
 // BB-2a step 5 (2026-09-12): which style sits in which ladder slot, per league. Draft, new,
 // PROPOSED - for Matt to confirm or edit (the handoff's own words). One order, reused across every
@@ -584,7 +597,6 @@ export const WEAKSPOT_AIM_SCATTER = 0.15;    // scatter around a remembered weak
 export const SPEED_DELTA_DEADBAND = 0.05;    // travel-multiple delta below which a repeated pitch speed counts as "the same"
 export const FOOL_PENALTY_MS_SCALE = 400;    // ms of extra timing sigma per unit of speed-delta surprise, scaled by patternWeight/fool
 export const FOOL_BONUS_MS_SCALE = 200;      // ms of REDUCED timing sigma per unit of speed consistency, scaled by patternWeight/fool
-export const GUESS_READ_NOISE_SCALE = 0.3;   // how much a CPU batter's own location read scatters at guess=0
 export const LOCATION_LEAN_WEIGHT = 0.5;     // how far patternWeight pulls a CPU batter's aim toward its own location read
 
 // agents.js's `ModelPitcher.variety` (sim-baseball.mjs's human stand-in): the probability of
@@ -595,16 +607,32 @@ export const LOCATION_LEAN_WEIGHT = 0.5;     // how far patternWeight pulls a CP
 // Draft, new.
 export const VARIETY_REPEAT_BASE_CHANCE = 0.85;
 
-// agents.js's CpuBatter: how far below `CPU[league].timingSigmaMs` the effective slot-4 (median
-// ladder slot) sigma is ever allowed to sit, league to league - doc §8, [Locked]: "difficulty
-// comes mostly from smarter CPU behavior, not bigger CPU stats," but nothing before this phase
-// stopped a league's own base sigma from simply being SHARPER than a median human's own timing
-// (`sim-baseball.mjs`'s `MODEL_TIERS.median.timingSigmaMs` is 55) - Minors (45) and Majors (35)
-// both did, structurally out-hitting a median-skill player by construction regardless of any other
-// lever. `cpuBaseTimingSigmaMs()` in agents.js clamps every league's own base sigma to this floor
-// BEFORE the per-slot ladder offset is added, so a league's raw `CPU[league].timingSigmaMs` value
-// can still be retuned (commit 5) without ever silently regressing back under the floor. Draft, new.
-export const CPU_SIGMA_FLOOR_MS = 55;
+// BB-2c commit 2: the CPU strength CONTRACT, doc §8, [Locked] (design doc v9): "CPU batters may
+// never time or place better than a median human, in any league or any slot." BB-2b's single flat
+// `CPU_SIGMA_FLOOR_MS` (55, exactly the median human's own sigma) turned out to be parity, not a
+// floor - and worse, `cpuBaseTimingSigmaMs()` applied it to the league's own BASE only, then added
+// the per-slot ladder offset AFTER, so a tough slot's own effective sigma could still fall well
+// below it (BB-2b commit 5's own report: the champion slot measured 30ms at its first draft,
+// sharper than even a modeled "strong" human at 35ms). BB-2c commit 1's `--attribute` counterfactual
+// confirmed a single GLOBAL floor is also the wrong shape - it is a big net negative at Little
+// League/High School/College (their own natural sigma already sits comfortably above a human's) and
+// only a small positive at Majors (whose natural sigma sat below it). Two constants replace the one:
+//
+// `CPU_SIGMA_MIN_MS`: a PER-LEAGUE floor for that league's own BASE sigma (before any ladder
+// offset), so Little League can still be far sloppier than a median human while Majors' base can't
+// be far off it. Values Draft, per the handoff.
+export const CPU_SIGMA_MIN_MS = { little: 115, highschool: 95, college: 80, minors: 70, majors: 62 };
+// `CPU_SIGMA_ABSOLUTE_FLOOR_MS`: the one number NOTHING may cross - not a league's own base, not a
+// ladder slot's offset, not the pattern-read timing bonus - a hard backstop above the median
+// human's own 55ms. `cpuBaseTimingSigmaMs()` and `CpuBatter`'s own pattern-bonus clamp both apply
+// it AFTER every other adjustment, not before, closing the gap BB-2b's ordering left open.
+export const CPU_SIGMA_ABSOLUTE_FLOOR_MS = 58;
+// `CPU_PLACEMENT_MIN`: the least bat-placement noise (a fraction of the plate half-width) any CPU
+// batter may ever place with - the median human's own placement noise (`sim-baseball.mjs`'s
+// `MODEL_TIERS.median.placementSigma`). Enforced on `CPU[league].placementNoise` directly (every
+// row above sits at or above it) rather than at read time, since placement noise has no per-slot
+// ladder offset to re-violate it after the fact.
+export const CPU_PLACEMENT_MIN = 0.22;
 
 // TEAM_LADDER_OFFSETS (BB-2a step 5) used to be a single fractional SKILL offset per slot - the
 // only axis it moved. BB-2b commit 3: "within-league monotone still noisy" traced to the ladder
@@ -658,5 +686,6 @@ export default {
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
-  GUESS_READ_NOISE_SCALE, LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE, CPU_SIGMA_FLOOR_MS,
+  LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN,
 };

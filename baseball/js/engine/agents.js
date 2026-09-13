@@ -18,23 +18,36 @@
 import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitchesFor,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
-  GUESS_READ_NOISE_SCALE, LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE, CPU_SIGMA_FLOOR_MS,
+  LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS,
   SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
 
-/** BB-2b commit 3: `CPU[league].timingSigmaMs` clamped to never sit BELOW `CPU_SIGMA_FLOOR_MS` -
- *  doc §8, [Locked]: "difficulty comes mostly from smarter CPU behavior, not bigger CPU stats,"
- *  but nothing before this phase stopped a league's own base sigma from simply being SHARPER than
- *  a median human's own timing. See settings.js's `CPU_SIGMA_FLOOR_MS` for the full rationale.
- *  `ladderOffset` (from `teams.js`'s `makeLeague`, BB-2b commit 3) is an ADDITIVE ms offset applied
- *  AFTER the floor, so a slot can still be sharper than the floor within its own league's ladder -
- *  the floor bounds the LEAGUE's own base difficulty, not each individual opponent. */
+/** BB-2c commit 2: the CPU strength contract's timing half, doc §8, [Locked] (design doc v9):
+ *  "CPU batters may never time or place better than a median human, in any league or any slot."
+ *  Two floors, taken together, replace BB-2b's single flat `CPU_SIGMA_FLOOR_MS` (which turned out
+ *  to be exact parity with a median human, not a floor, AND was applied to the league's own base
+ *  only - a tough ladder slot's own NEGATIVE offset could still push its effective sigma back
+ *  under it, which is exactly what happened to BB-2b's own first-draft champion slot).
+ *
+ *  `CPU_SIGMA_MIN_MS[league]` bounds that league's own BASE sigma (before any ladder offset) -
+ *  Little League can still be far sloppier than a median human while Majors' base can't drift far
+ *  above it. `CPU_SIGMA_ABSOLUTE_FLOOR_MS` is applied AFTER the ladder offset, not before, so this
+ *  function's own return value can never itself violate the absolute floor - the caller
+ *  (`CpuBatter.decideSwing`) additionally re-clamps after its own pattern-read timing bonus, since
+ *  that bonus is a further, later adjustment this function has no visibility into. */
+export function cpuSigmaFloorMs(league, settings) {
+  const leagueMin = (settings.CPU_SIGMA_MIN_MS && settings.CPU_SIGMA_MIN_MS[league]) != null
+    ? settings.CPU_SIGMA_MIN_MS[league] : CPU_SIGMA_MIN_MS[league];
+  const absFloor = settings.CPU_SIGMA_ABSOLUTE_FLOOR_MS != null ? settings.CPU_SIGMA_ABSOLUTE_FLOOR_MS : CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+  return Math.max(leagueMin != null ? leagueMin : absFloor, absFloor);
+}
 export function cpuBaseTimingSigmaMs(league, settings, ladderOffset) {
   const cpu = (settings.CPU && settings.CPU[league]) || CPU.college;
-  const floor = settings.CPU_SIGMA_FLOOR_MS != null ? settings.CPU_SIGMA_FLOOR_MS : CPU_SIGMA_FLOOR_MS;
+  const floor = cpuSigmaFloorMs(league, settings);
   const offsetMs = (ladderOffset && ladderOffset.timingSigmaMs) || 0;
-  return Math.max(floor, cpu.timingSigmaMs) + offsetMs;
+  return Math.max(floor, cpu.timingSigmaMs + offsetMs);
 }
 
 /** The shared "a pitch faster or slower than the batter expected fools their timing" mechanism
@@ -166,18 +179,30 @@ export class CpuBatter {
         // and how easily it is fooled by a speed change (cpu.fool).
         const penaltyMs = Math.max(0, speedDelta - SPEED_DELTA_DEADBAND) * cpu.fool * FOOL_PENALTY_MS_SCALE * patternWeight;
         const bonusMs = Math.max(0, SPEED_DELTA_DEADBAND - speedDelta) * cpu.fool * FOOL_BONUS_MS_SCALE * patternWeight;
-        effectiveSigma = Math.max(10, baseSigma + penaltyMs - bonusMs);
+        // BB-2c commit 2: the pattern-read BONUS (a repeated pitch speed narrowing the spread) is
+        // re-clamped to the league's own sigma floor here too - `baseSigma` already respects it,
+        // but `bonusMs` is a further, later reduction this function's own caller has no visibility
+        // into, and nothing before this phase stopped a big bonus from re-opening the exact gap
+        // the floor exists to close.
+        effectiveSigma = Math.max(cpuSigmaFloorMs(this.league, this.settings), baseSigma + penaltyMs - bonusMs);
       }
     }
 
     const timingErrorMs = gaussianLite(view.rand01) * effectiveSigma;
-    const readNoise = (1 - cpu.guess) * GUESS_READ_NOISE_SCALE;
-    let aimX = pitch.x + (view.rand01() * 2 - 1) * readNoise;
+    // BB-2c commit 2, doc §8, [Locked] (design doc v9): "CPU batters may never... place better than
+    // a median human." Base placement noise is now `CPU[league].placementNoise` (a per-league
+    // constant at or above `CPU_PLACEMENT_MIN`) - `guess` no longer touches it at all. `guess`
+    // instead drives ONLY how far the aim leans toward the pattern-read `locationLean` (doc §8:
+    // "how much CPU leans to your recent spot" - a reading skill, not a placement-precision one).
+    let aimX = pitch.x + (view.rand01() * 2 - 1) * cpu.placementNoise;
     if (patternWeight > 0 && locationLean != null) {
       // "Keep hitting one spot and he waits there" - a batter who has been leaning on a location
       // read has their aim pulled toward it, for better or worse depending on whether THIS pitch
-      // matches that expectation.
-      aimX = aimX * (1 - patternWeight * LOCATION_LEAN_WEIGHT) + locationLean * (patternWeight * LOCATION_LEAN_WEIGHT);
+      // matches that expectation. The lean weight is scaled by `guess` on top of `patternWeight`,
+      // so a league that reads patterns more (patternWeight) AND leans on them harder (guess) both
+      // move this, while never touching the base placement noise above.
+      const leanWeight = patternWeight * LOCATION_LEAN_WEIGHT * (cpu.guess != null ? cpu.guess : 1);
+      aimX = aimX * (1 - leanWeight) + locationLean * leanWeight;
     }
     // The CPU never charges its swing this phase - doc's charge mechanic is a held-input UI
     // concern (§12), and no CPU tuning field here says how often a CPU would choose to charge.
@@ -293,4 +318,4 @@ export class ScriptedAgent {
   }
 }
 
-export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, speedSurpriseMs };
+export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs };

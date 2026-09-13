@@ -16,7 +16,7 @@ import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs } from './engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs } from './engine/agents.js';
 import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
@@ -1142,15 +1142,17 @@ console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch sp
     ok(Math.abs(noHistChangeup - noHistFastball) < 5, 'with no pitch history at all, a changeup surprises ModelBatter no more than a fastball does (no expectation to violate)');
   })();
 
-  // agents.js: `cpuBaseTimingSigmaMs` never sits below CPU_SIGMA_FLOOR_MS at the median (slot-4,
-  // zero-offset) ladder slot, at every league - doc §8, [Locked]: "difficulty comes mostly from
-  // smarter CPU behavior, not bigger CPU stats."
+  // agents.js: `cpuBaseTimingSigmaMs` never sits below CPU_SIGMA_ABSOLUTE_FLOOR_MS at the median
+  // (slot-4, zero-offset) ladder slot, at every league - doc §8, [Locked]: "difficulty comes mostly
+  // from smarter CPU behavior, not bigger CPU stats." (BB-2c commit 2 superseded the old flat
+  // CPU_SIGMA_FLOOR_MS with a per-league minimum plus this absolute backstop - see section 17 below
+  // for the full contract, including every slot, not just the median one.)
   {
     for (const lg of SETTINGS.LEAGUES) {
       const medianOffset = SETTINGS.TEAM_LADDER_OFFSETS[4]; // slot 4 of 8, zero skill offset by construction
       ok(medianOffset.timingSigmaMs === 0, `TEAM_LADDER_OFFSETS[4] carries no timing offset (it IS the league's own median)`);
       const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, medianOffset);
-      ok(sigma >= SETTINGS.CPU_SIGMA_FLOOR_MS, `${lg}'s median-slot base timing sigma (${sigma}ms) is at least CPU_SIGMA_FLOOR_MS (${SETTINGS.CPU_SIGMA_FLOOR_MS}ms)`);
+      ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS, `${lg}'s median-slot base timing sigma (${sigma}ms) is at least CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS}ms)`);
     }
   }
 
@@ -1172,6 +1174,94 @@ console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch sp
     const highVariety = await repeatRate(1);
     ok(lowVariety > highVariety, `ModelPitcher at variety=0 repeats its previous pitch far more often than at variety=1 (${lowVariety.toFixed(2)} > ${highVariety.toFixed(2)})`);
   })();
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 17. BB-2c commit 2: the CPU strength contract - doc §8, [Locked] (design doc v9) --');
+{
+  // "CPU batters may never time or place better than a median human, in any league or any slot."
+  // The median human's own values, per sim-baseball.mjs's MODEL_TIERS.median (not imported here on
+  // purpose - this repo's CLAUDE.md instruction is that engine tests never depend on the simulator,
+  // so the two numbers are restated as literals, matching what CPU_SIGMA_ABSOLUTE_FLOOR_MS/
+  // CPU_PLACEMENT_MIN are THEMSELVES defined against in settings.js's own comments).
+  const MEDIAN_HUMAN_SIGMA_MS = 55;
+  const MEDIAN_HUMAN_PLACEMENT = 0.22;
+
+  ok(SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS > MEDIAN_HUMAN_SIGMA_MS,
+    `CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS}) sits strictly above the median human's own timing sigma (${MEDIAN_HUMAN_SIGMA_MS}) - a floor, not parity`);
+  ok(SETTINGS.CPU_PLACEMENT_MIN === MEDIAN_HUMAN_PLACEMENT,
+    `CPU_PLACEMENT_MIN (${SETTINGS.CPU_PLACEMENT_MIN}) equals the median human's own placement noise (${MEDIAN_HUMAN_PLACEMENT})`);
+
+  // Every league's own CPU_SIGMA_MIN_MS is at or above the absolute floor, and every league's
+  // shipped base `timingSigmaMs` is at or above ITS OWN league minimum - the raw table, not merely
+  // the runtime clamp, honors the contract.
+  for (const lg of SETTINGS.LEAGUES) {
+    ok(SETTINGS.CPU_SIGMA_MIN_MS[lg] >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
+      `CPU_SIGMA_MIN_MS.${lg} (${SETTINGS.CPU_SIGMA_MIN_MS[lg]}) is at or above CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS})`);
+    ok(SETTINGS.CPU[lg].timingSigmaMs >= SETTINGS.CPU_SIGMA_MIN_MS[lg],
+      `CPU.${lg}.timingSigmaMs (${SETTINGS.CPU[lg].timingSigmaMs}) is at or above its own CPU_SIGMA_MIN_MS (${SETTINGS.CPU_SIGMA_MIN_MS[lg]}) - the raw table, not just the runtime clamp`);
+    ok(SETTINGS.CPU[lg].placementNoise >= SETTINGS.CPU_PLACEMENT_MIN,
+      `CPU.${lg}.placementNoise (${SETTINGS.CPU[lg].placementNoise}) is at or above CPU_PLACEMENT_MIN (${SETTINGS.CPU_PLACEMENT_MIN})`);
+  }
+
+  // The critical guarantee: no LADDER SLOT's effective sigma, at ANY league, ever crosses the
+  // absolute floor - not just the median (zero-offset) slot section 16 already checked. This is
+  // exactly the defect BB-2b shipped (a champion slot measuring 30ms, sharper than a "strong"
+  // modeled human at 35ms) - a regression here must fail loudly, not silently.
+  for (const lg of SETTINGS.LEAGUES) {
+    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS.length; slot++) {
+      const offset = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, offset);
+      ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
+        `${lg} ladder slot ${slot}'s effective base timing sigma (${sigma}ms) is at or above CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS}ms)`);
+    }
+  }
+
+  // The pattern-read timing BONUS (a repeated pitch speed narrowing the spread) also cannot punch
+  // back below the floor. Under normal settings the bonus is small (majors: SPEED_DELTA_DEADBAND x
+  // fool x FOOL_BONUS_MS_SCALE x patternWeight = 0.05 x 0.10 x 200 x 0.65 = 0.65ms - nowhere near
+  // enough to test the clamp), so this drives the SAME code path with an exaggerated
+  // FOOL_BONUS_MS_SCALE override (a settings-sweep, same trick sim-baseball.mjs's own
+  // counterfactuals use) to force the bonus far past the floor, then measures the ACTUAL sample
+  // standard deviation of 1's produced against a run of identically-timed fastballs (the scenario
+  // that produces the largest possible bonus) and confirms it never collapses below the floor.
+  await (async () => {
+    const league = 'majors';
+    const skills = { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 5, pitchAcc: 5, pitchSpin: 5 };
+    const hist = [{ type: 'fastball', x: 0 }, { type: 'fastball', x: 0 }, { type: 'fastball', x: 0 }];
+    const pitch = { type: 'fastball', x: 0, isStrike: true };
+    const exaggerated = { ...SETTINGS, FOOL_BONUS_MS_SCALE: 1e7 };
+    const batter = new CpuBatter({ league, skills, settings: exaggerated, styleId: 'balanced', ladderOffset: SETTINGS.TEAM_LADDER_OFFSETS[7] });
+    const samples = [];
+    for (let i = 0; i < 2000; i++) {
+      const rng = mulberry32(9000 + i);
+      const d = await batter.decideSwing({ pitch, pitchHistory: hist, rand01: () => rng() });
+      if (d.action === 'swing') samples.push(d.timingErrorMs);
+    }
+    ok(samples.length > 500, 'the pattern-bonus probe produced enough swings to estimate a standard deviation');
+    const mean = samples.reduce((s, x) => s + x, 0) / samples.length;
+    const variance = samples.reduce((s, x) => s + (x - mean) ** 2, 0) / samples.length;
+    // gaussianLite() is itself normalized to unit variance, so timingErrorMs's own sample stdev
+    // IS the implied effective sigma directly - no further rescaling.
+    const stdev = Math.sqrt(variance);
+    const floor = cpuSigmaFloorMs(league, SETTINGS);
+    ok(stdev >= floor * 0.5, `even with FOOL_BONUS_MS_SCALE exaggerated to force the largest possible bonus, the champion slot's own timing spread (implied sigma ~${stdev.toFixed(1)}ms) does not collapse toward zero - it stays anchored near the floor (${floor}ms), proving the re-clamp in CpuBatter.decideSwing actually fires`);
+  })();
+
+  // `guess` no longer feeds base placement noise at all - a structural check, since driving this
+  // statistically (comparing placement scatter at two `guess` values with everything else held
+  // fixed) would need thousands of samples to separate from ordinary noise. The base aimX line
+  // must read `cpu.placementNoise`, never `cpu.guess`, and the guess-scaled term must be confined
+  // to the lean blend.
+  {
+    const fs = await import('node:fs');
+    const agentsSrc = fs.readFileSync(new URL('./engine/agents.js', import.meta.url), 'utf8');
+    const baseAimLine = agentsSrc.match(/let aimX = pitch\.x \+ .*/);
+    ok(!!baseAimLine && baseAimLine[0].includes('placementNoise') && !baseAimLine[0].includes('guess'),
+      `CpuBatter's base aimX line reads cpu.placementNoise, never cpu.guess: "${baseAimLine && baseAimLine[0]}"`);
+    ok(agentsSrc.includes('leanWeight') && agentsSrc.includes('cpu.guess'),
+      'guess is still used, confined to the lean-weight blend');
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
