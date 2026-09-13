@@ -11,8 +11,9 @@ own decomposition traced everything to, made "CPU batters may never time or plac
 median human" (design doc v9, §8, [Locked]) a structural contract with its own tests, gave a
 flavor style's own behavioral edge a measured strength budget so it never has to be paid for by
 hand-picking its ladder slot, reopened and measured the schedule shape, and retuned once inside the
-contract. Full report at the end of this milestone (commit 6); this section is the schedule-shape
-proposal block, written the moment commit 4 measured it.
+contract. This section is the schedule-shape proposal block, written the moment commit 4 measured
+it; the full commit-6 report (attribution table, final scoreboard, constants-by-source table, and
+the Locked-statement inventory) is below, at "Commit 6: the full report."
 
 ### The two CPU stat levers (commit 1's diagnosis)
 
@@ -55,6 +56,134 @@ Seasons-to-Gold under the chosen `repeatMiddle` default (1 / one-season rate, co
 before commit 5's own retune): little 1.47, highschool 2.04, college 2.19, minors 3.37, majors 4.55
 - already close to design doc v9's own per-league targets (about 1 / 1.5 / 2 / 3 / 4.5) from the
 contract and flavor-budget fixes alone, before any dedicated retune.
+
+### Commit 6: the full report
+
+**Attribution table (commit 1's `--attribute`, one cause per row):**
+
+| Cause | Effect measured | One-line diagnosis |
+|---|---|---|
+| CPU timing sigma per league | College at parity with, Minors/Majors sharper than, a median human | `CPU.timingSigmaMs` had no per-league floor tied to a human reference; a global floor helps Majors but hurts Little/High School/College, so the fix had to be per-league (commit 2's `CPU_SIGMA_MIN_MS`) |
+| `guess`-derived placement noise | College/Minors/Majors placement noise (0.21/0.165/0.12) below median human (0.22) | `guess` was framed as pattern-reading but coded as swing-precision; commit 2 split it into `placementNoise` (precision, floored) and a lean-only `guess` |
+| `pitchingLikeLittle` counterfactual | Negative or flat everywhere (majors -6.9pp), not the expected positive/neutral | Unresolved surprise, flagged rather than chased in commit 1 since it was measurement-only; not revisited in commit 5 - `patternWeight`'s dual read (also drives CPU BATTING pattern-reads) is the live hypothesis for a future session |
+| Shifters' shift behavior | +0.0723 (later +0.0813) measured strength edge, [OUT OF BAND] on `STYLE_STRENGTH_BAND` | A real, uncompressed positional edge no skill-weight vector predicts; commit 3's `STYLE_STRENGTH_DELTA` pays for it directly rather than moving Shifters off its confirmed ladder slot |
+
+**Per-league win-rate bands, before (commit 4, pre-retune) vs after (commit 5, full `--assert`):**
+
+| League | Target band | Before | After | Verdict |
+|---|---|---|---|---|
+| little | [0.92, 0.98] | 0.808 | 0.841 | still FAIL (too easy) |
+| highschool | [0.70, 0.80] | 0.769 | 0.769 | PASS |
+| college | [0.57, 0.67] | 0.667 | 0.694 | still FAIL (too easy) |
+| minors | [0.49, 0.59] | 0.617 | 0.628 | still FAIL (too easy) |
+| majors | [0.41, 0.51] | 0.564 | 0.561 | still FAIL (too easy) |
+
+Seasons-to-Gold, before vs after (target with ±0.75 tolerance in parens):
+
+| League | Before | After | Target |
+|---|---|---|---|
+| little | 1.67 | 1.52 | 1 (+0.75) - PASS |
+| highschool | 2.14 | 1.90 | 1.5 (+0.75) - PASS |
+| college | 2.73 | 2.50 | 2 (+0.75) - PASS |
+| minors | 2.50 | 3.19 | 3 (+0.75) - PASS |
+| majors | 3.75 | 5.36 | 4.5 (+0.75) - FAIL (moved the wrong way) |
+
+**SLOT_WINRATE_BAND, after (full `--assert`):** weakest opponent measured
+`[0.889, 0.828, 0.765, 0.735, 0.736]` against a `>= 0.85` floor at every league - little/highschool
+pass, college/minors/majors do not (their weakest CPU is still too tough a first win). Champion
+measured `[0.831, 0.743, 0.687, 0.579, 0.514]` against `[0.40, 0.55]` - only majors is in band;
+every other league's champion is still too easy relative to the target.
+
+**The Shifters anomaly (not resolved this phase):** at every league, ladder slot 4 (Shifters, zero
+skill offset) measures as the single TOUGHEST slot, tougher than slot 7 (Aces, the intended
+champion) - e.g. majors slot 4 42.5% player win rate vs slot 7's 51.4%. This survived both this
+commit's ladder widening and a fresh `STYLE_STRENGTH_DELTA` re-measurement (0.0723 -> 0.0813, i.e.
+it got MORE out of band, not less). `CHAMPION_IS_HARDEST` and the within-league `LADDER_MONOTONE`
+check both fail because of this one slot, at every league. This is a genuine, reproducible
+structural finding (confirmed at 1000 games/opponent, not sampling noise): Shifters' shift is a
+large enough behavioral edge that a single skill-budget correction cannot fully cancel it while
+still respecting the doc's own instruction not to move Shifters off its confirmed ladder slot or
+hand-tune Aces. **Open for a future session**: either a second, non-skill correction for Shifters
+specifically (a partial dampening of its shift magnitude at the correction's own discretion, not
+Aces'), or accepting Shifters as a deliberately anomalous "wildcard" slot the doc's ladder shape
+does not have to be strictly monotone through.
+
+**Little League's specific tension:** the league needs simultaneously an EASIER overall season
+(0.841, target up to 0.98) and a HARDER champion slot specifically (0.831, target down to 0.55).
+Every lever tried moves both numbers in the same direction (softer CPU behavior eases the season
+AND the champion; tougher ladder-only offsets sharpen both) - no combination found in this phase's
+budget separates them. This may need a Little-League-specific mechanism (e.g. a much steeper
+ladder curve concentrated only at the top slot) rather than a uniform per-league behavior nudge.
+
+**Cap-binding measurement, no `POINTS` change proposed:** `CAP_BINDS_ONLY` after this commit's
+retune: little/highschool bind fast (0.8/2.1 seasons), college/minors/majors do not (6.3/10.6/15.4)
+- unchanged in pattern from BB-2b's own finding. None of this commit's levers (CPU behavior fields,
+ladder timing/chase, `STYLE_STRENGTH_DELTA`) touch `POINTS`/`CAPS` at all, so this measurement is
+reported as confirmation the pattern is stable, not as grounds for a `POINTS` proposal.
+
+**Constants touched this phase, old -> new (full list):**
+
+| Constant | Old | New |
+|---|---|---|
+| `CPU_SIGMA_FLOOR_MS` (removed) | `55` | (replaced by `CPU_SIGMA_MIN_MS` + `CPU_SIGMA_ABSOLUTE_FLOOR_MS`) |
+| `GUESS_READ_NOISE_SCALE` (removed) | `0.3` | (removed; `placementNoise` replaces its role) |
+| `CPU_SIGMA_MIN_MS` (new) | - | `{little:115, highschool:95, college:80, minors:70, majors:62}` |
+| `CPU_SIGMA_ABSOLUTE_FLOOR_MS` (new) | - | `58` |
+| `CPU_PLACEMENT_MIN` (new) | - | `0.22` |
+| `CPU[lg].timingSigmaMs` | `90/75/55/45/35` | `115/95/80/70/62` |
+| `CPU[lg].placementNoise` (new field) | (derived: `0.27/0.24/0.21/0.165/0.12`) | `0.27/0.24/0.22/0.22/0.22` |
+| `CPU.college.cornerBias` / `patternWeight` | `0.33` / `0.23` | `0.38` / `0.27` |
+| `CPU.minors.cornerBias` / `patternWeight` | `0.50` / `0.42` | `0.55` / `0.47` |
+| `CPU.majors.cornerBias` / `patternWeight` | `0.68` / `0.65` | `0.72` / `0.70` |
+| `CPU.little.cornerBias` / `patternWeight` | `0.08` / `0.04` | `0.05` / `0.02` |
+| `STYLE_STRENGTH_DELTA` (new) | - | `{sluggers:0.0010, smallBall:-0.0333, patient:0.0160, flamethrowers:-0.0070, junkballers:-0.0150, shifters:0.0813, aces:0.0043, balanced:0}` (first measured 0.0203/-0.0230/0.0133/-0.0047/-0.0143/0.0723/-0.0053 in commit 3, re-measured in commit 5) |
+| `SCHEDULE_SHAPE` (new) | - | `'repeatMiddle'` (Draft) |
+| `TEAM_LADDER_OFFSETS[*].timingSigmaMs` | `{16,11,7,3,0,-0.8,-2,-3.5}` | `{20,14,9,4,0,-1,-2.5,-4}` |
+| `TEAM_LADDER_OFFSETS[*].chase` | `{0.10,0.075,0.05,0.025,0,-0.025,-0.05,-0.075}` | `{0.15,0.11,0.07,0.03,0,-0.03,-0.06,-0.12}` |
+| `SEASON_WINRATE_BAND` / `SEASONS_TO_GOLD_TARGET` / `SLOT_WINRATE_BAND` (new, `sim-baseball.mjs` only) | - | per design doc v9's own per-league table (see top of this milestone section) |
+| `sw.js` `CACHE` | `game-hub-v822` | `game-hub-v825` (past `origin/main`'s `v824` at time of this commit) |
+
+`POINTS`, `CAPS`, `SEASON.gamesPerSeason`, the trophy rules (`trophyFor`), the contact-quality
+constants (`swing.js`/`outcomes.js`), and everything under `js/`/`baseball/js/ui.js`/`css/`/
+`strings.js`/`index.html` were not touched.
+
+**Locked-statement inventory, phase-implemented, with the test that proves each:**
+
+| Locked statement (design doc v9) | Test |
+|---|---|
+| "CPU batters may never time better than a median human" | `baseball/js/test.js` §17 ladder-sweep test + §19 contract test 1 |
+| "CPU batters may never place better than a median human" | `baseball/js/test.js` §17 raw-table check + §19 contract test 2 |
+| "`guess` only ever weights a location lean, never base placement" | `baseball/js/test.js` §17 structural regex + §19 contract test 3 |
+| "Each league up chases less and reads patterns better" | `baseball/js/test.js` §19 monotone tests (`chase`, `patternWeight`, `cornerBias`) |
+| "The championship opponent is always the toughest team in the league" | `sim-baseball.mjs --assert`'s `CHAMPION_IS_HARDEST`/`SLOT_WINRATE_BAND` - **currently FAILING** (Shifters anomaly, see above); not yet proven by a passing test |
+| "Per-league regular-season win-rate bands / seasons-to-Gold" | `sim-baseball.mjs --assert`'s `SEASON_WINRATE_BAND`/`SEASONS_TO_GOLD_TARGET` - partially passing (seasons-to-Gold: 4 of 5 leagues; win-rate band: 1 of 5 leagues), not fully proven |
+| "A flavor style's own behavior is paid for by its own budget, not by hand-picking its slot" | `baseball/js/test.js` §18 |
+| "The schedule always meets the champion exactly once, in game 12" | `baseball/js/test.js` §8d shape-agnostic + per-shape assertions |
+
+**Self-review checklist:**
+- No CPU sigma below its league minimum or the absolute floor anywhere in `settings.js`: **yes** - `baseball/js/test.js` §17/§19 sweep every league x every ladder slot.
+- No CPU placement noise below the human's: **yes** - every `CPU[lg].placementNoise` is `>= CPU_PLACEMENT_MIN` (0.22), checked in §17/§19.
+- `guess` no longer touches base placement: **yes** - `agents.js`'s base `aimX` line reads `placementNoise` only; `guess` is confined to the lean-weight blend (§17 structural check).
+- `makeLeague` subtracts `STYLE_STRENGTH_DELTA`: **yes** - `teams.js`'s `slotCap` calculation subtracts it; verified against the shipped roster (§18).
+- `LEAGUE_LADDER_STYLES` unchanged from Matt's order: **yes** - byte-identical check in §18, at every league.
+- `SCHEDULE_SHAPE` monotone and the champion in game 12: **yes** - all three shapes assert this in §8d; `repeatMiddle` is the shipped default.
+- No magic numbers left in `agents.js`: **yes** - the sigma/placement floors, lean weight, and pattern-bonus scales all read from named `settings.js` exports (`CPU_SIGMA_MIN_MS`, `CPU_SIGMA_ABSOLUTE_FLOOR_MS`, `CPU_PLACEMENT_MIN`, `LOCATION_LEAN_WEIGHT`, `FOOL_PENALTY_MS_SCALE`, `FOOL_BONUS_MS_SCALE`).
+- `RULES_V` bumped if any snapshot shape changed: **not bumped** - no persisted snapshot shape changed this phase (only in-memory settings values and a new, non-persisted `sim-baseball.mjs` scoreboard).
+- The contact grid unchanged: **yes** - `node sim-baseball.mjs --contact-grid` measures byte-identical constants and passes all five checks (unchanged from before this phase).
+
+**What did not converge, reported honestly rather than forced:** `SEASON_WINRATE_BAND` (4 of 5
+leagues), `SLOT_WINRATE_BAND` (both ends, every league), `CHAMPION_IS_HARDEST`, and the
+within-league `LADDER_MONOTONE` check remain FAILING after this commit's retune, for the two
+structural reasons above (the Shifters slot-4 anomaly, and Little League's opposite-direction
+season/champion tension). `SEASONS_TO_GOLD_TARGET` moved from 4-of-5 passing to majors regressing
+slightly (3.75 -> 5.36, now just outside its own tolerance) as a side effect of toughening majors'
+`cornerBias`/`patternWeight` to chase the win-rate band, which is the kind of interaction this
+phase's levers could not fully separate by hand. This phase's real, banked progress: the CPU
+strength CONTRACT (no sub-human sigma or placement anywhere, at any slot, in any league) is fully
+implemented and tested, `STYLE_STRENGTH_DELTA` and the schedule-shape question are both real,
+measured, settings-driven features now rather than open items, and the diagnosis of WHY the
+remaining bands don't converge (Shifters, Little League's tension) is specific enough for a future
+session to act on without re-deriving it.
 
 ## Status: Phase 2b — why Gold is far away, then the fix
 

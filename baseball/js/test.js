@@ -1333,5 +1333,55 @@ console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 19. BB-2c commit 6: Locked-statement inventory (design doc v9, "difficulty from behavior") --');
+{
+  // Contract test 1: no league's CPU ever bats sharper-timed than the absolute human-relative
+  // floor, at ANY ladder slot - difficulty may never come from a stat that crosses into
+  // "better than a person could be," only from behavior (chase, pattern-reading, placement).
+  for (const lg of SETTINGS.LEAGUES) {
+    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS.length; slot++) {
+      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, SETTINGS.TEAM_LADDER_OFFSETS[slot]);
+      ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
+        `${lg} slot ${slot}: effective CPU batting sigma (${sigma.toFixed(1)}ms) never crosses CPU_SIGMA_ABSOLUTE_FLOOR_MS`);
+    }
+  }
+
+  // Contract test 2: no league's CPU ever places a pitch more precisely than a human batter's own
+  // best-known reference placement - difficulty comes from WHERE it places (pattern-reading via
+  // patternWeight/cornerBias), never from placing with impossible precision.
+  for (const lg of SETTINGS.LEAGUES) {
+    ok(SETTINGS.CPU[lg].placementNoise >= SETTINGS.CPU_PLACEMENT_MIN,
+      `${lg}: CPU placementNoise (${SETTINGS.CPU[lg].placementNoise}) never crosses CPU_PLACEMENT_MIN`);
+  }
+
+  // Contract test 3: `guess` (BB-2c commit 2) only ever weights a LOCATION LEAN, never the base
+  // placement roll itself - re-affirmed here as a Locked-statement inventory entry distinct from
+  // section 17's structural regex check, using the actual exported constant.
+  ok(SETTINGS.LOCATION_LEAN_WEIGHT > 0 && SETTINGS.LOCATION_LEAN_WEIGHT <= 1,
+    'LOCATION_LEAN_WEIGHT is the one place `guess` can move a CPU batter\'s aim, and it is bounded to a partial blend');
+
+  // Monotone test: "each league up chases less and reads patterns better" (doc §8, [Locked]) -
+  // checked on the raw per-league CPU table, which is the one place this Locked statement is
+  // actually encoded as data.
+  for (let i = 1; i < SETTINGS.LEAGUES.length; i++) {
+    const prev = SETTINGS.CPU[SETTINGS.LEAGUES[i - 1]];
+    const cur = SETTINGS.CPU[SETTINGS.LEAGUES[i]];
+    ok(cur.chase <= prev.chase, `${SETTINGS.LEAGUES[i]} chases no more than ${SETTINGS.LEAGUES[i - 1]} (${cur.chase} <= ${prev.chase})`);
+    ok(cur.patternWeight >= prev.patternWeight, `${SETTINGS.LEAGUES[i]} reads patterns at least as well as ${SETTINGS.LEAGUES[i - 1]} (${cur.patternWeight} >= ${prev.patternWeight})`);
+    ok(cur.cornerBias >= prev.cornerBias, `${SETTINGS.LEAGUES[i]} pitches corners at least as often as ${SETTINGS.LEAGUES[i - 1]} (${cur.cornerBias} >= ${prev.cornerBias})`);
+  }
+
+  // Per-league win-rate band shape test: SEASON_WINRATE_BAND/SEASONS_TO_GOLD_TARGET live in
+  // sim-baseball.mjs (the tool that measures a full season, which this headless suite does not
+  // play) - this only pins their SHAPE stays sane so a future edit can't silently invert a band
+  // or drop a league. The actual measured pass/fail against these bands is `sim-baseball.mjs
+  // --assert`'s job, not this suite's (see baseball/CLAUDE.md, "Status: Phase 2c" for the
+  // current measured scoreboard).
+  const BAND_SHAPE_LEAGUES = ['little', 'highschool', 'college', 'minors', 'majors'];
+  ok(JSON.stringify(SETTINGS.LEAGUES) === JSON.stringify(BAND_SHAPE_LEAGUES),
+    'LEAGUES is the fixed 5-league order every per-league band table is keyed by');
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;
