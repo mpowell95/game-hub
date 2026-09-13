@@ -12,9 +12,12 @@
   --sd-given: #16243a;
   --sd-player: #1769d4;
   --sd-select: #ffce3a;
+  --sd-select-tint: rgba(255, 206, 58, .16);
   --sd-peer: rgba(31, 95, 168, .08);
   --sd-same: rgba(23, 138, 122, .16);
   --sd-conflict: #e0532f;
+  --sd-accent: #7a3b8f;
+  --sd-hero-bg: linear-gradient(135deg, rgba(122, 59, 143, .16), rgba(122, 59, 143, .05));
   box-sizing: border-box;
   position: absolute;
   inset: 0;
@@ -49,6 +52,8 @@
   --sd-player: #6db2ff;
   --sd-peer: rgba(109, 178, 255, .12);
   --sd-same: rgba(66, 200, 178, .20);
+  --sd-select-tint: rgba(255, 206, 58, .22);
+  --sd-hero-bg: linear-gradient(135deg, rgba(163, 104, 194, .34), rgba(163, 104, 194, .1));
   /* css/ui.css's .gh-* primitives (the how-to card, the win modal) read --gh-surface/-ink/-muted,
    * which are themselves declared ONCE at :root as `var(--hub-surface, #fff)` - that fallback
    * resolves to a concrete value at :root itself (where --hub-surface is never set, since
@@ -70,11 +75,29 @@
   max-width: 420px;
   margin: 0 auto;
   width: 100%;
-  gap: 14px;
+  gap: 12px;
 }
+
+/* Purely decorative header art - a soft tinted panel around the mini-board SVG. Sized in `px`,
+ * not viewport units, so it shrinks along with everything else if a future tier is added; if a
+ * shorter phone ever needs more room, trim this first (docs/BUILDING-A-GAME.md, no scrolling). */
+.sd-hero {
+  align-self: center;
+  flex: none;
+  width: 88px;
+  height: 88px;
+  padding: 8px;
+  display: flex;
+  border-radius: var(--gh-r-lg, 16px);
+  background: var(--sd-hero-bg);
+}
+.sd-hero-svg { width: 100%; height: 100%; }
+
 .sd-menu-header { text-align: center; }
-.sd-menu-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
-.sd-menu-header p { margin: 0; color: var(--sd-muted); font-size: 14px; }
+.sd-menu-header h1 { margin: 0 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -.2px; }
+.sd-menu-header p { margin: 0; color: var(--sd-muted); font-size: 13px; }
+
+.sd-menu-card { display: flex; flex-direction: column; gap: 12px; }
 
 .sd-seg-wrap {
   display: flex;
@@ -84,7 +107,7 @@
 }
 .sd-seg {
   flex: 1 1 40%;
-  min-height: 44px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,8 +121,13 @@
   font-size: 13px;
   cursor: pointer;
   touch-action: manipulation;
+  transition: background-color .12s ease, border-color .12s ease;
 }
-.sd-seg.is-selected { outline: 2px solid var(--sd-select); border-color: var(--sd-select); }
+.sd-seg.is-selected {
+  outline: 2px solid var(--sd-select);
+  border-color: var(--sd-select);
+  background: var(--sd-select-tint);
+}
 .sd-seg-label { display: flex; align-items: center; gap: 6px; }
 .sd-seg svg.lb-dshape, .sd-hud-tier svg.lb-dshape { width: 15px; height: 15px; flex: none; }
 .sd-seg svg.lb-dshape-x2, .sd-hud-tier svg.lb-dshape-x2 { width: 26px; height: 15px; }
