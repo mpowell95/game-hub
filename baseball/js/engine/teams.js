@@ -128,9 +128,16 @@ export function makeLeague(league) {
   const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
   const teams = order.map((styleId, slot) => {
     const seed = hashSeed('bb-league', league, styleId);
-    const frac = TEAM_LADDER_OFFSETS[slot] || 0;
-    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + frac)));
-    return buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
+    // BB-2b commit 3: TEAM_LADDER_OFFSETS entries are now `{ skill, timingSigmaMs, chase }` - only
+    // `skill` feeds roster generation here, exactly as the old bare-number offset did; the other
+    // two are attached directly onto the returned team for `agents.js`'s `CpuBatter` to read
+    // (`ladderOffset`), since they are BATTING-BEHAVIOR knobs, not skill points.
+    const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0 };
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
+    const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
+    team.ladderSlot = slot;
+    team.ladderOffset = { timingSigmaMs: offsets.timingSigmaMs, chase: offsets.chase };
+    return team;
   });
   return teams;
 }

@@ -234,13 +234,13 @@ function mkCpuAgent(team, league, settings) {
     decidePitch: (v) => new CpuPitcher({ league, settings }).decidePitch(v),
     decideSwing: (v) => {
       const batter = team.players.find((p) => p.id === v.batterId) || team.players[0];
-      return new CpuBatter({ league, skills: batter.skills, settings, styleId: team.styleId }).decideSwing(v);
+      return new CpuBatter({ league, skills: batter.skills, settings, styleId: team.styleId, ladderOffset: team.ladderOffset }).decideSwing(v);
     },
   };
 }
 function mkModelAgent(league, settings, tier) {
   const cpu = settings.CPU[league] || settings.CPU.college;
-  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: cpu.swingIn, chase: cpu.chase });
+  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: cpu.swingIn, chase: cpu.chase, settings });
   const pitcher = new ModelPitcher({ league, settings, variety: tier.variety, cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix });
   return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v) };
 }
@@ -518,7 +518,7 @@ async function measureContactCell(sigma, hitPow, settings) {
     const seed = hashSeed('bb-contact-grid', sigma, hitPow, draw++) >>> 0;
     const rand01 = mulberry32(seed);
     const pitchDecision = await cpuPitcher.decidePitch({ rand01, weakZone: null });
-    const pitchResult = flyPitch(pitchDecision.type, pitchDecision.aim, controlSkill, settings, rand01);
+    const pitchResult = flyPitch(pitchDecision.type, pitchDecision.aim, controlSkill, settings, rand01, pitcher.skills);
     const swingDecision = await batter.decideSwing({ pitch: pitchResult, rand01 });
     if (swingDecision.action !== 'swing') continue; // a take is not a swing - draw again
     swings += 1;

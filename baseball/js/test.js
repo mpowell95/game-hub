@@ -16,7 +16,7 @@ import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent } from './engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs } from './engine/agents.js';
 import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
@@ -34,7 +34,7 @@ function mkAgent(team, league) {
     decidePitch: (v) => new CpuPitcher({ league, settings: SETTINGS }).decidePitch(v),
     decideSwing: (v) => {
       const batter = team.players.find((p) => p.id === v.batterId) || team.players[0];
-      return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS, styleId: team.styleId }).decideSwing(v);
+      return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS, styleId: team.styleId, ladderOffset: team.ladderOffset }).decideSwing(v);
     },
   };
 }
@@ -451,9 +451,17 @@ console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3; BB-2a step 5:
     ok(JSON.stringify(league) === JSON.stringify(league2), `makeLeague('${lg}') is byte-identical run to run`);
   }
   // BB-2a step 5: strength comes from TEAM_LADDER_OFFSETS by SLOT, not from a style's own flavor.
+  // BB-2b commit 3: each entry is now `{ skill, timingSigmaMs, chase }` - `skill` strictly rises
+  // weakest to strongest exactly as the old bare-number offset did; `timingSigmaMs`/`chase` are
+  // ADDITIVE offsets that should strictly FALL (a sloppier/more-chasing weak slot to a
+  // sharper/more-selective strong slot).
   ok(SETTINGS.TEAM_LADDER_OFFSETS.length === 8, 'TEAM_LADDER_OFFSETS names exactly 8 slots');
-  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((v, i) => i === 0 || v > SETTINGS.TEAM_LADDER_OFFSETS[i - 1]),
-    'TEAM_LADDER_OFFSETS is strictly rising, weakest slot to strongest (BB-2a step 5)');
+  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.skill > SETTINGS.TEAM_LADDER_OFFSETS[i - 1].skill),
+    'TEAM_LADDER_OFFSETS.skill is strictly rising, weakest slot to strongest (BB-2a step 5)');
+  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.timingSigmaMs < SETTINGS.TEAM_LADDER_OFFSETS[i - 1].timingSigmaMs),
+    'TEAM_LADDER_OFFSETS.timingSigmaMs strictly falls, weakest (sloppiest) slot to strongest (sharpest) (BB-2b commit 3)');
+  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.chase < SETTINGS.TEAM_LADDER_OFFSETS[i - 1].chase),
+    'TEAM_LADDER_OFFSETS.chase strictly falls, weakest (most-chasing) slot to strongest (most-selective) (BB-2b commit 3)');
   for (const lg of SETTINGS.LEAGUES) {
     ok(new Set(SETTINGS.LEAGUE_LADDER_STYLES[lg]).size === 8, `LEAGUE_LADDER_STYLES.${lg} names every style exactly once`);
     ok(SETTINGS.LEAGUE_LADDER_STYLES[lg].every((id) => !!SETTINGS.TEAM_STYLES[id]), `LEAGUE_LADDER_STYLES.${lg} only names real styles`);
@@ -950,11 +958,15 @@ console.log('\n-- 15. Locked-statement inventory gap-fill (BB-2a step 8) --');
   {
     const zonesM = zonesFor('majors', 0);
     const sector = zonesM.infield[1];
+    // BB-2b commit 3: sector midpoint, not a hardcoded 0 - the gaps this phase introduced between
+    // sectors mean 0deg no longer necessarily falls INSIDE sector[1] (it now sits in the gap
+    // between sectors 1 and 2 under the default GAP_DEG).
+    const sprayAngleDeg = (sector.fromDeg + sector.toDeg) / 2;
     const GROUND_ANGLE = 4;
     const angleFactor = Math.max(0, Math.sin((2 * GROUND_ANGLE * Math.PI) / 180));
     const nearEdgeFt = sector.toFt - SETTINGS.MECHANICS.groundEdgeMarginFt / 2; // well inside the near-edge band
     const exitVeloMph = nearEdgeFt / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
-    const trial = (hitSpd) => resolveContact({ exitVeloMph, launchAngleDeg: GROUND_ANGLE, sprayAngleDeg: 0 },
+    const trial = (hitSpd) => resolveContact({ exitVeloMph, launchAngleDeg: GROUND_ANGLE, sprayAngleDeg },
       zonesM, SETTINGS, SETTINGS.PARKS.default, hitSpd, () => 0.0001).result;
     ok(trial(0) === 'out', 'a close grounder with hitSpd=0 is fielded (the beat-out roll never fires with zero chance)');
     ok(trial(10) === 'hit', `the identical close grounder with hitSpd=10 beats the throw (doc §6: "Batter Speed affects beating out grounders"), sector.toFt=${sector.toFt}, tried at ${nearEdgeFt.toFixed(1)}ft`);
@@ -1013,12 +1025,153 @@ console.log('\n-- 15. Locked-statement inventory gap-fill (BB-2a step 8) --');
       ok(o.result === 'out' && o.kind === 'popout', `a pop-up (launchAngleDeg=${trial.a}) is always an out regardless of exit velocity or spray (doc §10, [Locked]), got ${JSON.stringify(o)}`);
     }
   }
-  // doc §10, [Locked]: "Fields get bigger each league" - fenceFtAt(0) (dead center) rises league to
-  // league.
+  // doc §10, [Locked]: "Fields get bigger each league" - every one of the five named fence points
+  // (not just dead center) is non-decreasing league to league. BB-2b commit 3: `_parkFt()` in
+  // game.js now reads `FIELD[league].fenceFt` directly for every league (see below), so this is
+  // the fence a real game actually plays with, not just a display shape.
   {
-    const centers = SETTINGS.LEAGUES.map((lg) => fenceFtAt(0, SETTINGS.FIELD[lg].fenceFt));
-    ok(centers.every((v, i) => i === 0 || v >= centers[i - 1]), `center-field fence distance grows league to league (doc §10, [Locked]): ${JSON.stringify(centers)}`);
+    for (const angle of [-45, -22.5, 0, 22.5, 45]) {
+      const byLeague = SETTINGS.LEAGUES.map((lg) => fenceFtAt(angle, SETTINGS.FIELD[lg].fenceFt));
+      ok(byLeague.every((v, i) => i === 0 || v >= byLeague[i - 1]),
+        `fence distance at ${angle}deg grows league to league (doc §10, [Locked]): ${JSON.stringify(byLeague)}`);
+    }
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch speed, ladder axis --');
+{
+  // zones.js: GAP_DEG carves real angular gaps between sectors - the seven sectors (4 infield + 3
+  // outfield) no longer tile the full -45..45 span, and angleSector() returns null inside a gap.
+  {
+    const zonesM = zonesFor('majors', 0);
+    const allSectors = [...zonesM.infield, ...zonesM.outfield];
+    const totalCoverageDeg = allSectors.reduce((s, sec) => s + (sec.toDeg - sec.fromDeg), 0);
+    // 7 sectors total across the two 90deg spans (infield + outfield), each missing GAP_DEG*(n-1)
+    // of coverage relative to a gap-free tiling.
+    const expectedGapless = 90 * 2;
+    const expectedGaps = SETTINGS.GAP_DEG * (zonesM.infield.length - 1) + SETTINGS.GAP_DEG * (zonesM.outfield.length - 1);
+    ok(Math.abs(totalCoverageDeg - (expectedGapless - expectedGaps)) < 1e-6,
+      `the seven sectors no longer tile the full 90deg span each - ${expectedGaps}deg of gap removed (GAP_DEG=${SETTINGS.GAP_DEG})`);
+    // A genuine gap angle (the midpoint between two adjacent infield sectors) resolves to null.
+    const gapAngle = (zonesM.infield[1].toDeg + zonesM.infield[2].fromDeg) / 2;
+    ok(angleSector(gapAngle, zonesM.infield) === null, `angleSector at the midpoint of an infield gap (${gapAngle}deg) returns null`);
+    const outGapAngle = (zonesM.outfield[0].toDeg + zonesM.outfield[1].fromDeg) / 2;
+    ok(angleSector(outGapAngle, zonesM.outfield) === null, `angleSector at the midpoint of an outfield gap (${outGapAngle}deg) returns null`);
+  }
+
+  // outcomes.js: at least one spray angle at every depth resolves to a HIT - a grounder through an
+  // infield gap, a blooper short of the outfield's near edge, a ball through an outfield gap, and
+  // a ball that cleared a manned outfield sector's own reach.
+  {
+    const zonesM = zonesFor('majors', 0);
+    const gapAngle = (zonesM.infield[1].toDeg + zonesM.infield[2].fromDeg) / 2;
+    const groundGap = resolveContact({ exitVeloMph: 70, launchAngleDeg: 4, sprayAngleDeg: gapAngle },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    ok(groundGap.result === 'hit' && groundGap.kind === 'ground-gap', `a grounder through an infield gap (${gapAngle}deg) is a single, got ${JSON.stringify(groundGap)}`);
+
+    const manned = zonesM.outfield[1]; // straightaway center, a manned sector
+    const bloopFt = manned.fromFt - SETTINGS.BLOOP_BAND_FT / 2; // well inside the bloop band
+    const angleFactor18 = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
+    const bloopVelo = bloopFt / (SETTINGS.CARRY_SCALE * angleFactor18) + 30;
+    const bloop = resolveContact({ exitVeloMph: bloopVelo, launchAngleDeg: 18, sprayAngleDeg: 0 },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    ok(bloop.result === 'hit' && bloop.kind === 'blooper', `a fly short of a manned sector's near edge, within BLOOP_BAND_FT, is a bloop single, got ${JSON.stringify(bloop)}`);
+
+    const tooShort = resolveContact({ exitVeloMph: bloopFt < 20 ? 35 : (manned.fromFt - SETTINGS.BLOOP_BAND_FT - 10) / (SETTINGS.CARRY_SCALE * angleFactor18) + 30,
+      launchAngleDeg: 18, sprayAngleDeg: 0 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    ok(tooShort.result === 'out', `a fly shorter than BLOOP_BAND_FT short of a manned sector's near edge is still an out, got ${JSON.stringify(tooShort)}`);
+
+    const outGapAngle = (zonesM.outfield[0].toDeg + zonesM.outfield[1].fromDeg) / 2;
+    const gapFly = resolveContact({ exitVeloMph: 95, launchAngleDeg: 20, sprayAngleDeg: outGapAngle },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    ok(gapFly.result === 'hit', `a fly through an outfield gap (${outGapAngle}deg) is a hit at any real depth, got ${JSON.stringify(gapFly)}`);
+  }
+
+  // game.js's `_parkFt()`: every league's own fence now comes from FIELD[league].fenceFt, never
+  // PARKS scaled by fieldScale - unless a real named Majors park is requested.
+  {
+    for (const lg of SETTINGS.LEAGUES) {
+      const home = makeTeam(lg, 1), away = makeTeam(lg, 2);
+      const g = new Game({ home, away, seed: 1, agents: { home: mkAgent(home, lg), away: mkAgent(away, lg) } });
+      const fence = g._parkFt();
+      ok(JSON.stringify(fence) === JSON.stringify(SETTINGS.FIELD[lg].fenceFt),
+        `_parkFt() for league '${lg}' with the default park is exactly FIELD.${lg}.fenceFt, not a PARKS/fieldScale product`);
+    }
+    const home = makeTeam('majors', 1), away = makeTeam('majors', 2);
+    const g = new Game({ home, away, seed: 1, agents: { home: mkAgent(home, 'majors'), away: mkAgent(away, 'majors') }, parkId: 'bandbox' });
+    ok(JSON.stringify(g._parkFt()) === JSON.stringify(SETTINGS.PARKS.bandbox), '_parkFt() for a real named Majors park returns that park\'s own distances, unscaled');
+  }
+
+  // pitch.js: pitchSpd measurably shortens a fastball's travel time; pitchSpin widens the
+  // changeup's own travel-multiple gap (doc §6, [Locked]).
+  {
+    const slow = flyPitch('fastball', 0, 1, SETTINGS, mulberry32(1), { pitchSpd: 0 });
+    const fast = flyPitch('fastball', 0, 1, SETTINGS, mulberry32(1), { pitchSpd: 10 });
+    ok(fast.timeToPlateS < slow.timeToPlateS, `a pitcher with pitchSpd=10 throws a measurably faster fastball than one at pitchSpd=0 (${fast.timeToPlateS} < ${slow.timeToPlateS})`);
+
+    const plainChange = flyPitch('changeup', 0, 1, SETTINGS, mulberry32(1), { pitchSpin: 0 });
+    const spunChange = flyPitch('changeup', 0, 1, SETTINGS, mulberry32(1), { pitchSpin: 10 });
+    ok(spunChange.timeToPlateS > plainChange.timeToPlateS, `a pitcher with pitchSpin=10 throws a changeup with a measurably WIDER speed gap than one at pitchSpin=0 (${spunChange.timeToPlateS} > ${plainChange.timeToPlateS})`);
+  }
+
+  // agents.js: a changeup thrown after two fastballs raises a batter's EFFECTIVE timing sigma
+  // (doc §8: "Change speeds and he swings early or late") - measured on ModelBatter, which had no
+  // pattern awareness at all before this phase. Mean |timingErrorMs| over many draws is a direct,
+  // testable proxy for effective sigma (a gaussianLite draw's own expected magnitude scales with
+  // it), so a real gap there is exactly what the doc's mechanism should produce.
+  await (async () => {
+    const hist = [{ type: 'fastball', x: 0 }, { type: 'fastball', x: 0 }];
+    const changeupPitch = { type: 'changeup', x: 0, isStrike: true };
+    const fastballPitch = { type: 'fastball', x: 0, isStrike: true };
+    const meanAbsTiming = async (pitch, pitchHistory, n = 400) => {
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        const b = new ModelBatter({ timingSigmaMs: 55, placementSigma: 0.22, swingIn: 1 });
+        const rng = mulberry32(2000 + i);
+        const d = await b.decideSwing({ pitch, pitchHistory, rand01: () => rng() });
+        total += Math.abs(d.timingErrorMs || 0);
+      }
+      return total / n;
+    };
+    const surprised = await meanAbsTiming(changeupPitch, hist);
+    const expected = await meanAbsTiming(fastballPitch, hist);
+    ok(surprised > expected, `a changeup after two fastballs raises a ModelBatter's effective timing sigma (mean |error| ${surprised.toFixed(1)}ms > ${expected.toFixed(1)}ms for an expected fastball)`);
+    const noHistChangeup = await meanAbsTiming(changeupPitch, []);
+    const noHistFastball = await meanAbsTiming(fastballPitch, []);
+    ok(Math.abs(noHistChangeup - noHistFastball) < 5, 'with no pitch history at all, a changeup surprises ModelBatter no more than a fastball does (no expectation to violate)');
+  })();
+
+  // agents.js: `cpuBaseTimingSigmaMs` never sits below CPU_SIGMA_FLOOR_MS at the median (slot-4,
+  // zero-offset) ladder slot, at every league - doc §8, [Locked]: "difficulty comes mostly from
+  // smarter CPU behavior, not bigger CPU stats."
+  {
+    for (const lg of SETTINGS.LEAGUES) {
+      const medianOffset = SETTINGS.TEAM_LADDER_OFFSETS[4]; // slot 4 of 8, zero skill offset by construction
+      ok(medianOffset.timingSigmaMs === 0, `TEAM_LADDER_OFFSETS[4] carries no timing offset (it IS the league's own median)`);
+      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, medianOffset);
+      ok(sigma >= SETTINGS.CPU_SIGMA_FLOOR_MS, `${lg}'s median-slot base timing sigma (${sigma}ms) is at least CPU_SIGMA_FLOOR_MS (${SETTINGS.CPU_SIGMA_FLOOR_MS}ms)`);
+    }
+  }
+
+  // agents.js's ModelPitcher: `variety` is continuous - a low-variety pitcher repeats its previous
+  // pitch far more often than a high-variety one (doc §8: "mixes pitches more" each league up).
+  await (async () => {
+    const repeatRate = async (variety) => {
+      const p = new ModelPitcher({ league: 'majors', settings: SETTINGS, variety, cornerBias: 0.5, pitchMix: SETTINGS.CPU.majors.pitchMix });
+      let repeats = 0, prev = null;
+      const rng = mulberry32(4242);
+      for (let i = 0; i < 500; i++) {
+        const d = await p.decidePitch({ rand01: () => rng() });
+        if (prev != null && d.type === prev) repeats += 1;
+        prev = d.type;
+      }
+      return repeats / 500;
+    };
+    const lowVariety = await repeatRate(0);
+    const highVariety = await repeatRate(1);
+    ok(lowVariety > highVariety, `ModelPitcher at variety=0 repeats its previous pitch far more often than at variety=1 (${lowVariety.toFixed(2)} > ${highVariety.toFixed(2)})`);
+  })();
 }
 
 // ---------------------------------------------------------------------------------------------

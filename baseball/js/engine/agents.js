@@ -15,9 +15,53 @@
 // recently-weak zone; `CpuBatter` reads `view.pitchHistory` (now `{type, x}` per entry) through
 // `patternWeight` to shift its timing (repeated SPEED) and its aim (repeated LOCATION).
 
-import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitchesFor } from './settings.js';
+import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitchesFor,
+  AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
+  WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
+  GUESS_READ_NOISE_SCALE, LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE, CPU_SIGMA_FLOOR_MS,
+  SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
+
+/** BB-2b commit 3: `CPU[league].timingSigmaMs` clamped to never sit BELOW `CPU_SIGMA_FLOOR_MS` -
+ *  doc §8, [Locked]: "difficulty comes mostly from smarter CPU behavior, not bigger CPU stats,"
+ *  but nothing before this phase stopped a league's own base sigma from simply being SHARPER than
+ *  a median human's own timing. See settings.js's `CPU_SIGMA_FLOOR_MS` for the full rationale.
+ *  `ladderOffset` (from `teams.js`'s `makeLeague`, BB-2b commit 3) is an ADDITIVE ms offset applied
+ *  AFTER the floor, so a slot can still be sharper than the floor within its own league's ladder -
+ *  the floor bounds the LEAGUE's own base difficulty, not each individual opponent. */
+export function cpuBaseTimingSigmaMs(league, settings, ladderOffset) {
+  const cpu = (settings.CPU && settings.CPU[league]) || CPU.college;
+  const floor = settings.CPU_SIGMA_FLOOR_MS != null ? settings.CPU_SIGMA_FLOOR_MS : CPU_SIGMA_FLOOR_MS;
+  const offsetMs = (ladderOffset && ladderOffset.timingSigmaMs) || 0;
+  return Math.max(floor, cpu.timingSigmaMs) + offsetMs;
+}
+
+/** The shared "a pitch faster or slower than the batter expected fools their timing" mechanism
+ *  (doc §8, [Locked]: "Change speeds and he swings early or late") - BB-2b commit 3, applied
+ *  identically to `ModelBatter` (which had NO pattern awareness at all before this phase) and
+ *  usable by `CpuBatter` alongside its own existing fool/patternWeight formula. Returns extra ms
+ *  of timing sigma, proportional to how far the ACTUAL pitch's travel multiple sits from the
+ *  EXPECTED one (a weighted average of recent pitches' own multiples). */
+export function speedSurpriseMs(actualMult, expectedMult, msPerMult) {
+  if (expectedMult == null) return 0;
+  return Math.abs(actualMult - expectedMult) * msPerMult;
+}
+
+/** The pattern-weighted "expected" pitch-speed travel multiple from a batter's own recent
+ *  history (oldest..newest, `{type, x}` per doc §8's last-3-pitches memory), or `null` with no
+ *  history to read - shared by `CpuBatter` and `ModelBatter` so both compute "what did I expect"
+ *  the same way. */
+function expectedTravelMult(hist, travelMult) {
+  if (!hist || !hist.length) return null;
+  let wSum = 0, multSum = 0;
+  for (let i = 0; i < hist.length; i++) {
+    const w = PATTERN_WEIGHTS[hist.length - 1 - i] || 0;
+    multSum += (travelMult[hist[i].type] || 1) * w;
+    wSum += w;
+  }
+  return wSum > 0 ? multSum / wSum : null;
+}
 
 /** A CPU pitcher. Picks from whatever pitches are unlocked for its league (and, for a player's own
  *  career opponent, their World Series titles - CPU rosters never carry titles, doc §8: "CPU stats
@@ -44,16 +88,17 @@ export class CpuPitcher {
       // doc §8, [Locked]: "Majors: attacks your weak spots." A small scatter around the exact
       // remembered zone, same shape as the ordinary aim scatter below - a pitcher that landed
       // exactly on the recorded x every time would be reading the batter's mind, not their habits.
-      const aimX = view.weakZone + (view.rand01() * 2 - 1) * 0.15;
+      const aimX = view.weakZone + (view.rand01() * 2 - 1) * WEAKSPOT_AIM_SCATTER;
       return { type, aim: aimX };
     }
 
     // cornerBias: how often the aim leaves the middle of the zone, and how far, both rising with
     // it (doc §8, [Locked]: "each league up... works the corners more"). At cornerBias 0 the
-    // pitcher is still not a laser (0.4 x half-width, comfortably outside a token miss); at 1 it
-    // is almost always working the very edge or just off it.
+    // pitcher is still not a laser (AIM_INZONE_BIAS x half-width, comfortably outside a token
+    // miss); at 1 it is almost always working the very edge or just off it.
     const cornerBias = cpu.cornerBias != null ? cpu.cornerBias : 0.5;
-    const inZoneBias = view.rand01() < (1 - cornerBias * 0.5) ? 0.4 : (0.9 + cornerBias * 0.9);
+    const inZoneBias = view.rand01() < (1 - cornerBias * AIM_CORNER_CHANCE_MULT)
+      ? AIM_INZONE_BIAS : (AIM_CORNER_BIAS_BASE + cornerBias * AIM_CORNER_BIAS_SCALE);
     const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
     return { type, aim: aimX };
   }
@@ -74,12 +119,17 @@ export class CpuBatter {
   /** @param {string} [styleId] - BB-2a step 5: the batting TEAM's own style, so a `chaseMul`
    *  behavior (settings.js's STYLE_BEHAVIOR - "Patient" lays off bad pitches more than its
    *  league's own baseline) can apply without a whole extra league tier. Optional: a team with no
-   *  style (e.g. a test fixture) simply gets no behavior multiplier. */
-  constructor({ league, skills, settings, styleId }) {
+   *  style (e.g. a test fixture) simply gets no behavior multiplier.
+   *  @param {{timingSigmaMs?:number, chase?:number}} [ladderOffset] - BB-2b commit 3: the batting
+   *  TEAM's own ladder-slot offset (`teams.js`'s `makeLeague`, from `settings.TEAM_LADDER_OFFSETS`)
+   *  - additive ms/chase adjustments so a team's own SLOT (not just its style) makes it bat
+   *  sloppier/more patient (weak slots) or sharper/more selective (strong slots) within one league. */
+  constructor({ league, skills, settings, styleId, ladderOffset }) {
     this.league = league;
     this.skills = skills;
     this.settings = settings;
     this.styleId = styleId;
+    this.ladderOffset = ladderOffset || null;
   }
   async decideSwing(view) {
     const cpu = this.settings.CPU[this.league] || CPU.college;
@@ -87,45 +137,47 @@ export class CpuBatter {
 
     const behavior = (this.settings.STYLE_BEHAVIOR || STYLE_BEHAVIOR)[this.styleId];
     const chaseMul = (behavior && behavior.chaseMul != null) ? behavior.chaseMul : 1;
-    const swingChance = pitch.isStrike ? cpu.swingIn : cpu.chase * chaseMul;
+    const chaseOffset = (this.ladderOffset && this.ladderOffset.chase) || 0;
+    const chaseChance = Math.max(0, Math.min(1, cpu.chase * chaseMul + chaseOffset));
+    const swingChance = pitch.isStrike ? cpu.swingIn : chaseChance;
     if (view.rand01() >= swingChance) return { action: 'take' };
 
     const patternWeight = cpu.patternWeight || 0;
     const hist = view.pitchHistory;
-    let effectiveSigma = cpu.timingSigmaMs;
+    const travelMult = this.settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT;
+    const baseSigma = cpuBaseTimingSigmaMs(this.league, this.settings, this.ladderOffset);
+    let effectiveSigma = baseSigma;
     let locationLean = null;
     if (patternWeight > 0 && hist && hist.length) {
+      const expectedMult = expectedTravelMult(hist, travelMult);
       // hist is oldest..newest; PATTERN_WEIGHTS is newest-first, so the LAST entry gets weight[0].
-      let wSum = 0, multSum = 0, xSum = 0;
+      let wSum = 0, xSum = 0;
       for (let i = 0; i < hist.length; i++) {
         const w = PATTERN_WEIGHTS[hist.length - 1 - i] || 0;
-        const mult = (this.settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT)[hist[i].type] || 1;
-        multSum += mult * w;
         xSum += (hist[i].x || 0) * w;
         wSum += w;
       }
-      if (wSum > 0) {
-        const expectedMult = multSum / wSum;
+      if (expectedMult != null && wSum > 0) {
         locationLean = xSum / wSum;
-        const actualMult = (this.settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT)[pitch.type] || 1;
+        const actualMult = travelMult[pitch.type] || 1;
         const speedDelta = Math.abs(actualMult - expectedMult);
         // Repeated speed (small delta) narrows the timing spread; a changed speed widens it -
         // both scaled by how much this league's batter actually leans on the read (patternWeight)
         // and how easily it is fooled by a speed change (cpu.fool).
-        const penaltyMs = Math.max(0, speedDelta - 0.05) * cpu.fool * 400 * patternWeight;
-        const bonusMs = Math.max(0, 0.05 - speedDelta) * cpu.fool * 200 * patternWeight;
-        effectiveSigma = Math.max(10, cpu.timingSigmaMs + penaltyMs - bonusMs);
+        const penaltyMs = Math.max(0, speedDelta - SPEED_DELTA_DEADBAND) * cpu.fool * FOOL_PENALTY_MS_SCALE * patternWeight;
+        const bonusMs = Math.max(0, SPEED_DELTA_DEADBAND - speedDelta) * cpu.fool * FOOL_BONUS_MS_SCALE * patternWeight;
+        effectiveSigma = Math.max(10, baseSigma + penaltyMs - bonusMs);
       }
     }
 
     const timingErrorMs = gaussianLite(view.rand01) * effectiveSigma;
-    const readNoise = (1 - cpu.guess) * 0.3;
+    const readNoise = (1 - cpu.guess) * GUESS_READ_NOISE_SCALE;
     let aimX = pitch.x + (view.rand01() * 2 - 1) * readNoise;
     if (patternWeight > 0 && locationLean != null) {
       // "Keep hitting one spot and he waits there" - a batter who has been leaning on a location
       // read has their aim pulled toward it, for better or worse depending on whether THIS pitch
       // matches that expectation.
-      aimX = aimX * (1 - patternWeight * 0.5) + locationLean * (patternWeight * 0.5);
+      aimX = aimX * (1 - patternWeight * LOCATION_LEAN_WEIGHT) + locationLean * (patternWeight * LOCATION_LEAN_WEIGHT);
     }
     // The CPU never charges its swing this phase - doc's charge mechanic is a held-input UI
     // concern (§12), and no CPU tuning field here says how often a CPU would choose to charge.
@@ -146,21 +198,35 @@ function gaussianLite(rand01) {
  *  (`MODEL_TIERS` in the simulator), never the CPU's own AI. Draws only from `view.rand01`, same
  *  discipline as every other agent. */
 export class ModelBatter {
-  /** @param {{timingSigmaMs:number, placementSigma:number, swingIn?:number, chase?:number}} opts
+  /** @param {{timingSigmaMs:number, placementSigma:number, swingIn?:number, chase?:number, settings?:object}} opts
    *  `timingSigmaMs`/`placementSigma` are the model's own skill knobs (how tight the timing and
    *  the bat placement are); `swingIn`/`chase` reuse the CPU's own strike/ball swing-decision
-   *  rates, since "does a human swing at this pitch" is not a different question from a CPU's. */
-  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20 }) {
+   *  rates, since "does a human swing at this pitch" is not a different question from a CPU's.
+   *  `settings` (BB-2b commit 3, optional) is only needed for `PITCH_TRAVEL_MULT`/
+   *  `SPEED_SURPRISE_MS_PER_MULT` overrides in a settings-sweep test; the real module's own values
+   *  are the default. */
+  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20, settings }) {
     this.timingSigmaMs = timingSigmaMs;
     this.placementSigma = placementSigma;
     this.swingIn = swingIn;
     this.chase = chase;
+    this.settings = settings;
   }
   async decideSwing(view) {
     const pitch = view.pitch;
     const swingChance = pitch.isStrike ? this.swingIn : this.chase;
     if (view.rand01() >= swingChance) return { action: 'take' };
-    const timingErrorMs = gaussianLite(view.rand01) * this.timingSigmaMs;
+    // BB-2b commit 3, doc §8: "Change speeds and he swings early or late" - a human is fooled by a
+    // pitch speed that surprises them exactly the way a CpuBatter's own pattern read already was
+    // (see `speedSurpriseMs`/`expectedTravelMult` above), which `ModelBatter` never modeled before
+    // this phase (it read no pitch history at all).
+    const travelMult = (this.settings && (this.settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT)) || PITCH_TRAVEL_MULT;
+    const msPerMult = (this.settings && this.settings.SPEED_SURPRISE_MS_PER_MULT) || SPEED_SURPRISE_MS_PER_MULT;
+    const expectedMult = expectedTravelMult(view.pitchHistory, travelMult);
+    const actualMult = travelMult[pitch.type] || 1;
+    const surpriseMs = speedSurpriseMs(actualMult, expectedMult, msPerMult);
+    const effectiveSigma = this.timingSigmaMs + surpriseMs;
+    const timingErrorMs = gaussianLite(view.rand01) * effectiveSigma;
     const aimX = pitch.x + (view.rand01() * 2 - 1) * this.placementSigma;
     return { action: 'swing', aimX, timingErrorMs, charged: false };
   }
@@ -177,15 +243,30 @@ export class ModelPitcher {
     this.variety = variety;
     this.cornerBias = cornerBias;
     this.pitchMix = pitchMix;
+    this._lastType = null; // BB-2b commit 3: continuous variety needs to know the PREVIOUS pitch
   }
   async decidePitch(view) {
     const unlocked = unlockedPitchesFor(this.league, 0);
     const mix = this.pitchMix || (this.settings.CPU[this.league] || CPU.college).pitchMix;
     const weights = unlocked.map((t) => (mix && mix[t]) || 1);
-    const type = this.variety > 0 ? pickWeighted(view.rand01, unlocked, weights) : unlocked[0];
+    // BB-2b commit 3: `variety` is now CONTINUOUS - the chance of repeating the immediately-
+    // previous pitch type falls linearly from `VARIETY_REPEAT_BASE_CHANCE` at variety=0 to 0 at
+    // variety=1, replacing the old binary "variety>0 draws randomly, variety<=0 always throws the
+    // same pitch forever" (doc §8's own framing - "mixes pitches more" each league up - is a
+    // continuous quantity, not an on/off switch).
+    const repeatBase = (this.settings && this.settings.VARIETY_REPEAT_BASE_CHANCE) || VARIETY_REPEAT_BASE_CHANCE;
+    const repeatChance = Math.max(0, repeatBase * (1 - Math.max(0, Math.min(1, this.variety))));
+    let type;
+    if (this._lastType && unlocked.includes(this._lastType) && view.rand01() < repeatChance) {
+      type = this._lastType;
+    } else {
+      type = pickWeighted(view.rand01, unlocked, weights);
+    }
+    this._lastType = type;
     const zone = this.settings.ZONE || ZONE;
     const halfWidth = zone.xMax;
-    const inZoneBias = view.rand01() < (1 - this.cornerBias * 0.5) ? 0.4 : (0.9 + this.cornerBias * 0.9);
+    const inZoneBias = view.rand01() < (1 - this.cornerBias * AIM_CORNER_CHANCE_MULT)
+      ? AIM_INZONE_BIAS : (AIM_CORNER_BIAS_BASE + this.cornerBias * AIM_CORNER_BIAS_SCALE);
     const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
     return { type, aim: aimX };
   }
@@ -212,4 +293,4 @@ export class ScriptedAgent {
   }
 }
 
-export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent };
+export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, speedSurpriseMs };

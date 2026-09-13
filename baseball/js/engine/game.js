@@ -203,17 +203,22 @@ export class Game {
     return value;
   }
 
-  /** The park's fence distances, SCALED by the league's own FIELD.fieldScale (doc §10, [Locked]:
-   *  "Fields get bigger each league... Screen size stays the same; bigger fields just render
-   *  smaller"). A named PARKS entry keeps its own shape (Boston's short left stays short relative
-   *  to the rest) while the whole field grows with the league, rather than needing a second,
-   *  duplicated fence table per league. */
+  /** The park's fence distances (doc §10, [Locked]: "Fields get bigger each league"). BB-2b
+   *  commit 3: every league's own fence now comes straight from `FIELD[league].fenceFt` - the
+   *  doc's real per-league fence table `zones.js`/`fenceFtAt` already read for everything else.
+   *  `PARKS` (a flat, league-independent {left,center,right} shape) is used ONLY when a real
+   *  named Majors park is actually requested (`parkId` is not `'default'`, and the league is
+   *  majors) - a named park's own distances are already at major-league scale and need no further
+   *  scaling. Before this phase every league's fence was `PARKS.default` scaled by that league's
+   *  `fieldScale` - a DIFFERENT number from `FIELD[league].fenceFt`, which nothing outside
+   *  `_parkFt()` ever consulted, so `zones.js`'s out-zone reach and the fence a batted ball
+   *  actually had to clear could silently disagree. */
   _parkFt() {
-    const base = this.settings.PARKS[this.parkId] || this.settings.PARKS.default;
-    const fieldScale = (this.settings.FIELD[this.league] || this.settings.FIELD.majors).fieldScale;
-    const scaled = {};
-    for (const k of Object.keys(base)) scaled[k] = base[k] * fieldScale;
-    return scaled;
+    if (this.league === 'majors' && this.parkId && this.parkId !== 'default' && this.settings.PARKS[this.parkId]) {
+      return { ...this.settings.PARKS[this.parkId] };
+    }
+    const fenceFt = (this.settings.FIELD[this.league] || this.settings.FIELD.majors).fenceFt;
+    return { ...fenceFt };
   }
 
   _controlSkillFor(pitcher) {
@@ -263,7 +268,14 @@ export class Game {
     };
   }
 
-  _buildSwingView(battingSide, pitchResult) {
+  /** BB-2b commit 3: `pitchHistory` here MUST be the batter's history from BEFORE this pitch -
+   *  the caller (`playAtBat`) captures it before calling `_recordPitch` and passes it in
+   *  explicitly, rather than this method reading `this.pitchHistory` itself (which by the time
+   *  the swing view is built already has the CURRENT pitch appended, and a batter "reading its own
+   *  pattern" against a history that already contains the pitch it is deciding on can never be
+   *  surprised - the exact defect this fixes; see the doc §8 "pitch speed reaches the batter"
+   *  mechanism in agents.js). */
+  _buildSwingView(battingSide, pitchResult, priorPitchHistory) {
     return {
       side: battingSide,
       inning: this.inning,
@@ -275,6 +287,7 @@ export class Game {
       score: { ...this.score },
       batterId: this._currentBatterId(battingSide),
       pitch: pitchResult,
+      pitchHistory: priorPitchHistory,
       rand01: () => this._rand(),
     };
   }
@@ -434,11 +447,14 @@ export class Game {
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
       const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
-      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand());
+      // Captured BEFORE `_recordPitch` appends the pitch about to be thrown - see
+      // `_buildSwingView`'s own header for why this ordering matters.
+      const priorPitchHistory = (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW);
+      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
-      const swingView = this._buildSwingView(battingSide, pitchResult);
+      const swingView = this._buildSwingView(battingSide, pitchResult, priorPitchHistory);
       const swingDecision = await battingAgent.decideSwing(swingView);
       const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand());
 

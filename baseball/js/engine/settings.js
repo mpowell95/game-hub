@@ -396,23 +396,22 @@ export const STYLE_BEHAVIOR = {
   shifters: { shift: true },
 };
 
-// BB-2a step 5 (2026-09-12): STRENGTH now comes from here, not from TEAM_STYLES or a post-hoc sort.
-// Eight per-slot FRACTIONAL offsets of `effectiveCapFor(league)`, weakest (slot 0) to strongest
-// (slot 7) - `makeLeague` applies `effectiveCap * (1 + offset)` per slot and orders teams BY SLOT,
-// never by a measured `teamStrength()`. Draft, new - a FRACTION rather than a flat skill-point
-// delta (BB-2a step 6 correction: a flat +/-6 points is a huge swing at Little League's effective
-// cap of 10 but a mild one at Majors' 20.7, which measurably flattened Little/High School's
-// within-league ladder into noise - see `baseball/CLAUDE.md`'s ladder-check table). Clamped inside
-// `teams.js`'s `makeLeague` to `[1, CAPS[league]]` (never above the raw league cap, per doc §8) -
-// Little League and High School both carry a `CPU_LEVEL_SHORTFALL` of 0, so their effectiveCap
-// already equals the raw cap and the top few slots there necessarily tie at the ceiling; this is a
-// real structural limit of "difficulty from behavior, not stats" at the bottom of the ladder, not
-// a bug in the offsets. A wider first attempt (+/-0.45/0.38) measured no better on the within-
-// league win-rate check than this narrower one - `sim-baseball.mjs`'s own report (baseball/
-// CLAUDE.md) shows the remaining disorder traces to which SKILL a slot's style favors mattering
-// more or less against a fixed human strategy than its aggregate offset alone predicts, not to the
-// offset's magnitude - so the narrower, more conservative spread was kept.
-export const TEAM_LADDER_OFFSETS = [-0.25, -0.18, -0.12, -0.06, 0, 0.06, 0.14, 0.25];
+// BB-2a step 5 (2026-09-12): STRENGTH comes from here, not from TEAM_STYLES or a post-hoc sort -
+// `makeLeague` applies a per-slot SKILL offset of `effectiveCapFor(league)` and orders teams BY
+// SLOT, never by a measured `teamStrength()`. weakest (slot 0) to strongest (slot 7). Clamped
+// inside `teams.js`'s `makeLeague` to `[1, CAPS[league]]` (never above the raw league cap, per doc
+// §8) - Little League and High School both carry a `CPU_LEVEL_SHORTFALL` of 0, so their
+// effectiveCap already equals the raw cap and the top few slots there necessarily tie at the
+// ceiling; this is a real structural limit of "difficulty from behavior, not stats" at the bottom
+// of the ladder, not a bug in the offsets. A wider first attempt (+/-0.45/0.38) measured no better
+// on the within-league win-rate check than the narrower `skill` values kept below - the remaining
+// disorder traces to which SKILL a slot's style favors mattering more or less against a fixed
+// human strategy than its aggregate offset alone predicts, not to the offset's magnitude.
+//
+// BB-2b commit 3 (2026-09-13): restructured from a bare number per slot into `{ skill,
+// timingSigmaMs, chase }` - the `skill` column below is numerically UNCHANGED from BB-2a step 6;
+// see the full definition and rationale for the two new columns further down this file, next to
+// `CPU_SIGMA_FLOOR_MS`.
 
 // BB-2a step 5 (2026-09-12): which style sits in which ladder slot, per league. Draft, new,
 // PROPOSED - for Matt to confirm or edit (the handoff's own words). One order, reused across every
@@ -537,6 +536,93 @@ export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
 // instruction, pending commit 4's measured proposal.
 export const STANDINGS_MODEL = 'scaledTo12'; // Draft [Open item 13]
 
+// ---------------------------------------------------------------------------------------------
+// BB-2b commit 3: engine mechanisms the doc requires that phase 2/2a still lacked.
+
+// zones.js: angular GAPS between out-zone sectors (doc §10, [Locked]: "Singles go through gaps
+// and as bloopers") - phase 2's sectors tiled the full -45..45 span with no gap at all, so nothing
+// could ever be a "gap" hit; every batted ball fell inside exactly one sector or was clamped to
+// one at the edges. Draft, new - degrees of dead zone between adjacent sectors (both infield and
+// outfield), where `zones.js`'s `angleSector` now returns `null` instead of clamping.
+export const GAP_DEG = 6;
+
+// outcomes.js: how many feet short of an outfield sector's own near edge (`fromFt`) a fly/line
+// ball is still a "bloop" single rather than an ordinary out (doc §10, [Locked]: "...and as
+// bloopers") - phase 2/2a's `resolveContact` never checked an outfield sector's near edge at all,
+// so a modestly-hit ball landing between the infield's own reach and an outfielder's own position
+// was scored as a flat "flyout"/"lineout" no matter how shallow the outfielder actually was.
+// Draft, new.
+export const BLOOP_BAND_FT = 25;
+
+// swing.js/agents.js: how much a pitch's actual travel-time MULTIPLE (relative to what the batter
+// was expecting, from `PITCH_TRAVEL_MULT`) shrinks or widens the batter's effective timing sigma -
+// a faster-than-expected pitch (changeup after fastballs, or vice versa) should fool a HUMAN
+// exactly the way it already fools a CpuBatter's own pattern read (doc §8: "Change speeds and he
+// swings early or late"), but `ModelBatter` (sim-baseball.mjs's human stand-in) never read
+// `pitchHistory` at all before this phase. Draft, new - ms of extra timing sigma per full unit of
+// travel-multiple surprise (e.g. a changeup at 1.4x thrown after an unbroken run of 1.0x fastballs
+// is a 0.4-multiple surprise).
+export const SPEED_SURPRISE_MS_PER_MULT = 60;
+
+// agents.js's `CpuBatter`/`ModelPitcher`: named constants for every magic number that governed a
+// CPU decision, per CLAUDE.md's own instruction ("no magic numbers, name every constant you
+// touch"). Draft, unchanged VALUES from what shipped in BB-2/BB-2a - only their names are new.
+export const AIM_CORNER_CHANCE_MULT = 0.5;   // how much cornerBias raises the chance of an off-middle aim (`1 - cornerBias * this`)
+export const AIM_INZONE_BIAS = 0.4;          // how far off-middle an ordinary (non-corner) aim scatters
+export const AIM_CORNER_BIAS_BASE = 0.9;     // the floor of an aim that DID go for the corner
+export const AIM_CORNER_BIAS_SCALE = 0.9;    // how much further cornerBias itself pushes a corner aim
+export const WEAKSPOT_AIM_SCATTER = 0.15;    // scatter around a remembered weak zone (doc §8: "attacks your weak spots")
+export const SPEED_DELTA_DEADBAND = 0.05;    // travel-multiple delta below which a repeated pitch speed counts as "the same"
+export const FOOL_PENALTY_MS_SCALE = 400;    // ms of extra timing sigma per unit of speed-delta surprise, scaled by patternWeight/fool
+export const FOOL_BONUS_MS_SCALE = 200;      // ms of REDUCED timing sigma per unit of speed consistency, scaled by patternWeight/fool
+export const GUESS_READ_NOISE_SCALE = 0.3;   // how much a CPU batter's own location read scatters at guess=0
+export const LOCATION_LEAN_WEIGHT = 0.5;     // how far patternWeight pulls a CPU batter's aim toward its own location read
+
+// agents.js's `ModelPitcher.variety` (sim-baseball.mjs's human stand-in): the probability of
+// repeating the immediately-previous pitch type, at variety=0, falling LINEARLY to 0 at variety=1.
+// Before this phase `variety` was BINARY (>0 drew a weighted random type every time; <=0 always
+// threw the unlocked list's first entry, forever, with no randomness at all) - doc §8's own
+// framing ("mixes pitches more" each league up) is a continuous quantity, not an on/off switch.
+// Draft, new.
+export const VARIETY_REPEAT_BASE_CHANCE = 0.85;
+
+// agents.js's CpuBatter: how far below `CPU[league].timingSigmaMs` the effective slot-4 (median
+// ladder slot) sigma is ever allowed to sit, league to league - doc §8, [Locked]: "difficulty
+// comes mostly from smarter CPU behavior, not bigger CPU stats," but nothing before this phase
+// stopped a league's own base sigma from simply being SHARPER than a median human's own timing
+// (`sim-baseball.mjs`'s `MODEL_TIERS.median.timingSigmaMs` is 55) - Minors (45) and Majors (35)
+// both did, structurally out-hitting a median-skill player by construction regardless of any other
+// lever. `cpuBaseTimingSigmaMs()` in agents.js clamps every league's own base sigma to this floor
+// BEFORE the per-slot ladder offset is added, so a league's raw `CPU[league].timingSigmaMs` value
+// can still be retuned (commit 5) without ever silently regressing back under the floor. Draft, new.
+export const CPU_SIGMA_FLOOR_MS = 55;
+
+// TEAM_LADDER_OFFSETS (BB-2a step 5) used to be a single fractional SKILL offset per slot - the
+// only axis it moved. BB-2b commit 3: "within-league monotone still noisy" traced to the ladder
+// moving a lever (skill points) that the contact-quality fix left with very little effect on win
+// rate, while the axis that actually decides most outcomes - a CPU BATTER'S OWN timing/chase
+// behavior - had no ladder at all (every team in a league shared one flat `CPU[league]` row
+// regardless of slot). Each entry is now `{ skill, timingSigmaMs, chase }`: `skill` is the
+// unchanged fractional offset of `effectiveCapFor(league)` from BB-2a step 6; `timingSigmaMs` is
+// an ADDITIVE ms offset applied on top of `cpuBaseTimingSigmaMs()` (negative = a sharper-timed,
+// tougher slot; positive = a sloppier, easier one); `chase` is an additive offset on
+// `CPU[league].chase` (negative = chases less/tougher; positive = chases more/easier). Values
+// mirror the existing skill-offset SHAPE (roughly proportional, slot 0 easiest to slot 7 hardest)
+// so slot 0 bats sloppier and chases more than slot 7 within the same league, at every league -
+// `teams.js`'s `makeLeague` applies `skill` to roster generation exactly as before and attaches
+// `timingSigmaMs`/`chase` directly onto the returned team object for `agents.js`'s `CpuBatter` to
+// read. Draft, new axis; the skill column's own values are unchanged from BB-2a step 6.
+export const TEAM_LADDER_OFFSETS = [
+  { skill: -0.25, timingSigmaMs: 25, chase: 0.20 },
+  { skill: -0.18, timingSigmaMs: 18, chase: 0.15 },
+  { skill: -0.12, timingSigmaMs: 12, chase: 0.10 },
+  { skill: -0.06, timingSigmaMs: 6, chase: 0.05 },
+  { skill: 0, timingSigmaMs: 0, chase: 0 },
+  { skill: 0.06, timingSigmaMs: -6, chase: -0.05 },
+  { skill: 0.14, timingSigmaMs: -14, chase: -0.10 },
+  { skill: 0.25, timingSigmaMs: -25, chase: -0.15 },
+];
+
 export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
@@ -547,4 +633,8 @@ export default {
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL,
+  GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
+  AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
+  WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
+  GUESS_READ_NOISE_SCALE, LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE, CPU_SIGMA_FLOOR_MS,
 };

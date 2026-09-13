@@ -8,7 +8,7 @@
 // matching outcomes.js's existing foul-line convention (`FOUL_LINE_DEG`, doc §15's units note -
 // fair territory spans the full -45..+45). Distances are feet from home plate, `carryFt`'s units.
 
-import { FIELD } from './settings.js';
+import { FIELD, GAP_DEG } from './settings.js';
 
 // One geometry, invented (Open item 7), shared by every league before per-league scaling: four
 // infield sectors roughly 3B/SS/2B/1B, three outfield sectors LF/CF/RF. `toFt - fromFt` is the
@@ -16,17 +16,49 @@ import { FIELD } from './settings.js';
 // with `fieldScale` (the field's own size) instead, so the two multipliers scale two different
 // things rather than compounding onto one number (compounding both onto `toFt` directly, tried
 // first, put a majors outfielder's reach past that league's own fence).
-const BASE_INFIELD_SECTORS = [
-  { fromDeg: -45, toDeg: -22.5, fromFt: 8, toFt: 62 },
-  { fromDeg: -22.5, toDeg: 0, fromFt: 8, toFt: 68 },
-  { fromDeg: 0, toDeg: 22.5, fromFt: 8, toFt: 68 },
-  { fromDeg: 22.5, toDeg: 45, fromFt: 8, toFt: 62 },
+//
+// BB-2b commit 3: each sector list is now laid out with a `GAP_DEG`-wide dead zone between
+// adjacent sectors (doc §10, [Locked]: "Singles go through gaps and as bloopers") - phase 2/2a's
+// sectors tiled the full -45..45 span edge to edge, so a batted ball always landed inside exactly
+// one sector (or was clamped to the nearest one at the foul lines) and nothing could ever actually
+// be "in a gap." `angleSector` below now returns `null` for an angle that falls in one of these
+// gaps rather than clamping to it; `outcomes.js` reads a `null` sector as "no fielder is
+// positioned here at all" - a grounder through an infield gap is always a single, and a fly/line
+// through an outfield gap is a hit whose bases come from depth alone (the same "how far it
+// carried" rule that already decided doubles/triples once a ball got past a MANNED sector's own
+// reach). The angular WIDTH each sector keeps shrinks to make room for the gaps; each sector's own
+// depth (`fromFt`/`toFt`) is unchanged from before this phase.
+const SECTOR_SPAN_DEG = 90; // -45..45, the full fair-territory arc
+
+/** Lay out `depths.length` sectors evenly across `SECTOR_SPAN_DEG`, each `gapDeg` degrees apart,
+ *  keeping every entry's own `{fromFt, toFt}` depth. */
+function layoutSectors(depths, gapDeg) {
+  const n = depths.length;
+  const totalGap = gapDeg * (n - 1);
+  const width = (SECTOR_SPAN_DEG - totalGap) / n;
+  const sectors = [];
+  let cursor = -45;
+  for (let i = 0; i < n; i++) {
+    sectors.push({ fromDeg: cursor, toDeg: cursor + width, fromFt: depths[i].fromFt, toFt: depths[i].toFt });
+    cursor += width + gapDeg;
+  }
+  return sectors;
+}
+
+const INFIELD_DEPTHS = [
+  { fromFt: 8, toFt: 62 },
+  { fromFt: 8, toFt: 68 },
+  { fromFt: 8, toFt: 68 },
+  { fromFt: 8, toFt: 62 },
 ];
-const BASE_OUTFIELD_SECTORS = [
-  { fromDeg: -45, toDeg: -15, fromFt: 90, toFt: 160 },
-  { fromDeg: -15, toDeg: 15, fromFt: 90, toFt: 180 },
-  { fromDeg: 15, toDeg: 45, fromFt: 90, toFt: 160 },
+const OUTFIELD_DEPTHS = [
+  { fromFt: 90, toFt: 160 },
+  { fromFt: 90, toFt: 180 },
+  { fromFt: 90, toFt: 160 },
 ];
+
+const BASE_INFIELD_SECTORS = layoutSectors(INFIELD_DEPTHS, GAP_DEG);
+const BASE_OUTFIELD_SECTORS = layoutSectors(OUTFIELD_DEPTHS, GAP_DEG);
 
 function shiftSector(s, shiftDeg) {
   return {
@@ -55,14 +87,18 @@ export function zonesFor(league, shiftDeg = 0) {
   return { infield, outfield };
 }
 
-/** The sector a spray angle falls in. Clamps to the nearest edge sector rather than failing open,
- *  because a spray angle sitting exactly on the foul line (+/-45) can round outside every
- *  sector's own bounds after a shift. */
+/** The sector a spray angle falls in, or `null` if it lands in one of the `GAP_DEG` dead zones
+ *  BETWEEN two sectors (BB-2b commit 3 - see the header above). Still clamps to the nearest edge
+ *  sector past the outermost bound, because a spray angle sitting exactly on (or just past) the
+ *  foul line (+/-45) can round outside every sector's own bounds after a shift - that is an edge
+ *  case of the shift, not a genuine gap. */
 export function angleSector(deg, sectors) {
   for (const s of sectors) {
     if (deg >= s.fromDeg && deg <= s.toDeg) return s;
   }
-  return deg < 0 ? sectors[0] : sectors[sectors.length - 1];
+  if (deg < sectors[0].fromDeg) return sectors[0];
+  if (deg > sectors[sectors.length - 1].toDeg) return sectors[sectors.length - 1];
+  return null; // inside a genuine gap between two sectors
 }
 
 export default { zonesFor, angleSector };

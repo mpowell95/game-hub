@@ -3,7 +3,7 @@
 // invented `fieldingSkill01` ramp. The real design has no "error" outcome at all (doc §10's list
 // is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
 
-import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT } from './settings.js';
+import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
@@ -71,6 +71,11 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
 
   if (kind === 'ground') {
     const sector = angleSector(batted.sprayAngleDeg, zones.infield);
+    if (!sector) {
+      // BB-2b commit 3: an angle sitting in the GAP_DEG dead zone between two infield sectors has
+      // no fielder positioned there at all - doc §10, [Locked]: "Singles go through gaps."
+      return { result: 'hit', bases: 1, kind: 'ground-gap', distanceFt, isFoul: false };
+    }
     if (distanceFt <= sector.toFt) {
       // A close play at the edge of the sector's reach: doc §6, [Locked], "Batter Speed affects
       // beating out grounders" - MECHANICS.beatOutPerPt/groundEdgeMarginFt name the roll.
@@ -94,19 +99,39 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   }
 
   const sector = angleSector(batted.sprayAngleDeg, zones.outfield);
-  if (distanceFt <= sector.toFt) {
-    // BB-2a step 3, [Draft]: a well-squared-up LINE DRIVE (contact quality `q` at or above
-    // LINE_THROUGH_Q) still goes through for a hit up to LINE_THROUGH_MAX_FT - a "routine fly into
-    // a sector" (the ordinary case below) stays an out, but a scorched line drive is not a fly ball
-    // a fielder settles under; it is through the infielder's reach before an outfielder can close.
-    if (kind === 'line' && (batted.q || 0) >= LINE_THROUGH_Q && distanceFt <= LINE_THROUGH_MAX_FT) {
-      return { result: 'hit', bases: 1, kind: 'line-through', distanceFt, isFoul: false };
+  // BB-2b commit 3: a ball hit through an outfield GAP_DEG dead zone has no fielder positioned at
+  // that angle at all, at any depth - doc §10, [Locked]: "Doubles in the gaps." Falls straight
+  // through to the depth-based bases logic below, same as a ball that carried past a MANNED
+  // sector's own reach.
+  if (sector) {
+    if (distanceFt < sector.fromFt) {
+      // Short of the outfield sector's own near edge - doc §10, [Locked]: "Singles go through
+      // gaps AND AS BLOOPERS." Within BLOOP_BAND_FT of that near edge, nobody quite reaches it: a
+      // modest bloop single. Shorter than that, it is close enough in that the ordinary out-zone
+      // read applies (an infielder/generic short fielder has it). Phase 2/2a never checked a
+      // sector's near edge at all, so every ball in this band was scored a flat out regardless of
+      // how shallow the nearest outfielder actually stood.
+      if (distanceFt >= sector.fromFt - BLOOP_BAND_FT) {
+        return { result: 'hit', bases: 1, kind: 'blooper', distanceFt, isFoul: false };
+      }
+      return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
     }
-    return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
+    if (distanceFt <= sector.toFt) {
+      // BB-2a step 3, [Draft]: a well-squared-up LINE DRIVE (contact quality `q` at or above
+      // LINE_THROUGH_Q) still goes through for a hit up to LINE_THROUGH_MAX_FT - a "routine fly
+      // into a sector" (the ordinary case below) stays an out, but a scorched line drive is not a
+      // fly ball a fielder settles under; it is through the infielder's reach before an
+      // outfielder can close.
+      if (kind === 'line' && (batted.q || 0) >= LINE_THROUGH_Q && distanceFt <= LINE_THROUGH_MAX_FT) {
+        return { result: 'hit', bases: 1, kind: 'line-through', distanceFt, isFoul: false };
+      }
+      return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
+    }
   }
-  // Through the outfield sector: a single through a gap, or a double/triple the deeper it carried
-  // (doc §10, [Locked]: "Doubles in the gaps and down the lines. Triples in deep corners and deep
-  // center" - the exact depth cutoffs are still invented, Open item 24, unchanged from phase 1).
+  // Through the outfield sector (or its gap): a single through a gap, or a double/triple the
+  // deeper it carried (doc §10, [Locked]: "Doubles in the gaps and down the lines. Triples in deep
+  // corners and deep center" - the exact depth cutoffs are still invented, Open item 24, unchanged
+  // from phase 1).
   let bases = 1;
   if (distanceFt > 320) bases = 3;
   else if (distanceFt > 250) bases = 2;
