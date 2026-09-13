@@ -949,6 +949,19 @@ async function main() {
     });
     scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk,
       'see the within-league ladder check above', `non-increasing within ${LADDER_TOLERANCE}`);
+
+    // BB-2b commit 5: CHAMPION_IS_HARDEST - doc §8, [Locked]: "the championship opponent is always
+    // the toughest team in the league" is only a real promise if the strongest ladder slot (index
+    // 7, the last column above) is ALSO the lowest win rate of any opponent within that league -
+    // otherwise a player could face an "easier" team in the final than one they already beat in
+    // the regular season, which would make the doc's own wording false even with the bracket fixed.
+    const championIsHardestOk = LEAGUES.every((lg) => {
+      const rates = ladderRatesByLeague[lg];
+      const champion = rates[rates.length - 1];
+      return rates.every((v) => champion <= v + LADDER_TOLERANCE);
+    });
+    scoreLine('CHAMPION_IS_HARDEST (the strongest ladder slot is the lowest win rate of any opponent)', championIsHardestOk,
+      'see the within-league ladder check above', `champion's win rate <= every other slot's, within ${LADDER_TOLERANCE}`);
   }
 
   const nudgeGaps = LEAGUES.map((lg) => ab[lg].tableSetterLowPowerWellTimedWinRate - ab[lg].sluggerHighPowerSloppyWinRate);

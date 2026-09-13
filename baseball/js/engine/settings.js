@@ -237,16 +237,16 @@ export const CPU = {
     pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.08, patternWeight: 0.04, weakSpotWeight: 0 },
   highschool: { timingSigmaMs: 75, swingIn: 0.85, chase: 0.40, fool: 0.35, guess: 0.20,
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
-  college:    { timingSigmaMs: 55, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // [Tested] doc §14 - the prototype's own tier, five original fields unchanged
+  college:    { timingSigmaMs: 65, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2b commit 5 retune: 55 -> 65 (see CPU_SIGMA_FLOOR_MS - the floor already puts a league AT 55 at its sharpest allowed, so College leaves room below it for Minors/Majors to be tougher on this axis instead of tying with it)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.33, patternWeight: 0.23, weakSpotWeight: 0.06 },
-  minors:     { timingSigmaMs: 45, swingIn: 0.72, chase: 0.18, fool: 0.18, guess: 0.45,
-    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.46, patternWeight: 0.36, weakSpotWeight: 0.20 },
-  majors:     { timingSigmaMs: 35, swingIn: 0.65, chase: 0.08, fool: 0.10, guess: 0.60,
+  minors:     { timingSigmaMs: 60, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,
+    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.50, patternWeight: 0.42, weakSpotWeight: 0.28 },
+  majors:     { timingSigmaMs: 55, swingIn: 0.65, chase: 0.05, fool: 0.10, guess: 0.60,
     // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
     // react to your stats") actually has unlocked at Majors with 0 titles - eephus/cutter would
     // sit in this table forever unused, since `unlockedPitchesFor('majors', 0)` never grants them.
     pitchMix: { fastball: 1.5, changeup: 1.5, curveball: 1.5, slider: 1.5, knuckleball: 1.5, screwball: 1.5 },
-    cornerBias: 0.55, patternWeight: 0.52, weakSpotWeight: 0.40 },
+    cornerBias: 0.68, patternWeight: 0.65, weakSpotWeight: 0.65 },
 };
 // [Locked] doc §8: each league up mixes pitches more, works corners more, chases less, reads
 // patterns better; Majors rarely chases and attacks weak spots. Every number above is Draft,
@@ -288,7 +288,7 @@ export const WEAKSPOT_WINDOW = 8;
 // thresholds, or rework how Gold is reached (a bye, a weaker semifinal opponent, a shorter top-half
 // repeat in the schedule) - this tool does not choose between them, and POINTS/SEASON are outside
 // this phase's scope to retune on its own judgement.
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 6, majors: 9 };
+export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 4, majors: 4 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -455,7 +455,7 @@ export const MECHANICS = {
   walkoffEndsImmediately: true,     // [Locked] doc §3
   extraInningRunnerOnSecond: true,  // [Locked] doc §3 - "every extra half-inning starts with a runner on second"
   doublePlayEnabled: true,          // [Locked] doc §3 - "can be a double play" with a runner on first, <2 outs
-  doublePlayChance: 0.40,           // Draft [Open item 26] - BB-2a step 6 retune, back to 0.40 (measured 2026-09-12 against the NEW contact model - puts a double play at roughly 1-in-8 grounders once P(runner on first, <2 outs) is folded in, same reasoning phase 2's original measurement used; the intervening 0.45 was step 1's revert of that number pending the contact-model fix, not a rejection of it)
+  doublePlayChance: 0.30,           // Draft [Open item 26] - BB-2b commit 5 retune: 0.40 -> 0.30, measured against the Gold-odds retune (a double play now snuffs out roughly 1-in-11 grounders with a runner on first and <2 outs, down from 1-in-8) - fewer of the player's own rallies end in two outs off one groundball, one of several small levers pulled toward the Gold thresholds alongside the CPU/ladder retune below
   maxExtraInnings: 50,              // [Locked] doc §3 - explicitly a safety valve only, never a stated rule
   outsPerInning: 3,
   strikesForOut: 3,
@@ -621,15 +621,28 @@ export const CPU_SIGMA_FLOOR_MS = 55;
 // `teams.js`'s `makeLeague` applies `skill` to roster generation exactly as before and attaches
 // `timingSigmaMs`/`chase` directly onto the returned team object for `agents.js`'s `CpuBatter` to
 // read. Draft, new axis; the skill column's own values are unchanged from BB-2a step 6.
+// BB-2b commit 5 retune: `timingSigmaMs`/`chase` compressed from their commit-3 first draft
+// ({25,18,12,6,0,-6,-14,-25} / {0.20,...,-0.15}) - the champion (slot 7) at that draft measured an
+// effective batting sigma of `cpuBaseTimingSigmaMs` (55, the floor) `+ (-25)` = 30ms at every
+// league, SHARPER than even `sim-baseball.mjs`'s own "strong" human tier (35ms) - `CPU_SIGMA_FLOOR_MS`
+// only bounds a league's own MEDIAN (slot-4, zero-offset) base, by design, so nothing stopped the
+// ladder's own offset from pushing a tougher slot back under the floor it exists to enforce.
+// Measured: `CHAMPION_GAME_WIN_MIN_MEDIAN` was as low as 6-12% at College/Minors/Majors with the
+// first-draft offsets - nowhere near reachable, because the doc's own [Locked] rule (the
+// championship opponent IS the toughest team) makes that one matchup's own win rate the hard floor
+// under Gold. Compressed here to `skill/chase` unchanged from the first draft's SHAPE but
+// `timingSigmaMs` scaled to 30% of it - still strictly monotone slot to slot (doc's own "team
+// strength rises by league at the same style" and the within-league ladder both still hold), but
+// the champion slot no longer bats sharper than a strong HUMAN, only sharper than a median one.
 export const TEAM_LADDER_OFFSETS = [
-  { skill: -0.25, timingSigmaMs: 25, chase: 0.20 },
-  { skill: -0.18, timingSigmaMs: 18, chase: 0.15 },
-  { skill: -0.12, timingSigmaMs: 12, chase: 0.10 },
-  { skill: -0.06, timingSigmaMs: 6, chase: 0.05 },
+  { skill: -0.25, timingSigmaMs: 16, chase: 0.10 },
+  { skill: -0.18, timingSigmaMs: 11, chase: 0.075 },
+  { skill: -0.12, timingSigmaMs: 7, chase: 0.05 },
+  { skill: -0.06, timingSigmaMs: 3, chase: 0.025 },
   { skill: 0, timingSigmaMs: 0, chase: 0 },
-  { skill: 0.06, timingSigmaMs: -6, chase: -0.05 },
-  { skill: 0.14, timingSigmaMs: -14, chase: -0.10 },
-  { skill: 0.25, timingSigmaMs: -25, chase: -0.15 },
+  { skill: 0.06, timingSigmaMs: -0.8, chase: -0.025 },
+  { skill: 0.14, timingSigmaMs: -2.0, chase: -0.05 },
+  { skill: 0.25, timingSigmaMs: -3.5, chase: -0.075 },
 ];
 
 export default {
