@@ -973,13 +973,25 @@ async function main() {
       }
       console.log(`\n${anyOut ? 'Some styles remain outside the +/-' + STYLE_STRENGTH_BAND + ' band even at the search bounds - widen STYLE_COMPRESS_CANDIDATES.' : 'Every style lands within the band.'}`);
     } else {
-      console.log('\n  style          winRate (vs balanced)');
+      // BB-2c commit 3: this IS the STYLE_STRENGTH_DELTA measurement - every style at its own
+      // TEAM_STYLES vector (the shipped, uncompressed weights - a "fixed middle slot", the same
+      // effectiveCapFor(league) both `buildCandidateTeam` calls use), full behavior on (STYLE_BEHAVIOR
+      // reads styleId regardless of ladder slot), against Balanced. `delta = winRate - 0.5` is what
+      // `makeLeague` (teams.js) now subtracts from a style's own ladder slot budget, so a style's
+      // measured strength - flavor AND behavior together - never has to be re-fought by hand-picking
+      // which slot it sits in.
+      console.log('\n  style          winRate (vs balanced)   delta (STYLE_STRENGTH_DELTA)');
+      const deltas = {};
       for (const id of styleIds) {
         const winRate = await measureStyleWinRate(id, SETTINGS.TEAM_STYLES[id], league, SETTINGS, STYLE_MEASURE_GAMES);
-        const inBand = Math.abs(winRate - 0.5) <= STYLE_STRENGTH_BAND;
+        const delta = winRate - 0.5;
+        deltas[id] = delta;
+        const inBand = Math.abs(delta) <= STYLE_STRENGTH_BAND;
         if (!inBand) anyOut = true;
-        console.log(`  ${id.padEnd(14)} ${(winRate * 100).toFixed(1).padStart(5)}%${inBand ? '' : '  [OUT OF BAND]'}`);
+        console.log(`  ${id.padEnd(14)} ${(winRate * 100).toFixed(1).padStart(5)}%${inBand ? '' : '  [OUT OF BAND]'}                    ${delta >= 0 ? '+' : ''}${delta.toFixed(4)}`);
       }
+      console.log('\n  STYLE_STRENGTH_DELTA (paste into settings.js):');
+      console.log('  ' + JSON.stringify(deltas, null, 2).split('\n').join('\n  '));
     }
     console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     if (FLAG_ASSERT && anyOut) process.exitCode = 1;

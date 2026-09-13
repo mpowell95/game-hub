@@ -17,7 +17,7 @@
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
 import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
-  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES } from './settings.js';
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA } from './settings.js';
 
 // doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
 // slot 0 always the starting pitcher (unchanged from phase 1).
@@ -133,7 +133,14 @@ export function makeLeague(league) {
     // two are attached directly onto the returned team for `agents.js`'s `CpuBatter` to read
     // (`ladderOffset`), since they are BATTING-BEHAVIOR knobs, not skill points.
     const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0 };
-    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
+    // BB-2c commit 3: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`) is subtracted
+    // from the slot's own skill budget - a style's BEHAVIOR (Shifters' shift, Patient's chaseMul)
+    // is a real strength edge no skill offset touches, so a style measuring stronger than its raw
+    // TEAM_STYLES vector predicts gets a smaller skill budget to compensate, and vice versa. This
+    // is what lets `LEAGUE_LADDER_STYLES`' own confirmed order stay exactly as Matt set it - a
+    // style keeps its slot, and its own measured delta pays for whatever behavioral edge it carries.
+    const styleDelta = STYLE_STRENGTH_DELTA[styleId] || 0;
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill - styleDelta)));
     const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
     team.ladderSlot = slot;
     team.ladderOffset = { timingSigmaMs: offsets.timingSigmaMs, chase: offsets.chase };

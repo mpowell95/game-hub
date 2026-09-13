@@ -409,6 +409,30 @@ export const STYLE_BEHAVIOR = {
   shifters: { shift: true },
 };
 
+// BB-2c commit 3: the flavor STRENGTH BUDGET. `--styles` measures each style's own win rate
+// against `balanced` at a fixed middle slot (`effectiveCapFor(league)`, the same cap `makeLeague`'s
+// own zero-offset slot 4 uses) with its full behavior on (STYLE_BEHAVIOR reads styleId regardless
+// of ladder slot, so Shifters' shift and Patient's chaseMul are both live in this measurement, not
+// just its skill weights). `delta = winRate - 0.5` is the style's own measured strength beyond what
+// its TEAM_STYLES vector alone predicts - `teams.js`'s `makeLeague` now subtracts it from that
+// style's own ladder-slot skill budget, so a flavor's behavior no longer has to be "paid for" by
+// hand-picking which slot it occupies. Shifters measured furthest out (+0.072, [OUT OF BAND] on
+// `STYLE_STRENGTH_BAND`) - its shift is a real, uncompressed edge; Shifters KEEPS its slot and its
+// shift per Matt's confirmed `LEAGUE_LADDER_STYLES` order, and this delta is what pays for it
+// instead. Draft, measured 2026-09-13 (`node sim-baseball.mjs --styles`, league=college,
+// games=3000 - the same default `STYLE_MEASURE_LEAGUE`/`STYLE_MEASURE_GAMES` BB-2a's own style
+// tuning used).
+export const STYLE_STRENGTH_DELTA = {
+  sluggers: 0.0203,
+  smallBall: -0.0230,
+  patient: 0.0133,
+  flamethrowers: -0.0047,
+  junkballers: -0.0143,
+  shifters: 0.0723,
+  aces: -0.0053,
+  balanced: 0,
+};
+
 // BB-2a step 5 (2026-09-12): STRENGTH comes from here, not from TEAM_STYLES or a post-hoc sort -
 // `makeLeague` applies a per-slot SKILL offset of `effectiveCapFor(league)` and orders teams BY
 // SLOT, never by a measured `teamStrength()`. weakest (slot 0) to strongest (slot 7). Clamped
@@ -679,7 +703,7 @@ export default {
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
   FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
-  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
+  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL,

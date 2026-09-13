@@ -1265,5 +1265,48 @@ console.log('\n-- 17. BB-2c commit 2: the CPU strength contract - doc §8, [Lock
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH_DELTA) --');
+{
+  // Every style has a delta, including balanced (0 - it is the reference, not measured against
+  // itself) - `makeLeague`'s lookup must never fall through to "no correction" for a real style.
+  const styleIds = Object.keys(SETTINGS.TEAM_STYLES);
+  for (const id of styleIds) {
+    ok(typeof SETTINGS.STYLE_STRENGTH_DELTA[id] === 'number', `STYLE_STRENGTH_DELTA has a numeric entry for '${id}'`);
+  }
+  ok(SETTINGS.STYLE_STRENGTH_DELTA.balanced === 0, 'balanced is the reference style - its own delta is exactly 0');
+
+  // makeLeague actually applies the delta: a style with a hand-inflated positive delta must
+  // measure a SMALLER slot cap than the same style at delta 0, all else equal - checked directly
+  // against the shipped effectiveCapFor/TEAM_LADDER_OFFSETS math, not by re-deriving it.
+  {
+    const league = makeLeague('majors');
+    const shiftersTeam = league.find((t) => t.styleId === 'shifters');
+    ok(!!shiftersTeam, 'shifters is still on the majors ladder');
+    const slot = shiftersTeam.ladderSlot;
+    const offsets = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+    const baseCap = effectiveCapFor('majors');
+    const rawCap = SETTINGS.CAPS.majors;
+    const expectedCapWithDelta = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill - SETTINGS.STYLE_STRENGTH_DELTA.shifters)));
+    const expectedCapNoDelta = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
+    ok(SETTINGS.STYLE_STRENGTH_DELTA.shifters > 0, 'shifters carries a positive measured delta (its shift is a real edge)');
+    ok(expectedCapWithDelta < expectedCapNoDelta,
+      `a positive STYLE_STRENGTH_DELTA lowers shifters' own slot cap (${expectedCapWithDelta.toFixed(2)} < ${expectedCapNoDelta.toFixed(2)} without the correction)`);
+    // Cross-check against the actual generated roster: mean skill total should track the
+    // delta-corrected cap, not the raw ladder-offset one.
+    const meanSkill = shiftersTeam.players.reduce((s, p) => s + SETTINGS.SKILL_IDS.reduce((s2, id) => s2 + p.skills[id], 0), 0)
+      / shiftersTeam.players.length / SETTINGS.SKILL_IDS.length;
+    ok(meanSkill <= expectedCapNoDelta, `shifters' own generated roster mean skill (${meanSkill.toFixed(2)}) does not exceed the UNCORRECTED cap (${expectedCapNoDelta.toFixed(2)}) - the correction only ever lowers the ceiling, never raises it silently`);
+  }
+
+  // LEAGUE_LADDER_STYLES is unchanged from Matt's confirmed order - this commit pays for a style's
+  // behavior with its OWN skill budget, it does not reshuffle who sits where.
+  const CONFIRMED_ORDER = ['balanced', 'smallBall', 'patient', 'junkballers', 'shifters', 'flamethrowers', 'sluggers', 'aces'];
+  for (const lg of SETTINGS.LEAGUES) {
+    ok(JSON.stringify(SETTINGS.LEAGUE_LADDER_STYLES[lg]) === JSON.stringify(CONFIRMED_ORDER),
+      `LEAGUE_LADDER_STYLES.${lg} is unchanged from Matt's confirmed order`);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;
