@@ -13,7 +13,10 @@ const len = (a) => Math.hypot(a.x, a.y);
 
 /** On the floor and in the way. A drain is a sensor and a ribbon is a ramp overhead, so neither is
  *  something a ball rolling along the playfield can hit. */
-const isSolid = (o) => o.kind !== 'drain' && o.kind !== 'ribbon';
+// A SENSOR is not solid either, and neither is a drop target that is down. Both were added with
+// PIER NINE (2026-09-12). Leaving them in would have `checkGaps` reporting the mouth of every
+// scoop as an ambiguous gap and `playable()` treating a rollover as a wall.
+const isSolid = (o) => o.kind !== 'drain' && o.kind !== 'ribbon' && o.kind !== 'sensor' && !o.down;
 
 /** Distance from a point to a shape's solid surface. Negative means inside it. */
 export function distToShape(sh, p) {
@@ -112,7 +115,12 @@ export function playable(table, cfg, step) {
   const s = step || 0.003;
   const nx = Math.ceil(table.w / s);
   const ny = Math.ceil(table.h / s);
-  const solid = table.shapes.filter(isSolid);
+  // A ONE-WAY GATE IS NOT A WALL TO A FLOOD FILL. It is solid to a ball going the wrong way and
+  // absent to one going the right way, and the fill has no direction, so treating it as solid
+  // walls off everything beyond it. On PIER NINE that is the whole playfield: the shooter lane's
+  // mouth is a gate, so the mask came back as 62 cells of shooter lane and the rest sweep reported
+  // all 62 of them as traps.
+  const solid = table.shapes.filter((o) => isSolid(o) && o.role !== 'gate');
   const drains = table.shapes.filter((s2) => s2.kind === 'drain');
   const free = new Uint8Array(nx * ny);
   const sink = new Uint8Array(nx * ny);
@@ -514,8 +522,26 @@ export function* tunnelProbeGen(table, cfg, opts) {
         const b = w.addBall(from, { x: dir.x * speed, y: dir.y * speed });
         for (let k = 0; k < 60 && b.alive; k++) w.step(cfg.DT);
         if (!b.alive) continue;
+        // A BALL ON A RAMP IS OVER THE PLAYFIELD, NOT IN IT. It is riding a wireform 55 to 62 mm
+        // above the deck, so "it is inside a post" and "it is somewhere the mask says a ball
+        // cannot be" are both TRUE and both meaningless - the ramp passes over those parts on
+        // purpose. PIER NINE's two ramps produced exactly two such reports out of 2700 shots, and
+        // both were a ball happily riding the Coaster past a post and a drop target underneath it.
+        if (b.ribbon) continue;
         let inside = null;
-        for (const o of solid) if (distToShape(o, b.p) < cfg.BALL_R - 5e-4) { inside = o.id; break; }
+        for (const o of solid) {
+          if (distToShape(o, b.p) >= cfg.BALL_R - 5e-4) continue;
+          // A ONE-WAY GATE IS PASSABLE BY DESIGN, so "the ball is inside it" is what the gate
+          // WORKING looks like and this probe cannot tell that from a tunnel. Without this, PIER
+          // NINE's two gates returned 60 of 2700 shots as passing through parts a ball is supposed
+          // to pass through, and a probe that cries wolf is a probe whose FAIL line stops being
+          // read. **The cost is real and is named here rather than buried: a gate is not
+          // tunnel-checked.** Testing the velocity instead was tried and is not enough - a ball
+          // that passes through legally and is then knocked back while still inside the band is
+          // indistinguishable from one that tunnelled in.
+          if (o.role === 'gate') continue;
+          inside = o.id; break;
+        }
         const escaped = !play.near(b.p);
         if (escaped || inside) fails.push({ shape: sh.id, from, dir, end: { x: b.p.x, y: b.p.y }, out: escaped, inside });
       }
@@ -543,6 +569,11 @@ export function* restSweepGen(table, cfg, opts) {
   const step = (opts && opts.step) || 0.012;
   const seconds = (opts && opts.seconds) || 6;
   const play = (opts && opts.play) || playable(table, cfg);
+  // A PARK IS A PLACE A BALL IS SUPPOSED TO SIT. Every machine with a shooter lane has one: the
+  // ball waits at the plunger, at rest, having reached no drain, which is this probe's definition
+  // of a trap and is also exactly right. A table declares them; nothing else changes.
+  const parks = table.parks || [];
+  const inPark = (p) => parks.some((k) => p.x >= k.x && p.x <= k.x + k.w && p.y >= k.y && p.y <= k.y + k.h);
   const stuck = [];
   const alive = [];
   let drops = 0;
@@ -585,7 +616,7 @@ export function* restSweepGen(table, cfg, opts) {
         // dead stops, those were two coordinates on BOARDWALK that a re-drop from the same spot
         // rolled straight out of - a probe crying wolf is a probe whose FAIL line stops being read.
         const held = on || b.ribbon;
-        if (speed < 0.05 && held) stuck.push(rec); else alive.push(rec);
+        if (speed < 0.05 && held && !inPark(b.p)) stuck.push(rec); else alive.push(rec);
       }
     }
   }

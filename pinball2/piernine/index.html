@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#05090f">
+<title>PIER NINE</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="app">
+  <!-- THE BACKGLASS. Score, ball, and the state that will not fit on the playfield at 306 px. -->
+  <header id="glass">
+    <div class="row">
+      <div class="score" id="score">0</div>
+      <button id="menu" class="btn" type="button" aria-label="Menu">MENU</button>
+    </div>
+    <div class="row sub">
+      <span id="ballno">BALL 1 / 3</span>
+      <span id="pier" class="pier"><b>P</b><b>I</b><b>E</b><b>R</b></span>
+      <span id="bonusx">BONUS x1</span>
+    </div>
+    <div id="banner" class="banner"></div>
+  </header>
+
+  <div id="stage">
+    <canvas id="table"></canvas>
+    <div id="over" class="over">
+      <div class="card">
+        <h1>PIER NINE</h1>
+        <p id="overline">3 balls. Flip with the screen halves, or Z and / on a keyboard.</p>
+        <button id="start" class="btn big" type="button">START</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two flipper buttons, full height of the band, because a flipper is the one control that is
+       pressed thousands of times a game and must never be missed. -->
+  <div id="pad">
+    <button class="flip" id="flipL" type="button" aria-label="Left flipper">◀</button>
+    <button class="flip" id="flipR" type="button" aria-label="Right flipper">▶</button>
+  </div>
+</div>
+<script type="module" src="./game.js"></script>
+</body>
+</html>

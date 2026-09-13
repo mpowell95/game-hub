@@ -116,9 +116,121 @@ export function draw(ctx, table, v, state) {
     ctx.setLineDash([]);
   }
 
+  // ---------------------------------------------------------------- deck art
+  // SENSORS ARE DRAWN FIRST because they are painted ON the deck: a rollover, a spinner's lane, a
+  // scoop's mouth and a kickback's strip all sit UNDER anything solid, which is also the order
+  // they exist in on a real playfield. `st.lamps` is a map of shape id to a state name, and a
+  // sensor with no entry is cold. Colour is never the only channel - see the root CLAUDE.md.
+  const lamp = (id) => (st.lamps && st.lamps[id]) || 'cold';
+  const LIT = { cold: '#55697f', hot: '#ffce3a', mode: '#fff3d0', spent: '#3d4a5c' };
+  for (const sh of table.shapes) {
+    if (sh.kind !== 'sensor') continue;
+    const state = lamp(sh.id);
+    const col = LIT[state] || LIT.cold;
+    if (sh.role === 'spinner') {
+      const a = toScreen(v, sh.a);
+      const b2 = toScreen(v, sh.b);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y);
+      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.setLineDash([5, 4]); ctx.stroke();
+      ctx.setLineDash([]);
+      const mid = { x: (a.x + b2.x) / 2, y: (a.y + b2.y) / 2 };
+      ctx.beginPath(); ctx.arc(mid.x, mid.y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#cfdae8'; ctx.fill();
+      continue;
+    }
+    const c = toScreen(v, sh.c);
+    const R = sh.r * S(v);
+    if (sh.role === 'saucer' && sh.part === 'wheel') {
+      // THE WHEEL IS DRAWN BIGGER THAN ITS HOLE, and that is correct: on a Ferris wheel the frame
+      // is AROUND the hole, not the hole itself. It is decor - nothing here is a collider, and no
+      // probe can see it (`docs/PINBALL2-PIER-NINE-ART.md`, "Art bigger than its collider").
+      const RIM = R * 1.9;
+      ctx.beginPath(); ctx.arc(c.x, c.y, RIM, 0, Math.PI * 2);
+      ctx.strokeStyle = '#35d0c0'; ctx.lineWidth = 2; ctx.stroke();
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(c.x + RIM * Math.cos(a), c.y + RIM * Math.sin(a), 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff3d0'; ctx.fill();
+      }
+      const locked = (st.locks || 0);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 - Math.PI / 2 + (st.wheelAng || 0);
+        const cx = c.x + RIM * 0.78 * Math.cos(a);
+        const cy = c.y + RIM * 0.78 * Math.sin(a);
+        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(cx, cy);
+        ctx.strokeStyle = '#35d0c0'; ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, R * 0.42, 0, Math.PI * 2);
+        if (i < locked) { ctx.fillStyle = '#ffce3a'; ctx.fill(); }
+        else { ctx.strokeStyle = '#55697f'; ctx.lineWidth = 1.8; ctx.stroke(); }
+      }
+    }
+    if (sh.role === 'saucer') {
+      ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+      ctx.fillStyle = '#05090f'; ctx.fill();
+      ctx.strokeStyle = state === 'cold' ? '#55697f' : col; ctx.lineWidth = 3.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = state === 'cold' ? '#12202f' : col; ctx.fill();
+      continue;
+    }
+    if (sh.role === 'bullseye') {
+      // Ring and dot, vermilion, lit or not. The precision shot must never read as a standup.
+      ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.78, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e0532f'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = state === 'cold' ? '#e0532f' : col; ctx.fill();
+      continue;
+    }
+    if (sh.role === 'kicker') {
+      ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.85, 0, Math.PI * 2);
+      ctx.strokeStyle = sh.armed ? '#35d0c0' : '#3d4a5c';
+      ctx.lineWidth = 3; ctx.setLineDash(sh.armed ? [] : [4, 4]); ctx.stroke();
+      ctx.setLineDash([]);
+      if (sh.armed) {
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y + R * 0.45); ctx.lineTo(c.x, c.y - R * 0.45);
+        ctx.moveTo(c.x - R * 0.3, c.y - R * 0.15); ctx.lineTo(c.x, c.y - R * 0.45);
+        ctx.lineTo(c.x + R * 0.3, c.y - R * 0.15);
+        ctx.strokeStyle = '#35d0c0'; ctx.lineWidth = 2.5; ctx.stroke();
+      }
+      continue;
+    }
+    // rollover: an oval insert. Filled and ringed when lit, an outline when not - shape AND hue.
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, R * 0.62, R * 0.95, 0, 0, Math.PI * 2);
+    if (state === 'cold') { ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke(); }
+    else {
+      ctx.fillStyle = col; ctx.fill();
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, R * 1.0, R * 1.3, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.setLineDash([3, 4]); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // What a solid part is PAINTED. One map, keyed by the table's own `part` label, so a colour is
+  // never decided at the point of drawing and a new part that forgets to add a row simply looks
+  // like a rail instead of throwing.
+  const PAINT = {
+    ringtoss: '#e0532f', baitshop: '#e0532f', boathouse: '#8fa6bb', ticket: '#e8dcc0',
+    drop: '#a8874f', shooterGate: '#35d0c0', orbitGate: '#35d0c0', lanepost: '#cfdae8',
+  };
+
   ctx.lineCap = 'round';
   for (const sh of table.shapes) {
     if (sh.kind !== 'seg' && sh.kind !== 'arc' && sh.kind !== 'circle' && sh.kind !== 'sling') continue;
+    // A DROPPED TARGET LIES FLAT. It is not a collider and it must not look like one: a low
+    // ellipse at 30%, which is the "spent" state the art file names for exactly this.
+    if (sh.down) {
+      const mid = toScreen(v, { x: (sh.a.x + sh.b.x) / 2, y: (sh.a.y + sh.b.y) / 2 });
+      const L = Math.hypot(sh.b.x - sh.a.x, sh.b.y - sh.a.y) * S(v);
+      ctx.save();
+      ctx.translate(mid.x, mid.y);
+      ctx.rotate(Math.atan2(sh.b.y - sh.a.y, sh.b.x - sh.a.x));
+      ctx.beginPath(); ctx.ellipse(0, 0, L / 2, Math.max(2, sh.r * S(v) * 0.45), 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(168,135,79,0.30)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(85,105,127,0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.restore();
+      continue;
+    }
     const wpx = sh.r * 2 * S(v);
     if (sh.kind === 'sling') {
       const a = toScreen(v, sh.a);
@@ -130,17 +242,25 @@ export function draw(ctx, table, v, state) {
       ctx.strokeStyle = hot ? '#ffe9a3' : '#e0532f'; ctx.lineWidth = wpx; ctx.stroke();
       continue;
     }
+    const paint = PAINT[sh.part] || '#9fb4cc';
     if (sh.kind === 'circle') {
+      // A RUBBER POST is a white cap in a dark rubber ring, and it is never lit amber: amber on
+      // this table means "shoot this", and nobody shoots a post.
       railPath(ctx, sh, v);
-      ctx.fillStyle = '#9fb4cc';
+      ctx.fillStyle = sh.part === 'post' ? '#16222f' : paint;
       ctx.fill();
+      if (sh.part === 'post') {
+        const c = toScreen(v, sh.c);
+        ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(1.5, sh.r * S(v) * 0.62), 0, Math.PI * 2);
+        ctx.fillStyle = '#cfdae8'; ctx.fill();
+      }
     } else {
       railPath(ctx, sh, v);
       ctx.strokeStyle = 'rgba(0,0,0,0.45)';
       ctx.lineWidth = wpx + 3;
       ctx.stroke();
       railPath(ctx, sh, v);
-      ctx.strokeStyle = '#9fb4cc';
+      ctx.strokeStyle = st.hot && st.hot[sh.id] ? '#ffe9a3' : paint;
       ctx.lineWidth = wpx;
       ctx.stroke();
       railPath(ctx, sh, v);
@@ -179,10 +299,44 @@ export function draw(ctx, table, v, state) {
       sh.pts.forEach((p, i) => { const q = fn(p); if (i === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); });
       ctx.strokeStyle = style; ctx.lineWidth = width; ctx.lineJoin = 'round'; ctx.stroke();
     };
+    // A WIREFORM, NOT A TUBE. A ramp drawn as a solid 46 mm lane is opaque, and on a table whose
+    // ramps cross the middle that means the deck under them - the Fishing Dock, the Boathouse, the
+    // wheel - simply is not there to look at. `docs/PINBALL2-PIER-NINE-ART.md` calls for cream
+    // sleepers between two rails, and a real wireform is mostly air, which is the point: you can
+    // see the playfield through it. A ramp opts in with `look: 'wire'`; the editor's own solid lane
+    // is still the default, because when you are EDITING a ramp you want to see its whole footprint.
+    if (sh.look === 'wire') {
+      const off = (d) => (p) => {
+        const q = lift(p, p.z);
+        return { x: q.x + d * 0.5 * wpx * (p.n ? p.n.x : 0), y: q.y + d * 0.5 * wpx * (p.n ? p.n.y : 0) };
+      };
+      // Sideways axis per point, so the two rails follow the curve instead of being a fat stroke.
+      for (let i = 0; i < sh.pts.length; i++) {
+        const a = sh.pts[Math.max(0, i - 1)];
+        const b2 = sh.pts[Math.min(sh.pts.length - 1, i + 1)];
+        const dx = b2.x - a.x; const dy = b2.y - a.y;
+        const L = Math.hypot(dx, dy) || 1;
+        sh.pts[i].n = { x: -dy / L, y: dx / L };
+      }
+      line((p) => toScreen(v, p), wpx * 0.55, 'rgba(0,0,0,0.22)');               // the shadow only
+      const tie = sh.tie || '#e8dcc0';
+      const rail = sh.rail || '#8fa6bb';
+      ctx.beginPath();
+      for (let i = 0; i < sh.pts.length; i += 2) {
+        const p = sh.pts[i];
+        const A = off(-1)(p); const B = off(1)(p);
+        ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
+      }
+      ctx.strokeStyle = tie; ctx.lineWidth = Math.max(1, wpx * 0.10); ctx.globalAlpha = 0.55; ctx.stroke();
+      ctx.globalAlpha = 1;
+      line(off(-1), Math.max(1.6, wpx * 0.10), rail);
+      line(off(1), Math.max(1.6, wpx * 0.10), rail);
+    } else {
     line((p) => toScreen(v, p), wpx * 0.9, 'rgba(0,0,0,0.35)');                 // the shadow, on the deck
     line((p) => lift(p, p.z), wpx + 6, 'rgba(10,16,28,0.9)');                   // the lane's own edge
     line((p) => lift(p, p.z), wpx, '#2b4a72');                                  // the lane floor
     line((p) => lift(p, p.z), Math.max(1, wpx * 0.12), 'rgba(180,220,255,0.35)');
+    }
     for (const end of [sh.pts[0], sh.pts[sh.pts.length - 1]]) {
       const q = lift(end, end.z);
       ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(3, wpx * 0.22), 0, Math.PI * 2);

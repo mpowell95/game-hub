@@ -1,6 +1,14 @@
 # PIER NINE — playfield blueprint and build sequence
 
-**Status: designed, approved by nobody yet. No code written.** Written 2026-09-12 from Matt's brief:
+**Status: BUILT, and playable at `/pinball2/piernine/` (2026-09-13).** Matt: *"build it for
+testing."* Six of the seven probes are green - 0 traps in 1,767 drops, 0 escapes from 42,984 balls,
+0 tunnels in 2,832 shots at the speed cap, 0 ambiguous gaps, both ramps clean - and the seventh
+(flipper power) is red for a reason written up in `pinball2/CLAUDE.md`, "PIER NINE, built". A full
+3-ball game runs end to end. **What was built and what was NOT, and the six defects the build found
+that this drawing did not, are all in `pinball2/CLAUDE.md`; read that before changing any coordinate
+here.** The geometry that actually shipped is `pinball2/machines/testbox/tables/piernine.js`, which
+names every deviation from this file in its own header - where they disagree, the code is what is
+running and this file is the intent. First written 2026-09-12 from Matt's brief:
 *"take the boardwalk tuning too. make it a better, more organized pinball machine... write a plan
 for how you would design a playable, fun, competitive, pinball board."*
 
