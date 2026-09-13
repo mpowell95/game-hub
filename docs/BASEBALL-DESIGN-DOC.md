@@ -1,6 +1,6 @@
 # Baseball: Game Design Doc
 
-Game Hub (`mpowell95/game-hub`). Version 9 draft, September 12, 2026. Revised after Fable architecture review.
+Game Hub (`mpowell95/game-hub`). Version 10 draft, September 12, 2026. Revised after Fable architecture review.
 
 This doc says how the game works. It is not a coding or implementation guide. Look, layout, and UI details belong in the Design Spec (next step).
 
@@ -87,6 +87,7 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
   4. Perfect Season
   5. Perfect Season x2, x3, and so on
 - **[Locked]** Perfect Season = win every Majors regular season, playoff, and World Series game in one season. It outranks any number of World Series titles.
+- **[Locked]** Perfect Season is meant to be achievable for a player who has already won the World Series and maxed every skill. It is not meant to be reachable at median skill. The simulator measures it against a maxed, strong-timing profile, not the median tier.
 - **[Locked]** Shows your best result across all careers, current and finished.
 - **[Locked]** Career wins also count on the hub's cross-game wins board. Baseball has a real opponent and a real loss axis. Quick Play records nothing and forfeits are losses, so there is no free win. Revisit after the first full career, since it is a read-time change either way.
 - **[Locked]** The metric is in section 16.
@@ -149,7 +150,7 @@ Minor League	24	13	No, about 2 seasons
 Major League	24	12	No, about 2 seasons
 ```
 
-Only the first two leagues hit their cap. The simulator confirms or retunes all of this before any number is locked.
+With the steeper win-rate curve in section 8, more seasons are spent in the upper leagues, so caps are now expected to bind in every league rather than only the first two. The yield table above assumes a 9-3 record, which no longer holds above High School. The simulator measures the real yields and the real binding points; treat this table as a starting point, not a prediction.
 
 ```
 League	Win	Loss	Bronze	Silver	Gold
@@ -166,7 +167,7 @@ Major League	1	0	1	2	3
 - **[Locked]** Target regular-season win rate for a median player, and the seasons to Gold that follow from it. Little League is near-total dominance; the Majors is a real grind. This replaces a flat "Gold in about two seasons everywhere".
 
 ```
-League	Win rate	Seasons to Gold
+League	Win rate (Locked)	Seasons to Gold (derived)
 Little League	92 to 98%	about 1
 High School	70 to 80%	about 1.5
 College	57 to 67%	about 2
@@ -174,14 +175,16 @@ Minor League	49 to 59%	about 3
 Major League	41 to 51%	about 4.5
 ```
 
-A full career is roughly 12 seasons and 170 games.
+The win-rate column is Locked. The seasons column is derived from it plus the bracket and standings model, and is measured by the simulator rather than set. A full career is roughly 12 seasons and 170 games.
+
+- **[Locked]** These bands describe a **median** player at the league's expected skill level. A player who has won the World Series and maxed every skill is far above that and wins far more. Every target in this section is a median-player target unless it says otherwise.
 - **[Locked]** Within a league, the weakest opponent is beaten at 85% or better and the champion sits between 40 and 55%. The sequence never rises as you go up the ladder.
 - **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
 - **[Locked]** Within a league, the 8 teams are ordered weakest to strongest, and the schedule puts harder opponents later in the season. The championship opponent is the toughest team in the league.
 - **[Locked]** Rosters are fixed. The same team always has the same players. CPU stats do not track or react to your stats.
 - **[Locked]** CPU teams are generated at the player's expected level for that league (the cap minus the typical shortfall), not at the raw league cap. Generating at the cap would leave the CPU 9 to 11 points above the player from College up, which contradicts "difficulty comes from behavior, not bigger stats". (This replaces the old "CPU stats stay close to yours and rise gently game to game" line, which could not be true at the same time as fixed rosters.)
-- **[Locked]** Nothing should force replays by math alone.
+- **[Locked]** No league is unwinnable. Missing the playoffs and replaying a season is a normal part of the upper leagues, but no league's math may make Gold unreachable.
 - **[Locked]** A well-timed low-Power swing beats a sloppy high-Power swing.
 
 ### CPU pitching by league
