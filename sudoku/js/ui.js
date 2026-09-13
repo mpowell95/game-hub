@@ -212,18 +212,25 @@ class SudokuUI {
     </svg>`;
   }
 
-  /** Two cells side by side: a filled cell with one large "5", and a cell holding four small
-   *  pencil-mark digits in a mini 3x3 grid. This is the one mechanic worth a picture -
-   *  everything else (rows/cols/boxes) is rules everyone already knows. */
+  /** Two LABELED cells side by side: a filled cell with one large "5" under "ANSWER", and a cell
+   *  holding four small pencil-mark digits, each sitting in its own fixed spot of a 3x3 grid
+   *  (matching where the real notes grid puts them - `.sd-notesgrid`), under "NOTES". Matt found
+   *  the first version (no labels, digits placed by eye) unclear - two boxes of numbers read as
+   *  numbers, not as a contrast, without something naming what's different about them. */
   _howToDiagramSVG() {
-    return `<svg viewBox="0 0 200 90" role="img" aria-label="${esc(t('howto_diagram_aria'))}">
+    return `<svg viewBox="0 0 200 108" role="img" aria-label="${esc(t('howto_diagram_aria'))}">
       <rect x="4" y="4" width="82" height="82" rx="8" fill="none" stroke="var(--sd-line)" stroke-width="2"/>
       <text x="45" y="56" text-anchor="middle" font-size="42" font-weight="700" fill="var(--sd-ink)">5</text>
+      <text x="45" y="101" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="1"
+        fill="var(--sd-muted)">${esc(t('howto_label_answer'))}</text>
+
       <rect x="114" y="4" width="82" height="82" rx="8" fill="none" stroke="var(--sd-line)" stroke-width="2"/>
-      <text x="132" y="30" text-anchor="middle" font-size="15" fill="var(--sd-muted)">2</text>
-      <text x="155" y="30" text-anchor="middle" font-size="15" fill="var(--sd-muted)">4</text>
-      <text x="132" y="55" text-anchor="middle" font-size="15" fill="var(--sd-muted)">6</text>
-      <text x="178" y="55" text-anchor="middle" font-size="15" fill="var(--sd-muted)">9</text>
+      <text x="155" y="23" text-anchor="middle" font-size="13" fill="var(--sd-muted)">2</text>
+      <text x="128" y="50" text-anchor="middle" font-size="13" fill="var(--sd-muted)">4</text>
+      <text x="182" y="50" text-anchor="middle" font-size="13" fill="var(--sd-muted)">6</text>
+      <text x="182" y="77" text-anchor="middle" font-size="13" fill="var(--sd-muted)">9</text>
+      <text x="155" y="101" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="1"
+        fill="var(--sd-muted)">${esc(t('howto_label_notes'))}</text>
     </svg>`;
   }
 
