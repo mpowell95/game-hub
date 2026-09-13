@@ -48,6 +48,7 @@ const FLAG_ASSERT = process.argv.includes('--assert');
 const FLAG_CONTACT_GRID = process.argv.includes('--contact-grid');
 const FLAG_STYLES = process.argv.includes('--styles');
 const FLAG_STYLES_TUNE = process.argv.includes('--tune');
+const FLAG_STAGES = process.argv.includes('--stages');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -589,8 +590,215 @@ function assertContactGrid(grid) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// BB-2b commit 1: `--stages` - a per-stage decomposition of Gold, MEASUREMENT ONLY (no engine
+// change - `season.js`'s real `playoffs()`/schedule are untouched; every variant below is
+// duplicated locally here). Names the stage eating the seasons: top4 odds x semifinal win rate x
+// championship win rate should multiply out to the measured one-season Gold rate; the diagnosis
+// (baseball/CLAUDE.md's BB-2a report) is that the player is charged twice - seeded low (so the
+// semifinal opponent is the strongest qualifier) AND handed the strongest team again in a
+// hardcoded, forced-home final - while the season alternates home/away for every other game.
+const BRACKET_MODELS = ['asCoded', 'strongestInFinal'];
+const SCHEDULE_SHAPES = ['repeatTop', 'repeatBottom', 'spread'];
+const PLAYOFF_HOMES = ['player', 'higherSeed', 'alternate'];
+
+// Local opponent-order builders, one per schedule shape. `repeatTop` is `season.js`'s own
+// `OPPONENT_ORDER` (unique 0..7, then the top four - the strongest half - a second time, late).
+// `repeatBottom` repeats the weakest four instead, early. `spread` repeats the SAME top-four set
+// `repeatTop` does, but schedules each team's second meeting immediately after its first, rather
+// than bunching all four repeats at the end - "each repeat adjacent to its first meeting," per the
+// handoff. All three stay weakest-to-strongest in their FIRST pass over all 8 opponents.
+function buildOpponentOrder(shape) {
+  if (shape === 'repeatBottom') return [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7];
+  if (shape === 'spread') return [0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7];
+  return [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7]; // repeatTop, matches season.js's OPPONENT_ORDER
+}
+
+/** `season.js`'s own `shuffledHomeFlags`, duplicated (not exported) for this measurement-only
+ *  diagnostic - a Fisher-Yates shuffle of a fixed 6-home/6-away flag array, seeded. */
+function shuffledHomeFlagsLocal(rand01) {
+  const flags = [true, true, true, true, true, true, false, false, false, false, false, false];
+  for (let i = flags.length - 1; i > 0; i--) {
+    const j = Math.floor(rand01() * (i + 1));
+    const tmp = flags[i]; flags[i] = flags[j]; flags[j] = tmp;
+  }
+  return flags;
+}
+
+function makeScheduleShape(league, seasonSeed, shape) {
+  const order = buildOpponentOrder(shape);
+  const rand01 = mulberry32(hashSeed('bb-schedule-shape', league, seasonSeed, shape));
+  const homeFlags = shuffledHomeFlagsLocal(rand01);
+  return order.map((opponentIndex, i) => ({ opponentIndex, home: homeFlags[i] }));
+}
+
+/** The CPU-scripted "record" a standings row carries for one team, for a higher-seed home-field
+ *  decision - `scriptedStandings`'s own `wins` column (see season.js), looked up by team name. */
+function winsForTeam(standings, team) {
+  const row = standings.find((s) => s.id === team.name);
+  return row ? row.wins : 0;
+}
+
+/** `season.js`'s real `playoffs()` is positional (1v4/2v3 by seed). `strongestInFinal` is the
+ *  bracket the doc implies (§8, [Locked]: "the championship opponent is always the toughest team")
+ *  but phase 2/2a never arranged: the player's semifinal opponent is chosen to EXCLUDE the single
+ *  strongest of the four qualifiers, so that team's own semifinal has no player in it and is
+ *  resolved (scripted) in its favor regardless - it reaches the final by construction, exactly
+ *  once, rather than being both the player's semifinal opponent AND the hardcoded final opponent. */
+function pickSemifinalOpponent(standings, teams, bracketModel) {
+  const seeds = standings.slice(0, 4);
+  if (bracketModel === 'strongestInFinal') {
+    const strongestTeam = teams[teams.length - 1];
+    const cpuSeeds = seeds.filter((s) => !s.isPlayer);
+    const strongestSeed = cpuSeeds.find((s) => s.id === strongestTeam.name);
+    const nonStrongest = cpuSeeds.filter((s) => s !== strongestSeed);
+    return nonStrongest[0] || cpuSeeds[0] || null;
+  }
+  const bracket = playoffs(standings); // positional 1v4/2v3, season.js's real implementation
+  const sfPair = bracket.semifinals.find((pair) => pair.some((t) => t.isPlayer));
+  if (!sfPair) return null; // shouldn't happen when madePlayoffs is true
+  return sfPair.find((t) => !t.isPlayer) || null;
+}
+
+function decidePlayoffHome(mode, seasonSeed, gameLabel, playerWins, oppWins) {
+  if (mode === 'higherSeed') return playerWins >= oppWins;
+  if (mode === 'alternate') {
+    const base = (Number(seasonSeed) % 2) === 0;
+    return gameLabel === 'semifinal' ? base : !base;
+  }
+  return true; // 'player' - as coded, both playoff games are forced player-home
+}
+
+/** One season, played under a named (bracketModel, playoffHome, scheduleShape) combination -
+ *  everything else identical to the real `playSeason` above (same skills, same tiers, same real
+ *  `Game`). Returns per-stage detail `--stages` needs that the scoreboard's `playSeason` throws
+ *  away: home/away split, seed, which slot each playoff opponent came from, and whether each
+ *  playoff round was actually reached/won. */
+async function playSeasonStaged(league, settings, tier, seasonSeed, opts) {
+  const teams = makeLeague(league);
+  const schedule = makeScheduleShape(league, seasonSeed, opts.scheduleShape);
+  const skills = playerSkillsFor(league, settings);
+  const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
+  const playerTeam = makePlayerTeam({ skills, hand: 'R' });
+
+  let wins = 0, losses = 0, homeWins = 0, homeGames = 0, awayWins = 0, awayGames = 0;
+  for (let i = 0; i < schedule.length; i++) {
+    const g = schedule[i];
+    const opponent = teams[g.opponentIndex];
+    const seed = hashSeed('bb-stage-season', league, tier, seasonSeed, opts.scheduleShape, i);
+    const res = await playOneGame(league, settings, opponent, playerAgent, playerTeam, seed >>> 0, g.home);
+    if (g.home) { homeGames += 1; if (res.won) homeWins += 1; } else { awayGames += 1; if (res.won) awayWins += 1; }
+    if (res.won) wins += 1; else losses += 1;
+  }
+
+  const standings = scriptedStandings(teams, { wins, losses });
+  const playerRank = standings.findIndex((r) => r.isPlayer);
+  const madePlayoffs = playerRank < 4;
+  const result = {
+    wins, losses, homeWins, homeGames, awayWins, awayGames, madePlayoffs, seed: playerRank,
+    semifinalOpponentSlot: null, semifinalWon: false, reachedChampionship: false,
+    finalOpponentSlot: null, wonChampionship: false, trophy: 0,
+  };
+  if (!madePlayoffs) return result;
+
+  const sfOpponentRow = pickSemifinalOpponent(standings, teams, opts.bracketModel);
+  const sfOpponentTeam = teams.find((t) => t.name === sfOpponentRow.id) || teams[teams.length - 1];
+  result.semifinalOpponentSlot = teams.indexOf(sfOpponentTeam);
+  const sfHome = decidePlayoffHome(opts.playoffHome, seasonSeed, 'semifinal', wins, winsForTeam(standings, sfOpponentTeam));
+  const sfSeed = hashSeed('bb-stage-sf', league, tier, seasonSeed, opts.bracketModel, opts.playoffHome, opts.scheduleShape);
+  const sfRes = await playOneGame(league, settings, sfOpponentTeam, playerAgent, playerTeam, sfSeed >>> 0, sfHome);
+  result.semifinalWon = sfRes.won;
+  if (!sfRes.won) { result.trophy = 1; return result; }
+
+  result.reachedChampionship = true;
+  // doc §8, [Locked]: "the championship opponent is always the toughest team in the league" - the
+  // strongest team is ALWAYS teams[teams.length-1] by makeLeague's own weakest..strongest order,
+  // regardless of bracket model; only the SEMIFINAL opponent choice differs between models.
+  const champTeam = teams[teams.length - 1];
+  result.finalOpponentSlot = teams.indexOf(champTeam);
+  const chHome = decidePlayoffHome(opts.playoffHome, seasonSeed, 'final', wins, winsForTeam(standings, champTeam));
+  const chSeed = hashSeed('bb-stage-champ', league, tier, seasonSeed, opts.bracketModel, opts.playoffHome, opts.scheduleShape);
+  const chRes = await playOneGame(league, settings, champTeam, playerAgent, playerTeam, chSeed >>> 0, chHome);
+  result.wonChampionship = chRes.won;
+  result.trophy = chRes.won ? 3 : 2;
+  return result;
+}
+
+function modeOf(arr) {
+  const counts = new Map();
+  for (const v of arr) if (v != null) counts.set(v, (counts.get(v) || 0) + 1);
+  let best = null, bestCount = -1;
+  for (const [v, c] of counts) if (c > bestCount) { best = v; bestCount = c; }
+  return best;
+}
+
+function fmtPct(v) { return v == null ? 'n/a' : `${(v * 100).toFixed(1)}%`; }
+
+async function runStagesConfig(league, settings, bracketModel, playoffHome, scheduleShape) {
+  const seasons = [];
+  for (let i = 0; i < SEASONS_N; i++) {
+    seasons.push(await playSeasonStaged(league, settings, 'median', i, { bracketModel, playoffHome, scheduleShape }));
+  }
+  const homeGames = seasons.reduce((s, x) => s + x.homeGames, 0);
+  const homeWins = seasons.reduce((s, x) => s + x.homeWins, 0);
+  const awayGames = seasons.reduce((s, x) => s + x.awayGames, 0);
+  const awayWins = seasons.reduce((s, x) => s + x.awayWins, 0);
+  const top4Rate = seasons.filter((s) => s.madePlayoffs).length / seasons.length;
+  const seedCounts = {};
+  for (const s of seasons) { const k = s.seed + 1; seedCounts[k] = (seedCounts[k] || 0) + 1; }
+  const sfPlayed = seasons.filter((s) => s.madePlayoffs);
+  const sfWinRate = sfPlayed.length ? sfPlayed.filter((s) => s.semifinalWon).length / sfPlayed.length : null;
+  const sfSlot = modeOf(sfPlayed.map((s) => s.semifinalOpponentSlot));
+  const finalPlayed = seasons.filter((s) => s.reachedChampionship);
+  const finalWinRate = finalPlayed.length ? finalPlayed.filter((s) => s.wonChampionship).length / finalPlayed.length : null;
+  const finalSlot = modeOf(finalPlayed.map((s) => s.finalOpponentSlot));
+  const goldRate = seasons.filter((s) => s.trophy === 3).length / seasons.length;
+  const productRate = top4Rate * (sfWinRate || 0) * (finalWinRate || 0);
+  return {
+    homeWinRate: homeGames ? homeWins / homeGames : null,
+    awayWinRate: awayGames ? awayWins / awayGames : null,
+    top4Rate, seedCounts, sfSlot, sfWinRate, finalSlot, finalWinRate, goldRate, productRate,
+  };
+}
+
+async function runStages(t0) {
+  console.log(`sim-baseball.mjs --stages - SEASONS_N=${SEASONS_N}, tier=median, leagues=${LEAGUES.join(',')}`);
+  console.log('measurement only - no engine change; every variant below is duplicated locally in this file.\n');
+  for (const league of LEAGUES) {
+    console.log(`=== ${league} (median tier) ===`);
+
+    console.log('  bracket model (schedule=repeatTop, playoffHome=player):');
+    for (const bracketModel of BRACKET_MODELS) {
+      const r = await runStagesConfig(league, SETTINGS, bracketModel, 'player', 'repeatTop');
+      console.log(`    ${bracketModel.padEnd(18)} regHome=${fmtPct(r.homeWinRate)} regAway=${fmtPct(r.awayWinRate)} top4=${fmtPct(r.top4Rate)} ` +
+        `sfSlot=${r.sfSlot} sfWin=${fmtPct(r.sfWinRate)} finalSlot=${r.finalSlot} finalWin=${fmtPct(r.finalWinRate)} ` +
+        `gold=${fmtPct(r.goldRate)} product=${fmtPct(r.productRate)} seeds=${JSON.stringify(r.seedCounts)}`);
+    }
+
+    console.log('  schedule shape (bracket=asCoded, playoffHome=player):');
+    for (const scheduleShape of SCHEDULE_SHAPES) {
+      const r = await runStagesConfig(league, SETTINGS, 'asCoded', 'player', scheduleShape);
+      console.log(`    ${scheduleShape.padEnd(18)} regHome=${fmtPct(r.homeWinRate)} regAway=${fmtPct(r.awayWinRate)} top4=${fmtPct(r.top4Rate)} ` +
+        `sfSlot=${r.sfSlot} sfWin=${fmtPct(r.sfWinRate)} finalSlot=${r.finalSlot} finalWin=${fmtPct(r.finalWinRate)} gold=${fmtPct(r.goldRate)}`);
+    }
+
+    console.log('  playoff home policy (bracket=asCoded, schedule=repeatTop):');
+    for (const playoffHome of PLAYOFF_HOMES) {
+      const r = await runStagesConfig(league, SETTINGS, 'asCoded', playoffHome, 'repeatTop');
+      console.log(`    ${playoffHome.padEnd(18)} sfWin=${fmtPct(r.sfWinRate)} finalWin=${fmtPct(r.finalWinRate)} gold=${fmtPct(r.goldRate)}`);
+    }
+    console.log('');
+  }
+  console.log(`wall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+}
+
+// ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
+
+  if (FLAG_STAGES) {
+    await runStages(t0);
+    return;
+  }
 
   if (FLAG_STYLES) {
     const league = STYLE_MEASURE_LEAGUE;
