@@ -69,12 +69,46 @@ function bind(btn, side) {
   btn.addEventListener('pointercancel', up);
   btn.addEventListener('lostpointercapture', up);
 }
-function hold(side, on) {
+// **A FLIP HAS A MINIMUM LENGTH, BECAUSE A SOLENOID DOES.**
+//
+// Without this a tap does NOTHING AT ALL. The press and the release land in the same animation
+// frame, so `setFlipper(true)` and `setFlipper(false)` both run before a single `world.step`, and
+// the bat never moves - measured in a real browser: an instantaneous tap held the flipper for 0
+// frames, while a 150 ms press held it for 5. Matt, on the first real game: *"Didn't flip the
+// flipper once."* He was tapping, the way anybody taps a pinball button.
+//
+// A real flipper is not a switch either: the button closes a circuit and the coil fires for a
+// fixed pulse whatever the finger does. 75 ms is that pulse - three times FLIP_UP_TIME, so the bat
+// reaches its stop and stays there long enough to throw a ball - and holding longer than 75 ms
+// still holds the bat up, so cradling is unaffected.
+const MIN_FLIP_MS = 75;
+const pressed = { L: false, R: false };
+const downAt = { L: 0, R: 0 };
+const pending = { L: null, R: null };
+
+function apply(side, on) {
   world.setFlipper(side, on);
   (side === 'L' ? el.flipL : el.flipR).classList.toggle('on', on);
-  // LANE CHANGE, on the press. It is free, it is the classic top-lane skill layer, and putting it
-  // on the flipper button is what makes it a skill rather than a menu.
-  if (on) rules.laneChange(side === 'L' ? -1 : 1);
+}
+
+function hold(side, on) {
+  if (on) {
+    if (pending[side]) { clearTimeout(pending[side]); pending[side] = null; }
+    pressed[side] = true;
+    downAt[side] = performance.now();
+    apply(side, true);
+    // LANE CHANGE, on the press. It is free, it is the classic top-lane skill layer, and putting it
+    // on the flipper button is what makes it a skill rather than a menu.
+    rules.laneChange(side === 'L' ? -1 : 1);
+    return;
+  }
+  pressed[side] = false;
+  const left = MIN_FLIP_MS - (performance.now() - downAt[side]);
+  if (left <= 0) { apply(side, false); return; }
+  pending[side] = setTimeout(() => {
+    pending[side] = null;
+    if (!pressed[side]) apply(side, false);
+  }, left);
 }
 bind(el.flipL, 'L');
 bind(el.flipR, 'R');
