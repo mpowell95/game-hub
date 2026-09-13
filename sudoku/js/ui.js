@@ -122,18 +122,24 @@ class SudokuUI {
         <span class="sd-seg-label">${diffShapeSVG(tierOf(tier))}<b>${esc(t(TIER_LABEL_KEY[tier]))}</b></span>
       </button>`).join('');
     const saved = loadSave();
+    const resumeLabel = saved
+      ? `${esc(t('resume'))} · ${esc(t(TIER_LABEL_KEY[saved.tier]) || '')} · ${esc(fmtTime(saved.elapsedMs))}`
+      : '';
     this.container.innerHTML = `
       <div class="sd-root sd-menu">
+        <div class="sd-hero" aria-hidden="true">${this._heroSVG()}</div>
         <div class="sd-menu-header">
           <h1>${esc(t('title'))}</h1>
           <p>${esc(t('tagline'))}</p>
         </div>
-        <div class="gh-field">
-          <span class="gh-field__label" id="sd-difflabel">${esc(t('setup_difficulty'))}</span>
-          <div class="sd-seg-wrap" role="radiogroup" aria-labelledby="sd-difflabel">${segs}</div>
+        <div class="gh-card sd-menu-card">
+          <div class="gh-field">
+            <span class="gh-field__label" id="sd-difflabel">${esc(t('setup_difficulty'))}</span>
+            <div class="sd-seg-wrap" role="radiogroup" aria-labelledby="sd-difflabel">${segs}</div>
+          </div>
+          ${saved ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="resume">${resumeLabel}</button>` : ''}
+          <button type="button" class="gh-btn gh-btn--block ${saved ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-action="start">${esc(t('start'))}</button>
         </div>
-        ${saved ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="resume">${esc(t('resume'))}</button>` : ''}
-        <button type="button" class="gh-btn gh-btn--block ${saved ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-action="start">${esc(t('start'))}</button>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-action="howto">${esc(t('howto'))}</button>
       </div>`;
     this.root = this.container.querySelector('.sd-root');
@@ -181,6 +187,32 @@ class SudokuUI {
     this.root.querySelector('[data-action="close"]').addEventListener('click', () => {
       if (this.game) this._enterGame(this.game); else this.renderMenu();
     });
+  }
+
+  /** Purely decorative mini board for the setup screen header - a few filled cells and one
+   *  selection outline, drawn entirely from this screen's own theme variables (never a
+   *  hardcoded color) so it repaints correctly in dark mode with no extra work. Static SVG,
+   *  no data behind it: aria-hidden, the same discipline as `js/game-art.js`'s hub tile. */
+  _heroSVG() {
+    return `<svg viewBox="0 0 120 120" class="sd-hero-svg" aria-hidden="true">
+      <g stroke="var(--sd-line)" stroke-width="1">
+        <path d="M18 30H114 M18 54H114 M18 78H114 M18 102H114"/>
+        <path d="M30 18V114 M54 18V114 M78 18V114 M102 18V114"/>
+      </g>
+      <g stroke="var(--sd-line-strong)" stroke-width="2">
+        <rect x="6" y="6" width="108" height="108" fill="none"/>
+        <path d="M6 42H114 M6 78H114"/>
+        <path d="M42 6V114 M78 6V114"/>
+      </g>
+      <g fill="var(--sd-muted)" font-family="system-ui, sans-serif" font-size="15" font-weight="700" text-anchor="middle">
+        <text x="24" y="29">6</text>
+        <text x="72" y="17">3</text>
+        <text x="108" y="41">8</text>
+        <text x="48" y="89">1</text>
+        <text x="96" y="113">5</text>
+      </g>
+      <rect x="55" y="55" width="10" height="10" fill="none" stroke="var(--sd-select)" stroke-width="3" rx="1.5"/>
+    </svg>`;
   }
 
   /** Two cells side by side: a filled cell with one large "5", and a cell holding four small

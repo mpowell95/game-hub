@@ -166,6 +166,26 @@ Every state below carries a non-color signal; hue is never the only one (root `C
 The selection outline uses `#ffce3a`, the repo's standing selection/emphasis accent, always paired
 with the outline shape itself — never color alone.
 
+## Setup screen (2026-09-13)
+
+Matt: *"improve the setup screen for sudoku. It's bare bones and eh."* The original shipped as a
+title, a tagline, the plain segmented tier row, and stacked buttons - correct per convention but
+visually flat. Now: a small decorative mini-board (`_heroSVG()` in `js/ui.js`) sits above the
+title in a soft accent-tinted panel (`--sd-accent` `#7a3b8f`, this game's own hub-tile color,
+never the selection accent); the difficulty picker and Start/Resume live inside one `.gh-card` for
+grouping; a selected tier now also gets a soft `--sd-select-tint` background fill, not just the
+outline, in both themes. **The hero is pure decoration, drawn entirely from this screen's own
+theme variables** (`var(--sd-line)`, `var(--sd-muted)`, `var(--sd-select)`) so it repaints
+correctly in dark mode for free, the same discipline as the how-to diagram right below it - no
+data behind it, `aria-hidden="true"`, same as `js/game-art.js`'s hub tile.
+
+The **Resume** button (shown only when a save exists, next to a fresh **Start**) now reads
+`Resume · <tier> · <mm:ss>` instead of a bare "Resume" - the tier and elapsed time were already on
+`SudokuGame`, just not surfaced. No new settings/save fields, no new stats, no new strings beyond
+what already existed (`resume`, the tier labels, `fmtTime()`). Verified at both phone heights
+(`node check-no-scroll.mjs sudoku`, `node test-visual.mjs sudoku`) in both hosts and both themes -
+still one screen, still zero scroll.
+
 ## Timer
 
 Starts on the **first input** of a completely fresh puzzle (nothing placed, no mistakes, no
