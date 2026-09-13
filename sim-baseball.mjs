@@ -67,10 +67,17 @@ const TIERS = ARG_TIER ? [ARG_TIER] : ['weak', 'median', 'strong'];
 // ---------------------------------------------------------------------------------------------
 // The simulator's OWN assumptions, printed at the top of every report (per the handoff: "Matt can
 // move them with --tier-sigma" is this file's `--tier-sigma` override below).
+// BB-2d commit 2: swingIn/chase are now the MODEL's own per-tier values, never copied from the
+// league's CPU row - `mkModelAgent` below stops reading `cpu.swingIn`/`cpu.chase` entirely. Before
+// this commit a human at Little League chased 55% of pitches (that league's own CPU row) and at
+// the Majors chased 5% - taxing the human hardest exactly where the win-rate band wants near-total
+// dominance, and least where it wants a real grind (commit 1's own `--range` measurement:
+// leagueRow win rate fell 78.6%->44.0% little->majors while humanOwn only fell 75.5%->52.1%, a much
+// flatter, more doc-consistent curve). Draft, per the handoff.
 const MODEL_TIERS = {
-  weak:   { timingSigmaMs: 85, placementSigma: 0.35, variety: 0.3 },
-  median: { timingSigmaMs: 55, placementSigma: 0.22, variety: 0.6 },
-  strong: { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85 },
+  weak:   { timingSigmaMs: 85, placementSigma: 0.35, variety: 0.3, swingIn: 0.85, chase: 0.35 },
+  median: { timingSigmaMs: 55, placementSigma: 0.22, variety: 0.6, swingIn: 0.85, chase: 0.22 },
+  strong: { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85, swingIn: 0.88, chase: 0.12 },
 };
 const tierSigmaArg = arg('tier-sigma', null);
 if (tierSigmaArg) {
@@ -267,7 +274,12 @@ function mkCpuAgent(team, league, settings) {
 }
 function mkModelAgent(league, settings, tier) {
   const cpu = settings.CPU[league] || settings.CPU.college;
-  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: cpu.swingIn, chase: cpu.chase, settings });
+  // BB-2d commit 2: swingIn/chase come from the MODEL TIER now, never the league's own CPU row -
+  // "does a human swing at this pitch" is a fact about the human, not about which league they are
+  // playing in. cornerBias/pitchMix stay read from the league's CPU row: the PITCHER half of the
+  // model still stands in for "a human choosing among the pitches this league's CPU would choose
+  // among", which is a fact about the league, not the batter's own discipline.
+  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: tier.swingIn, chase: tier.chase, settings });
   const pitcher = new ModelPitcher({ league, settings, variety: tier.variety, cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix });
   return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v) };
 }
@@ -337,6 +349,31 @@ function withOverride(settings, path, value) {
 }
 function withOverrides(settings, overrides) {
   return overrides.reduce((s, [path, value]) => withOverride(s, path, value), settings);
+}
+
+/** BB-2d commit 2: `--styles`' own STYLE_STRENGTH_DELTA measurement now plays the style's team
+ *  against the MEDIAN HUMAN model, at every league, rather than CPU-vs-CPU against `balanced` at
+ *  one league - "STYLE_STRENGTH_DELTA" exists to correct a style's SKILL BUDGET for how much it
+ *  actually costs the PLAYER (a human), so it should be measured against the player, not against
+ *  another CPU roster that never has to time a swing at all. `delta = 0.5 - winRate` (the player's
+ *  own win rate FALLING below 0.5 means the style is measurably tougher than its budget alone
+ *  predicts - the opposite sign convention from the old CPU-vs-CPU measurement, whose `delta` was
+ *  `winRate - 0.5` from the STYLE's own point of view; both still feed the same subtraction in
+ *  `teams.js`'s `makeLeague`, which needs "how much stronger, from the STYLE's perspective" -
+ *  see the sign flip at the call site below). */
+async function measureStyleVsHumanWinRate(styleId, styleVector, league, settings, gamesN) {
+  const opponentSeedTag = `${styleId}-vs-human`;
+  const skills = playerSkillsFor(league, settings);
+  let wins = 0;
+  for (let i = 0; i < gamesN; i++) {
+    const opponent = buildCandidateTeam(league, styleId, styleVector, hashSeed('bb-style-vs-human-team', league, opponentSeedTag, i));
+    const playerAgent = mkModelAgent(league, settings, MODEL_TIERS.median);
+    const playerTeam = makePlayerTeam({ skills, hand: 'R' });
+    const seed = hashSeed('bb-style-vs-human-game', league, opponentSeedTag, i);
+    const res = await playOneGame(league, settings, opponent, playerAgent, playerTeam, seed >>> 0, i % 2 === 0);
+    if (res.won) wins += 1;
+  }
+  return wins / gamesN;
 }
 
 // This commit predates commit 2's real `CPU_SIGMA_ABSOLUTE_FLOOR_MS`/`CPU_PLACEMENT_MIN`
@@ -1116,7 +1153,10 @@ async function measureLeverRange() {
  *  than copied from `CPU[league].swingIn/chase`? Uses the Draft `MODEL_TIERS.median` values this
  *  commit proposes for commit 2 (swingIn 0.85, chase 0.22 - see commit 2's own header) purely as a
  *  MEASUREMENT here; `mkModelAgent` itself is not changed until commit 2. */
-const HUMAN_MEDIAN_DISCIPLINE = { swingIn: 0.85, chase: 0.22 };
+// BB-2d commit 2: now identical to MODEL_TIERS.median's own swingIn/chase - kept as its own name
+// since this function's whole point is "the human's OWN discipline", not "whatever MODEL_TIERS
+// happens to hold", even though the two values are the same object after commit 2 landed.
+const HUMAN_MEDIAN_DISCIPLINE = { swingIn: MODEL_TIERS.median.swingIn, chase: MODEL_TIERS.median.chase };
 async function measureHumanOwnDiscipline(league) {
   const settings = SETTINGS;
   const teams = makeLeague(league);
@@ -1239,7 +1279,7 @@ async function main() {
 
   if (FLAG_STYLES) {
     const league = STYLE_MEASURE_LEAGUE;
-    console.log(`sim-baseball.mjs --styles${FLAG_STYLES_TUNE ? ' --tune' : ''} - league=${league}, games=${STYLE_MEASURE_GAMES}, band=${STYLE_STRENGTH_BAND}`);
+    console.log(`sim-baseball.mjs --styles${FLAG_STYLES_TUNE ? ' --tune' : ''} - ${FLAG_STYLES_TUNE ? `league=${league}` : `leagues=${LEAGUES.join(',')} (vs median human)`}, games=${STYLE_MEASURE_GAMES}, band=${STYLE_STRENGTH_BAND}`);
     const styleIds = Object.keys(SETTINGS.TEAM_STYLES).filter((id) => id !== 'balanced');
     let anyOut = false;
     if (FLAG_STYLES_TUNE) {
@@ -1254,22 +1294,24 @@ async function main() {
       }
       console.log(`\n${anyOut ? 'Some styles remain outside the +/-' + STYLE_STRENGTH_BAND + ' band even at the search bounds - widen STYLE_COMPRESS_CANDIDATES.' : 'Every style lands within the band.'}`);
     } else {
-      // BB-2c commit 3: this IS the STYLE_STRENGTH_DELTA measurement - every style at its own
-      // TEAM_STYLES vector (the shipped, uncompressed weights - a "fixed middle slot", the same
-      // effectiveCapFor(league) both `buildCandidateTeam` calls use), full behavior on (STYLE_BEHAVIOR
-      // reads styleId regardless of ladder slot), against Balanced. `delta = winRate - 0.5` is what
-      // `makeLeague` (teams.js) now subtracts from a style's own ladder slot budget, so a style's
-      // measured strength - flavor AND behavior together - never has to be re-fought by hand-picking
-      // which slot it sits in.
-      console.log('\n  style          winRate (vs balanced)   delta (STYLE_STRENGTH_DELTA)');
+      // BB-2d commit 2: STYLE_STRENGTH_DELTA is now measured against the MEDIAN HUMAN model, at
+      // EVERY league (not CPU-vs-CPU against `balanced` at one league) - see
+      // `measureStyleVsHumanWinRate`'s own header for why. `delta = 0.5 - winRate` (the PLAYER's
+      // own win rate, so a style that costs the player more than its budget predicts gets a
+      // positive delta - the sign `teams.js`'s `makeLeague` subtracts, unchanged from BB-2c).
+      console.log('\n  style          ' + LEAGUES.map((lg) => lg.padEnd(11)).join('') + ' mean delta (STYLE_STRENGTH_DELTA)');
       const deltas = {};
       for (const id of styleIds) {
-        const winRate = await measureStyleWinRate(id, SETTINGS.TEAM_STYLES[id], league, SETTINGS, STYLE_MEASURE_GAMES);
-        const delta = winRate - 0.5;
-        deltas[id] = delta;
-        const inBand = Math.abs(delta) <= STYLE_STRENGTH_BAND;
+        const perLeague = {};
+        for (const lg of LEAGUES) {
+          const winRate = await measureStyleVsHumanWinRate(id, SETTINGS.TEAM_STYLES[id], lg, SETTINGS, STYLE_MEASURE_GAMES);
+          perLeague[lg] = winRate;
+        }
+        const meanDelta = mean(LEAGUES.map((lg) => 0.5 - perLeague[lg]));
+        deltas[id] = meanDelta;
+        const inBand = Math.abs(meanDelta) <= STYLE_STRENGTH_BAND;
         if (!inBand) anyOut = true;
-        console.log(`  ${id.padEnd(14)} ${(winRate * 100).toFixed(1).padStart(5)}%${inBand ? '' : '  [OUT OF BAND]'}                    ${delta >= 0 ? '+' : ''}${delta.toFixed(4)}`);
+        console.log(`  ${id.padEnd(14)} ` + LEAGUES.map((lg) => (fmtPct(perLeague[lg])).padEnd(11)).join('') + `${inBand ? '' : '[OUT OF BAND] '}${meanDelta >= 0 ? '+' : ''}${meanDelta.toFixed(4)}`);
       }
       console.log('\n  STYLE_STRENGTH_DELTA (paste into settings.js):');
       console.log('  ' + JSON.stringify(deltas, null, 2).split('\n').join('\n  '));
