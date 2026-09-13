@@ -90,6 +90,7 @@ for (let r = 0; r < RUNS; r++) {
   totals.broken += world.broken;
   totals.rescues += world.rescues;
   totals.scores.push(rules.state.score);
+  const candidates = [];
   for (const b of world.balls) {
     if (!b.alive || b.held || b.ribbon) continue;
     if (Math.hypot(b.v.x, b.v.y) >= 0.05) continue;
@@ -103,7 +104,23 @@ for (let r = 0; r < RUNS; r++) {
       if (o.kind === 'drain' || o.kind === 'ribbon' || o.kind === 'sensor' || o.down) continue;
       if (distToShape(o, b.p) < cfg.BALL_R + 0.002) { held = o.id; break; }
     }
-    if (held) totals.stuck.push({ x: Math.round(b.p.x * 1000), y: Math.round(b.p.y * 1000), on: held });
+    if (!held) continue;
+    candidates.push({ b, x: Math.round(b.p.x * 1000), y: Math.round(b.p.y * 1000), on: held });
+  }
+  // A SLOW BALL AT ONE INSTANT IS NOT A STUCK BALL, and the difference is a re-check, not a
+  // judgement. This is a 25-second sample of three balls interacting; one of them will occasionally
+  // be crawling against a post at the exact tick the clock runs out. The first version reported one
+  // of those as a trap at (235, 675) - a ball dropped there at rest with no push at all drains on
+  // its own. So the world is run FORWARD, with no input, and only a ball that is still there is a
+  // trap. Same standard as `restSweep`'s nudge, using the real world state rather than a fresh one.
+  if (candidates.length) {
+    for (let k = 0; k < Math.round(8 / cfg.DT); k++) world.step(cfg.DT);
+    for (const c of candidates) {
+      if (!c.b.alive) continue;
+      if (Math.hypot(c.b.v.x, c.b.v.y) > 0.05) continue;
+      if (Math.abs(c.b.p.x * 1000 - c.x) > 3 || Math.abs(c.b.p.y * 1000 - c.y) > 3) continue;
+      totals.stuck.push(c);
+    }
   }
   totals.drained += world.balls.filter((b) => !b.alive).length;
 }
@@ -123,7 +140,7 @@ ok(totals.endedEarly === 0, `every run reached three balls (${totals.endedEarly}
 ok(totals.countMismatch === 0, `the game's ball count never disagreed with how many were alive (${totals.countMismatch} ticks)`);
 ok(totals.addRescues === 0, `no ball was ADDED inside a collider (${totals.addRescues} rescues on the first tick)`);
 ok(new Set(totals.scores).size > 1, `the runs were not all the same trajectory (${new Set(totals.scores).size} distinct scores)`);
-ok(totals.stuck.length === 0, `nothing was held still at the end of a run (${totals.stuck.length}: `
+ok(totals.stuck.length === 0, `nothing was STILL held still 8 s after a run ended (${totals.stuck.length}: `
   + `${totals.stuck.slice(0, 4).map((p) => `(${p.x},${p.y}) on ${p.on}`).join(' ')})`);
 // A soak is a SAMPLE and this line is the honest caveat, not a footnote: it proves these runs were
 // clean, not that multiball is. `restSweep` and `escapeProbe` are the ones that do not sample.

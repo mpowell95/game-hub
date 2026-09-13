@@ -152,21 +152,39 @@ export function makePierNine() {
   // ---------------------------------------------------------------- orbits
   seg(70, 250, 70, 640, 6, { part: 'guideL' });
   seg(395, 250, 395, 640, 6, { part: 'guideR' });
-  // THE ORBIT GATE IS AT THE TOP RUN, NOT IN THE LANE, for the same reason and a stronger one:
-  // the left orbit lane is vertical for its whole length, so there is nowhere in it to angle a
-  // gate TO - a ball sliding off one only wedges in the corner against the rail or the guide
-  // (measured: 34 balls at y 225). Up here the lane is horizontal, the ball runs left to right
-  // under the top rail, and gravity pulls it DOWN THE TABLE, away from the gate rather than onto
-  // it. Same job: a completed orbit cannot un-complete and the pop nest cannot spit a ball back
-  // round to the left outlane.
-  push({ id: id('g'), kind: 'seg', role: 'gate', a: P(131, 40), b: P(131, 94), r: mm(5),
-         pass: { x: 1, y: 0 }, part: 'orbitGate' });
-  // Both ENDS of it are welded - into the top rail above and into the first P.I.E.R lane post
-  // below - so there is no way round it and, more to the point, no 21 mm slot beside it. An
-  // unwelded end is how a gate stops being a gate.
+  // **THERE IS NO ONE-WAY GATE ON THIS TABLE, AND THAT IS A DELETION, NOT AN OMISSION.**
+  // Rev B put one at the top of the left orbit. In a vertical lane it is a shelf a ball sits on
+  // for ever (34 drops), so it was moved to the top RUN - where it turned out to block the path of
+  // the ball's own plunge. Traced: the plunge left the shooter lane at 4.4 m/s, hit the gate at
+  // (156, 60) 0.25 s later, dropped to 1.88 m/s, and was then machine-gunned between the pop nest
+  // and the P.I.E.R lane posts for SEVEN SECONDS of a nine-second ball. Matt, on the first real
+  // game: *"All I was able to do was press start. I did not have another chance to touch the ball
+  // before the game ended. Didn't flip the flipper once."* Measured on the shipped build: the ball
+  // was first reachable by a flipper at **7.4 s into a 9.3 s ball**.
+  //
+  // Its job - a completed orbit cannot un-complete - is worth a fraction of that, so it is gone.
+  // The engine's one-way gate is still built and still used, at the shooter lane, where the lane
+  // is a dead end and nothing can rest on the flap.
+
   lineSensor(28, 430, 64, 430, { role: 'spinner', part: 'lighthouse', score: 250, cool: 0.05 });
   sensor(48, 660, 15, { role: 'rollover', part: 'orbitL', score: 3000, cool: 1.2 });
   sensor(418, 660, 15, { role: 'rollover', part: 'orbitR', score: 3000, cool: 1.2 });
+
+  // **THE ORBIT RETURNS. Without these, both orbits empty into their own OUTLANE.**
+  //
+  // This is the layout error underneath the one above, and no probe could have caught it: every
+  // probe here asks whether a ball can get STUCK or get OUT, and none of them asks where a ball
+  // that is behaving perfectly ends up. Traced at eight plunge speeds, the route was identical
+  // every time - arc, left orbit, left divider, outlane - because the left orbit lane (x 28..64)
+  // sits directly above the left OUTLANE, and the divider's top at x 72 is inboard of it. A full
+  // orbit, the shot the blueprint scores at 3,000, delivered the ball to the drain.
+  //
+  // A real orbit hands the ball to an INLANE. So each lane now ends in a deflector that carries
+  // the ball up and over the top of its outlane and drops it inboard of the divider. The outlane
+  // is still fed - from the sling side, through the 51 mm mouth between the deflector's inner end
+  // and the divider's top - which is where an outlane is fed on a real machine anyway.
+  seg(28, 690, 96, 760, 6, { part: 'returnL' });
+  seg(437, 690, 369, 760, 6, { part: 'returnR' });
 
   // ---------------------------------------------------------------- the Ferris Wheel
   sensor(232, 470, 23, { role: 'saucer', part: 'wheel', dwell: 1.1,
@@ -213,16 +231,20 @@ export function makePierNine() {
   // real ball is travelling fastest. A post at (196, 786) sat 44 mm below the Coaster's mouth and
   // made every single entry speed report "too slow to get on", because the shot never reached the
   // lane at all.
-  // The two that flank the slings sit 40 mm CLEAR of them rather than welded on top: welded, the
-  // post's cap and the sling's end cap made a V facing up-table and the sweep parked 8 balls in
-  // the pair of them. A post is either welded into a surface a ball can roll along or it is on
-  // its own with more than a ball of room. There is no third option.
+  // TWELVE, not the fourteen rev C asked for, and the two that are missing are the pair that was
+  // meant to flank the slings. Welded on top of the sling ends they made a V facing up-table and
+  // the sweep parked 8 balls in them; moved 40 mm clear they landed under the orbit RETURN added
+  // later, welded to it at 1.7 mm, and a ball rolling down the return stopped dead in the notch
+  // the post made in its surface - measured, for ever. A post is either welded into a surface a
+  // ball can roll ALONG or it is on its own with more than a ball of room, and a post welded into
+  // a surface at an ANGLE is neither: it is a bump, and a bump on a slope is a trap. Two failed
+  // placements is enough; the pair is gone rather than moved a third time.
   // Each of these is WELDED to whatever it caps (its neighbour, a sling's end, a target's end) or
   // is clear of everything by more than a ball. A post that is merely CLOSE to another part makes
   // an upward-facing V, and a V catches balls: the first draft put one 12 mm from each sling's top
   // end and the sweep parked 19 balls in the two notches.
   for (const [x, y] of [[164, 752], [228, 748], [270, 726], [330, 722], [104, 676], [238, 562],
-                        [86, 730], [379, 730], [132, 432], [144, 704], [196, 690], [256, 680]]) {
+                         [132, 432], [144, 704], [196, 690], [256, 680]]) {
     post(x, y, 6, { part: 'post', score: 10 });
   }
   // (206,494) and (258,494) above are the other two - they are posts like these, listed with the
@@ -242,11 +264,11 @@ export function makePierNine() {
     name: 'PIER NINE',
     w: W, h: H, shapes,
     launch: P(470, 960),
-    launchV: { x: 0, y: -5.2 },
-    // 5.2 m/s, not 3. The lane is 34 mm and the ball is 27, so it scrapes both walls the whole way
-    // up and the losses are real: measured, a 3 m/s plunge arrived at the top of the lane with
-    // 0.1 m/s left, against 1.85 m of travel from gravity alone. A plunge has to CLEAR the gate
-    // with speed in hand, not arrive at it exhausted.
+    launchV: { x: 0, y: -3.2 },
+    // 3.2 m/s. It was 5.2 while the shooter gate was wrongly re-solidifying mid-flight and eating
+    // the plunge; with that fixed, 5.2 fires the ball round the top hard enough that it spends
+    // seconds ricocheting up there. Swept 2.2 to 5.2 against one number - how long until the ball
+    // is somewhere a FLIPPER CAN REACH IT - and 3.2 is the flat part of that curve at 1.5 s.
     //
     // The plunger. A ball at rest here has reached no drain and is not a trap - see `parks` in
     // `probes/checks.js`. Both kickers ship DISARMED: `rules.js` arms them, and a kickback left

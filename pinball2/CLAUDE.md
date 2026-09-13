@@ -200,13 +200,69 @@ It found two things on its first run, both in code that had already shipped:
 **A soak is a sample and that is written into the file's own output.** `restSweep` and `escapeProbe`
 are the ones that do not sample; this proves these runs were clean, not that multiball is.
 
+### "Didn't flip the flipper once" - the first real game, and three defects no probe could see
+
+Matt played the shipped build and sent a screen recording. *"All I was able to do was press start.
+I did not have another chance to touch the ball before the game ended. Didn't flip the flipper
+once."* Twenty-two seconds, three balls, and in every frame the ball is up in the top third
+scoring orbits and lanes by itself.
+
+**Every probe in this folder was green.** They ask whether a ball can get STUCK, get OUT, or pass
+THROUGH something. Not one of them asks the only question that mattered here: **can the player
+reach the ball?** Three separate defects, and the measurement that found each:
+
+1. **The ball was unreachable for 7.4 s of a 9.3 s ball.** Traced tick by tick from the plunge: the
+   ball left the shooter lane at 4.4 m/s, hit the top-run **one-way gate** at 0.25 s, dropped to
+   1.88 m/s, and was then fired back and forth between the pop nest and the P.I.E.R lane posts,
+   which sit 45 mm above it, for seven seconds. The gate blocked the path of the ball's own plunge.
+   It is deleted - see the note in `piernine.js`. Once it was gone the pops stopped trapping
+   anything on their own, so the pops were left exactly as they were: the cage was the gate.
+2. **BOTH ORBITS EMPTIED INTO THEIR OWN OUTLANE.** The layout error underneath the first one. The
+   left orbit lane is x 28..64 and the left divider's top is x 72, so a ball coming down the orbit
+   is OUTBOARD of the divider - in the outlane. Swept at eight plunge speeds, the route was
+   identical every time: *arc, left orbit, left divider, outlane, kickback, repeat.* The shot the
+   blueprint scores at 3,000 delivered the ball to the drain. Each lane now ends in a **return
+   deflector** that carries the ball over the top of its outlane and drops it inboard of the
+   divider, which is where a real orbit hands the ball over. The outlane is still fed, through the
+   51 mm mouth between the deflector's inner end and the divider's top, from the sling side.
+3. **A TAP DID NOTHING AT ALL.** Measured in a real browser: an instantaneous tap held the flipper
+   for **0 frames**, a 150 ms press for 5. The press and the release landed in the same animation
+   frame, so `setFlipper(true)` and `setFlipper(false)` both ran before a single `world.step` and
+   the bat never moved. He was tapping, the way anybody taps a pinball button. A real flipper is
+   not a switch either - the button closes a circuit and the coil fires for a fixed pulse - so
+   `game.js` now holds a flip for a minimum of 75 ms. Holding longer still holds the bat up, so
+   cradling is unchanged.
+
+Measured before and after, no input at all:
+
+| | shipped | now |
+|---|---|---|
+| first moment a flipper could reach the ball | **7.4 s** | **1.5 s** |
+| ball time, untouched | 9.3 s | 8.3 s |
+| does tapping change anything | **no - byte-identical score** | yes: 100,260 against 19,410 |
+
+**The lesson, and it is the expensive one in this folder now: every probe here measures the BALL,
+and none of them measured the PLAYER.** A table can have zero traps, zero escapes, zero tunnels and
+zero ambiguous gaps and still be unplayable, and this one was. The two numbers in that table are
+the ones to keep: **time until the ball is first reachable by a flipper**, and **does input change
+the outcome**. Both belong in the phase 8 robot, and until it exists they are checked by hand with
+the scripts this incident was diagnosed with.
+
+**A post welded into a surface AT AN ANGLE is a bump, and a bump on a slope is a trap.** The two
+posts that were meant to flank the slings ended up under the new return deflector, welded to it at
+1.7 mm, and a ball rolling down the return stopped dead in the notch for ever. `checkGaps` passed
+it - 1.7 mm is "shut", which is the answer for a gap and the wrong question for a bump. The pair is
+deleted rather than moved a third time; PIER NINE has 12 posts, not 14.
+
 ### Still not built, and named rather than skipped
 
 - **A gate is not tunnel-checked.** "The ball is inside it" is what a one-way gate WORKING looks like
   and the tunnel probe cannot tell that from a tunnel, so gates are excluded from that one test.
 - **No stats, no hub entry, no leaderboard.** After Matt has judged it, and it must be a NEW stats id.
 - **No robot player, so no make rates and no score spread** - build phase 8, and the reason the
-  acceptance table in the blueprint is still targets rather than claims.
+  acceptance table in the blueprint is still targets rather than claims. It should also carry the
+  two numbers from the incident above, which are the ones that would have caught it.
+- **No one-way gate in play** on the orbit; the kind is built and is used at the shooter lane.
 
 ## Files
 
