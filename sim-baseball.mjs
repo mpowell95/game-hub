@@ -30,6 +30,10 @@ import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher } from './baseball/js/
 import { makeLeague, makePlayerTeam, effectiveCapFor } from './baseball/js/engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './baseball/js/engine/season.js';
 import { hashSeed, mulberry32 } from './baseball/js/engine/rng.js';
+import { flyPitch } from './baseball/js/engine/pitch.js';
+import { swing } from './baseball/js/engine/swing.js';
+import { resolveContact } from './baseball/js/engine/outcomes.js';
+import { zonesFor } from './baseball/js/engine/zones.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +45,7 @@ function arg(name, dflt) {
 }
 const FLAG_QUICK = process.argv.includes('--quick');
 const FLAG_ASSERT = process.argv.includes('--assert');
+const FLAG_CONTACT_GRID = process.argv.includes('--contact-grid');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -79,6 +84,26 @@ const CHAMPION_GAME_WIN_MIN_MEDIAN = 0.40;
 const CAP_BINDS_ONLY = ['little', 'highschool'];
 const CAP_SEASONS_MAX_UPPER = 2.0;
 const NUDGE_MAX_WINRATE_GAP = 0.08;
+// BB-2a step 4: the season A/B (doc §8's "well-timed low-Power beats sloppy high-Power") now needs
+// a MARGIN, not just a sign - a promise that barely holds is not a promise the retune should stop
+// at. Every league must clear this gap, not merely have `nudgeWins === true`.
+const NUDGE_AB_MIN_WINRATE_GAP = 0.10;
+
+// ---------------------------------------------------------------------------------------------
+// BB-2a step 4: `--contact-grid` - an ISOLATED plate-appearance harness (real Game components -
+// a real college CpuPitcher, `swing.js`/`outcomes.js`/`zones.js` exactly as `game.js` calls them -
+// but no full 3-inning game around it) measuring expected bases PER SWING over a timing-sigma x
+// hitPow grid. This is the direct test of the mechanism BB-2a steps 2-3 changed: does a
+// well-timed, low-Power swing actually out-produce a sloppy, high-Power one, with a stated margin,
+// rather than merely "does the season A/B happen to come out the right way once."
+const CONTACT_GRID_SWINGS = Number(arg('contact-grid-swings', 20000));
+const CONTACT_GRID_SIGMAS = [35, 55, 85];   // ms - matches MODEL_TIERS' strong/median/weak timing
+const CONTACT_GRID_HITPOWS = [2, 6, 10];    // hitPow skill points
+const CONTACT_GRID_LEAGUE = 'college';      // "real college CpuPitcher", per the handoff
+const CONTACT_GRID_PLACEMENT_SIGMA = 0.22;  // fixed - matches MODEL_TIERS.median's placement
+const CONTACT_GRID_HIT_ACC = 5;             // fixed hitAcc, per the handoff
+const TIMING_OVER_POWER = 2.0;   // the timing gap at hitPow=2 must be >= this x the power gap at sigma=85
+const CONTACT_AB_MARGIN = 0.05;  // E(sigma=35,hitPow=2) must beat E(sigma=85,hitPow=10) by at least this many bases/swing
 
 // ---------------------------------------------------------------------------------------------
 // Settings override sweep ("--set outZoneMult=0.9,1.0,1.1"), the same trick `--faces` plays in
@@ -307,8 +332,14 @@ async function experimentNudgeAB(league, settings) {
     }
     return rows.filter((r) => r.won).length / rows.length;
   };
-  const sluggerWinRate = await play(sluggerSkills, 'strong', 'slugger-strong');
-  const tableSetterWinRate = await play(tableSetterSkills, 'weak', 'tablesetter-weak');
+  // [KNOWN-BUG PROBE, fixed BB-2a step 4] this call used to read `play(sluggerSkills, 'strong', ...)`
+  // / `play(tableSetterSkills, 'weak', ...)` - the OPPOSITE of both the comment above and the
+  // field names below (`sluggerHighPowerSloppyWinRate`, `tableSetterLowPowerWellTimedWinRate`).
+  // That swap tested "Slugger with GOOD timing and high Power beats Table Setter with BAD timing
+  // and low Power" - a foregone conclusion, not doc §8's actual promise - which is why NUDGE_A_B
+  // failed in every league throughout phase 2 regardless of the contact model underneath it.
+  const sluggerWinRate = await play(sluggerSkills, 'weak', 'slugger-weak');
+  const tableSetterWinRate = await play(tableSetterSkills, 'strong', 'tablesetter-strong');
   return { sluggerHighPowerSloppyWinRate: sluggerWinRate, tableSetterLowPowerWellTimedWinRate: tableSetterWinRate, nudgeWins: tableSetterWinRate > sluggerWinRate };
 }
 
@@ -338,8 +369,125 @@ async function experimentSkillEffect(league, settings) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// BB-2a step 4: the isolated contact-quality grid. One cell = one (timingSigmaMs, hitPow) pair;
+// keeps throwing/deciding until it has CONTACT_GRID_SWINGS actual SWING decisions (a take costs a
+// draw but is not counted - this measures what a swing itself produces, not how often one happens)
+// and reports mean bases per swing (an out is 0 bases).
+async function measureContactCell(sigma, hitPow, settings) {
+  const league = CONTACT_GRID_LEAGUE;
+  const teams = makeLeague(league);
+  const oppTeam = teams[Math.floor(teams.length / 2)];
+  const pitcher = oppTeam.players.find((p) => p.id === oppTeam.pitcherId);
+  const cap = settings.CAPS[league] != null ? settings.CAPS[league] : settings.CAPS.majors;
+  const controlSkill = Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
+  const cpuPitcher = new CpuPitcher({ league, settings });
+  const batter = new ModelBatter({ timingSigmaMs: sigma, placementSigma: CONTACT_GRID_PLACEMENT_SIGMA });
+  const batterSkills = { hitAcc: CONTACT_GRID_HIT_ACC, hitPow, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+  const zones = zonesFor(league, 0);
+  const fenceFt = settings.PARKS.default;
+
+  let draw = 0;
+  let swings = 0;
+  let totalBases = 0;
+  while (swings < CONTACT_GRID_SWINGS) {
+    const seed = hashSeed('bb-contact-grid', sigma, hitPow, draw++) >>> 0;
+    const rand01 = mulberry32(seed);
+    const pitchDecision = await cpuPitcher.decidePitch({ rand01, weakZone: null });
+    const pitchResult = flyPitch(pitchDecision.type, pitchDecision.aim, controlSkill, settings, rand01);
+    const swingDecision = await batter.decideSwing({ pitch: pitchResult, rand01 });
+    if (swingDecision.action !== 'swing') continue; // a take is not a swing - draw again
+    swings += 1;
+    const swingResult = swing(pitchResult, batterSkills, swingDecision, settings, rand01);
+    if (!swingResult.contact || !swingResult.inPlay) continue; // whiff/foul: 0 bases, already counted
+    const outcome = resolveContact(swingResult, zones, settings, fenceFt, batterSkills.hitSpd, rand01);
+    if (outcome.result === 'hit') totalBases += outcome.bases;
+  }
+  return totalBases / CONTACT_GRID_SWINGS;
+}
+
+async function measureContactGrid(settings) {
+  const grid = {};
+  for (const sigma of CONTACT_GRID_SIGMAS) {
+    grid[sigma] = {};
+    for (const hitPow of CONTACT_GRID_HITPOWS) {
+      grid[sigma][hitPow] = await measureContactCell(sigma, hitPow, settings);
+    }
+  }
+  return grid;
+}
+
+function printContactGrid(grid) {
+  console.log(`  E[bases/swing], sigma (ms, rows) x hitPow (cols), ${CONTACT_GRID_SWINGS} swings/cell, league=${CONTACT_GRID_LEAGUE}:`);
+  console.log('  sigma\\hitPow  ' + CONTACT_GRID_HITPOWS.map((hp) => String(hp).padStart(8)).join(''));
+  for (const sigma of CONTACT_GRID_SIGMAS) {
+    console.log(`  ${String(sigma).padEnd(12)} ` + CONTACT_GRID_HITPOWS.map((hp) => grid[sigma][hp].toFixed(4).padStart(8)).join(''));
+  }
+}
+
+/** The four contact-grid assertions (BB-2a step 4). Returns {ok, lines} - `lines` are the
+ *  [PASS]/[FAIL] strings, printed by the caller so both `--contact-grid` alone and the full sweep
+ *  format identically. */
+function assertContactGrid(grid) {
+  const lo = CONTACT_GRID_SIGMAS[0], hi = CONTACT_GRID_SIGMAS[CONTACT_GRID_SIGMAS.length - 1];
+  const pLo = CONTACT_GRID_HITPOWS[0], pHi = CONTACT_GRID_HITPOWS[CONTACT_GRID_HITPOWS.length - 1];
+  const lines = [];
+  let ok = true;
+  const line = (label, pass, measured, threshold) => {
+    if (!pass) ok = false;
+    lines.push(`  [${pass ? 'PASS' : 'FAIL'}] ${label}: measured ${measured}, threshold ${threshold}`);
+  };
+
+  const monotoneSigma = CONTACT_GRID_HITPOWS.every((hp) =>
+    CONTACT_GRID_SIGMAS.every((s, i) => i === 0 || grid[s][hp] <= grid[CONTACT_GRID_SIGMAS[i - 1]][hp] + 1e-9));
+  const sigmaFalls = CONTACT_GRID_HITPOWS.every((hp) => grid[hi][hp] < grid[lo][hp]);
+  line('CONTACT_GRID monotone (E falls as timing sigma rises, every hitPow)', monotoneSigma && sigmaFalls,
+    JSON.stringify(CONTACT_GRID_HITPOWS.map((hp) => CONTACT_GRID_SIGMAS.map((s) => +grid[s][hp].toFixed(3)))), 'non-increasing, strictly falls end to end');
+
+  const monotonePower = CONTACT_GRID_SIGMAS.every((s) =>
+    CONTACT_GRID_HITPOWS.every((hp, i) => i === 0 || grid[s][hp] >= grid[s][CONTACT_GRID_HITPOWS[i - 1]] - 1e-9));
+  const powerRises = CONTACT_GRID_SIGMAS.every((s) => grid[s][pHi] > grid[s][pLo]);
+  line('CONTACT_GRID monotone (E rises with hitPow, every sigma - power is a nudge, never zero)', monotonePower && powerRises,
+    JSON.stringify(CONTACT_GRID_SIGMAS.map((s) => CONTACT_GRID_HITPOWS.map((hp) => +grid[s][hp].toFixed(3)))), 'non-decreasing, strictly rises end to end');
+
+  const timingGapAtLowPower = grid[lo][pLo] - grid[hi][pLo];
+  const powerGapAtHighSigma = grid[hi][pHi] - grid[hi][pLo];
+  line('CONTACT_GRID ratio (timing gap at hitPow=2 vs power gap at sigma=85)',
+    timingGapAtLowPower >= TIMING_OVER_POWER * powerGapAtHighSigma,
+    `timingGap=${timingGapAtLowPower.toFixed(4)}, powerGap=${powerGapAtHighSigma.toFixed(4)}`,
+    `timingGap >= ${TIMING_OVER_POWER} x powerGap`);
+
+  const cross = grid[lo][pLo] - grid[hi][pHi];
+  line('CONTACT_GRID cross (well-timed low-Power beats sloppy high-Power, by a margin)',
+    cross >= CONTACT_AB_MARGIN, cross.toFixed(4), `>= ${CONTACT_AB_MARGIN}`);
+
+  const powerGapAtLowSigma = grid[lo][pHi] - grid[lo][pLo];
+  line('CONTACT_GRID ceiling (power gap at sigma=35 is at most half the timing gap at hitPow=2)',
+    powerGapAtLowSigma <= timingGapAtLowPower * 0.5,
+    `powerGap=${powerGapAtLowSigma.toFixed(4)}, timingGap=${timingGapAtLowPower.toFixed(4)}`,
+    '<= 0.5 x timingGap');
+
+  return { ok, lines };
+}
+
+// ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
+
+  if (FLAG_CONTACT_GRID) {
+    console.log(`sim-baseball.mjs --contact-grid - ${CONTACT_GRID_SWINGS} swings/cell, league=${CONTACT_GRID_LEAGUE}`);
+    const grid = await measureContactGrid(SETTINGS);
+    printContactGrid(grid);
+    const { ok, lines } = assertContactGrid(grid);
+    console.log('\n=== CONTACT GRID SCOREBOARD ===');
+    for (const l of lines) console.log(l);
+    console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    if (FLAG_ASSERT && !ok) {
+      console.log('\nFAIL: one or more contact-grid assertions did not meet their threshold (see above).');
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   console.log(`sim-baseball.mjs - GAMES_N=${GAMES_N} SEASONS_N=${SEASONS_N} leagues=${LEAGUES.join(',')} tiers=${TIERS.join(',')}`);
   console.log('MODEL_TIERS (this tool\'s own assumptions):', JSON.stringify(MODEL_TIERS));
 
@@ -428,8 +576,10 @@ async function main() {
     scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk, 'see per-team table above', 'roughly non-increasing');
   }
 
-  scoreLine('NUDGE_A_B (well-timed low-Power beats sloppy high-Power)',
-    LEAGUES.every((lg) => ab[lg].nudgeWins), JSON.stringify(LEAGUES.map((lg) => ab[lg].nudgeWins)), 'true in every league');
+  const nudgeGaps = LEAGUES.map((lg) => ab[lg].tableSetterLowPowerWellTimedWinRate - ab[lg].sluggerHighPowerSloppyWinRate);
+  scoreLine('NUDGE_A_B (well-timed low-Power beats sloppy high-Power, by a margin)',
+    nudgeGaps.every((g) => g >= NUDGE_AB_MIN_WINRATE_GAP),
+    JSON.stringify(nudgeGaps.map((g) => +g.toFixed(3))), `>= ${NUDGE_AB_MIN_WINRATE_GAP} in every league`);
 
   const bindingLeagues = LEAGUES.filter((lg) => CAP_BINDS_ONLY.includes(lg));
   const nonBindingLeagues = LEAGUES.filter((lg) => !CAP_BINDS_ONLY.includes(lg));
