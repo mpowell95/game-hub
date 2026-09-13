@@ -297,8 +297,13 @@ export class World {
     this.cfg = cfg;
     this.balls = [];
     this.flippers = table.shapes.filter((s) => s.kind === 'flipper').map((s) => new Flipper(s));
-    this.statics = table.shapes.filter((s) => s.kind === 'seg' || s.kind === 'arc' || s.kind === 'circle'
-      || s.kind === 'bumper' || s.kind === 'sling');
+    // SENSORS ARE NOT COLLIDERS and gates are not ordinary ones. Both are held apart from
+    // `statics` on purpose: a sensor the penetration net could see would eject a ball out of a
+    // scoop, and a gate the net could see would eject a ball halfway through it. See rebuild().
+    this.sensors = table.shapes.filter((s) => s.kind === 'sensor');
+    this.gates = table.shapes.filter((s) => s.kind === 'seg' && s.role === 'gate');
+    this.statics = [];
+    this.rebuild();
     this.fired = new Map();        // shape id -> world time it last kicked, for the cooldown
     this.ribbons = new Map();      // shape id -> precomputed geometry
     for (const sh of table.shapes) if (sh.kind === 'ribbon') this.ribbons.set(sh.id, ribbonGeom(sh));
@@ -311,9 +316,38 @@ export class World {
     this.time = 0;
   }
 
+  /** The solid set, recomputed. A DROP TARGET that is down is not a collider - it is not
+   *  "a wall you can pass through", it is not there at all - and the whole reason this is a
+   *  method rather than a line in the constructor is that a bank resetting must put the target
+   *  back only when nothing is standing where it will reappear. `resetBank` checks that. */
+  rebuild() {
+    this.statics = this.table.shapes.filter((s) => (s.kind === 'seg' || s.kind === 'arc'
+      || s.kind === 'circle' || s.kind === 'bumper' || s.kind === 'sling')
+      && s.role !== 'gate' && !s.down);
+  }
+
+  /** Drop or raise one target. Raising is REFUSED while a ball is standing where the target would
+   *  come back, because materialising geometry under a ball is the position write this engine does
+   *  not do. It returns whether it happened, so a bank reset can try again next tick. */
+  setDown(id, down) {
+    const sh = this.table.shapes.find((x) => x.id === id);
+    if (!sh || !!sh.down === !!down) return true;
+    if (!down) {
+      const was = sh.down; sh.down = false;
+      for (const b of this.balls) {
+        if (!b.alive || b.ribbon || b.held) continue;
+        if (staticPenetration(sh, b.p, this.cfg.BALL_R)) { sh.down = was; return false; }
+      }
+    } else {
+      sh.down = true;
+    }
+    this.rebuild();
+    return true;
+  }
+
   addBall(p, v) {
     const b = { p: { x: p.x, y: p.y }, v: { x: (v && v.x) || 0, y: (v && v.y) || 0 }, spin: 0, alive: true, resting: false, cradling: false, touched: new Map(),
-      ribbon: null, s: 0, q: 0, vs: 0, vq: 0, z: 0 };
+      ribbon: null, s: 0, q: 0, vs: 0, vq: 0, z: 0, held: null };
     this.balls.push(b);
     return b;
   }
@@ -354,6 +388,24 @@ export class World {
 
     for (const b of this.balls) {
       if (!b.alive) continue;
+
+      // A CAPTURED ball. A scoop holds it, and then throws it. It is not moved while held and it
+      // is not moved when released: it leaves from exactly where it rolled in, with a velocity.
+      // A real cup would settle it to the bottom, and that settling is the one thing here that
+      // would be a position write, so it is not done - `pinball2/CLAUDE.md`, "The scoop holds the
+      // ball where it stopped".
+      if (b.held) {
+        if (this.time + h >= b.held.until) {
+          const sh = this.table.shapes.find((x) => x.id === b.held.id);
+          b.v = sh && sh.eject ? { x: sh.eject.x, y: sh.eject.y } : { x: 0, y: -1 };
+          this.fired.set(b.held.id, this.time);
+          this.events.push({ type: 'eject', id: b.held.id, at: { x: b.p.x, y: b.p.y } });
+          b.held = null;
+        } else {
+          b.v = { x: 0, y: 0 };
+          continue;
+        }
+      }
 
       // A ball on a ramp is not in the playfield solver at all, which is why it passes over
       // everything down there. It is on exactly one surface at any moment: the floor, or one ribbon.
@@ -464,6 +516,9 @@ export class World {
 
       this.enterRibbon(b, p0);
       if (b.ribbon) continue;
+
+      this.checkSensors(b, p0);
+      if (b.held) continue;
 
       this.checkDrain(b);
     }
@@ -644,7 +699,73 @@ export class World {
       const r = shapeImpact(s, b.p, b.v, br, tmax);
       if (r && (!best || r.t < best.t)) best = r;
     }
+    // A ONE-WAY GATE is the only genuinely new collision behaviour on this table, and it is one
+    // line: a seg that is simply not there for a ball travelling the way it is allowed to go.
+    // It is tested HERE and nowhere else on purpose. The penetration net cannot see it (a ball
+    // halfway through would be ejected sideways) and neither can `isFree`, which is why gates are
+    // kept out of `statics` rather than filtered inside these loops.
+    for (const s of this.gates) {
+      // TWO tests, and the second one's THRESHOLD is the whole thing. A gate is absent for a ball
+      // that is heading the allowed way and is not yet CLEAR OF THE FAR FACE - not merely one that
+      // has not yet crossed the centreline. Written as "behind the line" it re-solidified under a
+      // ball whose centre was past the line but whose body was still in the band, and it stopped
+      // the plunge dead: measured, a 5.2 m/s plunge arrived at the gate doing 5.08, was hit by it
+      // at 3.24 m/s, and the first ball of the first real game never reached the playfield.
+      //
+      // The velocity test alone is very nearly enough - every way a resting ball can slide on a
+      // gate has a component INTO it, so `dot(v, pass)` is already <= 0 - and the position test is
+      // the belt to that brace.
+      if (dot(b.v, s.pass) > 0 && dot(sub(b.p, s.a), s.pass) < s.r + br) continue;
+      const r = shapeImpact(s, b.p, b.v, br, tmax);
+      if (r && (!best || r.t < best.t)) best = r;
+    }
     return best;
+  }
+
+  /** SENSORS: everything on this table that scores without being in the ball's way.
+   *
+   *  A rollover, a spinner, a bullseye, a scoop and a kickback are all the same object here - a
+   *  region the ball's CENTRE passes through - and none of them is a collider. That is the whole
+   *  reason the scoring parts cost the solver almost nothing: `distToShape` never sees them,
+   *  `checkGaps` never sees them, and no probe has to learn a new kind.
+   *
+   *  A crossing is tested against the segment the ball actually travelled this micro step, never
+   *  against where it happens to be standing. A ball at 8 m/s covers 33mm in a tick and would step
+   *  clean over a 28mm rollover - which is exactly the bug `enterRibbon` records as "a window, not
+   *  a crossing". */
+  checkSensors(b, p0) {
+    for (const sh of this.sensors) {
+      const last = this.fired.get(sh.id);
+      if (last != null && this.time - last < (sh.cool != null ? sh.cool : 0.35)) continue;
+
+      if (sh.role === 'spinner') {
+        if (!segCross(p0, b.p, sh.a, sh.b)) continue;
+        this.fired.set(sh.id, this.time);
+        this.events.push({ type: 'spin', id: sh.id, speed: len(b.v), at: { x: b.p.x, y: b.p.y } });
+        continue;
+      }
+
+      if (!segNearPoint(p0, b.p, sh.c, sh.r)) continue;
+
+      if (sh.role === 'saucer') {
+        // The ball stops where it rolled in. Nothing is placed anywhere.
+        b.v = { x: 0, y: 0 };
+        b.held = { id: sh.id, until: this.time + (sh.dwell != null ? sh.dwell : 0.9) };
+        this.fired.set(sh.id, this.time);
+        this.events.push({ type: 'capture', id: sh.id, at: { x: b.p.x, y: b.p.y } });
+        return;
+      }
+      if (sh.role === 'kicker') {
+        if (!sh.armed) continue;             // spent, or never lit. No cooldown burned either
+        b.v = { x: sh.eject.x, y: sh.eject.y };
+        this.fired.set(sh.id, this.time);
+        this.events.push({ type: 'kick', id: sh.id, at: { x: b.p.x, y: b.p.y } });
+        continue;
+      }
+      this.fired.set(sh.id, this.time);
+      this.events.push({ type: 'sensor', id: sh.id, role: sh.role, at: { x: b.p.x, y: b.p.y } });
+    }
+    if (this.events.length > 64) this.events.splice(0, this.events.length - 64);
   }
 
   /** The only place a velocity changes for a physical reason. */
@@ -754,7 +875,29 @@ export class World {
   }
 }
 
-export const _geom = { toiPointSeg, toiPointCircleOut, toiPointCircleIn, taperedParts, shapeImpact };
+/** Did the travelled segment p0->p1 cross the sensor line a-b? Proper segment intersection, so a
+ *  ball that leapt the whole spinner in one step still counts it. */
+function segCross(p0, p1, a, b) {
+  const s1 = sub(p1, p0);
+  const s2 = sub(b, a);
+  const den = s1.x * s2.y - s2.x * s1.y;
+  if (Math.abs(den) < 1e-12) return false;
+  const d = sub(a, p0);
+  const t = (d.x * s2.y - s2.x * d.y) / den;
+  const u = (d.x * s1.y - s1.x * d.y) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/** Did the travelled segment come within `r` of `c`? The closest approach, not the endpoints: a
+ *  fast ball can enter and leave a rollover inside one micro step. */
+function segNearPoint(p0, p1, c, r) {
+  const d = sub(p1, p0);
+  const L2 = dot(d, d);
+  const u = L2 < EPS ? 0 : Math.max(0, Math.min(1, dot(sub(c, p0), d) / L2));
+  return len(sub(c, add(p0, mul(d, u)))) <= r;
+}
+
+export const _geom = { toiPointSeg, toiPointCircleOut, toiPointCircleIn, taperedParts, shapeImpact, segCross, segNearPoint };
 
 // ==================================================================== RAMPS, AS RIBBONS
 //

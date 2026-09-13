@@ -7,10 +7,11 @@
 
 import { makeTable } from '../machines/testbox/table.js';
 import { makeBoardwalk } from '../machines/testbox/tables/boardwalk.js';
+import { makePierNine } from '../machines/testbox/tables/piernine.js';
 import { CONFIG } from '../machines/testbox/config.js';
 import { drainTime, tunnelProbe, restSweep, checkGaps, flipProbe, escapeProbe, flipPower, rampProbe } from './checks.js';
 
-const TABLES = { default: makeTable, boardwalk: makeBoardwalk };
+const TABLES = { default: makeTable, boardwalk: makeBoardwalk, piernine: makePierNine };
 
 const args = process.argv.slice(2);
 const ti = args.indexOf('--table');
