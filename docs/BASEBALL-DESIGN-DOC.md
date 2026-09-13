@@ -1,6 +1,6 @@
 # Baseball: Game Design Doc
 
-Game Hub (`mpowell95/game-hub`). Version 8 draft, September 12, 2026. Revised after Fable architecture review.
+Game Hub (`mpowell95/game-hub`). Version 9 draft, September 12, 2026. Revised after Fable architecture review.
 
 This doc says how the game works. It is not a coding or implementation guide. Look, layout, and UI details belong in the Design Spec (next step).
 
@@ -162,7 +162,21 @@ Major League	1	0	1	2	3
 
 ## 8. Difficulty and CPU
 
-- **[Locked]** Difficulty comes mostly from smarter CPU behavior, not bigger CPU stats.
+- **[Locked]** Difficulty comes mostly from smarter CPU behavior, not bigger CPU stats. CPU batters never time or place better than a median human, in any league or any slot. Difficulty comes from pitching behavior, chase, pattern reading and the field.
+- **[Locked]** Target regular-season win rate for a median player, and the seasons to Gold that follow from it. Little League is near-total dominance; the Majors is a real grind. This replaces a flat "Gold in about two seasons everywhere".
+
+```
+League	Win rate	Seasons to Gold
+Little League	92 to 98%	about 1
+High School	70 to 80%	about 1.5
+College	57 to 67%	about 2
+Minor League	49 to 59%	about 3
+Major League	41 to 51%	about 4.5
+```
+
+A full career is roughly 12 seasons and 170 games.
+- **[Locked]** Within a league, the weakest opponent is beaten at 85% or better and the champion sits between 40 and 55%. The sequence never rises as you go up the ladder.
+- **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
 - **[Locked]** Within a league, the 8 teams are ordered weakest to strongest, and the schedule puts harder opponents later in the season. The championship opponent is the toughest team in the league.
 - **[Locked]** Rosters are fixed. The same team always has the same players. CPU stats do not track or react to your stats.
