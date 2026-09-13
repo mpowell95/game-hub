@@ -368,6 +368,13 @@ export function rampProbe(table, cfg, opts) {
       if (turn > 20) fails.push({ ramp: sh.id, why: `a ${turn.toFixed(0)} degree kink at s = ${geom.segs[i].s0.toFixed(3)}, over the 20 degree limit` });
     }
 
+    // ONE RAMP AT A TIME. On a table with a DIVERTER two ribbons share a mouth and only one is
+    // armed in play, so a probe that leaves both armed fires at one mouth and measures whichever
+    // ribbon happens to come first in the shape list - it would test the same ramp twice and
+    // report the other as "too slow to get on". The probe's question is whether THIS ramp works.
+    const wasArmed = table.shapes.filter((s2) => s2.kind === 'ribbon').map((s2) => [s2, s2.armed]);
+    for (const [s2] of wasArmed) s2.armed = s2 === sh;
+
     // Fire at the mouth, from just outside it, straight up the lane.
     const at = ribbonAt(geom, 0);
     const speeds = (opts && opts.speeds) || [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0];
@@ -396,6 +403,7 @@ export function rampProbe(table, cfg, opts) {
       }
       const ridingSpeed = b.ribbon ? Math.abs(b.vs) : 0;
       runs.push({ ramp: sh.id, speed: sp, got, exitEnd, maxJump, stillOn: !!b.ribbon, riding: ridingSpeed, alive: b.alive, escapes: w.escapes, broken: w.broken });
+      for (const [s2, a] of wasArmed) s2.armed = a;   // put the table back exactly as it was
       if (maxJump > 0.001) fails.push({ ramp: sh.id, speed: sp, why: `position jumped ${(maxJump * 1000).toFixed(1)}mm further than it travelled` });
       if (w.escapes) fails.push({ ramp: sh.id, speed: sp, why: 'left the machine' });
       if (w.broken) fails.push({ ramp: sh.id, speed: sp, why: 'its numbers stopped being numbers' });
@@ -576,6 +584,7 @@ export function* restSweepGen(table, cfg, opts) {
   const inPark = (p) => parks.some((k) => p.x >= k.x && p.x <= k.x + k.w && p.y >= k.y && p.y <= k.y + k.h);
   const stuck = [];
   const alive = [];
+  let heldAtEnd = 0;
   let drops = 0;
   // WHERE THE BALLS GO IS WORKED OUT FIRST, and it is cheap: a mask lookup and a clearance test per
   // cell, with no simulation. Doing it up front is what makes the progress bar honest - the count
@@ -616,6 +625,14 @@ export function* restSweepGen(table, cfg, opts) {
         // dead stops, those were two coordinates on BOARDWALK that a re-drop from the same spot
         // rolled straight out of - a probe crying wolf is a probe whose FAIL line stops being read.
         const held = on || b.ribbon;
+        // A BALL IN A SCOOP IS NOT A TRAP, IT IS THE SCOOP. It is stationary, it is touching
+        // nothing, and it has reached no drain, which is three of this probe's four tests for a
+        // dead stop - PIER NINE's Ferris Wheel caught one drop in 1,767 exactly six seconds in and
+        // it was reported as a trap. The hold is unconditional in `physics.js`: it ends after the
+        // saucer's own `dwell` whatever the game does, so a ball held here is mid-eject, not lost.
+        // Counted rather than silently dropped, because a saucer that never let go WOULD be a trap
+        // and the number is the only place that would show.
+        if (b.held) { heldAtEnd++; continue; }
         if (speed < 0.05 && held && !inPark(b.p)) stuck.push(rec); else alive.push(rec);
       }
     }
@@ -641,7 +658,7 @@ export function* restSweepGen(table, cfg, opts) {
     }
     if (freed === 2) edges.push(st); else real.push(st);
   }
-  return { drops, stuck: real, edges, alive };
+  return { drops, stuck: real, edges, alive, heldAtEnd };
 }
 
 /** Drop a ball at rest on a grid over the playfield. Did every one of them reach the drain? */

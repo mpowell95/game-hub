@@ -180,6 +180,22 @@ export function draw(ctx, table, v, state) {
       ctx.fillStyle = state === 'cold' ? '#e0532f' : col; ctx.fill();
       continue;
     }
+    if (sh.role === 'diverter') {
+      // THE FLAP PHYSICALLY SWINGS, which is the strongest kind of state there is: you can see
+      // where the ramp will feed BEFORE you shoot it, without reading a word (the art file's
+      // "state as geometry rather than as light").
+      const piv = toScreen(v, sh.a);
+      const tip = toScreen(v, sh.on ? sh.alt : sh.b);
+      ctx.beginPath(); ctx.moveTo(piv.x, piv.y); ctx.lineTo(tip.x, tip.y);
+      ctx.strokeStyle = '#35d0c0'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
+      const gh = toScreen(v, sh.on ? sh.b : sh.alt);
+      ctx.beginPath(); ctx.moveTo(piv.x, piv.y); ctx.lineTo(gh.x, gh.y);
+      ctx.strokeStyle = 'rgba(53,208,192,0.30)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(piv.x, piv.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#cfdae8'; ctx.fill();
+      continue;
+    }
     if (sh.role === 'kicker') {
       ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.85, 0, Math.PI * 2);
       ctx.strokeStyle = sh.armed ? '#35d0c0' : '#3d4a5c';
@@ -305,6 +321,12 @@ export function draw(ctx, table, v, state) {
     // sleepers between two rails, and a real wireform is mostly air, which is the point: you can
     // see the playfield through it. A ramp opts in with `look: 'wire'`; the editor's own solid lane
     // is still the default, because when you are EDITING a ramp you want to see its whole footprint.
+    // A DISARMED LANE IS DRAWN COLD. On a table with a diverter two ramps share a mouth and only
+    // one of them is where the ball will actually go, and drawing both at full strength hides the
+    // one thing the diverter exists to tell you BEFORE you shoot: where this shot feeds. The flap
+    // swinging says it too; this says it along the whole length of the lane.
+    const dim = sh.armed === false;
+    ctx.globalAlpha = dim ? 0.22 : 1;
     if (sh.look === 'wire') {
       const off = (d) => (p) => {
         const q = lift(p, p.z);
@@ -327,8 +349,13 @@ export function draw(ctx, table, v, state) {
         const A = off(-1)(p); const B = off(1)(p);
         ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
       }
-      ctx.strokeStyle = tie; ctx.lineWidth = Math.max(1, wpx * 0.10); ctx.globalAlpha = 0.55; ctx.stroke();
-      ctx.globalAlpha = 1;
+      // MULTIPLY the tie's own translucency by the lane's, never overwrite it: setting alpha back
+      // to 1 here is what made a disarmed lane draw at full strength for one build, so both Coaster
+      // paths looked live at once and the diverter told the player nothing.
+      const A = ctx.globalAlpha;
+      ctx.strokeStyle = tie; ctx.lineWidth = Math.max(1, wpx * 0.10); ctx.globalAlpha = A * 0.55;
+      ctx.stroke();
+      ctx.globalAlpha = A;
       line(off(-1), Math.max(1.6, wpx * 0.10), rail);
       line(off(1), Math.max(1.6, wpx * 0.10), rail);
     } else {
@@ -342,6 +369,7 @@ export function draw(ctx, table, v, state) {
       ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(3, wpx * 0.22), 0, Math.PI * 2);
       ctx.fillStyle = '#7fd8ff'; ctx.fill();
     }
+    ctx.globalAlpha = 1;
   }
 
   const angles = st.flipperAngles || {};

@@ -44,6 +44,7 @@ const BOATHOUSE_SECS = 8;
 const HURRY_SECS = 15;
 
 export function createRules(world, table) {
+  const cfg2 = world.cfg;
   const byId = new Map(table.shapes.map((s) => [s.id, s]));
   const parts = (name) => table.shapes.filter((s) => s.part === name);
   const one = (name) => parts(name)[0];
@@ -53,6 +54,9 @@ export function createRules(world, table) {
   const wheel = one('wheel');
   const fortune = one('fortune');
   const lanes = parts('lane');
+  const coaster = one('coaster');
+  const feed = one('coasterFeed');
+  const flap = one('diverter');
 
   const R = {
     score: 0, ball: 1, ballsTotal: BALLS_PER_GAME, over: false,
@@ -62,6 +66,7 @@ export function createRules(world, table) {
     locks: 0, multiball: 0,
     mode: null, modesReady: 0, modesPlayed: [],
     combo: 0, comboUntil: 0,
+    divert: 'inlane',                 // 'inlane' | 'wheel' - which Coaster path is armed
     mystery: 0,                       // the Ticket Booth's 3-position prize wheel
     mysteryReady: false,
     hurry: null,
@@ -103,6 +108,22 @@ export function createRules(world, table) {
     return v;
   }
 
+  /** THE DIVERTER. One physical shot, two destinations, and the choice is game state rather than
+   *  aim - which is the whole reason the blueprint calls it the highest-value single addition: the
+   *  Coaster is the EASIEST shot on the table and this makes it the most context-dependent one.
+   *
+   *  Rev B listed three positions. Rev C moved mode-start to the Fortune Teller ("locks live at the
+   *  wheel, modes start at the scoop"), so two of them became the same thing and there are two
+   *  physical routes here, not three. That is the rev C rule working, not a piece left out. */
+  function setDiverter() {
+    const wantWheel = R.started && R.multiball <= 1 && R.locks < 3
+      && (R.locks > 0 || R.modesReady > 0 || R.mysteryReady);
+    R.divert = wantWheel ? 'wheel' : 'inlane';
+    if (coaster) coaster.armed = !wantWheel;
+    if (feed) feed.armed = wantWheel;
+    if (flap) flap.on = wantWheel;
+  }
+
   // ---------------------------------------------------------------- serving
   function serve() {
     R.started = true;
@@ -112,6 +133,7 @@ export function createRules(world, table) {
     if (ballsave) ballsave.armed = true;
     if (kickback) kickback.armed = true;
     R.multiball = 1;
+    setDiverter();
     return b;
   }
 
@@ -140,16 +162,35 @@ export function createRules(world, table) {
     if (R.multiball > 1) { award(BASE.jackpot, 'JACKPOT', { part: 'wheel' }); return; }
     R.locks = Math.min(3, R.locks + 1);
     award(BASE.lock[R.locks - 1], `LOCK ${R.locks}`, { part: 'wheel' });
-    if (R.locks === 3) {
-      R.locks = 0;
-      say('MULTIBALL', 0);
-      // Two more balls, both from the wheel, and the third is the one already in it.
-      for (let i = 0; i < 2; i++) {
-        world.addBall({ x: wheel.c.x + (i ? 0.02 : -0.02), y: wheel.c.y + 0.03 },
-                      { x: (i ? 0.5 : -0.5), y: 1.6 });
-      }
-      R.multiball = 3;
+    if (R.locks === 3) startMultiball();
+  }
+
+  /** THE SAME CODE PATH THE THIRD LOCK TAKES, named so the soak can reach it. A soak that sets up
+   *  multiball its own way is a soak of its own setup code. */
+  function startMultiball() {
+    R.locks = 0;
+    say('MULTIBALL', 0);
+    // Two more balls, both from the wheel, and the third is the one already in it.
+    //
+    // **THE SPOT IS ASKED FOR, NOT ASSUMED.** The first version put them at the wheel's centre
+    // plus 20 mm, which is inside the two posts that gate the saucer - the soak counted 2 rescues
+    // per multiball, meaning the engine was finding a ball inside a collider and pushing it out on
+    // its very first tick. Adding a ball IS a position write, the only one this engine makes on
+    // purpose, and the least it can do is land somewhere legal. `world.isFree` is the same test
+    // the solver's own rescue uses, so the answer cannot disagree with it.
+    const spots = [[-0.022, 0.046], [0.022, 0.046], [-0.040, 0.074], [0.040, 0.074],
+                   [0, 0.086], [-0.062, 0.052], [0.062, 0.052]];
+    let placed = 0;
+    for (const [dx, dy] of spots) {
+      if (placed >= 2) break;
+      const p = { x: wheel.c.x + dx, y: wheel.c.y + dy };
+      if (!world.isFree(p)) continue;
+      if (world.balls.some((o) => o.alive && Math.hypot(o.p.x - p.x, o.p.y - p.y) < cfg2.BALL_R * 2.2)) continue;
+      world.addBall(p, { x: dx > 0 ? 0.6 : -0.6, y: 1.5 });
+      placed++;
     }
+    R.multiball = 3;
+    setDiverter();
   }
 
   function atFortune() {
@@ -301,8 +342,12 @@ export function createRules(world, table) {
     const sh = byId.get(ev.id);
     if (!sh || !fresh(sh.id, 0.5)) return;
     R.bonus.ramps++;
-    if (sh.part === 'coaster') award(BASE.coaster, 'COASTER', { major: true, part: 'coaster' });
-    else award(BASE.pier, 'THE PIER', { major: true, part: 'pier' });
+    // BOTH Coaster paths pay the Coaster. It is one shot with one difficulty; where the ball is
+    // sent afterwards is the diverter's business and is already worth something else entirely.
+    if (sh.part === 'coaster' || sh.part === 'coasterFeed') {
+      award(BASE.coaster, sh.part === 'coasterFeed' ? 'COASTER > WHEEL' : 'COASTER',
+            { major: true, part: 'coaster' });
+    } else award(BASE.pier, 'THE PIER', { major: true, part: 'pier' });
   }
 
   function onDrain() {
@@ -323,6 +368,7 @@ export function createRules(world, table) {
     lanes.forEach((sh, i) => { L[sh.id] = R.lanesLit[i] ? 'hot' : 'cold'; });
     if (wheel) L[wheel.id] = R.locks > 0 ? 'hot' : 'cold';
     if (fortune) L[fortune.id] = (R.modesReady > 0 || R.mysteryReady || R.hurry) ? 'hot' : 'cold';
+    if (flap) L[flap.id] = R.divert === 'wheel' ? 'hot' : 'cold';
     for (const sh of table.shapes) {
       if (sh.kind !== 'sensor' || L[sh.id]) continue;
       L[sh.id] = R.mode && (R.mode.lit.includes('*') || R.mode.lit.includes(sh.part)) ? 'mode' : 'cold';
@@ -353,6 +399,7 @@ export function createRules(world, table) {
         else R.hurry.value = BASE.hurryUp * (left / HURRY_SECS);
       }
       if (now() > R.comboUntil) R.combo = 0;
+      setDiverter();
       if (ballsave && now() > R.saveUntil) ballsave.armed = false;
       // The bank reset RETRIES. `world.setDown` refuses to raise a target under a ball, which is
       // the one thing a bank reset must never do, so it is asked again next frame until it takes.
@@ -383,6 +430,7 @@ export function createRules(world, table) {
       R.lanesLit = out;
       R.laneCursor = (R.laneCursor + 1) % n;
     },
+    startMultiball,
     BASE, MODES,
   };
 }

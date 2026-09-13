@@ -230,7 +230,12 @@ export function makePierNine() {
 
   // ---------------------------------------------------------------- ramps
   lineSensor(177, 746, 215, 738, { role: 'spinner', part: 'coasterSpin', score: 250, cool: 0.05 });
+  // THE DIVERTER FLAP (H). It is drawn, it swings, and it is not a collider - see the note over
+  // COASTER_FEED for why the routing is done at the mouth and what that costs.
+  push({ id: id('x'), kind: 'sensor', role: 'diverter', part: 'diverter',
+         c: P(196, 480), r: mm(1), a: P(178, 462), b: P(214, 470), alt: P(206, 444) });
   shapes.push(buildRampMM(id('r'), COASTER, { zmax: 62, w: 46, part: 'coaster', rail: '#e0532f', tie: '#e8dcc0' }));
+  shapes.push(buildRampMM(id('r'), COASTER_FEED, { zmax: 58, w: 46, part: 'coasterFeed', rail: '#e0532f', tie: '#e8dcc0' }));
   shapes.push(buildRampMM(id('r'), PIER_RAMP, { zmax: 55, w: 44, part: 'pier', rail: '#35d0c0', tie: '#8fa6bb' }));
 
   return {
@@ -264,6 +269,26 @@ const COASTER = [
   ...loopMM(100, 330, 46, 360, 180),
   [58, 372], [74, 406], [100, 438], [126, 470], [142, 508], [150, 558], [150, 622], [148, 692], [146, 762],
   [142, 792], [140, 816], [138, 834],
+];
+
+// **THE COASTER'S SECOND PATH - the wheel feed, which is the diverter.**
+//
+// A `ribbon` is ONE path: a ball on one is simulated along it and across it, and there is no point
+// part-way down where it can be handed to a different lane without teleporting it, which is the
+// thing this whole engine exists not to do. So a diverter here is TWO ribbons sharing a mouth with
+// exactly one armed, and `enterRibbon` skips a ribbon whose `armed` is false. The flap at the crest
+// is drawn swinging between the two and is decor - it is the PICTURE of which lane is live, not the
+// thing that deflects the ball. What that costs, stated plainly: a ball does not bounce off the
+// flap, and the route is decided at the mouth rather than at the crest. Where the ball ENDS UP is
+// the real thing, and that is genuinely different between the two paths.
+//
+// This one climbs the same first 350 mm as the Coaster, then turns right across the top instead of
+// looping left, and drops the ball straight down into the Ferris Wheel - so with a lock available
+// the easiest shot on the table feeds the lock, and with none it returns to the left inlane.
+const COASTER_FEED = [
+  [196, 742], [198, 672], [194, 600], [186, 528], [176, 462], [166, 404], [158, 364],
+  ...loopMM(200, 340, 44, 180, 360),
+  [242, 376], [236, 404], [232, 436],
 ];
 
 // THE PIER. The calm shot beside the Coaster's noise: up the right, a tighter loop, down outboard
