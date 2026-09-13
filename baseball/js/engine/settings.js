@@ -532,9 +532,18 @@ export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
 // never exceed 7 wins, which structurally seeds the player low relative to what a 9-3 record
 // "should" mean on a 12-game slate. 'scaledTo12' scripts each CPU rank r's win total as
 // `round(12 * r / 7)` instead (0, 2, 3, 5, 7, 9, 10, 12 for ranks 0..7) - directly comparable to the
-// player's own 12-game record, "like for like" per the handoff. Default per the handoff's own
-// instruction, pending commit 4's measured proposal.
-export const STANDINGS_MODEL = 'scaledTo12'; // Draft [Open item 13]
+// player's own 12-game record, "like for like" per the handoff.
+//
+// BB-2b commit 4: measured with `--stages` on the commit-3 engine and REVERSED from commit 2's
+// initial guess of `scaledTo12`. Scaling every CPU rank onto a 12-game scale means the STRONGEST
+// few qualifiers now finish 9-3/10-2/12-0 - records a median-skill player essentially cannot beat -
+// and top-4 odds collapsed at every league (college 40.7% -> 0.3%, highschool 91.7% -> 35.7%,
+// minors 38.0% -> 0.7%, majors 39.7% -> 1.3%, measured at SEASONS_N=300). "Like for like" reads as
+// fairer in the abstract but is measurably WORSE for every one of the doc's own Gold targets, for
+// the same reason the original diagnosis named: Gold's bottleneck is compound probability against
+// teams that are already close to a maximum record, and inflating that maximum by scaling makes it
+// worse, not better. `rawWins7` is the default again.
+export const STANDINGS_MODEL = 'rawWins7'; // Draft [Open item 13], BB-2b commit 4
 
 // ---------------------------------------------------------------------------------------------
 // BB-2b commit 3: engine mechanisms the doc requires that phase 2/2a still lacked.

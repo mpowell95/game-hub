@@ -4,7 +4,50 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
-## Status: Phase 2a — contact quality, team flavor, and the retune
+## Status: Phase 2b — why Gold is far away, then the fix
+
+BB-2b (2026-09-13) diagnosed why BB-2a's own promise scoreboard still failed Gold at
+College/Minors/Majors, fixed the simulator's own measuring defects, built four engine mechanisms
+the doc requires that phase 2/2a still lacked (out-zone gaps and bloopers, the real per-league
+fence, pitch speed actually reaching the batter, and the CPU ladder moved onto the timing/chase
+axis instead of skill points alone), and retuned from a fixed base. Full report at the end of this
+milestone (commit 6); this section is BB-2b commit 4's own proposal block, written the moment the
+three Open item 13 settings were decided from measured numbers - see `sim-baseball.mjs --stages`.
+
+### The stage eating the seasons (commit 1's decomposition, before any fix)
+
+The handoff's own diagnosis named three causes: the player seeded low and fed the strongest CPU
+team TWICE (semifinal, then the hardcoded final), both playoff games forced player-home while the
+regular season alternates, and CPU batting strength pinned to a timing sigma no lever actually
+reached. Measured with `--stages` (SEASONS_N=300, median tier, pre-fix engine): the bracket/home
+mechanisms move Gold odds by only a few points at every league (e.g. college 20.3% -> 19.7% under
+`strongestInFinal`, minors 1.3% -> 1.7%) - **the dominant bottleneck is the REGULAR SEASON win rate
+itself** at College/Minors/Majors (top-4 odds 79.7%/29.3%/0.3%), because a median-tier player's
+per-game win rate against an average opponent was only ~30% at Minors and ~10% at Majors before any
+mechanism fix - confirming the handoff's own third cause (CPU timing sigma) as the one that
+mattered most.
+
+### Open item 13, decided (commit 4, measured on the commit-3 engine)
+
+| Setting | Options measured | Decision | Why |
+|---|---|---|---|
+| `BRACKET_MODEL` | `asCoded` (positional 1v4/2v3) vs `strongestInFinal` (player's semifinal excludes the top qualifier) | **`strongestInFinal`** | The bracket doc §8's own wording implies; measured effect is small and mixed (little +2.3pp gold, majors +0.3pp from 0, highschool -1.3pp, college/minors unchanged) - kept for doc consistency, not because the numbers demanded it |
+| `PLAYOFF_HOME` | `player` (forced, shipped) vs `higherSeed` vs `alternate` | **`higherSeed`** | Consistently helps where it matters (little +8.0pp gold, highschool +5.3pp, college +0.3pp from 0%); needs no invented tie-break of its own - the standings already say who is "better" |
+| `STANDINGS_MODEL` | `rawWins7` (shipped, CPU caps at 7 wins) vs `scaledTo12` (CPU ranks scripted onto a 12-game scale, 0-2-3-5-7-9-10-12) | **`rawWins7`** (REVERSED from commit 2's initial guess) | `scaledTo12` reads fairer in the abstract but is measurably catastrophic: top-4 odds collapsed at every league (college 40.7% -> 0.3%, highschool 91.7% -> 35.7%, minors 38.0% -> 0.7%, majors 39.7% -> 1.3%) because it inflates the top few CPU qualifiers to near-perfect 12-game records (9-3 through 12-0) that a median player essentially cannot beat |
+
+Schedule shape (also doc §4/§13 Open item 13, bundled with standings tie-breakers in the doc's own
+wording) was measured too but is **not** changed in code: `season.js`'s own `OPPONENT_ORDER`
+comment records that its exact current shape - every opponent once, then the top four (the
+strongest half) a SECOND time, late - was **already confirmed by Matt**, not merely Draft-invented.
+Measured anyway, because commit 1 was asked to: repeating the WEAKEST four early instead
+(`repeatBottom`) measured a large, consistent improvement at every league (college top-4 40.7% ->
+80.3%, gold 0% -> 0.3%; minors top-4 38.0% -> 70.7%; majors top-4 39.7% -> 78.0%, gold 0% -> 0.7%;
+little/highschool gold also rise) without touching `POINTS`/`SEASON` at all - the single largest
+lever this tool found, bigger than the retune below. **Flagged as a recommendation for Matt to
+reopen, not applied**, since changing an already-confirmed shape is exactly the kind of decision
+this tool does not get to make on its own.
+
+
 
 BB-2a (2026-09-12, same day as BB-2) fixed the three mechanisms diagnosed in BB-2's own report as
 the reason "well-timed low-Power beats sloppy high-Power" (doc §8, [Locked]) failed in every
