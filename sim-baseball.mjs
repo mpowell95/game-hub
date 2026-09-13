@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import * as SETTINGS from './baseball/js/engine/settings.js';
 import { Game } from './baseball/js/engine/game.js';
 import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher } from './baseball/js/engine/agents.js';
-import { makeLeague, makePlayerTeam, effectiveCapFor } from './baseball/js/engine/teams.js';
+import { makeLeague, makePlayerTeam, effectiveCapFor, teamStrength, POSITIONS } from './baseball/js/engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './baseball/js/engine/season.js';
 import { hashSeed, mulberry32 } from './baseball/js/engine/rng.js';
 import { flyPitch } from './baseball/js/engine/pitch.js';
@@ -46,6 +46,8 @@ function arg(name, dflt) {
 const FLAG_QUICK = process.argv.includes('--quick');
 const FLAG_ASSERT = process.argv.includes('--assert');
 const FLAG_CONTACT_GRID = process.argv.includes('--contact-grid');
+const FLAG_STYLES = process.argv.includes('--styles');
+const FLAG_STYLES_TUNE = process.argv.includes('--tune');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -106,6 +108,101 @@ const TIMING_OVER_POWER = 2.0;   // the timing gap at hitPow=2 must be >= this x
 const CONTACT_AB_MARGIN = 0.05;  // E(sigma=35,hitPow=2) must beat E(sigma=85,hitPow=10) by at least this many bases/swing
 
 // ---------------------------------------------------------------------------------------------
+// BB-2a step 5: `--styles` - flavor apart from strength. Every TEAM_STYLES vector should be
+// roughly as STRONG as `balanced` (the doc names the 8 styles but gives no numbers at all, and
+// phase 2 found the within-league ordering noisy team to team - a sluggers-style CPU reliably the
+// hardest opponent regardless of its schedule slot). This measures each style's CPU-vs-CPU win
+// rate against a `balanced` team at the same league/level, real Game, real CpuPitcher/CpuBatter on
+// both sides - style is the only thing that differs between the two rosters.
+const STYLE_STRENGTH_BAND = 0.04;      // a style's win rate vs balanced must land within 0.5 +/- this
+const STYLE_MEASURE_LEAGUE = arg('styles-league', 'college');
+const STYLE_MEASURE_GAMES = Number(arg('styles-games', 3000));
+// The tuner's only knob: compress (s<1) or expand (s>1) a style's weight vector toward/away from
+// the flat (all-1s) vector, preserving its RELATIVE shape (which skills it favors) while changing
+// how far it deviates from `balanced` - a spiky vector loses more to allocateSkills' integer clamp
+// at the cap than a flat one, which is exactly the mechanism that made high-variance styles
+// (Sluggers, Aces) measure stronger or weaker than their "same mean weight" would suggest.
+const STYLE_COMPRESS_CANDIDATES = [1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05, 0];
+
+function compressStyle(style, s) {
+  const out = {};
+  for (const id of SETTINGS.SKILL_IDS) out[id] = 1 + ((style[id] != null ? style[id] : 1) - 1) * s;
+  return out;
+}
+
+/** Build one CPU-vs-CPU measurement team directly from a candidate style VECTOR, bypassing
+ *  teams.js's own `TEAM_STYLES` lookup (which reads settings.js by import, not by parameter) so a
+ *  candidate vector can be measured without editing settings.js first - same allocation math as
+ *  `teams.js`'s own (private) `allocateSkills`/`buildRoster`, duplicated here deliberately rather
+ *  than exported, since this is a MEASUREMENT tool's own candidate, never a real generated team. */
+function buildCandidateTeam(league, name, styleVector, seed) {
+  const rand01 = mulberry32(seed >>> 0);
+  const effectiveCap = effectiveCapFor(league);
+  const capInt = Math.floor(effectiveCap);
+  const meanWeight = SETTINGS.SKILL_IDS.reduce((s, id) => s + (styleVector[id] != null ? styleVector[id] : 1), 0) / SETTINGS.SKILL_IDS.length;
+  const players = [];
+  for (let i = 0; i < 9; i++) {
+    const skills = {};
+    for (const id of SETTINGS.SKILL_IDS) {
+      const w = (styleVector[id] != null ? styleVector[id] : 1) / meanWeight;
+      const raw = effectiveCap * 0.5 * w * (0.7 + rand01() * 0.6);
+      skills[id] = Math.max(0, Math.min(capInt, Math.round(raw)));
+    }
+    const bats = rand01() < SETTINGS.LEFTY_RATE ? 'L' : 'R';
+    players.push({ id: `p${i}`, jersey: 1 + Math.floor(rand01() * 99), pos: POSITIONS[i] || POSITIONS[POSITIONS.length - 1], bats, throws: bats, skills });
+  }
+  return { name, league, styleId: name, players, battingOrder: players.map((p) => p.id), pitcherId: players[0].id };
+}
+
+/** CPU-vs-CPU: `styleVector` against `settings.TEAM_STYLES.balanced`, alternating home/away,
+ *  both sides played by the league's own real CpuPitcher/CpuBatter. Returns the style's win rate. */
+async function measureStyleWinRate(styleId, styleVector, league, settings, games) {
+  let wins = 0;
+  for (let i = 0; i < games; i++) {
+    const home = i % 2 === 0;
+    const teamStyle = buildCandidateTeam(league, styleId, styleVector, hashSeed('bb-style-team', league, styleId, i));
+    const teamBalanced = buildCandidateTeam(league, 'balanced-ref', settings.TEAM_STYLES.balanced, hashSeed('bb-style-balanced', league, styleId, i));
+    const agentStyle = mkCpuAgent(teamStyle, league, settings);
+    const agentBalanced = mkCpuAgent(teamBalanced, league, settings);
+    const seed = hashSeed('bb-style-game', league, styleId, i) >>> 0;
+    const g = new Game({
+      home: home ? teamStyle : teamBalanced,
+      away: home ? teamBalanced : teamStyle,
+      seed,
+      agents: { home: home ? agentStyle : agentBalanced, away: home ? agentBalanced : agentStyle },
+      settings,
+    });
+    await g.playGame();
+    const won = home ? g.winner === 'home' : g.winner === 'away';
+    if (won) wins += 1;
+  }
+  return wins / games;
+}
+
+/** For one style, try every STYLE_COMPRESS_CANDIDATES factor (largest first) and keep the LARGEST
+ *  s (the most flavor preserved) whose measured win rate lands inside STYLE_STRENGTH_BAND; only if
+ *  none does, fall back to whichever measured closest to 0.5. A simple, deterministic search - no
+ *  gradient, no randomness beyond the seeded games themselves - appropriate for a small, discrete
+ *  candidate set measured once each. Compressing all the way to s=0 (identical to `balanced`)
+ *  is a valid answer for a style whose doc-intended flavor is a BEHAVIOR, not a skill weighting
+ *  (Patient/Shifters, per settings.js's `styleBehavior` - BB-2a step 5), but is a last resort for
+ *  every other style, which should keep as much of its named emphasis as the band allows. */
+async function tuneStyle(styleId, league, settings, games) {
+  const base = settings.TEAM_STYLES[styleId];
+  const candidates = STYLE_COMPRESS_CANDIDATES.slice().sort((a, b) => b - a); // largest s first
+  let bestInBand = null;
+  let bestOverall = null;
+  for (const s of candidates) {
+    const vector = compressStyle(base, s);
+    const winRate = await measureStyleWinRate(styleId, vector, league, settings, games);
+    const dist = Math.abs(winRate - 0.5);
+    if (!bestOverall || dist < bestOverall.dist) bestOverall = { s, vector, winRate, dist };
+    if (dist <= STYLE_STRENGTH_BAND && !bestInBand) bestInBand = { s, vector, winRate, dist };
+  }
+  return bestInBand || bestOverall;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Settings override sweep ("--set outZoneMult=0.9,1.0,1.1"), the same trick `--faces` plays in
 // `tune-boggle-es.mjs`: measure a candidate value without editing settings.js. Applies to every
 // league's FIELD.outZoneMult (the only override this tool wires up; extend here if another knob
@@ -131,7 +228,7 @@ function mkCpuAgent(team, league, settings) {
     decidePitch: (v) => new CpuPitcher({ league, settings }).decidePitch(v),
     decideSwing: (v) => {
       const batter = team.players.find((p) => p.id === v.batterId) || team.players[0];
-      return new CpuBatter({ league, skills: batter.skills, settings }).decideSwing(v);
+      return new CpuBatter({ league, skills: batter.skills, settings, styleId: team.styleId }).decideSwing(v);
     },
   };
 }
@@ -472,6 +569,36 @@ function assertContactGrid(grid) {
 // ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
+
+  if (FLAG_STYLES) {
+    const league = STYLE_MEASURE_LEAGUE;
+    console.log(`sim-baseball.mjs --styles${FLAG_STYLES_TUNE ? ' --tune' : ''} - league=${league}, games=${STYLE_MEASURE_GAMES}, band=${STYLE_STRENGTH_BAND}`);
+    const styleIds = Object.keys(SETTINGS.TEAM_STYLES).filter((id) => id !== 'balanced');
+    let anyOut = false;
+    if (FLAG_STYLES_TUNE) {
+      console.log('\n  style          best-s   winRate  vector');
+      const results = {};
+      for (const id of styleIds) {
+        const best = await tuneStyle(id, league, SETTINGS, STYLE_MEASURE_GAMES);
+        results[id] = best;
+        const inBand = best.dist <= STYLE_STRENGTH_BAND;
+        if (!inBand) anyOut = true;
+        console.log(`  ${id.padEnd(14)} ${best.s.toFixed(2).padStart(6)}   ${(best.winRate * 100).toFixed(1).padStart(5)}%  ${inBand ? '' : '[OUT OF BAND] '}${JSON.stringify(best.vector)}`);
+      }
+      console.log(`\n${anyOut ? 'Some styles remain outside the +/-' + STYLE_STRENGTH_BAND + ' band even at the search bounds - widen STYLE_COMPRESS_CANDIDATES.' : 'Every style lands within the band.'}`);
+    } else {
+      console.log('\n  style          winRate (vs balanced)');
+      for (const id of styleIds) {
+        const winRate = await measureStyleWinRate(id, SETTINGS.TEAM_STYLES[id], league, SETTINGS, STYLE_MEASURE_GAMES);
+        const inBand = Math.abs(winRate - 0.5) <= STYLE_STRENGTH_BAND;
+        if (!inBand) anyOut = true;
+        console.log(`  ${id.padEnd(14)} ${(winRate * 100).toFixed(1).padStart(5)}%${inBand ? '' : '  [OUT OF BAND]'}`);
+      }
+    }
+    console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    if (FLAG_ASSERT && anyOut) process.exitCode = 1;
+    return;
+  }
 
   if (FLAG_CONTACT_GRID) {
     console.log(`sim-baseball.mjs --contact-grid - ${CONTACT_GRID_SWINGS} swings/cell, league=${CONTACT_GRID_LEAGUE}`);

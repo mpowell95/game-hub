@@ -15,7 +15,7 @@
 // recently-weak zone; `CpuBatter` reads `view.pitchHistory` (now `{type, x}` per entry) through
 // `patternWeight` to shift its timing (repeated SPEED) and its aim (repeated LOCATION).
 
-import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, unlockedPitchesFor } from './settings.js';
+import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitchesFor } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
 
@@ -71,16 +71,23 @@ export class CpuPitcher {
  *  used scales by league." Sees the already-thrown pitch on `view.pitch`, same as a human agent
  *  would. */
 export class CpuBatter {
-  constructor({ league, skills, settings }) {
+  /** @param {string} [styleId] - BB-2a step 5: the batting TEAM's own style, so a `chaseMul`
+   *  behavior (settings.js's STYLE_BEHAVIOR - "Patient" lays off bad pitches more than its
+   *  league's own baseline) can apply without a whole extra league tier. Optional: a team with no
+   *  style (e.g. a test fixture) simply gets no behavior multiplier. */
+  constructor({ league, skills, settings, styleId }) {
     this.league = league;
     this.skills = skills;
     this.settings = settings;
+    this.styleId = styleId;
   }
   async decideSwing(view) {
     const cpu = this.settings.CPU[this.league] || CPU.college;
     const pitch = view.pitch;
 
-    const swingChance = pitch.isStrike ? cpu.swingIn : cpu.chase;
+    const behavior = (this.settings.STYLE_BEHAVIOR || STYLE_BEHAVIOR)[this.styleId];
+    const chaseMul = (behavior && behavior.chaseMul != null) ? behavior.chaseMul : 1;
+    const swingChance = pitch.isStrike ? cpu.swingIn : cpu.chase * chaseMul;
     if (view.rand01() >= swingChance) return { action: 'take' };
 
     const patternWeight = cpu.patternWeight || 0;

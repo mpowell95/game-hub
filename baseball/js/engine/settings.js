@@ -337,20 +337,65 @@ export const PARKS = {                      // Draft [Open item 7]
 // Junkballers, Shifters, Balanced, Aces - [Locked] as names). The doc names the styles but never
 // gives their skill-weight numbers, so the weights below are still invented - Draft [Open item 25]
 // (a new item; the doc's own numbered open-items list stops at 15 and never reaches this one).
-export const TEAM_STYLES = {                          // Draft [Open item 25]
-  sluggers:     { hitAcc: 0.7, hitPow: 1.8, hitSpd: 0.6, pitchSpd: 1.0, pitchAcc: 0.9, pitchSpin: 0.9 },
-  smallBall:    { hitAcc: 1.3, hitPow: 0.5, hitSpd: 1.6, pitchSpd: 0.9, pitchAcc: 1.0, pitchSpin: 0.9 },
-  patient:      { hitAcc: 1.6, hitPow: 0.9, hitSpd: 0.9, pitchSpd: 0.9, pitchAcc: 1.0, pitchSpin: 0.9 },
-  flamethrowers:{ hitAcc: 0.9, hitPow: 0.9, hitSpd: 0.9, pitchSpd: 1.8, pitchAcc: 0.8, pitchSpin: 0.7 },
-  junkballers:  { hitAcc: 0.9, hitPow: 0.8, hitSpd: 0.9, pitchSpd: 0.6, pitchAcc: 1.0, pitchSpin: 1.8 },
-  shifters:     { hitAcc: 1.0, hitPow: 1.0, hitSpd: 1.0, pitchSpd: 1.0, pitchAcc: 1.2, pitchSpin: 1.0 },
-  balanced:     { hitAcc: 1.0, hitPow: 1.0, hitSpd: 1.0, pitchSpd: 1.0, pitchAcc: 1.0, pitchSpin: 1.0 },
-  aces:         { hitAcc: 0.9, hitPow: 0.9, hitSpd: 0.8, pitchSpd: 1.4, pitchAcc: 1.5, pitchSpin: 1.1 },
+//
+// BB-2a step 5 (2026-09-12): these are FLAVOR vectors now, not strength - measured and retuned by
+// `sim-baseball.mjs --styles --tune` (CPU-vs-CPU, real Game, real CpuPitcher/CpuBatter on both
+// sides, each style against `balanced` at the same league) so every style's win rate lands within
+// STYLE_STRENGTH_BAND of 0.50 at the SAME effectiveCap. Phase 2's "the within-league ordering is
+// noisy team to team - a sluggers-style CPU is reliably the hardest opponent" traced here: a
+// spiky weight vector loses more to `allocateSkills`' integer clamp at the cap than a flat one, so
+// two styles with the same MEAN weight (already normalized by `allocateSkills`) were not actually
+// the same overall strength. The tuner compresses/expands each vector toward/away from all-1s by a
+// single factor `s` (preserving its relative shape - which skills it favors) and keeps the largest
+// `s` that still lands in-band, so a style keeps as much of its named emphasis as the measured
+// numbers allow. `patient` and `shifters` compress hardest (s=0.5 and s=1.0-ish beyond only
+// pitchAcc) because their doc-given identity is a BEHAVIOR, not a skill shape - see
+// STYLE_BEHAVIOR below, which is where the rest of their flavor actually lives.
+// Measured: sluggers 53.3%, smallBall 46.8%, patient 53.8%, flamethrowers 46.4%, junkballers
+// 46.0%, shifters 51.3%, aces 46.3% (college, 3000 games each) - every style within +/-4pp of 50%.
+export const TEAM_STYLES = {                          // Draft [Open item 25], measured 2026-09-12
+  sluggers:      { hitAcc: 0.61, hitPow: 2.04, hitSpd: 0.48, pitchSpd: 1.00, pitchAcc: 0.87, pitchSpin: 0.87 },
+  smallBall:     { hitAcc: 1.39, hitPow: 0.35, hitSpd: 1.78, pitchSpd: 0.87, pitchAcc: 1.00, pitchSpin: 0.87 },
+  patient:       { hitAcc: 1.30, hitPow: 0.95, hitSpd: 0.95, pitchSpd: 0.95, pitchAcc: 1.00, pitchSpin: 0.95 },
+  flamethrowers: { hitAcc: 0.92, hitPow: 0.92, hitSpd: 0.92, pitchSpd: 1.64, pitchAcc: 0.84, pitchSpin: 0.76 },
+  junkballers:   { hitAcc: 0.91, hitPow: 0.82, hitSpd: 0.91, pitchSpd: 0.64, pitchAcc: 1.00, pitchSpin: 1.72 },
+  shifters:      { hitAcc: 1.00, hitPow: 1.00, hitSpd: 1.00, pitchSpd: 1.00, pitchAcc: 1.26, pitchSpin: 1.00 },
+  balanced:      { hitAcc: 1.00, hitPow: 1.00, hitSpd: 1.00, pitchSpd: 1.00, pitchAcc: 1.00, pitchSpin: 1.00 },
+  aces:          { hitAcc: 0.93, hitPow: 0.93, hitSpd: 0.86, pitchSpd: 1.28, pitchAcc: 1.35, pitchSpin: 1.07 },
 };
 // "Shifters" also names a BEHAVIOR the doc locks - "some teams shift their out zones toward where
-// you tend to hit" (doc §9) - not a skill weighting at all, and not modeled this phase (there is
-// no per-team out-zone adjustment mechanic yet). Flagged rather than silently dropped.
-export const SHIFTERS_ADJUST_OUT_ZONES = true; // [Locked] doc §9 - not yet consumed by outcomes.js
+// you tend to hit" (doc §9). Consumed by game.js's `_shiftDegFor` via STYLE_BEHAVIOR.shift below
+// (BB-2a step 5 - previously a hardcoded `styleId === 'shifters'` string check in game.js itself).
+export const SHIFTERS_ADJUST_OUT_ZONES = true; // [Locked] doc §9
+
+// BB-2a step 5 (2026-09-12): Patient and Shifters are BEHAVIORS the doc names (doc §9's "some
+// teams shift their out zones"; doc §8's own CPU-batter chase-rate mechanic, applied here as one
+// team's personality rather than a whole league's), not skill shapes - their TEAM_STYLES vectors
+// above are compressed nearly to `balanced` on purpose, because their actual identity lives here.
+// Draft, new. `chaseMul` multiplies a CpuBatter's own league `chase` rate (agents.js); `shift`
+// enables the out-zone rotation `_shiftDegFor` already computed per batter spray history.
+export const STYLE_BEHAVIOR = {
+  patient: { chaseMul: 0.55 }, // lays off bad pitches noticeably more than its league's own baseline
+  shifters: { shift: true },
+};
+
+// BB-2a step 5 (2026-09-12): STRENGTH now comes from here, not from TEAM_STYLES or a post-hoc sort.
+// Eight per-slot skill-point OFFSETS around `effectiveCapFor(league)`, weakest (slot 0) to
+// strongest (slot 7) - `makeLeague` applies one per slot and orders teams BY SLOT, never by a
+// measured `teamStrength()`. Draft, new - an even spread with a slightly steeper final two slots,
+// so the top of the ladder (the semifinal/championship teams, doc §8: "the championship opponent
+// is always the toughest team in the league") is more clearly separated from the pack than the
+// slots below it. Clamped against the league's own CAPS in `effectiveCapFor`'s own style (never
+// above the raw league cap, per doc §8) inside `teams.js`'s `makeLeague`.
+export const TEAM_LADDER_OFFSETS = [-6, -4, -3, -2, -1, 0, 2, 4];
+
+// BB-2a step 5 (2026-09-12): which style sits in which ladder slot, per league. Draft, new,
+// PROPOSED - for Matt to confirm or edit (the handoff's own words). One order, reused across every
+// league (a league's DIFFICULTY comes from `effectiveCapFor`/TEAM_LADDER_OFFSETS scaling with the
+// league, not from which flavor is toughest) - weakest to strongest: Balanced, Small Ball, Patient,
+// Junkballers, Shifters, Flamethrowers, Sluggers, Aces (the champion in every league).
+const LADDER_STYLE_ORDER = ['balanced', 'smallBall', 'patient', 'junkballers', 'shifters', 'flamethrowers', 'sluggers', 'aces'];
+export const LEAGUE_LADDER_STYLES = Object.fromEntries(LEAGUES.map((lg) => [lg, LADDER_STYLE_ORDER.slice()]));
 
 // Per league, the relative weight of each style being picked for a generated team (weights, not
 // probabilities - pickWeighted normalizes). Doc doesn't give this distribution either - Draft
@@ -432,6 +477,7 @@ export default {
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
   FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
-  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, TEAM_STYLE_WEIGHTS, LEFTY_RATE,
+  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
+  TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
 };

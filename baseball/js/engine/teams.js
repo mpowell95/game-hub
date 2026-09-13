@@ -16,7 +16,8 @@
 // strongest (§8, [Locked]). `RULES_V` 2 -> 3 for this shape change.
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
-import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL } from './settings.js';
+import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES } from './settings.js';
 
 // doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
 // slot 0 always the starting pitcher (unchanged from phase 1).
@@ -52,11 +53,13 @@ function allocateSkills(effectiveCap, style, rand01) {
 }
 
 /** Shared by `makeTeam` and `makeLeague`: build one full roster (9 players, jersey+position, a
- *  batting order) from an already-resolved styleId and an already-seeded `rand01`. */
-function buildRoster(league, styleId, rand01, opts) {
+ *  batting order) from an already-resolved styleId and an already-seeded `rand01`. `effectiveCap`
+ *  is explicit (BB-2a step 5) rather than always re-derived from `effectiveCapFor(league)` - a
+ *  `makeLeague` slot's own ladder-offset cap differs from the league's single "expected level"
+ *  number `makeTeam` still uses for an ungraded team. */
+function buildRoster(league, styleId, rand01, opts, effectiveCap) {
   const size = opts.size || 9;
   const style = TEAM_STYLES[styleId];
-  const effectiveCap = effectiveCapFor(league);
 
   const players = [];
   for (let i = 0; i < size; i++) {
@@ -103,22 +106,31 @@ export function makeTeam(league, index, opts = {}) {
     const styleIds = Object.keys(styleWeights);
     styleId = pickWeighted(rand01, styleIds, styleIds.map((id) => styleWeights[id]));
   }
-  return buildRoster(league, styleId, rand01, opts);
+  return buildRoster(league, styleId, rand01, opts, effectiveCapFor(league));
 }
 
 /** doc §9, [Locked]: 8 teams per league, each with a DISTINCT style, "the same players every
  *  time." Every league offers exactly the eight named `TEAM_STYLES`, one team each, ordered
  *  weakest to strongest (doc §8, [Locked]: "the 8 teams are ordered weakest to strongest, and the
- *  schedule puts harder opponents later"). Fixed forever per (league, styleId) - never per
- *  position in the array - so a later change to the style list's iteration order cannot silently
- *  reseed every team in the league. */
+ *  schedule puts harder opponents later").
+ *
+ *  BB-2a step 5: strength now comes from `TEAM_LADDER_OFFSETS` (eight per-slot skill-point
+ *  offsets around `effectiveCapFor(league)`) applied by SLOT, never from a post-hoc sort by
+ *  measured `teamStrength()` - a style's own flavor (TEAM_STYLES) no longer has to double as its
+ *  strength, so the tuner (`sim-baseball.mjs --styles --tune`) can bring every style's win rate
+ *  close to `balanced` without fighting the ladder order. `LEAGUE_LADDER_STYLES[league]` says
+ *  which style occupies which slot; slot order IS the returned array order. Fixed forever per
+ *  (league, styleId) seed - never per position in the array - so editing the ladder-style TABLE
+ *  cannot silently reseed a team that keeps the same style. */
 export function makeLeague(league) {
-  const styleIds = Object.keys(TEAM_STYLES);
-  const teams = styleIds.map((styleId) => {
+  const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
+  const baseCap = effectiveCapFor(league);
+  const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
+  const teams = order.map((styleId, slot) => {
     const seed = hashSeed('bb-league', league, styleId);
-    return buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` });
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap + (TEAM_LADDER_OFFSETS[slot] || 0)));
+    return buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
   });
-  teams.sort((a, b) => teamStrength(a).overall - teamStrength(b).overall);
   return teams;
 }
 

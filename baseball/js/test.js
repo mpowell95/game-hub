@@ -34,7 +34,7 @@ function mkAgent(team, league) {
     decidePitch: (v) => new CpuPitcher({ league, settings: SETTINGS }).decidePitch(v),
     decideSwing: (v) => {
       const batter = team.players.find((p) => p.id === v.batterId) || team.players[0];
-      return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS }).decideSwing(v);
+      return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS, styleId: team.styleId }).decideSwing(v);
     },
   };
 }
@@ -437,7 +437,7 @@ console.log('\n-- 8. teams.js --');
 }
 
 // ---------------------------------------------------------------------------------------------
-console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3) --');
+console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3; BB-2a step 5: ladder by slot) --');
 {
   for (const lg of SETTINGS.LEAGUES) {
     const league = makeLeague(lg);
@@ -445,18 +445,27 @@ console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3) --');
     const styleIds = league.map((t) => t.styleId);
     ok(new Set(styleIds).size === 8, `makeLeague('${lg}') gives every team a DISTINCT style`);
     ok(styleIds.every((id) => !!SETTINGS.TEAM_STYLES[id]), `makeLeague('${lg}') only uses the doc's 8 named styles`);
-    const strengths = league.map((t) => teamStrength(t).overall);
-    ok(strengths.every((s, i) => i === 0 || s >= strengths[i - 1]),
-      `makeLeague('${lg}') is sorted weakest to strongest (doc §8, [Locked])`);
+    ok(JSON.stringify(styleIds) === JSON.stringify(SETTINGS.LEAGUE_LADDER_STYLES[lg]),
+      `makeLeague('${lg}') orders teams by LEAGUE_LADDER_STYLES's own slot order (BB-2a step 5), never by measured teamStrength`);
     const league2 = makeLeague(lg);
     ok(JSON.stringify(league) === JSON.stringify(league2), `makeLeague('${lg}') is byte-identical run to run`);
   }
-  // "the same league at a higher league is stronger at the same style index" (doc §8, [Locked]:
-  // "each league's teams are generated at that league's expected player level").
-  const littleLeague = makeLeague('little').sort((a, b) => a.styleId.localeCompare(b.styleId));
-  const majorsLeague = makeLeague('majors').sort((a, b) => a.styleId.localeCompare(b.styleId));
-  ok(littleLeague.every((t, i) => teamStrength(majorsLeague[i]).overall >= teamStrength(t).overall),
-    'the same style is generated stronger in Majors than in Little League');
+  // BB-2a step 5: strength comes from TEAM_LADDER_OFFSETS by SLOT, not from a style's own flavor.
+  ok(SETTINGS.TEAM_LADDER_OFFSETS.length === 8, 'TEAM_LADDER_OFFSETS names exactly 8 slots');
+  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((v, i) => i === 0 || v > SETTINGS.TEAM_LADDER_OFFSETS[i - 1]),
+    'TEAM_LADDER_OFFSETS is strictly rising, weakest slot to strongest (BB-2a step 5)');
+  for (const lg of SETTINGS.LEAGUES) {
+    ok(new Set(SETTINGS.LEAGUE_LADDER_STYLES[lg]).size === 8, `LEAGUE_LADDER_STYLES.${lg} names every style exactly once`);
+    ok(SETTINGS.LEAGUE_LADDER_STYLES[lg].every((id) => !!SETTINGS.TEAM_STYLES[id]), `LEAGUE_LADDER_STYLES.${lg} only names real styles`);
+  }
+  // "the same style is generated stronger in Majors than in Little League" still holds, since
+  // effectiveCapFor(league) (the base every slot's offset is applied around) rises by league.
+  const littleLeague = makeLeague('little');
+  const majorsLeague = makeLeague('majors');
+  for (let slot = 0; slot < 8; slot++) {
+    ok(teamStrength(majorsLeague[slot]).overall >= teamStrength(littleLeague[slot]).overall,
+      `slot ${slot}'s team (${majorsLeague[slot].styleId}) is generated at least as strong in Majors as in Little League`);
+  }
 
   const skills = { hitAcc: 6, hitPow: 6, hitSpd: 6, pitchSpd: 6, pitchAcc: 6, pitchSpin: 6 };
   const pt = makePlayerTeam({ skills, hand: 'L' });
@@ -579,6 +588,36 @@ console.log('\n-- 9. the agent seam --');
     ok(SETTINGS.unlockedPitchesFor('majors').includes(d.type), 'ModelPitcher only ever offers an unlocked pitch for its league');
     ok(typeof d.aim === 'number', 'ModelPitcher aims with a single lateral number');
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 9a2. STYLE_BEHAVIOR: Patient chases less, Shifters rotate their out-zones (BB-2a step 5) --');
+{
+  ok(SETTINGS.STYLE_BEHAVIOR.patient.chaseMul < 1, 'a Patient batter\'s chaseMul is below 1 (doc §9/§8: lays off bad pitches more)');
+  ok(SETTINGS.STYLE_BEHAVIOR.shifters.shift === true, 'Shifters carry the shift behavior flag (doc §9, [Locked])');
+  ok(SETTINGS.TEAM_STYLES.balanced.hitAcc === 1 && Object.values(SETTINGS.TEAM_STYLES.balanced).every((v) => v === 1),
+    'balanced stays the flat all-1s reference vector every style is measured against');
+
+  // A Patient batter chases a ball outside the zone less often than the same league's ordinary
+  // rate, same rand01 draw - direct, deterministic comparison of the chaseMul wiring.
+  const league = 'college';
+  const skills = { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 5, pitchAcc: 5, pitchSpin: 5 };
+  const ballPitch = { x: 1.5, isStrike: false }; // outside the zone - only 'chase' governs a swing
+  const patientBatter = new CpuBatter({ league, skills, settings: SETTINGS, styleId: 'patient' });
+  const ordinaryBatter = new CpuBatter({ league, skills, settings: SETTINGS, styleId: 'balanced' });
+  const chaseRoll = SETTINGS.CPU[league].chase - 0.001; // just under the league's own chase rate
+  const dPatient = await patientBatter.decideSwing({ rand01: () => chaseRoll, pitch: ballPitch, pitchHistory: [] });
+  const dOrdinary = await ordinaryBatter.decideSwing({ rand01: () => chaseRoll, pitch: ballPitch, pitchHistory: [] });
+  ok(dOrdinary.action === 'swing', 'a roll just under the league\'s own chase rate swings for an ordinary-style batter');
+  ok(dPatient.action === 'take', 'the identical roll is a take for a Patient batter (chaseMul lowers the effective rate below the roll)');
+
+  // Shifters: `_shiftDegFor` reads STYLE_BEHAVIOR.shift, not a hardcoded style-id string.
+  const g = playGameOnce(league, hashSeed('shift-behavior-probe'));
+  const shiftersTeam = { styleId: 'shifters' };
+  const balancedTeam = { styleId: 'balanced' };
+  g.sprayHistory['batterX'] = [10, 12, 8];
+  ok(g._shiftDegFor(shiftersTeam, 'batterX') !== 0, 'a Shifters defense rotates its out-zones toward the batter\'s own spray tendency');
+  ok(g._shiftDegFor(balancedTeam, 'batterX') === 0, 'a non-Shifters defense never rotates its out-zones');
 }
 
 // ---------------------------------------------------------------------------------------------

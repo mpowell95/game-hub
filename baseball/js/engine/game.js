@@ -226,7 +226,10 @@ export class Game {
    *  batter's own recent spray tendency. Every other style shifts nothing - `zonesFor`'s default
    *  `shiftDeg` of 0 leaves the base geometry untouched. */
   _shiftDegFor(defenseTeam, batterId) {
-    if (defenseTeam.styleId !== 'shifters') return 0;
+    // BB-2a step 5: reads settings.js's STYLE_BEHAVIOR table (was a hardcoded 'shifters' string
+    // check) - a team's shifting behavior is now named alongside the rest of its flavor.
+    const behavior = this.settings.STYLE_BEHAVIOR && this.settings.STYLE_BEHAVIOR[defenseTeam.styleId];
+    if (!behavior || !behavior.shift) return 0;
     const hist = this.sprayHistory[batterId];
     if (!hist || !hist.length) return 0;
     const mean = hist.reduce((s, v) => s + v, 0) / hist.length;
