@@ -47,6 +47,146 @@ lever this tool found, bigger than the retune below. **Flagged as a recommendati
 reopen, not applied**, since changing an already-confirmed shape is exactly the kind of decision
 this tool does not get to make on its own.
 
+### What else changed (commits 2, 3, 5)
+
+- **Commit 2, simulator defects**: `experimentNudgeAB`'s Slugger/TableSetter tier wiring was
+  checked and found already correct (fixed in BB-2a step 4, before this handoff was written - no
+  change needed). The promise scoreboard's three "median tier, every league" lines now report the
+  WORST league, not the median across leagues - a median across five leagues let Little/High
+  School's easy numbers hide Majors' 0.3% top-4 rate. `season.js`'s `playoffs()`/
+  `scriptedStandings()` gained real `BRACKET_MODEL`/`STANDINGS_MODEL` parameters (defaulting to new
+  settings.js constants); both playoff games' home/away now follows a new `PLAYOFF_HOME` setting
+  instead of being forced player-home.
+- **Commit 3, engine mechanisms**: `zones.js` gained real angular GAPS between out-zone sectors
+  (`GAP_DEG`) and `outcomes.js` gained a bloop-single band short of an outfield sector's own near
+  edge (`BLOOP_BAND_FT`) - doc §10, [Locked]: "Singles go through gaps and as bloopers," neither of
+  which existed before this phase. `game.js`'s `_parkFt()` now reads `FIELD[league].fenceFt`
+  directly for every league instead of scaling `PARKS.default` by `fieldScale` - a real, found
+  integration bug: `game.js`'s `_buildSwingView` never included `pitchHistory` at all, so
+  `CpuBatter`'s whole pattern-following mechanism was written but NEVER FIRED in a real game, only
+  in hand-built test fixtures. Fixed, and `pitch.js`'s `flyPitch()` now reads `pitchSpd`/`pitchSpin`
+  skill points (named since BB-1a, unused until now) to shorten fastball travel and widen the
+  changeup's own speed gap; `ModelBatter` gained the same "a changeup fools your timing" mechanic
+  CpuBatter already had (`SPEED_SURPRISE_MS_PER_MULT`). `TEAM_LADDER_OFFSETS` restructured from a
+  bare skill fraction per slot into `{skill, timingSigmaMs, chase}` - the skill-only ladder had
+  gone nearly inert once the contact-quality fix made skill points barely move win rate; the new
+  two axes are what the retune (commit 5) actually moves. `CPU_SIGMA_FLOOR_MS` (55) stops any
+  league's own base sigma from being sharper than a median human. Ten more magic numbers in
+  `agents.js` got named (values unchanged). `ModelPitcher.variety` is now continuous instead of
+  binary.
+- **Commit 5, the retune**: see the full old/new constant list in that commit's own message; summary
+  above. `CPU.college.timingSigmaMs` 55->65, `CPU.minors.timingSigmaMs` 45->60,
+  `CPU.majors.timingSigmaMs` 35->55 (the floor); `CPU.minors`/`CPU.majors` cornerBias/patternWeight/
+  weakSpotWeight/chase widened; `CPU_LEVEL_SHORTFALL` `{college:3,minors:6,majors:9}` ->
+  `{college:3,minors:4,majors:4}`; `TEAM_LADDER_OFFSETS.timingSigmaMs`/`.chase` widened (`.skill`
+  unchanged from BB-2a); `MECHANICS.doublePlayChance` 0.40 -> 0.30.
+
+### The promise scoreboard, as measured 2026-09-13 (`node sim-baseball.mjs --assert`, full default
+### sweep, 400 games/cell, 300 seasons/cell, LADDER_GAMES_N=1000, ~29s wall clock)
+
+```
+  [FAIL] GOLD_SEASONS_MAX_MEDIAN (median tier, worst league): measured 12.00, threshold <= 2
+  [FAIL] GOLD_ONE_SEASON_MIN_MEDIAN (worst league): measured 0.083, threshold >= 0.35
+  [FAIL] CHAMPION_GAME_WIN_MIN_MEDIAN (worst league): measured 0.362, threshold >= 0.4
+  [PASS] LADDER_MONOTONE (win rate falls each league up): measured [0.759,0.655,0.573,0.515,0.492]
+  [FAIL] LADDER_MONOTONE (within-league, weakest..strongest opponent): see the table below
+  [FAIL] CHAMPION_IS_HARDEST (new, BB-2b commit 5): the strongest ladder slot is NOT the lowest
+         win rate of any opponent at any league - see below
+  [PASS] NUDGE_A_B (well-timed low-Power beats sloppy high-Power, margin >= 0.10):
+         measured [0.552,0.6,0.522,0.477,0.513]
+  [FAIL] CAP_BINDS_ONLY (little/highschool cap within seasons): measured ["0.8","2.3"], <= 2
+         (High School misses by 0.3 seasons, unchanged from BB-2a - POINTS out of scope)
+  [PASS] CAP_BINDS_ONLY (college/minors/majors do NOT bind quickly): ["8.4","14.1","20.0"], > 2
+  [PASS] SKILL_EFFECT sensitivity: unchanged from BB-2a (SKILL_EFFECT/swing.js untouched this phase)
+
+  within-league ladder (median tier, 1000 games/opponent, weakest..strongest):
+    little     80.2  79.2  78.7  78.8  64.8  74.5  71.9  69.6
+    highschool 75.0  72.8  71.2  68.0  56.7  68.5  61.8  62.8
+    college    70.8  66.1  57.6  61.5  45.1  55.1  48.0  51.6
+    minors     64.9  63.9  58.6  53.2  37.9  47.6  41.3  42.0
+    majors     68.1  62.8  55.4  49.4  34.5  44.5  35.0  37.5
+```
+
+**Read plainly, these are the open items for Matt**, largely reframed from phase 2/2a's own list
+now that this phase has actually measured (not merely guessed) which lever moves what:
+
+1. **Gold is still far away at the worst league** (College/Minors/Majors, worst measured at
+   Majors). This phase's own `--stages` decomposition (commit 1) traced the dominant cost to the
+   SCHEDULE, not the bracket, home field, or CPU tuning: the shipped 12-game season plays the
+   strongest four opponents TWICE, so even a genuinely fair per-game win rate against the hardest
+   quarter of the league is paid twice before the playoffs. Commit 4 measured the fix
+   (`repeatBottom`, repeating the WEAKEST four instead) as a large, consistent win at every league
+   (e.g. Majors top-4 39.7% -> 78.0%) but did not apply it, because `season.js`'s own
+   `OPPONENT_ORDER` comment records the current shape as already confirmed by Matt specifically -
+   reopening it is his call, not a retune-only decision. **This is the single highest-leverage open
+   item**: loosening the `GOLD_*` thresholds themselves is the other option on the table, unchanged
+   from phase 2's own framing.
+2. **A new `CHAMPION_IS_HARDEST` check FAILS**: the league's own un-offset "slot 4" measures
+   HARDER than slots 5-7 at every league, despite carrying none of the ladder's own skill/sigma/
+   chase advantage. Traced to `LEAGUE_LADDER_STYLES` - slot 4 is occupied by the `shifters` style,
+   whose real toughness is a BEHAVIOR (`STYLE_BEHAVIOR.shift`, rotating out-zones toward the
+   batter's spray) that no ladder offset touches. `LEAGUE_LADDER_STYLES`'s own header already
+   marks it PROPOSED, not confirmed - reordering which style sits at which slot (moving `shifters`
+   off the median slot) is the fix this points to, flagged for Matt rather than changed here.
+3. **High School's `CAP_BINDS_ONLY` misses by 0.3 seasons** (2.3 vs 2.0), unchanged from BB-2a -
+   `POINTS.highschool` is untouched Draft and explicitly out of this phase's scope.
+4. **The within-league ladder is still not strictly monotone** even after commit 5's widening -
+   see the table above; the disorder traces to the same per-style behavioral effects as item 2.
+
+### The Locked-statement inventory, new rows this phase
+
+One row per Locked statement BB-2b implemented or newly tested, continuing BB-2a's table (see
+below for the full inventory; `test.js` section numbers cited).
+
+| Doc statement | Test |
+|---|---|
+| §10 Singles go through gaps | §16 (BB-2b commit 3, new) |
+| §10 Singles as bloopers | §16 (BB-2b commit 3, new) |
+| §10 Doubles in the gaps | §16 (BB-2b commit 3, new) |
+| §10 Fields get bigger each league, at every named point (was center only) | §15 (extended, BB-2b commit 3) |
+| §8 CPU batters read your patterns (now actually wired into real games) | §16 (BB-2b commit 3, new) |
+| §6 Speed: pitch velocity (pitchSpd) | §16 (BB-2b commit 3, new) |
+| §6 Spin: bigger speed gap on the changeup (pitchSpin) | §16 (BB-2b commit 3, new) |
+| §8 the semifinal never holds the strongest qualifier (BRACKET_MODEL=strongestInFinal) | §8d (BB-2b commit 2, new, 1000 seeded seasons) |
+| §8 difficulty from behavior not bigger stats (CPU_SIGMA_FLOOR_MS) | §16 (BB-2b commit 3, new) |
+
+### Every settings.js constant, by source (updated for Phase 2b)
+
+Phase 2b changes, restated: `BRACKET_MODEL`/`PLAYOFF_HOME`/`STANDINGS_MODEL` are new Draft [Open
+item 13] constants (commit 2), each `season.js`'s own default parameter; `GAP_DEG`/`BLOOP_BAND_FT`
+are new Draft constants powering the gap/blooper mechanism (commit 3, no doc-given numbers - §10
+leaves exact zone sizes open, Open item 7); `SPEED_SURPRISE_MS_PER_MULT`/`CPU_SIGMA_FLOOR_MS`/
+`VARIETY_REPEAT_BASE_CHANCE` are new Draft constants (commit 3); `AIM_CORNER_CHANCE_MULT`/
+`AIM_INZONE_BIAS`/`AIM_CORNER_BIAS_BASE`/`AIM_CORNER_BIAS_SCALE`/`WEAKSPOT_AIM_SCATTER`/
+`SPEED_DELTA_DEADBAND`/`FOOL_PENALTY_MS_SCALE`/`FOOL_BONUS_MS_SCALE`/`GUESS_READ_NOISE_SCALE`/
+`LOCATION_LEAN_WEIGHT` are commit 3's naming pass over ten pre-existing `agents.js` magic numbers -
+values unchanged, only now named. `TEAM_LADDER_OFFSETS` restructured from a bare per-slot number
+into `{skill, timingSigmaMs, chase}` (commit 3, widened commit 5) - `.skill` numerically unchanged
+from BB-2a step 6 throughout. `CPU.college/minors/majors.timingSigmaMs`, `CPU.minors/majors`'s
+cornerBias/patternWeight/weakSpotWeight/chase, `CPU_LEVEL_SHORTFALL`, and
+`MECHANICS.doublePlayChance` are all Draft, retuned (commit 5 - old/new values in that commit's own
+message). `SKILL_EFFECT.*`/`FIELD.*`/`CARRY_SCALE`/`LINE_THROUGH_*` are UNCHANGED from BB-2a -
+neither `swing.js` nor the contact-quality model was touched this phase.
+
+### Verification (Phase 2b, in order)
+
+```
+node validate-sw-assets.mjs           # ok, REST_MANIFEST/version.json regenerated for game-hub-v822
+node baseball/js/test.js              # 1911 assertions, 0 failed (was 1374 at start of phase)
+node sim-baseball.mjs --contact-grid  # PASS on all 5 assertions, byte-identical to BB-2a (SKILL_EFFECT/swing.js untouched)
+node sim-baseball.mjs --assert --quick   # FAILS - see the promise scoreboard; the tool reporting, not a build break
+node sim-baseball.mjs --assert        # FAILS - full-sample confirmation of the same open items
+node test-game-conventions.mjs        # 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs           # re-run, unchanged
+node test-sw-strategy.mjs             # 107 passed, 0 failed
+```
+
+**`sim-baseball.mjs --assert` fails on real, reported game-design findings, not on a broken
+build.** This phase made real, measured progress (the across-league ladder now passes for the
+first time; the champion-game win rate rose from ~6% to 36%) but did not reach Gold at the worst
+league - the four open items above, and the schedule-shape proposal in particular, are Matt's to
+resolve; nothing in this phase invents a passing number to paper over them.
+
 
 
 BB-2a (2026-09-12, same day as BB-2) fixed the three mechanisms diagnosed in BB-2's own report as
