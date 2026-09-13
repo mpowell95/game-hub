@@ -476,8 +476,12 @@ export class Game {
         // (`sim-baseball.mjs --attribute`'s plate-appearance ledger) - purely additive fields on an
         // event payload every existing consumer already destructures by name, so nothing reading
         // the old fields is affected.
+        // BB-2d commit 1: distanceFt/sprayAngleDeg/battedKind exposed for measurement
+        // (`sim-baseball.mjs --range`'s batted-ball census) - purely additive, same discipline as
+        // BB-2c commit 1's q/exitVeloMph/centered; no existing caller reads them.
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
-          q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered });
+          q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
+          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind });
         return;
       }
 

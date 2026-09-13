@@ -50,6 +50,7 @@ const FLAG_STYLES = process.argv.includes('--styles');
 const FLAG_STYLES_TUNE = process.argv.includes('--tune');
 const FLAG_STAGES = process.argv.includes('--stages');
 const FLAG_ATTRIBUTE = process.argv.includes('--attribute');
+const FLAG_RANGE = process.argv.includes('--range');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -945,11 +946,289 @@ async function runStages(t0) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// BB-2d commit 1: `--range` - measurement only, no settings.js change. Three questions per league:
+// (1) the batted-ball census (is a home run even possible, and how often), (2) the ceiling/floor -
+// every lever pushed to its easiest/hardest extreme within the current contract (CPU_SIGMA_MIN_MS/
+// CPU_SIGMA_ABSOLUTE_FLOOR_MS/CPU_PLACEMENT_MIN are never crossed) - and (3) a per-lever range,
+// one factor at a time, so commits 2-7 know which levers actually move win rate before they touch
+// any of them.
+const RANGE_GAMES = 1000;
+const RANGE_GAMES_N = Math.max(4, Math.round(FLAG_QUICK ? RANGE_GAMES / 10 : RANGE_GAMES));
+const RANGE_LEVER_LEAGUE = 'college'; // matches CONTACT_GRID_LEAGUE/STYLE_MEASURE_LEAGUE's own default
+
+function emptyCensus() { return { games: 0, pa: 0, homers: 0, triples: 0, doubles: 0, singles: 0, outs: 0, flyBalls: 0, flyHomers: 0, carries: [] }; }
+function foldCensusPA(census, payload) {
+  if (payload.outcome === 'strikeout' || payload.outcome === 'walk') { census.pa += 1; return; }
+  census.pa += 1;
+  const bases = payload.bases || 0;
+  if (bases === 4) census.homers += 1;
+  else if (bases === 3) census.triples += 1;
+  else if (bases === 2) census.doubles += 1;
+  else if (bases === 1) census.singles += 1;
+  else census.outs += 1;
+  if (payload.battedKind === 'fly') {
+    census.flyBalls += 1;
+    if (bases === 4) census.flyHomers += 1;
+  }
+  if (payload.distanceFt != null) census.carries.push(payload.distanceFt);
+}
+async function playOneGameForCensus(league, settings, opponent, playerAgent, playerTeam, seed, playerHome) {
+  const home = playerHome ? playerTeam : opponent;
+  const away = playerHome ? opponent : playerTeam;
+  const homeAgent = playerHome ? playerAgent : mkCpuAgent(opponent, league, settings);
+  const awayAgent = playerHome ? mkCpuAgent(opponent, league, settings) : playerAgent;
+  const g = new Game({ home, away, seed, agents: { home: homeAgent, away: awayAgent }, settings });
+  const playerSide = playerHome ? 'home' : 'away';
+  const oppSide = playerHome ? 'away' : 'home';
+  const census = { player: emptyCensus(), opp: emptyCensus() };
+  g.onEvent = async (type, payload) => {
+    if (type !== 'atBatEnd') return;
+    if (payload.side === playerSide) foldCensusPA(census.player, payload);
+    else if (payload.side === oppSide) foldCensusPA(census.opp, payload);
+  };
+  await g.playGame();
+  census.player.games = 1; census.opp.games = 1;
+  return census;
+}
+function percentile(arr, p) {
+  if (!arr.length) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+  return sorted[idx];
+}
+async function measureCensus(league, settings, gamesN) {
+  const teams = makeLeague(league);
+  const opponent = teams[Math.floor(teams.length / 2)];
+  const skills = playerSkillsFor(league, settings);
+  const total = { player: emptyCensus(), opp: emptyCensus() };
+  for (let i = 0; i < gamesN; i++) {
+    const agent = mkModelAgent(league, settings, MODEL_TIERS.median);
+    const team = makePlayerTeam({ skills, hand: 'R' });
+    const seed = hashSeed('bb-range-census', league, i);
+    const { player, opp } = await playOneGameForCensus(league, settings, opponent, agent, team, seed >>> 0, i % 2 === 0);
+    for (const key of ['games', 'pa', 'homers', 'triples', 'doubles', 'singles', 'outs', 'flyBalls', 'flyHomers']) {
+      total.player[key] += player[key]; total.opp[key] += opp[key];
+    }
+    total.player.carries.push(...player.carries); total.opp.carries.push(...opp.carries);
+  }
+  return total;
+}
+function censusSummary(census, gamesN, fenceCenterFt) {
+  return {
+    homersPerGame: census.homers / gamesN,
+    triplesPerGame: census.triples / gamesN,
+    doublesPerGame: census.doubles / gamesN,
+    singlesPerGame: census.singles / gamesN,
+    outsPerGame: census.outs / gamesN,
+    flyFenceShare: census.flyBalls ? census.flyHomers / census.flyBalls : 0,
+    meanCarryFt: mean(census.carries),
+    p95CarryFt: percentile(census.carries, 0.95),
+    fenceCenterFt,
+  };
+}
+
+/** Ceiling: the weakest ladder slot (index 0), every CPU behavior lever pushed to its easiest
+ *  extreme WITHIN the current contract (CPU_SIGMA_MIN_MS is a per-league MINIMUM, never crossed
+ *  upward-bounded here - sloppier CPU timing is always "easier" with no contract ceiling, so a
+ *  generous 200ms stands in for "as sloppy as this measurement bothers to check"; cornerBias/
+ *  patternWeight/weakSpotWeight/outZoneMult all have real bounds and are pushed to their easiest
+ *  legal end). Floor: the strongest ladder slot (index 7), every lever at its hardest legal
+ *  extreme - CPU_SIGMA_ABSOLUTE_FLOOR_MS/CPU_PLACEMENT_MIN are the two the contract itself pins,
+ *  used here exactly (never crossed), cornerBias/patternWeight/weakSpotWeight at 1, outZoneMult at
+ *  its own settings.js ceiling (1.05, `FIELD` header's own comment).
+ */
+function ceilingFloorSettings(league, extreme) {
+  const easy = extreme === 'ceiling';
+  return withOverrides(SETTINGS, [
+    [`CPU.${league}.timingSigmaMs`, easy ? 200 : SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS],
+    [`CPU.${league}.placementNoise`, easy ? 0.45 : SETTINGS.CPU_PLACEMENT_MIN],
+    [`CPU.${league}.cornerBias`, easy ? 0 : 1],
+    [`CPU.${league}.patternWeight`, easy ? 0 : 1],
+    [`CPU.${league}.weakSpotWeight`, easy ? 0 : 1],
+    [`CPU.${league}.chase`, easy ? 0.9 : 0.02],
+    [`FIELD.${league}.outZoneMult`, easy ? 0.75 : 1.05],
+  ]);
+}
+async function measureCeilingFloor(league) {
+  const teams = makeLeague(league);
+  const skills = playerSkillsFor(league, SETTINGS);
+  const out = {};
+  for (const [label, opponentTeam] of [['ceiling', teams[0]], ['floor', teams[teams.length - 1]]]) {
+    const settings = ceilingFloorSettings(league, label);
+    const rows = [];
+    for (let i = 0; i < RANGE_GAMES_N; i++) {
+      const agent = mkModelAgent(league, settings, MODEL_TIERS.median);
+      const team = makePlayerTeam({ skills, hand: 'R' });
+      const seed = hashSeed('bb-range-extreme', league, label, i);
+      rows.push(await playOneGame(league, settings, opponentTeam, agent, team, seed >>> 0, i % 2 === 0));
+    }
+    out[label] = rows.filter((r) => r.won).length / rows.length;
+  }
+  return out;
+}
+
+/** Per-lever range: one factor at a time, min vs max, win rate at each - RANGE_LEVER_LEAGUE only
+ *  (matches the existing convention of `--contact-grid`/`--styles` measuring at one representative
+ *  league rather than all five). Every lever named by the handoff. */
+async function measureLeverWinRate(league, settings) {
+  const teams = makeLeague(league);
+  const opponent = teams[Math.floor(teams.length / 2)];
+  const skills = playerSkillsFor(league, settings);
+  const rows = [];
+  for (let i = 0; i < RANGE_GAMES_N; i++) {
+    const agent = mkModelAgent(league, settings, MODEL_TIERS.median);
+    const team = makePlayerTeam({ skills, hand: 'R' });
+    const seed = hashSeed('bb-range-lever', league, i, JSON.stringify(settings.CPU[league]).length);
+    rows.push(await playOneGame(league, settings, opponent, agent, team, seed >>> 0, i % 2 === 0));
+  }
+  return rows.filter((r) => r.won).length / rows.length;
+}
+async function measureLeverRange() {
+  const league = RANGE_LEVER_LEAGUE;
+  const levers = [
+    ['outZoneMult', [0.75, 1.05], (v) => withOverride(SETTINGS, `FIELD.${league}.outZoneMult`, v)],
+    ['fieldScale', [0.6, 1.10], (v) => withOverride(SETTINGS, `FIELD.${league}.fieldScale`, v)],
+    ['cornerBias', [0, 1], (v) => withOverride(SETTINGS, `CPU.${league}.cornerBias`, v)],
+    ['pitchMix.changeup share', [0, 4], (v) => withOverride(SETTINGS, `CPU.${league}.pitchMix`, { ...SETTINGS.CPU[league].pitchMix, changeup: v })],
+    ['patternWeight', [0, 1], (v) => withOverride(SETTINGS, `CPU.${league}.patternWeight`, v)],
+    ['weakSpotWeight', [0, 1], (v) => withOverride(SETTINGS, `CPU.${league}.weakSpotWeight`, v)],
+    ['chase', [0.9, 0.02], (v) => withOverride(SETTINGS, `CPU.${league}.chase`, v)],
+    ['CPU sigma (within contract)', [200, SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS], (v) => withOverride(SETTINGS, `CPU.${league}.timingSigmaMs`, v)],
+    ['SPEED_SURPRISE_MS_PER_MULT', [0, 200], (v) => withOverride(SETTINGS, 'SPEED_SURPRISE_MS_PER_MULT', v)],
+    ['human swingIn (median-tier own value)', [0.95, 0.65], (v) => v], // measured separately below - see humanOwnDiscipline
+    ['human chase (median-tier own value)', [0.45, 0.05], (v) => v],  // measured separately below
+  ];
+  const results = [];
+  for (const [name, [lo, hi], build] of levers) {
+    if (name.startsWith('human ')) continue; // measured by measureHumanOwnDiscipline below
+    const loRate = await measureLeverWinRate(league, build(lo));
+    const hiRate = await measureLeverWinRate(league, build(hi));
+    results.push({ name, lo, hi, loRate, hiRate });
+  }
+  for (const axis of ['skill', 'timingSigmaMs', 'chase']) {
+    results.push({ name: `TEAM_LADDER_OFFSETS.${axis}`, lo: SETTINGS.TEAM_LADDER_OFFSETS[0][axis], hi: SETTINGS.TEAM_LADDER_OFFSETS[7][axis], note: 'see the within-league ladder check' });
+  }
+  return results;
+}
+
+/** BB-2d commit 1's own anticipation of commit 2: what does the human's OWN median-tier discipline
+ *  (not the league's CPU row) do to win rate at this league, held fixed across every league rather
+ *  than copied from `CPU[league].swingIn/chase`? Uses the Draft `MODEL_TIERS.median` values this
+ *  commit proposes for commit 2 (swingIn 0.85, chase 0.22 - see commit 2's own header) purely as a
+ *  MEASUREMENT here; `mkModelAgent` itself is not changed until commit 2. */
+const HUMAN_MEDIAN_DISCIPLINE = { swingIn: 0.85, chase: 0.22 };
+async function measureHumanOwnDiscipline(league) {
+  const settings = SETTINGS;
+  const teams = makeLeague(league);
+  const opponent = teams[Math.floor(teams.length / 2)];
+  const skills = playerSkillsFor(league, settings);
+  const play = async (swingIn, chase) => {
+    const rows = [];
+    for (let i = 0; i < RANGE_GAMES_N; i++) {
+      const batter = new ModelBatter({ timingSigmaMs: MODEL_TIERS.median.timingSigmaMs, placementSigma: MODEL_TIERS.median.placementSigma, swingIn, chase, settings });
+      const pitcher = new ModelPitcher({ league, settings, variety: MODEL_TIERS.median.variety, cornerBias: settings.CPU[league].cornerBias, pitchMix: settings.CPU[league].pitchMix });
+      const agent = { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v) };
+      const team = makePlayerTeam({ skills, hand: 'R' });
+      const seed = hashSeed('bb-range-humandiscipline', league, i);
+      rows.push(await playOneGame(league, settings, opponent, agent, team, seed >>> 0, i % 2 === 0));
+    }
+    return rows.filter((r) => r.won).length / rows.length;
+  };
+  const leagueRowRate = await play(settings.CPU[league].swingIn, settings.CPU[league].chase);
+  const humanOwnRate = await play(HUMAN_MEDIAN_DISCIPLINE.swingIn, HUMAN_MEDIAN_DISCIPLINE.chase);
+  return { leagueRowRate, humanOwnRate };
+}
+
+/** Shifters against the human, at every league, every tier, and once more with SHIFT_MAX_DEG=0. */
+async function measureShiftersDelta(league) {
+  const settings = SETTINGS;
+  const teams = makeLeague(league);
+  const shiftersTeam = teams.find((t) => t.styleId === 'shifters');
+  const balancedTeam = teams.find((t) => t.styleId === 'balanced');
+  const skills = playerSkillsFor(league, settings);
+  const play = async (opponent, tier, settingsForGame, seedTag) => {
+    const rows = [];
+    for (let i = 0; i < RANGE_GAMES_N; i++) {
+      const agent = mkModelAgent(league, settingsForGame, MODEL_TIERS[tier]);
+      const team = makePlayerTeam({ skills, hand: 'R' });
+      const seed = hashSeed('bb-range-shifters', league, tier, seedTag, i);
+      rows.push(await playOneGame(league, settingsForGame, opponent, agent, team, seed >>> 0, i % 2 === 0));
+    }
+    return rows.filter((r) => r.won).length / rows.length;
+  };
+  const noShiftSettings = withOverride(settings, 'SHIFT_MAX_DEG', 0);
+  const out = {};
+  for (const tier of TIERS) {
+    const shiftersRate = await play(shiftersTeam, tier, settings, `shifters-${tier}`);
+    const balancedRate = await play(balancedTeam, tier, settings, `balanced-${tier}`);
+    const shiftersRateNoShift = await play(shiftersTeam, tier, noShiftSettings, `shifters-noshift-${tier}`);
+    out[tier] = { shiftersRate, balancedRate, delta: shiftersRate - balancedRate, shiftersRateNoShift };
+  }
+  return out;
+}
+
+async function runRange(t0) {
+  console.log(`sim-baseball.mjs --range - RANGE_GAMES_N=${RANGE_GAMES_N}, leagues=${LEAGUES.join(',')}, lever league=${RANGE_LEVER_LEAGUE}`);
+  console.log('measurement only - no settings.js change.\n');
+
+  console.log('=== Batted-ball census (median tier, both sides, per game) ===');
+  for (const league of LEAGUES) {
+    const fenceCenterFt = SETTINGS.FIELD[league].fenceFt.center;
+    const total = await measureCensus(league, SETTINGS, RANGE_GAMES_N);
+    const playerS = censusSummary(total.player, RANGE_GAMES_N, fenceCenterFt);
+    const oppS = censusSummary(total.opp, RANGE_GAMES_N, fenceCenterFt);
+    console.log(`  ${league} (fence center ${fenceCenterFt}ft):`);
+    console.log(`    player: HR/g=${playerS.homersPerGame.toFixed(3)} 3B/g=${playerS.triplesPerGame.toFixed(3)} 2B/g=${playerS.doublesPerGame.toFixed(3)} 1B/g=${playerS.singlesPerGame.toFixed(3)} out/g=${playerS.outsPerGame.toFixed(3)} flyClearsFence=${fmtPct(playerS.flyFenceShare)} meanCarry=${playerS.meanCarryFt.toFixed(0)}ft p95Carry=${playerS.p95CarryFt.toFixed(0)}ft`);
+    console.log(`    opp:    HR/g=${oppS.homersPerGame.toFixed(3)} 3B/g=${oppS.triplesPerGame.toFixed(3)} 2B/g=${oppS.doublesPerGame.toFixed(3)} 1B/g=${oppS.singlesPerGame.toFixed(3)} out/g=${oppS.outsPerGame.toFixed(3)} flyClearsFence=${fmtPct(oppS.flyFenceShare)} meanCarry=${oppS.meanCarryFt.toFixed(0)}ft p95Carry=${oppS.p95CarryFt.toFixed(0)}ft`);
+    if (playerS.homersPerGame === 0 && oppS.homersPerGame === 0) {
+      console.log(`    **HOME RUNS IMPOSSIBLE AT ${league.toUpperCase()}** (fence ${fenceCenterFt}ft, p95 carry only ${playerS.p95CarryFt.toFixed(0)}ft)`);
+    }
+  }
+
+  console.log('\n=== Ceiling/floor (median tier, every lever at its easiest/hardest legal extreme) ===');
+  for (const league of LEAGUES) {
+    const { ceiling, floor } = await measureCeilingFloor(league);
+    const bold = league === 'little' && ceiling < 0.92 ? '  **BELOW 0.92**' : '';
+    console.log(`  ${league.padEnd(12)} ceiling=${fmtPct(ceiling)}  floor=${fmtPct(floor)}${bold}`);
+  }
+
+  console.log(`\n=== Per-lever range (league=${RANGE_LEVER_LEAGUE}, median tier, vs average opponent) ===`);
+  const leverRows = await measureLeverRange();
+  for (const row of leverRows) {
+    if (row.note) { console.log(`  ${row.name.padEnd(28)} lo=${row.lo} hi=${row.hi} (${row.note})`); continue; }
+    console.log(`  ${row.name.padEnd(28)} lo=${row.lo}->${fmtPct(row.loRate)}  hi=${row.hi}->${fmtPct(row.hiRate)}`);
+  }
+
+  console.log(`\n=== Human's own discipline vs CPU league row (${RANGE_LEVER_LEAGUE}'s own row for reference; every league measured) ===`);
+  for (const league of LEAGUES) {
+    const { leagueRowRate, humanOwnRate } = await measureHumanOwnDiscipline(league);
+    console.log(`  ${league.padEnd(12)} leagueRow(swingIn=${SETTINGS.CPU[league].swingIn},chase=${SETTINGS.CPU[league].chase})=${fmtPct(leagueRowRate)}  humanOwn(swingIn=${HUMAN_MEDIAN_DISCIPLINE.swingIn},chase=${HUMAN_MEDIAN_DISCIPLINE.chase})=${fmtPct(humanOwnRate)}`);
+  }
+
+  console.log('\n=== Shifters vs the human, every league, every tier (and with SHIFT_MAX_DEG=0) ===');
+  for (const league of LEAGUES) {
+    const byTier = await measureShiftersDelta(league);
+    console.log(`  ${league}:`);
+    for (const tier of TIERS) {
+      const r = byTier[tier];
+      console.log(`    ${tier.padEnd(8)} shifters=${fmtPct(r.shiftersRate)} balanced=${fmtPct(r.balancedRate)} delta=${(r.delta >= 0 ? '+' : '') + (r.delta * 100).toFixed(1)}pp  noShift=${fmtPct(r.shiftersRateNoShift)}`);
+    }
+  }
+
+  console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+}
+
+// ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
 
   if (FLAG_ATTRIBUTE) {
     await runAttribute(t0);
+    return;
+  }
+
+  if (FLAG_RANGE) {
+    await runRange(t0);
     return;
   }
 

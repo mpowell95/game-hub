@@ -92,7 +92,10 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01) {
     launchAngleDeg = 55 + rand01() * 15;
     kind = 'popup';
   }
-  void kind; // outcomes.js re-derives its own kind from launchAngleDeg; kept here for callers/tests
+  // BB-2d commit 1: `kind` (ground/line/fly/popup) exposed for measurement (`sim-baseball.mjs
+  // --range`'s batted-ball census needs the SWING's own kind, not outcomes.js's re-derivation,
+  // since the two must agree for a fly-ball-clears-the-fence share to mean anything) - purely
+  // additive; outcomes.js still re-derives its own copy from launchAngleDeg and does not read this.
 
   // Exit velocity: TIMING QUALITY (q) gates how much of the swing's power actually reaches the
   // ball - power multiplies a good swing, it never rescues a bad one. `qualityFloor` is the share
@@ -125,7 +128,7 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01) {
   // BB-2c commit 1: `centered` exposed for measurement (`sim-baseball.mjs --attribute`'s
   // "share of centered contact") - already computed above to pick the launch-angle branch, just
   // not previously returned. Purely additive; no existing caller reads it.
-  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered };
+  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered, kind };
 }
 
 export default { swing, qualityFor };
