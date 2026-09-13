@@ -255,16 +255,13 @@ export const WEAKSPOT_WINDOW = 8;
 // `effectiveCapFor`/section 8's test in test.js, which now asserts that directly so this cannot
 // regress silently.)
 //
-// Draft, measured by sim-baseball.mjs 2026-09-12 (was {little:0, highschool:0, college:1.5,
-// minors:3.3, majors:5.3}, giving effective caps 10/14/16.5/18.7/20.7). Pushed further to weaken
-// CPU teams more from College up, aiming at GOLD_ONE_SEASON_MIN_MEDIAN/GOLD_SEASONS_MAX_MEDIAN -
-// measured effect was small (median-tier gold odds moved roughly 17-31% across two much larger
-// shortfall attempts), so the values below are a middle point that still keeps the effective-cap
-// ladder STRICTLY rising (10, 14, 15, 16, 17) per doc §8, [Locked]: "CPU teams must get better as
-// you move up." The Gold thresholds still FAIL at this setting (see baseball/CLAUDE.md's pasted
-// scoreboard) - open item for Matt: either loosen the two GOLD_* thresholds, or accept a much
-// flatter effective-cap ladder than doc §8 implies. Not resolved here.
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 6, majors: 9 };
+// Reverted 2026-09-12 (BB-2a, step 1): {little:0, highschool:0, college:3, minors:6, majors:9}
+// (effective caps 10/14/15/16/17) back to {little:0, highschool:0, college:1.5, minors:3.3,
+// majors:5.3} (effective caps 10/14/16.5/18.7/20.7). That Phase 2 retune was tuned against a
+// contact model swing.js is about to change (timing quality is about to become continuous and
+// multiply power, per this phase's contact-quality axis) - retuning this lever again happens once,
+// AFTER the new contact model lands, from this reverted base (BB-2a step 6).
+export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 1.5, minors: 3.3, majors: 5.3 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -357,8 +354,8 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 // therefore still invented - Draft [Open item 4] - constrained only by the doc's qualitative
 // description of which effect each skill drives, renamed onto the six real skill ids.
 export const SKILL_EFFECT = {                // Draft [Open item 4]
-  hitAcc:    { contactRadiusInPerPt: 0.12, whiffReductionPerPt: 0.008 }, // "bigger timing window and sweet spot" - measured by sim-baseball.mjs 2026-09-12 (was 0.15/0.01; the SKILL_EFFECT sensitivity experiment measured several leagues' 10-point win-rate gap over NUDGE_MAX_WINRATE_GAP)
-  hitPow:    { exitVeloMphPerPt: 0.5 },                                  // "more distance, stronger charged swings" - measured by sim-baseball.mjs 2026-09-12 (was 0.6, same experiment)
+  hitAcc:    { contactRadiusInPerPt: 0.15, whiffReductionPerPt: 0.01 },  // "bigger timing window and sweet spot" - reverted 2026-09-12 (BB-2a step 1) from 0.12/0.008 (measured against the pre-contact-model swing.js); retuned again once from this base after the contact model lands (BB-2a step 6)
+  hitPow:    { exitVeloMphPerPt: 0.6 },                                  // "more distance, stronger charged swings" - reverted 2026-09-12 (BB-2a step 1) from 0.5, same reason
   hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - sprintFtPerSPerPt/stealSuccessPerPt still unused (no steal/bunt this phase, see RESERVED_PHASE_6); the beat-out HALF is now wired, via MECHANICS.beatOutPerPt in outcomes.js
   pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
   pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - pickoff unused this phase
@@ -374,7 +371,7 @@ export const MECHANICS = {
   walkoffEndsImmediately: true,     // [Locked] doc §3
   extraInningRunnerOnSecond: true,  // [Locked] doc §3 - "every extra half-inning starts with a runner on second"
   doublePlayEnabled: true,          // [Locked] doc §3 - "can be a double play" with a runner on first, <2 outs
-  doublePlayChance: 0.40,           // Draft [Open item 26], measured by sim-baseball.mjs 2026-09-12 - the doc locks that it CAN happen, not how often; ~0.40 puts a double play at roughly 1-in-8 grounders once P(runner on first, <2 outs) is folded in (see baseball/CLAUDE.md)
+  doublePlayChance: 0.45,           // Draft [Open item 26] - reverted 2026-09-12 (BB-2a step 1) from 0.40 (measured 2026-09-12 against the pre-contact-model swing.js) back to 0.45; the doc locks that a double play CAN happen, not how often; retuned again once from this base after the contact model lands (BB-2a step 6)
   maxExtraInnings: 50,              // [Locked] doc §3 - explicitly a safety valve only, never a stated rule
   outsPerInning: 3,
   strikesForOut: 3,
