@@ -1400,7 +1400,7 @@ console.log('\n-- 20. BB-2d commit 4: batted-ball carry scaled to the league --'
     const batterSkills = { hitAcc: cap, hitPow: cap, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
     const zones = zonesFor(lg, 0);
     const fenceFt = SETTINGS.FIELD[lg].fenceFt;
-    let homers = 0, triples = 0, swings = 0, draw = 0;
+    let homers = 0, doubles = 0, triples = 0, swings = 0, draw = 0;
     while (swings < HR_EXISTENCE_ABS) {
       const seed = hashSeed('bb-hr-existence', lg, draw++) >>> 0;
       const rand01 = mulberry32(seed);
@@ -1414,8 +1414,10 @@ console.log('\n-- 20. BB-2d commit 4: batted-ball carry scaled to the league --'
       const outcome = resolveContact(swingResult, zones, SETTINGS, fenceFt, batterSkills.hitSpd, rand01);
       if (outcome.bases === 4) homers += 1;
       if (outcome.bases === 3) triples += 1;
+      if (outcome.bases === 2) doubles += 1;
     }
     ok(homers > 0, `${lg}: a home run is possible (doc §10, [Locked]) - ${homers} in ${swings} swings at maxed power/timing`);
+    ok(doubles > 0, `${lg}: a double is possible (doc §10, [Locked]) - ${doubles} in ${swings} swings at maxed power/timing`);
     ok(triples > 0, `${lg}: a triple is possible (doc §10, [Locked]) - ${triples} in ${swings} swings at maxed power/timing`);
   }
 
@@ -1568,6 +1570,67 @@ console.log('\n-- 22. BB-2d commit 6: Shifters bounded and priced --');
     g.sprayHistory['batterY'] = [10, 12, 8, 11]; // one short of SHIFT_MIN_SAMPLES (5)
     ok(g._shiftDegFor(shiftersTeam, 'batterY') === 0, 'fewer than SHIFT_MIN_SAMPLES recorded balls in play never triggers a shift');
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 23. BB-2d commit 8: inventory - Perfect Season reachable at the maxed tier --');
+{
+  // Doc §5, [Locked]: Perfect Season must be reachable for a player who has won the World Series
+  // and maxed every skill - `sim-baseball.mjs`'s own MAXED_TIER/PERFECT_SEASON_REACHABLE
+  // scoreboard line measures this at 300 seasons (0.60 measured, well above the 0.02 gate); this
+  // is the same mechanism replicated headlessly at a small sample (40 seasons) so a real engine
+  // regression fails this suite, not only the separate simulator tool.
+  const MAXED = { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85, swingIn: 0.88, chase: 0.12 };
+  function maxedSkillsForTest(league) {
+    const capInt = Math.floor(SETTINGS.CAPS[league]);
+    const skills = {};
+    for (const id of SETTINGS.SKILL_IDS) skills[id] = capInt;
+    return skills;
+  }
+  async function playMaxedSeason(league, seasonSeed) {
+    const teams = makeLeague(league);
+    const schedule = makeSchedule(league, seasonSeed, SETTINGS.SCHEDULE_SHAPE);
+    const skills = maxedSkillsForTest(league);
+    const playerTeam = makePlayerTeam({ skills, hand: 'R' });
+    const cpu = SETTINGS.CPU[league];
+    const playerAgent = {
+      decidePitch: (v) => new ModelPitcher({ league, settings: SETTINGS, variety: MAXED.variety, cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix }).decidePitch(v),
+      decideSwing: (v) => new ModelBatter({ timingSigmaMs: MAXED.timingSigmaMs, placementSigma: MAXED.placementSigma, swingIn: MAXED.swingIn, chase: MAXED.chase, settings: SETTINGS }).decideSwing(v),
+    };
+    let wins = 0, losses = 0;
+    for (let i = 0; i < schedule.length; i++) {
+      const g = schedule[i];
+      const opponent = teams[g.opponentIndex];
+      const home = g.home ? playerTeam : opponent, away = g.home ? opponent : playerTeam;
+      const homeAgent = g.home ? playerAgent : mkAgent(opponent, league);
+      const awayAgent = g.home ? mkAgent(opponent, league) : playerAgent;
+      const game = new Game({ home, away, seed: hashSeed('bb-maxed-season', league, seasonSeed, i) >>> 0, agents: { home: homeAgent, away: awayAgent } });
+      await game.playGame();
+      const won = game.winner === (g.home ? 'home' : 'away');
+      if (won) wins += 1; else losses += 1;
+    }
+    if (wins + losses === 0 || losses > 0) return false; // any regular-season loss ends the perfect-season attempt
+    const standings = scriptedStandings(teams, { wins, losses }, SETTINGS.STANDINGS_MODEL);
+    const playerRank = standings.findIndex((r) => r.isPlayer);
+    if (playerRank >= 4) return false;
+    const bracket = playoffs(standings, SETTINGS.BRACKET_MODEL);
+    const sfPair = bracket.semifinals.find((pair) => pair.some((t) => t.isPlayer));
+    const sfOpponentRow = sfPair.find((t) => !t.isPlayer);
+    const sfOpponentTeam = teams.find((t) => t.name === sfOpponentRow.id) || teams[teams.length - 1];
+    const sfGame = new Game({ home: playerTeam, away: sfOpponentTeam, seed: hashSeed('bb-maxed-sf', league, seasonSeed) >>> 0,
+      agents: { home: playerAgent, away: mkAgent(sfOpponentTeam, league) } });
+    await sfGame.playGame();
+    if (sfGame.winner !== 'home') return false;
+    const champTeam = teams[teams.length - 1];
+    const chGame = new Game({ home: playerTeam, away: champTeam, seed: hashSeed('bb-maxed-champ', league, seasonSeed) >>> 0,
+      agents: { home: playerAgent, away: mkAgent(champTeam, league) } });
+    await chGame.playGame();
+    return chGame.winner === 'home';
+  }
+  let perfectCount = 0;
+  const SEASONS = 40;
+  for (let i = 0; i < SEASONS; i++) if (await playMaxedSeason('majors', i)) perfectCount += 1;
+  ok(perfectCount > 0, `doc §5, [Locked]: Perfect Season is reachable at the maxed tier - ${perfectCount}/${SEASONS} Majors seasons perfect`);
 }
 
 // ---------------------------------------------------------------------------------------------

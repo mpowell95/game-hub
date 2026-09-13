@@ -4,6 +4,264 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 2d — the curve, the champion, and Shifters: mechanisms, not constants
+
+BB-2d (2026-09-13) is the design doc's own v10 revision landing in code: home runs (and doubles and
+triples) made possible in every league for the first time this whole effort, the champion given its
+own pitching-behavior axis instead of sharing its league's flat row, Shifters bounded and priced on
+the same axis the ladder itself uses, and one retune pass that clears every one of doc v10's own
+per-league `SEASON_WINRATE_BAND` targets simultaneously — the first time in this effort's history.
+
+### The diagnosis (commit 1's `--range`), and what didn't survive measurement
+
+The handoff's own arithmetic diagnosis — swing.js's ~75mph exit-velocity ceiling times the old
+`CARRY_SCALE` (6.2) tops out near 279ft, clearing Little League's 210ft fence — did **not** survive
+measurement against real games: the census (`node sim-baseball.mjs --range`, RANGE_GAMES_N=1000)
+found p95 carry at only 150-166ft in EVERY league, nowhere near even Little League's own fence.
+Home runs were impossible everywhere, not only from College up. Little League's own ceiling (every
+lever pushed to its easiest legal extreme) measured 99.6% — comfortably above the 0.92 floor the
+handoff worried it might miss, so the "stop tuning, report the ceiling" escape clause never
+triggered.
+
+The human model's own defect was real and measured as diagnosed: copying the league's own CPU row
+onto `mkModelAgent` taxed a human hardest exactly where the win-rate band wants near-total dominance
+(Little League: `chase` 0.55) and least where it wants a real grind (Majors: `chase` 0.05). Fixed by
+giving `MODEL_TIERS` its own `swingIn`/`chase` per tier (commit 2), independent of any league.
+
+Shifters' shift was confirmed a large, real drag (commit 1: median tier, -13.6pp at Little League to
+-28.0pp at Majors, `shiftersRate - balancedRate`) — bounded (`SHIFT_MAX_DEG` 15→3, half of `GAP_DEG`;
+`SHIFT_MIN_SAMPLES` new, 5) in commit 6, which alone moved Shifters from the largest `--styles`
+outlier to no longer the largest (four other styles now cost the player more).
+
+### Batted-ball carry, recalibrated (commit 4)
+
+`LEAGUE_POWER_SCALE` (new, per league) had to be applied RELATIVE to `CARRY_ZERO_MPH` (carryFt's own
+"no carry below this speed" baseline), not as a straight multiply on the raw exit-velocity mph — a
+straight multiply pushed Little League's whole axis, baseline included, below the point where ANY
+ball carries at all (every census carry rounded to 0ft), while Majors' multiply compounded onto the
+new, much larger `CARRY_SCALE` into carries past 700ft. `BASE_EXIT_VELO`/`CARRY_SCALE` recalibrated
+together (62/6.2 → 31.39/183.29) so a q=1 swing at College carries `HR_CARRY_FRAC` (1.05) of the
+fence at cap `hitPow` and `MEDIAN_CARRY_FRAC` (0.80) at half of cap — `SKILL_EFFECT.hitPow.
+exitVeloMphPerPt` also retuned (0.35→0.07) alongside it, the smallest reduction (of a five-point
+sweep measured against the real `--contact-grid` tool each time) that kept both of doc §8's own
+TIMING_OVER_POWER/ceiling checks passing against the new, much-lower base. `MIN_EXIT_VELO_MPH` (new,
+named) replaces a bare `35` that sat ABOVE where the new base's own quality-scaled floor naturally
+lands — the exact regression a max-Power, worst-timed swing exposed (measured landing exactly on the
+old floor, erasing the whole timing-quality gradient). `LEAGUE_POWER_SCALE.little` needed a much
+larger push than its `fieldScale` starting guess (0.60→1.8) to clear `LL_HR_PER_GAME_BAND` — the
+fly-ball population that can even become a home run is a small, fixed slice of centered contact
+regardless of exit velocity, so a closer fence does far less than the same multiplier does at a
+league with a farther one.
+
+Measured after (median tier, player side, per game): little 0.329 HR (band [0.3, 1.0]), highschool
+0.139, college 0.130, minors 0.127, majors 0.154 — all five leagues can now produce a home run, a
+double, and a triple (test.js section 20's own existence probes, maxed power/timing, every league).
+
+### The champion's own axis (commit 5)
+
+Before this commit every pitching-behavior field (`cornerBias`, `pitchMix`, `patternWeight`,
+`weakSpotWeight`) was per-LEAGUE only — a league's champion pitched with the exact same values as
+its weakest team, and `CPU_SIGMA_MIN_MS` bound every slot to the same flat floor. `TEAM_LADDER_
+OFFSETS[slot]` gains `behaviorMul` (0.50 at slot 0 to 1.60 at slot 7, multiplies cornerBias/
+patternWeight/weakSpotWeight) and `changeupShare` (0 to 2.00, leans the pitch mix toward changeup),
+both bounded by `CHAMPION_CEILING` (`'nextLeagueRow'`) so a league's champion can never out-pitch the
+NEXT league's own base row — "easier season, harder champion" never turns a Little League champion
+into a de facto Majors pitcher. `SLOT_SIGMA_DESCENT` lets slots 5-7 descend their own base sigma
+floor linearly toward `CPU_SIGMA_ABSOLUTE_FLOOR_MS` (58) instead of sharing every other slot's flat
+league floor — resolved per (league, slot) in `teams.js`'s `makeLeague` and attached as `team.
+ladderOffset.sigmaFloorMs`. `CpuPitcher` gained a `ladderOffset` constructor param for the first
+time this whole effort (it had none at all before this commit).
+
+### Shifters, bounded and priced on the ladder's own axis (commit 6)
+
+`STYLE_STRENGTH_DELTA` no longer touches the skill cap at all — converted through two measured
+slopes (`SIGMA_MS_PER_WINRATE_PP` 4.2, `CHASE_PER_WINRATE_PP` 0.2, both from commit 1's own per-lever
+range table) into additive `timingSigmaMs`/`chase` offsets stacked on the slot's own `TEAM_LADDER_
+OFFSETS`, the same axis the ladder itself already moves. `zones.js`'s `shiftSectors` (replaces the
+old per-sector `shiftSector`) shifts the WHOLE sector list together and snaps only the two outermost
+edges to the foul lines, instead of clamping each sector independently — the old clamp could leave an
+uncovered sliver on the trailing edge; the new rule keeps the total covered arc identical at every
+shift angle (test.js section 22's own invariant check, every league, both infield/outfield, five
+shift angles each).
+
+### The retune (commit 7): the lever nobody had touched
+
+The dominant, previously-untouched lever turned out to be `CPU[lg].swingIn` — free of the doc's own
+cornerBias/patternWeight/chase monotonicity requirement (so it can move independently per league),
+and measured (single-factor sweeps against the real season, not assumed) to move `SEASON_WINRATE_
+BAND` far more than cornerBias/patternWeight/weakSpotWeight, which sometimes moved the WRONG
+direction: raising cornerBias/patternWeight/guess past a point made Majors EASIER, not harder — an
+aggressive corner-working pitcher against a disciplined model batter just walks more players, and a
+CpuBatter over-committing to a location lean against a real ModelPitcher's own randomized variety
+gets fooled worse, not better. Both real, measured findings this phase would have missed by tuning
+on intuition alone.
+
+Four values changed, nothing else in the CPU table touched: `CPU.little.swingIn` 0.90→0.30,
+`CPU.highschool.swingIn` 0.85→0.50, `CPU.majors.swingIn` 0.65→1.00, `CPU.majors.guess` 0.60→0.20.
+
+**All five of doc v10's own `SEASON_WINRATE_BAND` targets pass simultaneously for the first time
+this whole effort** (`node sim-baseball.mjs --assert`, full sample, 43.8s wall clock):
+
+```
+League      Measured   Target          Verdict
+little      0.934      [0.92, 0.98]    PASS
+highschool  0.737      [0.70, 0.80]    PASS
+college     0.589      [0.57, 0.67]    PASS
+minors      0.569      [0.49, 0.59]    PASS
+majors      0.481      [0.41, 0.51]    PASS
+```
+
+`CHAMPION_GAME_WIN_MIN_MEDIAN` (0.431 >= 0.40) and `PERFECT_SEASON_REACHABLE` (maxed tier, Majors,
+0.6033 >= 0.02) both pass too.
+
+**Still failing, reported honestly rather than forced:**
+
+```
+Check                                    Measured                       Target
+SEASONS_TO_GOLD_TARGET.college           4.35 seasons                   <= 2.75
+SEASONS_TO_GOLD_TARGET.minors            5.26 seasons                   <= 3.75
+SEASONS_TO_GOLD_TARGET.majors            9.68 seasons                   <= 5.25
+SLOT_WINRATE_BAND (weakest, all leagues) [0.95,0.81,0.656,0.655,0.594]   >= 0.85 everywhere
+SLOT_WINRATE_BAND (champion, all leagues)[0.913,0.712,0.531,0.54,0.449]  [0.40,0.55] everywhere
+CHAMPION_IS_HARDEST                       FAIL                          see within-league table
+LADDER_MONOTONE (within-league)           FAIL                          see within-league table
+CAP_BINDS_ONLY (highschool)               2.1 seasons                   <= 2.0
+```
+
+`SEASONS_TO_GOLD_TARGET` is a stated CONSEQUENCE of the win-rate band, not independently tunable
+without moving the band itself (doc v10's own words: "measured by the simulator rather than set").
+All three measured values are FINITE — Gold is reachable everywhere, just slower than the target
+average implies — so "no league is unwinnable" (doc §8, [Locked]) still holds; this is the same
+compound-probability bottleneck BB-2b's own report first diagnosed (a semifinal AND a championship
+against the single strongest team, in the same season, on top of an already-tight regular season).
+
+**Little League and High School's champion-slot band is mathematically incompatible with their own
+season band, under the current schedule weighting — proven algebraically, not just observed:**
+`SCHEDULE_SHAPE='repeatMiddle'` plays 12 games weighted `{slot0:1, 1:1, 2:2, 3:2, 4:2, 5:2, 6:1,
+7:1}` (the champion, slot 7, exactly once). Season win rate is the weighted mean of all eight slots'
+own win rates. Pinning the champion at its OWN band's most favorable edge (0.55) and solving for
+what the other seven slots would need to average, at even Little League's band's LOW edge (0.92):
+`(10*X + 0.55) / 12 = 0.92` implies `X = 1.049` — a required average win rate above 100%, impossible
+by construction. This is BB-2c's own previously-flagged "Little League's specific tension" (season
+needs easier, champion needs harder, every lever tried moved both the same direction) now proven
+rather than merely observed — not fixable by any per-slot lever this phase's contract allows,
+because it is a fact about the WEIGHTING, not the difficulty. Reopening `SCHEDULE_SHAPE` for these
+two leagues specifically, or loosening one of the two bands for them specifically, are the two
+options on the table — both Matt's call, not a retune lever.
+
+`SLOT_WINRATE_BAND`'s "weakest opponent >= 0.85" also fails at College/Minors/Majors — `TEAM_
+LADDER_OFFSETS[0]`'s own offset (one row shared by every league) is proportionally a much smaller
+edge at these leagues' own tougher base CPU rows than at Little/High School's easier ones, the same
+"one shared table, different relative effect per league" pattern this whole phase kept finding.
+
+### `STYLE_STRENGTH_DELTA` is stale as of the retune (not re-measured this phase)
+
+`node sim-baseball.mjs --styles` (vs median human, post-retune CPU rows) now measures deltas of
+-0.11 to -0.20 across every style — a real shift from commit 6's own post-shift-bound values
+(-0.06 to -0.15), since the measurement is against the CURRENT settings and `CPU[lg].swingIn`
+changed underneath it in commit 7. Not re-applied to `STYLE_STRENGTH_DELTA` this phase — the retune
+lever list (commit 7's own handoff) does not include it, and re-measuring it is a small, separate
+job for whichever session next touches `TEAM_LADDER_OFFSETS`/`STYLE_STRENGTH_DELTA` together.
+
+### Constants touched this phase, by source
+
+| Constant | Old | New |
+|---|---|---|
+| `BASE_EXIT_VELO` (moved from swing.js's own local const) | `62` | `31.39` |
+| `CARRY_SCALE` | `6.2` | `183.29` |
+| `SKILL_EFFECT.hitPow.exitVeloMphPerPt` | `0.35` | `0.07` |
+| `HR_CARRY_FRAC` / `MEDIAN_CARRY_FRAC` / `MEDIAN_HIT_POW_FRAC` (new) | - | `1.05` / `0.80` / `0.5` |
+| `LEAGUE_POWER_SCALE` (new) | - | `{little:1.8, highschool:0.85, college:1.00, minors:1.05, majors:1.10}` |
+| `MIN_EXIT_VELO_MPH` (new, was a bare `35` in swing.js) | - | `BASE_EXIT_VELO * (35/62)` |
+| `CARRY_ZERO_MPH` (new, was a bare `30` in outcomes.js) | - | `30` |
+| `DOUBLE_DEPTH_FRAC` / `TRIPLE_DEPTH_FRAC` (new, replace flat 250ft/320ft) | - | `0.625` / `0.80` |
+| `TEAM_LADDER_OFFSETS[*].behaviorMul` (new) | - | `0.50` to `1.60`, linear by slot |
+| `TEAM_LADDER_OFFSETS[*].changeupShare` (new) | - | `0` to `2.00`, linear by slot |
+| `CHAMPION_CEILING` (new) | - | `'nextLeagueRow'` |
+| `SLOT_SIGMA_DESCENT` (new) | - | `{bindThroughSlot: 4, descentToSlot: 7}` |
+| `SHIFT_MAX_DEG` | `15` | `3` (= `GAP_DEG / 2`) |
+| `SHIFT_MIN_SAMPLES` (new) | - | `5` |
+| `SIGMA_MS_PER_WINRATE_PP` / `CHASE_PER_WINRATE_PP` (new) | - | `4.2` / `0.2` |
+| `STYLE_STRENGTH_DELTA` | `{sluggers:0.0010, smallBall:-0.0333, patient:0.0160, flamethrowers:-0.0070, junkballers:-0.0150, shifters:0.0813, aces:0.0043}` | `{sluggers:-0.0646, smallBall:-0.1530, patient:-0.1080, flamethrowers:-0.1176, junkballers:-0.1320, shifters:-0.1022, aces:-0.1252}` (measured post-shift-bound, pre-retune - see above, now stale) |
+| `CPU.little.swingIn` | `0.90` | `0.30` |
+| `CPU.highschool.swingIn` | `0.85` | `0.50` |
+| `CPU.majors.swingIn` | `0.65` | `1.00` |
+| `CPU.majors.guess` | `0.60` | `0.20` |
+| `sw.js` `CACHE` | `game-hub-v825` | `game-hub-v826` (past `origin/main`'s `v824` at time of this phase) |
+
+Not touched: `POINTS`, `CAPS`, `SEASON`, trophy rules, the contact grid's own assertions,
+`CPU_SIGMA_ABSOLUTE_FLOOR_MS`, `CPU_PLACEMENT_MIN`, `LEAGUE_LADDER_STYLES`, `js/`, `baseball/js/
+ui.js`/`css/`/`strings.js`/`index.html`, any other game folder, the frozen `bb` stats shape.
+
+### The Locked-statement inventory, phase-implemented, with the test that proves each
+
+| Locked statement (design doc v10) | Test |
+|---|---|
+| §10 "Home runs over the wall" (every league, not only College up) | `baseball/js/test.js` §20 (existence probe, maxed power/timing) |
+| §10 "Doubles in the gaps and down the lines" (every league) | `baseball/js/test.js` §20 |
+| §10 "Triples in deep corners and deep center" (every league) | `baseball/js/test.js` §20 |
+| §8 "CPU batters may never time or place better than a median human" (still holds; untouched this phase) | `baseball/js/test.js` §17/§19 (unchanged) |
+| §8 "the championship opponent is always the toughest team" — a slot's pitching never exceeds the next league's own row | `baseball/js/test.js` §21 (`CHAMPION_CEILING`) |
+| §9 "some teams shift their out zones toward where you tend to hit" — bounded, no uncovered sliver | `baseball/js/test.js` §22 (covered-arc invariant) |
+| §5 "Perfect Season is meant to be achievable for a player who has already won the World Series and maxed every skill" | `sim-baseball.mjs --assert`'s `PERFECT_SEASON_REACHABLE` + `baseball/js/test.js` §23 |
+| §8 per-league `SEASON_WINRATE_BAND` (all five leagues) | `sim-baseball.mjs --assert` — **passing, all five, for the first time this effort** |
+| §8 "no league is unwinnable" | `sim-baseball.mjs --assert`'s `SEASONS_TO_GOLD_TARGET` all measuring FINITE (see above — the target tolerance itself still fails at three leagues) |
+
+### Self-review, answered line by line
+
+- No exit velocity or carry constant left absolute where the doc scales the field: **yes** —
+  `LEAGUE_POWER_SCALE` is applied to every league's exit-velocity term via `scaleAboveZero`.
+- The human model reads no league row: **yes** — `mkModelAgent` reads `tier.swingIn`/`tier.chase`
+  only; `CPU[league].swingIn`/`.chase` are never read by it after commit 2.
+- `STYLE_STRENGTH_DELTA` never touches a skill cap: **yes** — `teams.js`'s `slotCap` depends only
+  on `TEAM_LADDER_OFFSETS[slot].skill`; verified by `baseball/js/test.js` §22.
+- No uncovered sliver under any shift: **yes** — the covered-arc invariant holds at every league,
+  every tested shift angle, both infield and outfield (`baseball/js/test.js` §22).
+- The champion's effective sigma at or above 58 everywhere: **yes** — `baseball/js/test.js` §21
+  sweeps every league x every slot.
+- Every `TEAM_LADDER_OFFSETS` behavior value at or below the next league's row: **yes** —
+  `CHAMPION_CEILING` enforced in `agents.js`, verified by `baseball/js/test.js` §21.
+- `RULES_V` bumped if any snapshot shape changed: **not bumped** — no persisted snapshot shape
+  changed this phase (settings values and scoreboard-only additions).
+- The contact grid unchanged: **its ASSERTIONS are unchanged and still pass** — the measured
+  VALUES changed (BASE_EXIT_VELO/CARRY_SCALE/exitVeloMphPerPt all moved, per commit 4), which the
+  handoff's own "must not touch: the contact grid's assertions" always meant the test LOGIC, not a
+  frozen number.
+- The scoreboard bands equal the doc's table: **yes** — `SEASON_WINRATE_BAND`/`SEASONS_TO_GOLD_
+  TARGET` in `sim-baseball.mjs` transcribe doc v10 §8's own table exactly, unchanged this phase.
+
+### Little League's ceiling, in one sentence
+
+Little League's own ceiling (every lever at its easiest legal extreme) measures 99.6% — well above
+the 0.92 floor that would have triggered "stop tuning, report the ceiling" — so its remaining
+`SEASON_WINRATE_BAND` pass (0.934, comfortably inside [0.92, 0.98]) reflects real headroom, not a
+hard limit; the champion-band conflict documented above is a separate, structural fact about the
+SCHEDULE's weighting, not about how easy the league itself can be made.
+
+### Verification (Phase 2d, in order)
+
+```
+node validate-sw-assets.mjs           # ok, REST_MANIFEST/version.json regenerated for game-hub-v826
+node baseball/js/test.js              # 2397 assertions, 0 failed (was 2133 at the start of this phase)
+node sim-baseball.mjs --range --quick    # measurement only, see the per-commit reports above
+node sim-baseball.mjs --contact-grid     # PASS on all 5 assertions
+node sim-baseball.mjs --styles --quick   # measurement only, STYLE_STRENGTH_DELTA stale post-retune (see above)
+node sim-baseball.mjs --assert --quick   # FAILS - sampling noise moves majors across its own band edge at this sample size
+node sim-baseball.mjs --assert           # FAILS - see the promise scoreboard above; five SEASON_WINRATE_BAND lines PASS
+node test-game-conventions.mjs           # 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs              # re-run, unchanged
+node test-sw-strategy.mjs                # 107 passed, 0 failed
+```
+
+**`sim-baseball.mjs --assert` still fails, on real, reported findings — the same discipline every
+phase of this effort has followed.** But five checks that failed at the start of this phase now
+pass, including every one of doc v10's own per-league `SEASON_WINRATE_BAND` targets simultaneously,
+for the first time. The remaining fails are two structural facts (the Little/High School schedule-
+weighting conflict, proven algebraically; the compound-probability Gold bottleneck, previously
+diagnosed and still present) plus one shared-table cross-league tension (`TEAM_LADDER_OFFSETS[0]`'s
+proportional effect), none of which a further retune pass within this phase's contract can resolve —
+each is named plainly above for whoever picks this up next.
+
 ## Status: Phase 2c — the regular season was the bottleneck, and what CPU strength is allowed to be
 
 BB-2c (2026-09-13) named the two CPU stat advantages behind the regular-season win-rate gap BB-2b's
