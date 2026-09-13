@@ -551,6 +551,43 @@ console.log('\n-- 8d. season.js: schedule, standings, playoffs (Step 3) --');
   ok(trophyFor({ reachedChampionship: true, wonChampionship: false }) === 2, 'losing the championship is Silver (2)');
   ok(trophyFor({ reachedSemifinal: true, reachedChampionship: false }) === 1, 'losing the semifinal is Bronze (1)');
   ok(trophyFor({}) === 0, 'missing the playoffs entirely is 0 (no trophy)');
+
+  // BB-2b commit 2, doc §4/§13 Open item 13: `BRACKET_MODEL` = 'strongestInFinal' - the player's
+  // semifinal opponent must never be the strongest of the four qualifiers, over 1000 seeded
+  // "seasons" spanning every possible player record. `scriptedStandings`'s STRONGEST CPU row always
+  // carries the highest `strengthRank` among the seeds (ties broken by strengthRank on equal wins,
+  // and no two CPU rows can tie on wins under either standings model) - a stronger invariant than
+  // comparing team ids, since it holds regardless of which STANDINGS_MODEL is in effect.
+  {
+    let sfChecked = 0;
+    for (let seed = 0; seed < 1000; seed++) {
+      const wins = seed % 13;
+      const st = scriptedStandings(league, { wins, losses: 12 - wins }, seed % 2 === 0 ? 'rawWins7' : 'scaledTo12');
+      const playerRow = st.find((r) => r.isPlayer);
+      const playerSeed = st.indexOf(playerRow);
+      if (playerSeed >= 4) continue; // missed the playoffs this "season"
+      const bracket = playoffs(st, 'strongestInFinal');
+      const sfPair = bracket.semifinals.find((pair) => pair.some((t) => t.isPlayer));
+      const sfOpponent = sfPair.find((t) => !t.isPlayer);
+      if (!sfOpponent) continue; // the player IS the only seed (shouldn't happen with 4 seeds, guarded anyway)
+      sfChecked += 1;
+      const seeds = bracket.seeds;
+      const strongestSeed = seeds.filter((s) => !s.isPlayer).reduce((a, b) => (b.strengthRank > a.strengthRank ? b : a));
+      ok(sfOpponent.id !== strongestSeed.id || strongestSeed.isPlayer,
+        `BRACKET_MODEL=strongestInFinal: the player's semifinal opponent is never the strongest qualifier (seed ${seed})`);
+    }
+    ok(sfChecked > 100, 'the strongestInFinal probe actually exercised a meaningful number of in-the-playoffs seasons');
+  }
+
+  // STANDINGS_MODEL = 'scaledTo12': every CPU rank's win total is directly on a 12-game scale, and
+  // strictly increasing by rank (doc §4/§13 Open item 13).
+  {
+    const st = scriptedStandings(league, { wins: 6, losses: 6 }, 'scaledTo12');
+    const cpu = st.filter((r) => !r.isPlayer).sort((a, b) => a.strengthRank - b.strengthRank);
+    ok(cpu.every((r) => r.wins + r.losses === 12), 'scaledTo12: every CPU row plays a 12-game record, same as the player');
+    ok(cpu.every((r, i) => i === 0 || r.wins > cpu[i - 1].wins), 'scaledTo12: CPU win totals strictly rise by strength rank');
+    ok(cpu[cpu.length - 1].wins === 12 && cpu[0].wins === 0, 'scaledTo12: the strongest CPU goes 12-0, the weakest 0-12');
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

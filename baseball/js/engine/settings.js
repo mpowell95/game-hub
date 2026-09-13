@@ -496,6 +496,47 @@ export const LINE_THROUGH_MAX_FT = 220;
 // to rediscover that the hook is deliberately absent rather than forgotten.
 export const RESERVED_PHASE_6 = ['steal', 'bunt', 'pickoff'];
 
+// ---------------------------------------------------------------------------------------------
+// BB-2b commit 2: doc §4/§13's own "Open item 13" (schedule shape and standings tie-breakers) -
+// the three levers `sim-baseball.mjs --stages` (commit 1) measured against the real bottleneck.
+// All three Draft, for Matt to confirm or edit via commit 4's proposal block; `season.js` reads
+// them as its own default parameter, so a caller (this sim, and later phase 4's real career loop)
+// can still override per-call without touching settings.js.
+//
+// BRACKET_MODEL: 'asCoded' is the shipped positional 1v4/2v3 bracket (season.js's original
+// `playoffs()`) - a low-seeded player (seed 4, the common case) faces the single STRONGEST
+// qualifier in the semifinal, then the hardcoded championship opponent is that same strongest team
+// again. 'strongestInFinal' is the bracket doc §8's own wording implies ("the championship
+// opponent is always the toughest team in the league") but nothing before this phase actually
+// arranged: the player's semifinal opponent is chosen to EXCLUDE the strongest of the four
+// qualifiers, so that team reaches the final by winning ITS OWN (scripted) semifinal instead of by
+// being fed to the player twice. Commit 1's `--stages` measured this move Gold odds by only a few
+// points at every league - not the dominant lever - but it is still the bracket the doc's own
+// wording describes, so it is the default.
+export const BRACKET_MODEL = 'strongestInFinal'; // Draft [Open item 13]
+
+// PLAYOFF_HOME: 'player' is the shipped behavior (both the semifinal and the championship are
+// forced player-home, while the 12-game regular season alternates 6/6) - a real, uncompared-against
+// home-field edge in a 3-inning engine where the home side skips a pointless bottom of the third
+// and owns the walk-off (baseball/CLAUDE.md's "both playoff games are forced player-home" finding).
+// 'higherSeed' gives home to whichever side has more wins (the CPU's own scripted record under
+// STANDINGS_MODEL, or the player's real one) - the ordinary sports convention, and what
+// `scriptedStandings`'s own tie-break already treats as "better." 'alternate' flips home/away
+// between the two playoff games by season, an even simpler in-between. Commit 1 measured this
+// lever moves Gold odds only a few points too; 'higherSeed' is the default because it needs no
+// invented tie-break rule of its own - the standings already decide who is "better."
+export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
+
+// STANDINGS_MODEL: 'rawWins7' is the shipped `scriptedStandings` (CPU team at ladder rank r plays a
+// scripted 7-game round robin among the other 7 CPUs and finishes r-r wins, 0..7) compared directly
+// against the PLAYER's real 12-game record - a 9-3 player is compared against CPU rows that can
+// never exceed 7 wins, which structurally seeds the player low relative to what a 9-3 record
+// "should" mean on a 12-game slate. 'scaledTo12' scripts each CPU rank r's win total as
+// `round(12 * r / 7)` instead (0, 2, 3, 5, 7, 9, 10, 12 for ranks 0..7) - directly comparable to the
+// player's own 12-game record, "like for like" per the handoff. Default per the handoff's own
+// instruction, pending commit 4's measured proposal.
+export const STANDINGS_MODEL = 'scaledTo12'; // Draft [Open item 13]
+
 export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
@@ -505,4 +546,5 @@ export default {
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
+  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL,
 };

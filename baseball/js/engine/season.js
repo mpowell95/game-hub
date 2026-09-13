@@ -10,6 +10,7 @@
 // caller and folded in as `playerResults`.
 
 import { hashSeed, mulberry32 } from './rng.js';
+import { BRACKET_MODEL, STANDINGS_MODEL } from './settings.js';
 
 // doc §4, [Draft]: "12 regular season games per league across 8 opponents." Every opponent once,
 // then the four strongest a second time (doc §8, [Locked]: "the schedule puts harder opponents
@@ -50,22 +51,33 @@ export function makeSchedule(league, seasonSeed) {
  * row and ranked by the same `wins` column; ties break on strength rank for two CPU teams (which
  * cannot actually tie under this rule) and, for the player, on career wins per doc §5's own
  * leaderboard tie-break.
+ *
+ * `standingsModel` (BB-2b commit 2, doc §4/§13 Open item 13): `'rawWins7'` is the original scripted
+ * record - a 7-game round robin among the 8 CPUs, so a CPU team's win total tops out at 7 no matter
+ * how long the PLAYER's own season is. `'scaledTo12'` scripts the same rank ordering onto a 12-game
+ * scale instead (`round(12 * rank / (n-1))`), directly comparable to the player's own 12-game
+ * record - see `settings.js`'s `STANDINGS_MODEL` for the full rationale and default.
  * @param {Array} teams - `makeLeague(league)`'s 8 teams, weakest to strongest (index 0..7)
  * @param {{wins:number, losses:number}} playerResults - the player's own regular-season record
+ * @param {string} [standingsModel] - `'rawWins7'` | `'scaledTo12'`, defaults to `settings.STANDINGS_MODEL`
  * @returns {Array<{id:string, styleId?:string, wins:number, losses:number, isPlayer:boolean, strengthRank:number}>}
  *   sorted strongest/most-wins first (index 0 = the standings leader)
  */
-export function scriptedStandings(teams, playerResults) {
+export function scriptedStandings(teams, playerResults, standingsModel = STANDINGS_MODEL) {
   const n = teams.length;
-  const rows = teams.map((team, rank) => ({
-    id: team.name,
-    styleId: team.styleId,
-    // Rank 0 is the weakest of 8, so it beats nobody: wins = rank, losses = (n-1-rank).
-    wins: rank,
-    losses: (n - 1) - rank,
-    isPlayer: false,
-    strengthRank: rank,
-  }));
+  const rows = teams.map((team, rank) => {
+    const scaled = standingsModel === 'scaledTo12';
+    const wins = scaled ? Math.round((12 * rank) / (n - 1)) : rank;
+    const losses = scaled ? 12 - wins : (n - 1) - rank;
+    return {
+      id: team.name,
+      styleId: team.styleId,
+      wins,
+      losses,
+      isPlayer: false,
+      strengthRank: rank,
+    };
+  });
   rows.push({
     id: 'you',
     wins: playerResults.wins || 0,
@@ -82,14 +94,37 @@ export function scriptedStandings(teams, playerResults) {
 
 /**
  * doc §4, [Locked]: "Regular season, then semifinal, then championship. No quarterfinal." Top 4
- * seed 1-4 (seed 1 strongest/most wins); the bracket is 1v4 and 2v3. "The strongest team always
- * wins its semifinal" resolves any semifinal with NO player in it outright; a semifinal the
- * player IS in is left `null` for the caller to resolve by actually playing the game.
+ * seed 1-4 (seed 1 strongest/most wins). "The strongest team always wins its semifinal" resolves
+ * any semifinal with NO player in it outright; a semifinal the player IS in is left `null` for the
+ * caller to resolve by actually playing the game.
+ *
+ * `bracketModel` (BB-2b commit 2, doc §4/§13 Open item 13): `'asCoded'` is the original positional
+ * bracket (seed 1 v seed 4, seed 2 v seed 3) - since a low-skill player is nearly always seed 4
+ * under `'rawWins7'` standings, this pairs the player against the single STRONGEST of the four
+ * qualifiers in the semifinal, and the championship opponent (always the league's overall
+ * strongest team, decided by the caller, never by this function) is that same team again.
+ * `'strongestInFinal'` is the bracket doc §8's own wording implies ("the championship opponent is
+ * always the toughest team in the league") - the player's semifinal opponent is chosen to EXCLUDE
+ * the strongest of the four qualifiers (by `strengthRank`, which is 1:1 with `makeLeague`'s own
+ * slot order), so that team reaches the final by winning ITS OWN scripted semifinal instead of by
+ * being fed to the player twice. See `settings.js`'s `BRACKET_MODEL` for the measured effect and
+ * default. Player-absent seasons fall back to the positional pairing (this function is only ever
+ * called by a caller that already knows the player qualified, but never assumes it here).
  * @param {Array} standings - `scriptedStandings()`'s sorted output
+ * @param {string} [bracketModel] - `'asCoded'` | `'strongestInFinal'`, defaults to `settings.BRACKET_MODEL`
  * @returns {{seeds:Array, semifinals:Array<Array>, winners:Array}}
  */
-export function playoffs(standings) {
+export function playoffs(standings, bracketModel = BRACKET_MODEL) {
   const seeds = standings.slice(0, 4);
+  const playerIdx = seeds.findIndex((s) => s.isPlayer);
+  if (bracketModel === 'strongestInFinal' && playerIdx !== -1) {
+    const cpuSeeds = seeds.filter((s) => !s.isPlayer);
+    const strongest = cpuSeeds.reduce((a, b) => (b.strengthRank > a.strengthRank ? b : a));
+    const others = cpuSeeds.filter((s) => s !== strongest);
+    const semifinals = [[seeds[playerIdx], others[0]], [strongest, others[1]]];
+    const winners = semifinals.map((pair) => (pair.some((t) => t.isPlayer) ? null : pair[0]));
+    return { seeds, semifinals, winners };
+  }
   const semifinals = [[seeds[0], seeds[3]], [seeds[1], seeds[2]]];
   const winners = semifinals.map((pair) => (pair.some((t) => t.isPlayer) ? null : pair[0]));
   return { seeds, semifinals, winners };

@@ -308,7 +308,6 @@ async function sweepMatchup(league, settings, opponent, tier, seedBase, gamesN =
 }
 
 function mean(a) { return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0; }
-function median(a) { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; }
 
 /** BB-2a step 6: the within-league LADDER_MONOTONE check's own dedicated measurement, at
  *  LADDER_GAMES_N per opponent (median tier only) rather than reusing whatever --games/--quick the
@@ -375,24 +374,30 @@ async function playSeason(league, settings, tier, seasonSeed) {
     if (res.won) wins += 1; else losses += 1;
   }
 
-  const standings = scriptedStandings(teams, { wins, losses });
+  // BB-2b commit 2: bracket/home/standings are no longer hardcoded here - `scriptedStandings`/
+  // `playoffs` read `settings.STANDINGS_MODEL`/`settings.BRACKET_MODEL` themselves (Open item 13),
+  // and both playoff games' home/away now follows `settings.PLAYOFF_HOME` instead of being forced
+  // player-home while the 12-game regular season alternates 6/6 (baseball/CLAUDE.md's own finding).
+  const standings = scriptedStandings(teams, { wins, losses }, settings.STANDINGS_MODEL);
   const playerRank = standings.findIndex((r) => r.isPlayer);
   const madePlayoffs = playerRank < 4;
   let reachedSemifinal = false, reachedChampionship = false, wonChampionship = false;
   if (madePlayoffs) {
-    const bracket = playoffs(standings);
+    const bracket = playoffs(standings, settings.BRACKET_MODEL);
     const sfIndex = bracket.semifinals.findIndex((pair) => pair.some((t) => t.isPlayer));
     reachedSemifinal = true;
     const sfOpponentRow = bracket.semifinals[sfIndex].find((t) => !t.isPlayer);
     const sfOpponentTeam = teams.find((t) => t.name === sfOpponentRow.id) || teams[teams.length - 1];
+    const sfHome = decidePlayoffHome(settings.PLAYOFF_HOME, seasonSeed, 'semifinal', wins, winsForTeam(standings, sfOpponentTeam));
     const sfSeed = hashSeed('bb-playoff-sf', league, tier, seasonSeed);
-    const sfRes = await playOneGame(league, settings, sfOpponentTeam, playerAgent, playerTeam, sfSeed >>> 0, true);
+    const sfRes = await playOneGame(league, settings, sfOpponentTeam, playerAgent, playerTeam, sfSeed >>> 0, sfHome);
     if (sfRes.won) {
       reachedChampionship = true;
       // doc §8, [Locked]: "the championship opponent is always the toughest team in the league."
       const champOpponent = teams[teams.length - 1];
+      const chHome = decidePlayoffHome(settings.PLAYOFF_HOME, seasonSeed, 'final', wins, winsForTeam(standings, champOpponent));
       const chSeed = hashSeed('bb-playoff-champ', league, tier, seasonSeed);
-      const chRes = await playOneGame(league, settings, champOpponent, playerAgent, playerTeam, chSeed >>> 0, true);
+      const chRes = await playOneGame(league, settings, champOpponent, playerAgent, playerTeam, chSeed >>> 0, chHome);
       wonChampionship = chRes.won;
     }
   }
@@ -600,6 +605,7 @@ function assertContactGrid(grid) {
 const BRACKET_MODELS = ['asCoded', 'strongestInFinal'];
 const SCHEDULE_SHAPES = ['repeatTop', 'repeatBottom', 'spread'];
 const PLAYOFF_HOMES = ['player', 'higherSeed', 'alternate'];
+const STANDINGS_MODELS = ['rawWins7', 'scaledTo12'];
 
 // Local opponent-order builders, one per schedule shape. `repeatTop` is `season.js`'s own
 // `OPPONENT_ORDER` (unique 0..7, then the top four - the strongest half - a second time, late).
@@ -638,22 +644,11 @@ function winsForTeam(standings, team) {
   return row ? row.wins : 0;
 }
 
-/** `season.js`'s real `playoffs()` is positional (1v4/2v3 by seed). `strongestInFinal` is the
- *  bracket the doc implies (§8, [Locked]: "the championship opponent is always the toughest team")
- *  but phase 2/2a never arranged: the player's semifinal opponent is chosen to EXCLUDE the single
- *  strongest of the four qualifiers, so that team's own semifinal has no player in it and is
- *  resolved (scripted) in its favor regardless - it reaches the final by construction, exactly
- *  once, rather than being both the player's semifinal opponent AND the hardcoded final opponent. */
-function pickSemifinalOpponent(standings, teams, bracketModel) {
-  const seeds = standings.slice(0, 4);
-  if (bracketModel === 'strongestInFinal') {
-    const strongestTeam = teams[teams.length - 1];
-    const cpuSeeds = seeds.filter((s) => !s.isPlayer);
-    const strongestSeed = cpuSeeds.find((s) => s.id === strongestTeam.name);
-    const nonStrongest = cpuSeeds.filter((s) => s !== strongestSeed);
-    return nonStrongest[0] || cpuSeeds[0] || null;
-  }
-  const bracket = playoffs(standings); // positional 1v4/2v3, season.js's real implementation
+/** BB-2b commit 2: `season.js`'s real `playoffs()` now takes `bracketModel` directly (Open item
+ *  13) - this used to be duplicated here in commit 1 before that landed; kept as a thin wrapper so
+ *  `playSeasonStaged` below reads the same way it did in commit 1's diagnostic. */
+function pickSemifinalOpponent(standings, bracketModel) {
+  const bracket = playoffs(standings, bracketModel); // season.js's real implementation
   const sfPair = bracket.semifinals.find((pair) => pair.some((t) => t.isPlayer));
   if (!sfPair) return null; // shouldn't happen when madePlayoffs is true
   return sfPair.find((t) => !t.isPlayer) || null;
@@ -690,7 +685,7 @@ async function playSeasonStaged(league, settings, tier, seasonSeed, opts) {
     if (res.won) wins += 1; else losses += 1;
   }
 
-  const standings = scriptedStandings(teams, { wins, losses });
+  const standings = scriptedStandings(teams, { wins, losses }, opts.standingsModel);
   const playerRank = standings.findIndex((r) => r.isPlayer);
   const madePlayoffs = playerRank < 4;
   const result = {
@@ -700,7 +695,7 @@ async function playSeasonStaged(league, settings, tier, seasonSeed, opts) {
   };
   if (!madePlayoffs) return result;
 
-  const sfOpponentRow = pickSemifinalOpponent(standings, teams, opts.bracketModel);
+  const sfOpponentRow = pickSemifinalOpponent(standings, opts.bracketModel);
   const sfOpponentTeam = teams.find((t) => t.name === sfOpponentRow.id) || teams[teams.length - 1];
   result.semifinalOpponentSlot = teams.indexOf(sfOpponentTeam);
   const sfHome = decidePlayoffHome(opts.playoffHome, seasonSeed, 'semifinal', wins, winsForTeam(standings, sfOpponentTeam));
@@ -733,10 +728,10 @@ function modeOf(arr) {
 
 function fmtPct(v) { return v == null ? 'n/a' : `${(v * 100).toFixed(1)}%`; }
 
-async function runStagesConfig(league, settings, bracketModel, playoffHome, scheduleShape) {
+async function runStagesConfig(league, settings, bracketModel, playoffHome, scheduleShape, standingsModel = 'rawWins7') {
   const seasons = [];
   for (let i = 0; i < SEASONS_N; i++) {
-    seasons.push(await playSeasonStaged(league, settings, 'median', i, { bracketModel, playoffHome, scheduleShape }));
+    seasons.push(await playSeasonStaged(league, settings, 'median', i, { bracketModel, playoffHome, scheduleShape, standingsModel }));
   }
   const homeGames = seasons.reduce((s, x) => s + x.homeGames, 0);
   const homeWins = seasons.reduce((s, x) => s + x.homeWins, 0);
@@ -785,6 +780,12 @@ async function runStages(t0) {
     for (const playoffHome of PLAYOFF_HOMES) {
       const r = await runStagesConfig(league, SETTINGS, 'asCoded', playoffHome, 'repeatTop');
       console.log(`    ${playoffHome.padEnd(18)} sfWin=${fmtPct(r.sfWinRate)} finalWin=${fmtPct(r.finalWinRate)} gold=${fmtPct(r.goldRate)}`);
+    }
+
+    console.log('  standings model (bracket=asCoded, schedule=repeatTop, playoffHome=player):');
+    for (const standingsModel of STANDINGS_MODELS) {
+      const r = await runStagesConfig(league, SETTINGS, 'asCoded', 'player', 'repeatTop', standingsModel);
+      console.log(`    ${standingsModel.padEnd(18)} top4=${fmtPct(r.top4Rate)} gold=${fmtPct(r.goldRate)} seeds=${JSON.stringify(r.seedCounts)}`);
     }
     console.log('');
   }
@@ -905,20 +906,30 @@ async function main() {
     console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${label}: measured ${measured}, threshold ${threshold}`);
   };
 
-  const medianAcross = (fn) => median(LEAGUES.map((lg) => fn(report.leagues[lg].default.seasonStats.median)));
+  // BB-2b commit 2: these three lines used to report the MEDIAN across leagues, which a small
+  // number of easy leagues (Little/High School) could drag comfortably over the threshold while
+  // the leagues that actually matter (College/Minors/Majors, per commit 1's own `--stages`
+  // decomposition) stayed badly broken - majors measured a 0.3% top-4 rate under the un-retuned
+  // ladder, invisible to a median across five leagues. `worstAcross` reports the single WORST
+  // league instead, so the scoreboard cannot pass while any one league is still failing the
+  // player.
+  const worstAcross = (fn, worseIsHigher) => {
+    const values = LEAGUES.map((lg) => fn(report.leagues[lg].default.seasonStats.median));
+    return worseIsHigher ? Math.max(...values) : Math.min(...values);
+  };
   if (report.leagues[LEAGUES[0]].default) {
-    const medGoldSeasons = medianAcross((s) => s.expectedSeasonsToGold);
-    scoreLine('GOLD_SEASONS_MAX_MEDIAN (median tier, every league)', medGoldSeasons <= GOLD_SEASONS_MAX_MEDIAN,
-      medGoldSeasons.toFixed(2), `<= ${GOLD_SEASONS_MAX_MEDIAN}`);
+    const worstGoldSeasons = worstAcross((s) => s.expectedSeasonsToGold, true);
+    scoreLine('GOLD_SEASONS_MAX_MEDIAN (median tier, worst league)', worstGoldSeasons <= GOLD_SEASONS_MAX_MEDIAN,
+      worstGoldSeasons === Infinity ? 'inf' : worstGoldSeasons.toFixed(2), `<= ${GOLD_SEASONS_MAX_MEDIAN}`);
 
-    const medGoldOneSeasons = medianAcross((s) => s.goldRate);
-    scoreLine('GOLD_ONE_SEASON_MIN_MEDIAN', medGoldOneSeasons >= GOLD_ONE_SEASON_MIN_MEDIAN,
-      medGoldOneSeasons.toFixed(3), `>= ${GOLD_ONE_SEASON_MIN_MEDIAN}`);
+    const worstGoldOneSeasons = worstAcross((s) => s.goldRate, false);
+    scoreLine('GOLD_ONE_SEASON_MIN_MEDIAN (worst league)', worstGoldOneSeasons >= GOLD_ONE_SEASON_MIN_MEDIAN,
+      worstGoldOneSeasons.toFixed(3), `>= ${GOLD_ONE_SEASON_MIN_MEDIAN}`);
 
     const champRates = LEAGUES.map((lg) => report.leagues[lg].default.seasonStats.median.champWinRate).filter((v) => v != null);
-    const medChamp = champRates.length ? median(champRates) : null;
-    scoreLine('CHAMPION_GAME_WIN_MIN_MEDIAN', medChamp != null && medChamp >= CHAMPION_GAME_WIN_MIN_MEDIAN,
-      medChamp == null ? 'n/a (no sample reached the championship)' : medChamp.toFixed(3), `>= ${CHAMPION_GAME_WIN_MIN_MEDIAN}`);
+    const worstChamp = champRates.length ? Math.min(...champRates) : null;
+    scoreLine('CHAMPION_GAME_WIN_MIN_MEDIAN (worst league)', worstChamp != null && worstChamp >= CHAMPION_GAME_WIN_MIN_MEDIAN,
+      worstChamp == null ? 'n/a (no sample reached the championship)' : worstChamp.toFixed(3), `>= ${CHAMPION_GAME_WIN_MIN_MEDIAN}`);
 
     // LADDER_MONOTONE: median win rate against the league-average team falls each league up.
     const ladderWinRates = LEAGUES.map((lg) => mean(report.leagues[lg].default.gameStats.map((t) => t.perTier.median.winRate)));
