@@ -235,6 +235,12 @@ thing worth a picture is notes vs. an answer**, so the sheet is now just the dia
 caption under it (`howto_caption`) - `renderHowTo()` in `js/ui.js`. `howto_lead`/`howto_rule_1-3`
 and their CSS (`.sd-howto-lead`/`.sd-howto-rules`) were deleted, not hidden.
 
+**Cutting the text made the diagram itself read as unclear** (Matt, immediately after: "Not
+clear") - two boxes of numbers with no caption doing the explaining for them anymore is just two
+boxes of numbers. `_howToDiagramSVG()` now labels each box (`howto_label_answer`/`howto_label_notes`,
+"Answer"/"Notes") and places the four pencil-mark digits at their REAL fixed grid positions (matching
+where `.sd-notesgrid` actually puts digit N in the game) instead of an arbitrary-looking scatter.
+
 ## Timer
 
 Starts on the **first input** of a completely fresh puzzle (nothing placed, no mistakes, no
