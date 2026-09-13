@@ -177,6 +177,21 @@ export const FEEL = {
     niceBoost: 1.06,        // [Tested] doc §14 - Nice pitch speed, x
     niceBreak: 1.3,         // [Tested] doc §14 - Nice pitch bend, x
     aimScatter: 0.12,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
+
+    // ---- Contact-quality axis (BB-2a, 2026-09-12) -------------------------------------------
+    // Draft, new. Fixes the mechanism the BB-2 handoff diagnosed: `absTiming` used to decide only
+    // miss/foul/contact and then never appear again, so a swing 3ms off and one 99ms off (inside a
+    // 100ms window) produced identical exit velocity - "Perfect" did not exist as a continuous
+    // quantity. `q` (computed in swing.js) is 1 inside `perfectMs` of dead-on timing, falling
+    // linearly to 0 at the timing window's own edge; exit velocity and launch angle both read it.
+    perfectMs: 25,          // Draft, BB-2a - the "Perfect" band width (doc §12's popup wording)
+    qualityFloor: 0.55,     // Draft, BB-2a - exit-velocity share kept by a swing barely inside the window (q=0); power contributes nothing at all here, only at q>0
+    lineDriveCenterDeg: 20, // Draft, BB-2a - center of a CENTERED swing's launch-angle band
+    lineDriveSpreadMinDeg: 8,  // Draft, BB-2a - launch-angle spread at q=1 (a tight, true line-drive band)
+    lineDriveSpreadMaxDeg: 30, // Draft, BB-2a - launch-angle spread at q=0 (widens toward topped/popped)
+    pullMaxDeg: 40,          // Draft, BB-2a - the largest pull/opposite-field spray a sloppy-timed (q near 0) swing can produce
+    perfectSprayDeg: 22,     // Draft, BB-2a - where a perfectly-timed (q=1) swing centers its spray: one of the two GAPS (left or right of straightaway), never dead center - a squared-up ball is not aimed at the deepest part of the park nor at a fielder standing in it
+    perfectSpraySpreadDeg: 8, // Draft, BB-2a - how narrow the q=1 spray band is around whichever gap it picked
   },
   ui: {
     betweenMs: 3000,        // [Tested] doc §14 - pause between pitches
@@ -397,6 +412,14 @@ export const MECHANICS = {
 // here from outcomes.js's own local const so every magic number in the engine has one home.
 export const CARRY_SCALE = 6.2;
 
+// BB-2a step 3 (2026-09-12): a well-squared-up LINE DRIVE (contact quality `q` at or above
+// LINE_THROUGH_Q) that lands inside an outfield out-zone sector still goes through as a hit, up to
+// LINE_THROUGH_MAX_FT - a "routine fly into a sector" stays an out (the ordinary out-zone check,
+// untouched), but a scorched line drive through the same depth a lazy fly ball would have been
+// caught at is what a squared-up ball actually does. Draft, new, BB-2a.
+export const LINE_THROUGH_Q = 0.75;
+export const LINE_THROUGH_MAX_FT = 220;
+
 // Reserved for phase 6 (doc §3/§17 Open item 8): steal, bunt, and pickoff are [Locked] FEATURES
 // with reserved input slots, but "how each works in play" is undecided and no baserunning happens
 // between pitches this phase (bases.js's own header). Named here so a future phase does not have
@@ -410,5 +433,5 @@ export default {
   FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, TEAM_STYLE_WEIGHTS, LEFTY_RATE,
-  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, MECHANICS, RESERVED_PHASE_6,
+  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
 };

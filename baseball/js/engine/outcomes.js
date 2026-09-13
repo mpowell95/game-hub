@@ -3,7 +3,7 @@
 // invented `fieldingSkill01` ramp. The real design has no "error" outcome at all (doc §10's list
 // is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
 
-import { FOUL_LINE_DEG, CARRY_SCALE } from './settings.js';
+import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
@@ -45,7 +45,8 @@ export function fenceFtAt(sprayDeg, fenceFt) {
 }
 
 /**
- * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number}} batted
+ * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number, q?:number}} batted -
+ *   `q` (BB-2a) is swing.js's contact-quality axis, 0..1; used only by the line-through rule below
  * @param {{infield:Array, outfield:Array}} zones - `zonesFor(league, shiftDeg)` from zones.js
  * @param {object} settings
  * @param {{left:number, leftCenter?:number, center:number, rightCenter?:number, right:number}} fenceFt
@@ -94,6 +95,13 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
 
   const sector = angleSector(batted.sprayAngleDeg, zones.outfield);
   if (distanceFt <= sector.toFt) {
+    // BB-2a step 3, [Draft]: a well-squared-up LINE DRIVE (contact quality `q` at or above
+    // LINE_THROUGH_Q) still goes through for a hit up to LINE_THROUGH_MAX_FT - a "routine fly into
+    // a sector" (the ordinary case below) stays an out, but a scorched line drive is not a fly ball
+    // a fielder settles under; it is through the infielder's reach before an outfielder can close.
+    if (kind === 'line' && (batted.q || 0) >= LINE_THROUGH_Q && distanceFt <= LINE_THROUGH_MAX_FT) {
+      return { result: 'hit', bases: 1, kind: 'line-through', distanceFt, isFoul: false };
+    }
     return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
   }
   // Through the outfield sector: a single through a gap, or a double/triple the deeper it carried

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch } from './engine/pitch.js';
-import { swing } from './engine/swing.js';
+import { swing, qualityFor } from './engine/swing.js';
 import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
@@ -228,6 +228,53 @@ console.log('\n-- 5. swing.js --');
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 5b. swing.js: contact-quality axis (BB-2a step 2) --');
+{
+  const F = SETTINGS.FEEL.engine;
+  ok(qualityFor(0, F.perfectMs, F.timingWindow) === 1, 'q is 1 at dead-on timing');
+  ok(qualityFor(F.perfectMs, F.perfectMs, F.timingWindow) === 1, 'q is still 1 exactly at the perfect-band edge');
+  ok(qualityFor(F.timingWindow, F.perfectMs, F.timingWindow) === 0, 'q is 0 exactly at the timing-window edge');
+  ok(qualityFor(F.timingWindow * 2, F.perfectMs, F.timingWindow) === 0, 'q never goes negative past the window edge');
+  const qs = [0, 10, 25, 40, 60, 80, 99].map((ms) => qualityFor(ms, F.perfectMs, F.timingWindow));
+  ok(qs.every((v, i) => i === 0 || v <= qs[i - 1] + 1e-9), 'q is non-increasing in absolute timing error');
+
+  // With a fixed rand stream and a fixed (centered) placement, exitVeloMph must be non-increasing
+  // in the absolute timing error across the whole window - the exact defect the handoff diagnosed
+  // ("a swing 3ms off and a swing 99ms off produce identical contact") must no longer hold.
+  const skills = { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 5, pitchAcc: 5, pitchSpin: 5 };
+  const exitVeloAt = (timingErrorMs) => {
+    const r = mulberry32(777); // same seed every call -> identical noise draws
+    const pitch = { x: 0, isStrike: true };
+    const s = swing(pitch, skills, { action: 'swing', aimX: 0, timingErrorMs, charged: false }, SETTINGS, r);
+    return s;
+  };
+  const timingSamples = [0, 5, 15, 25, 40, 60, 80, 99];
+  const veloSamples = timingSamples.map((ms) => exitVeloAt(ms));
+  ok(veloSamples.every((s) => s.contact && s.inPlay), 'every sampled timing error stays inside the window (in play)');
+  ok(veloSamples.every((s, i) => i === 0 || s.exitVeloMph <= veloSamples[i - 1].exitVeloMph + 1e-9),
+    'exitVeloMph is non-increasing in absolute timing error, fixed rand stream and placement (BB-2a step 2)');
+  ok(veloSamples[0].exitVeloMph > veloSamples[veloSamples.length - 1].exitVeloMph,
+    'a dead-on-time swing carries meaningfully more than a barely-inside-the-window one (was: identical)');
+
+  // At q=1, power's contribution is FULL; at q=0 (window edge), exit velo is at most qualityFloor's
+  // share of the q=1 exit velo for a MAX-power swing vs a MIN-power one under the same conditions.
+  // The window itself widens with hitAcc (whiffReductionPerPt), so its edge must be computed the
+  // same way swing.js computes it, not assumed to equal the base FEEL.timingWindow.
+  const hitAccPtsForWindow = 5;
+  const windowMsFor = () => F.timingWindow * (1 + hitAccPtsForWindow * (SETTINGS.SKILL_EFFECT.hitAcc.whiffReductionPerPt || 0) * 4);
+  const veloForPower = (hitPowPts, timingErrorMs) => {
+    const r = mulberry32(321);
+    const sk = { ...skills, hitPow: hitPowPts, hitAcc: hitAccPtsForWindow };
+    const pitch = { x: 0, isStrike: true };
+    return swing(pitch, sk, { action: 'swing', aimX: 0, timingErrorMs, charged: false }, SETTINGS, r).exitVeloMph;
+  };
+  const perfectMaxPower = veloForPower(10, 0);
+  const edgeMaxPower = veloForPower(10, windowMsFor());
+  ok(edgeMaxPower <= perfectMaxPower * F.qualityFloor + 1e-6 + 4 /* rand01 noise budget, +-4mph */,
+    `a max-Power swing at the timing window's edge (q=0) caps out near qualityFloor of its own perfect-timing exit velo (edge=${edgeMaxPower.toFixed(1)}, cap=${(perfectMaxPower * F.qualityFloor + 4).toFixed(1)})`);
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error outcome) --');
 {
   ok(carryFt(100, 25) > carryFt(60, 25), 'more exit velocity carries further');
@@ -273,6 +320,45 @@ console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error
   ok(shifted.infield.every((s) => s.fromDeg >= -45 && s.toDeg <= 45), 'a shifted zone never rotates outside fair territory');
   const sec = angleSector(0, zonesFor('majors').outfield);
   ok(sec.fromDeg <= 0 && sec.toDeg >= 0, 'angleSector finds the sector containing a given angle');
+
+  // BB-2a step 3: a perfectly-timed swing must not spray toward the worst part of the field, and a
+  // squared-up LINE DRIVE goes through a sector a routine fly into the same spot would not.
+  {
+    // A marginal fly ball hit dead center (a majors outfielder's deepest, best-covered sector) is
+    // an out; the SAME exit velocity/launch angle hit toward a gap (where swing.js's q=1 spray
+    // model centers a perfectly-timed swing, per settings.js's `perfectSprayDeg`) is a hit - the
+    // doc's own promise ("good timing is not aimed at the worst place on the field") made concrete.
+    const zonesM = zonesFor('majors', 0);
+    const centerSector = zonesM.outfield[1];
+    const cornerSector = zonesM.outfield[0];
+    ok(centerSector.toFt > cornerSector.toFt, 'majors\' straightaway-center out-zone reaches deeper than its corners (the geometry this test exercises)');
+    const midDistance = (centerSector.toFt + cornerSector.toFt) / 2; // beyond corner reach, within center reach
+    const FLY_ANGLE = 30; // a 'fly' kind (battedBallKind: >=26, <52), clear of the line-through rule
+    const angleFactor = Math.max(0, Math.sin((2 * FLY_ANGLE * Math.PI) / 180));
+    const exitVeloMph = midDistance / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const deadCenter = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: 0, q: 1 },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
+    const towardGap = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: SETTINGS.FEEL.engine.perfectSprayDeg, q: 1 },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
+    ok(deadCenter.result === 'out', `a marginal fly ball hit dead center is caught (majors' deepest out-zone), got ${JSON.stringify(deadCenter)}`);
+    ok(towardGap.result === 'hit', `the identical ball hit toward a gap (where a perfectly-timed swing sprays) gets through, got ${JSON.stringify(towardGap)}`);
+  }
+  {
+    // A well-squared-up line drive (q above LINE_THROUGH_Q) that lands inside an outfield sector's
+    // reach is a hit; the same launch/exit velocity with LOW q (a routine-quality fly/liner) at the
+    // identical spot stays an out.
+    const zonesM = zonesFor('majors', 0);
+    const sec2 = zonesM.outfield[1]; // straightaway center
+    const midDepth = (sec2.fromFt + sec2.toFt) / 2;
+    // Reverse-engineer an exit velo/angle combo that carries to midDepth at launchAngleDeg=18.
+    const angleFactor = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
+    const exitVeloMph = midDepth / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const highQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.95 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    const lowQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.1 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+    ok(highQ.result === 'hit' && highQ.kind === 'line-through',
+      `a well-squared-up line drive (q=0.95) through a sector's own reach depth is a hit, not an out (BB-2a step 3), got ${JSON.stringify(highQ)}`);
+    ok(lowQ.result === 'out', `the identical distance/angle at low contact quality (q=0.1) stays a routine out, got ${JSON.stringify(lowQ)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
