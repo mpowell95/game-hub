@@ -4,6 +4,209 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 2a — contact quality, team flavor, and the retune
+
+BB-2a (2026-09-12, same day as BB-2) fixed the three mechanisms diagnosed in BB-2's own report as
+the reason "well-timed low-Power beats sloppy high-Power" (doc §8, [Locked]) failed in every
+league: timing was binary inside its own window, a perfectly-timed swing sprayed toward dead
+center (the worst place on the field), and power was additive with no gate on quality. It also
+separated team FLAVOR from STRENGTH (phase 2's "within-league ordering is noisy" open item), added
+a Locked-statement test inventory, and did one retune pass from a reverted base. **Two standing
+rules are now in force, written into this file per that instruction**:
+
+1. Every Locked statement in the design doc has a test that fails if the code stops honoring it.
+2. Every phase's report lists which Locked statements it implemented and the test that proves each.
+
+### What changed
+
+- **`baseball/js/engine/swing.js`**: a new continuous contact-quality axis, `q` (`qualityFor`),
+  1 at dead-on timing (`FEEL.engine.perfectMs`) falling linearly to 0 at the timing window's own
+  edge. Exit velocity now reads it — power's own contribution is scaled by `q` (it multiplies a
+  good swing, never rescues a bad one) and a q=0 swing floors at `qualityFloor` of the no-power
+  base. The centered-contact launch-angle band narrows toward a line-drive spread as `q` rises and
+  widens toward topped/popped as it falls. Spray direction still pulls/opposes by timing sign, but
+  the pull/opposite magnitude shrinks to zero as `q` rises; at `q`=1 the swing centers on one of the
+  two GAPS (`perfectSprayDeg`) instead of dead center.
+- **`baseball/js/engine/outcomes.js`/`settings.js`**: a well-squared-up line drive (`q` at or above
+  `LINE_THROUGH_Q`) that lands inside an outfield sector's reach now goes through as a hit
+  (`line-through`), up to `LINE_THROUGH_MAX_FT` — a routine fly into the same spot stays an out.
+- **`sim-baseball.mjs --contact-grid`** (new): an isolated plate-appearance harness (a real college
+  `CpuPitcher`, the real `swing.js`/`outcomes.js`/`zones.js` pipeline `game.js` itself calls, no
+  full 3-inning game) measuring expected bases per SWING over a 3x3 grid of timing sigma
+  {35,55,85} x hitPow {2,6,10}, 20000 swings/cell. Four assertions (monotone, ratio, cross,
+  ceiling — see the pasted grid below). Also fixed a real pre-existing bug in the season A/B
+  experiment: the comment and field names said Slugger should get sloppy timing and Table Setter
+  precise timing, but the code passed the tiers SWAPPED — the exact reason `NUDGE_A_B` failed in
+  every league throughout phase 2 regardless of the contact model underneath it.
+- **`baseball/js/engine/teams.js`/`settings.js`**: `TEAM_STYLES` vectors are FLAVOR only now, not
+  strength — measured and compressed toward `balanced` by `sim-baseball.mjs --styles --tune`
+  (CPU-vs-CPU, real Game, both sides at the same effectiveCap) so every style's win rate lands
+  within `STYLE_STRENGTH_BAND` (0.04) of 0.50. Patient and Shifters compress hardest because their
+  real identity is a new `STYLE_BEHAVIOR` table (`chaseMul`, `shift`), not a skill shape — Patient's
+  batters chase bad pitches less (`agents.js`'s `CpuBatter` now takes an optional `styleId`) and
+  Shifters rotate their out-zones (`game.js`'s `_shiftDegFor` now reads `STYLE_BEHAVIOR.shift`
+  instead of a hardcoded `'shifters'` string). STRENGTH now comes from `TEAM_LADDER_OFFSETS` — eight
+  per-slot FRACTIONAL offsets of `effectiveCapFor(league)` — applied by SLOT in `makeLeague`, which
+  orders teams by `LEAGUE_LADDER_STYLES`'s own table rather than a post-hoc sort by measured
+  `teamStrength()`. `LEAGUE_LADDER_STYLES` is one PROPOSED order (Balanced weakest through Aces as
+  champion, doc §8) — **for Matt to confirm or edit.**
+- **The retune** (step 6, from the base step 1 reverted): `CPU_LEVEL_SHORTFALL`
+  `{college:1.5,minors:3.3,majors:5.3}` → `{college:3,minors:6,majors:9}` (effective caps
+  10/14/16.5/18.7/20.7 → 10/14/15/16/17); `SKILL_EFFECT.hitAcc.contactRadiusInPerPt` 0.15 → 0.09;
+  `.whiffReductionPerPt` 0.01 → 0.006; `SKILL_EFFECT.hitPow.exitVeloMphPerPt` 0.6 → 0.35;
+  `MECHANICS.doublePlayChance` 0.45 → 0.40. Two more aggressive experiments (shortfall up to
+  `{college:5,minors:10,majors:15}`, softened majors/minors CPU behavior) were tried and discarded —
+  both moved Gold odds only marginally and made Minors/Majors' regular-season top4 rate WORSE,
+  reconfirming phase 2's own diagnosis under the new contact model: the bottleneck is COMPOUND
+  probability (the 12-game schedule already plays the top half of the ladder twice, and Gold needs
+  winning both a semifinal AND a championship against the single strongest team in one season).
+- **The within-league `LADDER_MONOTONE` check** now has its own dedicated measurement
+  (`LADDER_GAMES_N`=1000/opponent, median tier) and a real numeric `LADDER_TOLERANCE` (0.02),
+  replacing phase 2's ad hoc "+0.15" fudge, which was hiding real disorder at only 400
+  games/opponent. `TEAM_LADDER_OFFSETS` is a FRACTION of `effectiveCapFor(league)`, not a flat
+  skill-point delta — a flat delta was a huge swing at Little League's cap of 10 but mild at Majors'
+  20.7, and measurably flattened Little/High School's ladder into noise; step 6 corrected this.
+- **A real, pre-existing bug found by a new test** (step 8): `FIELD.majors`' left/center/right
+  (330/400/330) were each SMALLER than `FIELD.minors`' (335/405/335) — a violation of doc §10,
+  [Locked] ("Fields get bigger each league") that nothing checked before test.js section 15's
+  `fenceFtAt(0)` monotonicity assertion. Corrected to `{337/378/408/378/337}`, still Draft [Open
+  item 7].
+
+### The contact grid (`node sim-baseball.mjs --contact-grid`, 20000 swings/cell, league=college)
+
+```
+  E[bases/swing]   hitPow=2   hitPow=6   hitPow=10
+  sigma=35ms         0.7154     0.7344     0.7521
+  sigma=55ms         0.5151     0.5202     0.5448
+  sigma=85ms         0.3507     0.3584     0.3685
+
+  [PASS] monotone (E falls as sigma rises, every hitPow)
+  [PASS] monotone (E rises with hitPow, every sigma - power is a nudge, never zero)
+  [PASS] ratio (timing gap at hitPow=2 >= 2.0x the power gap at sigma=85): 0.3648 >= 2.0 x 0.0179
+  [PASS] cross (well-timed low-Power beats sloppy high-Power by >= 0.05): 0.3469
+  [PASS] ceiling (power gap at sigma=35 <= 0.5x the timing gap at hitPow=2): 0.0367 <= 0.5 x 0.3648
+```
+
+### The style-strength check (`node sim-baseball.mjs --styles`, college, 3000 games/style)
+
+Every style within +/-4pp of 50% except Sluggers, which drifted to 54.5% after step 6's
+`CPU_LEVEL_SHORTFALL` change moved `effectiveCapFor('college')` (the tuning in step 5 measured
+against 16.5, step 6 landed on 15) — a small, known residual, not re-chased past one targeted
+attempt (moving its compression from s=1.3 to s=1.15 measured 54.4%, indistinguishable from 54.5%
+at this sample size, so the original s=1.3 vector was kept): sluggers 54.5%, smallBall 48.9%,
+patient 52.6%, flamethrowers 49.5%, junkballers 48.4%, shifters 51.7%, aces 48.3%.
+
+### The promise scoreboard (`node sim-baseball.mjs --assert`, 400 games/cell, 300 seasons/cell,
+### LADDER_GAMES_N=1000, ~22.5s wall clock)
+
+```
+  [FAIL] GOLD_SEASONS_MAX_MEDIAN (median tier, every league): measured 6.38, threshold <= 2
+  [FAIL] GOLD_ONE_SEASON_MIN_MEDIAN: measured 0.157, threshold >= 0.35
+  [PASS] CHAMPION_GAME_WIN_MIN_MEDIAN: measured 0.706, threshold >= 0.4
+  [PASS] LADDER_MONOTONE (win rate falls each league up): measured [0.813,0.719,0.507,0.293,0.111]
+  [FAIL] LADDER_MONOTONE (within-league, weakest..strongest opponent): see the table below
+  [PASS] NUDGE_A_B (well-timed low-Power beats sloppy high-Power, margin >= 0.10):
+         measured [0.455,0.52,0.693,0.718,0.527]
+  [FAIL] CAP_BINDS_ONLY (little/highschool cap within seasons): measured ["0.8","2.2"], <= 2
+  [PASS] CAP_BINDS_ONLY (college/minors/majors do NOT bind quickly): ["8.9","26.7","103.6"], > 2
+  [PASS] SKILL_EFFECT sensitivity: measured ["0.050","0.040","0.013","0.018","0.025"], <= 0.08
+
+  within-league ladder (median tier, 1000 games/opponent, weakest..strongest):
+    little     81.4  81.5  82.2  80.7  78.7  79.4  77.2  80.9
+    highschool 74.5  75.2  71.8  72.3  70.6  70.8  69.5  73.5
+    college    54.8  52.5  51.6  53.6  50.5  50.2  45.3  50.1
+    minors     31.6  31.0  32.4  30.7  28.6  30.7  24.6  27.6
+    majors     12.7  12.6  12.8   9.4  11.3   8.2   6.0   9.3
+```
+
+**Read plainly, these are the open items for Matt** (largely unchanged in substance from phase 2,
+now measured against the FIXED contact model rather than the broken one):
+
+1. **Gold is still too rare at College/Minors/Majors median skill.** The mechanism fix (steps 2-4)
+   and the retune (step 6) did not move this - the bottleneck is COMPOUND probability, not contact
+   quality or CPU strength. Loosening `GOLD_SEASONS_MAX_MEDIAN`/`GOLD_ONE_SEASON_MIN_MEDIAN`, or
+   reworking how Gold is reached (a bye, a weaker semifinal opponent, a shorter top-half schedule
+   repeat), are both on the table - this tool does not choose.
+2. **High School's `CAP_BINDS_ONLY` misses by 0.2 seasons** (2.2 vs 2.0) - `POINTS.highschool` is
+   untouched Draft and explicitly out of this phase's scope ("do not touch POINTS").
+3. **The within-league ladder is far tighter than phase 2** (mostly within a few points at 1000
+   games/opponent, down from swings as wide as 25+ points) **but still not strictly monotone.** The
+   remaining disorder traces to which skill a slot's style favors mattering more or less against a
+   fixed human strategy than its raw ladder offset predicts - not to sampling noise, and not to
+   offset magnitude (a wider spread measured no better than the narrower one kept).
+4. **Sluggers sits at 54.5% vs `balanced`**, 0.5pp outside `STYLE_STRENGTH_BAND` - a small drift
+   from step 6's `CPU_LEVEL_SHORTFALL` change after step 5's tuning pass, not re-chased.
+
+### The Locked-statement inventory (the two standing rules above, applied)
+
+One row per Locked statement the engine can honor, with the test that proves it. `test.js`'s own
+section numbers are cited; run `node baseball/js/test.js` to see them all pass.
+
+| Doc statement | Test |
+|---|---|
+| §1 One flat plane (pitch varies x and speed only) | §4 `pitch.js` - `ZONE`/`flyPitch` |
+| §3 3 innings, 3 outs/half, 4 balls/3 strikes, foul never K3 | §10 rules correctness |
+| §3 Extra innings: runner on second every extra half | §10 extra-innings probes |
+| §3 Walk-off ends immediately; skip a pointless bottom half | §10 walkoff/scheduled-skip probes |
+| §3 Ground-out double play possible, runner on 1st, <2 outs | §10 double-play probes |
+| §3 Deep fly out can be a sac fly | §10 sac-fly probes (incl. shallow-fly negative) |
+| §3 **No mercy rule** | §15 (BB-2a step 8, new) |
+| §3 Batter Speed affects beating out grounders | §15 (BB-2a step 8, new) |
+| §6 Exactly six real skill ids | §15 (BB-2a step 8, new) |
+| §6 Start 15/15 points, cap 10 | §15 (BB-2a step 8, new) |
+| §6 Presets sum to 15/side, nothing over 10 | §1 settings integrity |
+| §7 Win pays >= loss; trophies rise bronze<silver<gold | §1 settings integrity |
+| §8 CPU generated below the raw cap, per league | §8 `effectiveCapFor` |
+| §8 Effective-cap ladder strictly rising by league | §8 `[KNOWN-BUG PROBE]` |
+| §8 Little League mostly fastballs | §15 (BB-2a step 8, new) |
+| §8 Each league up mixes more/works corners more/chases less | §8c CPU table monotonicity |
+| §8 Majors attacks your weak spots (highest weakSpotWeight) | §15 (BB-2a step 8, new) |
+| §8 CPU batter reads pattern memory (speed narrows, location leans) | §9b |
+| §8 Rosters fixed - same (league,index) is byte-identical | §8 `makeTeam` determinism |
+| §8 8 teams ordered weakest to strongest, no forced replays, the A/B | `sim-baseball.mjs --assert` (NUDGE_A_B, LADDER_MONOTONE) |
+| §8 **Well-timed low-Power beats sloppy high-Power, by a margin** | `sim-baseball.mjs --contact-grid` (this phase's own gate) |
+| §9 8 teams, one per style | §8b `makeLeague` |
+| §9 9 distinct batters, 1 pitcher per game | §15 (BB-2a step 8, new) |
+| §9 No names, jersey + position only | §8 |
+| §9 ~1 in 4 CPU players are lefties | §15 (BB-2a step 8, new) |
+| §9 Shifters shift their out-zones toward your spray | §9a2 (BB-2a step 5, new) |
+| §9 Team strength rises by league at the same style | §8b |
+| §10 4 infield / 3 outfield out-zones | §15 (BB-2a step 8, new) |
+| §10 Pop-ups in the infield are always outs | §15 (BB-2a step 8, new) |
+| §10 Fields/out-zones get bigger each league | §6 (depth) + §15 (fence distance, new) |
+| §10 No "error" outcome anywhere | §2 `[KNOWN-BUG PROBE]` |
+| §11 Pitch unlock table, cumulative by league | §1 settings integrity |
+| §11 Title-gated eephus/cutter | §1 settings integrity |
+| §15 Fixed 1/120s timestep | §1 settings integrity |
+| §15 Forward-only snapshot migration (rulesV mismatch rejected) | §12 resume gate |
+
+**Not yet implementable, listed as such, with the phase that owns it:**
+
+- Break direction by arm, hidden readout until the ball crosses the plate (phase 3 - no rendering
+  or player-facing UI exists yet).
+- Steal, bunt, pickoff (phase 6, per `RESERVED_PHASE_6` in settings.js - no baserunning between
+  pitches exists this phase).
+- Points/caps flow into a real career loop (phase 4 - `POINTS`/`CAPS` are computed by the
+  simulator's own experiments but nothing in the shipped engine spends them yet).
+
+### Verification (Phase 2a, in order)
+
+```
+node validate-sw-assets.mjs           # ok, REST_MANIFEST/version.json regenerated for game-hub-v812
+node baseball/js/test.js              # 1374 assertions, 0 failed (was 1317 before this phase)
+node sim-baseball.mjs --contact-grid  # PASS on all 5 assertions (see grid above)
+node sim-baseball.mjs --assert --quick   # FAILS - see the promise scoreboard; the tool reporting, not a build break
+node sim-baseball.mjs --assert        # FAILS - full-sample confirmation of the same three open items
+node test-game-conventions.mjs        # 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs           # re-run, unchanged
+node test-sw-strategy.mjs             # 107 passed, 0 failed
+```
+
+**`sim-baseball.mjs --assert` fails on real, reported game-design findings, not on a broken
+build**, exactly as phase 2's own report noted - now measured against a contact model that no
+longer contradicts itself, and with a within-league ladder check tight enough to trust. Every other
+suite is green. The four open items above are Matt's to resolve.
+
 ## Status: Phase 2 — mechanisms and simulator
 
 BB-2 (2026-09-12, same day as BB-1a) landed the three mechanisms the shipped engine still faked
