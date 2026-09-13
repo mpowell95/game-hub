@@ -82,8 +82,31 @@ if (tierSigmaArg) {
 
 // ---------------------------------------------------------------------------------------------
 // The promise scoreboard's thresholds - Draft, for Matt to confirm from the report (step 6).
-const GOLD_SEASONS_MAX_MEDIAN = 2.0;
-const GOLD_ONE_SEASON_MIN_MEDIAN = 0.35;
+// BB-2c: design doc v9 §8, [Locked] replaces the old flat "Gold in about two seasons everywhere"
+// with a per-league SHAPE - Little League near-total dominance, the Majors a real grind. The two
+// flat medians (`GOLD_SEASONS_MAX_MEDIAN`/`GOLD_ONE_SEASON_MIN_MEDIAN`) are retired in favor of
+// `SEASON_WINRATE_BAND` (the doc's own per-league regular-season win-rate table) and
+// `SEASONS_TO_GOLD_TARGET` (its own seasons-to-Gold column, asserted with `SEASONS_TO_GOLD_TOLERANCE`
+// - Gold is a CONSEQUENCE of the win-rate band, still asserted, never chased directly).
+const SEASON_WINRATE_BAND = {
+  little: [0.92, 0.98],
+  highschool: [0.70, 0.80],
+  college: [0.57, 0.67],
+  minors: [0.49, 0.59],
+  majors: [0.41, 0.51],
+};
+const SEASONS_TO_GOLD_TARGET = { little: 1, highschool: 1.5, college: 2, minors: 3, majors: 4.5 };
+// Draft, stated tolerance: seasons-to-Gold is 1/(one-season rate), which is highly sensitive to
+// sampling noise near small rates (Majors' own target of 4.5 seasons corresponds to a ~22% one-
+// season rate - a few percentage points of measurement noise there swings seasons-to-Gold by a
+// full season or more), so this is deliberately wide relative to `LADDER_TOLERANCE`.
+const SEASONS_TO_GOLD_TOLERANCE = 0.75;
+// Doc v9 §8, [Locked]: "the weakest opponent is beaten at 85% or better and the champion sits
+// between 40 and 55%" - the within-league ladder's own two endpoints, on top of the existing
+// non-increasing (`LADDER_TOLERANCE`) shape check.
+const SLOT_WINRATE_WEAKEST_MIN = 0.85;
+const SLOT_WINRATE_CHAMPION_MIN = 0.40;
+const SLOT_WINRATE_CHAMPION_MAX = 0.55;
 const CHAMPION_GAME_WIN_MIN_MEDIAN = 0.40;
 const CAP_BINDS_ONLY = ['little', 'highschool'];
 const CAP_SEASONS_MAX_UPPER = 2.0;
@@ -569,11 +592,16 @@ async function measureLeagueSeasons(league, settings) {
     const avgPoints = mean(seasons.map((s) => s.points));
     const capRoom = Math.max(0, settings.CAPS[league] * settings.SKILL_IDS.length
       - settings.START_POINTS_PER_SIDE * 2);
+    // BB-2c: the regular-season win RATE (design doc v9 §8's own per-league band) - wins across
+    // the whole 12-game schedule, not the flat "vs one average opponent" number `measureLeagueGames`
+    // reports elsewhere in this file (that number ignores the schedule's own repeats entirely).
+    const seasonWinRate = mean(seasons.map((s) => s.wins / (s.wins + s.losses)));
     perTier[tier] = {
       goldRate,
       expectedSeasonsToGold: goldRate > 0 ? 1 / goldRate : Infinity,
       top4Rate,
       champWinRate,
+      seasonWinRate,
       avgPointsPerSeason: avgPoints,
       seasonsToCap: avgPoints > 0 ? capRoom / avgPoints : Infinity,
     };
@@ -1059,13 +1087,25 @@ async function main() {
     return worseIsHigher ? Math.max(...values) : Math.min(...values);
   };
   if (report.leagues[LEAGUES[0]].default) {
-    const worstGoldSeasons = worstAcross((s) => s.expectedSeasonsToGold, true);
-    scoreLine('GOLD_SEASONS_MAX_MEDIAN (median tier, worst league)', worstGoldSeasons <= GOLD_SEASONS_MAX_MEDIAN,
-      worstGoldSeasons === Infinity ? 'inf' : worstGoldSeasons.toFixed(2), `<= ${GOLD_SEASONS_MAX_MEDIAN}`);
-
-    const worstGoldOneSeasons = worstAcross((s) => s.goldRate, false);
-    scoreLine('GOLD_ONE_SEASON_MIN_MEDIAN (worst league)', worstGoldOneSeasons >= GOLD_ONE_SEASON_MIN_MEDIAN,
-      worstGoldOneSeasons.toFixed(3), `>= ${GOLD_ONE_SEASON_MIN_MEDIAN}`);
+    // BB-2c: design doc v9 §8, [Locked] - a per-league regular-season win-rate BAND, not a flat
+    // "gold in two seasons everywhere." Every league must land inside its own band; a single FAIL
+    // anywhere fails this line (there is no "worst league" reduction here - each league's band is
+    // already specific to it).
+    for (const lg of LEAGUES) {
+      const [lo, hi] = SEASON_WINRATE_BAND[lg];
+      const rate = report.leagues[lg].default.seasonStats.median.seasonWinRate;
+      scoreLine(`SEASON_WINRATE_BAND.${lg} (median tier, regular season)`, rate >= lo && rate <= hi,
+        rate.toFixed(3), `[${lo}, ${hi}]`);
+    }
+    // Seasons to Gold is a CONSEQUENCE of the win-rate band above, still asserted (per league, with
+    // SEASONS_TO_GOLD_TOLERANCE), never chased directly by retuning Gold odds on their own.
+    for (const lg of LEAGUES) {
+      const target = SEASONS_TO_GOLD_TARGET[lg];
+      const measured = report.leagues[lg].default.seasonStats.median.expectedSeasonsToGold;
+      const ok = measured <= target + SEASONS_TO_GOLD_TOLERANCE;
+      scoreLine(`SEASONS_TO_GOLD_TARGET.${lg} (median tier)`, ok,
+        measured === Infinity ? 'inf' : measured.toFixed(2), `<= ${target} + ${SEASONS_TO_GOLD_TOLERANCE}`);
+    }
 
     const champRates = LEAGUES.map((lg) => report.leagues[lg].default.seasonStats.median.champWinRate).filter((v) => v != null);
     const worstChamp = champRates.length ? Math.min(...champRates) : null;
@@ -1090,6 +1130,19 @@ async function main() {
     });
     scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk,
       'see the within-league ladder check above', `non-increasing within ${LADDER_TOLERANCE}`);
+
+    // BB-2c, design doc v9 §8, [Locked]: "the weakest opponent is beaten at 85% or better and the
+    // champion sits between 40 and 55%" - the ladder's own two endpoints, at every league.
+    const weakestOk = LEAGUES.every((lg) => ladderRatesByLeague[lg][0] >= SLOT_WINRATE_WEAKEST_MIN);
+    scoreLine('SLOT_WINRATE_BAND (weakest opponent >= 85% at every league)', weakestOk,
+      JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][0].toFixed(3))), `every value >= ${SLOT_WINRATE_WEAKEST_MIN}`);
+    const championBandOk = LEAGUES.every((lg) => {
+      const champ = ladderRatesByLeague[lg][ladderRatesByLeague[lg].length - 1];
+      return champ >= SLOT_WINRATE_CHAMPION_MIN && champ <= SLOT_WINRATE_CHAMPION_MAX;
+    });
+    scoreLine('SLOT_WINRATE_BAND (champion in [0.40, 0.55] at every league)', championBandOk,
+      JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][ladderRatesByLeague[lg].length - 1].toFixed(3))),
+      `every value in [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}]`);
 
     // BB-2b commit 5: CHAMPION_IS_HARDEST - doc §8, [Locked]: "the championship opponent is always
     // the toughest team in the league" is only a real promise if the strongest ladder slot (index

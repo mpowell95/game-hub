@@ -239,21 +239,30 @@ export const FIELD_SCALE = { outZoneMult: 1.0, fieldScale: 1.0 }; // [Tested] do
 // guess-derived values, 0.21/0.165/0.12, were all BELOW a median human's own placement precision);
 // Little/High School keep their old guess-derived values (0.27/0.24) since those already sat above
 // the floor on their own.
+// BB-2c commit 5 retune: per-league `cornerBias`/`patternWeight` nudged, the first lever in the
+// handoff's specified order, to close the `SEASON_WINRATE_BAND` gaps `--assert --quick` measured
+// after commit 2-4's contract/flavor/schedule work landed (Little too easy overall at 0.833
+// against a [0.92,0.98] target; College/Minors/Majors too easy at 0.675/0.633/0.575 against
+// [0.57,0.67]/[0.49,0.59]/[0.41,0.51]): little cornerBias 0.08 -> 0.05, patternWeight 0.04 -> 0.02
+// (less corner-aim/pattern-reading toughness, matching a season that should be nearly automatic);
+// college cornerBias 0.33 -> 0.38, patternWeight 0.23 -> 0.27; minors cornerBias 0.50 -> 0.55,
+// patternWeight 0.42 -> 0.47; majors cornerBias 0.68 -> 0.72, patternWeight 0.65 -> 0.70 (more of
+// both, since the upper three leagues were all measuring an easier season than the band allows).
 export const CPU = {
   little:     { timingSigmaMs: 115, placementNoise: 0.27, swingIn: 0.90, chase: 0.55, fool: 0.45, guess: 0.10,
-    pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.08, patternWeight: 0.04, weakSpotWeight: 0 },
+    pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.05, patternWeight: 0.02, weakSpotWeight: 0 },
   highschool: { timingSigmaMs: 95, placementNoise: 0.24, swingIn: 0.85, chase: 0.40, fool: 0.35, guess: 0.20,
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
   college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
-    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.33, patternWeight: 0.23, weakSpotWeight: 0.06 },
+    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.38, patternWeight: 0.27, weakSpotWeight: 0.06 },
   minors:     { timingSigmaMs: 70, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
-    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.50, patternWeight: 0.42, weakSpotWeight: 0.28 },
+    pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.55, patternWeight: 0.47, weakSpotWeight: 0.28 },
   majors:     { timingSigmaMs: 62, placementNoise: 0.22, swingIn: 0.65, chase: 0.05, fool: 0.10, guess: 0.60,   // BB-2c commit 2: timingSigmaMs 55 -> 62 (CPU_SIGMA_MIN_MS.majors); placementNoise floored (was 0.12)
     // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
     // react to your stats") actually has unlocked at Majors with 0 titles - eephus/cutter would
     // sit in this table forever unused, since `unlockedPitchesFor('majors', 0)` never grants them.
     pitchMix: { fastball: 1.5, changeup: 1.5, curveball: 1.5, slider: 1.5, knuckleball: 1.5, screwball: 1.5 },
-    cornerBias: 0.68, patternWeight: 0.65, weakSpotWeight: 0.65 },
+    cornerBias: 0.72, patternWeight: 0.70, weakSpotWeight: 0.65 },
 };
 // BB-2c commit 2, doc §8, [Locked] (design doc v9): "CPU batters may never time or place better
 // than a median human, in any league or any slot." `guess` (0.10..0.60 by league) no longer feeds
@@ -419,17 +428,24 @@ export const STYLE_BEHAVIOR = {
 // hand-picking which slot it occupies. Shifters measured furthest out (+0.072, [OUT OF BAND] on
 // `STYLE_STRENGTH_BAND`) - its shift is a real, uncompressed edge; Shifters KEEPS its slot and its
 // shift per Matt's confirmed `LEAGUE_LADDER_STYLES` order, and this delta is what pays for it
-// instead. Draft, measured 2026-09-13 (`node sim-baseball.mjs --styles`, league=college,
+// instead. Draft, first measured 2026-09-13 (`node sim-baseball.mjs --styles`, league=college,
 // games=3000 - the same default `STYLE_MEASURE_LEAGUE`/`STYLE_MEASURE_GAMES` BB-2a's own style
-// tuning used).
+// tuning used). BB-2c commit 5 retune: re-measured after this commit's `CPU`/`TEAM_LADDER_OFFSETS`
+// changes (delta is a measurement of the CURRENT settings, not a fixed constant, so it goes stale
+// the moment the behavior it corrects for changes) - sluggers 0.0203 -> 0.0010, smallBall -0.0230
+// -> -0.0333, patient 0.0133 -> 0.0160, flamethrowers -0.0047 -> -0.0070, junkballers -0.0143 ->
+// -0.0150, shifters 0.0723 -> 0.0813 (still furthest out of band, and still the single biggest
+// residual driver of `CHAMPION_IS_HARDEST`/`SLOT_WINRATE_BAND`'s within-league failures - see
+// `baseball/CLAUDE.md`), aces -0.0053 -> 0.0043 (measured, not hand-tuned; the handoff's "do not
+// hand-tune Aces" rule is about not hand-picking this number, not about never re-measuring it).
 export const STYLE_STRENGTH_DELTA = {
-  sluggers: 0.0203,
-  smallBall: -0.0230,
-  patient: 0.0133,
-  flamethrowers: -0.0047,
-  junkballers: -0.0143,
-  shifters: 0.0723,
-  aces: -0.0053,
+  sluggers: 0.0010,
+  smallBall: -0.0333,
+  patient: 0.0160,
+  flamethrowers: -0.0070,
+  junkballers: -0.0150,
+  shifters: 0.0813,
+  aces: 0.0043,
   balanced: 0,
 };
 
@@ -711,15 +727,27 @@ export const CPU_PLACEMENT_MIN = 0.22;
 // `timingSigmaMs` scaled to 30% of it - still strictly monotone slot to slot (doc's own "team
 // strength rises by league at the same style" and the within-league ladder both still hold), but
 // the champion slot no longer bats sharper than a strong HUMAN, only sharper than a median one.
+// BB-2c commit 5 retune: `timingSigmaMs`/`chase` widened from BB-2b's compressed draft
+// ({16,11,7,3,0,-0.8,-2,-3.5} / {0.10,0.075,0.05,0.025,0,-0.025,-0.05,-0.075}) toward
+// `{20,14,9,4,0,-1,-2.5,-4}` / `{0.15,0.11,0.07,0.03,0,-0.03,-0.06,-0.12}` to widen
+// `SLOT_WINRATE_BAND`'s weakest-to-champion spread within a league - `SLOT_WINRATE_BAND`, doc
+// §13 Open item 13, needs the weakest slot near-automatic (>=0.85 everywhere) and the champion a
+// real fight (0.40-0.55 everywhere), which the BB-2b spread (tuned only for
+// `CHAMPION_GAME_WIN_MIN_MEDIAN`, a single flat threshold) never had to produce. The champion row's
+// `timingSigmaMs: -4` is the largest magnitude this table may ever hold at Majors:
+// `cpuBaseTimingSigmaMs('majors')` is `62 + offset`, and `CPU_SIGMA_ABSOLUTE_FLOOR_MS` is 58, so
+// `-4` lands EXACTLY on the floor with no headroom left on this axis - any further Majors-champion
+// difficulty has to come from `chase`/`cornerBias`/`patternWeight`/`weakSpotWeight`/
+// `outZoneMult`/`fieldScale`, not sigma.
 export const TEAM_LADDER_OFFSETS = [
-  { skill: -0.25, timingSigmaMs: 16, chase: 0.10 },
-  { skill: -0.18, timingSigmaMs: 11, chase: 0.075 },
-  { skill: -0.12, timingSigmaMs: 7, chase: 0.05 },
-  { skill: -0.06, timingSigmaMs: 3, chase: 0.025 },
+  { skill: -0.25, timingSigmaMs: 20, chase: 0.15 },
+  { skill: -0.18, timingSigmaMs: 14, chase: 0.11 },
+  { skill: -0.12, timingSigmaMs: 9, chase: 0.07 },
+  { skill: -0.06, timingSigmaMs: 4, chase: 0.03 },
   { skill: 0, timingSigmaMs: 0, chase: 0 },
-  { skill: 0.06, timingSigmaMs: -0.8, chase: -0.025 },
-  { skill: 0.14, timingSigmaMs: -2.0, chase: -0.05 },
-  { skill: 0.25, timingSigmaMs: -3.5, chase: -0.075 },
+  { skill: 0.06, timingSigmaMs: -1, chase: -0.03 },
+  { skill: 0.14, timingSigmaMs: -2.5, chase: -0.06 },
+  { skill: 0.25, timingSigmaMs: -4, chase: -0.12 },
 ];
 
 export default {
