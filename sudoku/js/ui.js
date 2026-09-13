@@ -143,6 +143,7 @@ class SudokuUI {
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-action="howto">${esc(t('howto'))}</button>
       </div>`;
     this.root = this.container.querySelector('.sd-root');
+    this._positionRoot();
     this.root.querySelectorAll('[data-tier]').forEach((el) => {
       el.addEventListener('click', () => {
         this.selectedTier = el.dataset.tier;
@@ -184,6 +185,7 @@ class SudokuUI {
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="close">${esc(t('howto_close'))}</button>
       </div>`;
     this.root = this.container.querySelector('.sd-root');
+    this._positionRoot();
     this.root.querySelector('[data-action="close"]').addEventListener('click', () => {
       if (this.game) this._enterGame(this.game); else this.renderMenu();
     });
@@ -289,6 +291,7 @@ class SudokuUI {
       </div>`;
 
     this.root = this.container.querySelector('.sd-root');
+    this._positionRoot();
     this.el = {
       board: this.root.querySelector('[data-role="board"]'),
       timer: this.root.querySelector('[data-role="timer"]'),
@@ -531,6 +534,23 @@ class SudokuUI {
 
   // --- layout: one screen, no scrolling -------------------------------------------------------
 
+  /** Pins `.sd-root` to the REAL on-screen box of `this.container` - `#sudoku` standalone,
+   *  `.hub-game` when mounted - by measurement, not CSS. `container.getBoundingClientRect()`
+   *  already reflects the hub's sticky header pushing the mount point down; a plain
+   *  `position: absolute; inset: 0` cannot see that (`.hub-game` has no defined CSS height for it
+   *  to fill), so it fell back to the viewport and hid this screen's own HUD under the header. Run
+   *  on every render and on `onViewportResize` (rotation, URL bar show/hide, keyboard). */
+  _positionRoot() {
+    if (!this.root || !this.container) return;
+    const r = this.container.getBoundingClientRect();
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+    if (!vh) return;
+    this.root.style.left = Math.round(r.left) + 'px';
+    this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    this.root.style.top = Math.round(r.top) + 'px';
+    this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+  }
+
   _fit() {
     if (this.screen !== 'play' || !this.el || !this.el.board) return;
     const root = this.root;
@@ -594,7 +614,7 @@ export function init(container) {
   ensureStylesheet();
   if (instance) instance.destroy();
   instance = new SudokuUI(container);
-  instance._offViewport = onViewportResize(() => instance._fit());
+  instance._offViewport = onViewportResize(() => { instance._positionRoot(); instance._fit(); });
   instance._offLang = onLangChange(() => {
     if (instance.screen === 'menu') instance.renderMenu();
     else if (instance.screen === 'howto') instance.renderHowTo();
