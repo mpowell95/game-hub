@@ -93,7 +93,8 @@ it rolled in. Named rather than quietly added.
 
 ### Six probes green, one red, and the red one is honest
 
-Run: `node pinball2/probes/run.mjs all --table piernine` (about five minutes).
+Run: `node pinball2/probes/run.mjs all --table piernine` (about five minutes) and
+`node pinball2/probes/test-multiball.mjs 40 25` (about four).
 
 | Probe | Result |
 |---|---|
@@ -104,6 +105,7 @@ Run: `node pinball2/probes/run.mjs all --table piernine` (about five minutes).
 | ramps | **0 problems**, both ramps, 24 entry speeds |
 | flipper push | 0 of 22,676 left the machine |
 | **flipper power** | **3 of 8 spots move the ball less than 300 mm. FAIL, and it stays red.** |
+| multiball soak | 40 x 25 s of three-ball play: 0 escapes, 0 jams, 0 NaN, 0 balls added inside a collider |
 
 **Why flipper power stays red.** The bar was calibrated on TEST BOX, which is an empty box: a ball
 flipped there reaches 920 mm because there is nothing between the bat and the top rail. PIER NINE
@@ -146,17 +148,65 @@ Two of these (2 and 5) were invisible to every probe in the folder and were foun
 - a ball ARRIVING somewhere slowly is a state the rest sweep cannot reach, because it drops balls at
 rest and a ball dropped at the top of the shooter lane just rolls back down.
 
-### Not built, and named rather than skipped
+### The diverter, and a lie that got as far as `main`
 
-- **The Coaster's diverter.** It is the one rev-B mechanism that needs a ball to leave a ramp by a
-  different route, and a `ribbon` is one path. `enterRibbon` now skips a ribbon whose `armed` is
-  false, so a second Coaster path is a DATA change when it is wanted. Until then the Coaster has one
-  exit and `rules.js` scores it as the default feed.
-- **Multiball is in `rules.js` and has never been through a soak.** Three balls, drain rules and
-  serve-next are written; the 3-ball soak in build phase 5 has not been run.
+The first build of PIER NINE shipped without the Coaster's diverter, and this file said:
+
+> *`enterRibbon` now skips a ribbon whose `armed` is false, so a second Coaster path is a DATA
+> change when it is wanted.*
+
+**That was not true when it was written.** `armed: true` was set on the ramp shape and the check in
+`enterRibbon` was never written - the only `armed` in the engine was the kickback's. The sentence
+went into a commit message, a PR body and this file, and it was doing work: it made an unbuilt
+mechanism read as a deliberate, cheap deferral. Matt asked what "not built" meant and the answer was
+that a hook had been documented instead of written.
+
+It is built now, and the shape of it is worth keeping:
+
+- **A diverter here is TWO RIBBONS SHARING A MOUTH, exactly one armed.** `enterRibbon` skips a
+  ribbon whose `armed === false` (undefined means armed, so TEST BOX and BOARDWALK are untouched).
+  A ball cannot be handed from one lane to another part-way along without teleporting it, so the
+  choice is made where a real flap makes it - at entry.
+- **The flap at the crest is DECOR and swings between the two positions.** What that costs, stated
+  plainly: the ball does not bounce off the flap. Where it ENDS UP is the real thing, and that is
+  genuinely different - measured, the same shot at the same mouth at the same speed either returns
+  to the left inlane or is captured by the Ferris Wheel.
+- **Two physical routes, not rev B's three.** Rev C moved mode-start to the Fortune Teller ("locks
+  live at the wheel, modes start at the scoop"), so two of the three collapsed into one. That is
+  the rev C rule working, not a third route left out.
+- `rampProbe` **arms one ribbon at a time**, or it fires at a shared mouth and measures whichever
+  ribbon comes first in the shape list - testing one ramp twice and reporting the other as "too slow
+  to get on".
+
+### The multiball soak, run
+
+`node pinball2/probes/test-multiball.mjs [runs] [seconds]`. Multiball is the only state where three
+balls are in the same solver, two of them ADDED mid-game rather than served, and no other probe ever
+puts a second ball on the table. It asserts no escape, no jam, no NaN, three balls really in play,
+the game's own ball count never disagreeing with how many are alive, and nothing sitting still at
+the end of a run.
+
+It found two things on its first run, both in code that had already shipped:
+
+1. **`rescues 16` - the two extra balls were being ADDED INSIDE the posts that gate the wheel.**
+   Adding a ball is the one position write this engine makes on purpose, and it was landing in a
+   collider, so the solver's rescue net pushed it out on its first tick. `startMultiball` now ASKS
+   `world.isFree` for a spot from a list of candidates. A number that is not zero in this engine is
+   a bug even when nothing visible goes wrong.
+2. **All eight runs scored exactly 313,760.** This engine is deterministic - there is no randomness
+   anywhere in it - so eight identical set-ups are ONE trajectory sampled eight times, which is a
+   unit test wearing a soak's clothes. Each run now varies the plunge and the robot's phase.
+
+**A soak is a sample and that is written into the file's own output.** `restSweep` and `escapeProbe`
+are the ones that do not sample; this proves these runs were clean, not that multiball is.
+
+### Still not built, and named rather than skipped
+
 - **A gate is not tunnel-checked.** "The ball is inside it" is what a one-way gate WORKING looks like
   and the tunnel probe cannot tell that from a tunnel, so gates are excluded from that one test.
 - **No stats, no hub entry, no leaderboard.** After Matt has judged it, and it must be a NEW stats id.
+- **No robot player, so no make rates and no score spread** - build phase 8, and the reason the
+  acceptance table in the blueprint is still targets rather than claims.
 
 ## Files
 
@@ -168,6 +218,7 @@ rest and a ball dropped at the top of the shooter lane just rolls back down.
 | `machines/testbox/tables/boardwalk.js` | the physics test bed. Three red probes, on purpose |
 | `machines/testbox/tables/piernine.js` | **PIER NINE's geometry**, in millimetres, with every deviation from the blueprint named in the file |
 | `piernine/index.html`, `game.js`, `rules.js`, `style.css` | **the playable machine.** `rules.js` is the scoring spine the engine does not have |
+| `probes/test-multiball.mjs` | the 3-ball soak. The only probe that puts more than one ball on the table |
 | `machines/testbox/render.js` | canvas 2D. Calls the solver's own flipper decomposition, so what is drawn and what is hit cannot drift |
 | `editor/index.html`, `editor/editor.js` | the tool: Play, Edit, Tune, Check |
 | `probes/checks.js` | the three checks, written ONCE and run from both the editor and node |

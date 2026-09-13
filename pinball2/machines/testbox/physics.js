@@ -533,6 +533,12 @@ export class World {
     const cfg = this.cfg;
     for (const sh of this.table.shapes) {
       if (sh.kind !== 'ribbon') continue;
+      // A DISARMED RAMP IS NOT THERE AT ITS MOUTH. This is what a DIVERTER is in this engine: two
+      // ribbons whose mouths are the same point, exactly one of them armed, and the flap at the
+      // crest is the picture of which. A ball cannot be re-routed part-way along a ribbon - a
+      // ribbon is one path, by construction - so the choice is made where a real diverter's flap
+      // makes it, at entry. `armed` undefined means armed, so every existing table is untouched.
+      if (sh.armed === false) continue;
       const geom = this.ribbons.get(sh.id);
       if (!geom || !geom.segs.length) continue;
       const half = sh.w / 2 - cfg.BALL_R;
