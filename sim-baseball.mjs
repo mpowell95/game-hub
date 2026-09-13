@@ -79,6 +79,22 @@ const MODEL_TIERS = {
   median: { timingSigmaMs: 55, placementSigma: 0.22, variety: 0.6, swingIn: 0.85, chase: 0.22 },
   strong: { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85, swingIn: 0.88, chase: 0.12 },
 };
+// BB-2d commit 3: doc §5, [Locked] - "Perfect Season is meant to be achievable for a player who has
+// already won the World Series and maxed every skill. It is not meant to be reachable at median
+// skill." MAXED_TIER stands in for that player: the STRONG tier's own timing/placement/pitch-
+// variety (the sharpest human this simulator models - the doc names no SHARPER human tier than
+// "strong", so this is the ceiling of skill this tool can measure, paired with every skill point
+// actually bought), never `effectiveCapFor` (that is the CPU's own generation ceiling, a fact
+// about CPU rosters, not about how high a real player's skills can go - doc §7: earned points can
+// go into any skill, up to the league's own raw CAPS).
+const MAXED_TIER = { ...MODEL_TIERS.strong };
+const PERFECT_SEASON_MIN_ODDS = 0.02; // Draft, per the handoff - roughly once every 50 seasons
+function maxedSkillsFor(league, settings) {
+  const capInt = Math.floor(settings.CAPS[league] != null ? settings.CAPS[league] : settings.CAPS.majors);
+  const skills = {};
+  for (const id of settings.SKILL_IDS) skills[id] = capInt;
+  return skills;
+}
 const tierSigmaArg = arg('tier-sigma', null);
 if (tierSigmaArg) {
   // "--tier-sigma weak=90,median=60,strong=30"
@@ -569,11 +585,14 @@ async function measureLeagueGames(league, settings) {
 // ---------------------------------------------------------------------------------------------
 // Season-level measurement: play whole 12-game regular seasons, resolve the CPU-scripted bracket,
 // and play the player's own semifinal/championship when they reach it.
-async function playSeason(league, settings, tier, seasonSeed) {
+// BB-2d commit 3: `override` lets a caller supply its own tier object and skills (the maxed tier's
+// full-CAPS skills, never `effectiveCapFor`) instead of looking `tier` up in MODEL_TIERS - every
+// existing caller passes a MODEL_TIERS key string and gets the old behavior unchanged.
+async function playSeason(league, settings, tier, seasonSeed, override = null) {
   const teams = makeLeague(league);
   const schedule = makeSchedule(league, seasonSeed, settings.SCHEDULE_SHAPE);
-  const skills = playerSkillsFor(league, settings);
-  const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
+  const skills = (override && override.skills) || playerSkillsFor(league, settings);
+  const playerAgent = mkModelAgent(league, settings, (override && override.tier) || MODEL_TIERS[tier]);
   const playerTeam = makePlayerTeam({ skills, hand: 'R' });
 
   let wins = 0, losses = 0;
@@ -615,7 +634,28 @@ async function playSeason(league, settings, tier, seasonSeed) {
   const trophy = trophyFor({ reachedSemifinal, reachedChampionship, wonChampionship });
   const points = wins * settings.POINTS[league].win + losses * settings.POINTS[league].loss
     + [0, settings.POINTS[league].bronze, settings.POINTS[league].silver, settings.POINTS[league].gold][trophy];
-  return { wins, losses, madePlayoffs, trophy, points, reachedChampionship };
+  // BB-2d commit 3: `perfectSeason` exposed - every regular-season game won AND the championship
+  // won (doc §5, [Locked]: "win every Majors regular season, playoff, and World Series game in one
+  // season"). Purely additive; no existing caller reads it.
+  const perfectSeason = losses === 0 && wonChampionship;
+  return { wins, losses, madePlayoffs, trophy, points, reachedChampionship, wonChampionship, perfectSeason };
+}
+
+/** BB-2d commit 3: the maxed-tier profile has never been measured before this commit - every
+ *  existing tier runs at the league's EXPECTED level, never at a player's own ceiling. Plays
+ *  `seasonsN` whole seasons with `MAXED_TIER`'s timing/placement and `maxedSkillsFor`'s full-CAPS
+ *  skills, and reports both the season win rate (for comparison against the median tier's own) and
+ *  the Perfect Season rate directly - `PERFECT_SEASON_REACHABLE`'s own gate, per the handoff. */
+async function measureMaxedSeasons(league, settings, seasonsN) {
+  const skills = maxedSkillsFor(league, settings);
+  const seasons = [];
+  for (let i = 0; i < seasonsN; i++) {
+    seasons.push(await playSeason(league, settings, null, i, { tier: MAXED_TIER, skills }));
+  }
+  const perfectRate = seasons.filter((s) => s.perfectSeason).length / seasons.length;
+  const seasonWinRate = mean(seasons.map((s) => s.wins / (s.wins + s.losses)));
+  const goldRate = seasons.filter((s) => s.trophy === 3).length / seasons.length;
+  return { perfectRate, seasonWinRate, goldRate };
 }
 
 async function measureLeagueSeasons(league, settings) {
@@ -1387,6 +1427,16 @@ async function main() {
   }
   report.experiments = { nudgeAB: ab, skillEffect };
 
+  // BB-2d commit 3: the maxed tier, Majors only (doc §5's own Perfect Season is a Majors-season
+  // fact) - printed beside the median tier's own Majors season win rate already computed above.
+  console.log('\n=== Maxed tier: Perfect Season reachability (Majors) ===');
+  const maxed = await measureMaxedSeasons('majors', SETTINGS, SEASONS_N);
+  const medianMajorsSeasonWinRate = report.leagues.majors && report.leagues.majors.default
+    ? report.leagues.majors.default.seasonStats.median.seasonWinRate : null;
+  console.log(`  maxed tier: seasonWinRate=${fmtPct(maxed.seasonWinRate)}  goldRate=${fmtPct(maxed.goldRate)}  perfectSeasonRate=${fmtPct(maxed.perfectRate)}`);
+  console.log(`  median tier (for comparison): seasonWinRate=${medianMajorsSeasonWinRate == null ? 'n/a' : fmtPct(medianMajorsSeasonWinRate)}`);
+  report.maxedTier = maxed;
+
   // -----------------------------------------------------------------------------------------
   // The promise scoreboard.
   console.log('\n=== PROMISE SCOREBOARD ===');
@@ -1432,6 +1482,11 @@ async function main() {
     const worstChamp = champRates.length ? Math.min(...champRates) : null;
     scoreLine('CHAMPION_GAME_WIN_MIN_MEDIAN (worst league)', worstChamp != null && worstChamp >= CHAMPION_GAME_WIN_MIN_MEDIAN,
       worstChamp == null ? 'n/a (no sample reached the championship)' : worstChamp.toFixed(3), `>= ${CHAMPION_GAME_WIN_MIN_MEDIAN}`);
+
+    // BB-2d commit 3, doc §5 [Locked]: Perfect Season must be reachable for the MAXED tier, not the
+    // median one - measured separately above (Majors only).
+    scoreLine('PERFECT_SEASON_REACHABLE (maxed tier, Majors)', maxed.perfectRate >= PERFECT_SEASON_MIN_ODDS,
+      maxed.perfectRate.toFixed(4), `>= ${PERFECT_SEASON_MIN_ODDS}`);
 
     // LADDER_MONOTONE: median win rate against the league-average team falls each league up.
     const ladderWinRates = LEAGUES.map((lg) => mean(report.leagues[lg].default.gameStats.map((t) => t.perTier.median.winRate)));
