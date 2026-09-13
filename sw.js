@@ -796,7 +796,7 @@ const REST_MANIFEST = {
   './baseball/js/ui.js': '775f46fb69',
   './baseball/js/strings.js': 'eec454237c',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': '5449696468',
+  './baseball/js/engine/settings.js': 'aa812de9be',
   './baseball/js/engine/pitch.js': '15587bfac7',
   './baseball/js/engine/swing.js': '93e43ce2a8',
   './baseball/js/engine/outcomes.js': '11ba9a2b80',

@@ -888,5 +888,102 @@ console.log('\n-- 14. pattern memory --');
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 15. Locked-statement inventory gap-fill (BB-2a step 8) --');
+{
+  // doc §3, [Locked]: "No mercy rule" - a lopsided score never ends the game early on its own; the
+  // ONLY early endings are a walkoff (home ahead in the bottom of the last inning) and skipping a
+  // now-pointless bottom half (home already ahead entering it) - both doc-given rules, never a
+  // run-margin cutoff. Grep-level: no mercy-margin concept exists in the engine at all.
+  const engineSrcForMercy = fs.readFileSync(path.join(ENGINE_DIR, 'game.js'), 'utf8');
+  ok(!/mercy/i.test(engineSrcForMercy), 'game.js names no mercy-rule concept at all (doc §3, [Locked]: "No mercy rule")');
+  {
+    // A 20+ run blowout still plays every scheduled half - forcing the score, then playing one
+    // more half-inning through the real engine, proves the half is not skipped for the margin.
+    const g = playGameOnce('majors', hashSeed('no-mercy-probe'));
+    g.score = { home: 25, away: 1 };
+    g.inning = 1; g.half = 'top';
+    let halfPlayed = false;
+    g.onEvent = async (type) => { if (type === 'halfInningEnd') halfPlayed = true; };
+    await g.playHalfInning();
+    ok(halfPlayed, 'a 24-run-margin game still plays a full half-inning rather than ending early (no mercy rule)');
+  }
+
+  // doc §6, [Locked]: "Batter Speed affects beating out grounders" - a close grounder's hit rate at
+  // hitSpd=10 must exceed hitSpd=0, same distance/sector/rand01 stream.
+  {
+    const zonesM = zonesFor('majors', 0);
+    const sector = zonesM.infield[1];
+    const GROUND_ANGLE = 4;
+    const angleFactor = Math.max(0, Math.sin((2 * GROUND_ANGLE * Math.PI) / 180));
+    const nearEdgeFt = sector.toFt - SETTINGS.MECHANICS.groundEdgeMarginFt / 2; // well inside the near-edge band
+    const exitVeloMph = nearEdgeFt / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const trial = (hitSpd) => resolveContact({ exitVeloMph, launchAngleDeg: GROUND_ANGLE, sprayAngleDeg: 0 },
+      zonesM, SETTINGS, SETTINGS.PARKS.default, hitSpd, () => 0.0001).result;
+    ok(trial(0) === 'out', 'a close grounder with hitSpd=0 is fielded (the beat-out roll never fires with zero chance)');
+    ok(trial(10) === 'hit', `the identical close grounder with hitSpd=10 beats the throw (doc §6: "Batter Speed affects beating out grounders"), sector.toFt=${sector.toFt}, tried at ${nearEdgeFt.toFixed(1)}ft`);
+  }
+
+  // doc §6, [Locked]: exactly six skill ids, nothing invented beyond the doc's own list.
+  ok(JSON.stringify(SETTINGS.SKILL_IDS.slice().sort()) === JSON.stringify(['hitAcc', 'hitPow', 'hitSpd', 'pitchAcc', 'pitchSpd', 'pitchSpin'].sort()),
+    'SKILL_IDS is exactly the doc\'s six real skills, nothing more (doc §6, [Locked])');
+  ok(SETTINGS.START_POINTS_PER_SIDE === 15 && SETTINGS.START_CAP === 10,
+    'a new player starts with 15 points per side at a cap of 10 (doc §6, [Locked])');
+
+  // doc §8, [Locked]: "Little League: mostly fastballs down the middle" - fastball must be the
+  // dominant weight in Little League's own pitchMix.
+  {
+    const mix = SETTINGS.CPU.little.pitchMix;
+    const total = Object.values(mix).reduce((a, b) => a + b, 0);
+    ok((mix.fastball || 0) / total > 0.5, 'CPU.little.pitchMix is majority fastball (doc §8, [Locked]: "mostly fastballs")');
+  }
+  // doc §8, [Locked]: "Majors: attacks your weak spots" - weakSpotWeight highest at Majors.
+  {
+    const weights = SETTINGS.LEAGUES.map((lg) => SETTINGS.CPU[lg].weakSpotWeight);
+    ok(weights[weights.length - 1] === Math.max(...weights), 'weakSpotWeight is highest at Majors, the last league (doc §8, [Locked])');
+  }
+
+  // doc §9, [Locked]: "9 distinct batters... and 1 pitcher per game" - a generated team has 9
+  // roster slots and exactly one pitcher id, resolving to a real player.
+  {
+    const t = makeTeam('college', 3);
+    ok(t.players.length === 9, 'a generated team has exactly 9 players (doc §9, [Locked])');
+    ok(t.players.filter((p) => p.id === t.pitcherId).length === 1, 'exactly one roster player is the pitcher');
+  }
+  // doc §9, [Locked]: "About 1 in 4 CPU players are lefties" - measured across many generated
+  // players, both bats and throws, within a wide statistical margin (this is a per-player coin
+  // flip at LEFTY_RATE, not a per-team guarantee).
+  {
+    let lefty = 0, total = 0;
+    for (let i = 0; i < 300; i++) {
+      const t = makeTeam('college', 1000 + i);
+      for (const p of t.players) { total += 2; if (p.bats === 'L') lefty += 1; if (p.throws === 'L') lefty += 1; }
+    }
+    const rate = lefty / total;
+    ok(Math.abs(rate - SETTINGS.LEFTY_RATE) < 0.03, `measured lefty rate ${rate.toFixed(3)} is within 0.03 of LEFTY_RATE (${SETTINGS.LEFTY_RATE}), doc §9, [Locked]`);
+  }
+
+  // doc §10, [Locked]: "4 infield ground-out zones, 3 outfield fly-out zones" - exact counts.
+  {
+    const zonesM = zonesFor('majors', 0);
+    ok(zonesM.infield.length === 4, 'zonesFor names exactly 4 infield sectors (doc §10, [Locked])');
+    ok(zonesM.outfield.length === 3, 'zonesFor names exactly 3 outfield sectors (doc §10, [Locked])');
+  }
+  // doc §10, [Locked]: "Pop-ups in the infield are outs" - always, regardless of distance/spray.
+  {
+    const zonesM = zonesFor('majors', 0);
+    for (const trial of [{ v: 40, a: 60, s: 0 }, { v: 90, a: 65, s: 20 }, { v: 30, a: 58, s: -30 }]) {
+      const o = resolveContact({ exitVeloMph: trial.v, launchAngleDeg: trial.a, sprayAngleDeg: trial.s }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
+      ok(o.result === 'out' && o.kind === 'popout', `a pop-up (launchAngleDeg=${trial.a}) is always an out regardless of exit velocity or spray (doc §10, [Locked]), got ${JSON.stringify(o)}`);
+    }
+  }
+  // doc §10, [Locked]: "Fields get bigger each league" - fenceFtAt(0) (dead center) rises league to
+  // league.
+  {
+    const centers = SETTINGS.LEAGUES.map((lg) => fenceFtAt(0, SETTINGS.FIELD[lg].fenceFt));
+    ok(centers.every((v, i) => i === 0 || v >= centers[i - 1]), `center-field fence distance grows league to league (doc §10, [Locked]): ${JSON.stringify(centers)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

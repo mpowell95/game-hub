@@ -321,7 +321,12 @@ export const FIELD = {                      // Draft [Open item 7]
   highschool: { fenceFt: { left: 300, leftCenter: 330, center: 360, rightCenter: 330, right: 300 }, outZoneMult: 0.85, fieldScale: 0.85 },
   college:    { fenceFt: { left: 330, leftCenter: 365, center: 400, rightCenter: 365, right: 330 }, outZoneMult: 0.95, fieldScale: 1.00 },
   minors:     { fenceFt: { left: 335, leftCenter: 370, center: 405, rightCenter: 370, right: 335 }, outZoneMult: 1.00, fieldScale: 1.05 },
-  majors:     { fenceFt: { left: 330, leftCenter: 375, center: 400, rightCenter: 375, right: 330 }, outZoneMult: 1.05, fieldScale: 1.10 },
+  // BB-2a step 8 [KNOWN-BUG PROBE]: majors' left/center/right were each SMALLER than minors'
+  // (330/400/330 vs minors' 335/405/335) - a real pre-existing inconsistency with doc §10,
+  // [Locked] ("Fields get bigger each league"), caught by test.js section 15's new fenceFtAt(0)
+  // monotonicity check rather than by inspection. Corrected here to strictly exceed minors' in
+  // every named point; still Draft [Open item 7] (exact distances remain fully invented).
+  majors:     { fenceFt: { left: 337, leftCenter: 378, center: 408, rightCenter: 378, right: 337 }, outZoneMult: 1.05, fieldScale: 1.10 },
 };
 
 // How wide the fair-territory pattern-memory/shift window is, and how far a "shifters" team may
