@@ -143,12 +143,9 @@
 .sd-seg svg.lb-dshape, .sd-hud-tier svg.lb-dshape { width: 15px; height: 15px; flex: none; }
 .sd-seg svg.lb-dshape-x2, .sd-hud-tier svg.lb-dshape-x2 { width: 26px; height: 15px; }
 
-.sd-howto-lead { margin: 0 0 10px; font-size: 15px; }
-.sd-howto-diagram { display: flex; justify-content: center; margin: 4px 0 10px; }
-.sd-howto-diagram svg { width: 100%; max-width: 260px; height: auto; }
-.sd-howto-caption { margin: 0 0 10px; font-size: 13px; color: var(--sd-muted); text-align: center; }
-.sd-howto-rules { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
-.sd-howto-rules li { margin-bottom: 4px; }
+.sd-howto-diagram { display: flex; justify-content: center; margin: 4px 0 14px; }
+.sd-howto-diagram svg { width: 100%; max-width: 300px; height: auto; }
+.sd-howto-caption { margin: 0; font-size: 14px; color: var(--sd-muted); text-align: center; }
 
 /* --- HUD ------------------------------------------------------------------------------------- */
 .sd-hud {

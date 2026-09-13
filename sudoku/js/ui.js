@@ -164,8 +164,9 @@ class SudokuUI {
     this._enterGame(game);
   }
 
-  /** One short bold sentence, one diagram carrying the non-obvious mechanic (notes), a caption,
-   *  short rules - docs/BUILDING-A-GAME.md Part 2's repo-wide how-to-play pattern. */
+  /** Sudoku's rules (fill every row/col/box with 1-9) are already known - the ONE thing worth a
+   *  picture is notes vs. an answer, so that is the whole sheet: the diagram and one caption line,
+   *  nothing else (Matt, 2026-09-13: "SO MUCH TEXT. Remove that."). */
   renderHowTo() {
     this.screen = 'howto';
     this._pauseTimer();
@@ -173,14 +174,8 @@ class SudokuUI {
     this.container.innerHTML = `
       <div class="sd-root sd-howto-screen">
         <div class="gh-card">
-          <p class="sd-howto-lead"><b>${esc(t('howto_lead'))}</b></p>
           <div class="sd-howto-diagram">${this._howToDiagramSVG()}</div>
           <p class="sd-howto-caption">${esc(t('howto_caption'))}</p>
-          <ul class="sd-howto-rules">
-            <li>${esc(t('howto_rule_1'))}</li>
-            <li>${esc(t('howto_rule_2'))}</li>
-            <li>${esc(t('howto_rule_3'))}</li>
-          </ul>
         </div>
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="close">${esc(t('howto_close'))}</button>
       </div>`;

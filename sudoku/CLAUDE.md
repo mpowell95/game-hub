@@ -224,6 +224,17 @@ Verified: `node check-no-scroll.mjs sudoku` (0 scroll, both hosts, both heights)
 `node test-visual.mjs sudoku` (14/14, incl. the fit checks) both still pass, and the launcher grid
 was re-measured at its normal width after the abandoned `.hub-main` flex attempt was reverted.
 
+## How to play: cut to the diagram and one caption (2026-09-13)
+
+Matt: *"The How to Play screen is awful. SO MUCH TEXT. Remove that."* It shipped with a bold lead
+sentence restating the row/col/box rule, the diagram, a caption, and three more bullets spelling
+out tap-to-fill/notes/auto-clear - `docs/BUILDING-A-GAME.md` Part 2's general how-to-play pattern,
+applied without asking whether Sudoku needed all of it. It didn't: everyone already knows the
+row/col/box rule, and the pad below the sheet already teaches tap-to-fill by existing. **The only
+thing worth a picture is notes vs. an answer**, so the sheet is now just the diagram and the one
+caption under it (`howto_caption`) - `renderHowTo()` in `js/ui.js`. `howto_lead`/`howto_rule_1-3`
+and their CSS (`.sd-howto-lead`/`.sd-howto-rules`) were deleted, not hidden.
+
 ## Timer
 
 Starts on the **first input** of a completely fresh puzzle (nothing placed, no mistakes, no
