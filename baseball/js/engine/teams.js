@@ -128,7 +128,8 @@ export function makeLeague(league) {
   const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
   const teams = order.map((styleId, slot) => {
     const seed = hashSeed('bb-league', league, styleId);
-    const slotCap = Math.max(1, Math.min(rawCap, baseCap + (TEAM_LADDER_OFFSETS[slot] || 0)));
+    const frac = TEAM_LADDER_OFFSETS[slot] || 0;
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + frac)));
     return buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
   });
   return teams;

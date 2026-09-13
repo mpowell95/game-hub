@@ -90,6 +90,11 @@ const NUDGE_MAX_WINRATE_GAP = 0.08;
 // a MARGIN, not just a sign - a promise that barely holds is not a promise the retune should stop
 // at. Every league must clear this gap, not merely have `nudgeWins === true`.
 const NUDGE_AB_MIN_WINRATE_GAP = 0.10;
+// BB-2a step 6: the within-league ladder check needs its own larger sample and a real numeric
+// tolerance, not the ad hoc "+0.15" phase 2 shipped with - "the phase 2 noise was sampling at 400."
+const LADDER_TOLERANCE = 0.02;
+const LADDER_GAMES = 1000;
+const LADDER_GAMES_N = Math.max(4, Math.round(FLAG_QUICK ? LADDER_GAMES / 10 : LADDER_GAMES));
 
 // ---------------------------------------------------------------------------------------------
 // BB-2a step 4: `--contact-grid` - an ISOLATED plate-appearance harness (real Game components -
@@ -283,12 +288,15 @@ async function playOneGame(league, settings, opponent, playerAgent, playerTeam, 
   return { won, playerRuns, oppRuns, pitches, atBats, playerHits, playerDoubles, playerTriples, playerHomers, playerSO, playerBB };
 }
 
-/** Play a whole GAMES_N-game matchup sweep for one (league, team, tier), alternating home/away. */
-async function sweepMatchup(league, settings, opponent, tier, seedBase) {
+/** Play a whole matchup sweep for one (league, team, tier), alternating home/away. `gamesN`
+ *  defaults to the sweep's own GAMES_N but can be overridden (BB-2a step 6: the within-league
+ *  LADDER_MONOTONE check needs its own larger LADDER_GAMES sample - "the phase 2 noise was
+ *  sampling at 400" - independent of whatever `--games`/`--quick` the rest of the report uses). */
+async function sweepMatchup(league, settings, opponent, tier, seedBase, gamesN = GAMES_N) {
   const cpu = settings.CPU[league] || settings.CPU.college;
   const skills = playerSkillsFor(league, settings);
   const results = [];
-  for (let i = 0; i < GAMES_N; i++) {
+  for (let i = 0; i < gamesN; i++) {
     const seed = hashSeed('bb-sim', league, opponent.styleId, tier, seedBase, i);
     const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
     const playerTeam = makePlayerTeam({ skills, hand: 'R' });
@@ -300,6 +308,20 @@ async function sweepMatchup(league, settings, opponent, tier, seedBase) {
 
 function mean(a) { return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0; }
 function median(a) { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; }
+
+/** BB-2a step 6: the within-league LADDER_MONOTONE check's own dedicated measurement, at
+ *  LADDER_GAMES_N per opponent (median tier only) rather than reusing whatever --games/--quick the
+ *  rest of the report used - "the phase 2 noise was sampling at 400," per the handoff. Returns win
+ *  rates in SLOT order (weakest..strongest), matching makeLeague's own order. */
+async function measureLadderWinRates(league, settings) {
+  const teams = makeLeague(league);
+  const rates = [];
+  for (const team of teams) {
+    const rows = await sweepMatchup(league, settings, team, 'median', 'ladder', LADDER_GAMES_N);
+    rates.push(rows.filter((r) => r.won).length / rows.length);
+  }
+  return rates;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Per-league/team/tier per-game measurement.
@@ -695,12 +717,19 @@ async function main() {
     const ladderOk = ladderWinRates.every((v, i) => i === 0 || v <= ladderWinRates[i - 1] + 1e-9);
     scoreLine('LADDER_MONOTONE (win rate falls each league up)', ladderOk, JSON.stringify(ladderWinRates.map((v) => +v.toFixed(3))), 'non-increasing');
 
-    // within-league schedule-order monotonicity (weakest..strongest opponent).
+    // within-league schedule-order monotonicity (weakest..strongest opponent), BB-2a step 6: its
+    // own LADDER_GAMES_N-game measurement and a real LADDER_TOLERANCE, replacing phase 2's ad hoc
+    // "+0.15" (which was hiding real disorder, not just noise, at only 400 games/opponent).
+    const ladderRatesByLeague = {};
+    for (const lg of LEAGUES) ladderRatesByLeague[lg] = await measureLadderWinRates(lg, SETTINGS);
+    console.log(`\n  within-league ladder check (median tier, ${LADDER_GAMES_N} games/opponent, tolerance ${LADDER_TOLERANCE}):`);
+    for (const lg of LEAGUES) console.log(`    ${lg.padEnd(12)} ` + ladderRatesByLeague[lg].map((v) => (v * 100).toFixed(1) + '%').join('  '));
     const withinLeagueOk = LEAGUES.every((lg) => {
-      const rates = report.leagues[lg].default.gameStats.map((t) => t.perTier.median.winRate);
-      return rates.every((v, i) => i === 0 || v <= rates[i - 1] + 0.15); // allow sampling noise
+      const rates = ladderRatesByLeague[lg];
+      return rates.every((v, i) => i === 0 || v <= rates[i - 1] + LADDER_TOLERANCE);
     });
-    scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk, 'see per-team table above', 'roughly non-increasing');
+    scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk,
+      'see the within-league ladder check above', `non-increasing within ${LADDER_TOLERANCE}`);
   }
 
   const nudgeGaps = LEAGUES.map((lg) => ab[lg].tableSetterLowPowerWellTimedWinRate - ab[lg].sluggerHighPowerSloppyWinRate);

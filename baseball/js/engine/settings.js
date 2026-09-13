@@ -272,11 +272,23 @@ export const WEAKSPOT_WINDOW = 8;
 //
 // Reverted 2026-09-12 (BB-2a, step 1): {little:0, highschool:0, college:3, minors:6, majors:9}
 // (effective caps 10/14/15/16/17) back to {little:0, highschool:0, college:1.5, minors:3.3,
-// majors:5.3} (effective caps 10/14/16.5/18.7/20.7). That Phase 2 retune was tuned against a
-// contact model swing.js is about to change (timing quality is about to become continuous and
-// multiply power, per this phase's contact-quality axis) - retuning this lever again happens once,
-// AFTER the new contact model lands, from this reverted base (BB-2a step 6).
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 1.5, minors: 3.3, majors: 5.3 };
+// majors:5.3} (effective caps 10/14/16.5/18.7/20.7), pending the contact-model fix.
+//
+// BB-2a step 6 retune: back to {college:3, minors:6, majors:9} (effective caps 10/14/15/16/17) -
+// measured against the NEW contact model with `sim-baseball.mjs --quick`. Widening this further
+// (tried up to {college:5, minors:10, majors:15} and beyond) moved median-tier Gold odds only
+// marginally and, at Minors/Majors, made the regular-season top4 rate WORSE, not better - the real
+// bottleneck (confirmed under the new contact model, matching phase 2's own finding) is COMPOUND
+// probability: `makeSchedule`'s 12-game season already plays the top HALF of the ladder (styles at
+// slots 4-7) TWICE, so even a materially weaker CPU roster does not move the player's regular-
+// season record much, and Gold additionally needs winning both a semifinal AND a championship
+// against the single strongest team in the same season. GOLD_SEASONS_MAX_MEDIAN and
+// GOLD_ONE_SEASON_MIN_MEDIAN still FAIL at College/Minors/Majors after this retune - see the
+// pasted scoreboard below. Open item for Matt, unchanged from phase 2: loosen the two GOLD_*
+// thresholds, or rework how Gold is reached (a bye, a weaker semifinal opponent, a shorter top-half
+// repeat in the schedule) - this tool does not choose between them, and POINTS/SEASON are outside
+// this phase's scope to retune on its own judgement.
+export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 6, majors: 9 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -380,14 +392,22 @@ export const STYLE_BEHAVIOR = {
 };
 
 // BB-2a step 5 (2026-09-12): STRENGTH now comes from here, not from TEAM_STYLES or a post-hoc sort.
-// Eight per-slot skill-point OFFSETS around `effectiveCapFor(league)`, weakest (slot 0) to
-// strongest (slot 7) - `makeLeague` applies one per slot and orders teams BY SLOT, never by a
-// measured `teamStrength()`. Draft, new - an even spread with a slightly steeper final two slots,
-// so the top of the ladder (the semifinal/championship teams, doc §8: "the championship opponent
-// is always the toughest team in the league") is more clearly separated from the pack than the
-// slots below it. Clamped against the league's own CAPS in `effectiveCapFor`'s own style (never
-// above the raw league cap, per doc §8) inside `teams.js`'s `makeLeague`.
-export const TEAM_LADDER_OFFSETS = [-6, -4, -3, -2, -1, 0, 2, 4];
+// Eight per-slot FRACTIONAL offsets of `effectiveCapFor(league)`, weakest (slot 0) to strongest
+// (slot 7) - `makeLeague` applies `effectiveCap * (1 + offset)` per slot and orders teams BY SLOT,
+// never by a measured `teamStrength()`. Draft, new - a FRACTION rather than a flat skill-point
+// delta (BB-2a step 6 correction: a flat +/-6 points is a huge swing at Little League's effective
+// cap of 10 but a mild one at Majors' 20.7, which measurably flattened Little/High School's
+// within-league ladder into noise - see `baseball/CLAUDE.md`'s ladder-check table). Clamped inside
+// `teams.js`'s `makeLeague` to `[1, CAPS[league]]` (never above the raw league cap, per doc §8) -
+// Little League and High School both carry a `CPU_LEVEL_SHORTFALL` of 0, so their effectiveCap
+// already equals the raw cap and the top few slots there necessarily tie at the ceiling; this is a
+// real structural limit of "difficulty from behavior, not stats" at the bottom of the ladder, not
+// a bug in the offsets. A wider first attempt (+/-0.45/0.38) measured no better on the within-
+// league win-rate check than this narrower one - `sim-baseball.mjs`'s own report (baseball/
+// CLAUDE.md) shows the remaining disorder traces to which SKILL a slot's style favors mattering
+// more or less against a fixed human strategy than its aggregate offset alone predicts, not to the
+// offset's magnitude - so the narrower, more conservative spread was kept.
+export const TEAM_LADDER_OFFSETS = [-0.25, -0.18, -0.12, -0.06, 0, 0.06, 0.14, 0.25];
 
 // BB-2a step 5 (2026-09-12): which style sits in which ladder slot, per league. Draft, new,
 // PROPOSED - for Matt to confirm or edit (the handoff's own words). One order, reused across every
@@ -414,8 +434,8 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 // therefore still invented - Draft [Open item 4] - constrained only by the doc's qualitative
 // description of which effect each skill drives, renamed onto the six real skill ids.
 export const SKILL_EFFECT = {                // Draft [Open item 4]
-  hitAcc:    { contactRadiusInPerPt: 0.15, whiffReductionPerPt: 0.01 },  // "bigger timing window and sweet spot" - reverted 2026-09-12 (BB-2a step 1) from 0.12/0.008 (measured against the pre-contact-model swing.js); retuned again once from this base after the contact model lands (BB-2a step 6)
-  hitPow:    { exitVeloMphPerPt: 0.6 },                                  // "more distance, stronger charged swings" - reverted 2026-09-12 (BB-2a step 1) from 0.5, same reason
+  hitAcc:    { contactRadiusInPerPt: 0.09, whiffReductionPerPt: 0.006 }, // "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
+  hitPow:    { exitVeloMphPerPt: 0.35 },                                 // "more distance, stronger charged swings" - BB-2a step 6 retune (was 0.6), same reason - kept well inside the contact grid's TIMING_OVER_POWER/ceiling margins
   hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - sprintFtPerSPerPt/stealSuccessPerPt still unused (no steal/bunt this phase, see RESERVED_PHASE_6); the beat-out HALF is now wired, via MECHANICS.beatOutPerPt in outcomes.js
   pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
   pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - pickoff unused this phase
@@ -431,7 +451,7 @@ export const MECHANICS = {
   walkoffEndsImmediately: true,     // [Locked] doc §3
   extraInningRunnerOnSecond: true,  // [Locked] doc §3 - "every extra half-inning starts with a runner on second"
   doublePlayEnabled: true,          // [Locked] doc §3 - "can be a double play" with a runner on first, <2 outs
-  doublePlayChance: 0.45,           // Draft [Open item 26] - reverted 2026-09-12 (BB-2a step 1) from 0.40 (measured 2026-09-12 against the pre-contact-model swing.js) back to 0.45; the doc locks that a double play CAN happen, not how often; retuned again once from this base after the contact model lands (BB-2a step 6)
+  doublePlayChance: 0.40,           // Draft [Open item 26] - BB-2a step 6 retune, back to 0.40 (measured 2026-09-12 against the NEW contact model - puts a double play at roughly 1-in-8 grounders once P(runner on first, <2 outs) is folded in, same reasoning phase 2's original measurement used; the intervening 0.45 was step 1's revert of that number pending the contact-model fix, not a rejection of it)
   maxExtraInnings: 50,              // [Locked] doc §3 - explicitly a safety valve only, never a stated rule
   outsPerInning: 3,
   strikesForOut: 3,
