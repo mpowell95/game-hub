@@ -49,6 +49,7 @@ const FLAG_CONTACT_GRID = process.argv.includes('--contact-grid');
 const FLAG_STYLES = process.argv.includes('--styles');
 const FLAG_STYLES_TUNE = process.argv.includes('--tune');
 const FLAG_STAGES = process.argv.includes('--stages');
+const FLAG_ATTRIBUTE = process.argv.includes('--attribute');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -210,11 +211,13 @@ async function tuneStyle(styleId, league, settings, games) {
 
 // ---------------------------------------------------------------------------------------------
 // Settings override sweep ("--set outZoneMult=0.9,1.0,1.1"), the same trick `--faces` plays in
-// `tune-boggle-es.mjs`: measure a candidate value without editing settings.js. Applies to every
-// league's FIELD.outZoneMult (the only override this tool wires up; extend here if another knob
-// needs sweeping).
+// `tune-boggle-es.mjs`: measure a candidate value without editing settings.js. A bare key (no dot)
+// keeps the original broadcast behavior (every league's FIELD.outZoneMult); BB-2c commit 1 extends
+// it to accept any DOTTED path instead, set at that one exact location only (e.g.
+// "--set CPU.majors.timingSigmaMs=58") - see `withOverride`, defined further down this file.
 function settingsFor(overrideValue) {
   if (overrideValue == null) return SETTINGS;
+  if (SET_KEY && SET_KEY.includes('.')) return withOverride(SETTINGS, SET_KEY, overrideValue);
   const FIELD = {};
   for (const lg of SETTINGS.LEAGUES) FIELD[lg] = { ...SETTINGS.FIELD[lg], outZoneMult: overrideValue };
   return { ...SETTINGS, FIELD };
@@ -287,6 +290,153 @@ async function playOneGame(league, settings, opponent, playerAgent, playerTeam, 
   const oppRuns = playerHome ? g.score.away : g.score.home;
   const won = g.winner === playerSide;
   return { won, playerRuns, oppRuns, pitches, atBats, playerHits, playerDoubles, playerTriples, playerHomers, playerSO, playerBB };
+}
+
+// ---------------------------------------------------------------------------------------------
+// BB-2c commit 1: `--attribute` - which of the two diagnosed CPU stat advantages (timing sigma,
+// placement noise) actually causes the regular-season win-rate gap, measured by ONE-FACTOR
+// COUNTERFACTUAL swaps through the real engine, not argued from first principles. Measurement
+// only - no settings.js value changes; `withOverride` clones just the branch it touches so every
+// other constant, including the settings module's own function exports, passes through by
+// reference.
+function withOverride(settings, path, value) {
+  const keys = path.split('.');
+  const root = { ...settings };
+  let cursor = root;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const k = keys[i];
+    cursor[k] = { ...cursor[k] };
+    cursor = cursor[k];
+  }
+  cursor[keys[keys.length - 1]] = value;
+  return root;
+}
+function withOverrides(settings, overrides) {
+  return overrides.reduce((s, [path, value]) => withOverride(s, path, value), settings);
+}
+
+// This commit predates commit 2's real `CPU_SIGMA_ABSOLUTE_FLOOR_MS`/`CPU_PLACEMENT_MIN`
+// constants - these two literals are exactly the values the handoff specifies for them, used here
+// only to build the counterfactual settings a measurement-only commit is allowed to construct.
+const ATTRIB_SIGMA_FLOOR = 58;
+const ATTRIB_PLACEMENT_MIN = 0.22;
+// `readNoise = (1 - guess) * 0.3` is the shipped formula (pre-contract) for a CpuBatter's base
+// placement noise - the `guess` value that reproduces ATTRIB_PLACEMENT_MIN under that formula,
+// since `placementNoise` does not exist as its own field until commit 2.
+const ATTRIB_GUESS_FOR_PLACEMENT_MIN = 1 - ATTRIB_PLACEMENT_MIN / 0.3;
+
+/** Play ONE game and return a full plate-appearance ledger for BOTH sides, not just the player's
+ *  own - `--attribute`'s counterfactuals need to see how the SWAPPED side's batting changed, and
+ *  the player's own tier is held fixed throughout so its ledger is the constant against which the
+ *  opponent's move is read. */
+function emptyLedger() { return { pa: 0, so: 0, bb: 0, inPlay: 0, hits: 0, homers: 0, outsFromContact: 0, qSum: 0, qN: 0, centered: 0, centeredN: 0, exitVeloSum: 0, exitVeloN: 0 }; }
+function foldAtBat(ledger, payload) {
+  ledger.pa += 1;
+  if (payload.outcome === 'strikeout') { ledger.so += 1; return; }
+  if (payload.outcome === 'walk') { ledger.bb += 1; return; }
+  ledger.inPlay += 1;
+  if (payload.bases > 0) ledger.hits += 1; else ledger.outsFromContact += 1;
+  if (payload.bases === 4) ledger.homers += 1;
+  if (payload.q != null) { ledger.qSum += payload.q; ledger.qN += 1; }
+  if (payload.centered != null) { if (payload.centered) ledger.centered += 1; ledger.centeredN += 1; }
+  if (payload.exitVeloMph != null) { ledger.exitVeloSum += payload.exitVeloMph; ledger.exitVeloN += 1; }
+}
+async function playOneGameForLedger(league, settings, opponent, playerAgent, playerTeam, seed, playerHome) {
+  const home = playerHome ? playerTeam : opponent;
+  const away = playerHome ? opponent : playerTeam;
+  const homeAgent = playerHome ? playerAgent : mkCpuAgent(opponent, league, settings);
+  const awayAgent = playerHome ? mkCpuAgent(opponent, league, settings) : playerAgent;
+  const g = new Game({ home, away, seed, agents: { home: homeAgent, away: awayAgent }, settings });
+  const playerSide = playerHome ? 'home' : 'away';
+  const oppSide = playerHome ? 'away' : 'home';
+  const ledgers = { player: emptyLedger(), opp: emptyLedger() };
+  g.onEvent = async (type, payload) => {
+    if (type !== 'atBatEnd') return;
+    if (payload.side === playerSide) foldAtBat(ledgers.player, payload);
+    else if (payload.side === oppSide) foldAtBat(ledgers.opp, payload);
+  };
+  await g.playGame();
+  const playerRuns = playerHome ? g.score.home : g.score.away;
+  const oppRuns = playerHome ? g.score.away : g.score.home;
+  const won = g.winner === playerSide;
+  return { won, playerRuns, oppRuns, ledgers };
+}
+
+/** Median win rate for one league/tier under one settings object, over `ATTRIBUTE_GAMES` games
+ *  against the league's own average team (index 4 of 8, the same "average opponent" stand-in
+ *  `measureLeagueGames` uses elsewhere in this file), plus the folded ledger for both sides. */
+async function measureAttributeCell(league, settings, tier, gamesN, seedTag) {
+  const teams = makeLeague(league);
+  const opponent = teams[Math.floor(teams.length / 2)];
+  const skills = playerSkillsFor(league, settings);
+  const ledgers = { player: emptyLedger(), opp: emptyLedger() };
+  let wins = 0;
+  for (let i = 0; i < gamesN; i++) {
+    const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
+    const playerTeam = makePlayerTeam({ skills, hand: 'R' });
+    const seed = hashSeed('bb-attribute', league, seedTag, i);
+    const res = await playOneGameForLedger(league, settings, opponent, playerAgent, playerTeam, seed >>> 0, i % 2 === 0);
+    if (res.won) wins += 1;
+    for (const key of ['player', 'opp']) {
+      for (const field of Object.keys(ledgers[key])) ledgers[key][field] += res.ledgers[key][field];
+    }
+  }
+  return { winRate: wins / gamesN, ledgers };
+}
+
+function ledgerSummary(ledger) {
+  const pa = ledger.pa || 1;
+  return {
+    so: ledger.so / pa, bb: ledger.bb / pa, inPlay: ledger.inPlay / pa,
+    hitOnContact: ledger.inPlay ? ledger.hits / ledger.inPlay : 0,
+    homerRate: ledger.inPlay ? ledger.homers / ledger.inPlay : 0,
+    meanQ: ledger.qN ? ledger.qSum / ledger.qN : 0,
+    centeredShare: ledger.centeredN ? ledger.centered / ledger.centeredN : 0,
+    meanExitVelo: ledger.exitVeloN ? ledger.exitVeloSum / ledger.exitVeloN : 0,
+    contactToOuts: ledger.inPlay ? ledger.outsFromContact / ledger.inPlay : 0,
+  };
+}
+
+/** The five one-factor counterfactuals the handoff names, built for one league. */
+function attributeCounterfactuals(league) {
+  const cpuLeagues = SETTINGS.LEAGUES;
+  return {
+    'sigmaFloor': withOverrides(SETTINGS, cpuLeagues.map((lg) => [`CPU.${lg}.timingSigmaMs`, ATTRIB_SIGMA_FLOOR])),
+    'placementFloor': withOverrides(SETTINGS, cpuLeagues.map((lg) => [`CPU.${lg}.guess`, ATTRIB_GUESS_FOR_PLACEMENT_MIN])),
+    'both': withOverrides(SETTINGS, cpuLeagues.flatMap((lg) => [[`CPU.${lg}.timingSigmaMs`, ATTRIB_SIGMA_FLOOR], [`CPU.${lg}.guess`, ATTRIB_GUESS_FOR_PLACEMENT_MIN]])),
+    'pitchingLikeLittle': withOverrides(SETTINGS, [
+      [`CPU.${league}.pitchMix`, SETTINGS.CPU.little.pitchMix],
+      [`CPU.${league}.cornerBias`, SETTINGS.CPU.little.cornerBias],
+      [`CPU.${league}.patternWeight`, SETTINGS.CPU.little.patternWeight],
+      [`CPU.${league}.weakSpotWeight`, SETTINGS.CPU.little.weakSpotWeight],
+    ]),
+    'fieldLikeCollege': withOverrides(SETTINGS, [
+      [`FIELD.${league}.outZoneMult`, SETTINGS.FIELD.college.outZoneMult],
+      [`FIELD.${league}.fieldScale`, SETTINGS.FIELD.college.fieldScale],
+    ]),
+  };
+}
+
+async function runAttribute(t0) {
+  const gamesN = Math.max(4, Math.round(FLAG_QUICK ? 1000 / 10 : 1000));
+  console.log(`sim-baseball.mjs --attribute - ATTRIBUTE_GAMES=${gamesN}, tier=median, leagues=${LEAGUES.join(',')}`);
+  console.log(`measurement only - counterfactuals use ATTRIB_SIGMA_FLOOR=${ATTRIB_SIGMA_FLOOR}, ATTRIB_PLACEMENT_MIN=${ATTRIB_PLACEMENT_MIN} (anticipating commit 2's real constants)\n`);
+  for (const league of LEAGUES) {
+    const baseline = await measureAttributeCell(league, SETTINGS, 'median', gamesN, 'baseline');
+    console.log(`=== ${league} (median tier) ===`);
+    console.log(`  baseline: winRate=${fmtPct(baseline.winRate)} runsFor/against per PA-ledger below`);
+    console.log(`  player ledger: ${JSON.stringify(ledgerSummary(baseline.ledgers.player))}`);
+    console.log(`  opp    ledger: ${JSON.stringify(ledgerSummary(baseline.ledgers.opp))}`);
+
+    const cfs = attributeCounterfactuals(league);
+    for (const [name, settings] of Object.entries(cfs)) {
+      const r = await measureAttributeCell(league, settings, 'median', gamesN, name);
+      const delta = r.winRate - baseline.winRate;
+      console.log(`  cf ${name.padEnd(18)} winRate=${fmtPct(r.winRate)}  delta=${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}pp`);
+    }
+    console.log('');
+  }
+  console.log(`wall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 }
 
 /** Play a whole matchup sweep for one (league, team, tier), alternating home/away. `gamesN`
@@ -795,6 +945,11 @@ async function runStages(t0) {
 // ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
+
+  if (FLAG_ATTRIBUTE) {
+    await runAttribute(t0);
+    return;
+  }
 
   if (FLAG_STAGES) {
     await runStages(t0);

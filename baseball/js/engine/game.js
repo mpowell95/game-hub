@@ -472,7 +472,12 @@ export class Game {
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
         const { bases, runsScored } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored });
+        // BB-2c commit 1: q/exitVeloMph/centered exposed for measurement
+        // (`sim-baseball.mjs --attribute`'s plate-appearance ledger) - purely additive fields on an
+        // event payload every existing consumer already destructures by name, so nothing reading
+        // the old fields is affected.
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
+          q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered });
         return;
       }
 

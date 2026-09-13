@@ -122,7 +122,10 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01) {
   const gapSprayDeg = timingSign * F.perfectSprayDeg * q + (rand01() * 2 - 1) * F.perfectSpraySpreadDeg * q;
   const sprayAngleDeg = pullSprayDeg + gapSprayDeg + (rand01() * 2 - 1) * 10 * (1 - q);
 
-  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q };
+  // BB-2c commit 1: `centered` exposed for measurement (`sim-baseball.mjs --attribute`'s
+  // "share of centered contact") - already computed above to pick the launch-angle branch, just
+  // not previously returned. Purely additive; no existing caller reads it.
+  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered };
 }
 
 export default { swing, qualityFor };
