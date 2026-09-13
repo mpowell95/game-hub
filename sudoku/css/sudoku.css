@@ -19,12 +19,23 @@
   --sd-accent: #7a3b8f;
   --sd-hero-bg: linear-gradient(135deg, rgba(122, 59, 143, .16), rgba(122, 59, 143, .05));
   box-sizing: border-box;
-  position: absolute;
+  /* `position: fixed`, with `top`/`left`/`width`/`height` set INLINE by `_positionRoot()` in
+   * ui.js, not by `inset: 0` here. A CSS-only `position: absolute; inset: 0` fills whichever box
+   * happens to be its containing block - which, mounted in the hub, is the wrong box: `.hub-game`
+   * has no defined height (a plain block child of a non-flex `.hub-main`), giving `inset: 0`
+   * nothing real to fill, so it fell back to the viewport and covered the hub's own STICKY header,
+   * hiding this screen's own HUD - and its back-to-setup button - underneath it (2026-09-13). A
+   * real fix needs to know this screen's actual on-screen top offset, which only JS can measure
+   * (the same reasoning `_fit()` already uses for the board): `_positionRoot()` reads
+   * `container.getBoundingClientRect()` (the mount point passed to `init()` - `#sudoku` standalone,
+   * `.hub-game` in the hub) and pins this element to exactly that slot, so it sits below a sticky
+   * header instead of guessing via CSS. Standalone, that slot already starts at the viewport's top,
+   * so nothing changes there. `position: fixed; inset: 0` here is only the fallback for the
+   * instant before that inline style lands - same render pass, so it is never actually visible. */
+  position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  height: 100%;
   background: var(--sd-bg);
   color: var(--sd-ink);
   font-family: var(--gh-font, system-ui, sans-serif);

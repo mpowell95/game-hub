@@ -186,6 +186,44 @@ what already existed (`resume`, the tier labels, `fmtTime()`). Verified at both 
 (`node check-no-scroll.mjs sudoku`, `node test-visual.mjs sudoku`) in both hosts and both themes -
 still one screen, still zero scroll.
 
+## The in-game HUD was rendering invisible in the hub (fixed 2026-09-13)
+
+Matt sent a screenshot: mounted in the hub, the `‹ Hub / Sudoku` bar showed, then a large blank
+gap, then the board - no tier chip, no timer, no mistakes counter, and (the actual complaint) no
+visible way back to the setup screen, even though `.sd-hud`'s own `‹` button had been there since
+the first build.
+
+Cause: `.sd-root` used `position: absolute; inset: 0`, which fills whatever box is its CSS
+containing block. Standalone that box is `#sudoku` (`position: relative`), so it worked. Mounted
+in the hub, `.hub-game` (the actual mount point) has no `position` set in `css/hub.css`, so
+`inset: 0` skipped past it to the next positioned ancestor - there is none - and fell back to the
+viewport itself, exactly the size and position `.hub-top`'s STICKY (non-floating) header already
+occupies. The HUD wasn't gone; it was rendering underneath the header, which paints on top because
+`position: sticky` gives it its own stacking context. This is the pattern `hill-climb/css/hill-climb.css`
+uses on purpose for `immersive: true` games (there the header itself goes `position: absolute` and
+floats out of the way) - Sudoku copied the fill-the-screen half of that pattern without being
+immersive, so its header stayed in flow and simply sat on top.
+
+**The fix stays entirely inside this game's own files - no shared `css/hub.css` edit.** An
+earlier attempt gave `.hub-game`/`.hub-main` an explicit height via flex/percentage so a CSS-only
+`inset: 0` would have a real box to fill; it does not work (a flex item's computed height does not
+count as a "specified height" for a plain block descendant's percentage resolution in Chromium,
+verified empirically), and a `display: flex` added to `.hub-main` to work around THAT broke the
+`.hub-grid` launcher's own width, so it was reverted before ever reaching a commit.
+
+The real fix: `.sd-root` is `position: fixed`, and `_positionRoot()` (`js/ui.js`, next to `_fit()`,
+same idea) measures `this.container.getBoundingClientRect()` - `#sudoku` standalone, `.hub-game`
+mounted - and sets `top`/`left`/`width`/`height` on it INLINE, in pixels. `getBoundingClientRect()`
+already reflects wherever the sticky header actually pushed the mount point to, which a CSS-only
+answer has no way to see. Runs on every render (menu/how-to/play) and on `onViewportResize`
+(rotation, URL bar show/hide, on-screen keyboard) - the same trigger `_fit()` already uses for the
+board, now also driving the whole screen's position. `inset: 0` stays in the CSS as the one-frame
+fallback before that inline style lands (never actually visible; same render pass).
+
+Verified: `node check-no-scroll.mjs sudoku` (0 scroll, both hosts, both heights) and
+`node test-visual.mjs sudoku` (14/14, incl. the fit checks) both still pass, and the launcher grid
+was re-measured at its normal width after the abandoned `.hub-main` flex attempt was reverted.
+
 ## Timer
 
 Starts on the **first input** of a completely fresh puzzle (nothing placed, no mistakes, no
