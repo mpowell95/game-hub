@@ -236,7 +236,11 @@ export class Game {
     const behavior = this.settings.STYLE_BEHAVIOR && this.settings.STYLE_BEHAVIOR[defenseTeam.styleId];
     if (!behavior || !behavior.shift) return 0;
     const hist = this.sprayHistory[batterId];
-    if (!hist || !hist.length) return 0;
+    // BB-2d commit 6: SHIFT_MIN_SAMPLES - a shift is a TENDENCY, not a fluke off one ball in play.
+    // Before this commit a single recorded spray angle (hist.length checked only against 0) could
+    // already trigger a shift, which is not "where you tend to hit," just where you hit once.
+    const minSamples = this.settings.SHIFT_MIN_SAMPLES != null ? this.settings.SHIFT_MIN_SAMPLES : 1;
+    if (!hist || hist.length < minSamples) return 0;
     const mean = hist.reduce((s, v) => s + v, 0) / hist.length;
     const max = this.settings.SHIFT_MAX_DEG;
     return Math.max(-max, Math.min(max, mean));

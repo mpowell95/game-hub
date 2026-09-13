@@ -17,7 +17,7 @@
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
 import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
-  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA,
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, SLOT_SIGMA_DESCENT } from './settings.js';
 
 // doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
@@ -148,18 +148,23 @@ export function makeLeague(league) {
     // team for `agents.js`'s `CpuBatter`/`CpuPitcher` to read (`ladderOffset`), since they are
     // BEHAVIOR knobs, not skill points.
     const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1, changeupShare: 0 };
-    // BB-2c commit 3: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`) is subtracted
-    // from the slot's own skill budget - a style's BEHAVIOR (Shifters' shift, Patient's chaseMul)
-    // is a real strength edge no skill offset touches, so a style measuring stronger than its raw
-    // TEAM_STYLES vector predicts gets a smaller skill budget to compensate, and vice versa. This
-    // is what lets `LEAGUE_LADDER_STYLES`' own confirmed order stay exactly as Matt set it - a
-    // style keeps its slot, and its own measured delta pays for whatever behavioral edge it carries.
+    // BB-2d commit 6: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`, now against
+    // the median HUMAN model per commit 2) no longer touches the skill cap at all - see this
+    // constant's own settings.js comment for why. Converted instead through SIGMA_MS_PER_WINRATE_PP/
+    // CHASE_PER_WINRATE_PP into ADDITIVE timingSigmaMs/chase offsets, stacked on TOP of the slot's
+    // own TEAM_LADDER_OFFSETS values - a style's own measured behavioral edge (Shifters' shift,
+    // Patient's chaseMul) is now paid for on the SAME axis TEAM_LADDER_OFFSETS itself uses, not by
+    // weakening the roster. `LEAGUE_LADDER_STYLES`' own confirmed order still stays exactly as
+    // Matt set it - a style keeps its slot, and its own measured delta pays for whatever
+    // behavioral edge it carries, just on a different axis than before this commit.
     const styleDelta = STYLE_STRENGTH_DELTA[styleId] || 0;
-    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill - styleDelta)));
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
     const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
     team.ladderSlot = slot;
+    const styleDeltaPp = styleDelta * 100;
     team.ladderOffset = {
-      timingSigmaMs: offsets.timingSigmaMs, chase: offsets.chase,
+      timingSigmaMs: offsets.timingSigmaMs + styleDeltaPp * SIGMA_MS_PER_WINRATE_PP,
+      chase: offsets.chase + styleDeltaPp * CHASE_PER_WINRATE_PP,
       behaviorMul: offsets.behaviorMul != null ? offsets.behaviorMul : 1,
       changeupShare: offsets.changeupShare || 0,
       sigmaFloorMs: slotSigmaFloorMs(league, slot),

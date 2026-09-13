@@ -356,7 +356,26 @@ export const FIELD = {                      // Draft [Open item 7]
 // shift their out zones toward where you tend to hit" - SHIFTERS_ADJUST_OUT_ZONES below names the
 // rule; these two numbers are how much, Draft, new (not in the doc's own open-items list).
 export const SHIFT_WINDOW = 10;   // Draft - last N balls in play, per batter, averaged for the shift
-export const SHIFT_MAX_DEG = 15;  // Draft - the shift can never rotate a sector past this many degrees
+// BB-2d commit 6: SHIFT_MAX_DEG halved from 15 to HALF OF GAP_DEG (computed relationally, never a
+// second hand-typed number that could drift from it) - commit 1's own `--range` measurement found
+// Shifters a large, real drag on the player's win rate at every league (median tier: -13.6pp at
+// Little League down to -28.0pp at Majors, delta = shiftersRate - balancedRate), and the shift
+// itself (not just STYLE_STRENGTH_DELTA under-compensating for it) was the largest single
+// contributor - the `noShift` control measured 3.7-15.3pp of that same gap disappearing outright
+// when SHIFT_MAX_DEG was forced to 0. Bounding it to at most half of GAP_DEG (the dead-zone width
+// between adjacent sectors) keeps a shift from ever fully closing one gap while opening a new one
+// the same size on the other side - a real, bounded nudge toward the batter's own tendency,
+// never a full sector reassignment.
+// (GAP_DEG itself is declared further down this file, after the BB-2b commit 3 mechanisms it
+// belongs with - hardcoded here as GAP_DEG's own value / 2 to avoid a forward reference, with a
+// test.js assertion pinning the two numbers together so they cannot silently drift apart.)
+export const SHIFT_MAX_DEG = 3;
+// BB-2d commit 6: a shift needs at least this many balls in play on file before it applies at all -
+// before this commit, `game.js`'s `_shiftDegFor` fired off a SINGLE ball in play (`hist.length`
+// checked only against 0), so the very first ball a batter ever hit could already trigger a shift
+// off one data point - not "where you tend to hit," just where you hit once. Matches this
+// mechanism's own intent (a TENDENCY, not a fluke).
+export const SHIFT_MIN_SAMPLES = 5;
 
 // Named ballparks (doc §10's "Majors parks" - fictional names, shapes inspired by famous parks;
 // [Locked] that they exist and are wind/weather-free; [Open] which park FEATURES make v1). The
@@ -438,14 +457,34 @@ export const STYLE_BEHAVIOR = {
 // residual driver of `CHAMPION_IS_HARDEST`/`SLOT_WINRATE_BAND`'s within-league failures - see
 // `baseball/CLAUDE.md`), aces -0.0053 -> 0.0043 (measured, not hand-tuned; the handoff's "do not
 // hand-tune Aces" rule is about not hand-picking this number, not about never re-measuring it).
+// BB-2d commit 6: STYLE_STRENGTH_DELTA no longer touches the skill cap at all - `makeLeague` used
+// to subtract it from `slotCap` (BB-2c commit 3), which meant a style's own measured strength edge
+// was paid for by making its ROSTER weaker, an axis the contact-quality fix (BB-2a) already left
+// with very little effect on win rate (the same reason `TEAM_LADDER_OFFSETS` itself moved onto
+// timing/chase in BB-2b commit 3). Converted instead through two measured slopes (commit 1's own
+// `--range` per-lever table: CPU sigma 200ms->91.2% win rate down to 58ms->57.5%, a slope of about
+// 4.2ms per win-rate percentage point; CPU chase 0.9->60.4% down to 0.02->56.0%, about 0.2 chase
+// units per percentage point) into ADDITIVE `timingSigmaMs`/`chase` offsets on top of the team's
+// own ladder-slot offset - the same two axes `TEAM_LADDER_OFFSETS` itself already moves. A style
+// measuring TOUGHER than its skill weights predict (positive delta) gets a SLOPPIER, more chase-
+// prone team instead of a weaker one; the skill cap is now `baseCap * (1 + offsets.skill)` alone.
+export const SIGMA_MS_PER_WINRATE_PP = 4.2;  // Draft, measured (see above)
+export const CHASE_PER_WINRATE_PP = 0.2;     // Draft, measured (see above)
+// BB-2d commit 6 re-measurement (`node sim-baseball.mjs --styles --styles-games 1000`, vs the
+// median human model at every league per commit 2, AFTER SHIFT_MAX_DEG halved and SHIFT_MIN_SAMPLES
+// added): `delta = 0.5 - winRate` from the PLAYER's own point of view (commit 2's sign convention).
+// Notably, Shifters (-0.1022) is no longer the largest outlier it was in BB-2c (0.0813 there, under
+// the OLD CPU-vs-CPU-vs-balanced measurement and the OLD SHIFT_MAX_DEG=15/no minimum-samples gate) -
+// smallBall/junkballers/aces all measure a larger cost to the player now. Real progress on the
+// "Shifters anomaly" BB-2c's own report flagged as unresolved, from this commit's bounding alone.
 export const STYLE_STRENGTH_DELTA = {
-  sluggers: 0.0010,
-  smallBall: -0.0333,
-  patient: 0.0160,
-  flamethrowers: -0.0070,
-  junkballers: -0.0150,
-  shifters: 0.0813,
-  aces: 0.0043,
+  sluggers: -0.0646,
+  smallBall: -0.1530,
+  patient: -0.1080,
+  flamethrowers: -0.1176,
+  junkballers: -0.1320,
+  shifters: -0.1022,
+  aces: -0.1252,
   balanced: 0,
 };
 
@@ -863,8 +902,9 @@ export default {
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
   FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
-  PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
-  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
+  PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, SHIFT_MIN_SAMPLES, PARKS,
+  TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, BASE_EXIT_VELO, CARRY_SCALE, HR_CARRY_FRAC, MEDIAN_CARRY_FRAC,
   MEDIAN_HIT_POW_FRAC, LEAGUE_POWER_SCALE, DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, MIN_EXIT_VELO_MPH, CARRY_ZERO_MPH,

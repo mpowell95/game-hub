@@ -685,7 +685,9 @@ console.log('\n-- 9a2. STYLE_BEHAVIOR: Patient chases less, Shifters rotate thei
   const g = playGameOnce(league, hashSeed('shift-behavior-probe'));
   const shiftersTeam = { styleId: 'shifters' };
   const balancedTeam = { styleId: 'balanced' };
-  g.sprayHistory['batterX'] = [10, 12, 8];
+  // BB-2d commit 6: SHIFT_MIN_SAMPLES (5) - needs at least that many recorded balls in play before
+  // a shift applies at all.
+  g.sprayHistory['batterX'] = [10, 12, 8, 11, 9];
   ok(g._shiftDegFor(shiftersTeam, 'batterX') !== 0, 'a Shifters defense rotates its out-zones toward the batter\'s own spray tendency');
   ok(g._shiftDegFor(balancedTeam, 'batterX') === 0, 'a non-Shifters defense never rotates its out-zones');
 }
@@ -1300,9 +1302,10 @@ console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH
   }
   ok(SETTINGS.STYLE_STRENGTH_DELTA.balanced === 0, 'balanced is the reference style - its own delta is exactly 0');
 
-  // makeLeague actually applies the delta: a style with a hand-inflated positive delta must
-  // measure a SMALLER slot cap than the same style at delta 0, all else equal - checked directly
-  // against the shipped effectiveCapFor/TEAM_LADDER_OFFSETS math, not by re-deriving it.
+  // BB-2d commit 6: STYLE_STRENGTH_DELTA no longer touches the skill cap at all (it used to lower
+  // a positive-delta style's own slot cap - see this section's own git history for that assertion).
+  // It is converted into timingSigmaMs/chase offsets instead - see test.js section 22's own checks
+  // for the wiring, and STYLE_STRENGTH_DELTA's settings.js comment for why the axis moved.
   {
     const league = makeLeague('majors');
     const shiftersTeam = league.find((t) => t.styleId === 'shifters');
@@ -1311,16 +1314,10 @@ console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH
     const offsets = SETTINGS.TEAM_LADDER_OFFSETS[slot];
     const baseCap = effectiveCapFor('majors');
     const rawCap = SETTINGS.CAPS.majors;
-    const expectedCapWithDelta = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill - SETTINGS.STYLE_STRENGTH_DELTA.shifters)));
-    const expectedCapNoDelta = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
-    ok(SETTINGS.STYLE_STRENGTH_DELTA.shifters > 0, 'shifters carries a positive measured delta (its shift is a real edge)');
-    ok(expectedCapWithDelta < expectedCapNoDelta,
-      `a positive STYLE_STRENGTH_DELTA lowers shifters' own slot cap (${expectedCapWithDelta.toFixed(2)} < ${expectedCapNoDelta.toFixed(2)} without the correction)`);
-    // Cross-check against the actual generated roster: mean skill total should track the
-    // delta-corrected cap, not the raw ladder-offset one.
-    const meanSkill = shiftersTeam.players.reduce((s, p) => s + SETTINGS.SKILL_IDS.reduce((s2, id) => s2 + p.skills[id], 0), 0)
-      / shiftersTeam.players.length / SETTINGS.SKILL_IDS.length;
-    ok(meanSkill <= expectedCapNoDelta, `shifters' own generated roster mean skill (${meanSkill.toFixed(2)}) does not exceed the UNCORRECTED cap (${expectedCapNoDelta.toFixed(2)}) - the correction only ever lowers the ceiling, never raises it silently`);
+    const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
+    const capInt = Math.floor(expectedCap);
+    ok(shiftersTeam.players.every((p) => SETTINGS.SKILL_IDS.every((id) => p.skills[id] <= capInt)),
+      `shifters' own generated roster never exceeds its skill-offset-only cap (${capInt}) - STYLE_STRENGTH_DELTA plays no part in it`);
   }
 
   // LEAGUE_LADDER_STYLES is unchanged from Matt's confirmed order - this commit pays for a style's
@@ -1500,6 +1497,76 @@ console.log('\n-- 21. BB-2d commit 5: the champion\'s own axis --');
       `TEAM_LADDER_OFFSETS[${slot}].behaviorMul strictly exceeds slot ${slot - 1}'s`);
     ok(SETTINGS.TEAM_LADDER_OFFSETS[slot].changeupShare >= SETTINGS.TEAM_LADDER_OFFSETS[slot - 1].changeupShare,
       `TEAM_LADDER_OFFSETS[${slot}].changeupShare is non-decreasing from slot ${slot - 1}'s`);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 22. BB-2d commit 6: Shifters bounded and priced --');
+{
+  // SHIFT_MAX_DEG is hardcoded to avoid a forward reference to GAP_DEG (declared later in
+  // settings.js) - pinned here so the two numbers cannot silently drift apart.
+  ok(SETTINGS.SHIFT_MAX_DEG === SETTINGS.GAP_DEG / 2, 'SHIFT_MAX_DEG is exactly half of GAP_DEG');
+
+  // Covered-arc invariant: the TOTAL width covered by a zone's sectors (gaps excluded) must be
+  // identical at every shift angle - a shift only ever translates the internal structure and
+  // snaps the two outermost edges to the foul lines, never grows or shrinks the total footprint.
+  const coveredWidth = (zones) => zones.reduce((s, sec) => s + (sec.toDeg - sec.fromDeg), 0);
+  for (const lg of SETTINGS.LEAGUES) {
+    const base = zonesFor(lg, 0);
+    const baseInfieldWidth = coveredWidth(base.infield);
+    const baseOutfieldWidth = coveredWidth(base.outfield);
+    for (const shiftDeg of [-SETTINGS.SHIFT_MAX_DEG, -1, 0, 1, SETTINGS.SHIFT_MAX_DEG]) {
+      const z = zonesFor(lg, shiftDeg);
+      ok(Math.abs(coveredWidth(z.infield) - baseInfieldWidth) < 1e-9,
+        `${lg}: infield covered arc is identical at shift=${shiftDeg} (no uncovered sliver, no growth)`);
+      ok(Math.abs(coveredWidth(z.outfield) - baseOutfieldWidth) < 1e-9,
+        `${lg}: outfield covered arc is identical at shift=${shiftDeg}`);
+      ok(z.infield[0].fromDeg === -45 && z.infield[z.infield.length - 1].toDeg === 45,
+        `${lg}: infield spans exactly -45..45 at shift=${shiftDeg}, no gap at either foul line`);
+      ok(z.outfield[0].fromDeg === -45 && z.outfield[z.outfield.length - 1].toDeg === 45,
+        `${lg}: outfield spans exactly -45..45 at shift=${shiftDeg}, no gap at either foul line`);
+    }
+  }
+
+  // STYLE_STRENGTH_DELTA no longer touches the skill cap - a style's slotCap depends only on
+  // TEAM_LADDER_OFFSETS[slot].skill, never on STYLE_STRENGTH_DELTA, at every slot.
+  {
+    const league = makeLeague('college');
+    const rawCap = SETTINGS.CAPS.college;
+    const baseCap = effectiveCapFor('college');
+    for (let slot = 0; slot < 8; slot++) {
+      const team = league[slot];
+      const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + SETTINGS.TEAM_LADDER_OFFSETS[slot].skill)));
+      const capInt = Math.floor(expectedCap);
+      ok(team.players.every((p) => SETTINGS.SKILL_IDS.every((id) => p.skills[id] <= capInt)),
+        `college slot ${slot} (${team.styleId}): no player skill exceeds the STYLE_STRENGTH_DELTA-free slotCap`);
+    }
+  }
+
+  // STYLE_STRENGTH_DELTA now flows into timingSigmaMs/chase instead: a style with a real measured
+  // delta produces a ladderOffset that DIFFERS from the bare TEAM_LADDER_OFFSETS row for its slot
+  // by exactly `delta*100 * SIGMA_MS_PER_WINRATE_PP` / `* CHASE_PER_WINRATE_PP`.
+  {
+    const league = makeLeague('college');
+    for (const team of league) {
+      const slotOffsets = SETTINGS.TEAM_LADDER_OFFSETS[team.ladderSlot];
+      const delta = SETTINGS.STYLE_STRENGTH_DELTA[team.styleId] || 0;
+      const expectedSigma = slotOffsets.timingSigmaMs + delta * 100 * SETTINGS.SIGMA_MS_PER_WINRATE_PP;
+      const expectedChase = slotOffsets.chase + delta * 100 * SETTINGS.CHASE_PER_WINRATE_PP;
+      ok(Math.abs(team.ladderOffset.timingSigmaMs - expectedSigma) < 1e-9,
+        `college ${team.styleId} (slot ${team.ladderSlot}): ladderOffset.timingSigmaMs includes its own STYLE_STRENGTH_DELTA`);
+      ok(Math.abs(team.ladderOffset.chase - expectedChase) < 1e-9,
+        `college ${team.styleId} (slot ${team.ladderSlot}): ladderOffset.chase includes its own STYLE_STRENGTH_DELTA`);
+    }
+  }
+
+  // SHIFT_MIN_SAMPLES: fewer than the minimum recorded balls in play never shifts, at or above it
+  // may (already exercised at 5 samples in section 9a2 above; this pins the negative case).
+  {
+    const g = playGameOnce('college', hashSeed('shift-min-samples-probe'), 3, 4);
+    const shiftersTeam = { styleId: 'shifters' };
+    g.sprayHistory['batterY'] = [10, 12, 8, 11]; // one short of SHIFT_MIN_SAMPLES (5)
+    ok(g._shiftDegFor(shiftersTeam, 'batterY') === 0, 'fewer than SHIFT_MIN_SAMPLES recorded balls in play never triggers a shift');
   }
 }
 

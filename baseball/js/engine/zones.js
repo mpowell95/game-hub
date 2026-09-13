@@ -60,13 +60,26 @@ const OUTFIELD_DEPTHS = [
 const BASE_INFIELD_SECTORS = layoutSectors(INFIELD_DEPTHS, GAP_DEG);
 const BASE_OUTFIELD_SECTORS = layoutSectors(OUTFIELD_DEPTHS, GAP_DEG);
 
-function shiftSector(s, shiftDeg) {
-  return {
-    fromDeg: Math.max(-45, Math.min(45, s.fromDeg + shiftDeg)),
-    toDeg: Math.max(-45, Math.min(45, s.toDeg + shiftDeg)),
-    fromFt: s.fromFt,
-    toFt: s.toFt,
-  };
+/** BB-2d commit 6: shift the WHOLE sector list together, then snap only the two OUTERMOST edges
+ *  (the first sector's `fromDeg`, the last sector's `toDeg`) exactly to the foul lines - never
+ *  clamp each sector independently. Clamping per-sector (the old behavior) could leave an
+ *  UNCOVERED SLIVER on the trailing edge: a positive shift pushes every sector right, opening a
+ *  gap between -45 and the first sector's new (still-unclamped) position while doing nothing to
+ *  compress it, and the leading sector could simultaneously overshoot +45 with no fix on that
+ *  side either. Snapping the two true endpoints to +/-45 unconditionally - compressing whichever
+ *  end overshot, extending whichever end fell short - keeps the TOTAL covered arc (the sum of
+ *  every sector's own width, gaps excluded) IDENTICAL at every shift angle: every internal
+ *  GAP_DEG gap between sectors is preserved exactly as laid out, only uniformly translated, and
+ *  only the two boundary sectors ever change width. Safe because SHIFT_MAX_DEG is bounded to at
+ *  most half of GAP_DEG - the shift can never be large enough to invert sector order or collapse
+ *  an internal gap. */
+function shiftSectors(sectors, shiftDeg) {
+  const shifted = sectors.map((s) => ({ ...s, fromDeg: s.fromDeg + shiftDeg, toDeg: s.toDeg + shiftDeg }));
+  if (shifted.length) {
+    shifted[0] = { ...shifted[0], fromDeg: -45 };
+    shifted[shifted.length - 1] = { ...shifted[shifted.length - 1], toDeg: 45 };
+  }
+  return shifted;
 }
 
 /** The out-zone geometry for one league, optionally rotated toward a batter's own spray tendency
@@ -82,8 +95,8 @@ export function zonesFor(league, shiftDeg = 0) {
     const depth = (s.toFt - s.fromFt) * f.outZoneMult;
     return { fromDeg: s.fromDeg, toDeg: s.toDeg, fromFt, toFt: fromFt + depth };
   };
-  const infield = BASE_INFIELD_SECTORS.map((s) => shiftSector(scale(s), shiftDeg));
-  const outfield = BASE_OUTFIELD_SECTORS.map((s) => shiftSector(scale(s), shiftDeg));
+  const infield = shiftSectors(BASE_INFIELD_SECTORS.map(scale), shiftDeg);
+  const outfield = shiftSectors(BASE_OUTFIELD_SECTORS.map(scale), shiftDeg);
   return { infield, outfield };
 }
 
