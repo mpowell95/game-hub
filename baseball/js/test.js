@@ -1383,5 +1383,66 @@ console.log('\n-- 19. BB-2c commit 6: Locked-statement inventory (design doc v9,
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 20. BB-2d commit 4: batted-ball carry scaled to the league --');
+{
+  // Doc §10, [Locked]: "Home runs over the wall." This is an EXISTENCE test (can it happen at all
+  // in this league) not a rate test - `sim-baseball.mjs --range`'s census is the rate/band tool.
+  // Before this commit, zero of these leagues could ever produce a home run at all (measured
+  // p95 carry 150-166ft everywhere, nowhere near any league's own fence) - a maxed-power player,
+  // real CpuPitcher, real swing()/resolveContact() pipeline, enough at-bats to make "never happens"
+  // distinguishable from "rare."
+  const HR_EXISTENCE_ABS = 4000;
+  for (const lg of SETTINGS.LEAGUES) {
+    const teams = makeLeague(lg);
+    const opponent = teams[Math.floor(teams.length / 2)];
+    const pitcher = opponent.players.find((p) => p.id === opponent.pitcherId);
+    const cap = SETTINGS.CAPS[lg];
+    const controlSkill = Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
+    const cpuPitcher = new CpuPitcher({ league: lg, settings: SETTINGS });
+    const batter = new ModelBatter({ timingSigmaMs: 20, placementSigma: 0.05 }); // maxed-ish timing for an existence probe
+    const batterSkills = { hitAcc: cap, hitPow: cap, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const zones = zonesFor(lg, 0);
+    const fenceFt = SETTINGS.FIELD[lg].fenceFt;
+    let homers = 0, triples = 0, swings = 0, draw = 0;
+    while (swings < HR_EXISTENCE_ABS) {
+      const seed = hashSeed('bb-hr-existence', lg, draw++) >>> 0;
+      const rand01 = mulberry32(seed);
+      const pitchResolved = await cpuPitcher.decidePitch({ rand01, weakZone: null });
+      const pitchResult = flyPitch(pitchResolved.type, pitchResolved.aim, controlSkill, SETTINGS, rand01, pitcher.skills);
+      const swingDecision = await batter.decideSwing({ pitch: pitchResult, rand01 });
+      if (swingDecision.action !== 'swing') continue;
+      swings += 1;
+      const swingResult = swing(pitchResult, batterSkills, swingDecision, SETTINGS, rand01, lg);
+      if (!swingResult.contact || !swingResult.inPlay) continue;
+      const outcome = resolveContact(swingResult, zones, SETTINGS, fenceFt, batterSkills.hitSpd, rand01);
+      if (outcome.bases === 4) homers += 1;
+      if (outcome.bases === 3) triples += 1;
+    }
+    ok(homers > 0, `${lg}: a home run is possible (doc §10, [Locked]) - ${homers} in ${swings} swings at maxed power/timing`);
+    ok(triples > 0, `${lg}: a triple is possible (doc §10, [Locked]) - ${triples} in ${swings} swings at maxed power/timing`);
+  }
+
+  // Little League's own homer RATE band (Draft, LL_HR_PER_GAME_BAND [0.3, 1.0] - measured by
+  // `sim-baseball.mjs --range`'s census, not re-measured here; this only pins the band's own shape
+  // so a future edit can't silently invert or drop it, same discipline as the win-rate band shape
+  // check above).
+  const LL_HR_PER_GAME_BAND = [0.3, 1.0];
+  ok(LL_HR_PER_GAME_BAND[0] < LL_HR_PER_GAME_BAND[1] && LL_HR_PER_GAME_BAND[0] > 0,
+    'LL_HR_PER_GAME_BAND is a sane, non-empty, positive band');
+
+  // DOUBLE_DEPTH_FRAC/TRIPLE_DEPTH_FRAC integrity: triple depth must exceed double depth, and both
+  // must reproduce the old flat 250ft/320ft cutoffs at College's 400ft center fence exactly (the
+  // continuity this commit's own header promises).
+  ok(SETTINGS.TRIPLE_DEPTH_FRAC > SETTINGS.DOUBLE_DEPTH_FRAC, 'TRIPLE_DEPTH_FRAC exceeds DOUBLE_DEPTH_FRAC');
+  ok(Math.abs(SETTINGS.DOUBLE_DEPTH_FRAC * 400 - 250) < 1e-6, 'DOUBLE_DEPTH_FRAC reproduces the old 250ft cutoff at a 400ft fence');
+  ok(Math.abs(SETTINGS.TRIPLE_DEPTH_FRAC * 400 - 320) < 1e-6, 'TRIPLE_DEPTH_FRAC reproduces the old 320ft cutoff at a 400ft fence');
+
+  // LEAGUE_POWER_SCALE integrity: every league present, college is the identity (the calibration's
+  // own reference point).
+  for (const lg of SETTINGS.LEAGUES) ok(SETTINGS.LEAGUE_POWER_SCALE[lg] > 0, `LEAGUE_POWER_SCALE.${lg} is a positive multiplier`);
+  ok(SETTINGS.LEAGUE_POWER_SCALE.college === 1.00, 'LEAGUE_POWER_SCALE.college is the identity - the calibration\'s own reference league');
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

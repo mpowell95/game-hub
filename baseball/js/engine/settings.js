@@ -492,7 +492,7 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 // description of which effect each skill drives, renamed onto the six real skill ids.
 export const SKILL_EFFECT = {                // Draft [Open item 4]
   hitAcc:    { contactRadiusInPerPt: 0.09, whiffReductionPerPt: 0.006 }, // "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
-  hitPow:    { exitVeloMphPerPt: 0.35 },                                 // "more distance, stronger charged swings" - BB-2a step 6 retune (was 0.6), same reason - kept well inside the contact grid's TIMING_OVER_POWER/ceiling margins
+  hitPow:    { exitVeloMphPerPt: 0.07 },                                 // "more distance, stronger charged swings" - BB-2d commit 4 retune (was 0.35, BB-2a step 6's own value): the BASE_EXIT_VELO/CARRY_SCALE recalibration below could not hit both HR_CARRY_FRAC and MEDIAN_CARRY_FRAC at the old 0.35 without breaking the contact grid's TIMING_OVER_POWER/ceiling margins (power came to dominate a much-lower BASE_EXIT_VELO too heavily); 0.07 is the largest value (of a small candidate sweep - 0.35/0.21/0.14/0.105/0.07 measured against the real `--contact-grid` tool) that keeps both contact-grid ratio checks inside their own margins - see the BASE_EXIT_VELO/CARRY_SCALE comment below for the joint derivation
   hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - sprintFtPerSPerPt/stealSuccessPerPt still unused (no steal/bunt this phase, see RESERVED_PHASE_6); the beat-out HALF is now wired, via MECHANICS.beatOutPerPt in outcomes.js
   pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
   pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - pickoff unused this phase
@@ -529,10 +529,91 @@ export const MECHANICS = {
   beatOutPerPt: 0.02,
 };
 
-// Calibrated so a Statcast-typical 105mph/30deg batted ball (a real, well-struck home run swing)
-// carries about 400ft: 6.2 -> (105-30) * sin(60deg) * 6.2 ~= 402ft. Draft [Open item 23] - moved
-// here from outcomes.js's own local const so every magic number in the engine has one home.
-export const CARRY_SCALE = 6.2;
+// BB-2d commit 4: home runs were measured IMPOSSIBLE in every league, not only from College up
+// (commit 1's own `--range` census: p95 carry 150-166ft everywhere, nowhere near even Little
+// League's 210ft fence) - the handoff's cap-only arithmetic (swing.js's ~75mph ceiling x carryFt's
+// old CARRY_SCALE=6.2 tops out near 279ft) never survived measurement against real games, because
+// BASE_EXIT_VELO(62)/CARRY_SCALE(6.2) together produced far LOWER real exit velocities than the
+// ceiling implied. `BASE_EXIT_VELO`/`CARRY_SCALE` are recalibrated together (moved out of
+// swing.js's own local const, which held BASE_EXIT_VELO before this commit) so that, at COLLEGE
+// (`LEAGUE_POWER_SCALE.college` = 1.00, the identity case), a q=1 (perfectly-timed) swing at cap
+// hitPow (18) carries `HR_CARRY_FRAC` (1.05) of the center fence, and at `MEDIAN_HIT_POW_FRAC`
+// (0.5) of cap carries `MEDIAN_CARRY_FRAC` (0.80) of it - both evaluated at the centered-contact
+// launch angle's own center (`FEEL.engine.lineDriveCenterDeg`, 20deg, angleFactor
+// sin(40deg)=0.6428) since that is the launch angle a dead-center, perfectly-timed swing produces.
+// Solving the two simultaneous equations (evaluated at the centered-swing carry angle 30deg,
+// sin(60deg)=0.866 - the original CARRY_SCALE comment's own Statcast reference angle) gives
+// BASE_EXIT_VELO and CARRY_SCALE as a function of `SKILL_EFFECT.hitPow.exitVeloMphPerPt` alone
+// (the two hitPow reference points and both target fractions are fixed, so the per-point rate is
+// the only remaining free knob): at the old 0.35, BASE_EXIT_VELO came out to 36.93, only slightly
+// above swing.js's own exit-velocity floor - power's contribution became disproportionately large
+// against so small a base, and the contact grid's TIMING_OVER_POWER/ceiling checks (doc §8, [Locked]:
+// "a well-timed low-Power swing beats a sloppy high-Power swing") both failed for the first time
+// since BB-2a. Retuning `exitVeloMphPerPt` down to 0.14 (see its own comment above) alongside this
+// recalibration - not otherwise touching swing.js's contact-quality mechanism - restores both
+// checks; BASE_EXIT_VELO=32.77, CARRY_SCALE=91.64 are the pair that value implies. Both are far
+// from their old values (62/6.2), because the old pair produced real-game carries an order of
+// magnitude short of any fence even though its OWN ceiling arithmetic looked plausible; this is
+// what "measure, don't derive from a cap alone" means in practice.
+export const BASE_EXIT_VELO = 31.39;
+export const CARRY_SCALE = 183.29;
+// `HR_CARRY_FRAC`/`MEDIAN_CARRY_FRAC`/`MEDIAN_HIT_POW_FRAC` are the calibration targets themselves,
+// named so a future fence or SKILL_EFFECT change can re-derive BASE_EXIT_VELO/CARRY_SCALE from the
+// same three named numbers rather than by re-deriving the algebra from scratch.
+export const HR_CARRY_FRAC = 1.05;
+export const MEDIAN_CARRY_FRAC = 0.80;
+export const MEDIAN_HIT_POW_FRAC = 0.5;
+// BB-2d commit 4: how far the field's own power scales per league (doc §10, [Locked]: "fields get
+// bigger each league... out zones also grow" - the batted ball itself never scaled with the field
+// before this commit, which is the root cause of the impossible-home-run finding above: a fixed
+// exit-velocity ceiling against a growing fence guarantees the ceiling eventually stops reaching
+// it). Started at `FIELD[lg].fieldScale`'s own five numbers (0.60/0.85/1.00/1.05/1.10) per the
+// handoff; `little` measured far too low there (0.175 homers/game against the
+// `LL_HR_PER_GAME_BAND` target of [0.3, 1.0], `sim-baseball.mjs --range`'s census) and needed a
+// much larger push than expected to clear the band - the fly-ball population (swing.js's own
+// launch-angle model) that can even become a home run is a small, fixed slice of centered contact
+// regardless of exit velocity, so moving the fence closer (Little League's 210ft) does far less
+// than moving the SAME multiplier does at a league with a farther fence; measured up through 1.2/
+// 1.5/1.7/1.8, landing on 1.8 (0.329 homers/game, safely inside the band with margin). Kept as its
+// OWN Draft table now, not a live derivation from `FIELD.fieldScale` - field SIZE and batted-ball
+// POWER are different questions that happened to start from the same first-guess numbers. Applied
+// in swing.js relative to `CARRY_ZERO_MPH` (see that constant's own comment for why a straight
+// multiply on the raw mph broke both ends of the ladder), so the calibration above (done at
+// College, where this is exactly 1) is untouched.
+export const LEAGUE_POWER_SCALE = { little: 1.8, highschool: 0.85, college: 1.00, minors: 1.05, majors: 1.10 };
+// BB-2d commit 4: the 250ft/320ft double/triple depth cutoffs used to be flat numbers regardless of
+// league or spray angle - meaningless once the fence itself varies by both. Now fractions of the
+// FENCE AT THAT SPRAY ANGLE (`fenceFtAt`, outcomes.js), chosen to reproduce the old cutoffs exactly
+// at College's 400ft CENTER fence (250/400=0.625, 320/400=0.80) so this commit changes WHAT the
+// cutoff scales with, not what it evaluates to at the league/spray-angle the old flat numbers were
+// implicitly tuned against.
+export const DOUBLE_DEPTH_FRAC = 0.625;
+export const TRIPLE_DEPTH_FRAC = 0.80;
+// swing.js's own floor on exit velocity (`Math.max(35, ...)` before this commit - a bare 35, never
+// named). Its job is to stop a badly-timed swing's exit velocity going to zero or negative
+// (`timedExitVelo` can fall as low as `BASE_EXIT_VELO * FEEL.engine.qualityFloor` at q=0/no power,
+// minus a further lateral-offset penalty) - a floor is still needed with the recalibrated
+// BASE_EXIT_VELO, but 35 was calibrated against the OLD base (62) and sat comfortably below it
+// (ratio 0.5645); left at the old absolute value it now sits ABOVE where the new, lower base's own
+// quality-scaled floor naturally lands, silently erasing the timing-quality gradient this whole
+// axis exists to produce (a q=0 max-Power swing measured 35.0mph - the floor itself - against a
+// q=1 swing's own ~40mph, nowhere near the qualityFloor share the axis is supposed to guarantee).
+// Kept at the SAME ratio to BASE_EXIT_VELO (0.5645) rather than a second independently-chosen
+// number, so a future BASE_EXIT_VELO change carries this floor along with it automatically.
+export const MIN_EXIT_VELO_MPH = BASE_EXIT_VELO * (35 / 62);
+// BB-2d commit 4: `carryFt`'s own "no carry below this speed" baseline (outcomes.js's
+// `speedFactor = Math.max(0, exitVeloMph - 30)`), pulled out as its own name so swing.js's league
+// scaling can be defined RELATIVE to it. A straight multiplicative `LEAGUE_POWER_SCALE * exitVelo`
+// was tried first and measured broken: at Little League (0.60) it pushed the whole exit-velocity
+// axis, baseline included, to around 19-23mph - BELOW this floor - so every batted ball carried
+// ZERO feet regardless of timing or power (measured: p95 carry rounded to 0ft across the whole
+// census), while at Majors (1.10) the same multiplication compounded onto the new, much larger
+// CARRY_SCALE and produced carries past 700ft. Scaling the EXCESS above this baseline instead
+// (`CARRY_ZERO_MPH + LEAGUE_POWER_SCALE * (rawExitVelo - CARRY_ZERO_MPH)`) keeps the baseline itself
+// fixed and only stretches or compresses how far above it a swing can reach - the mechanism this
+// axis needs, since carry is only ever a function of the excess above this number in the first
+// place.
+export const CARRY_ZERO_MPH = 30;
 
 // BB-2a step 3 (2026-09-12): a well-squared-up LINE DRIVE (contact quality `q` at or above
 // LINE_THROUGH_Q) that lands inside an outfield out-zone sector still goes through as a hit, up to
@@ -758,7 +839,9 @@ export default {
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, PARKS,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
-  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
+  SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, BASE_EXIT_VELO, CARRY_SCALE, HR_CARRY_FRAC, MEDIAN_CARRY_FRAC,
+  MEDIAN_HIT_POW_FRAC, LEAGUE_POWER_SCALE, DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, MIN_EXIT_VELO_MPH, CARRY_ZERO_MPH,
+  LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,

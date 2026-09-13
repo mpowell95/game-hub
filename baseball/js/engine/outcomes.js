@@ -3,7 +3,8 @@
 // invented `fieldingSkill01` ramp. The real design has no "error" outcome at all (doc §10's list
 // is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
 
-import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT } from './settings.js';
+import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT,
+  DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
@@ -16,7 +17,7 @@ export function carryFt(exitVeloMph, launchAngleDeg) {
   // sin(2*angle) peaks at 45 degrees, which is where a real batted ball carries furthest for a
   // given speed - the same shape a real projectile's range curve has, without modeling drag.
   const angleFactor = Math.max(0, Math.sin((2 * clampedAngle * Math.PI) / 180));
-  const speedFactor = Math.max(0, exitVeloMph - 30);
+  const speedFactor = Math.max(0, exitVeloMph - CARRY_ZERO_MPH);
   return Math.max(0, speedFactor * angleFactor * CARRY_SCALE);
 }
 
@@ -130,11 +131,13 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   }
   // Through the outfield sector (or its gap): a single through a gap, or a double/triple the
   // deeper it carried (doc §10, [Locked]: "Doubles in the gaps and down the lines. Triples in deep
-  // corners and deep center" - the exact depth cutoffs are still invented, Open item 24, unchanged
-  // from phase 1).
+  // corners and deep center"). BB-2d commit 4: the cutoffs are now fractions of the FENCE AT THIS
+  // SPRAY ANGLE (`wallFt`, already computed above) instead of two flat feet numbers - a flat 250/
+  // 320 meant nothing once the fence itself varies by league and by spray angle; the fractions
+  // reproduce the old cutoffs exactly at College's 400ft center fence (250/400=0.625, 320/400=0.80).
   let bases = 1;
-  if (distanceFt > 320) bases = 3;
-  else if (distanceFt > 250) bases = 2;
+  if (distanceFt > wallFt * TRIPLE_DEPTH_FRAC) bases = 3;
+  else if (distanceFt > wallFt * DOUBLE_DEPTH_FRAC) bases = 2;
   return { result: 'hit', bases, kind: `${kind}-hit`, distanceFt, isFoul: false };
 }
 

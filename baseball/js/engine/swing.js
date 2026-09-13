@@ -29,7 +29,7 @@ export function qualityFor(absTimingMs, perfectMs, timingWindowMs) {
   return Math.max(0, 1 - (absTimingMs - perfectMs) / span);
 }
 
-export function swing(pitchResult, batterSkills, decision, settings, rand01) {
+export function swing(pitchResult, batterSkills, decision, settings, rand01, league) {
   if (!decision || decision.action !== 'swing') {
     return { swung: false, contact: false, foul: false, inPlay: false };
   }
@@ -107,10 +107,27 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01) {
   const powerBonus = hitPowPts * effect.hitPow.exitVeloMphPerPt;
   const qualityFrac = Math.min(1, Math.abs(offset) / Math.max(sweetSpotWidth, batReach));
   const chargeMul = charged ? F.chargePower : 1;
-  const BASE_EXIT_VELO = 62;
+  // BB-2d commit 4: the batted ball itself now scales with the league's own field
+  // (`LEAGUE_POWER_SCALE`, settings.js). Scaled relative to `CARRY_ZERO_MPH` (carryFt's own "no
+  // carry below this speed" baseline), not multiplied against the raw mph value - a straight
+  // multiply pushed Little League's whole axis, baseline included, below the point where ANY ball
+  // carries at all (measured: every census carry rounded to 0ft), while Majors' multiply compounded
+  // onto the new, much larger CARRY_SCALE into carries past 700ft. Scaling only the EXCESS above
+  // the baseline keeps the baseline fixed and stretches/compresses how far above it a swing can
+  // reach - see settings.js's own CARRY_ZERO_MPH comment for the measured comparison. At College
+  // (leaguePowerScale=1) this is the identity transform, so the calibration settings.js's own
+  // header describes is untouched.
+  const leaguePowerScale = (settings.LEAGUE_POWER_SCALE && settings.LEAGUE_POWER_SCALE[league]) != null
+    ? settings.LEAGUE_POWER_SCALE[league] : 1;
+  const carryZeroMph = settings.CARRY_ZERO_MPH != null ? settings.CARRY_ZERO_MPH : 30;
+  const scaleAboveZero = (mph) => carryZeroMph + leaguePowerScale * (mph - carryZeroMph);
+  const baseExitVelo = settings.BASE_EXIT_VELO != null ? settings.BASE_EXIT_VELO : 36.93;
   const timingQualityMul = F.qualityFloor + (1 - F.qualityFloor) * q;
-  const timedExitVelo = BASE_EXIT_VELO * timingQualityMul + powerBonus * q;
-  const exitVeloMph = Math.max(35, (timedExitVelo - qualityFrac * 18) * chargeMul + (rand01() * 2 - 1) * 4);
+  const rawTimedExitVelo = baseExitVelo * timingQualityMul + powerBonus * q;
+  const timedExitVelo = scaleAboveZero(rawTimedExitVelo);
+  const rawMinExitVelo = settings.MIN_EXIT_VELO_MPH != null ? settings.MIN_EXIT_VELO_MPH : baseExitVelo * (35 / 62);
+  const minExitVelo = scaleAboveZero(rawMinExitVelo);
+  const exitVeloMph = Math.max(minExitVelo, (timedExitVelo - qualityFrac * 18) * chargeMul + (rand01() * 2 - 1) * 4);
 
   // Spray: "Early contact pulls the ball, late contact goes the opposite way" (doc §12), but a
   // PERFECTLY-timed swing must not spray toward the worst part of the field (BB-2a step 3 fixes

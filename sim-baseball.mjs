@@ -778,7 +778,7 @@ async function measureContactCell(sigma, hitPow, settings) {
     const swingDecision = await batter.decideSwing({ pitch: pitchResult, rand01 });
     if (swingDecision.action !== 'swing') continue; // a take is not a swing - draw again
     swings += 1;
-    const swingResult = swing(pitchResult, batterSkills, swingDecision, settings, rand01);
+    const swingResult = swing(pitchResult, batterSkills, swingDecision, settings, rand01, league);
     if (!swingResult.contact || !swingResult.inPlay) continue; // whiff/foul: 0 bases, already counted
     const outcome = resolveContact(swingResult, zones, settings, fenceFt, batterSkills.hitSpd, rand01);
     if (outcome.result === 'hit') totalBases += outcome.bases;

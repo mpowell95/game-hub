@@ -456,7 +456,7 @@ export class Game {
 
       const swingView = this._buildSwingView(battingSide, pitchResult, priorPitchHistory);
       const swingDecision = await battingAgent.decideSwing(swingView);
-      const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand());
+      const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
 
       if (!swingResult.swung) {
         if (pitchResult.isStrike) this.strikes += 1; else this.balls += 1;
