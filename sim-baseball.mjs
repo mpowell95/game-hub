@@ -510,7 +510,7 @@ async function measureLeagueGames(league, settings) {
 // and play the player's own semifinal/championship when they reach it.
 async function playSeason(league, settings, tier, seasonSeed) {
   const teams = makeLeague(league);
-  const schedule = makeSchedule(league, seasonSeed);
+  const schedule = makeSchedule(league, seasonSeed, settings.SCHEDULE_SHAPE);
   const skills = playerSkillsFor(league, settings);
   const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
   const playerTeam = makePlayerTeam({ skills, hand: 'R' });
@@ -753,39 +753,13 @@ function assertContactGrid(grid) {
 // semifinal opponent is the strongest qualifier) AND handed the strongest team again in a
 // hardcoded, forced-home final - while the season alternates home/away for every other game.
 const BRACKET_MODELS = ['asCoded', 'strongestInFinal'];
-const SCHEDULE_SHAPES = ['repeatTop', 'repeatBottom', 'spread'];
+// BB-2c commit 4: `SCHEDULE_SHAPE` is now a real, settings-driven `season.js` parameter (see
+// settings.js's own constant) - `spread` (BB-2b's own ad hoc third shape) is replaced by
+// `repeatMiddle`, the handoff's own third named shape; the diagnostic below now calls the REAL
+// `makeSchedule(league, seasonSeed, shape)` directly instead of duplicating its own copy.
+const SCHEDULE_SHAPES = ['repeatTop', 'repeatBottom', 'repeatMiddle'];
 const PLAYOFF_HOMES = ['player', 'higherSeed', 'alternate'];
 const STANDINGS_MODELS = ['rawWins7', 'scaledTo12'];
-
-// Local opponent-order builders, one per schedule shape. `repeatTop` is `season.js`'s own
-// `OPPONENT_ORDER` (unique 0..7, then the top four - the strongest half - a second time, late).
-// `repeatBottom` repeats the weakest four instead, early. `spread` repeats the SAME top-four set
-// `repeatTop` does, but schedules each team's second meeting immediately after its first, rather
-// than bunching all four repeats at the end - "each repeat adjacent to its first meeting," per the
-// handoff. All three stay weakest-to-strongest in their FIRST pass over all 8 opponents.
-function buildOpponentOrder(shape) {
-  if (shape === 'repeatBottom') return [0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7];
-  if (shape === 'spread') return [0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7];
-  return [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7]; // repeatTop, matches season.js's OPPONENT_ORDER
-}
-
-/** `season.js`'s own `shuffledHomeFlags`, duplicated (not exported) for this measurement-only
- *  diagnostic - a Fisher-Yates shuffle of a fixed 6-home/6-away flag array, seeded. */
-function shuffledHomeFlagsLocal(rand01) {
-  const flags = [true, true, true, true, true, true, false, false, false, false, false, false];
-  for (let i = flags.length - 1; i > 0; i--) {
-    const j = Math.floor(rand01() * (i + 1));
-    const tmp = flags[i]; flags[i] = flags[j]; flags[j] = tmp;
-  }
-  return flags;
-}
-
-function makeScheduleShape(league, seasonSeed, shape) {
-  const order = buildOpponentOrder(shape);
-  const rand01 = mulberry32(hashSeed('bb-schedule-shape', league, seasonSeed, shape));
-  const homeFlags = shuffledHomeFlagsLocal(rand01);
-  return order.map((opponentIndex, i) => ({ opponentIndex, home: homeFlags[i] }));
-}
 
 /** The CPU-scripted "record" a standings row carries for one team, for a higher-seed home-field
  *  decision - `scriptedStandings`'s own `wins` column (see season.js), looked up by team name. */
@@ -820,7 +794,7 @@ function decidePlayoffHome(mode, seasonSeed, gameLabel, playerWins, oppWins) {
  *  playoff round was actually reached/won. */
 async function playSeasonStaged(league, settings, tier, seasonSeed, opts) {
   const teams = makeLeague(league);
-  const schedule = makeScheduleShape(league, seasonSeed, opts.scheduleShape);
+  const schedule = makeSchedule(league, seasonSeed, opts.scheduleShape);
   const skills = playerSkillsFor(league, settings);
   const playerAgent = mkModelAgent(league, settings, MODEL_TIERS[tier]);
   const playerTeam = makePlayerTeam({ skills, hand: 'R' });

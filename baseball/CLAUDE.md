@@ -4,6 +4,58 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 2c — the regular season was the bottleneck, and what CPU strength is allowed to be
+
+BB-2c (2026-09-13) named the two CPU stat advantages behind the regular-season win-rate gap BB-2b's
+own decomposition traced everything to, made "CPU batters may never time or place better than a
+median human" (design doc v9, §8, [Locked]) a structural contract with its own tests, gave a
+flavor style's own behavioral edge a measured strength budget so it never has to be paid for by
+hand-picking its ladder slot, reopened and measured the schedule shape, and retuned once inside the
+contract. Full report at the end of this milestone (commit 6); this section is the schedule-shape
+proposal block, written the moment commit 4 measured it.
+
+### The two CPU stat levers (commit 1's diagnosis)
+
+BB-2b's own `--stages` decomposition already named the regular-season win rate as the dominant
+bottleneck (majors ~10% at median). This handoff traced WHY: the CPU timing ladder
+(`CPU.timingSigmaMs` 90/75/55/45/35 by league) put College at exact parity with a median human (55)
+and Minors/Majors SHARPER than one - a stat advantage, not the doc's own "difficulty from behavior"
+promise. A second, hidden advantage rode along in `guess`: `CpuBatter`'s placement noise
+(`readNoise = (1 - guess) * 0.3`) fell to 0.21/0.165/0.12 from College up, all below a median
+human's own 0.22 - `guess` was framed as a pattern-reading knob but coded as a swing-skill one.
+`sim-baseball.mjs --attribute`'s one-factor counterfactuals confirmed a single GLOBAL sigma floor
+is the wrong shape (it hurts Little/High School/College, which already sat above a human, and only
+barely helps Majors) - the fix needed a PER-LEAGUE minimum, which commit 2 built.
+
+### The schedule shape, measured and set (commit 4)
+
+`node sim-baseball.mjs --stages`, median tier, SEASONS_N=300, one-season Gold rate under each
+shape (bracket=asCoded, playoffHome=player, standings=rawWins7 throughout - isolating the schedule
+shape alone):
+
+| League | repeatTop (shipped) | repeatBottom | repeatMiddle |
+|---|---|---|---|
+| little | 70.3% | 64.3% | 68.0% |
+| highschool | 50.7% | 52.3% | 49.0% |
+| college | 34.7% | 43.0% | **45.7%** |
+| minors | 30.3% | 33.3% | 29.7% |
+| majors | 18.7% | 23.3% | 22.0% |
+
+No shape dominates at every league - `repeatBottom` edges ahead at High School/Minors/Majors by a
+few points, `repeatMiddle` is clearly best at College, `repeatTop` (still) wins at Little League
+(already saturated near 100% top-4 regardless of shape). **`repeatMiddle` is set as the Draft
+default**, per the handoff's own stated prior: it stays progressively harder without any early
+plateau, halves the games against the top half of the ladder, and is the only shape that leaves
+both of the two strongest teams faced once each before the playoffs - `repeatBottom`'s edge at the
+other four leagues is small enough (1-5pp) that it does not outweigh that shape property.
+`repeatTop`/`repeatBottom` stay fully selectable (`SCHEDULE_SHAPE` in settings.js,
+`makeSchedule(league, seasonSeed, shape)` in season.js) for a future session to reopen.
+
+Seasons-to-Gold under the chosen `repeatMiddle` default (1 / one-season rate, commits 1-4 combined,
+before commit 5's own retune): little 1.47, highschool 2.04, college 2.19, minors 3.37, majors 4.55
+- already close to design doc v9's own per-league targets (about 1 / 1.5 / 2 / 3 / 4.5) from the
+contract and flavor-budget fixes alone, before any dedicated retune.
+
 ## Status: Phase 2b — why Gold is far away, then the fix
 
 BB-2b (2026-09-13) diagnosed why BB-2a's own promise scoreboard still failed Gold at

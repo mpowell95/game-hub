@@ -10,13 +10,18 @@
 // caller and folded in as `playerResults`.
 
 import { hashSeed, mulberry32 } from './rng.js';
-import { BRACKET_MODEL, STANDINGS_MODEL } from './settings.js';
+import { BRACKET_MODEL, STANDINGS_MODEL, SCHEDULE_SHAPE } from './settings.js';
 
-// doc §4, [Draft]: "12 regular season games per league across 8 opponents." Every opponent once,
-// then the four strongest a second time (doc §8, [Locked]: "the schedule puts harder opponents
-// later in the season... the championship opponent is always the toughest team in the league") -
-// Draft [Open item 13], confirmed by Matt: this exact shape, not merely "12 games somehow".
-const OPPONENT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7];
+// doc §4, [Draft]: "12 regular season games per league across 8 opponents." doc §8, [Locked]: "the
+// schedule puts harder opponents later in the season... the championship opponent is always the
+// toughest team in the league." BB-2c commit 4, doc §13 Open item 13: three shapes, all weakest to
+// strongest on the first pass and meeting the champion (index 7) exactly once, in game 12 - see
+// `settings.js`'s `SCHEDULE_SHAPE` for the full rationale and the measured proposal.
+const OPPONENT_ORDERS = {
+  repeatTop: [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7],
+  repeatBottom: [0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7],
+  repeatMiddle: [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7],
+};
 
 /** A Fisher-Yates shuffle of a fixed 6-home/6-away flag array, seeded - "home and away six and
  *  six shuffled by seed" (doc §4). */
@@ -33,14 +38,16 @@ function shuffledHomeFlags(rand01) {
  * The 12-game regular-season schedule for one league/season seed.
  * @param {string} league
  * @param {number|string} seasonSeed
+ * @param {string} [scheduleShape] - `'repeatTop'` | `'repeatBottom'` | `'repeatMiddle'`, defaults
+ *   to `settings.SCHEDULE_SHAPE`
  * @returns {Array<{opponentIndex:number, home:boolean}>} `opponentIndex` indexes the 8 CPU teams
- *   from `makeLeague()` (0 = weakest .. 7 = strongest); a repeated index appears twice, always in
- *   the second half of the schedule.
+ *   from `makeLeague()` (0 = weakest .. 7 = strongest); a repeated index appears twice.
  */
-export function makeSchedule(league, seasonSeed) {
+export function makeSchedule(league, seasonSeed, scheduleShape = SCHEDULE_SHAPE) {
+  const order = OPPONENT_ORDERS[scheduleShape] || OPPONENT_ORDERS[SCHEDULE_SHAPE] || OPPONENT_ORDERS.repeatTop;
   const rand01 = mulberry32(hashSeed('bb-schedule', league, seasonSeed));
   const homeFlags = shuffledHomeFlags(rand01);
-  return OPPONENT_ORDER.map((opponentIndex, i) => ({ opponentIndex, home: homeFlags[i] }));
+  return order.map((opponentIndex, i) => ({ opponentIndex, home: homeFlags[i] }));
 }
 
 /**

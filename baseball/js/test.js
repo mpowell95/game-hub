@@ -513,20 +513,45 @@ console.log('\n-- 8c. settings.js CPU table (Step 2): every league carries the n
 // ---------------------------------------------------------------------------------------------
 console.log('\n-- 8d. season.js: schedule, standings, playoffs (Step 3) --');
 {
+  // BB-2c commit 4: shape-agnostic checks, run against every SCHEDULE_SHAPE - none of these
+  // properties are specific to any one shape's own repeat pattern.
+  for (const shape of ['repeatTop', 'repeatBottom', 'repeatMiddle']) {
+    for (const lg of SETTINGS.LEAGUES) {
+      const sched = makeSchedule(lg, 42, shape);
+      ok(sched.length === 12, `makeSchedule('${lg}', '${shape}') has 12 games (doc §4)`);
+      ok(sched.filter((g) => g.home).length === 6, `[${shape}] exactly six home games`);
+      ok(new Set(sched.map((g) => g.opponentIndex)).size === 8, `[${shape}] every one of the 8 opponents appears at least once`);
+      const counts = {};
+      for (const g of sched) counts[g.opponentIndex] = (counts[g.opponentIndex] || 0) + 1;
+      ok(Object.values(counts).filter((c) => c === 2).length === 4, `[${shape}] exactly four opponents are repeated`);
+      ok(sched[0].opponentIndex === 0, `[${shape}] the weakest opponent (index 0) is played first`);
+      ok(sched[11].opponentIndex === 7, `[${shape}] the champion (index 7) is met exactly once, in game 12 (doc §8, [Locked])`);
+      const sched2 = makeSchedule(lg, 42, shape);
+      ok(JSON.stringify(sched) === JSON.stringify(sched2), `[${shape}] the same (league, seed, shape) is the same schedule every time`);
+    }
+  }
+  // Each shape's own specific repeat pattern.
+  {
+    const top = makeSchedule('college', 42, 'repeatTop').map((g) => g.opponentIndex);
+    const bottom = makeSchedule('college', 42, 'repeatBottom').map((g) => g.opponentIndex);
+    const middle = makeSchedule('college', 42, 'repeatMiddle').map((g) => g.opponentIndex);
+    ok(JSON.stringify(top) === JSON.stringify([0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7]), 'repeatTop repeats the four STRONGEST opponents (4-7), late');
+    ok(JSON.stringify(bottom) === JSON.stringify([0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7]), 'repeatBottom repeats the four WEAKEST opponents (0-3), early');
+    ok(JSON.stringify(middle) === JSON.stringify([0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]), 'repeatMiddle repeats the MIDDLE four opponents (2-5)');
+  }
+  // The default (SETTINGS.SCHEDULE_SHAPE, with no explicit shape argument) matches whichever shape
+  // is actually configured - a regression here means the Draft default silently drifted from the
+  // shipped constant.
+  {
+    const withDefault = makeSchedule('college', 42);
+    const withExplicit = makeSchedule('college', 42, SETTINGS.SCHEDULE_SHAPE);
+    ok(JSON.stringify(withDefault) === JSON.stringify(withExplicit), 'makeSchedule() with no shape argument matches settings.SCHEDULE_SHAPE explicitly passed');
+  }
   for (const lg of SETTINGS.LEAGUES) {
     const sched = makeSchedule(lg, 42);
-    ok(sched.length === 12, `makeSchedule('${lg}') has 12 games (doc §4)`);
-    ok(sched.filter((g) => g.home).length === 6, 'exactly six home games');
-    ok(new Set(sched.map((g) => g.opponentIndex)).size === 8, 'every one of the 8 opponents appears at least once');
-    const counts = {};
-    for (const g of sched) counts[g.opponentIndex] = (counts[g.opponentIndex] || 0) + 1;
-    const repeats = Object.entries(counts).filter(([, c]) => c === 2).map(([idx]) => Number(idx));
-    ok(repeats.length === 4 && repeats.every((idx) => idx >= 4), 'the four STRONGEST opponents (index 4-7) are repeated; nobody else is');
     const firstHalfAvg = mean(sched.slice(0, 6).map((g) => g.opponentIndex));
     const secondHalfAvg = mean(sched.slice(6).map((g) => g.opponentIndex));
-    ok(secondHalfAvg >= firstHalfAvg, 'harder opponents (higher index) land later in the schedule, on average');
-    const sched2 = makeSchedule(lg, 42);
-    ok(JSON.stringify(sched) === JSON.stringify(sched2), 'the same (league, seed) is the same schedule every time');
+    ok(secondHalfAvg >= firstHalfAvg, 'harder opponents (higher index) land later in the schedule, on average, under the Draft default shape');
   }
   function mean(a) { return a.reduce((s, x) => s + x, 0) / a.length; }
 

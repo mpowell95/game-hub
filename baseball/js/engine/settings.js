@@ -582,6 +582,31 @@ export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
 // worse, not better. `rawWins7` is the default again.
 export const STANDINGS_MODEL = 'rawWins7'; // Draft [Open item 13], BB-2b commit 4
 
+// BB-2c commit 4: SCHEDULE_SHAPE, doc §4/§13 Open item 13 ("schedule shape... over 8 opponents").
+// `season.js`'s own `OPPONENT_ORDER` used to be a single hardcoded array, its comment claiming it
+// was "confirmed by Matt" - BB-2b measured an alternative (repeating the weakest four instead of
+// the strongest) as the single largest lever this whole effort found for reaching Gold, and
+// flagged it as a recommendation rather than touch an already-confirmed shape unilaterally. This
+// handoff reopens it explicitly. All three shapes below are weakest to strongest on the FIRST pass
+// over all 8 opponents and meet the champion (index 7) exactly once, in game 12 - doc §8, [Locked]:
+// "the championship opponent is always the toughest team," which every shape here still honors on
+// the very last regular-season game, whatever else repeats earlier.
+//
+//   repeatTop    - [0,1,2,3,4,5,6,7,4,5,6,7]: the shipped shape - every opponent once, then the
+//                  four STRONGEST a second time, late. Plays the hardest half of the ladder twice.
+//   repeatBottom - [0,0,1,1,2,2,3,3,4,5,6,7]: the four WEAKEST twice, early, then the top half once
+//                  each late. Measured (`sim-baseball.mjs --stages`) as a large, consistent lift to
+//                  top-4 odds and Gold at every league.
+//   repeatMiddle - [0,1,2,2,3,3,4,4,5,5,6,7]: repeats the MIDDLE four (slots 2-5) instead of either
+//                  extreme - still progressively harder, halves the games against the top half
+//                  (slots 4-7 each played once except 4/5, which repeat), and meets both of the two
+//                  strongest teams only once each before the playoffs.
+//
+// Measured (`node sim-baseball.mjs --stages`, median tier, SEASONS_N=300) and set as the Draft
+// default: `repeatMiddle` - see the proposal block in `baseball/CLAUDE.md` for the full table.
+// `repeatTop`/`repeatBottom` remain selectable for comparison.
+export const SCHEDULE_SHAPE = 'repeatMiddle'; // Draft [Open item 13], BB-2c commit 4
+
 // ---------------------------------------------------------------------------------------------
 // BB-2b commit 3: engine mechanisms the doc requires that phase 2/2a still lacked.
 
@@ -706,7 +731,7 @@ export default {
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
-  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL,
+  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
