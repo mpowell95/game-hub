@@ -1444,5 +1444,65 @@ console.log('\n-- 20. BB-2d commit 4: batted-ball carry scaled to the league --'
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 21. BB-2d commit 5: the champion\'s own axis --');
+{
+  // The champion's effective sigma is never below CPU_SIGMA_ABSOLUTE_FLOOR_MS (58), at every
+  // league, after every ladder offset SLOT_SIGMA_DESCENT can apply.
+  for (const lg of SETTINGS.LEAGUES) {
+    for (let slot = 0; slot < 8; slot++) {
+      const offsets = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+      const league = makeLeague(lg);
+      const team = league[slot];
+      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, team.ladderOffset);
+      ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
+        `${lg} slot ${slot}: effective base sigma (${sigma.toFixed(1)}) never crosses CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS})`);
+      void offsets;
+    }
+  }
+
+  // SLOT_SIGMA_DESCENT: slots 0-4 sit at the league's own flat floor; slots 5-7 strictly descend
+  // toward (and slot 7 lands exactly at) CPU_SIGMA_ABSOLUTE_FLOOR_MS.
+  for (const lg of SETTINGS.LEAGUES) {
+    const league = makeLeague(lg);
+    const floors = league.map((t) => t.ladderOffset.sigmaFloorMs);
+    for (let slot = 0; slot <= 4; slot++) {
+      ok(Math.abs(floors[slot] - SETTINGS.CPU_SIGMA_MIN_MS[lg]) < 1e-9,
+        `${lg} slot ${slot}: sigmaFloorMs sits at the league's own flat floor (SLOT_SIGMA_DESCENT.bindThroughSlot)`);
+    }
+    for (let slot = 5; slot <= 7; slot++) {
+      ok(floors[slot] <= floors[slot - 1] + 1e-9, `${lg} slot ${slot}: sigmaFloorMs is non-increasing (descending toward the absolute floor)`);
+    }
+    ok(Math.abs(floors[7] - SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS) < 1e-9,
+      `${lg} slot 7 (the champion): sigmaFloorMs lands exactly at CPU_SIGMA_ABSOLUTE_FLOOR_MS`);
+  }
+
+  // CHAMPION_CEILING: every TEAM_LADDER_OFFSETS.behaviorMul value, applied to the toughest
+  // league's own cornerBias/patternWeight/weakSpotWeight, never exceeds the NEXT league's own base
+  // row for that field (Majors is its own ceiling, since it has no next league).
+  for (let i = 0; i < SETTINGS.LEAGUES.length; i++) {
+    const lg = SETTINGS.LEAGUES[i];
+    const nextLg = SETTINGS.LEAGUES[i + 1] || lg;
+    const ceilingRow = SETTINGS.CPU[nextLg];
+    const champOffsets = SETTINGS.TEAM_LADDER_OFFSETS[7]; // the champion slot
+    const cpu = SETTINGS.CPU[lg];
+    const effCornerBias = Math.min(cpu.cornerBias * champOffsets.behaviorMul, ceilingRow.cornerBias);
+    const effPatternWeight = Math.min(cpu.patternWeight * champOffsets.behaviorMul, ceilingRow.patternWeight);
+    const effWeakSpotWeight = Math.min(cpu.weakSpotWeight * champOffsets.behaviorMul, ceilingRow.weakSpotWeight);
+    ok(effCornerBias <= ceilingRow.cornerBias + 1e-9, `${lg} champion's effective cornerBias never exceeds ${nextLg}'s own base row`);
+    ok(effPatternWeight <= ceilingRow.patternWeight + 1e-9, `${lg} champion's effective patternWeight never exceeds ${nextLg}'s own base row`);
+    ok(effWeakSpotWeight <= ceilingRow.weakSpotWeight + 1e-9, `${lg} champion's effective weakSpotWeight never exceeds ${nextLg}'s own base row`);
+  }
+
+  // behaviorMul/changeupShare integrity: strictly rising slot 0 -> slot 7 (easier to harder
+  // champion), and every value is non-negative.
+  for (let slot = 1; slot < 8; slot++) {
+    ok(SETTINGS.TEAM_LADDER_OFFSETS[slot].behaviorMul > SETTINGS.TEAM_LADDER_OFFSETS[slot - 1].behaviorMul,
+      `TEAM_LADDER_OFFSETS[${slot}].behaviorMul strictly exceeds slot ${slot - 1}'s`);
+    ok(SETTINGS.TEAM_LADDER_OFFSETS[slot].changeupShare >= SETTINGS.TEAM_LADDER_OFFSETS[slot - 1].changeupShare,
+      `TEAM_LADDER_OFFSETS[${slot}].changeupShare is non-decreasing from slot ${slot - 1}'s`);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

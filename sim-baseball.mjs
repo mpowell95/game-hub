@@ -281,7 +281,11 @@ if (ARG_SET) {
 // `ModelPitcher` at one of the three tiers above, standing in for a human at that skill level.
 function mkCpuAgent(team, league, settings) {
   return {
-    decidePitch: (v) => new CpuPitcher({ league, settings }).decidePitch(v),
+    // BB-2d commit 5: CpuPitcher now also reads the team's own ladderOffset (behaviorMul/
+    // changeupShare) - a real ladder team built by `makeLeague` carries one; `buildCandidateTeam`
+    // (the `--styles` measurement's own team builder) does not, so this is undefined there and
+    // CpuPitcher falls back to no slot adjustment, exactly as before this commit.
+    decidePitch: (v) => new CpuPitcher({ league, settings, ladderOffset: team.ladderOffset }).decidePitch(v),
     decideSwing: (v) => {
       const batter = team.players.find((p) => p.id === v.batterId) || team.players[0];
       return new CpuBatter({ league, skills: batter.skills, settings, styleId: team.styleId, ladderOffset: team.ladderOffset }).decideSwing(v);

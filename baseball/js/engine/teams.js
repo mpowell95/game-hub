@@ -17,7 +17,8 @@
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
 import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
-  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA } from './settings.js';
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, SLOT_SIGMA_DESCENT } from './settings.js';
 
 // doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
 // slot 0 always the starting pitcher (unchanged from phase 1).
@@ -122,17 +123,31 @@ export function makeTeam(league, index, opts = {}) {
  *  which style occupies which slot; slot order IS the returned array order. Fixed forever per
  *  (league, styleId) seed - never per position in the array - so editing the ladder-style TABLE
  *  cannot silently reseed a team that keeps the same style. */
+// BB-2d commit 5: slots 0-4 keep the existing per-league CPU_SIGMA_MIN_MS floor; slots 5-7 descend
+// linearly toward CPU_SIGMA_ABSOLUTE_FLOOR_MS (never below it) - see SLOT_SIGMA_DESCENT's own
+// comment in settings.js. Resolved to an absolute ms number HERE, at roster-build time (this
+// function already knows the slot and league), and attached onto `team.ladderOffset.sigmaFloorMs`
+// so agents.js's `cpuSigmaFloorMs` can read one number without re-deriving the interpolation.
+function slotSigmaFloorMs(league, slot) {
+  const leagueMin = CPU_SIGMA_MIN_MS[league] != null ? CPU_SIGMA_MIN_MS[league] : CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+  const { bindThroughSlot, descentToSlot } = SLOT_SIGMA_DESCENT;
+  if (slot <= bindThroughSlot) return leagueMin;
+  const t = Math.min(1, (slot - bindThroughSlot) / (descentToSlot - bindThroughSlot));
+  return leagueMin + (CPU_SIGMA_ABSOLUTE_FLOOR_MS - leagueMin) * t;
+}
+
 export function makeLeague(league) {
   const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
   const baseCap = effectiveCapFor(league);
   const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
   const teams = order.map((styleId, slot) => {
     const seed = hashSeed('bb-league', league, styleId);
-    // BB-2b commit 3: TEAM_LADDER_OFFSETS entries are now `{ skill, timingSigmaMs, chase }` - only
-    // `skill` feeds roster generation here, exactly as the old bare-number offset did; the other
-    // two are attached directly onto the returned team for `agents.js`'s `CpuBatter` to read
-    // (`ladderOffset`), since they are BATTING-BEHAVIOR knobs, not skill points.
-    const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0 };
+    // BB-2b commit 3: TEAM_LADDER_OFFSETS entries are now `{ skill, timingSigmaMs, chase }` (BB-2d
+    // commit 5 adds `behaviorMul`/`changeupShare`) - only `skill` feeds roster generation here,
+    // exactly as the old bare-number offset did; the rest are attached directly onto the returned
+    // team for `agents.js`'s `CpuBatter`/`CpuPitcher` to read (`ladderOffset`), since they are
+    // BEHAVIOR knobs, not skill points.
+    const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1, changeupShare: 0 };
     // BB-2c commit 3: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`) is subtracted
     // from the slot's own skill budget - a style's BEHAVIOR (Shifters' shift, Patient's chaseMul)
     // is a real strength edge no skill offset touches, so a style measuring stronger than its raw
@@ -143,7 +158,12 @@ export function makeLeague(league) {
     const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill - styleDelta)));
     const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
     team.ladderSlot = slot;
-    team.ladderOffset = { timingSigmaMs: offsets.timingSigmaMs, chase: offsets.chase };
+    team.ladderOffset = {
+      timingSigmaMs: offsets.timingSigmaMs, chase: offsets.chase,
+      behaviorMul: offsets.behaviorMul != null ? offsets.behaviorMul : 1,
+      changeupShare: offsets.changeupShare || 0,
+      sigmaFloorMs: slotSigmaFloorMs(league, slot),
+    };
     return team;
   });
   return teams;

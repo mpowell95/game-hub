@@ -820,16 +820,43 @@ export const CPU_PLACEMENT_MIN = 0.22;
 // `-4` lands EXACTLY on the floor with no headroom left on this axis - any further Majors-champion
 // difficulty has to come from `chase`/`cornerBias`/`patternWeight`/`weakSpotWeight`/
 // `outZoneMult`/`fieldScale`, not sigma.
+// BB-2d commit 5: two new per-slot columns, `behaviorMul`/`changeupShare` - the champion's own
+// axis. Before this commit, every PITCHING-behavior field (cornerBias, pitchMix, patternWeight,
+// weakSpotWeight) was per-LEAGUE only, with no per-slot ladder at all: a Little League champion
+// pitched with the exact same cornerBias/patternWeight/weakSpotWeight as that league's weakest
+// team, and `CPU_SIGMA_MIN_MS` bound EVERY slot's own base sigma to the same per-league floor,
+// so a league's champion could never bat/pitch meaningfully differently from its weakest team on
+// these axes - only `skill`/`timingSigmaMs`/`chase` varied by slot. `behaviorMul` (Draft, linear
+// 0.5 at slot 0 to 1.6 at slot 7) multiplies `cornerBias`/`patternWeight`/`weakSpotWeight`
+// (agents.js's `CpuPitcher`/`CpuBatter` both read it now); `changeupShare` (Draft, linear 0 at
+// slot 0 to 2.0 at slot 7) is an ADDITIVE pitch-mix weight added to `changeup`'s own entry, a
+// slot-scaled lean toward off-speed per the doc's own "mixes pitches more" framing. Both are
+// capped by `CHAMPION_CEILING` (see below) - the effective value can never make a league's
+// champion pitch tougher on these axes than the NEXT league's own base row, so "easier season,
+// harder champion" never turns a Little League champion into a de facto Majors pitcher.
 export const TEAM_LADDER_OFFSETS = [
-  { skill: -0.25, timingSigmaMs: 20, chase: 0.15 },
-  { skill: -0.18, timingSigmaMs: 14, chase: 0.11 },
-  { skill: -0.12, timingSigmaMs: 9, chase: 0.07 },
-  { skill: -0.06, timingSigmaMs: 4, chase: 0.03 },
-  { skill: 0, timingSigmaMs: 0, chase: 0 },
-  { skill: 0.06, timingSigmaMs: -1, chase: -0.03 },
-  { skill: 0.14, timingSigmaMs: -2.5, chase: -0.06 },
-  { skill: 0.25, timingSigmaMs: -4, chase: -0.12 },
+  { skill: -0.25, timingSigmaMs: 20, chase: 0.15, behaviorMul: 0.50, changeupShare: 0 },
+  { skill: -0.18, timingSigmaMs: 14, chase: 0.11, behaviorMul: 0.66, changeupShare: 0.29 },
+  { skill: -0.12, timingSigmaMs: 9, chase: 0.07, behaviorMul: 0.81, changeupShare: 0.57 },
+  { skill: -0.06, timingSigmaMs: 4, chase: 0.03, behaviorMul: 0.97, changeupShare: 0.86 },
+  { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1.13, changeupShare: 1.14 },
+  { skill: 0.06, timingSigmaMs: -1, chase: -0.03, behaviorMul: 1.29, changeupShare: 1.43 },
+  { skill: 0.14, timingSigmaMs: -2.5, chase: -0.06, behaviorMul: 1.44, changeupShare: 1.71 },
+  { skill: 0.25, timingSigmaMs: -4, chase: -0.12, behaviorMul: 1.60, changeupShare: 2.00 },
 ];
+// The ceiling rule itself: every effective per-slot pitching-behavior value (after `behaviorMul`)
+// is clamped to the NEXT league's own BASE row for that same field - Majors (no next league) is
+// its own ceiling, so its champion is bounded only by its own row. A single named mode string
+// (rather than a bare boolean) so a future session can add a different ceiling rule without
+// renaming this constant out from under callers that just check its value.
+export const CHAMPION_CEILING = 'nextLeagueRow';
+// BB-2d commit 5: slots 0-4 keep the existing per-league `CPU_SIGMA_MIN_MS` floor unchanged (BB-2c
+// commit 2's own contract, untouched); slots 5-7 DESCEND linearly from that same floor (at slot 4)
+// toward `CPU_SIGMA_ABSOLUTE_FLOOR_MS` (at slot 7), never below it - the mechanism that actually
+// lets a champion's own BASE sigma sharpen past its league's median floor, which before this
+// commit only the additive `timingSigmaMs` ladder offset could do (and BB-2c commit 5's own
+// comment already noted Majors' champion row sat with zero headroom left on that axis alone).
+export const SLOT_SIGMA_DESCENT = { bindThroughSlot: 4, descentToSlot: 7 };
 
 export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
@@ -847,5 +874,5 @@ export default {
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
-  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
 };

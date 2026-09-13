@@ -19,7 +19,7 @@ import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitche
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
-  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, LEAGUES,
   SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
@@ -37,17 +37,35 @@ import { pickWeighted } from './rng.js';
  *  function's own return value can never itself violate the absolute floor - the caller
  *  (`CpuBatter.decideSwing`) additionally re-clamps after its own pattern-read timing bonus, since
  *  that bonus is a further, later adjustment this function has no visibility into. */
-export function cpuSigmaFloorMs(league, settings) {
+/** BB-2d commit 5: `ladderOffset.sigmaFloorMs` (set by `teams.js`'s `makeLeague`, per
+ *  `SLOT_SIGMA_DESCENT`) overrides the league-flat floor for slots 5-7 - a real CPU team's own
+ *  slot descends this floor toward `CPU_SIGMA_ABSOLUTE_FLOOR_MS`; anything without a resolved
+ *  slot (a measurement harness building an ungraded team, or slots 0-4) falls back to the
+ *  league-flat floor exactly as before this commit. */
+export function cpuSigmaFloorMs(league, settings, ladderOffset) {
   const leagueMin = (settings.CPU_SIGMA_MIN_MS && settings.CPU_SIGMA_MIN_MS[league]) != null
     ? settings.CPU_SIGMA_MIN_MS[league] : CPU_SIGMA_MIN_MS[league];
   const absFloor = settings.CPU_SIGMA_ABSOLUTE_FLOOR_MS != null ? settings.CPU_SIGMA_ABSOLUTE_FLOOR_MS : CPU_SIGMA_ABSOLUTE_FLOOR_MS;
-  return Math.max(leagueMin != null ? leagueMin : absFloor, absFloor);
+  const slotFloor = (ladderOffset && ladderOffset.sigmaFloorMs != null) ? ladderOffset.sigmaFloorMs : leagueMin;
+  return Math.max(slotFloor != null ? slotFloor : absFloor, absFloor);
 }
 export function cpuBaseTimingSigmaMs(league, settings, ladderOffset) {
   const cpu = (settings.CPU && settings.CPU[league]) || CPU.college;
-  const floor = cpuSigmaFloorMs(league, settings);
+  const floor = cpuSigmaFloorMs(league, settings, ladderOffset);
   const offsetMs = (ladderOffset && ladderOffset.timingSigmaMs) || 0;
   return Math.max(floor, cpu.timingSigmaMs + offsetMs);
+}
+
+/** BB-2d commit 5: the CHAMPION_CEILING rule - an effective per-slot pitching-behavior value
+ *  (after `behaviorMul`) can never exceed the NEXT league's own BASE row for that field (Majors,
+ *  with no next league, is its own ceiling). `LEAGUES`' own order is the ladder; a league not in
+ *  it (should not happen) falls back to no ceiling beyond the league's own row. */
+function championCeilingRow(league, settings) {
+  const order = settings.LEAGUES || LEAGUES;
+  const idx = order.indexOf(league);
+  const nextLeague = (idx >= 0 && idx + 1 < order.length) ? order[idx + 1] : league;
+  const cpu = settings.CPU || CPU;
+  return cpu[nextLeague] || cpu[league] || CPU.college;
 }
 
 /** The shared "a pitch faster or slower than the batter expected fools their timing" mechanism
@@ -83,20 +101,34 @@ function expectedTravelMult(hist, travelMult) {
  *  a league with `weakSpotWeight` above zero, sometimes aims at the batter's own recent weak zone
  *  instead (doc §8, [Locked]: "Majors: attacks your weak spots"). */
 export class CpuPitcher {
-  constructor({ league, settings }) {
+  /** @param {{timingSigmaMs?:number, chase?:number, behaviorMul?:number, changeupShare?:number}} [ladderOffset]
+   *  - BB-2d commit 5: the pitching TEAM's own ladder-slot offset (`teams.js`'s `makeLeague`) -
+   *  `behaviorMul` scales `cornerBias`/`weakSpotWeight` (both PITCHING behaviors), `changeupShare`
+   *  leans the pitch mix toward the changeup. Both are bounded by `championCeilingRow` so a
+   *  league's champion slot can never out-pitch the next league's own base row. */
+  constructor({ league, settings, ladderOffset }) {
     this.league = league;
     this.settings = settings;
+    this.ladderOffset = ladderOffset || null;
   }
   async decidePitch(view) {
     const cpu = this.settings.CPU[this.league] || CPU.college;
+    const behaviorMul = (this.ladderOffset && this.ladderOffset.behaviorMul != null) ? this.ladderOffset.behaviorMul : 1;
+    const changeupShare = (this.ladderOffset && this.ladderOffset.changeupShare) || 0;
+    const ceilingRow = championCeilingRow(this.league, this.settings);
+
     const unlocked = unlockedPitchesFor(this.league, 0);
-    const weights = unlocked.map((t) => (cpu.pitchMix && cpu.pitchMix[t]) || 1);
+    const mix = { ...(cpu.pitchMix || {}) };
+    if (unlocked.includes('changeup')) mix.changeup = (mix.changeup || 1) + changeupShare;
+    const weights = unlocked.map((t) => (mix && mix[t]) || 1);
     const type = pickWeighted(view.rand01, unlocked, weights);
 
     const zone = this.settings.ZONE || ZONE;
     const halfWidth = zone.xMax; // zone is symmetric about 0
 
-    const weakSpotWeight = cpu.weakSpotWeight || 0;
+    // BB-2d commit 5: CHAMPION_CEILING - the effective weakSpotWeight/cornerBias (after
+    // behaviorMul) can never exceed the NEXT league's own base row for that field.
+    const weakSpotWeight = Math.min((cpu.weakSpotWeight || 0) * behaviorMul, ceilingRow.weakSpotWeight != null ? ceilingRow.weakSpotWeight : 1);
     if (weakSpotWeight > 0 && view.weakZone != null && view.rand01() < weakSpotWeight) {
       // doc §8, [Locked]: "Majors: attacks your weak spots." A small scatter around the exact
       // remembered zone, same shape as the ordinary aim scatter below - a pitcher that landed
@@ -109,7 +141,8 @@ export class CpuPitcher {
     // it (doc §8, [Locked]: "each league up... works the corners more"). At cornerBias 0 the
     // pitcher is still not a laser (AIM_INZONE_BIAS x half-width, comfortably outside a token
     // miss); at 1 it is almost always working the very edge or just off it.
-    const cornerBias = cpu.cornerBias != null ? cpu.cornerBias : 0.5;
+    const cornerBias = Math.min((cpu.cornerBias != null ? cpu.cornerBias : 0.5) * behaviorMul,
+      ceilingRow.cornerBias != null ? ceilingRow.cornerBias : 1);
     const inZoneBias = view.rand01() < (1 - cornerBias * AIM_CORNER_CHANCE_MULT)
       ? AIM_INZONE_BIAS : (AIM_CORNER_BIAS_BASE + cornerBias * AIM_CORNER_BIAS_SCALE);
     const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
@@ -155,7 +188,13 @@ export class CpuBatter {
     const swingChance = pitch.isStrike ? cpu.swingIn : chaseChance;
     if (view.rand01() >= swingChance) return { action: 'take' };
 
-    const patternWeight = cpu.patternWeight || 0;
+    // BB-2d commit 5: `behaviorMul` (this batting team's own ladder-slot offset) scales
+    // patternWeight too, bounded by CHAMPION_CEILING (the next league's own base patternWeight) -
+    // the champion slot reads the human's pitching patterns more sharply than its league's
+    // weakest team, but never past what the next league up already does by default.
+    const slotBehaviorMul = (this.ladderOffset && this.ladderOffset.behaviorMul != null) ? this.ladderOffset.behaviorMul : 1;
+    const patternCeiling = championCeilingRow(this.league, this.settings).patternWeight;
+    const patternWeight = Math.min((cpu.patternWeight || 0) * slotBehaviorMul, patternCeiling != null ? patternCeiling : 1);
     const hist = view.pitchHistory;
     const travelMult = this.settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT;
     const baseSigma = cpuBaseTimingSigmaMs(this.league, this.settings, this.ladderOffset);
