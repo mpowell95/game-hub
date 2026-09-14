@@ -166,10 +166,16 @@ if (mountErr) {
     }
   }
 
-  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill.
+  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill. BB-3b's
+  // R1 wind-up (`_stepWindup`, FEEL.ui.windupMs - 1400ms by default) now delays every CPU pitch
+  // before the swing/throw handlers are even registered, and the verdict line itself only holds
+  // for FEEL.ui.resultMs before clearing - so this polls continuously through each cycle instead
+  // of sampling once at a fixed offset, which could straddle the hold window entirely (a flat
+  // single check after a long wait missed almost every at-bat once the wind-up landed).
   let sawLine1 = false;
   let overlapSeen = null;
-  for (let i = 0; i < 10 && !overlapSeen; i++) {
+  const CYCLE_MS = 2600, POLL_MS = 150;
+  for (let i = 0; i < 6 && !overlapSeen; i++) {
     await page.evaluate(() => {
       const tile = document.querySelector('.bb-pitch-tile');
       if (tile) tile.click();
@@ -179,19 +185,21 @@ if (mountErr) {
         main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       }
     });
-    await page.waitForTimeout(250);
-    const line = await page.evaluate(() => {
-      const back = document.querySelector('.hub-back');
-      const line1 = document.querySelector('[data-role="line1"]');
-      if (!line1 || !line1.textContent.trim()) return null;
-      const l = line1.getBoundingClientRect();
-      const b = back ? back.getBoundingClientRect() : null;
-      const overlap = b ? (l.top < b.bottom && l.bottom > b.top && l.left < b.right && l.right > b.left) : false;
-      return { top: l.top, backBottom: b ? b.bottom : null, overlap };
-    });
-    if (line) {
-      sawLine1 = true;
-      if (line.overlap) overlapSeen = line;
+    for (let elapsed = 0; elapsed < CYCLE_MS && !overlapSeen; elapsed += POLL_MS) {
+      await page.waitForTimeout(POLL_MS);
+      const line = await page.evaluate(() => {
+        const back = document.querySelector('.hub-back');
+        const line1 = document.querySelector('[data-role="line1"]');
+        if (!line1 || !line1.textContent.trim()) return null;
+        const l = line1.getBoundingClientRect();
+        const b = back ? back.getBoundingClientRect() : null;
+        const overlap = b ? (l.top < b.bottom && l.bottom > b.top && l.left < b.right && l.right > b.left) : false;
+        return { top: l.top, backBottom: b ? b.bottom : null, overlap };
+      });
+      if (line) {
+        sawLine1 = true;
+        if (line.overlap) overlapSeen = line;
+      }
     }
   }
   if (!sawLine1) {
@@ -200,6 +208,21 @@ if (mountErr) {
     fail('verdict-line', `verdict line top=${overlapSeen.top} overlapped .hub-back bottom=${overlapSeen.backBottom}`);
   } else {
     ok('verdict line never overlaps the hub back pill across simulated at-bats');
+  }
+
+  // The field canvas (BB-3b: now a real picture, baseball/img/plate.webp, fitted via
+  // field.js's `plateCover()`) mounted at a real, usable size - proof the band's own picture had
+  // somewhere honest to draw into, ahead of `PLATE_ANCHORS`' own sanity checks below.
+  const canvasSize = await page.evaluate(() => {
+    const c = document.querySelector('.bb-field-canvas');
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { width: r.width, height: r.height };
+  });
+  if (!canvasSize || canvasSize.width < 8) {
+    fail('plate-camera', 'field canvas has no usable width to check the strike-zone floor against');
+  } else {
+    ok(`field canvas mounted at ${canvasSize.width.toFixed(0)}px wide (0.30W strike-zone floor = ${(canvasSize.width * 0.3).toFixed(0)}px)`);
   }
 }
 await ctx.close();
@@ -230,36 +253,29 @@ await ctx.close();
   }
 }
 
-// 4. The PLATE camera (2026-09-14 camera rebuild, Matt: "the camera is fundamentally wrong...
-// this game was always meant to" match Mario Superstar Baseball's close, over-the-shoulder view).
-// Regression guard for the two failure modes a real render caught during that rebuild: (a) the
-// near player collapsing to the same size as the far one (no foreshortening - the bug this whole
-// rebuild exists to fix), and (b) a near-field ground shape (the mound circle, the rubber)
-// wrapping into a self-crossing mess because part of it fell behind the camera when the SAME
-// world point becomes the "near" reference in pitching mode - found on a real render, not assumed.
+// 4. The PLATE camera (rebuilt again 2026-09-14, BB-3b art pass: a real picture,
+// `baseball/img/plate.webp`, replaces the procedural pinhole projection the prior round built).
+// There is no more per-point projection to probe scale/foreshortening on - the picture supplies
+// that - so this checks the thing that replaced it: `PLATE_ANCHORS`, measured off the picture, are
+// internally sane (the plate sits below the mound, both land inside the canvas) and the rendered
+// strike zone honors its own 0.30W floor (spec section 6) rather than shrinking to a sliver on a
+// narrow phone.
 {
   const mod = await import('./baseball/js/field.js');
-  if (typeof mod.projectPlate !== 'function') {
-    fail('plate-camera', 'field.js does not export projectPlate(xFt, yFt, w, h, mode)');
+  if (!mod.PLATE_ANCHORS) {
+    fail('plate-camera', 'field.js does not export PLATE_ANCHORS');
   } else {
-    const W = 393, H = 429;
-    const battingNear = mod.projectPlate(0, 0, W, H, 'batting');   // home plate, near the batter
-    const battingFar = mod.projectPlate(0, 60.5, W, H, 'batting'); // the mound, far away
-    const ratio = battingNear.scale / battingFar.scale;
-    if (ratio < 8) {
-      fail('plate-camera', `near/far scale ratio only ${ratio.toFixed(2)}x (batting: home vs mound) - expected strong foreshortening (>= 8x), the camera may have collapsed back toward a flat/overhead view`);
+    const a = mod.PLATE_ANCHORS;
+    const within01 = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+    if (!within01(a.plate) || !within01(a.mound)) {
+      fail('plate-camera', `PLATE_ANCHORS.plate/mound fall outside the picture's own 0..1 frame (plate=${JSON.stringify(a.plate)}, mound=${JSON.stringify(a.mound)})`);
     } else {
-      ok(`plate camera foreshortens strongly: home is ${ratio.toFixed(1)}x the mound's scale (batting)`);
+      ok('PLATE_ANCHORS.plate and .mound both land inside the picture');
     }
-    // Mirror symmetry: pitching's own near/far ratio (pitcher vs the batter at the plate) should
-    // match batting's within a small tolerance - same camera, turned around.
-    const pitchingNear = mod.projectPlate(0, 60.5, W, H, 'pitching'); // the mound, near the pitcher
-    const pitchingFar = mod.projectPlate(0, 0, W, H, 'pitching');     // home plate, far away
-    const ratio2 = pitchingNear.scale / pitchingFar.scale;
-    if (Math.abs(ratio2 - ratio) / ratio > 0.02) {
-      fail('plate-camera', `pitching's near/far ratio (${ratio2.toFixed(2)}x) does not mirror batting's (${ratio.toFixed(2)}x) - the two modes should be the same camera turned around`);
+    if (a.plate.y <= a.mound.y) {
+      fail('plate-camera', `plate anchor (y=${a.plate.y}) is not below the mound anchor (y=${a.mound.y}) - the plate should read nearer the bottom of the frame`);
     } else {
-      ok('pitching mode mirrors batting mode exactly (same camera, turned around)');
+      ok(`plate anchor sits below the mound anchor (plate.y=${a.plate.y}, mound.y=${a.mound.y})`);
     }
   }
   if (typeof mod.drawPlateView !== 'function' || typeof mod.drawPlateBall !== 'function') {

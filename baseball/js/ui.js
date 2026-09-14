@@ -13,7 +13,7 @@ import * as SETTINGS from './engine/settings.js';
 import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
-import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall } from './field.js';
+import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages } from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
 const t = makeT(STRINGS);
@@ -133,6 +133,8 @@ class BaseballPlayScreen {
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
     if (this._tossRaf) cancelAnimationFrame(this._tossRaf);
+    if (this._swingRaf) cancelAnimationFrame(this._swingRaf);
+    if (this._swingTimeout) clearTimeout(this._swingTimeout);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -242,8 +244,11 @@ class BaseballPlayScreen {
       line1: '', line2: '',
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
+      pitcherPose: 'set',  // 'set' | 'windup' | 'release' - see field.js's drawPitcherFigure
+      swingT: 0,            // 0..1, the bat's ~120ms swing progress - see _animateBatSwing
     };
     this.gameAbort = () => { if (this.game) this.game.abort(); };
+    preloadPlateImages();
 
     this.screen = 'play';
     this._renderPlay();
@@ -304,14 +309,73 @@ class BaseballPlayScreen {
   }
 
   /** The PLATE camera - live for every pitch (aiming, the throw, the swing). See field.js's own
-   *  header for the camera and baseball/CLAUDE.md's "The camera was rebuilt to match the
-   *  reference" for why this is the default view and the overhead camera below is the exception,
-   *  not the other way round. */
+   *  header for the camera (one fixed picture in both states, BB-3b) and baseball/CLAUDE.md's "The
+   *  camera was rebuilt to match the reference" for the history. */
   _drawStaticField() {
     if (!this.ctx || !this._fieldW) return;
     const dark = document.documentElement.classList.contains('gh-dark');
     const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
-    drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark);
+    drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark, {
+      pitcherPose: this.state.pitcherPose,
+      swingT: this.state.swingT,
+      batterFlip: this._currentBatterFlip(),
+    });
+  }
+
+  /** The art is left-handed as drawn (field.js's own header); a right-handed batter is a
+   *  horizontal flip. Whichever team is BATTING supplies the hand, regardless of which state the
+   *  human is in - see `_drawStaticField`'s mode note. */
+  _currentBatterFlip() {
+    if (!this.game) return false;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const battingId = this.game._currentBatterId ? this.game._currentBatterId(battingSide) : null;
+    const team = this.game[battingSide];
+    const batter = team && battingId ? team.players.find((p) => p.id === battingId) : null;
+    return !!(batter && batter.bats === 'R');
+  }
+
+  /** The bat's ~120ms swing (spec section 7), started when the player actually swings. Runs after
+   *  the pitch-flight loop has finished its own per-frame redraws (chained off its promise) so the
+   *  two animation loops never fight over the same canvas in the same frame. */
+  _animateBatSwing() {
+    if (this.destroyed) return;
+    const dur = 120;
+    const t0 = performance.now();
+    const step = (now) => {
+      if (this.destroyed) return;
+      const frac = Math.min(1, (now - t0) / dur);
+      this.state.swingT = frac;
+      this._drawStaticField();
+      if (frac < 1) {
+        this._swingRaf = requestAnimationFrame(step);
+      } else {
+        this._swingTimeout = setTimeout(() => {
+          if (this.destroyed) return;
+          this.state.swingT = 0;
+          this._drawStaticField();
+        }, 150);
+      }
+    };
+    this._swingRaf = requestAnimationFrame(step);
+  }
+
+  /** The pitcher steps set -> wind-up -> release before every pitch the CPU throws to a human
+   *  batter (spec section 9, R1). Wind-up starts 400ms before release; total lead-in is
+   *  `FEEL.ui.windupMs`. A human's OWN pitch (this.state.mode === 'pitching') steps the same three
+   *  poses instead in time with the throw ring's own fill - see HumanAgent.decidePitch's tick(). */
+  async _stepWindup() {
+    const total = WINDUP_MS;
+    const leadIn = Math.max(0, total - 400);
+    this.state.pitcherPose = 'set';
+    this._drawStaticField();
+    if (leadIn > 0) await sleep(leadIn);
+    if (this.destroyed) return;
+    this.state.pitcherPose = 'windup';
+    this._drawStaticField();
+    await sleep(Math.min(400, total));
+    if (this.destroyed) return;
+    this.state.pitcherPose = 'release';
+    this._drawStaticField();
   }
 
   /** The OVERHEAD camera - the cutaway that plays for the batted-ball flight, so the out-zone
@@ -560,16 +624,18 @@ class BaseballPlayScreen {
     });
   }
 
-  /** The pitch, through the plate camera, while PITCHING: the ball leaves the pitcher's hand
-   *  (near, large) and SHRINKS as it recedes toward the plate. Cosmetic, not a mimic of the
-   *  engine's own physics - when the human pitches, the batter is `CpuBatter`, so the resolved
-   *  pitch (its real break, its real x, its real timeToPlateS) is computed and consumed entirely
-   *  inside the engine's own `Game.playPitch` and never reaches this UI (engine/ is unchanged this
-   *  pass - see field.js's header). Building a second, UI-side pitch-physics model to match it
-   *  would risk a toss that visibly disagrees with the engine's own call; a fixed, honest,
-   *  aim-only toss cannot disagree with anything because it never claims to BE the real pitch. Not
-   *  awaited by its caller - a purely visual flourish that never adds real pacing (see
-   *  baseball/CLAUDE.md's "the camera rebuild" note on why this is here at all). */
+  /** The pitch, through the plate camera, while PITCHING: the ball leaves the pitcher's hand at
+   *  the mound (far, small) and GROWS toward the plate - same direction as `_animatePitchFlight`
+   *  now that there is only ONE fixed camera in both states (field.js's own header, BB-3b's camera
+   *  reversal). Cosmetic, not a mimic of the engine's own physics - when the human pitches, the
+   *  batter is `CpuBatter`, so the resolved pitch (its real break, its real x, its real
+   *  timeToPlateS) is computed and consumed entirely inside the engine's own `Game.playPitch` and
+   *  never reaches this UI (engine/ is unchanged this pass - see field.js's header). Building a
+   *  second, UI-side pitch-physics model to match it would risk a toss that visibly disagrees with
+   *  the engine's own call; a fixed, honest, aim-only toss cannot disagree with anything because it
+   *  never claims to BE the real pitch. Not awaited by its caller - a purely visual flourish that
+   *  never adds real pacing (see baseball/CLAUDE.md's "the camera rebuild" note on why this is here
+   *  at all). */
   _animatePitchToss(aimX) {
     return new Promise((resolve) => {
       const dur = 420;
@@ -577,8 +643,8 @@ class BaseballPlayScreen {
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
-        const yFt = 60.5 * frac;
-        const xFt = (aimX || 0) * 6 * frac;
+        const yFt = 60.5 * (1 - frac);
+        const xFt = (aimX || 0) * 6 * (1 - frac);
         this._drawStaticField();
         drawPlateBall(this.ctx, this._fieldW, this._fieldH, xFt, yFt, 'pitching', {});
         if (frac < 1) {
@@ -694,6 +760,8 @@ class HumanAgent {
     const s = this.screen;
     if (s.destroyed) return { type: 'fastball', aim: 0 };
     s.state.mode = 'pitching';
+    s.state.pitcherPose = 'set';
+    s.state.swingT = 0;
     s._paintStrip();
     s._paintModeLabels();
     s._setLine1(''); s._setLine2('');
@@ -709,10 +777,14 @@ class HumanAgent {
       let raf;
       let released = false;
       const start = performance.now();
+      // The pitcher steps set -> wind-up -> release IN TIME WITH the ring's own fill (spec
+      // section 8), not a separate fixed delay the way the CPU's own pitch-to-a-human-batter case
+      // uses (`_stepWindup`) - a human throwing controls the pace themselves via when they release.
       const tick = (now) => {
         if (s.destroyed) return;
         const elapsed = now - start;
         const frac = elapsed / meterMs;
+        s.state.pitcherPose = frac < 0.55 ? 'set' : 'windup';
         if (elapsed > meterMs) {
           s._paintRing('hung', Math.min(1, (elapsed - meterMs) / hangGraceMs));
         } else if (frac >= NICE_CENTER - NICE_HALF) {
@@ -720,6 +792,7 @@ class HumanAgent {
         } else {
           s._paintRing('filling', frac);
         }
+        s._drawStaticField();
         if (!released) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -733,6 +806,8 @@ class HumanAgent {
         s._onMainUp = null;
         const holdMs = performance.now() - start;
         s._paintRing('released', Math.min(1.3, holdMs / meterMs));
+        s.state.pitcherPose = 'release';
+        s._drawStaticField();
         s._animatePitchToss(s.padX); // cosmetic - not awaited, adds no pacing (see its own header)
         resolve({ type: s.state.selectedPitch, aim: s.padX, hold: holdMs, steer: steerSamples });
       };
@@ -744,10 +819,16 @@ class HumanAgent {
     const s = this.screen;
     if (s.destroyed) return { action: 'take' };
     s.state.mode = 'batting';
+    s.state.swingT = 0;
     s._paintModeLabels();
     const pitch = view.pitch;
     s.state.lastPitches.push({ type: pitch.type, isStrike: pitch.isStrike, mph: Math.round(pitchMph(pitch, this.league)) });
     s._paintStrip();
+
+    // The CPU's own wind-up (spec section 9, R1): set -> wind-up 400ms before release -> release,
+    // a fixed lead-in timed off FEEL.ui.windupMs, THEN the ball actually leaves the hand.
+    await s._stepWindup();
+    if (s.destroyed) return { action: 'take' };
 
     const flightPromise = s._animatePitchFlight(pitch);
     s._paintRing('idle', 0);
@@ -769,6 +850,10 @@ class HumanAgent {
         const charged = heldMs >= F.chargeTime;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
         s._paintRing(charged ? 'charged' : 'idle', Math.min(1, heldMs / F.chargeTime));
+        // The bat's own visible swing (R3) - chained off the flight loop's own promise so the two
+        // per-frame redraw loops never race over the same canvas in the same frame (see
+        // _animateBatSwing's own header).
+        flightPromise.then(() => { if (!s.destroyed) s._animateBatSwing(); });
         resolve({ action: 'swing', aimX: s.padX, timingErrorMs: timing, charged });
       };
       s._onMainDown = () => {

@@ -493,256 +493,256 @@ export function planGeometry() {
 }
 
 /* ================================================================================================
- * THE PLATE CAMERA (2026-09-14 camera rebuild) - the real over-the-shoulder view, live for every
- * pitch. Matt: *"a low camera positioned behind and slightly above the batter, looking out toward
- * the pitcher. The batter is in the near foreground at the bottom of the frame... This is a
- * first-person-ish over-the-shoulder view, not a map."* Pitching is the mirror: a low camera
- * behind and slightly above the pitcher, looking in toward home plate.
+ * THE PLATE CAMERA (rebuilt 2026-09-14, BB-3b art pass) - a real painted background
+ * (`baseball/img/plate.webp`, ported from `reference/baseball/backdrop-plate.jpg`), not a
+ * procedural pinhole projection. The prior round (same day, "camera rebuild") built a real
+ * perspective-divide camera from scratch because no approved art existed yet; that math is gone
+ * now that it does. See `baseball/CLAUDE.md`'s BB-3b entry for the full record, but the short
+ * version: a hand-derived camera can never match a hand-painted picture pixel for pixel, so once
+ * the picture exists, the picture IS the camera and everything else positions off six measured
+ * points in it (`PLATE_ANCHORS` below), not off a re-derived lens model.
  *
- * ONE camera definition serves both - `plateSpace()` below transforms world coordinates so
- * "batting" and "pitching" are the same camera looking down the same corridor from opposite ends
- * (home plate is this camera's own origin either way; pitching maps the real world so the mound
- * becomes that origin and turns the batter into the far object, mirroring x the way turning 180
- * degrees actually flips left/right).
- *
- * THE MATH: a real pinhole camera, low (chest height) and close (a couple of feet behind the
- * plate/mound), tilted down only slightly, projected with NO artificial two-point remap on either
- * axis (unlike the overhead camera above) - true perspective division throughout, because the
- * whole point of this camera is the size falloff and the foul-line divergence that only true
- * perspective produces. The constants were solved (not eyeballed) against two targets: home plate
- * near the very bottom of the frame (v ~= 0.90) and the mound at middle distance (v ~= 0.48) - see
- * `/tmp/plate_cam2.mjs`'s grid search (not committed; its output is these numbers). A consequence,
- * checked rather than assumed: with a low, near-level camera, a flat ground plane's vertical
- * position asymptotically approaches a horizon line very quickly past the mound (v moves from 0.90
- * at home to 0.48 at the mound to just 0.465 at true infinity) - true to real low-angle-camera
- * optics, not a bug, but it means there is no honest "to-scale" position for a real fence 300-400ft
- * away: it would sit almost exactly on top of the mound in screen space. So the fence/outfield
- * beyond the mound is a STYLIZED backdrop band (flat colors, not a projected polygon), while
- * everything that actually matters for gameplay - the mound, the dirt, the foul lines, the plate,
- * the two players, the ball - is real projected geometry all the way through.
+ * ONE FIXED CAMERA, both states - this reverses the prior round's 180-degree pitching mirror
+ * (Matt's own earlier call). The handoff's reasoning, carried here rather than re-litigated: the
+ * reference art only exists shot from behind the plate (both batters drawn from behind, the
+ * pitcher facing the camera), a mirror would need art that does not exist (a front-view batter, a
+ * back-view pitcher), and the approved mock is this camera. So the picture never changes between
+ * batting and pitching - only WHICH SPRITE stands at each of the two anchored spots does:
+ * whichever team is BATTING has its batter at the near box (`batter-home.webp` for you,
+ * `batter-away.webp` for the CPU), and whichever team is PITCHING has its pitcher at the mound
+ * (always the three `pitcher-*.webp` poses - the art itself carries no team color). This is a
+ * fixed spectator's view of the at-bat, not literally the human's own first-person view when
+ * pitching - "the two states differ only by which batter sprite stands at the near box and which
+ * label the button carries" (the handoff's own framing). NOT YET RATIFIED BY MATT - report this
+ * reversal back to him rather than presenting it as settled (see the handoff's own report-back
+ * list).
  */
-const D2R = Math.PI / 180;
-const PLATE_CAM_BACK_FT = 2;     // how far behind the near player's own spot the camera sits
-const PLATE_CAM_HEIGHT_FT = 3.5; // chest/shoulder height, low - not a broadcast crane
-const PLATE_CAM_TILT_DEG = 7;    // slight downward tilt so the ground recedes correctly
-const PLATE_CAM_FOCAL = 0.3;     // solved alongside the constants above for the home/mound framing
-const PLATE_CAM_X_SCALE = 2.6;   // lateral aggressiveness - a close camera's foul lines should
-                                  // reach the frame edges within a few feet of the plate, not
-                                  // gently bow outward across the whole depth of the shot
-const PCT = Math.cos(PLATE_CAM_TILT_DEG * D2R);
-const PST = Math.sin(PLATE_CAM_TILT_DEG * D2R);
 
-/** Batting looks from behind home plate toward the mound; pitching is the same camera turned
- *  180deg, so the mound becomes its own "home" and x mirrors (turning around flips left/right). */
-function plateSpace(xFt, yFt, mode) {
-  return mode === 'pitching' ? { fx: -xFt, fy: P - yFt } : { fx: xFt, fy: yFt };
+// ---------------------------------------------------------------------- image loading (sync-cacheable) --
+// `drawPlateView`/`drawPlateBall` run inside `requestAnimationFrame` loops and must stay
+// synchronous, so images are loaded once into a plain cache keyed by filename; a draw call before
+// an image has finished loading just falls back to a flat fill (see `drawPlateView`) rather than
+// awaiting anything mid-frame.
+const IMG_BASE = new URL('../img/', import.meta.url);
+const _plateImages = {};
+function _loadImg(name) {
+  if (name in _plateImages) return;
+  _plateImages[name] = null;
+  const image = new Image();
+  image.onload = () => { _plateImages[name] = image; };
+  image.onerror = () => { /* leaves it null; drawPlateView's fallback fill covers this */ };
+  image.src = new URL(name, IMG_BASE).href;
 }
-function plateRatios(xFt, yFt, mode) {
-  const { fx, fy } = plateSpace(xFt, yFt, mode);
-  const fwd = fy + PLATE_CAM_BACK_FT;
-  const zCam = fwd * PCT + PLATE_CAM_HEIGHT_FT * PST;
-  const yCam = fwd * PST - PLATE_CAM_HEIGHT_FT * PCT;
-  return { fx, zCam, yCam };
+const PLATE_IMAGE_NAMES = [
+  'plate.webp', 'batter-home.webp', 'batter-away.webp', 'bat.webp',
+  'pitcher-set.webp', 'pitcher-windup.webp', 'pitcher-release.webp', 'ball-sheet.webp',
+];
+/** Kick off loading every plate-view image. Idempotent - call as early as convenient (ui.js calls
+ *  it once at construction); a draw before this resolves just shows the flat-fill fallback for a
+ *  frame or two, never throws. */
+export function preloadPlateImages() {
+  for (const name of PLATE_IMAGE_NAMES) _loadImg(name);
 }
-// Reference depth (the near player's own standing spot) - scale 1 there, in EITHER mode, by the
-// symmetry plateSpace() sets up (both modes reduce to the same fwd/zCam at their own origin).
-const PLATE_HOME_Z = plateRatios(0, 0, 'batting').zCam;
-// The true horizon (fwd -> infinity): where the stylized backdrop band starts.
-const PLATE_HORIZON_V = 0.5 - PLATE_CAM_FOCAL * (PST / PCT);
-
-/** Project a point in feet through the PLATE camera. `mode` is 'batting' or 'pitching' - see the
- *  section header. Returns `{x, y, scale}` in the same shape as the overhead camera's `project`. */
-export function projectPlate(xFt, yFt, w, h, mode) {
-  const { fx, zCam, yCam } = plateRatios(xFt, yFt, mode);
-  const v = 0.5 - (PLATE_CAM_FOCAL * yCam) / zCam;
-  const u = 0.5 + (PLATE_CAM_FOCAL * PLATE_CAM_X_SCALE * fx) / zCam;
-  return { x: u * w, y: v * h, scale: Math.max(0.01, PLATE_HOME_Z / zCam) };
+function plateImg(name) {
+  if (!(name in _plateImages)) _loadImg(name);
+  return _plateImages[name];
 }
 
-function plateScreen(xFt, yFt, w, h, mode) {
-  const p = projectPlate(xFt, yFt, w, h, mode);
-  return { x: p.x, y: p.y };
+// ---------------------------------------------------------------------- anchors, measured once --
+// Six points, measured directly off `baseball/img/plate.webp` (1200x2062) as fractions of that
+// picture's own width/height - NOT of the canvas, which is a different aspect ratio at every phone
+// height. `plateCover()` below is what turns a fraction into a screen pixel, so re-measuring only
+// ever means editing this table, never touching any drawing code.
+export const PLATE_ANCHORS = {
+  plate: { x: 0.500, y: 0.728 },       // home plate's own center
+  mound: { x: 0.500, y: 0.463 },       // the rubber
+  release: { x: 0.550, y: 0.420 },     // where a pitcher's throwing hand sits, mound depth
+  strikeZoneWidthFrac: 0.18,           // of the picture's own drawW - see the floor below
+  nearBoxLeft: { x: 0.229, y: 0.749 },
+  nearBoxRight: { x: 0.771, y: 0.749 },
+};
+// Section 6 of the spec: "The strike zone has a floor of 0.30W wide so the pad's travel never
+// becomes a slider of a few pixels." Applied at render time against the CANVAS width, not the
+// picture's own fraction, so a narrow phone still gets a usable zone even though the picture's own
+// anchor fraction is smaller than that.
+const PLATE_ZONE_FLOOR = 0.30;
+// Sizes as fractions of the field BAND height (not the picture), per the handoff's own measurement
+// off the mock: the near batter fills about half the band, the mound pitcher about a ninth of it.
+const NEAR_BATTER_HEIGHT_FRAC = 0.50;
+const MOUND_PITCHER_HEIGHT_FRAC = 0.11;
+
+/** `plate.webp` fitted to a `w`x`h` canvas the way CSS `background-size: cover; background-position:
+ *  bottom center` would: scaled up to cover both dimensions (cropping whichever axis overflows),
+ *  anchored at the bottom so the plate itself sits a fixed pixel distance from the band's own
+ *  bottom edge at every phone height - see spec section 6, "so a cut between them moves nothing
+ *  else on the screen." Returns null while the image is still loading. */
+function plateCover(w, h) {
+  const im = plateImg('plate.webp');
+  if (!im) return null;
+  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+  if (!iw || !ih) return null;
+  const scale = Math.max(w / iw, h / ih);
+  const drawW = iw * scale, drawH = ih * scale;
+  return { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: h - drawH, scale };
 }
-function platePath(ctx, pts, w, h, mode) {
-  ctx.beginPath();
-  pts.forEach((pt, i) => {
-    const s = plateScreen(pt.x, pt.y, w, h, mode);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  });
-  ctx.closePath();
-}
-/** A small ground-level circle (the plate dirt, the mound), sampled around its true world edge and
- *  projected point by point - NOT drawn as a screen-space ellipse. This is what makes it read as a
- *  patch of ground seen from low and close (wide and short) rather than a shape hovering in space. */
-function plateGroundCircle(cx, cy, radiusFt, w, h, mode, fromDeg = 0, toDeg = 360) {
-  const pts = [];
-  const N = 20;
-  for (let i = 0; i <= N; i++) {
-    const deg = fromDeg + ((toDeg - fromDeg) * i) / N;
-    const a = deg * D2R;
-    pts.push({ x: cx + Math.sin(a) * radiusFt, y: cy + Math.cos(a) * radiusFt });
-  }
-  return pts;
+/** A `PLATE_ANCHORS`-shaped `{x,y}` fraction of the picture -> screen px, given a `plateCover()`
+ *  transform. Every on-screen position in this camera goes through this one function. */
+function anchorPx(frac, cover) {
+  return { x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH };
 }
 
-/** A flat 2D player silhouette (no assets in this repo for a modeled figure) - a cap, a head, and
- *  a torso/legs capsule, drawn at `xFt,yFt` and scaled by that point's own camera scale so it sits
- *  correctly in the perspective (huge in the near foreground, tiny in the distance) without a
- *  separate size system of its own. `facing` is 1 (facing away from camera, toward the far end -
- *  the near player, seen from behind/the side) or -1 (facing the camera - the far player, seen
- *  face-on). Deliberately static - no windup/swing pose states this pass (see field.js's own
- *  header and baseball/CLAUDE.md - pacing/windup/swing feedback are explicitly out of scope). */
-// A figure standing exactly at the camera's own reference depth (scale 1.0) is drawn at this
-// fraction of the frame's own height - not a real-world foot conversion (this ground-only camera
-// model has no true vertical/elevation axis, only the ground-plane depth `scale` already computed
-// for everything else), a directly-tuned fraction chosen to match the reference's own framing: the
-// near player fills roughly half the frame, the far one reads as a small, clearly separate figure.
-const PLATE_FIGURE_REF_FRAC = 0.6;
-function drawPlateFigure(ctx, w, h, xFt, yFt, mode, color) {
-  const p = projectPlate(xFt, yFt, w, h, mode);
-  const scale = p.scale;
-  const bodyH = Math.max(3, h * PLATE_FIGURE_REF_FRAC * scale);
-  const bodyW = bodyH * 0.42;
-  const legH = bodyH * 0.42;
-  const torsoH = bodyH * 0.4;
-  const headR = bodyH * 0.16;
+// ---------------------------------------------------------------------- figures --
+// Measured on `batter-home.webp`/`batter-away.webp` (same pose, 300x700): the fists, where the bat
+// handle sits, as a fraction of the sprite's own width/height (0,0 top-left, feet at the bottom
+// edge since the sprite is trimmed to its own bounding box).
+const BATTER_HAND_FRAC = { x: 0.42, y: 0.345 };
+// Measured on `bat.webp` (290x500): the round grip knob at the handle end - the point the bat
+// rotates about.
+const BAT_GRIP_FRAC = { x: 0.30, y: 0.85 };
+const BAT_IDLE_ANGLE_DEG = -18; // held up near the shoulder, matching the mock's resting pose
+const BAT_SWING_DEG = 140;      // spec section 7: "rotating about the hands by about 140 degrees"
+const BAT_HEIGHT_OF_BATTER = 0.62; // the bat's own drawn height, as a fraction of the batter's
+
+/** The near-box batter, with the bat rotating about the batter's own hands. `swingT` 0..1 is the
+ *  spec's ~120ms swing (see ui.js's `_animateBatSwing`); `flip` mirrors the whole group (the art is
+ *  left-handed as drawn - spec section 2 - so a right-handed batter is a horizontal flip, not a
+ *  second sprite). Anchored at its own FEET, not its center, so `heightPx` alone fixes its scale. */
+function drawBatterFigure(ctx, imgName, anchor, heightPx, opts = {}) {
+  const batterImage = plateImg(imgName);
+  if (!batterImage) return;
+  const iw = batterImage.naturalWidth || batterImage.width, ih = batterImage.naturalHeight || batterImage.height;
+  if (!iw || !ih) return;
+  const scale = heightPx / ih;
+  const dw = iw * scale, dh = ih * scale;
   ctx.save();
-  ctx.translate(p.x, p.y);
-  // legs
-  ctx.fillStyle = 'rgba(20,20,25,0.85)';
-  ctx.fillRect(-bodyW * 0.28, -legH, bodyW * 0.24, legH);
-  ctx.fillRect(bodyW * 0.04, -legH, bodyW * 0.24, legH);
-  // torso
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(-bodyW / 2, -legH - torsoH, bodyW, torsoH, bodyW * 0.3)
-    : ctx.rect(-bodyW / 2, -legH - torsoH, bodyW, torsoH);
-  ctx.fill();
-  // head
-  ctx.beginPath();
-  ctx.arc(0, -legH - torsoH - headR, headR, 0, Math.PI * 2);
-  ctx.fillStyle = '#e8c39e';
-  ctx.fill();
-  // cap
-  ctx.beginPath();
-  ctx.arc(0, -legH - torsoH - headR, headR * 1.05, Math.PI, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
+  ctx.translate(anchor.x, anchor.y);
+  if (opts.flip) ctx.scale(-1, 1);
+  ctx.drawImage(batterImage, -dw / 2, -dh, dw, dh);
+
+  const batImage = plateImg('bat.webp');
+  if (batImage && (batImage.naturalWidth || batImage.width)) {
+    const handX = -dw / 2 + dw * BATTER_HAND_FRAC.x;
+    const handY = -dh + dh * BATTER_HAND_FRAC.y;
+    const bw0 = batImage.naturalWidth || batImage.width, bh0 = batImage.naturalHeight || batImage.height;
+    const bScale = (dh * BAT_HEIGHT_OF_BATTER) / bh0;
+    const bw = bw0 * bScale, bh = bh0 * bScale;
+    const swingT = opts.swingT || 0;
+    const angleDeg = BAT_IDLE_ANGLE_DEG - BAT_SWING_DEG * swingT;
+    ctx.save();
+    ctx.translate(handX, handY);
+    ctx.rotate((angleDeg * Math.PI) / 180);
+    ctx.drawImage(batImage, -bw * BAT_GRIP_FRAC.x, -bh * BAT_GRIP_FRAC.y, bw, bh);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
-/** The full static plate-view scene: sky/backdrop, grass, the two dirt patches (plate + mound),
- *  the rubber, foul lines, home plate, and both players. Everything but the sky/fence backdrop is
- *  real projected ground-plane geometry - see the section header for why the backdrop alone is
- *  stylized. `dark` is accepted for call-site compatibility (see the overhead camera's own note)
- *  but this camera's night-stadium palette is close to what a dark-mode reader would want anyway,
- *  so it is used lightly (a cooler sky) rather than ignored outright. League is not a parameter -
- *  the backdrop is stylized regardless of league (see the section header), and every other shape
- *  here (the mound, the plate, the foul lines) is at fixed real-world distances that don't vary by
- *  league the way the outfield fence does. */
-export function drawPlateView(ctx, w, h, mode, dark) {
+/** The mound pitcher, one of the three poses. `pose` is 'set' | 'windup' | 'release' (spec section
+ *  9's CPU wind-up; ui.js drives it - for the CPU pitching to a human batter, a fixed lead-in
+ *  timed off `FEEL.ui.windupMs`; for a human pitching, in step with the throw ring's own fill).
+ *  Anchored at its own feet, same convention as the batter. */
+function drawPitcherFigure(ctx, pose, anchor, heightPx) {
+  const name = pose === 'windup' ? 'pitcher-windup.webp' : pose === 'release' ? 'pitcher-release.webp' : 'pitcher-set.webp';
+  const im = plateImg(name);
+  if (!im) return;
+  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+  if (!iw || !ih) return;
+  const scale = heightPx / ih;
+  const dw = iw * scale, dh = ih * scale;
+  ctx.drawImage(im, anchor.x - dw / 2, anchor.y - dh, dw, dh);
+}
+
+/** The full plate-view scene: the picture, the strike zone, and both figures. `mode` is 'batting'
+ *  or 'pitching' - selects which sprite plays the BATTER role (see the section header: the picture
+ *  and the anchors never change, only which sprite stands where and the ring/button labels do).
+ *  `dark` is accepted for call-site compatibility (every other camera-view field in this repo takes
+ *  it) but unused - this picture has one identity, same as the overhead camera above.
+ *  `opts`: `pitcherPose` ('set'|'windup'|'release'), `swingT` (0..1, the batter's bat-swing
+ *  progress), `batterFlip` (bool, true for a right-handed batter - see drawBatterFigure). */
+export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
-
-  const horizonY = h * PLATE_HORIZON_V;
-  const backdropTopY = Math.max(0, horizonY - h * 0.14);
-
-  // Sky / stadium backdrop (stylized - see header).
-  ctx.fillStyle = dark ? '#16202f' : '#8fc3ec';
-  ctx.fillRect(0, 0, w, backdropTopY);
-  ctx.fillStyle = dark ? '#22303f' : '#4a6b52';
-  ctx.fillRect(0, backdropTopY, w, Math.max(0, horizonY - backdropTopY) + 2);
-
-  // Grass, full ground plane.
-  ctx.fillStyle = '#3f6b34';
-  ctx.fillRect(0, horizonY, w, h - horizonY);
-
-  // Mound dirt patch - the HOME-FACING HALF ONLY (angles 90-270 around the mound's own center,
-  // per plateGroundCircle's own convention), not a full circle. In batting mode the mound is far
-  // (safe either way), but in pitching mode this same world point IS the camera's own near
-  // reference - a full circle would sample points on the far side of the mound, behind the pitcher
-  // (and briefly behind the camera itself), which is exactly what produced a self-crossing
-  // hourglass smear the first time this was tried (found on a real render, not assumed). The back
-  // half is naturally hidden behind the pitcher's own body from this angle anyway, so cutting it is
-  // also just correct, not merely a workaround.
-  platePath(ctx, plateGroundCircle(0, P, 9, w, h, mode, 90, 270), w, h, mode);
-  ctx.fillStyle = '#a9713f';
-  ctx.fill();
-  // The rubber is a near-field detail under the pitcher's own feet - only drawn in batting mode,
-  // where it is small and far (safe). In pitching mode it would sit almost exactly at the camera's
-  // own position (the same near-singularity the mound circle above has to dodge) and would in any
-  // case be occluded by the pitcher's own body from this angle, so it is simply not drawn there.
-  if (mode === 'batting') {
-    platePath(ctx, [{ x: -1, y: P - 0.25 }, { x: 1, y: P - 0.25 }, { x: 1, y: P + 0.25 }, { x: -1, y: P + 0.25 }], w, h, mode);
-    ctx.fillStyle = '#f4f6fb';
-    ctx.fill();
+  const cover = plateCover(w, h);
+  if (!cover) {
+    // Still loading - a flat fill so the band is never a blank/transparent hole for a frame.
+    ctx.fillStyle = '#2f4a22';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+    return;
   }
+  const plateImage = plateImg('plate.webp');
+  ctx.drawImage(plateImage, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
 
-  // Home-plate dirt fan - a hand-placed forward-biased trapezoid (never a true circle sampled
-  // behind the camera, which the 2ft camBack makes a real risk this close in) covering the
-  // batter's box and the ground immediately in front of the plate.
-  platePath(ctx, [{ x: -9, y: 0.3 }, { x: 9, y: 0.3 }, { x: 6, y: 16 }, { x: -6, y: 16 }], w, h, mode);
-  ctx.fillStyle = '#a9713f';
-  ctx.fill();
+  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
+  const moundXY = anchorPx(PLATE_ANCHORS.mound, cover);
+  const nearXY = anchorPx(PLATE_ANCHORS.nearBoxRight, cover);
 
-  // Foul lines: home plate outward toward the mound and beyond - true perspective divergence,
-  // no hand-tuned curve.
-  const linePts = [];
-  for (let yf = 0; yf <= 70; yf += 2) linePts.push({ x: yf, y: yf });
-  ctx.beginPath();
-  linePts.forEach((pt, i) => { const s = plateScreen(pt.x, pt.y, w, h, mode); if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y); });
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.beginPath();
-  linePts.forEach((pt, i) => { const s = plateScreen(-pt.x, pt.y, w, h, mode); if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y); });
-  ctx.stroke();
+  // Strike zone, above the plate - floored to 0.30 of the CANVAS width (spec section 6) so a
+  // narrow phone never turns the pad's travel into a slider of a few pixels.
+  const zoneW = Math.max(w * PLATE_ZONE_FLOOR, PLATE_ANCHORS.strikeZoneWidthFrac * cover.drawW);
+  const zoneH = zoneW * 0.62;
+  const zoneBottom = plateXY.y - zoneW * 0.12;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(plateXY.x - zoneW / 2, zoneBottom - zoneH, zoneW, zoneH);
 
-  // Home plate pentagon.
-  platePath(ctx, platePolygon(), w, h, mode);
-  ctx.fillStyle = '#f4f6fb';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // The two players. The NEAR one (whichever the camera is behind) is huge foreground, off to one
-  // side of the plate/mound the way an over-the-shoulder shot naturally frames its own subject; the
-  // FAR one stands where their role puts them.
-  const cbTeal = '#178A7A', cbBlue = '#1F5FA8';
-  if (mode === 'batting') {
-    drawPlateFigure(ctx, w, h, 0, P, 'batting', cbBlue);      // pitcher, far, on the mound
-    drawPlateFigure(ctx, w, h, 1.2, 2.0, 'batting', cbTeal);  // batter, near, in the box
-  } else {
-    drawPlateFigure(ctx, w, h, 0, 0, 'pitching', cbTeal);     // batter, far, at the plate
-    drawPlateFigure(ctx, w, h, -1.0, P - 2, 'pitching', cbBlue); // pitcher, near, on the mound
-  }
+  // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
+  // mound - independent of whether the human is batting or pitching (see the section header).
+  const batterImgName = mode === 'pitching' ? 'batter-away.webp' : 'batter-home.webp';
+  drawBatterFigure(ctx, batterImgName, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, {
+    flip: !!opts.batterFlip,
+    swingT: opts.swingT || 0,
+  });
+  drawPitcherFigure(ctx, opts.pitcherPose || 'set', moundXY, h * MOUND_PITCHER_HEIGHT_FRAC);
 
   ctx.restore();
 }
 
-// Same reasoning as PLATE_FIGURE_REF_FRAC: a ball at the camera's own reference depth (scale 1.0)
-// reads at this fraction of the frame's height across its diameter - tuned so it reads as "about
-// to reach the batter/camera" near the plate and as a small dot leaving the pitcher's hand.
-const PLATE_BALL_REF_FRAC = 0.045;
-/** The ball, through the plate camera - grows as it approaches (batting) or shrinks as it
- *  recedes (pitching), driven entirely by `projectPlate`'s own scale, never a separate curve. */
+// A ball at the plate (depthFrac 0) reads at this fraction of the field band's own height across
+// its diameter; it shrinks toward `PLATE_BALL_FAR_MULT` of that at the mound/release (depthFrac 1).
+const PLATE_BALL_REF_FRAC = 0.05;
+const PLATE_BALL_FAR_MULT = 0.22; // matches MOUND_PITCHER_HEIGHT_FRAC / NEAR_BATTER_HEIGHT_FRAC
+
+/** The ball, through the plate camera. `yFt` is feet of travel from the plate (0) toward the
+ *  mound/release point (60.5) - BOTH callers (`_animatePitchFlight` for batting,
+ *  `_animatePitchToss` for pitching) already count it that way, since this is now one fixed camera
+ *  in both modes (see the section header) rather than two cameras with opposite conventions.
+ *  `xFt` is a lateral offset from the plate's own centerline. This is still a straight-line
+ *  interpolation between the `release` and `plate` anchors, not the engine's real flight path -
+ *  that lands in commit 4 (`baseball/CLAUDE.md`'s BB-3b entry, "the ball flies the truth"). */
 export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
-  const p = projectPlate(xFt, yFt, w, h, mode);
-  const r = Math.max(1.5, h * PLATE_BALL_REF_FRAC * (opts.sizeMult || 1) * p.scale);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-  ctx.lineWidth = Math.max(0.5, 1.2 * p.scale);
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.stroke();
-  ctx.restore();
-  return p;
+  const cover = plateCover(w, h);
+  if (!cover) return { x: w / 2, y: h / 2, scale: 1 };
+  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
+  const releaseXY = anchorPx(PLATE_ANCHORS.release, cover);
+  const depthFrac = Math.max(0, Math.min(1, yFt / 60.5));
+  const x = plateXY.x + (releaseXY.x - plateXY.x) * depthFrac + (xFt / 8.5) * (w * 0.12) * depthFrac;
+  const y = plateXY.y + (releaseXY.y - plateXY.y) * depthFrac;
+  const scale = 1 - depthFrac * (1 - PLATE_BALL_FAR_MULT);
+  const r = Math.max(1.5, h * PLATE_BALL_REF_FRAC * (opts.sizeMult || 1) * scale);
+
+  const ballSheet = plateImg('ball-sheet.webp');
+  if (ballSheet && (ballSheet.naturalWidth || ballSheet.width)) {
+    const frames = 10;
+    const frameIdx = Math.floor(((opts.spin || 0) % 1 + 1) % 1 * frames) % frames;
+    const fw = (ballSheet.naturalWidth || ballSheet.width) / frames;
+    const fh = ballSheet.naturalHeight || ballSheet.height;
+    ctx.drawImage(ballSheet, frameIdx * fw, 0, fw, fh, x - r, y - r, r * 2, r * 2);
+  } else {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.lineWidth = Math.max(0.5, 1.2 * scale);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.stroke();
+    ctx.restore();
+  }
+  return { x, y, scale };
 }
 
 export default {
   project, drawField, drawBall, drawLandingMarker, planGeometry,
-  projectPlate, drawPlateView, drawPlateBall,
+  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall,
 };
