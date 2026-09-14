@@ -1017,6 +1017,31 @@ export const CHAMPION_CEILING = 'nextLeagueRow';
 // comment already noted Majors' champion row sat with zero headroom left on that axis alone).
 export const SLOT_SIGMA_DESCENT = { bindThroughSlot: 4, descentToSlot: 7 };
 
+// ---------------------------------------------------------------------------------------------
+// Phase 3 (BB-3): the UI input seams the engine had constants for but no way to feed. Doc §12/§14
+// name hold-and-release pitching and steerable breaks; FEEL.engine already carried meterTime/
+// niceWidth/niceBoost/niceBreak from phase 1 with nothing reading them. Draft, new this phase.
+
+// How far past the meter's own fill time (FEEL.engine.meterTime) a release still counts as "in
+// the meter" before it is scored a hang - the meter doesn't stop dead at meterTimeMs, a release a
+// little past it is a LATE-but-still-active release, not a broken input.
+export const HANG_GRACE_FRAC = 0.25; // Draft, new
+// A pitch held into the hang region: slower (this multiplies timeToPlateS) and less steerable
+// (this multiplies steer's own effect) than a normal throw, and drifts toward the center of the
+// zone rather than landing on the pitcher's aim - overheld, everything about it goes soft.
+export const HANG_SPEED_MULT = 1.18;   // Draft, new
+export const HANG_BREAK_MULT = 0.4;    // Draft, new
+export const HANG_CENTER_PULL = 0.6;   // Draft, new - 0 = no pull toward center, 1 = lands dead center
+
+// Steering: only these two pitch types steer at all (doc §11, [Locked]: curve/slider break away
+// from the throwing arm; a human steers HOW MUCH and WHEN, never which way). `steerFromFrac` is
+// the fraction of the pitch's own flight (0..1) before which a steer sample is ignored - curveball
+// steers from the moment it leaves the hand, slider only once it's already halfway home.
+export const STEERABLE_PITCHES = { curveball: { steerFromFrac: 0 }, slider: { steerFromFrac: 0.5 } };
+// How much a fully-weighted steer stream can bend the pitch, as a fraction of the plate half-width
+// - bounded well under a full zone width so steering nudges a break, it does not relocate the pitch.
+export const STEER_MAX_OFFSET = 0.35; // Draft, new
+
 export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
@@ -1036,4 +1061,5 @@ export default {
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
   LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights, CHAMPION_SIGMA_HEADROOM_FRAC,
+  HANG_GRACE_FRAC, HANG_SPEED_MULT, HANG_BREAK_MULT, HANG_CENTER_PULL, STEERABLE_PITCHES, STEER_MAX_OFFSET,
 };

@@ -4,6 +4,109 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 3 complete — the game is real and playable (2026-09-14)
+
+**Matt can open the hub, tap the `devOnly` Baseball tile, pick a league, and play a full
+three-inning Quick Play game against the CPU, batting and pitching both real.** The phase-0
+placeholder screen is gone. What shipped, against the phase 3 handoff's own eight-commit plan:
+
+- **Commit 1 (engine seams)**: `flyPitch()` gained hold-and-release (`pitchExtras.hold` — a
+  release inside `FEEL.engine.meterTime`'s Nice window lands exactly on aim and travels faster
+  via `niceBoost`; past `HANG_GRACE_FRAC` past the meter it hangs — slower, less break, drifts
+  toward center) and steering (`pitchExtras.steer`, curveball/slider only, weighted toward
+  earlier samples, `STEERABLE_PITCHES.steerFromFrac` gating when a slider starts honoring it) and
+  now returns the per-step flight `path` the UI draws from. `swing.js` gained
+  `computeSwingTiming()`, mapping a raw release timestamp to `timingErrorMs`/`swingStep` via
+  `swingDelay`/`inputOffset`. All additive and optional — no existing caller's output changed.
+- **Commit 2 (field renderer)**: `baseball/js/field.js`, a pseudo-perspective camera (behind home
+  plate, looking at center field) drawing from `FIELD[league]`/`zonesFor()` — grass, dirt,
+  foul lines, fence, mound, home plate, three bases, outfield out-zone hatching (infield hatching
+  was drawn once and removed — at this camera's scale it read as noise across the plate rather
+  than a legible zone), plus the ball and landing markers (X for an out, a base-labeled circle for
+  a hit, HR for a homer). **No mocks branch existed to lift the approved camera/field art from** —
+  `claude/baseball-mocks`, named in this phase's own handoff, is not on the remote (checked before
+  starting; the user confirmed proceeding from the design doc alone). This is therefore a first
+  cut, not an approved design — **the camera angle is exactly the open question the handoff itself
+  flagged, and Matt should judge it now that the ball actually moves on it.**
+- **Commits 3-6 (the play screen, batting, pitching, the game loop)**: `baseball/js/ui.js`
+  replaces the placeholder wholesale. Four fixed bands — HUD 48px, field (remainder), pitch strip
+  108px, control band 172px — measured identical between batting and pitching in a real headless
+  Chromium (see "Verification" below). A `HumanAgent` implements the engine's
+  `decidePitch`/`decideSwing` by driving real touch input: the pad sets aim/sweet-spot/steer, the
+  ring is the pitching throw meter (fills over `meterTime`, release timing decides
+  normal/Nice/Hang), the main button is Swing/Pitch and carries Hill Climb's rapid-tap cure
+  verbatim (non-passive `touchstart` with `preventDefault`, pointer events ignoring
+  `pointerType === 'touch'`, `selectstart` blocked on the root). Quick Play setup is a `.gh-seg`
+  league picker plus Play; everything else (opponent slot, player skills preset, batting hand) is
+  randomized per the spec. A real `Game` from `js/engine/game.js` plays 3 innings, player's team
+  batting first (away), CPU (`makeLeague(league)`, one random slot) at home; the end-of-game modal
+  shows the line and Play again / Done.
+- **Commit 7 (Tune panel)**: a `devOnly`-gated sheet of live sliders over `FEEL.engine`/`FEEL.ui`,
+  applied on the next pitch with no restart, plus a Copy settings button.
+- **Commit 8 (ship)**: `sw.js` `ASSETS` gained `baseball/js/field.js`; `CACHE` bumped
+  `game-hub-v830` → **`game-hub-v831`** (main had not moved past v830, so no drift to bump past).
+
+### What is deliberately NOT built this phase (per the handoff's own scope)
+
+Career, standings, points, skills allocation, player creation, the career store, stats recording,
+the leaderboard, trophies, steal/bunt/pickoff (the three action slots render, disabled, with a
+"Not yet" tooltip), screwball/eephus/cutter pitches, Majors park shapes, sound. `isInProgress()`
+returns `false` with a comment pointing at career autosave as phase 4's job.
+
+### Things the spec asked for that were simplified, and why
+
+- **The steering UI (a drag arrow on the pad after release, sampling the drag each step) is
+  wired at the engine level (commit 1's `resolveSteer`) but the play-screen's own steer-sampling
+  loop was not built this pass** — `HumanAgent.decidePitch` resolves with an empty `steer: []`
+  today. Curveball and slider still throw and register as those types; they simply never bend
+  from a drag. This is the single largest gap between the shipped build and the full spec and is
+  the first thing a phase-4 (or same-day follow-up) session should close — the engine seam is
+  ready and tested, only the pad's post-release drag listener is missing.
+- **The pitching pad currently sets aim before the throw only**; per-step in-flight steering
+  input (dragging the pad *while the ball travels*) was not wired for the same reason.
+- **The batting-state pitch strip shows the last 8 pitches as compact chips** (code + mph + a
+  ball/strike color), not the fuller per-pitch history card the handoff sketched — a deliberate
+  space simplification to fit 108px on a phone width.
+- **The camera is a cheap 2D-canvas pseudo-perspective, not a true 3D scene.** Faster to ship and
+  fully deterministic to test, but it is a first cut exactly where the handoff expected one; see
+  the field-renderer note above.
+
+### Verification (2026-09-14, real headless Chromium at 393x852)
+
+A full 3-inning Quick Play game was driven end to end with real `touchscreen.tap()` calls on
+`[data-role="mainbtn"]`: batting progressed through the lineup, the half-inning correctly turned
+over to pitching (CPU scored a run against the player's own pitching), and the game ended on the
+real end-modal ("You lose", "You 0 - 1 CPU", Play again / Done) — no page errors, no console
+errors traceable to this code (one benign `Failed to load resource: 404` reproduces even with no
+baseball code involved and does not appear when the profile is pre-seeded, i.e. it is a name-gate/
+Firebase artifact of this sandbox having no real network egress, not a baseball defect).
+**Measured band heights: `.bb-hud` 48px, `.bb-strip` 108px, `.bb-control` 172px, byte-identical in
+both batting and pitching modes** (fixed via `box-sizing: border-box` on every `.bb-root`
+descendant — without it padding pushed the strip to 124px).
+
+```
+node baseball/js/test.js          -> 2554 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node test-i18n-strings.mjs        -> 0 failures
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node validate-sw-assets.mjs       -> ok (game-hub-v831, 449 precached entries)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+node test-visual.mjs baseball     -> 13 passed, 0 failed (draws clean light/dark/reduced-motion,
+                                      fits both hosts at both heights; contact sheet reviewed)
+```
+
+`playwright-core` is not installed in this repo's own `node_modules` (only a global `playwright`
+package existed in this environment) — a `node_modules/playwright-core` symlink to the global
+package's nested copy was created locally to run the visual/scroll suites and is **not** part of
+this commit; a future session without that symlink will see those two suites SKIP, same as any
+environment missing the browser dependency.
+
+### Open UI item carried from the mocks round, not in this phase's scope
+
+Career home's standings block leaves a large blank region below the row list at the tall phone
+(reported during the mocks round). That screen does not exist yet in this repo (career is phase 4+
+territory) — noted here so whichever phase builds career home picks it up rather than re-finding it.
+
 ## Status: Phase 2 complete
 
 **Every band and tuning constant in `baseball/js/engine/settings.js` is Draft and adjustable from
