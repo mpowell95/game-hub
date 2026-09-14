@@ -152,6 +152,24 @@ function baseCenters(B) {
   };
 }
 
+// The four basepath LANES: dirt strips 6ft wide, centered on the straight line
+// joining each pair of bases (3ft either side) - in (s,t) space every lane is a
+// plain axis-aligned rectangle, same trick as the bases and the grass square.
+// home-first and third-home sit ON the foul lines, so their outer 3ft falls in
+// what would otherwise be foul territory (real infields cut it that way too);
+// first-second and second-third sit on the diamond's other two edges, so their
+// outer 3ft falls in what would otherwise be the outfield-facing skin - already
+// dirt there, so it costs nothing to redraw.
+function basepathLanes(B) {
+  const rectST = (s0, s1, t0, t1) => [[s0, t0], [s1, t0], [s1, t1], [s0, t1]].map(([s, t]) => stToXY(s, t));
+  return {
+    homeFirst: rectST(0, B, -3, 3),
+    homeThird: rectST(-3, 3, 0, B),
+    firstSecond: rectST(B - 3, B + 3, 0, B),
+    secondThird: rectST(0, B, B - 3, B + 3),
+  };
+}
+
 // Batter's boxes: 4ft wide x 6ft long, one each side, 6in (0.5ft) of dirt to the
 // plate's own front-corner edge (x = PLATE_FRONT_W/2).
 const BOX_W = 4, BOX_L = 6, BOX_GAP = 0.5;
@@ -219,6 +237,57 @@ function hatchPattern(ctx) {
 function toScreen(pt, w, h) {
   const p = project(pt.x, pt.y);
   return { x: p.u * w, y: p.v * h };
+}
+
+// A "ground widget" (a small, roughly circular dirt feature - the home-plate
+// circle, the mound) is smaller on screen than a naive per-point projection of
+// its true edge would give: at 13ft, home plate's circle spans a large enough
+// slice of the frame, this close to the camera, that its own near/far edges sit
+// at meaningfully different depths and each gets projected at ITS OWN local
+// scale - the near edge (closer to the camera than home itself) comes out
+// bigger than the feet-to-pixels rate the rest of the field reads at. A single
+// isotropic scale - measured the same way anything else in the picture would
+// be measured, e.g. home-to-first's own screen length over its own 90ft - is
+// what keeps a small feature reading at the same scale as its surroundings.
+function groundScale(refA, refB, refFt, w, h) {
+  const a = toScreen(refA, w, h), b = toScreen(refB, w, h);
+  return Math.hypot(b.x - a.x, b.y - a.y) / refFt;
+}
+function drawGroundCircle(ctx, center, radiusFt, scalePxPerFt, w, h) {
+  const c = toScreen(center, w, h);
+  const r = radiusFt * scalePxPerFt;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+}
+
+// Where a foul line should stop. The true fence intersection (radius fenceFt at
+// +/-45deg) sits far outside the frame at this camera's calibrated field of view
+// (it is not a rendering bug - a locked camera this close to home plate simply
+// cannot frame the full 90 degrees of fair territory out to a real fence), so a
+// foul line drawn to that true point exits through the SIDE of the canvas, well
+// past where the fence arc itself has already left the frame through the TOP -
+// which is the "runs past the fence, to the corners" defect. The fence arc IS
+// the fence as far as this picture can show it, so a foul line stops wherever
+// that arc's own drawn curve leaves the canvas, on the matching side.
+function fenceExitPoint(fenceR, side, w, h) {
+  const N = 400;
+  let prev = null;
+  for (let i = 0; i <= N; i++) {
+    const angle = side * 45 * (i / N);
+    const pt = polar(angle, fenceR);
+    const s = toScreen(pt, w, h);
+    if (s.x < 0 || s.x > w || s.y < 0 || s.y > h) {
+      if (!prev) return s; // already off-frame at angle 0 - shouldn't happen here
+      // linear interpolate between prev (in-frame) and s (out-of-frame) to the
+      // exact edge crossed
+      const target = s.x < 0 ? 0 : s.x > w ? w : (s.y < 0 ? 0 : h);
+      const usesX = s.x < 0 || s.x > w;
+      const t = usesX ? (target - prev.x) / (s.x - prev.x) : (target - prev.y) / (s.y - prev.y);
+      return { x: prev.x + (s.x - prev.x) * t, y: prev.y + (s.y - prev.y) * t };
+    }
+    prev = s;
+  }
+  return prev; // never left the frame (a short enough fence) - the true endpoint
 }
 function pathFor(ctx, pts, w, h) {
   ctx.beginPath();
@@ -305,28 +374,30 @@ export function drawField(cv, opts) {
   ctx.fillStyle = GRASS;
   ctx.fill();
 
-  // 4. home-plate dirt circle, punched back through the grass square's near corner.
-  const homeR = homeCircleRadius(B);
-  const homeCirclePts = [];
-  for (let i = 0; i <= 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    homeCirclePts.push({ x: Math.cos(a) * homeR, y: Math.sin(a) * homeR });
-  }
-  pathFor(ctx, homeCirclePts, w, h);
+  // 4. the four basepath LANES, cut back through the grass square (and, for the
+  // two lanes that ride the foul lines, through the foul-territory tint too).
+  const lanes = basepathLanes(B);
   ctx.fillStyle = DIRT;
-  ctx.fill();
+  for (const key of ['homeFirst', 'homeThird', 'firstSecond', 'secondThird']) {
+    pathFor(ctx, lanes[key], w, h);
+    ctx.fill();
+  }
 
-  // 5. mound dirt circle - an island of dirt entirely inside the grass square.
-  const moundPts = [];
-  for (let i = 0; i <= 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    moundPts.push({ x: Math.cos(a) * MOUND_RADIUS, y: mCY + Math.sin(a) * MOUND_RADIUS });
-  }
-  pathFor(ctx, moundPts, w, h);
+  // 5. home-plate and mound dirt circles. Drawn at a single ISOTROPIC feet-to-
+  // pixels scale (see groundScale/drawGroundCircle above) rather than projecting
+  // each boundary point through the full camera - a small feature sampled that
+  // way inherits a blown-up size from sitting nearer the camera than the field
+  // points it is being compared against. The scale is measured, not chosen: the
+  // same home-to-first distance the plan-geometry check itself uses.
+  const scale = groundScale(home, first, B, w, h);
   ctx.fillStyle = DIRT;
+  drawGroundCircle(ctx, home, homeCircleRadius(B), scale, w, h);
+  ctx.fill();
+  drawGroundCircle(ctx, { x: 0, y: mCY }, MOUND_RADIUS, scale, w, h);
   ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
   ctx.lineWidth = 1;
+  drawGroundCircle(ctx, { x: 0, y: mCY }, MOUND_RADIUS, scale, w, h);
   ctx.stroke();
 
   // fence arc (illustrative: a circular arc around home at the center-field radius)
@@ -346,12 +417,16 @@ export function drawField(cv, opts) {
   for (const s of INFIELD_SECTORS) drawSector(ctx, w, h, s, pattern);
   for (const s of OUTFIELD_SECTORS) drawSector(ctx, w, h, s, pattern);
 
-  // foul lines: home -> the fence, exactly along u and v
+  // foul lines: home -> wherever the fence arc itself leaves the frame (its true
+  // intersection with the fence is off-canvas at this camera - see
+  // fenceExitPoint's own header).
+  const exitL = fenceExitPoint(fenceR, -1, w, h);
+  const exitR = fenceExitPoint(fenceR, 1, w, h);
+  const sHome = toScreen(home, w, h);
   ctx.beginPath();
-  [polar(-45, fenceR), home, polar(45, fenceR)].forEach((pt, i) => {
-    const s = toScreen(pt, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  });
+  ctx.moveTo(exitL.x, exitL.y);
+  ctx.lineTo(sHome.x, sHome.y);
+  ctx.lineTo(exitR.x, exitR.y);
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 2;
   ctx.stroke();
