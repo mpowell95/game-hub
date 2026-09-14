@@ -1,0 +1,282 @@
+/* Baseball mocks, round 2 - career home, how-to, game-end. Mocks only, not
+   deployed, not in sw.js ASSETS. Reuses css/ui.css tokens (wrapped in .gh-dark
+   for this game's dark identity) and the Escoba sheet pattern. */
+
+.gh-dark { color: var(--gh-ink); }
+
+/* ============================================================== career home == */
+.bb-home {
+  /* Dark, matching the field mocks' identity - defined locally (rather than
+     relying on :root.gh-dark, which lives in css/hub.css and needs the class
+     on the document root) so this file works standalone. Same values as
+     css/hub.css's own :root.gh-dark block. */
+  --gh-bg: #0e1420;
+  --gh-surface: #1b2333;
+  --gh-surface-2: #2b3547;
+  --gh-ink: #e9eef6;
+  --gh-muted: #9db0c9;
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--gh-bg);
+  color: var(--gh-ink);
+  overflow: hidden;
+  font-family: var(--gh-font);
+}
+.bb-home * { box-sizing: border-box; }
+
+/* --- status row --- */
+.bb-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--gh-surface-2);
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  cursor: default;
+}
+.bb-status--healthy { color: var(--gh-ink); }
+.bb-status--pulling { color: var(--gh-muted); }
+.bb-status--offline, .bb-status--fork {
+  align-items: flex-start;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  line-height: 1.25;
+}
+.bb-status__glyph { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+.bb-status__glyph.spin { animation: bb-spin 1.4s linear infinite; }
+@keyframes bb-spin { to { transform: rotate(360deg); } }
+.bb-status__text { font-size: 11px; font-weight: 700; }
+.bb-status--fork { cursor: pointer; }
+.bb-status__hint { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--gh-accent); flex: none; }
+
+/* --- next game card --- */
+.bb-nextgame {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--gh-surface);
+  border-top: 1px solid var(--gh-border);
+  border-bottom: 1px solid var(--gh-border);
+}
+.bb-nextgame__info { display: flex; flex-direction: column; gap: 6px; }
+.bb-nextgame__info.is-empty { visibility: hidden; }
+.bb-nextgame__opp { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; }
+.bb-nextgame__opp .bb-marker svg { width: 11px; height: 11px; }
+.bb-nextgame__tag { font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+.bb-nextgame__game { font-size: 12px; font-weight: 700; color: var(--gh-muted); }
+.bb-nextgame__syncrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--gh-tap);
+  border-radius: var(--gh-r-pill);
+  background: var(--gh-surface-2);
+  color: var(--gh-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.bb-nextgame__syncrow svg { width: 14px; height: 14px; }
+
+/* --- standings --- */
+.bb-standings {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
+  background: var(--gh-bg);
+}
+.bb-standings__head {
+  flex: none;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--gh-muted);
+}
+.bb-srow {
+  flex: none;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--gh-border);
+}
+.bb-srow__rank {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--gh-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+.bb-srow__code { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; min-width: 0; }
+.bb-srow__code .bb-marker svg { width: 10px; height: 10px; }
+.bb-srow__wl { flex: none; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-muted); }
+.bb-srow.is-me { font-weight: 900; }
+.bb-srow__divider {
+  flex: none;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--gh-muted);
+  letter-spacing: 0.15em;
+}
+.bb-srow--compact { height: 26px; border-top: none; }
+
+/* --- season strip --- */
+.bb-strip {
+  flex: none;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--gh-surface-2);
+}
+.bb-strip__marks { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 3px; min-width: 0; }
+.bb-mark { flex: none; width: 12px; height: 12px; position: relative; }
+.bb-mark--win { border-radius: 50%; background: var(--bb-player, #178A7A); }
+.bb-mark--loss { border-radius: 50%; border: 1.5px solid var(--gh-muted); background: transparent; }
+.bb-mark--loss::before, .bb-mark--loss::after {
+  content: ''; position: absolute; top: 50%; left: 50%; width: 8px; height: 1.5px;
+  background: var(--gh-muted); transform-origin: center;
+}
+.bb-mark--loss::before { transform: translate(-50%, -50%) rotate(45deg); }
+.bb-mark--loss::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.bb-mark--unplayed { border-radius: 50%; width: 5px; height: 5px; background: var(--gh-border-strong); margin: 3.5px; }
+.bb-mark--current { position: relative; }
+.bb-mark--current::after {
+  content: ''; position: absolute; left: 50%; bottom: -5px; width: 14px; height: 2px;
+  background: var(--bb-accent); transform: translateX(-50%); border-radius: 2px;
+}
+.bb-strip__side { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* --- footer row --- */
+.bb-footer {
+  flex: none;
+  height: 44px;
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+}
+.bb-footer .gh-btn { flex: 1; padding: 0 4px; font-size: 12px; }
+
+/* ============================================================== marker (shared) == */
+.bb-marker { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.bb-marker--circle svg circle { fill: var(--bb-player, #178A7A); }
+.bb-marker--triangle svg polygon { fill: var(--bb-cpu, #1F5FA8); }
+
+/* ============================================================== how-to sheet == */
+.bb-howto {
+  --gh-surface: #1b2333;
+  --gh-surface-2: #2b3547;
+  --gh-ink: #e9eef6;
+  --gh-muted: #9db0c9;
+  --gh-border: rgba(190, 214, 244, .18);
+  max-width: 340px;
+  width: 100%;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+.bb-howto-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bb-howto-head .gh-modal__title2 { margin: 0; font-size: 1.1rem; font-weight: 800; }
+.bb-howto-goal { margin: 0; font-size: 0.95rem; font-weight: 800; text-align: center; }
+.bb-howto-row { display: flex; align-items: center; gap: 12px; }
+.bb-howto-diagram {
+  flex: none;
+  width: 96px;
+  height: 64px;
+  border-radius: var(--gh-r-md);
+  background: var(--gh-surface-2);
+  position: relative;
+  overflow: hidden;
+}
+.bb-howto-caption { font-size: 12px; font-weight: 700; line-height: 1.35; color: var(--gh-ink); }
+.bb-howto-lines { display: flex; flex-direction: column; gap: 4px; }
+.bb-howto-line { font-size: 11px; font-weight: 600; color: var(--gh-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ============================================================== game-end modal == */
+.bb-end {
+  --gh-surface: #1b2333;
+  --gh-surface-2: #2b3547;
+  --gh-ink: #e9eef6;
+  --gh-muted: #9db0c9;
+  --gh-border: rgba(190, 214, 244, .18);
+  width: min(340px, 100%);
+}
+/* Escoba's close pattern: a 32px VISIBLE circle inside a 44px tap target,
+   rather than css/ui.css's .gh-modal__close, which makes the visible circle
+   itself the full 44px. */
+.bb-end__close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+}
+.bb-end__close__dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gh-surface-2);
+  color: var(--gh-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.bb-end__close:hover .bb-end__close__dot { background: #384360; color: var(--gh-ink); }
+.bb-end__head { display: flex; align-items: center; gap: 8px; margin: 0 var(--gh-sp-6) 4px 0; }
+.bb-end__head .bb-marker svg { width: 16px; height: 16px; }
+.bb-end__title { margin: 0; font-size: 1.3rem; font-weight: 900; }
+.bb-end__box {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.bb-end__box > div { text-align: center; padding: 4px 2px; }
+.bb-end__box > div:first-child { text-align: left; }
+.bb-end__box .bb-head { color: var(--gh-muted); font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; }
+.bb-end__box .bb-total { font-weight: 900; background: var(--gh-surface-2); border-radius: 6px; }
+.bb-end__points { text-align: center; font-size: 13px; font-weight: 800; padding: 8px; border-radius: var(--gh-r-md); background: var(--gh-surface-2); }
+.bb-end__actions { display: flex; gap: 8px; }
+.bb-end__actions .gh-btn { flex: 1; padding: 0 8px; white-space: nowrap; }
+
+.bb-trophy { width: 56px; height: 64px; margin: 0 auto; display: block; }
+.bb-end__ceremony { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.bb-end__advance { font-size: 13px; font-weight: 800; color: var(--gh-ink); }
+.bb-end__league { font-size: 12px; font-weight: 700; color: var(--gh-muted); }

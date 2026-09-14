@@ -1,0 +1,47 @@
+<title>Baseball mock - career home</title>
+<link rel="stylesheet" href="../../css/ui.css">
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="round2.css">
+<style>
+  .r2-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 4px; }
+  .r2-group { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+</style>
+<div class="mock-page">
+  <div class="mock-label">career-home &middot; four sync states &middot; tall (361&times;714)</div>
+  <div class="r2-row" id="rowTall"></div>
+  <div class="mock-label" style="margin-top:10px;">career-home &middot; four sync states &middot; short (361&times;530)</div>
+  <div class="r2-row" id="rowShort"></div>
+</div>
+<script type="module">
+  import { renderCareerHome } from './career-home.js';
+
+  const STATES = [
+    { id: 'healthy', label: 'Healthy' },
+    { id: 'pulling', label: 'Pulling' },
+    { id: 'offline', label: 'Offline' },
+    { id: 'fork', label: 'Fork' },
+  ];
+
+  function build(container, height) {
+    for (const s of STATES) {
+      const group = document.createElement('div');
+      group.className = 'r2-group';
+      const label = document.createElement('div');
+      label.className = 'mock-label';
+      label.textContent = s.label;
+      const phone = document.createElement('div');
+      phone.className = 'mock-phone ' + (height === 'tall' ? 'mock-phone--tall' : 'mock-phone--short');
+      const inner = document.createElement('div');
+      inner.style.width = '100%';
+      inner.style.height = '100%';
+      phone.appendChild(inner);
+      group.appendChild(label);
+      group.appendChild(phone);
+      container.appendChild(group);
+      renderCareerHome(inner, { state: s.id, height });
+    }
+  }
+
+  build(document.getElementById('rowTall'), 'tall');
+  build(document.getElementById('rowShort'), 'short');
+</script>

@@ -1,0 +1,70 @@
+<title>Baseball mock - how to play</title>
+<link rel="stylesheet" href="../../css/ui.css">
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="round2.css">
+<style>
+  .mock-phone { display: flex; align-items: center; justify-content: center; padding: 12px; }
+  .r2-row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+</style>
+<div class="mock-page">
+  <div class="mock-label">how-to &middot; tall root (361&times;714) and short root (361&times;530)</div>
+  <div class="r2-row">
+    <div class="r2-group" style="display:flex;flex-direction:column;gap:8px;align-items:center;">
+      <div class="mock-label">Tall</div>
+      <div class="mock-phone mock-phone--tall gh-dark" id="hostTall"></div>
+    </div>
+    <div class="r2-group" style="display:flex;flex-direction:column;gap:8px;align-items:center;">
+      <div class="mock-label">Short</div>
+      <div class="mock-phone mock-phone--short gh-dark" id="hostShort"></div>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { drawSwingDiagram, drawRingDiagram, drawSteeringDiagram } from './howto-diagrams.js';
+
+  const ROWS = [
+    { draw: drawSwingDiagram, caption: 'Tap swings instantly. Hold to charge power.' },
+    { draw: drawRingDiagram, caption: 'The Nice zone sits at the top. Stop the needle inside it.' },
+    { draw: drawSteeringDiagram, caption: 'Drag the pad toward the break. The ball bends the same way.' },
+  ];
+  const LINES = [
+    'Tap swings, hold charges',
+    'Release in the marked zone for a power pitch',
+    'Hold too long and the pitch hangs',
+    'Drag toward the break to bend curves and sliders',
+  ];
+
+  function buildSheet() {
+    const overlay = document.createElement('div');
+    overlay.className = 'gh-overlay';
+    overlay.style.position = 'absolute';
+    overlay.style.background = 'rgba(9,16,28,0.7)';
+    const sheet = document.createElement('div');
+    sheet.className = 'gh-modal bb-howto';
+    sheet.innerHTML = `
+      <div class="bb-howto-head">
+        <h2 class="gh-modal__title2">How to play</h2>
+        <button class="gh-btn gh-btn--ghost">Done</button>
+      </div>
+      <p class="bb-howto-goal">Hit the gaps, pitch to the corners</p>
+      ${ROWS.map((r, i) => `
+        <div class="bb-howto-row">
+          <canvas class="bb-howto-diagram" data-i="${i}"></canvas>
+          <div class="bb-howto-caption">${r.caption}</div>
+        </div>`).join('')}
+      <div class="bb-howto-lines">
+        ${LINES.map(l => `<div class="bb-howto-line">${l}</div>`).join('')}
+      </div>
+    `;
+    overlay.appendChild(sheet);
+    return { overlay, sheet };
+  }
+
+  for (const hostId of ['hostTall', 'hostShort']) {
+    const host = document.getElementById(hostId);
+    const { overlay, sheet } = buildSheet();
+    host.appendChild(overlay);
+    const canvases = sheet.querySelectorAll('.bb-howto-diagram');
+    ROWS.forEach((r, i) => r.draw(canvases[i]));
+  }
+</script>
