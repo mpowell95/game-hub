@@ -1190,8 +1190,9 @@ async function measureLeverRange() {
     const hiRate = await measureLeverWinRate(league, build(hi));
     results.push({ name, lo, hi, loRate, hiRate });
   }
+  // BB-2e commit 2: TEAM_LADDER_OFFSETS is per-league now - RANGE_LEVER_LEAGUE's own row.
   for (const axis of ['skill', 'timingSigmaMs', 'chase']) {
-    results.push({ name: `TEAM_LADDER_OFFSETS.${axis}`, lo: SETTINGS.TEAM_LADDER_OFFSETS[0][axis], hi: SETTINGS.TEAM_LADDER_OFFSETS[7][axis], note: 'see the within-league ladder check' });
+    results.push({ name: `TEAM_LADDER_OFFSETS.${league}.${axis}`, lo: SETTINGS.TEAM_LADDER_OFFSETS[league][0][axis], hi: SETTINGS.TEAM_LADDER_OFFSETS[league][7][axis], note: 'see the within-league ladder check' });
   }
   return results;
 }
@@ -1314,28 +1315,15 @@ async function runRange(t0) {
 // `TEAM_LADDER_OFFSETS` actually requires. This checks three named ladder SHAPES instead, per
 // league, against the shipped `SCHEDULE_SHAPE`'s own per-slot game-count weights.
 const LADDER_SHAPE_NAMES = ['cliff', 'spread', 'steep'];
-// Named per-shape gap weights - 7 gaps between the 8 slots (weakest..champion), summing to 1, each
-// naming how much of the total slot0->champion RANGE that gap consumes. `cliff`: slots 0-6 sit
-// close together (the first 6 gaps are small and equal), the whole rest of the range drops in the
-// last gap alone. `spread`: every gap equal (a straight line, slot to slot). `steep`: the first 5
-// gaps (slots 0-5) are shallow, the last 2 (5->6, 6->7) are steep. Draft, new - the doc names the
-// three shapes and their per-league assignment (see LEAGUE_LADDER_SHAPE below) but gives no
-// numbers for how tight "close together" or how shallow "shallow" is.
-const CLIFF_TOP_GAP_FRAC = 0.02;     // each of the first 6 gaps, under `cliff`
-const STEEP_SHALLOW_GAP_FRAC = 0.06; // each of the first 5 gaps, under `steep`
-function ladderGapWeights(shape) {
-  if (shape === 'cliff') return [...Array(6).fill(CLIFF_TOP_GAP_FRAC), 1 - 6 * CLIFF_TOP_GAP_FRAC];
-  if (shape === 'steep') {
-    const rest = (1 - 5 * STEEP_SHALLOW_GAP_FRAC) / 2;
-    return [...Array(5).fill(STEEP_SHALLOW_GAP_FRAC), rest, rest];
-  }
-  return Array(7).fill(1 / 7); // spread
-}
+// BB-2e commit 2: the gap weights themselves (`CLIFF_TOP_GAP_FRAC`/`STEEP_SHALLOW_GAP_FRAC`/
+// `ladderGapWeights`) moved to settings.js, where the real per-league `TEAM_LADDER_OFFSETS`
+// generator now lives too - imported here, not duplicated, so the shape this tool PROVES
+// compatible and the shape a league is ASSIGNED can never silently drift apart.
 /** 8 slot win rates from `slot0` (weakest) down to `champion` (slot 7), following one of the three
  *  named shapes above - `slot0`/`champion` are WIN RATES here (this function is pure arithmetic,
  *  shared with the real generator commit 2 builds over skill/timingSigmaMs/chase offsets instead). */
 function ladderProfile(shape, slot0, champion) {
-  const weights = ladderGapWeights(shape);
+  const weights = SETTINGS.ladderGapWeights(shape);
   const range = slot0 - champion;
   const out = [slot0];
   let cum = 0;

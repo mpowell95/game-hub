@@ -873,16 +873,76 @@ export const CPU_PLACEMENT_MIN = 0.22;
 // capped by `CHAMPION_CEILING` (see below) - the effective value can never make a league's
 // champion pitch tougher on these axes than the NEXT league's own base row, so "easier season,
 // harder champion" never turns a Little League champion into a de facto Majors pitcher.
-export const TEAM_LADDER_OFFSETS = [
-  { skill: -0.25, timingSigmaMs: 20, chase: 0.15, behaviorMul: 0.50, changeupShare: 0 },
-  { skill: -0.18, timingSigmaMs: 14, chase: 0.11, behaviorMul: 0.66, changeupShare: 0.29 },
-  { skill: -0.12, timingSigmaMs: 9, chase: 0.07, behaviorMul: 0.81, changeupShare: 0.57 },
-  { skill: -0.06, timingSigmaMs: 4, chase: 0.03, behaviorMul: 0.97, changeupShare: 0.86 },
-  { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1.13, changeupShare: 1.14 },
-  { skill: 0.06, timingSigmaMs: -1, chase: -0.03, behaviorMul: 1.29, changeupShare: 1.43 },
-  { skill: 0.14, timingSigmaMs: -2.5, chase: -0.06, behaviorMul: 1.44, changeupShare: 1.71 },
-  { skill: 0.25, timingSigmaMs: -4, chase: -0.12, behaviorMul: 1.60, changeupShare: 2.00 },
-];
+//
+// BB-2e commit 2: `TEAM_LADDER_OFFSETS` is now a PER-LEAGUE table, generated from a per-league
+// `LADDER_SHAPE` rather than one flat array shared by every league. BB-2d's own report proved
+// Little League/High School's champion-slot band "mathematically incompatible" with their season
+// band ONLY under an assumed EVEN SLOPE from slot 0 to slot 7 (`sim-baseball.mjs --ladder`'s own
+// `spread` shape) - a shape nothing in this table actually requires. `--ladder`'s arithmetic
+// (commit 1) confirmed both bands DO hold for Little League and High School under `cliff` (slots
+// 0-6 clustered near the top, one steep drop to the champion) and for College under `spread`.
+// Matt's own instruction assigns the three shapes: `cliff` for Little League/High School
+// (one stacked team and seven that fall over - "what Little League actually looks like"),
+// `spread` for College/Minor League (a field of real teams, descending roughly evenly), `steep`
+// for Major League (a shallow descent across slots 0-5, a sharper drop across 6-7).
+export const LADDER_SHAPE = {
+  little: 'cliff', highschool: 'cliff', college: 'spread', minors: 'spread', majors: 'steep',
+};
+// Named per-shape GAP weights - 7 gaps between the 8 slots, summing to 1, each naming how much of
+// the total slot0->slot7 RANGE that gap consumes (direction-agnostic: works the same whether an
+// axis rises or falls from slot 0 to slot 7). Shared, byte-identical logic with
+// `sim-baseball.mjs --ladder`'s own arithmetic proof (commit 1) - that tool imports these two
+// constants and this function directly, so the shape a league is ASSIGNED and the shape commit 1
+// PROVED compatible can never silently drift apart.
+export const CLIFF_TOP_GAP_FRAC = 0.02;     // each of the first 6 gaps, under `cliff`
+export const STEEP_SHALLOW_GAP_FRAC = 0.06; // each of the first 5 gaps, under `steep`
+export function ladderGapWeights(shape) {
+  if (shape === 'cliff') return [...Array(6).fill(CLIFF_TOP_GAP_FRAC), 1 - 6 * CLIFF_TOP_GAP_FRAC];
+  if (shape === 'steep') {
+    const rest = (1 - 5 * STEEP_SHALLOW_GAP_FRAC) / 2;
+    return [...Array(5).fill(STEEP_SHALLOW_GAP_FRAC), rest, rest];
+  }
+  return Array(7).fill(1 / 7); // spread
+}
+// The reference ENDPOINT magnitudes per axis - slot 0 (weakest) and slot 7 (champion) - UNCHANGED
+// from the flat table's own slot0/slot7 rows (BB-2c/2d's own retuned values, confirmed reachable
+// at every league by `sim-baseball.mjs --assert`'s own SLOT_WINRATE_BAND champion check before
+// this commit). A league's assigned SHAPE decides only how slots 1-6 are SPACED between these two
+// endpoints - the endpoints themselves are commit 3's lever, not commit 2's; generating a
+// per-league table from a shared endpoint pair is what "a band change re-derives the ladder
+// instead of needing a hand-tuned array" (the handoff's own words) means in practice.
+const LADDER_AXIS_ENDPOINTS = {
+  skill:         { slot0: -0.25, slot7: 0.25 },
+  timingSigmaMs: { slot0: 20,    slot7: -4 },
+  chase:         { slot0: 0.15,  slot7: -0.12 },
+  behaviorMul:   { slot0: 0.50,  slot7: 1.60 },
+  changeupShare: { slot0: 0,     slot7: 2.00 },
+};
+function ladderAxisProfile(shape, slot0, slot7) {
+  const weights = ladderGapWeights(shape);
+  const range = slot7 - slot0;
+  const out = [slot0];
+  let cum = 0;
+  for (const w of weights) { cum += w; out.push(slot0 + cum * range); }
+  return out;
+}
+function ladderOffsetsFor(league) {
+  const shape = LADDER_SHAPE[league] || 'spread';
+  const perAxis = {};
+  for (const axis of Object.keys(LADDER_AXIS_ENDPOINTS)) {
+    const { slot0, slot7 } = LADDER_AXIS_ENDPOINTS[axis];
+    perAxis[axis] = ladderAxisProfile(shape, slot0, slot7);
+  }
+  return Array.from({ length: 8 }, (_, slot) => ({
+    skill: perAxis.skill[slot],
+    timingSigmaMs: perAxis.timingSigmaMs[slot],
+    chase: perAxis.chase[slot],
+    behaviorMul: perAxis.behaviorMul[slot],
+    changeupShare: perAxis.changeupShare[slot],
+  }));
+}
+// PER-LEAGUE now: `TEAM_LADDER_OFFSETS[league][slot]`, never a bare `TEAM_LADDER_OFFSETS[slot]`.
+export const TEAM_LADDER_OFFSETS = Object.fromEntries(LEAGUES.map((lg) => [lg, ladderOffsetsFor(lg)]));
 // The ceiling rule itself: every effective per-slot pitching-behavior value (after `behaviorMul`)
 // is clamped to the NEXT league's own BASE row for that same field - Majors (no next league) is
 // its own ceiling, so its champion is bounded only by its own row. A single named mode string
@@ -915,4 +975,5 @@ export default {
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
+  LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights,
 };

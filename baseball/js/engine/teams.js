@@ -147,7 +147,10 @@ export function makeLeague(league) {
     // exactly as the old bare-number offset did; the rest are attached directly onto the returned
     // team for `agents.js`'s `CpuBatter`/`CpuPitcher` to read (`ladderOffset`), since they are
     // BEHAVIOR knobs, not skill points.
-    const offsets = TEAM_LADDER_OFFSETS[slot] || { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1, changeupShare: 0 };
+    // BB-2e commit 2: TEAM_LADDER_OFFSETS is now PER-LEAGUE (generated from that league's own
+    // LADDER_SHAPE) - indexed [league][slot], never a bare [slot].
+    const leagueOffsets = TEAM_LADDER_OFFSETS[league] || TEAM_LADDER_OFFSETS.majors;
+    const offsets = leagueOffsets[slot] || { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1, changeupShare: 0 };
     // BB-2d commit 6: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`, now against
     // the median HUMAN model per commit 2) no longer touches the skill cap at all - see this
     // constant's own settings.js comment for why. Converted instead through SIGMA_MS_PER_WINRATE_PP/

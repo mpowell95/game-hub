@@ -454,14 +454,18 @@ console.log('\n-- 8b. teams.js: makeLeague/makePlayerTeam (Step 3; BB-2a step 5:
   // BB-2b commit 3: each entry is now `{ skill, timingSigmaMs, chase }` - `skill` strictly rises
   // weakest to strongest exactly as the old bare-number offset did; `timingSigmaMs`/`chase` are
   // ADDITIVE offsets that should strictly FALL (a sloppier/more-chasing weak slot to a
-  // sharper/more-selective strong slot).
-  ok(SETTINGS.TEAM_LADDER_OFFSETS.length === 8, 'TEAM_LADDER_OFFSETS names exactly 8 slots');
-  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.skill > SETTINGS.TEAM_LADDER_OFFSETS[i - 1].skill),
-    'TEAM_LADDER_OFFSETS.skill is strictly rising, weakest slot to strongest (BB-2a step 5)');
-  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.timingSigmaMs < SETTINGS.TEAM_LADDER_OFFSETS[i - 1].timingSigmaMs),
-    'TEAM_LADDER_OFFSETS.timingSigmaMs strictly falls, weakest (sloppiest) slot to strongest (sharpest) (BB-2b commit 3)');
-  ok(SETTINGS.TEAM_LADDER_OFFSETS.every((o, i) => i === 0 || o.chase < SETTINGS.TEAM_LADDER_OFFSETS[i - 1].chase),
-    'TEAM_LADDER_OFFSETS.chase strictly falls, weakest (most-chasing) slot to strongest (most-selective) (BB-2b commit 3)');
+  // sharper/more-selective strong slot). BB-2e commit 2: TEAM_LADDER_OFFSETS is per-league now
+  // (generated from that league's own LADDER_SHAPE) - every league checked, not one flat table.
+  for (const lg of SETTINGS.LEAGUES) {
+    const offsets = SETTINGS.TEAM_LADDER_OFFSETS[lg];
+    ok(offsets.length === 8, `TEAM_LADDER_OFFSETS.${lg} names exactly 8 slots`);
+    ok(offsets.every((o, i) => i === 0 || o.skill > offsets[i - 1].skill),
+      `TEAM_LADDER_OFFSETS.${lg}.skill is strictly rising, weakest slot to strongest (BB-2a step 5)`);
+    ok(offsets.every((o, i) => i === 0 || o.timingSigmaMs < offsets[i - 1].timingSigmaMs),
+      `TEAM_LADDER_OFFSETS.${lg}.timingSigmaMs strictly falls, weakest (sloppiest) slot to strongest (sharpest) (BB-2b commit 3)`);
+    ok(offsets.every((o, i) => i === 0 || o.chase < offsets[i - 1].chase),
+      `TEAM_LADDER_OFFSETS.${lg}.chase strictly falls, weakest (most-chasing) slot to strongest (most-selective) (BB-2b commit 3)`);
+  }
   for (const lg of SETTINGS.LEAGUES) {
     ok(new Set(SETTINGS.LEAGUE_LADDER_STYLES[lg]).size === 8, `LEAGUE_LADDER_STYLES.${lg} names every style exactly once`);
     ok(SETTINGS.LEAGUE_LADDER_STYLES[lg].every((id) => !!SETTINGS.TEAM_STYLES[id]), `LEAGUE_LADDER_STYLES.${lg} only names real styles`);
@@ -1169,15 +1173,18 @@ console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch sp
     ok(Math.abs(noHistChangeup - noHistFastball) < 5, 'with no pitch history at all, a changeup surprises ModelBatter no more than a fastball does (no expectation to violate)');
   })();
 
-  // agents.js: `cpuBaseTimingSigmaMs` never sits below CPU_SIGMA_ABSOLUTE_FLOOR_MS at the median
-  // (slot-4, zero-offset) ladder slot, at every league - doc §8, [Locked]: "difficulty comes mostly
-  // from smarter CPU behavior, not bigger CPU stats." (BB-2c commit 2 superseded the old flat
-  // CPU_SIGMA_FLOOR_MS with a per-league minimum plus this absolute backstop - see section 17 below
-  // for the full contract, including every slot, not just the median one.)
+  // agents.js: `cpuBaseTimingSigmaMs` never sits below CPU_SIGMA_ABSOLUTE_FLOOR_MS at slot 4, at
+  // every league - doc §8, [Locked]: "difficulty comes mostly from smarter CPU behavior, not
+  // bigger CPU stats." (BB-2c commit 2 superseded the old flat CPU_SIGMA_FLOOR_MS with a per-league
+  // minimum plus this absolute backstop - see section 17 below for the full contract, including
+  // every slot, not just this one.) BB-2e commit 2: slot 4 is no longer guaranteed a literal ZERO
+  // offset under a non-`spread` shape (`cliff`/`steep` place their own gap weights asymmetrically
+  // around the middle, so the true zero-crossing can sit anywhere in the ladder) - the invariant
+  // this section actually checks (the floor) does not depend on that, so the assertion is on the
+  // measured sigma only, not on the offset's own value.
   {
     for (const lg of SETTINGS.LEAGUES) {
-      const medianOffset = SETTINGS.TEAM_LADDER_OFFSETS[4]; // slot 4 of 8, zero skill offset by construction
-      ok(medianOffset.timingSigmaMs === 0, `TEAM_LADDER_OFFSETS[4] carries no timing offset (it IS the league's own median)`);
+      const medianOffset = SETTINGS.TEAM_LADDER_OFFSETS[lg][4]; // slot 4 of 8
       const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, medianOffset);
       ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS, `${lg}'s median-slot base timing sigma (${sigma}ms) is at least CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS}ms)`);
     }
@@ -1236,8 +1243,8 @@ console.log('\n-- 17. BB-2c commit 2: the CPU strength contract - doc §8, [Lock
   // exactly the defect BB-2b shipped (a champion slot measuring 30ms, sharper than a "strong"
   // modeled human at 35ms) - a regression here must fail loudly, not silently.
   for (const lg of SETTINGS.LEAGUES) {
-    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS.length; slot++) {
-      const offset = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS[lg].length; slot++) {
+      const offset = SETTINGS.TEAM_LADDER_OFFSETS[lg][slot];
       const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, offset);
       ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
         `${lg} ladder slot ${slot}'s effective base timing sigma (${sigma}ms) is at or above CPU_SIGMA_ABSOLUTE_FLOOR_MS (${SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS}ms)`);
@@ -1258,7 +1265,7 @@ console.log('\n-- 17. BB-2c commit 2: the CPU strength contract - doc §8, [Lock
     const hist = [{ type: 'fastball', x: 0 }, { type: 'fastball', x: 0 }, { type: 'fastball', x: 0 }];
     const pitch = { type: 'fastball', x: 0, isStrike: true };
     const exaggerated = { ...SETTINGS, FOOL_BONUS_MS_SCALE: 1e7 };
-    const batter = new CpuBatter({ league, skills, settings: exaggerated, styleId: 'balanced', ladderOffset: SETTINGS.TEAM_LADDER_OFFSETS[7] });
+    const batter = new CpuBatter({ league, skills, settings: exaggerated, styleId: 'balanced', ladderOffset: SETTINGS.TEAM_LADDER_OFFSETS[league][7] });
     const samples = [];
     for (let i = 0; i < 2000; i++) {
       const rng = mulberry32(9000 + i);
@@ -1311,7 +1318,7 @@ console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH
     const shiftersTeam = league.find((t) => t.styleId === 'shifters');
     ok(!!shiftersTeam, 'shifters is still on the majors ladder');
     const slot = shiftersTeam.ladderSlot;
-    const offsets = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+    const offsets = SETTINGS.TEAM_LADDER_OFFSETS.majors[slot];
     const baseCap = effectiveCapFor('majors');
     const rawCap = SETTINGS.CAPS.majors;
     const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
@@ -1336,8 +1343,8 @@ console.log('\n-- 19. BB-2c commit 6: Locked-statement inventory (design doc v9,
   // floor, at ANY ladder slot - difficulty may never come from a stat that crosses into
   // "better than a person could be," only from behavior (chase, pattern-reading, placement).
   for (const lg of SETTINGS.LEAGUES) {
-    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS.length; slot++) {
-      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, SETTINGS.TEAM_LADDER_OFFSETS[slot]);
+    for (let slot = 0; slot < SETTINGS.TEAM_LADDER_OFFSETS[lg].length; slot++) {
+      const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, SETTINGS.TEAM_LADDER_OFFSETS[lg][slot]);
       ok(sigma >= SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS,
         `${lg} slot ${slot}: effective CPU batting sigma (${sigma.toFixed(1)}ms) never crosses CPU_SIGMA_ABSOLUTE_FLOOR_MS`);
     }
@@ -1449,7 +1456,7 @@ console.log('\n-- 21. BB-2d commit 5: the champion\'s own axis --');
   // league, after every ladder offset SLOT_SIGMA_DESCENT can apply.
   for (const lg of SETTINGS.LEAGUES) {
     for (let slot = 0; slot < 8; slot++) {
-      const offsets = SETTINGS.TEAM_LADDER_OFFSETS[slot];
+      const offsets = SETTINGS.TEAM_LADDER_OFFSETS[lg][slot];
       const league = makeLeague(lg);
       const team = league[slot];
       const sigma = cpuBaseTimingSigmaMs(lg, SETTINGS, team.ladderOffset);
@@ -1482,7 +1489,7 @@ console.log('\n-- 21. BB-2d commit 5: the champion\'s own axis --');
     const lg = SETTINGS.LEAGUES[i];
     const nextLg = SETTINGS.LEAGUES[i + 1] || lg;
     const ceilingRow = SETTINGS.CPU[nextLg];
-    const champOffsets = SETTINGS.TEAM_LADDER_OFFSETS[7]; // the champion slot
+    const champOffsets = SETTINGS.TEAM_LADDER_OFFSETS[lg][7]; // the champion slot, this league's own table
     const cpu = SETTINGS.CPU[lg];
     const effCornerBias = Math.min(cpu.cornerBias * champOffsets.behaviorMul, ceilingRow.cornerBias);
     const effPatternWeight = Math.min(cpu.patternWeight * champOffsets.behaviorMul, ceilingRow.patternWeight);
@@ -1493,12 +1500,15 @@ console.log('\n-- 21. BB-2d commit 5: the champion\'s own axis --');
   }
 
   // behaviorMul/changeupShare integrity: strictly rising slot 0 -> slot 7 (easier to harder
-  // champion), and every value is non-negative.
-  for (let slot = 1; slot < 8; slot++) {
-    ok(SETTINGS.TEAM_LADDER_OFFSETS[slot].behaviorMul > SETTINGS.TEAM_LADDER_OFFSETS[slot - 1].behaviorMul,
-      `TEAM_LADDER_OFFSETS[${slot}].behaviorMul strictly exceeds slot ${slot - 1}'s`);
-    ok(SETTINGS.TEAM_LADDER_OFFSETS[slot].changeupShare >= SETTINGS.TEAM_LADDER_OFFSETS[slot - 1].changeupShare,
-      `TEAM_LADDER_OFFSETS[${slot}].changeupShare is non-decreasing from slot ${slot - 1}'s`);
+  // champion), and every value is non-negative - every league now, not one shared table.
+  for (const lg of SETTINGS.LEAGUES) {
+    const offsets = SETTINGS.TEAM_LADDER_OFFSETS[lg];
+    for (let slot = 1; slot < 8; slot++) {
+      ok(offsets[slot].behaviorMul > offsets[slot - 1].behaviorMul,
+        `TEAM_LADDER_OFFSETS.${lg}[${slot}].behaviorMul strictly exceeds slot ${slot - 1}'s`);
+      ok(offsets[slot].changeupShare >= offsets[slot - 1].changeupShare,
+        `TEAM_LADDER_OFFSETS.${lg}[${slot}].changeupShare is non-decreasing from slot ${slot - 1}'s`);
+    }
   }
 }
 
@@ -1538,7 +1548,7 @@ console.log('\n-- 22. BB-2d commit 6: Shifters bounded and priced --');
     const baseCap = effectiveCapFor('college');
     for (let slot = 0; slot < 8; slot++) {
       const team = league[slot];
-      const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + SETTINGS.TEAM_LADDER_OFFSETS[slot].skill)));
+      const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + SETTINGS.TEAM_LADDER_OFFSETS.college[slot].skill)));
       const capInt = Math.floor(expectedCap);
       ok(team.players.every((p) => SETTINGS.SKILL_IDS.every((id) => p.skills[id] <= capInt)),
         `college slot ${slot} (${team.styleId}): no player skill exceeds the STYLE_STRENGTH_DELTA-free slotCap`);
@@ -1551,7 +1561,7 @@ console.log('\n-- 22. BB-2d commit 6: Shifters bounded and priced --');
   {
     const league = makeLeague('college');
     for (const team of league) {
-      const slotOffsets = SETTINGS.TEAM_LADDER_OFFSETS[team.ladderSlot];
+      const slotOffsets = SETTINGS.TEAM_LADDER_OFFSETS.college[team.ladderSlot];
       const delta = SETTINGS.STYLE_STRENGTH_DELTA[team.styleId] || 0;
       const expectedSigma = slotOffsets.timingSigmaMs + delta * 100 * SETTINGS.SIGMA_MS_PER_WINRATE_PP;
       const expectedChase = slotOffsets.chase + delta * 100 * SETTINGS.CHASE_PER_WINRATE_PP;
@@ -1631,6 +1641,56 @@ console.log('\n-- 23. BB-2d commit 8: inventory - Perfect Season reachable at th
   const SEASONS = 40;
   for (let i = 0; i < SEASONS; i++) if (await playMaxedSeason('majors', i)) perfectCount += 1;
   ok(perfectCount > 0, `doc §5, [Locked]: Perfect Season is reachable at the maxed tier - ${perfectCount}/${SEASONS} Majors seasons perfect`);
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDER_OFFSETS generator --');
+{
+  // Every league names a real shape.
+  for (const lg of SETTINGS.LEAGUES) {
+    ok(['cliff', 'spread', 'steep'].includes(SETTINGS.LADDER_SHAPE[lg]),
+      `LADDER_SHAPE.${lg} names one of the three real shapes (got '${SETTINGS.LADDER_SHAPE[lg]}')`);
+  }
+  // Matt's own per-league assignment (see settings.js's own comment for the rationale).
+  ok(SETTINGS.LADDER_SHAPE.little === 'cliff' && SETTINGS.LADDER_SHAPE.highschool === 'cliff',
+    'Little League and High School are assigned cliff');
+  ok(SETTINGS.LADDER_SHAPE.college === 'spread' && SETTINGS.LADDER_SHAPE.minors === 'spread',
+    'College and Minor League are assigned spread');
+  ok(SETTINGS.LADDER_SHAPE.majors === 'steep', 'Major League is assigned steep');
+
+  // slot0/slot7 land EXACTLY on the reference endpoint magnitudes, at every league and every axis -
+  // the shape only decides how slots 1-6 are spaced, never the endpoints themselves.
+  const ENDPOINTS = {
+    skill: [-0.25, 0.25], timingSigmaMs: [20, -4], chase: [0.15, -0.12],
+    behaviorMul: [0.50, 1.60], changeupShare: [0, 2.00],
+  };
+  for (const lg of SETTINGS.LEAGUES) {
+    const offsets = SETTINGS.TEAM_LADDER_OFFSETS[lg];
+    for (const [axis, [slot0, slot7]] of Object.entries(ENDPOINTS)) {
+      ok(Math.abs(offsets[0][axis] - slot0) < 1e-9, `TEAM_LADDER_OFFSETS.${lg}[0].${axis} lands exactly on the reference slot0 endpoint (${slot0})`);
+      ok(Math.abs(offsets[7][axis] - slot7) < 1e-9, `TEAM_LADDER_OFFSETS.${lg}[7].${axis} lands exactly on the reference slot7 endpoint (${slot7})`);
+    }
+  }
+
+  // cliff's own promise: slots 0-6 sit CLOSE TOGETHER (a small, stated tolerance), the whole rest
+  // of the range drops in the last gap alone - checked on the skill axis (0.5 total range;
+  // CLIFF_TOP_GAP_FRAC x 6 x range is the theoretical max spread across slots 0-6).
+  const CLIFF_CLUSTER_TOLERANCE = SETTINGS.CLIFF_TOP_GAP_FRAC * 6 * 0.5 + 1e-9; // = 0.06 + epsilon
+  for (const lg of SETTINGS.LEAGUES.filter((l) => SETTINGS.LADDER_SHAPE[l] === 'cliff')) {
+    const skillVals = SETTINGS.TEAM_LADDER_OFFSETS[lg].slice(0, 7).map((o) => o.skill);
+    const spread = Math.max(...skillVals) - Math.min(...skillVals);
+    ok(spread <= CLIFF_CLUSTER_TOLERANCE,
+      `${lg} (cliff): slots 0-6's own skill offsets sit within ${CLIFF_CLUSTER_TOLERANCE.toFixed(4)} of each other (measured spread ${spread.toFixed(4)})`);
+  }
+
+  // ladderGapWeights integrity: every shape's 7 gap weights are non-negative and sum to 1, for
+  // every shape this table can ever be assigned (not just the three currently in use).
+  for (const shape of ['cliff', 'spread', 'steep']) {
+    const weights = SETTINGS.ladderGapWeights(shape);
+    ok(weights.length === 7, `ladderGapWeights('${shape}') returns exactly 7 gap weights`);
+    ok(weights.every((w) => w >= 0), `ladderGapWeights('${shape}') is never negative`);
+    ok(Math.abs(weights.reduce((s, w) => s + w, 0) - 1) < 1e-9, `ladderGapWeights('${shape}') sums to exactly 1`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
