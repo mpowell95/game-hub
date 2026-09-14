@@ -55,6 +55,11 @@ let root = null;
 export default { init, destroy, isInProgress };
 
 export function init(el) {
+  // Idempotency guard: a container already holding a live instance (e.g. init() called twice
+  // before the first destroy(), such as a fast double-tap on the launcher tile) must not stack a
+  // second .bb-root on top of the first - a real device screenshot showed exactly that ghosting
+  // (a stale, differently-sized control band showing through the current one).
+  if (el._bbInstance) el._bbInstance.destroy();
   root = el;
   const game = new BaseballPlayScreen(el);
   root._bbInstance = game;
@@ -85,6 +90,14 @@ class BaseballPlayScreen {
     this.dev = isDevProfile();
 
     ensureCSS();
+
+    // Golf's own reference pattern (golf/js/ui.js's `_fitInsets`): the hub's floating immersive
+    // back pill is `position: absolute` OVER this game, not reserving layout space for it, and
+    // `.bb-root` is itself `position: fixed`, which ignores `.hub-main-immersive`'s own top
+    // padding entirely (that padding only helps a normally-flowed root). So the HUD's top
+    // clearance has to be measured against the pill directly, every fit, or it collides with the
+    // status bar and the pill exactly as a real-device screenshot showed on 2026-09-14.
+    this.inHub = !!container.closest('.hub-game');
 
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'bb-root';
@@ -118,19 +131,51 @@ class BaseballPlayScreen {
     if (this._onWindowPointerUp) window.removeEventListener('pointerup', this._onWindowPointerUp);
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
+    if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
 
   _fit() {
     if (this.destroyed || !this.rootEl) return;
+    this._fitInsets();
     const el = this.rootEl;
     el.style.height = '';
     const rect = el.getBoundingClientRect();
-    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
     const top = rect.top;
     let h = Math.max(320, Math.round(vh - top));
     el.style.height = h + 'px';
     if (this._sizeCanvas) this._sizeCanvas();
+  }
+
+  /** Measure the hub's own floating immersive back pill (`.hub-back`) and reserve exactly enough
+   *  top clearance to clear it - golf's own `_fitInsets` pattern. Because `.bb-root` is `position:
+   *  fixed`, `.hub-main-immersive`'s CSS padding never reaches it, so this has to be a real
+   *  measurement rather than a hardcoded constant: absent, hidden or clear of us, the pad is 0. */
+  _fitInsets() {
+    if (!this.rootEl) return;
+    const r = this.rootEl.getBoundingClientRect();
+    let pad = 0;
+    if (this.inHub) {
+      const back = document.querySelector('.hub-back');
+      if (back && back.offsetParent !== null) {
+        const b = back.getBoundingClientRect();
+        if (b.bottom > r.top && b.right > r.left && b.left < r.right) pad = Math.ceil(b.bottom - r.top) + 6;
+      }
+    } else {
+      // Standalone: no hub chrome to clear, but the device's own status bar/notch still needs
+      // clearance. env(safe-area-inset-top) can't be read directly in JS, so it's measured off a
+      // one-off probe element - the same trick because a CSS-only padding here would double-count
+      // against the hub-back measurement above on devices where both apply.
+      if (!this._safeAreaProbe) {
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top, 0px);pointer-events:none;visibility:hidden;';
+        document.body.appendChild(probe);
+        this._safeAreaProbe = probe;
+      }
+      pad = Math.ceil(parseFloat(getComputedStyle(this._safeAreaProbe).paddingTop) || 0);
+    }
+    this.rootEl.style.setProperty('--bb-top-pad', Math.max(0, pad) + 'px');
   }
 
   // -------------------------------------------------------------------------------- setup screen
@@ -213,6 +258,7 @@ class BaseballPlayScreen {
   _renderPlay() {
     this.rootEl.innerHTML = `
       <div class="bb-play">
+        <div class="bb-top-spacer" data-role="topspacer"></div>
         <div class="bb-hud" data-role="hud"></div>
         <div class="bb-field-wrap" data-role="fieldwrap">
           <canvas class="bb-field-canvas" data-role="canvas"></canvas>
@@ -224,7 +270,7 @@ class BaseballPlayScreen {
         <div class="bb-strip" data-role="strip"></div>
         <div class="bb-control" data-role="control"></div>
       </div>
-      <button type="button" class="bb-back" data-act="back" aria-label="${t('back')}">&larr;</button>
+      ${this.inHub ? '' : `<button type="button" class="bb-back" data-act="back" aria-label="${t('back')}">&larr;</button>`}
     `;
     this.canvas = this.rootEl.querySelector('[data-role="canvas"]');
     this.ctx = this.canvas.getContext('2d');
@@ -243,7 +289,8 @@ class BaseballPlayScreen {
       this._fieldH = r.height;
       this._drawStaticField();
     };
-    this.rootEl.querySelector('[data-act="back"]').addEventListener('click', () => this._confirmBack());
+    const backBtn = this.rootEl.querySelector('[data-act="back"]');
+    if (backBtn) backBtn.addEventListener('click', () => this._confirmBack());
     this._paintHud();
     this._paintStrip();
     this._paintControl();
@@ -320,7 +367,11 @@ class BaseballPlayScreen {
     const control = this.rootEl.querySelector('[data-role="control"]');
     if (!control) return;
     control.innerHTML = `
-      <div class="bb-pad" data-role="pad"><div class="bb-pad-marker" data-role="padmarker"></div></div>
+      <div class="bb-pad" data-role="pad">
+        <div class="bb-pad-zone"></div>
+        <div class="bb-pad-sweet"></div>
+        <div class="bb-pad-marker" data-role="padmarker"></div>
+      </div>
       <div class="bb-actions">
         <button type="button" class="bb-slot" data-act="steal" disabled title="${t('locked')}">${t('act_steal')}</button>
         <button type="button" class="bb-slot" data-act="bunt" disabled title="${t('locked')}">${t('act_bunt')}</button>

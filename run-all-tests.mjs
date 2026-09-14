@@ -88,6 +88,10 @@ const SUITES = [
   // Yahtzee against the live AI, then profiles the opponent's strength on both edges. Same
   // browser contract as test-visual.mjs, so it SKIPs without playwright-core/Chromium.
   { file: 'test-yahtzee-ai.mjs', optionalDep: 'playwright-core' },
+  // Baseball's real-hub, real-device-dpr mount check - catches a game that looks fine in a bare
+  // headless page but sits behind the hub's own floating back pill or renders a collapsed field
+  // projection on a real phone. Same browser contract as test-visual.mjs.
+  { file: 'test-baseball-device.mjs', optionalDep: 'playwright-core' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },

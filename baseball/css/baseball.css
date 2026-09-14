@@ -70,6 +70,15 @@
   min-height: 0;
 }
 
+/* Reserves clearance for the hub's own floating immersive back pill (measured in JS, since
+ * `.bb-root` is `position: fixed` and so never receives `.hub-main-immersive`'s own top padding -
+ * see `_fitInsets()`). Standalone this is 0 and `.bb-hud`'s own safe-area padding below does the
+ * whole job. Deliberately OUTSIDE the HUD's own 48px band, which stays a clean fixed height. */
+.bb-top-spacer {
+  flex: 0 0 var(--bb-top-pad, 0px);
+  height: var(--bb-top-pad, 0px);
+}
+
 .bb-hud {
   height: 48px;
   min-height: 48px;
@@ -78,9 +87,9 @@
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  padding-top: env(safe-area-inset-top);
   background: rgba(0,0,0,0.06);
   font-size: 13px;
+  overflow: hidden;
 }
 :root.gh-dark .bb-hud { background: rgba(255,255,255,0.06); }
 
@@ -181,7 +190,9 @@
   padding: 0 12px;
   padding-bottom: env(safe-area-inset-bottom);
   gap: 2.5%;
+  background: rgba(0,0,0,0.10);
 }
+:root.gh-dark .bb-control { background: rgba(255,255,255,0.05); }
 
 .bb-pad {
   width: 44%;
@@ -191,17 +202,45 @@
   background: rgba(0,0,0,0.06);
   position: relative;
   touch-action: none;
+  overflow: hidden;
 }
 :root.gh-dark .bb-pad { background: rgba(255,255,255,0.08); }
+/* The sweet-spot / strike-zone bar: a horizontal band across the pad's own vertical centre
+ * representing the plate's lateral span, so dragging reads as moving a bat/aim point along a
+ * real zone rather than pushing a bare dot around an empty square. */
+.bb-pad-zone {
+  position: absolute;
+  top: 50%;
+  left: 6%;
+  right: 6%;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.12);
+  border: 1px solid rgba(0,0,0,0.25);
+}
+:root.gh-dark .bb-pad-zone { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.25); }
+.bb-pad-sweet {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28%;
+  height: 10px;
+  margin-top: -5px;
+  margin-left: -14%;
+  border-radius: 6px;
+  background: rgba(23,138,122,0.45);
+}
 .bb-pad-marker {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14px; height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 16px; height: 16px;
+  margin: -8px 0 0 -8px;
   border-radius: 50%;
   background: #ffce3a;
   border: 2px solid #16210f;
+  z-index: 2;
 }
 
 .bb-actions {

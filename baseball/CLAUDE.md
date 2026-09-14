@@ -107,6 +107,113 @@ Career home's standings block leaves a large blank region below the row list at 
 (reported during the mocks round). That screen does not exist yet in this repo (career is phase 4+
 territory) — noted here so whichever phase builds career home picks it up rather than re-finding it.
 
+## The phase 3 deploy was broken on a real phone (fixed 2026-09-14, `game-hub-v831` → `game-hub-v832`)
+
+Matt, from a real iPhone screenshot, minutes after the phase 3 deploy went live: the HUD was cut
+off behind the status bar and the Hub button, the field rendered as a narrow vertical sliver at
+any camera angle, the verdict line overlapped the Hub button, Steal/Bunt/Pickoff appeared to
+render twice, a large empty black band sat between the field and the pitch strip, the pitch strip
+was left-aligned pills instead of a tile grid, the Swing button was oversized, and the pad's
+sweet-spot bar was missing. **Every headless suite above, including `test-visual.mjs`'s `fit`
+check, had reported this build clean.** They were not wrong about what they measured — they were
+not measuring the right things.
+
+**Root causes, verified rather than assumed (the user's own suspicion — "measuring against the
+full device viewport instead of the hub root rect" — was close but not exactly it):**
+
+1. **`.bb-root` is `position: fixed; inset: 0`.** The hub's `.hub-main-immersive` reserves top
+   clearance for its floating `.hub-back` pill with CSS `padding-top` — but that padding only
+   applies to normally-flowed children, never to a `position: fixed` descendant, which escapes the
+   flow entirely. `.bb-hud` had only a static `env(safe-area-inset-top)` rule, which clears the OS
+   status bar but has no idea the hub draws its own ~89px-tall floating back button on top of that
+   (measured on a real hub mount at 393x852/dpr3: `.hub-back` bottom = 89px). Headless
+   `test-visual.mjs` never caught it because its `fit` check only asks whether the PAGE overflows
+   its own viewport, never whether content sits *behind* chrome that lives outside the flow.
+   **Fixed the way golf's play screen already solves this**: `this.inHub = !!container.closest
+   ('.hub-game')` at construction, and a new `_fitInsets()` method (golf's own name and pattern)
+   that measures the REAL `.hub-back` element's `getBoundingClientRect()` when in-hub, or a hidden
+   `env(safe-area-inset-top)` probe element when standalone (JS cannot read an `env()` value any
+   other way), and writes the result to a `--bb-top-pad` custom property consumed by a new
+   `.bb-top-spacer` flex child at the top of `.bb-play` — deliberately a separate element from the
+   fixed-height `.bb-hud` band, so the HUD's own 48px stays a clean, unconditional constant.
+2. **Baseball drew its own circular back button (`.bb-back`) in the top-left, unlike every other
+   immersive game here** (golf, escoba, skeeball), which rely solely on the hub's own floating
+   pill and never draw a second one. Combined with `init()` having no guard against being called
+   twice on an already-mounted container, this is the likely source of the reported
+   "Steal/Bunt/Pickoff render twice, ghosted" — a stale first mount's nodes surviving underneath a
+   second one. Fixed two ways: `.bb-back` is now rendered only when `!this.inHub` (matching every
+   other immersive game's convention), and `init(el)` now destroys any existing `el._bbInstance`
+   before constructing a new one.
+3. **`field.js`'s lateral projection scale was independently wrong by roughly 10x**, unrelated to
+   any viewport/device issue — the original ad hoc formula (`xFt * (w * 0.00072) * scale`) was
+   never derived from real camera geometry and collapsed every x-coordinate toward the canvas
+   center, which is exactly "a narrow vertical sliver at any camera angle." Rewritten as a real
+   pinhole-camera projection: a camera position behind and above home plate
+   (`CAM_BACK_FT`/`CAM_HEIGHT_FT`), a tilt angle (`CAM_TILT_DEG`), a perspective divide against
+   depth (`camZ`), and an explicit `CAM_X_SCALE` fraction controlling how far a ball at `camX ==
+   camZ` sits from center — derived and sanity-checked numerically (home plate at screen center,
+   first/third base well separated, the fence nearly spanning the canvas width) before being
+   written into the module. This is still a first cut, not an approved design (see the "no mocks
+   branch" note above) — but it is now geometrically sound math instead of a hand-picked constant
+   that happened to look plausible in one still frame.
+4. Two smaller visual gaps from the same deploy, fixed alongside the above: the control band had
+   no background (read on a phone as "a large empty black band" against the strip above it — now
+   `rgba(0,0,0,0.10)` / a dark-mode equivalent) and the pad's sweet-spot bar was simply never
+   built (`.bb-pad-zone`/`.bb-pad-sweet` added). A pre-existing bug from the same build, found
+   along the way and fixed here too: `_renderSetup()`/the end-modal/tune-panel buttons referenced
+   nonexistent CSS classes (`gh-seg-btn`, `gh-btn-primary` — the real primitives are `gh-seg__item`
+   and `gh-btn--primary`, double-dash BEM), so the league picker and several buttons never picked
+   up `css/ui.css`'s styling at all.
+
+**`claude/baseball-mocks` still does not exist on the remote** — checked a second time this
+round (full branch listing across both pages, plus a `path:mocks` code search), both zero results,
+same as the first check. The user's ask to "lift" the approved field renderer and band geometry
+from that branch could not be carried out because the branch is not there; the fixes above were
+built from the design doc, the reported symptoms, and golf's own working `_fitInsets()` pattern
+instead, then verified against a real device-shaped mount (below) rather than against mocks that
+do not exist.
+
+### Verification, this time against the real hub chrome at real device dimensions
+
+The gap that let this ship: every prior check measured either a bare headless page or a synthetic
+393x852 box with no real hub chrome in it. This time, verification was done by mounting baseball
+through the hub's own `hub.launch()` path (the same real-mount pattern `test-visual.mjs`'s
+`mountInHub` uses — inject the `devOnly` `GAMES` entry into the live `window.__ghHub.games` and
+call `hub.launch('baseball')`, never a synthetic single-page harness) at `393x852,
+deviceScaleFactor: 3` — the real DPR an iPhone reports, where the original bug shipped invisible
+at the suite's `deviceScaleFactor: 1`. Measured directly: `.hub-back` bottom = 89px, `.bb-hud` top
+= 95px (fully clear), `.bb-strip` exactly 108px, `.bb-control` exactly 172px, no duplicate
+`.bb-back` present, the swing button exactly 101x101px, and 12 simulated at-bats' worth of verdict
+lines ("Side retired", "Out", …) never overlapping `.hub-back`. Screenshots reviewed directly
+showed a readable HUD, a wide-based field (still a first-cut camera, not a flat top-down diamond,
+but no longer a needle), the 4-tile pitch grid, the visible sweet-spot bar, and a correctly-sized
+button.
+
+**`test-baseball-device.mjs` is the permanent form of that check** (the user's explicit ask: "add
+a device-sized check that would have caught this"), committed alongside these fixes. It mounts
+baseball through the real hub at `393x852/dpr3`, and asserts: `.bb-hud` clears `.hub-back`'s real
+bottom edge; no duplicate back button is drawn in-hub; the main button is 101x101px; the verdict
+line never overlaps `.hub-back` across several simulated at-bats; and — reading `field.js`'s own
+`project()` directly rather than inspecting pixels — first and third base project at least 15% of
+the canvas width apart from home plate (catches a collapsed-sliver regression without a browser
+screenshot at all) and home plate stays horizontally centered. Follows `test-visual.mjs`'s own
+SKIP-without-`playwright-core`-or-Chromium pattern exactly, so a clone without those stays green
+rather than red.
+
+```
+node baseball/js/test.js          -> 2554 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node test-i18n-strings.mjs        -> 0 failures
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-baseball-device.mjs     -> 6 checks passed (real hub mount, 393x852/dpr3)
+node validate-sw-assets.mjs       -> ok (game-hub-v832, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open, unchanged from the phase 3 note above**: this is still a first-cut camera and
+in-flight steering is still not wired. Those are scope gaps, not regressions from this round.
+
 ## Status: Phase 2 complete
 
 **Every band and tuning constant in `baseball/js/engine/settings.js` is Draft and adjustable from
