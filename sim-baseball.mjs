@@ -1364,6 +1364,22 @@ function achievableRange(shape, weights, champion, slot0Lo, slot0Hi) {
   const rHi = weightedSeasonRate(ladderProfile(shape, slot0Hi, champion), weights);
   return rLo <= rHi ? [rLo, rHi] : [rHi, rLo];
 }
+// BB-2f commit 1 (fix within the same commit): the season rate is `weightedSeasonRate`, an AFFINE
+// function of slot0 AND champion (out[i] = slot0*(1-cum_i) + champion*cum_i, both cum_i in [0,1] so
+// both partial coefficients are >= 0) - so it is monotone increasing in BOTH variables independently.
+// The first cut of this commit fixed champion at its band's own MIDPOINT (0.475) and only swept
+// slot0, which understates what is actually achievable: the champion band is [0.40, 0.55], a real
+// RANGE the retune in commit 3 is free to land anywhere inside, not a single point. Fixing it at the
+// midpoint made Majors read as arithmetically infeasible when it is not - sweeping the whole box
+// (both corners, since monotone in both axes bounds the whole reachable interval) finds real,
+// in-band solutions the midpoint-only check missed. This is the box version of `achievableRange`
+// above; `achievableRange` itself stays as the single-champion-value primitive it already was
+// (still used pointwise below to report one concrete satisfying pair).
+function achievableRangeBox(shape, weights, slot0Lo, slot0Hi, champLo, champHi) {
+  const rMin = weightedSeasonRate(ladderProfile(shape, slot0Lo, champLo), weights);
+  const rMax = weightedSeasonRate(ladderProfile(shape, slot0Hi, champHi), weights);
+  return rMin <= rMax ? [rMin, rMax] : [rMax, rMin];
+}
 /** Inverts the (linear) slot0 -> season-rate map exactly, using the true endpoints slot0=0/1 (not
  *  the contract-bounded [0.85,1] range), so a target rate outside the bounded range still resolves
  *  to a real slot0 number instead of `null` - the caller decides whether that number is legal. */
@@ -1374,36 +1390,42 @@ function slot0For(shape, weights, champion, targetRate) {
   return (targetRate - r0) / (r1 - r0);
 }
 async function runLadder() {
-  const champMid = mean([SLOT_WINRATE_CHAMPION_MIN, SLOT_WINRATE_CHAMPION_MAX]);
+  const champLo = SLOT_WINRATE_CHAMPION_MIN, champHi = SLOT_WINRATE_CHAMPION_MAX;
   const shippedShape = SETTINGS.SCHEDULE_SHAPE;
   const shippedWeights = SCHEDULE_WEIGHTS[shippedShape];
-  console.log(`sim-baseball.mjs --ladder - arithmetic only, no games played. champion band midpoint = ${champMid.toFixed(3)} (constant across leagues), shipped SCHEDULE_SHAPE=${shippedShape} (champion plays ${shippedWeights[7]} of 12 games, game 12).\n`);
+  console.log(`sim-baseball.mjs --ladder - arithmetic only, no games played. champion band = [${champLo}, ${champHi}] (constant across leagues, swept whole range - not fixed at the midpoint), shipped SCHEDULE_SHAPE=${shippedShape} (champion plays ${shippedWeights[7]} of 12 games, game 12).\n`);
   let anyLeagueUnsatisfied = false;
   for (const league of LEAGUES) {
     const [lo, hi] = SEASON_WINRATE_BAND[league];
     const weakestMin = SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[league];
-    console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${weakestMin}, champion band [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}] (mid ${champMid.toFixed(3)})`);
+    console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${weakestMin}, champion band [${champLo}, ${champHi}]`);
     let anyShapeOk = false;
     for (const shape of LADDER_SHAPE_NAMES) {
-      const [rangeLo, rangeHi] = achievableRange(shape, shippedWeights, champMid, weakestMin, 1.0);
+      const [rangeLo, rangeHi] = achievableRangeBox(shape, shippedWeights, weakestMin, 1.0, champLo, champHi);
       const overlapLo = Math.max(rangeLo, lo), overlapHi = Math.min(rangeHi, hi);
       const overlaps = overlapLo <= overlapHi;
       if (overlaps) anyShapeOk = true;
-      const slot0Range = overlaps
-        ? `slot0 in [${slot0For(shape, shippedWeights, champMid, overlapLo).toFixed(4)}, ${slot0For(shape, shippedWeights, champMid, overlapHi).toFixed(4)}]`
-        : '';
-      // Margin: how much of the overlap window survives moving 0.005 in from each side of the
-      // season band before the achievable range would fail to reach it - i.e. how far the
-      // overlap sits from being a knife-edge single point.
+      // A concrete satisfying pair, once we know one exists: hold slot0 at its own floor and solve
+      // for the champion value that lands exactly on the overlap's low edge - valid whenever that
+      // edge sits inside [rangeLo, the season rate at (slot0=weakestMin, champion=champHi)], which
+      // is guaranteed here since overlapLo is by construction >= rangeLo (the box's true minimum,
+      // reached at this exact slot0/champLo corner) and champion is monotone increasing in rate.
+      const rateAtFloorChampHi = weightedSeasonRate(ladderProfile(shape, weakestMin, champHi), shippedWeights);
+      const exampleChamp = overlapLo <= rateAtFloorChampHi
+        ? champLo + (overlapLo - rangeLo) / Math.max(1e-9, rateAtFloorChampHi - rangeLo) * (champHi - champLo)
+        : null;
+      const example = overlaps && exampleChamp != null
+        ? `e.g. slot0=${weakestMin}, champion=${exampleChamp.toFixed(4)}`
+        : overlaps ? '(overlap needs slot0 above its own floor too - see corner values)' : '';
       const margin = overlaps ? (overlapHi - overlapLo) : 0;
-      console.log(`  ${shape.padEnd(8)} achievable season rate over slot0 in [${weakestMin}, 1.0] = [${rangeLo.toFixed(4)}, ${rangeHi.toFixed(4)}]  ${overlaps ? `PASS (band overlap [${overlapLo.toFixed(4)}, ${overlapHi.toFixed(4)}], width ${margin.toFixed(4)}, ${slot0Range})` : 'fail (no overlap with season band)'}`);
+      console.log(`  ${shape.padEnd(8)} achievable season rate over slot0 in [${weakestMin}, 1.0] x champion in [${champLo}, ${champHi}] = [${rangeLo.toFixed(4)}, ${rangeHi.toFixed(4)}]  ${overlaps ? `PASS (band overlap [${overlapLo.toFixed(4)}, ${overlapHi.toFixed(4)}], width ${margin.toFixed(4)}, ${example})` : 'fail (no overlap with season band)'}`);
     }
     if (!anyShapeOk) {
       anyLeagueUnsatisfied = true;
       console.log(`  no shape satisfies both bands under SCHEDULE_SHAPE=${shippedShape} - checking which schedule shapes WOULD admit one:`);
       for (const [scheduleName, weights] of Object.entries(SCHEDULE_WEIGHTS)) {
         for (const shape of LADDER_SHAPE_NAMES) {
-          const [rLo, rHi] = achievableRange(shape, weights, champMid, weakestMin, 1.0);
+          const [rLo, rHi] = achievableRangeBox(shape, weights, weakestMin, 1.0, champLo, champHi);
           const oLo = Math.max(rLo, lo), oHi = Math.min(rHi, hi);
           const admits = oLo <= oHi;
           console.log(`    ${scheduleName.padEnd(12)} x ${shape.padEnd(8)} achievable=[${rLo.toFixed(4)}, ${rHi.toFixed(4)}]  ${admits ? `admits (overlap [${oLo.toFixed(4)}, ${oHi.toFixed(4)}])` : 'does not admit'}`);
