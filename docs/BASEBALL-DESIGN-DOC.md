@@ -1,6 +1,6 @@
 # Baseball: Game Design Doc
 
-Game Hub (`mpowell95/game-hub`). Version 10 draft, September 12, 2026. Revised after Fable architecture review.
+Game Hub (`mpowell95/game-hub`). Version 11 draft, September 12, 2026. Revised after Fable architecture review.
 
 This doc says how the game works. It is not a coding or implementation guide. Look, layout, and UI details belong in the Design Spec (next step).
 
@@ -178,7 +178,18 @@ Major League	41 to 51%	about 4.5
 The win-rate column is Locked. The seasons column is derived from it plus the bracket and standings model, and is measured by the simulator rather than set. A full career is roughly 12 seasons and 170 games.
 
 - **[Locked]** These bands describe a **median** player at the league's expected skill level. A player who has won the World Series and maxed every skill is far above that and wins far more. Every target in this section is a median-player target unless it says otherwise.
-- **[Locked]** Within a league, the weakest opponent is beaten at 85% or better and the champion sits between 40 and 55%. The sequence never rises as you go up the ladder.
+- **[Locked]** Within a league, the weakest opponent and the champion sit in these bands. The sequence never rises as you go up the ladder, but it need not descend evenly: a league may be flat with a cliff at the champion, or spread across all eight slots.
+
+```
+League	Weakest slot beaten	Champion
+Little League	95%	40 to 55%
+High School	85%	40 to 55%
+College	78%	40 to 55%
+Minor League	70%	40 to 55%
+Major League	62%	40 to 55%
+```
+
+- **[Locked]** Every league's CPU teams are generated below that league's cap, so the champion has room to be better than its league mates. No league may generate every team at the cap.
 - **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
 - **[Locked]** Within a league, the 8 teams are ordered weakest to strongest, and the schedule puts harder opponents later in the season. The championship opponent is the toughest team in the league.
