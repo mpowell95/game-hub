@@ -230,6 +230,45 @@ await ctx.close();
   }
 }
 
+// 4. The PLATE camera (2026-09-14 camera rebuild, Matt: "the camera is fundamentally wrong...
+// this game was always meant to" match Mario Superstar Baseball's close, over-the-shoulder view).
+// Regression guard for the two failure modes a real render caught during that rebuild: (a) the
+// near player collapsing to the same size as the far one (no foreshortening - the bug this whole
+// rebuild exists to fix), and (b) a near-field ground shape (the mound circle, the rubber)
+// wrapping into a self-crossing mess because part of it fell behind the camera when the SAME
+// world point becomes the "near" reference in pitching mode - found on a real render, not assumed.
+{
+  const mod = await import('./baseball/js/field.js');
+  if (typeof mod.projectPlate !== 'function') {
+    fail('plate-camera', 'field.js does not export projectPlate(xFt, yFt, w, h, mode)');
+  } else {
+    const W = 393, H = 429;
+    const battingNear = mod.projectPlate(0, 0, W, H, 'batting');   // home plate, near the batter
+    const battingFar = mod.projectPlate(0, 60.5, W, H, 'batting'); // the mound, far away
+    const ratio = battingNear.scale / battingFar.scale;
+    if (ratio < 8) {
+      fail('plate-camera', `near/far scale ratio only ${ratio.toFixed(2)}x (batting: home vs mound) - expected strong foreshortening (>= 8x), the camera may have collapsed back toward a flat/overhead view`);
+    } else {
+      ok(`plate camera foreshortens strongly: home is ${ratio.toFixed(1)}x the mound's scale (batting)`);
+    }
+    // Mirror symmetry: pitching's own near/far ratio (pitcher vs the batter at the plate) should
+    // match batting's within a small tolerance - same camera, turned around.
+    const pitchingNear = mod.projectPlate(0, 60.5, W, H, 'pitching'); // the mound, near the pitcher
+    const pitchingFar = mod.projectPlate(0, 0, W, H, 'pitching');     // home plate, far away
+    const ratio2 = pitchingNear.scale / pitchingFar.scale;
+    if (Math.abs(ratio2 - ratio) / ratio > 0.02) {
+      fail('plate-camera', `pitching's near/far ratio (${ratio2.toFixed(2)}x) does not mirror batting's (${ratio.toFixed(2)}x) - the two modes should be the same camera turned around`);
+    } else {
+      ok('pitching mode mirrors batting mode exactly (same camera, turned around)');
+    }
+  }
+  if (typeof mod.drawPlateView !== 'function' || typeof mod.drawPlateBall !== 'function') {
+    fail('plate-camera', 'field.js does not export drawPlateView/drawPlateBall');
+  } else {
+    ok('drawPlateView and drawPlateBall are exported');
+  }
+}
+
 await browser.close();
 
 console.log('');

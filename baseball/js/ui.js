@@ -13,7 +13,7 @@ import * as SETTINGS from './engine/settings.js';
 import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
-import { drawField, drawBall, drawLandingMarker, project } from './field.js';
+import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall } from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
 const t = makeT(STRINGS);
@@ -132,6 +132,7 @@ class BaseballPlayScreen {
     if (this._onWindowPointerUp) window.removeEventListener('pointerup', this._onWindowPointerUp);
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
+    if (this._tossRaf) cancelAnimationFrame(this._tossRaf);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -302,7 +303,22 @@ class BaseballPlayScreen {
     return (SETTINGS.FIELD[this.league] || SETTINGS.FIELD.majors).fenceFt;
   }
 
+  /** The PLATE camera - live for every pitch (aiming, the throw, the swing). See field.js's own
+   *  header for the camera and baseball/CLAUDE.md's "The camera was rebuilt to match the
+   *  reference" for why this is the default view and the overhead camera below is the exception,
+   *  not the other way round. */
   _drawStaticField() {
+    if (!this.ctx || !this._fieldW) return;
+    const dark = document.documentElement.classList.contains('gh-dark');
+    const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
+    drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark);
+  }
+
+  /** The OVERHEAD camera - the cutaway that plays for the batted-ball flight, so the out-zone
+   *  geometry and the landing marker (both authored for a top-down view) stay meaningful. Chosen
+   *  deliberately over a soft pull-back on the plate camera or dropping the visual outcome
+   *  entirely - see field.js's header. */
+  _drawOverheadField() {
     if (!this.ctx || !this._fieldW) return;
     const dark = document.documentElement.classList.contains('gh-dark');
     drawField(this.ctx, this._fieldW, this._fieldH, this.league, this._fenceFt(), dark);
@@ -495,6 +511,11 @@ class BaseballPlayScreen {
     this._setLine1(''); this._setLine2('');
   }
 
+  /** The ball is IN PLAY - cuts to the overhead camera for the flight and the landing marker (see
+   *  field.js's header for why: the out-zone geometry and the landing marker are both authored for
+   *  a top-down view and don't translate to the close plate camera). The plate camera returns on
+   *  the next `_drawStaticField()` call, which `decidePitch`/`decideSwing` make at the start of the
+   *  next pitch. */
   _animateBattedBall(xFt, yFt, kind, label) {
     return new Promise((resolve) => {
       const dur = 700;
@@ -502,7 +523,7 @@ class BaseballPlayScreen {
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
-        this._drawStaticField();
+        this._drawOverheadField();
         drawBall(this.ctx, this._fieldW, this._fieldH, xFt * frac, yFt * frac, { baseRadius: 7 });
         if (frac < 1) {
           this._rafBall = requestAnimationFrame(step);
@@ -515,6 +536,9 @@ class BaseballPlayScreen {
     });
   }
 
+  /** The pitch, through the plate camera, while batting: the ball starts far (at the mound) and
+   *  GROWS as it approaches - real engine data (`pitchResult.x`/`timeToPlateS`), not a cosmetic
+   *  approximation, since the human batter's own decideSwing has the real resolved pitch in hand. */
   _animatePitchFlight(pitchResult) {
     return new Promise((resolve) => {
       const dur = pitchResult.timeToPlateS * 1000;
@@ -525,7 +549,7 @@ class BaseballPlayScreen {
         const yFt = 60.5 * (1 - frac);
         const xFt = pitchResult.x * 8.5 * frac; // spread from center-line toward final x near the plate
         this._drawStaticField();
-        drawBall(this.ctx, this._fieldW, this._fieldH, xFt, yFt, { baseRadius: 6 });
+        drawPlateBall(this.ctx, this._fieldW, this._fieldH, xFt, yFt, 'batting', {});
         if (frac < 1) {
           this._pitchRaf = requestAnimationFrame(step);
         } else {
@@ -533,6 +557,37 @@ class BaseballPlayScreen {
         }
       };
       this._pitchRaf = requestAnimationFrame(step);
+    });
+  }
+
+  /** The pitch, through the plate camera, while PITCHING: the ball leaves the pitcher's hand
+   *  (near, large) and SHRINKS as it recedes toward the plate. Cosmetic, not a mimic of the
+   *  engine's own physics - when the human pitches, the batter is `CpuBatter`, so the resolved
+   *  pitch (its real break, its real x, its real timeToPlateS) is computed and consumed entirely
+   *  inside the engine's own `Game.playPitch` and never reaches this UI (engine/ is unchanged this
+   *  pass - see field.js's header). Building a second, UI-side pitch-physics model to match it
+   *  would risk a toss that visibly disagrees with the engine's own call; a fixed, honest,
+   *  aim-only toss cannot disagree with anything because it never claims to BE the real pitch. Not
+   *  awaited by its caller - a purely visual flourish that never adds real pacing (see
+   *  baseball/CLAUDE.md's "the camera rebuild" note on why this is here at all). */
+  _animatePitchToss(aimX) {
+    return new Promise((resolve) => {
+      const dur = 420;
+      const t0 = performance.now();
+      const step = (now) => {
+        if (this.destroyed) return resolve();
+        const frac = Math.min(1, (now - t0) / dur);
+        const yFt = 60.5 * frac;
+        const xFt = (aimX || 0) * 6 * frac;
+        this._drawStaticField();
+        drawPlateBall(this.ctx, this._fieldW, this._fieldH, xFt, yFt, 'pitching', {});
+        if (frac < 1) {
+          this._tossRaf = requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      };
+      this._tossRaf = requestAnimationFrame(step);
     });
   }
 
@@ -642,6 +697,8 @@ class HumanAgent {
     s._paintStrip();
     s._paintModeLabels();
     s._setLine1(''); s._setLine2('');
+    s._drawStaticField(); // cut back to the plate camera - the last at-bat may have left the
+                           // overhead cutaway up (_animateBattedBall)
 
     return new Promise((resolve) => {
       let steerSamples = [];
@@ -676,6 +733,7 @@ class HumanAgent {
         s._onMainUp = null;
         const holdMs = performance.now() - start;
         s._paintRing('released', Math.min(1.3, holdMs / meterMs));
+        s._animatePitchToss(s.padX); // cosmetic - not awaited, adds no pacing (see its own header)
         resolve({ type: s.state.selectedPitch, aim: s.padX, hold: holdMs, steer: steerSamples });
       };
       s._onMainUp = finish;

@@ -294,6 +294,128 @@ node test-sw-strategy.mjs         -> 107 passed, 0 failed
 judged), but in-flight steering is still not wired, and the career-home/how-to/game-end mocks
 remain unbuilt - all phase 4+ scope.
 
+## The camera was rebuilt to match the reference: over-the-shoulder, not overhead (2026-09-14, `game-hub-v833` → `game-hub-v834`)
+
+Both prior camera rounds (the phase 3 first cut and the mocks-matched rewrite that followed it)
+were still, fundamentally, an ELEVATED view of the whole infield - closer to a broadcast blimp
+shot than what the game was ever meant to be. Matt, with two Mario Superstar Baseball screenshots:
+*"The play screen's camera is fundamentally wrong and everything visual depends on it. Rebuild
+it... this game was always meant to match"* that reference's close, low, over-the-shoulder view -
+batter huge in the near foreground, pitcher small in the middle distance, strong perspective
+foreshortening, the ball visibly growing as it approaches. The mocks-matched overhead camera got
+the DIAMOND right; it was never going to get the CAMERA right, because it isn't the same shot.
+
+**This is a genuinely different camera, not a re-tuning of the old one.** Both now live in
+`field.js` side by side, doing two different jobs:
+
+- **The plate camera** (`projectPlate`/`drawPlateView`/`drawPlateBall`, new) - live for every
+  pitch. Low (chest height), close (a couple of feet behind the plate or the mound), true
+  perspective throughout with no artificial remap on either axis (unlike the overhead camera,
+  which deliberately DOES remap - see its own section header). Batting looks from behind home
+  plate toward the mound; pitching is the same camera turned 180 degrees (the mound becomes its
+  own "home," and lateral position mirrors, the way turning around actually flips left and right).
+  Solved (not eyeballed) against two targets - home plate near the bottom of the frame, the mound
+  at middle distance - via a small grid search; see the section's own comment for the derivation
+  and why a low, near-level camera's horizon is a hard asymptote (everything past the mound
+  compresses into a narrow band near it, which is real low-angle-camera optics, not a bug - it is
+  why the outfield/fence beyond the mound is a stylized backdrop rather than projected geometry,
+  the one part of this camera that is NOT to-scale).
+- **The overhead camera** (`project`/`drawField`/`drawBall`/`drawLandingMarker`, unchanged from
+  the mocks-matched round) - kept, verbatim, as the CUTAWAY that plays when a ball is put in play.
+
+### What to do about out zones - raised, not decided silently
+
+The handoff explicitly flagged this rather than assuming an answer, since the out-zone geometry
+and the landing marker were both authored for a top-down view and do not mean anything from a
+close, ground-level camera. Matt's choice, from three options put to him (cut to a wide view on
+contact; soften it to a pull-back on the same camera; drop the visual outcome and rely on the HUD
+text alone): **cut to the overhead camera on contact.** This is also exactly what the reference
+itself does (Mario Superstar Baseball cuts to a fielding camera once the ball is live) - not a
+coincidence so much as the same problem this genre has always solved the same way, because a
+close plate-side camera genuinely cannot show a ball's flight and landing across a whole outfield.
+`_animateBattedBall` (`baseball/js/ui.js`) now calls `_drawOverheadField()` instead of
+`_drawStaticField()` for exactly the duration of the batted-ball animation and the landing-marker
+pause; the very next `decidePitch`/`decideSwing` call (start of the next at-bat) explicitly cuts
+back to the plate camera via its own `_drawStaticField()` call, since nothing else was forcing a
+repaint between innings and the stale overhead frame would otherwise sit there through the whole
+next at-bat's aim/charge phase.
+
+### The pitch, cosmetically, while pitching
+
+The batting side's pitch-flight animation (`_animatePitchFlight`) already had real data to draw
+from - `HumanAgent.decideSwing` receives the engine's own resolved `pitchResult` (`x`,
+`timeToPlateS`), because the human is the one swinging. When the human PITCHES, the batter is
+`CpuBatter`, and the resolved pitch is computed and consumed entirely inside the engine's own
+`Game.playPitch` - nothing about its real break, timing, or outcome reaches this UI at all (and
+`baseball/js/engine/` is unchanged this pass, so that seam was not widened to fix it). Building a
+second, UI-side estimate of the same physics to fake a matching toss would risk a visible
+disagreement with what the engine actually decided. Instead, `_animatePitchToss` (new) plays a
+fixed, honest, aim-only cosmetic toss on release - the ball leaves the pitcher's hand near/large
+and shrinks toward the plate over a flat duration, using only the human's own aim input, and
+never claims to BE the real pitch. It is fired without being awaited, so it adds no pacing of its
+own; the count/verdict flow is entirely unaffected by whether or how it plays.
+
+### Two bugs found only by rendering the pitching mirror, not by reasoning about it
+
+- **Figures were invisible at first.** The initial size formula scaled a figure's height by a
+  made-up `h/220` constant that had no relationship to the camera's own actual feet-to-pixel rate
+  at any given depth - both players rendered at a few pixels tall, functionally invisible on a
+  ~1300px canvas. Fixed by sizing everything relative to the SAME `scale` value used for
+  everything else in this camera (a figure standing at the camera's own reference depth is drawn
+  at a fixed, tuned fraction of the frame's height - `PLATE_FIGURE_REF_FRAC` - and everything else
+  follows from `projectPlate`'s own scale, the same rule the ball's own radius follows).
+- **The near player's own default position (3.2ft off-axis) projected off-canvas** at this
+  camera's aggressive lateral scale (`x=441px` on a 393px-wide canvas) - invisible for a completely
+  different reason than the first bug (drawn, just off the edge). Found by computing the actual
+  projected coordinates directly rather than continuing to guess-and-rescreenshot; moved both
+  players' near-field positions closer to center (`x` -> ~1.0-1.2ft) so they stay on-canvas at
+  every host width this repo supports.
+- **The mound's dirt circle and the rubber self-crossed into a bowtie/hourglass smear in pitching
+  mode specifically** - not a rendering bug in the shapes themselves, but a real consequence of
+  mirroring: in batting mode the mound (60.5ft away) is safely far from the camera, so a full
+  circle sampled around it is fine; in pitching mode that SAME world point becomes the camera's
+  own near reference (the pitcher's own standing spot), and a circle sampled symmetrically around
+  it puts half its points behind the pitcher - and briefly behind the camera itself - producing
+  the near-singular distortion visible on a real render. Fixed two ways: the mound's dirt patch is
+  now drawn as a HALF-circle facing home only (`plateGroundCircle`'s `fromDeg`/`toDeg` params,
+  90-270), and the rubber (a genuinely tiny, always-near-camera-when-pitching detail that would be
+  occluded by the pitcher's own body anyway) is simply not drawn in pitching mode at all. Both
+  fixes were found by rendering the actual mirror and looking at it, not by reasoning about the
+  math in the abstract - the same lesson the earlier field-renderer rounds already learned once.
+
+### Verification
+
+Both views were compared side by side against the two reference screenshots and read as the same
+kind of shot: the batter huge and partially cropped by the frame edge in the near foreground, the
+pitcher small and clearly separated in the middle distance, foul lines diverging steeply toward
+the bottom corners rather than converging to a point, the ground reading as a receding plane. The
+pitching view was confirmed to mirror correctly (batter small at the plate, pitcher huge on the
+mound) by forcing `state.mode = 'pitching'` on a live instance and re-rendering. The ball's own
+growth was confirmed directly via `canvas.toDataURL()` at several points along its flight (a
+`page.screenshot()` a frame later intermittently missed it - an unrelated async repaint racing the
+capture in the test harness itself, not a rendering defect; reading the canvas's own pixels
+immediately after the draw call removed the race and confirmed the ball paints and sizes
+correctly at every point checked). The overhead cutaway and its landing marker were confirmed
+still correct and unchanged.
+
+```
+node baseball/js/test.js          -> 2554 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node test-i18n-strings.mjs        -> 0 failures
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-baseball-device.mjs     -> 9 checks passed (real hub mount, 393x852/dpr3, plus new
+                                      plate-camera foreshortening + mirror-symmetry checks)
+node validate-sw-assets.mjs       -> ok (game-hub-v834, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Explicitly unchanged this pass, per the handoff's own scope**: pacing, windup timing, swing
+feedback, the league picker, and `baseball/js/engine/` itself. The two players are static
+silhouettes with no pose states - no windup animation was added, only the two players' correct
+size and position in the new camera. In-flight steering is still not wired (unchanged from every
+prior round). The career-home/how-to/game-end mocks remain unbuilt (phase 4+ scope, unchanged).
+
 ## Status: Phase 2 complete
 
 **Every band and tuning constant in `baseball/js/engine/settings.js` is Draft and adjustable from
