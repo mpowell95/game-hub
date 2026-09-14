@@ -1,4 +1,4 @@
-// teams.js : deterministic team generation. Same (league, index) -> byte-identical team, on any
+// teams.js : deterministic team generation. Same (league, styleId) -> byte-identical team, on any
 // device, every run - the same "emit the documented shape from a seed and nothing else" contract
 // golf/js/holegen.js's header describes for hole generation, applied here to rosters.
 //
@@ -9,21 +9,24 @@
 // below (how a style's weights turn into six skill values under that ceiling) is not given by the
 // doc at all - Draft [Open item 25], the same tag TEAM_STYLES/TEAM_STYLE_WEIGHTS carry in
 // settings.js, since a style's numeric weights are equally undecided there.
+//
+// Step 3 (phase 2): players carry no NAME (doc §9, [Locked]: "Players are shown by jersey number
+// and position... No names" - phase 1's invented `nameFor()`/FIRST_NAMES/LAST_NAMES are gone) and
+// `makeLeague()` builds the doc's fixed eight-team, one-style-each league (§9), ordered weakest to
+// strongest (§8, [Locked]). `RULES_V` 2 -> 3 for this shape change.
 
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
-import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL } from './settings.js';
+import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
+  TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, SLOT_SIGMA_DESCENT } from './settings.js';
 
-function nameFor(rand01) {
-  const first = FIRST_NAMES[Math.floor(rand01() * FIRST_NAMES.length)];
-  const last = LAST_NAMES[Math.floor(rand01() * LAST_NAMES.length)];
-  return `${first} ${last}`;
+// doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
+// slot 0 always the starting pitcher (unchanged from phase 1).
+export const POSITIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+
+function jerseyFor(rand01) {
+  return 1 + Math.floor(rand01() * 99);
 }
-
-const FIRST_NAMES = ['Alex', 'Sam', 'Jordan', 'Casey', 'Morgan', 'Riley', 'Drew', 'Jamie', 'Quinn',
-  'Reese', 'Avery', 'Rowan', 'Blair', 'Dana', 'Kai', 'Emerson', 'Finley', 'Harper', 'Skyler', 'Toby'];
-const LAST_NAMES = ['Rivera', 'Chen', 'Okafor', 'Novak', 'Hartley', 'Dubois', 'Kowalski', 'Silva',
-  'Nakamura', 'Petrov', 'Fontaine', 'Delgado', 'Whitfield', 'Osei', 'Larsen', 'Mercer', 'Vance',
-  'Iyer', 'Boone', 'Castellan'];
 
 /** How far below the league's raw cap a CPU team is generated (doc §8). */
 export function effectiveCapFor(league) {
@@ -50,25 +53,14 @@ function allocateSkills(effectiveCap, style, rand01) {
   return skills;
 }
 
-/**
- * Build one full team: a roster of `size` players and a batting order (all `size` ids, in order).
- * @param {string} league - a LEAGUES id
- * @param {number} index - which team within the league/season this is (varies the seed)
- * @param {object} [opts]
- * @param {string} [opts.name] - display name; a generated placeholder if omitted
- * @param {number} [opts.size] - roster size, default 9 (no bench this phase)
- */
-export function makeTeam(league, index, opts = {}) {
+/** Shared by `makeTeam` and `makeLeague`: build one full roster (9 players, jersey+position, a
+ *  batting order) from an already-resolved styleId and an already-seeded `rand01`. `effectiveCap`
+ *  is explicit (BB-2a step 5) rather than always re-derived from `effectiveCapFor(league)` - a
+ *  `makeLeague` slot's own ladder-offset cap differs from the league's single "expected level"
+ *  number `makeTeam` still uses for an ungraded team. */
+function buildRoster(league, styleId, rand01, opts, effectiveCap) {
   const size = opts.size || 9;
-  const seed = hashSeed('bb-team', league, index);
-  const rand01 = mulberry32(seed);
-
-  const styleWeights = TEAM_STYLE_WEIGHTS[league] || TEAM_STYLE_WEIGHTS.majors;
-  const styleIds = Object.keys(styleWeights);
-  const styleId = pickWeighted(rand01, styleIds, styleIds.map((id) => styleWeights[id]));
   const style = TEAM_STYLES[styleId];
-
-  const effectiveCap = effectiveCapFor(league);
 
   const players = [];
   for (let i = 0; i < size; i++) {
@@ -76,7 +68,8 @@ export function makeTeam(league, index, opts = {}) {
     const throwsArm = rand01() < LEFTY_RATE ? 'L' : 'R';
     players.push({
       id: `p${i}`,
-      name: nameFor(rand01),
+      jersey: jerseyFor(rand01),
+      pos: POSITIONS[i] || POSITIONS[POSITIONS.length - 1],
       bats,
       throws: throwsArm,
       skills: allocateSkills(effectiveCap, style, rand01),
@@ -85,12 +78,125 @@ export function makeTeam(league, index, opts = {}) {
 
   const pitcherIndex = 0; // roster slot 0 is always the starting pitcher this phase
   return {
-    name: opts.name || `${league}-${index}`,
+    name: opts.name || `${league}-${styleId}`,
     league,
     styleId,
     players,
     battingOrder: players.map((p) => p.id),
     pitcherId: players[pitcherIndex].id,
+  };
+}
+
+/**
+ * Build one full team.
+ * @param {string} league - a LEAGUES id
+ * @param {number|string} index - which team within the league/season this is (varies the seed);
+ *   also accepted as a styleId string directly (see `opts.styleId`) for `makeLeague`'s own use.
+ * @param {object} [opts]
+ * @param {string} [opts.name] - display name; a generated placeholder if omitted
+ * @param {number} [opts.size] - roster size, default 9 (no bench this phase)
+ * @param {string} [opts.styleId] - force a specific TEAM_STYLES id rather than drawing one
+ */
+export function makeTeam(league, index, opts = {}) {
+  const seed = hashSeed('bb-team', league, index);
+  const rand01 = mulberry32(seed);
+
+  let styleId = opts.styleId;
+  if (!styleId) {
+    const styleWeights = TEAM_STYLE_WEIGHTS[league] || TEAM_STYLE_WEIGHTS.majors;
+    const styleIds = Object.keys(styleWeights);
+    styleId = pickWeighted(rand01, styleIds, styleIds.map((id) => styleWeights[id]));
+  }
+  return buildRoster(league, styleId, rand01, opts, effectiveCapFor(league));
+}
+
+/** doc §9, [Locked]: 8 teams per league, each with a DISTINCT style, "the same players every
+ *  time." Every league offers exactly the eight named `TEAM_STYLES`, one team each, ordered
+ *  weakest to strongest (doc §8, [Locked]: "the 8 teams are ordered weakest to strongest, and the
+ *  schedule puts harder opponents later").
+ *
+ *  BB-2a step 5: strength now comes from `TEAM_LADDER_OFFSETS` (eight per-slot skill-point
+ *  offsets around `effectiveCapFor(league)`) applied by SLOT, never from a post-hoc sort by
+ *  measured `teamStrength()` - a style's own flavor (TEAM_STYLES) no longer has to double as its
+ *  strength, so the tuner (`sim-baseball.mjs --styles --tune`) can bring every style's win rate
+ *  close to `balanced` without fighting the ladder order. `LEAGUE_LADDER_STYLES[league]` says
+ *  which style occupies which slot; slot order IS the returned array order. Fixed forever per
+ *  (league, styleId) seed - never per position in the array - so editing the ladder-style TABLE
+ *  cannot silently reseed a team that keeps the same style. */
+// BB-2d commit 5: slots 0-4 keep the existing per-league CPU_SIGMA_MIN_MS floor; slots 5-7 descend
+// linearly toward CPU_SIGMA_ABSOLUTE_FLOOR_MS (never below it) - see SLOT_SIGMA_DESCENT's own
+// comment in settings.js. Resolved to an absolute ms number HERE, at roster-build time (this
+// function already knows the slot and league), and attached onto `team.ladderOffset.sigmaFloorMs`
+// so agents.js's `cpuSigmaFloorMs` can read one number without re-deriving the interpolation.
+function slotSigmaFloorMs(league, slot) {
+  const leagueMin = CPU_SIGMA_MIN_MS[league] != null ? CPU_SIGMA_MIN_MS[league] : CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+  const { bindThroughSlot, descentToSlot } = SLOT_SIGMA_DESCENT;
+  if (slot <= bindThroughSlot) return leagueMin;
+  const t = Math.min(1, (slot - bindThroughSlot) / (descentToSlot - bindThroughSlot));
+  return leagueMin + (CPU_SIGMA_ABSOLUTE_FLOOR_MS - leagueMin) * t;
+}
+
+export function makeLeague(league) {
+  const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
+  const baseCap = effectiveCapFor(league);
+  const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
+  const teams = order.map((styleId, slot) => {
+    const seed = hashSeed('bb-league', league, styleId);
+    // BB-2b commit 3: TEAM_LADDER_OFFSETS entries are now `{ skill, timingSigmaMs, chase }` (BB-2d
+    // commit 5 adds `behaviorMul`/`changeupShare`) - only `skill` feeds roster generation here,
+    // exactly as the old bare-number offset did; the rest are attached directly onto the returned
+    // team for `agents.js`'s `CpuBatter`/`CpuPitcher` to read (`ladderOffset`), since they are
+    // BEHAVIOR knobs, not skill points.
+    // BB-2e commit 2: TEAM_LADDER_OFFSETS is now PER-LEAGUE (generated from that league's own
+    // LADDER_SHAPE) - indexed [league][slot], never a bare [slot].
+    const leagueOffsets = TEAM_LADDER_OFFSETS[league] || TEAM_LADDER_OFFSETS.majors;
+    const offsets = leagueOffsets[slot] || { skill: 0, timingSigmaMs: 0, chase: 0, behaviorMul: 1, changeupShare: 0 };
+    // BB-2d commit 6: STYLE_STRENGTH_DELTA (measured by `sim-baseball.mjs --styles`, now against
+    // the median HUMAN model per commit 2) no longer touches the skill cap at all - see this
+    // constant's own settings.js comment for why. Converted instead through SIGMA_MS_PER_WINRATE_PP/
+    // CHASE_PER_WINRATE_PP into ADDITIVE timingSigmaMs/chase offsets, stacked on TOP of the slot's
+    // own TEAM_LADDER_OFFSETS values - a style's own measured behavioral edge (Shifters' shift,
+    // Patient's chaseMul) is now paid for on the SAME axis TEAM_LADDER_OFFSETS itself uses, not by
+    // weakening the roster. `LEAGUE_LADDER_STYLES`' own confirmed order still stays exactly as
+    // Matt set it - a style keeps its slot, and its own measured delta pays for whatever
+    // behavioral edge it carries, just on a different axis than before this commit.
+    const styleDelta = STYLE_STRENGTH_DELTA[styleId] || 0;
+    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
+    const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
+    team.ladderSlot = slot;
+    const styleDeltaPp = styleDelta * 100;
+    team.ladderOffset = {
+      timingSigmaMs: offsets.timingSigmaMs + styleDeltaPp * SIGMA_MS_PER_WINRATE_PP,
+      chase: offsets.chase + styleDeltaPp * CHASE_PER_WINRATE_PP,
+      behaviorMul: offsets.behaviorMul != null ? offsets.behaviorMul : 1,
+      changeupShare: offsets.changeupShare || 0,
+      sigmaFloorMs: slotSigmaFloorMs(league, slot),
+    };
+    return team;
+  });
+  return teams;
+}
+
+/** doc §6, [Locked]: "One player who is all 9: always bats and always pitches." Nine copies of the
+ *  same skills/hand, one per position, so the batting order and the pitcher slot both resolve to a
+ *  real roster entry the same way a CPU team's do - no special-casing needed anywhere `game.js`
+ *  reads `team.players`/`team.pitcherId`. */
+export function makePlayerTeam({ skills, hand }) {
+  const players = POSITIONS.map((pos, i) => ({
+    id: `p${i}`,
+    jersey: i + 1,
+    pos,
+    bats: hand,
+    throws: hand,
+    skills: { ...skills },
+  }));
+  return {
+    name: 'You',
+    league: null,
+    styleId: null,
+    players,
+    battingOrder: players.map((p) => p.id),
+    pitcherId: players[0].id,
   };
 }
 
@@ -110,4 +216,4 @@ export function teamStrength(team) {
   return { means, overall: sum / SKILL_IDS.length };
 }
 
-export default { makeTeam, teamStrength, effectiveCapFor };
+export default { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS };

@@ -17,10 +17,15 @@ import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
 import { swing } from './swing.js';
 import { resolveContact } from './outcomes.js';
+import { zonesFor } from './zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
 
-export const SNAP_V = 1;
+// BB-2f: bumped 1 -> 2, forward-only (doc §15, [Locked]: "SNAP_V is bumped and migrated
+// forward-only, never reinterpreted") - the snapshot shape gained `atBatOpen`/`halfInningOpen`,
+// needed by the resume-correctness fix below. An old v1 snapshot is rejected outright by
+// `validateSnapshot`, never resumed with a guessed value for the new fields.
+export const SNAP_V = 2;
 
 // The runner placed on second at the start of every extra half-inning (doc §3, [Locked]: "every
 // extra half-inning starts with a runner on second"). Not a real batter - nobody's individual
@@ -55,6 +60,8 @@ export function validateSnapshot(snap) {
   }
   if (typeof snap.rngState !== 'number') errs.push('rngState must be a number');
   if (typeof snap.over !== 'boolean') errs.push('over must be a boolean');
+  if (typeof snap.atBatOpen !== 'boolean') errs.push('atBatOpen must be a boolean');
+  if (typeof snap.halfInningOpen !== 'boolean') errs.push('halfInningOpen must be a boolean');
   return errs;
 }
 
@@ -88,10 +95,18 @@ export class Game {
     this.score = { home: 0, away: 0 };
     this.lineupPos = { home: 0, away: 0 };
     this.totals = {
-      home: { hits: 0, runs: 0, errors: 0, strikeouts: 0, walks: 0 },
-      away: { hits: 0, runs: 0, errors: 0, strikeouts: 0, walks: 0 },
+      home: { hits: 0, runs: 0, strikeouts: 0, walks: 0 },
+      away: { hits: 0, runs: 0, strikeouts: 0, walks: 0 },
     };
     this.pitchHistory = Object.create(null); // batterId -> array of recent pitch types thrown to them
+    // batterId -> array of recent sprayAngleDeg for balls this batter has put in play, capped at
+    // SHIFT_WINDOW - the doc §9 "shifters" style reads this to rotate its out-zone geometry toward
+    // where a batter tends to hit (settings.js's SHIFTERS_ADJUST_OUT_ZONES, [Locked]).
+    this.sprayHistory = Object.create(null);
+    // batterId -> array of pitch x-locations this batter swung at and missed, capped at
+    // WEAKSPOT_WINDOW - what a `weakSpotWeight` CpuPitcher (doc §8: "Majors: attacks your weak
+    // spots") reads before aiming there. Step 2.
+    this.weakZoneLog = Object.create(null);
 
     this.over = false;
     this.winner = null;         // 'home' | 'away' | 'tie' | null
@@ -108,6 +123,15 @@ export class Game {
     // Same one-shot pattern, one level up: a snapshot can also land mid-half-inning (outs > 0),
     // and playHalfInning()'s own `this.outs = 0` must not run again in that case.
     this._resumeHalfPending = false;
+    // BB-2f: whether the CURRENT at-bat/half-inning is genuinely still in progress right now -
+    // true for the whole span between `atBatStart`/`halfInningStart` and the moment that unit
+    // actually concludes (a hit/walk/strikeout; 3 outs), set false the instant it concludes,
+    // BEFORE the return - unconditionally, regardless of `aborted` (see the header note on
+    // `playAtBat`/`playHalfInning` below for why these two must never be gated on `aborted`).
+    // `fromSnapshot` restores `_resumePending`/`_resumeHalfPending` FROM these two flags, not
+    // unconditionally true - see that method's own comment for the bug this fixes.
+    this._atBatOpen = false;
+    this._halfInningOpen = false;
   }
 
   /** Rebuild a Game from `snapshot()`'s output. `agents` is supplied fresh (never serialized),
@@ -137,14 +161,31 @@ export class Game {
       away: { ...snap.totals.away },
     };
     g.pitchHistory = { ...(snap.pitchHistory || {}) };
+    g.sprayHistory = { ...(snap.sprayHistory || {}) };
+    g.weakZoneLog = { ...(snap.weakZoneLog || {}) };
     g.over = snap.over;
     g.winner = snap.winner || null;
     g.matchEndReason = snap.matchEndReason || null;
     g.onEvent = null;
     g.onDecided = null;
     g.aborted = false;
-    g._resumePending = true;     // the very next playAtBat must not zero the restored balls/strikes
-    g._resumeHalfPending = true; // the very next playHalfInning must not zero the restored outs
+    g._atBatOpen = snap.atBatOpen;
+    g._halfInningOpen = snap.halfInningOpen;
+    // BB-2f fix: these used to be unconditionally `true` - wrong whenever the snapshot was taken
+    // right as an at-bat/half-inning had ALREADY concluded (a hit/walk/strikeout, or the 3rd out)
+    // but before the next one's own state (balls/strikes reset, or outs reset for the next
+    // half-inning) had run - which the old code deferred to run ONLY on the very next
+    // playAtBat()/playHalfInning() call, a call that never happened on the aborted game itself
+    // (the outer loop stops the instant `aborted` is set). Unconditionally trusting "resuming"
+    // meant that next call wrongly preserved a STALE count instead of starting the new batter/half
+    // at zero - found by this file's own resume-determinism test once a settings change (BB-2f
+    // commit 2) shifted which pitch of a fixed seed happened to be the one an existing test's
+    // scripted abort lands on, landing it exactly on an at-bat conclusion for the first time.
+    // Restoring from the flags this snapshot actually carries (rather than a blanket `true`) is
+    // the fix: `_resumePending`/`_resumeHalfPending` are `true` only when the unit was genuinely
+    // still open at snapshot time.
+    g._resumePending = !!snap.atBatOpen;
+    g._resumeHalfPending = !!snap.halfInningOpen;
     return g;
   }
 
@@ -167,10 +208,14 @@ export class Game {
       lineupPos: { ...this.lineupPos },
       totals: { home: { ...this.totals.home }, away: { ...this.totals.away } },
       pitchHistory: { ...this.pitchHistory },
+      sprayHistory: { ...this.sprayHistory },
+      weakZoneLog: { ...this.weakZoneLog },
       rngState: this.rngState,
       over: this.over,
       winner: this.winner,
       matchEndReason: this.matchEndReason,
+      atBatOpen: this._atBatOpen,
+      halfInningOpen: this._halfInningOpen,
     };
   }
 
@@ -190,8 +235,22 @@ export class Game {
     return value;
   }
 
+  /** The park's fence distances (doc §10, [Locked]: "Fields get bigger each league"). BB-2b
+   *  commit 3: every league's own fence now comes straight from `FIELD[league].fenceFt` - the
+   *  doc's real per-league fence table `zones.js`/`fenceFtAt` already read for everything else.
+   *  `PARKS` (a flat, league-independent {left,center,right} shape) is used ONLY when a real
+   *  named Majors park is actually requested (`parkId` is not `'default'`, and the league is
+   *  majors) - a named park's own distances are already at major-league scale and need no further
+   *  scaling. Before this phase every league's fence was `PARKS.default` scaled by that league's
+   *  `fieldScale` - a DIFFERENT number from `FIELD[league].fenceFt`, which nothing outside
+   *  `_parkFt()` ever consulted, so `zones.js`'s out-zone reach and the fence a batted ball
+   *  actually had to clear could silently disagree. */
   _parkFt() {
-    return this.settings.PARKS[this.parkId] || this.settings.PARKS.default;
+    if (this.league === 'majors' && this.parkId && this.parkId !== 'default' && this.settings.PARKS[this.parkId]) {
+      return { ...this.settings.PARKS[this.parkId] };
+    }
+    const fenceFt = (this.settings.FIELD[this.league] || this.settings.FIELD.majors).fenceFt;
+    return { ...fenceFt };
   }
 
   _controlSkillFor(pitcher) {
@@ -200,15 +259,31 @@ export class Game {
     return Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
   }
 
-  _defenseLevel01() {
-    // There is no per-player "fielding" skill in the real design (doc §6 names only hitAcc/
-    // hitPow/hitSpd and pitchSpd/pitchAcc/pitchSpin) - defense there is entirely OUT-ZONE
-    // GEOMETRY, sized per league (doc §10: "out zones also grow"). Exact per-league sizing is
-    // Open item 7 (undecided), so this is a placeholder league-ordered ramp, not a real model:
-    // higher leagues field a little better, same direction as the doc's own "better fielders" line,
-    // with no claim to the actual magnitude.
-    const idx = Math.max(0, LEAGUES.indexOf(this.league));
-    return 0.4 + 0.15 * (idx / (LEAGUES.length - 1));
+  /** How far a "shifters" team (doc §9, [Locked]) rotates its out-zone geometry toward this
+   *  batter's own recent spray tendency. Every other style shifts nothing - `zonesFor`'s default
+   *  `shiftDeg` of 0 leaves the base geometry untouched. */
+  _shiftDegFor(defenseTeam, batterId) {
+    // BB-2a step 5: reads settings.js's STYLE_BEHAVIOR table (was a hardcoded 'shifters' string
+    // check) - a team's shifting behavior is now named alongside the rest of its flavor.
+    const behavior = this.settings.STYLE_BEHAVIOR && this.settings.STYLE_BEHAVIOR[defenseTeam.styleId];
+    if (!behavior || !behavior.shift) return 0;
+    const hist = this.sprayHistory[batterId];
+    // BB-2d commit 6: SHIFT_MIN_SAMPLES - a shift is a TENDENCY, not a fluke off one ball in play.
+    // Before this commit a single recorded spray angle (hist.length checked only against 0) could
+    // already trigger a shift, which is not "where you tend to hit," just where you hit once.
+    const minSamples = this.settings.SHIFT_MIN_SAMPLES != null ? this.settings.SHIFT_MIN_SAMPLES : 1;
+    if (!hist || hist.length < minSamples) return 0;
+    const mean = hist.reduce((s, v) => s + v, 0) / hist.length;
+    const max = this.settings.SHIFT_MAX_DEG;
+    return Math.max(-max, Math.min(max, mean));
+  }
+
+  _recordSpray(batterId, sprayAngleDeg) {
+    if (typeof sprayAngleDeg !== 'number') return;
+    const hist = this.sprayHistory[batterId] || (this.sprayHistory[batterId] = []);
+    hist.push(sprayAngleDeg);
+    const window = this.settings.SHIFT_WINDOW;
+    if (hist.length > window) hist.splice(0, hist.length - window);
   }
 
   _buildPitchView(defenseSide) {
@@ -224,11 +299,19 @@ export class Game {
       score: { ...this.score },
       batterId,
       pitchHistory: (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW),
+      weakZone: this._weakZoneFor(batterId),
       rand01: () => this._rand(),
     };
   }
 
-  _buildSwingView(battingSide, pitchResult) {
+  /** BB-2b commit 3: `pitchHistory` here MUST be the batter's history from BEFORE this pitch -
+   *  the caller (`playAtBat`) captures it before calling `_recordPitch` and passes it in
+   *  explicitly, rather than this method reading `this.pitchHistory` itself (which by the time
+   *  the swing view is built already has the CURRENT pitch appended, and a batter "reading its own
+   *  pattern" against a history that already contains the pitch it is deciding on can never be
+   *  surprised - the exact defect this fixes; see the doc §8 "pitch speed reaches the batter"
+   *  mechanism in agents.js). */
+  _buildSwingView(battingSide, pitchResult, priorPitchHistory) {
     return {
       side: battingSide,
       inning: this.inning,
@@ -240,6 +323,7 @@ export class Game {
       score: { ...this.score },
       batterId: this._currentBatterId(battingSide),
       pitch: pitchResult,
+      pitchHistory: priorPitchHistory,
       rand01: () => this._rand(),
     };
   }
@@ -282,10 +366,26 @@ export class Game {
     }
   }
 
-  _recordPitch(batterId, type) {
+  _recordPitch(batterId, type, x) {
     const hist = this.pitchHistory[batterId] || (this.pitchHistory[batterId] = []);
-    hist.push(type);
+    hist.push({ type, x });
     if (hist.length > PATTERN_WINDOW * 3) hist.splice(0, hist.length - PATTERN_WINDOW * 3);
+  }
+
+  /** doc §8, [Locked]: "Majors: attacks your weak spots" - a batter's own recent swing-and-miss
+   *  locations, averaged, or null with too few samples to mean anything. */
+  _weakZoneFor(batterId) {
+    const log = this.weakZoneLog[batterId];
+    if (!log || log.length < 2) return null;
+    return log.reduce((s, x) => s + x, 0) / log.length;
+  }
+
+  _recordWeak(batterId, x) {
+    if (typeof x !== 'number') return;
+    const log = this.weakZoneLog[batterId] || (this.weakZoneLog[batterId] = []);
+    log.push(x);
+    const window = this.settings.WEAKSPOT_WINDOW;
+    if (log.length > window) log.splice(0, log.length - window);
   }
 
   async playGame() {
@@ -297,7 +397,16 @@ export class Game {
         break;
       }
       await this.playHalfInning();
-      if (this.over || this.aborted) break;
+      if (this.over) break;
+      // BB-2f fix: advancing to the next half/inning is NOT gated on `!this.aborted` any more -
+      // only on whether the half-inning `playHalfInning()` just ran ACTUALLY concluded
+      // (`_halfInningOpen` false). An abort can land exactly on the pitch that also completes the
+      // half-inning's 3rd out; that half-inning is genuinely over and the advance must still
+      // happen, or a resumed game re-enters the SAME (already-finished) half instead of the next
+      // one. If `_halfInningOpen` is still true, the half is genuinely still in progress (this can
+      // only happen while aborted - the while loop below never exits early otherwise), so there is
+      // nothing to advance yet; the outer `while (!aborted)` condition stops iteration on its own.
+      if (this._halfInningOpen) break;
 
       if (this.half === 'bottom') {
         if (this.inning >= this.settings.SEASON.inningsPerGame && this.score.home !== this.score.away) {
@@ -327,6 +436,7 @@ export class Game {
     } else {
       this.outs = 0;
     }
+    this._halfInningOpen = true;
     // doc §3, [Locked]: "every extra half-inning starts with a runner on second." Only on a
     // genuinely FRESH half (never on a resumed one - a restored snapshot already carries whatever
     // base state it had, ghost runner included if one was already placed).
@@ -336,15 +446,27 @@ export class Game {
     }
     await this.emit('halfInningStart', { inning: this.inning, half: this.half });
     if (this.aborted) return;
+    // BB-2f fix: no early `return` on `aborted` here any more - the while loop's own condition
+    // already stops it from calling `playAtBat()` again, and falling through to the block below
+    // is exactly what lets a half-inning that concluded (3rd out) on the SAME pitch that triggered
+    // an abort still get its state properly closed out, instead of leaving `outs`/bases/balls/
+    // strikes stale for whatever resumes next.
     while (this.outs < this.settings.MECHANICS.outsPerInning && !this.over && !this.aborted) {
       await this.playAtBat();
-      if (this.aborted) return;
     }
-    if (!this.over && !this.aborted) {
+    // The half-inning is only genuinely OVER once outs reaches the limit - not merely because
+    // `aborted` is true (that can be true here with outs still short of the limit, meaning this
+    // half-inning is still mid-progress and must resume exactly as-is, per `_halfInningOpen`
+    // staying true). The state reset itself must run whenever the half genuinely concluded,
+    // regardless of `aborted` - only the notification (`emit`) is conditional on `!aborted`
+    // (and `emit()` already no-ops once aborted on its own, so this condition is for clarity, not
+    // strictly required).
+    if (!this.over && this.outs >= this.settings.MECHANICS.outsPerInning) {
       this.bases = emptyBases();
       this.balls = 0;
       this.strikes = 0;
-      await this.emit('halfInningEnd', { inning: this.inning, half: this.half, score: { ...this.score } });
+      this._halfInningOpen = false;
+      if (!this.aborted) await this.emit('halfInningEnd', { inning: this.inning, half: this.half, score: { ...this.score } });
     }
   }
 
@@ -368,6 +490,7 @@ export class Game {
       this.balls = 0;
       this.strikes = 0;
     }
+    this._atBatOpen = true;
     await this.emit('atBatStart', { batterId, side: battingSide });
     if (this.aborted) return;
 
@@ -383,36 +506,59 @@ export class Game {
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
       const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
-      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand());
-      this._recordPitch(batterId, pitchResult.type);
+      // Captured BEFORE `_recordPitch` appends the pitch about to be thrown - see
+      // `_buildSwingView`'s own header for why this ordering matters.
+      const priorPitchHistory = (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW);
+      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills);
+      this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
-      const swingView = this._buildSwingView(battingSide, pitchResult);
+      const swingView = this._buildSwingView(battingSide, pitchResult, priorPitchHistory);
       const swingDecision = await battingAgent.decideSwing(swingView);
-      const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand());
+      const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
 
       if (!swingResult.swung) {
         if (pitchResult.isStrike) this.strikes += 1; else this.balls += 1;
       } else if (!swingResult.contact) {
+        this._recordWeak(batterId, pitchResult.x);
         this.strikes += 1;
       } else if (swingResult.foul) {
         if (this.strikes < 2) this.strikes += 1;
       } else {
-        const outcome = resolveContact(swingResult, this._defenseLevel01(), this.settings, this._parkFt(), () => this._rand());
-        this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
+        const shiftDeg = this._shiftDegFor(defenseTeam, batterId);
+        const zones = zonesFor(this.league, shiftDeg);
+        const outcome = resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
+        this._recordSpray(batterId, swingResult.sprayAngleDeg);
+        const { bases, runsScored } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind });
+        this._atBatOpen = false;
+        // BB-2c commit 1: q/exitVeloMph/centered exposed for measurement
+        // (`sim-baseball.mjs --attribute`'s plate-appearance ledger) - purely additive fields on an
+        // event payload every existing consumer already destructures by name, so nothing reading
+        // the old fields is affected.
+        // BB-2d commit 1: distanceFt/sprayAngleDeg/battedKind exposed for measurement
+        // (`sim-baseball.mjs --range`'s batted-ball census) - purely additive, same discipline as
+        // BB-2c commit 1's q/exitVeloMph/centered; no existing caller reads them.
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
+          q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
+          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind });
         return;
       }
 
       await this.emit('count', { balls: this.balls, strikes: this.strikes });
-      if (this.aborted) return;
+      // BB-2f fix: no early `return` here either, for the same reason as the two removed above -
+      // an abort can land on the exact pitch that pushes strikes/balls to their own threshold, and
+      // returning here BEFORE the strikeout/walk checks below would snapshot an invalid, stuck
+      // state (3 strikes that were never converted into an out) instead of letting the at-bat's
+      // own conclusion run. If neither threshold is met, the while loop's own condition
+      // (`!this.aborted`) still stops the next pitch from being thrown.
 
       if (this.strikes >= this.settings.MECHANICS.strikesForOut) {
         this.outs += 1;
         this.totals[battingSide].strikeouts += 1;
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout' });
+        this._atBatOpen = false;
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout', bases: 0, runsScored: 0 });
         return;
       }
       if (this.balls >= this.settings.MECHANICS.ballsForWalk) {
@@ -421,7 +567,8 @@ export class Game {
         this.totals[battingSide].walks += 1;
         this._addRuns(battingSide, runsScored);
         this._advanceLineup(battingSide);
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', runsScored });
+        this._atBatOpen = false;
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', bases: 1, runsScored });
         return;
       }
     }
@@ -433,15 +580,18 @@ export class Game {
    *  on. */
   _resolveBattedBall(outcome, batterId, battingSide, rand01) {
     if (outcome.isFoul || outcome.result === 'out') {
+      // doc §3, [Locked]: "Deep fly out scores the runner from third (sac fly)" - DEEP, not any
+      // fly out; MECHANICS.sacFlyMinDepthFt is how deep (Draft, new).
       const isSacFly = outcome.kind === 'flyout'
         && this.bases[2] != null
-        && this.outs < this.settings.MECHANICS.outsPerInning - 1;
+        && this.outs < this.settings.MECHANICS.outsPerInning - 1
+        && (outcome.distanceFt || 0) >= this.settings.MECHANICS.sacFlyMinDepthFt;
       if (isSacFly) {
         const { bases, runsScored } = advanceSacFly(this.bases);
         this.bases = bases;
         this.outs += 1; // no hit credited on a sac fly - the batter is out
         this._addRuns(battingSide, runsScored);
-        return;
+        return { bases: 0, runsScored };
       }
       // doc §3, [Locked]: "Ground out with a runner on first and fewer than 2 outs CAN be a
       // double play" - the doc locks that it can happen, not how often (Draft, MECHANICS.
@@ -453,23 +603,18 @@ export class Game {
       if (canDoublePlay && rand01 && rand01() < this.settings.MECHANICS.doublePlayChance) {
         this.bases = advanceDoublePlay(this.bases);
         this.outs += 2; // the batter, plus the runner forced at second
-        return;
+        return { bases: 0, runsScored: 0 };
       }
       this.outs += 1;
-      return;
+      return { bases: 0, runsScored: 0 };
     }
-    if (outcome.result === 'error') {
-      const { bases, runsScored } = advanceAll(this.bases, batterId, 1);
-      this.bases = bases;
-      this.totals[battingSide].errors += 1;
-      this._addRuns(battingSide, runsScored);
-      return;
-    }
-    // a hit
+    // a hit - doc §10's outcome list is singles/doubles/triples/homers/outs; there is no "error"
+    // outcome in the real design (phase 1's invented one is gone as of Step 1).
     const { bases, runsScored } = advanceAll(this.bases, batterId, outcome.bases);
     this.bases = bases;
     this.totals[battingSide].hits += 1;
     this._addRuns(battingSide, runsScored);
+    return { bases: outcome.bases, runsScored };
   }
 }
 

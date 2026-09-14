@@ -22,3 +22,6 @@ backups/*.json
 
 # Visual-suite output (test-visual.mjs). Regenerated on every run; look at it, do not commit it.
 .visual-out/
+
+# sim-baseball.mjs's --json report output. Regenerated on every run; look at it, do not commit it.
+.sim-out/
