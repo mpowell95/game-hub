@@ -1,21 +1,21 @@
-/* baseball.css - phase 0: placeholder-screen chrome only. No game yet (see baseball/CLAUDE.md).
- * Everything is scoped under .bb-root, root CLAUDE.md's convention (a 2-3 letter game prefix). */
+/* baseball.css - phase 3 (BB-3): the real play screen. Scoped under .bb-root, root CLAUDE.md's
+ * convention. Fixed geometry throughout - nothing shifts between batting and pitching. */
+
+.bb-root, .bb-root * {
+  box-sizing: border-box;
+}
 
 .bb-root {
   position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 24px;
-  padding-top: calc(24px + env(safe-area-inset-top));
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
-  text-align: center;
+  min-height: 320px;
   background: #eaeff7;
   color: #16210f;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  touch-action: manipulation;
 }
 
 :root.gh-dark .bb-root {
@@ -23,16 +23,303 @@
   color: #e7edf5;
 }
 
-.bb-title {
+/* ---------------------------------------------------------------- setup screen ---- */
+.bb-setup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.bb-setup-title {
   font-size: 22px;
   font-weight: 700;
   margin: 0;
 }
 
-.bb-body {
-  font-size: 15px;
-  line-height: 1.4;
-  max-width: 340px;
-  margin: 0;
-  opacity: 0.85;
+.bb-league-seg {
+  flex-wrap: wrap;
+  justify-content: center;
 }
+
+.bb-play-btn {
+  min-width: 160px;
+  min-height: 44px;
+}
+
+.bb-tune-open {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  opacity: 0.6;
+  min-height: 44px;
+}
+
+/* ---------------------------------------------------------------- play screen ---- */
+.bb-play {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bb-hud {
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  padding-top: env(safe-area-inset-top);
+  background: rgba(0,0,0,0.06);
+  font-size: 13px;
+}
+:root.gh-dark .bb-hud { background: rgba(255,255,255,0.06); }
+
+.bb-hud-score { display: flex; align-items: baseline; gap: 4px; font-weight: 700; }
+.bb-hud-team { font-size: 11px; opacity: 0.7; }
+.bb-hud-team.is-you { color: #ffce3a; }
+.bb-hud-runs { font-size: 16px; }
+.bb-hud-inning { font-size: 12px; white-space: nowrap; }
+.bb-hud-count { display: flex; gap: 6px; align-items: center; }
+.bb-dotrow { display: flex; gap: 2px; }
+.bb-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(0,0,0,0.2); display: inline-block; }
+:root.gh-dark .bb-dot { background: rgba(255,255,255,0.2); }
+.bb-dot.is-on.bb-dot-b { background: #1F5FA8; }
+.bb-dot.is-on.bb-dot-s { background: #E0532F; }
+.bb-dot.is-on.bb-dot-o { background: #178A7A; }
+.bb-hud-bases { width: 26px; height: 26px; flex: 0 0 26px; }
+.bb-bases-svg { width: 100%; height: 100%; }
+.bb-bases-svg rect { fill: rgba(0,0,0,0.12); stroke: currentColor; stroke-width: 1; }
+:root.gh-dark .bb-bases-svg rect { fill: rgba(255,255,255,0.12); }
+.bb-bases-svg rect.is-on { fill: #ffce3a; }
+.bb-hud-batter { margin-left: auto; font-size: 11px; opacity: 0.75; white-space: nowrap; }
+
+.bb-field-wrap {
+  flex: 1 1 auto;
+  min-height: calc(28 * var(--bb-fh-unit, 1px));
+  position: relative;
+  overflow: hidden;
+}
+.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bb-lines {
+  position: absolute;
+  top: 6px;
+  left: 0; right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  color: #fff;
+}
+.bb-line1, .bb-line2 { min-height: 1.2em; font-weight: 700; font-size: 14px; }
+.bb-line2 { font-size: 12px; font-weight: 500; opacity: 0.9; }
+
+.bb-strip {
+  height: 108px;
+  min-height: 108px;
+  flex: 0 0 108px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  background: rgba(0,0,0,0.04);
+}
+:root.gh-dark .bb-strip { background: rgba(255,255,255,0.04); }
+.bb-strip-pitches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+.bb-pitch-tile {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.03);
+  font-size: 13px;
+  font-weight: 600;
+}
+:root.gh-dark .bb-pitch-tile { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); color: #e7edf5; }
+.bb-pitch-tile.is-sel {
+  background: #ffce3a;
+  border-color: #16210f;
+  border-width: 2px;
+  color: #16210f;
+}
+.bb-strip-history {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.bb-hist-chip {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.08);
+}
+:root.gh-dark .bb-hist-chip { background: rgba(255,255,255,0.1); }
+.bb-hist-chip.is-strike { border-bottom: 2px solid #E0532F; }
+.bb-hist-chip.is-ball { border-bottom: 2px solid #1F5FA8; }
+
+.bb-control {
+  height: 172px;
+  min-height: 172px;
+  flex: 0 0 172px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  padding-bottom: env(safe-area-inset-bottom);
+  gap: 2.5%;
+}
+
+.bb-pad {
+  width: 44%;
+  aspect-ratio: 1 / 1;
+  max-height: 100%;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.06);
+  position: relative;
+  touch-action: none;
+}
+:root.gh-dark .bb-pad { background: rgba(255,255,255,0.08); }
+.bb-pad-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #ffce3a;
+  border: 2px solid #16210f;
+}
+
+.bb-actions {
+  width: 13%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: flex-start;
+}
+.bb-slot {
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.04);
+  font-size: 11px;
+  opacity: 0.45;
+}
+:root.gh-dark .bb-slot { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); color: #e7edf5; }
+
+.bb-ring-wrap {
+  width: 38%;
+  aspect-ratio: 1/1;
+  max-height: 100%;
+  position: relative;
+  margin-left: auto;
+}
+.bb-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+.bb-ring-track { fill: none; stroke: rgba(0,0,0,0.12); stroke-width: 10; }
+:root.gh-dark .bb-ring-track { stroke: rgba(255,255,255,0.14); }
+.bb-ring-fill { fill: none; stroke: #178A7A; stroke-width: 10; transition: stroke-dashoffset 0.05s linear; }
+.bb-mainbtn {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 101px; height: 101px;
+  margin: -50.5px 0 0 -50.5px;
+  border-radius: 50%;
+  border: none;
+  background: #178A7A;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  touch-action: none;
+  user-select: none;
+}
+.bb-mainbtn.is-down {
+  background: #ffce3a;
+  color: #16210f;
+  border: 2px solid #16210f;
+  transform: scale(1.04);
+}
+
+.bb-back {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  left: 8px;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 18px;
+  z-index: 5;
+}
+
+/* ---------------------------------------------------------------- end modal ---- */
+.bb-end-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  overscroll-behavior: contain;
+}
+.bb-end-modal {
+  background: #fff;
+  color: #16210f;
+  border-radius: 14px;
+  padding: 24px;
+  min-width: 240px;
+  text-align: center;
+  position: relative;
+}
+:root.gh-dark .bb-end-modal { background: #17202e; color: #e7edf5; }
+.bb-end-close {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 32px; height: 32px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  color: inherit;
+}
+.bb-end-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.bb-end-line { font-size: 15px; margin-bottom: 16px; }
+.bb-end-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* ---------------------------------------------------------------- Tune panel (dev) ---- */
+.bb-tune-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  overscroll-behavior: contain;
+}
+.bb-tune-sheet {
+  background: #fff;
+  color: #16210f;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 14px 14px 0 0;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+:root.gh-dark .bb-tune-sheet { background: #17202e; color: #e7edf5; }
+.bb-tune-row { display: grid; grid-template-columns: 100px 1fr 50px; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.bb-tune-actions { display: flex; gap: 10px; margin-top: 12px; }
