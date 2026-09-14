@@ -64,6 +64,18 @@ export function drawRingDiagram(cv) {
   ctx.drawImage(ringCv, (w - size) / 2, (h - size) / 2, size, size);
 }
 
+// 4. Hang: the same ring, past the Nice zone with the fill draining - holding
+// too long costs the pitch its power.
+export function drawHangDiagram(cv) {
+  const { ctx, w, h } = setup(cv);
+  ctx.clearRect(0, 0, w, h);
+  const size = h * 0.94;
+  const ringCv = document.createElement('canvas');
+  ringCv.width = size; ringCv.height = size;
+  drawRingState(ringCv, 'throw', 'hung', 0.55);
+  ctx.drawImage(ringCv, (w - size) / 2, (h - size) / 2, size, size);
+}
+
 // 3. Steering: the pad with a drag arrow toward the break side, and the ball
 // bending the same way outside it.
 export function drawSteeringDiagram(cv) {

@@ -69,16 +69,7 @@ const GAME = {
 function nextGameCard(state) {
   const noCareer = state === 'pulling' || state === 'offline';
   const g = GAME[state];
-  const info = noCareer
-    ? `<div class="bb-nextgame__info is-empty">
-        <div class="bb-nextgame__opp">${marker('cpu')}<span>vs XXX</span></div>
-        <div class="bb-nextgame__game">Game 0 of 0</div>
-      </div>`
-    : `<div class="bb-nextgame__info${g.muted ? ' is-muted' : ''}">
-        <div class="bb-nextgame__opp">${marker('cpu')}<span>${g.tag} ${g.code}</span></div>
-        ${g.park ? `<div class="bb-nextgame__park">${g.park}</div>` : ''}
-        <div class="bb-nextgame__game">${g.game}</div>
-      </div>`;
+
   let action;
   if (state === 'pulling') {
     action = `<div class="bb-nextgame__syncrow">${ICON_SYNC}<span>Syncing</span></div>`;
@@ -87,7 +78,29 @@ function nextGameCard(state) {
   } else {
     action = `<button class="gh-btn gh-btn--primary gh-btn--block">Play</button>`;
   }
-  return `<div class="bb-nextgame">${info}${action}</div>`;
+
+  if (noCareer) {
+    // No real game to show yet - a single hidden placeholder holds the
+    // opponent/game-label space so the action doesn't jump when a career
+    // starts, but there is nothing here to split into three shares.
+    return `<div class="bb-nextgame">
+      <div class="bb-nextgame__placeholder">
+        <div class="bb-nextgame__opp">${marker('cpu')}<span>vs XXX</span></div>
+        <div class="bb-nextgame__game">Game 0 of 0</div>
+      </div>
+      ${action}
+    </div>`;
+  }
+
+  const muted = g.muted ? ' is-muted' : '';
+  return `<div class="bb-nextgame">
+    <div class="bb-nextgame__top">
+      <div class="bb-nextgame__opp${muted}">${marker('cpu')}<span>${g.tag} ${g.code}</span></div>
+      ${g.park ? `<div class="bb-nextgame__park${muted}">${g.park}</div>` : ''}
+    </div>
+    <div class="bb-nextgame__game${muted}">${g.game}</div>
+    ${action}
+  </div>`;
 }
 
 function standingsBlock(state, short) {
@@ -102,7 +115,7 @@ function standingsBlock(state, short) {
         <span class="bb-srow__code">&mdash;</span>
         <span class="bb-srow__wl">&mdash;</span>
       </div>`).join('');
-    return `<div class="bb-standings"><div class="bb-standings__head">Standings</div>${blanks}</div>`;
+    return `<div class="bb-standings"><div class="bb-standings__head">Standings</div><div class="bb-standings__rows">${blanks}</div></div>`;
   }
 
   function rowHtml(r) {
@@ -134,8 +147,10 @@ function standingsBlock(state, short) {
 
   return `<div class="bb-standings">
     <div class="bb-standings__head">Standings</div>
-    ${visible.map(rowHtml).join('')}
-    ${fifthHtml}
+    <div class="bb-standings__rows">
+      ${visible.map(rowHtml).join('')}
+      ${fifthHtml}
+    </div>
   </div>`;
 }
 
@@ -160,14 +175,12 @@ function footerRow() {
   return `<div class="bb-footer">
     <button class="gh-btn gh-btn--ghost">Quick Play</button>
     <button class="gh-btn gh-btn--ghost">How to play</button>
-    <button class="gh-btn gh-btn--danger">Retire</button>
+    <button class="gh-btn gh-btn--ghost bb-footer__retire">Retire</button>
   </div>`;
 }
 
 export function renderCareerHome(root, { state, height }) {
   const short = height === 'short';
-  const H = short ? 530 : 714;
-  const nextGameH = Math.round(H * 0.28);
   root.classList.add('gh-dark');
   root.innerHTML = `<div class="bb-home">
     ${statusRow(state)}
@@ -176,8 +189,6 @@ export function renderCareerHome(root, { state, height }) {
     ${seasonStrip(state)}
     ${footerRow()}
   </div>`;
-
-  root.querySelector('.bb-nextgame').style.height = `${nextGameH}px`;
 
   const forkRow = root.querySelector('[data-fork-row]');
   if (forkRow) {

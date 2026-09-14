@@ -20,18 +20,13 @@
   </div>
 </div>
 <script type="module">
-  import { drawSwingDiagram, drawRingDiagram, drawSteeringDiagram } from './howto-diagrams.js';
+  import { drawSwingDiagram, drawRingDiagram, drawSteeringDiagram, drawHangDiagram } from './howto-diagrams.js';
 
   const ROWS = [
     { draw: drawSwingDiagram, caption: 'Tap swings instantly. Hold to charge power.' },
-    { draw: drawRingDiagram, caption: 'The Nice zone sits at the top. Stop the needle inside it.' },
+    { draw: drawRingDiagram, caption: 'Stop the needle in the Nice zone for a power pitch.' },
+    { draw: drawHangDiagram, caption: 'Hold too long and the pitch hangs.' },
     { draw: drawSteeringDiagram, caption: 'Drag the pad toward the break. The ball bends the same way.' },
-  ];
-  const LINES = [
-    'Tap swings, hold charges',
-    'Release in the marked zone for a power pitch',
-    'Hold too long and the pitch hangs',
-    'Drag toward the break to bend curves and sliders',
   ];
 
   function buildSheet() {
@@ -52,9 +47,6 @@
           <canvas class="bb-howto-diagram" data-i="${i}"></canvas>
           <div class="bb-howto-caption">${r.caption}</div>
         </div>`).join('')}
-      <div class="bb-howto-lines">
-        ${LINES.map(l => `<div class="bb-howto-line">${l}</div>`).join('')}
-      </div>
     `;
     overlay.appendChild(sheet);
     return { overlay, sheet };

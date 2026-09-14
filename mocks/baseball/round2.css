@@ -23,7 +23,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   background: var(--gh-bg);
   color: var(--gh-ink);
   overflow: hidden;
@@ -71,27 +71,35 @@
 }
 .bb-status--pulling .bb-status__line, .bb-status--pulling-stale .bb-status__line { color: var(--gh-muted); }
 
-/* --- next game card --- */
+/* --- next game card ---
+ * Sized to its own content, not stretched to fill a fixed 0.28H - a card
+ * whose text is a few short lines has no honest way to fill 200px without
+ * either padding that reads as a void or artificially spreading three items
+ * across a track they don't need. The three blocks (opponent, game label,
+ * action) sit at a deliberate, even 14px rhythm instead; whatever height the
+ * 0.28H budget doesn't use goes to the standings block below (bb-home has no
+ * space-between of its own, and bb-standings is flex:1), rather than sitting
+ * empty inside this card. */
 .bb-nextgame {
   flex: none;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 16px 12px;
   background: var(--gh-surface);
   border-top: 1px solid var(--gh-border);
   border-bottom: 1px solid var(--gh-border);
 }
-.bb-nextgame__info { display: flex; flex-direction: column; gap: 6px; }
-.bb-nextgame__info.is-empty { visibility: hidden; }
+.bb-nextgame__placeholder { display: flex; flex-direction: column; gap: 4px; visibility: hidden; }
+.bb-nextgame__top { display: flex; flex-direction: column; gap: 4px; }
 .bb-nextgame__opp { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; }
 .bb-nextgame__opp .bb-marker svg { width: 11px; height: 11px; }
 .bb-nextgame__tag { font-size: 11px; font-weight: 700; color: var(--gh-muted); }
 .bb-nextgame__park { font-size: 11px; font-weight: 600; color: var(--gh-muted); }
 .bb-nextgame__game { font-size: 12px; font-weight: 700; color: var(--gh-muted); }
-.bb-nextgame__info.is-muted .bb-nextgame__opp,
-.bb-nextgame__info.is-muted .bb-nextgame__park,
-.bb-nextgame__info.is-muted .bb-nextgame__game { color: var(--gh-muted); opacity: 0.6; }
+.bb-nextgame__opp.is-muted,
+.bb-nextgame__park.is-muted,
+.bb-nextgame__game.is-muted { color: var(--gh-muted); opacity: 0.6; }
 .bb-nextgame__syncrow {
   display: flex;
   align-items: center;
@@ -106,9 +114,14 @@
 }
 .bb-nextgame__syncrow svg { width: 14px; height: 14px; }
 
-/* --- standings --- */
+/* --- standings ---
+ * flex:1 - this is where the page's leftover height goes (removing bb-home's
+ * old space-between, which used to spread it as blank gaps between every
+ * row). The row list is centered in whatever room is left below the header
+ * rather than pinned to the top with dead space beneath it. */
 .bb-standings {
-  flex: none;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 0 12px;
@@ -124,6 +137,13 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--gh-muted);
+}
+.bb-standings__rows {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 .bb-srow {
   flex: none;
@@ -199,6 +219,10 @@
   padding: 0 12px;
 }
 .bb-footer .gh-btn { flex: 1; padding: 0 4px; font-size: 12px; }
+/* Retire is rare and destructive, so it must not out-shout Play: ghost shape
+   (no fill), danger-colored text only. */
+.bb-footer__retire { color: var(--gh-cb-vermilion); }
+.bb-footer__retire:hover:not(:disabled) { background: rgba(224, 83, 47, 0.14); color: var(--gh-cb-vermilion); }
 
 /* ============================================================== marker (shared) == */
 .bb-marker { display: inline-flex; align-items: center; justify-content: center; flex: none; }
@@ -231,8 +255,6 @@
   overflow: hidden;
 }
 .bb-howto-caption { font-size: 12px; font-weight: 700; line-height: 1.35; color: var(--gh-ink); }
-.bb-howto-lines { display: flex; flex-direction: column; gap: 4px; }
-.bb-howto-line { font-size: 11px; font-weight: 600; color: var(--gh-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ============================================================== game-end modal == */
 .bb-end {
