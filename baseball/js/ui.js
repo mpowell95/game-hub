@@ -14,6 +14,7 @@ import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
 import { drawField, drawBall, drawLandingMarker, project } from './field.js';
+import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
 const t = makeT(STRINGS);
 
@@ -377,21 +378,27 @@ class BaseballPlayScreen {
         <button type="button" class="bb-slot" data-act="bunt" disabled title="${t('locked')}">${t('act_bunt')}</button>
         <button type="button" class="bb-slot" data-act="pickoff" disabled title="${t('locked')}">${t('act_pickoff')}</button>
       </div>
-      <div class="bb-ring-wrap">
-        <svg class="bb-ring" viewBox="0 0 120 120" data-role="ringsvg">
-          <circle cx="60" cy="60" r="52" class="bb-ring-track"></circle>
-          <circle cx="60" cy="60" r="52" class="bb-ring-fill" data-role="ringfill"></circle>
-        </svg>
-        <button type="button" class="bb-mainbtn" data-role="mainbtn"></button>
+      <div class="bb-ringwrap" data-role="mainbtn" role="button" aria-label="${t('act_swing')}">
+        <canvas data-role="ringcanvas" width="${RING_D}" height="${RING_D}"></canvas>
+        <div class="bb-ring-label" data-role="ringlabel"></div>
       </div>
     `;
     this._bindControlInput();
     this._paintModeLabels();
+    this._paintRing('idle', 0);
   }
 
   _paintModeLabels() {
-    const mainBtn = this.rootEl.querySelector('[data-role="mainbtn"]');
-    if (mainBtn) mainBtn.textContent = this.state.mode === 'pitching' ? t('act_pitch') : t('act_swing');
+    const label = this.rootEl.querySelector('[data-role="ringlabel"]');
+    if (label) label.textContent = this.state.mode === 'pitching' ? t('act_pitch') : t('act_swing');
+  }
+
+  /** Redraw the Swing/Throw ring+button in one state - see ring.js's own header for why this is a
+   *  single canvas rather than a CSS-colored button overlapping an SVG ring. */
+  _paintRing(state, value) {
+    const cv = this.rootEl.querySelector('[data-role="ringcanvas"]');
+    if (!cv) return;
+    drawRingState(cv, this.state.mode === 'pitching' ? 'throw' : 'swing', state, value);
   }
 
   _bindControlInput() {
@@ -640,17 +647,22 @@ class HumanAgent {
       let steerSamples = [];
       const dtS = SETTINGS.FEEL.engine.dtS;
       const meterMs = SETTINGS.FEEL.engine.meterTime;
-      const ringFill = s.rootEl.querySelector('[data-role="ringfill"]');
-      const C = 2 * Math.PI * 52;
-      if (ringFill) { ringFill.style.strokeDasharray = `${C}`; ringFill.style.strokeDashoffset = `${C}`; }
+      const hangGraceMs = meterMs * SETTINGS.HANG_GRACE_FRAC;
+      s._paintRing('filling', 0);
       let raf;
       let released = false;
       const start = performance.now();
       const tick = (now) => {
         if (s.destroyed) return;
         const elapsed = now - start;
-        const frac = Math.min(1.3, elapsed / meterMs);
-        if (ringFill) ringFill.style.strokeDashoffset = `${C * (1 - Math.min(1, frac))}`;
+        const frac = elapsed / meterMs;
+        if (elapsed > meterMs) {
+          s._paintRing('hung', Math.min(1, (elapsed - meterMs) / hangGraceMs));
+        } else if (frac >= NICE_CENTER - NICE_HALF) {
+          s._paintRing('nice', frac);
+        } else {
+          s._paintRing('filling', frac);
+        }
         if (!released) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -663,6 +675,7 @@ class HumanAgent {
         cancelAnimationFrame(raf);
         s._onMainUp = null;
         const holdMs = performance.now() - start;
+        s._paintRing('released', Math.min(1.3, holdMs / meterMs));
         resolve({ type: s.state.selectedPitch, aim: s.padX, hold: holdMs, steer: steerSamples });
       };
       s._onMainUp = finish;
@@ -679,29 +692,45 @@ class HumanAgent {
     s._paintStrip();
 
     const flightPromise = s._animatePitchFlight(pitch);
+    s._paintRing('idle', 0);
 
     return new Promise((resolve) => {
       let resolved = false;
       let timer = null;
+      let raf = null;
+      let downAt = null;
+      const F = SETTINGS.FEEL.engine;
       const releaseMs0 = performance.now();
       const settle = (heldMs) => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
+        if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
         const releaseMs = performance.now() - releaseMs0;
-        const F = SETTINGS.FEEL.engine;
         const charged = heldMs >= F.chargeTime;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
+        s._paintRing(charged ? 'charged' : 'idle', Math.min(1, heldMs / F.chargeTime));
         resolve({ action: 'swing', aimX: s.padX, timingErrorMs: timing, charged });
       };
-      s._onMainDown = () => {};
+      s._onMainDown = () => {
+        downAt = performance.now();
+        const loop = () => {
+          if (resolved) return;
+          const heldMs = performance.now() - downAt;
+          const frac = Math.min(1, heldMs / F.chargeTime);
+          s._paintRing(frac >= 1 ? 'charged' : 'charging', frac);
+          raf = requestAnimationFrame(loop);
+        };
+        raf = requestAnimationFrame(loop);
+      };
       s._onMainUp = (heldMs) => settle(heldMs);
 
       const timeoutMs = pitch.timeToPlateS * 1000 + 250;
       timer = setTimeout(() => {
         if (resolved) return;
         resolved = true;
+        if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
         resolve({ action: 'take' });
       }, timeoutMs);

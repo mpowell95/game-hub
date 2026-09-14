@@ -131,7 +131,7 @@ if (mountErr) {
   const rects = await page.evaluate(() => {
     const back = document.querySelector('.hub-back');
     const hud = document.querySelector('.bb-hud');
-    const mainbtn = document.querySelector('.bb-mainbtn');
+    const mainbtn = document.querySelector('.bb-ringwrap');
     const backBtn = document.querySelector('.bb-back');
     const r = (el) => el ? el.getBoundingClientRect() : null;
     return { back: r(back), hud: r(hud), mainbtn: r(mainbtn), hasOwnBackBtn: !!backBtn };
@@ -151,14 +151,18 @@ if (mountErr) {
     ok('no duplicate back button when mounted in the hub');
   }
 
+  // The Swing/Throw control is one canvas (ring.js, ported from the approved mocks) drawing
+  // BOTH the 137px progress ring AND the 101px fill button - `.bb-ringwrap` is the DOM element
+  // (and tap target) at the ring's own size; the 101px button is a canvas pixel, not a separate
+  // box, so RING_D (137) is what a DOM measurement can honestly check here.
   if (!rects.mainbtn) {
-    fail('mainbtn-size', 'missing .bb-mainbtn');
+    fail('mainbtn-size', 'missing .bb-ringwrap');
   } else {
     const w = Math.round(rects.mainbtn.width), h = Math.round(rects.mainbtn.height);
-    if (Math.abs(w - 101) > 2 || Math.abs(h - 101) > 2) {
-      fail('mainbtn-size', `expected 101x101, got ${w}x${h}`);
+    if (Math.abs(w - 137) > 2 || Math.abs(h - 137) > 2) {
+      fail('mainbtn-size', `expected 137x137 (ring.js RING_D), got ${w}x${h}`);
     } else {
-      ok(`main button is ${w}x${h} (expected 101x101)`);
+      ok(`swing/throw control is ${w}x${h} (expected 137x137, drawing a 101px button inside)`);
     }
   }
 
@@ -169,7 +173,7 @@ if (mountErr) {
     await page.evaluate(() => {
       const tile = document.querySelector('.bb-pitch-tile');
       if (tile) tile.click();
-      const main = document.querySelector('.bb-mainbtn');
+      const main = document.querySelector('.bb-ringwrap');
       if (main) {
         main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
