@@ -46,16 +46,41 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // their own generated data (a hand-typed table and its source going out of step is a silent
 // failure, never a loud one, until something like this checks it).
 const DOC_LEAGUE_NAMES = { 'Little League': 'little', 'High School': 'highschool', 'College': 'college', 'Minor League': 'minors', 'Major League': 'majors' };
+// BB-2g commit 1: doc v12 §8's "Weakest slot beaten" and "Champion" columns share one table and
+// one row shape (`League\tWeakest\tChampion`), so both are read out of the same parse instead of
+// two independent regexes that could drift against each other.
 function parseDocWeakestFloorTable() {
+  const table = parseDocSlotWinrateTable();
+  if (!table) return null;
+  const out = {};
+  for (const league of Object.keys(table)) out[league] = table[league].weakest;
+  return out;
+}
+// BB-2g commit 1: the champion column is a RANGE ("65 to 80%"), not a single percentage, so this
+// returns `{ [league]: [lo, hi] }` - `SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE` below must equal it
+// exactly, the same discipline `DOC_FLOOR_TABLE_MATCHES` already applies to the weakest column.
+function parseDocChampionBandTable() {
+  const table = parseDocSlotWinrateTable();
+  if (!table) return null;
+  const out = {};
+  for (const league of Object.keys(table)) out[league] = table[league].champion;
+  return out;
+}
+function parseDocSlotWinrateTable() {
   const text = fs.readFileSync(path.join(ROOT, 'docs/BASEBALL-DESIGN-DOC.md'), 'utf8');
   const tableMatch = text.match(/League\tWeakest slot beaten\tChampion\n([\s\S]*?)```/);
   if (!tableMatch) return null;
   const out = {};
   for (const line of tableMatch[1].trim().split('\n')) {
-    const [docName, pct] = line.split('\t');
+    const [docName, weakestPct, champPct] = line.split('\t');
     const league = DOC_LEAGUE_NAMES[docName];
     if (!league) continue;
-    out[league] = Number(pct.replace('%', '')) / 100;
+    const champMatch = champPct.match(/^(\d+(?:\.\d+)?)\s*to\s*(\d+(?:\.\d+)?)%$/);
+    if (!champMatch) continue;
+    out[league] = {
+      weakest: Number(weakestPct.replace('%', '')) / 100,
+      champion: [Number(champMatch[1]) / 100, Number(champMatch[2]) / 100],
+    };
   }
   return out;
 }
@@ -164,8 +189,19 @@ const SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE = {
   minors: 0.70,
   majors: 0.62,
 };
-const SLOT_WINRATE_CHAMPION_MIN = 0.40;
-const SLOT_WINRATE_CHAMPION_MAX = 0.55;
+// BB-2g commit 1: doc v12 §8 replaces the flat 40-55% champion band with a PER-LEAGUE one. BB-2f
+// measured almost no slot spread under the flat band (Little League 94.2% down to 90.3% across
+// eight slots, champion 90.3% against a 40-55% target the CPU-strength contract cannot reach at
+// Little League's 115ms sigma floor) - the band itself was wrong for that league, not the levers.
+// The five values below are doc v12's own table, verbatim - `DOC_CHAMPION_TABLE_MATCHES` in the
+// promise scoreboard asserts this object equals it, parsed straight from the committed doc file.
+const SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE = {
+  little: [0.65, 0.80],
+  highschool: [0.58, 0.72],
+  college: [0.50, 0.62],
+  minors: [0.45, 0.57],
+  majors: [0.40, 0.52],
+};
 const CHAMPION_GAME_WIN_MIN_MEDIAN = 0.40;
 const CAP_BINDS_ONLY = ['little', 'highschool'];
 const CAP_SEASONS_MAX_UPPER = 2.0;
@@ -1408,14 +1444,14 @@ function slot0For(shape, weights, champion, targetRate) {
   return (targetRate - r0) / (r1 - r0);
 }
 async function runLadder() {
-  const champLo = SLOT_WINRATE_CHAMPION_MIN, champHi = SLOT_WINRATE_CHAMPION_MAX;
   const shippedShape = SETTINGS.SCHEDULE_SHAPE;
   const shippedWeights = SCHEDULE_WEIGHTS[shippedShape];
-  console.log(`sim-baseball.mjs --ladder - arithmetic only, no games played. champion band = [${champLo}, ${champHi}] (constant across leagues, swept whole range - not fixed at the midpoint), shipped SCHEDULE_SHAPE=${shippedShape} (champion plays ${shippedWeights[7]} of 12 games, game 12).\n`);
+  console.log(`sim-baseball.mjs --ladder - arithmetic only, no games played. champion band is now PER LEAGUE (doc v12 §8) - swept whole range per league, not fixed at the midpoint. shipped SCHEDULE_SHAPE=${shippedShape} (champion plays ${shippedWeights[7]} of 12 games, game 12).\n`);
   let anyLeagueUnsatisfied = false;
   for (const league of LEAGUES) {
     const [lo, hi] = SEASON_WINRATE_BAND[league];
     const weakestMin = SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[league];
+    const [champLo, champHi] = SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE[league];
     console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${weakestMin}, champion band [${champLo}, ${champHi}]`);
     let anyShapeOk = false;
     for (const shape of LADDER_SHAPE_NAMES) {
@@ -1678,13 +1714,18 @@ async function main() {
     scoreLine('SLOT_WINRATE_BAND (weakest opponent >= its own per-league floor)', weakestOk,
       JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][0].toFixed(3))),
       JSON.stringify(LEAGUES.map((lg) => SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[lg])));
+    // BB-2g commit 1, design doc v12 §8, [Locked]: the champion band is now PER LEAGUE (was a
+    // single flat [0.40, 0.55] - BB-2f measured almost no slot spread under it in Little League,
+    // where the CPU-strength contract's own sigma floor cannot produce a champion who wins only
+    // half his games).
     const championBandOk = LEAGUES.every((lg) => {
       const champ = ladderRatesByLeague[lg][ladderRatesByLeague[lg].length - 1];
-      return champ >= SLOT_WINRATE_CHAMPION_MIN && champ <= SLOT_WINRATE_CHAMPION_MAX;
+      const [champLo, champHi] = SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE[lg];
+      return champ >= champLo && champ <= champHi;
     });
-    scoreLine('SLOT_WINRATE_BAND (champion in [0.40, 0.55] at every league)', championBandOk,
+    scoreLine('SLOT_WINRATE_BAND (champion within its own per-league band)', championBandOk,
       JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][ladderRatesByLeague[lg].length - 1].toFixed(3))),
-      `every value in [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}]`);
+      JSON.stringify(LEAGUES.map((lg) => SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE[lg])));
 
     // BB-2b commit 5: CHAMPION_IS_HARDEST - doc §8, [Locked]: "the championship opponent is always
     // the toughest team in the league" is only a real promise if the strongest ladder slot (index
@@ -1704,8 +1745,16 @@ async function main() {
     // generate every CPU team at its own cap (CPU_LEVEL_SHORTFALL must be nonzero everywhere).
     const docFloorTable = parseDocWeakestFloorTable();
     const floorMatchesDoc = docFloorTable != null && LEAGUES.every((lg) => docFloorTable[lg] === SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[lg]);
-    scoreLine('DOC_FLOOR_TABLE_MATCHES (SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE == doc v11 §8 table)', floorMatchesDoc,
+    scoreLine('DOC_FLOOR_TABLE_MATCHES (SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE == doc v12 §8 table)', floorMatchesDoc,
       JSON.stringify(docFloorTable), JSON.stringify(SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE));
+    // BB-2g commit 1: the champion column gets the same doc-drift guard the weakest column already
+    // has, now that it is a per-league table too.
+    const docChampionTable = parseDocChampionBandTable();
+    const championMatchesDoc = docChampionTable != null && LEAGUES.every((lg) =>
+      docChampionTable[lg][0] === SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE[lg][0] &&
+      docChampionTable[lg][1] === SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE[lg][1]);
+    scoreLine('DOC_CHAMPION_TABLE_MATCHES (SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE == doc v12 §8 table)', championMatchesDoc,
+      JSON.stringify(docChampionTable), JSON.stringify(SLOT_WINRATE_CHAMPION_BAND_BY_LEAGUE));
     const noLeagueAtZeroShortfall = LEAGUES.every((lg) => SETTINGS.CPU_LEVEL_SHORTFALL[lg] > 0);
     scoreLine('CPU_LEVEL_SHORTFALL (no league generates every team at its own cap)', noLeagueAtZeroShortfall,
       JSON.stringify(LEAGUES.map((lg) => SETTINGS.CPU_LEVEL_SHORTFALL[lg])), 'every value > 0');
