@@ -15,6 +15,9 @@
 //   node sim-baseball.mjs --json out.json           # write the full report under .sim-out/
 //   node sim-baseball.mjs --assert                  # exit non-zero on any FAIL (the phase gate)
 //   node sim-baseball.mjs --assert --quick           # the fast phase-gate form
+//   node sim-baseball.mjs --ladder                   # BB-2e: which ladder SHAPE satisfies both
+//                                                     # the season and champion bands - arithmetic
+//                                                     # only, no games played, instant
 //
 // It NEVER edits settings.js. Step 6 of the BB-2 handoff reads this tool's report and hand-writes
 // the retuned constants, each with its old and new value stated in the commit - the same discipline
@@ -51,6 +54,7 @@ const FLAG_STYLES_TUNE = process.argv.includes('--tune');
 const FLAG_STAGES = process.argv.includes('--stages');
 const FLAG_ATTRIBUTE = process.argv.includes('--attribute');
 const FLAG_RANGE = process.argv.includes('--range');
+const FLAG_LADDER = process.argv.includes('--ladder');
 const ARG_LEAGUE = arg('league', null);
 const ARG_TIER = arg('tier', null);
 const ARG_JSON = arg('json', null);
@@ -1303,6 +1307,111 @@ async function runRange(t0) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// BB-2e commit 1: `--ladder` - measurement only, no settings.js change, arithmetic over win rates
+// (not simulation, per this file's own header) so it runs instantly. BB-2d's own report proved
+// Little League/High School's champion-slot band "mathematically incompatible" with their season
+// band - but that proof assumed an EVEN SLOPE from slot 0 to slot 7, a shape nothing in
+// `TEAM_LADDER_OFFSETS` actually requires. This checks three named ladder SHAPES instead, per
+// league, against the shipped `SCHEDULE_SHAPE`'s own per-slot game-count weights.
+const LADDER_SHAPE_NAMES = ['cliff', 'spread', 'steep'];
+// Named per-shape gap weights - 7 gaps between the 8 slots (weakest..champion), summing to 1, each
+// naming how much of the total slot0->champion RANGE that gap consumes. `cliff`: slots 0-6 sit
+// close together (the first 6 gaps are small and equal), the whole rest of the range drops in the
+// last gap alone. `spread`: every gap equal (a straight line, slot to slot). `steep`: the first 5
+// gaps (slots 0-5) are shallow, the last 2 (5->6, 6->7) are steep. Draft, new - the doc names the
+// three shapes and their per-league assignment (see LEAGUE_LADDER_SHAPE below) but gives no
+// numbers for how tight "close together" or how shallow "shallow" is.
+const CLIFF_TOP_GAP_FRAC = 0.02;     // each of the first 6 gaps, under `cliff`
+const STEEP_SHALLOW_GAP_FRAC = 0.06; // each of the first 5 gaps, under `steep`
+function ladderGapWeights(shape) {
+  if (shape === 'cliff') return [...Array(6).fill(CLIFF_TOP_GAP_FRAC), 1 - 6 * CLIFF_TOP_GAP_FRAC];
+  if (shape === 'steep') {
+    const rest = (1 - 5 * STEEP_SHALLOW_GAP_FRAC) / 2;
+    return [...Array(5).fill(STEEP_SHALLOW_GAP_FRAC), rest, rest];
+  }
+  return Array(7).fill(1 / 7); // spread
+}
+/** 8 slot win rates from `slot0` (weakest) down to `champion` (slot 7), following one of the three
+ *  named shapes above - `slot0`/`champion` are WIN RATES here (this function is pure arithmetic,
+ *  shared with the real generator commit 2 builds over skill/timingSigmaMs/chase offsets instead). */
+function ladderProfile(shape, slot0, champion) {
+  const weights = ladderGapWeights(shape);
+  const range = slot0 - champion;
+  const out = [slot0];
+  let cum = 0;
+  for (const w of weights) { cum += w; out.push(slot0 - cum * range); }
+  return out;
+}
+// `season.js`'s own `OPPONENT_ORDERS`, restated as per-slot GAME COUNTS out of 12 (that module
+// builds a per-season array, not a weight table - this is the one place a weight table is useful).
+// Must stay in step with `season.js`'s own orders; `baseball/js/test.js`'s shape-agnostic schedule
+// assertions already pin each order's own shape, so a drift here would show up as a wrong count,
+// not a silent one.
+const SCHEDULE_WEIGHTS = {
+  repeatTop:    [1, 1, 1, 1, 2, 2, 2, 2],
+  repeatBottom: [2, 2, 2, 2, 1, 1, 1, 1],
+  repeatMiddle: [1, 1, 2, 2, 2, 2, 1, 1],
+};
+function weightedSeasonRate(profile, weights) {
+  const total = weights.reduce((s, w) => s + w, 0);
+  return profile.reduce((s, v, i) => s + v * weights[i], 0) / total;
+}
+/** The achievable season-rate INTERVAL as slot0 ranges over [slot0Lo, slot0Hi] (the rate is linear
+ *  in slot0 for a fixed champion and shape, so the two endpoints bound the whole interval). */
+function achievableRange(shape, weights, champion, slot0Lo, slot0Hi) {
+  const rLo = weightedSeasonRate(ladderProfile(shape, slot0Lo, champion), weights);
+  const rHi = weightedSeasonRate(ladderProfile(shape, slot0Hi, champion), weights);
+  return rLo <= rHi ? [rLo, rHi] : [rHi, rLo];
+}
+/** Inverts the (linear) slot0 -> season-rate map exactly, using the true endpoints slot0=0/1 (not
+ *  the contract-bounded [0.85,1] range), so a target rate outside the bounded range still resolves
+ *  to a real slot0 number instead of `null` - the caller decides whether that number is legal. */
+function slot0For(shape, weights, champion, targetRate) {
+  const r0 = weightedSeasonRate(ladderProfile(shape, 0, champion), weights);
+  const r1 = weightedSeasonRate(ladderProfile(shape, 1, champion), weights);
+  if (r1 === r0) return null;
+  return (targetRate - r0) / (r1 - r0);
+}
+async function runLadder() {
+  const champMid = mean([SLOT_WINRATE_CHAMPION_MIN, SLOT_WINRATE_CHAMPION_MAX]);
+  const shippedShape = SETTINGS.SCHEDULE_SHAPE;
+  const shippedWeights = SCHEDULE_WEIGHTS[shippedShape];
+  console.log(`sim-baseball.mjs --ladder - arithmetic only, no games played. champion band midpoint = ${champMid.toFixed(3)} (constant across leagues), shipped SCHEDULE_SHAPE=${shippedShape} (champion plays ${shippedWeights[7]} of 12 games, game 12).\n`);
+  let anyLeagueUnsatisfied = false;
+  for (const league of LEAGUES) {
+    const [lo, hi] = SEASON_WINRATE_BAND[league];
+    console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${SLOT_WINRATE_WEAKEST_MIN}, champion band [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}] (mid ${champMid.toFixed(3)})`);
+    let anyShapeOk = false;
+    for (const shape of LADDER_SHAPE_NAMES) {
+      const [rangeLo, rangeHi] = achievableRange(shape, shippedWeights, champMid, SLOT_WINRATE_WEAKEST_MIN, 1.0);
+      const overlapLo = Math.max(rangeLo, lo), overlapHi = Math.min(rangeHi, hi);
+      const overlaps = overlapLo <= overlapHi;
+      if (overlaps) anyShapeOk = true;
+      const slot0Range = overlaps
+        ? `slot0 in [${slot0For(shape, shippedWeights, champMid, overlapLo).toFixed(4)}, ${slot0For(shape, shippedWeights, champMid, overlapHi).toFixed(4)}]`
+        : '';
+      console.log(`  ${shape.padEnd(8)} achievable season rate over slot0 in [${SLOT_WINRATE_WEAKEST_MIN}, 1.0] = [${rangeLo.toFixed(4)}, ${rangeHi.toFixed(4)}]  ${overlaps ? `PASS (band overlap [${overlapLo.toFixed(4)}, ${overlapHi.toFixed(4)}], ${slot0Range})` : 'fail (no overlap with season band)'}`);
+    }
+    if (!anyShapeOk) {
+      anyLeagueUnsatisfied = true;
+      console.log(`  no shape satisfies both bands under SCHEDULE_SHAPE=${shippedShape} - checking which schedule shapes WOULD admit one:`);
+      for (const [scheduleName, weights] of Object.entries(SCHEDULE_WEIGHTS)) {
+        for (const shape of LADDER_SHAPE_NAMES) {
+          const [rLo, rHi] = achievableRange(shape, weights, champMid, SLOT_WINRATE_WEAKEST_MIN, 1.0);
+          const oLo = Math.max(rLo, lo), oHi = Math.min(rHi, hi);
+          const admits = oLo <= oHi;
+          console.log(`    ${scheduleName.padEnd(12)} x ${shape.padEnd(8)} achievable=[${rLo.toFixed(4)}, ${rHi.toFixed(4)}]  ${admits ? `admits (overlap [${oLo.toFixed(4)}, ${oHi.toFixed(4)}])` : 'does not admit'}`);
+        }
+      }
+    }
+    console.log('');
+  }
+  console.log(anyLeagueUnsatisfied
+    ? 'Not every league has a satisfying shape under the shipped schedule - see the per-league numbers above.'
+    : 'Every league has at least one satisfying shape under the shipped schedule - see the PASS rows above.');
+}
+
+// ---------------------------------------------------------------------------------------------
 async function main() {
   const t0 = Date.now();
 
@@ -1313,6 +1422,11 @@ async function main() {
 
   if (FLAG_RANGE) {
     await runRange(t0);
+    return;
+  }
+
+  if (FLAG_LADDER) {
+    await runLadder();
     return;
   }
 
