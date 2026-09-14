@@ -514,14 +514,19 @@ export const CHASE_PER_WINRATE_PP = 0.2;     // Draft, measured (see above)
 // the OLD CPU-vs-CPU-vs-balanced measurement and the OLD SHIFT_MAX_DEG=15/no minimum-samples gate) -
 // smallBall/junkballers/aces all measure a larger cost to the player now. Real progress on the
 // "Shifters anomaly" BB-2c's own report flagged as unresolved, from this commit's bounding alone.
+// BB-2g commit 2 re-measurement (`node sim-baseball.mjs --styles`, vs the median human model at
+// every league, against the CURRENT settings after BB-2e/2f's own retunes - the BB-2d values above
+// were stale against those changes, per BB-2d's own note). Every style measured tougher than
+// before (mean delta moved -0.06..-0.15 to -0.12..-0.20) because BB-2e/2f's own sigma/chase/
+// shortfall retuning already sharpened the underlying ladder these deltas stack on top of.
 export const STYLE_STRENGTH_DELTA = {
-  sluggers: -0.0646,
-  smallBall: -0.1530,
-  patient: -0.1080,
-  flamethrowers: -0.1176,
-  junkballers: -0.1320,
-  shifters: -0.1022,
-  aces: -0.1252,
+  sluggers: -0.1155,
+  smallBall: -0.1989,
+  patient: -0.1559,
+  flamethrowers: -0.1632,
+  junkballers: -0.1677,
+  shifters: -0.1573,
+  aces: -0.1671,
   balanced: 0,
 };
 
