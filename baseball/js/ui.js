@@ -13,7 +13,7 @@ import * as SETTINGS from './engine/settings.js';
 import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
-import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages } from './field.js';
+import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages, drawFrameCheck } from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
 const t = makeT(STRINGS);
@@ -48,6 +48,11 @@ const FIELD_FLOOR_FRAC = 0.28;
 const BETWEEN_MS = SETTINGS.FEEL.ui.betweenMs;
 const WINDUP_MS = SETTINGS.FEEL.ui.windupMs;
 const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
+
+// BB-3b correction: the real 8-frame swing sequence, timed from the swing decision (release), per
+// Matt's own spec - [msSinceRelease, frame]. Frame 5 (contact) lands at 80ms; frame 8 is the last
+// step and is held (see _startSwingTimeline) rather than looped back automatically.
+const SWING_TIMELINE = [[0, 3], [40, 4], [80, 5], [120, 6], [160, 7], [200, 8]];
 
 const LEAGUE_ORDER = SETTINGS.LEAGUES;
 
@@ -133,8 +138,7 @@ class BaseballPlayScreen {
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
     if (this._tossRaf) cancelAnimationFrame(this._tossRaf);
-    if (this._swingRaf) cancelAnimationFrame(this._swingRaf);
-    if (this._swingTimeout) clearTimeout(this._swingTimeout);
+    this._clearSwingTimers();
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -194,6 +198,7 @@ class BaseballPlayScreen {
         </div>
         <button type="button" class="gh-btn gh-btn--primary bb-play-btn" data-act="play">${t('setup_play')}</button>
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="tune">${t('tune_open')}</button>` : ''}
+        ${this.dev ? `<button type="button" class="bb-tune-open" data-act="frames">Frames</button>` : ''}
       </div>`;
     this.rootEl.querySelectorAll('[data-league]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -208,6 +213,8 @@ class BaseballPlayScreen {
     this.rootEl.querySelector('[data-act="play"]').addEventListener('click', () => this._startGame());
     const tuneBtn = this.rootEl.querySelector('[data-act="tune"]');
     if (tuneBtn) tuneBtn.addEventListener('click', () => this._openTune());
+    const framesBtn = this.rootEl.querySelector('[data-act="frames"]');
+    if (framesBtn) framesBtn.addEventListener('click', () => this._openFrameCheck());
   }
 
   // -------------------------------------------------------------------------------- game start
@@ -245,7 +252,7 @@ class BaseballPlayScreen {
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
       pitcherPose: 'set',  // 'set' | 'windup' | 'release' - see field.js's drawPitcherFigure
-      swingT: 0,            // 0..1, the bat's ~120ms swing progress - see _animateBatSwing
+      batterFrame: 1,       // 1-8, the real swing sequence - see _startSwingTimeline
     };
     this.gameAbort = () => { if (this.game) this.game.abort(); };
     preloadPlateImages();
@@ -317,7 +324,7 @@ class BaseballPlayScreen {
     const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
     drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark, {
       pitcherPose: this.state.pitcherPose,
-      swingT: this.state.swingT,
+      batterFrame: this.state.batterFrame,
       batterFlip: this._currentBatterFlip(),
     });
   }
@@ -334,29 +341,25 @@ class BaseballPlayScreen {
     return !!(batter && batter.bats === 'R');
   }
 
-  /** The bat's ~120ms swing (spec section 7), started when the player actually swings. Runs after
-   *  the pitch-flight loop has finished its own per-frame redraws (chained off its promise) so the
-   *  two animation loops never fight over the same canvas in the same frame. */
-  _animateBatSwing() {
-    if (this.destroyed) return;
-    const dur = 120;
-    const t0 = performance.now();
-    const step = (now) => {
+  /** Starts the real swing frame sequence at the moment of the swing decision (release): frame 3
+   *  at 0ms, stepping through contact (frame 5, 80ms) to frame 8 at 200ms - see `SWING_TIMELINE`
+   *  and `field.js`'s `drawBatterFigure` header. Frame 8 is left standing - `_settleAtBat`'s own
+   *  result-beat hold and the next `_stepWindup`/`decidePitch` reset `state.batterFrame` back to
+   *  1, per spec. Both these writes and the flight loop's own per-frame redraw read the same
+   *  shared `state.batterFrame`, so there is no ordering hazard between them the way a continuous,
+   *  separately-tracked animation value would have. */
+  _startSwingTimeline() {
+    this._clearSwingTimers();
+    this._swingTimers = SWING_TIMELINE.map(([atMs, frame]) => setTimeout(() => {
       if (this.destroyed) return;
-      const frac = Math.min(1, (now - t0) / dur);
-      this.state.swingT = frac;
+      this.state.batterFrame = frame;
       this._drawStaticField();
-      if (frac < 1) {
-        this._swingRaf = requestAnimationFrame(step);
-      } else {
-        this._swingTimeout = setTimeout(() => {
-          if (this.destroyed) return;
-          this.state.swingT = 0;
-          this._drawStaticField();
-        }, 150);
-      }
-    };
-    this._swingRaf = requestAnimationFrame(step);
+    }, atMs));
+  }
+
+  _clearSwingTimers() {
+    if (this._swingTimers) this._swingTimers.forEach((id) => clearTimeout(id));
+    this._swingTimers = null;
   }
 
   /** The pitcher steps set -> wind-up -> release before every pitch the CPU throws to a human
@@ -746,6 +749,61 @@ class BaseballPlayScreen {
       if (navigator.clipboard) navigator.clipboard.writeText(json).catch(() => {});
     });
   }
+
+  // -------------------------------------------------------------------------------- Frames panel (dev only)
+  /** BB-3b correction: "Build the dev-only flip-through page first and check foot drift across
+   *  the eight frames before wiring the timeline." Steps through both 8-frame swing sequences on a
+   *  fixed ground line, with a toggle to compare the raw (uncorrected) frames against
+   *  `FRAME_Y_OFFSET_FRAC`'s correction - this is what proved the correction was needed (visible
+   *  floating on frames 5-8 without it) before any of the timeline work in this file was written.
+   *  Re-open this and re-check whenever the batter art is replaced. */
+  _openFrameCheck() {
+    if (!this.dev) return;
+    preloadPlateImages();
+    const sheet = document.createElement('div');
+    sheet.className = 'bb-tune-overlay';
+    sheet.innerHTML = `
+      <div class="bb-tune-sheet">
+        <h2>Frames</h2>
+        <canvas data-role="fc-canvas" width="320" height="420" style="width:100%;max-width:320px;background:#1c1c1c;border-radius:8px"></canvas>
+        <label class="bb-tune-row"><span>Side</span>
+          <select data-role="fc-side"><option value="home">home</option><option value="away">away</option></select>
+        </label>
+        <label class="bb-tune-row"><span>Frame</span>
+          <input type="range" data-role="fc-frame" min="1" max="8" step="1" value="1">
+          <span class="bb-tune-val" data-role="fc-frame-val">1</span>
+        </label>
+        <label class="bb-tune-row"><span>Ground-corrected</span>
+          <input type="checkbox" data-role="fc-offset" checked>
+        </label>
+        <div class="bb-tune-actions">
+          <button type="button" class="gh-btn" data-act="prev">&larr; Prev</button>
+          <button type="button" class="gh-btn" data-act="next">Next &rarr;</button>
+          <button type="button" class="gh-btn gh-btn--primary" data-act="close">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(sheet);
+    const cv = sheet.querySelector('[data-role="fc-canvas"]');
+    const ctx = cv.getContext('2d');
+    const sideSel = sheet.querySelector('[data-role="fc-side"]');
+    const frameInp = sheet.querySelector('[data-role="fc-frame"]');
+    const frameVal = sheet.querySelector('[data-role="fc-frame-val"]');
+    const offsetChk = sheet.querySelector('[data-role="fc-offset"]');
+    let closed = false;
+    const redraw = () => {
+      frameVal.textContent = frameInp.value;
+      drawFrameCheck(ctx, cv.width, cv.height, sideSel.value, parseInt(frameInp.value, 10), offsetChk.checked);
+      if (!this.destroyed && !closed) requestAnimationFrame(redraw);
+    };
+    requestAnimationFrame(redraw);
+    sheet.querySelector('[data-act="prev"]').addEventListener('click', () => {
+      frameInp.value = Math.max(1, parseInt(frameInp.value, 10) - 1);
+    });
+    sheet.querySelector('[data-act="next"]').addEventListener('click', () => {
+      frameInp.value = Math.min(8, parseInt(frameInp.value, 10) + 1);
+    });
+    sheet.querySelector('[data-act="close"]').addEventListener('click', () => { closed = true; sheet.remove(); });
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -761,7 +819,8 @@ class HumanAgent {
     if (s.destroyed) return { type: 'fastball', aim: 0 };
     s.state.mode = 'pitching';
     s.state.pitcherPose = 'set';
-    s.state.swingT = 0;
+    s._clearSwingTimers();
+    s.state.batterFrame = 1; // the away batter is static until commit 4's swing event
     s._paintStrip();
     s._paintModeLabels();
     s._setLine1(''); s._setLine2('');
@@ -819,7 +878,8 @@ class HumanAgent {
     const s = this.screen;
     if (s.destroyed) return { action: 'take' };
     s.state.mode = 'batting';
-    s.state.swingT = 0;
+    s._clearSwingTimers();
+    s.state.batterFrame = 1;
     s._paintModeLabels();
     const pitch = view.pitch;
     s.state.lastPitches.push({ type: pitch.type, isStrike: pitch.isStrike, mph: Math.round(pitchMph(pitch, this.league)) });
@@ -850,10 +910,11 @@ class HumanAgent {
         const charged = heldMs >= F.chargeTime;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
         s._paintRing(charged ? 'charged' : 'idle', Math.min(1, heldMs / F.chargeTime));
-        // The bat's own visible swing (R3) - chained off the flight loop's own promise so the two
-        // per-frame redraw loops never race over the same canvas in the same frame (see
-        // _animateBatSwing's own header).
-        flightPromise.then(() => { if (!s.destroyed) s._animateBatSwing(); });
+        // The real swing frame sequence (BB-3b correction, R3) - starts immediately at release,
+        // per spec (frame 3 at 0ms). A take (the timeout branch below) never calls this, so
+        // state.batterFrame stays on whatever the charge loop left it at (1 or 2) until the next
+        // decideSwing/decidePitch resets it.
+        s._startSwingTimeline();
         resolve({ action: 'swing', aimX: s.padX, timingErrorMs: timing, charged });
       };
       s._onMainDown = () => {
@@ -863,6 +924,9 @@ class HumanAgent {
           const heldMs = performance.now() - downAt;
           const frac = Math.min(1, heldMs / F.chargeTime);
           s._paintRing(frac >= 1 ? 'charged' : 'charging', frac);
+          // Frame 2 while held past chargeTime (spec); frame 1 (idle) before that.
+          s.state.batterFrame = frac >= 1 ? 2 : 1;
+          s._drawStaticField();
           raf = requestAnimationFrame(loop);
         };
         raf = requestAnimationFrame(loop);
@@ -875,6 +939,9 @@ class HumanAgent {
         resolved = true;
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
+        // A take stays on frame 1 (spec), even if the button was mid-hold when the pitch expired.
+        s.state.batterFrame = 1;
+        s._drawStaticField();
         resolve({ action: 'take' });
       }, timeoutMs);
     });

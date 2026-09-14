@@ -534,7 +534,11 @@ function _loadImg(name) {
   image.src = new URL(name, IMG_BASE).href;
 }
 const PLATE_IMAGE_NAMES = [
-  'plate.webp', 'batter-home.webp', 'batter-away.webp', 'bat.webp',
+  'plate.webp',
+  'batter-home-1.webp', 'batter-home-2.webp', 'batter-home-3.webp', 'batter-home-4.webp',
+  'batter-home-5.webp', 'batter-home-6.webp', 'batter-home-7.webp', 'batter-home-8.webp',
+  'batter-away-1.webp', 'batter-away-2.webp', 'batter-away-3.webp', 'batter-away-4.webp',
+  'batter-away-5.webp', 'batter-away-6.webp', 'batter-away-7.webp', 'batter-away-8.webp',
   'pitcher-set.webp', 'pitcher-windup.webp', 'pitcher-release.webp', 'ball-sheet.webp',
 ];
 /** Kick off loading every plate-view image. Idempotent - call as early as convenient (ui.js calls
@@ -592,53 +596,44 @@ function anchorPx(frac, cover) {
 }
 
 // ---------------------------------------------------------------------- figures --
-// Measured on `batter-home.webp`/`batter-away.webp` (same pose, 300x700): the fists, where the bat
-// handle sits, as a fraction of the sprite's own width/height (0,0 top-left, feet at the bottom
-// edge since the sprite is trimmed to its own bounding box). Grid-measured directly on the shipped
-// webp (not eyeballed off the source PNG) after the first cut left the bat floating well above and
-// right of the actual fists.
-const BATTER_HAND_FRAC = { x: 0.333, y: 0.386 };
-// Measured on `bat.webp` (290x500): the round grip knob at the handle end - the point the bat
-// rotates about. Also grid-measured on the shipped webp.
-const BAT_GRIP_FRAC = { x: 0.086, y: 0.92 };
-const BAT_IDLE_ANGLE_DEG = -40; // held up near the shoulder, matching the mock's resting pose -
-                                 // bat.webp is drawn with its own built-in ~25deg rightward lean
-                                 // (grip to tip), so this rotates it the rest of the way to the
-                                 // mock's slight LEFTWARD lean over the shoulder
-const BAT_SWING_DEG = 140;      // spec section 7: "rotating about the hands by about 140 degrees"
-const BAT_HEIGHT_OF_BATTER = 0.62; // the bat's own drawn height, as a fraction of the batter's
+// BB-3b correction (Matt, after reviewing the bat-over-hands batter): "The bat-on-top-of-hands
+// batter is out. Do not fix it; replace it." Two real 8-frame swing sequences
+// (`batter-home-1..8.webp`, `batter-away-1..8.webp`, ported from `reference/baseball/batter-{home,
+// away}-{1-8}.png`) replace the single static sprite plus a separately-rotated `bat.webp` layer.
+// The bat is drawn IN THE HAND in every frame now - there is no bat layer, no bat rotation, no
+// hand anchor to measure. `bat.webp`/`batter-home.webp`/`batter-away.webp` are unused everywhere.
 
-/** The near-box batter, with the bat rotating about the batter's own hands. `swingT` 0..1 is the
- *  spec's ~120ms swing (see ui.js's `_animateBatSwing`); `flip` mirrors the whole group (the art is
- *  left-handed as drawn - spec section 2 - so a right-handed batter is a horizontal flip, not a
- *  second sprite). Anchored at its own FEET, not its center, so `heightPx` alone fixes its scale. */
-function drawBatterFigure(ctx, imgName, anchor, heightPx, opts = {}) {
-  const batterImage = plateImg(imgName);
+// Every frame shares one canvas height (937px source, 800px shipped) and one scale, but the
+// artist's own per-frame framing was NOT perfectly ground-locked - a flip-through (built as this
+// repo's dev-only "Frames" check, `_openFrameCheck` in ui.js) showed the follow-through frames
+// visibly rising off the ground line by as much as 37px at the shipped 800px scale. Measured once
+// (lowest non-transparent pixel row per frame, at the shipped 800px height, against each set's own
+// frame-1 baseline) and stored here as a FRACTION of the drawn height, so it scales with
+// `NEAR_BATTER_HEIGHT_FRAC` automatically. Positive = shift the sprite down; negative = up.
+// Re-measure (and re-verify with the Frames check) if these images are ever replaced.
+const FRAME_Y_OFFSET_FRAC = {
+  home: { 1: 0, 2: -0.01175, 3: -0.015, 4: -0.0075, 5: -0.021375, 6: -0.037375, 7: -0.045875, 8: -0.034125 },
+  away: { 1: 0, 2: -0.0085, 3: 0.0405, 4: 0.01175, 5: -0.005375, 6: -0.013875, 7: 0.006375, 8: -0.00425 },
+};
+
+/** The near-box batter: one frame (1-8) of the real swing sequence for `side` ('home' or 'away').
+ *  `flip` mirrors the whole sprite (the art is left-handed as drawn - spec section 2 - so a
+ *  right-handed batter is a horizontal flip, not a second sprite set). Anchored at its own FEET
+ *  (the frame's own measured ground line, via `FRAME_Y_OFFSET_FRAC`, not just the canvas edge), so
+ *  `heightPx` alone fixes its scale and every frame's feet land on the same screen row. */
+function drawBatterFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
+  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
+  const batterImage = plateImg(`batter-${side}-${f}.webp`);
   if (!batterImage) return;
   const iw = batterImage.naturalWidth || batterImage.width, ih = batterImage.naturalHeight || batterImage.height;
   if (!iw || !ih) return;
   const scale = heightPx / ih;
   const dw = iw * scale, dh = ih * scale;
+  const yOffset = (FRAME_Y_OFFSET_FRAC[side]?.[f] || 0) * heightPx;
   ctx.save();
-  ctx.translate(anchor.x, anchor.y);
+  ctx.translate(anchor.x, anchor.y + yOffset);
   if (opts.flip) ctx.scale(-1, 1);
   ctx.drawImage(batterImage, -dw / 2, -dh, dw, dh);
-
-  const batImage = plateImg('bat.webp');
-  if (batImage && (batImage.naturalWidth || batImage.width)) {
-    const handX = -dw / 2 + dw * BATTER_HAND_FRAC.x;
-    const handY = -dh + dh * BATTER_HAND_FRAC.y;
-    const bw0 = batImage.naturalWidth || batImage.width, bh0 = batImage.naturalHeight || batImage.height;
-    const bScale = (dh * BAT_HEIGHT_OF_BATTER) / bh0;
-    const bw = bw0 * bScale, bh = bh0 * bScale;
-    const swingT = opts.swingT || 0;
-    const angleDeg = BAT_IDLE_ANGLE_DEG - BAT_SWING_DEG * swingT;
-    ctx.save();
-    ctx.translate(handX, handY);
-    ctx.rotate((angleDeg * Math.PI) / 180);
-    ctx.drawImage(batImage, -bw * BAT_GRIP_FRAC.x, -bh * BAT_GRIP_FRAC.y, bw, bh);
-    ctx.restore();
-  }
   ctx.restore();
 }
 
@@ -662,8 +657,8 @@ function drawPitcherFigure(ctx, pose, anchor, heightPx) {
  *  and the anchors never change, only which sprite stands where and the ring/button labels do).
  *  `dark` is accepted for call-site compatibility (every other camera-view field in this repo takes
  *  it) but unused - this picture has one identity, same as the overhead camera above.
- *  `opts`: `pitcherPose` ('set'|'windup'|'release'), `swingT` (0..1, the batter's bat-swing
- *  progress), `batterFlip` (bool, true for a right-handed batter - see drawBatterFigure). */
+ *  `opts`: `pitcherPose` ('set'|'windup'|'release'), `batterFrame` (1-8, the real swing sequence -
+ *  see ui.js's swing timeline), `batterFlip` (bool, true for a right-handed batter). */
 export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
@@ -693,10 +688,9 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
 
   // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
   // mound - independent of whether the human is batting or pitching (see the section header).
-  const batterImgName = mode === 'pitching' ? 'batter-away.webp' : 'batter-home.webp';
-  drawBatterFigure(ctx, batterImgName, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, {
+  const batterSide = mode === 'pitching' ? 'away' : 'home';
+  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, {
     flip: !!opts.batterFlip,
-    swingT: opts.swingT || 0,
   });
   drawPitcherFigure(ctx, opts.pitcherPose || 'set', moundXY, h * MOUND_PITCHER_HEIGHT_FRAC);
 
@@ -747,7 +741,42 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
   return { x, y, scale };
 }
 
+/** The dev-only "Frames" flip-through check (ui.js's `_openFrameCheck`, gated the same way the
+ *  Tune panel is). Draws one frame of a swing sequence on a flat ground line so a foot-drift
+ *  regression in a future art replacement is visible immediately, without reasoning about
+ *  `FRAME_Y_OFFSET_FRAC` by eye. `useOffset` toggles the correction off so the raw, uncorrected
+ *  drift can be compared against it directly - this is what proved the correction was needed
+ *  (visible floating on frames 5-8 without it) before the swing timeline was wired at all. */
+export function drawFrameCheck(ctx, w, h, side, frame, useOffset) {
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#1c1c1c';
+  ctx.fillRect(0, 0, w, h);
+  const groundY = h * 0.85;
+  ctx.strokeStyle = '#e0532f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(w, groundY);
+  ctx.stroke();
+  const heightPx = h * 0.7;
+  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
+  if (useOffset) {
+    drawBatterFigure(ctx, side, f, { x: w / 2, y: groundY }, heightPx, {});
+  } else {
+    // Bypass FRAME_Y_OFFSET_FRAC entirely - draw the raw frame bottom-anchored at the ground line.
+    const im = plateImg(`batter-${side}-${f}.webp`);
+    if (im && (im.naturalWidth || im.width)) {
+      const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+      const scale = heightPx / ih;
+      const dw = iw * scale, dh = ih * scale;
+      ctx.drawImage(im, w / 2 - dw / 2, groundY - dh, dw, dh);
+    }
+  }
+  ctx.restore();
+}
+
 export default {
   project, drawField, drawBall, drawLandingMarker, planGeometry,
-  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall,
+  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, drawFrameCheck,
 };
