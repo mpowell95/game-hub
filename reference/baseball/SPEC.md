@@ -24,10 +24,11 @@ is the artifact (see `reference/README.md`).
 | `bat.png` | The bat, its own image so code rotates it for the swing |
 | `pitcher-set.png` | Your pitcher, set position, transparent |
 | `pitcher-sheet.png` | The same pitcher, three poses (set, wind-up, release) in one sheet; cut the second and third out |
+| `pitcher-windup.png`, `pitcher-release.png` | The other two poses, cut from the sheet |
 | `ball-sheet.png` | Ten balls at different seam angles, transparent; cycle them for spin |
 
-Still to add: `batter-away.png` (the CPU batter for the pitching state, same pose, red uniform).
-`backdrop1.jpg` and `1` are leftovers and can be deleted.
+| `batter-away.png` | The CPU batter, same pose, red uniform, no bat, transparent |
+
 
 Every geometry figure below is a fraction of the game root's own rectangle, with the pixel value at
 the reference phone beside it. Reference phone: 393 by 852, mounted in the hub with
@@ -198,7 +199,7 @@ Both states, in one frame, with nothing moving between them:
 
 | Element | Batting | Pitching |
 |---|---|---|
-| Foreground figure | `batter-home` plus `bat` at the near box, your hand's side | `batter-away` (bat included) at the near box, the CPU batter's side |
+| Foreground figure | `batter-home` plus `bat` at the near box, your hand's side | `batter-away` plus `bat` at the near box, the CPU batter's side |
 | Mound figure | `pitcher-*` poses, small, CPU pitcher | `pitcher-*` poses, small, you |
 | Left pad | Slides the sweet-spot bar along the strike zone's width | Slides the aim crosshair; after release on curve, slider or screwball the same pad steers, and a break-direction arrow appears inside the pad at release |
 | Ring button label | SWING | THROW |
