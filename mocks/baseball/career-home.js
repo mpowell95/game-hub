@@ -23,36 +23,62 @@ const STANDINGS_BELOW4 = [
   { rank: 7, code: 'YOU', wl: '2-4', me: true },
 ];
 
+// Every state's status row is TWO reserved lines, always - the row's height must
+// never depend on how much a state has to say. A state with nothing for line 2
+// still occupies the same box; the line is blank, not absent. Measured once
+// (below, in renderCareerHome) and pinned in round2.css as a fixed height, not a
+// min-height, so a future longer sentence overflows loudly instead of growing
+// the row.
+const STATUS = {
+  healthy: { glyph: null, spin: false, l1: 'College, Season 2', l2: '' },
+  pulling: { glyph: ICON_SYNC, spin: true, l1: 'Syncing', l2: '' },
+  'pulling-stale': { glyph: ICON_SYNC, spin: true, l1: 'Syncing', l2: '' },
+  offline: {
+    glyph: ICON_CLOUD_SLASH, spin: false,
+    l1: 'You are offline. Your career is saved on this phone.',
+    l2: 'It syncs itself next time you open the hub online.',
+  },
+  fork: {
+    glyph: ICON_BRANCH, spin: false,
+    l1: 'Your career was continued on another device.',
+    l2: "This phone's version has been kept.",
+  },
+};
+
 function statusRow(state) {
-  if (state === 'healthy') {
-    return `<div class="bb-status bb-status--healthy"><span class="bb-status__text">College, Season 2</span></div>`;
-  }
-  if (state === 'pulling') {
-    return `<div class="bb-status bb-status--pulling">
-      <span class="bb-status__glyph spin">${ICON_SYNC}</span>
-      <span class="bb-status__text">Syncing</span>
-    </div>`;
-  }
-  if (state === 'offline') {
-    return `<div class="bb-status bb-status--offline">
-      <span class="bb-status__glyph">${ICON_CLOUD_SLASH}</span>
-      <span class="bb-status__text">You are offline. Your career is saved on this phone. It syncs itself next time you open the hub online.</span>
-    </div>`;
-  }
-  // fork - clickable, reverts to healthy text once tapped
-  return `<div class="bb-status bb-status--fork" data-fork-row>
-      <span class="bb-status__glyph">${ICON_BRANCH}</span>
-      <span class="bb-status__text">Your career was continued on another device. This phone's version has been kept.</span>
-    </div>`;
+  const s = STATUS[state];
+  const clickable = state === 'fork';
+  return `<div class="bb-status bb-status--${state}"${clickable ? ' data-fork-row' : ''}>
+    <span class="bb-status__glyphslot">${s.glyph ? `<span class="bb-status__glyph${s.spin ? ' spin' : ''}">${s.glyph}</span>` : ''}</span>
+    <span class="bb-status__lines">
+      <span class="bb-status__line">${s.l1}</span>
+      <span class="bb-status__line">${s.l2}</span>
+    </span>
+  </div>`;
 }
+
+// Per-state next-game content. `park` only ever prints for Majors (doc's own
+// rule); `muted` is the "numbers that could change when the pull returns"
+// treatment for a Pulling state that still has a local career to show.
+const GAME = {
+  healthy: { tag: 'vs', code: 'IRM', game: 'Game 7 of 12', park: null, muted: false },
+  fork: { tag: 'at', code: 'BHC', game: 'World Series', park: 'Meridian Park', muted: false },
+  'pulling-stale': { tag: 'vs', code: 'GRV', game: 'Championship', park: null, muted: true },
+};
 
 function nextGameCard(state) {
   const noCareer = state === 'pulling' || state === 'offline';
-  const opp = state === 'fork' ? { tag: 'at', code: 'BHC', game: 'Semifinal' } : { tag: 'vs', code: 'IRM', game: 'Game 7 of 12' };
-  const info = `<div class="bb-nextgame__info${noCareer ? ' is-empty' : ''}">
-      <div class="bb-nextgame__opp">${marker('cpu')}<span>${opp.tag} ${opp.code}</span></div>
-      <div class="bb-nextgame__game">${opp.game}</div>
-    </div>`;
+  const g = GAME[state];
+  const info = noCareer
+    ? `<div class="bb-nextgame__info is-empty">
+        <div class="bb-nextgame__opp">${marker('cpu')}<span>vs XXX</span></div>
+        <div class="bb-nextgame__game">Game 0 of 0</div>
+      </div>`
+    : `<div class="bb-nextgame__info${g.muted ? ' is-muted' : ''}">
+        <div class="bb-nextgame__opp">${marker('cpu')}<span>${g.tag} ${g.code}</span></div>
+        ${g.park ? `<div class="bb-nextgame__park">${g.park}</div>` : ''}
+        <div class="bb-nextgame__game">${g.game}</div>
+      </div>`;
   let action;
   if (state === 'pulling') {
     action = `<div class="bb-nextgame__syncrow">${ICON_SYNC}<span>Syncing</span></div>`;
@@ -79,6 +105,14 @@ function standingsBlock(state, short) {
     return `<div class="bb-standings"><div class="bb-standings__head">Standings</div>${blanks}</div>`;
   }
 
+  function rowHtml(r) {
+    return `<div class="bb-srow${r.me ? ' is-me' : ''}">
+      <span class="bb-srow__rank">${r.rank}</span>
+      <span class="bb-srow__code">${marker(r.me ? 'you' : 'cpu')}${r.code}</span>
+      <span class="bb-srow__wl">${r.wl}</span>
+    </div>`;
+  }
+
   const visible = rows.slice(0, 4);
   let fifthHtml = '';
   if (!short) {
@@ -96,14 +130,6 @@ function standingsBlock(state, short) {
         </div>
       </div>`;
     }
-  }
-
-  function rowHtml(r) {
-    return `<div class="bb-srow${r.me ? ' is-me' : ''}">
-      <span class="bb-srow__rank">${r.rank}</span>
-      <span class="bb-srow__code">${marker(r.me ? 'you' : 'cpu')}${r.code}</span>
-      <span class="bb-srow__wl">${r.wl}</span>
-    </div>`;
   }
 
   return `<div class="bb-standings">

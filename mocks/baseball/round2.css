@@ -31,33 +31,45 @@
 }
 .bb-home * { box-sizing: border-box; }
 
-/* --- status row --- */
+/* --- status row -----------------------------------------------------------
+ * FIXED HEIGHT, always - never a min-height. Two reserved 15px line slots
+ * (measured to fit the longest state - Offline's two-sentence message - at
+ * the 11px text floor) plus 6px top/bottom padding = 42px, identical in
+ * every state whether or not a state has anything to put in line 2. A state
+ * with a one-line message (Healthy, Pulling) leaves line 2 truly empty
+ * rather than collapsing the row, which is what let the row's height vary
+ * by state in the first place. */
 .bb-status {
+  --bb-status-h: 42px;
+  height: var(--bb-status-h);
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
   background: var(--gh-surface-2);
-  font-size: 12px;
-  font-weight: 700;
-  min-height: 32px;
   cursor: default;
+  overflow: hidden;
 }
-.bb-status--healthy { color: var(--gh-ink); }
-.bb-status--pulling { color: var(--gh-muted); }
-.bb-status--offline, .bb-status--fork {
-  align-items: flex-start;
-  padding-top: 4px;
-  padding-bottom: 4px;
-  line-height: 1.25;
-}
-.bb-status__glyph { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+.bb-status--fork { cursor: pointer; }
+.bb-status__glyphslot { flex: none; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.bb-status__glyph { width: 16px; height: 16px; color: var(--gh-ink); }
+.bb-status--pulling .bb-status__glyph, .bb-status--pulling-stale .bb-status__glyph { color: var(--gh-muted); }
 .bb-status__glyph.spin { animation: bb-spin 1.4s linear infinite; }
 @keyframes bb-spin { to { transform: rotate(360deg); } }
-.bb-status__text { font-size: 11px; font-weight: 700; }
-.bb-status--fork { cursor: pointer; }
-.bb-status__hint { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--gh-accent); flex: none; }
+.bb-status__lines { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.bb-status__line {
+  height: 15px;
+  line-height: 15px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--gh-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bb-status--pulling .bb-status__line, .bb-status--pulling-stale .bb-status__line { color: var(--gh-muted); }
 
 /* --- next game card --- */
 .bb-nextgame {
@@ -75,7 +87,11 @@
 .bb-nextgame__opp { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; }
 .bb-nextgame__opp .bb-marker svg { width: 11px; height: 11px; }
 .bb-nextgame__tag { font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+.bb-nextgame__park { font-size: 11px; font-weight: 600; color: var(--gh-muted); }
 .bb-nextgame__game { font-size: 12px; font-weight: 700; color: var(--gh-muted); }
+.bb-nextgame__info.is-muted .bb-nextgame__opp,
+.bb-nextgame__info.is-muted .bb-nextgame__park,
+.bb-nextgame__info.is-muted .bb-nextgame__game { color: var(--gh-muted); opacity: 0.6; }
 .bb-nextgame__syncrow {
   display: flex;
   align-items: center;
