@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch } from './engine/pitch.js';
-import { swing, qualityFor } from './engine/swing.js';
+import { swing, qualityFor, computeSwingTiming } from './engine/swing.js';
 import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
@@ -1764,6 +1764,51 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
     ok(Math.abs(weights.reduce((s, w) => s + w, 0) - 1) < 1e-9, `ladderGapWeights('${shape}') sums to exactly 1`);
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Section 26 (BB-3 commit 1): the UI input seams - hold/release, steering, swing timing, and the
+// flight path flyPitch now returns.
+(function section26() {
+  // Omitting pitchExtras entirely must reproduce prior output byte-for-byte.
+  const rand = mulberry32(777);
+  const r1 = flyPitch('fastball', 0.2, 0.5, SETTINGS, rand, { pitchSpd: 3 });
+  ok(Array.isArray(r1.path) && r1.path.length > 1, 'flyPitch returns a non-trivial per-step path');
+  ok(r1.path[0].t === 0 && Math.abs(r1.path[r1.path.length - 1].x - r1.x) < 1e-9,
+    'flyPitch path starts at t=0 and ends at the pitch\'s own final x');
+  ok(r1.wasNice === false && r1.wasHang === false, 'omitting pitchExtras never produces a Nice/Hang pitch');
+
+  // A release inside the Nice window lands exactly on aim, with no aimScatter at all.
+  const niceMs = SETTINGS.FEEL.engine.meterTime - 1;
+  const rNice = flyPitch('fastball', 0.35, 0.5, SETTINGS, mulberry32(1), {}, { hold: niceMs });
+  ok(rNice.wasNice && rNice.x === 0.35, 'a Nice release lands exactly on the pitcher\'s aim');
+  const rNormal = flyPitch('fastball', 0.35, 0.5, SETTINGS, mulberry32(1), {}, { hold: 50 });
+  ok(!rNormal.wasNice && !rNormal.wasHang, 'a release well before the meter fills is an ordinary pitch');
+
+  // A release past the hang threshold is slower and drifts toward center.
+  const hangMs = SETTINGS.FEEL.engine.meterTime * (1 + SETTINGS.HANG_GRACE_FRAC) + 50;
+  const rHang = flyPitch('fastball', 0.8, 0.5, SETTINGS, mulberry32(2), {}, { hold: hangMs });
+  const rBase = flyPitch('fastball', 0.8, 0.5, SETTINGS, mulberry32(2), {}, { hold: 50 });
+  ok(rHang.wasHang, 'a release past the hang threshold is scored a hang');
+  ok(rHang.timeToPlateS > rBase.timeToPlateS, 'a hung pitch travels slower than an ordinary one');
+  ok(Math.abs(rHang.x) < Math.abs(0.8), 'a hung pitch drifts toward the center of the zone');
+
+  // Steering: a curveball honors an early steer sample; a slider ignores one before its own
+  // steerFromFrac (0.5) and only bends once enough of the flight has passed to include later ones.
+  const steerEarly = [{ step: 0, dx: 1 }];
+  const cvNoSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(3), {}, { hold: 50, steer: [] });
+  const cvSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(3), {}, { hold: 50, steer: steerEarly });
+  ok(cvSteer.x !== cvNoSteer.x, 'a curveball steers from an early sample (step 0)');
+  const slNoSteer = flyPitch('slider', 0, 0.5, SETTINGS, mulberry32(4), {}, { hold: 50, steer: [] });
+  const slEarlySteer = flyPitch('slider', 0, 0.5, SETTINGS, mulberry32(4), {}, { hold: 50, steer: steerEarly });
+  ok(slEarlySteer.x === slNoSteer.x, 'a slider ignores a steer sample from before its own halfway point');
+
+  // computeSwingTiming: a synthetic tap at the exact crossing time (zero delay/offset) is zero.
+  const t0 = computeSwingTiming({ releaseMs: 1500, timeToPlateS: 1.5, dtS: SETTINGS.FEEL.engine.dtS });
+  ok(t0.timingErrorMs === 0, 'a tap at the exact crossing time (no swingDelay/inputOffset) produces zero timing error');
+  const tEarly = computeSwingTiming({ releaseMs: 1400, timeToPlateS: 1.5, swingDelayMs: 60, inputOffsetMs: 10, dtS: SETTINGS.FEEL.engine.dtS });
+  ok(tEarly.timingErrorMs < 0, 'releasing before the delay-adjusted ideal time reads as early (negative error)');
+  ok(t0.swingStep === Math.round(1500 / (SETTINGS.FEEL.engine.dtS * 1000)), 'swingStep quantizes the release to the engine\'s own fixed timestep');
+})();
 
 // ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);

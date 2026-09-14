@@ -29,6 +29,21 @@ export function qualityFor(absTimingMs, perfectMs, timingWindowMs) {
   return Math.max(0, 1 - (absTimingMs - perfectMs) / span);
 }
 
+/** BB-3: maps a raw input-release timestamp (ms since the pitch left the pitcher's hand) to the
+ *  swing decision's own `timingErrorMs`, honoring `FEEL.engine.swingDelay` (the motor delay
+ *  between deciding to swing and the bat arriving) and `FEEL.ui.inputOffset` (a device/latency
+ *  calibration). Pure - no clock reads, no state. The "ideal" release time is the crossing time
+ *  pulled back by both delays; releasing exactly then reads as zero error. A tap at the exact
+ *  crossing time with both delays at 0 (the synthetic-tap baseline) is therefore zero by
+ *  construction - `swingDelayMs`/`inputOffsetMs` default to 0 for exactly that case. */
+export function computeSwingTiming({ releaseMs, timeToPlateS, swingDelayMs = 0, inputOffsetMs = 0, dtS }) {
+  const crossMs = timeToPlateS * 1000;
+  const idealReleaseMs = crossMs - swingDelayMs - inputOffsetMs;
+  const timingErrorMs = releaseMs - idealReleaseMs;
+  const swingStep = dtS ? Math.round(releaseMs / (dtS * 1000)) : null;
+  return { timingErrorMs, swingStep };
+}
+
 export function swing(pitchResult, batterSkills, decision, settings, rand01, league) {
   if (!decision || decision.action !== 'swing') {
     return { swung: false, contact: false, foul: false, inPlay: false };
@@ -148,4 +163,4 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered, kind };
 }
 
-export default { swing, qualityFor };
+export default { swing, qualityFor, computeSwingTiming };

@@ -509,7 +509,12 @@ export class Game {
       // Captured BEFORE `_recordPitch` appends the pitch about to be thrown - see
       // `_buildSwingView`'s own header for why this ordering matters.
       const priorPitchHistory = (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW);
-      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills);
+      // BB-3: a human pitcher's decision may carry `hold`/`steer` (the hold-and-release meter and
+      // in-flight steering, see pitch.js) - passed through as pitchExtras; a CPU/model agent never
+      // sets either, so their pitches are byte-identical to before this phase.
+      const pitchExtras = pitchDecision && (pitchDecision.hold != null || pitchDecision.steer)
+        ? { hold: pitchDecision.hold, steer: pitchDecision.steer } : null;
+      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
