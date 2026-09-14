@@ -4,6 +4,226 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Status: Phase 2f — the per-league weakest-slot floor, and a real resume bug found along the way
+
+BB-2f (2026-09-14, continuing BB-2e the same day) landed design doc v11's fix for the exact
+contradiction BB-2e's own `--ladder` proof surfaced: `SLOT_WINRATE_WEAKEST_MIN` (the "weakest
+opponent beaten at X% or better" floor) was a single flat 0.85 shared by every league, which is
+mathematically unsatisfiable in the Majors no matter what ladder shape or schedule is chosen (a
+season averaging down to 41-51% cannot also beat its weakest opponent 85% of the time). Doc v11
+replaces it with a per-league table and adds a new Locked rule: every league's CPU teams must
+generate below that league's own cap, so the champion has room to be tougher than its league
+mates - closing the "champion clamps to the exact same ceiling as everyone else" defect BB-2e's
+own three-axis exhaustion (timing sigma, chase, behaviorMul) had already traced but could not fix
+on its own, since none of those axes touch the skill clamp.
+
+### Commit 1: re-proving the arithmetic, and a correction made within the same commit
+
+`node sim-baseball.mjs --ladder` now reads the per-league floor
+(`SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE`: little 0.95, highschool 0.85, college 0.78, minors 0.70,
+majors 0.62 - doc v11 §8, verbatim) instead of the flat 0.85. The FIRST cut of this proof still
+fixed the champion at its own band's exact midpoint (0.475) and only swept `slot0` - an
+over-constrained check inherited from BB-2e's own version, and it reported Majors as having NO
+satisfying shape at all under the new floor. That was a false negative, corrected within the same
+commit: the champion band is a real RANGE (`[0.40, 0.55]`), not one point, and `weightedSeasonRate`
+is affine (monotone) in both `slot0` and `champion` independently, so the achievable season-rate
+interval over the full box is exactly `[rate at the low corner, rate at the high corner]`
+(`achievableRangeBox`). Swept properly, **every league now has at least one satisfying shape**
+under the shipped `SCHEDULE_SHAPE=repeatMiddle`:
+
+| League | Satisfying shape | Overlap width | Note |
+|---|---|---|---|
+| little | cliff | 0.0162 | |
+| highschool | cliff / spread / steep | 0.0138 / 0.0750 / 0.0771 | all three pass |
+| college | spread | 0.0800 | |
+| minors | spread | 0.0400 | |
+| majors | spread | **0.0000** | knife-edge: only at slot0 exactly at its floor (0.62) AND champion exactly at its band's own floor (0.40) |
+
+Majors' zero-width overlap is flagged rather than declared a clean win - a real margin needs real
+measurement, which commit 3's actual simulation (not this arithmetic sanity check) is the true
+test of.
+
+### Commit 2: the per-league floor and the shortfall rule
+
+`SLOT_WINRATE_WEAKEST_MIN` folded into the same per-league table everywhere (the main promise
+scoreboard's weakest-slot check, not just `--ladder`). A new `DOC_FLOOR_TABLE_MATCHES` scoreboard
+line parses doc v11 §8's own table straight out of the committed markdown and asserts it is
+byte-identical to the hand-transcribed constant - the same discipline `test-new-badge.mjs`/
+`test-emoji.mjs` apply to their own generated data, closing a gap `SEASON_WINRATE_BAND`'s own
+table never had.
+
+`CPU_LEVEL_SHORTFALL.little`/`.highschool`: `0` → `1` (Draft placeholder) → **`3` / `1`** after
+commit 3's own measurement (see below). A new `CPU_LEVEL_SHORTFALL (no league generates every team
+at its own cap)` scoreboard line, plus a structural `baseball/js/test.js` §1 assertion
+(`CPU_LEVEL_SHORTFALL.${lg} is nonzero`), both enforce doc v11's new rule going forward.
+
+### A real, pre-existing resume-correctness bug, found by retuning a constant
+
+Bumping `CPU_LEVEL_SHORTFALL.highschool` off zero perturbed a roster's skill values just enough to
+shift which pitch of `test.js`'s fixed `RESUME_SEED=909090` happened to be its scripted abort
+point - and the new pitch landed exactly on one that ALSO concluded an at-bat, a case section 12's
+resume test had never exercised before. `Game.fromSnapshot` set `_resumePending`/
+`_resumeHalfPending` unconditionally to `true` on every resume, trusting a snapshot was always
+taken mid-progress. It is not: when an at-bat or half-inning concludes, the "reset for whoever's up
+next" step was deferred to the START of the next `playAtBat()`/`playHalfInning()` call - a call
+that never happens on the aborted game object itself (the outer loop stops the instant `aborted`
+is set). A snapshot taken right as a unit concluded carried that unit's own final (nonzero)
+balls/strikes/outs, and resuming wrongly preserved them instead of resetting for the next
+batter/half-inning. A related defect in the same family: `playAtBat`'s check right after
+`emit('count', ...)` could fire after strikes/balls had just reached their own out/walk threshold
+but before that threshold was checked, snapshotting an invalid stuck state.
+
+Fixed with two new snapshot fields, `atBatOpen`/`halfInningOpen` (true from the moment a unit
+starts, false the instant it genuinely concludes - unconditionally, regardless of `aborted`, since
+`emit()` already self-guards notifications on its own). `fromSnapshot` now restores
+`_resumePending`/`_resumeHalfPending` FROM these flags instead of a blanket `true`. **`SNAP_V`
+bumped 1 → 2** (doc §15, [Locked]: forward-only, never reinterpreted) - an old v1 snapshot is
+rejected outright, never resumed with a guessed value for the two new required fields. A new
+`[KNOWN-BUG PROBE]` (`test.js` section 12b) sweeps 24 seeds × 40 stop-points, asserting
+non-vacuously that the sweep actually exercises both an at-bat-conclusion and a
+half-inning-conclusion abort, and that every one resumes byte-identically to its own
+straight-through reference.
+
+### Commit 3: the retune, and a genuine, measured structural ceiling
+
+Per-league shortfall sweeps (1/2/3/5/7/9), `sim-baseball.mjs --assert` per league:
+`teams.js`'s `makeLeague` clamps every slot's skill to `min(rawCap, baseCap * (1 + offset))` - the
+champion's own `+0.25` offset only escapes the RAW cap once `baseCap * 1.25 < rawCap`. For Little
+League (rawCap 10) that needs shortfall > 2; for High School (rawCap 14) it needs shortfall > 2.8.
+Below those thresholds the champion was ALWAYS clamped to the exact same raw cap as a
+zero-headroom generation, regardless of its offset - doc v11's own diagnosis confirmed correct by
+direct measurement.
+
+**`little: 3`** - best point on its own sweep (season/weakest both PASS; champion moves 0.93 →
+0.90, the largest improvement any tested value bought; 5/7/9 fail the weakest floor for no further
+champion gain). **`highschool: 1`** - best point on ITS sweep (season 0.75/weakest 0.81 both PASS;
+2+ fails the weakest floor for no further champion gain - champion sits at 0.71-0.79 across the
+whole 1-4 range, moving only ~2-8pp). **college/minors/majors unchanged** (3/4/4) - college's own
+weakest-slot value (0.656) does not move with shortfall at all (byte-identical to BB-2e's own
+report); that bottleneck is a different, shared axis (`LADDER_AXIS_ENDPOINTS`), out of this phase's
+contract to retune without risking Little League's own now-passing bands.
+
+**The genuine finding, measured rather than assumed**: Little League and High School's champion
+band is NOT reachable within this phase's contract, even with `CPU_LEVEL_SHORTFALL` pushed far
+past any shippable value. A sweep to shortfall 9 for Little League (an effective cap of 1 skill
+point out of 10) still only moved its champion win rate to 0.87-0.93 - nowhere near `[0.40, 0.55]`.
+Skill, now genuinely unclamped for the first time, joins timing sigma/chase/behaviorMul (BB-2e's
+own three, each independently exhausted) as a FOURTH axis that cannot close this gap alone. Not
+chased further: a shortfall large enough to matter would also fail `NUDGE_A_B` (a nearly
+skill-less team cannot express "well-timed low-Power beats sloppy high-Power" either).
+
+### The full scoreboard (`node sim-baseball.mjs --assert`, full sample, 44.9s)
+
+```
+[PASS] SEASON_WINRATE_BAND, all 5 leagues simultaneously (little 0.936, highschool 0.748,
+       college 0.586, minors 0.566, majors 0.485) - unchanged from BB-2e, preserved.
+[PASS] SEASONS_TO_GOLD_TARGET.little (1.19) / .highschool (1.81) - BOTH PASS, highschool
+       crossing from FAIL (1.90 at BB-2e) to PASS (1.81) this commit.
+[FAIL] SEASONS_TO_GOLD_TARGET.college (4.29) / .minors (5.00) / .majors (8.57) - the same
+       compound-probability bottleneck every phase since BB-2b has reported, untouched
+       (POINTS/SEASON out of this phase's contract).
+[PASS] CHAMPION_GAME_WIN_MIN_MEDIAN (0.455), PERFECT_SEASON_REACHABLE (0.59 >= 0.02),
+       LADDER_MONOTONE (across-league), NUDGE_A_B (every league, min margin 0.182 - no
+       regression from the shortfall changes), CONTACT_GRID (all 5, byte-identical).
+[FAIL] SLOT_WINRATE_BAND weakest: [0.942, 0.814, 0.656, 0.655, 0.594] vs
+       [0.95, 0.85, 0.78, 0.7, 0.62] - every league now sits CLOSE to its own floor (little
+       misses by 0.008, highschool by 0.036) rather than the old flat-0.85 target's much
+       larger misses at college/minors/majors.
+[FAIL] SLOT_WINRATE_BAND champion: [0.903, 0.712, 0.531, 0.54, 0.449] vs [0.40, 0.55] -
+       college/minors/majors ALREADY PASS (unchanged from BB-2e); little/highschool fail,
+       per the structural ceiling above.
+[FAIL] CHAMPION_IS_HARDEST / within-league LADDER_MONOTONE: unchanged structural finding from
+       BB-2c/2d/2e (a Sluggers/Shifters-style ordering anomaly; STYLE_STRENGTH_DELTA stale
+       since BB-2d's own retune - re-measuring it is a separate job, per that commit's note).
+[FAIL] CAP_BINDS_ONLY (highschool): 2.1 seasons vs <=2.0 - a 0.1-season miss present in every
+       phase's own report back to BB-2b; POINTS out of this phase's scope, untouched.
+```
+
+### Measured per-league slot profiles beside their bands (full sample, weakest..strongest)
+
+```
+little      94.2  93.5  93.5  94.6  91.4  92.5  92.0  90.3   season 93.6%  weakest-floor 0.95  champion-band [0.40,0.55]
+highschool  81.4  75.7  75.4  78.2  75.0  77.0  72.4  71.2   season 74.8%  weakest-floor 0.85
+college     65.6  64.6  59.4  60.5  56.5  58.6  51.4  53.1   season 58.6%  weakest-floor 0.78
+minors      65.5  60.0  57.1  57.7  57.1  55.9  43.6  54.0   season 56.6%  weakest-floor 0.70
+majors      59.4  56.1  52.6  50.7  50.2  51.0  36.3  44.9   season 48.5%  weakest-floor 0.62
+```
+
+### Seasons-to-Gold, measured (not tuned to)
+
+little 1.19, highschool 1.81 (both now inside their own target+tolerance), college 4.29, minors
+5.00, majors 8.57 (all three still miss - the compound-probability bottleneck, reported not
+forced, every phase since BB-2b).
+
+### Constants touched this phase, by source
+
+| Constant | Old | New |
+|---|---|---|
+| `SLOT_WINRATE_WEAKEST_MIN` (sim-baseball.mjs) | flat `0.85` | `SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE`, per doc v11 §8: `{little:0.95, highschool:0.85, college:0.78, minors:0.70, majors:0.62}` |
+| `parseDocWeakestFloorTable`/`DOC_FLOOR_TABLE_MATCHES` (new) | - | doc-text parser + scoreboard line binding the table to its own source |
+| `CPU_LEVEL_SHORTFALL.little` | `0` | `3` |
+| `CPU_LEVEL_SHORTFALL.highschool` | `0` | `1` |
+| `CPU_LEVEL_SHORTFALL.college`/`.minors`/`.majors` | `3`/`4`/`4` | unchanged |
+| `Game.SNAP_V` | `1` | `2` (forward-only bump) |
+| `Game` snapshot shape | - | `atBatOpen`/`halfInningOpen` booleans added |
+| `sw.js` `CACHE` | `game-hub-v827` | `game-hub-v828` (past `origin/main`'s `v824` at time of this phase) |
+
+Not touched: `POINTS`, `CAPS`, `SEASON`, trophies, the contact grid's own assertions,
+`CPU_SIGMA_ABSOLUTE_FLOOR_MS`, `CPU_PLACEMENT_MIN`, `LEAGUE_LADDER_STYLES`, `js/`, `baseball/js/
+ui.js`/`css/`/`strings.js`/`index.html`, any other game folder, the frozen `bb` stats shape,
+BB-2d's carry calibration, the maxed tier, `LADDER_SHAPE`.
+
+### The Locked-statement inventory, phase-implemented, with the test that proves each
+
+| Locked statement (design doc v11) | Test |
+|---|---|
+| §8 per-league weakest-slot floor table (was a single flat value) | `sim-baseball.mjs --assert`'s `SLOT_WINRATE_BAND (weakest)` + `DOC_FLOOR_TABLE_MATCHES` |
+| §8 "every league's CPU teams are generated below that league's cap... no league may generate every team at the cap" | `sim-baseball.mjs --assert`'s `CPU_LEVEL_SHORTFALL` line + `baseball/js/test.js` §1 |
+| §8 the champion band is a real range, not a single point (arithmetic proof) | `sim-baseball.mjs --ladder`'s `achievableRangeBox` |
+| §15 "SNAP_V is bumped and migrated forward-only, never reinterpreted" | `baseball/js/test.js` §12 (`bad4`/stale-`rulesV` rejection) + the `SNAP_V` bump itself |
+
+### Self-review, answered line by line
+
+- The per-league floor table matches the doc exactly: **yes** - `DOC_FLOOR_TABLE_MATCHES` parses
+  the committed markdown directly, not a hand-copied literal.
+- No league generates every team at its own cap: **yes** - `CPU_LEVEL_SHORTFALL` scoreboard line +
+  `test.js` §1, both nonzero at every league.
+- The resume bug fix does not regress any existing resume behavior: **yes** -
+  `test.js` section 12 (the original fixed-seed probe) and the new section 12b sweep both pass,
+  2536→2541 assertions total, 0 failed.
+- `RULES_V` unchanged (no roster/team shape changed this phase); `SNAP_V` bumped because the
+  snapshot's own field shape changed: **yes**.
+- The champion/season bands were not reopened: **yes** - `SEASON_WINRATE_BAND`/
+  `SLOT_WINRATE_CHAMPION_MIN`/`MAX` are byte-identical to BB-2e; only `CPU_LEVEL_SHORTFALL` (a
+  lever, not a band) moved.
+- The contact grid unchanged: **yes**, byte-identical (college league untouched this phase).
+
+### Verification (Phase 2f, in order)
+
+```
+node validate-sw-assets.mjs           # ok, REST_MANIFEST/version.json regenerated for game-hub-v828
+node baseball/js/test.js              # 2541 passed, 0 failed (was 2533 at the start of this phase)
+node sim-baseball.mjs --ladder        # see commit 1's own table above
+node sim-baseball.mjs --contact-grid  # PASS on all 5, byte-identical to before this phase
+node sim-baseball.mjs --assert --quick   # FAILS - sampling noise at this sample size, same
+                                          # caveat every phase has noted
+node sim-baseball.mjs --assert           # see the full scoreboard above
+node test-game-conventions.mjs           # 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs               # re-run, unchanged
+node test-sw-strategy.mjs                 # 107 passed, 0 failed
+```
+
+**`sim-baseball.mjs --assert` still fails, on real, reported findings - the same discipline every
+phase of this effort has followed.** This phase's real, banked progress: doc v11's per-league
+weakest-slot floor landed with an automated doc-to-code binding check; `CPU_LEVEL_SHORTFALL` moved
+off zero for the two leagues doc v11 flagged, with the champion-clamp mechanism now genuinely
+measured (not assumed) to respond to it; `SEASONS_TO_GOLD_TARGET.highschool` crossed from FAIL to
+PASS; and a real, previously-latent resume-correctness bug was found and fixed with a
+non-vacuous regression probe, purely because retuning a constant happened to shake it loose.
+Little League/High School's champion band remains a measured structural ceiling - specific enough
+for a future session to know that CPU_LEVEL_SHORTFALL alone cannot close it, rather than
+re-deriving the diagnosis from scratch.
+
 ## Status: Phase 2e — the ladder SHAPE, not a hand-tuned array
 
 BB-2e (2026-09-14) answered BB-2d's own open question - "Little League/High School's champion-slot

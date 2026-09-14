@@ -64,6 +64,13 @@ for (const lg of SETTINGS.LEAGUES) {
   ok(typeof SETTINGS.CAPS[lg] === 'number' && SETTINGS.CAPS[lg] > 0, `CAPS.${lg} is a positive number`);
   ok(typeof SETTINGS.CPU_LEVEL_SHORTFALL[lg] === 'number' && SETTINGS.CPU_LEVEL_SHORTFALL[lg] >= 0,
     `CPU_LEVEL_SHORTFALL.${lg} is a non-negative number`);
+  // BB-2f, doc v11 §8, [Locked]: "every league's CPU teams are generated below that league's
+  // cap... no league may generate every team at the cap." A structural, always-on guard (this
+  // suite plays no full season, so `sim-baseball.mjs --assert`'s own equivalent scoreboard line
+  // is the measured one) - a future edit that zeroes a league's shortfall to "simplify" fails here
+  // immediately, rather than silently reintroducing the exact clamp BB-2e traced Little League/
+  // High School's stuck champion band to.
+  ok(SETTINGS.CPU_LEVEL_SHORTFALL[lg] > 0, `CPU_LEVEL_SHORTFALL.${lg} is nonzero (doc v11 §8, [Locked])`);
 }
 // doc §6, [Draft]: caps rise 10, 14, 18, 22, 26 - monotonic by league.
 ok(SETTINGS.LEAGUES.every((lg, i) => i === 0 || SETTINGS.CAPS[lg] > SETTINGS.CAPS[SETTINGS.LEAGUES[i - 1]]),
