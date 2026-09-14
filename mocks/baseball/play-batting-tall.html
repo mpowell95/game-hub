@@ -1,0 +1,14 @@
+<title>Baseball mock - batting, tall</title>
+<link rel="stylesheet" href="../../css/ui.css">
+<link rel="stylesheet" href="common.css">
+<div class="mock-page">
+  <div class="mock-label">play-batting-tall &middot; 361&times;714 &middot; batting</div>
+  <div class="mock-backpill">&lsaquo; Hub</div>
+  <div class="mock-phone mock-phone--tall">
+    <div id="bb-root"></div>
+  </div>
+</div>
+<script type="module">
+  import { renderFrame } from './frame.js';
+  renderFrame(document.getElementById('bb-root'), { state: 'batting' });
+</script>

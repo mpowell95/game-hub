@@ -1,0 +1,42 @@
+<title>Baseball mock - button states</title>
+<link rel="stylesheet" href="../../css/ui.css">
+<link rel="stylesheet" href="common.css">
+<div class="mock-page">
+  <div class="mock-label">button-states &middot; Swing / Throw ring, every state from the spec's state-language table</div>
+  <div class="states-grid" id="grid"></div>
+</div>
+<script type="module">
+  import { drawRingState, NICE_CENTER, NICE_HALF } from './ring.js';
+
+  const STATES = [
+    { mode: 'swing', state: 'idle',     value: 0,    title: 'Swing idle' },
+    { mode: 'swing', state: 'charging', value: 0.55, title: 'Swing charging' },
+    { mode: 'swing', state: 'charged',  value: 1,    title: 'Swing charged', pulse: true },
+    { mode: 'throw', state: 'idle',     value: 0,    title: 'Throw idle' },
+    { mode: 'throw', state: 'filling',  value: 0.35, title: 'Throw filling' },
+    { mode: 'throw', state: 'nice',     value: NICE_CENTER, title: 'In the Nice zone' },
+    { mode: 'throw', state: 'released', value: NICE_CENTER + NICE_HALF * 0.6, title: 'Released, with the marker' },
+    { mode: 'throw', state: 'hung',     value: 0.6,  title: 'Hung, draining' },
+  ];
+
+  const grid = document.getElementById('grid');
+  const label = { swing: 'SWING', throw: 'THROW' };
+
+  for (const s of STATES) {
+    for (const rm of [false, true]) {
+      const card = document.createElement('div');
+      card.className = 'state-card' + (rm ? ' state-card--rm' : '');
+      card.innerHTML = `
+        <div class="state-card__ring${(s.pulse && !rm) ? ' bb-pulse' : ''}">
+          <canvas></canvas>
+          <div class="state-card__ring-label">${label[s.mode]}</div>
+        </div>
+        <div class="state-card__title">${s.title}</div>
+        <div class="state-card__sub">${s.mode === 'swing' ? 'Bat swing meter' : 'Pitch power meter'}</div>
+      `;
+      grid.appendChild(card);
+      const cv = card.querySelector('canvas');
+      drawRingState(cv, s.mode, s.state, s.value);
+    }
+  }
+</script>
