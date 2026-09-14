@@ -925,6 +925,64 @@ console.log('\n-- 12. resume gate: a snapshot mid-game resumes byte-identically 
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 12b. [KNOWN-BUG PROBE] resume gate: abort landing EXACTLY on an at-bat or half-inning conclusion --');
+{
+  // BB-2f: the section-12 probe above only ever aborted at ONE fixed pitch count, on ONE fixed
+  // seed/roster - it happened to never land on the exact pitch that ALSO concludes an at-bat (a
+  // hit/walk/strikeout) or a half-inning (the 3rd out), so it could not catch the bug this commit
+  // fixes: `Game.fromSnapshot` used to set `_resumePending`/`_resumeHalfPending` unconditionally to
+  // `true`, trusting every resume was mid-progress - wrong whenever the snapshot was taken right as
+  // the previous unit had ALREADY concluded (the next unit's own reset, deferred to the next
+  // playAtBat()/playHalfInning() call, never ran on the aborted game itself). Found when BB-2f
+  // commit 2's own settings change (CPU_LEVEL_SHORTFALL.highschool 0->1) shifted a roster's skill
+  // values just enough to move which pitch of a FIXED seed happened to fall on a conclusion - this
+  // probe does not depend on luck: it sweeps enough (seed, stopAfter) pairs that at least one MUST
+  // land on each of the three at-bat conclusions and the half-inning conclusion, asserted directly
+  // rather than hoped for.
+  const league = 'highschool';
+  const PROBE_SEEDS = 24;
+  const PROBE_STOP_RANGE = 40; // pitches 1..40 covers several at-bats/half-innings on this roster
+  let sawAtBatConclusionAbort = false;
+  let sawHalfInningConclusionAbort = false;
+  let allMatched = true;
+  for (let s = 0; s < PROBE_SEEDS; s++) {
+    const seed = hashSeed('bb-resume-probe', s);
+    for (let stopAfter = 1; stopAfter <= PROBE_STOP_RANGE; stopAfter++) {
+      const reference = playGameOnce(league, seed, 5, 6);
+      await reference.playGame();
+
+      const live = playGameOnce(league, seed, 5, 6);
+      let pitchesSeen = 0;
+      live.onEvent = async (type) => {
+        if (type === 'pitch') {
+          pitchesSeen += 1;
+          if (pitchesSeen === stopAfter) live.abort();
+        }
+      };
+      await live.playGame();
+      if (live.over) break; // this seed's game ended before reaching stopAfter pitches - no more to probe
+      // Read AFTER the pass finishes (never inside the onEvent hook itself) - `abort()` fires
+      // during the 'pitch' emit, before the swing is even decided, so the at-bat/half-inning may
+      // still conclude later in this SAME pass; only the flags' final value tells us which case
+      // this (seed, stopAfter) pair actually exercised.
+      if (live._atBatOpen === false) sawAtBatConclusionAbort = true;
+      if (live._halfInningOpen === false) sawHalfInningConclusionAbort = true;
+
+      const snap = live.snapshot();
+      const resumed = Game.fromSnapshot(snap, { home: mkAgent(live.home, league), away: mkAgent(live.away, league) });
+      await resumed.playGame();
+      if (JSON.stringify(resumed.snapshot()) !== JSON.stringify(reference.snapshot())) {
+        allMatched = false;
+        console.error(`  mismatch at seed=${seed} stopAfter=${stopAfter} (atBatOpen=${live._atBatOpen}, halfInningOpen=${live._halfInningOpen})`);
+      }
+    }
+  }
+  ok(sawAtBatConclusionAbort, 'the sweep actually exercised an abort landing exactly on an at-bat conclusion (probe is not vacuous)');
+  ok(sawHalfInningConclusionAbort, 'the sweep actually exercised an abort landing exactly on a half-inning conclusion (probe is not vacuous)');
+  ok(allMatched, `every (seed, stopAfter) pair in the sweep resumes byte-identically to its own straight-through reference (${PROBE_SEEDS} seeds x up to ${PROBE_STOP_RANGE} stop points)`);
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log('\n-- 13. speed gate --');
 {
   const N = 40;

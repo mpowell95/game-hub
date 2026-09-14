@@ -21,7 +21,11 @@ import { zonesFor } from './zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
 
-export const SNAP_V = 1;
+// BB-2f: bumped 1 -> 2, forward-only (doc §15, [Locked]: "SNAP_V is bumped and migrated
+// forward-only, never reinterpreted") - the snapshot shape gained `atBatOpen`/`halfInningOpen`,
+// needed by the resume-correctness fix below. An old v1 snapshot is rejected outright by
+// `validateSnapshot`, never resumed with a guessed value for the new fields.
+export const SNAP_V = 2;
 
 // The runner placed on second at the start of every extra half-inning (doc §3, [Locked]: "every
 // extra half-inning starts with a runner on second"). Not a real batter - nobody's individual
@@ -56,6 +60,8 @@ export function validateSnapshot(snap) {
   }
   if (typeof snap.rngState !== 'number') errs.push('rngState must be a number');
   if (typeof snap.over !== 'boolean') errs.push('over must be a boolean');
+  if (typeof snap.atBatOpen !== 'boolean') errs.push('atBatOpen must be a boolean');
+  if (typeof snap.halfInningOpen !== 'boolean') errs.push('halfInningOpen must be a boolean');
   return errs;
 }
 
@@ -117,6 +123,15 @@ export class Game {
     // Same one-shot pattern, one level up: a snapshot can also land mid-half-inning (outs > 0),
     // and playHalfInning()'s own `this.outs = 0` must not run again in that case.
     this._resumeHalfPending = false;
+    // BB-2f: whether the CURRENT at-bat/half-inning is genuinely still in progress right now -
+    // true for the whole span between `atBatStart`/`halfInningStart` and the moment that unit
+    // actually concludes (a hit/walk/strikeout; 3 outs), set false the instant it concludes,
+    // BEFORE the return - unconditionally, regardless of `aborted` (see the header note on
+    // `playAtBat`/`playHalfInning` below for why these two must never be gated on `aborted`).
+    // `fromSnapshot` restores `_resumePending`/`_resumeHalfPending` FROM these two flags, not
+    // unconditionally true - see that method's own comment for the bug this fixes.
+    this._atBatOpen = false;
+    this._halfInningOpen = false;
   }
 
   /** Rebuild a Game from `snapshot()`'s output. `agents` is supplied fresh (never serialized),
@@ -154,8 +169,23 @@ export class Game {
     g.onEvent = null;
     g.onDecided = null;
     g.aborted = false;
-    g._resumePending = true;     // the very next playAtBat must not zero the restored balls/strikes
-    g._resumeHalfPending = true; // the very next playHalfInning must not zero the restored outs
+    g._atBatOpen = snap.atBatOpen;
+    g._halfInningOpen = snap.halfInningOpen;
+    // BB-2f fix: these used to be unconditionally `true` - wrong whenever the snapshot was taken
+    // right as an at-bat/half-inning had ALREADY concluded (a hit/walk/strikeout, or the 3rd out)
+    // but before the next one's own state (balls/strikes reset, or outs reset for the next
+    // half-inning) had run - which the old code deferred to run ONLY on the very next
+    // playAtBat()/playHalfInning() call, a call that never happened on the aborted game itself
+    // (the outer loop stops the instant `aborted` is set). Unconditionally trusting "resuming"
+    // meant that next call wrongly preserved a STALE count instead of starting the new batter/half
+    // at zero - found by this file's own resume-determinism test once a settings change (BB-2f
+    // commit 2) shifted which pitch of a fixed seed happened to be the one an existing test's
+    // scripted abort lands on, landing it exactly on an at-bat conclusion for the first time.
+    // Restoring from the flags this snapshot actually carries (rather than a blanket `true`) is
+    // the fix: `_resumePending`/`_resumeHalfPending` are `true` only when the unit was genuinely
+    // still open at snapshot time.
+    g._resumePending = !!snap.atBatOpen;
+    g._resumeHalfPending = !!snap.halfInningOpen;
     return g;
   }
 
@@ -184,6 +214,8 @@ export class Game {
       over: this.over,
       winner: this.winner,
       matchEndReason: this.matchEndReason,
+      atBatOpen: this._atBatOpen,
+      halfInningOpen: this._halfInningOpen,
     };
   }
 
@@ -365,7 +397,16 @@ export class Game {
         break;
       }
       await this.playHalfInning();
-      if (this.over || this.aborted) break;
+      if (this.over) break;
+      // BB-2f fix: advancing to the next half/inning is NOT gated on `!this.aborted` any more -
+      // only on whether the half-inning `playHalfInning()` just ran ACTUALLY concluded
+      // (`_halfInningOpen` false). An abort can land exactly on the pitch that also completes the
+      // half-inning's 3rd out; that half-inning is genuinely over and the advance must still
+      // happen, or a resumed game re-enters the SAME (already-finished) half instead of the next
+      // one. If `_halfInningOpen` is still true, the half is genuinely still in progress (this can
+      // only happen while aborted - the while loop below never exits early otherwise), so there is
+      // nothing to advance yet; the outer `while (!aborted)` condition stops iteration on its own.
+      if (this._halfInningOpen) break;
 
       if (this.half === 'bottom') {
         if (this.inning >= this.settings.SEASON.inningsPerGame && this.score.home !== this.score.away) {
@@ -395,6 +436,7 @@ export class Game {
     } else {
       this.outs = 0;
     }
+    this._halfInningOpen = true;
     // doc §3, [Locked]: "every extra half-inning starts with a runner on second." Only on a
     // genuinely FRESH half (never on a resumed one - a restored snapshot already carries whatever
     // base state it had, ghost runner included if one was already placed).
@@ -404,15 +446,27 @@ export class Game {
     }
     await this.emit('halfInningStart', { inning: this.inning, half: this.half });
     if (this.aborted) return;
+    // BB-2f fix: no early `return` on `aborted` here any more - the while loop's own condition
+    // already stops it from calling `playAtBat()` again, and falling through to the block below
+    // is exactly what lets a half-inning that concluded (3rd out) on the SAME pitch that triggered
+    // an abort still get its state properly closed out, instead of leaving `outs`/bases/balls/
+    // strikes stale for whatever resumes next.
     while (this.outs < this.settings.MECHANICS.outsPerInning && !this.over && !this.aborted) {
       await this.playAtBat();
-      if (this.aborted) return;
     }
-    if (!this.over && !this.aborted) {
+    // The half-inning is only genuinely OVER once outs reaches the limit - not merely because
+    // `aborted` is true (that can be true here with outs still short of the limit, meaning this
+    // half-inning is still mid-progress and must resume exactly as-is, per `_halfInningOpen`
+    // staying true). The state reset itself must run whenever the half genuinely concluded,
+    // regardless of `aborted` - only the notification (`emit`) is conditional on `!aborted`
+    // (and `emit()` already no-ops once aborted on its own, so this condition is for clarity, not
+    // strictly required).
+    if (!this.over && this.outs >= this.settings.MECHANICS.outsPerInning) {
       this.bases = emptyBases();
       this.balls = 0;
       this.strikes = 0;
-      await this.emit('halfInningEnd', { inning: this.inning, half: this.half, score: { ...this.score } });
+      this._halfInningOpen = false;
+      if (!this.aborted) await this.emit('halfInningEnd', { inning: this.inning, half: this.half, score: { ...this.score } });
     }
   }
 
@@ -436,6 +490,7 @@ export class Game {
       this.balls = 0;
       this.strikes = 0;
     }
+    this._atBatOpen = true;
     await this.emit('atBatStart', { batterId, side: battingSide });
     if (this.aborted) return;
 
@@ -476,6 +531,7 @@ export class Game {
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
         const { bases, runsScored } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
+        this._atBatOpen = false;
         // BB-2c commit 1: q/exitVeloMph/centered exposed for measurement
         // (`sim-baseball.mjs --attribute`'s plate-appearance ledger) - purely additive fields on an
         // event payload every existing consumer already destructures by name, so nothing reading
@@ -490,12 +546,18 @@ export class Game {
       }
 
       await this.emit('count', { balls: this.balls, strikes: this.strikes });
-      if (this.aborted) return;
+      // BB-2f fix: no early `return` here either, for the same reason as the two removed above -
+      // an abort can land on the exact pitch that pushes strikes/balls to their own threshold, and
+      // returning here BEFORE the strikeout/walk checks below would snapshot an invalid, stuck
+      // state (3 strikes that were never converted into an out) instead of letting the at-bat's
+      // own conclusion run. If neither threshold is met, the while loop's own condition
+      // (`!this.aborted`) still stops the next pitch from being thrown.
 
       if (this.strikes >= this.settings.MECHANICS.strikesForOut) {
         this.outs += 1;
         this.totals[battingSide].strikeouts += 1;
         this._advanceLineup(battingSide);
+        this._atBatOpen = false;
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout', bases: 0, runsScored: 0 });
         return;
       }
@@ -505,6 +567,7 @@ export class Game {
         this.totals[battingSide].walks += 1;
         this._addRuns(battingSide, runsScored);
         this._advanceLineup(battingSide);
+        this._atBatOpen = false;
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', bases: 1, runsScored });
         return;
       }
