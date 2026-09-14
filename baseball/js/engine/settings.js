@@ -310,7 +310,18 @@ export const WEAKSPOT_WINDOW = 8;
 // thresholds, or rework how Gold is reached (a bye, a weaker semifinal opponent, a shorter top-half
 // repeat in the schedule) - this tool does not choose between them, and POINTS/SEASON are outside
 // this phase's scope to retune on its own judgement.
-export const CPU_LEVEL_SHORTFALL = { little: 0, highschool: 0, college: 3, minors: 4, majors: 4 };
+//
+// BB-2f commit 2, doc v11 §8, [Locked]: "every league's CPU teams are generated below that
+// league's cap... no league may generate every team at the cap." `little`/`highschool` were the
+// only two leagues still at 0 - BB-2e's own report measured WHY that mattered: with zero shortfall,
+// `effectiveCapFor` equals the raw CAPS value, so the champion's own `+0.25` skill offset clamps to
+// the exact same ceiling every other team in the league already sits at - the whole ladder there is
+// forced to be behavior-only, and BB-2e independently exhausted three separate behavior axes
+// (timing sigma, chase, behaviorMul) trying to widen the champion band without ever moving it.
+// Draft placeholder values below (little:1, highschool:1 - the smallest nonzero shortfall, ~10%/7%
+// of each league's own small cap) give the champion generation room to exceed its league mates for
+// the first time; commit 3 measures whether they are enough and retunes them if not.
+export const CPU_LEVEL_SHORTFALL = { little: 1, highschool: 1, college: 3, minors: 4, majors: 4 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,

@@ -40,6 +40,26 @@ import { zonesFor } from './baseball/js/engine/zones.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
+// BB-2f commit 2: read doc v11 section 8's own "Weakest slot beaten" table straight out of the
+// committed markdown, so `SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE` below cannot silently drift from the
+// doc it transcribes - the same discipline `test-new-badge.mjs`/`test-emoji.mjs` already apply to
+// their own generated data (a hand-typed table and its source going out of step is a silent
+// failure, never a loud one, until something like this checks it).
+const DOC_LEAGUE_NAMES = { 'Little League': 'little', 'High School': 'highschool', 'College': 'college', 'Minor League': 'minors', 'Major League': 'majors' };
+function parseDocWeakestFloorTable() {
+  const text = fs.readFileSync(path.join(ROOT, 'docs/BASEBALL-DESIGN-DOC.md'), 'utf8');
+  const tableMatch = text.match(/League\tWeakest slot beaten\tChampion\n([\s\S]*?)```/);
+  if (!tableMatch) return null;
+  const out = {};
+  for (const line of tableMatch[1].trim().split('\n')) {
+    const [docName, pct] = line.split('\t');
+    const league = DOC_LEAGUE_NAMES[docName];
+    if (!league) continue;
+    out[league] = Number(pct.replace('%', '')) / 100;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------------------------
 // CLI, `tune-boggle-es.mjs`'s own `arg()` shape.
 function arg(name, dflt) {
@@ -129,18 +149,14 @@ const SEASONS_TO_GOLD_TARGET = { little: 1, highschool: 1.5, college: 2, minors:
 // season rate - a few percentage points of measurement noise there swings seasons-to-Gold by a
 // full season or more), so this is deliberately wide relative to `LADDER_TOLERANCE`.
 const SEASONS_TO_GOLD_TOLERANCE = 0.75;
-// Doc v9 §8, [Locked]: "the weakest opponent is beaten at 85% or better and the champion sits
-// between 40 and 55%" - the within-league ladder's own two endpoints, on top of the existing
-// non-increasing (`LADDER_TOLERANCE`) shape check.
-const SLOT_WINRATE_WEAKEST_MIN = 0.85;
-const SLOT_WINRATE_CHAMPION_MIN = 0.40;
-const SLOT_WINRATE_CHAMPION_MAX = 0.55;
-// BB-2f commit 1: doc v11 §8, [Locked] replaces the single flat 0.85 floor above with a per-league
-// table - a global 85% floor cannot be satisfied by ANY shape in the Majors (its own champion band
-// midpoint of 0.475 would need slot0=0.85 to average into a 41-51% season, which no shape/schedule
-// combination reaches, per BB-2e's own `--ladder` proof). `--ladder` reads this table; the flat
-// constant above stays as the (now unused by `--ladder`) legacy scoreboard threshold until commit 2
-// folds the whole scoreboard onto this same table.
+// Doc v11 §8, [Locked]: "the weakest opponent and the champion sit in these bands" - the
+// within-league ladder's own two endpoints, on top of the existing non-increasing
+// (`LADDER_TOLERANCE`) shape check. BB-2f commit 2: the weakest-slot floor is now a PER-LEAGUE
+// table (was a single flat 0.85 - unsatisfiable in the Majors at any shape, per BB-2e/BB-2f
+// commit 1's own `--ladder` proof: even at the champion band's own floor, 0.85 pulled the season
+// average well above every upper league's own season band). The five values below are doc v11's
+// own table, verbatim - `DOC_FLOOR_TABLE_MATCHES` in the promise scoreboard below asserts this
+// object equals it, parsed straight from the committed doc file.
 const SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE = {
   little: 0.95,
   highschool: 0.85,
@@ -148,6 +164,8 @@ const SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE = {
   minors: 0.70,
   majors: 0.62,
 };
+const SLOT_WINRATE_CHAMPION_MIN = 0.40;
+const SLOT_WINRATE_CHAMPION_MAX = 0.55;
 const CHAMPION_GAME_WIN_MIN_MEDIAN = 0.40;
 const CAP_BINDS_ONLY = ['little', 'highschool'];
 const CAP_SEASONS_MAX_UPPER = 2.0;
@@ -1653,11 +1671,13 @@ async function main() {
     scoreLine('LADDER_MONOTONE (within-league, weakest..strongest opponent)', withinLeagueOk,
       'see the within-league ladder check above', `non-increasing within ${LADDER_TOLERANCE}`);
 
-    // BB-2c, design doc v9 §8, [Locked]: "the weakest opponent is beaten at 85% or better and the
-    // champion sits between 40 and 55%" - the ladder's own two endpoints, at every league.
-    const weakestOk = LEAGUES.every((lg) => ladderRatesByLeague[lg][0] >= SLOT_WINRATE_WEAKEST_MIN);
-    scoreLine('SLOT_WINRATE_BAND (weakest opponent >= 85% at every league)', weakestOk,
-      JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][0].toFixed(3))), `every value >= ${SLOT_WINRATE_WEAKEST_MIN}`);
+    // BB-2f commit 2, design doc v11 §8, [Locked]: the weakest opponent's floor is now PER LEAGUE
+    // (was one flat 85% - unsatisfiable in the Majors, per BB-2e/BB-2f commit 1's own `--ladder`
+    // proof) and the champion still sits between 40 and 55% everywhere.
+    const weakestOk = LEAGUES.every((lg) => ladderRatesByLeague[lg][0] >= SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[lg]);
+    scoreLine('SLOT_WINRATE_BAND (weakest opponent >= its own per-league floor)', weakestOk,
+      JSON.stringify(LEAGUES.map((lg) => +ladderRatesByLeague[lg][0].toFixed(3))),
+      JSON.stringify(LEAGUES.map((lg) => SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[lg])));
     const championBandOk = LEAGUES.every((lg) => {
       const champ = ladderRatesByLeague[lg][ladderRatesByLeague[lg].length - 1];
       return champ >= SLOT_WINRATE_CHAMPION_MIN && champ <= SLOT_WINRATE_CHAMPION_MAX;
@@ -1678,6 +1698,17 @@ async function main() {
     });
     scoreLine('CHAMPION_IS_HARDEST (the strongest ladder slot is the lowest win rate of any opponent)', championIsHardestOk,
       'see the within-league ladder check above', `champion's win rate <= every other slot's, within ${LADDER_TOLERANCE}`);
+
+    // BB-2f commit 2: two Locked-statement checks doc v11 §8 adds - the floor table this file
+    // hand-transcribes must match the doc's own committed table exactly, and no league may
+    // generate every CPU team at its own cap (CPU_LEVEL_SHORTFALL must be nonzero everywhere).
+    const docFloorTable = parseDocWeakestFloorTable();
+    const floorMatchesDoc = docFloorTable != null && LEAGUES.every((lg) => docFloorTable[lg] === SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[lg]);
+    scoreLine('DOC_FLOOR_TABLE_MATCHES (SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE == doc v11 §8 table)', floorMatchesDoc,
+      JSON.stringify(docFloorTable), JSON.stringify(SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE));
+    const noLeagueAtZeroShortfall = LEAGUES.every((lg) => SETTINGS.CPU_LEVEL_SHORTFALL[lg] > 0);
+    scoreLine('CPU_LEVEL_SHORTFALL (no league generates every team at its own cap)', noLeagueAtZeroShortfall,
+      JSON.stringify(LEAGUES.map((lg) => SETTINGS.CPU_LEVEL_SHORTFALL[lg])), 'every value > 0');
   }
 
   const nudgeGaps = LEAGUES.map((lg) => ab[lg].tableSetterLowPowerWellTimedWinRate - ab[lg].sluggerHighPowerSloppyWinRate);
