@@ -318,10 +318,36 @@ export const WEAKSPOT_WINDOW = 8;
 // the exact same ceiling every other team in the league already sits at - the whole ladder there is
 // forced to be behavior-only, and BB-2e independently exhausted three separate behavior axes
 // (timing sigma, chase, behaviorMul) trying to widen the champion band without ever moving it.
-// Draft placeholder values below (little:1, highschool:1 - the smallest nonzero shortfall, ~10%/7%
-// of each league's own small cap) give the champion generation room to exceed its league mates for
-// the first time; commit 3 measures whether they are enough and retunes them if not.
-export const CPU_LEVEL_SHORTFALL = { little: 1, highschool: 1, college: 3, minors: 4, majors: 4 };
+//
+// BB-2f commit 3 retune, measured (`sim-baseball.mjs --assert`, per-league sweeps of shortfall
+// 1/2/3/5/7/9): `teams.js`'s `makeLeague` clamps every slot's skill to
+// `min(rawCap, baseCap * (1 + offset))` - the champion's own `+0.25` offset only escapes the RAW
+// cap once `baseCap * 1.25 < rawCap`, i.e. once shortfall is large enough that `baseCap < rawCap /
+// 1.25`. For Little League (rawCap 10) that needs shortfall > 2 (shortfall 3: baseCap 7, champion
+// slot cap 8.75 - genuinely below the raw 10 for the first time); for High School (rawCap 14) it
+// needs shortfall > 2.8 (shortfall 3: baseCap 11, champion slot cap 13.75). `little: 3` measured as
+// the best point on its own sweep (season/weakest both PASS; champion moves 0.93 -> 0.89, the
+// largest improvement any tested value bought, at shortfall 5/7/9 the weakest floor starts failing
+// too while champion barely moves further - diminishing returns past 3). `highschool: 1` measured
+// as ITS best point (season 0.76/weakest 0.85 both PASS at shortfall 1; shortfall 2+ fails the
+// weakest floor for no further champion gain - champion sits at 0.77-0.79 across the whole 1-4
+// range tested, moving only ~2pp). `college`/`minors`/`majors` are UNCHANGED (3/4/4, BB-2a/2b
+// values) - swept college 3/5/7/9 and found its own weakest-slot value (0.656) does not move with
+// shortfall at all (byte-identical to BB-2e's own report, since this constant was already 3 there);
+// its bottleneck is a different axis, out of this phase's contract to retune (LADDER_AXIS_ENDPOINTS
+// itself, shared across every league, is not this phase's lever - reopening it risks Little
+// League's own now-passing weakest/season bands).
+//
+// The measured result at little/highschool: CPU_LEVEL_SHORTFALL genuinely widens the champion's
+// available skill range for the first time (proving doc v11's own diagnosis correct - the ceiling
+// WAS purely `effectiveCapFor` clamping the champion to the same value as every other slot), but
+// SKILL alone is not enough to move either league's champion win rate into [0.40, 0.55]: even an
+// extreme, unshippable shortfall (9, leaving little league's CPU teams an effective cap of 1 skill
+// point) only moved little's champion from 0.93 to 0.87-0.93 (noisy, no clear trend past shortfall
+// 3) - nowhere near the band. Reported honestly below rather than chased with an unreasonable
+// shortfall value that would also break `NUDGE_A_B`'s "well-timed low-Power beats sloppy high-
+// Power" contract by leaving every team without enough skill range to express it.
+export const CPU_LEVEL_SHORTFALL = { little: 3, highschool: 1, college: 3, minors: 4, majors: 4 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
