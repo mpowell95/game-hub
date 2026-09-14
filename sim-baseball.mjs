@@ -135,6 +135,19 @@ const SEASONS_TO_GOLD_TOLERANCE = 0.75;
 const SLOT_WINRATE_WEAKEST_MIN = 0.85;
 const SLOT_WINRATE_CHAMPION_MIN = 0.40;
 const SLOT_WINRATE_CHAMPION_MAX = 0.55;
+// BB-2f commit 1: doc v11 §8, [Locked] replaces the single flat 0.85 floor above with a per-league
+// table - a global 85% floor cannot be satisfied by ANY shape in the Majors (its own champion band
+// midpoint of 0.475 would need slot0=0.85 to average into a 41-51% season, which no shape/schedule
+// combination reaches, per BB-2e's own `--ladder` proof). `--ladder` reads this table; the flat
+// constant above stays as the (now unused by `--ladder`) legacy scoreboard threshold until commit 2
+// folds the whole scoreboard onto this same table.
+const SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE = {
+  little: 0.95,
+  highschool: 0.85,
+  college: 0.78,
+  minors: 0.70,
+  majors: 0.62,
+};
 const CHAMPION_GAME_WIN_MIN_MEDIAN = 0.40;
 const CAP_BINDS_ONLY = ['little', 'highschool'];
 const CAP_SEASONS_MAX_UPPER = 2.0;
@@ -1368,24 +1381,29 @@ async function runLadder() {
   let anyLeagueUnsatisfied = false;
   for (const league of LEAGUES) {
     const [lo, hi] = SEASON_WINRATE_BAND[league];
-    console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${SLOT_WINRATE_WEAKEST_MIN}, champion band [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}] (mid ${champMid.toFixed(3)})`);
+    const weakestMin = SLOT_WINRATE_WEAKEST_MIN_BY_LEAGUE[league];
+    console.log(`=== ${league} === season band [${lo}, ${hi}], slot0 (weakest) floor >= ${weakestMin}, champion band [${SLOT_WINRATE_CHAMPION_MIN}, ${SLOT_WINRATE_CHAMPION_MAX}] (mid ${champMid.toFixed(3)})`);
     let anyShapeOk = false;
     for (const shape of LADDER_SHAPE_NAMES) {
-      const [rangeLo, rangeHi] = achievableRange(shape, shippedWeights, champMid, SLOT_WINRATE_WEAKEST_MIN, 1.0);
+      const [rangeLo, rangeHi] = achievableRange(shape, shippedWeights, champMid, weakestMin, 1.0);
       const overlapLo = Math.max(rangeLo, lo), overlapHi = Math.min(rangeHi, hi);
       const overlaps = overlapLo <= overlapHi;
       if (overlaps) anyShapeOk = true;
       const slot0Range = overlaps
         ? `slot0 in [${slot0For(shape, shippedWeights, champMid, overlapLo).toFixed(4)}, ${slot0For(shape, shippedWeights, champMid, overlapHi).toFixed(4)}]`
         : '';
-      console.log(`  ${shape.padEnd(8)} achievable season rate over slot0 in [${SLOT_WINRATE_WEAKEST_MIN}, 1.0] = [${rangeLo.toFixed(4)}, ${rangeHi.toFixed(4)}]  ${overlaps ? `PASS (band overlap [${overlapLo.toFixed(4)}, ${overlapHi.toFixed(4)}], ${slot0Range})` : 'fail (no overlap with season band)'}`);
+      // Margin: how much of the overlap window survives moving 0.005 in from each side of the
+      // season band before the achievable range would fail to reach it - i.e. how far the
+      // overlap sits from being a knife-edge single point.
+      const margin = overlaps ? (overlapHi - overlapLo) : 0;
+      console.log(`  ${shape.padEnd(8)} achievable season rate over slot0 in [${weakestMin}, 1.0] = [${rangeLo.toFixed(4)}, ${rangeHi.toFixed(4)}]  ${overlaps ? `PASS (band overlap [${overlapLo.toFixed(4)}, ${overlapHi.toFixed(4)}], width ${margin.toFixed(4)}, ${slot0Range})` : 'fail (no overlap with season band)'}`);
     }
     if (!anyShapeOk) {
       anyLeagueUnsatisfied = true;
       console.log(`  no shape satisfies both bands under SCHEDULE_SHAPE=${shippedShape} - checking which schedule shapes WOULD admit one:`);
       for (const [scheduleName, weights] of Object.entries(SCHEDULE_WEIGHTS)) {
         for (const shape of LADDER_SHAPE_NAMES) {
-          const [rLo, rHi] = achievableRange(shape, weights, champMid, SLOT_WINRATE_WEAKEST_MIN, 1.0);
+          const [rLo, rHi] = achievableRange(shape, weights, champMid, weakestMin, 1.0);
           const oLo = Math.max(rLo, lo), oHi = Math.min(rHi, hi);
           const admits = oLo <= oHi;
           console.log(`    ${scheduleName.padEnd(12)} x ${shape.padEnd(8)} achievable=[${rLo.toFixed(4)}, ${rHi.toFixed(4)}]  ${admits ? `admits (overlap [${oLo.toFixed(4)}, ${oHi.toFixed(4)}])` : 'does not admit'}`);
