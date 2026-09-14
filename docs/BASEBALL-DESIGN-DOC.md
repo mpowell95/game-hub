@@ -1,6 +1,6 @@
 # Baseball: Game Design Doc
 
-Game Hub (`mpowell95/game-hub`). Version 11 draft, September 12, 2026. Revised after Fable architecture review.
+Game Hub (`mpowell95/game-hub`). Version 12 draft, September 12, 2026. Revised after Fable architecture review.
 
 This doc says how the game works. It is not a coding or implementation guide. Look, layout, and UI details belong in the Design Spec (next step).
 
@@ -182,13 +182,14 @@ The win-rate column is Locked. The seasons column is derived from it plus the br
 
 ```
 League	Weakest slot beaten	Champion
-Little League	95%	40 to 55%
-High School	85%	40 to 55%
-College	78%	40 to 55%
-Minor League	70%	40 to 55%
-Major League	62%	40 to 55%
+Little League	95%	65 to 80%
+High School	85%	58 to 72%
+College	78%	50 to 62%
+Minor League	70%	45 to 57%
+Major League	62%	40 to 52%
 ```
 
+- **[Draft]** Every band in this section is a starting point, tunable later from the settings block. They are not worth another round of tuning to hit exactly.
 - **[Locked]** Every league's CPU teams are generated below that league's cap, so the champion has room to be better than its league mates. No league may generate every team at the cap.
 - **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
