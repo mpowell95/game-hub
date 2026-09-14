@@ -1660,12 +1660,19 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
 
   // slot0/slot7 land EXACTLY on the reference endpoint magnitudes, at every league and every axis -
   // the shape only decides how slots 1-6 are spaced, never the endpoints themselves.
+  // BB-2e commit 3: timingSigmaMs's own slot7 (champion) endpoint is now PER-LEAGUE
+  // (`championSigmaOffset`, not exported - restated here from its own named inputs, all exported).
   const ENDPOINTS = {
-    skill: [-0.25, 0.25], timingSigmaMs: [20, -4], chase: [0.15, -0.12],
+    skill: [-0.25, 0.25], chase: [0.15, -0.12],
     behaviorMul: [0.50, 1.60], changeupShare: [0, 2.00],
   };
   for (const lg of SETTINGS.LEAGUES) {
     const offsets = SETTINGS.TEAM_LADDER_OFFSETS[lg];
+    ok(Math.abs(offsets[0].timingSigmaMs - 20) < 1e-9, `TEAM_LADDER_OFFSETS.${lg}[0].timingSigmaMs lands exactly on the shared reference slot0 endpoint (20)`);
+    const headroom = SETTINGS.CPU_SIGMA_MIN_MS[lg] - SETTINGS.CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+    const expectedChampSigma = -headroom * SETTINGS.CHAMPION_SIGMA_HEADROOM_FRAC;
+    ok(Math.abs(offsets[7].timingSigmaMs - expectedChampSigma) < 1e-9,
+      `TEAM_LADDER_OFFSETS.${lg}[7].timingSigmaMs uses ${(SETTINGS.CHAMPION_SIGMA_HEADROOM_FRAC * 100).toFixed(0)}% of ${lg}'s own headroom to the absolute floor (expected ${expectedChampSigma.toFixed(2)})`);
     for (const [axis, [slot0, slot7]] of Object.entries(ENDPOINTS)) {
       ok(Math.abs(offsets[0][axis] - slot0) < 1e-9, `TEAM_LADDER_OFFSETS.${lg}[0].${axis} lands exactly on the reference slot0 endpoint (${slot0})`);
       ok(Math.abs(offsets[7][axis] - slot7) < 1e-9, `TEAM_LADDER_OFFSETS.${lg}[7].${axis} lands exactly on the reference slot7 endpoint (${slot7})`);

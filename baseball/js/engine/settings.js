@@ -918,6 +918,23 @@ const LADDER_AXIS_ENDPOINTS = {
   behaviorMul:   { slot0: 0.50,  slot7: 1.60 },
   changeupShare: { slot0: 0,     slot7: 2.00 },
 };
+// BB-2e commit 3: `timingSigmaMs`'s own slot7 (champion) endpoint is PER-LEAGUE now, not the flat
+// -4 every league shared before this commit. Measured (`node sim-baseball.mjs --assert --quick
+// --league little`, before this change): the flat -4 offset left the champion's effective sigma at
+// 111ms at Little League - nowhere near CPU_SIGMA_ABSOLUTE_FLOOR_MS (58) - while Majors' champion
+// already sat EXACTLY on the floor (`cpu.timingSigmaMs` 58 minus 4, clamped up to 58 by the floor
+// itself, so -4 was already moot there). The flat endpoint was calibrated to Majors' own narrow
+// headroom (CPU_SIGMA_MIN_MS.majors - CPU_SIGMA_ABSOLUTE_FLOOR_MS = 0) and left every other
+// league's much larger headroom (Little League: 115-58 = 57ms) almost entirely unused - a real
+// contributor to Little League's champion measuring 0.93 win rate against a [0.40, 0.55] target.
+// `CHAMPION_SIGMA_HEADROOM_FRAC` names how much of a league's OWN headroom to the absolute floor
+// the champion's offset uses; `championSigmaOffset` resolves it to an actual ms number per league.
+export const CHAMPION_SIGMA_HEADROOM_FRAC = 0.9;
+function championSigmaOffset(league) {
+  const leagueMin = CPU_SIGMA_MIN_MS[league] != null ? CPU_SIGMA_MIN_MS[league] : CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+  const headroom = leagueMin - CPU_SIGMA_ABSOLUTE_FLOOR_MS;
+  return -headroom * CHAMPION_SIGMA_HEADROOM_FRAC;
+}
 function ladderAxisProfile(shape, slot0, slot7) {
   const weights = ladderGapWeights(shape);
   const range = slot7 - slot0;
@@ -931,7 +948,8 @@ function ladderOffsetsFor(league) {
   const perAxis = {};
   for (const axis of Object.keys(LADDER_AXIS_ENDPOINTS)) {
     const { slot0, slot7 } = LADDER_AXIS_ENDPOINTS[axis];
-    perAxis[axis] = ladderAxisProfile(shape, slot0, slot7);
+    const resolvedSlot7 = axis === 'timingSigmaMs' ? championSigmaOffset(league) : slot7;
+    perAxis[axis] = ladderAxisProfile(shape, slot0, resolvedSlot7);
   }
   return Array.from({ length: 8 }, (_, slot) => ({
     skill: perAxis.skill[slot],
@@ -975,5 +993,5 @@ export default {
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
-  LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights,
+  LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights, CHAMPION_SIGMA_HEADROOM_FRAC,
 };
