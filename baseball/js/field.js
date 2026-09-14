@@ -594,12 +594,17 @@ function anchorPx(frac, cover) {
 // ---------------------------------------------------------------------- figures --
 // Measured on `batter-home.webp`/`batter-away.webp` (same pose, 300x700): the fists, where the bat
 // handle sits, as a fraction of the sprite's own width/height (0,0 top-left, feet at the bottom
-// edge since the sprite is trimmed to its own bounding box).
-const BATTER_HAND_FRAC = { x: 0.42, y: 0.345 };
+// edge since the sprite is trimmed to its own bounding box). Grid-measured directly on the shipped
+// webp (not eyeballed off the source PNG) after the first cut left the bat floating well above and
+// right of the actual fists.
+const BATTER_HAND_FRAC = { x: 0.333, y: 0.386 };
 // Measured on `bat.webp` (290x500): the round grip knob at the handle end - the point the bat
-// rotates about.
-const BAT_GRIP_FRAC = { x: 0.30, y: 0.85 };
-const BAT_IDLE_ANGLE_DEG = -18; // held up near the shoulder, matching the mock's resting pose
+// rotates about. Also grid-measured on the shipped webp.
+const BAT_GRIP_FRAC = { x: 0.086, y: 0.92 };
+const BAT_IDLE_ANGLE_DEG = -40; // held up near the shoulder, matching the mock's resting pose -
+                                 // bat.webp is drawn with its own built-in ~25deg rightward lean
+                                 // (grip to tip), so this rotates it the rest of the way to the
+                                 // mock's slight LEFTWARD lean over the shoulder
 const BAT_SWING_DEG = 140;      // spec section 7: "rotating about the hands by about 140 degrees"
 const BAT_HEIGHT_OF_BATTER = 0.62; // the bat's own drawn height, as a fraction of the batter's
 
