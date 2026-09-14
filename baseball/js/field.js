@@ -2,41 +2,63 @@
 // "out zones sit where fielders would stand") - grass, dirt, foul lines, bases, and the out-zone
 // geometry `zonesFor()` already computes, at the league's own real distances (`FIELD[league]`).
 //
-// CAMERA: a cheap pseudo-perspective looking from behind home plate toward center field - things
-// further away (larger y, in feet) sit higher on screen and are scaled down. There was no approved
-// mockup to lift this from this phase (the claude/baseball-mocks branch named in this phase's own
-// handoff does not exist on the remote); this is a first cut, and Matt should judge the angle once
-// the ball is actually moving on it, per that handoff's own note.
+// CAMERA: a real pinhole projection from behind home plate toward center field (see the constants
+// below) - not an ad hoc curve. There was no approved mockup to lift this from this phase (the
+// claude/baseball-mocks branch named in this phase's own handoff does not exist on the remote,
+// confirmed twice); this is still a first cut and Matt should judge the angle once the ball is
+// moving on it, but a real screenshot on 2026-09-14 showed the FIRST cut (a hand-tuned curve)
+// collapsing the whole diamond into a vertical sliver - this replaces it with true perspective
+// math so distances and widths are at least geometrically honest.
 
 import { zonesFor } from './engine/zones.js';
 
-const DEPTH_FT = 420; // roughly one league's own outfield depth; scales the perspective falloff
-const NEAR_FT = 130; // the close-in region (infield + mound) gets its own, gentler falloff so the
-                      // mound doesn't visually collapse into home plate the way a single power
-                      // curve over the whole 420ft range does
+// CAMERA: a real pinhole projection (not an ad hoc curve) - a camera sitting behind home plate,
+// elevated, tilted down toward center field. World feet: home plate at the origin, +y toward
+// center field, +x toward right field, ground at z=0. Chosen by computing the actual camX/camZ
+// and camY/camZ ratios at home plate, first base and the fence for a range of (camBack, camHeight,
+// tiltDeg) triples and picking the one where first base lands at a believable ~80% of the frame's
+// half-width and the fence stays inside it - see /tmp/cam_calc.mjs's derivation (not committed;
+// the numbers below are its output). This is what replaces phase 3's first-cut ad hoc curve, which
+// a real device screenshot showed collapsing the whole diamond into a vertical sliver.
+const CAM_BACK_FT = 12;   // camera sits this far behind home plate
+const CAM_HEIGHT_FT = 9;  // camera height above the ground
+const CAM_TILT_DEG = 16;  // how far down from horizontal the camera looks
+const CAM_FAR_FT = 420;   // the far anchor for the vertical mapping (roughly a deep fence)
+const CAM_X_SCALE = 0.72; // fraction of the half-width that camX/camZ = 1.0 maps to
+const D2R = Math.PI / 180;
+
+function cameraRatios(xFt, yFt) {
+  const tilt = CAM_TILT_DEG * D2R;
+  const vy = yFt + CAM_BACK_FT;
+  const vz = -CAM_HEIGHT_FT;
+  const camX = xFt;
+  const camY = vy * Math.sin(tilt) + vz * Math.cos(tilt);
+  const camZ = vy * Math.cos(tilt) - vz * Math.sin(tilt);
+  return { xz: camX / camZ, yz: camY / camZ, camZ };
+}
+
+// The two vertical anchors (home plate and CAM_FAR_FT downrange), computed once - the mapping
+// from camY/camZ to canvas Y is linear between these two ratios, which is what keeps depth
+// perspective-correct rather than an arbitrary hand-tuned curve.
+const YZ_HOME = cameraRatios(0, 0).yz;
+const YZ_FAR = cameraRatios(0, CAM_FAR_FT).yz;
 
 /** Project a point in feet (home plate at the origin, center field along +y, foul lines at
  *  +/-45deg) onto a canvas of size `w`x`h`. Home plate sits near the bottom, center field near
- *  the top; `pad` reserves a margin at both edges. */
-export function project(xFt, yFt, w, h, pad = 0.06) {
+ *  the top; `pad` reserves a margin at both edges. `scale` is a size multiplier for anything drawn
+ *  at that point (ball, bases, markers) - derived from the same camZ every other perspective cue
+ *  uses, so nothing on the field disagrees about how far away something is. */
+export function project(xFt, yFt, w, h, pad = 0.08) {
+  const { xz, yz, camZ } = cameraRatios(xFt, yFt);
   const topY = h * pad;
-  const botY = h * (1 - pad * 1.4);
-  const usableH = botY - topY;
-  // Two gentler curves stitched at NEAR_FT rather than one power curve over the whole depth -
-  // a single curve compressed the mound (60.5ft) almost on top of home plate (0ft).
-  const nearBandFrac = 0.42; // how much of the screen the near band (0..NEAR_FT) claims
-  let depthFrac;
-  if (yFt <= NEAR_FT) {
-    depthFrac = (yFt / NEAR_FT) * nearBandFrac;
-  } else {
-    const t = Math.min(1, (yFt - NEAR_FT) / (DEPTH_FT - NEAR_FT));
-    depthFrac = nearBandFrac + (1 - nearBandFrac) * Math.pow(t, 0.85);
-  }
-  const screenY = botY - usableH * depthFrac;
-  const scale = 1 - depthFrac * 0.62; // narrows toward center field
-  const cx = w / 2;
-  const screenX = cx + xFt * (w * 0.00072) * scale;
-  return { x: screenX, y: screenY, scale: Math.max(0.15, scale) };
+  const botY = h * (1 - pad * 0.9);
+  const t = (yz - YZ_HOME) / (YZ_FAR - YZ_HOME);
+  const screenY = botY - t * (botY - topY);
+  const screenX = w / 2 + xz * (w / 2) * CAM_X_SCALE;
+  // Reference depth is home plate's own camZ; things at that depth draw at scale 1.
+  const homeZ = cameraRatios(0, 0).camZ;
+  const scale = Math.max(0.12, homeZ / camZ);
+  return { x: screenX, y: screenY, scale };
 }
 
 function polarToXY(sprayDeg, ft) {
@@ -63,8 +85,8 @@ export function drawField(ctx, w, h, league, fenceFt, dark) {
   // A subtle mow-stripe texture, alternating bands by depth - cosmetic only.
   ctx.fillStyle = grass2;
   for (let i = 0; i < 8; i++) {
-    const y0 = project(0, (i / 8) * DEPTH_FT, w, h).y;
-    const y1 = project(0, ((i + 0.5) / 8) * DEPTH_FT, w, h).y;
+    const y0 = project(0, (i / 8) * CAM_FAR_FT, w, h).y;
+    const y1 = project(0, ((i + 0.5) / 8) * CAM_FAR_FT, w, h).y;
     ctx.fillRect(0, y1, w, Math.max(1, y0 - y1));
   }
 
