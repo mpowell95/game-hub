@@ -214,6 +214,86 @@ node test-sw-strategy.mjs         -> 107 passed, 0 failed
 **Still open, unchanged from the phase 3 note above**: this is still a first-cut camera and
 in-flight steering is still not wired. Those are scope gaps, not regressions from this round.
 
+## The approved mocks arrived; the field renderer and control band were re-lifted from them (2026-09-14, `game-hub-v832` → `game-hub-v833`)
+
+`claude/baseball-mocks` did not exist on the remote through two separate checks during the round
+above. Matt: *"try again. The mockups are now there."* A third check (`mocks/baseball/` under
+that branch, fetched via `git fetch origin claude/baseball-mocks`) found 15 files: `field.js`,
+`ring.js`, `frame.js`, `common.css`, plus career-home/how-to/game-end mocks (`round2.css` and
+their own JS/HTML - out of this phase's scope, career home doesn't exist yet). This round lifts
+the two files that cover the play screen this phase actually built: `field.js` and `ring.js`.
+
+**`baseball/js/field.js` is now a direct port of the mocks' renderer**, not the prior round's
+hand-derived camera. The mocks build the diamond in an exact (s, t) basepath coordinate system (u/v
+unit vectors along the two foul lines, so every base and every basepath-aligned shape is a plain
+axis-aligned rectangle in that space - the 45-degree geometry can never drift off a hand-placed
+pixel) and project it through a camera CALIBRATED against three framing targets (home plate near
+the bottom, the mound about a third up, the fence near the top) rather than picked by eye. Ported
+rather than imported verbatim because this repo's callers need a `project(xFt, yFt, w, h)` ->
+`{x, y, scale}` usable independently for the ball/landing markers, and `drawField` needs to take
+this repo's own per-league 5-point fence shape (`FIELD[league].fenceFt`) rather than the mocks'
+single `fenceCenterFt` (they only ever drew the college league). Also gained from the port: a real
+home-plate pentagon (was a circle), a full infield skin polygon with the grass square and basepath
+lanes cut into it (was a crude 4-point kite), batter's boxes, the rubber, and bases drawn at a
+fixed on-screen size via the mocks' own "ground widget" isotropic-scale technique (a small feature
+this close to a calibrated camera reads bigger than its surroundings under a naive per-point
+projection - see the module's own header). `planGeometry()` is exported (mirrors the mocks') so
+`baseball/js/test.js` can assert the 45-degree/1.41421 facts directly. Verified against the mocks'
+own `play-batting-tall.html`, rendered side by side with the shipped build at matching viewport
+sizes - foul lines, dirt path, mound, out-zone hatching and base placement all match.
+
+**`baseball/js/ring.js` is a new file, a direct port of the mocks' `ring.js`.** The phase 3 first
+cut drew the Swing/Throw control as an SVG progress ring plus a SEPARATE CSS-colored `<button>`
+sitting on top of it (flat teal, no state of its own) - which is exactly the reported "Swing button
+is teal and far larger than 101px": the button had no relationship to the ring's own 137px/101px
+spec sizes at all. The mocks draw both the ring AND the button on ONE canvas, state-driven
+(`drawRingState(cv, mode, state, value)`, `mode` swing|throw, states idle/charging/charged for
+swing and idle/filling/nice/released/hung for throw) - `RING_D` (137) and `BTN_D` (101) are the
+single source of both sizes, lifted from the Design Spec's own numbers per the mocks' own header.
+`baseball/js/ui.js`'s control band now renders `.bb-ringwrap` (a `<canvas>` plus a text label,
+137x137, the real tap target) instead of the old `<svg class="bb-ring">` + `<button
+class="bb-mainbtn">` pair; the pitching meter loop and the new swing-charge loop both call
+`_paintRing()` each frame with the matching mocks state (`filling` while under the Nice window,
+`nice` once inside it, `hung` past `HANG_GRACE_FRAC`, `released` at release; `charging`/`charged`
+for the swing hold against `FEEL.engine.chargeTime`) instead of animating an SVG `stroke-dashoffset`
+that never reflected timing quality at all.
+
+**`baseball/css/baseball.css`'s HUD/strip/control bands were rewritten against the mocks'
+`common.css`** - the hatched dark panel treatment, HUD slot proportions and separators, the 4x2
+tile grid at 44px rows, and the control band's fixed-pixel layout (159px pad at the left edge,
+a 47px action column, the 137px ring at the right edge) all now match the approved reference
+rather than the first round's percentage-based approximation. **The play screen (`.bb-play` and
+its three bands) now has ONE fixed dark identity always**, matching the mocks' own `.bb-root`
+(`#16240f` background, no light/dark toggle) - every other camera-view field in this repo works
+the same way (stadium lights, not a theme choice). The setup/end-modal/tune-panel screens, which
+the mocks don't cover, keep their existing light/dark-aware styling unchanged. Class names stayed
+this repo's own (`bb-hud`, `bb-strip`, `bb-pad`, …, not the mocks' `bb-hud__slot`/`bb-tile`/`bb-ctrl`)
+so `ui.js`'s existing `data-role` wiring and event handlers needed no renaming - only the CSS
+declarations changed.
+
+**Not lifted this round, and why**: the mocks' `round2.css`/`career-home.js`/`how-to.html`/
+`game-end.html` cover screens that don't exist in this repo yet (career home, a dedicated how-to
+sheet, a dedicated game-end screen beyond the existing inline modal) - phase 4+ territory per the
+"What is deliberately NOT built this phase" note above. `button-states.html` is a reference sheet
+for `ring.js`'s own states, not a screen to build; it was read, not ported.
+
+```
+node baseball/js/test.js          -> 2554 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node test-i18n-strings.mjs        -> 0 failures
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-baseball-device.mjs     -> 6 checks passed (real hub mount, 393x852/dpr3;
+                                      updated for .bb-ringwrap replacing .bb-mainbtn)
+node validate-sw-assets.mjs       -> ok (game-hub-v833, ring.js added to ASSETS,
+                                      REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open, unchanged**: this camera is now the approved one (no longer a first cut to be
+judged), but in-flight steering is still not wired, and the career-home/how-to/game-end mocks
+remain unbuilt - all phase 4+ scope.
+
 ## Status: Phase 2 complete
 
 **Every band and tuning constant in `baseball/js/engine/settings.js` is Draft and adjustable from

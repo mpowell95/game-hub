@@ -62,12 +62,21 @@
   min-height: 44px;
 }
 
-/* ---------------------------------------------------------------- play screen ---- */
+/* ---------------------------------------------------------------- play screen ---- *
+ * Bands, colors, and control-band geometry below are lifted from `mocks/baseball/common.css` on
+ * `claude/baseball-mocks` (fetched 2026-09-14 - see field.js's own header for the fetch history).
+ * The play screen has ONE fixed dark identity always, like every other camera-view field in this
+ * repo (matching the mocks' own `.bb-root` - no light/dark toggle for stadium lights). Class names
+ * here stay this repo's own (`bb-hud`, `bb-strip`, `bb-control`, `bb-pad`, `bb-ringwrap`, ...)
+ * rather than the mocks' (`bb-hud__slot`, `bb-tile`, `bb-ctrl`, ...) so `ui.js`'s existing
+ * `data-role` wiring and event handlers did not need renaming - only the CSS reads changed. */
 .bb-play {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: #16240f;
+  color: #fff;
 }
 
 /* Reserves clearance for the hub's own floating immersive back pill (measured in JS, since
@@ -77,62 +86,92 @@
 .bb-top-spacer {
   flex: 0 0 var(--bb-top-pad, 0px);
   height: var(--bb-top-pad, 0px);
+  background: #16240f;
 }
 
 .bb-hud {
   height: 48px;
   min-height: 48px;
   flex: 0 0 48px;
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  background: rgba(0,0,0,0.06);
-  font-size: 13px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0;
+  background: repeating-linear-gradient(135deg,
+      rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
+    rgba(10, 16, 10, 0.62);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.65);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.55);
+  font-size: 11px;
   overflow: hidden;
 }
-:root.gh-dark .bb-hud { background: rgba(255,255,255,0.06); }
 
-.bb-hud-score { display: flex; align-items: baseline; gap: 4px; font-weight: 700; }
-.bb-hud-team { font-size: 11px; opacity: 0.7; }
-.bb-hud-team.is-you { color: #ffce3a; }
-.bb-hud-runs { font-size: 16px; }
+.bb-hud-score, .bb-hud-inning, .bb-hud-count, .bb-hud-bases, .bb-hud-batter {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 4px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 1px solid rgba(255,255,255,0.10);
+}
+.bb-hud-batter { border-right: 0; }
+.bb-hud-score { flex: 0 0 36%; gap: 4px; padding: 0 6px; }
+.bb-hud-inning { flex: 0 0 11%; justify-content: center; }
+.bb-hud-count { flex: 0 0 29%; justify-content: center; gap: 5px; }
+.bb-hud-bases { flex: 0 0 12%; justify-content: center; }
+.bb-hud-batter { flex: 0 0 12%; justify-content: flex-end; font-size: 11px; letter-spacing: -0.03em; margin-left: auto; }
+
+.bb-hud-team { font-size: 11px; font-weight: 800; opacity: 0.85; }
+.bb-hud-team.is-you { color: #178A7A; }
+.bb-hud-runs { font-size: 13px; font-weight: 900; }
+.bb-hud-dash { opacity: 0.45; font-weight: 400; font-size: 11px; }
 .bb-hud-inning { font-size: 12px; white-space: nowrap; }
 .bb-hud-count { display: flex; gap: 6px; align-items: center; }
-.bb-dotrow { display: flex; gap: 2px; }
-.bb-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(0,0,0,0.2); display: inline-block; }
-:root.gh-dark .bb-dot { background: rgba(255,255,255,0.2); }
-.bb-dot.is-on.bb-dot-b { background: #1F5FA8; }
-.bb-dot.is-on.bb-dot-s { background: #E0532F; }
-.bb-dot.is-on.bb-dot-o { background: #178A7A; }
+.bb-dotrow { display: flex; gap: 2px; align-items: center; }
+.bb-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
+.bb-dot.is-on.bb-dot-b { background: #1F5FA8; border-color: rgba(0,0,0,0.5); }
+.bb-dot.is-on.bb-dot-s { background: #E0532F; border-color: rgba(0,0,0,0.5); }
+.bb-dot.is-on.bb-dot-o { background: #e9eef6; border-color: rgba(0,0,0,0.5); }
 .bb-hud-bases { width: 26px; height: 26px; flex: 0 0 26px; }
-.bb-bases-svg { width: 100%; height: 100%; }
-.bb-bases-svg rect { fill: rgba(0,0,0,0.12); stroke: currentColor; stroke-width: 1; }
-:root.gh-dark .bb-bases-svg rect { fill: rgba(255,255,255,0.12); }
-.bb-bases-svg rect.is-on { fill: #ffce3a; }
-.bb-hud-batter { margin-left: auto; font-size: 11px; opacity: 0.75; white-space: nowrap; }
+.bb-bases-svg { width: 18px; height: 18px; }
+.bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.2; }
+.bb-bases-svg rect.is-on { fill: #178A7A; stroke: #12181f; }
+.bb-hud-batter { margin-left: auto; font-size: 11px; opacity: 0.85; white-space: nowrap; }
 
 .bb-field-wrap {
   flex: 1 1 auto;
   min-height: calc(28 * var(--bb-fh-unit, 1px));
   position: relative;
   overflow: hidden;
+  background: #3f6b34;
 }
 .bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .bb-lines {
   position: absolute;
-  top: 6px;
-  left: 0; right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 14%;
+  width: 88%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-  color: #fff;
+  text-align: center;
 }
-.bb-line1, .bb-line2 { min-height: 1.2em; font-weight: 700; font-size: 14px; }
-.bb-line2 { font-size: 12px; font-weight: 500; opacity: 0.9; }
+.bb-line1, .bb-line2 {
+  min-height: 15px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 15px;
+  color: #fff;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.6);
+  white-space: nowrap;
+}
+.bb-line2 { font-size: 11px; font-weight: 700; opacity: 0.92; }
 
 .bb-strip {
   height: 108px;
@@ -141,30 +180,40 @@
   padding: 8px;
   display: flex;
   align-items: center;
-  background: rgba(0,0,0,0.04);
+  background: repeating-linear-gradient(135deg,
+      rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
+    rgba(6,10,6,0.5);
+  border-top: 1px solid rgba(0, 0, 0, 0.65);
 }
-:root.gh-dark .bb-strip { background: rgba(255,255,255,0.04); }
 .bb-strip-pitches {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-rows: repeat(2, 44px);
+  gap: 4px;
   width: 100%;
+  height: 100%;
 }
 .bb-pitch-tile {
   min-height: 44px;
-  border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.15);
-  background: rgba(0,0,0,0.03);
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
 }
-:root.gh-dark .bb-pitch-tile { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); color: #e7edf5; }
 .bb-pitch-tile.is-sel {
   background: #ffce3a;
-  border-color: #16210f;
-  border-width: 2px;
-  color: #16210f;
+  border: 2px solid #16240f;
+  color: #16240f;
+  transform: translateY(-1px);
 }
+.bb-pitch-name { font-size: 12px; font-weight: 900; }
 .bb-strip-history {
   display: flex;
   gap: 6px;
@@ -175,9 +224,9 @@
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
 }
-:root.gh-dark .bb-hist-chip { background: rgba(255,255,255,0.1); }
 .bb-hist-chip.is-strike { border-bottom: 2px solid #E0532F; }
 .bb-hist-chip.is-ball { border-bottom: 2px solid #1F5FA8; }
 
@@ -185,51 +234,50 @@
   height: 172px;
   min-height: 172px;
   flex: 0 0 172px;
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  padding-bottom: env(safe-area-inset-bottom);
-  gap: 2.5%;
-  background: rgba(0,0,0,0.10);
-}
-:root.gh-dark .bb-control { background: rgba(255,255,255,0.05); }
-
-.bb-pad {
-  width: 44%;
-  aspect-ratio: 1 / 1;
-  max-height: 100%;
-  border-radius: 14px;
-  background: rgba(0,0,0,0.06);
   position: relative;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg,
+      rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
+    rgba(6,10,6,0.55);
+  border-top: 1px solid rgba(0, 0, 0, 0.65);
+}
+
+/* Pad, actions and ring sit at the mocks' own fixed pixel geometry (159px pad, 47px action column,
+ * 137px ring) rather than percentages of the band - the band itself is a fixed 172px, so a fixed
+ * layout inside it is exactly as honest and matches the approved reference pixel for pixel. */
+.bb-pad {
+  position: absolute;
+  left: 12px;
+  bottom: 0;
+  width: 159px;
+  height: 159px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
   touch-action: none;
   overflow: hidden;
 }
-:root.gh-dark .bb-pad { background: rgba(255,255,255,0.08); }
 /* The sweet-spot / strike-zone bar: a horizontal band across the pad's own vertical centre
  * representing the plate's lateral span, so dragging reads as moving a bat/aim point along a
  * real zone rather than pushing a bare dot around an empty square. */
 .bb-pad-zone {
   position: absolute;
-  top: 50%;
-  left: 6%;
-  right: 6%;
-  height: 10px;
-  margin-top: -5px;
-  border-radius: 6px;
-  background: rgba(0,0,0,0.12);
-  border: 1px solid rgba(0,0,0,0.25);
+  left: 8%;
+  right: 8%;
+  top: 42%;
+  height: 16%;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-radius: 3px;
 }
-:root.gh-dark .bb-pad-zone { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.25); }
 .bb-pad-sweet {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 28%;
-  height: 10px;
-  margin-top: -5px;
-  margin-left: -14%;
-  border-radius: 6px;
-  background: rgba(23,138,122,0.45);
+  width: 34px;
+  height: 6px;
+  transform: translate(-50%, -50%);
+  background: #178A7A;
+  border-radius: 3px;
 }
 .bb-pad-marker {
   position: absolute;
@@ -239,57 +287,60 @@
   margin: -8px 0 0 -8px;
   border-radius: 50%;
   background: #ffce3a;
-  border: 2px solid #16210f;
+  border: 2px solid #16240f;
   z-index: 2;
 }
 
 .bb-actions {
-  width: 13%;
+  position: absolute;
+  left: 179px;
+  top: 13px;
+  width: 47px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-self: flex-start;
 }
 .bb-slot {
   height: 44px;
   border-radius: 8px;
-  border: 1px solid rgba(0,0,0,0.15);
-  background: rgba(0,0,0,0.04);
+  background: rgba(255,255,255,0.05);
+  border: 1px dashed rgba(255,255,255,0.16);
   font-size: 11px;
-  opacity: 0.45;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-align: center;
+  line-height: 1.1;
+  color: rgba(255,255,255,0.4);
+  padding: 2px;
 }
-:root.gh-dark .bb-slot { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); color: #e7edf5; }
 
-.bb-ring-wrap {
-  width: 38%;
-  aspect-ratio: 1/1;
-  max-height: 100%;
-  position: relative;
-  margin-left: auto;
-}
-.bb-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
-.bb-ring-track { fill: none; stroke: rgba(0,0,0,0.12); stroke-width: 10; }
-:root.gh-dark .bb-ring-track { stroke: rgba(255,255,255,0.14); }
-.bb-ring-fill { fill: none; stroke: #178A7A; stroke-width: 10; transition: stroke-dashoffset 0.05s linear; }
-.bb-mainbtn {
+/* The Swing/Throw control: one canvas draws BOTH the progress ring and the fill button
+ * (`ring.js`, ported from the mocks) - never a CSS-colored button overlapping a separate SVG
+ * ring, which is how the phase 3 first cut drew an oversized flat-teal circle with no state of
+ * its own. `RING_D`/`BTN_D` in ring.js are the single source of the 137px/101px sizes; this CSS
+ * only positions the canvas, it never resizes it. */
+.bb-ringwrap {
   position: absolute;
-  top: 50%; left: 50%;
-  width: 101px; height: 101px;
-  margin: -50.5px 0 0 -50.5px;
-  border-radius: 50%;
-  border: none;
-  background: #178A7A;
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
+  right: 12px;
+  top: 17px;
+  width: 137px;
+  height: 137px;
   touch-action: none;
   user-select: none;
 }
-.bb-mainbtn.is-down {
-  background: #ffce3a;
-  color: #16210f;
-  border: 2px solid #16210f;
-  transform: scale(1.04);
+.bb-ringwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bb-ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .bb-back {
