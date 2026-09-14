@@ -69,30 +69,35 @@ function diamondPoints(B) {
 
 // Bases: 18in (1.5ft) squares, edges parallel to u/v (the same 45-degree grid the
 // basepaths run on - in (s,t) space every base is a plain axis-aligned square).
-// First/third: outer edge on the foul line, square extends inward -> center offset
-// half a base width in from the line. Second: centered exactly on its corner point.
+// First/third: outer edge on the foul line, so the CENTER sits half a base width
+// in from the line. Second: centered exactly on its corner point. Only the center
+// is needed - see BASE_PX in drawField for why the squares themselves are drawn
+// at a fixed screen size rather than their true (sub-pixel) projected corners.
 const BASE_FT = 1.5;
-function baseSquareXY(sCenter, tCenter) {
-  const half = BASE_FT / 2;
-  const corners = [
-    [sCenter - half, tCenter - half], [sCenter + half, tCenter - half],
-    [sCenter + half, tCenter + half], [sCenter - half, tCenter + half],
-  ];
-  return corners.map(([s, t]) => stToXY(s, t));
-}
-function basesFor(B) {
-  return {
-    first: baseSquareXY(B, BASE_FT / 2),
-    third: baseSquareXY(BASE_FT / 2, B),
-    second: baseSquareXY(B, B),
-  };
-}
 
 // Mound: 18ft-diameter circle centered 59ft out (rubber sits 18in = 1.5ft behind the
 // circle's own center, i.e. rubber = mound center + 1.5, which is exactly P for a
-// league where P = 60.5).
+// league where P = 60.5). Fixed size at every league (a "standard" figure), unlike
+// the infield-skin arc and the home-plate circle below, which scale with B.
 const MOUND_RADIUS = 9;
 function moundCenterY(P) { return P - 1.5; }
+
+// Infield grass: a square inset inside the base square, same center, same 45-degree
+// rotation, side length B - 6 (a 3ft dirt margin on the infield side of each
+// baseline). In (s,t) space the base square is [0,B]x[0,B], so the inset square is
+// simply [3, B-3] on each axis - it can't drift off that 45-degree grid because it
+// is never expressed in real x/y until stToXY converts it.
+function infieldGrassSquare(B) {
+  const lo = 3, hi = B - 3;
+  return [[lo, lo], [hi, lo], [hi, hi], [lo, hi]].map(([s, t]) => stToXY(s, t));
+}
+
+// Home plate dirt circle: radius 13ft at the reference (B=90) league, scaled
+// proportionally with B like the infield-skin arc. Drawn as a full circle
+// (not clipped to fair territory) - it is what rounds off the point where the two
+// foul lines meet, and real groundskeeping cuts it as a full circle too.
+const HOME_CIRCLE_REF_R = 13;
+function homeCircleRadius(B) { return HOME_CIRCLE_REF_R * (B / 90); }
 
 // Infield dirt: an arc of radius 95ft centered on the MIDDLE of the pitcher's rubber
 // (0, P), running from the first-base line to the third-base line - i.e. the two
@@ -117,6 +122,34 @@ function infieldDirtArc(P, radius) {
   // a1/a2 straddle it (first is left of it in x>0, third mirrors), so the minor arc
   // from a1 to a2 passing near +90deg is exactly the far, outfield-facing edge.
   return { center: C, radius, a1, a2, s };
+}
+
+// The infield SKIN itself: the region bounded by the two foul lines (home out to
+// where each meets the arc) and the arc between them - a continuous dirt wedge,
+// with the grass square and the mound circle cut/punched into it afterward. This
+// is the shape a real "skinned infield" actually is: dirt everywhere between the
+// lines out to the grass line, not just a thin strip under the basepaths.
+function infieldSkinPolygon(dirt) {
+  const pFirst = stToXY(dirt.s, 0);
+  const pThird = stToXY(0, dirt.s);
+  const pts = [{ x: 0, y: 0 }, pFirst];
+  const N = 24;
+  for (let i = 1; i < N; i++) {
+    const a = dirt.a1 + (dirt.a2 - dirt.a1) * (i / N);
+    pts.push({ x: dirt.center.x + Math.cos(a) * dirt.radius, y: dirt.center.y + Math.sin(a) * dirt.radius });
+  }
+  pts.push(pThird);
+  return pts;
+}
+
+// Base CENTER points (not corners) - first/third are inset half a base width in
+// from the foul line they sit on; second is centered exactly on its corner point.
+function baseCenters(B) {
+  return {
+    first: stToXY(B, BASE_FT / 2),
+    third: stToXY(BASE_FT / 2, B),
+    second: stToXY(B, B),
+  };
 }
 
 // Batter's boxes: 4ft wide x 6ft long, one each side, 6in (0.5ft) of dirt to the
@@ -233,14 +266,18 @@ export function drawField(cv, opts) {
   const { ctx, w, h } = setupCanvas(cv);
   const B = LEAGUE.basePathFt, P = LEAGUE.pitcherDistFt;
   const { home, first, third, second } = diamondPoints(B);
-  const bases = basesFor(B);
+  const baseC = baseCenters(B);
   const mCY = moundCenterY(P);
-  const dirt = infieldDirtArc(P, LEAGUE.infieldDirtRadiusFt);
+  const dirt = infieldDirtArc(P, LEAGUE.infieldDirtRadiusFt * (B / 90));
   const boxes = batterBoxes();
   const fenceR = LEAGUE.fenceCenterFt;
+  const GRASS = '#3f6b34', DIRT = '#a9713f';
 
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#3f6b34';
+  // 1. base fill: grass everywhere (this alone covers the outfield - "everything
+  // between the infield arc and the fence, inside the foul lines" - and the fair
+  // infield GRASS square below, with no extra polygon needed for either).
+  ctx.fillStyle = GRASS;
   ctx.fillRect(0, 0, w, h);
 
   // foul territory tint outside the +/-45deg wedge, out to the fence radius
@@ -255,6 +292,42 @@ export function drawField(cv, opts) {
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
   ctx.fill('evenodd');
   ctx.restore();
+
+  // 2. infield SKIN (dirt): the whole wedge bounded by the two foul lines and the
+  // 95ft (scaled) arc off the rubber - a continuous dirt area, matching a real
+  // skinned infield, not a thin strip under the basepaths.
+  pathFor(ctx, infieldSkinPolygon(dirt), w, h);
+  ctx.fillStyle = DIRT;
+  ctx.fill();
+
+  // 3. infield GRASS square cut into the skin - same 45-degree grid, side B-6.
+  pathFor(ctx, infieldGrassSquare(B), w, h);
+  ctx.fillStyle = GRASS;
+  ctx.fill();
+
+  // 4. home-plate dirt circle, punched back through the grass square's near corner.
+  const homeR = homeCircleRadius(B);
+  const homeCirclePts = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    homeCirclePts.push({ x: Math.cos(a) * homeR, y: Math.sin(a) * homeR });
+  }
+  pathFor(ctx, homeCirclePts, w, h);
+  ctx.fillStyle = DIRT;
+  ctx.fill();
+
+  // 5. mound dirt circle - an island of dirt entirely inside the grass square.
+  const moundPts = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    moundPts.push({ x: Math.cos(a) * MOUND_RADIUS, y: mCY + Math.sin(a) * MOUND_RADIUS });
+  }
+  pathFor(ctx, moundPts, w, h);
+  ctx.fillStyle = DIRT;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
   // fence arc (illustrative: a circular arc around home at the center-field radius)
   const fencePts = [];
@@ -283,40 +356,6 @@ export function drawField(cv, opts) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // infield dirt: the basepath strips (home-first-second-third-home) plus the arc
-  ctx.beginPath();
-  [home, first, second, third].forEach((pt, i) => {
-    const s = toScreen(pt, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  });
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(169,113,63,0.55)';
-  ctx.fill();
-
-  // the dirt arc itself, sampled and filled against the mound center
-  const arcPts = [];
-  const arcN = 20;
-  for (let i = 0; i <= arcN; i++) {
-    const a = dirt.a1 + (dirt.a2 - dirt.a1) * (i / arcN);
-    arcPts.push({ x: dirt.center.x + Math.cos(a) * dirt.radius, y: dirt.center.y + Math.sin(a) * dirt.radius });
-  }
-  pathFor(ctx, [home, ...arcPts], w, h);
-  ctx.fillStyle = '#a9713f';
-  ctx.fill();
-
-  // mound
-  const moundPts = [];
-  for (let i = 0; i <= 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    moundPts.push({ x: Math.cos(a) * MOUND_RADIUS, y: mCY + Math.sin(a) * MOUND_RADIUS });
-  }
-  pathFor(ctx, moundPts, w, h);
-  ctx.fillStyle = '#b8815099';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
   // rubber: 24in x 6in, centered at (0, P)
   const rubW = 2, rubD = 0.5;
   pathFor(ctx, [
@@ -342,14 +381,25 @@ export function drawField(cv, opts) {
   pathFor(ctx, boxes.right, w, h); ctx.stroke();
   pathFor(ctx, boxes.left, w, h); ctx.stroke();
 
-  // bases: 18in squares, white
+  // bases: 18in squares, white. True-to-scale corners project to well under a
+  // pixel at this camera distance (golf's cup has the same problem, and is drawn
+  // at a floored on-screen size for the same reason - CLAUDE.md's own "the cup is
+  // now drawn ... imported ... so the hole you see and the hole that captures are
+  // the same number" rule is about capture radius, not about a marker readable at
+  // a glance, so a fixed screen size here is the right departure). The CENTER each
+  // one is drawn at is still the exact plan-view point computed above.
+  const BASE_PX = 8;
   ctx.fillStyle = '#f4f6fb';
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
   ctx.lineWidth = 1;
   for (const key of ['first', 'third', 'second']) {
-    pathFor(ctx, bases[key], w, h);
-    ctx.fill();
-    ctx.stroke();
+    const s = toScreen(baseC[key], w, h);
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(Math.PI / 4); // bases are drawn edge-on to the basepath grid
+    ctx.fillRect(-BASE_PX / 2, -BASE_PX / 2, BASE_PX, BASE_PX);
+    ctx.strokeRect(-BASE_PX / 2, -BASE_PX / 2, BASE_PX, BASE_PX);
+    ctx.restore();
   }
 
   // home plate pentagon
@@ -395,7 +445,7 @@ export function drawField(cv, opts) {
 
   // runner on first: profile-color diamond marker, ink border
   if (opts && opts.runnerFirst) {
-    const s = toScreen(first, w, h);
+    const s = toScreen(baseC.first, w, h);
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.rotate(Math.PI / 4);
