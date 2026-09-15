@@ -61,6 +61,14 @@ const FADE_MS = 150;
 const SWING_TIMELINE = [[0, 3], [40, 4], [80, 5], [120, 6], [160, 7], [200, 8]];
 
 const LEAGUE_ORDER = SETTINGS.LEAGUES;
+/** The league's center-field fence, in feet, from the same FIELD table the game plays on - the
+ *  ONE number the Quick Play picker shows beside each league. Matt (2026-09-15): the five-segment
+ *  picker "reads as a difficulty menu", and baseball is tier-blind by the doc's own lock; a
+ *  ballpark distance reframes the choice as a PLACE, not a level. No shapes, no tier words. */
+function fenceCenterFt(league) {
+  const f = SETTINGS.FIELD[league] || SETTINGS.FIELD.majors;
+  return Math.round(f.fenceFt.center);
+}
 
 let root = null;
 
@@ -104,7 +112,7 @@ class BaseballPlayScreen {
     this.container = container;
     this.destroyed = false;
     this.screen = 'setup'; // setup | play | end
-    this.league = 'college';
+    this.league = LEAGUE_ORDER[0]; // Quick Play opens on Little League (the ladder's first rung), never mid-ladder
     this.dev = isDevProfile();
 
     ensureCSS();
@@ -152,7 +160,6 @@ class BaseballPlayScreen {
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
     this._clearSwingTimers();
     this._clearPitcherTimer();
-    this._clearSwingCue();
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -204,10 +211,14 @@ class BaseballPlayScreen {
   _renderSetup() {
     this.rootEl.innerHTML = `
       <div class="bb-setup">
-        <h1 class="bb-setup-title">${t('title')}</h1>
-        <div class="gh-seg bb-league-seg" role="radiogroup" aria-label="${t('setup_league')}">
+        <h1 class="bb-setup-title">${t('setup_quick')}</h1>
+        <div class="bb-league-list" role="radiogroup" aria-label="${t('setup_league')}">
           ${LEAGUE_ORDER.map((lg) => `
-            <button type="button" class="gh-seg__item" data-league="${lg}" role="radio" aria-checked="${lg === this.league}" aria-pressed="${lg === this.league}">${t('league_' + lg)}</button>
+            <button type="button" class="bb-league-row" data-league="${lg}" role="radio" aria-checked="${lg === this.league}" aria-pressed="${lg === this.league}">
+              <span class="bb-league-mark" aria-hidden="true"></span>
+              <span class="bb-league-name">${t('league_' + lg)}</span>
+              <span class="bb-league-fence">${t('setup_fence').replace('{ft}', String(fenceCenterFt(lg)))}</span>
+            </button>
           `).join('')}
         </div>
         <button type="button" class="gh-btn gh-btn--primary bb-play-btn" data-act="play">${t('setup_play')}</button>
@@ -433,33 +444,6 @@ class BaseballPlayScreen {
   _clearPitcherTimer() {
     if (this._pitcherTimer) clearTimeout(this._pitcherTimer);
     this._pitcherTimer = null;
-  }
-
-  /** Batting's own timing cue: a brief highlight on the swing ring at `delayMs` from now (the
-   *  pitch's own ideal release instant, `crossMs - F.swingDelay` - the exact formula
-   *  `timingFromRelease` scores a real release against, computed by the caller). Nothing in the
-   *  engine's contact model changes - this only tells the player WHEN the window they already
-   *  have to hit is centered, the same job pitching's Nice zone already does for the CPU's own
-   *  throw. `dev`-gated tuning aside, this is a fixed, honest cue: it fires at the true ideal
-   *  instant every time, never nudged toward the player. */
-  _scheduleSwingCue(delayMs) {
-    this._clearSwingCue();
-    const ring = this.rootEl && this.rootEl.querySelector('.bb-ringwrap');
-    if (!ring) return;
-    this._swingCueTimer = setTimeout(() => {
-      if (this.destroyed) return;
-      ring.classList.add('is-swingcue');
-      this._swingCueOffTimer = setTimeout(() => ring.classList.remove('is-swingcue'), 180);
-    }, Math.max(0, delayMs));
-  }
-
-  _clearSwingCue() {
-    if (this._swingCueTimer) clearTimeout(this._swingCueTimer);
-    if (this._swingCueOffTimer) clearTimeout(this._swingCueOffTimer);
-    this._swingCueTimer = null;
-    this._swingCueOffTimer = null;
-    const ring = this.rootEl && this.rootEl.querySelector('.bb-ringwrap');
-    if (ring) ring.classList.remove('is-swingcue');
   }
 
   /** The OVERHEAD camera - the cutaway that plays for the batted-ball flight, so the out-zone
@@ -1247,9 +1231,6 @@ class HumanAgent {
     const flightPromise = s._animatePitchFlight(pitch);
     s._paintRing('idle', 0);
 
-    const F0 = SETTINGS.FEEL.engine;
-    s._scheduleSwingCue(pitch.timeToPlateS * 1000 - F0.swingDelay);
-
     return new Promise((resolve) => {
       let resolved = false;
       let timer = null;
@@ -1260,7 +1241,6 @@ class HumanAgent {
       const settle = (heldMs) => {
         if (resolved) return;
         resolved = true;
-        s._clearSwingCue();
         clearTimeout(timer);
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
@@ -1295,7 +1275,6 @@ class HumanAgent {
       timer = setTimeout(() => {
         if (resolved) return;
         resolved = true;
-        s._clearSwingCue();
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
         // A take stays on frame 1 (spec), even if the button was mid-hold when the pitch expired.

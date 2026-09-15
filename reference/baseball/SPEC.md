@@ -319,7 +319,7 @@ a radio mark and their six numbers in `--gh-fs-xs`, a `Custom` row that opens sk
 ghost, `Start` primary. Skill spend: six rows, each a name, ten pips (filled to the current point, a
 tick at the current cap), minus and plus at 44 px; a chip at the top reads "Points left 3"; `Done`
 primary; minus is disabled below the preset's floor during creation and below the current value
-after. Quick Play setup: a five-row `.gh-seg` for the league, `Play` primary, nothing else. Game-end
+after. Quick Play setup: the title Quick Play, five league rows in ladder order (name plus center-field fence distance, Little League first and selected by default, accent plus ink border plus a filled circle marker on the selected row, no shapes, no tier words), `Play` primary, nothing else. Built 2026-09-15 at Matt's word. Game-end
 modal: X top right, headline (Win or Loss with your marker), the line score as three columns per
 inning plus R H, a points row ("+3 points" or "+0"), then `Continue` primary; in Quick Play the
 buttons are `Play again` and `Done`. Ceremony: the same modal with the trophy cup (bands, section 3)

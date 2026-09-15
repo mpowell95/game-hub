@@ -5,6 +5,8 @@ export const STRINGS = {
   en: {
     title: 'Baseball',
     setup_league: 'League',
+    setup_quick: 'Quick Play',
+    setup_fence: '{ft} ft',
     setup_play: 'Play',
     tune_open: 'Tune',
     league_little: 'Little League',
@@ -70,6 +72,8 @@ export const STRINGS = {
   es: {
     title: 'Béisbol',
     setup_league: 'Liga',
+    setup_quick: 'Partida rápida',
+    setup_fence: '{ft} ft',
     setup_play: 'Jugar',
     tune_open: 'Ajustes',
     league_little: 'Infantil',
