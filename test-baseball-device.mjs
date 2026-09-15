@@ -166,40 +166,68 @@ if (mountErr) {
     }
   }
 
-  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill.
+  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill. R2 (BB-3b
+  // commit 4) now wraps EVERY pitch in windupMs + the real flight + resultMs + betweenMs - a full
+  // cycle from one pitch's release to the next is on the order of 7-8s (1400 windup + ~1.5-2s
+  // flight + 1800 result + 3000 between), a real behavior change from the pre-R2 build this test
+  // was written against. So: click roughly every 500ms (cheap - most land outside the live input
+  // window and are silently ignored, per HumanAgent's own null-handler guards) to catch the brief
+  // windows across several full cycles, while polling continuously for the verdict line the whole
+  // time rather than sampling once at a fixed offset (which could straddle its resultMs hold
+  // entirely).
   let sawLine1 = false;
   let overlapSeen = null;
-  for (let i = 0; i < 10 && !overlapSeen; i++) {
-    await page.evaluate(() => {
-      const tile = document.querySelector('.bb-pitch-tile');
-      if (tile) tile.click();
-      const main = document.querySelector('.bb-ringwrap');
-      if (main) {
-        main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  const TOTAL_BUDGET_MS = 70000, CLICK_EVERY_MS = 500, POLL_MS = 150;
+  for (let elapsed = 0; elapsed < TOTAL_BUDGET_MS && !overlapSeen; elapsed += POLL_MS) {
+    if (elapsed % CLICK_EVERY_MS < POLL_MS) {
+      await page.evaluate(() => {
+        const tile = document.querySelector('.bb-pitch-tile');
+        if (tile) tile.click();
+        const main = document.querySelector('.bb-ringwrap');
+        if (main) {
+          main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+        }
+      });
+    }
+    await page.waitForTimeout(POLL_MS);
+    {
+      const line = await page.evaluate(() => {
+        const back = document.querySelector('.hub-back');
+        const line1 = document.querySelector('[data-role="line1"]');
+        if (!line1 || !line1.textContent.trim()) return null;
+        const l = line1.getBoundingClientRect();
+        const b = back ? back.getBoundingClientRect() : null;
+        const overlap = b ? (l.top < b.bottom && l.bottom > b.top && l.left < b.right && l.right > b.left) : false;
+        return { top: l.top, backBottom: b ? b.bottom : null, overlap };
+      });
+      if (line) {
+        sawLine1 = true;
+        if (line.overlap) overlapSeen = line;
       }
-    });
-    await page.waitForTimeout(250);
-    const line = await page.evaluate(() => {
-      const back = document.querySelector('.hub-back');
-      const line1 = document.querySelector('[data-role="line1"]');
-      if (!line1 || !line1.textContent.trim()) return null;
-      const l = line1.getBoundingClientRect();
-      const b = back ? back.getBoundingClientRect() : null;
-      const overlap = b ? (l.top < b.bottom && l.bottom > b.top && l.left < b.right && l.right > b.left) : false;
-      return { top: l.top, backBottom: b ? b.bottom : null, overlap };
-    });
-    if (line) {
-      sawLine1 = true;
-      if (line.overlap) overlapSeen = line;
     }
   }
   if (!sawLine1) {
-    fail('verdict-line', 'never observed a verdict line across 10 simulated at-bats - test may not be driving the game');
+    fail('verdict-line', `never observed a verdict line across a ${TOTAL_BUDGET_MS}ms drive - test may not be driving the game`);
   } else if (overlapSeen) {
     fail('verdict-line', `verdict line top=${overlapSeen.top} overlapped .hub-back bottom=${overlapSeen.backBottom}`);
   } else {
     ok('verdict line never overlaps the hub back pill across simulated at-bats');
+  }
+
+  // The field canvas (BB-3b: now a real picture, baseball/img/plate.webp, fitted via
+  // field.js's `plateCover()`) mounted at a real, usable size - proof the band's own picture had
+  // somewhere honest to draw into, ahead of `PLATE_ANCHORS`' own sanity checks below.
+  const canvasSize = await page.evaluate(() => {
+    const c = document.querySelector('.bb-field-canvas');
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { width: r.width, height: r.height };
+  });
+  if (!canvasSize || canvasSize.width < 8) {
+    fail('plate-camera', 'field canvas has no usable width to check the strike-zone floor against');
+  } else {
+    ok(`field canvas mounted at ${canvasSize.width.toFixed(0)}px wide (0.30W strike-zone floor = ${(canvasSize.width * 0.3).toFixed(0)}px)`);
   }
 }
 await ctx.close();
@@ -230,42 +258,181 @@ await ctx.close();
   }
 }
 
-// 4. The PLATE camera (2026-09-14 camera rebuild, Matt: "the camera is fundamentally wrong...
-// this game was always meant to" match Mario Superstar Baseball's close, over-the-shoulder view).
-// Regression guard for the two failure modes a real render caught during that rebuild: (a) the
-// near player collapsing to the same size as the far one (no foreshortening - the bug this whole
-// rebuild exists to fix), and (b) a near-field ground shape (the mound circle, the rubber)
-// wrapping into a self-crossing mess because part of it fell behind the camera when the SAME
-// world point becomes the "near" reference in pitching mode - found on a real render, not assumed.
+// 4. The PLATE camera (rebuilt again 2026-09-14, BB-3b art pass: a real picture,
+// `baseball/img/plate.webp`, replaces the procedural pinhole projection the prior round built).
+// There is no more per-point projection to probe scale/foreshortening on - the picture supplies
+// that - so this checks the thing that replaced it: `PLATE_ANCHORS`, measured off the picture, are
+// internally sane (the plate sits below the mound, both land inside the canvas) and the rendered
+// strike zone honors its own 0.30W floor (spec section 6) rather than shrinking to a sliver on a
+// narrow phone.
 {
   const mod = await import('./baseball/js/field.js');
-  if (typeof mod.projectPlate !== 'function') {
-    fail('plate-camera', 'field.js does not export projectPlate(xFt, yFt, w, h, mode)');
+  if (!mod.PLATE_ANCHORS) {
+    fail('plate-camera', 'field.js does not export PLATE_ANCHORS');
   } else {
-    const W = 393, H = 429;
-    const battingNear = mod.projectPlate(0, 0, W, H, 'batting');   // home plate, near the batter
-    const battingFar = mod.projectPlate(0, 60.5, W, H, 'batting'); // the mound, far away
-    const ratio = battingNear.scale / battingFar.scale;
-    if (ratio < 8) {
-      fail('plate-camera', `near/far scale ratio only ${ratio.toFixed(2)}x (batting: home vs mound) - expected strong foreshortening (>= 8x), the camera may have collapsed back toward a flat/overhead view`);
+    const a = mod.PLATE_ANCHORS;
+    const within01 = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+    if (!within01(a.plate) || !within01(a.mound)) {
+      fail('plate-camera', `PLATE_ANCHORS.plate/mound fall outside the picture's own 0..1 frame (plate=${JSON.stringify(a.plate)}, mound=${JSON.stringify(a.mound)})`);
     } else {
-      ok(`plate camera foreshortens strongly: home is ${ratio.toFixed(1)}x the mound's scale (batting)`);
+      ok('PLATE_ANCHORS.plate and .mound both land inside the picture');
     }
-    // Mirror symmetry: pitching's own near/far ratio (pitcher vs the batter at the plate) should
-    // match batting's within a small tolerance - same camera, turned around.
-    const pitchingNear = mod.projectPlate(0, 60.5, W, H, 'pitching'); // the mound, near the pitcher
-    const pitchingFar = mod.projectPlate(0, 0, W, H, 'pitching');     // home plate, far away
-    const ratio2 = pitchingNear.scale / pitchingFar.scale;
-    if (Math.abs(ratio2 - ratio) / ratio > 0.02) {
-      fail('plate-camera', `pitching's near/far ratio (${ratio2.toFixed(2)}x) does not mirror batting's (${ratio.toFixed(2)}x) - the two modes should be the same camera turned around`);
+    if (a.plate.y <= a.mound.y) {
+      fail('plate-camera', `plate anchor (y=${a.plate.y}) is not below the mound anchor (y=${a.mound.y}) - the plate should read nearer the bottom of the frame`);
     } else {
-      ok('pitching mode mirrors batting mode exactly (same camera, turned around)');
+      ok(`plate anchor sits below the mound anchor (plate.y=${a.plate.y}, mound.y=${a.mound.y})`);
     }
   }
   if (typeof mod.drawPlateView !== 'function' || typeof mod.drawPlateBall !== 'function') {
     fail('plate-camera', 'field.js does not export drawPlateView/drawPlateBall');
   } else {
     ok('drawPlateView and drawPlateBall are exported');
+  }
+  if (mod.PLATE_ANCHORS) {
+    const a = mod.PLATE_ANCHORS;
+    if (a.nearBoxLeft.x < a.plate.x && a.plate.x < a.nearBoxRight.x) {
+      ok('nearBoxLeft sits left of the plate, nearBoxRight sits right of it (anchor fractions)');
+    } else {
+      fail('plate-camera', `nearBoxLeft/nearBoxRight do not straddle the plate anchor (left=${a.nearBoxLeft.x}, plate=${a.plate.x}, right=${a.nearBoxRight.x})`);
+    }
+  }
+}
+
+// 5. Batter hand/anchor correction (Matt): both frame sets are drawn RIGHT-handed, so the DEFAULT
+// (unflipped) stands at the LEFT box and a LEFT-handed batter (flipped) stands at the RIGHT box -
+// never the other way round. Rendered, not just reasoned about: draws the real batter frame via
+// field.js's own drawFrameCheck (a flat background, so the sprite's own pixels are trivial to
+// isolate) with flip false/true, and asserts the rendered bounding box's own center falls left of
+// canvas-center for the unflipped draw and right of it for the flipped one.
+{
+  const p2 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
+  await p2.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const bounds = await p2.evaluate(async () => {
+    const mod = await import('/baseball/js/field.js');
+    mod.preloadPlateImages();
+    await new Promise((r) => setTimeout(r, 800));
+    const measure = (flip) => {
+      const c = document.createElement('canvas');
+      c.width = 400; c.height = 700;
+      const ctx = c.getContext('2d');
+      mod.drawFrameCheck(ctx, c.width, c.height, 'batter', 'home', 5, true, flip);
+      const data = ctx.getImageData(0, 0, c.width, c.height).data;
+      // The flat #1c1c1c background is (28,28,28) - anything meaningfully different is the sprite
+      // or the ground line/center tick; restrict the scan to the sprite's own height band and
+      // ignore the thin overlay lines by requiring a wide-enough run.
+      let minX = Infinity, maxX = -Infinity;
+      const yTop = Math.round(c.height * 0.2), yBot = Math.round(c.height * 0.8);
+      for (let y = yTop; y < yBot; y++) {
+        for (let x = 0; x < c.width; x++) {
+          const i = (y * c.width + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const isBg = Math.abs(r - 28) < 6 && Math.abs(g - 28) < 6 && Math.abs(b - 28) < 6;
+          const isLine = (r > 200 && g < 100 && b < 100) || (r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 10 && Math.abs(g - b) < 10);
+          if (!isBg && !isLine) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+        }
+      }
+      return { minX, maxX, center: (minX + maxX) / 2, canvasCenter: c.width / 2 };
+    };
+    return { unflipped: measure(false), flipped: measure(true) };
+  });
+  await p2.close();
+  if (!isFinite(bounds.unflipped.center) || !isFinite(bounds.flipped.center)) {
+    fail('batter-hand', `could not isolate the sprite's own pixels (unflipped=${JSON.stringify(bounds.unflipped)}, flipped=${JSON.stringify(bounds.flipped)})`);
+  } else {
+    if (bounds.unflipped.center < bounds.unflipped.canvasCenter) {
+      ok(`unflipped batter renders left of center (bbox center ${bounds.unflipped.center.toFixed(0)}px vs canvas center ${bounds.unflipped.canvasCenter}px)`);
+    } else {
+      fail('batter-hand', `unflipped batter's bounding box center (${bounds.unflipped.center.toFixed(0)}px) is not left of canvas center (${bounds.unflipped.canvasCenter}px)`);
+    }
+    if (bounds.flipped.center > bounds.flipped.canvasCenter) {
+      ok(`flipped (left-handed) batter renders right of center (bbox center ${bounds.flipped.center.toFixed(0)}px vs canvas center ${bounds.flipped.canvasCenter}px)`);
+    } else {
+      fail('batter-hand', `flipped batter's bounding box center (${bounds.flipped.center.toFixed(0)}px) is not right of canvas center (${bounds.flipped.canvasCenter}px)`);
+    }
+  }
+}
+
+// 6. The real pitcher frames (BB-3b addition): frame 1's rendered bounding box sits centered on
+// the mound anchor, and frame 3's own throwing-hand anchor (PLATE_ANCHORS.release) lands INSIDE
+// frame 3's rendered bounding box - not beside the head, which is what the old three-cartoon-pose
+// set's arbitrary offset produced. Renders the real drawPlateView (not the flat-background dev
+// tool) so this exercises the exact same cover-fit math the game itself uses.
+{
+  const p3 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
+  await p3.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const result = await p3.evaluate(async () => {
+    const mod = await import('/baseball/js/field.js');
+    mod.preloadPlateImages();
+    await new Promise((r) => setTimeout(r, 900));
+    const w = 400, h = 700;
+    const render = (pitcherFrame) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      mod.drawPlateView(ctx, w, h, 'batting', false, { pitcherFrame, batterFrame: 1 });
+      return ctx.getImageData(0, 0, w, h).data;
+    };
+    // The pitcher's own colors (navy jersey ~#1F3864-ish, gray pants, pale skin) read as distinctly
+    // NOT-grass and NOT-dirt in a tight window around the mound; scan that window only, so the
+    // batter/plate/crowd elsewhere in frame never contaminate the bbox.
+    const isField = (r, g, b) => (g > r && g > b && g > 90) /* grass */ || (r > 140 && r < 210 && g > 90 && g < 160 && b < 130 && r > g) /* dirt */;
+    const bboxIn = (data, x0, x1, y0, y1) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+          if (a < 200) continue;
+          if (isField(r, g, b)) continue;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+    // Mound-area window: PLATE_ANCHORS.mound projected through the same cover-fit math as
+    // drawPlateView, widened generously since the exact figure size depends on band height.
+    const plateImg = new Image();
+    plateImg.src = '/baseball/img/plate.webp';
+    await new Promise((r) => { if (plateImg.complete) r(); else plateImg.onload = r; });
+    const iw = plateImg.naturalWidth, ih = plateImg.naturalHeight;
+    const scale = Math.max(w / iw, h / ih);
+    const drawW = iw * scale, drawH = ih * scale;
+    const offsetX = (w - drawW) / 2, offsetY = h - drawH;
+    const anchorPx = (frac) => ({ x: offsetX + frac.x * drawW, y: offsetY + frac.y * drawH });
+    const mound = anchorPx(mod.PLATE_ANCHORS.mound);
+    const release = anchorPx(mod.PLATE_ANCHORS.release);
+    const winHalf = 40;
+    const x0 = Math.max(0, Math.round(mound.x - winHalf)), x1 = Math.min(w, Math.round(mound.x + winHalf));
+    const y0 = Math.max(0, Math.round(mound.y - winHalf)), y1 = Math.min(h, Math.round(mound.y + winHalf));
+
+    const bbox1 = bboxIn(render(1), x0, x1, y0, y1);
+    const bbox3 = bboxIn(render(3), x0, x1, y0, y1);
+    return { mound, release, bbox1, bbox3, window: { x0, x1, y0, y1 } };
+  });
+  await p3.close();
+  const b1 = result.bbox1;
+  if (!isFinite(b1.minX)) {
+    fail('pitcher-frames', `could not isolate frame 1's sprite in the mound window (${JSON.stringify(result.window)})`);
+  } else {
+    const centerX = (b1.minX + b1.maxX) / 2;
+    const off = Math.abs(centerX - result.mound.x);
+    if (off <= 15) {
+      ok(`pitcher frame 1's bounding box is centered on the mound anchor (bbox center x=${centerX.toFixed(1)}, mound x=${result.mound.x.toFixed(1)}, off by ${off.toFixed(1)}px)`);
+    } else {
+      fail('pitcher-frames', `frame 1's bbox center x=${centerX.toFixed(1)} is ${off.toFixed(1)}px from the mound anchor x=${result.mound.x.toFixed(1)} (expected <=15px)`);
+    }
+  }
+  const b3 = result.bbox3;
+  if (!isFinite(b3.minX)) {
+    fail('pitcher-frames', `could not isolate frame 3's sprite in the mound window (${JSON.stringify(result.window)})`);
+  } else {
+    const inside = result.release.x >= b3.minX && result.release.x <= b3.maxX && result.release.y >= b3.minY && result.release.y <= b3.maxY;
+    if (inside) {
+      ok(`frame 3's own hand anchor (release=${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) lands inside its rendered bounding box (${JSON.stringify(b3)})`);
+    } else {
+      fail('pitcher-frames', `release anchor (${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) is outside frame 3's own bounding box (${JSON.stringify(b3)}) - "beside the head", not in the hand`);
+    }
   }
 }
 
