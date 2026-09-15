@@ -4,6 +4,59 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Matt's four answers on the BB-3b report-back list (2026-09-15, `game-hub-v840` → `game-hub-v841`)
+
+The build session's own handoff (`HANDOFF-SESSION-2026-09-15.md`, not in the repo) listed the
+decisions still waiting on Matt. He answered all four in one message; this entry is the record and
+the change that each one produced.
+
+1. **The swing cue is removed.** Matt: *"Remove. Do not add features that are not discussed."* The
+   v836 ring glow (`_scheduleSwingCue`, `.bb-ringwrap.is-swingcue`) fired at the ideal release
+   instant, which made batting "tap when it flashes" and quietly undid the Accuracy skill's whole
+   meaning (a bigger timing window is worth nothing if the screen tells you the instant). The spec's
+   own rule stands: there is no visible timing window; Line 1's Early / Late / Perfect after the pitch
+   is the only timing feedback, and it stays. Nothing in the engine or the tuned values changed. If
+   contact is genuinely too hard on a phone, the lever is `timingWindow` in the Tune panel after a
+   real playtest, not a cue.
+2. **The camera stays as it is**: behind the plate in both states. Matt: *"Don't reverse the camera
+   anymore."* Closed.
+3. **The overhead cut on contact is kept.** It is the painted stadium with the players on it (which
+   Matt asked for by name on 2026-09-14), shown only while a batted ball is in the air, then back
+   to the plate view for the next pitch.
+4. **The Quick Play picker is five ladder rows, not a segmented control.** Matt: *"It still lets
+   you choose any league. Which is wrong."* Two things were true at once: the screen never said it
+   was Quick Play (so it read as the career letting you pick any league), and the `.gh-seg` of five
+   read as Easy-to-Expert on a game the doc locks as tier-blind. Now: the title is **Quick Play**,
+   the leagues are rows in ladder order with **Little League first and selected by default** (never
+   mid-ladder), each row carries the league name and its center-field fence distance from the same
+   `FIELD` table the game plays on ("210 ft"), the selected row is the `#ffce3a` accent with a 2 px
+   ink border and a filled circle marker (never color alone), no shapes, no tier words. Quick Play
+   still lets you pick any league: that is the doc's own locked Quick Play design. The CAREER,
+   which starts at Little League and climbs, is phase 4 and does not exist yet; when it does, it is
+   the launcher's primary path and Quick Play is the secondary button on career home (SPEC.md
+   section 10).
+
+Two housekeeping items from the same review landed alongside:
+
+- The root `CLAUDE.md` games table said Baseball was "phase 0: plumbing only, no game" on a default
+  branch serving a playable build. Corrected.
+- **R2 is now MEASURED, not asserted from the code.** `test-baseball-device.mjs` gains an
+  `r2-cadence` check: no input, every pitch a take, the gap from each pitch's verdict paint
+  (`_setLine1`, wrapped on the live instance) to the next pitch's release (`state.pitcherFrame`
+  reaching 3) must equal `resultMs + betweenMs + windupMs` within 150 ms, on the real hub mount at
+  393x852/dpr3. First run: **6220, 6221, 6225 ms against a 6200 ms target**. The v834 recording
+  measured 1.5 to 2.25 s pitch to pitch; the earlier build-session figure of "about 8.6 s" was
+  never accounted for, and this check replaces it with a number that names its own components.
+
+```
+node test-i18n-strings.mjs        -> 0 failures
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-baseball-device.mjs     -> all checks passed (incl. r2-cadence, above)
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v841)
+```
+
 ## BB-3b commit 6 (part 3): the half-inning transition cross-fades in place (2026-09-15, `game-hub-v839` → `game-hub-v840`)
 
 Per SPEC.md section 5's own transition row: "a half-inning end is a fixed 3000ms beat

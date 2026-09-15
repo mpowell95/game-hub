@@ -562,7 +562,7 @@ working in that folder).
 
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
-| Baseball | in-hub `module:`, immersive, **phase 0: plumbing only, no game, `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
+| Baseball | in-hub `module:`, immersive, **Quick Play playable (BB-3b); career is phase 4; `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |
 | Battleship | in-hub `module:`, immersive, **multiplayer** (`gamehub.battleship.mp.v1`, the repo's first hidden-information game) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`), **bilingual gameplay** (EN/ES word list + dice, chosen on the setup screen) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |

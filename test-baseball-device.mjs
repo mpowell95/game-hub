@@ -166,6 +166,57 @@ if (mountErr) {
     }
   }
 
+  // 1b. R2 (HANDOFF-BASEBALL-3B.md section 5, Matt's second complaint on the v834 recording: "the
+  // time between pitches ignores the tuned value"): the gap from one pitch's VERDICT to the NEXT
+  // pitch's RELEASE is resultMs + betweenMs + windupMs, measured on the real hub mount rather than
+  // inferred from the code. No input is given, so every pitch is a take (ball or strike) and no
+  // batted-ball animation enters the sum. The verdict is captured by wrapping the instance's own
+  // `_setLine1` (what `_onEngineEvent` paints through); the release is `state.pitcherFrame`
+  // reaching 3 (`_stepWindup`'s own release step). A half-inning transition adds its own beat and
+  // is excluded by its verdict text.
+  {
+    const expected = await page.evaluate(async () => {
+      const S = await import('/baseball/js/engine/settings.js');
+      return { result: S.FEEL.ui.resultMs, between: S.FEEL.ui.betweenMs, windup: S.FEEL.ui.windupMs };
+    });
+    await page.evaluate(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const rec = { releases: [], verdicts: [] };
+      window.__bbCadence = rec;
+      const orig = inst._setLine1.bind(inst);
+      inst._setLine1 = (txt) => { if (txt) rec.verdicts.push({ t: performance.now(), txt: String(txt) }); orig(txt); };
+      let last = inst.state.pitcherFrame;
+      rec.timer = setInterval(() => {
+        const f = inst.state.pitcherFrame;
+        if (f === 3 && last !== 3) rec.releases.push(performance.now());
+        last = f;
+      }, 10);
+    });
+    const deadline = Date.now() + 45000;
+    let data = { releases: [], verdicts: [] };
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(500);
+      data = await page.evaluate(() => ({ releases: window.__bbCadence.releases.slice(), verdicts: window.__bbCadence.verdicts.slice() }));
+      if (data.releases.length >= 4) break;
+    }
+    await page.evaluate(() => { clearInterval(window.__bbCadence.timer); });
+    const gaps = [];
+    for (let i = 0; i + 1 < data.releases.length; i++) {
+      const v = data.verdicts.find((x) => x.t > data.releases[i] && x.t < data.releases[i + 1]);
+      if (v && !/retired|end of|fin de/i.test(v.txt)) gaps.push({ gap: data.releases[i + 1] - v.t, txt: v.txt });
+    }
+    const target = expected.result + expected.between + expected.windup;
+    const TOL = 150;
+    const desc = gaps.map((g) => `${g.txt} ${g.gap.toFixed(0)}ms`).join(', ');
+    if (gaps.length < 2) {
+      fail('r2-cadence', `only ${gaps.length} verdict-to-release gaps observed in 45s (releases=${data.releases.length}, verdicts=${data.verdicts.length}) - is the CPU pitching to a human batter?`);
+    } else if (gaps.some((g) => Math.abs(g.gap - target) > TOL)) {
+      fail('r2-cadence', `verdict-to-next-release should be ${target}ms (${expected.result} result + ${expected.between} between + ${expected.windup} windup) within ${TOL}ms; measured ${desc}`);
+    } else {
+      ok(`r2-cadence: verdict-to-next-release measured ${desc}; target ${target}ms (${expected.result}+${expected.between}+${expected.windup}), tolerance ${TOL}ms`);
+    }
+  }
+
   // 2. Drive several at-bats, watching for the verdict line overlapping the back pill. R2 (BB-3b
   // commit 4) now wraps EVERY pitch in windupMs + the real flight + resultMs + betweenMs - a full
   // cycle from one pitch's release to the next is on the order of 7-8s (1400 windup + ~1.5-2s

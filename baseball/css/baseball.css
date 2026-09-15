@@ -54,10 +54,48 @@
   margin: 0;
 }
 
-.bb-league-seg {
-  flex-wrap: wrap;
-  justify-content: center;
+.bb-league-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 340px;
 }
+.bb-league-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--gh-r-md, 12px);
+  border: 2px solid transparent;
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bb-league-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  flex: 0 0 14px;
+}
+.bb-league-name { flex: 1; }
+.bb-league-fence { font-size: 12px; font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.bb-league-row[aria-pressed="true"] {
+  background: #ffce3a;
+  border-color: var(--gh-ink, #1a2233);
+  color: #1a2233;
+}
+.bb-league-row[aria-pressed="true"] .bb-league-mark { background: currentColor; }
+.bb-league-row[aria-pressed="true"] .bb-league-fence { opacity: 0.85; }
+:root.gh-dark .bb-root .bb-league-row { background: #1b2434; color: #e9eef6; }
+:root.gh-dark .bb-root .bb-league-row[aria-pressed="true"] { background: #ffce3a; color: #1a2233; border-color: #e9eef6; }
 
 .bb-play-btn {
   min-width: 160px;
@@ -358,20 +396,8 @@
   touch-action: none;
   user-select: none;
   border-radius: 50%;
-  transition: filter 120ms ease, box-shadow 120ms ease;
 }
 .bb-ringwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-/* Batting's own timing cue (Matt: "I can't make contact with the ball or anything") - a brief
- * highlight on the ring right at the pitch's own ideal release instant (crossMs - swingDelay,
- * the exact formula `timingFromRelease` scores against), since unlike pitching's own meter/Nice
- * zone the swing ring previously carried NO signal for when to release, only how long the
- * player had been holding it. This is the swing signal itself, not decoration - kept under
- * reduced motion (the transition is removed, the flash itself is not), per BUILDING-A-GAME.md's
- * "reduced motion thins garnish, it does not freeze gameplay." */
-.bb-ringwrap.is-swingcue {
-  filter: brightness(1.7);
-  box-shadow: 0 0 18px 6px rgba(255,206,58,0.65);
-}
 @media (prefers-reduced-motion: reduce) {
   .bb-ringwrap { transition: none; }
 }
