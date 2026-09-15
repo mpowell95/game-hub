@@ -539,13 +539,30 @@ export class Game {
       // this function). No existing listener reacts to an event type it doesn't recognize.
       await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action, charged: !!(swingDecision && swingDecision.charged) });
       const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
+      // BB-3b commit 6: two additive readouts for Line 1 (SPEC.md section 3/9) - `verdict` names
+      // what the pitch itself was (a called ball/strike, a foul, or a swing that missed
+      // entirely), and `timingWord` is the swing's own early/late/perfect classification, read
+      // straight off the same `timingErrorMs`/`perfectMs`/`timingWindow` axis `swing.js`'s own
+      // contact-quality model (`qualityFor`) already scores against - never a second, invented
+      // threshold. Present only when a real swing was attempted (a take carries no timing at
+      // all); `null` otherwise. Both ride the 'count' and 'atBatEnd' events every existing
+      // listener already destructures by name, so nothing reading the old fields is affected.
+      const F = this.settings.FEEL.engine;
+      const timingErrorMs = swingDecision && swingDecision.action === 'swing' ? swingDecision.timingErrorMs : null;
+      const timingWord = typeof timingErrorMs === 'number'
+        ? (Math.abs(timingErrorMs) <= F.perfectMs ? 'perfect' : (timingErrorMs < 0 ? 'early' : 'late'))
+        : null;
+      let verdict;
 
       if (!swingResult.swung) {
+        verdict = pitchResult.isStrike ? 'strike' : 'ball';
         if (pitchResult.isStrike) this.strikes += 1; else this.balls += 1;
       } else if (!swingResult.contact) {
+        verdict = 'miss';
         this._recordWeak(batterId, pitchResult.x);
         this.strikes += 1;
       } else if (swingResult.foul) {
+        verdict = 'foul';
         if (this.strikes < 2) this.strikes += 1;
       } else {
         const shiftDeg = this._shiftDegFor(defenseTeam, batterId);
@@ -564,11 +581,12 @@ export class Game {
         // BB-2c commit 1's q/exitVeloMph/centered; no existing caller reads them.
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
           q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
-          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind });
+          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind,
+          timingWord });
         return;
       }
 
-      await this.emit('count', { balls: this.balls, strikes: this.strikes });
+      await this.emit('count', { balls: this.balls, strikes: this.strikes, verdict, timingWord });
       // BB-2f fix: no early `return` here either, for the same reason as the two removed above -
       // an abort can land on the exact pitch that pushes strikes/balls to their own threshold, and
       // returning here BEFORE the strikeout/walk checks below would snapshot an invalid, stuck

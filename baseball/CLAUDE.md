@@ -4,6 +4,68 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## BB-3b commit 6 (part 1): Line 1/2's real vocabulary, and a real leave-confirm (2026-09-15, `game-hub-v837` → `game-hub-v838`)
+
+Per `HANDOFF-BASEBALL-3B.md` commit 6, split into the parts that don't need a design call from
+Matt first (this entry) and the parts that do (the strip/HUD pixel rebuild and the league picker
+redesign, both still open - see below).
+
+**Line 1 had exactly two words its whole life: "Out" and "Hit!".** SPEC.md section 3/9's own
+vocabulary - Ball, Strike, Foul on a take or a miss; Early, Late, Perfect on a swing, from the same
+`timingErrorMs`/`perfectMs`/`timingWindow` axis `swing.js`'s own contact-quality model already
+scores against; Single/Double/Triple/Home run/Out/Walk/Strikeout once resolved - was never wired
+in. `game.js`'s `'count'`/`'atBatEnd'` events now carry two additive fields, `verdict` (ball/
+strike/foul/miss, computed where `swingResult` already is) and `timingWord` (early/late/perfect,
+computed from `swingDecision.timingErrorMs` against the exact constants `swing.js` uses - never a
+second, invented threshold) - both `null`/absent for every existing caller that doesn't read them,
+same discipline as every other additive engine seam this project has shipped. `ui.js`'s
+`_verdictWord()` picks the word (a foul always reads "Foul"; a swing otherwise reads its own timing
+word instead of a generic "Strike"; a take reads Ball/Strike). `outcomeWord()` now reads `bases`
+(the authoritative count) rather than re-deriving from the finer-grained `kind` string, so a hit
+reads Single/Double/Triple/Home run correctly instead of a flat "Hit!".
+
+**Line 2 was never painted at all.** Now shows "pitch name and mph" (SPEC.md section 5) the
+instant a pitch resolves - the type rides on the existing `'pitch'` event (at release) into
+`state.pendingPitchType`, read back out by `_pitchReadout()` when `'count'`/`'atBatEnd'` fires (at
+crossing). New `pitchname_*` string keys (full names - "Fastball", not the strip's own two-letter
+`pitch_*` tile codes).
+
+**`isInProgress()` returned `false` unconditionally its whole life** (a phase-4-autosave note, not
+a design choice) - meaning the hub's own leave dialog (`js/hub.js`'s `requestLeave()`) never fired
+for baseball at all: the hub's back pill dropped an active Quick Play game with zero warning,
+every time. Now `true` exactly while the `play` screen is up and the game hasn't been decided or
+aborted - the same bar the doc comment for `isInProgress()` always set, just answered honestly.
+**`window.confirm` is gone** (it was the only one anywhere in this repo, and the handoff's own
+contract bans it) - the standalone-only `.bb-back` button's own leave prompt is now a real
+`.gh-overlay`/`.gh-modal` (the same shared primitive every other confirm in this repo uses), not a
+browser dialog.
+
+**Verified with a real Playwright session driving the actual production UI, not a synthetic
+event dump**: with a real tap-timed swing bypass forcing perfect contact, the captured
+`_setLine1`/`_setLine2` write log showed "Strike" / "Fastball 55" on a take, then "Triple" /
+"Fastball 55" on a real hit - the exact sequence the spec describes, read off the live DOM writes
+rather than assumed from the code.
+
+```
+node baseball/js/test.js          -> 2563 passed, 0 failed (engine seams additive, byte-identical
+                                      for every existing caller)
+node test-baseball-device.mjs     -> 16 checks passed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-i18n-strings.mjs        -> baseball: 59 en keys, 0 missing from es
+node test-game-conventions.mjs    -> 11 passed, 0 failed, no new known-gap entries
+node validate-sw-assets.mjs       -> ok (game-hub-v838, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open, per the handoff's own commit 6 scope** (deliberately not attempted this pass - each
+is a real design call, not a wiring gap): the pitch strip's exact 8x44x92 tile geometry and the
+pitching-state selector redesign; the HUD's B/S/O dot rows, base-diamond fill and inning triangle
+(the HUD currently renders, just not to this spec's exact vocabulary); the half-inning transition's
+in-place cross-fade; and the Quick Play league picker's redesign (five rows with fence distance
+instead of a `.gh-seg`) - explicitly flagged in the handoff as something to show Matt before
+building, not something to build and hope he likes.
+
 ## BB-3b commit 5: the overhead cutaway is the painted stadium, not a vector field (2026-09-15, `game-hub-v836` → `game-hub-v837`)
 
 Per `HANDOFF-BASEBALL-3B.md` commit 5. `overhead.webp` (shipped since commit 1, unused until now)

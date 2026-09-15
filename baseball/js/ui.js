@@ -78,10 +78,16 @@ export function destroy() {
   root = null;
 }
 
-/** Career autosave arrives in phase 4 - a Quick Play game that is force-quit mid-play is simply
- *  lost today, same as any other unsaved arcade round in this repo. */
+/** BB-3b commit 6: `true` while a Quick Play game is actually being played (the `play` screen,
+ *  game not yet decided) - `false` on setup and once the end modal is up, since leaving from
+ *  either of those loses nothing. This is the hub's OWN question (`requestLeave()` in `js/hub.js`)
+ *  - answering it honestly is what makes the hub's leave dialog fire from the back pill instead of
+ *  silently dropping an in-progress game with no warning at all, which is what a permanent `false`
+ *  did. Career autosave (so a force-quit game could actually be resumed) is still phase 4 - this
+ *  only makes losing one ASK first, the same bar `isInProgress()`'s own doc contract sets. */
 export function isInProgress() {
-  return false;
+  const g = root && root._bbInstance;
+  return !!(g && g.screen === 'play' && g.game && g.game.winner == null && !g.game.aborted);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -256,6 +262,7 @@ class BaseballPlayScreen {
       recentPitches: [], // pitching strip: last 4
       pitcherFrame: 1,      // 1-4, the real delivery sequence - see field.js's drawPitcherFigure
       batterFrame: 1,       // 1-8, the real swing sequence - see _startSwingTimeline
+      pendingPitchType: null, // Line 2's readout - see _pitchReadout
     };
     this.gameAbort = () => { if (this.game) this.game.abort(); };
     preloadPlateImages();
@@ -615,6 +622,8 @@ class BaseballPlayScreen {
       this._paintHud();
     } else if (type === 'count') {
       this._paintHud();
+      this._setLine1(this._verdictWord(payload.verdict, payload.timingWord));
+      this._setLine2(this._pitchReadout());
       // R2 (handoff section 5): "the verdict holds for resultMs, then betweenMs passes, then the
       // wind-up runs for windupMs, then the flight." `_settleAtBat` already applies the same
       // result-hold + between-pitch gap when a pitch CONCLUDES the at-bat; this is the other
@@ -634,7 +643,11 @@ class BaseballPlayScreen {
         await sleep(BETWEEN_MS);
       }
     } else if (type === 'pitch') {
-      // Handled inline by HumanAgent while the ball is in flight (it owns the visual).
+      // Handled inline by HumanAgent while the ball is in flight (it owns the visual) - but Line
+      // 2 (SPEC.md section 5: "pitch name and mph, painted the instant the ball crosses the
+      // plate") needs to know WHICH pitch just resolved once 'count'/'atBatEnd' fires, so the
+      // type rides here, at release, and is read back out at crossing.
+      this.state.pendingPitchType = payload.type;
     } else if (type === 'swing') {
       // BB-3b commit 4: additive event (game.js) - the only way this UI learns the CPU batter
       // swung when the HUMAN is pitching (the decision is otherwise made and consumed entirely
@@ -666,10 +679,33 @@ class BaseballPlayScreen {
   _setLine1(text) { const el = this.rootEl.querySelector('[data-role="line1"]'); if (el) el.textContent = text; }
   _setLine2(text) { const el = this.rootEl.querySelector('[data-role="line2"]'); if (el) el.textContent = text; }
 
+  /** SPEC.md section 3/9: Line 1's per-pitch verdict, before the outcome is known - a swing
+   *  ALWAYS reads as its own timing quality (Early/Late/Perfect) rather than a generic "Strike",
+   *  except a foul (which keeps its own word regardless of timing); a take reads Ball/Strike
+   *  (called). `game.js`'s 'count'/'atBatEnd' events carry `verdict`/`timingWord` for exactly
+   *  this - see its own header for the classification. */
+  _verdictWord(verdict, timingWord) {
+    if (verdict === 'foul') return t('v_foul');
+    if (timingWord) return t('v_' + timingWord);
+    if (verdict === 'ball') return t('v_ball');
+    return t('v_strike');
+  }
+
+  /** SPEC.md section 5: Line 2, "pitch name and mph, painted the instant the ball crosses the
+   *  plate" - `state.pendingPitchType` was recorded at release (the 'pitch' event) since the
+   *  resolving events ('count'/'atBatEnd') don't carry the pitch's own type. */
+  _pitchReadout() {
+    const type = this.state.pendingPitchType;
+    if (!type) return '';
+    const mph = Math.round(pitchMph({ type }, this.league));
+    return `${t('pitchname_' + type)} ${mph}`;
+  }
+
   async _settleAtBat(payload) {
     const outKind = payload.outcome;
-    let word = t('res_' + outcomeWord(outKind));
+    let word = t('res_' + outcomeWord(outKind, payload.bases));
     this._setLine1(word);
+    this._setLine2(this._pitchReadout());
     if (payload.distanceFt != null && payload.sprayAngleDeg != null) {
       const isOut = /out$/.test(outKind) || outKind === 'strikeout';
       const isHr = outKind === 'homer';
@@ -764,14 +800,38 @@ class BaseballPlayScreen {
     arrow.style.transform = `translate(-50%, -50%) scaleX(${netSteer >= 0 ? 1 : -1})`;
   }
 
+  /** BB-3b commit 6: the standalone `.bb-back` button's own leave confirm - `window.confirm` is
+   *  banned by the handoff's own contract (section 7), and was also the only one anywhere in this
+   *  repo. In-hub, `isInProgress()` above answers the SAME question for the hub's own leave
+   *  dialog (`requestLeave()` in `js/hub.js`), so this only fires standalone; both paths now ask
+   *  before dropping a game with the same `.gh-overlay`/`.gh-modal` primitive every other confirm
+   *  in this repo uses, never a browser dialog. */
   async _confirmBack() {
-    if (this.screen === 'play') {
-      // eslint-disable-next-line no-alert
-      const ok = window.confirm(t('confirm_forfeit'));
-      if (!ok) return;
+    if (this.screen === 'play' && this.game && this.game.winner == null && !this.game.aborted) {
+      const leave = await this._confirmForfeitModal();
+      if (!leave) return;
     }
     if (this.game) this.game.abort();
     this._backToLauncher();
+  }
+
+  _confirmForfeitModal() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'gh-overlay';
+      overlay.innerHTML = `
+        <div class="gh-modal" role="dialog" aria-modal="true">
+          <p>${t('confirm_forfeit')}</p>
+          <div class="gh-modal__actions">
+            <button type="button" class="gh-btn" data-act="cancel">${t('cancel')}</button>
+            <button type="button" class="gh-btn gh-btn--primary" data-act="leave">${t('leave')}</button>
+          </div>
+        </div>`;
+      this.rootEl.appendChild(overlay);
+      const done = (leave) => { overlay.remove(); resolve(leave); };
+      overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
+      overlay.querySelector('[data-act="leave"]').addEventListener('click', () => done(true));
+    });
   }
 
   _backToLauncher() {
@@ -1204,12 +1264,18 @@ function basesSvg(bases) {
   </svg>`;
 }
 
-function outcomeWord(kind) {
+/** SPEC.md section 13's exact outcome vocabulary (Single/Double/Triple/Home run/Out/Walk/
+ *  Strikeout) - a hit's WORD comes from `bases` (the authoritative count `game.js`'s own
+ *  `resolveContact` already resolves), never re-derived from the finer-grained `kind` string
+ *  (`ground-gap`/`blooper`/`line-through`/... - those exist for measurement, not for display). */
+function outcomeWord(kind, bases) {
   if (kind === 'homer') return 'homer';
   if (kind === 'walk') return 'walk';
   if (kind === 'strikeout') return 'strikeout';
   if (/out$/.test(kind)) return 'out';
-  return 'hit';
+  if (bases === 3) return 'triple';
+  if (bases === 2) return 'double';
+  return 'single';
 }
 
 function basesLabel(bases) {
