@@ -334,6 +334,48 @@ await ctx.close();
       ok(`plate anchor sits below the mound anchor (plate.y=${a.plate.y}, mound.y=${a.mound.y})`);
     }
   }
+  // [KNOWN-BUG PROBE] The pitch's flight, as pure geometry (Matt, 2026-09-15, three reports in one
+  // message): (1) the ball spent ~half its flight crawling through the strike zone, because the old
+  // drawPlateBall lerped screen position LINEARLY in depth; (2) the flight ENDED on the ground at
+  // the plate, below the zone, so "swing when it is in the middle of the zone" was always Early and
+  // contact only came once the ball was "almost OUT of the strike zone"; (3) the lateral offset was
+  // multiplied by depthFrac, so EVERY pitch crossed dead center on screen - a pitch's x was never
+  // visible where it mattered. `plateBallPos` is the fix; this pins all three against a synthetic
+  // cover (the real 393x380 fit of the 1200x1585 picture), no browser needed.
+  if (typeof mod.plateBallPos !== 'function' || typeof mod.zoneRect !== 'function') {
+    fail('plate-flight', 'field.js does not export plateBallPos/zoneRect');
+  } else {
+    const W = 393, H = 380;
+    const cover = { drawW: 393, drawH: 519.1, offsetX: 0, offsetY: H - 519.1, scale: 0.3275 };
+    const z = mod.zoneRect(W, cover);
+    const inZone = (p) => p.x >= z.left && p.x <= z.left + z.w && p.y >= z.top && p.y <= z.top + z.h;
+    const end = mod.plateBallPos(W, H, cover, 0, 0);
+    if (Math.abs(end.y - z.cy) > 0.5 || Math.abs(end.x - z.cx) > 0.5) {
+      fail('plate-flight', `crossing (yFt=0) draws at (${end.x.toFixed(1)}, ${end.y.toFixed(1)}), not the zone center (${z.cx.toFixed(1)}, ${z.cy.toFixed(1)})`);
+    } else {
+      ok('the pitch crosses at the strike zone\'s own center, not on the ground at the plate');
+    }
+    let inside = 0; const N = 1000; let mono = true; let prevR = 0;
+    for (let i = 0; i <= N; i++) {
+      const p = mod.plateBallPos(W, H, cover, 0, 60.5 * (1 - i / N));
+      if (inZone(p)) inside++;
+      if (p.r < prevR) mono = false;
+      prevR = p.r;
+    }
+    const frac = inside / (N + 1);
+    if (frac > 0.15) {
+      fail('plate-flight', `ball center is inside the zone for ${(frac * 100).toFixed(1)}% of a constant-speed flight (need <= 15%) - the linear crawl is back`);
+    } else {
+      ok(`ball is inside the zone for the last ${(frac * 100).toFixed(1)}% of the flight (perspective, not a linear crawl)`);
+    }
+    if (!mono) fail('plate-flight', 'ball radius does not grow monotonically toward the plate');
+    const right = mod.plateBallPos(W, H, cover, 8.5, 0), left = mod.plateBallPos(W, H, cover, -8.5, 0);
+    if (Math.abs(right.x - (z.left + z.w)) > 0.5 || Math.abs(left.x - z.left) > 0.5) {
+      fail('plate-flight', `x=+1/-1 cross at ${right.x.toFixed(1)}/${left.x.toFixed(1)}, not the zone edges ${(z.left + z.w).toFixed(1)}/${z.left.toFixed(1)}`);
+    } else {
+      ok('x=+1 / x=-1 cross at the zone\'s right / left edge (the pitch location is visible at the plate)');
+    }
+  }
   if (typeof mod.drawPlateView !== 'function' || typeof mod.drawPlateBall !== 'function') {
     fail('plate-camera', 'field.js does not export drawPlateView/drawPlateBall');
   } else {

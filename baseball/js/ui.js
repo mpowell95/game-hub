@@ -355,6 +355,7 @@ class BaseballPlayScreen {
       pitcherFlip: this._currentPitcherFlip(),
       batterFrame: this.state.batterFrame,
       batterFlip: this._currentBatterFlip(),
+      batterAimX: mode === 'batting' ? (this.state.batterAimX || 0) : 0,
     });
   }
 
@@ -599,6 +600,15 @@ class BaseballPlayScreen {
       this.padX = frac;
       const marker = this.rootEl.querySelector('[data-role="padmarker"]');
       if (marker) marker.style.left = (50 + frac * 45) + '%';
+      // Batting: the figure itself moves across the box with the pad (field.js `drawPlateView`,
+      // `batterAimX`), so where you are aimed is visible on the field, not only on the pad. A
+      // flight in progress redraws every frame anyway and reads the same state; between pitches
+      // this is the only redraw, so do it here. Never in the pitching state - that pad is the
+      // pitcher's aim and the CPU batter stands where it stands.
+      if (this.state && this.state.mode !== 'pitching') {
+        this.state.batterAimX = frac;
+        if (!this._flightActive) this._drawStaticField();
+      }
       if (this._onPadMove) this._onPadMove(frac);
     };
     let padDown = false;
@@ -853,10 +863,12 @@ class BaseballPlayScreen {
    *  `pitchResult.x` at t=1, so the engine's own value stays the truth at the plate. Also carries
    *  a short fading trail and cycles through `ball-sheet`'s frames as it spins. */
   _animatePitchFlight(pitchResult) {
-    return new Promise((resolve) => {
+    return new Promise((resolveP) => {
       const dur = pitchResult.timeToPlateS * 1000;
       const t0 = performance.now();
       const trail = [];
+      this._flightActive = true;
+      const resolve = () => { this._flightActive = false; resolveP(); };
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
