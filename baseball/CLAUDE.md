@@ -4,6 +4,57 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Batting had no swing-timing cue at all (fixed 2026-09-15, `game-hub-v835` → `game-hub-v836`)
+
+Matt, right after BB-3b's art pass went live: *"It looks good. I can't make contact with the ball
+or anything."* Pitching already gives a player a real signal (the ring fills toward a Nice zone,
+`ring.js`, ported from the approved mocks) — batting never did. `decideSwing` scores a release
+against `timingFromRelease` (`crossMs - F.swingDelay`, i.e. the player must release ~60ms *before*
+the ball visually reaches the plate, per `FEEL.engine.swingDelay`), but nothing on screen ever
+told the player that instant existed, let alone when it was. The only ring feedback during batting
+was the charge state (idle/charging/charged), which is about hold-to-charge POWER, unrelated to
+timing entirely.
+
+**Diagnosed before touching anything, to rule out an actual engine bug**: a real Playwright
+session bypassed the UI and fed the engine synthetic swings at `timingErrorMs: 0` /
+`aimX: pitch.x` (perfect timing, perfect placement) across a real Quick Play game — **8 for 8
+in play**, confirming `swing.js`'s contact model and the UI's data plumbing (units, signs, axes)
+were already correct; nothing there needed fixing. The gap was purely that a player had no way to
+find the ideal instant by feel.
+
+**Fix**: `_scheduleSwingCue(delayMs)` (`baseball/js/ui.js`) — a `setTimeout` armed the moment
+`decideSwing` starts the pitch flight, firing at the exact same `crossMs - F.swingDelay` instant
+`timingFromRelease` scores against (never a widened or nudged version of it — a fixed, honest
+cue). It adds `.is-swingcue` to `.bb-ringwrap` for 180ms, a CSS glow/brighten
+(`filter`/`box-shadow`, never `transform`/`width`/`height`, per `docs/BUILDING-A-GAME.md`'s
+compositor-only rule) — the swing ring's own approved-mocks drawing (`ring.js`) is untouched, this
+sits on top of it. Cleared on every settle/take/destroy path (`_clearSwingCue`), same discipline as
+`_clearPitcherTimer`/`_clearSwingTimers`. Under `prefers-reduced-motion` the transition drops to
+instant but the cue itself still fires — per that doc's own rule, this is the swing signal, not
+decoration, so reduced motion may not freeze it.
+
+**Verified end to end, not just synthetically**: a second real Playwright session left the
+engine untouched and drove the actual production UI — watched for `.bb-ringwrap.is-swingcue` via
+a `MutationObserver`, and fired a real `touchscreen.tap()` on the ring the instant it appeared.
+**5 real taps, 5 real balls in play** (a lineout, a popout, two line-hits, a lineout — zero
+whiffs), each with real `q` (0.57-0.99) and exit velocity in the engine's own event payload. The
+tap-to-contact pipeline (button → `timingErrorMs` → `swing()`) was already sound; this closes the
+loop a player needs to use it.
+
+```
+node baseball/js/test.js          -> 2563 passed, 0 failed (unchanged - no engine file touched)
+node test-baseball-device.mjs     -> 15 checks passed (real hub mount, 393x852/dpr3)
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v836, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open**: this is a cue, not a difficulty change — `timingWindow`/`swingDelay`/`foulMult`
+(all `[Tested]` doc §14) were not touched, and the window a good swing needs to land in is exactly
+as tight as it was. If real play still shows this too hard even once players know where to look,
+that is Matt's call, not a lever this fix pulled.
+
 ## Status: Phase 3 complete — the game is real and playable (2026-09-14)
 
 **Matt can open the hub, tap the `devOnly` Baseball tile, pick a league, and play a full
