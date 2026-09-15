@@ -4,6 +4,68 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## BB-3b commit 6 (part 3): the half-inning transition cross-fades in place (2026-09-15, `game-hub-v839` → `game-hub-v840`)
+
+Per SPEC.md section 5's own transition row: "a half-inning end is a fixed 3000ms beat
+(`FEEL.ui.betweenMs`). During it Line 1 shows the half-inning result... and the labels swap in
+place: SWING becomes THROW, the strip cross-fades... the wells swap, the foreground figure
+cross-fades between the two batters. No element changes size or position. Under reduced motion
+the swap is instant at the beat's midpoint." None of this existed before - the old code held
+"Side retired" for the full 3000ms then repainted everything abruptly with the very next
+`halfInningStart` event, no fade at all, and the three action-slot wells never differed by state
+(Bunt/Steal/Pickoff, all three, always, regardless of who was batting).
+
+**The swap now genuinely happens at the beat's own midpoint**, not a separately-timed repaint
+tacked onto the end: `halfInningEnd` holds the "Side retired" text for `BETWEEN_MS/2` and sets a
+`_pendingHalfSwap` flag; the `halfInningStart` that always follows immediately (nothing awaits
+between the two in `game.js`'s own loop) reads that flag, and if set, runs the actual state
+mutation (mode flip, HUD/strip/actions/labels repaint, a redraw of the plate camera with reset
+pitcher/batter frames) through `_crossFadeSwap()` - fade the five swapping elements
+(`.bb-hud`/`.bb-strip`/`.bb-ring-label`/`.bb-actions`/the field canvas) to 0 over `FADE_MS` (150),
+swap while invisible, force a reflow so the browser can't coalesce the add/remove into no visible
+transition, fade back to 1 - then holds the remaining half of the beat before clearing both
+readout lines. The VERY FIRST `halfInningStart` (the game's opening pitch, nothing to fade from)
+takes a separate, un-flagged path straight to the same repaint with no fade and no extra wait.
+
+**The action-slot wells now genuinely swap** (`_paintActionSlots()`, new): batting carries Bunt
+and Steal with an empty third well; pitching carries Pickoff with two empty wells - both still
+fully disabled placeholders (`RESERVED_PHASE_6`, unchanged; no baserunning between pitches exists
+yet), only WHICH well is occupied changes. `.bb-slot.is-empty` is the dashed, unlabeled well; the
+CSS treatment was already close (the `.bb-slot` base style is a dashed well by default), so this
+only needed the content to actually differ by mode.
+
+**A real edge case, found by reasoning about the event order rather than assumed away**: a game
+that ends ON a half-inning-ending pitch gets a `halfInningEnd` but NO following `halfInningStart`
+(there is no next half) - `game.js`'s own `playGame()` loop breaks straight to `gameEnd` instead of
+calling `playHalfInning()` again. The `_pendingHalfSwap` flag would otherwise dangle and "Side
+retired" would sit un-cleared under the end modal (harmless once covered, but not what the code
+should rely on). `gameEnd`'s own handler now clears both lines and the flag defensively.
+
+**Verified with a real Playwright session driving the actual production UI** (a swing timed 5
+seconds off to guarantee a quick strikeout, three per half-inning): polling every 100ms across a
+real forced half-inning transition showed the strip's `.bb-fading` class appear ~1500ms after
+"Side retired" first painted (exactly `BETWEEN_MS/2`), and the mode/action wells flip from
+`batting`/`Bunt|Steal|` to `pitching`/`||Pickoff` about 127ms later, matching `FADE_MS`. A second
+run under `reducedMotion: 'reduce'` (a real Playwright context setting, not a CSS-only check)
+confirmed via `MutationObserver` that `.bb-fading` is never applied at all in that path, while the
+mode still changes - the instant-swap contract holds.
+
+```
+node baseball/js/test.js          -> 2563 passed, 0 failed (no engine file touched)
+node test-baseball-device.mjs     -> 16 checks passed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v840, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open**: the Quick Play league picker redesign - still a design call for Matt before
+building (see the handoff's own report-back list), not attempted this pass. Commits 7 (formal
+steering/R2 test suites), 8 (docs sweep across `baseball/CLAUDE.md`'s own status header and the
+root `CLAUDE.md` games table) and 9 (final ship, largely subsumed by this session's own
+merge-per-round cadence) remain.
+
 ## BB-3b commit 6 (part 2): the pitch strip is eight fixed tiles, one row, both states (2026-09-15, `game-hub-v838` → `game-hub-v839`)
 
 Per the handoff's own "Numbers to carry" table: "Strip tiles | 8 by 44 by 92, 1 px gaps". Both

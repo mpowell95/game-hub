@@ -49,6 +49,11 @@ const FIELD_FLOOR_FRAC = 0.28;
 const BETWEEN_MS = SETTINGS.FEEL.ui.betweenMs;
 const WINDUP_MS = SETTINGS.FEEL.ui.windupMs;
 const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
+// The half-inning transition's cross-fade (SPEC.md section 5, "the swap is instant at the beat's
+// midpoint" under reduced motion - so full motion fades AROUND that same midpoint): half of each
+// side of `_crossFadeSwap`'s own round trip (fade out, then in), well inside the BETWEEN_MS/2
+// budget `_onEngineEvent`'s 'halfInningEnd'/'halfInningStart' pair splits around it.
+const FADE_MS = 150;
 
 // BB-3b correction: the real 8-frame swing sequence, timed from the swing decision (release), per
 // Matt's own spec - [msSinceRelease, frame]. Frame 5 (contact) lands at 80ms; frame 8 is the last
@@ -553,19 +558,32 @@ class BaseballPlayScreen {
         <div class="bb-pad-marker" data-role="padmarker"></div>
         <div class="bb-pad-steerarrow" data-role="steerarrow" style="display:none">&#10132;</div>
       </div>
-      <div class="bb-actions">
-        <button type="button" class="bb-slot" data-act="steal" disabled title="${t('locked')}">${t('act_steal')}</button>
-        <button type="button" class="bb-slot" data-act="bunt" disabled title="${t('locked')}">${t('act_bunt')}</button>
-        <button type="button" class="bb-slot" data-act="pickoff" disabled title="${t('locked')}">${t('act_pickoff')}</button>
-      </div>
+      <div class="bb-actions" data-role="actions"></div>
       <div class="bb-ringwrap" data-role="mainbtn" role="button" aria-label="${t('act_swing')}">
         <canvas data-role="ringcanvas" width="${RING_D}" height="${RING_D}"></canvas>
         <div class="bb-ring-label" data-role="ringlabel"></div>
       </div>
     `;
+    this._paintActionSlots();
     this._bindControlInput();
     this._paintModeLabels();
     this._paintRing('idle', 0);
+  }
+
+  /** SPEC.md section 5's control-band table: the three action slots differ by state - batting
+   *  carries Bunt and Steal (slot 3 an empty well), pitching carries Pickoff (slots 1-2 empty
+   *  wells). All three stay disabled either way (steal/bunt/pickoff are `RESERVED_PHASE_6` - the
+   *  engine has no baserunning between pitches yet, per `baseball/CLAUDE.md`'s "What is
+   *  deliberately NOT built this phase") - only which WELL is occupied changes, per state, which
+   *  is what "the wells swap" (section 5's transition row) means. */
+  _paintActionSlots() {
+    const actions = this.rootEl.querySelector('[data-role="actions"]');
+    if (!actions) return;
+    const empty = () => `<div class="bb-slot is-empty" aria-hidden="true"></div>`;
+    const slot = (act) => `<button type="button" class="bb-slot" data-act="${act}" disabled title="${t('locked')}">${t('act_' + act)}</button>`;
+    actions.innerHTML = this.state.mode === 'pitching'
+      ? `${empty()}${empty()}${slot('pickoff')}`
+      : `${slot('bunt')}${slot('steal')}${empty()}`;
   }
 
   _paintModeLabels() {
@@ -631,13 +649,54 @@ class BaseballPlayScreen {
     mainBtn.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch') return; onUp(); });
   }
 
+  /** SPEC.md section 5's half-inning transition: "the labels swap in place... the strip cross-
+   *  fades... the wells swap... the foreground figure cross-fades... no element changes size or
+   *  position... under reduced motion the swap is instant at the beat's midpoint." `swapFn` is
+   *  the actual state mutation + repaint (mode flip, HUD/strip/actions/labels/field); this only
+   *  wraps it in the fade. Reduced motion runs `swapFn` immediately with no fade at all - still at
+   *  the beat's midpoint, since the caller (`_onEngineEvent`'s 'halfInningEnd' case) already
+   *  splits the 3000ms beat in half around this call either way. */
+  async _crossFadeSwap(swapFn) {
+    if (this.destroyed) { swapFn(); return; }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) { swapFn(); return; }
+    const els = this.rootEl.querySelectorAll('[data-role="hud"], [data-role="strip"], [data-role="ringlabel"], [data-role="actions"], [data-role="canvas"]');
+    els.forEach((el) => el.classList.add('bb-fading'));
+    await sleep(FADE_MS);
+    if (this.destroyed) return;
+    swapFn();
+    // Force a reflow before removing the class, or the browser can coalesce the add+remove into
+    // no visible transition at all (the fade-in would never be seen).
+    void this.rootEl.offsetHeight;
+    els.forEach((el) => el.classList.remove('bb-fading'));
+    await sleep(FADE_MS);
+  }
+
   // -------------------------------------------------------------------------------- engine glue
   async _onEngineEvent(type, payload) {
     if (this.destroyed) return;
     if (type === 'halfInningStart') {
-      this.state.mode = this.game.half === 'top' ? 'batting' : 'pitching';
-      this.state.lastPitches = [];
-      this._paintHud(); this._paintStrip(); this._paintModeLabels();
+      const swap = () => {
+        this.state.mode = this.game.half === 'top' ? 'batting' : 'pitching';
+        this.state.lastPitches = [];
+        this.state.pitcherFrame = 1;
+        this.state.batterFrame = 1;
+        this._paintHud(); this._paintStrip(); this._paintActionSlots(); this._paintModeLabels();
+        this._drawStaticField();
+      };
+      if (this._pendingHalfSwap) {
+        // A real half-inning transition (not the game's very first half, where there is nothing
+        // to fade FROM and no beat to split) - SPEC.md section 5: swap at the beat's midpoint,
+        // cross-faded under full motion, instant under reduced motion (`_crossFadeSwap`'s own
+        // check).
+        this._pendingHalfSwap = false;
+        await this._crossFadeSwap(swap);
+        const remaining = Math.max(0, BETWEEN_MS / 2 - FADE_MS * 2);
+        await sleep(remaining);
+        this._setLine1(''); this._setLine2('');
+      } else {
+        swap();
+      }
     } else if (type === 'atBatStart') {
       this._paintHud();
     } else if (type === 'count') {
@@ -688,11 +747,19 @@ class BaseballPlayScreen {
       this._paintHud();
       await this._settleAtBat(payload);
     } else if (type === 'halfInningEnd') {
+      // First half of the 3000ms beat (SPEC.md section 5); the 'halfInningStart' that follows
+      // (always immediately - nothing awaits between the two in game.js's own loop) does the
+      // cross-fade swap and holds the second half, then clears both lines.
       this._setLine1(t('half_end'));
-      await sleep(BETWEEN_MS);
-      this._setLine1(''); this._setLine2('');
+      this._pendingHalfSwap = true;
+      await sleep(BETWEEN_MS / 2);
     } else if (type === 'gameEnd') {
-      // handled by the playGame().then() in _startGame
+      // The end modal (_showEndModal, via the playGame().then() in _startGame) covers this
+      // whole screen anyway, but a game that ends ON a half-inning-ending pitch never gets a
+      // following 'halfInningStart' to clear the "Side retired" beat's own text (there is no
+      // next half) - clear defensively rather than leave it stuck under the modal.
+      this._pendingHalfSwap = false;
+      this._setLine1(''); this._setLine2('');
     }
   }
 

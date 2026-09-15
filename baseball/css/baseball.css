@@ -18,6 +18,18 @@
   touch-action: manipulation;
 }
 
+/* BB-3b commit 6: the half-inning transition (SPEC.md section 5) - "the labels swap in place...
+ * the strip cross-fades... the wells swap... the foreground figure cross-fades", "no element
+ * changes size or position". `_crossFadeSwap()` in ui.js toggles `.bb-fading` on these five
+ * elements around the actual state swap; opacity only, per the compositor-only animation rule
+ * (docs/BUILDING-A-GAME.md Part 0). Reduced motion skips the fade (ui.js's own check), landing the
+ * swap instantly at the beat's midpoint instead - the transition here is untouched by it because
+ * `.bb-fading` is never applied in that path at all. */
+.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas {
+  transition: opacity var(--gh-dur-mid, 200ms) ease;
+}
+.bb-fading { opacity: 0; }
+
 :root.gh-dark .bb-root {
   background: #0d1420;
   color: #e7edf5;
@@ -330,6 +342,7 @@
   color: rgba(255,255,255,0.4);
   padding: 2px;
 }
+.bb-slot.is-empty { background: rgba(255,255,255,0.02); }
 
 /* The Swing/Throw control: one canvas draws BOTH the progress ring and the fill button
  * (`ring.js`, ported from the mocks) - never a CSS-colored button overlapping a separate SVG
