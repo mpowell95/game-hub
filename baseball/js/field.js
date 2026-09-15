@@ -562,8 +562,13 @@ export const PLATE_ANCHORS = {
   mound: { x: 0.500, y: 0.463 },       // the rubber
   release: { x: 0.550, y: 0.420 },     // where a pitcher's throwing hand sits, mound depth
   strikeZoneWidthFrac: 0.18,           // of the picture's own drawW - see the floor below
-  nearBoxLeft: { x: 0.229, y: 0.749 },
-  nearBoxRight: { x: 0.771, y: 0.749 },
+  // Re-measured (white box-line pixel scan on the shipped plate.webp, not eyeballed) after Matt
+  // reported the batter's feet sitting on the box's own TOP edge rather than standing inside it -
+  // the box spans y=1417 (top/back edge) to y~1705 (bottom/front edge) in the 1200x2062 picture;
+  // these sit about 78% of the way down (toward the front edge, where a batter's own feet would
+  // actually plant), not at the box's vertical center the first measurement used.
+  nearBoxLeft: { x: 0.217, y: 0.796 },
+  nearBoxRight: { x: 0.782, y: 0.796 },
 };
 // Section 6 of the spec: "The strike zone has a floor of 0.30W wide so the pad's travel never
 // becomes a slider of a few pixels." Applied at render time against the CANVAS width, not the
@@ -617,8 +622,9 @@ const FRAME_Y_OFFSET_FRAC = {
 };
 
 /** The near-box batter: one frame (1-8) of the real swing sequence for `side` ('home' or 'away').
- *  `flip` mirrors the whole sprite (the art is left-handed as drawn - spec section 2 - so a
- *  right-handed batter is a horizontal flip, not a second sprite set). Anchored at its own FEET
+ *  `flip` mirrors the whole sprite - BOTH frame sets are drawn RIGHT-handed (Matt's own
+ *  correction, overriding this file's earlier "left-handed as drawn" note), so a LEFT-handed
+ *  batter is the flip, not a right-handed one. Anchored at its own FEET
  *  (the frame's own measured ground line, via `FRAME_Y_OFFSET_FRAC`, not just the canvas edge), so
  *  `heightPx` alone fixes its scale and every frame's feet land on the same screen row. */
 function drawBatterFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
@@ -658,7 +664,10 @@ function drawPitcherFigure(ctx, pose, anchor, heightPx) {
  *  `dark` is accepted for call-site compatibility (every other camera-view field in this repo takes
  *  it) but unused - this picture has one identity, same as the overhead camera above.
  *  `opts`: `pitcherPose` ('set'|'windup'|'release'), `batterFrame` (1-8, the real swing sequence -
- *  see ui.js's swing timeline), `batterFlip` (bool, true for a right-handed batter). */
+ *  see ui.js's swing timeline), `batterFlip` (bool, true for a LEFT-handed batter - see the
+ *  section header's own note on the correction: both frame sets are drawn RIGHT-handed, so the
+ *  DEFAULT is unflipped, standing at the third-base side box (`nearBoxLeft`, screen left from
+ *  behind the plate); a left-handed batter is the flipped frame, standing at `nearBoxRight`). */
 export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
@@ -675,7 +684,10 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
 
   const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
   const moundXY = anchorPx(PLATE_ANCHORS.mound, cover);
-  const nearXY = anchorPx(PLATE_ANCHORS.nearBoxRight, cover);
+  // Both frame sets are drawn RIGHT-handed (see the correction note above): unflipped stands at
+  // the LEFT box, flipped (a left-handed batter) at the RIGHT box - never one fixed box for both.
+  const flip = !!opts.batterFlip;
+  const nearXY = anchorPx(flip ? PLATE_ANCHORS.nearBoxRight : PLATE_ANCHORS.nearBoxLeft, cover);
 
   // Strike zone, above the plate - floored to 0.30 of the CANVAS width (spec section 6) so a
   // narrow phone never turns the pad's travel into a slider of a few pixels.
@@ -689,9 +701,7 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
   // mound - independent of whether the human is batting or pitching (see the section header).
   const batterSide = mode === 'pitching' ? 'away' : 'home';
-  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, {
-    flip: !!opts.batterFlip,
-  });
+  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
   drawPitcherFigure(ctx, opts.pitcherPose || 'set', moundXY, h * MOUND_PITCHER_HEIGHT_FRAC);
 
   ctx.restore();
@@ -748,8 +758,11 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
  *  regression in a future art replacement is visible immediately, without reasoning about
  *  `FRAME_Y_OFFSET_FRAC` by eye. `useOffset` toggles the correction off so the raw, uncorrected
  *  drift can be compared against it directly - this is what proved the correction was needed
- *  (visible floating on frames 5-8 without it) before the swing timeline was wired at all. */
-export function drawFrameCheck(ctx, w, h, side, frame, useOffset) {
+ *  (visible floating on frames 5-8 without it) before the swing timeline was wired at all.
+ *  `flip` mirrors the frame and moves it to the OPPOSITE side of the ground line (left for
+ *  unflipped, right for flipped - matching `drawPlateView`'s own nearBoxLeft/nearBoxRight choice)
+ *  so the hand-flip/anchor correction can be checked here too, not just reasoned about. */
+export function drawFrameCheck(ctx, w, h, side, frame, useOffset, flip) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = '#1c1c1c';
@@ -761,10 +774,17 @@ export function drawFrameCheck(ctx, w, h, side, frame, useOffset) {
   ctx.moveTo(0, groundY);
   ctx.lineTo(w, groundY);
   ctx.stroke();
+  // A center tick, so left-of-center vs right-of-center is checkable without a ruler.
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.moveTo(w / 2, 0);
+  ctx.lineTo(w / 2, h);
+  ctx.stroke();
   const heightPx = h * 0.7;
   const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
+  const anchorX = flip ? w * 0.75 : w * 0.25;
   if (useOffset) {
-    drawBatterFigure(ctx, side, f, { x: w / 2, y: groundY }, heightPx, {});
+    drawBatterFigure(ctx, side, f, { x: anchorX, y: groundY }, heightPx, { flip: !!flip });
   } else {
     // Bypass FRAME_Y_OFFSET_FRAC entirely - draw the raw frame bottom-anchored at the ground line.
     const im = plateImg(`batter-${side}-${f}.webp`);
@@ -772,7 +792,11 @@ export function drawFrameCheck(ctx, w, h, side, frame, useOffset) {
       const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
       const scale = heightPx / ih;
       const dw = iw * scale, dh = ih * scale;
-      ctx.drawImage(im, w / 2 - dw / 2, groundY - dh, dw, dh);
+      ctx.save();
+      ctx.translate(anchorX, groundY);
+      if (flip) ctx.scale(-1, 1);
+      ctx.drawImage(im, -dw / 2, -dh, dw, dh);
+      ctx.restore();
     }
   }
   ctx.restore();

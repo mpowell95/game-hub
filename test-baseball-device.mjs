@@ -288,6 +288,68 @@ await ctx.close();
   } else {
     ok('drawPlateView and drawPlateBall are exported');
   }
+  if (mod.PLATE_ANCHORS) {
+    const a = mod.PLATE_ANCHORS;
+    if (a.nearBoxLeft.x < a.plate.x && a.plate.x < a.nearBoxRight.x) {
+      ok('nearBoxLeft sits left of the plate, nearBoxRight sits right of it (anchor fractions)');
+    } else {
+      fail('plate-camera', `nearBoxLeft/nearBoxRight do not straddle the plate anchor (left=${a.nearBoxLeft.x}, plate=${a.plate.x}, right=${a.nearBoxRight.x})`);
+    }
+  }
+}
+
+// 5. Batter hand/anchor correction (Matt): both frame sets are drawn RIGHT-handed, so the DEFAULT
+// (unflipped) stands at the LEFT box and a LEFT-handed batter (flipped) stands at the RIGHT box -
+// never the other way round. Rendered, not just reasoned about: draws the real batter frame via
+// field.js's own drawFrameCheck (a flat background, so the sprite's own pixels are trivial to
+// isolate) with flip false/true, and asserts the rendered bounding box's own center falls left of
+// canvas-center for the unflipped draw and right of it for the flipped one.
+{
+  const p2 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
+  await p2.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const bounds = await p2.evaluate(async () => {
+    const mod = await import('/baseball/js/field.js');
+    mod.preloadPlateImages();
+    await new Promise((r) => setTimeout(r, 800));
+    const measure = (flip) => {
+      const c = document.createElement('canvas');
+      c.width = 400; c.height = 700;
+      const ctx = c.getContext('2d');
+      mod.drawFrameCheck(ctx, c.width, c.height, 'home', 5, true, flip);
+      const data = ctx.getImageData(0, 0, c.width, c.height).data;
+      // The flat #1c1c1c background is (28,28,28) - anything meaningfully different is the sprite
+      // or the ground line/center tick; restrict the scan to the sprite's own height band and
+      // ignore the thin overlay lines by requiring a wide-enough run.
+      let minX = Infinity, maxX = -Infinity;
+      const yTop = Math.round(c.height * 0.2), yBot = Math.round(c.height * 0.8);
+      for (let y = yTop; y < yBot; y++) {
+        for (let x = 0; x < c.width; x++) {
+          const i = (y * c.width + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const isBg = Math.abs(r - 28) < 6 && Math.abs(g - 28) < 6 && Math.abs(b - 28) < 6;
+          const isLine = (r > 200 && g < 100 && b < 100) || (r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 10 && Math.abs(g - b) < 10);
+          if (!isBg && !isLine) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+        }
+      }
+      return { minX, maxX, center: (minX + maxX) / 2, canvasCenter: c.width / 2 };
+    };
+    return { unflipped: measure(false), flipped: measure(true) };
+  });
+  await p2.close();
+  if (!isFinite(bounds.unflipped.center) || !isFinite(bounds.flipped.center)) {
+    fail('batter-hand', `could not isolate the sprite's own pixels (unflipped=${JSON.stringify(bounds.unflipped)}, flipped=${JSON.stringify(bounds.flipped)})`);
+  } else {
+    if (bounds.unflipped.center < bounds.unflipped.canvasCenter) {
+      ok(`unflipped batter renders left of center (bbox center ${bounds.unflipped.center.toFixed(0)}px vs canvas center ${bounds.unflipped.canvasCenter}px)`);
+    } else {
+      fail('batter-hand', `unflipped batter's bounding box center (${bounds.unflipped.center.toFixed(0)}px) is not left of canvas center (${bounds.unflipped.canvasCenter}px)`);
+    }
+    if (bounds.flipped.center > bounds.flipped.canvasCenter) {
+      ok(`flipped (left-handed) batter renders right of center (bbox center ${bounds.flipped.center.toFixed(0)}px vs canvas center ${bounds.flipped.canvasCenter}px)`);
+    } else {
+      fail('batter-hand', `flipped batter's bounding box center (${bounds.flipped.center.toFixed(0)}px) is not right of canvas center (${bounds.flipped.canvasCenter}px)`);
+    }
+  }
 }
 
 await browser.close();

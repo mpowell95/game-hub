@@ -330,16 +330,19 @@ class BaseballPlayScreen {
     });
   }
 
-  /** The art is left-handed as drawn (field.js's own header); a right-handed batter is a
-   *  horizontal flip. Whichever team is BATTING supplies the hand, regardless of which state the
-   *  human is in - see `_drawStaticField`'s mode note. */
+  /** Both frame sets are drawn RIGHT-handed (Matt's correction, field.js's own header); a
+   *  LEFT-handed batter is the flip, standing at the opposite box (nearBoxRight instead of
+   *  nearBoxLeft - see field.js's `drawPlateView`). Whichever team is BATTING supplies the hand,
+   *  regardless of which state the human is in - see `_drawStaticField`'s mode note. Same rule
+   *  for both sets: your own batting hand in the batting state, the CPU batter's hand (teams.js's
+   *  lefty rate) in the pitching state. */
   _currentBatterFlip() {
     if (!this.game) return false;
     const battingSide = this.game.half === 'top' ? 'away' : 'home';
     const battingId = this.game._currentBatterId ? this.game._currentBatterId(battingSide) : null;
     const team = this.game[battingSide];
     const batter = team && battingId ? team.players.find((p) => p.id === battingId) : null;
-    return !!(batter && batter.bats === 'R');
+    return !!(batter && batter.bats === 'L');
   }
 
   /** Starts the real swing frame sequence at the moment of the swing decision (release): frame 3
@@ -801,6 +804,9 @@ class BaseballPlayScreen {
         <label class="bb-tune-row"><span>Ground-corrected</span>
           <input type="checkbox" data-role="fc-offset" checked>
         </label>
+        <label class="bb-tune-row"><span>Flip (left-handed)</span>
+          <input type="checkbox" data-role="fc-flip">
+        </label>
         <div class="bb-tune-actions">
           <button type="button" class="gh-btn" data-act="prev">&larr; Prev</button>
           <button type="button" class="gh-btn" data-act="next">Next &rarr;</button>
@@ -814,10 +820,11 @@ class BaseballPlayScreen {
     const frameInp = sheet.querySelector('[data-role="fc-frame"]');
     const frameVal = sheet.querySelector('[data-role="fc-frame-val"]');
     const offsetChk = sheet.querySelector('[data-role="fc-offset"]');
+    const flipChk = sheet.querySelector('[data-role="fc-flip"]');
     let closed = false;
     const redraw = () => {
       frameVal.textContent = frameInp.value;
-      drawFrameCheck(ctx, cv.width, cv.height, sideSel.value, parseInt(frameInp.value, 10), offsetChk.checked);
+      drawFrameCheck(ctx, cv.width, cv.height, sideSel.value, parseInt(frameInp.value, 10), offsetChk.checked, flipChk.checked);
       if (!this.destroyed && !closed) requestAnimationFrame(redraw);
     };
     requestAnimationFrame(redraw);
