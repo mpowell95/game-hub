@@ -27,8 +27,8 @@ Matt's standing rules that shaped every line below:
 
 Report the result of each in your first message. Do not guess at any of them.
 
-1. `ls reference/baseball/models/` shows Matt's model file(s). Expected: `player.glb` (one
-   character carrying both roles), or `batter.glb` + `pitcher.glb`. **If the folder is empty, do
+1. `ls reference/baseball/models/` shows Matt's files. Expected: `body.glb`, `swing.glb`,
+   `pitch.glb`, optionally `miss.glb`, `set.glb`, `pitcher-body.glb`, and `README.md`. **If the folder is empty, do
    commits 1 and 2 against the scaffolding asset in section 1.4 and stop before commit 3 until
    Matt's file lands.** Never ship a stand-in character.
 2. `grep -o '"185"' pinball/js/vendor/three.core.min.js` prints `"185"`: the vendored three.js
@@ -60,7 +60,12 @@ Report the result of each in your first message. Do not guess at any of them.
 
 This is the one step the build session cannot do: there is no headless Blender in the
 container (`pip download bpy` timed out) and Mixamo is a browser tool behind an Adobe login.
-Everything here is free.
+Everything here is free. **Budget: about an hour the first time.**
+
+The shape of it: one file holds the BODY (mesh + skeleton + the Idle clip); four small files
+hold the other clips as skeleton-only animation. The code applies those clips to the body at
+runtime by bone name, which works because every file comes off the same Mixamo skeleton. This
+avoids merging animations inside Blender, which is the step people get stuck on.
 
 ### 1.1 Pick a character
 
@@ -68,64 +73,95 @@ Any humanoid mesh in a T-pose or A-pose. Cartoon proportions match the Gemini ar
 realistic scan at the sizes these figures draw (the pitcher is 11% of the field height).
 Options, in order of least effort:
 
-- **Mixamo's own stock characters.** Log in, "Characters" tab, pick one. Rigged already.
-- **Quaternius** (quaternius.com) low-poly humanoids, CC0. Download the glb or fbx, upload to
-  Mixamo, auto-rig (see 1.2). *I have not re-checked that site's current licence text; confirm
-  it still says CC0 before shipping.*
+- **Mixamo's own stock characters.** Log in, "Characters" tab, pick one. Rigged already. Adobe's
+  terms let you use Mixamo characters and animations in your own projects, games included; *read
+  the Mixamo FAQ on adobe.com for the current wording before shipping.*
+- **Quaternius** (quaternius.com), a solo 3D artist who publishes low-poly game asset packs,
+  CC0. "CC0" is the Creative Commons public-domain dedication: no credit required, no licence
+  text to carry, use for anything. *I have not re-checked that site's current licence text;
+  confirm it still says CC0 before shipping.* Download the character as fbx or glb, upload to
+  Mixamo, auto-rig (1.2).
 - Any other T-posed humanoid you like the look of, same auto-rig step.
 
 ### 1.2 Mixamo (mixamo.com, free Adobe account)
 
-1. Upload the character (if not a stock one). The auto-rigger asks you to place chin, wrists,
-   elbows, knees and groin markers. Symmetry on. Skeleton LOD: standard (65 bones).
-2. Search animations. *I believe the library has baseball clips with names like "Baseball
-   Idle", "Baseball Hit", "Baseball Strike", "Baseball Pitching". I cannot confirm the exact
-   names from here; search "baseball" and take what fits.* You need five clips:
+1. **Character.** Stock: click it, done. Uploaded: "Upload character", drop the file. The
+   auto-rigger shows the figure and asks you to drag five markers onto it: chin, both wrists,
+   both elbows, both knees, groin. "Use symmetry" on. Skeleton LOD: standard (65 bones). Wait a
+   minute; it plays a test walk when it is done.
+2. **Clips.** "Animations" tab, search **baseball**. *I believe the library has clips with names
+   like "Baseball Idle", "Baseball Hit", "Baseball Strike", "Baseball Pitching"; I cannot confirm
+   the exact names from here.* Pick five:
 
-   | Role | Clip | Mixamo search | Notes |
-   |---|---|---|---|
-   | Batter | Idle | baseball idle | loops; the stance at the plate |
-   | Batter | Swing | baseball hit / strike | contact happens somewhere in it; note the frame (1.3) |
-   | Batter | Miss | baseball strike | optional; the same swing clip works if none fits |
-   | Pitcher | Set | baseball idle / idle | loops; standing on the mound |
-   | Pitcher | Pitch | baseball pitching | release happens somewhere in it; note the frame (1.3) |
+   | # | Role | Purpose | Likely search | Notes |
+   |---|---|---|---|---|
+   | 1 | Batter | Idle | baseball idle | loops; the stance at the plate |
+   | 2 | Batter | Swing | baseball hit | contact happens somewhere in it |
+   | 3 | Batter | Miss | baseball strike | optional; skip if nothing fits, Swing is reused |
+   | 4 | Pitcher | Set | idle | loops; standing on the mound; any calm idle works |
+   | 5 | Pitcher | Pitch | baseball pitching | release happens somewhere in it |
 
-3. Download each: **Format FBX Binary, 30 fps, no keyframe reduction.** Skin: **"With Skin"**
-   for the FIRST clip only, **"Without Skin"** for the rest (they share the same skeleton, so
-   one mesh is enough).
-4. Hand: it does not matter whether the clip is right- or left-handed as animated. Note which it
-   is. The code mirrors for the other hand (section 2, C3).
+   If a clip has an **"In Place"** checkbox in its right-hand panel, tick it. It stops the figure
+   walking off its spot on the field.
+3. **Download each clip.** The Download button, top right. Settings:
+   - Format **FBX Binary**, **30** frames per second, keyframe reduction **none**.
+   - Skin: **"With Skin"** for clip 1 (Idle) ONLY. **"Without Skin"** for clips 2 to 5.
+   "With Skin" means the body comes along; "Without Skin" is just the skeleton moving, a much
+   smaller file. One body is enough; the other four clips are applied to it by the code.
+4. Note whether the swing and the pitch are animated right- or left-handed. Either is fine; the
+   code mirrors for the other hand. Write it down for the README (1.4).
 
-### 1.3 Blender (blender.org, Windows build; free)
+### 1.3 Blender (blender.org, Windows installer, version 4.x; free)
 
-1. File > Import > FBX the "With Skin" file. That is the character.
-2. File > Import > FBX each "Without Skin" file. Each arrives as its own armature carrying one
-   action. In the Dope Sheet's Action Editor, select YOUR character's armature and assign each
-   imported action to it (Action dropdown), then click "Push Down" so it lands on its own NLA
-   track. Delete the extra armatures.
-3. Rename the five actions to exactly: `Idle`, `Swing`, `Miss`, `Set`, `Pitch`. Capital first
-   letter, nothing else. The code looks them up by these names.
-4. Rename the shirt material to exactly `Jersey`, and the cap material (if any) to `Cap`. The
-   code recolours those two by team. Skin, pants, hair: leave as they are.
-5. Note two frame numbers and write them into `reference/baseball/models/README.md`:
-   - `Swing` contact frame: the frame where the hands pass the front of the body (the bat would
-     be over the plate).
-   - `Pitch` release frame: the frame where the throwing hand is furthest forward.
-   The code can estimate both from bone motion; your eye is better. Example line:
-   `Swing contact = frame 14 of 38. Pitch release = frame 22 of 41. Clips are right-handed.`
-6. File > Export > glTF 2.0: format **glb**, Include > Animations ON, **"Group by NLA Track"
-   ON**, Sampling ON, **Compression OFF** (no Draco; no decoder is vendored). Textures: if the
-   file is over 3 MB, set the image size to 1024 or lower, or use "JPEG" as the export image
-   format.
-7. Name it `player.glb`. Upload it and the README to `reference/baseball/models/` on GitHub (web
-   upload is fine; the file is under GitHub's 25 MB web limit).
+Five small conversions, the same steps each time. Blender is only being used as an
+FBX-to-glb converter here; no modelling, no animation editing.
 
-If you would rather have two different-looking people, do the whole thing twice and upload
-`batter.glb` and `pitcher.glb`; the code takes either layout (section 2, C2).
+For **clip 1** (the body):
+1. File > New > General. Delete the default cube (click it, X, Delete).
+2. File > Import > FBX (.fbx), pick the "With Skin" file. The character appears.
+3. In the Outliner (top right list) find the material on the shirt: click the character mesh,
+   Material Properties tab (the red sphere icon, bottom right panel), and rename the shirt's
+   material to exactly **`Jersey`**. If there is a cap material, rename it **`Cap`**. Leave the
+   rest alone. The code recolours those two by team.
+4. Timeline at the bottom: the imported action is already on the armature. In the Dope Sheet >
+   Action Editor, rename the action to exactly **`Idle`**.
+5. File > Export > glTF 2.0: Format **glTF Binary (.glb)**, Include > Animation **on**,
+   Animation > **Group by NLA Track on** (harmless here), **Compression off** (no Draco; the
+   game has no decoder). Save as **`body.glb`**. If it is over 3 MB, go to Data > Images and set
+   the image size limit to 1024, or export images as JPEG.
+
+For **clips 2 to 5** (skeleton only), each one:
+1. File > New > General, delete the cube.
+2. File > Import > FBX, pick the "Without Skin" file. Only a skeleton appears. That is correct.
+3. Dope Sheet > Action Editor: rename the action to exactly **`Swing`**, **`Miss`**, **`Set`**
+   or **`Pitch`**.
+4. Export glTF 2.0 with the same settings, saved as **`swing.glb`**, **`miss.glb`**,
+   **`set.glb`**, **`pitch.glb`**. Each should be well under 1 MB.
+
+### 1.4 The mark frames, and where to upload
+
+Two frame numbers matter, and your eye is better than the code's guess. With `swing.glb`'s scene
+open in Blender, drag the timeline scrubber until the hands pass the front of the body, where a
+bat would be over the plate. Read the frame number. Do the same in `pitch.glb` for the frame
+where the throwing hand is furthest forward. Write both, plus the hand, plus the clip lengths
+(the timeline's End value), into `reference/baseball/models/README.md`, for example:
+
+```
+Swing: contact frame 14 of 38. Miss: contact frame 14 of 38.
+Pitch: release frame 22 of 41.
+Clips are right-handed.
+Character: <name, where it came from>
+```
+
+Upload the five glb files and the README to `reference/baseball/models/` on GitHub (the web
+uploader is fine; every file is under GitHub's 25 MB web limit).
+
+If you would rather have two different-looking people (a distinct pitcher), repeat 1.3 clip 1
+for the second character and name it `pitcher-body.glb`; the code takes either layout (C2).
 
 ### 1.4 Scaffolding asset (build session only, never shipped)
 
-Until `player.glb` lands, the build session may develop against three's example
+Until `body.glb` lands, the build session may develop against three's example
 `RobotExpressive.glb` fetched from jsdelivr into the scratchpad (it carries named clips and a
 Mixamo-style rig, which is enough to prove the loader, the mixer, the camera and the test). It
 is never copied into `baseball/`, never committed, and never appears in a screenshot sent to
@@ -194,12 +230,17 @@ from upper left, no shadow maps. A **blob shadow** per actor: a flat dark ellips
 (`CircleGeometry`, `opacity 0.35`) at the feet, scaled with the actor. Shadow maps on a phone GPU
 for two figures are not worth their cost, and the painted backdrop already has its own light.
 
-**Loading.** `GLTFLoader.loadAsync(url)`. Accept either layout: `player.glb` (both actors are
-`SkeletonUtils.clone(gltf.scene)` of the one file) or `batter.glb` + `pitcher.glb`. Clips are
-found by name: `Idle`, `Swing`, `Miss`, `Set`, `Pitch`. `Miss` falls back to `Swing`; `Set`
-falls back to `Idle`. A missing `Swing` or `Pitch` throws with the file name and the clip
-names that ARE present in the message. Also find the throwing-hand bone: the first bone whose
-name ends in `RightHand` (Mixamo: `mixamorigRightHand`); throw likewise if absent.
+**Loading.** `GLTFLoader.loadAsync(url)` per file. Layout, matching section 1:
+`body.glb` (mesh + skeleton + `Idle`) plus `swing.glb`, `miss.glb`, `set.glb`, `pitch.glb`
+(skeleton-only clips). Both actors are `SkeletonUtils.clone(body.scene)`; an optional
+`pitcher-body.glb` replaces the pitcher's clone. Clips come from each file's `animations[0]`
+(fall back to a name match if a file carries more than one) and are applied to the body's
+skeleton by bone name, which works because every file came off the same Mixamo rig; the
+loader's `sanitizeNodeName` strips the `mixamorig:` colon identically in every file, so track
+names line up. `miss.glb` missing falls back to `Swing`; `set.glb` missing falls back to `Idle`.
+A missing `swing.glb` or `pitch.glb` throws with the file name in the message. Also find the
+throwing-hand bone: the first bone whose name ends in `RightHand` (Mixamo: `mixamorigRightHand`);
+throw likewise if absent.
 
 **Team colour.** After load, traverse materials; the one named `Jersey` gets `color.set(hex)`
 per team, `Cap` likewise if present. Home and away hexes: take them from the two shipped sprite
@@ -217,7 +258,7 @@ The pitcher gets no bat, no glove.
 
 ```js
 const actors = new Actors(wrapEl);           // creates the canvas, nothing loaded yet
-await actors.load({ player: url } | { batter: url, pitcher: url });
+await actors.load({ body, swing, miss, set, pitch, pitcherBody });  // urls; miss/set/pitcherBody optional
 actors.resize(w, h, cover);                  // called from _sizeCanvas after the 2D canvas
 actors.setBatter({ side: 'home'|'away', bats: 'R'|'L' });
 actors.setPitcher({ side, throws });
@@ -303,7 +344,7 @@ Check: the ball leaves the pitcher's hand (not a fixed anchor), on both hands, b
 
 ### C5. Loading, the setup screen and the service worker
 
-- `baseball/models/player.glb` (or the pair) is the shipped copy. `reference/baseball/models/`
+- `baseball/models/*.glb` (body + the four clip files) is the shipped copy. `reference/baseball/models/`
   is the archive and stays.
 - `sw.js`: add the glb path(s) to `ASSETS`, and widen `LAZY_REST` to
   `/^\.\/(boggle\/data\/words[a-z-]*\.txt|baseball\/models\/[a-z-]+\.glb)$/`. A model of a few MB
@@ -320,10 +361,10 @@ Check: the ball leaves the pitcher's hand (not a fixed anchor), on both hands, b
 
 `test-baseball-actors.mjs`, new, two halves, and the header says which is which:
 
-1. **Node, no browser** (runs in `run-all-tests.mjs`): read the shipped glb's 12-byte header and
+1. **Node, no browser** (runs in `run-all-tests.mjs`): read each shipped glb's 12-byte header and
    JSON chunk (no loader; the format is a length-prefixed JSON chunk), assert magic `glTF`, version
-   2, and that `animations[].name` contains `Idle`, `Swing`, `Pitch` (`Miss`, `Set` optional),
-   a node named `*RightHand` exists, a material named `Jersey` exists, no `KHR_draco_mesh_compression`
+   2, that `body.glb` has a node named `*RightHand` and a material named `Jersey`, that every
+   clip file has at least one animation, no `KHR_draco_mesh_compression`
    in `extensionsRequired`, and file size under 4 MB. Structural checks on `ui.js`: no remaining
    `state.batterFrame` / `state.pitcherFrame` writes; `actors.dispose()` inside `destroy()`;
    `visibilitychange` handled.
@@ -367,7 +408,7 @@ run `run-all-tests.mjs` (Matt's rule, root `CLAUDE.md`).
 ## 3. Report back, in this order
 
 1. Section 0 results, verbatim.
-2. Which layout Matt supplied (`player.glb` or the pair), the clip names actually present, the
+2. Which files Matt supplied, the clip names actually present, the
    README's mark frames, the file size, and the hand the clips are animated in.
 3. A screenshot of the plate view with both actors idle, and one mid-swing, at 393x852.
 4. `r2-cadence` numbers before and after C3.
