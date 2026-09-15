@@ -185,27 +185,32 @@
     rgba(6,10,6,0.5);
   border-top: 1px solid rgba(0, 0, 0, 0.65);
 }
-.bb-strip-pitches {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(2, 44px);
-  gap: 4px;
+/* BB-3b commit 6: one row of 8 fixed tiles, both states (handoff "Numbers to carry": 44 wide, 92
+ * tall, 1px gaps) - `flex:1` rather than a literal 44px so the row always fills the strip's own
+ * width exactly (44px was measured at the 361px reference W; a narrower/wider phone still gets 8
+ * equal tiles spanning the same row, never a scrollbar or a gap at either end). */
+.bb-strip-tiles {
+  display: flex;
+  gap: 1px;
   width: 100%;
   height: 100%;
 }
 .bb-pitch-tile {
-  min-height: 44px;
-  border-radius: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
+  padding: 0;
 }
 .bb-pitch-tile.is-sel {
   background: #ffce3a;
@@ -213,22 +218,21 @@
   color: #16240f;
   transform: translateY(-1px);
 }
-.bb-pitch-name { font-size: 12px; font-weight: 900; }
-.bb-strip-history {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  width: 100%;
+.bb-pitch-tile.is-locked {
+  background: rgba(255,255,255,0.03);
+  border-style: dashed;
+  color: rgba(255,255,255,0.35);
+  font-size: 14px;
 }
-.bb-hist-chip {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.08);
-  color: #fff;
-}
-.bb-hist-chip.is-strike { border-bottom: 2px solid #E0532F; }
-.bb-hist-chip.is-ball { border-bottom: 2px solid #1F5FA8; }
+.bb-pitch-tile.is-empty { background: rgba(255,255,255,0.03); border-style: dashed; }
+.bb-pitch-name { font-size: 11px; font-weight: 900; }
+.bb-pitch-mph { font-size: 11px; opacity: 0.8; }
+.bb-pitch-mark { font-size: 11px; line-height: 1; }
+/* Colorblind-safe (root CLAUDE.md): hue AND shape both mark ball vs strike - never hue alone. */
+.bb-pitch-tile.is-strike { border-bottom: 2px solid #E0532F; }
+.bb-pitch-tile.is-strike .bb-pitch-mark { color: #E0532F; }
+.bb-pitch-tile.is-ball { border-bottom: 2px solid #1F5FA8; }
+.bb-pitch-tile.is-ball .bb-pitch-mark { color: #1F5FA8; }
 
 .bb-control {
   height: 172px;

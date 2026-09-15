@@ -498,15 +498,28 @@ class BaseballPlayScreen {
   }
 
   // -------------------------------------------------------------------------------- strip
+  /** BB-3b commit 6: the strip is eight fixed tiles in ONE ROW, in both states (the handoff's own
+   *  numbers section: "44 wide, 92 tall, 1px gaps" - `.bb-strip-tiles` in baseball.css). Pitching
+   *  shows one well per `SETTINGS.PITCH_TYPES` entry (always 8, in that fixed order) - a locked
+   *  one is an empty well with a lock glyph, per SPEC.md section 5, never simply omitted (omitting
+   *  it would silently reflow every tile after it, which is exactly the "nothing moves between
+   *  states" rule this band exists to hold). Batting shows the last 8 pitches of THIS at-bat,
+   *  filling left to right as each one resolves, blank wells for what hasn't been thrown yet -
+   *  replaces the prior round's flex-wrap compact chips (a deliberate space simplification,
+   *  phase 3's own CLAUDE.md note), now that the fixed-tile geometry has a real home. */
   _paintStrip() {
     const strip = this.rootEl.querySelector('[data-role="strip"]');
     if (!strip) return;
     if (this.state.mode === 'pitching') {
-      strip.innerHTML = `<div class="bb-strip-pitches">${
-        this.state.unlockedPitches.map((p) => `
-          <button type="button" class="bb-pitch-tile${p === this.state.selectedPitch ? ' is-sel' : ''}" data-pitch="${p}">
+      strip.innerHTML = `<div class="bb-strip-tiles">${
+        SETTINGS.PITCH_TYPES.map((p) => {
+          if (!this.state.unlockedPitches.includes(p)) {
+            return `<div class="bb-pitch-tile is-locked" aria-hidden="true">&#128274;</div>`;
+          }
+          return `<button type="button" class="bb-pitch-tile${p === this.state.selectedPitch ? ' is-sel' : ''}" data-pitch="${p}">
             <span class="bb-pitch-name">${t('pitch_' + p)}</span>
-          </button>`).join('')
+          </button>`;
+        }).join('')
       }</div>`;
       strip.querySelectorAll('[data-pitch]').forEach((b) => {
         b.addEventListener('click', () => {
@@ -516,8 +529,15 @@ class BaseballPlayScreen {
       });
     } else {
       const recent = this.state.lastPitches.slice(-8);
-      strip.innerHTML = `<div class="bb-strip-history">${
-        recent.map((p) => `<div class="bb-hist-chip ${p.isStrike ? 'is-strike' : 'is-ball'}">${t('pitch_' + p.type)} ${p.mph}</div>`).join('')
+      const slots = Array.from({ length: 8 }, (_, i) => recent[i] || null);
+      strip.innerHTML = `<div class="bb-strip-tiles">${
+        slots.map((p) => (p
+          ? `<div class="bb-pitch-tile ${p.isStrike ? 'is-strike' : 'is-ball'}">
+              <span class="bb-pitch-name">${t('pitch_' + p.type)}</span>
+              <span class="bb-pitch-mph">${p.mph}</span>
+              <span class="bb-pitch-mark" aria-hidden="true">${p.isStrike ? '■' : '●'}</span>
+            </div>`
+          : `<div class="bb-pitch-tile is-empty"></div>`)).join('')
       }</div>`;
     }
   }

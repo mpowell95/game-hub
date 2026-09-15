@@ -4,6 +4,49 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## BB-3b commit 6 (part 2): the pitch strip is eight fixed tiles, one row, both states (2026-09-15, `game-hub-v838` → `game-hub-v839`)
+
+Per the handoff's own "Numbers to carry" table: "Strip tiles | 8 by 44 by 92, 1 px gaps". Both
+states now render the SAME `.bb-strip-tiles` layout (a flex row of 8 tiles, `flex:1` rather than a
+literal 44px so it fills the strip's own width exactly at any phone size, 92px tall - the strip's
+108px band minus its own 8px top/bottom padding, matching the handoff's number by construction
+rather than a second hardcoded value that could drift from it):
+
+- **Pitching**: one well per `SETTINGS.PITCH_TYPES` entry, ALWAYS all 8 in that fixed order - a
+  locked pitch is an empty well with a lock glyph (SPEC.md section 5: "locked pitches as empty
+  wells with a lock glyph"), never simply omitted. Omitting a locked pitch would silently reflow
+  every tile after it, which is exactly the "nothing moves between states" rule this band exists
+  to hold - the well itself is the promise, not just the unlocked ones.
+- **Batting**: the last 8 pitches of THIS at-bat, filling left to right as each one resolves,
+  blank dashed wells for what hasn't been thrown yet. Replaces the prior round's flex-wrap compact
+  chips (phase 3's own CLAUDE.md note flagged this as "a deliberate space simplification" at the
+  time - now that the fixed-tile geometry has a real home, it isn't needed).
+- **The ball/strike mark is a real second cue, not color alone** (root CLAUDE.md's colorblind
+  rule): a small filled square for a strike, a filled circle for a ball, colored to match the
+  tile's own border - a colorblind player reading only shape still gets the right answer.
+
+**One review fix, found by `test-game-conventions.mjs` itself, not eyeballed**: the first draft
+sized the mph readout at 10px and the ball/strike mark at 8px, both under the UX floor's 11px text
+minimum (`docs/BUILDING-A-GAME.md`). Raised both to 11px and re-verified with a real screenshot
+that all 8 tiles still fit without wrapping or overflow at the 393px reference width (46.25px per
+tile, confirmed via `scrollWidth`/`clientWidth`).
+
+```
+node baseball/js/test.js          -> 2563 passed, 0 failed (no engine file touched)
+node test-baseball-device.mjs     -> 16 checks passed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node test-game-conventions.mjs    -> 11 passed, 0 failed (was 1 failure before the 11px fix)
+node validate-sw-assets.mjs       -> ok (game-hub-v839, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open**: the HUD already matched most of SPEC.md section 5's own table from an earlier
+round (hatched panel, dot-row count, base-square diamond, slot proportions close to the spec's
+fractions) - not rebuilt again this pass since the gap there was small. The half-inning
+transition's in-place cross-fade and the Quick Play league picker redesign remain, the latter
+still explicitly a design call for Matt before building (see the handoff's own report-back list).
+
 ## BB-3b commit 6 (part 1): Line 1/2's real vocabulary, and a real leave-confirm (2026-09-15, `game-hub-v837` → `game-hub-v838`)
 
 Per `HANDOFF-BASEBALL-3B.md` commit 6, split into the parts that don't need a design call from
