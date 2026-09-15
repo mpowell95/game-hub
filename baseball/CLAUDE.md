@@ -4,6 +4,35 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The big word: Early / Late / Perfect / Nice / Hung (2026-09-15, `game-hub-v841` → `game-hub-v842`)
+
+Matt: *"in my recent tests, i haven't even seen the Early, Late, Perfect reactions. They should be
+obvious but i haven't seen them anywhere... They should be big and on the screen, not in tiny text
+on a line somewhere."* Measured against the v841 code: Early and Late DID fire on every swing, in
+13 px text on Line 1 at the plate; on contact `_settleAtBat` painted the outcome word over the
+timing word, so **Perfect never appeared at all**; Nice and Hung were computed in `decidePitch`
+and never painted anywhere. All three were true at once, which is why he never saw them.
+
+Now `_showPop(word, kind)` paints one reserved element (`.bb-pop`, `data-role="pop"`, inside the
+field band, z-indexed over the canvas) at 44 px, white with an ink stroke, centered at 26% of the
+band: Early with a left chevron, Late with a right chevron, Perfect and Nice with a star in the
+`#ffce3a` accent, Hung in muted grey. It fires from the `count` and `atBatEnd` events whenever
+`timingWord` is present (so a swing and miss says which way you missed, and contact says Perfect
+BEFORE Line 1's outcome word), and from the human's own release for Nice / Hung. Holds for
+`resultMs` and rises 12 px on transform/opacity only; reduced motion holds it still and fades.
+Line 1 keeps Ball / Strike / Foul and the outcome words at its size. Empty between beats: reserved
+space, not a dead zone. Verified by forcing each word on the live play screen in Chromium at
+393x852 (all four visible, sized, and marked) and by the unchanged suites below.
+
+```
+node test-i18n-strings.mjs        -> 0 failures
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-baseball-device.mjs     -> all checks passed (r2-cadence 6219 / 6220 / 6219 ms vs 6200)
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v842)
+```
+
 ## Matt's four answers on the BB-3b report-back list (2026-09-15, `game-hub-v840` → `game-hub-v841`)
 
 The build session's own handoff (`HANDOFF-SESSION-2026-09-15.md`, not in the repo) listed the

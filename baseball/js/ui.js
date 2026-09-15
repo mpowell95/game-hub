@@ -160,6 +160,7 @@ class BaseballPlayScreen {
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
     this._clearSwingTimers();
     this._clearPitcherTimer();
+    if (this._popTimer) clearTimeout(this._popTimer);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -301,6 +302,7 @@ class BaseballPlayScreen {
         <div class="bb-top-spacer" data-role="topspacer"></div>
         <div class="bb-hud" data-role="hud"></div>
         <div class="bb-field-wrap" data-role="fieldwrap">
+          <div class="bb-pop" data-role="pop" aria-live="polite"></div>
           <canvas class="bb-field-canvas" data-role="canvas"></canvas>
           <div class="bb-lines">
             <div class="bb-line1" data-role="line1"></div>
@@ -687,6 +689,7 @@ class BaseballPlayScreen {
       this._paintHud();
       this._setLine1(this._verdictWord(payload.verdict, payload.timingWord));
       this._setLine2(this._pitchReadout());
+      if (payload.timingWord) this._showPop(t('v_' + payload.timingWord), payload.timingWord);
       // R2 (handoff section 5): "the verdict holds for resultMs, then betweenMs passes, then the
       // wind-up runs for windupMs, then the flight." `_settleAtBat` already applies the same
       // result-hold + between-pitch gap when a pitch CONCLUDES the at-bat; this is the other
@@ -747,6 +750,25 @@ class BaseballPlayScreen {
     }
   }
 
+  /** THE BIG WORD. Matt (2026-09-15): *"They should be obvious... They should be big and on the
+   *  screen, not in tiny text on a line somewhere."* Early / Late / Perfect on every swing (a miss
+   *  included, since which WAY you missed is the whole point), Nice / Hung on your own release.
+   *  One reserved element in the field band, empty except for the beat after the event, so nothing
+   *  else moves (fixed geometry). Each word carries its own shape (chevrons for early/late, a star
+   *  for perfect/nice), never color alone. Transform/opacity only; reduced motion holds it still. */
+  _showPop(word, kind) {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
+    if (!el) return;
+    const mark = kind === 'early' ? '\u25C0 ' : (kind === 'perfect' || kind === 'nice') ? '\u2605 ' : '';
+    const tail = kind === 'late' ? ' \u25B6' : '';
+    el.textContent = mark + word + tail;
+    el.className = 'bb-pop is-' + kind;
+    if (this._popTimer) clearTimeout(this._popTimer);
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    el.classList.add('is-on');
+    this._popTimer = setTimeout(() => { el.classList.remove('is-on'); el.textContent = ''; }, RESULT_MS);
+  }
+
   _setLine1(text) { const el = this.rootEl.querySelector('[data-role="line1"]'); if (el) el.textContent = text; }
   _setLine2(text) { const el = this.rootEl.querySelector('[data-role="line2"]'); if (el) el.textContent = text; }
 
@@ -777,6 +799,7 @@ class BaseballPlayScreen {
     let word = t('res_' + outcomeWord(outKind, payload.bases));
     this._setLine1(word);
     this._setLine2(this._pitchReadout());
+    if (payload.timingWord) this._showPop(t('v_' + payload.timingWord), payload.timingWord);
     if (payload.distanceFt != null && payload.sprayAngleDeg != null) {
       const isOut = /out$/.test(outKind) || outKind === 'strikeout';
       const isHr = outKind === 'homer';
@@ -1150,6 +1173,7 @@ class HumanAgent {
         } else if (holdMs > hangThresholdMs) {
           wasHang = true; speedMul = SETTINGS.HANG_SPEED_MULT; breakMul = SETTINGS.HANG_BREAK_MULT;
         }
+        if (wasNice) s._showPop(t('v_nice'), 'nice'); else if (wasHang) s._showPop(t('v_hung'), 'hung');
         const pitcher = this._ownPitcher();
         const cap = SETTINGS.CAPS[this.league] != null ? SETTINGS.CAPS[this.league] : SETTINGS.CAPS.majors;
         const skill01 = Math.max(0, Math.min(1, ((pitcher && pitcher.skills.pitchAcc) || 0) / cap));
