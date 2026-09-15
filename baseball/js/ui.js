@@ -141,6 +141,7 @@ class BaseballPlayScreen {
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
     this._clearSwingTimers();
     this._clearPitcherTimer();
+    this._clearSwingCue();
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this.gameAbort) this.gameAbort();
   }
@@ -420,6 +421,33 @@ class BaseballPlayScreen {
   _clearPitcherTimer() {
     if (this._pitcherTimer) clearTimeout(this._pitcherTimer);
     this._pitcherTimer = null;
+  }
+
+  /** Batting's own timing cue: a brief highlight on the swing ring at `delayMs` from now (the
+   *  pitch's own ideal release instant, `crossMs - F.swingDelay` - the exact formula
+   *  `timingFromRelease` scores a real release against, computed by the caller). Nothing in the
+   *  engine's contact model changes - this only tells the player WHEN the window they already
+   *  have to hit is centered, the same job pitching's Nice zone already does for the CPU's own
+   *  throw. `dev`-gated tuning aside, this is a fixed, honest cue: it fires at the true ideal
+   *  instant every time, never nudged toward the player. */
+  _scheduleSwingCue(delayMs) {
+    this._clearSwingCue();
+    const ring = this.rootEl && this.rootEl.querySelector('.bb-ringwrap');
+    if (!ring) return;
+    this._swingCueTimer = setTimeout(() => {
+      if (this.destroyed) return;
+      ring.classList.add('is-swingcue');
+      this._swingCueOffTimer = setTimeout(() => ring.classList.remove('is-swingcue'), 180);
+    }, Math.max(0, delayMs));
+  }
+
+  _clearSwingCue() {
+    if (this._swingCueTimer) clearTimeout(this._swingCueTimer);
+    if (this._swingCueOffTimer) clearTimeout(this._swingCueOffTimer);
+    this._swingCueTimer = null;
+    this._swingCueOffTimer = null;
+    const ring = this.rootEl && this.rootEl.querySelector('.bb-ringwrap');
+    if (ring) ring.classList.remove('is-swingcue');
   }
 
   /** The OVERHEAD camera - the cutaway that plays for the batted-ball flight, so the out-zone
@@ -1072,6 +1100,9 @@ class HumanAgent {
     const flightPromise = s._animatePitchFlight(pitch);
     s._paintRing('idle', 0);
 
+    const F0 = SETTINGS.FEEL.engine;
+    s._scheduleSwingCue(pitch.timeToPlateS * 1000 - F0.swingDelay);
+
     return new Promise((resolve) => {
       let resolved = false;
       let timer = null;
@@ -1082,6 +1113,7 @@ class HumanAgent {
       const settle = (heldMs) => {
         if (resolved) return;
         resolved = true;
+        s._clearSwingCue();
         clearTimeout(timer);
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
@@ -1116,6 +1148,7 @@ class HumanAgent {
       timer = setTimeout(() => {
         if (resolved) return;
         resolved = true;
+        s._clearSwingCue();
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
         // A take stays on frame 1 (spec), even if the button was mid-hold when the pitch expired.
