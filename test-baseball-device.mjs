@@ -315,7 +315,7 @@ await ctx.close();
       const c = document.createElement('canvas');
       c.width = 400; c.height = 700;
       const ctx = c.getContext('2d');
-      mod.drawFrameCheck(ctx, c.width, c.height, 'home', 5, true, flip);
+      mod.drawFrameCheck(ctx, c.width, c.height, 'batter', 'home', 5, true, flip);
       const data = ctx.getImageData(0, 0, c.width, c.height).data;
       // The flat #1c1c1c background is (28,28,28) - anything meaningfully different is the sprite
       // or the ground line/center tick; restrict the scan to the sprite's own height band and
@@ -348,6 +348,90 @@ await ctx.close();
       ok(`flipped (left-handed) batter renders right of center (bbox center ${bounds.flipped.center.toFixed(0)}px vs canvas center ${bounds.flipped.canvasCenter}px)`);
     } else {
       fail('batter-hand', `flipped batter's bounding box center (${bounds.flipped.center.toFixed(0)}px) is not right of canvas center (${bounds.flipped.canvasCenter}px)`);
+    }
+  }
+}
+
+// 6. The real pitcher frames (BB-3b addition): frame 1's rendered bounding box sits centered on
+// the mound anchor, and frame 3's own throwing-hand anchor (PLATE_ANCHORS.release) lands INSIDE
+// frame 3's rendered bounding box - not beside the head, which is what the old three-cartoon-pose
+// set's arbitrary offset produced. Renders the real drawPlateView (not the flat-background dev
+// tool) so this exercises the exact same cover-fit math the game itself uses.
+{
+  const p3 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
+  await p3.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const result = await p3.evaluate(async () => {
+    const mod = await import('/baseball/js/field.js');
+    mod.preloadPlateImages();
+    await new Promise((r) => setTimeout(r, 900));
+    const w = 400, h = 700;
+    const render = (pitcherFrame) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      mod.drawPlateView(ctx, w, h, 'batting', false, { pitcherFrame, batterFrame: 1 });
+      return ctx.getImageData(0, 0, w, h).data;
+    };
+    // The pitcher's own colors (navy jersey ~#1F3864-ish, gray pants, pale skin) read as distinctly
+    // NOT-grass and NOT-dirt in a tight window around the mound; scan that window only, so the
+    // batter/plate/crowd elsewhere in frame never contaminate the bbox.
+    const isField = (r, g, b) => (g > r && g > b && g > 90) /* grass */ || (r > 140 && r < 210 && g > 90 && g < 160 && b < 130 && r > g) /* dirt */;
+    const bboxIn = (data, x0, x1, y0, y1) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+          if (a < 200) continue;
+          if (isField(r, g, b)) continue;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+    // Mound-area window: PLATE_ANCHORS.mound projected through the same cover-fit math as
+    // drawPlateView, widened generously since the exact figure size depends on band height.
+    const plateImg = new Image();
+    plateImg.src = '/baseball/img/plate.webp';
+    await new Promise((r) => { if (plateImg.complete) r(); else plateImg.onload = r; });
+    const iw = plateImg.naturalWidth, ih = plateImg.naturalHeight;
+    const scale = Math.max(w / iw, h / ih);
+    const drawW = iw * scale, drawH = ih * scale;
+    const offsetX = (w - drawW) / 2, offsetY = h - drawH;
+    const anchorPx = (frac) => ({ x: offsetX + frac.x * drawW, y: offsetY + frac.y * drawH });
+    const mound = anchorPx(mod.PLATE_ANCHORS.mound);
+    const release = anchorPx(mod.PLATE_ANCHORS.release);
+    const winHalf = 40;
+    const x0 = Math.max(0, Math.round(mound.x - winHalf)), x1 = Math.min(w, Math.round(mound.x + winHalf));
+    const y0 = Math.max(0, Math.round(mound.y - winHalf)), y1 = Math.min(h, Math.round(mound.y + winHalf));
+
+    const bbox1 = bboxIn(render(1), x0, x1, y0, y1);
+    const bbox3 = bboxIn(render(3), x0, x1, y0, y1);
+    return { mound, release, bbox1, bbox3, window: { x0, x1, y0, y1 } };
+  });
+  await p3.close();
+  const b1 = result.bbox1;
+  if (!isFinite(b1.minX)) {
+    fail('pitcher-frames', `could not isolate frame 1's sprite in the mound window (${JSON.stringify(result.window)})`);
+  } else {
+    const centerX = (b1.minX + b1.maxX) / 2;
+    const off = Math.abs(centerX - result.mound.x);
+    if (off <= 15) {
+      ok(`pitcher frame 1's bounding box is centered on the mound anchor (bbox center x=${centerX.toFixed(1)}, mound x=${result.mound.x.toFixed(1)}, off by ${off.toFixed(1)}px)`);
+    } else {
+      fail('pitcher-frames', `frame 1's bbox center x=${centerX.toFixed(1)} is ${off.toFixed(1)}px from the mound anchor x=${result.mound.x.toFixed(1)} (expected <=15px)`);
+    }
+  }
+  const b3 = result.bbox3;
+  if (!isFinite(b3.minX)) {
+    fail('pitcher-frames', `could not isolate frame 3's sprite in the mound window (${JSON.stringify(result.window)})`);
+  } else {
+    const inside = result.release.x >= b3.minX && result.release.x <= b3.maxX && result.release.y >= b3.minY && result.release.y <= b3.maxY;
+    if (inside) {
+      ok(`frame 3's own hand anchor (release=${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) lands inside its rendered bounding box (${JSON.stringify(b3)})`);
+    } else {
+      fail('pitcher-frames', `release anchor (${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) is outside frame 3's own bounding box (${JSON.stringify(b3)}) - "beside the head", not in the hand`);
     }
   }
 }

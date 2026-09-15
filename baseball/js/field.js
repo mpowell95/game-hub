@@ -539,7 +539,9 @@ const PLATE_IMAGE_NAMES = [
   'batter-home-5.webp', 'batter-home-6.webp', 'batter-home-7.webp', 'batter-home-8.webp',
   'batter-away-1.webp', 'batter-away-2.webp', 'batter-away-3.webp', 'batter-away-4.webp',
   'batter-away-5.webp', 'batter-away-6.webp', 'batter-away-7.webp', 'batter-away-8.webp',
-  'pitcher-set.webp', 'pitcher-windup.webp', 'pitcher-release.webp', 'ball-sheet.webp',
+  'pitcher-home-1.webp', 'pitcher-home-2.webp', 'pitcher-home-3.webp', 'pitcher-home-4.webp',
+  'pitcher-away-1.webp', 'pitcher-away-2.webp', 'pitcher-away-3.webp', 'pitcher-away-4.webp',
+  'ball-sheet.webp',
 ];
 /** Kick off loading every plate-view image. Idempotent - call as early as convenient (ui.js calls
  *  it once at construction); a draw before this resolves just shows the flat-fill fallback for a
@@ -570,7 +572,13 @@ function plateImg(name) {
 export const PLATE_ANCHORS = {
   plate: { x: 0.500, y: 0.879 },       // home plate's own center
   mound: { x: 0.500, y: 0.505 },       // the rubber
-  release: { x: 0.550, y: 0.462 },     // where a pitcher's throwing hand sits, mound depth
+  // Re-measured from the real pitcher-*-3.webp (release pose) throwing hand, not eyeballed: the
+  // hand's own position as a fraction of that frame's trimmed art, projected through the mound
+  // anchor and the pitcher's own runtime scale (MOUND_PITCHER_HEIGHT_FRAC) at the reference root
+  // rectangle (SPEC.md section 0: W 361, field band ~386 tall). Previously an arbitrary small
+  // offset "beside the head" from the old three-cartoon-pose set; this is where the ball actually
+  // leaves the bare (gloveless) hand in the real release frame.
+  release: { x: 0.493, y: 0.454 },
   strikeZoneWidthFrac: 0.18,           // of the picture's own drawW - see the floor below
   // The box spans y=1250 (top/back edge) to y~1522 (bottom/front edge) in the 1200x1585 picture;
   // these sit about 78% of the way down (toward the front edge, where a batter's own feet would
@@ -651,19 +659,61 @@ function drawBatterFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
   ctx.restore();
 }
 
-/** The mound pitcher, one of the three poses. `pose` is 'set' | 'windup' | 'release' (spec section
- *  9's CPU wind-up; ui.js drives it - for the CPU pitching to a human batter, a fixed lead-in
- *  timed off `FEEL.ui.windupMs`; for a human pitching, in step with the throw ring's own fill).
- *  Anchored at its own feet, same convention as the batter. */
-function drawPitcherFigure(ctx, pose, anchor, heightPx) {
-  const name = pose === 'windup' ? 'pitcher-windup.webp' : pose === 'release' ? 'pitcher-release.webp' : 'pitcher-set.webp';
-  const im = plateImg(name);
-  if (!im) return;
+// BB-3b addition: the real 4-frame pitcher sequences (`pitcher-{home,away}-{1-4}.webp`, ported
+// from `reference/baseball/Pitcher-{home,away}-{1-4}.png`) replace the earlier three-pose cartoon
+// set. Naming means UNIFORM, not schedule side, same as the batters: `-home-` is the player's own
+// team (white), `-away-` is the CPU team (navy). Poses: 1 set (idle), 2 wind-up (leg kick),
+// 3 release (stride, throwing hand forward and low - the ball leaves from this hand), 4
+// follow-through (arm across the body, back leg up).
+//
+// Unlike the batter frames, these source canvases are trimmed to a DIFFERENT size per frame (a
+// real consequence of the four poses occupying very different amounts of space - the leg-kick is
+// taller and narrower than the follow-through, which is wider and shorter). So the batter's rule
+// (one canvas height, shared across the whole set) does not transfer as-is. Instead: every frame
+// was trimmed to its own alpha bounding box at ship time (so the shipped canvas edges ARE the
+// bbox - no residual padding to anchor against), and ONE scale factor per set was derived from
+// frame 1's own trimmed height (so frame 1 ships close to the mound figure's usual size); frames
+// 2-4 were resized by that SAME factor, not independently re-normalized to a fixed height - so
+// their real relative sizes (a crouch is legitimately shorter than the stance) are preserved. At
+// RUNTIME this means `drawPitcherFigure` must NOT do `heightPx / thisFrame'sOwnHeight` per frame
+// (which would re-normalize every pose back to an identical height, undoing the ship-time work,
+// exactly the "bounce" the batter frames were built to avoid) - it derives ONE scale from frame 1's
+// own shipped height mapped to `MOUND_PITCHER_HEIGHT_FRAC`, then applies that same multiplier to
+// whichever frame is currently drawn.
+const PITCHER_FRAME_Y_OFFSET_FRAC = {
+  // Populated only if the dev-only Frames check ever measures more than 3px of foot drift between
+  // poses (unlikely by construction: anchoring at each frame's OWN alpha-bbox bottom means the
+  // lowest visible pixel - the planted foot, in every one of these four real delivery poses - IS
+  // the anchor for that frame, not a shared canvas edge with padding around it, which is what
+  // caused real drift in the batter set). Same shape as FRAME_Y_OFFSET_FRAC if ever needed.
+  home: {}, away: {},
+};
+
+/** The mound pitcher: one of four real delivery poses (1-4) for `side` ('home' or 'away' - see
+ *  the section header for what the name actually means: uniform color, not who is pitching).
+ *  `flip` mirrors the whole sprite - both sets are drawn RIGHT-handed (Matt's correction), so a
+ *  LEFT-handed pitcher (teams.js's own `throws`) is the flip, same rule as the batters. Anchored
+ *  at each frame's own alpha-bbox bottom-center (the shipped canvas edge, since every frame was
+ *  trimmed to its bbox at ship time - see the section header), not a shared canvas edge. */
+function drawPitcherFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
+  const f = Math.max(1, Math.min(4, Math.round(frame || 1)));
+  const frame1 = plateImg(`pitcher-${side}-1.webp`);
+  const im = plateImg(`pitcher-${side}-${f}.webp`);
+  if (!frame1 || !im) return;
+  const ih1 = frame1.naturalHeight || frame1.height;
+  if (!ih1) return;
+  // ONE scale for the whole set (see header) - frame 1's own shipped height maps to heightPx;
+  // every other frame uses that same multiplier against its own (different) shipped size.
+  const scale = heightPx / ih1;
   const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
   if (!iw || !ih) return;
-  const scale = heightPx / ih;
   const dw = iw * scale, dh = ih * scale;
-  ctx.drawImage(im, anchor.x - dw / 2, anchor.y - dh, dw, dh);
+  const yOffset = (PITCHER_FRAME_Y_OFFSET_FRAC[side]?.[f] || 0) * heightPx;
+  ctx.save();
+  ctx.translate(anchor.x, anchor.y + yOffset);
+  if (opts.flip) ctx.scale(-1, 1);
+  ctx.drawImage(im, -dw / 2, -dh, dw, dh);
+  ctx.restore();
 }
 
 /** The full plate-view scene: the picture, the strike zone, and both figures. `mode` is 'batting'
@@ -671,7 +721,8 @@ function drawPitcherFigure(ctx, pose, anchor, heightPx) {
  *  and the anchors never change, only which sprite stands where and the ring/button labels do).
  *  `dark` is accepted for call-site compatibility (every other camera-view field in this repo takes
  *  it) but unused - this picture has one identity, same as the overhead camera above.
- *  `opts`: `pitcherPose` ('set'|'windup'|'release'), `batterFrame` (1-8, the real swing sequence -
+ *  `opts`: `pitcherFrame` (1-4, the real delivery sequence), `pitcherFlip` (bool, true for a
+ *  LEFT-handed pitcher, same rule as the batters), `batterFrame` (1-8, the real swing sequence -
  *  see ui.js's swing timeline), `batterFlip` (bool, true for a LEFT-handed batter - see the
  *  section header's own note on the correction: both frame sets are drawn RIGHT-handed, so the
  *  DEFAULT is unflipped, standing at the third-base side box (`nearBoxLeft`, screen left from
@@ -708,9 +759,13 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
 
   // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
   // mound - independent of whether the human is batting or pitching (see the section header).
+  // Naming means uniform, not who's pitching: '-home-' is the player's own team (white),
+  // '-away-' is the CPU's (navy) - so the mound shows 'home' when the human pitches, 'away' when
+  // the human bats (the CPU pitches), the mirror of the batter's own side selection above.
   const batterSide = mode === 'pitching' ? 'away' : 'home';
+  const pitcherSide = mode === 'pitching' ? 'home' : 'away';
   drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
-  drawPitcherFigure(ctx, opts.pitcherPose || 'set', moundXY, h * MOUND_PITCHER_HEIGHT_FRAC);
+  drawPitcherFigure(ctx, pitcherSide, opts.pitcherFrame || 1, moundXY, h * MOUND_PITCHER_HEIGHT_FRAC, { flip: !!opts.pitcherFlip });
 
   ctx.restore();
 }
@@ -762,15 +817,17 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
 }
 
 /** The dev-only "Frames" flip-through check (ui.js's `_openFrameCheck`, gated the same way the
- *  Tune panel is). Draws one frame of a swing sequence on a flat ground line so a foot-drift
- *  regression in a future art replacement is visible immediately, without reasoning about
- *  `FRAME_Y_OFFSET_FRAC` by eye. `useOffset` toggles the correction off so the raw, uncorrected
- *  drift can be compared against it directly - this is what proved the correction was needed
- *  (visible floating on frames 5-8 without it) before the swing timeline was wired at all.
- *  `flip` mirrors the frame and moves it to the OPPOSITE side of the ground line (left for
- *  unflipped, right for flipped - matching `drawPlateView`'s own nearBoxLeft/nearBoxRight choice)
- *  so the hand-flip/anchor correction can be checked here too, not just reasoned about. */
-export function drawFrameCheck(ctx, w, h, side, frame, useOffset, flip) {
+ *  Tune panel is). Draws one frame of a swing/delivery sequence on a flat ground line so a
+ *  foot-drift regression in a future art replacement is visible immediately, without reasoning
+ *  about the offset tables by eye. `kind` is 'batter' (8 frames, `FRAME_Y_OFFSET_FRAC`) or
+ *  'pitcher' (4 frames, `PITCHER_FRAME_Y_OFFSET_FRAC`, one shared per-set scale factor - see its
+ *  own section header). `useOffset` toggles the correction off so the raw, uncorrected drift can
+ *  be compared directly - this is what proved the batter correction was needed (visible floating
+ *  on frames 5-8 without it) before the swing timeline was wired at all. `flip` mirrors the frame
+ *  and moves it to the OPPOSITE side of a center tick (left for unflipped, right for flipped -
+ *  matching `drawPlateView`'s own box/hand choice for both roles) so the hand-flip/anchor
+ *  correction can be checked here too, not just reasoned about. */
+export function drawFrameCheck(ctx, w, h, kind, side, frame, useOffset, flip) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = '#1c1c1c';
@@ -789,8 +846,32 @@ export function drawFrameCheck(ctx, w, h, side, frame, useOffset, flip) {
   ctx.lineTo(w / 2, h);
   ctx.stroke();
   const heightPx = h * 0.7;
-  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
   const anchorX = flip ? w * 0.75 : w * 0.25;
+  if (kind === 'pitcher') {
+    const f = Math.max(1, Math.min(4, Math.round(frame || 1)));
+    if (useOffset) {
+      drawPitcherFigure(ctx, side, f, { x: anchorX, y: groundY }, heightPx, { flip: !!flip });
+    } else {
+      // Bypass PITCHER_FRAME_Y_OFFSET_FRAC and the shared-scale rule - draw this ONE frame's own
+      // bbox bottom-anchored at the ground line, at ITS OWN independent scale (heightPx/its own
+      // height), so a real re-normalization bug (the "bounce" the shared-scale rule exists to
+      // avoid) is visible here as a size jump between frames, not just a position jump.
+      const im = plateImg(`pitcher-${side}-${f}.webp`);
+      if (im && (im.naturalWidth || im.width)) {
+        const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+        const scale = heightPx / ih;
+        const dw = iw * scale, dh = ih * scale;
+        ctx.save();
+        ctx.translate(anchorX, groundY);
+        if (flip) ctx.scale(-1, 1);
+        ctx.drawImage(im, -dw / 2, -dh, dw, dh);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
   if (useOffset) {
     drawBatterFigure(ctx, side, f, { x: anchorX, y: groundY }, heightPx, { flip: !!flip });
   } else {
