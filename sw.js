@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v836';
+const CACHE = 'game-hub-v837';
 
 const ASSETS = [
   './',
@@ -848,7 +848,7 @@ const REST_MANIFEST = {
   './baseball/index.html': '62e2408169',
   './baseball/css/baseball.css': 'cf925d4959',
   './baseball/js/ui.js': '11ba586fdd',
-  './baseball/js/field.js': '8878483dfa',
+  './baseball/js/field.js': '36bb71de41',
   './baseball/js/ring.js': '0f4dadc12d',
   './baseball/js/strings.js': 'f10561afa6',
   './baseball/img/plate.webp': 'd294f2f89f',
