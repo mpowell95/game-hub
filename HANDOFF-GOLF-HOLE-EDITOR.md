@@ -69,9 +69,13 @@ sands edit or something."*
   overwritten**. It is always available to reset to or compare against.
 - Anything Matt changes saves into a separate working copy per course (naming is the builder's
   call - "Red Mesa (edit)" / "Oasis Sands (edit)" is the working name used in this doc).
-- **Nothing autosaves or runs a check on save.** Save just saves. Validation is a separate, explicit
-  button Matt presses when he wants it - see "Verification tools" below. It should never block or
-  delay a save.
+- **The working copy autosaves continuously as Matt edits.** There is no separate manual Save step
+  and no risk of losing work to a closed tab or a crash - since the working copy is never the
+  protected original, there is nothing unsafe about writing to it constantly. This replaces the
+  need for any separate "draft" or crash-recovery layer.
+- **Autosaving never runs a check.** Validation is a separate, explicit button Matt presses when he
+  wants it - see "Verification tools" below. It should never block or delay an edit, and it never
+  fires on its own as a side effect of the working copy being written to.
 
 ### Getting an edited course back into the real game
 
@@ -102,6 +106,11 @@ trusted just because it came from the editor.
   at a time.
 - A visible indicator of which holes in the current course have been edited vs. left at their
   original state.
+- A running course-level total (total yardage, total par) alongside the strip, so editing
+  individual holes doesn't quietly drift the course's overall length or par without Matt noticing.
+  The real course files' totals (Pine Valley 72/6,489 yds, Red Mesa 71/6,140 yds are the existing
+  examples) are exactly the kind of number that should be visible while editing, not just checked
+  after the fact.
 
 ### Hole-level structural editing
 - Lengthen / shorten a hole.
@@ -110,6 +119,11 @@ trusted just because it came from the editor.
   choice, not just a single generic bend.
 - Add a brand-new, blank hole, inserted at a chosen position in the course.
 - Reorder holes within a course.
+
+**Open question for the building session: which end moves.** Lengthening or shortening a hole could
+mean moving the tee, moving the pin, or stretching from the middle - and this doc does not pick one.
+Whatever the editor does, it should be unambiguous to Matt while he's doing it (e.g. an explicit
+choice, or a visual cue showing what's about to move) rather than a silent default.
 
 **Recommended approach, for the building session to evaluate rather than treat as mandatory:**
 implement these as edits to the same **parametric design-spec inputs `golf/js/holegen.js` already
@@ -178,6 +192,9 @@ waypoint coordinates or a raw spec object is not.
   side by side. A visual comparison is sufficient - no true data diff is required.
 - A Reset This Hole button: discard edits on the hole currently open and restore it to the baked-in
   original, without touching any other hole in the course.
+- **Reset This Hole asks for confirmation before discarding anything.** Undo/redo is not a
+  substitute for this - a reset is a bigger, easy-to-hit-by-accident action and should not fire on
+  a single misclick.
 
 ### Measurement and feedback while editing
 - Numeric readouts alongside the visual editing - current hole length, current width at whatever
@@ -190,6 +207,12 @@ waypoint coordinates or a raw spec object is not.
 - Canvas zoom and pan, the way Paint 3D has (its bottom-left zoom slider is the reference point) -
   a whole hole runs hundreds of yards, and placing an individual tree precisely needs to zoom in.
 - Undo/redo (or a version history) while editing a hole.
+- A visible legend/key for what each paint color means (fairway vs. rough vs. sand vs. water vs.
+  green, etc.) - always on screen, not something to memorize, especially on a busy hole with many
+  surfaces close together.
+- Keyboard shortcuts for the actions used most often (undo/redo, switching tools, toggling a
+  panel) - this is a tool Matt will come back to repeatedly, and mouse-only interaction gets
+  tedious fast for repeated actions.
 
 ---
 
