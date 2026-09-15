@@ -37,6 +37,26 @@ export function resolveSteer(steerArr, stepFilter) {
   return wSum > 0 ? dSum / wSum : 0;
 }
 
+/** doc §11, [Locked]: "Curve and slider break away from the pitcher's throwing arm. Screwball
+ *  breaks the other way. You control how much and when, never which way." So the break direction
+ *  is a fact of the pitch TYPE and the pitcher's own HAND, never the player's drag - this is the
+ *  one true sign for a given (type, hand) pair. `hand` is 'L' or 'R' (teams.js's own `throws`
+ *  field); anything else falls back to 'R'. Exported so the UI's own preview, its break-direction
+ *  arrow, and this file's own scoring all read the same fact from the same place (never
+ *  reimplemented three times to silently drift apart). */
+export function steerDirectionSign(type, hand) {
+  const armSign = hand === 'L' ? -1 : 1; // a right-handed arm's own natural break side is +1
+  return type === 'screwball' ? -armSign : armSign;
+}
+
+/** A single steer sample's dx, clamped to the one physically correct direction (`dirSign`, from
+ *  `steerDirectionSign`) - a drag the WRONG way contributes exactly 0, per the doc's own "never
+ *  which way" lock, rather than partially cancelling a correct-direction drag or (worse) bending
+ *  the pitch backward. Pure. */
+export function clampSteerDx(dirSign, dx) {
+  return dx * dirSign > 0 ? dx : 0;
+}
+
 /**
  * Throw one pitch.
  * @param {string} type - a PITCH_TYPES entry
@@ -47,14 +67,15 @@ export function resolveSteer(steerArr, stepFilter) {
  * @param {function} rand01 - () => next draw in [0,1); caller owns advancing/snapshotting state
  * @param {{pitchSpd?:number, pitchSpin?:number}} [pitcherSkills] - the pitcher's own raw skill
  *   points for §6's "Speed: pitch velocity" and "Spin: ...bigger speed gap on the changeup."
- * @param {{hold?:number|null, steer?:Array<{step:number,dx:number}>, scatter?:number}} [pitchExtras]
+ * @param {{hold?:number|null, steer?:Array<{step:number,dx:number}>, scatter?:number, pitcherHand?:string}} [pitchExtras]
  *   - BB-3: a human pitcher's hold time in ms (null/omitted = a tap, i.e. a normal pitch) and any
  *   in-flight steer samples for a steerable type. BB-3b commit 4: `scatter`, a pre-rolled [0,1)
  *   draw (the SAME draw this function would otherwise make itself via `rand01()`) - lets a human
  *   pitcher's own UI preview the pitch's aim-scatter component before this function ever runs (see
  *   game.js's `previewsPitch` seam), so what the player watched during the throw is exactly what
- *   gets scored, not a second independent draw. Omit entirely for byte-identical prior behavior -
- *   every field here is optional and additive.
+ *   gets scored, not a second independent draw. `pitcherHand` ('L'/'R', default 'R') - which way a
+ *   steerable pitch's break clamps to (see `steerDirectionSign`); irrelevant without `steer`.
+ *   Omit entirely for byte-identical prior behavior - every field here is optional and additive.
  * @returns {{type, x, isStrike, timeToPlateS, path, wasNice, wasHang}}
  */
 export function flyPitch(type, aimX, pitchAccSkill01, settings, rand01, pitcherSkills = {}, pitchExtras = null) {
@@ -122,7 +143,13 @@ export function flyPitch(type, aimX, pitchAccSkill01, settings, rand01, pitcherS
   if (steerable && pitchExtras && pitchExtras.steer && pitchExtras.steer.length) {
     const fromStep = Math.floor((steerable.steerFromFrac || 0) * totalSteps);
     const steerMaxOffset = settings.STEER_MAX_OFFSET != null ? settings.STEER_MAX_OFFSET : STEER_MAX_OFFSET;
-    const netSteer = resolveSteer(pitchExtras.steer, (step) => step >= fromStep);
+    // doc §11, [Locked]: the break direction is the pitch type and the pitcher's OWN hand, never
+    // the player's drag - a sample dragged the wrong way is clamped to 0 (see steerDirectionSign/
+    // clampSteerDx's own header) before it ever reaches resolveSteer's weighted average.
+    const hand = (pitchExtras && pitchExtras.pitcherHand) || 'R';
+    const dirSign = steerDirectionSign(type, hand);
+    const clamped = pitchExtras.steer.map((s) => (s && typeof s.dx === 'number') ? { step: s.step, dx: clampSteerDx(dirSign, s.dx) } : s);
+    const netSteer = resolveSteer(clamped, (step) => step >= fromStep);
     x += netSteer * steerMaxOffset * breakMul;
   }
 

@@ -1856,5 +1856,35 @@ await (async function section27() {
 })();
 
 // ---------------------------------------------------------------------------------------------
+// Section 28 (BB-3b review fix): the steering direction clamp. Doc §11, [Locked]: "Curve and
+// slider break away from the pitcher's throwing arm... You control how much and when, never
+// which way." A drag the wrong way must produce NO bend, not a smaller or reversed one.
+(function section28() {
+  const rHand = 'R', lHand = 'L';
+  // A right-handed pitcher's curveball: steerDirectionSign('curveball','R') = +1 (armSign itself),
+  // so a positive dx (the correct direction) bends the pitch, a negative one (wrong way) does
+  // nothing - the pitch lands exactly where an empty steer array would leave it.
+  const noSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [], pitcherHand: rHand });
+  const wrongWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: -1 }], pitcherHand: rHand });
+  const rightWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }], pitcherHand: rHand });
+  ok(wrongWay.x === noSteer.x, 'a right-handed curveball dragged the wrong way does nothing (lands exactly where no steer would)');
+  ok(rightWay.x !== noSteer.x, 'a right-handed curveball dragged the correct way still bends');
+
+  // A left-handed pitcher's curveball breaks the MIRROR of a right-handed one's - the same dx
+  // that was "correct" for a righty is now the wrong way, and vice versa.
+  const leftyWrongWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }], pitcherHand: lHand });
+  const leftyRightWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: -1 }], pitcherHand: lHand });
+  const leftyNoSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [], pitcherHand: lHand });
+  ok(leftyWrongWay.x === leftyNoSteer.x, 'a left-handed curveball mirrors: the righty\'s "correct" drag direction does nothing for a lefty');
+  ok(leftyRightWay.x !== leftyNoSteer.x, 'a left-handed curveball bends on the mirrored (now-correct) drag direction');
+
+  // Omitting pitcherHand defaults to 'R' - byte-identical to passing it explicitly, so every
+  // pre-existing caller (which never set it) keeps behaving as a right-handed pitcher, exactly as
+  // this repo's teams/players have always defaulted in practice.
+  const noHandField = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }] });
+  ok(noHandField.x === rightWay.x, 'omitting pitcherHand defaults to R, identical to passing it explicitly');
+})();
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

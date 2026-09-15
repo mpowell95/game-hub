@@ -522,8 +522,12 @@ export class Game {
       // sets either, so their pitches are byte-identical to before this phase. BB-3b commit 4:
       // `scatter` (the pre-rolled draw above) rides along the same way, present only when it was
       // actually drawn.
+      // `pitcherHand` (pitcher.throws) is what steerDirectionSign clamps a curveball/slider's
+      // break to (doc §11, [Locked]: "never which way") - always the REAL pitcher's own hand,
+      // whether they're human or CPU, so a steer array built any other way (a future agent, a
+      // test) still clamps correctly rather than silently defaulting to 'R'.
       const pitchExtras = pitchDecision && (pitchDecision.hold != null || pitchDecision.steer || pitchView.scatterDraw != null)
-        ? { hold: pitchDecision.hold, steer: pitchDecision.steer, scatter: pitchView.scatterDraw } : null;
+        ? { hold: pitchDecision.hold, steer: pitchDecision.steer, scatter: pitchView.scatterDraw, pitcherHand: pitcher.throws } : null;
       const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });

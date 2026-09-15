@@ -557,18 +557,26 @@ function plateImg(name) {
 // picture's own width/height - NOT of the canvas, which is a different aspect ratio at every phone
 // height. `plateCover()` below is what turns a fraction into a screen pixel, so re-measuring only
 // ever means editing this table, never touching any drawing code.
+// BB-3b review fix: `plate.webp` was re-cropped (see the commit's own note) to include the stands
+// and sky - the original crop (0,0)-(704,1210) of the source, before this fix, was tall/narrow
+// enough (aspect 1.72) that `plateCover()`'s cover-fit cropped away nearly everything above the
+// infield on any real device band (whose own aspect never exceeds about 1.07 tall, 0.56 short -
+// see SPEC.md section 0's own root-rectangle table), leaving the sky and stands invisible in
+// practice even though the source crop technically included them. Re-cropped to (0,100)-(704,1030)
+// (aspect 1.32, closer to the band's own shape) - trims a modest sky sliver off the very top and
+// the dead dirt below the batter's boxes off the bottom, keeping the floodlight tower, clouds and
+// full stands intact. Every anchor below is re-measured on the NEW crop (a white/cream-pixel scan
+// of the shipped plate.webp, not eyeballed) - this table cannot be edited without doing that again.
 export const PLATE_ANCHORS = {
-  plate: { x: 0.500, y: 0.728 },       // home plate's own center
-  mound: { x: 0.500, y: 0.463 },       // the rubber
-  release: { x: 0.550, y: 0.420 },     // where a pitcher's throwing hand sits, mound depth
+  plate: { x: 0.500, y: 0.879 },       // home plate's own center
+  mound: { x: 0.500, y: 0.505 },       // the rubber
+  release: { x: 0.550, y: 0.462 },     // where a pitcher's throwing hand sits, mound depth
   strikeZoneWidthFrac: 0.18,           // of the picture's own drawW - see the floor below
-  // Re-measured (white box-line pixel scan on the shipped plate.webp, not eyeballed) after Matt
-  // reported the batter's feet sitting on the box's own TOP edge rather than standing inside it -
-  // the box spans y=1417 (top/back edge) to y~1705 (bottom/front edge) in the 1200x2062 picture;
+  // The box spans y=1250 (top/back edge) to y~1522 (bottom/front edge) in the 1200x1585 picture;
   // these sit about 78% of the way down (toward the front edge, where a batter's own feet would
-  // actually plant), not at the box's vertical center the first measurement used.
-  nearBoxLeft: { x: 0.217, y: 0.796 },
-  nearBoxRight: { x: 0.782, y: 0.796 },
+  // actually plant), not at the box's vertical center an earlier measurement used.
+  nearBoxLeft: { x: 0.250, y: 0.922 },
+  nearBoxRight: { x: 0.750, y: 0.922 },
 };
 // Section 6 of the spec: "The strike zone has a floor of 0.30W wide so the pad's travel never
 // becomes a slider of a few pixels." Applied at render time against the CANVAS width, not the

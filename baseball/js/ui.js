@@ -13,7 +13,7 @@ import * as SETTINGS from './engine/settings.js';
 import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
-import { resolveSteer } from './engine/pitch.js';
+import { resolveSteer, steerDirectionSign, clampSteerDx } from './engine/pitch.js';
 import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages, drawFrameCheck } from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
@@ -555,8 +555,19 @@ class BaseballPlayScreen {
       // result-hold + between-pitch gap when a pitch CONCLUDES the at-bat; this is the other
       // case - a plain ball/strike/foul that doesn't - so every pitch gets the identical pause
       // before the next one's wind-up begins (`_stepWindup`, already wired since commit 3).
-      await sleep(RESULT_MS);
-      await sleep(BETWEEN_MS);
+      //
+      // BUT: game.js emits 'count' for EVERY pitch that doesn't put the ball in play, strikeout
+      // and walk included - it checks the strikeout/walk thresholds and emits 'atBatEnd' right
+      // AFTER this handler returns, on the exact same pitch. Pausing here too doubled the beat on
+      // those two outcomes (resultMs+betweenMs from this handler, then resultMs+betweenMs again
+      // from `_settleAtBat`) - a review fix. So: skip the pause here when this count is about to
+      // conclude the at-bat, and let `_settleAtBat`'s own (single) pause cover it instead.
+      const strikeoutPending = payload.strikes >= SETTINGS.MECHANICS.strikesForOut;
+      const walkPending = payload.balls >= SETTINGS.MECHANICS.ballsForWalk;
+      if (!strikeoutPending && !walkPending) {
+        await sleep(RESULT_MS);
+        await sleep(BETWEEN_MS);
+      }
     } else if (type === 'pitch') {
       // Handled inline by HumanAgent while the ball is in flight (it owns the visual).
     } else if (type === 'swing') {
@@ -949,6 +960,11 @@ class HumanAgent {
         const steerable = SETTINGS.STEERABLE_PITCHES[type];
         const fromStep = steerable ? Math.floor((steerable.steerFromFrac || 0) * totalSteps) : null;
         const steerMaxOffset = SETTINGS.STEER_MAX_OFFSET;
+        // doc §11, [Locked]: break direction is the pitch type and the pitcher's OWN hand, never
+        // the drag - clamped here exactly as game.js's own flyPitch call will clamp it (same
+        // function, same hand), so the live preview never shows a bend the engine won't score.
+        const pitcherHand = (pitcher && pitcher.throws) || 'R';
+        const dirSign = steerable ? steerDirectionSign(type, pitcherHand) : 1;
 
         const t0 = performance.now();
         const flightStep = (now) => {
@@ -956,7 +972,8 @@ class HumanAgent {
           const frac = Math.min(1, (now - t0) / durationMs);
           const stepIdx = Math.round(frac * totalSteps);
           if (steerable) steerSamples.push({ step: stepIdx, dx: s.padX - aimAtRelease });
-          const netSteer = steerable ? resolveSteer(steerSamples, (st) => st >= fromStep) : 0;
+          const clampedSamples = steerable ? steerSamples.map((sm) => ({ step: sm.step, dx: clampSteerDx(dirSign, sm.dx) })) : steerSamples;
+          const netSteer = steerable ? resolveSteer(clampedSamples, (st) => st >= fromStep) : 0;
           let liveX = baseX + netSteer * steerMaxOffset * breakMul;
           if (wasHang) liveX = liveX * (1 - SETTINGS.HANG_CENTER_PULL);
           s._drawStaticField();
