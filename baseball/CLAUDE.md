@@ -4,6 +4,75 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## BB-3b commit 5: the overhead cutaway is the painted stadium, not a vector field (2026-09-15, `game-hub-v836` → `game-hub-v837`)
+
+Per `HANDOFF-BASEBALL-3B.md` commit 5. `overhead.webp` (shipped since commit 1, unused until now)
+replaces the mocks-matched vector-drawn overhead field as the camera that plays on contact: a real
+painted stadium with all nine fielders baked in, not a procedural diamond.
+
+**The mapping from world feet to picture pixels is a full 2D projective homography, measured, not
+eyeballed.** Home plate, first, second and third base were each located as their own white-pixel
+blob in the shipped image (a Python/PIL scan restricted to small search windows, not a by-eye
+guess — home plate is partly occluded by the painted catcher, so it needed its own tight crop
+first). An affine fit through only three of those points (home, first, third) was tried first and
+predicted second base about 46px (2.4% of the picture's own height) off its true measured
+position — a real, measurable perspective term, not noise — so the full 4-point homography (exact
+for exactly 4 correspondences via the standard DLT, no least squares needed) is what shipped.
+`OVERHEAD_HOMOGRAPHY` in `field.js` is the 3x3 matrix; `projectOverhead()` applies it to any world
+point the rest of the module already computes, so the out-zone sectors, the fence arc, the ball
+and the landing marker all needed zero changes to their own math — only which projection function
+feeds them.
+
+**`project()` now tries the picture first, falling back to the old calibrated-camera trig
+(`_projectVector`) while `overhead.webp` is still loading** — the same "picture unavailable, fall
+back to a flat answer" contract `drawPlateView` already uses. This mattered immediately:
+`test-baseball-device.mjs`'s own check 3 calls `field.js`'s `project()` straight from plain Node
+(no DOM at all, proving the projection is pure math) — `project()` reaching into `plateImg()` for
+the first time broke that call with `ReferenceError: Image is not defined`. Fixed by guarding
+`_loadImg` against a missing `Image` global, so a bare-Node caller gets the same graceful `null`
+a slow network would give a browser, not a crash.
+
+**Out-zone hatching cannot literally sit UNDER the painted fielders** the way `SPEC.md` asks
+("translucent sectors under the painted fielders") — `overhead.webp` is one flat image with the
+fielders baked into its own pixels, and canvas has no way to draw a shape underneath pixels
+already committed to a single bitmap. Shipped instead as a low-alpha (0.55) hatch pattern drawn
+*over* the picture, so a fielder still reads clearly through it rather than being hidden by it —
+the closest honest approximation to the spec's intent with the asset actually shipped, not a
+silent reinterpretation of "under" as "over."
+
+**Verified, not just shape-tested**: a real render (`field.js`'s `drawField` + `drawLandingMarker`
++ `drawBall`, through an actual `page.screenshot()`) shows the bases landing exactly on the
+picture's own painted base squares, the mound circle under the painted pitcher, out-zone hatching
+correctly seated under each fielder's own sector, and sample landing markers (a single, a double,
+a groundout) placed in sensible field locations. `test-baseball-device.mjs` gained a new
+topological check (first right of home, third left of home, second and the mound both above home
+and in that order) once the picture has actually loaded — not an exact-pixel re-assertion of the
+measured matrix, but the shape a transposed row or a stale coefficient would visibly break.
+
+**Deferred this commit, not silently dropped**: runners sliding base to base and the "painted
+fielder nearest the landing point hops once on an out" (both named in the handoff's own commit 5)
+are real new state-driven animation work — knowing which bases are occupied before/after an
+`atBatEnd` and animating between them — and were not built this pass. The picture-based camera,
+hatch, fence arc and ball/landing-marker reprojection (the part that touches EVERY at-bat) shipped
+first since it's what a player sees on every single contact; the two flourishes are next.
+
+```
+node baseball/js/test.js          -> 2563 passed, 0 failed (unchanged - no engine file touched)
+node test-baseball-device.mjs     -> 16 checks passed (real hub mount, 393x852/dpr3), incl. the
+                                      new overhead-homography topology check
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v837, REST_MANIFEST + version.json regenerated)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+```
+
+**Still open, per the handoff's own remaining scope**: commit 6 (Line 1's full vocabulary, the
+fixed 8-tile strip, HUD dots/bases/inning markers, the league picker's presentation, `isInProgress`
+wired to the hub's leave dialog), commit 7 (the formal steering/R2 test suites), commit 8 (docs),
+commit 9 (final ship + phone recording ask). None of commits 1-5's own report-back items (the
+pitching-camera reversal, the unratified overhead cut, the league picker) have been put to Matt yet
+either — still pending, per the handoff's section 11.
+
 ## Batting had no swing-timing cue at all (fixed 2026-09-15, `game-hub-v835` → `game-hub-v836`)
 
 Matt, right after BB-3b's art pass went live: *"It looks good. I can't make contact with the ball

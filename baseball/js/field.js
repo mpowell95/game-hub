@@ -183,11 +183,21 @@ function projectUV(x, y) {
 // - matches how `drawBall`/`drawLandingMarker`'s callers already read `scale`.
 const HOME_Z = projectUV(0, 0).zCam;
 
-/** Project a point in feet (home plate at the origin, +y toward center field, foul lines at
- *  +/-45deg) onto a canvas of size `w`x`h`. */
-export function project(xFt, yFt, w, h) {
+/** The calibrated-camera projection - kept as the fallback for `project()` below (BB-3b commit 5)
+ *  while `overhead.webp` is still loading, and as what `_drawFieldVector` (the same fallback, for
+ *  the whole field) draws against. Not used once the picture is available. */
+function _projectVector(xFt, yFt, w, h) {
   const { u, v, zCam } = projectUV(xFt, yFt);
   return { x: u * w, y: v * h, scale: Math.max(0.08, HOME_Z / zCam) };
+}
+
+/** Project a point in feet (home plate at the origin, +y toward center field, foul lines at
+ *  +/-45deg) onto a canvas of size `w`x`h`. BB-3b commit 5: this is now `projectOverhead` (the
+ *  picture-based homography, see its own header below) once `overhead.webp` has loaded, falling
+ *  back to the calibrated-camera math above until it has. */
+export function project(xFt, yFt, w, h) {
+  const p = projectOverhead(xFt, yFt, w, h);
+  return p || _projectVector(xFt, yFt, w, h);
 }
 
 function toScreen(pt, w, h) { return project(pt.x, pt.y, w, h); }
@@ -275,10 +285,21 @@ function drawSector(ctx, w, h, sector, pattern) {
   ctx.stroke();
 }
 
-/** Draw the whole static field (grass, dirt, lines, bases, out-zone hatching) for one league.
- *  `ctx` a 2D canvas context already sized to `w`x`h` device pixels (caller handles DPR). `dark`
- *  is accepted for call-site compatibility but unused - see the module header. */
+/** Draw the whole overhead view for one league: `overhead.webp` plus the out-zone hatch and the
+ *  fence arc, all through `projectOverhead` (BB-3b commit 5) - or, while the picture is still
+ *  loading, the old vector-drawn field (`_drawFieldVector`) as a fallback so the cutaway is never
+ *  a blank canvas. `ctx` a 2D canvas context already sized to `w`x`h` device pixels (caller
+ *  handles DPR). `dark` is accepted for call-site compatibility but unused - see the module
+ *  header. */
 export function drawField(ctx, w, h, league, fenceFt, dark) {
+  if (drawOverheadPicture(ctx, w, h, league, fenceFt)) return;
+  _drawFieldVector(ctx, w, h, league, fenceFt, dark);
+}
+
+/** The old calibrated-camera field: grass, dirt, lines, bases, out-zone hatching, all vector-
+ *  drawn. Kept only as `drawField`'s fallback while `overhead.webp` loads - see this file's
+ *  header and the BB-3b commit 5 section above. */
+function _drawFieldVector(ctx, w, h, league, fenceFt, dark) {
   const { home, first, third } = diamondPoints();
   const baseC = baseCenters();
   const mCY = moundCenterY();
@@ -474,6 +495,135 @@ export function drawLandingMarker(ctx, w, h, xFt, yFt, kind, label, dark) {
   ctx.restore();
 }
 
+/* ------------------------------------------------------------------------------------------- *
+ * BB-3b commit 5: the overhead camera is now `overhead.webp` (ported from
+ * `reference/baseball/backdrop-overhead.jpg`), a real painted stadium with the nine fielders
+ * baked in - not the calibrated-but-still-procedural camera above, which is kept only as the
+ * fallback while the picture loads (`_projectVector`, `_drawFieldVector`). Same reasoning as the
+ * plate camera's own rebuild: once the picture exists, the picture IS the camera.
+ *
+ * The mapping from world feet to picture pixels is a full 2D PROJECTIVE HOMOGRAPHY, not an
+ * affine transform - measured (not eyeballed) by locating home plate, first base, second base
+ * and third base as their own white-pixel blobs in the shipped `overhead.webp` (a script scan,
+ * not a by-eye guess: home plate is occluded by the painted catcher, so it was isolated to its
+ * own small crop region first). An affine fit through only three of those four points (home,
+ * first, third) was tried first and predicted second base about 46px (2.4% of the picture's own
+ * height) off its true measured position - a real, measurable perspective term, not sampling
+ * noise, so the extra two degrees of freedom a full homography carries over an affine map are
+ * earning their keep here. Solved once via the standard 4-point DLT (exact for exactly 4
+ * correspondences, no least squares needed) and stored as the 3x3 matrix below; `projectOverhead`
+ * applies it to any world point the rest of this module already computes (out-zone sectors, the
+ * fence arc, the ball, the landing marker), so nothing downstream needed to change shape, only
+ * which projection function feeds it. */
+const OVERHEAD_HOMOGRAPHY = [
+  [4.23742044e-03, 7.37562798e-04, 4.99416667e-01],
+  [-1.19879752e-05, -1.67176355e-03, 6.70773333e-01],
+  [-2.18117956e-05, 1.47373479e-03, 1],
+];
+
+/** `overhead.webp` fitted to a `w`x`h` canvas the way CSS `background-size: cover;
+ *  background-position: center` would - unlike the plate camera's bottom-anchored cover, the
+ *  content that matters here (the whole diamond) sits close to the picture's own vertical
+ *  middle, not its bottom edge. Returns null while the image is still loading. */
+function overheadCover(w, h) {
+  const im = plateImg('overhead.webp');
+  if (!im) return null;
+  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+  if (!iw || !ih) return null;
+  const scale = Math.max(w / iw, h / ih);
+  const drawW = iw * scale, drawH = ih * scale;
+  return { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: (h - drawH) / 2, scale };
+}
+
+/** World feet (home plate at the origin, +y toward center field) -> screen px, through the
+ *  measured homography and whatever `overheadCover` the current canvas needs. Returns null while
+ *  the image is still loading (the caller's fallback, `_projectVector`, takes over) - never
+ *  throws, matching the picture-loading contract everywhere else in this file. `scale` is a flat
+ *  1: this is a painted picture, not a perspective camera with a real "distance from the lens",
+ *  so the ball and landing marker read at one fixed size here, the same way the old vector
+ *  camera's bases already did (see `drawGroundCircle`'s own "ground widget" note). */
+function projectOverhead(xFt, yFt, w, h) {
+  const cover = overheadCover(w, h);
+  if (!cover) return null;
+  const [r0, r1, r2] = OVERHEAD_HOMOGRAPHY;
+  const wgt = r2[0] * xFt + r2[1] * yFt + r2[2];
+  const u = (r0[0] * xFt + r0[1] * yFt + r0[2]) / wgt;
+  const v = (r1[0] * xFt + r1[1] * yFt + r1[2]) / wgt;
+  return { x: cover.offsetX + u * cover.drawW, y: cover.offsetY + v * cover.drawH, scale: 1 };
+}
+
+/** Draw `overhead.webp` cover-fit into the canvas, the translucent out-zone hatch over it (a flat
+ *  low alpha, not a solid fill, so the picture's own nine painted fielders read through it - see
+ *  the header note on why this can't be true UNDER-fielder z-order with a single flat image), and
+ *  the current league's fence as a thin line - everything through `projectOverhead`. Returns
+ *  false (does nothing) if the picture has not loaded yet, so the caller can fall back to the old
+ *  vector field. */
+function drawOverheadPicture(ctx, w, h, league, fenceFt) {
+  const cover = overheadCover(w, h);
+  const im = plateImg('overhead.webp');
+  if (!cover || !im) return false;
+
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(im, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
+
+  const zones = zonesFor(league, 0);
+  const pattern = hatchPattern(ctx);
+  for (const s of zones.outfield) {
+    drawOverheadSector(ctx, w, h, s, pattern);
+  }
+  for (const s of zones.infield) {
+    drawOverheadSector(ctx, w, h, s, pattern);
+  }
+
+  const shapePts = [fenceFt.left, fenceFt.leftCenter, fenceFt.center, fenceFt.rightCenter, fenceFt.right];
+  const N = 24;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const deg = -45 + 90 * (i / N);
+    const t = (deg + 45) / 90;
+    const segT = t * 4;
+    const seg = Math.min(3, Math.floor(segT));
+    const ft = shapePts[seg] + (shapePts[seg + 1] - shapePts[seg]) * (segT - seg);
+    const pt = polar(deg, ft);
+    const s = projectOverhead(pt.x, pt.y, w, h);
+    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.restore();
+  return true;
+}
+
+/** One out-zone sector, projected through `projectOverhead` - the same shape `drawSector` draws
+ *  for the vector fallback field, kept as its own function since the two draw against different
+ *  projections and `drawSector`'s own `pathFor`/`toScreen` chain is wired to `project()` (which
+ *  would recurse back into this same picture path - harmless, but pointless indirection). */
+function drawOverheadSector(ctx, w, h, sector, pattern) {
+  const N = 10;
+  const pts = [];
+  for (let i = 0; i <= N; i++) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.toFt));
+  for (let i = N; i >= 0; i--) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.fromFt));
+  ctx.beginPath();
+  pts.forEach((pt, i) => {
+    const s = projectOverhead(pt.x, pt.y, w, h);
+    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+  });
+  ctx.closePath();
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = pattern;
+  ctx.globalAlpha = 0.55;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
 // Exported for the geometry self-check (measured in the plan view, before projection) - mirrors
 // mocks/baseball/field.js's own planGeometry, kept here so baseball/js/test.js can assert the
 // 45-degree/1.41421 facts directly rather than trusting the camera math not to have disturbed them.
@@ -527,6 +677,12 @@ const IMG_BASE = new URL('../img/', import.meta.url);
 const _plateImages = {};
 function _loadImg(name) {
   if (name in _plateImages) return;
+  // BB-3b commit 5: `project()` now reaches this function (via `projectOverhead`), and
+  // `test-baseball-device.mjs`'s own check 3 (unchanged since the vector-camera round) calls
+  // `project()` from plain Node, with no `Image`/`document` at all - never leave `_plateImages`
+  // populated with a real Image() outside a DOM, just leave the name unresolved so every image
+  // getter's existing `if (!im) return null` fallback takes over exactly like a slow network would.
+  if (typeof Image === 'undefined') return;
   _plateImages[name] = null;
   const image = new Image();
   image.onload = () => { _plateImages[name] = image; };
@@ -535,6 +691,7 @@ function _loadImg(name) {
 }
 const PLATE_IMAGE_NAMES = [
   'plate.webp',
+  'overhead.webp',
   'batter-home-1.webp', 'batter-home-2.webp', 'batter-home-3.webp', 'batter-home-4.webp',
   'batter-home-5.webp', 'batter-home-6.webp', 'batter-home-7.webp', 'batter-home-8.webp',
   'batter-away-1.webp', 'batter-away-2.webp', 'batter-away-3.webp', 'batter-away-4.webp',

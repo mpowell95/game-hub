@@ -436,6 +436,53 @@ await ctx.close();
   }
 }
 
+// 7. The overhead camera is now `overhead.webp` (BB-3b commit 5), a picture, not the old
+// procedural camera - check 3 above already proves the FALLBACK camera's own geometry is sane
+// (it runs before the picture has had time to load); this proves the PICTURE camera's own
+// homography is, once `overhead.webp` has actually loaded: the four bases and the mound project
+// to a topologically sane diamond (first right of home, third left of home, second and the mound
+// both above home and in that order) - not an exact-pixel match (that would just restate the
+// measured matrix back at itself), but the shape a homography bug (a transposed row, a stale
+// coefficient) would visibly break.
+{
+  const p4 = await (await browser.newContext({ viewport: { width: 393, height: 852 } })).newPage();
+  await p4.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  const result = await p4.evaluate(async () => {
+    const mod = await import('/baseball/js/field.js');
+    mod.preloadPlateImages();
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('overhead.webp failed to load'));
+      img.src = '/baseball/img/overhead.webp';
+    });
+    // Give field.js's own internal cache a moment to pick up the now-loaded image too.
+    await new Promise((r) => setTimeout(r, 50));
+    const w = 393, h = 500;
+    const home = mod.project(0, 0, w, h);
+    const first = mod.project(63.64, 63.64, w, h);
+    const third = mod.project(-63.64, 63.64, w, h);
+    const second = mod.project(0, 127.28, w, h);
+    const mound = mod.project(0, 60.5, w, h);
+    return { home, first, third, second, mound };
+  });
+  await p4.close();
+  const { home, first, third, second, mound } = result;
+  const checks = [
+    ['first base sits right of home', first.x > home.x],
+    ['third base sits left of home', third.x < home.x],
+    ['second base sits above home (further into the outfield)', second.y < home.y],
+    ['the mound sits above home', mound.y < home.y],
+    ['the mound sits below second (between home and second)', mound.y > second.y],
+  ];
+  const allPass = checks.every(([, pass]) => pass);
+  if (allPass) {
+    ok(`overhead picture homography: a sane diamond (home ${JSON.stringify(home)}, first ${JSON.stringify(first)}, second ${JSON.stringify(second)}, third ${JSON.stringify(third)}, mound ${JSON.stringify(mound)})`);
+  } else {
+    for (const [label, pass] of checks) if (!pass) fail('overhead-homography', label);
+  }
+}
+
 await browser.close();
 
 console.log('');
