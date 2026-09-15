@@ -905,14 +905,14 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   const flip = !!opts.batterFlip;
   const nearXY = anchorPx(flip ? PLATE_ANCHORS.nearBoxRight : PLATE_ANCHORS.nearBoxLeft, cover);
 
-  // Strike zone, above the plate - floored to 0.30 of the CANVAS width (spec section 6) so a
-  // narrow phone never turns the pad's travel into a slider of a few pixels.
-  const zoneW = Math.max(w * PLATE_ZONE_FLOOR, PLATE_ANCHORS.strikeZoneWidthFrac * cover.drawW);
-  const zoneH = zoneW * 0.62;
-  const zoneBottom = plateXY.y - zoneW * 0.12;
+  // Strike zone, above the plate - ONE geometry shared with the ball's own flight (`zoneRect`), so
+  // "the ball is in the zone" on screen and "the ball is at the plate" in the engine cannot drift
+  // apart again (Matt, 2026-09-15: contact only happened once the ball was "almost OUT of the
+  // strike zone").
+  const zone = zoneRect(w, cover);
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
-  ctx.strokeRect(plateXY.x - zoneW / 2, zoneBottom - zoneH, zoneW, zoneH);
+  ctx.strokeRect(zone.left, zone.top, zone.w, zone.h);
 
   // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
   // mound - independent of whether the human is batting or pitching (see the section header).
@@ -921,7 +921,14 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   // the human bats (the CPU pitches), the mirror of the batter's own side selection above.
   const batterSide = mode === 'pitching' ? 'away' : 'home';
   const pitcherSide = mode === 'pitching' ? 'home' : 'away';
-  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, nearXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
+  // The batter's own stance moves WITH the pad (Matt, 2026-09-15: "The batter should move within
+  // the batter's box as I move this slider - closer to the plate and farther from the plate").
+  // `batterAimX` is the pad's own -1..1 (the swing decision's `aimX`, fraction of plate half-width);
+  // +1 is the right edge of the zone on screen for either hand, so the figure shifts the same way
+  // the pad marker does - toward the plate for a righty (left box), away from it for a lefty.
+  const aimShift = (opts.batterAimX || 0) * BATTER_AIM_TRAVEL_FRAC * cover.drawW;
+  const batterXY = { x: nearXY.x + aimShift, y: nearXY.y };
+  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, batterXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
   drawPitcherFigure(ctx, pitcherSide, opts.pitcherFrame || 1, moundXY, h * MOUND_PITCHER_HEIGHT_FRAC, { flip: !!opts.pitcherFlip });
 
   ctx.restore();
@@ -930,8 +937,62 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
 // BB-3b commit 4 (handoff section 9, "Numbers to carry"): "Ball radius, plate view: 4 px at the
 // hand to 14 px at the plate" - literal screen pixels, not a fraction of the canvas, matching the
 // handoff's own number exactly rather than the earlier rounds' height-relative guess.
-const PLATE_BALL_RADIUS_FAR_PX = 4;
 const PLATE_BALL_RADIUS_NEAR_PX = 14;
+// Where the plate camera stands, in feet behind the crossing point. The ball's screen position
+// and size both follow a real pinhole law in this distance - an object at `y` ft in front of the
+// plate draws at D / (D + y) of its at-the-plate size and offset. 24 ft is the distance the
+// shipped 4 px -> 14 px radius pair already implied (14 x 24 / 84.5 = 4.0), so the ball's size
+// curve is unchanged by construction; what changes is that its POSITION now follows the same
+// curve instead of a straight screen-space lerp. The reason (Matt, 2026-09-15, first report):
+// "it takes .5x to get from the pitcher's hand to entering the strike zone. And it takes .5X to
+// cross the strike zone" - a linear lerp spends screen distance evenly over time, and the zone is
+// the bottom third of the path, so the ball crawled through it. Under the pinhole law the ball
+// hangs small and far for most of the flight and rushes through the zone at the end, which is
+// also what makes the pitch's SPEED legible (his "the speed the ball is thrown at doesn't even
+// really matter"). Measured with `plateBallPos` at 393x380: the ball's center is inside the zone
+// rectangle for the last ~7% of the flight, not ~33%.
+const PLATE_CAMERA_FT = 24;
+// How far the batter's own figure travels across the box for the pad's full -1..1, as a fraction
+// of the picture's drawn width. +/-0.06 keeps both feet inside the painted box at either end.
+const BATTER_AIM_TRAVEL_FRAC = 0.06;
+
+/** The strike zone rectangle, in screen px: floored to 0.30 of the CANVAS width (spec section 6)
+ *  so a narrow phone never turns the pad's travel into a slider of a few pixels, standing on the
+ *  plate. Shared by `drawPlateView` (which strokes it) and `plateBallPos` (whose flight ENDS at its
+ *  center) - one function, so the two can never disagree. */
+export function zoneRect(w, cover) {
+  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
+  const zw = Math.max(w * PLATE_ZONE_FLOOR, PLATE_ANCHORS.strikeZoneWidthFrac * cover.drawW);
+  const zh = zw * 0.62;
+  const bottom = plateXY.y - zw * 0.12;
+  return { left: plateXY.x - zw / 2, top: bottom - zh, w: zw, h: zh, cx: plateXY.x, cy: bottom - zh / 2 };
+}
+
+/** The pitch, through the plate camera, as pure geometry: `{x, y, r}` in screen px for a ball
+ *  `yFt` feet in front of the plate (60.5 = the release point, 0 = crossing) with lateral offset
+ *  `xFt` (the engine's -1..1 x times 8.5, plate half-widths). The flight STARTS at
+ *  `PLATE_ANCHORS.release` and ENDS at the strike zone's own center, laterally placed at
+ *  `x` zone half-widths - so a pitch that reads x=+1 crosses at the zone's right edge, and the
+ *  engine's crossing instant (`timeToPlateS`) is the instant the ball is drawn at the zone's
+ *  center, never on the ground at the plate. Position and radius both follow the pinhole law in
+ *  `PLATE_CAMERA_FT` (see it). Exported so a test can measure the curve, and so the 3D pass
+ *  (HANDOFF-BASEBALL-3C.md, C4) has one function to reproduce rather than a drawing to eyeball. */
+export function plateBallPos(w, h, cover, xFt, yFt) {
+  const zone = zoneRect(w, cover);
+  const releaseXY = anchorPx(PLATE_ANCHORS.release, cover);
+  const y = Math.max(0, Math.min(60.5, yFt));
+  const D = PLATE_CAMERA_FT;
+  const k = D / (D + y);              // 1 at the plate, D/(D+60.5) at release
+  const kFar = D / (D + 60.5);
+  const p = (k - kFar) / (1 - kFar);  // 0 at release, 1 at the zone center
+  const lateral = (xFt / 8.5) * (zone.w / 2) * k;
+  return {
+    x: releaseXY.x + (zone.cx - releaseXY.x) * p + lateral,
+    y: releaseXY.y + (zone.cy - releaseXY.y) * p,
+    r: PLATE_BALL_RADIUS_NEAR_PX * k,
+    depthFrac: y / 60.5,
+  };
+}
 
 /** The ball, through the plate camera. `yFt` is feet of travel from the plate (0) toward the
  *  mound/release point (60.5) - BOTH callers (`_animatePitchFlight` for batting,
@@ -942,14 +1003,10 @@ const PLATE_BALL_RADIUS_NEAR_PX = 14;
 export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
   const cover = plateCover(w, h);
   if (!cover) return { x: w / 2, y: h / 2, scale: 1 };
-  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
-  const releaseXY = anchorPx(PLATE_ANCHORS.release, cover);
-  const depthFrac = Math.max(0, Math.min(1, yFt / 60.5));
-  const x = plateXY.x + (releaseXY.x - plateXY.x) * depthFrac + (xFt / 8.5) * (w * 0.12) * depthFrac;
-  const y = plateXY.y + (releaseXY.y - plateXY.y) * depthFrac;
-  const scale = 1 - depthFrac * 0.78;
-  const r = opts.radiusPx != null ? opts.radiusPx
-    : (PLATE_BALL_RADIUS_NEAR_PX - (PLATE_BALL_RADIUS_NEAR_PX - PLATE_BALL_RADIUS_FAR_PX) * depthFrac) * (opts.sizeMult || 1);
+  const pos = plateBallPos(w, h, cover, xFt, yFt);
+  const x = pos.x, y = pos.y;
+  const scale = pos.r / PLATE_BALL_RADIUS_NEAR_PX;
+  const r = opts.radiusPx != null ? opts.radiusPx : pos.r * (opts.sizeMult || 1);
 
   ctx.save();
   ctx.globalAlpha = opts.alpha != null ? opts.alpha : 1;
@@ -1050,5 +1107,5 @@ export function drawFrameCheck(ctx, w, h, kind, side, frame, useOffset, flip) {
 
 export default {
   project, drawField, drawBall, drawLandingMarker, planGeometry,
-  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, drawFrameCheck,
+  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, drawFrameCheck, zoneRect, plateBallPos,
 };

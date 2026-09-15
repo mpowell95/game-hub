@@ -4,6 +4,50 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The pitch you can actually hit: perspective flight, zone-center crossing, the batter moves (2026-09-15, `game-hub-v842` → `game-hub-v843`)
+
+Matt, testing v842, three reports in one message. All three were the plate camera's own maths in
+`field.js`, none of them the engine, and all three carry straight into the 3D pass
+(`HANDOFF-BASEBALL-3C.md`, C2/C4 cite them):
+
+1. *"it takes .5x to get from the pitcher's hand to entering the strike zone. And it takes .5X to
+   cross the strike zone... the speed the ball is thrown at doesn't even really matter."* The old
+   `drawPlateBall` lerped screen position LINEARLY in depth, so screen distance was spent evenly
+   over time and the zone (the bottom third of the path) got a third of the flight. Now
+   `plateBallPos` follows a pinhole law in `PLATE_CAMERA_FT` (24 ft, the distance the shipped 4 px
+   to 14 px radius pair already implied, so the size curve is unchanged by construction). Measured:
+   the ball's center is inside the zone rectangle for the last **7.3%** of a constant-speed flight,
+   not ~33%.
+2. *"I can't see where I am aimed... The batter should move within the batter's box as I move this
+   slider."* The pad's -1..1 is now `state.batterAimX` in the batting state and `drawPlateView`
+   shifts the figure by `BATTER_AIM_TRAVEL_FRAC` (0.06) x the picture's drawn width; +1 is
+   screen-right for either hand, which is toward the plate for a righty and away for a lefty, the
+   same direction the pad marker moves. Both feet stay in the painted box at either end (checked at
+   393x852). Never in the pitching state: that pad is the pitcher's aim.
+3. *"You can't make contact with the ball until it's right there, almost OUT of the strike zone."*
+   The flight ENDED on the ground at the plate anchor, below the zone, so the ball passed through
+   the zone's center well before the engine's crossing instant. Now it ends at the zone's own center
+   (`zoneRect`, one function shared with the stroke), so `timeToPlateS` is the instant the ball is
+   drawn in the middle of the zone. The engine's timing maths (`swingDelay` 60, contact frame at
+   80 ms) are untouched.
+
+A fourth defect the same fix removed, not reported: the lateral offset was multiplied by
+`depthFrac` (1 at release, 0 at the plate), so **every pitch crossed dead center on screen** and a
+pitch's location was never visible where it mattered. Now x=+1 crosses at the zone's right edge,
+x=-1 at its left, for the batting flight and the human pitcher's own flight alike.
+
+`test-baseball-device.mjs` gained a `[KNOWN-BUG PROBE]` block, `plate-flight`, pinning all of it
+against a synthetic cover in node (crossing at the zone center, in-zone fraction <= 15%, radius
+monotone, x=+/-1 at the zone edges).
+
+```
+node test-baseball-device.mjs     -> all checks passed (r2-cadence 6223 / 6223 / 6220 ms vs 6200)
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node baseball/js/test.js          -> 2563 passed, 0 failed
+```
+
 ## The big word: Early / Late / Perfect / Nice / Hung (2026-09-15, `game-hub-v841` → `game-hub-v842`)
 
 Matt: *"in my recent tests, i haven't even seen the Early, Late, Perfect reactions. They should be

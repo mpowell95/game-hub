@@ -260,7 +260,7 @@ The pitcher gets no bat, no glove.
 const actors = new Actors(wrapEl);           // creates the canvas, nothing loaded yet
 await actors.load({ body, swing, miss, set, pitch, pitcherBody });  // urls; miss/set/pitcherBody optional
 actors.resize(w, h, cover);                  // called from _sizeCanvas after the 2D canvas
-actors.setBatter({ side: 'home'|'away', bats: 'R'|'L' });
+actors.setBatter({ side: 'home'|'away', bats: 'R'|'L', aimX });   // aimX: the pad's -1..1; shifts the figure BATTER_AIM_TRAVEL_FRAC x drawW, as drawPlateView does (v843)
 actors.setPitcher({ side, throws });
 actors.play('batter', 'Swing', { markAtMs: 80 });   // the clip's contact mark lands 80 ms from now
 actors.play('pitcher', 'Pitch', { markAtMs: 1400 });// the release mark lands 1400 ms from now
@@ -314,6 +314,10 @@ not needed; `renderer.info.memory` reads zero geometries after dispose).
   | charge loop frames 1/2 | `Idle` (a charging batter holds the stance; no half-cock pose exists in the clip set, and inventing one is a feature not discussed) |
   | `_settleAtBat` / new at-bat resets to frame 1 | `actors.idle('batter')` + `actors.setBatter(next)` at the same moment the fade swap runs today |
 
+- The batter MOVES WITH THE PAD (v843, Matt: "closer to the plate and farther from the plate"):
+  `setPadFromEvent` writes `state.batterAimX` in the batting state and `drawPlateView` shifts the
+  figure by `BATTER_AIM_TRAVEL_FRAC` x `cover.drawW` x aimX. Keep it: `setBatter({..., aimX})` on
+  every pad move, same fraction, same sign (+1 shifts screen-right for either hand).
 - Batter side/hand per at-bat: `setBatter({ side, bats })` from the engine's current batter,
   `setPitcher({ side, throws })` from the current pitcher, at the same place `drawPlateView`'s
   `flip` is computed today.
@@ -329,8 +333,13 @@ ms). If they move, the timeline changed and the commit is wrong.
 
 - Pitch flight: at release, read the throwing-hand bone's world position
   (`bone.getWorldPosition`) and use it as the ball's start point in the actor scene instead of
-  `PLATE_ANCHORS.release`. The end point is the plate crossing, at the screen position
-  `drawPlateBall` computes for `t=1` today (same `pitchResult.x`, same `pitchBendFrac` bend).
+  `PLATE_ANCHORS.release`. The end point is the STRIKE ZONE'S CENTER, laterally at `pitchResult.x`
+  zone half-widths, and the path between follows the pinhole law in `PLATE_CAMERA_FT`: all of
+  that is `field.js`'s exported `plateBallPos(w, h, cover, xFt, yFt)` (v843, Matt's three
+  flight reports of 2026-09-15; `test-baseball-device.mjs`'s `plate-flight` probe pins it).
+  Drive the 3D ball's screen position and radius from THAT function, never from a lerp of your
+  own: the ball must hang small and far for most of the flight and rush through the zone at
+  the end, and it must be drawn at the zone's center at the engine's crossing instant.
   The ball is a `SphereGeometry` with a red-seam texture (`ball-sheet.webp` frame 1 mapped once;
   no spin sheet needed in 3D, rotate the mesh instead), scaled from `0.011` of the pitcher's
   height at release to `0.06` of the batter's height at the plate, following the same
