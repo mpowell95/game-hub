@@ -47,9 +47,14 @@ export function resolveSteer(steerArr, stepFilter) {
  * @param {function} rand01 - () => next draw in [0,1); caller owns advancing/snapshotting state
  * @param {{pitchSpd?:number, pitchSpin?:number}} [pitcherSkills] - the pitcher's own raw skill
  *   points for §6's "Speed: pitch velocity" and "Spin: ...bigger speed gap on the changeup."
- * @param {{hold?:number|null, steer?:Array<{step:number,dx:number}>}} [pitchExtras] - BB-3: a
- *   human pitcher's hold time in ms (null/omitted = a tap, i.e. a normal pitch) and any in-flight
- *   steer samples for a steerable type. Omit entirely for byte-identical prior behavior.
+ * @param {{hold?:number|null, steer?:Array<{step:number,dx:number}>, scatter?:number}} [pitchExtras]
+ *   - BB-3: a human pitcher's hold time in ms (null/omitted = a tap, i.e. a normal pitch) and any
+ *   in-flight steer samples for a steerable type. BB-3b commit 4: `scatter`, a pre-rolled [0,1)
+ *   draw (the SAME draw this function would otherwise make itself via `rand01()`) - lets a human
+ *   pitcher's own UI preview the pitch's aim-scatter component before this function ever runs (see
+ *   game.js's `previewsPitch` seam), so what the player watched during the throw is exactly what
+ *   gets scored, not a second independent draw. Omit entirely for byte-identical prior behavior -
+ *   every field here is optional and additive.
  * @returns {{type, x, isStrike, timeToPlateS, path, wasNice, wasHang}}
  */
 export function flyPitch(type, aimX, pitchAccSkill01, settings, rand01, pitcherSkills = {}, pitchExtras = null) {
@@ -90,7 +95,11 @@ export function flyPitch(type, aimX, pitchAccSkill01, settings, rand01, pitcherS
   // (skill=1) still keeps a third of it (a pitch is never a laser), same shape phase 1 used.
   // A Nice release lands EXACTLY on aim (no scatter); a normal or hung release keeps it.
   const scatter = wasNice ? 0 : F.aimScatter * (1 - skill * 0.67);
-  let x = aimX + (rand01() * 2 - 1) * scatter;
+  // BB-3b commit 4: a pre-rolled scatter draw (see the header above) stands in for this
+  // function's own rand01() call when present, so a human pitcher's UI-side preview and this
+  // function's own scoring draw from the identical random value.
+  const scatterDraw = pitchExtras && typeof pitchExtras.scatter === 'number' ? pitchExtras.scatter : rand01();
+  let x = aimX + (scatterDraw * 2 - 1) * scatter;
 
   // ---- BB-3: steering (curveball/slider only, doc §11 [Locked] on WHICH way; how much/when is
   // the human's own input) --------------------------------------------------------------------

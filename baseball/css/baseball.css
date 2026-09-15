@@ -290,6 +290,19 @@
   border: 2px solid #16240f;
   z-index: 2;
 }
+/* Break-direction arrow (spec section 8): shown only while a curveball/slider is in flight, from
+ * release to plate crossing - see ui.js's _paintSteerArrow. Positioned centered on the pad; JS
+ * only ever toggles display and flips it horizontally (scaleX) toward the current steer side. */
+.bb-pad-steerarrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  color: #ffce3a;
+  z-index: 3;
+  pointer-events: none;
+}
 
 .bb-actions {
   position: absolute;

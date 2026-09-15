@@ -1811,5 +1811,50 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
 })();
 
 // ---------------------------------------------------------------------------------------------
+// Section 27 (BB-3b commit 4): the pre-rolled scatter seam and the additive `swing` event.
+await (async function section27() {
+  // A pre-rolled `pitchExtras.scatter` reproduces exactly what flyPitch's own internal rand01()
+  // draw would have produced at that point, given the SAME underlying draw.
+  const randA = mulberry32(42);
+  const draw = randA(); // the "pre-roll" a human pitcher's UI would take
+  const rWithPreroll = flyPitch('fastball', 0.1, 0.5, SETTINGS, mulberry32(999) /* unused for scatter now */, {}, { hold: 50, scatter: draw });
+  const randB = mulberry32(42);
+  const drawB = randB(); // same seed, same first draw
+  const rWithoutPreroll = flyPitch('fastball', 0.1, 0.5, SETTINGS, () => drawB, {}, { hold: 50 });
+  ok(rWithPreroll.x === rWithoutPreroll.x,
+    'a pre-rolled pitchExtras.scatter produces the identical x as flyPitch drawing the same value itself');
+
+  // Omitting pitchExtras.scatter (every existing caller) still calls rand01() exactly once for
+  // the scatter term, at the same point in the stream as before this commit - already covered by
+  // section 26's "omitting pitchExtras entirely reproduces prior output byte-for-byte" and by
+  // every one of this file's other 2500+ assertions staying green after this change; this adds
+  // the direct, minimal check.
+  const seq = [];
+  const spy = () => { const v = mulberry32(7)(); seq.push(v); return v; };
+  const before = flyPitch('fastball', 0, 0.5, SETTINGS, mulberry32(7));
+  const after = flyPitch('fastball', 0, 0.5, SETTINGS, mulberry32(7), {}, { hold: 50, steer: [] });
+  ok(before.x === after.x, 'a pitchExtras object with no scatter field still draws its own rand01() scatter, byte-identical to omitting pitchExtras');
+
+  // The additive `swing` event: fires once per pitch, after decideSwing, with {side, action, charged}.
+  const seed = 555;
+  const homeTeam = makeTeam('college', 0, mulberry32(seed));
+  const awayTeam = makeTeam('college', 1, mulberry32(seed + 1));
+  const swingEvents = [];
+  const g = new Game({
+    home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+    agents: {
+      home: { decidePitch: async () => ({ type: 'fastball', aim: 0 }), decideSwing: async () => ({ action: 'take' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: 0 }), decideSwing: async () => ({ action: 'swing', aimX: 0, timingErrorMs: 0, charged: false }) },
+    },
+  });
+  g.onEvent = async (type, payload) => { if (type === 'swing') swingEvents.push(payload); };
+  g.innings = 1;
+  await g.playHalfInning();
+  ok(swingEvents.length > 0, 'the swing event fires at least once over a half inning');
+  ok(swingEvents.every((e) => e.side === 'away' && typeof e.action === 'string' && typeof e.charged === 'boolean'),
+    'every swing event carries {side, action, charged} with the expected shapes');
+})();
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

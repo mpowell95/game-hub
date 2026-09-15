@@ -166,27 +166,32 @@ if (mountErr) {
     }
   }
 
-  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill. BB-3b's
-  // R1 wind-up (`_stepWindup`, FEEL.ui.windupMs - 1400ms by default) now delays every CPU pitch
-  // before the swing/throw handlers are even registered, and the verdict line itself only holds
-  // for FEEL.ui.resultMs before clearing - so this polls continuously through each cycle instead
-  // of sampling once at a fixed offset, which could straddle the hold window entirely (a flat
-  // single check after a long wait missed almost every at-bat once the wind-up landed).
+  // 2. Drive several at-bats, watching for the verdict line overlapping the back pill. R2 (BB-3b
+  // commit 4) now wraps EVERY pitch in windupMs + the real flight + resultMs + betweenMs - a full
+  // cycle from one pitch's release to the next is on the order of 7-8s (1400 windup + ~1.5-2s
+  // flight + 1800 result + 3000 between), a real behavior change from the pre-R2 build this test
+  // was written against. So: click roughly every 500ms (cheap - most land outside the live input
+  // window and are silently ignored, per HumanAgent's own null-handler guards) to catch the brief
+  // windows across several full cycles, while polling continuously for the verdict line the whole
+  // time rather than sampling once at a fixed offset (which could straddle its resultMs hold
+  // entirely).
   let sawLine1 = false;
   let overlapSeen = null;
-  const CYCLE_MS = 2600, POLL_MS = 150;
-  for (let i = 0; i < 6 && !overlapSeen; i++) {
-    await page.evaluate(() => {
-      const tile = document.querySelector('.bb-pitch-tile');
-      if (tile) tile.click();
-      const main = document.querySelector('.bb-ringwrap');
-      if (main) {
-        main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
-      }
-    });
-    for (let elapsed = 0; elapsed < CYCLE_MS && !overlapSeen; elapsed += POLL_MS) {
-      await page.waitForTimeout(POLL_MS);
+  const TOTAL_BUDGET_MS = 70000, CLICK_EVERY_MS = 500, POLL_MS = 150;
+  for (let elapsed = 0; elapsed < TOTAL_BUDGET_MS && !overlapSeen; elapsed += POLL_MS) {
+    if (elapsed % CLICK_EVERY_MS < POLL_MS) {
+      await page.evaluate(() => {
+        const tile = document.querySelector('.bb-pitch-tile');
+        if (tile) tile.click();
+        const main = document.querySelector('.bb-ringwrap');
+        if (main) {
+          main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+        }
+      });
+    }
+    await page.waitForTimeout(POLL_MS);
+    {
       const line = await page.evaluate(() => {
         const back = document.querySelector('.hub-back');
         const line1 = document.querySelector('[data-role="line1"]');
@@ -203,7 +208,7 @@ if (mountErr) {
     }
   }
   if (!sawLine1) {
-    fail('verdict-line', 'never observed a verdict line across 10 simulated at-bats - test may not be driving the game');
+    fail('verdict-line', `never observed a verdict line across a ${TOTAL_BUDGET_MS}ms drive - test may not be driving the game`);
   } else if (overlapSeen) {
     fail('verdict-line', `verdict line top=${overlapSeen.top} overlapped .hub-back bottom=${overlapSeen.backBottom}`);
   } else {

@@ -503,6 +503,14 @@ export class Game {
     // phase's resume gate exists to catch (found by that gate, verified born red beforehand).
     while (!this.over && !this.aborted) {
       const pitchView = this._buildPitchView(defenseSide);
+      // BB-3b commit 4: an agent that wants to PREVIEW the pitch while its own UI is still
+      // deciding (a human pitcher, drawing the throw before flyPitch has even run) opts in via
+      // `previewsPitch` - only then is the extra draw taken, so a CPU/model agent (which never
+      // sets it) consumes rand01() at exactly the same points in the stream as before this
+      // commit, and every existing seeded test/sim stays byte-identical. The draw itself is the
+      // SAME one flyPitch would otherwise make internally for its own aim-scatter term (see
+      // pitch.js's header) - pre-rolling it here just lets the UI show it before flyPitch runs.
+      if (defenseAgent && defenseAgent.previewsPitch) pitchView.scatterDraw = this._rand();
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
       const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
@@ -511,15 +519,21 @@ export class Game {
       const priorPitchHistory = (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW);
       // BB-3: a human pitcher's decision may carry `hold`/`steer` (the hold-and-release meter and
       // in-flight steering, see pitch.js) - passed through as pitchExtras; a CPU/model agent never
-      // sets either, so their pitches are byte-identical to before this phase.
-      const pitchExtras = pitchDecision && (pitchDecision.hold != null || pitchDecision.steer)
-        ? { hold: pitchDecision.hold, steer: pitchDecision.steer } : null;
+      // sets either, so their pitches are byte-identical to before this phase. BB-3b commit 4:
+      // `scatter` (the pre-rolled draw above) rides along the same way, present only when it was
+      // actually drawn.
+      const pitchExtras = pitchDecision && (pitchDecision.hold != null || pitchDecision.steer || pitchView.scatterDraw != null)
+        ? { hold: pitchDecision.hold, steer: pitchDecision.steer, scatter: pitchView.scatterDraw } : null;
       const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
       const swingView = this._buildSwingView(battingSide, pitchResult, priorPitchHistory);
       const swingDecision = await battingAgent.decideSwing(swingView);
+      // BB-3b commit 4: additive event, so the UI can animate a CPU batter's swing when a human
+      // is pitching (nothing told it before - the decision was made and consumed entirely inside
+      // this function). No existing listener reacts to an event type it doesn't recognize.
+      await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action, charged: !!(swingDecision && swingDecision.charged) });
       const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
 
       if (!swingResult.swung) {

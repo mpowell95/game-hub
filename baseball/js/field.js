@@ -697,18 +697,18 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   ctx.restore();
 }
 
-// A ball at the plate (depthFrac 0) reads at this fraction of the field band's own height across
-// its diameter; it shrinks toward `PLATE_BALL_FAR_MULT` of that at the mound/release (depthFrac 1).
-const PLATE_BALL_REF_FRAC = 0.05;
-const PLATE_BALL_FAR_MULT = 0.22; // matches MOUND_PITCHER_HEIGHT_FRAC / NEAR_BATTER_HEIGHT_FRAC
+// BB-3b commit 4 (handoff section 9, "Numbers to carry"): "Ball radius, plate view: 4 px at the
+// hand to 14 px at the plate" - literal screen pixels, not a fraction of the canvas, matching the
+// handoff's own number exactly rather than the earlier rounds' height-relative guess.
+const PLATE_BALL_RADIUS_FAR_PX = 4;
+const PLATE_BALL_RADIUS_NEAR_PX = 14;
 
 /** The ball, through the plate camera. `yFt` is feet of travel from the plate (0) toward the
  *  mound/release point (60.5) - BOTH callers (`_animatePitchFlight` for batting,
- *  `_animatePitchToss` for pitching) already count it that way, since this is now one fixed camera
- *  in both modes (see the section header) rather than two cameras with opposite conventions.
- *  `xFt` is a lateral offset from the plate's own centerline. This is still a straight-line
- *  interpolation between the `release` and `plate` anchors, not the engine's real flight path -
- *  that lands in commit 4 (`baseball/CLAUDE.md`'s BB-3b entry, "the ball flies the truth"). */
+ *  `HumanAgent.decidePitch`'s own flight loop for pitching) already count it that way, since this
+ *  is one fixed camera in both modes (see the section header). `xFt` is a lateral offset from the
+ *  plate's own centerline. Returns `{x, y, scale}` in screen px so a caller can build a trail from
+ *  consecutive calls. */
 export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
   const cover = plateCover(w, h);
   if (!cover) return { x: w / 2, y: h / 2, scale: 1 };
@@ -717,9 +717,12 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
   const depthFrac = Math.max(0, Math.min(1, yFt / 60.5));
   const x = plateXY.x + (releaseXY.x - plateXY.x) * depthFrac + (xFt / 8.5) * (w * 0.12) * depthFrac;
   const y = plateXY.y + (releaseXY.y - plateXY.y) * depthFrac;
-  const scale = 1 - depthFrac * (1 - PLATE_BALL_FAR_MULT);
-  const r = Math.max(1.5, h * PLATE_BALL_REF_FRAC * (opts.sizeMult || 1) * scale);
+  const scale = 1 - depthFrac * 0.78;
+  const r = opts.radiusPx != null ? opts.radiusPx
+    : (PLATE_BALL_RADIUS_NEAR_PX - (PLATE_BALL_RADIUS_NEAR_PX - PLATE_BALL_RADIUS_FAR_PX) * depthFrac) * (opts.sizeMult || 1);
 
+  ctx.save();
+  ctx.globalAlpha = opts.alpha != null ? opts.alpha : 1;
   const ballSheet = plateImg('ball-sheet.webp');
   if (ballSheet && (ballSheet.naturalWidth || ballSheet.width)) {
     const frames = 10;
@@ -728,7 +731,6 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
     const fh = ballSheet.naturalHeight || ballSheet.height;
     ctx.drawImage(ballSheet, frameIdx * fw, 0, fw, fh, x - r, y - r, r * 2, r * 2);
   } else {
-    ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = '#fff';
@@ -736,8 +738,8 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
     ctx.lineWidth = Math.max(0.5, 1.2 * scale);
     ctx.strokeStyle = '#1a1a1a';
     ctx.stroke();
-    ctx.restore();
   }
+  ctx.restore();
   return { x, y, scale };
 }
 
