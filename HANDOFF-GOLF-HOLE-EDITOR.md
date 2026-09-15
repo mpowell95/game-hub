@@ -69,9 +69,9 @@ sands edit or something."*
   overwritten**. It is always available to reset to or compare against.
 - Anything Matt changes saves into a separate working copy per course (naming is the builder's
   call - "Red Mesa (edit)" / "Oasis Sands (edit)" is the working name used in this doc).
-- **Nothing autosaves or runs a check on save.** Save just saves. Validation, difficulty feedback,
-  and the playability sweep are all separate, explicit buttons Matt presses when he wants them -
-  see "Verification tools" below. None of them should block or delay a save.
+- **Nothing autosaves or runs a check on save.** Save just saves. Validation is a separate, explicit
+  button Matt presses when he wants it - see "Verification tools" below. It should never block or
+  delay a save.
 
 ### Getting an edited course back into the real game
 
@@ -85,8 +85,8 @@ geometry they're supposed to describe).
 editor should export in the **same object shape** the real course files (`golf/courses/redmesa.js`,
 `golf/courses/oasissands.js`) already use, so folding an edited course back in is a mechanical
 replacement of that course's data, not a rewrite or reinterpretation. Whatever session does that
-fold-back should run `validateHole()` and a difficulty sweep against the result as a check, not
-treat the export as trusted just because it came from the editor.
+fold-back should run `validateHole()` against the result as a check, not treat the export as
+trusted just because it came from the editor.
 
 ---
 
@@ -111,6 +111,20 @@ treat the export as trusted just because it came from the editor.
 - Add a brand-new, blank hole, inserted at a chosen position in the course.
 - Reorder holes within a course.
 
+**Recommended approach, for the building session to evaluate rather than treat as mandatory:**
+implement these as edits to the same **parametric design-spec inputs `golf/js/holegen.js` already
+takes** (a centerline of waypoints, a width profile along it, hazards placed "at this fraction of
+the route") and always regenerate the hole through the existing `holegen.js` pipeline, rather than
+letting the editor manipulate raw fairway/rough polygons directly. Lengthening a hole becomes
+adding/moving a centerline waypoint or rescaling the route; widening becomes raising the width
+profile at a point or over a range; a dogleg becomes bending the centerline. `holegen.js` already
+recomputes `route`, `bounds`, `cardYards`, and tree-belt insets from these inputs correctly - this
+is the class of bug (`golf/CLAUDE.md` has many entries: stale `route`, hazards drawn outside the
+hole, self-intersecting corridor polygons on tight bends) that reusing the existing pipeline avoids,
+where hand-editing raw geometry would reintroduce it. This constrains editing to the vocabulary
+`holegen.js` already understands rather than arbitrary freehand fairway-edge dragging - accepted as
+a deliberate trade for correctness and much lower implementation cost.
+
 ### Surface and obstacle editing
 - A paint-can / flood-fill tool: click a region, fill it to a chosen surface type (fairway, rough,
   sand, water, green, etc.), the same interaction model as a bucket-fill tool in a painting app.
@@ -134,21 +148,19 @@ treat the export as trusted just because it came from the editor.
   direction/side choice (e.g. dogleg left vs. dogleg right) rather than one generic version of each
   preset.
 
-### Verification tools (all on-demand buttons, none automatic on save)
+### Verification tools (on-demand button, not automatic on save)
 - **Validate Hole button** - runs the existing hole-shape validation (`golf/js/holes.js`'s
   `validateHole()` covers the class of checks: pin inside green, polygons well-formed, slope grid
   shaped correctly, hole reachable). Should report *where* a problem is, not just pass/fail.
-- **Difficulty Feedback button** - runs a strokes-vs-par measurement for the current hole, in the
-  spirit of `golf/js/test.js` section 15c's simulated-play sweep. This is a headless simulation (no
-  browser), so it should be fast - well under a couple of seconds for one hole - but it's still a
-  separate button rather than something that runs automatically, so it never blocks the save/edit
-  loop.
-- **Playability Sweep button** - a more thorough check than Validate Hole, in the spirit of the
-  realistic-timing playtest harnesses this repo has used before (`golf/CLAUDE.md`'s 2026-09-07/09
-  playtest sections describe the shape: a simulated player with human-like tap timing, not a
-  search-based prober, which is what actually caught softlocks the test suite's own search-based
-  player missed). This can reasonably take longer than the difficulty check; that's fine, it's an
-  explicit button too.
+
+**Explicitly not part of this editor, by decision:**
+- **Difficulty feedback** (strokes-vs-par measurement, in the spirit of `golf/js/test.js` section
+  15c) is not a button in the tool. When Matt wants a difficulty read on a hole, he asks a session
+  to run it directly, the same way this repo already runs that suite manually rather than
+  automatically.
+- **A playability sweep** (the realistic-timing playtest harness described in `golf/CLAUDE.md`'s
+  2026-09-07/09 playtest sections) is not built as part of this editor at all, on demand or
+  otherwise.
 
 ### Compare and reset
 - A Compare button: view the original (unedited) version of the current hole and the edited version
