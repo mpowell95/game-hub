@@ -125,6 +125,17 @@ where hand-editing raw geometry would reintroduce it. This constrains editing to
 `holegen.js` already understands rather than arbitrary freehand fairway-edge dragging - accepted as
 a deliberate trade for correctness and much lower implementation cost.
 
+**This must still be easy to edit and easy to understand - that constraint is not optional.** The
+whole point of building an editor at all, per Matt, is that it should be *simpler* to use than
+editing hole data directly (`golf/js/holegen.js`'s design-spec objects and raw coordinate arrays are
+not something Matt should ever need to look at). Working parametrically must not mean exposing
+`holegen.js`'s actual spec fields, arrays, or code-shaped objects to Matt on screen. It means: drag
+a handle on the canvas to move a waypoint, drag a slider or an edge to change width, pick a dogleg
+preset and a direction - all visual, all direct manipulation - and the editor translates that into
+the parametric spec underneath, invisibly. The numeric readouts called for elsewhere in this doc
+(current length, current width, current par) are the right amount of number-showing; a table of
+waypoint coordinates or a raw spec object is not.
+
 ### Surface and obstacle editing
 - A paint-can / flood-fill tool: click a region, fill it to a chosen surface type (fairway, rough,
   sand, water, green, etc.), the same interaction model as a bucket-fill tool in a painting app.
