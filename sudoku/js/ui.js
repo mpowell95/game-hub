@@ -76,8 +76,11 @@ class SudokuUI {
     const saved = loadSave();
     this.selectedTier = (saved && saved.tier) || this.settings.tier;
 
-    if (saved) this._enterGame(saved);
-    else this.renderMenu();
+    // ALWAYS open on the setup screen, even with a save in hand (Matt, 2026-09-16: "when you go
+    // back into sudoku, it jumps immediately back into the game... make it so it brings you to the
+    // setup screen and from there you can resume or start a new game"). The save is untouched -
+    // the menu's Resume button picks it straight back up.
+    this.renderMenu();
   }
 
   // --- timer ---------------------------------------------------------------------------------
@@ -357,10 +360,26 @@ class SudokuUI {
     const digitBtn = ev.target.closest('[data-digit]');
     if (digitBtn) { this._inputDigit(Number(digitBtn.dataset.digit)); return; }
     const actionEl = ev.target.closest('[data-action]');
-    if (actionEl) this._handleAction(actionEl.dataset.action);
+    if (actionEl) { this._handleAction(actionEl.dataset.action); return; }
+    // A tap on anything that is neither a cell nor a control CLEARS the selection (Matt,
+    // 2026-09-16: "by clicking off the board, the highlight goes away"). Buttons are excluded so a
+    // near-miss on a control never costs the selection the control is about to act on; everything
+    // else - the HUD strip, the margins around the board, the gaps in the pad - deselects.
+    if (!ev.target.closest('button') && this.selected >= 0) this._deselect();
+  }
+
+  _deselect() {
+    if (this.selected >= 0 && this.cellEls && this.cellEls[this.selected]) {
+      this.cellEls[this.selected].tabIndex = -1;
+      try { this.cellEls[this.selected].blur(); } catch { /* ignore */ }
+    }
+    this.selected = -1;
+    if (this.cellEls && this.cellEls[0]) this.cellEls[0].tabIndex = 0;
+    this._paintHighlights();
   }
 
   _handleKey(ev) {
+    if (ev.key === 'Escape' && this.selected >= 0) { this._deselect(); ev.preventDefault(); return; }
     if (this.selected < 0) return;
     if (ev.key >= '1' && ev.key <= '9') { this._inputDigit(Number(ev.key)); ev.preventDefault(); return; }
     if (ev.key === 'Backspace' || ev.key === 'Delete') { this._doErase(); ev.preventDefault(); return; }
