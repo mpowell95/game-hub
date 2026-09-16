@@ -405,6 +405,10 @@ export function validateHole(hole) {
   }
 
   if (!hole.pin || !pointInPoly(hole.pin, (hole.green || {}).poly || [])) at('pin is not inside green.poly');
+  // Alternative pin positions (2026-09-16): every one has to be a cup the green can hold.
+  for (const [i, p] of (hole.pins || []).entries()) {
+    if (!Array.isArray(p) || !pointInPoly(p, (hole.green || {}).poly || [])) at(`pins[${i}] ${JSON.stringify(p)} is not inside green.poly`);
+  }
 
   // THE GREEN HAS TO BE IN `surfaces`, OR THE HOLE HAS NO PUTTING SURFACE AT ALL. `green.poly` on
   // its own is only read by the slope grid and the camera; the lie lookup and the renderer both

@@ -303,6 +303,17 @@ every device and in every test run. After expansion there is one flat tree list 
 path; the two authoring forms are a convenience, never two behaviours. **A belt does not imply the
 `trees` surface** - paint that polygon too if the lie should be woods.
 
+### The green's outline, fringe widths and pins (2026-09-16, from the hole editor)
+
+A generated hole may carry three more recipe fields, each Matt's: **`greenOutline`** (the putting
+surface's own polygon in world yards, replacing the shape family; the fringe is then that outline
+pushed out along each vertex's normal by `offsetOutline`), **`fringe`** (a number, or
+`{front, right, back, left}` yards in the green's own frame, blended by bearing; absent = 6 all
+round), and **`pins`** (world points inside the green: one is where the cup is, two or more are
+carried on the hole as `hole.pins` and `golf/js/ui.js` picks one as the hole starts, so replaying a
+hole is not the same hole). `validateHole` refuses a pin outside the green. The route still ends
+at the green's centre; only the cup moves.
+
 ### The green and its slope grid
 
 `green` is `{poly, slope}`. `slope` is `{cols, rows, cells}`:

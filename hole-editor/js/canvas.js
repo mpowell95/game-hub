@@ -155,6 +155,9 @@ export function listObjects(spec, stations, length) {
     const st = stations[Math.min(stations.length - 1, Math.max(0, Math.round((c.yd / length) * (stations.length - 1))))];
     out.push({ group: 'cross', index, kind: c.kind || 'water', center: [st.x, st.y], station: st });
   });
+  (spec.pins || []).forEach((p, index) => {
+    out.push({ group: 'pins', index, kind: 'pin', center: [p[0], p[1]], radius: 2.5 });
+  });
   return out;
 }
 
@@ -398,9 +401,13 @@ export class EditorCanvas {
       const handle = this._widthHandleAt(wx, wy, tolYd);
       if (handle) return handle;
     }
-    if (this.tool === 'select' || this.tool === 'bunker' || this.tool === 'water' || this.tool === 'tree' || this.tool === 'cross') {
+    if (this.tool === 'select' || this.tool === 'bunker' || this.tool === 'water' || this.tool === 'tree' || this.tool === 'cross' || this.tool === 'green') {
       const objects = listObjects(this.spec, this.stations, this.length);
+      // Pins first: they sit on the green and are tiny, so they must win over anything under them.
+      for (const o of objects) if (o.group === 'pins' && Math.hypot(o.center[0] - wx, o.center[1] - wy) <= Math.max(tolYd, o.radius)) return o;
+      if (this.tool === 'green') return null;
       for (const o of objects) {
+        if (o.group === 'pins') continue;
         if (o.poly && pointInPoly([wx, wy], o.poly)) return o;
         if (!o.poly && Math.hypot(o.center[0] - wx, o.center[1] - wy) <= Math.max(tolYd, o.radius || 3)) return o;
       }
@@ -534,6 +541,24 @@ export class EditorCanvas {
         el.setPointerCapture(e.pointerId);
         return;
       }
+      if (hit && hit.group === 'pins') {
+        this.setSelection(hit);
+        objDrag = { kind: 'pin', index: hit.index };
+        this.ops.liveBegin();
+        el.setPointerCapture(e.pointerId);
+        return;
+      }
+      // Green tool with "Add pin" armed: the next click inside the green places a pin.
+      if (this.tool === 'green' && this.placingPin && this.built) {
+        const gb = greenBox(this.built);
+        if (w.x >= gb.minX && w.x <= gb.maxX && w.y >= gb.minY && w.y <= gb.maxY) {
+          this.placingPin = false;
+          el.style.cursor = '';
+          this.ops.instant((spec) => this.ops.mutators.addPin(spec, w.x, w.y));
+          this.setSelection({ group: 'pins', index: (this.spec.pins || []).length - 1 });
+          return;
+        }
+      }
       if (hit) {
         this.setSelection(hit);
         if (this.tool === 'select') {
@@ -623,6 +648,8 @@ export class EditorCanvas {
       if (objDrag && this.ops) {
         if (objDrag.kind === 'waypoint') {
           this.ops.liveUpdate((spec) => ({ ...spec, path: spec.path.map((p, i) => (i === objDrag.index ? [+w.x.toFixed(1), +w.y.toFixed(1)] : p)) }));
+        } else if (objDrag.kind === 'pin') {
+          this.ops.liveUpdate((spec) => this.ops.mutators.movePin(spec, objDrag.index, w.x, w.y));
         } else if (objDrag.kind === 'resize') {
           // Scale about the object's box centre so the opposite edge stays put in feel; the
           // factor is measured against the CURRENT box each move, never compounded.
@@ -739,6 +766,11 @@ export class EditorCanvas {
     const { group, kind, replaceIndex, points } = d;
     this.drawing = null;
     this.el.style.cursor = '';
+    if (group === 'green') {
+      this.ops.instant((spec) => this.ops.mutators.setGreenOutline(spec, points));
+      if (this.onDrawChange) this.onDrawChange(null);
+      return;
+    }
     if (replaceIndex != null) {
       this.ops.instant((spec) => this.ops.mutators.setDrawnPoly(spec, group, replaceIndex, points));
       this.setSelection({ group, index: replaceIndex });
@@ -1014,6 +1046,22 @@ export class EditorCanvas {
             ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(4, (o.radius || 4) * cam.ppy + 3), 0, Math.PI * 2);
             ctx.stroke();
           }
+        } else if (o.group === 'pins') {
+          // A pin: a small flag with its number. Several pins = the game picks one per visit.
+          const px = sx(o.center[0]); const py = sy(o.center[1]);
+          ctx.save();
+          ctx.fillStyle = selected ? '#ffce3a' : '#ffffff';
+          ctx.strokeStyle = '#1e1e1e';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillRect(px - 1, py - 18, 2, 18);
+          ctx.fillStyle = '#e01b1b';
+          ctx.beginPath(); ctx.moveTo(px + 1, py - 18); ctx.lineTo(px + 11, py - 14); ctx.lineTo(px + 1, py - 10); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(String(o.index + 1), px, py - 21);
+          ctx.restore();
         } else if (o.group === 'cross') {
           // No exact wavy-band outline (built by holegen's own wave maths, not blob()) - a straight
           // band across the corridor at this yardage is enough to see and grab it.

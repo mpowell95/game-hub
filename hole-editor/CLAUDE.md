@@ -461,3 +461,21 @@ clicks + Enter making a 16-point lake that paints and validates).
 Wind, for the record (Matt asked): `shot.js` `windFor()` - fixed per hole, seeded from the hole
 number and its yardage, one hole in six calm; never random per round. A hole may state `wind`
 explicitly; none does.
+
+## Drawn greens, fringe widths, pins (2026-09-16)
+
+Matt: *"I need to be able to draw green shapes as well. And determine how wide i want the fringe
+to be... I really need to be able to set the pin location on each hole... 3-4 possible pin
+locations that the course randomly chooses from each time it's played."* All three, engine and
+editor:
+
+- **Green -> Draw the outline instead**: click corners, Enter/double-click closes; the rounded
+  outline is `greenOutline` (world yards) and IS the putting surface (`golf/js/holegen.js`).
+  Guards find its edge by ray-cast; the fringe is `offsetOutline` (each vertex along its own
+  outward normal). "Use a preset shape instead" clears it.
+- **Fringe width**: one slider, or per side (front/back/left/right) - `fringe`, blended by
+  bearing in the green's frame. Works for preset greens too (`fringePoly` takes a function).
+- **Pins**: Green -> Add pin, then click on the green; flags are numbered, draggable, Delete
+  removes. One pin = the cup; two or more = `hole.pins`, and `golf/js/ui.js` `_enterHole` picks
+  one at random each time the hole is played. `validateHole` refuses a pin off the green.
+  Export prints all three fields. CACHE v851.

@@ -506,14 +506,37 @@ const GUARD_TOKENS = [
 
 function renderGreen(el, ctx) {
   const { spec, built, ops, refresh } = ctx;
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
   const guard = spec.guard || [];
+  const drawn = Array.isArray(spec.greenOutline);
+  const fr = spec.fringe;
+  const frSame = fr == null || typeof fr === 'number';
+  const frVal = (k) => (fr && typeof fr === 'object' && fr[k] != null ? fr[k] : (typeof fr === 'number' ? fr : 6));
+  const pins = spec.pins || [];
   el.innerHTML = `
-    ${seg('shape', Object.keys(GREEN_SHAPES).map((k) => [k, k]), spec.greenShape || 'round')}
-    ${slider('he-g-angle', 'greenAngle', 0, 359, 1, spec.greenAngle || 0)}
-    ${slider('he-g-r', 'greenR', 8, 22, 0.5, spec.greenR || Math.round(built.green ? Math.max(...built.green.poly.map((p) => Math.hypot(p[0] - built.pin[0], p[1] - built.pin[1]))) : 14))}
-    ${checkbox('he-g-same', 'same (greenRy = greenR)', spec.greenRy == null)}
-    ${spec.greenRy != null ? slider('he-g-ry', 'greenRy', 8, 22, 0.5, spec.greenRy) : ''}
-    <button class="gh-btn gh-btn--block" id="he-g-reroll" style="margin:6px 0;">Reroll</button>
+    <div class="he-objgroup">Shape</div>
+    ${drawn ? `
+      <div class="he-empty">Drawn outline (${spec.greenOutline.length} points).</div>
+      <button class="gh-btn gh-btn--block" id="he-g-draw" style="margin:6px 0;">Redraw outline</button>
+      <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-g-preset" style="margin-bottom:6px;">Use a preset shape instead</button>` : `
+      ${seg('shape', Object.keys(GREEN_SHAPES).map((k) => [k, k]), spec.greenShape || 'round')}
+      ${slider('he-g-angle', 'greenAngle', 0, 359, 1, spec.greenAngle || 0)}
+      ${slider('he-g-r', 'greenR', 8, 22, 0.5, spec.greenR || Math.round(built.green ? Math.max(...built.green.poly.map((p) => Math.hypot(p[0] - built.pin[0], p[1] - built.pin[1]))) : 14))}
+      ${checkbox('he-g-same', 'same (greenRy = greenR)', spec.greenRy == null)}
+      ${spec.greenRy != null ? slider('he-g-ry', 'greenRy', 8, 22, 0.5, spec.greenRy) : ''}
+      <button class="gh-btn gh-btn--block" id="he-g-reroll" style="margin:6px 0;">Reroll</button>
+      <button class="gh-btn gh-btn--block" id="he-g-draw" style="margin-bottom:6px;">Draw the outline instead</button>`}
+    <div class="he-objgroup">Fringe width (yd)</div>
+    ${checkbox('he-g-fr-same', 'Same all round', frSame)}
+    ${frSame ? slider('he-g-fr', 'all sides', 2, 14, 0.5, typeof fr === 'number' ? fr : 6) : `
+      ${slider('he-g-fr-front', 'front (toward the tee)', 2, 14, 0.5, frVal('front'))}
+      ${slider('he-g-fr-back', 'back', 2, 14, 0.5, frVal('back'))}
+      ${slider('he-g-fr-left', 'left', 2, 14, 0.5, frVal('left'))}
+      ${slider('he-g-fr-right', 'right', 2, 14, 0.5, frVal('right'))}`}
+    <div class="he-objgroup">Pins</div>
+    <div class="he-empty">${pins.length === 0 ? 'No pin set: the cup is the green\'s centre.' : pins.length === 1 ? 'One pin: the cup is always here.' : `${pins.length} pins: the game picks one at random each time the hole is played.`} Click a flag to select it, drag to move, Delete to remove.</div>
+    ${pins.map((p, i) => `<div class="he-objrow" data-pin="${i}">Pin ${i + 1} &middot; ${p[0].toFixed(0)}, ${p[1].toFixed(0)}</div>`).join('')}
+    <button class="gh-btn gh-btn--block" id="he-g-addpin" style="margin:6px 0;">Add pin (then click on the green)</button>
     <div class="he-objgroup">Guards</div>
     <div style="columns:2;">${GUARD_TOKENS.map(([tok, label]) => checkbox(`he-guard-${tok}`, label, guard.includes(tok))).join('')}</div>
     ${slider('he-g-tree', 'Guard tree type', 0, (built.treeTypes || [{}]).length - 1, 1, spec.guardTree || 0)}
@@ -521,16 +544,31 @@ function renderGreen(el, ctx) {
   `;
   const detach = el.querySelector('#he-g-detach');
   if (detach) detach.addEventListener('click', () => ops.detachGuards());
-  wireSeg(el, 'shape', (val) => { ops.instant((s) => ops.mutators.setGreenField(s, { greenShape: val })); refresh(); });
-  wireSlider(el, 'he-g-angle', ops, (s, v) => ops.mutators.setGreenField(s, { greenAngle: Math.round(v) }));
-  wireSlider(el, 'he-g-r', ops, (s, v) => ops.mutators.setGreenField(s, { greenR: v }));
-  el.querySelector('#he-g-same').addEventListener('change', (e) => {
-    ops.instant((s) => ops.mutators.setGreenField(s, { greenRy: e.target.checked ? undefined : s.greenR }));
+  el.querySelector('#he-g-draw').addEventListener('click', () => ops.startDraw('green'));
+  const preset = el.querySelector('#he-g-preset');
+  if (preset) preset.addEventListener('click', () => { ops.instant((s) => ops.mutators.clearGreenOutline(s)); refresh(); });
+  if (!drawn) {
+    wireSeg(el, 'shape', (val) => { ops.instant((s) => ops.mutators.setGreenField(s, { greenShape: val })); refresh(); });
+    wireSlider(el, 'he-g-angle', ops, (s, v) => ops.mutators.setGreenField(s, { greenAngle: Math.round(v) }));
+    wireSlider(el, 'he-g-r', ops, (s, v) => ops.mutators.setGreenField(s, { greenR: v }));
+    el.querySelector('#he-g-same').addEventListener('change', (e) => {
+      ops.instant((s) => ops.mutators.setGreenField(s, { greenRy: e.target.checked ? undefined : s.greenR }));
+      refresh();
+    });
+    const ry = el.querySelector('#he-g-ry');
+    if (ry) wireSlider(el, 'he-g-ry', ops, (s, v) => ops.mutators.setGreenField(s, { greenRy: v }));
+    el.querySelector('#he-g-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollGreen(s)); refresh(); });
+  }
+  // Fringe: one width, or four.
+  el.querySelector('#he-g-fr-same').addEventListener('change', (e) => {
+    const v = typeof fr === 'number' ? fr : 6;
+    ops.instant((s) => ops.mutators.setFringe(s, e.target.checked ? v : { front: frVal('front'), back: frVal('back'), left: frVal('left'), right: frVal('right') }));
     refresh();
   });
-  const ry = el.querySelector('#he-g-ry');
-  if (ry) wireSlider(el, 'he-g-ry', ops, (s, v) => ops.mutators.setGreenField(s, { greenRy: v }));
-  el.querySelector('#he-g-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollGreen(s)); refresh(); });
+  if (frSame) wireSlider(el, 'he-g-fr', ops, (s, v) => ops.mutators.setFringe(s, v === 6 ? undefined : v));
+  else for (const side of ['front', 'back', 'left', 'right']) wireSlider(el, `he-g-fr-${side}`, ops, (s, v) => ops.mutators.setFringe(s, { ...(typeof s.fringe === 'object' ? s.fringe : {}), [side]: v }));
+  // Pins.
+  el.querySelector('#he-g-addpin').addEventListener('click', () => ops.armPin());
   for (const [tok] of GUARD_TOKENS) {
     el.querySelector(`#he-guard-${tok}`).addEventListener('change', (e) => ops.instant((s) => ops.mutators.toggleGuard(s, tok, e.target.checked)));
   }
@@ -613,6 +651,7 @@ function renderSelect(el, ctx) {
   if (ctx.drawing) { drawingHint(el, ctx); return; }
   if (selection.group === 'waypoint') { el.innerHTML = '<div class="he-empty">Waypoint selected. Drag to move (switch to Route for Dogleg/Straighten).</div>'; return; }
   if (selection.group === 'guard') { renderGuardHit(el, ctx); return; }
+  if (selection.group === 'pins') { el.innerHTML = `<div class="he-empty">Pin ${selection.index + 1} selected. Drag to move it on the green; Delete removes it. Switch to Green (G) to add more.</div>`; return; }
   const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross };
   const fn = byGroup[selection.group];
   if (fn) fn(el, ctx); else el.innerHTML = '<div class="he-empty">Selected.</div>';

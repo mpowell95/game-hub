@@ -18,6 +18,7 @@ import {
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
   detachGuards, insertSBend,
+  setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
 } from './model.js';
 import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
@@ -36,6 +37,7 @@ const MUTATORS = {
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
   detachGuards, insertSBend,
+  setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
 };
 
 const TOOLS = [
@@ -362,6 +364,8 @@ const editOps = {
     editOps.instant((s) => detachGuards(s, slot));
   },
   slot: () => doc.order.indexOf(currentId) + 1,
+  /** Green panel "Add pin": the next click inside the green places one. */
+  armPin() { editorCanvas.placingPin = true; editorCanvas.el.style.cursor = 'crosshair'; },
 };
 editorCanvas.ops = editOps;
 

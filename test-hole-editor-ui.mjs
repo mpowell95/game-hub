@@ -156,6 +156,33 @@ ok('...which are now ordinary, selectable objects', (await page.evaluate(() => (
 await key('Control+z');
 for (let i = 0; i < 5; i++) await key('[');
 
+console.log('\n-- Green: drawn outline, fringe, pins --');
+await key('g');
+const gc = await page.evaluate(() => window.__he.editorCanvas.built.pin);
+await page.click('#he-g-draw'); await settle();
+for (const [dx, dy] of [[-13, -9], [13, -9], [15, 11], [0, 16], [-15, 11]]) { const q = await toScreen(gc[0] + dx, gc[1] + dy); await page.mouse.click(q.x, q.y); await page.waitForTimeout(70); }
+await page.keyboard.press('Enter'); await settle();
+const sg = await spec();
+ok('five clicks and Enter draw the green outline (20 points)', Array.isArray(sg.greenOutline) && sg.greenOutline.length === 20, JSON.stringify(sg.greenOutline || null).slice(0, 60));
+ok('...and the built green IS that outline', await page.evaluate(() => { const b = window.__he.getBuilt(window.__he.currentId); const s = window.__he.doc.holes[window.__he.currentId].spec; return JSON.stringify(b.green.poly) === JSON.stringify(s.greenOutline); }));
+await page.click('#he-g-fr-same'); await settle();
+await page.fill('#he-g-fr-front-n', '11'); await page.keyboard.press('Tab'); await settle();
+ok('per-side fringe writes {front: 11, ...}', (await spec()).fringe && (await spec()).fringe.front === 11, JSON.stringify((await spec()).fringe));
+await page.click('#he-g-addpin'); await settle();
+const p1 = await toScreen(gc[0] - 4, gc[1] - 2);
+await page.mouse.click(p1.x, p1.y); await settle();
+await page.click('#he-g-addpin'); await settle();
+const p2 = await toScreen(gc[0] + 5, gc[1] + 4);
+await page.mouse.click(p2.x, p2.y); await settle();
+ok('Add pin + click, twice, gives two pins', ((await spec()).pins || []).length === 2, JSON.stringify((await spec()).pins));
+ok('...and the built hole carries them and validates', await page.evaluate(async () => { const H = await import('/golf/js/holes.js'); const b = window.__he.getBuilt(window.__he.currentId); return b.pins && b.pins.length === 2 && H.validateHole(b).length === 0; }));
+// drag pin 2 a little
+await page.mouse.move(p2.x, p2.y); await page.mouse.down(); await page.mouse.move(p2.x - 8, p2.y, { steps: 3 }); await page.mouse.up(); await settle();
+ok('a pin drags', (await spec()).pins[1][0] < gc[0] + 5 - 1, JSON.stringify((await spec()).pins));
+await page.click('#he-g-preset'); await settle();
+ok('Use a preset shape clears the drawn outline', (await spec()).greenOutline === undefined);
+for (let i = 0; i < 6; i++) await key('Control+z');
+
 console.log('\n-- Route --');
 await key('r');
 const len0 = await page.evaluate(() => window.__he.getBuilt(window.__he.currentId).cardYards);

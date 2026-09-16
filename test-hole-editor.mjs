@@ -14,7 +14,7 @@ import {
   normalise, createDocument, buildHole, mintId,
   movePathPoint, deleteBunker, setBeltSide, addTree, setTreeField,
   smoothPoly, addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject, addBunker, polyCentroid,
-  detachGuards, insertSBend,
+  detachGuards, insertSBend, setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument,
 } from './hole-editor/js/model.js';
@@ -362,6 +362,34 @@ await test('insertSBend: two middle waypoints on opposite sides of the tee-pin l
   assert.ok(s.path[1][0] < spec.path[0][0] - 10, 'first bend goes left');
   assert.ok(s.path[2][0] > spec.path[0][0] + 10, 'second bend comes back right');
   assert.ok(s.path[2][1] - s.path[1][1] >= 60, 'the two bends are at least 60 yd apart');
+});
+
+// --- drawn green, fringe, pins (2026-09-16) ------------------------------------------------------
+await test('a drawn green outline, a per-side fringe and two pins build, validate and export', async () => {
+  const doc = createDocument();
+  const id = 'rm-03';
+  let spec = doc.holes[id].spec;
+  const c = buildHole(doc, id).pin;
+  spec = setGreenOutline(spec, [[c[0] - 14, c[1] - 10], [c[0] + 14, c[1] - 10], [c[0] + 16, c[1] + 12], [c[0] - 16, c[1] + 12]]);
+  spec = setFringe(spec, { front: 9, back: 4, left: 6, right: 6 });
+  spec = addPin(spec, c[0] - 5, c[1] - 3);
+  spec = addPin(spec, c[0] + 6, c[1] + 5);
+  doc.holes[id].spec = spec;
+  const built = buildHole(doc, id);
+  const { validateHole } = await import('./golf/js/holes.js');
+  assert.deepEqual(validateHole(built), []);
+  assert.equal(built.green.poly.length, 16, 'the outline was rounded to 16 points');
+  assert.equal(built.pins.length, 2);
+  const src = generateSource(doc, '2026-09-16');
+  assert.match(src, /greenOutline: \[\[/);
+  assert.match(src, /fringe: \{ front: 9/);
+  assert.match(src, /pins: \[\[/);
+  spec = movePin(spec, 1, c[0] + 2, c[1] + 2);
+  assert.deepEqual(spec.pins[1], [+(c[0] + 2).toFixed(1), +(c[1] + 2).toFixed(1)]);
+  spec = deletePin(deletePin(spec, 1), 0);
+  assert.equal(spec.pins, undefined, 'deleting every pin removes the key');
+  const back = clearGreenOutline(spec);
+  assert.equal(back.greenOutline, undefined);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
