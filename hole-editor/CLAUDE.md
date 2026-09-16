@@ -227,3 +227,40 @@ the clipboard. Neither writes to the game's own files - the fold-back (golf/CLAU
   the nickname then Reset restores it and the confirm dialog gates the action; Export produces a
   real download starting with the copied header comment and containing `SPEC_1`.
 - `node validate-sw-assets.mjs` - still green.
+
+## Step 6 (2026-09-16): keyboard, layers, legend, persistence
+
+Keyboard, layers, legend and persistence were already fully built and tested as each earlier step
+needed them (the tool switcher needed its keys in step 4; thumbnails/reorder needed persistence and
+the legend in step 3), so this step is mostly a check that section 4.1's full key list and section
+3.6's rules are ALL actually there, plus two real gaps it found:
+
+- **`Space`+drag-to-pan didn't guard against a focused text input.** Holding Space while typing a
+  space character into Nickname (or any future text field) would also arm the pan - harmless in
+  practice (panning only fires on a canvas pointerdown) but wrong on principle, and every other
+  keydown handler in the file already guards the same way. Fixed with the same
+  input/textarea/select check the Delete/Escape handler uses.
+- **"Discard ALL edits" (section 3.6) had no control anywhere.** The screen layout in section 4
+  doesn't name a "Course panel" the way 3.6's prose does, and there is nowhere else in the
+  documented layout for a whole-course action to live - the bottom strip's totals area is the one
+  place already showing course-wide (not per-hole) state, so that is where the button went,
+  confirm-gated exactly like Reset hole. Rebuilds the document from `createDocument()`, resets the
+  undo/redo stacks, and re-selects hole 1.
+
+Everything else in section 4.1's key list was already wired: `V R W B H T L G S C M` (step 4),
+`Ctrl+Z`/`Ctrl+Y`/`Ctrl+Shift+Z` (step 3), `Delete`/`Backspace` (step 4), `F` fit (step 3), `+`/`-`
+zoom (step 4), `[`/`]` previous/next hole (step 3), `Esc` deselect-then-clear-ruler (step 4),
+`Ctrl+E` export (step 5, added alongside the Export button).
+
+### Tests run and their result
+
+- `node test-hole-editor.mjs` - 19/19 green.
+- Interactive Playwright: edited the nickname, reloaded the page, and read it back from
+  `localStorage` unchanged; collapsed the Legend panel, reloaded, confirmed it stayed collapsed
+  (`golf.holeEditor.ui.v1`); Discard ALL edits (confirmed) restored hole 1's nickname to the
+  original; `Space`+drag moved the camera.
+- `node validate-sw-assets.mjs` - still green.
+
+Sections 1-8 (scope, layout, model, canvas, tools, validate/compare/reset, export, keyboard/
+layers/legend/persistence) are now built and tested end to end. Only section 9 (Phase 2 - the
+three guarded game-side edits and the editor's Play button) remains.

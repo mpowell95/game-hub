@@ -87,7 +87,10 @@ root.innerHTML = `
     </div>
   </div>
   <div class="he-bottom">
-    <div class="he-totals" id="he-totals"></div>
+    <div class="he-totals">
+      <span id="he-totals-text"></span>
+      <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-discard-all">Discard ALL edits</button>
+    </div>
     <div class="he-strip" id="he-strip"></div>
   </div>
 `;
@@ -223,7 +226,7 @@ function refreshPanels() {
 
 function refreshStrip() {
   renderBottomStrip(
-    document.getElementById('he-totals'),
+    document.getElementById('he-totals-text'),
     document.getElementById('he-strip'),
     { doc, originals, currentId, getBuilt, onSelect: selectHole, onReorder: reorder },
   );
@@ -335,6 +338,23 @@ document.getElementById('he-export').addEventListener('click', () => {
 });
 document.getElementById('he-copy-json').addEventListener('click', () => {
   navigator.clipboard?.writeText(generateJSON(doc));
+});
+
+// section 3.6: "Discard ALL edits" - confirm, then the fresh (unedited) document, whole course.
+document.getElementById('he-discard-all').addEventListener('click', () => {
+  if (!window.confirm('Discard ALL edits on every hole and start over from the original Red Mesa? This cannot be undone.')) return;
+  doc = createDocument();
+  editorState.doc = doc;
+  editorState.undo = [];
+  editorState.redo = [];
+  currentId = doc.order[0];
+  validateResults = null;
+  editorCanvas.cameras.clear();
+  editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+  refreshPanels();
+  refreshStrip();
+  refreshContext();
+  scheduleSave();
 });
 
 document.getElementById('he-reset').addEventListener('click', () => {

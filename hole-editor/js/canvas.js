@@ -383,7 +383,8 @@ export class EditorCanvas {
   _wireInput() {
     const el = this.el;
     let spaceDown = false;
-    window.addEventListener('keydown', (e) => { if (e.code === 'Space') spaceDown = true; });
+    const isTyping = () => document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !isTyping()) spaceDown = true; });
     window.addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
 
     el.addEventListener('wheel', (e) => {
