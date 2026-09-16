@@ -1027,6 +1027,20 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
     ok('a stand at angle 0 runs along the hole, at 90 it runs across it', span(along, 'y') > 12 && span(along, 'x') < 5 && span(across, 'x') > 12 && span(across, 'y') < 5,
       `along dx ${span(along, 'x').toFixed(1)} dy ${span(along, 'y').toFixed(1)}; across dx ${span(across, 'x').toFixed(1)} dy ${span(across, 'y').toFixed(1)}`);
     ok('...and turning it does not move its centre', Math.abs((along.reduce((a, t) => a + t.x, 0) - across.reduce((a, t) => a + t.x, 0)) / 3) < 2);
+    // A DRAWN GREEN, PER-SIDE FRINGE, AND PINS (2026-09-16, the hole editor).
+    {
+      const sq = [[-12, 288], [12, 288], [12, 312], [-12, 312]];
+      const g = makeHole({ ...straight, greenOutline: sq, fringe: { front: 10, back: 3, left: 6, right: 6 }, pins: [[-6, 295], [6, 305]], guard: ['frontSand'] });
+      ok('a drawn green IS the green polygon', JSON.stringify(g.green.poly) === JSON.stringify(sq));
+      const fr = g.surfaces.find((s) => s.kind === 'fringe').poly;
+      const frontReach = 288 - Math.min(...fr.map((p) => p[1])); const backReach = Math.max(...fr.map((p) => p[1])) - 312;
+      ok('the fringe is wider at the front than at the back when asked', frontReach > backReach + 2, `front ${frontReach.toFixed(1)} back ${backReach.toFixed(1)}`);
+      ok('a front guard still sits in front of a drawn green', g.surfaces.some((s) => s.kind === 'greensideBunker' && Math.max(...s.poly.map((p) => p[1])) < 288));
+      ok('the first pin is the cup and the rest ride along as hole.pins', g.pin[0] === -6 && g.pin[1] === 295 && g.pins.length === 2);
+      ok('it all validates', validateHole(g).length === 0, validateHole(g).join('; '));
+      ok('a pin outside the green is refused', validateHole(makeHole({ ...straight, pins: [[40, 300]] })).some((e) => /pin is not inside/.test(e)));
+      ok('a single pin does not add a `pins` key', !('pins' in makeHole({ ...straight, pins: [[3, 301]] })));
+    }
     ok('the runsAway presets fall AWAY from the tee (+y) where every other preset falls toward it',
       SLOPE_PRESETS.runsAway(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.runsAwaySteep(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.gentle(0.5, 0.5)[1] < 0);
   }

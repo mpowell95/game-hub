@@ -554,6 +554,66 @@ export function insertSBend(spec, firstSide, length) {
   return { ...spec, path: [tee, p1, p2, pin] };
 }
 
+// --- the green's own outline, fringe widths and pins (Matt, 2026-09-16) --------------------------
+
+/** A drawn putting surface: the clicked corners, rounded, become `greenOutline` (world yards).
+ *  The shape family / angle / radii stop mattering for the shape (holegen keeps them only as the
+ *  reach the fairway stops short of), so they are left in place for "Use preset shape" to return
+ *  to. Pins outside the new outline are dropped rather than left invalid. */
+export function setGreenOutline(spec, points) {
+  if (!points || points.length < 3) return spec;
+  const greenOutline = smoothPoly(points);
+  const out = { ...spec, greenOutline };
+  if (Array.isArray(spec.pins)) {
+    const inside = spec.pins.filter((p) => pointInPolyLocal(p, greenOutline));
+    if (inside.length) out.pins = inside; else delete out.pins;
+  }
+  return out;
+}
+
+export function clearGreenOutline(spec) {
+  const out = { ...spec };
+  delete out.greenOutline;
+  delete out.pins;             // a preset green is a different shape; old pins may fall outside it
+  return out;
+}
+
+/** `fringe` is a number (same all round) or {front, right, back, left} in yards. `undefined`
+ *  restores holegen's default of 6. */
+export function setFringe(spec, fringe) {
+  const out = { ...spec };
+  if (fringe == null) delete out.fringe; else out.fringe = fringe;
+  return out;
+}
+
+function pointInPolyLocal(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0]; const yi = poly[i][1]; const xj = poly[j][0]; const yj = poly[j][1];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Pins are world points on the green. One is simply where the cup is; two or more and the game
+ *  picks one each time the hole is played (golf/js/ui.js). */
+export function addPin(spec, x, y) {
+  const pins = [...(spec.pins || []), [+(+x).toFixed(1), +(+y).toFixed(1)]];
+  return { ...spec, pins };
+}
+
+export function movePin(spec, index, x, y) {
+  const pins = (spec.pins || []).map((p, i) => (i === index ? [+(+x).toFixed(1), +(+y).toFixed(1)] : p));
+  return { ...spec, pins };
+}
+
+export function deletePin(spec, index) {
+  const pins = (spec.pins || []).filter((_, i) => i !== index);
+  const out = { ...spec, pins };
+  if (!pins.length) delete out.pins;
+  return out;
+}
+
 /** Duplicate a placed thing beside itself (12 yd further up the hole, or 12 yd up for a drawn
  *  shape), with a fresh seed so a blob is not the identical blob. Returns the new spec; the copy
  *  is the last entry of its group. */
@@ -577,6 +637,7 @@ export function deleteObject(spec, group, index) {
   if (group === 'trees') return deleteTree(spec, index);
   if (group === 'sentinels') return deleteSentinel(spec, index);
   if (group === 'cross') return deleteCross(spec, index);
+  if (group === 'pins') return deletePin(spec, index);
   throw new Error(`hole-editor: unknown object group "${group}"`);
 }
 

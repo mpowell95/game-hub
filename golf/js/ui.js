@@ -1104,6 +1104,13 @@ class GolfGame {
   _enterHole() {
     this._dropStripObs();
     const hole = this.course.holes[this.holeIdxs[this.pos]];
+    // TODAY'S PIN (2026-09-16). Matt: *"3-4 possible pin locations that the course randomly
+    // chooses from each time it's played. That way the pin location and the wind could help make
+    // replaying the same course fun."* A hole authored with several `pins` gets one of them as the
+    // cup each time it is entered; a hole with one, or none, is unchanged. The hole object is the
+    // course's own, so the pick is written onto it - every reader of `hole.pin` (the cup, the
+    // HUD's distance, the camera, the renderer's flag) then agrees for the rest of the hole.
+    if (Array.isArray(hole.pins) && hole.pins.length > 1) hole.pin = [...hole.pins[Math.floor(Math.random() * hole.pins.length)]];
     // A hole that fails validation must fail LOUDLY rather than half-render: a malformed green
     // silently flattens the break, and that gets diagnosed as "putting feels wrong" for a week.
     const errs = validateHole(hole);

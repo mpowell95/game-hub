@@ -135,16 +135,42 @@ export function fringePoly(cx, cy, rx, ry, seed, shape, angleRad, padYd) {
   const fn = GREEN_SHAPES[shape] || GREEN_SHAPES.round;
   const k = greenShape(seed);
   const pts = [];
+  // `padYd` may be a function of the world angle (2026-09-16, per-side fringe widths).
+  const padAt = typeof padYd === 'function' ? padYd : () => padYd;
   for (let i = 0; i < GREEN_POINTS; i++) {
     const a = (i / GREEN_POINTS) * TAU;
     const jitter = 1 + (k[i % k.length] - 1) / 3;
     const r = Math.max(0.25, fn(angDiff(a, angleRad)) * jitter);
+    const pad = padAt(a);
     pts.push([
-      +(cx + (rx * r + padYd) * Math.cos(a)).toFixed(1),
-      +(cy + (ry * r + padYd) * Math.sin(a)).toFixed(1),
+      +(cx + (rx * r + pad) * Math.cos(a)).toFixed(1),
+      +(cy + (ry * r + pad) * Math.sin(a)).toFixed(1),
     ]);
   }
   return pts;
+}
+
+/** A DRAWN green's fringe: the outline pushed out along each vertex's own outward normal by the
+ *  fringe width on that bearing (2026-09-16). The rounded outlines the editor produces have no
+ *  sharp inner corners, which is what keeps this simple offset from folding over; validateHole's
+ *  crossing check catches one that does. */
+export function offsetOutline(poly, centre, padAt) {
+  let area = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) area += (poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1]);
+  const sign = area > 0 ? 1 : -1;                       // outward normal of edge (a->b) is (dy,-dx) for CCW
+  const n = poly.length;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p = poly[i]; const prev = poly[(i - 1 + n) % n]; const next = poly[(i + 1) % n];
+    const e1 = [p[0] - prev[0], p[1] - prev[1]]; const e2 = [next[0] - p[0], next[1] - p[1]];
+    const n1 = [e1[1] * sign, -e1[0] * sign]; const n2 = [e2[1] * sign, -e2[0] * sign];
+    const m1 = Math.hypot(...n1) || 1; const m2 = Math.hypot(...n2) || 1;
+    let nx = n1[0] / m1 + n2[0] / m2; let ny = n1[1] / m1 + n2[1] / m2;
+    const mm = Math.hypot(nx, ny) || 1; nx /= mm; ny /= mm;
+    const pad = padAt(Math.atan2(p[1] - centre[1], p[0] - centre[0]));
+    out.push([+(p[0] + nx * pad).toFixed(1), +(p[1] + ny * pad).toFixed(1)]);
+  }
+  return out;
 }
 
 /** The twelve radius factors for one green, seeded. Smoothed round the ring so a green has broad
@@ -572,6 +598,28 @@ export function makeHole(spec) {
   const pin = spec.path[spec.path.length - 1];
   const greenR = spec.greenR || Math.round((spec.par === 3 ? 18 : 17) - 7 * (spec.hard == null ? hardnessOf(spec.n) : spec.hard));
   const greenRy = spec.greenRy || greenR;
+  // A DRAWN GREEN (2026-09-16). Matt: *"I need to be able to draw green shapes as well."*
+  // `greenOutline` is the putting surface's own polygon in world yards, drawn in the hole editor
+  // (which rounds the clicked corners). It replaces the shape family; `greenR`/`greenRy` are then
+  // only the reach the fairway stops short of. The star-shape guarantees (no self-crossing, a
+  // fringe that always contains the green) no longer come for free, so validateHole's crossing
+  // check is what stands in for them.
+  const gOutline = Array.isArray(spec.greenOutline) && spec.greenOutline.length >= 3 ? spec.greenOutline.map((p) => [+p[0], +p[1]]) : null;
+  const gReach = gOutline ? Math.max(...gOutline.map((p) => Math.hypot(p[0] - pin[0], p[1] - pin[1]))) : greenRy;
+  // THE FRINGE'S WIDTH, per side (2026-09-16). Matt: *"determine how wide i want the fringe to be
+  // (not a perfect X yds all the way around the green)."* `fringe` is a number, or
+  // `{front, right, back, left}` in yards in the green's own frame (front = toward the tee); the
+  // width between two sides blends by bearing. Absent, 6 everywhere, as it always was.
+  const fr = spec.fringe;
+  const fringeAt = (bearingRel) => {
+    if (fr == null) return 6;
+    if (typeof fr === 'number') return fr;
+    const c = Math.cos(bearingRel); const s = Math.sin(bearingRel);
+    const w = { f: Math.max(0, c), b: Math.max(0, -c), r: Math.max(0, s), l: Math.max(0, -s) };
+    const tot = w.f + w.b + w.r + w.l || 1;
+    return ((fr.front == null ? 6 : fr.front) * w.f + (fr.back == null ? 6 : fr.back) * w.b
+      + (fr.right == null ? 6 : fr.right) * w.r + (fr.left == null ? 6 : fr.left) * w.l) / tot;
+  };
   // THE COLLAR IS 6 YARDS ON BOTH AXES, not a scaled-up copy of the green. Scaling it
   // proportionally looks equivalent and is not: a wide, shallow green (Red Mesa 3 is 18 x 10)
   // comes out with 6 yards of collar across and 3.3 up the hole, so missing it long lands in the
@@ -674,7 +722,7 @@ export function makeHole(spec) {
   // few yards are the fringe's, which is painted over the top of the rough. Running the fairway
   // into the green instead would put a mow stripe through the putting surface.
   const fwFrom = Math.min(10, length * 0.05);
-  const fwTo = Math.max(fwFrom + 20, length - (greenRy + 8));
+  const fwTo = Math.max(fwFrom + 20, length - (gReach + 8));
   const rgTo = length;
 
   const surfaces = [];
@@ -779,6 +827,21 @@ export function makeHole(spec) {
   const gJit = greenShape(greenSeed);
   const edgeAt = (bearing) => {
     const A = gBase + bearing;
+    if (gOutline) {
+      // A drawn green: cast the ray from the green's centre and take the nearest edge it crosses.
+      const dx = Math.cos(A); const dy = Math.sin(A);
+      let best = Infinity;
+      for (let i = 0, j = gOutline.length - 1; i < gOutline.length; j = i++) {
+        const [ax, ay] = gOutline[j]; const [bx, by] = gOutline[i];
+        const ex = bx - ax; const ey = by - ay;
+        const D = ex * dy - ey * dx;
+        if (Math.abs(D) < 1e-9) continue;
+        const t = (ex * (ay - pin[1]) - ey * (ax - pin[0])) / D;
+        const u = (dx * (ay - pin[1]) - dy * (ax - pin[0])) / D;
+        if (t > 0 && u >= 0 && u <= 1 && t < best) best = t;
+      }
+      return Number.isFinite(best) ? best : gReach;
+    }
     const jitter = 1 + (gJit[Math.round(((A % TAU) + TAU) % TAU / TAU * GREEN_POINTS) % gJit.length] - 1) / 3;
     const rr2 = Math.max(0.25, (GREEN_SHAPES[gShape] || GREEN_SHAPES.round)(angDiff(A, gAngleRad)) * jitter);
     return Math.hypot(greenR * rr2 * Math.cos(A), greenRy * rr2 * Math.sin(A));
@@ -786,7 +849,7 @@ export function makeHole(spec) {
   /** A point `pad` yards beyond the green's edge, on a bearing measured from the approach:
    *  0 is short of the green, 90 is right of it, 180 long, 270 left. */
   const gEdge = (bearing, pad) => {
-    const d = edgeAt(bearing) + 6 + pad;                // +6 clears the fringe
+    const d = edgeAt(bearing) + fringeAt(bearing) + pad;   // past the fringe on THAT side
     return [pin[0] + Math.cos(gBase + bearing) * d, pin[1] + Math.sin(gBase + bearing) * d];
   };
   const DEG = Math.PI / 180;
@@ -1031,13 +1094,21 @@ export function makeHole(spec) {
   // THE FRINGE IS THE GREEN PUSHED OUT BY A CONSTANT, not the green drawn bigger. Scaling a kidney
   // scales its notch, and the collar would then cut INTO the putting surface exactly where the
   // notch is deepest.
-  surfaces.push({ kind: 'fringe', poly: fringePoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad, 6) });
+  surfaces.push({ kind: 'fringe', poly: gOutline
+    ? offsetOutline(gOutline, pin, (worldAngle) => fringeAt(worldAngle - gBase))
+    : fringePoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad, (worldAngle) => fringeAt(worldAngle - gBase)) });
   for (const b of bunkers) if ((b.kind || 'greensideBunker') !== 'fairwayBunker') surfaces.push({ kind: 'greensideBunker', poly: b.poly });
   surfaces.push({ kind: 'green', poly: 'green' });
   surfaces.push({ kind: 'tee', poly: [[tee[0] - 6, tee[1] - 5], [tee[0] + 6, tee[1] - 5], [tee[0] + 6, tee[1] + 5], [tee[0] - 6, tee[1] + 5]] });
 
+  // THE PIN (2026-09-16). Matt: *"No golf course has the pins in the center always... 3-4
+  // possible pin locations that the course randomly chooses from each time it's played."* `pins`
+  // is a list of world points inside the green. One pin is simply where the cup is; two or more
+  // are carried on the hole as `pins` and golf/js/ui.js picks one as the hole starts. The route
+  // still ends at the green's centre (path[last]); only the cup moves.
+  const pins = Array.isArray(spec.pins) && spec.pins.length ? spec.pins.map((p) => [+p[0], +p[1]]) : null;
   const green = {
-    poly: greenPoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad),
+    poly: gOutline || greenPoly(pin[0], pin[1], greenR, greenRy, greenSeed, gShape, gAngleRad),
     slope: slopeFrom(spec.slope || { fall: [0, -0.15] }, slopeK),
   };
 
@@ -1112,7 +1183,8 @@ export function makeHole(spec) {
     }),
     cardYards: +length.toFixed(1),
     tee: [...tee],
-    pin: [...pin],
+    pin: pins ? [...pins[0]] : [...pin],
+    ...(pins && pins.length > 1 ? { pins } : {}),
     bounds,
     base: spec.base || 'heavyRough',
     surfaces,
