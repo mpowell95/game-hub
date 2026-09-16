@@ -514,3 +514,12 @@ has **Wind: auto** (that derivation) or a speed slider (0-2, 0 = calm) and eight
 labelled by where it blows: toward the green, right, toward the tee, left, and the diagonals.
 Exported as `wind: { speed, deg }`; `golf/js/holegen.js` turns it into the `hole.wind` that
 `shot.js`'s `windFor` has always honoured. Unset = exactly what the course did before.
+
+## Tree shadows are drawn (2026-09-16)
+
+The game offsets a tree's shadow by 0.92 yds per yard of HEIGHT; the editor drew crowns only,
+so Matt's hole 7 - palo verde stands set to 39.5-47 yds tall on the Height slider - looked
+nothing like the game, where their shade lay across the whole green and nothing in the bag
+could fly them. `canvas.js` now paints the same ellipses at the same alpha before the crowns.
+The Height slider's units are yards; a palo verde is 8, a saguaro 15, a boulder 40, and the 8
+iron's apex, the highest in the bag, is 32.

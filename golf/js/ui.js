@@ -181,6 +181,13 @@ const DEG = Math.PI / 180;
 const POSE_STILL_MS = 265;
 const POSE_BACK_MS = 40;
 const POSE_THRU_MS = 45;
+/** How long a ball that met a tree takes to fall from the point of contact to the ground. */
+const BLOCKED_FALL_MS = 420;
+/** A putt longer than this (in feet) is followed by the camera, like a full shot is. Matt,
+ *  2026-09-16: *"The camera needs to follow the ball on a long putt just like it does on regular
+ *  shots."* Shorter ones keep the static frame the reference uses, which is what lets a player
+ *  read the break they just played. */
+const PUTT_FOLLOW_FT = 40;
 const WINDUP_MS = 850;
 
 /** THE OPENING FLYOVER (2026-09-06). The camera opens ON THE GREEN, sits there long enough to
@@ -1605,7 +1612,8 @@ class GolfGame {
         power: Math.max(0, Math.min(1, power * pm.paceMul)),
         rangeFt: puttRangeFt(this._activeClub()),
       });
-      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball] };
+      const pathLen = res.path && res.path.length > 1 ? distYd(res.path[0], res.path[res.path.length - 1]) : 0;
+      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball], follow: pathLen * FT_PER_YD > PUTT_FOLLOW_FT };
     } else {
       const club = this._activeClub();
       // THE MISS IS A CURVE, NOT A ROTATED LAUNCH LINE (2026-09-08). Matt: *"Do off target balls
@@ -1624,7 +1632,13 @@ class GolfGame {
         hole: this.hole, from: this.ball, aimRad: this.aimRad,
         club, power, mishitDeg: m.deg, distanceMul: m.distanceMul,
       });
-      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: res.flightMs, res, club, from: [...this.ball] };
+      // A BLOCKED SHOT IS ANIMATED AS THE SHOT IT WAS (2026-09-16): the real arc up to where it
+      // met the tree, then a fall. It used to be drawn as a complete, smaller arc ending at the
+      // drop point - peak and all - so a ball that hit a 47 yd tree at half its carry looked like
+      // a shot that "starts its descent well before the tree" (Matt, with a recording of Red
+      // Mesa 7) and the tree looked innocent.
+      const fly = res.flightMs;
+      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: fly + (res.blocked ? BLOCKED_FALL_MS : 0), fly, res, club, from: [...this.ball] };
     }
     // The hub readout is set when the ball STOPS, never here - see _settleShot.
   }
@@ -2166,7 +2180,9 @@ class GolfGame {
     if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
     // ...and "in the trees" is any tree, not only the painted wood: a ball a tree just stopped, or
     // one resting under a crown / against a trunk / inside a stand, gets the same two buttons.
-    else if (this._lie() === 'trees' || (a.res && a.res.blocked) || amongTrees(this.hole, this.ball)) this._showDropPrompt();
+    // ...never on the green or its collar: a putt runs under the branches and nothing stops it, so
+    // "in the trees" there is a question with no answer (Matt, Red Mesa 7, after a putt).
+    else if (!mustPutt(this._lie()) && (this._lie() === 'trees' || (a.res && a.res.blocked) || amongTrees(this.hole, this.ball))) this._showDropPrompt();
     // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
     // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
     // into mid-air as if it were lying there.
@@ -2551,10 +2567,23 @@ class GolfGame {
         const r = this.anim.res;
         const roll = r.rollMs || 0;
         if (el < this.anim.dur) {
-          const f = flightPoint(p, r.carry * (r.blocked ? r.blocked.p : 1), r.sideYd * (r.blocked ? r.blocked.p : 1), r.apex);
           const cos = Math.cos(r.aimRad); const sin = Math.sin(r.aimRad);
-          ballPos = [this.ball[0] + sin * f.along + cos * f.side, this.ball[1] + cos * f.along - sin * f.side];
-          height = f.height;
+          const fly = this.anim.fly || this.anim.dur;
+          if (r.blocked && el >= fly) {
+            // THE FALL: from the point of contact, at the height it was struck at, straight down
+            // onto the drop point the engine chose (a couple of yards short of the trunk).
+            const q = Math.min(1, (el - fly) / BLOCKED_FALL_MS);
+            const c = flightPoint(r.blocked.p, r.carry, r.sideYd, r.apex);
+            const cx = this.ball[0] + sin * c.along + cos * c.side; const cy = this.ball[1] + cos * c.along - sin * c.side;
+            ballPos = [cx + (r.landing[0] - cx) * q, cy + (r.landing[1] - cy) * q];
+            height = c.height * (1 - q) * (1 - q);
+          } else {
+            // The real trajectory - full carry, full apex - stopped at the contact point.
+            const pp = r.blocked ? Math.min(1, Math.max(0, el) / Math.max(1, fly)) * r.blocked.p : p;
+            const f = flightPoint(pp, r.carry, r.sideYd, r.apex);
+            ballPos = [this.ball[0] + sin * f.along + cos * f.side, this.ball[1] + cos * f.along - sin * f.side];
+            height = f.height;
+          }
         } else {
           // THE GROUND PHASE. Measured off the reference at 30 fps: the ball spends 3.4 s bouncing
           // and rolling against 2.7 s in the air, decaying in stages rather than stopping. Ours
@@ -2605,8 +2634,15 @@ class GolfGame {
       } else {
         // The camera does NOT move during a putt. Confirmed frame by frame in the reference, and
         // it is right: a static frame is what lets the player read the break they just played.
+        // ...EXCEPT ON A LONG ONE (PUTT_FOLLOW_FT), where the ball would leave the frame: then the
+        // camera trails it the way it trails a full shot's run-out.
         const path = this.anim.res.path;
         ballPos = winding ? this.ball : path[Math.min(path.length - 1, Math.floor(p * (path.length - 1)))];
+        if (this.anim.follow && !winding) {
+          this.cam.x += (ballPos[0] - this.cam.x) * 0.12;
+          this.cam.y += (ballPos[1] + this.cam.halfH * 0.12 - this.cam.y) * 0.12;
+          this.cam.clamp();
+        }
       }
       if (this.anim && this.anim.type === 'putt' && p >= 1) { this.ball = [...ballPos]; this._settleShot(); this._aimCamera(false); }
     } else {
@@ -2710,6 +2746,8 @@ class GolfGame {
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
       puttLine: putting ? puttRangeFt(this._activeClub()) / FT_PER_YD : 0,
+      // The wood goes translucent while the ball is on the green or its collar (render.js).
+      seeThroughTrees: this._mustPutt(),
     });
     this._drawMeter(now);
     this._paintSwingLabel(now);
