@@ -211,7 +211,7 @@ export function renderBottomStrip(totalsEl, stripEl, { doc, originals, currentId
 
     const cv = wrap.querySelector('canvas');
     const dpr = 2;
-    cv.width = 120 * dpr; cv.height = 120 * dpr;
+    cv.width = 150 * dpr; cv.height = 140 * dpr;
     renderMapThumbnail(getBuilt(id), cv);
 
     wrap.addEventListener('click', () => onSelect(id));
