@@ -126,6 +126,13 @@ export function originalSpecs() {
   return out;
 }
 
+/** Build the ORIGINAL hole for an id, at its original slot (never its current position in some
+ *  document's `order`) - what Compare (section 7) shows beside the current one. */
+export function buildOriginalHole(id, originals) {
+  const slot = Number(id.slice(3));
+  return makeHole({ ...RM_DEFAULTS, ...(originals || originalSpecs())[id], n: slot });
+}
+
 function deepFreeze(v) {
   if (v && typeof v === 'object' && !Object.isFrozen(v)) {
     Object.freeze(v);

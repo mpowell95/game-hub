@@ -67,9 +67,31 @@ export function renderLayers(el, layers, onChange) {
 
 function fmtYd(y) { return (Math.round(y * 10) / 10).toFixed(1); }
 
+/** section 7: a "crosses itself" message cites two points; anything else cites at most one. */
+export function pointsInMessage(msg) {
+  const re = /\[(-?[\d.]+),\s*(-?[\d.]+)\]/g;
+  const pts = [];
+  let m;
+  while ((m = re.exec(msg))) pts.push([+m[1], +m[2]]);
+  return pts;
+}
+
+/** Never run on its own (section 7 - Matt's rule); `validateResults` is null until the Validate
+ *  button has been pressed for this hole. */
+function renderValidateResults(validateResults) {
+  if (!validateResults) return '';
+  if (!validateResults.length) return '<div class="he-objgroup">Validate</div><div class="he-objrow" style="color:#5fd97a;">No problems</div>';
+  return `<div class="he-objgroup">Validate</div>${validateResults.map((msg, i) => `<div class="he-objrow" data-validate-row="${i}" style="white-space:normal;color:#ff8f80;">${msg}</div>`).join('')}`;
+}
+function wireValidateResults(el, onRowClick) {
+  el.querySelectorAll('[data-validate-row]').forEach((row) => {
+    row.addEventListener('click', () => onRowClick(+row.dataset.validateRow));
+  });
+}
+
 /** Section 4.3. Slot/id and Length are read-only (Length is `built.cardYards`, R5 - never
  *  hand-edited, only ever a consequence of the path/width); everything else is a live control. */
-export function renderHolePanel(el, doc, id, built, ops, hoverText) {
+export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResults, onValidateRowClick) {
   const slot = doc.order.indexOf(id) + 1;
   const spec = doc.holes[id].spec;
   const broken = doc.holes[id].broken;
@@ -105,7 +127,9 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText) {
       ${spec.rough != null ? slider('he-h-rough', 'Rough collar', 3, 20, 1, spec.rough) : ''}
     </div>
     ${broken ? `<div class="he-broken">${broken}</div>` : ''}
+    ${renderValidateResults(validateResults)}
   `;
+  wireValidateResults(el, onValidateRowClick || (() => {}));
   if (!ops) return;
   el.querySelector('#he-h-nick').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'nickname', e.target.value)));
   wireSeg(el, 'par', (v) => ops.instant((s) => ops.mutators.setField(s, 'par', +v)));
@@ -514,4 +538,50 @@ export function renderContextPanel(el, ctx) {
   };
   const fn = byTool[ctx.tool];
   if (fn) fn(el, ctx); else el.innerHTML = '<span class="he-empty">Tools land in step 4.</span>';
+}
+
+// --- Compare (section 7) --------------------------------------------------------------------
+// Visual only: two canvases side by side, original vs current, both letterboxed to the SAME
+// scale so a size difference is honest rather than an artifact of independent fitting.
+
+export function openCompareModal({ originalBuilt, currentBuilt, slot, id }) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  const W = 360; const H = 720;
+  const scale = Math.min(
+    W / Math.max(originalBuilt.bounds.maxX - originalBuilt.bounds.minX, currentBuilt.bounds.maxX - currentBuilt.bounds.minX),
+    H / Math.max(originalBuilt.bounds.maxY - originalBuilt.bounds.minY, currentBuilt.bounds.maxY - currentBuilt.bounds.minY),
+  );
+  const card = (built, label) => {
+    const b = built.bounds;
+    const w = Math.max(1, Math.round((b.maxX - b.minX) * scale));
+    const h = Math.max(1, Math.round((b.maxY - b.minY) * scale));
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+      <div style="color:#e8e8e8;font:600 13px sans-serif;">${label} &middot; par ${built.par} &middot; ${Math.round(built.cardYards)} yd</div>
+      <div style="width:${W}px;height:${H}px;background:#0b0f07;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.15);">
+        <canvas width="${w}" height="${h}" data-role="${label}"></canvas>
+      </div>
+    </div>`;
+  };
+  overlay.innerHTML = `
+    <div style="background:#1e1e1e;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e8e8e8;font:600 15px sans-serif;">Compare &middot; ${id} (slot ${slot})</div>
+        <button class="gh-btn gh-btn--sm" id="he-compare-close">Close</button>
+      </div>
+      <div style="display:flex;gap:20px;">
+        ${card(originalBuilt, 'Original')}
+        ${card(currentBuilt, 'Current')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const origCv = overlay.querySelector('canvas[data-role="Original"]');
+  const curCv = overlay.querySelector('canvas[data-role="Current"]');
+  renderMapThumbnail(originalBuilt, origCv);
+  renderMapThumbnail(currentBuilt, curCv);
+  const close = () => overlay.remove();
+  overlay.querySelector('#he-compare-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  window.addEventListener('keydown', function onEsc(e) { if (e.key === 'Escape') { close(); window.removeEventListener('keydown', onEsc); } });
 }

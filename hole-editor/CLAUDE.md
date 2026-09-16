@@ -193,3 +193,37 @@ temporary and local to the check.
 - **Second attempt, with the same seven edits spread out and non-overlapping**, passed clean:
   `node golf/js/test.js` → "all golf engine tests passed", including section 14's full 18-hole
   playthrough of the edited course.
+
+## Step 5 (2026-09-16): Validate / Compare / Reset (+ Export/Copy JSON wiring)
+
+- **Validate** runs `validateHole(built)` (or reports `broken` as the only row) into a new section
+  of the Hole panel - never on its own, only on the ribbon button, per section 7's rule. Each row
+  is clickable: `pointsInMessage()` (panels.js) pulls every `[x,y]` a message cites - one point for
+  most messages, two for a "crosses itself" report - and `EditorCanvas.panTo()` centres the camera
+  there and rings every cited point in red (plus a dashed line between the two, for a self-cross)
+  until the next canvas click, which already clears `validateRing` (wired in step 4).
+- **Compare** opens a plain DOM modal (not a canvas overlay) with two `buildMap` renders side by
+  side at one shared scale - the original (`buildOriginalHole()`, new in `model.js`: builds an id's
+  frozen original spec at its ORIGINAL slot, never its current position in `order`) and the
+  current hole - each labelled with par and length. Closes on the X, a click outside, or Escape.
+- **Reset hole**: `window.confirm`, then the spec is replaced by a deep copy of the frozen
+  original (by id - the slot, i.e. `order`, is untouched), one undo push, `validateResults`
+  cleared (a stale list belongs to the edit that's gone).
+
+**Export and Copy JSON were wired too, though section 11 doesn't name a step for it.** Both were
+already built and tested in step 2 (`export.js`); leaving the ribbon button dead through steps 3-5
+would leave the tool unable to do the one thing it exists for. Export triggers a browser download
+of `generateSource(doc)` as `redmesa.js` (also on Ctrl+E); Copy JSON writes `generateJSON(doc)` to
+the clipboard. Neither writes to the game's own files - the fold-back (golf/CLAUDE.md's "Fold-back
+(a session, not the tool)") is still a deliberate, separate step.
+
+### Tests run and their result
+
+- `node test-hole-editor.mjs` - 19/19 green throughout (Validate/Compare/Reset touch no model
+  invariant the existing suite doesn't already cover; `buildOriginalHole` is exercised indirectly
+  by every `originalSpecs()`-based test already in the file).
+- Interactive Playwright: Validate on a clean hole shows "No problems"; `panTo`/`validateRing`
+  verified directly; Compare modal opens with both canvases and closes on its own button; editing
+  the nickname then Reset restores it and the confirm dialog gates the action; Export produces a
+  real download starting with the copied header comment and containing `SPEC_1`.
+- `node validate-sw-assets.mjs` - still green.

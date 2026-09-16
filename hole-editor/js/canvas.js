@@ -209,7 +209,7 @@ export class EditorCanvas {
     this.tool = 'select';
     this.selection = null; // {group,index} | {group:'waypoint', index} | null
     this.ruler = null; // [[x,y]] | [[x,y],[x,y]] | null
-    this.validateRing = null; // a world point to ring in red until the next click (section 7)
+    this.validateRing = null; // an array of world points to ring in red until the next click (section 7)
     // Supplied by main.js: { getSpec, instant(mutateFn), liveBegin, liveUpdate(mutateFn), liveEnd,
     // guardTree }. Instant = one undo-worthy action now; live* = a drag, one undo push at the end.
     this.ops = null;
@@ -309,6 +309,16 @@ export class EditorCanvas {
     const cam = this.camera;
     if (!cam) return;
     this.cameras.set(this.holeId, { ...cam, cx: cam.cx - dxPx / cam.ppy, cy: cam.cy + dyPx / cam.ppy });
+    this.draw();
+  }
+
+  /** Centre the camera on a world point, keeping zoom - section 7's "pans to the offending
+   *  point". `points` (one or two world points) are ringed in red until the next click. */
+  panTo(x, y, points) {
+    const cam = this.camera;
+    if (!cam) return;
+    this.cameras.set(this.holeId, { ...cam, cx: x, cy: y });
+    this.validateRing = points || [[x, y]];
     this.draw();
   }
 
@@ -823,13 +833,23 @@ export class EditorCanvas {
       }
       ctx.restore();
     }
-    if (this.validateRing) {
+    if (this.validateRing && this.validateRing.length) {
       ctx.save();
       ctx.strokeStyle = '#ff4433';
       ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(sx(this.validateRing[0]), sy(this.validateRing[1]), 14, 0, Math.PI * 2);
-      ctx.stroke();
+      for (const p of this.validateRing) {
+        ctx.beginPath();
+        ctx.arc(sx(p[0]), sy(p[1]), 14, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // A "crosses itself" report cites two edges - draw the offending segment between them too.
+      if (this.validateRing.length === 2) {
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(sx(this.validateRing[0][0]), sy(this.validateRing[0][1]));
+        ctx.lineTo(sx(this.validateRing[1][0]), sy(this.validateRing[1][1]));
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }

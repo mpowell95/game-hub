@@ -4,7 +4,7 @@
 // instant action or once per drag/slider release - section 3.5).
 
 import {
-  createDocument, buildHole, originalSpecs, HOLE_COUNT,
+  createDocument, buildHole, originalSpecs, buildOriginalHole, HOLE_COUNT,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument, STORAGE_KEY,
   setField,
@@ -18,7 +18,9 @@ import {
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
 } from './model.js';
 import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
-import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel } from './panels.js';
+import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
+import { validateHole } from '../../golf/js/holes.js';
+import { generateSource, generateJSON } from './export.js';
 
 const MUTATORS = {
   setField,
@@ -175,11 +177,12 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
   '<button class="he-tool" id="he-redo" title="Redo (Ctrl+Y)"><span class="he-tool-icon">↷</span><span class="he-tool-label">Redo</span></button>',
   '<div class="he-sep"></div>',
-  '<button class="he-tool" id="he-validate" title="Validate" disabled><span class="he-tool-icon">✓</span><span class="he-tool-label">Validate</span></button>',
-  '<button class="he-tool" id="he-compare" title="Compare" disabled><span class="he-tool-icon">⇄</span><span class="he-tool-label">Compare</span></button>',
-  '<button class="he-tool" id="he-reset" title="Reset hole" disabled><span class="he-tool-icon">↺</span><span class="he-tool-label">Reset hole</span></button>',
+  '<button class="he-tool" id="he-validate" title="Validate"><span class="he-tool-icon">✓</span><span class="he-tool-label">Validate</span></button>',
+  '<button class="he-tool" id="he-compare" title="Compare"><span class="he-tool-icon">⇄</span><span class="he-tool-label">Compare</span></button>',
+  '<button class="he-tool" id="he-reset" title="Reset hole"><span class="he-tool-icon">↺</span><span class="he-tool-label">Reset hole</span></button>',
   '<div class="he-sep"></div>',
-  '<button class="he-tool" id="he-export" title="Export (Ctrl+E)" disabled><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
+  '<button class="he-tool" id="he-export" title="Export (Ctrl+E)"><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
+  '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
 ].join('');
 
 const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
@@ -197,9 +200,24 @@ for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('
 // (section 3.3); nothing further to cache here.
 function getBuilt(id) { return buildHole(doc, id); }
 
+// section 7: never runs on its own. null until the Validate button is pressed for this hole;
+// switching holes (but not editing this one further) clears it, since a stale list would point at
+// another hole's problems.
+let validateResults = null;
+
+function onValidateRowClick(i) {
+  const msg = validateResults[i];
+  if (!msg) return;
+  const pts = pointsInMessage(msg);
+  if (!pts.length) return;
+  const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  editorCanvas.panTo(cx, cy, pts);
+}
+
 function refreshPanels() {
   const built = getBuilt(currentId);
-  renderHolePanel(document.getElementById('he-hole'), doc, currentId, built, editOps, lastWidthAtCursor);
+  renderHolePanel(document.getElementById('he-hole'), doc, currentId, built, editOps, lastWidthAtCursor, validateResults, onValidateRowClick);
   renderObjectsList(document.getElementById('he-objects'), doc, currentId, built);
 }
 
@@ -214,6 +232,7 @@ function refreshStrip() {
 function selectHole(id) {
   if (id === currentId) return;
   currentId = id;
+  validateResults = null;
   editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
   refreshPanels();
   refreshStrip();
@@ -289,6 +308,43 @@ editorCanvas.onSelectionChange = () => refreshContext();
 document.getElementById('he-undo').addEventListener('click', () => { if (undo(editorState)) afterChange(); });
 document.getElementById('he-redo').addEventListener('click', () => { if (redo(editorState)) afterChange(); });
 
+// --- Validate / Compare / Reset (section 7) -----------------------------------------------
+document.getElementById('he-validate').addEventListener('click', () => {
+  const entry = doc.holes[currentId];
+  validateResults = entry.broken ? [entry.broken] : validateHole(getBuilt(currentId));
+  refreshPanels();
+});
+
+document.getElementById('he-compare').addEventListener('click', () => {
+  openCompareModal({
+    originalBuilt: buildOriginalHole(currentId, originals),
+    currentBuilt: getBuilt(currentId),
+    slot: doc.order.indexOf(currentId) + 1,
+    id: currentId,
+  });
+});
+
+document.getElementById('he-export').addEventListener('click', () => {
+  const src = generateSource(doc);
+  const blob = new Blob([src], { type: 'text/javascript' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'redmesa.js';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+document.getElementById('he-copy-json').addEventListener('click', () => {
+  navigator.clipboard?.writeText(generateJSON(doc));
+});
+
+document.getElementById('he-reset').addEventListener('click', () => {
+  if (!window.confirm(`Reset ${currentId} to its original design? This cannot be undone by anything but Undo.`)) return;
+  pushUndo(editorState);
+  doc.holes[currentId].spec = JSON.parse(JSON.stringify(originals[currentId]));
+  validateResults = null;
+  afterChange();
+});
+
 renderLegend(document.getElementById('he-legend'));
 renderLayers(document.getElementById('he-layers'), layers, () => editorCanvas.draw());
 
@@ -303,6 +359,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '-' || e.key === '_') { editorCanvas.zoomBy(1 / 1.1); return; }
   if (e.key === '[') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i - 1 + HOLE_COUNT) % HOLE_COUNT]); return; }
   if (e.key === ']') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i + 1) % HOLE_COUNT]); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); document.getElementById('he-export').click(); return; }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) { setTool(TOOL_KEYS[e.key.toLowerCase()]); }
 });
 
