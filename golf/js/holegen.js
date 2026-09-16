@@ -243,6 +243,14 @@ export const SLOPE_PRESETS = {
   leftShed: (u, v) => [-0.52 - (1 - u) * 0.22, -0.14 - v * 0.10],
   rightShed: (u, v) => [0.52 + u * 0.22, -0.14 - v * 0.10],
 
+  // RUNS AWAY: falls from front to BACK, so an approach that lands past the hole keeps going and
+  // an overshot ball runs off the back. Every other preset falls toward the tee; Matt (2026-09-16,
+  // designing hole 3: "make the green slope away from the tee and put a large greenside bunker
+  // right behind the hole that an overshot ball will roll into") needed the opposite. `v` runs
+  // front to back, so the fall is +y in the green's frame and grows toward the back edge.
+  runsAway: (u, v) => [(u - 0.5) * 0.10, 0.16 + v * 0.14],
+  runsAwaySteep: (u, v) => [(u - 0.5) * 0.22, 0.40 + v * 0.34],
+
   // QUARTERS: each corner falls its own way. The read changes completely depending on which part
   // of the green you are on, which is the hardest thing a flat picture can ask of a player.
   quarters: (u, v) => [(u < 0.5 ? -1 : 1) * (0.30 + v * 0.34), (v < 0.5 ? -1 : 1) * (0.30 + u * 0.30)],
@@ -520,7 +528,15 @@ function ribbon(stations, side, innerAt, outerAt, from, to) {
 function place(stations, at, side, off) {
   const i = Math.min(stations.length - 1, Math.max(0, Math.round(at * (stations.length - 1))));
   const p = stations[i];
-  return [p.x + p.nx * off * side, p.y + p.ny * off * side];
+  // PAST THE PIN, OR BEHIND THE TEE (2026-09-16). Matt, in the hole editor: *"It doesn't let me
+  // place a bunker behind the green."* `at` used to clamp to 0..1, so nothing could be authored
+  // beyond the last station. Now an `at` outside that range carries on along the end station's
+  // own tangent by the extra distance - `yd: length + 20` is twenty yards past the pin, straight
+  // on. The station's normal still sets `side`/`off`, so "behind the green, a little right" is
+  // one number each, as everywhere else.
+  const len = stations[stations.length - 1].s;
+  const over = at > 1 ? (at - 1) * len : (at < 0 ? at * len : 0);
+  return [p.x + p.tx * over + p.nx * off * side, p.y + p.ty * over + p.ny * off * side];
 }
 
 // --- the constructor ----------------------------------------------------------------------------

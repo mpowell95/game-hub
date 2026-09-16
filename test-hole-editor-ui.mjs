@@ -86,6 +86,16 @@ const s1 = await spec();
 ok('Delete removes the selected bunker and writes defend:false (R2)', s1.bunkers.length === 0 && s1.defend === false);
 await key('Control+z');
 ok('...Ctrl+Z brings it back', (await spec()).bunkers.length === 1);
+// Behind the green (Matt, 2026-09-16: 'It doesn't let me place a bunker behind the green').
+await key('b');
+const pinB = await page.evaluate(() => window.__he.editorCanvas.built.pin);
+const behind = await toScreen(pinB[0], pinB[1] + 22);
+await page.mouse.click(behind.x, behind.y); await settle();
+const bb = (await spec()).bunkers; const lastB = bb[bb.length - 1];
+const lenB = await page.evaluate(() => window.__he.getBuilt(window.__he.currentId).cardYards);
+ok('[KNOWN-BUG PROBE] a click 22 yd past the pin places a bunker BEYOND the hole length', lastB.yd > lenB + 15, `yd ${lastB.yd.toFixed(1)} vs length ${lenB}`);
+ok('...as a greenside bunker', lastB.kind === 'greensideBunker');
+await key('Control+z');
 
 console.log('\n-- Route --');
 await key('r');
