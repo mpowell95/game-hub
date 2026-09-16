@@ -108,6 +108,7 @@ const EXCLUDED = [
   { re: /(^|\/)js\/sim\.js$/, why: "headless match simulation (node-only, not deployed) - e.g. chinchon/js/sim.js's own header comment" },
   // "Reference screenshots in mancala/reference/ (gitignored)" - CLAUDE.md, Mancala row.
   { re: /^mancala\/reference\//, why: 'design reference screenshots, gitignored - CLAUDE.md Mancala row' },
+  { re: /^hole-editor\//, why: 'Matt-only desktop design tool, never deployed - HANDOFF-GOLF-HOLE-EDITOR.md' },
 ];
 function excludedWhy(relPath) {
   const hit = EXCLUDED.find((x) => x.re.test(relPath));

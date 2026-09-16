@@ -1972,6 +1972,10 @@ class GolfGame {
   }
 
   _recordRound() {
+    // HANDOFF-GOLF-HOLE-EDITOR.md phase 2: an edited-hole practice session (`?editor=1`) must
+    // never write a bestHole or a round best - the course object is a document still being
+    // designed, not a real one a player's record should ever reflect.
+    if (globalThis.__gfNoRecord) return;
     if (this.recorded || this.roundId === 'practice') return;
     if (this.holeIdxs.some((_, i) => !Number.isFinite(this.scores[i]))) return;
     this.recorded = true;
@@ -2017,6 +2021,7 @@ class GolfGame {
   /** One hole's own record. Additive and Math.min inside the recorder; a failed write is queued
    *  and replayed by `recordGolf` itself, exactly as a round's is. */
   _recordHole(hole, strokes) {
+    if (globalThis.__gfNoRecord) return;
     if (!Number.isFinite(strokes) || strokes <= 0) return;
     try {
       recordGolf(this.course.id, {
