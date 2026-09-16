@@ -208,7 +208,19 @@
 .sd-cell.sd-boxright { border-right: 2px solid var(--sd-line-strong); }
 .sd-cell.sd-boxbottom { border-bottom: 2px solid var(--sd-line-strong); }
 
-.sd-cell.sd-peer { background: var(--sd-peer); }
+/* THE TINT IS LAYERED OVER THE CELL'S OWN SURFACE, never set as a bare translucent
+ * `background`. `.sd-board` paints `var(--sd-line)` behind the cells (that IS the grid - the thin
+ * lines are the board showing through the 0.5px gaps between cells), so a translucent
+ * `background: var(--sd-peer)` composited over #b8c2d4, not over white: every highlighted cell
+ * came out the exact colour of the grid lines, which is why the row/column/box highlight swallowed
+ * the lines inside it whole (Matt, 2026-09-16: "The highlight also makes the lines showing the
+ * individual digit squares invisible"). Measured: peer cells rendered rgb(184,194,212), identical
+ * to `--sd-line`. A background-image layer over an opaque background-color composites against the
+ * SURFACE instead, so the lines read exactly as they do on an unhighlighted cell. */
+.sd-cell.sd-peer {
+  background-color: var(--sd-surface);
+  background-image: linear-gradient(var(--sd-peer), var(--sd-peer));
+}
 .sd-cell.sd-same .sd-digit { text-decoration: underline; text-underline-offset: 3px; }
 .sd-cell.sd-selected {
   outline: 3px solid var(--sd-select);

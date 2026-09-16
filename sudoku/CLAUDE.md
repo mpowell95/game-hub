@@ -241,6 +241,61 @@ boxes of numbers. `_howToDiagramSVG()` now labels each box (`howto_label_answer`
 "Answer"/"Notes") and places the four pencil-mark digits at their REAL fixed grid positions (matching
 where `.sd-notesgrid` actually puts digit N in the game) instead of an arbitrary-looking scatter.
 
+## Opening the game always lands on the setup screen (2026-09-16)
+
+Matt: *"when you have a game going but leave, when you go back into sudoku, it jumps immediately
+back into the game. Please make it so it brings you to the setup screen and from there you can
+resume or start a new game."* The constructor used to call `_enterGame(saved)` whenever a save
+existed, so an in-progress puzzle re-mounted straight onto the board - there was no way to change
+difficulty, or start fresh, without first going back out through the HUD's `‹`.
+
+Now the constructor **always** calls `renderMenu()`. Nothing about the save changed: it is still
+written after every input, the menu's **Resume · <tier> · <mm:ss>** button (already built,
+2026-09-13) picks it straight back up, and **Start** still clears and generates a fresh puzzle.
+`selectedTier` still defaults to the saved puzzle's tier, so Resume and the pre-selected segment
+agree. THE LAW is untouched - this changes which screen paints first, never what is stored.
+
+## Clicking off the board clears the selection (2026-09-16)
+
+Matt: *"When that highlight is on, you cannot unhighlight anything by clicking below the board.
+please make it so you can."* `_handleClick()` fell through and did nothing for a click that hit
+neither a cell, a digit nor a `data-action`, so the row/column/box highlight could only ever move,
+never go away.
+
+It now calls `_deselect()` for any click inside `.sd-root` that is **not a cell and not a
+`<button>`** - the HUD strip, the margins around the board, the gaps between the pad keys. Buttons
+are excluded on purpose: a near-miss on Undo/Erase/Notes/Hint must not cost the selection the
+control is about to act on. `Escape` does the same thing from a keyboard. `_deselect()` moves the
+roving `tabindex` back to cell 0 and repaints highlights; `this.selected = -1` was already the
+value `_paintHighlights()` treats as "no selection", so no painting logic changed.
+
+## The highlight used to swallow the grid lines (fixed 2026-09-16)
+
+Matt, same message: *"The highlight also makes the lines showing the individual digit squares
+invisible."*
+
+`.sd-board` paints `var(--sd-line)` as its own background, and **that IS the thin grid** - the
+0.5px cell borders let the board show through between the white cells. `.sd-cell.sd-peer` then set
+`background: var(--sd-peer)`, a *translucent* tint, which therefore composited against the board's
+`--sd-line` rather than against the cell's white surface. Measured in a real browser: a peer cell
+rendered `rgb(184, 194, 212)` - byte for byte `--sd-line` itself. Every highlighted cell was
+exactly the colour of the lines, so the lines inside the highlighted row/column/box disappeared.
+
+The fix keeps the same tint but layers it over an opaque surface:
+
+```css
+.sd-cell.sd-peer {
+  background-color: var(--sd-surface);
+  background-image: linear-gradient(var(--sd-peer), var(--sd-peer));
+}
+```
+
+A `background-image` composites over the element's own `background-color`, so the tint now sits on
+white (or `#17233b` in dark) and the lines read exactly as they do on an unhighlighted cell. **Never
+give a `.sd-cell` a bare translucent `background`** - the board's own fill is behind it, not the
+page. Verified in Chromium at 393x852 in both themes, plus `node check-no-scroll.mjs sudoku` (4
+screens, 0 scroll) and `node test-visual.mjs sudoku` (14/14).
+
 ## Timer
 
 Starts on the **first input** of a completely fresh puzzle (nothing placed, no mistakes, no
