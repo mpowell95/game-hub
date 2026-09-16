@@ -282,11 +282,21 @@ function renderRoute(el, ctx) {
       <span class="he-field__value">${spec.path.length} (tee, ${spec.path.length - 2} middle, pin)</span></div>
     <button class="gh-btn gh-btn--block" id="he-dogleg-l" style="margin-bottom:6px;">Dogleg left</button>
     <button class="gh-btn gh-btn--block" id="he-dogleg-r" style="margin-bottom:6px;">Dogleg right</button>
+    <button class="gh-btn gh-btn--block" id="he-sbend-l" style="margin-bottom:6px;">S-bend: left, then right</button>
+    <button class="gh-btn gh-btn--block" id="he-sbend-r" style="margin-bottom:6px;">S-bend: right, then left</button>
     <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-straighten">Straighten</button>
-    <div class="he-empty" style="margin-top:8px;">Drag a waypoint to move it; drag the pin to lengthen/shorten. Double-click the centreline to insert one. Delete removes a selected middle waypoint.</div>
+    <div class="he-empty" style="margin-top:8px;">
+      The white squares are waypoints; the fairway is a smooth curve through them, so one waypoint
+      set off to the side makes a bend, and two set off to opposite sides make an S. Keep a bend at
+      least 60 yd from the next one or the curve cannot round it. Drag a waypoint to move it, drag
+      the pin to lengthen or shorten. Double-click the centreline to add a waypoint; Delete removes
+      a selected one. The outside of a bend is drawn wider on purpose.
+    </div>
   `;
   el.querySelector('#he-dogleg-l').addEventListener('click', () => ops.instant((s) => ops.mutators.insertDogleg(s, -1, built.cardYards)));
   el.querySelector('#he-dogleg-r').addEventListener('click', () => ops.instant((s) => ops.mutators.insertDogleg(s, 1, built.cardYards)));
+  el.querySelector('#he-sbend-l').addEventListener('click', () => ops.instant((s) => ops.mutators.insertSBend(s, -1, built.cardYards)));
+  el.querySelector('#he-sbend-r').addEventListener('click', () => ops.instant((s) => ops.mutators.insertSBend(s, 1, built.cardYards)));
   el.querySelector('#he-straighten').addEventListener('click', () => ops.instant((s) => ops.mutators.straightenPath(s)));
 }
 
@@ -322,13 +332,30 @@ function objTargetFor(spec, selection, groups) {
 }
 
 // The drawing hint shown while a shape is being drawn, in place of the tool's controls.
-function drawingHint(el) {
-  el.innerHTML = '<div class="he-empty">Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.</div>';
+function drawingHint(el, ctx) {
+  const n = ctx.drawing.points.length;
+  el.innerHTML = `
+    <div class="he-empty">Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.</div>
+    <div class="he-field__value" style="margin:6px 0;">${n} corner${n === 1 ? '' : 's'}</div>
+    <button class="gh-btn gh-btn--block" id="he-draw-undo" ${n ? '' : 'disabled'} style="margin-bottom:6px;">Delete last point (Backspace)</button>
+    <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-draw-cancel">Cancel (Esc)</button>`;
+  el.querySelector('#he-draw-undo').addEventListener('click', () => ctx.ops.undoDrawPoint());
+  el.querySelector('#he-draw-cancel').addEventListener('click', () => ctx.ops.cancelDraw());
+}
+
+/** A click on a bunker / lake the green's guard tokens generate (not an authored object). */
+function renderGuardHit(el, ctx) {
+  const { spec, ops } = ctx;
+  const kind = ctx.selection.kind === 'water' ? 'lake' : 'bunker';
+  el.innerHTML = `
+    <div class="he-empty">This ${kind} comes from the green's guard preset${(spec.guard || []).length > 1 ? 's' : ''} (${(spec.guard || []).join(', ')}), so it has no handles of its own. Detach the presets and every hazard they make becomes an ordinary object you can move, resize, redraw or delete.</div>
+    <button class="gh-btn gh-btn--block" id="he-guard-detach" style="margin-top:8px;">Detach guard presets</button>`;
+  el.querySelector('#he-guard-detach').addEventListener('click', () => ops.detachGuards());
 }
 
 function renderBunker(el, ctx) {
   const { spec, selection, ops, refresh, toolState, setToolState } = ctx;
-  if (ctx.drawing) { drawingHint(el); return; }
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
   const target = objTargetFor(spec, selection, ['bunkers']);
   if (!target) {
     el.innerHTML = `
@@ -362,7 +389,7 @@ function renderBunker(el, ctx) {
 
 function renderWater(el, ctx) {
   const { spec, selection, ops, refresh } = ctx;
-  if (ctx.drawing) { drawingHint(el); return; }
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
   const target = objTargetFor(spec, selection, ['water']);
   if (!target) {
     el.innerHTML = `
@@ -407,6 +434,7 @@ function renderTree(el, ctx) {
     ${seg('type', treeTypeOptions(built), type)}
     ${editingStand ? slider('he-t-n', 'n', 2, 9, 1, spec.sentinels[target.index].n) : ''}
     ${editingStand ? slider('he-t-spread', 'spread', 3, 15, 0.5, spec.sentinels[target.index].spread) : ''}
+    ${editingStand ? slider('he-t-angle', 'Angle (0 = along the hole)', 0, 179, 1, spec.sentinels[target.index].angle || 0) : ''}
     ${target ? slider('he-t-size', 'Size (x the type)', 0.4, 3, 0.05, (editingStand ? spec.sentinels : spec.trees)[target.index].s ?? 1) : ''}
     ${target ? slider('he-t-height', 'Height (yd)', 1, 60, 0.5, (editingStand ? spec.sentinels : spec.trees)[target.index].h ?? ((built.treeTypes || [])[type] || {}).height ?? 15) : ''}
     ${!target ? '<div class="he-empty" style="margin-top:6px;">Click the hole to place it.</div>' : `<div class="he-empty" style="margin-top:6px;">Editing the selected ${editingStand ? 'stand' : 'tree'}.</div>`}
@@ -423,6 +451,7 @@ function renderTree(el, ctx) {
   if (editingStand) {
     wireSlider(el, 'he-t-n', ops, (s, v) => ops.mutators.setSentinelField(s, target.index, { n: Math.round(v) }));
     wireSlider(el, 'he-t-spread', ops, (s, v) => ops.mutators.setSentinelField(s, target.index, { spread: v }));
+    wireSlider(el, 'he-t-angle', ops, (s, v) => ops.mutators.setSentinelField(s, target.index, { angle: Math.round(v) || undefined }));
   }
   // Size and height (Matt, 2026-09-16: "Can i edit the size and height of trees?"). `s` multiplies
   // the type's trunk and canopy; `h` replaces the type's height. Both are read by the game's
@@ -488,7 +517,10 @@ function renderGreen(el, ctx) {
     <div class="he-objgroup">Guards</div>
     <div style="columns:2;">${GUARD_TOKENS.map(([tok, label]) => checkbox(`he-guard-${tok}`, label, guard.includes(tok))).join('')}</div>
     ${slider('he-g-tree', 'Guard tree type', 0, (built.treeTypes || [{}]).length - 1, 1, spec.guardTree || 0)}
+    ${guard.length ? '<button class="gh-btn gh-btn--block gh-btn--ghost" id="he-g-detach" style="margin-top:6px;">Detach guard presets into editable objects</button>' : ''}
   `;
+  const detach = el.querySelector('#he-g-detach');
+  if (detach) detach.addEventListener('click', () => ops.detachGuards());
   wireSeg(el, 'shape', (val) => { ops.instant((s) => ops.mutators.setGreenField(s, { greenShape: val })); refresh(); });
   wireSlider(el, 'he-g-angle', ops, (s, v) => ops.mutators.setGreenField(s, { greenAngle: Math.round(v) }));
   wireSlider(el, 'he-g-r', ops, (s, v) => ops.mutators.setGreenField(s, { greenR: v }));
@@ -578,7 +610,9 @@ function renderCross(el, ctx) {
 function renderSelect(el, ctx) {
   const { selection } = ctx;
   if (!selection) { el.innerHTML = '<div class="he-empty">Click an object to select it.</div>'; return; }
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
   if (selection.group === 'waypoint') { el.innerHTML = '<div class="he-empty">Waypoint selected. Drag to move (switch to Route for Dogleg/Straighten).</div>'; return; }
+  if (selection.group === 'guard') { renderGuardHit(el, ctx); return; }
   const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross };
   const fn = byGroup[selection.group];
   if (fn) fn(el, ctx); else el.innerHTML = '<div class="he-empty">Selected.</div>';

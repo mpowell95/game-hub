@@ -437,3 +437,27 @@ Then three asks in one message, all built:
 Tests: five headless cases (smoothing, build + validate + export of a drawn bunker, scale,
 duplicate/translate, chosen kind) and four browser probes (D, a handle drag growing `r`, four
 clicks + Enter making a 16-point lake that paints and validates).
+
+## Matt's second list (2026-09-16): draw undo, exact outlines, guard hazards, S-bend, readout, stand angle
+
+- **Delete last point while drawing**: Backspace, or the button in the drawing panel.
+- **Outlines sat beside their objects.** The editor rebuilt its stations from the coarse `route`
+  (a point every 25 yd, and the fairway MIDDLE, not the centreline), so `placeLocal` disagreed
+  with holegen's `place()`. `holegen.js` now exports `routeStations(path)` - the same `spline()`
+  `makeHole` uses - and the canvas builds its stations from it. `buildStations` stays as the
+  fallback and for tests.
+- **Guard hazards** (a green's `guard` tokens: `frontJaws`, `ringSand`...) are recipes, not
+  objects, so hole 6's greenside bunkers could not be selected. Clicking one now selects it as a
+  `guard` hit and offers **Detach guard presets**, also in the Green panel: `detachGuards()`
+  builds the hole with and without the tokens and turns every hazard in the DIFFERENCE into a
+  drawn bunker / lake / placed tree, then removes the tokens. Proven: hole 6 paints the identical
+  bunker polygons before and after.
+- **Route**: S-bend presets (left-then-right, right-then-left) and a plain-words hint.
+- **Readout**: "From tee: N yd" above the width, live with the cursor.
+- **Stands can be turned**: `angle` (degrees from the hole's direction) on a sentinel stand,
+  engine-side in `holegen.js` (the line pivots about the stand's centre); a slider in the Tree
+  panel. Duplicate copies a stand with its size, height and angle.
+
+Wind, for the record (Matt asked): `shot.js` `windFor()` - fixed per hole, seeded from the hole
+number and its yardage, one hole in six calm; never random per round. A hole may state `wind`
+explicitly; none does.

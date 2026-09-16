@@ -1019,6 +1019,14 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
     const cy = sand[0].poly.reduce((a, p) => a + p[1], 0) / sand[0].poly.length;
     ok('a bunker at yd = length + 20 is built about 20 yds PAST the pin', sand.length === 1 && Math.abs(cy - (h.pin[1] + 20)) < 3, `centre y ${cy.toFixed(1)}, pin y ${h.pin[1]}`);
     ok('...and the bounds grew to hold it (validateHole passes)', validateHole(h).length === 0, validateHole(h).join('; '));
+    // A stand may be turned (`angle`, 2026-09-16). At 90 deg on a straight hole its trees run
+    // ACROSS the hole (same y, spread in x); at 0 they run along it, as before.
+    const along = makeHole({ ...straight, sentinels: [{ yd: 150, side: 1, off: 20, type: 0, n: 3, spread: 8 }] }).trees;
+    const across = makeHole({ ...straight, sentinels: [{ yd: 150, side: 1, off: 20, type: 0, n: 3, spread: 8, angle: 90 }] }).trees;
+    const span = (list, k) => Math.max(...list.map((t) => t[k])) - Math.min(...list.map((t) => t[k]));
+    ok('a stand at angle 0 runs along the hole, at 90 it runs across it', span(along, 'y') > 12 && span(along, 'x') < 5 && span(across, 'x') > 12 && span(across, 'y') < 5,
+      `along dx ${span(along, 'x').toFixed(1)} dy ${span(along, 'y').toFixed(1)}; across dx ${span(across, 'x').toFixed(1)} dy ${span(across, 'y').toFixed(1)}`);
+    ok('...and turning it does not move its centre', Math.abs((along.reduce((a, t) => a + t.x, 0) - across.reduce((a, t) => a + t.x, 0)) / 3) < 2);
     ok('the runsAway presets fall AWAY from the tee (+y) where every other preset falls toward it',
       SLOPE_PRESETS.runsAway(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.runsAwaySteep(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.gentle(0.5, 0.5)[1] < 0);
   }

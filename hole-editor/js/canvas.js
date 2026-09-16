@@ -7,7 +7,7 @@
 
 import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
-import { blob } from '../../golf/js/holegen.js';
+import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
 
 /** The axis-aligned box round an outline, plus its eight resize handles (corners and side
@@ -265,10 +265,24 @@ export class EditorCanvas {
   _recomputeStations() {
     this.stations = [];
     this.length = 0;
-    if (this.built && this.built.route && this.built.route.length > 1) {
+    // THE GAME'S OWN STATIONS (holegen's `routeStations`, 2026-09-16), not a rebuild from the
+    // coarse `route`: that rebuild is why an outline could sit beside the bunker it belonged to.
+    // `buildStations` is kept for tests and as the fallback for a spec with no path.
+    if (this.spec && this.spec.path && this.spec.path.length > 1) {
+      const { stations, length } = routeStations(this.spec.path);
+      this.stations = stations; this.length = length;
+    } else if (this.built && this.built.route && this.built.route.length > 1) {
       const { stations, length } = buildStations(this.built.route, 2);
       this.stations = stations; this.length = length;
     }
+  }
+
+  /** Draw mode: drop the last corner (Backspace, or the panel button). */
+  undoDrawPoint() {
+    if (!this.drawing || !this.drawing.points.length) return;
+    this.drawing.points.pop();
+    if (this.onDrawChange) this.onDrawChange(this.drawing);
+    this.draw();
   }
 
   setSelection(sel) {
@@ -541,6 +555,16 @@ export class EditorCanvas {
       else if (this.tool === 'tree') placeAndSelect('tree', this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'sentinels' : 'trees');
       else if (this.tool === 'cross') placeAndSelect('cross', 'cross');
       else {
+        // A GUARD HAZARD (a bunker, lake or tree the green's `guard` tokens generate) is not an
+        // authored object, so it has no entry to select - Matt: *"The greenside bunkers on hole 6
+        // for example. I cannot select, move, or delete them."* Clicking one now selects it as a
+        // `guard` hit, and the panel offers to DETACH the tokens into ordinary editable objects.
+        if (this.tool === 'select' && this.built && (this.spec.guard || []).length) {
+          const authored = new Set(listObjects(this.spec, this.stations, this.length).filter((o) => o.poly).map((o) => JSON.stringify(o.poly[0])));
+          const hitSurf = [...this.built.surfaces].reverse().find((s) => (s.kind === 'greensideBunker' || s.kind === 'fairwayBunker' || s.kind === 'water')
+            && Array.isArray(s.poly) && !authored.has(JSON.stringify(s.poly[0])) && pointInPoly([w.x, w.y], s.poly));
+          if (hitSurf) { this.setSelection({ group: 'guard', kind: hitSurf.kind, poly: hitSurf.poly }); return; }
+        }
         this.setSelection(null);
         // Matt, 2026-09-16: *"if my cursor is set to Select, i should be able to drag the hole
         // around while zoomed in rather than having to zoom out then back in in a new area."* So
@@ -668,6 +692,7 @@ export class EditorCanvas {
 
     window.addEventListener('keydown', (e) => {
       if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      if (e.key === 'Backspace' && this.drawing) { e.preventDefault(); this.undoDrawPoint(); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection && this.ops) {
         e.preventDefault();
         const sel = this.selection;
@@ -1025,6 +1050,16 @@ export class EditorCanvas {
           }
         }
       }
+    }
+
+    // 6a. a selected GUARD hazard: outline it so the click is acknowledged before it is detached.
+    if (this.selection && this.selection.group === 'guard' && this.selection.poly) {
+      ctx.save();
+      ctx.strokeStyle = '#ffce3a'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      this.selection.poly.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      ctx.closePath(); ctx.stroke();
+      ctx.restore();
     }
 
     // 6b. a shape being drawn: the corners so far, the outline, and the rubber band to the cursor.

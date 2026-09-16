@@ -17,6 +17,7 @@ import {
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
+  detachGuards, insertSBend,
 } from './model.js';
 import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
@@ -34,6 +35,7 @@ const MUTATORS = {
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
+  detachGuards, insertSBend,
 };
 
 const TOOLS = [
@@ -175,7 +177,10 @@ function widthAtCursorText(w) {
 }
 editorCanvas.onHoverChange = (w) => {
   lastWidthAtCursor = widthAtCursorText(w);
-  hoverEl.textContent = `Width at cursor: ${lastWidthAtCursor}`;
+  // Matt (2026-09-16): "add a 'distance from tee' value ... I want this to update as i move my
+  // cursor around too." Straight-line yards from the tee to the cursor, the way a golfer reads it.
+  const fromTee = w && editorCanvas.built ? `${Math.hypot(w.x - editorCanvas.built.tee[0], w.y - editorCanvas.built.tee[1]).toFixed(1)} yd` : '-';
+  hoverEl.textContent = `From tee: ${fromTee}\nWidth at cursor: ${lastWidthAtCursor}`;
   const holeField = document.getElementById('he-h-widthcursor');
   if (holeField) holeField.textContent = lastWidthAtCursor;
 };
@@ -284,6 +289,7 @@ function pruneSelection() {
   let gone = false;
   if (sel.group === 'waypoint') gone = sel.index >= spec.path.length;
   else if (sel.group === 'widthHandle') gone = false;
+  else if (sel.group === 'guard') gone = !(spec.guard || []).length;
   else gone = !Array.isArray(spec[sel.group]) || sel.index >= spec[sel.group].length;
   if (gone) { editorCanvas.selection = null; }
 }
@@ -347,6 +353,15 @@ const editOps = {
   getBunkerKind: () => toolState.bunkerKind || 'auto',
   /** Draw a new bunker/lake outline, or redraw an existing one (Matt: "can i draw shapes?"). */
   startDraw(group, kind, replaceIndex = null) { editorCanvas.startDraw(group, kind, replaceIndex); },
+  undoDrawPoint() { editorCanvas.undoDrawPoint(); },
+  cancelDraw() { editorCanvas.cancelDraw(); },
+  /** Turn the green's guard tokens into editable bunkers / lakes / trees (model.js detachGuards). */
+  detachGuards() {
+    const slot = doc.order.indexOf(currentId) + 1;
+    editorCanvas.selection = null;
+    editOps.instant((s) => detachGuards(s, slot));
+  },
+  slot: () => doc.order.indexOf(currentId) + 1,
 };
 editorCanvas.ops = editOps;
 
