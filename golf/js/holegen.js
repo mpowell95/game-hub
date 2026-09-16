@@ -380,6 +380,14 @@ function spline(ctrl, step = 4) {
   return { stations: st, length: len };
 }
 
+/** THE REAL STATIONS OF A CENTRELINE, for the hole editor (2026-09-16). The editor used to
+ *  rebuild its own stations from the coarse `route` (a point every 25 yd, and the fairway MIDDLE
+ *  rather than the centreline), so the outline it drew for a bunker sat beside the bunker the game
+ *  painted - Matt: *"the thing i have to click to select them, above or below or next to the
+ *  actual image."* This is the same `spline()` `makeHole` places everything with, so the two
+ *  cannot disagree. Pure; never called by the game itself. */
+export function routeStations(path) { return spline(path, 4); }
+
 /** One side of a corridor, offset from the centreline.
  *
  *  THE BACKWARD-POINT GUARD IS LOAD-BEARING. On the inside of a bend the offset points crowd
@@ -948,6 +956,25 @@ export function makeHole(spec) {
   for (const sn of (spec.sentinels || []).map(byYd)) {
     const cnt = sn.n == null ? 5 : sn.n;
     const spread = sn.spread == null ? 7 : sn.spread;
+    // A STAND MAY BE TURNED (`angle`, degrees, 2026-09-16). Matt: *"Can i rotate tree clusters?
+    // they're always in a vertical line. Sometimes the edge of the fairway isn't exactly
+    // vertical."* 0 lays the trees along the hole as before; the line pivots about the stand's
+    // own centre, so `at`/`side`/`off` still say where the stand IS and `angle` only says which
+    // way it runs. The little 3 yd zigzag stays perpendicular to the line, whichever way it runs.
+    if (sn.angle) {
+      const [cx0, cy0] = place(stations, Math.max(0, Math.min(1, sn.at)), sn.side == null ? 1 : sn.side, sn.off);
+      const si = Math.min(stations.length - 1, Math.max(0, Math.round(sn.at * (stations.length - 1))));
+      const st = stations[si];
+      const a = (sn.angle * Math.PI) / 180;
+      const dx = st.tx * Math.cos(a) - st.ty * Math.sin(a); const dy = st.tx * Math.sin(a) + st.ty * Math.cos(a);
+      const px = -dy; const py = dx;                          // perpendicular to the line
+      for (let i = 0; i < cnt; i++) {
+        const along = (i - (cnt - 1) / 2) * spread; const zig = (i % 2) * 3;
+        extraTrees.push({ x: +(cx0 + dx * along + px * zig).toFixed(1), y: +(cy0 + dy * along + py * zig).toFixed(1), type: sn.type,
+          ...(sn.s != null ? { s: sn.s } : {}), ...(sn.h != null ? { h: sn.h } : {}) });
+      }
+      continue;
+    }
     for (let i = 0; i < cnt; i++) {
       const at = sn.at + ((i - (cnt - 1) / 2) * spread) / length;
       const [x, y] = place(stations, Math.max(0, Math.min(1, at)), sn.side == null ? 1 : sn.side,

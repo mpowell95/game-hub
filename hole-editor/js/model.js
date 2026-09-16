@@ -508,6 +508,52 @@ export function scaleObject(spec, group, index, fx, fy) {
   return { ...spec, [group]: list };
 }
 
+/** DETACH the green's guard tokens into ordinary objects (Matt, 2026-09-16, hole 6: *"I cannot
+ *  select, move, or delete them"*). A token is a recipe (`frontJaws` = two bunkers pinching the
+ *  front); once detached, each hazard it produced becomes a drawn bunker / lake / a placed tree
+ *  in the spec, and the token is removed. The hazards are found by DIFFERENCE - the hole built
+ *  with the tokens against the hole built without them - so this never re-derives holegen's
+ *  geometry (R5); it reads what makeHole painted. `slot` is the hole number for the build. */
+export function detachGuards(spec, slot) {
+  const guard = spec.guard || [];
+  if (!guard.length) return spec;
+  const withG = makeHole({ ...RM_DEFAULTS, ...spec, n: slot });
+  const without = makeHole({ ...RM_DEFAULTS, ...spec, guard: [], n: slot });
+  const key = (poly) => JSON.stringify(poly);
+  const base = new Set(without.surfaces.filter((s) => Array.isArray(s.poly)).map((s) => key(s.poly)));
+  const bunkers = [...(spec.bunkers || [])];
+  const water = [...(spec.water || [])];
+  for (const s of withG.surfaces) {
+    if (!Array.isArray(s.poly) || base.has(key(s.poly))) continue;
+    if (s.kind === 'greensideBunker' || s.kind === 'fairwayBunker') bunkers.push({ poly: s.poly, kind: s.kind });
+    else if (s.kind === 'water') water.push({ poly: s.poly });
+  }
+  const baseTrees = new Set(without.trees.map((t) => `${t.x},${t.y}`));
+  const trees = [...(spec.trees || [])];
+  for (const t of withG.trees) if (!baseTrees.has(`${t.x},${t.y}`)) trees.push({ x: t.x, y: t.y, type: t.type });
+  const out = { ...spec, bunkers, water, trees };
+  delete out.guard;
+  return out;
+}
+
+/** An S-bend (Matt, 2026-09-16: "a dogleg left between the first 2 points, then back to the
+ *  right after"): two waypoints, the first at the drive landing distance offset to `firstSide`,
+ *  the second ~120 yd on, offset the other way, so the hole swings out and comes back. Replaces
+ *  the middle waypoints. */
+export function insertSBend(spec, firstSide, length) {
+  const tee = spec.path[0];
+  const pin = spec.path[spec.path.length - 1];
+  const dx = pin[0] - tee[0]; const dy = pin[1] - tee[1];
+  const lineLen = Math.hypot(dx, dy) || 1;
+  const ux = dx / lineLen; const uy = dy / lineLen;
+  const nx = uy; const ny = -ux;
+  const d1 = Math.min(215, lineLen * 0.45);
+  const d2 = Math.min(lineLen - 60, d1 + Math.max(90, lineLen * 0.3));
+  const p1 = [+(tee[0] + ux * d1 + nx * 24 * firstSide).toFixed(1), +(tee[1] + uy * d1 + ny * 24 * firstSide).toFixed(1)];
+  const p2 = [+(tee[0] + ux * d2 - nx * 20 * firstSide).toFixed(1), +(tee[1] + uy * d2 - ny * 20 * firstSide).toFixed(1)];
+  return { ...spec, path: [tee, p1, p2, pin] };
+}
+
 /** Duplicate a placed thing beside itself (12 yd further up the hole, or 12 yd up for a drawn
  *  shape), with a fresh seed so a blob is not the identical blob. Returns the new spec; the copy
  *  is the last entry of its group. */

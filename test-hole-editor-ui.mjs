@@ -125,6 +125,37 @@ ok('[KNOWN-BUG PROBE] four clicks and Enter draw a lake as a 16-point polygon', 
 ok('...that the built hole paints as water and validates', await page.evaluate(async () => { const H = await import('/golf/js/holes.js'); const b = window.__he.getBuilt(window.__he.currentId); return b.surfaces.some((s) => s.kind === 'water' && s.poly.length === 16) && H.validateHole(b).length === 0; }));
 await key('Control+z');
 
+console.log('\n-- Draw: delete last point; readouts; guard hazards --');
+await key('h');
+await page.click('#he-w-draw'); await settle();
+for (const [dx, dy] of [[-30, 150], [-10, 150], [-10, 170]]) { const q = await toScreen(dx, dy); await page.mouse.click(q.x, q.y); await page.waitForTimeout(80); }
+ok('three clicks make three corners', (await page.evaluate(() => window.__he.editorCanvas.drawing.points.length)) === 3);
+await page.keyboard.press('Backspace'); await settle();
+ok('Backspace deletes the last corner', (await page.evaluate(() => window.__he.editorCanvas.drawing.points.length)) === 2);
+await page.click('#he-draw-undo'); await settle();
+ok('...and so does the panel button', (await page.evaluate(() => window.__he.editorCanvas.drawing.points.length)) === 1);
+await page.keyboard.press('Escape'); await settle();
+ok('Esc cancels the drawing', (await page.evaluate(() => window.__he.editorCanvas.drawing)) === null);
+const rp = await toScreen(0, 150);
+await page.mouse.move(rp.x, rp.y); await settle();
+const readout = await page.evaluate(() => document.getElementById('he-hover').textContent);
+ok('the readout shows the distance from the tee and the width', /From tee: 14[0-9]\.\d yd/.test(readout) && /Width at cursor/.test(readout), readout);
+// hole 6's guard bunkers (frontJaws etc.) are selectable and detachable
+await key('v');
+for (let i = 0; i < 5; i++) await key(']');
+ok('on hole 6', (await page.evaluate(() => window.__he.currentId)) === 'rm-06');
+const gHit = await page.evaluate(() => { const b = window.__he.getBuilt(window.__he.currentId); const s = b.surfaces.filter((x) => x.kind === 'greensideBunker'); const p = s[s.length - 1].poly; let x = 0; let y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; });
+const gs = await toScreen(gHit[0], gHit[1]);
+await page.mouse.click(gs.x, gs.y); await settle();
+ok('[KNOWN-BUG PROBE] clicking a guard-made bunker selects it', (await page.evaluate(() => (window.__he.editorCanvas.selection || {}).group)) === 'guard');
+await page.click('#he-guard-detach'); await settle();
+const s6 = await spec();
+ok('Detach turns the guard presets into drawn bunkers', !s6.guard && s6.bunkers.some((b) => b.poly));
+await page.mouse.click(gs.x, gs.y); await settle();
+ok('...which are now ordinary, selectable objects', (await page.evaluate(() => (window.__he.editorCanvas.selection || {}).group)) === 'bunkers');
+await key('Control+z');
+for (let i = 0; i < 5; i++) await key('[');
+
 console.log('\n-- Route --');
 await key('r');
 const len0 = await page.evaluate(() => window.__he.getBuilt(window.__he.currentId).cardYards);

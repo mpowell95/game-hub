@@ -188,6 +188,7 @@ input[type="range"] { accent-color: var(--he-accent); }
   font-size: 15px;
   color: var(--he-muted);
   pointer-events: none;
+  white-space: pre-line;
 }
 
 /* --- bottom strip: totals + thumbnails ------------------------------------------------------ */

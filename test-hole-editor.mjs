@@ -14,6 +14,7 @@ import {
   normalise, createDocument, buildHole, mintId,
   movePathPoint, deleteBunker, setBeltSide, addTree, setTreeField,
   smoothPoly, addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject, addBunker, polyCentroid,
+  detachGuards, insertSBend,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument,
 } from './hole-editor/js/model.js';
@@ -333,6 +334,34 @@ await test('addBunker honours a chosen kind and still auto-picks without one', (
   assert.equal(addBunker(spec, { yd: 100, side: 1, off: 20 }, L).bunkers.at(-1).kind, 'fairwayBunker');
   assert.equal(addBunker(spec, { yd: L - 10, side: 1, off: 20 }, L).bunkers.at(-1).kind, 'greensideBunker');
   assert.equal(addBunker(spec, { yd: 100, side: 1, off: 20 }, L, 'greensideBunker').bunkers.at(-1).kind, 'greensideBunker');
+});
+
+// --- detach guards, S-bend (2026-09-16) ----------------------------------------------------------
+await test('detachGuards: hole 6 guard bunkers become drawn bunkers, the token is gone, the hole paints the same', () => {
+  const doc = createDocument();
+  const id = 'rm-06';
+  const spec = doc.holes[id].spec;
+  assert.ok((spec.guard || []).length > 0, 'hole 6 has guard tokens');
+  const before = buildHole(doc, id);
+  const sandBefore = before.surfaces.filter((s) => s.kind === 'greensideBunker' || s.kind === 'fairwayBunker').map((s) => JSON.stringify(s.poly)).sort();
+  const detached = detachGuards(spec, 6);
+  assert.equal(detached.guard, undefined);
+  assert.ok(detached.bunkers.filter((b) => b.poly).length >= 1, 'at least one drawn bunker was added');
+  doc.holes[id].spec = detached;
+  const after = buildHole(doc, id);
+  const sandAfter = after.surfaces.filter((s) => s.kind === 'greensideBunker' || s.kind === 'fairwayBunker').map((s) => JSON.stringify(s.poly)).sort();
+  assert.deepEqual(sandAfter, sandBefore, 'every bunker polygon is still painted, unchanged');
+});
+
+await test('insertSBend: two middle waypoints on opposite sides of the tee-pin line', () => {
+  const doc = createDocument();
+  const spec = doc.holes['rm-01'].spec;
+  const L = buildHole(doc, 'rm-01').cardYards;
+  const s = insertSBend(spec, -1, L);
+  assert.equal(s.path.length, 4);
+  assert.ok(s.path[1][0] < spec.path[0][0] - 10, 'first bend goes left');
+  assert.ok(s.path[2][0] > spec.path[0][0] + 10, 'second bend comes back right');
+  assert.ok(s.path[2][1] - s.path[1][1] >= 60, 'the two bends are at least 60 yd apart');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
