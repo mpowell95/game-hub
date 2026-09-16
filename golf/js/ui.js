@@ -17,7 +17,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints, maxStrokes } from './rounds.js';
 import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { SAVE_V, validateSave, resumePos, isComplete } from './save.js';
-import { CLUBS, PUTTER, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
+import { CLUBS, PUTTER, isPutter, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, overZone, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, amongTrees, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
@@ -1210,18 +1210,24 @@ class GolfGame {
   /** THE PUTTER IS ACTUALLY IN HAND. This - not the lie - is what decides how the shot resolves,
    *  what the aim ladder draws, and whether the distance reads in feet. The LIE still decides the
    *  camera, because a putt from 15 yds out needs to see where it is going. */
-  _putting() { return this._activeClub().id === 'putter'; }
+  _putting() { return isPutter(this._activeClub()); }
 
   /** THE club in hand, resolved in ONE place. The HUD paints this and _fire swings it, so the tile
    *  can never name one club while the shot uses another - which is exactly what happened when the
    *  HUD grew its own auto-pick fallback and _fire kept reading the raw field. */
   _activeClub() {
     const lie = this._lie();
-    if (lockedToPutter(lie)) return PUTTER;
+    // ON THE GREEN: one of the two putters, and nothing else. A full club carried onto the green
+    // becomes whichever putter reaches (autoSelectClub); a putter already in hand stays.
+    if (lockedToPutter(lie)) {
+      if (!isPutter(this.club)) this.club = autoSelectClub(this._distToPin(), lie);
+      return this.club;
+    }
     // A putter carried onto a lie that cannot hold one (the ball ran into rough) hands the bag
-    // back rather than swinging a putter out of the cabbage.
+    // back rather than swinging a putter out of the cabbage - and the POWER putter is the green's
+    // alone, so off the green it is handed back everywhere.
     if (!this.club) this.club = autoSelectClub(this._distToPin(), lie);
-    else if (this.club.id === 'putter' && !canPutt(lie)) this.club = autoSelectClub(this._distToPin(), lie);
+    else if (this.club.id === 'powerputter' || (isPutter(this.club) && !canPutt(lie))) this.club = autoSelectClub(this._distToPin(), lie);
     return this.club;
   }
 
@@ -1503,8 +1509,7 @@ class GolfGame {
   _stepClub(dir) {
     if (this.anim || this.swing.phase !== PHASE.IDLE) return;
     if (this.intro) this._endIntro();
-    if (lockedToPutter(this._lie())) return;        // the putter is the only club on the green
-    this.club = stepClub(this._activeClub(), dir, this._lie());
+    this.club = stepClub(this._activeClub(), dir, this._lie());   // on the green: putter <-> power putter
     this._syncTempo();
     this._coach('club');
     this._paintHud();
@@ -1594,11 +1599,11 @@ class GolfGame {
       // THE PUTTER HAS ITS OWN ACCURACY. See puttMishit's header in swing.js: the old
       // `m.deg * 0.25` could not miss a cup that captures at a fixed 0.30 yds, and the green band
       // carried no pace error at all, so every putt inside 30 ft went in.
-      const pm = puttMishit(barPosOf(pos), zone);
+      const pm = puttMishit(barPosOf(pos), zone, this._activeClub());
       const res = simulatePutt({
         hole: this.hole, from: this.ball, aimRad: this.aimRad + pm.deg * DEG,
         power: Math.max(0, Math.min(1, power * pm.paceMul)),
-        rangeFt: puttRangeFt(),
+        rangeFt: puttRangeFt(this._activeClub()),
       });
       this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball] };
     } else {
@@ -2376,7 +2381,7 @@ class GolfGame {
     // that matches both of the reference's observations and needs no constant to guess at.
     const d = this._distToPin();
     const club = this._activeClub();
-    const putting = club.id === 'putter';
+    const putting = isPutter(club);
     this.el.dist.textContent = putting
       ? `${(d * FT_PER_YD).toFixed(1)} ${t('ft')}`
       : `${d.toFixed(1)} ${t('yds')}`;
@@ -2388,7 +2393,7 @@ class GolfGame {
     // it. It is the LIE-ADJUSTED full-power carry, so it drops as the lie worsens - which makes
     // the "Power: 82%" line above it something the player can act on rather than just read.
     this.el.clubyds.textContent = putting
-      ? `${puttRangeFt().toFixed(0)} ${t('ft')}`
+      ? `${puttRangeFt(club).toFixed(0)} ${t('ft')}`
       : `${Math.round(club.carry * L.power)} ${t('yds')}`;
 
     // THE WIND. It is a constant for the hole (see shot.js's windFor), so this only has to be
@@ -2704,7 +2709,7 @@ class GolfGame {
       // hole 1, a 17 ft putt shows dots continuing off the green and into the trees. They are a
       // POWER LADDER, exactly like a full shot's, not a line that stops at the hole. Ours stopped
       // at the pin, which left nothing to gauge power against.
-      puttLine: putting ? puttRangeFt() / FT_PER_YD : 0,
+      puttLine: putting ? puttRangeFt(this._activeClub()) / FT_PER_YD : 0,
     });
     this._drawMeter(now);
     this._paintSwingLabel(now);

@@ -505,3 +505,12 @@ pass on the folded file (three editor tests were re-pointed: hole 6 no longer ha
 hole 3 already carries three pins). **Matt's browser copy still holds the pre-repair shapes** -
 the editor loads from `localStorage`, not from the file, so those three holes differ from what
 shipped until he resets the editor or re-imports.
+
+## Wind (2026-09-16)
+
+Matt: *"what's up with the wind? did you allow me to control that via the editor or what?"* Not
+until now - it was derived from the hole number and yardage, one hole in six calm. The Hole panel
+has **Wind: auto** (that derivation) or a speed slider (0-2, 0 = calm) and eight directions,
+labelled by where it blows: toward the green, right, toward the tee, left, and the diagonals.
+Exported as `wind: { speed, deg }`; `golf/js/holegen.js` turns it into the `hole.wind` that
+`shot.js`'s `windFor` has always honoured. Unset = exactly what the course did before.

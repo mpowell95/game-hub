@@ -169,6 +169,7 @@ export const STRINGS = {
     club_swedge: 'sand wedge',
     club_lwedge: 'lob wedge',
     club_putter: 'putter',
+    club_powerputter: 'power putter',
     // aria
     a11y_aim_left: 'Aim left',
     a11y_aim_right: 'Aim right',
@@ -352,6 +353,7 @@ export const STRINGS = {
     club_swedge: 'sand wedge',
     club_lwedge: 'lob wedge',
     club_putter: 'putter',
+    club_powerputter: 'putter de potencia',
     a11y_aim_left: 'Apuntar a la izquierda',
     a11y_aim_right: 'Apuntar a la derecha',
     a11y_club_up: 'Más palo',

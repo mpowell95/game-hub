@@ -1183,6 +1183,10 @@ export function makeHole(spec) {
       return [+(p.x + p.nx * off).toFixed(1), +(p.y + p.ny * off).toFixed(1)];
     }),
     cardYards: +length.toFixed(1),
+    // A STATED WIND (2026-09-16, from the hole editor): `{ speed, deg }`, deg clockwise from
+    // straight up the hole (0 blows toward the green, 90 left-to-right, 180 into your face).
+    // Absent, shot.js's windFor derives one from the hole number and yardage as it always has.
+    ...(spec.wind && spec.wind.speed != null ? { wind: { speed: +spec.wind.speed, bearing: ((+spec.wind.deg || 0) * Math.PI) / 180 } } : {}),
     tee: [...tee],
     pin: pins ? [...pins[0]] : [...pin],
     ...(pins && pins.length > 1 ? { pins } : {}),

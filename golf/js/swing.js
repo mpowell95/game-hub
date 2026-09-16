@@ -394,7 +394,16 @@ export const PUTT_PACE = 0.06;
  *  position every other shot uses. `paceMul` is signed by which SIDE of the bar was hit, so a
  *  stroke missed one way runs long and the other way leaves it short - which is what makes a lag
  *  putt a real stroke rather than a formality. */
-export function puttMishit(barPos, zone = 1) {
+/** How much worse the POWER putter's line and pace are than the putter's, on the same strike.
+ *  2.5x the line error and 2x the pace error, on top of its narrower green band (clubs.js,
+ *  ZONE_POWER_PUTTER): from 75 ft a well-struck one still gets close; a sloppy one does not. */
+export const POWER_PUTT_LINE_MUL = 2.5;
+export const POWER_PUTT_PACE_MUL = 2.0;
+
+export function puttMishit(barPos, zone = 1, club = null) {
+  const power = !!(club && club.id === 'powerputter');
+  const lineMul = power ? POWER_PUTT_LINE_MUL : 1;
+  const paceMul = power ? POWER_PUTT_PACE_MUL : 1;
   const m = mishit(barPos, 1, zone, 1, 0);
   const signed = (barPos - 0.5) * 2;
   const off = Math.min(1, Math.abs(signed));
@@ -405,7 +414,7 @@ export function puttMishit(barPos, zone = 1) {
   // to the right. Right now it appears to be inverted."* He was reading the putter, which is the
   // one club where the ball's line is visible against a target, and it was inverted for exactly
   // half the misses. Full shots were never affected - they take `m.deg` unchanged.
-  return { deg: m.deg * PUTT_LINE_K, paceMul: 1 - PUTT_PACE * off * Math.sign(signed || 1) };
+  return { deg: m.deg * PUTT_LINE_K * lineMul, paceMul: 1 - PUTT_PACE * paceMul * off * Math.sign(signed || 1) };
 }
 
 export function mishit(barPos, power, zone = 1, clubZone = 1, floor = 0) {

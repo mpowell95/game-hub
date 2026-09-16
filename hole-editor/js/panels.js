@@ -124,6 +124,13 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResu
     </div>
     ${checkbox('he-h-defend', 'Auto-bunker at landing zone', spec.defend !== false)}
     <div class="he-field">
+      ${checkbox('he-h-wind-auto', 'Wind: auto (seeded, 1 in 6 calm)', spec.wind == null)}
+      ${spec.wind != null ? `
+        ${slider('he-h-wind-speed', 'Wind speed (0 = calm)', 0, 2, 0.1, spec.wind.speed)}
+        <span class="he-field__label">Blowing toward</span>
+        ${seg('wind-deg', [[0, '&uarr; green'], [45, '&nearr;'], [90, '&rarr; right'], [135, '&searr;'], [180, '&darr; tee'], [225, '&swarr;'], [270, '&larr; left'], [315, '&nwarr;']], spec.wind.deg || 0)}` : ''}
+    </div>
+    <div class="he-field">
       ${checkbox('he-h-rough-auto', 'Rough collar: course default', spec.rough == null)}
       ${spec.rough != null ? slider('he-h-rough', 'Rough collar', 3, 20, 1, spec.rough) : ''}
     </div>
@@ -139,6 +146,11 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResu
   const pinch = el.querySelector('#he-h-pinch');
   if (pinch) wireSlider(el, 'he-h-pinch', ops, (s, v) => ops.mutators.setField(s, 'pinchTo', v));
   el.querySelector('#he-h-defend').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'defend', e.target.checked ? undefined : false)));
+  el.querySelector('#he-h-wind-auto').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'wind', e.target.checked ? undefined : { speed: 1.0, deg: 0 })));
+  if (el.querySelector('#he-h-wind-speed')) {
+    wireSlider(el, 'he-h-wind-speed', ops, (s, v) => ops.mutators.setField(s, 'wind', { ...(s.wind || {}), speed: +v.toFixed(1) }));
+    wireSeg(el, 'wind-deg', (v) => ops.instant((s) => ops.mutators.setField(s, 'wind', { ...(s.wind || {}), deg: +v })));
+  }
   el.querySelector('#he-h-rough-auto').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'rough', e.target.checked ? undefined : 10)));
   const rough = el.querySelector('#he-h-rough');
   if (rough) wireSlider(el, 'he-h-rough', ops, (s, v) => ops.mutators.setField(s, 'rough', v));

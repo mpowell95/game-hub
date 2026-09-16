@@ -69,7 +69,7 @@ const rm = (spec) => makeHole({ ...RM_DEFAULTS, ...spec });`;
 // --- field order (section 8.3) -------------------------------------------------------------------
 
 const FIELD_ORDER = [
-  'n', 'par', 'nickname', 'path', 'fw', 'fwL', 'fwR', 'rough', 'hard', 'seed', 'greenSeed',
+  'n', 'par', 'nickname', 'path', 'fw', 'fwL', 'fwR', 'rough', 'hard', 'wind', 'seed', 'greenSeed',
   'pinchTo', 'defend', 'greenR', 'greenRy', 'greenShape', 'greenAngle', 'greenOutline', 'fringe', 'pins', 'slope', 'slopeK',
   'guard', 'guardTree', 'cross', 'bunkers', 'water', 'trees', 'sentinels', 'belts', 'base', 'decor',
 ];
