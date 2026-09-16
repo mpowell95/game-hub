@@ -5,6 +5,9 @@
 // Export-round-trip and structural checks are added once js/export.js exists (step 2).
 
 import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { makeHole } from './golf/js/holegen.js';
 import { SPECS, RM_DEFAULTS, RED_MESA } from './golf/courses/redmesa.js';
 import {
@@ -13,6 +16,7 @@ import {
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument,
 } from './hole-editor/js/model.js';
+import { generateSource, generateJSON } from './hole-editor/js/export.js';
 
 let pass = 0; let fail = 0;
 function test(name, fn) {
@@ -194,6 +198,53 @@ test('persistence: malformed/absent/wrong-version input loads as null', () => {
   assert.equal(loadDocument(''), null);
   assert.equal(loadDocument('not json'), null);
   assert.equal(loadDocument(JSON.stringify({ version: 2 })), null);
+});
+
+// --- 8: export round-trip -----------------------------------------------------------------------
+// Written into golf/courses/ itself (temporarily) so the generated file's own
+// `import { makeHole } from '../js/holegen.js'` resolves exactly as it will once folded back.
+await (async () => {
+  const tmpName = '__hole-editor-export-test__.mjs';
+  const tmpPath = join('golf', 'courses', tmpName);
+  try {
+    const doc = createDocument(); // fresh, unedited, normalised
+    const src = generateSource(doc, '2026-09-16');
+    writeFileSync(tmpPath, src);
+    const mod = await import(pathToFileURL(tmpPath).href + `?t=${Date.now()}`);
+    test('export round-trip: the fresh document exports 18 holes identical to RED_MESA.holes', () => {
+      assert.equal(mod.HOLES.length, 18);
+      for (let i = 0; i < 18; i++) {
+        assert.equal(JSON.stringify(mod.HOLES[i]), JSON.stringify(RED_MESA.holes[i]), `hole ${i + 1} differs after export round-trip`);
+      }
+      assert.equal(mod.RED_MESA.par, RED_MESA.par);
+    });
+  } finally {
+    try { unlinkSync(tmpPath); } catch { /* best effort */ }
+  }
+})();
+
+test('export: Copy JSON round-trips through loadDocument', () => {
+  const doc = createDocument();
+  const json = generateJSON(doc);
+  const loaded = loadDocument(json);
+  assert.equal(JSON.stringify(loaded.holes), JSON.stringify(doc.holes));
+});
+
+// --- structural (section 12) ----------------------------------------------------------------
+test('structural: hole-editor/ has no js/ui.js', () => {
+  assert.equal(existsSync('hole-editor/js/ui.js'), false);
+});
+
+test('structural: sw.js ASSETS contains no hole-editor/ path', () => {
+  const sw = readFileSync('sw.js', 'utf8');
+  const m = sw.match(/const ASSETS = \[([\s\S]*?)\n\];/);
+  assert.ok(m, 'could not find ASSETS array in sw.js');
+  assert.equal(/hole-editor\//.test(m[1]), false, 'sw.js ASSETS references hole-editor/');
+});
+
+test('structural: validate-sw-assets.mjs carries the hole-editor exclusion', () => {
+  const src = readFileSync('validate-sw-assets.mjs', 'utf8');
+  assert.match(src, /hole-editor\\\//);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

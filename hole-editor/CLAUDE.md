@@ -46,3 +46,37 @@ regardless of which path wrote it, so nothing about this is visible to Matt.
 - `node golf/js/test.js` - unchanged, still green (nothing in the game changed this step).
 - `node validate-sw-assets.mjs` - unchanged, still green (the `hole-editor/` exclusion is added in
   step 2, alongside `js/export.js`, since nothing here is referenced by `sw.js` yet regardless).
+
+## Step 2 (2026-09-16): `js/export.js` + export round-trip test
+
+`js/export.js`: `generateSource(doc, date)` builds `redmesa.js` text from the document - the header
+comment, `DESERT_TYPES`/`RM_DEFAULTS`/`rm` and the `RED_MESA` tail are copied verbatim as strings
+(section 8.1/8.2); every `SPEC_i`/`HOLE_i` is generated from `doc.order`/`doc.holes` in the field
+order section 8.3 gives. `generateJSON(doc)` is the "Copy JSON" button (just `serialiseDocument`).
+
+Added the `hole-editor/` exclusion to `validate-sw-assets.mjs`'s `EXCLUDED` list, exactly as
+section 2 specifies (the folder isn't in `SCAN_DIRS` either, so nothing here was ever going to be
+scanned, but the exclusion is explicit per the spec and `test-hole-editor.mjs` checks for it).
+
+**"Numbers as-is" (section 8.3) means export does not re-round anything either.** The same
+station-rounding trap that made `normalise()` keep full precision (see Step 1's note above) would
+reopen the instant export rounded `yd` back down for tidiness - re-exporting the fresh document
+would again relocate Red Mesa 5's bunker and 11's water. So a handful of `yd` values inherited
+unchanged from the original `at`-based specs print with long float tails (e.g.
+`yd: 193.38000000000002`) instead of a clean `193.4`. This is real but cosmetic: it only affects
+values nobody has touched in the editor yet (anything placed or dragged through a tool uses
+`roundYd()`, 1dp, same as always), and a hand cleanup pass is a one-line edit if the exported file
+is ever committed over `golf/courses/redmesa.js` by hand. Not fixed further because fixing it would
+mean re-deriving the same precision problem `fixStationRounding` already solves once, in a second
+place, for a purely cosmetic gain (R5's spirit, if not its letter).
+
+### Tests run and their result
+
+- `node test-hole-editor.mjs` - 19/19 green: the 14 from step 1 plus the export round-trip (a
+  fresh document's generated source, `import()`ed from a temp file written alongside
+  `golf/courses/redmesa.js` so its own relative import resolves, builds all 18 holes identical to
+  `RED_MESA.holes`), the Copy JSON round-trip, and the three structural checks (no `js/ui.js`, no
+  `hole-editor/` path in `sw.js`'s `ASSETS`, the `validate-sw-assets.mjs` exclusion present).
+- `node golf/js/test.js` - unchanged, still green.
+- `node validate-sw-assets.mjs` - still green (`hole-editor/` isn't scanned; the exclusion is
+  present regardless, per spec).
