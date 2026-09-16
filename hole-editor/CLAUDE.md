@@ -382,3 +382,31 @@ Playwright, both:
 - **Steeper is denser (Matt).** `render.js` exports `slopeChevronGrid(mag)`: a cell draws a 1x1,
   2x2 or 3x3 grid of chevrons by its gradient's magnitude (thirds). The GAME draws it that way
   now too, so the player's read and the editor's are the same rule.
+
+## Review pass (2026-09-16): five defects found by driving every tool, all fixed
+
+Matt: *"Please review the tool for more bugs. Correct all that you find."* Read every file, then
+drove every tool in Chromium with assertions. `test-hole-editor-ui.mjs` (repo root, Playwright,
+needs `node server.mjs`) now carries each finding as a `[KNOWN-BUG PROBE]` and 28 checks in all;
+it is deliberately NOT in `run-all-tests.mjs`, like every other browser suite.
+
+1. **A Width handle dragged by ZERO pixels doubled the fairway.** `fw`'s `w` is a HALF-width
+   (holegen.js says so); the drag stored `half * 2`. Measured: w 16 -> 30 on hole 1 from a
+   no-op drag. Now stores the half-width, clamped 4.5-30. The Width panel and Objects list print
+   it as the full width ("32 yd wide") because that is what a person reads a fairway as.
+2. **Place a bunker, press Ctrl+Z: page error** ("Cannot read properties of undefined (reading
+   'kind')"). Placing selects the new object; undo removed it; the context panel rendered the
+   selection against a list one shorter. `pruneSelection()` in `afterChange` drops any selection
+   whose object no longer exists, on every non-gesture change (undo, redo, reset, delete).
+3. **Slope Paint mode did nothing.** The panel offered it, `setSlopeCell` existed, and no canvas
+   code called it. A press inside the green's 8x8 box (drawn as a grid while the tool is
+   active) picks the cell; the drag's direction sets the downhill vector, its length the
+   magnitude (saturating at 24 px); a plain click zeroes the cell.
+4. **The Cross panel's `over` never reached a placed hazard** (`_place` did not pass it). It does;
+   `addCross` writes it only when it differs from holegen's default of 8.
+5. **The zoom slider sat at its HTML default until the first wheel event**, and the +/- keys never
+   moved it. `syncZoomSlider()` after boot, hole switch, Fit and the keys.
+
+Also: the Validate list is cleared by the next edit (it described the hole before the edit);
+after a slider release the context panel is left in place (`afterChange({ keepContext })`) so
+arrow keys keep working on it; the nickname is HTML-escaped properly.

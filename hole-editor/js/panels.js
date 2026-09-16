@@ -66,6 +66,7 @@ export function renderLayers(el, layers, onChange) {
 }
 
 function fmtYd(y) { return (Math.round(y * 10) / 10).toFixed(1); }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 /** section 7: a "crosses itself" message cites two points; anything else cites at most one. */
 export function pointsInMessage(msg) {
@@ -102,7 +103,7 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResu
     </div>
     <div class="he-field">
       <span class="he-field__label">Nickname</span>
-      <input type="text" id="he-h-nick" value="${(spec.nickname || '').replace(/"/g, '&quot;')}" style="width:100%;" />
+      <input type="text" id="he-h-nick" value="${esc(spec.nickname || '')}" style="width:100%;" />
     </div>
     <div class="he-field">
       <span class="he-field__label">Par</span>
@@ -152,7 +153,8 @@ export function renderObjectsList(el, doc, id, built) {
   const path = spec.path || [];
   groups.push(['Waypoints', path.map((p, i) => `${i}: ${p[0].toFixed(0)}, ${p[1].toFixed(0)}`)]);
 
-  if (Array.isArray(spec.fw)) groups.push(['Width points', spec.fw.map((p) => `at ${p.at} &middot; w ${p.w}`)]);
+  // `w` is a HALF-width in the recipe; a person reads a fairway as its full width.
+  if (Array.isArray(spec.fw)) groups.push(['Width points', spec.fw.map((p) => `at ${p.at} &middot; ${(p.w * 2).toFixed(0)} yd wide`)]);
 
   if (spec.bunkers && spec.bunkers.length) {
     groups.push(['Bunkers', spec.bunkers.map((b) => `${b.kind || 'greensideBunker'} &middot; ${fmtYd(b.yd != null ? b.yd : 0)} yd`)]);
@@ -293,7 +295,7 @@ function renderWidth(el, ctx) {
   const sidesDiffer = !!(spec.fwL || spec.fwR);
   const rows = (profile, side) => profile.map((p, i) => `
     <div class="he-objrow" style="cursor:default;display:flex;justify-content:space-between;">
-      <span>at ${p.at} &middot; w ${p.w}</span>
+      <span>at ${p.at} &middot; ${(p.w * 2).toFixed(0)} yd wide (base)</span>
       <span>
         <button class="gh-btn gh-btn--sm" data-del="${side}:${i}" ${profile.length <= 2 || p.at === 0 || p.at === 1 ? 'disabled' : ''}>&times;</button>
       </span>
