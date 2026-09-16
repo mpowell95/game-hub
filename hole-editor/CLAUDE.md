@@ -80,3 +80,38 @@ place, for a purely cosmetic gain (R5's spirit, if not its letter).
 - `node golf/js/test.js` - unchanged, still green.
 - `node validate-sw-assets.mjs` - still green (`hole-editor/` isn't scanned; the exclusion is
   present regardless, per spec).
+
+## Step 3 (2026-09-16): canvas, camera, thumbnails, hole switching, reorder
+
+`index.html`, `editor.css`, `js/main.js`, `js/canvas.js`, `js/panels.js`. The screen layout from
+section 4 (ribbon, left bay with Legend + Objects, canvas with the zoom slider/Fit, right bay with
+a placeholder Tool panel + Hole + Layers, bottom strip with totals + 18 draggable thumbnails), the
+camera (fit/pan/wheel-zoom, remembered per hole for the session), and the drawing order's
+non-tool-dependent steps: the built map, trees (dimmed 60% for belt-origin ones, told apart from
+hand-placed by `t.s` - `treesOf`'s belt entries carry a scale, hand-placed ones don't), slope
+chevrons (copied construction from `render.js`'s `drawSlope`, since its own `cam` object is the
+game's), the dashed route, the centreline/waypoints/tee/pin, bounds and the 50-yd grid.
+
+**The 11 tools' ribbon buttons render (icon, label, keyboard hint) but are `disabled`** - section 6
+is step 4. Undo/Redo are wired now because reorder needs them (section 3.5: "reorder is
+undoable") and both round-tripped correctly in a real-browser check (drag `rm-01` onto `rm-03`,
+`he-undo` restores `order`). Validate/Compare/Reset/Export stay disabled until steps 5/2(export UI)
+land.
+
+**Verification:** `node server.mjs` + a Playwright screenshot at 1920x1080, eyeballed hole-by-hole
+against `node sheet-course.mjs redmesa`'s contact sheet - hole 1 (bend, fairway bunker, guard sand)
+and hole 5 (saguaro corridor, greenside bunker) both match the reference picture. No console errors
+except a browser-issued `favicon.ico` 404 (there is no favicon; harmless). `node test-hole-editor.mjs`
+still 19/19 (nothing in `model.js`/`export.js` changed), `node golf/js/test.js` and
+`node validate-sw-assets.mjs` still green.
+
+**Plain-option decisions the spec was silent on (neither changes what Matt sees or exports):**
+- Tool icons are single Unicode glyphs (arrows/shapes), not custom art - a Matt-only desktop tool
+  doesn't need icon design, and the label under each one already carries the meaning.
+- The bottom strip's dirty-total comparison uses `RED_MESA.par`/`RED_MESA.holes` cardYards sum
+  directly as "the originals' totals" (section 4.2), rather than rebuilding the frozen originals -
+  they are the same numbers by the round-trip contract, and this avoids a second `makeHole` pass
+  over all 18 on every redraw.
+- `renderMapThumbnail`/camera code lives in `canvas.js` rather than a new file, since the file
+  layout (section 2) only names `canvas.js` as owning "the canvas" and the thumbnails share its one
+  piece of real logic (`buildMap` + letterbox).
