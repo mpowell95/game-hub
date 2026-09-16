@@ -9,7 +9,7 @@
 // is ours, the assertion says so, and the test is a regression guard rather than a claim about
 // the reference.
 
-import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS,
+import { validateHole, surfaceAt, pointInPoly, slopeAt, treesOf, distYd, SURFACE_KINDS, bboxOf,
   greenBox as greenBoxOf } from './holes.js';
 import { PINE_VALLEY } from '../courses/pinevalley.js';
 import { RED_MESA } from '../courses/redmesa.js';
@@ -96,6 +96,23 @@ const clone = () => JSON.parse(JSON.stringify(PINE_VALLEY.holes[0]));
 {
   const h = clone(); h.tee = [40, 300];
   ok('a tee not on a tee surface fails', validateHole(h).some((e) => /tee is not inside/.test(e)));
+}
+{
+  // A BOW TIE (2026-09-16, for the hole editor). Nothing checked this before: the generator's
+  // backward-point guard is the only thing that prevents one, and a hand-edited outline has no
+  // guard. A self-intersecting polygon makes the lie lookup report "outside" for a ball standing
+  // on the fairway. The error names WHICH edges cross, because the editor has to point at them.
+  const h = clone();
+  const i = h.surfaces.findIndex((s) => s.kind === 'fairway');
+  const bb = bboxOf(h.surfaces[i].poly);
+  h.surfaces[i].poly = [[bb.minX, bb.minY], [bb.maxX, bb.maxY], [bb.maxX, bb.minY], [bb.minX, bb.maxY]];
+  const errs = validateHole(h);
+  ok('a polygon that crosses itself fails', errs.some((e) => /crosses itself/.test(e)));
+  ok('...and the error names the two edges', errs.some((e) => /edge 0 .* crosses edge 2/.test(e)));
+  ok('...while a plain quad of the same corners passes',
+    !validateHole({ ...h, surfaces: h.surfaces.map((s, k) => (k === i
+      ? { ...s, poly: [[bb.minX, bb.minY], [bb.maxX, bb.minY], [bb.maxX, bb.maxY], [bb.minX, bb.maxY]] } : s)) })
+      .some((e) => /crosses itself/.test(e)));
 }
 {
   const h = clone(); h.treeBelts[0].type = 7;
