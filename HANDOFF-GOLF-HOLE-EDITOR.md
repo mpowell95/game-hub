@@ -74,9 +74,15 @@ test-hole-editor.mjs  at the repo root, node, no browser (section 12)
 1. `n` removed from the spec (it is `order.indexOf(id) + 1` at regeneration and export).
 2. Build the hole once with `makeHole({...RM_DEFAULTS, ...rawSpec})` to get `cardYards` (= L).
 3. **Every `at` becomes `yd` (Matt):** on each entry of `bunkers`, `water`, `trees`, `sentinels`,
-   `yd = +(at * L).toFixed(1)`, `at` deleted. `cross` already uses `yd`; an `at` cross converts
-   the same way. `fw`/`fwL`/`fwR` control points keep `at` (they are a profile over the hole,
-   not a placed thing).
+   `yd = at * L` at FULL float precision, `at` deleted. **Do not round here** (corrected
+   2026-09-16 after step 1 found it): `place()` picks a spline station by rounding
+   `at * (stations - 1)`, so a value rounded to 0.1 yd can land on the other side of that
+   rounding and move the hazard one whole station, about 4 yards. Two of the eighteen holes
+   did. Where full precision still misses, nudge `yd` by fractions of a yard until the built
+   hole is identical, using `makeHole` as the judge (`fixStationRounding` in `model.js`).
+   Rounding to 0.1 yd applies only to NEW placements from a click (`roundYd`). `cross`
+   already uses `yd`; an `at` cross converts the same way. `fw`/`fwL`/`fwR` control points
+   keep `at` (they are a profile over the hole, not a placed thing).
 4. **Seed and difficulty pinned:** if absent, `seed = n*977+13`, `greenSeed = n*6151+991`,
    `hard = (n-1)/17`, using the ORIGINAL `n`. (These are `makeHole`'s own defaults; pinning
    them is what makes a moved hole keep its shapes.)
