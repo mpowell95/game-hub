@@ -489,6 +489,13 @@ function renderSlope(el, ctx) {
       if (!window.confirm('Painting replaces the preset. Continue?')) { refresh(); return; }
       ops.instant((s) => ops.mutators.bakeSlopeToCells(s));
     }
+    // BUG, fixed 2026-09-16 (Matt: "still having an issue with the slope"): once cells existed,
+    // `mode` was forced to 'paint' and clicking Preset did nothing at all - there was no way back.
+    // Going back to a preset REPLACES the painted cells, so it asks, then writes a preset.
+    if (val === 'preset' && isPaint) {
+      if (!window.confirm('Going back to a preset replaces the painted cells. Continue?')) { refresh(); return; }
+      ops.instant((s) => ops.mutators.setSlopePreset(s, 'gentle', 1));
+    }
     setToolState({ slopeMode: val });
     refresh();
   });

@@ -124,6 +124,9 @@ const painted = (await spec()).slope.cells[3 * 8 + 2];
 ok('[KNOWN-BUG PROBE] a drag inside a cell paints it (rightward drag -> +x downhill, magnitude 1)', painted[0] > 0.9 && Math.abs(painted[1]) < 0.1, JSON.stringify(painted));
 await page.mouse.click(cp.x, cp.y); await settle();
 ok('...and a plain click zeroes it', JSON.stringify((await spec()).slope.cells[3 * 8 + 2]) === '[0,0]');
+page.once('dialog', (d) => d.accept());
+await page.click('#he-context .gh-seg__item[data-val="preset"]'); await settle();
+ok('[KNOWN-BUG PROBE] Preset can be re-entered from Paint (it replaces the cells with a preset)', typeof (await spec()).slope === 'string');
 
 console.log('\n-- Cross --');
 await key('c');
