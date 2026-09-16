@@ -43,6 +43,8 @@ export const SHADOW_DROP = 0.16;     // [MEASURED] yards down the hole, per yard
 export const SHADOW_RX = 1.02;
 export const SHADOW_RY = 0.62;
 export const SHADOW_ALPHA = 0.15;    // [MEASURED] (124,151,63) / (155,177,92) = 0.85x
+/** How solid a crown is drawn while the ball is on the green (see buildMap's tree layer). */
+export const TREE_SEE_THROUGH_ALPHA = 0.38;
 
 export const MOW_DARK_SHARE = 1 / 3;
 
@@ -455,6 +457,15 @@ export function buildMap(hole, theme) {
   // per-tree loop paints tree B's black key straight over tree A's finished canopy, and the
   // mushroom ring this file already warns about comes back at every seam. Keys first, then every
   // canopy over all of them, then the clumps: one wood, one outline.
+  // THE WOOD IS PAINTED ON ITS OWN LAYER (2026-09-16), so `draw` can lay it down translucent while
+  // the ball is on the green. Matt, on Red Mesa 7, whose stands crowd the putting surface: *"the
+  // trees are blocking the view of the ball while putting."* A crown drawn over the cup is right
+  // from above and useless when the shot is a putt underneath it. The ground alone is kept too.
+  const groundCv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  groundCv.getContext('2d').drawImage(cv, 0, 0);
+  const treesCv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const tctx = treesCv.getContext('2d');
+  tctx.imageSmoothingEnabled = false;
   const stand = treesOf(hole).map((t) => {
     const type = hole.treeTypes[t.type];
     const cactus = type.name === 'saguaro';
@@ -466,6 +477,7 @@ export function buildMap(hole, theme) {
     return { t, type, cactus, px, py, r, shapes: treeShapes(px, py, r, cactus) };
   });
   {
+    const ctx = tctx;   // every tree pass below paints the tree layer, never the ground
     const key = Math.max(1.2, MAP_PPY * 0.75);
     for (const s of stand) {
       const [, rim] = TREE_FILL[s.type.name] || [pal.treeCanopy, pal.treeRim];
@@ -479,6 +491,7 @@ export function buildMap(hole, theme) {
     }
   }
   for (const st of stand) {
+    const ctx = tctx;
     const t = st.t;
     const type = st.type;
     const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
@@ -523,7 +536,8 @@ export function buildMap(hole, theme) {
     }
   }
 
-  return { canvas: cv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
+  ctx.drawImage(treesCv, 0, 0);
+  return { canvas: cv, ground: groundCv, trees: treesCv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }
 
 /** The camera: what world point sits at the centre of the view, and how many px a yard is.
@@ -581,7 +595,17 @@ export function drawFrame(ctx, map, hole, cam, st) {
   const srcH = cam.halfH * 2 * map.ppy;
   ctx.fillStyle = pal.heavyRough;
   ctx.fillRect(0, 0, viewW, viewH);
-  ctx.drawImage(map.canvas, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
+  if (st.seeThroughTrees && map.ground && map.trees) {
+    // On the green the wood goes translucent: the ball, the cup and the break stay readable under
+    // a crown that would otherwise hide all three. The crowns are still there, still where they
+    // are - a putt is never blocked by one, so nothing about play is hidden by showing through.
+    ctx.drawImage(map.ground, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
+    ctx.save(); ctx.globalAlpha = TREE_SEE_THROUGH_ALPHA;
+    ctx.drawImage(map.trees, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
+    ctx.restore();
+  } else {
+    ctx.drawImage(map.canvas, srcX, srcY, srcW, srcH, 0, 0, viewW, viewH);
+  }
 
   // --- the pin ---------------------------------------------------------------
   const px = sx(hole.pin[0]);

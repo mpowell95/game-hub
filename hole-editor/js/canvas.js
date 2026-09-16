@@ -5,7 +5,7 @@
 // R5: nothing here computes its own fairway polygon, route, bounds or yardage - everything drawn
 // is read off the BUILT hole (`buildHole()` in model.js), the same object the game itself plays.
 
-import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC } from '../../golf/js/render.js';
+import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC, SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
@@ -879,11 +879,27 @@ export class EditorCanvas {
       ctx.restore();
     }
 
-    // 2. trees
+    // 2. trees - SHADOWS FIRST, the way the game draws them (2026-09-16). The game offsets a
+    // tree's shadow by 0.92 yd per yard of HEIGHT, so a 47 yd tree throws its shade 43 yd across
+    // the hole; the editor drew crowns only, and Matt's hole 7 looked nothing like the game's.
     if (L.trees) {
       const handCount = (built.trees || []).length;
       const types = built.treeTypes || [];
       const list = treesOf(built);
+      ctx.save();
+      ctx.globalAlpha = SHADOW_ALPHA;
+      ctx.fillStyle = '#000';
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        const type = types[t.type] || {};
+        if (i >= handCount && L.belts === false) continue;
+        const rr = (type.name === 'saguaro' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
+        const th = t.h != null ? t.h : (type.height || 15);
+        ctx.beginPath();
+        ctx.ellipse(sx(t.x) - th * SHADOW_LEN * cam.ppy, sy(t.y) + th * SHADOW_DROP * cam.ppy, rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
         const type = types[t.type] || {};

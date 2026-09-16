@@ -125,6 +125,32 @@ The same day a recipe gained `wind: { speed, deg }` (holegen.js passes it throug
 auto (the seeded derivation, one hole in six calm), or a speed 0-2 and one of eight directions,
 0 = blowing toward the green, 90 = left to right, 180 = into the player's face.
 
+### Red Mesa 7's playtest, and four rules it changed (2026-09-16, CACHE v856)
+
+Matt's recording: a 6 iron from 136 yds "goes so short... it starts its descent well before the
+tree." Replayed through `resolveShot` from where his drive finished: the ball flew INTO the
+palo verde stand short-right of the green, whose trees he had set to **47 yds tall** in the editor
+(a palo verde is 8; the highest-peaking club in the bag apexes at 32). Contact at three quarters
+of the carry, 26 yds up the tree. The engine was right and the picture lied - a blocked shot was
+animated as a complete, smaller arc ending at the drop point, so the ball peaked and came down
+before the tree it had hit. Four changes:
+
+- **A blocked shot animates as the shot it was** (`ui.js`, `BLOCKED_FALL_MS`): the real arc,
+  full carry and apex, stopped at the contact point, then a fall onto the drop.
+- **The wood is on its own map layer** (`buildMap` returns `ground` and `trees` beside
+  `canvas`), and `draw` lays it down at `TREE_SEE_THROUGH_ALPHA` while the lie is green or
+  fringe - a crown over the cup hid the ball, the cup and the break on 7.
+- **No drop prompt on the green or its collar** - a putt runs under the branches; "in the trees"
+  there was a question with no answer.
+- **The camera follows a putt longer than `PUTT_FOLLOW_FT`** (40 ft) the way it trails a full
+  shot; shorter ones keep the reference's static frame.
+
+The editor now draws tree SHADOWS the way the game does (offset 0.92 yds per yard of height), so
+a 47-yd tree looks in the editor like what it does to a green. Not changed: the putt ladder does
+NOT read the slope - its dots sit at fixed quarters of the club's range (15/30/45/60 ft for the
+putter, 37.5/75/112/150 for the power putter). What Matt saw "adjusting for the slope" on a long
+downhill putt was the power putter being handed over at 55 ft, with its longer ladder.
+
 ## Harbor Links is gone from the product, but its keys are not
 
 Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course
