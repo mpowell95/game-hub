@@ -13,19 +13,20 @@ import { SPECS, RM_DEFAULTS, RED_MESA } from './golf/courses/redmesa.js';
 import {
   normalise, createDocument, buildHole, mintId,
   movePathPoint, deleteBunker, setBeltSide, addTree, setTreeField,
+  smoothPoly, addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject, addBunker, polyCentroid,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument,
 } from './hole-editor/js/model.js';
 import { generateSource, generateJSON } from './hole-editor/js/export.js';
 
 let pass = 0; let fail = 0;
-function test(name, fn) {
-  try { fn(); pass++; console.log(`ok - ${name}`); }
+async function test(name, fn) {
+  try { await fn(); pass++; console.log(`ok - ${name}`); }
   catch (e) { fail++; console.error(`FAIL - ${name}\n    ${e.stack || e}`); }
 }
 
 // --- 3.2 / 12: normalise round-trip -----------------------------------------------------------
-test('normalise round-trip: all 18 holes JSON-identical to RED_MESA.holes', () => {
+await test('normalise round-trip: all 18 holes JSON-identical to RED_MESA.holes', () => {
   for (let i = 0; i < 18; i++) {
     const slot = i + 1;
     const norm = normalise(SPECS[i], slot);
@@ -38,7 +39,7 @@ test('normalise round-trip: all 18 holes JSON-identical to RED_MESA.holes', () =
   }
 });
 
-test('yd conversion: a normalised spec has no `at` on any placed thing', () => {
+await test('yd conversion: a normalised spec has no `at` on any placed thing', () => {
   for (let i = 0; i < 18; i++) {
     const norm = normalise(SPECS[i], i + 1);
     for (const field of ['bunkers', 'water', 'trees', 'sentinels', 'cross']) {
@@ -54,7 +55,7 @@ test('yd conversion: a normalised spec has no `at` on any placed thing', () => {
   }
 });
 
-test('pinning: every normalised spec has numeric seed, greenSeed, hard', () => {
+await test('pinning: every normalised spec has numeric seed, greenSeed, hard', () => {
   for (let i = 0; i < 18; i++) {
     const norm = normalise(SPECS[i], i + 1);
     assert.equal(typeof norm.seed, 'number');
@@ -64,12 +65,12 @@ test('pinning: every normalised spec has numeric seed, greenSeed, hard', () => {
 });
 
 // --- mintId / document ---------------------------------------------------------------------------
-test('mintId: rm-01..rm-18', () => {
+await test('mintId: rm-01..rm-18', () => {
   assert.equal(mintId(1), 'rm-01');
   assert.equal(mintId(18), 'rm-18');
 });
 
-test('createDocument: 18 holes, order matches ids, specs match normalised originals', () => {
+await test('createDocument: 18 holes, order matches ids, specs match normalised originals', () => {
   const doc = createDocument();
   assert.equal(doc.order.length, 18);
   assert.deepEqual(doc.order, Array.from({ length: 18 }, (_, i) => mintId(i + 1)));
@@ -81,7 +82,7 @@ test('createDocument: 18 holes, order matches ids, specs match normalised origin
   }
 });
 
-test('buildHole: a fresh document builds every hole identical to RED_MESA.holes', () => {
+await test('buildHole: a fresh document builds every hole identical to RED_MESA.holes', () => {
   const doc = createDocument();
   for (let i = 0; i < 18; i++) {
     const id = mintId(i + 1);
@@ -91,7 +92,7 @@ test('buildHole: a fresh document builds every hole identical to RED_MESA.holes'
 });
 
 // --- reorder ---------------------------------------------------------------------------------
-test('reorder: swapping two ids changes only n, nothing else in surfaces/trees/green', () => {
+await test('reorder: swapping two ids changes only n, nothing else in surfaces/trees/green', () => {
   const doc = createDocument();
   const id = 'rm-01';
   const before = buildHole(doc, id);
@@ -105,7 +106,7 @@ test('reorder: swapping two ids changes only n, nothing else in surfaces/trees/g
 });
 
 // --- R2: deleted stays deleted --------------------------------------------------------------
-test('R2: deleting the last bunker sets defend:false; built hole has no auto bunker', () => {
+await test('R2: deleting the last bunker sets defend:false; built hole has no auto bunker', () => {
   const doc = createDocument();
   const id = 'rm-01'; // SPEC_1: one authored fairwayBunker (the landing-zone one) + a guard greensideBunker
   const spec = doc.holes[id].spec;
@@ -126,7 +127,7 @@ test('R2: deleting the last bunker sets defend:false; built hole has no auto bun
     before.surfaces.filter((s) => s.kind === 'greensideBunker').length);
 });
 
-test('R2: belt off writes false and preserves the other side', () => {
+await test('R2: belt off writes false and preserves the other side', () => {
   const doc = createDocument();
   const id = 'rm-01'; // SPEC_1 has explicit belts on both sides
   const spec = doc.holes[id].spec;
@@ -136,7 +137,7 @@ test('R2: belt off writes false and preserves the other side', () => {
   assert.deepEqual(edited.belts.right, rightBefore);
 });
 
-test('R2: a hole with no belts key gets both sides copied in before one is turned off', () => {
+await test('R2: a hole with no belts key gets both sides copied in before one is turned off', () => {
   const doc = createDocument();
   const id = 'rm-06'; // SPEC_6 sets belts: false (both sides off already)
   const spec = { ...doc.holes[id].spec, belts: undefined };
@@ -146,7 +147,7 @@ test('R2: a hole with no belts key gets both sides copied in before one is turne
 });
 
 // --- R4: the tee never moves -----------------------------------------------------------------
-test('R4: the model rejects a move of path[0]', () => {
+await test('R4: the model rejects a move of path[0]', () => {
   const doc = createDocument();
   const spec = doc.holes['rm-01'].spec;
   assert.throws(() => movePathPoint(spec, 0, 10, 10), /R4|tee/i);
@@ -156,7 +157,7 @@ test('R4: the model rejects a move of path[0]', () => {
 });
 
 // --- undo/redo -----------------------------------------------------------------------------
-test('undo: 3 edits, 3 undos returns the original document; redo returns the edited one', () => {
+await test('undo: 3 edits, 3 undos returns the original document; redo returns the edited one', () => {
   const doc = createDocument();
   const original = JSON.stringify({ order: doc.order, holes: doc.holes });
   const state = createEditorState(doc);
@@ -182,7 +183,7 @@ test('undo: 3 edits, 3 undos returns the original document; redo returns the edi
 });
 
 // --- persistence -----------------------------------------------------------------------------
-test('persistence: a document serialises and reloads equal', () => {
+await test('persistence: a document serialises and reloads equal', () => {
   const doc = createDocument();
   doc.holes['rm-03'].spec = { ...doc.holes['rm-03'].spec, nickname: 'Edited' };
   const raw = serialiseDocument(doc);
@@ -193,7 +194,7 @@ test('persistence: a document serialises and reloads equal', () => {
   assert.equal(JSON.stringify(loaded.holes), JSON.stringify(doc.holes));
 });
 
-test('persistence: malformed/absent/wrong-version input loads as null', () => {
+await test('persistence: malformed/absent/wrong-version input loads as null', () => {
   assert.equal(loadDocument(null), null);
   assert.equal(loadDocument(''), null);
   assert.equal(loadDocument('not json'), null);
@@ -223,7 +224,7 @@ await (async () => {
   }
 })();
 
-test('export: Copy JSON round-trips through loadDocument', () => {
+await test('export: Copy JSON round-trips through loadDocument', () => {
   const doc = createDocument();
   const json = generateJSON(doc);
   const loaded = loadDocument(json);
@@ -231,27 +232,25 @@ test('export: Copy JSON round-trips through loadDocument', () => {
 });
 
 // --- structural (section 12) ----------------------------------------------------------------
-test('structural: hole-editor/ has no js/ui.js', () => {
+await test('structural: hole-editor/ has no js/ui.js', () => {
   assert.equal(existsSync('hole-editor/js/ui.js'), false);
 });
 
-test('structural: sw.js ASSETS contains no hole-editor/ path', () => {
+await test('structural: sw.js ASSETS contains no hole-editor/ path', () => {
   const sw = readFileSync('sw.js', 'utf8');
   const m = sw.match(/const ASSETS = \[([\s\S]*?)\n\];/);
   assert.ok(m, 'could not find ASSETS array in sw.js');
   assert.equal(/hole-editor\//.test(m[1]), false, 'sw.js ASSETS references hole-editor/');
 });
 
-test('structural: validate-sw-assets.mjs carries the hole-editor exclusion', () => {
+await test('structural: validate-sw-assets.mjs carries the hole-editor exclusion', () => {
   const src = readFileSync('validate-sw-assets.mjs', 'utf8');
   assert.match(src, /hole-editor\\\//);
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
-if (fail) process.exit(1);
 
 // --- a tree's own size and height (2026-09-16) --------------------------------------------------
-test('tree size/height: s and h on a placed tree survive build and export', async () => {
+await test('tree size/height: s and h on a placed tree survive build and export', async () => {
   const doc = createDocument();
   const id = 'rm-01';
   let spec = doc.holes[id].spec;
@@ -266,3 +265,75 @@ test('tree size/height: s and h on a placed tree survive build and export', asyn
   const src = generateSource(doc, '2026-09-16');
   assert.match(src, /s: 1\.5, h: 22/, 'export prints s and h on the tree entry');
 });
+
+// --- drawn shapes, duplicate, resize (2026-09-16) ------------------------------------------------
+await test('smoothPoly: a 4-click square becomes 16 rounded points that all lie inside the square', () => {
+  const sq = [[0, 0], [20, 0], [20, 20], [0, 20]];
+  const out = smoothPoly(sq);
+  assert.equal(out.length, 16);
+  assert.ok(out.every(([x, y]) => x >= 0 && x <= 20 && y >= 0 && y <= 20));
+  const [cx, cy] = polyCentroid(out);
+  assert.ok(Math.abs(cx - 10) < 0.2 && Math.abs(cy - 10) < 0.2);
+});
+
+await test('a drawn bunker builds as a greensideBunker surface with that outline, validates, and exports', async () => {
+  const doc = createDocument();
+  const id = 'rm-03';
+  let spec = doc.holes[id].spec;
+  const pin = buildHole(doc, id).pin;
+  const pts = [[pin[0] - 8, pin[1] + 20], [pin[0] + 8, pin[1] + 20], [pin[0] + 10, pin[1] + 34], [pin[0] - 10, pin[1] + 34]];
+  spec = addDrawnShape(spec, 'bunkers', pts, 'greensideBunker');
+  doc.holes[id].spec = spec;
+  const built = buildHole(doc, id);
+  const mine = built.surfaces.filter((s) => s.kind === 'greensideBunker').find((s) => s.poly.length === 16);
+  assert.ok(mine, 'the drawn outline is painted as a greenside bunker');
+  const { validateHole } = await import('./golf/js/holes.js');
+  assert.deepEqual(validateHole(built), []);
+  assert.match(generateSource(doc, '2026-09-16'), /poly: \[\[/, 'export prints the polygon');
+});
+
+await test('scaleObject: a blob bunker scales r/ry, a drawn one scales its points about its centre', () => {
+  const doc = createDocument();
+  let spec = doc.holes['rm-01'].spec;
+  spec = scaleObject(spec, 'bunkers', 0, 2, 0.5);
+  assert.equal(spec.bunkers[0].r, 16);      // hole 1's bunker is r 8 with no ry (0.72 r implied)
+  assert.equal(spec.bunkers[0].ry, 2.9);
+  spec = addDrawnShape(spec, 'water', [[0, 100], [10, 100], [10, 110], [0, 110]]);
+  const before = polyCentroid(spec.water[spec.water.length - 1].poly);
+  spec = scaleObject(spec, 'water', spec.water.length - 1, 3, 3);
+  const after = spec.water[spec.water.length - 1].poly;
+  const c = polyCentroid(after);
+  assert.ok(Math.abs(c[0] - before[0]) < 0.2 && Math.abs(c[1] - before[1]) < 0.2, 'centre stays put');
+  assert.ok(Math.max(...after.map((p) => p[0])) - Math.min(...after.map((p) => p[0])) > 25, 'and it is three times wider');
+});
+
+await test('duplicateObject: the copy is 12 yd further up with a fresh seed; a drawn copy is translated', () => {
+  const doc = createDocument();
+  let spec = doc.holes['rm-01'].spec;
+  const n = spec.bunkers.length;
+  spec = duplicateObject(spec, 'bunkers', 0);
+  assert.equal(spec.bunkers.length, n + 1);
+  assert.ok(Math.abs(spec.bunkers[n].yd - spec.bunkers[0].yd - 12) < 0.06);   // the copy is rounded to 0.1, the original may carry a float tail
+  // hole 1's bunker has no seed of its own (holegen derives one from its index, so the copy already
+  // differs); a seeded original must get a fresh seed.
+  const seeded = duplicateObject({ ...spec, bunkers: [{ ...spec.bunkers[0], seed: 500 }] }, 'bunkers', 0);
+  assert.equal(seeded.bunkers[1].seed, 501);
+  spec = addDrawnShape(spec, 'water', [[0, 100], [10, 100], [10, 110], [0, 110]]);
+  const i = spec.water.length - 1;
+  spec = duplicateObject(spec, 'water', i);
+  assert.ok(Math.abs(polyCentroid(spec.water[i + 1].poly)[1] - polyCentroid(spec.water[i].poly)[1] - 12) < 0.01);
+  spec = translateDrawn(spec, 'water', i + 1, 5, -3);
+  assert.ok(Math.abs(polyCentroid(spec.water[i + 1].poly)[0] - polyCentroid(spec.water[i].poly)[0] - 5) < 0.01);
+});
+
+await test('addBunker honours a chosen kind and still auto-picks without one', () => {
+  const doc = createDocument();
+  const spec = doc.holes['rm-01'].spec;
+  const L = buildHole(doc, 'rm-01').cardYards;
+  assert.equal(addBunker(spec, { yd: 100, side: 1, off: 20 }, L).bunkers.at(-1).kind, 'fairwayBunker');
+  assert.equal(addBunker(spec, { yd: L - 10, side: 1, off: 20 }, L).bunkers.at(-1).kind, 'greensideBunker');
+  assert.equal(addBunker(spec, { yd: 100, side: 1, off: 20 }, L, 'greensideBunker').bunkers.at(-1).kind, 'greensideBunker');
+});
+
+console.log(`\n${pass} passed, ${fail} failed`);
+if (fail) process.exit(1);

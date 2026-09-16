@@ -157,10 +157,10 @@ export function renderObjectsList(el, doc, id, built) {
   if (Array.isArray(spec.fw)) groups.push(['Width points', spec.fw.map((p) => `at ${p.at} &middot; ${(p.w * 2).toFixed(0)} yd wide`)]);
 
   if (spec.bunkers && spec.bunkers.length) {
-    groups.push(['Bunkers', spec.bunkers.map((b) => `${b.kind || 'greensideBunker'} &middot; ${fmtYd(b.yd != null ? b.yd : 0)} yd`)]);
+    groups.push(['Bunkers', spec.bunkers.map((b) => `${b.kind || 'greensideBunker'} &middot; ${b.poly ? 'drawn' : `${fmtYd(b.yd != null ? b.yd : 0)} yd`}`)]);
   }
   if (spec.water && spec.water.length) {
-    groups.push(['Water', spec.water.map((w) => `${fmtYd(w.yd != null ? w.yd : 0)} yd`)]);
+    groups.push(['Water', spec.water.map((w) => (w.poly ? 'drawn' : `${fmtYd(w.yd != null ? w.yd : 0)} yd`))]);
   }
   if (spec.trees && spec.trees.length) {
     groups.push(['Trees', spec.trees.map((t) => `type ${t.type || 0} &middot; ${t.yd != null ? `${fmtYd(t.yd)} yd` : `${t.x}, ${t.y}`}${t.s != null ? ` &middot; x${t.s}` : ''}${t.h != null ? ` &middot; ${t.h} yd tall` : ''}`)]);
@@ -321,36 +321,73 @@ function objTargetFor(spec, selection, groups) {
   return null;
 }
 
+// The drawing hint shown while a shape is being drawn, in place of the tool's controls.
+function drawingHint(el) {
+  el.innerHTML = '<div class="he-empty">Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.</div>';
+}
+
 function renderBunker(el, ctx) {
-  const { spec, selection, ops, refresh } = ctx;
+  const { spec, selection, ops, refresh, toolState, setToolState } = ctx;
+  if (ctx.drawing) { drawingHint(el); return; }
   const target = objTargetFor(spec, selection, ['bunkers']);
-  if (!target) { el.innerHTML = '<div class="he-empty">Click the hole to place a bunker.</div>'; return; }
+  if (!target) {
+    el.innerHTML = `
+      ${seg('kind', [['auto', 'Auto'], ['fairwayBunker', 'Fairway'], ['greensideBunker', 'Greenside']], toolState.bunkerKind || 'auto')}
+      <div class="he-empty" style="margin:6px 0;">Auto = greenside within 40 yd of the pin, fairway otherwise. Click the hole to place a bunker, or draw one:</div>
+      <button class="gh-btn gh-btn--block" id="he-b-draw">Draw shape</button>`;
+    wireSeg(el, 'kind', (val) => setToolState({ bunkerKind: val }));
+    el.querySelector('#he-b-draw').addEventListener('click', () => ops.startDraw('bunkers', toolState.bunkerKind && toolState.bunkerKind !== 'auto' ? toolState.bunkerKind : 'greensideBunker'));
+    return;
+  }
   const b = spec.bunkers[target.index];
+  const drawn = !!b.poly;
   el.innerHTML = `
     ${seg('kind', [['fairwayBunker', 'Fairway'], ['greensideBunker', 'Greenside']], b.kind || 'greensideBunker')}
-    ${slider('he-b-r', 'r', 3, 18, 0.5, b.r || 6)}
-    ${slider('he-b-ry', 'ry', 3, 14, 0.5, b.ry || (b.r || 6) * 0.72)}
-    <button class="gh-btn gh-btn--block" id="he-b-reroll">Reroll shape</button>
+    ${drawn ? '<div class="he-empty">Drawn shape. Drag its white handles to resize, drag inside to move.</div>' : `
+      ${slider('he-b-r', 'r', 3, 18, 0.5, b.r || 6)}
+      ${slider('he-b-ry', 'ry', 3, 14, 0.5, b.ry || (b.r || 6) * 0.72)}
+      <button class="gh-btn gh-btn--block" id="he-b-reroll" style="margin-bottom:6px;">Reroll shape</button>`}
+    <button class="gh-btn gh-btn--block" id="he-b-redraw" style="margin-bottom:6px;">${drawn ? 'Redraw shape' : 'Draw its shape instead'}</button>
+    <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-b-dup">Duplicate (D)</button>
   `;
   wireSeg(el, 'kind', (val) => { ops.instant((s) => ops.mutators.setBunkerField(s, target.index, { kind: val })); refresh(); });
-  wireSlider(el, 'he-b-r', ops, (s, v) => ops.mutators.setBunkerField(s, target.index, { r: v }));
-  wireSlider(el, 'he-b-ry', ops, (s, v) => ops.mutators.setBunkerField(s, target.index, { ry: v }));
-  el.querySelector('#he-b-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollBunker(s, target.index)); refresh(); });
+  if (!drawn) {
+    wireSlider(el, 'he-b-r', ops, (s, v) => ops.mutators.setBunkerField(s, target.index, { r: v }));
+    wireSlider(el, 'he-b-ry', ops, (s, v) => ops.mutators.setBunkerField(s, target.index, { ry: v }));
+    el.querySelector('#he-b-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollBunker(s, target.index)); refresh(); });
+  }
+  el.querySelector('#he-b-redraw').addEventListener('click', () => ops.startDraw('bunkers', b.kind, target.index));
+  el.querySelector('#he-b-dup').addEventListener('click', () => document.getElementById('he-duplicate').click());
 }
 
 function renderWater(el, ctx) {
   const { spec, selection, ops, refresh } = ctx;
+  if (ctx.drawing) { drawingHint(el); return; }
   const target = objTargetFor(spec, selection, ['water']);
-  if (!target) { el.innerHTML = '<div class="he-empty">Click the hole to place water.</div>'; return; }
+  if (!target) {
+    el.innerHTML = `
+      <div class="he-empty" style="margin-bottom:6px;">Click the hole to place water, or draw a lake:</div>
+      <button class="gh-btn gh-btn--block" id="he-w-draw">Draw shape</button>`;
+    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water'));
+    return;
+  }
   const w = spec.water[target.index];
+  const drawn = !!w.poly;
   el.innerHTML = `
-    ${slider('he-w-rx', 'rx', 4, 30, 0.5, w.rx)}
-    ${slider('he-w-ry', 'ry', 4, 30, 0.5, w.ry == null ? w.rx : w.ry)}
-    <button class="gh-btn gh-btn--block" id="he-w-reroll">Reroll shape</button>
+    ${drawn ? '<div class="he-empty">Drawn shape. Drag its white handles to resize, drag inside to move.</div>' : `
+      ${slider('he-w-rx', 'rx', 4, 30, 0.5, w.rx)}
+      ${slider('he-w-ry', 'ry', 4, 30, 0.5, w.ry == null ? w.rx : w.ry)}
+      <button class="gh-btn gh-btn--block" id="he-w-reroll" style="margin-bottom:6px;">Reroll shape</button>`}
+    <button class="gh-btn gh-btn--block" id="he-w-redraw" style="margin-bottom:6px;">${drawn ? 'Redraw shape' : 'Draw its shape instead'}</button>
+    <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-w-dup">Duplicate (D)</button>
   `;
-  wireSlider(el, 'he-w-rx', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { rx: v }));
-  wireSlider(el, 'he-w-ry', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { ry: v }));
-  el.querySelector('#he-w-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollWater(s, target.index)); refresh(); });
+  if (!drawn) {
+    wireSlider(el, 'he-w-rx', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { rx: v }));
+    wireSlider(el, 'he-w-ry', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { ry: v }));
+    el.querySelector('#he-w-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollWater(s, target.index)); refresh(); });
+  }
+  el.querySelector('#he-w-redraw').addEventListener('click', () => ops.startDraw('water', null, target.index));
+  el.querySelector('#he-w-dup').addEventListener('click', () => document.getElementById('he-duplicate').click());
 }
 
 function treeTypeOptions(built) {

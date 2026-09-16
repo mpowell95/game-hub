@@ -337,9 +337,9 @@ function nextSeed(list, base) {
 
 /** Bunker tool click (section 6.4). `length` is the built hole's cardYards; `pinYd` defaults to
  *  `length` (the pin sits at the end of the hole by construction). */
-export function addBunker(spec, { yd, side, off }, length) {
+export function addBunker(spec, { yd, side, off }, length, chosenKind) {
   const seed0 = spec.seed;
-  const kind = (length - yd) <= 40 ? 'greensideBunker' : 'fairwayBunker';
+  const kind = chosenKind || ((length - yd) <= 40 ? 'greensideBunker' : 'fairwayBunker');
   const bunkers = [...(spec.bunkers || []), { yd: +yd, side, off: +off, r: 10, ry: 7, kind, seed: nextSeed(spec.bunkers, seed0 + 80) }];
   return { ...spec, bunkers };
 }
@@ -423,7 +423,8 @@ export function deleteCross(spec, index) {
 }
 
 /** Select tool drag (section 6.1): move a placed thing (not the tee/waypoints, not guards) to a
- *  new {yd, side, off}. `group` is 'bunkers' | 'water' | 'trees' | 'sentinels' | 'cross'. */
+ *  new {yd, side, off}. `group` is 'bunkers' | 'water' | 'trees' | 'sentinels' | 'cross'. A DRAWN
+ *  object (one with its own `poly`, see `addDrawnShape`) has no yd/side/off: it is translated. */
 export function moveObject(spec, group, index, { yd, side, off }) {
   const list = spec[group].map((o, i) => {
     if (i !== index) return o;
@@ -431,6 +432,95 @@ export function moveObject(spec, group, index, { yd, side, off }) {
     return { ...o, yd: +yd, side, off: +off };
   });
   return { ...spec, [group]: list };
+}
+
+// --- drawn shapes, duplicate, resize (Matt, 2026-09-16) ------------------------------------------
+//
+// Matt: *"can i resize objects like bunkers and bodies of water on the map... small white squares
+// on the sides that i can click and drag... And instead of 'reroll shape' can i draw shapes?"*
+//
+// A drawn bunker or lake is `{poly, kind}` / `{poly}` - the form holegen.js has always accepted
+// beside the seeded blob ("or handed a polygon outright for a shape a blob cannot be"). Its points
+// are world yards, which for a hole whose tee never moves (R4) IS yards from the tee, so R1 holds.
+// Nothing is derived twice: the polygon a person draws is the polygon the game paints.
+
+export function polyCentroid(poly) {
+  let x = 0; let y = 0;
+  for (const p of poly) { x += p[0]; y += p[1]; }
+  return [x / poly.length, y / poly.length];
+}
+
+/** Chaikin's corner-cutting on a CLOSED polygon: the handful of points a person clicks becomes a
+ *  rounded outline, the way a real bunker's edge is. Two passes turn a 5-click pentagon into 20
+ *  smooth points; it can never self-intersect if the clicked outline did not. */
+export function smoothPoly(points, passes = 2) {
+  let pts = points.map((p) => [+p[0], +p[1]]);
+  for (let k = 0; k < passes; k++) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]; const b = pts[(i + 1) % pts.length];
+      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+      out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+    }
+    pts = out;
+  }
+  return pts.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]);
+}
+
+/** A drawn bunker (`kind` decides fairway/greenside) or lake from clicked points, smoothed. */
+export function addDrawnShape(spec, group, points, kind) {
+  if (!points || points.length < 3) return spec;
+  const poly = smoothPoly(points);
+  const entry = group === 'bunkers' ? { poly, kind: kind || 'greensideBunker' } : { poly };
+  return { ...spec, [group]: [...(spec[group] || []), entry] };
+}
+
+/** Replace a placed (blob) bunker/lake with a drawn outline in the same slot, keeping `kind`. */
+export function setDrawnPoly(spec, group, index, points) {
+  if (!points || points.length < 3) return spec;
+  const poly = smoothPoly(points);
+  const list = spec[group].map((o, i) => (i === index ? (group === 'bunkers' ? { poly, kind: o.kind || 'greensideBunker' } : { poly }) : o));
+  return { ...spec, [group]: list };
+}
+
+export function translateDrawn(spec, group, index, dx, dy) {
+  const list = spec[group].map((o, i) => (i === index && o.poly ? { ...o, poly: o.poly.map((p) => [+(p[0] + dx).toFixed(1), +(p[1] + dy).toFixed(1)]) } : o));
+  return { ...spec, [group]: list };
+}
+
+/** Resize about the object's own centre. A blob scales `r`/`ry` (bunker) or `rx`/`ry` (water);
+ *  a drawn shape scales its points. `fx`/`fy` are multipliers (1 = unchanged). */
+export function scaleObject(spec, group, index, fx, fy) {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const list = spec[group].map((o, i) => {
+    if (i !== index) return o;
+    if (o.poly) {
+      const [cx, cy] = polyCentroid(o.poly);
+      return { ...o, poly: o.poly.map((p) => [+(cx + (p[0] - cx) * fx).toFixed(1), +(cy + (p[1] - cy) * fy).toFixed(1)]) };
+    }
+    if (group === 'bunkers') {
+      const r = o.r || 6; const ry = o.ry || r * 0.72;
+      return { ...o, r: +clamp(r * fx, 2, 40).toFixed(1), ry: +clamp(ry * fy, 2, 40).toFixed(1) };
+    }
+    const rx = o.rx; const ry = o.ry == null ? rx : o.ry;
+    return { ...o, rx: +clamp(rx * fx, 2, 80).toFixed(1), ry: +clamp(ry * fy, 2, 80).toFixed(1) };
+  });
+  return { ...spec, [group]: list };
+}
+
+/** Duplicate a placed thing beside itself (12 yd further up the hole, or 12 yd up for a drawn
+ *  shape), with a fresh seed so a blob is not the identical blob. Returns the new spec; the copy
+ *  is the last entry of its group. */
+export function duplicateObject(spec, group, index) {
+  const o = spec[group] && spec[group][index];
+  if (!o) return spec;
+  let copy;
+  if (o.poly) copy = { ...o, poly: o.poly.map((p) => [p[0], +(p[1] + 12).toFixed(1)]) };
+  else {
+    copy = { ...o, yd: +(o.yd + 12).toFixed(1) };
+    if (o.seed != null) copy.seed = nextSeed(spec[group], o.seed);
+  }
+  return { ...spec, [group]: [...spec[group], copy] };
 }
 
 /** Select tool Delete key (section 6.1). Bunkers go through `deleteBunker` for R2; every other
