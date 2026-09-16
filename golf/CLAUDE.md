@@ -65,6 +65,36 @@ the same robot is real evidence, and it is what caught a change of mine that mad
 
 ### The stages, as built
 
+## The courses are EDITABLE, and the clone instruction is retired (2026-09-16)
+
+Matt, reviewing the hole-editor handoff: *"You've let the fact that I asked you to clone a course
+restrict yourself in the past. So I want you to leave the courses as is but remove that restriction.
+I asked you to clone the courses as exact copies as a starting point. That should not prevent you
+from making any changes I request (like changing the order of the holes). This is my game. Nothing
+is locked to me."* And on the golf records that a renumbering would repurpose: *"That history is
+test data and is irrelevant and will be excluded... I'm designing courses starting from where we're
+at now. i don't care about whatever rules that violates."*
+
+So, standing from today:
+
+- **The reference-clone instruction governed the FIRST DRAFT of a hole and nothing after it.** Any
+  hole on any course may be re-cut, reordered, lengthened or redesigned when Matt asks. "It is a
+  clone" is not a reason to refuse or to hedge. This supersedes "Holes 1-3 are NOT re-cut" below.
+- **The golf records in Firebase as of this date are Matt's own test data** (the `MattyIce`
+  record in "GOLF HISTORY NOW EXISTS" below is the whole of it). Matt has declared it disposable.
+  A renumbering does not have to route around it; the hole-3 swap in that section is no longer
+  blocked. THE LAW is unchanged for every other game and for golf history that real players
+  record from here on, and that section stays as the record of what was checked and why.
+- **Course design happens in the hole editor** (`HANDOFF-GOLF-HOLE-EDITOR.md` at the repo root),
+  Red Mesa first. Its data rules are stated there and are binding on the course files too: a
+  placed thing is authored in **yards from the tee** (`yd`, supported by `makeHole` for bunkers,
+  water, trees and sentinels since today; `cross` always was), a hole carries its own `seed`,
+  `greenSeed` and `hard` explicitly once it has been edited, and `defend: false` / `belts: {left:
+  false}` are how a deleted bunker or belt stays deleted.
+- **Yardages are computed, never quoted.** `course.holes.reduce(... cardYards)` is the number; a
+  figure typed into this file goes stale the day a hole is re-cut (the 6,489 that sat in "Two
+  courses, thirty-six holes" for eleven days measured 6,581.5 by then).
+
 ## Harbor Links is gone from the product, but its keys are not
 
 Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course
@@ -1687,9 +1717,10 @@ what keep that honest.
 Matt: *"build the remaining 6 holes in this 9 hole course and the back 9. Then you must build a
 brand new 18 hole course with a completely different theme than the woodsy one we have now."*
 
-**Pine Valley is eighteen holes of par 72 over 6,489 yards; Red Mesa is eighteen of par 71 over
-6,140.** Holes 1-3 of Pine Valley are the hand-authored ones the reference footage documents and
-are untouched. The other thirty-three are new.
+**Pine Valley is eighteen holes of par 72; Red Mesa is eighteen of par 71.** Yardages are not
+quoted here on purpose - compute them from the course data (see "The courses are EDITABLE" at the
+top of this file). Holes 1-3 of Pine Valley were the hand-authored ones the reference footage
+documents. The other thirty-three are new.
 
 ### Holes are DESIGNED, not typed: `golf/js/holegen.js`
 
@@ -2546,6 +2577,9 @@ hole spec touches, invisible until eighteen holes are drawn side by side.
 
 ### Holes 1-3 are NOT re-cut, and that is deliberate
 
+**Superseded 2026-09-16** - see "The courses are EDITABLE" at the top of this file. Kept as the
+record of why they were left alone at the time.
+
 They are the three holes the reference footage documents (`golf-reference-spec.md` §17.1) and the
 standing instruction on this rebuild is that the reference is cloned rather than improved. They are
 also the frozen `pinevalley3` round. Their centrelines, greens, slope grids and hazards stay as
@@ -3073,6 +3107,10 @@ the thing Matt asked for - a band a player can actually aim at. Orange is untouc
 above the floor and is unaffected.
 
 ## GOLF HISTORY NOW EXISTS, AND THE HOLE-3 SWAP IS BLOCKED BY IT (2026-09-06)
+
+**Superseded 2026-09-16**: Matt declared this record his own test data, disposable. The swap is
+not blocked. See "The courses are EDITABLE" at the top of this file. The section stays as the
+record of the check and of what a renumbering does to a stored key.
 
 Matt: *"if i tell you to do something, you must do it. If hole 3 is too difficult, it must be
 swapped with an easier par 3."*
