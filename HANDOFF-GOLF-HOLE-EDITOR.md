@@ -375,11 +375,11 @@ asked:
    is NOT allowed; it runs as normal.
 3. `golf/js/ui.js`: both `recordGolf` call sites return early when `globalThis.__gfNoRecord`
    is true (an edited hole must never write `bestHole` or a round best).
-The editor's `Play` button (ribbon, after Export) opens
-`/golf/?editor=1#practice=<slot>` in a new tab; the golf page, when the hash names a practice
-slot and the override is active, starts that hole in practice mode directly. Test: a
-`test-visual.mjs`-style Playwright run that opens the page with the override and asserts the
-mounted hole's `cardYards` equals the editor's.
+The editor's `Play` button (ribbon, after Export) opens `/golf/?editor=1` in a new tab. Matt
+then picks the hole from the game's own Practice list, which already lists every hole of the
+course. No deep-link into a hole: that would be a fourth game change and the setup screen is one
+tap away. Test: a `test-visual.mjs`-style Playwright run that opens the page with the override
+and asserts the setup screen's course strip shows the editor's `cardYards` for hole 1.
 
 ---
 
