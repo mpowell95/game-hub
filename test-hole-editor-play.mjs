@@ -37,7 +37,7 @@ const beforeAspect = holeAspect(before);
 const afterAspect = holeAspect(after);
 assert.notEqual(beforeAspect.toFixed(4), afterAspect.toFixed(4), 'the test edit did not actually change hole 1s bounds - fix the test, not the game');
 
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--headless=new'] });
 const page = await b.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2 });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack || e.message));
