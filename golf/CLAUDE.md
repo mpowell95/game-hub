@@ -344,7 +344,10 @@ at load in dev):
 - `slope.cells.length === cols * rows`, and every component is within -1..+1.
 - `cardYards > 0`, `par` in 3..5.
 - Every `trees[].type` and `treeBelts[].type` indexes a real `treeTypes` entry.
-- The pin is reachable: `cardYards` is within the ladder's three-shot reach for the par.
+- (2026-09-16) No polygon crosses itself (`polySelfIntersects`, which names the two edges). Written
+  for the hole editor; the generator's backward-point guard had been the only prevention.
+- It does NOT check reachability - that is `test.js` section 14, by playing the hole. This list
+  claimed otherwise until 2026-09-16.
 
 A hole that fails validation must fail loudly at load. A malformed green silently flattens the
 break, which is the kind of bug that gets diagnosed as "putting feels wrong" for a week.

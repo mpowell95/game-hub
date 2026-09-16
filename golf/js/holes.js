@@ -29,6 +29,35 @@ export function pointInPoly(pt, poly) {
   return inside;
 }
 
+/** Does this closed polygon cross itself? Returns `[i, j]` - the two edge indices that cross -
+ *  or null. O(n^2) over the edges, which is fine for the 10-80 point outlines a hole carries.
+ *
+ *  Written for the hole editor (Matt, 2026-09-16: the validator's concern is *"self intersecting
+ *  polygons and the like"*). Until then nothing checked this: the generator's backward-point
+ *  guard in holegen.js is the only thing that PREVENTS a bow tie, and a hand-edited outline has no
+ *  such guard. A self-intersecting polygon makes the ray-cast lie lookup report "outside" for a
+ *  ball plainly standing on the fairway, and nothing at runtime would say why.
+ *
+ *  Adjacent edges share a vertex and are skipped; only a proper crossing counts (touching at an
+ *  endpoint, or collinear overlap, is left alone - a traced outline that kisses itself is not the
+ *  bug this exists to catch, and all 728 polygons shipped on 2026-09-16 pass). */
+export function polySelfIntersects(poly) {
+  const n = poly.length;
+  if (n < 4) return null;
+  const orient = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]; const b = poly[(i + 1) % n];
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;              // the closing edge is adjacent to the first
+      const c = poly[j]; const d = poly[(j + 1) % n];
+      const o1 = orient(a, b, c); const o2 = orient(a, b, d);
+      const o3 = orient(c, d, a); const o4 = orient(c, d, b);
+      if (o1 && o2 && o3 && o4 && o1 !== o2 && o3 !== o4) return [i, j];
+    }
+  }
+  return null;
+}
+
 export function bboxOf(poly) {
   let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
   for (const [x, y] of poly) {
@@ -351,6 +380,8 @@ export function validateHole(hole) {
         at(`${what} has a point outside bounds: ${JSON.stringify(p)}`);
       }
     }
+    const x = polySelfIntersects(poly);
+    if (x) at(`${what} crosses itself: edge ${x[0]} (${JSON.stringify(poly[x[0]])}) crosses edge ${x[1]} (${JSON.stringify(poly[x[1]])})`);
   };
 
   for (const [i, s] of (hole.surfaces || []).entries()) {

@@ -111,8 +111,8 @@ suite fails if it disagrees). Treat the export as untrusted until the suite is g
 - Reorder holes (drag in the strip).
 
 ### Structural editing (visual, on the canvas)
-- Lengthen / shorten: drag the tee or the pin end. **Open: which end moves by default.** Make it
-  unambiguous on screen, never a silent default.
+- Lengthen / shorten: **the PIN end moves; the tee stays where it is (Matt).** Everything is
+  placed in yards from the tee, so this is the only choice under which no hazard moves.
 - Widen / narrow: whole hole or a section (the width profile's control points, drawn as handles).
 - Doglegs and curves: drag centreline waypoints; a dogleg preset with a left/right choice.
 
@@ -131,9 +131,9 @@ suite fails if it disagrees). Treat the export as untrusted until the suite is g
   Place mode.
 
 ### Verification (a button, never automatic)
-- **Validate Hole**: `validateHole()` plus a **self-intersection check written for the editor**
-  (the shipped validator does not detect a bow-tie polygon, and the generator's backward-point
-  guard is the only thing preventing one today). Report WHERE, on the canvas, not pass/fail.
+- **Validate Hole**: `validateHole()`. Since 2026-09-16 it includes the self-intersection check
+  (`polySelfIntersects` in `golf/js/holes.js`), and its error names the two crossing edges, so
+  the editor can point at them. Report WHERE, on the canvas, not pass/fail.
 - Not in the tool (Matt): difficulty measurement (`test.js` 15c is run by a session on request),
   the playability sweep, hole reachability.
 
@@ -160,9 +160,6 @@ Bucket fill, brush painting, add hole, Oasis Sands.
 
 ## Separate engine job, not this editor: fairway slopes (Matt wants them)
 
-The ball only breaks on the green today (`slopeAt` reads `green.slope` and returns flat outside
-the green's box; the run-out in `shot.js` ignores ground slope). Fairway slopes need: a slope
-field for the fairway in the hole format, a read in the run-out and bounce, a slope read drawn
-on the fairway, a `makeHole` recipe input, a validator entry and a test. Write it as its own
-handoff and build it before or alongside the editor's slope tools; the editor then offers the
-same preset-or-paint control on the fairway.
+The ball only breaks on the green today. The engine work is its own handoff,
+`HANDOFF-GOLF-FAIRWAY-SLOPES.md`, and should be built before the editor's fairway-slope tool;
+the editor then offers the same preset-or-paint control it offers on the green.
