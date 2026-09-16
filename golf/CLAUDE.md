@@ -85,8 +85,10 @@ So, standing from today:
   A renumbering does not have to route around it; the hole-3 swap in that section is no longer
   blocked. THE LAW is unchanged for every other game and for golf history that real players
   record from here on, and that section stays as the record of what was checked and why.
-- **Course design happens in the hole editor** (`HANDOFF-GOLF-HOLE-EDITOR.md` at the repo root),
-  Red Mesa first. Its data rules are stated there and are binding on the course files too: a
+- **Course design happens in the hole editor** (`HANDOFF-GOLF-HOLE-EDITOR.md` at the repo root,
+  a full build spec), Red Mesa first. For it, `golf/courses/redmesa.js` exports every recipe as
+  `SPEC_n` / `SPECS` and the house defaults as `RM_DEFAULTS` (2026-09-16; the built `HOLES` are
+  byte-identical to before). Its data rules are stated there and are binding on the course files too: a
   placed thing is authored in **yards from the tee** (`yd`, supported by `makeHole` for bunkers,
   water, trees and sentinels since today; `cross` always was), a hole carries its own `seed`,
   `greenSeed` and `hard` explicitly once it has been edited, and `defend: false` / `belts: {left:

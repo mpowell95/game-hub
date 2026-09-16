@@ -45,14 +45,16 @@ const DESERT_TYPES = [
 
 /** Red Mesa's house style: sparse scrub both sides, saguaros by default, and a narrower collar of
  *  rough than Pine Valley's - the desert starts sooner here. */
-const rm = (spec) => makeHole({
+/** The course-level defaults every spec below is laid on top of. EXPORTED for the hole editor
+ *  (HANDOFF-GOLF-HOLE-EDITOR.md), which needs the recipe and the defaults separately. */
+export const RM_DEFAULTS = {
   treeTypes: DESERT_TYPES,
   rough: 7,
   belts: { left: { depth: 20, spacing: 14 }, right: { depth: 20, spacing: 14 } },
-  ...spec,
-});
+};
+const rm = (spec) => makeHole({ ...RM_DEFAULTS, ...spec });
 
-export const HOLE_1 = rm({
+export const SPEC_1 = {
   n: 1, par: 4, nickname: 'Sunrise Wash',
   // A generous opener, and the only wide fairway on the front nine. The green is the kindest out
   // here: everything on it feeds toward the middle.
@@ -62,9 +64,10 @@ export const HOLE_1 = rm({
   bunkers: [{ at: 0.55, side: 1, off: 20, r: 8, kind: 'fairwayBunker' }],
   guard: ['rightSand'],
   slope: 'bowl',
-});
+};
+export const HOLE_1 = rm(SPEC_1);
 
-export const HOLE_2 = rm({
+export const SPEC_2 = {
   n: 2, par: 4, nickname: 'Coyote Bend',
   // Dogleg left round a boulder field. Boulders block at ANY height, so there is no flying the
   // corner: the only question is how much of it you dare cut on the ground.
@@ -74,9 +77,10 @@ export const HOLE_2 = rm({
   trees: [{ at: 0.44, side: -1, off: 12, type: 2 }, { at: 0.5, side: -1, off: 15, type: 2 }],
   guard: ['leftSand', 'backSand'],
   slope: 'gentle',
-});
+};
+export const HOLE_2 = rm(SPEC_2);
 
-export const HOLE_3 = rm({
+export const SPEC_3 = {
   n: 3, par: 3, nickname: 'Ocotillo',
   // Over a rocky gully to a green that is wide and shallow: the miss is long or short, never side
   // to side, and long is the desert.
@@ -86,9 +90,10 @@ export const HOLE_3 = rm({
   guard: ['frontJaws'],
   slope: 'gentle',
   greenR: 18, greenRy: 10,
-});
+};
+export const HOLE_3 = rm(SPEC_3);
 
-export const HOLE_4 = rm({
+export const SPEC_4 = {
   n: 4, par: 5, nickname: 'The Long Arroyo',
   // A sand arroyo runs the entire right side from the tee to the green, and a second one CROSSES
   // the corridor at 205: the tee shot is a lay-up, and the arroyo is playable rather than penal,
@@ -104,9 +109,10 @@ export const HOLE_4 = rm({
   bunkers: [{ at: 0.55, side: 1, off: 19, r: 10, ry: 30, kind: 'fairwayBunker', seed: 2402 }],
   guard: ['rightSand', 'frontSand'],
   slope: 'spine',
-});
+};
+export const HOLE_4 = rm(SPEC_4);
 
-export const HOLE_5 = rm({
+export const SPEC_5 = {
   n: 5, par: 4, nickname: 'Cactus Alley',
   // The narrowest driving test on the property: turf between two stands of saguaro. They cannot be
   // flown - the canopy stops at 15 yards and nothing peaks under that - so this is straight or
@@ -117,9 +123,10 @@ export const HOLE_5 = rm({
   bunkers: [{ at: 0.97, side: 1, off: 18, r: 6 }],
   guard: ['leftSand'],
   slope: 'rightShed',
-});
+};
+export const HOLE_5 = rm(SPEC_5);
 
-export const HOLE_6 = rm({
+export const SPEC_6 = {
   n: 6, par: 3, nickname: 'Kiln',
   // The green is an island of turf in a sea of sand, and it crowns in the middle, so a ball that
   // lands anywhere but the plateau runs off it into one. There is no rough here at all.
@@ -129,9 +136,10 @@ export const HOLE_6 = rm({
   guard: ['ringSand'],
   slope: 'crown',
   greenR: 13,
-});
+};
+export const HOLE_6 = rm(SPEC_6);
 
-export const HOLE_7 = rm({
+export const SPEC_7 = {
   n: 7, par: 4, nickname: 'Mesa Rim',
   // The fairway sits on a shelf with desert falling away both sides and a pool hard against the
   // green's left. The tee shot is comfortable; the approach is a saddle green with water on the
@@ -143,9 +151,10 @@ export const HOLE_7 = rm({
   guard: ['leftWater', 'frontJaws'],
   slope: 'saddle',
   greenR: 12,
-});
+};
+export const HOLE_7 = rm(SPEC_7);
 
-export const HOLE_8 = rm({
+export const SPEC_8 = {
   n: 8, par: 5, nickname: 'Thunder Valley',
   // A double dogleg with a waste area on the outside of each bend, so both drives are aimed at
   // sand, and a wash crossing at 205 that makes the first of them a lay-up.
@@ -155,9 +164,10 @@ export const HOLE_8 = rm({
   cross: [{ yd: 222, kind: 'waste', depth: 34 }],
   guard: ['frontJaws', 'backSand'],
   slope: 'tier',
-});
+};
+export const HOLE_8 = rm(SPEC_8);
 
-export const HOLE_9 = rm({
+export const SPEC_9 = {
   n: 9, par: 4, nickname: 'Adobe',
   // Straight and honest until the last forty yards, where sand crosses the front of the green.
   // There is no running one in here, and the green falls a different way in every quarter.
@@ -166,9 +176,10 @@ export const HOLE_9 = rm({
   belts: { left: { depth: 20, spacing: 15, seed: 2901 }, right: { depth: 20, spacing: 15, seed: 2902 } },
   guard: ['frontSand', 'leftSand', 'rightSand'],
   slope: 'quarters',
-});
+};
+export const HOLE_9 = rm(SPEC_9);
 
-export const HOLE_10 = rm({
+export const SPEC_10 = {
   n: 10, par: 4, nickname: 'Rattler',
   // It bends right, then left, then right again. Position, not distance - and the green steps up
   // halfway through, so the club into it depends on where the pin is.
@@ -178,9 +189,10 @@ export const HOLE_10 = rm({
   bunkers: [{ at: 0.62, side: 1, off: 18, r: 8, kind: 'fairwayBunker' }],
   guard: ['rightSand', 'backSand'],
   slope: 'tier',
-});
+};
+export const HOLE_10 = rm(SPEC_10);
 
-export const HOLE_11 = rm({
+export const SPEC_11 = {
   n: 11, par: 3, nickname: 'High Noon',
   // All of it over water, to a green with sand behind. Everything about it says take one more
   // club, and one more club is the back bunker.
@@ -191,9 +203,10 @@ export const HOLE_11 = rm({
   guard: ['backSand', 'leftSand'],
   slope: 'crown',
   greenR: 13,
-});
+};
+export const HOLE_11 = rm(SPEC_11);
 
-export const HOLE_12 = rm({
+export const SPEC_12 = {
   n: 12, par: 4, nickname: 'Painted Hills',
   // Boulders stand in the middle of the fairway at driving distance and more of them line the left
   // shoulder of the green. They block at any height, so both the tee shot and the approach are
@@ -205,9 +218,10 @@ export const HOLE_12 = rm({
   guard: ['leftTrees', 'rightSand'],
   guardTree: 2,
   slope: 'tier',
-});
+};
+export const HOLE_12 = rm(SPEC_12);
 
-export const HOLE_13 = rm({
+export const SPEC_13 = {
   n: 13, par: 5, nickname: 'The Gorge',
   // Three shots for most, and the gorge crosses at 205 so the first of them is a lay-up. The third
   // is over water to a shallow green that runs hard from back to front.
@@ -218,9 +232,10 @@ export const HOLE_13 = rm({
   guard: ['frontWater', 'ringSand'],
   slope: 'steep',
   greenR: 12, greenRy: 10,
-});
+};
+export const HOLE_13 = rm(SPEC_13);
 
-export const HOLE_14 = rm({
+export const SPEC_14 = {
   n: 14, par: 4, nickname: 'Roadrunner',
   // A driver reaches, and everything round the green is sand on a crown that throws a ball off in
   // whatever direction it arrived from. Going for it is the wrong play and it will not feel like
@@ -232,9 +247,10 @@ export const HOLE_14 = rm({
   guard: ['ringSand', 'backWater'],
   slope: 'crown',
   greenR: 10,
-});
+};
+export const HOLE_14 = rm(SPEC_14);
 
-export const HOLE_15 = rm({
+export const SPEC_15 = {
   n: 15, par: 4, nickname: 'Dust Devil',
   // Wide open off the tee, and then the fairway simply ends: the green sits alone on its own island
   // of turf with forty yards of desert in front of it and water short. The approach is all carry,
@@ -245,9 +261,10 @@ export const HOLE_15 = rm({
   guard: ['frontWater', 'ringSand'],
   slope: 'quarters',
   greenR: 11,
-});
+};
+export const HOLE_15 = rm(SPEC_15);
 
-export const HOLE_16 = rm({
+export const SPEC_16 = {
   n: 16, par: 3, nickname: 'Sundial',
   // Short, and the most severe green on the course: it crowns in the middle and is ringed with
   // sand, so the putt matters far more than the tee shot and the tee shot is not easy either.
@@ -257,9 +274,10 @@ export const HOLE_16 = rm({
   guard: ['ringSand'],
   slope: 'crown',
   greenR: 11,
-});
+};
+export const HOLE_16 = rm(SPEC_16);
 
-export const HOLE_17 = rm({
+export const SPEC_17 = {
   n: 17, par: 4, nickname: 'Mirage',
   // Water down the whole right side and the fairway leans that way. The safe line is left, into
   // the palo verde - trivial to fly with a wedge, impossible with anything you would want to be
@@ -271,9 +289,10 @@ export const HOLE_17 = rm({
   sentinels: [{ at: 0.46, side: -1, off: 19, n: 4, spread: 9, type: 2 }],
   guard: ['rightWater', 'frontSand'],
   slope: 'saddle',
-});
+};
+export const HOLE_17 = rm(SPEC_17);
 
-export const HOLE_18 = rm({
+export const SPEC_18 = {
   n: 18, par: 4, nickname: 'Red Mesa',
   // The hole the course is named for, and the hardest here. A wash crosses at 200 so the drive is
   // a lay-up, the green then sits between water short and sand long on the smallest surface of any
@@ -285,7 +304,15 @@ export const HOLE_18 = rm({
   guard: ['frontWater', 'backSand', 'rightSand'],
   slope: 'steep',
   greenR: 11, greenRy: 13,
-});
+};
+export const HOLE_18 = rm(SPEC_18);
+
+/** THE RECIPES, in slot order - what the hole editor reads and what it writes back. Each SPEC_n is
+ *  exactly the object HOLE_n is built from; nothing here is derived twice. */
+export const SPECS = [
+  SPEC_1, SPEC_2, SPEC_3, SPEC_4, SPEC_5, SPEC_6, SPEC_7, SPEC_8, SPEC_9,
+  SPEC_10, SPEC_11, SPEC_12, SPEC_13, SPEC_14, SPEC_15, SPEC_16, SPEC_17, SPEC_18,
+];
 
 export const HOLES = [
   HOLE_1, HOLE_2, HOLE_3, HOLE_4, HOLE_5, HOLE_6, HOLE_7, HOLE_8, HOLE_9,
