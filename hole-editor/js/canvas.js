@@ -75,7 +75,11 @@ export function buildStations(route, step = 2) {
 export function placeLocal(stations, at, side, off) {
   const i = Math.min(stations.length - 1, Math.max(0, Math.round(at * (stations.length - 1))));
   const p = stations[i];
-  return [p.x + p.nx * off * side, p.y + p.ny * off * side];
+  // Past the pin / behind the tee: carry on along the end station's tangent, exactly as
+  // holegen.js's `place()` does since 2026-09-16.
+  const len = stations[stations.length - 1].s;
+  const over = at > 1 ? (at - 1) * len : (at < 0 ? at * len : 0);
+  return [p.x + p.tx * over + p.nx * off * side, p.y + p.ty * over + p.ny * off * side];
 }
 
 /** A click's world point -> {yd, side, off}, via the nearest station overall (not by fraction -
@@ -88,7 +92,15 @@ export function nearestPlacement(stations, length, wx, wy) {
   }
   const p = stations[best];
   const signed = (wx - p.x) * p.nx + (wy - p.y) * p.ny;
-  return { yd: p.t * length, side: signed < 0 ? -1 : 1, off: Math.abs(signed) };
+  // At either END of the route the nearest station cannot say how far PAST it the click is, so
+  // the overshoot along that station's tangent becomes extra yardage: a click 20 yd beyond the pin
+  // is `yd: length + 20` (Matt, 2026-09-16: "It doesn't let me place a bunker behind the green").
+  let yd = p.t * length;
+  if (best === stations.length - 1 || best === 0) {
+    const along = (wx - p.x) * p.tx + (wy - p.y) * p.ty;
+    if ((best === stations.length - 1 && along > 0) || (best === 0 && along < 0)) yd += along;
+  }
+  return { yd, side: signed < 0 ? -1 : 1, off: Math.abs(signed) };
 }
 
 /** Every selectable placed thing on a hole - section 4.4's Objects list groups, minus guards

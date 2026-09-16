@@ -20,7 +20,7 @@ import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
 import { STRINGS } from './strings.js';
-import { BEHIND_TEE_YD, makeHole } from './holegen.js';
+import { BEHIND_TEE_YD, makeHole, SLOPE_PRESETS } from './holegen.js';
 import fs from 'node:fs';   // section 12b reads the shipped ui.js/render.js as text
 
 let fail = 0;
@@ -1006,6 +1006,21 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
       trees: [{ yd: 150, side: 1, off: 20, type: 0, s: 1.5, h: 22 }], sentinels: [{ yd: 200, side: -1, off: 25, type: 0, n: 2, s: 0.8, h: 30 }] });
     ok('makeHole carries s and h through for a placed tree', carried.trees[0].s === 1.5 && carried.trees[0].h === 22);
     ok('...and for every tree of a stand', carried.trees.slice(1).every((t) => t.s === 0.8 && t.h === 30));
+  }
+
+  // --- PLACEMENT PAST THE PIN (2026-09-16). Matt, in the editor: "It doesn't let me place a
+  // bunker behind the green." `place()` clamped `at` to 0..1; now it carries on along the last
+  // station's tangent, so a bunker an overshot ball rolls into can be authored at all.
+  {
+    const straight = { n: 1, par: 4, path: [[0, 5], [0, 300]], treeTypes: h3.treeTypes, defend: false };
+    const len = makeHole(straight).cardYards;              // the spline runs from path[0], not from y = 0
+    const h = makeHole({ ...straight, bunkers: [{ yd: len + 20, side: 1, off: 0, r: 8, ry: 8, kind: 'greensideBunker' }] });
+    const sand = h.surfaces.filter((s) => s.kind === 'greensideBunker');
+    const cy = sand[0].poly.reduce((a, p) => a + p[1], 0) / sand[0].poly.length;
+    ok('a bunker at yd = length + 20 is built about 20 yds PAST the pin', sand.length === 1 && Math.abs(cy - (h.pin[1] + 20)) < 3, `centre y ${cy.toFixed(1)}, pin y ${h.pin[1]}`);
+    ok('...and the bounds grew to hold it (validateHole passes)', validateHole(h).length === 0, validateHole(h).join('; '));
+    ok('the runsAway presets fall AWAY from the tee (+y) where every other preset falls toward it',
+      SLOPE_PRESETS.runsAway(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.runsAwaySteep(0.5, 0.5)[1] > 0 && SLOPE_PRESETS.gentle(0.5, 0.5)[1] < 0);
   }
 
   // --- A TREE'S OWN SIZE, AND THE ONE CONTRACT IT MUST NOT BREAK -----------------------------
