@@ -410,3 +410,30 @@ it is deliberately NOT in `run-all-tests.mjs`, like every other browser suite.
 Also: the Validate list is cleared by the next edit (it described the hole before the edit);
 after a slider release the context panel is left in place (`afterChange({ keepContext })`) so
 arrow keys keep working on it; the nickname is HTML-escaped properly.
+
+## Past the pin, runs-away greens, Duplicate, resize handles, drawn shapes (2026-09-16)
+
+Matt, designing hole 3: *"It doesn't let me place a bunker behind the green."* Everything is
+placed in yards from the tee and `holegen.js`'s `place()` clamped the fraction to 0..1, so a click
+past the pin snapped back onto it. `place()` now carries on along the end station's tangent
+(`yd: length + 20` is twenty yards past the pin); `nearestPlacement`/`placeLocal` here do the
+same. And *"make the green slope away from the tee"*: every preset fell toward the tee, so
+`runsAway` / `runsAwaySteep` were added to `SLOPE_PRESETS`; the dropdown lists them itself.
+
+Then three asks in one message, all built:
+- **Duplicate** (ribbon, `D`, and a button in the Bunker/Water panels): the selected bunker,
+  lake, tree, stand or cross hazard, 12 yd further up the hole, with a fresh seed, selected.
+- **Resize handles**: a selected bunker or lake (Select tool) shows a dashed box with eight
+  white squares; sides scale one axis, corners both, about the box centre. A blob scales its
+  `r`/`ry` (`rx`/`ry`), a drawn shape scales its points. The factor is measured against the
+  CURRENT box on every move, never compounded.
+- **Draw shape**: Bunker/Water panel -> "Draw shape" (or "Redraw shape" on a selected one). Click
+  each corner, double-click or Enter closes, Esc cancels. The clicked outline is rounded with two
+  passes of Chaikin (`smoothPoly`, a 4-click square -> 16 points) and stored as `{poly, kind}` /
+  `{poly}`, the form holegen.js always accepted beside a blob. World yards = yards from the tee
+  while the tee never moves (R4), so R1 holds. A drawn shape is dragged by translation and has
+  no reroll. Bunker placement also gained an Auto / Fairway / Greenside choice before the click.
+
+Tests: five headless cases (smoothing, build + validate + export of a drawn bunker, scale,
+duplicate/translate, chosen kind) and four browser probes (D, a handle drag growing `r`, four
+clicks + Enter making a 16-point lake that paints and validates).

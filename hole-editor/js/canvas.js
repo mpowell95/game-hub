@@ -8,6 +8,23 @@
 import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob } from '../../golf/js/holegen.js';
+import { polyCentroid } from './model.js';
+
+/** The axis-aligned box round an outline, plus its eight resize handles (corners and side
+ *  midpoints) in world yards - Matt's "small white squares on the sides that i can click and
+ *  drag". `axis` says what a handle changes: 'x', 'y' or both. */
+export function bboxHandles(poly) {
+  let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+  for (const [x, y] of poly) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  const mx = (minX + maxX) / 2; const my = (minY + maxY) / 2;
+  return {
+    minX, minY, maxX, maxY,
+    handles: [
+      { x: minX, y: minY, axis: 'xy' }, { x: maxX, y: minY, axis: 'xy' }, { x: maxX, y: maxY, axis: 'xy' }, { x: minX, y: maxY, axis: 'xy' },
+      { x: mx, y: minY, axis: 'y' }, { x: maxX, y: my, axis: 'x' }, { x: mx, y: maxY, axis: 'y' }, { x: minX, y: my, axis: 'x' },
+    ],
+  };
+}
 
 const THEME = 'desert';
 // render.js's own thresholds (SLOPE_FLAT, SLOPE_MIN_PX) are not exported - copied here as plain
@@ -109,13 +126,15 @@ export function nearestPlacement(stations, length, wx, wy) {
 export function listObjects(spec, stations, length) {
   const out = [];
   (spec.bunkers || []).forEach((b, index) => {
-    if (b.yd == null) return; // a poly-only bunker (none in Red Mesa's authored specs) isn't editable here
+    if (b.poly) { out.push({ group: 'bunkers', index, kind: b.kind || 'greensideBunker', center: polyCentroid(b.poly), poly: b.poly, drawn: true }); return; }
+    if (b.yd == null) return;
     const [cx, cy] = placeLocal(stations, b.yd / length, b.side == null ? 1 : b.side, b.off || 0);
     const r = b.r || 6; const ry = b.ry || r * 0.72;
     const seed = b.seed || (spec.seed + 80 + index);
     out.push({ group: 'bunkers', index, kind: b.kind || 'greensideBunker', center: [cx, cy], poly: blob(cx, cy, r, ry, seed, 9) });
   });
   (spec.water || []).forEach((w, index) => {
+    if (w.poly) { out.push({ group: 'water', index, kind: 'water', center: polyCentroid(w.poly), poly: w.poly, drawn: true }); return; }
     if (w.yd == null) return;
     const [cx, cy] = placeLocal(stations, w.yd / length, w.side == null ? 0 : w.side, w.off || 0);
     const rx = w.rx; const ry = w.ry == null ? rx : w.ry;
@@ -235,6 +254,8 @@ export class EditorCanvas {
     this.selection = null; // {group,index} | {group:'waypoint', index} | null
     this.ruler = null; // [[x,y]] | [[x,y],[x,y]] | null
     this.validateRing = null; // an array of world points to ring in red until the next click (section 7)
+    this.drawing = null; // {group, kind, replaceIndex, points} while a shape is being drawn
+    this.onDrawChange = null;
     // Supplied by main.js: { getSpec, instant(mutateFn), liveBegin, liveUpdate(mutateFn), liveEnd,
     // guardTree }. Instant = one undo-worthy action now; live* = a drag, one undo push at the end.
     this.ops = null;
@@ -459,6 +480,32 @@ export class EditorCanvas {
         }
       }
 
+      // DRAW MODE (Matt: "can i draw shapes?"): every click adds a corner; double-click or Enter
+      // closes the shape, Escape abandons it.
+      if (this.drawing) {
+        const last = this.drawing.points[this.drawing.points.length - 1];
+        if (!last || Math.hypot(last[0] - w.x, last[1] - w.y) > 1) this.drawing.points.push([+w.x.toFixed(1), +w.y.toFixed(1)]);
+        this.draw();
+        return;
+      }
+
+      // RESIZE HANDLES on the selected bunker / lake (Select tool): the eight white squares round
+      // its box. Checked before the outline so a handle on the edge wins over "drag the object".
+      if (this.tool === 'select' && this.selection && (this.selection.group === 'bunkers' || this.selection.group === 'water')) {
+        const o = listObjects(this.spec, this.stations, this.length).find((x) => x.group === this.selection.group && x.index === this.selection.index);
+        if (o && o.poly) {
+          const tol = 12 / this.camera.ppy;
+          const bb = bboxHandles(o.poly);
+          const hnd = bb.handles.find((h) => Math.hypot(h.x - w.x, h.y - w.y) <= tol);
+          if (hnd) {
+            objDrag = { kind: 'resize', group: o.group, index: o.index, axis: hnd.axis };
+            this.ops.liveBegin();
+            el.setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+      }
+
       const hit = this.hitTest(w.x, w.y);
       if (hit && hit.group === 'waypoint') {
         this.setSelection(hit);
@@ -476,7 +523,7 @@ export class EditorCanvas {
       if (hit) {
         this.setSelection(hit);
         if (this.tool === 'select') {
-          objDrag = { kind: 'object', group: hit.group, index: hit.index };
+          objDrag = { kind: 'object', group: hit.group, index: hit.index, drawn: !!hit.drawn, lastX: w.x, lastY: w.y };
           this.ops.liveBegin();
           el.setPointerCapture(e.pointerId);
         }
@@ -512,6 +559,8 @@ export class EditorCanvas {
       const r = el.getBoundingClientRect();
       const w = this.toWorld(e.clientX - r.left, e.clientY - r.top);
 
+      if (this.drawing) { this.finishDraw(); return; }
+
       if (this.tool === 'route') {
         this.ops.instant((spec) => {
           // Insert after the nearest existing waypoint that precedes this point along the route.
@@ -545,10 +594,29 @@ export class EditorCanvas {
       const w = this.toWorld(e.clientX - r.left, e.clientY - r.top);
       this.hover = w;
       if (this.onHoverChange) this.onHoverChange(w);
+      if (this.drawing) { this.draw(); return; }   // the rubber band follows the cursor
 
       if (objDrag && this.ops) {
         if (objDrag.kind === 'waypoint') {
           this.ops.liveUpdate((spec) => ({ ...spec, path: spec.path.map((p, i) => (i === objDrag.index ? [+w.x.toFixed(1), +w.y.toFixed(1)] : p)) }));
+        } else if (objDrag.kind === 'resize') {
+          // Scale about the object's box centre so the opposite edge stays put in feel; the
+          // factor is measured against the CURRENT box each move, never compounded.
+          const axis = objDrag.axis;
+          this.ops.liveUpdate((spec) => {
+            const o = listObjects(spec, this.stations, this.length).find((x) => x.group === objDrag.group && x.index === objDrag.index);
+            if (!o || !o.poly) return spec;
+            const bb = bboxHandles(o.poly);
+            const cx = (bb.minX + bb.maxX) / 2; const cy = (bb.minY + bb.maxY) / 2;
+            const hw = Math.max(0.5, (bb.maxX - bb.minX) / 2); const hh = Math.max(0.5, (bb.maxY - bb.minY) / 2);
+            const fx = axis.includes('x') ? Math.max(0.2, Math.abs(w.x - cx) / hw) : 1;
+            const fy = axis.includes('y') ? Math.max(0.2, Math.abs(w.y - cy) / hh) : 1;
+            return this.ops.mutators.scaleObject(spec, objDrag.group, objDrag.index, fx, fy);
+          });
+        } else if (objDrag.kind === 'object' && objDrag.drawn) {
+          const dx = w.x - objDrag.lastX; const dy = w.y - objDrag.lastY;
+          objDrag.lastX = w.x; objDrag.lastY = w.y;
+          this.ops.liveUpdate((spec) => this.ops.mutators.translateDrawn(spec, objDrag.group, objDrag.index, dx, dy));
         } else if (objDrag.kind === 'object') {
           const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
           this.ops.liveUpdate((spec) => {
@@ -613,16 +681,56 @@ export class EditorCanvas {
           this.ops.instant((spec) => this._deleteSelected(spec, sel));
         }
       } else if (e.key === 'Escape') {
-        if (this.selection) this.setSelection(null);
+        if (this.drawing) this.cancelDraw();
+        else if (this.selection) this.setSelection(null);
         else if (this.ruler) { this.ruler = null; if (this.onRulerChange) this.onRulerChange(null); this.draw(); }
+      } else if (e.key === 'Enter' && this.drawing) {
+        e.preventDefault();
+        this.finishDraw();
       }
     });
+  }
+
+  /** Enter draw mode for a new bunker/lake (`replaceIndex` null) or to redraw the outline of an
+   *  existing one. `kind` is the bunker kind for a new bunker. */
+  startDraw(group, kind, replaceIndex = null) {
+    this.drawing = { group, kind, replaceIndex, points: [] };
+    this.el.style.cursor = 'crosshair';
+    if (this.onDrawChange) this.onDrawChange(this.drawing);
+    this.draw();
+  }
+
+  cancelDraw() {
+    this.drawing = null;
+    this.el.style.cursor = '';
+    if (this.onDrawChange) this.onDrawChange(null);
+    this.draw();
+  }
+
+  finishDraw() {
+    const d = this.drawing;
+    if (!d) return;
+    if (d.points.length < 3) { this.cancelDraw(); return; }
+    const { group, kind, replaceIndex, points } = d;
+    this.drawing = null;
+    this.el.style.cursor = '';
+    if (replaceIndex != null) {
+      this.ops.instant((spec) => this.ops.mutators.setDrawnPoly(spec, group, replaceIndex, points));
+      this.setSelection({ group, index: replaceIndex });
+    } else {
+      this.ops.instant((spec) => this.ops.mutators.addDrawnShape(spec, group, points, kind));
+      this.setSelection({ group, index: this.spec[group].length - 1 });
+    }
+    if (this.onDrawChange) this.onDrawChange(null);
   }
 
   /** Click placement for Bunker/Water/Tree/Cross (sections 6.4-6.6/6.10). `w` is the world point. */
   _place(spec, kind, w) {
     const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
-    if (kind === 'bunker') return this.ops.mutators.addBunker(spec, placement, this.length);
+    if (kind === 'bunker') {
+      const chosen = this.ops.getBunkerKind ? this.ops.getBunkerKind() : 'auto';
+      return this.ops.mutators.addBunker(spec, placement, this.length, chosen === 'auto' ? undefined : chosen);
+    }
     if (kind === 'water') return this.ops.mutators.addWater(spec, placement);
     if (kind === 'tree') {
       const treeType = this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'stand' : 'single';
@@ -901,8 +1009,42 @@ export class EditorCanvas {
           ctx.beginPath();
           ctx.arc(sx(o.center[0]), sy(o.center[1]), 4, 0, Math.PI * 2);
           ctx.fill();
+          // The resize box and its eight white handles (Select tool, bunkers and lakes).
+          if (this.tool === 'select' && o.poly && (o.group === 'bunkers' || o.group === 'water')) {
+            const bb = bboxHandles(o.poly);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,.85)';
+            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sx(bb.minX), sy(bb.maxY), (bb.maxX - bb.minX) * cam.ppy, (bb.maxY - bb.minY) * cam.ppy);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#1e1e1e';
+            for (const h of bb.handles) { const px = sx(h.x); const py = sy(h.y); ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10); }
+            ctx.restore();
+          }
         }
       }
+    }
+
+    // 6b. a shape being drawn: the corners so far, the outline, and the rubber band to the cursor.
+    if (this.drawing) {
+      const pts = this.drawing.points;
+      ctx.save();
+      ctx.strokeStyle = '#ffce3a';
+      ctx.fillStyle = '#ffce3a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      pts.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      if (this.hover && pts.length) ctx.lineTo(sx(this.hover.x), sy(this.hover.y));
+      ctx.stroke();
+      if (pts.length > 2) { ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(sx(pts[pts.length - 1][0]), sy(pts[pts.length - 1][1])); ctx.lineTo(sx(pts[0][0]), sy(pts[0][1])); ctx.stroke(); ctx.setLineDash([]); }
+      for (const p of pts) { ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), 3.5, 0, Math.PI * 2); ctx.fill(); }
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`${pts.length} corner${pts.length === 1 ? '' : 's'} - double-click or Enter to close, Esc to cancel`, 12, 24);
+      ctx.restore();
     }
 
     // 7. width handles (Width tool only) - section 6.3.

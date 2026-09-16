@@ -97,6 +97,34 @@ ok('[KNOWN-BUG PROBE] a click 22 yd past the pin places a bunker BEYOND the hole
 ok('...as a greenside bunker', lastB.kind === 'greensideBunker');
 await key('Control+z');
 
+console.log('\n-- Duplicate, resize handles, draw shape --');
+await key('v');
+await page.evaluate(() => window.__he.editorCanvas.setSelection({ group: 'bunkers', index: 0 }));
+const nDup0 = (await spec()).bunkers.length;
+await key('d');
+const sDup = await spec();
+ok('D duplicates the selected bunker 12 yd further up and selects the copy', sDup.bunkers.length === nDup0 + 1 && Math.abs(sDup.bunkers[nDup0].yd - sDup.bunkers[0].yd - 12) < 0.06 && (await page.evaluate(() => window.__he.editorCanvas.selection.index)) === nDup0);
+await key('Control+z');
+// resize: drag the right-side handle of bunker 0 outward by 30 px
+await page.evaluate(() => window.__he.editorCanvas.setSelection({ group: 'bunkers', index: 0 }));
+const r0 = (await spec()).bunkers[0].r;
+const hb = await page.evaluate(async () => { const C = await import('/hole-editor/js/canvas.js'); const ec = window.__he.editorCanvas; const o = C.listObjects(ec.spec, ec.stations, ec.length).find((x) => x.group === 'bunkers' && x.index === 0); const bb = C.bboxHandles(o.poly); return bb.handles[5]; });
+const hs = await toScreen(hb.x, hb.y);
+await page.mouse.move(hs.x, hs.y); await page.mouse.down(); await page.mouse.move(hs.x + 30, hs.y, { steps: 4 }); await page.mouse.up(); await settle();
+const r1 = (await spec()).bunkers[0].r;
+ok('dragging the right resize handle outward grows r', r1 > r0 * 1.2, `r ${r0} -> ${r1}`);
+await key('Control+z');
+// draw a lake: Water tool, Draw shape, four corners, Enter
+await key('h');
+await page.click('#he-w-draw'); await settle();
+const nW0 = ((await spec()).water || []).length;
+for (const [dx, dy] of [[-30, 150], [-10, 150], [-10, 170], [-30, 170]]) { const q = await toScreen(dx, dy); await page.mouse.click(q.x, q.y); await page.waitForTimeout(80); }
+await page.keyboard.press('Enter'); await settle();
+const sW = await spec();
+ok('[KNOWN-BUG PROBE] four clicks and Enter draw a lake as a 16-point polygon', (sW.water || []).length === nW0 + 1 && sW.water[nW0].poly && sW.water[nW0].poly.length === 16, JSON.stringify((sW.water || [])[nW0] || null).slice(0, 80));
+ok('...that the built hole paints as water and validates', await page.evaluate(async () => { const H = await import('/golf/js/holes.js'); const b = window.__he.getBuilt(window.__he.currentId); return b.surfaces.some((s) => s.kind === 'water' && s.poly.length === 16) && H.validateHole(b).length === 0; }));
+await key('Control+z');
+
 console.log('\n-- Route --');
 await key('r');
 const len0 = await page.evaluate(() => window.__he.getBuilt(window.__he.currentId).cardYards);

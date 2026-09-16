@@ -16,6 +16,7 @@ import {
   addCross, setCrossField, deleteCross, deleteObject,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
+  addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
 } from './model.js';
 import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
@@ -32,6 +33,7 @@ const MUTATORS = {
   addCross, setCrossField, deleteCross, deleteObject,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
+  addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
 };
 
 const TOOLS = [
@@ -185,6 +187,7 @@ ribbon.innerHTML = [
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
   '<button class="he-tool" id="he-redo" title="Redo (Ctrl+Y)"><span class="he-tool-icon">↷</span><span class="he-tool-label">Redo</span></button>',
+  '<button class="he-tool" id="he-duplicate" title="Duplicate the selected object (D)"><span class="he-tool-icon">⧉</span><span class="he-tool-label">Duplicate</span></button>',
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-validate" title="Validate"><span class="he-tool-icon">✓</span><span class="he-tool-label">Validate</span></button>',
   '<button class="he-tool" id="he-compare" title="Compare"><span class="he-tool-icon">⇄</span><span class="he-tool-label">Compare</span></button>',
@@ -341,8 +344,23 @@ const editOps = {
     afterChange({ keepContext: true });
   },
   getCrossOver: () => toolState.crossOver,
+  getBunkerKind: () => toolState.bunkerKind || 'auto',
+  /** Draw a new bunker/lake outline, or redraw an existing one (Matt: "can i draw shapes?"). */
+  startDraw(group, kind, replaceIndex = null) { editorCanvas.startDraw(group, kind, replaceIndex); },
 };
 editorCanvas.ops = editOps;
+
+// Duplicate (ribbon + D): the selected bunker / lake / tree / stand / cross, 12 yd further up the
+// hole, and the copy becomes the selection so it can be dragged straight away.
+const DUPLICABLE = ['bunkers', 'water', 'trees', 'sentinels', 'cross'];
+function duplicateSelected() {
+  const sel = editorCanvas.selection;
+  if (!sel || !DUPLICABLE.includes(sel.group)) return;
+  editOps.instant((s) => duplicateObject(s, sel.group, sel.index));
+  editorCanvas.setSelection({ group: sel.group, index: doc.holes[currentId].spec[sel.group].length - 1 });
+}
+document.getElementById('he-duplicate').addEventListener('click', duplicateSelected);
+editorCanvas.onDrawChange = () => refreshContext();
 
 const contextHeadEl = document.querySelector('[data-panel="context"] .he-panel__head');
 function refreshContext() {
@@ -352,6 +370,7 @@ function refreshContext() {
     spec: doc.holes[currentId].spec,
     built: getBuilt(currentId),
     selection: editorCanvas.selection,
+    drawing: editorCanvas.drawing,
     ops: editOps,
     toolState,
     setToolState(patch) { toolState = { ...toolState, ...patch }; refreshContext(); },
@@ -442,6 +461,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '[') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i - 1 + HOLE_COUNT) % HOLE_COUNT]); return; }
   if (e.key === ']') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i + 1) % HOLE_COUNT]); return; }
   if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); document.getElementById('he-export').click(); return; }
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'd') { duplicateSelected(); return; }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) { setTool(TOOL_KEYS[e.key.toLowerCase()]); }
 });
 
