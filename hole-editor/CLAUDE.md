@@ -479,3 +479,29 @@ editor:
   removes. One pin = the cup; two or more = `hole.pins`, and `golf/js/ui.js` `_enterHole` picks
   one at random each time the hole is played. `validateHole` refuses a pin off the green.
   Export prints all three fields. CACHE v851.
+
+## The first real fold-back (2026-09-16, CACHE v852)
+
+Matt exported after a full editing session and sent the file. `golf/courses/redmesa.js` IS that
+export, with three repairs the validator demanded - all of them shapes the editor let through:
+
+- **Hole 7 had a waypoint at y 3.6 on a tee at y 5**, dragged behind the tee, which folded the
+  fairway, rough and belt polygons over on themselves at the tee box. Dropped the waypoint.
+  Guard: `clampAheadOfTee` in `model.js` - `movePathPoint` (now what the canvas drag calls too)
+  floors every waypoint at tee + 10 yd.
+- **Hole 9's traced bunker doubled back on its last three points**, and **hole 7's drawn green
+  fringe folded over inside a notch** (the outline pushed out 6 yd across a dip narrower than
+  that). Guard: `dropLoops` in `golf/js/holes.js` - a crossing whose loop is 8 vertices or fewer
+  is cut out; `smoothPoly` and `offsetOutline` both run it, so a drawn shape or a fringe cannot
+  ship a kink again. Bigger crossings are still left for the validator to report.
+- **Hole 6's ring of sand was drawn as a spiral**: inner loop, bridge, outer loop, bridge, both
+  loops the same way round, so the two bridges had to cross. Rebuilt in the file as outer loop +
+  inner loop reversed, joined at their nearest vertices (5.6 yd apart); `surfaceAt` is even-odd,
+  so the middle is not sand and the green on top wins anyway. The editor cannot draw a ring on
+  purpose; if that becomes a want, it is a two-outline feature, not a drawing trick.
+
+Par stayed 71, so `GOLF_COURSE_PAR` was untouched. `golf/js/test.js` and `test-hole-editor.mjs`
+pass on the folded file (three editor tests were re-pointed: hole 6 no longer has guard tokens,
+hole 3 already carries three pins). **Matt's browser copy still holds the pre-repair shapes** -
+the editor loads from `localStorage`, not from the file, so those three holes differ from what
+shipped until he resets the editor or re-imports.

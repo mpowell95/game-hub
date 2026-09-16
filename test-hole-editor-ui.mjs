@@ -140,21 +140,22 @@ const rp = await toScreen(0, 150);
 await page.mouse.move(rp.x, rp.y); await settle();
 const readout = await page.evaluate(() => document.getElementById('he-hover').textContent);
 ok('the readout shows the distance from the tee and the width', /From tee: 14[0-9]\.\d yd/.test(readout) && /Width at cursor/.test(readout), readout);
-// hole 6's guard bunkers (frontJaws etc.) are selectable and detachable
+// hole 16's guard bunkers (ringSand) are selectable and detachable. (Hole 6 was the subject
+// until the first fold-back, 2026-09-16: Matt detached its guards and drew his own ring.)
 await key('v');
-for (let i = 0; i < 5; i++) await key(']');
-ok('on hole 6', (await page.evaluate(() => window.__he.currentId)) === 'rm-06');
+for (let i = 0; i < 15; i++) await key(']');
+ok('on hole 16', (await page.evaluate(() => window.__he.currentId)) === 'rm-16');
 const gHit = await page.evaluate(() => { const b = window.__he.getBuilt(window.__he.currentId); const s = b.surfaces.filter((x) => x.kind === 'greensideBunker'); const p = s[s.length - 1].poly; let x = 0; let y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; });
 const gs = await toScreen(gHit[0], gHit[1]);
 await page.mouse.click(gs.x, gs.y); await settle();
 ok('[KNOWN-BUG PROBE] clicking a guard-made bunker selects it', (await page.evaluate(() => (window.__he.editorCanvas.selection || {}).group)) === 'guard');
 await page.click('#he-guard-detach'); await settle();
-const s6 = await spec();
-ok('Detach turns the guard presets into drawn bunkers', !s6.guard && s6.bunkers.some((b) => b.poly));
+const s16 = await spec();
+ok('Detach turns the guard presets into drawn bunkers', !s16.guard && s16.bunkers.some((b) => b.poly));
 await page.mouse.click(gs.x, gs.y); await settle();
 ok('...which are now ordinary, selectable objects', (await page.evaluate(() => (window.__he.editorCanvas.selection || {}).group)) === 'bunkers');
 await key('Control+z');
-for (let i = 0; i < 5; i++) await key('[');
+for (let i = 0; i < 15; i++) await key('[');
 
 console.log('\n-- Green: drawn outline, fringe, pins --');
 await key('g');

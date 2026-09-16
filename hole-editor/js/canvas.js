@@ -647,7 +647,7 @@ export class EditorCanvas {
 
       if (objDrag && this.ops) {
         if (objDrag.kind === 'waypoint') {
-          this.ops.liveUpdate((spec) => ({ ...spec, path: spec.path.map((p, i) => (i === objDrag.index ? [+w.x.toFixed(1), +w.y.toFixed(1)] : p)) }));
+          this.ops.liveUpdate((spec) => this.ops.mutators.movePathPoint(spec, objDrag.index, +w.x.toFixed(1), +w.y.toFixed(1)));
         } else if (objDrag.kind === 'pin') {
           this.ops.liveUpdate((spec) => this.ops.mutators.movePin(spec, objDrag.index, w.x, w.y));
         } else if (objDrag.kind === 'resize') {
