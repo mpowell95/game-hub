@@ -8,7 +8,7 @@ import {
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument, STORAGE_KEY,
   setField,
-  insertWaypoint, removeWaypoint, straightenPath, insertDogleg,
+  insertWaypoint, removeWaypoint, movePathPoint, straightenPath, insertDogleg,
   setWidthPoint, insertWidthPoint, deleteWidthPoint, scaleWidth,
   addBunker, setBunkerField, rerollBunker, deleteBunker,
   addWater, setWaterField, rerollWater, deleteWater,
@@ -27,7 +27,7 @@ import { generateSource, generateJSON } from './export.js';
 
 const MUTATORS = {
   setField,
-  insertWaypoint, removeWaypoint, straightenPath, insertDogleg,
+  insertWaypoint, removeWaypoint, movePathPoint, straightenPath, insertDogleg,
   setWidthPoint, insertWidthPoint, deleteWidthPoint, scaleWidth,
   addBunker, setBunkerField, rerollBunker, deleteBunker,
   addWater, setWaterField, rerollWater, deleteWater,

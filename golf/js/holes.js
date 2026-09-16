@@ -58,6 +58,24 @@ export function polySelfIntersects(poly) {
   return null;
 }
 
+/** Remove the SMALL loops a smoothed or offset outline can fold into (2026-09-16): where two
+ *  edges cross and the arc between them is at most `maxLoop` vertices, that arc is cut out and
+ *  the outline runs straight through the crossing. Anything bigger is left for validateHole to
+ *  report - a shape whose two halves cross is a drawing to look at, not a kink to tidy. Found on
+ *  the first real editor export: a traced bunker's last three points doubled back on themselves,
+ *  and a drawn green's fringe (its outline pushed out 6 yd) folded over inside a notch. */
+export function dropLoops(poly, maxLoop = 8) {
+  let pts = poly.slice();
+  for (let guard = 0; guard < 64; guard++) {
+    const x = polySelfIntersects(pts);
+    if (!x) return pts;
+    const [i, j] = x;
+    if (j - i > maxLoop || pts.length - (j - i) < 3) return pts;
+    pts = [...pts.slice(0, i + 1), ...pts.slice(j + 1)];   // vertices i+1..j are the loop
+  }
+  return pts;
+}
+
 export function bboxOf(poly) {
   let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
   for (const [x, y] of poly) {

@@ -152,9 +152,11 @@ await test('R4: the model rejects a move of path[0]', () => {
   const doc = createDocument();
   const spec = doc.holes['rm-01'].spec;
   assert.throws(() => movePathPoint(spec, 0, 10, 10), /R4|tee/i);
-  const moved = movePathPoint(spec, 1, 10, 10);
-  assert.deepEqual(moved.path[1], [10, 10]);
+  const moved = movePathPoint(spec, 1, 10, 40);
+  assert.deepEqual(moved.path[1], [10, 40]);
   assert.deepEqual(moved.path[0], spec.path[0]);
+  // A waypoint can never be dragged behind the tee (first real export had one at y 3.6).
+  assert.deepEqual(movePathPoint(spec, 1, 10, 2).path[1], [10, spec.path[0][1] + 10]);
 });
 
 // --- undo/redo -----------------------------------------------------------------------------
@@ -337,14 +339,14 @@ await test('addBunker honours a chosen kind and still auto-picks without one', (
 });
 
 // --- detach guards, S-bend (2026-09-16) ----------------------------------------------------------
-await test('detachGuards: hole 6 guard bunkers become drawn bunkers, the token is gone, the hole paints the same', () => {
+await test('detachGuards: hole 10 guard bunkers become drawn bunkers, the token is gone, the hole paints the same', () => {
   const doc = createDocument();
-  const id = 'rm-06';
+  const id = 'rm-10';
   const spec = doc.holes[id].spec;
-  assert.ok((spec.guard || []).length > 0, 'hole 6 has guard tokens');
+  assert.ok((spec.guard || []).length > 0, 'hole 10 has guard tokens');
   const before = buildHole(doc, id);
   const sandBefore = before.surfaces.filter((s) => s.kind === 'greensideBunker' || s.kind === 'fairwayBunker').map((s) => JSON.stringify(s.poly)).sort();
-  const detached = detachGuards(spec, 6);
+  const detached = detachGuards(spec, 10);
   assert.equal(detached.guard, undefined);
   assert.ok(detached.bunkers.filter((b) => b.poly).length >= 1, 'at least one drawn bunker was added');
   doc.holes[id].spec = detached;
@@ -368,7 +370,8 @@ await test('insertSBend: two middle waypoints on opposite sides of the tee-pin l
 await test('a drawn green outline, a per-side fringe and two pins build, validate and export', async () => {
   const doc = createDocument();
   const id = 'rm-03';
-  let spec = doc.holes[id].spec;
+  let spec = { ...doc.holes[id].spec }; delete spec.pins;   // the shipped hole 3 has its own pins
+  doc.holes[id].spec = spec;
   const c = buildHole(doc, id).pin;
   spec = setGreenOutline(spec, [[c[0] - 14, c[1] - 10], [c[0] + 14, c[1] - 10], [c[0] + 16, c[1] + 12], [c[0] - 16, c[1] + 12]]);
   spec = setFringe(spec, { front: 9, back: 4, left: 6, right: 6 });

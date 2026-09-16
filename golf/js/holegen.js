@@ -21,7 +21,7 @@
 //
 // Units: YARDS. x across the hole (right positive), y up it away from the tee.
 
-import { mulberry32, bboxOf } from './holes.js';
+import { mulberry32, bboxOf, dropLoops } from './holes.js';
 
 /** A 12-gon green. Shared with the hand-authored holes, which is the point: three hand-drawn
  *  blobs would each need re-checking against their own slope grid. */
@@ -152,8 +152,9 @@ export function fringePoly(cx, cy, rx, ry, seed, shape, angleRad, padYd) {
 
 /** A DRAWN green's fringe: the outline pushed out along each vertex's own outward normal by the
  *  fringe width on that bearing (2026-09-16). The rounded outlines the editor produces have no
- *  sharp inner corners, which is what keeps this simple offset from folding over; validateHole's
- *  crossing check catches one that does. */
+ *  sharp inner corners, which is what keeps this simple offset from mostly not folding over; a
+ *  notch between two lobes still folds at the fringe width, so the small loop that makes is cut out
+ *  (dropLoops) and validateHole's crossing check catches anything bigger. */
 export function offsetOutline(poly, centre, padAt) {
   let area = 0;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) area += (poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1]);
@@ -170,7 +171,7 @@ export function offsetOutline(poly, centre, padAt) {
     const pad = padAt(Math.atan2(p[1] - centre[1], p[0] - centre[0]));
     out.push([+(p[0] + nx * pad).toFixed(1), +(p[1] + ny * pad).toFixed(1)]);
   }
-  return out;
+  return dropLoops(out);
 }
 
 /** The twelve radius factors for one green, seeded. Smoothed round the ring so a green has broad

@@ -5,6 +5,7 @@
 // twice) - this module is where each of them is actually enforced.
 
 import { makeHole, slopeFrom } from '../../golf/js/holegen.js';
+import { dropLoops } from '../../golf/js/holes.js';
 import { SPECS, RM_DEFAULTS } from '../../golf/courses/redmesa.js';
 
 export const COURSE_ID = 'redmesa';
@@ -191,9 +192,15 @@ export function buildHole(doc, id) {
 // writing the result back onto doc.holes[id].spec.
 
 /** R4: the tee (path[0]) never moves. Every other waypoint may. */
+/** No waypoint may sit behind the tee: the first real export had one dragged to y 3.6 on a tee at
+ *  y 5, and the fairway, rough and belt polygons all folded over on themselves at the tee box. */
+export function clampAheadOfTee(spec, y) {
+  return Math.max(+y, spec.path[0][1] + 10);
+}
+
 export function movePathPoint(spec, index, x, y) {
   if (index === 0) throw new Error('hole-editor: path[0] is the tee and cannot be moved (R4)');
-  const path = spec.path.map((p, i) => (i === index ? [+x, +y] : p));
+  const path = spec.path.map((p, i) => (i === index ? [+x, clampAheadOfTee(spec, y)] : p));
   return { ...spec, path };
 }
 
@@ -464,7 +471,8 @@ export function smoothPoly(points, passes = 2) {
     }
     pts = out;
   }
-  return pts.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]);
+  // A traced outline whose last points double back makes a tiny loop the game refuses; cut it.
+  return dropLoops(pts.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]));
 }
 
 /** A drawn bunker (`kind` decides fairway/greenside) or lake from clicked points, smoothed. */

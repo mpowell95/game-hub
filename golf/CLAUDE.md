@@ -97,6 +97,16 @@ So, standing from today:
   figure typed into this file goes stale the day a hole is re-cut (the 6,489 that sat in "Two
   courses, thirty-six holes" for eleven days measured 6,581.5 by then).
 
+### Red Mesa's first fold-back (2026-09-16)
+
+`golf/courses/redmesa.js` is Matt's hole-editor export, folded in at CACHE v852 with three
+validator-driven repairs (a waypoint behind the tee on 7, a kinked bunker trace on 9, a spiral
+ring bunker on 6 - detail in `hole-editor/CLAUDE.md`). Two guards came out of it that any
+course now inherits: `dropLoops` (`holes.js`) tidies small self-crossing loops in offset fringes
+and smoothed traces, and the editor floors every waypoint at tee + 10 yd. The next fold-back is
+the same recipe: replace the file, `node golf/js/test.js`, check par against `GOLF_COURSE_PAR`,
+bump CACHE, validate, deploy.
+
 ## Harbor Links is gone from the product, but its keys are not
 
 Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course
