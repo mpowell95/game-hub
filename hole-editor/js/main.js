@@ -254,12 +254,33 @@ function reorder(draggedId, dropOnId) {
   afterChange();
 }
 
+// THE CANVAS REDRAWS ON EVERY EVENT; THE PANELS AND THE STRIP REDRAW ONCE PER FRAME. A drag fires
+// pointermove far faster than the screen can paint, and every one of them used to rebuild the
+// Hole panel, the Objects list, the 18-thumbnail strip AND the context panel synchronously -
+// measured as long tasks of 400-965 ms during a 20-step drag (2026-09-16, "very slow/delayed").
+// During a live gesture the context panel is also left alone: the control being dragged already
+// shows its own value, and re-rendering the panel underneath a slider mid-drag is how a drag gets
+// dropped. It catches up at liveEnd(), which calls this with no gesture in flight.
+// The rebuild itself (makeHole + buildMap + the tree expansion, ~30 ms a hole) is coalesced the
+// same way: the spec is updated on every event, the picture once per frame. A mouse reports
+// position 60-125 times a second; painting more often than the screen refreshes only queues work.
+let refreshQueued = false;
 function afterChange() {
-  editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
-  refreshPanels();
-  refreshStrip();
-  refreshContext();
   scheduleSave();
+  const inGesture = liveBeforeSpec != null;
+  if (!inGesture) {
+    editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
+    refreshPanels(); refreshStrip(); refreshContext();
+    return;
+  }
+  if (refreshQueued) return;
+  refreshQueued = true;
+  requestAnimationFrame(() => {
+    refreshQueued = false;
+    editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
+    refreshPanels();
+    refreshStrip();
+  });
 }
 
 // --- the edit-ops bridge (section 3.5's undo rule, applied uniformly) ---------------------------

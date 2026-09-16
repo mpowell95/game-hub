@@ -175,13 +175,26 @@ export function fitCamera(built, W, H) {
 /** One `<canvas>` per hole thumbnail (section 4.2): buildMap's canvas, letterboxed, never
  *  cropped - the same rule `_paintHoleStrip`/`sheet-course.mjs` use. `cv` must already have its
  *  pixel width/height set (css-size * dpr) by the caller. */
+/** ONE painted map per built hole, shared by the thumbnails, the Compare modal and the main
+ *  canvas. `buildHole()` hands back the SAME object for an unchanged hole, so a WeakMap on it is
+ *  exactly "redraw only the ids whose built hole changed" (spec 4.2). Measured before this cache
+ *  existed (2026-09-16): every pointermove of a drag re-ran `buildMap` for all 18 holes (~17 ms
+ *  each) inside the strip refresh, so a 20-step drag produced long tasks of 965, 476, 421 and
+ *  422 ms - the "very slow/delayed" Matt reported the first time he used it. */
+const _maps = new WeakMap();
+export function mapFor(built) {
+  let m = _maps.get(built);
+  if (!m) { m = buildMap(built, THEME); _maps.set(built, m); }
+  return m;
+}
+
 export function renderMapThumbnail(built, cv) {
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const pal = paletteFor(THEME);
   ctx.fillStyle = pal.heavyRough;
   ctx.fillRect(0, 0, cv.width, cv.height);
-  const map = buildMap(built, THEME);
+  const map = mapFor(built);
   const sc = Math.min(cv.width / map.w, cv.height / map.h);
   const w = map.w * sc;
   const h = map.h * sc;
@@ -451,7 +464,18 @@ export class EditorCanvas {
       else if (this.tool === 'water') placeAndSelect('water', 'water');
       else if (this.tool === 'tree') placeAndSelect('tree', this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'sentinels' : 'trees');
       else if (this.tool === 'cross') placeAndSelect('cross', 'cross');
-      else this.setSelection(null);
+      else {
+        this.setSelection(null);
+        // Matt, 2026-09-16: *"if my cursor is set to Select, i should be able to drag the hole
+        // around while zoomed in rather than having to zoom out then back in in a new area."* So
+        // on Select, a left-drag that starts on empty ground PANS, the same as middle-drag or
+        // Space+drag. Nothing is lost: a click on empty ground still deselects (it already did).
+        if (this.tool === 'select') {
+          dragging = { x: e.clientX, y: e.clientY };
+          el.setPointerCapture(e.pointerId);
+          el.style.cursor = 'grabbing';
+        }
+      }
     });
 
     el.addEventListener('dblclick', (e) => {
@@ -525,6 +549,7 @@ export class EditorCanvas {
     });
     el.addEventListener('pointerup', (e) => {
       dragging = null;
+      el.style.cursor = '';
       if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
       try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
     });
@@ -582,7 +607,7 @@ export class EditorCanvas {
 
   _mapFor(built) {
     let m = this._mapCache.get(built);
-    if (!m) { m = buildMap(built, THEME); this._mapCache.set(built, m); }
+    if (!m) { m = mapFor(built); this._mapCache.set(built, m); }
     return m;
   }
 

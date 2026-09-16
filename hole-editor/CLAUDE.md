@@ -317,3 +317,42 @@ handoff spec's own text says so directly ("Deploy nothing until phase 2... phase
 are [deployed]"). The override is inert for every player who has never opened the hole editor -
 `__gfCourseOverride` is only ever set by code that runs after `?editor=1` finds a matching
 document in that browser's own `localStorage`, which nothing else ever writes.
+
+## First use (2026-09-16): "very slow/delayed", drag-to-pan, and a bigger UI
+
+Matt, on opening it for the first time: *"it's very slow/delayed. why?"* Measured in a real
+browser with a PerformanceObserver on a 30-step drag of the pin: **long tasks of 460-530 ms on
+every single pointermove**, and ~450 ms per hole switch. Cause, two layers of the same thing:
+
+1. `renderMapThumbnail` called `buildMap` fresh on every call, and `refreshStrip()` re-rendered
+   all 18 thumbnails on every `afterChange()` - so each mouse move re-painted eighteen holes
+   (~17 ms each) that had not changed. Fixed with `mapFor(built)` in `canvas.js`: one painted map
+   per built hole in a WeakMap, shared by the thumbnails, the Compare modal and the main canvas.
+   `buildHole()` returns the same object for an unchanged hole, so this IS spec 4.2's "redraw only
+   the ids whose built hole changed".
+2. `afterChange()` rebuilt the hole and re-rendered every panel synchronously per event. Now, during
+   a live gesture (`liveBeforeSpec != null`), the spec is updated on every event but the rebuild,
+   the canvas, the Hole panel, the Objects list and the strip refresh once per animation frame,
+   and the context panel is left alone until `liveEnd()` (re-rendering it under a slider mid-drag
+   is how a drag gets dropped). Outside a gesture nothing changed.
+
+After: **70-85 ms per frame during a drag** (the floor is `makeHole` + `buildMap` + the tree
+expansion for the changed hole, ~30 ms, plus the draw), slider drags one frame. Measured with
+`scratchpad/pw/perf2.mjs`-style Playwright runs, before and after, same drag.
+
+Two asks from the same message, both done:
+- **Select-tool drag pans.** *"if my cursor is set to Select, i should be able to drag the hole
+  around while zoomed in."* A left-drag that starts on empty ground with Select active pans, same
+  as middle-drag / Space+drag; a plain click on empty ground still deselects. Verified in
+  Playwright: camera centre moves, selection stays null.
+- **Bigger everything.** *"the tool options and text and everything can be larger. Use more of the
+  screen."* Base font 13 -> 16 px, ribbon 48 -> 66 px with 22 px icons, left bay 240 -> 310, right
+  bay 320 -> 420, strip 150 -> 200 with 150x140 thumbnails, every panel size scaled to match.
+  Still fits 1920x1080 with the strip's captions on one line.
+
+Also from the same review: `run-all-tests.mjs` now includes `test-hole-editor.mjs` (spec section
+12), and `test-hole-editor-play.mjs` launches Chromium with `--no-sandbox --headless=new` like
+`test-visual.mjs`, so it runs on the cloud image instead of skipping. Phase 2's three game edits
+had shipped under the SAME `CACHE` name (v846); a device already warmed on v846 would never have
+fetched them (the REST tier is cache-first and `warmRest()` skips paths already cached). Bumped
+to v847 with that fix. This one touches only `hole-editor/`, which is not in `sw.js`, so no bump.
