@@ -38,6 +38,7 @@ const SUITES = [
   { file: 'hill-climb/js/test.js' },
   { file: 'skeeball/js/test.js' },
   { file: 'test-arcade-scores.mjs' },
+  { file: 'test-hole-editor.mjs' },
   { file: 'battleship/js/test.js' },
   { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
