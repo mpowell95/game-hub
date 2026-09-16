@@ -125,7 +125,7 @@ The same day a recipe gained `wind: { speed, deg }` (holegen.js passes it throug
 auto (the seeded derivation, one hole in six calm), or a speed 0-2 and one of eight directions,
 0 = blowing toward the green, 90 = left to right, 180 = into the player's face.
 
-### Red Mesa 7's playtest, and four rules it changed (2026-09-16, CACHE v855)
+### Red Mesa 7's playtest, and four rules it changed (2026-09-16, CACHE v856)
 
 Matt's recording: a 6 iron from 136 yds "goes so short... it starts its descent well before the
 tree." Replayed through `resolveShot` from where his drive finished: the ball flew INTO the
