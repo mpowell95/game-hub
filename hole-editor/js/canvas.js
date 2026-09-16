@@ -410,6 +410,7 @@ export class EditorCanvas {
 
     let dragging = null; // camera pan
     let objDrag = null;  // {kind:'object'|'waypoint'|'widthHandle', ...}
+    let slopeDrag = null; // Slope tool, Paint mode: {r, c, x0, y0} - the cell pressed and where
     el.addEventListener('pointerdown', (e) => {
       if (e.button === 1 || (e.button === 0 && spaceDown)) {
         dragging = { x: e.clientX, y: e.clientY };
@@ -428,6 +429,22 @@ export class EditorCanvas {
         if (this.onRulerChange) this.onRulerChange(this.ruler);
         this.draw();
         return;
+      }
+
+      // SLOPE PAINT (section 6.9). Was never implemented: the panel offered Paint mode and the
+      // mutator existed, but no canvas code called it (found in the 2026-09-16 review). A press
+      // inside the green's 8x8 box picks the cell; the drag's direction and length set its
+      // downhill vector on release, a plain click zeroes it.
+      if (this.tool === 'slope' && this.spec && this.spec.slope && this.spec.slope.cells && this.built) {
+        const gb = greenBox(this.built);
+        if (w.x >= gb.minX && w.x <= gb.maxX && w.y >= gb.minY && w.y <= gb.maxY) {
+          const sl = this.spec.slope;
+          const c = Math.min(sl.cols - 1, Math.floor(((w.x - gb.minX) / (gb.maxX - gb.minX)) * sl.cols));
+          const rr = Math.min(sl.rows - 1, Math.floor(((w.y - gb.minY) / (gb.maxY - gb.minY)) * sl.rows));
+          slopeDrag = { r: rr, c, x0: e.clientX, y0: e.clientY };
+          el.setPointerCapture(e.pointerId);
+          return;
+        }
       }
 
       const hit = this.hitTest(w.x, w.y);
@@ -537,17 +554,31 @@ export class EditorCanvas {
           // symmetric `fw` point" unless the spec already has its own `fwL`/`fwR`).
           const st = objDrag.station;
           const signed = (w.x - st.x) * st.nx + (w.y - st.y) * st.ny;
-          const half = Math.max(2.5, Math.min(15, Math.abs(signed)));
+          // `fw`'s `w` IS a half-width (holegen.js: "fairway half-width in yards"), so the signed
+          // distance is written as-is. BUG, fixed 2026-09-16: this used to store `half * 2`, so a
+          // handle dragged by ZERO pixels doubled the fairway (measured: w 16 -> 30 on hole 1).
+          const half = Math.max(4.5, Math.min(30, Math.abs(signed)));
           this.ops.liveUpdate((spec) => {
             const key = spec.fwL || spec.fwR ? objDrag.key : 'fw';
             const profile = Array.isArray(spec[key]) ? spec[key] : [{ at: 0, w: 15 }, { at: 1, w: 15 }];
-            const next = profile.map((pt, i) => (i === objDrag.index ? { ...pt, w: +(half * 2).toFixed(1) } : pt));
+            const next = profile.map((pt, i) => (i === objDrag.index ? { ...pt, w: +half.toFixed(1) } : pt));
             return { ...spec, [key]: next };
           });
         }
       }
     });
     el.addEventListener('pointerup', (e) => {
+      if (slopeDrag && this.ops) {
+        const dx = e.clientX - slopeDrag.x0; const dy = e.clientY - slopeDrag.y0;
+        const px = Math.hypot(dx, dy);
+        // Screen y runs down, world y runs up the hole: flip dy. Magnitude saturates at 24 px.
+        const vec = px < 4 ? [0, 0] : [+((dx / px) * Math.min(1, px / 24)).toFixed(2), +((-dy / px) * Math.min(1, px / 24)).toFixed(2)];
+        const { r, c } = slopeDrag;
+        slopeDrag = null;
+        this.ops.instant((spec) => this.ops.mutators.setSlopeCell(spec, r, c, vec));
+        try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+        return;
+      }
       dragging = null;
       el.style.cursor = '';
       if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
@@ -586,7 +617,14 @@ export class EditorCanvas {
       const type = this.ops.getTreePlantType ? this.ops.getTreePlantType() : 0;
       return treeType === 'stand' ? this.ops.mutators.addSentinel(spec, { ...placement, type }) : this.ops.mutators.addTree(spec, { ...placement, type });
     }
-    if (kind === 'cross') return this.ops.mutators.addCross(spec, { yd: placement.yd, kind: this.ops.getCrossKind ? this.ops.getCrossKind() : 'water', depth: this.ops.getCrossDepth ? this.ops.getCrossDepth() : 22 });
+    if (kind === 'cross') {
+      return this.ops.mutators.addCross(spec, {
+        yd: placement.yd,
+        kind: this.ops.getCrossKind ? this.ops.getCrossKind() : 'water',
+        depth: this.ops.getCrossDepth ? this.ops.getCrossDepth() : 22,
+        over: this.ops.getCrossOver ? this.ops.getCrossOver() : undefined,   // was dropped (2026-09-16 review)
+      });
+    }
     return spec;
   }
 
@@ -740,6 +778,19 @@ export class EditorCanvas {
         }
         ctx.restore();
       }
+    }
+
+    // 3b. Slope tool in Paint mode: the 8x8 cell grid over the green's box, so a press lands in a
+    // cell you can see.
+    if (this.tool === 'slope' && this.spec && this.spec.slope && this.spec.slope.cells && built.green) {
+      const gb = greenBox(built);
+      const sl = this.spec.slope;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,206,58,.45)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= sl.cols; i++) { const x = sx(gb.minX + ((gb.maxX - gb.minX) * i) / sl.cols); ctx.beginPath(); ctx.moveTo(x, sy(gb.minY)); ctx.lineTo(x, sy(gb.maxY)); ctx.stroke(); }
+      for (let j = 0; j <= sl.rows; j++) { const y = sy(gb.minY + ((gb.maxY - gb.minY) * j) / sl.rows); ctx.beginPath(); ctx.moveTo(sx(gb.minX), y); ctx.lineTo(sx(gb.maxX), y); ctx.stroke(); }
+      ctx.restore();
     }
 
     // 4. route, dashed

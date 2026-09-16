@@ -406,8 +406,10 @@ export function deleteSentinel(spec, index) {
 }
 
 /** Cross tool (section 6.10). */
-export function addCross(spec, { yd, kind, depth }) {
-  const cross = [...(spec.cross || []), { yd: +yd, kind: kind || 'water', depth: depth == null ? 22 : depth }];
+export function addCross(spec, { yd, kind, depth, over }) {
+  const entry = { yd: +yd, kind: kind || 'water', depth: depth == null ? 22 : depth };
+  if (over != null && over !== 8) entry.over = over;   // 8 is holegen's own default; only write a real choice
+  const cross = [...(spec.cross || []), entry];
   return { ...spec, cross };
 }
 

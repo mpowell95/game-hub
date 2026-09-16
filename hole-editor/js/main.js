@@ -151,6 +151,10 @@ function sliderToPpy(v) {
 }
 zoomSlider.addEventListener('input', () => editorCanvas.setZoom(sliderToPpy(+zoomSlider.value)));
 editorCanvas.onZoomChange = (ppy) => { zoomSlider.value = ppyToSlider(ppy); };
+// The slider mirrors the camera, so it has to be told whenever the camera changes without it:
+// boot, a hole switch (each hole remembers its own zoom), Fit, and the +/- keys. It used to sit
+// at its HTML default of 50 until the first wheel event (2026-09-16 review).
+function syncZoomSlider() { if (editorCanvas.camera) zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy); }
 document.getElementById('he-fit').addEventListener('click', () => {
   editorCanvas.fit();
   zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy);
@@ -240,6 +244,7 @@ function selectHole(id) {
   currentId = id;
   validateResults = null;
   editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+  syncZoomSlider();
   refreshPanels();
   refreshStrip();
   refreshContext();
@@ -264,13 +269,35 @@ function reorder(draggedId, dropOnId) {
 // The rebuild itself (makeHole + buildMap + the tree expansion, ~30 ms a hole) is coalesced the
 // same way: the spec is updated on every event, the picture once per frame. A mouse reports
 // position 60-125 times a second; painting more often than the screen refreshes only queues work.
+// A selection that no longer exists (its object was deleted, or an undo removed it, or a redo put
+// the list back shorter) must be dropped BEFORE the context panel renders, or the panel reads
+// `spec.bunkers[i]` of nothing and throws. Found in the 2026-09-16 review: place a bunker (which
+// selects it), press Ctrl+Z, page error. The Delete key already cleared its own selection; this
+// covers every other route to the same state.
+function pruneSelection() {
+  const sel = editorCanvas.selection;
+  if (!sel) return;
+  const spec = doc.holes[currentId].spec;
+  let gone = false;
+  if (sel.group === 'waypoint') gone = sel.index >= spec.path.length;
+  else if (sel.group === 'widthHandle') gone = false;
+  else gone = !Array.isArray(spec[sel.group]) || sel.index >= spec[sel.group].length;
+  if (gone) { editorCanvas.selection = null; }
+}
+
 let refreshQueued = false;
-function afterChange() {
+function afterChange({ keepContext = false } = {}) {
   scheduleSave();
   const inGesture = liveBeforeSpec != null;
   if (!inGesture) {
+    // An edit makes the last Validate list stale (it described the hole before the edit).
+    validateResults = null;
+    pruneSelection();
     editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
-    refreshPanels(); refreshStrip(); refreshContext();
+    refreshPanels(); refreshStrip();
+    // After a slider release the panel already shows the committed value; re-rendering it would
+    // blur the slider and swallow the next arrow key.
+    if (!keepContext) refreshContext();
     return;
   }
   if (refreshQueued) return;
@@ -311,8 +338,9 @@ const editOps = {
     pushUndo(editorState);
     doc.holes[currentId].spec = finalSpec;
     liveBeforeSpec = null;
-    afterChange();
+    afterChange({ keepContext: true });
   },
+  getCrossOver: () => toolState.crossOver,
 };
 editorCanvas.ops = editOps;
 
@@ -332,6 +360,8 @@ function refreshContext() {
 }
 editorCanvas.onSelectionChange = () => refreshContext();
 
+// Undo/redo restore the WHOLE document, including `order` - the current hole may have moved, and
+// any selection may point at an object that is gone (pruneSelection, in afterChange, handles it).
 document.getElementById('he-undo').addEventListener('click', () => { if (undo(editorState)) afterChange(); });
 document.getElementById('he-redo').addEventListener('click', () => { if (redo(editorState)) afterChange(); });
 
@@ -407,8 +437,8 @@ window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); if (undo(editorState)) afterChange(); return; }
   if ((e.ctrlKey && e.key.toLowerCase() === 'y') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); if (redo(editorState)) afterChange(); return; }
   if (e.key === 'f' || e.key === 'F') { editorCanvas.fit(); zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy); return; }
-  if (e.key === '+' || e.key === '=') { editorCanvas.zoomBy(1.1); return; }
-  if (e.key === '-' || e.key === '_') { editorCanvas.zoomBy(1 / 1.1); return; }
+  if (e.key === '+' || e.key === '=') { editorCanvas.zoomBy(1.1); zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy); return; }
+  if (e.key === '-' || e.key === '_') { editorCanvas.zoomBy(1 / 1.1); zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy); return; }
   if (e.key === '[') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i - 1 + HOLE_COUNT) % HOLE_COUNT]); return; }
   if (e.key === ']') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i + 1) % HOLE_COUNT]); return; }
   if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); document.getElementById('he-export').click(); return; }
@@ -423,6 +453,7 @@ window.__he = { get doc() { return doc; }, get currentId() { return currentId; }
 window.addEventListener('beforeunload', saveNow);
 editorCanvas.resize();
 editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+syncZoomSlider();
 refreshPanels();
 refreshStrip();
 setTool(currentTool);
