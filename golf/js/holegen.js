@@ -936,7 +936,9 @@ export function makeHole(spec) {
       const at = sn.at + ((i - (cnt - 1) / 2) * spread) / length;
       const [x, y] = place(stations, Math.max(0, Math.min(1, at)), sn.side == null ? 1 : sn.side,
         sn.off + (i % 2) * 3);
-      extraTrees.push({ x: +x.toFixed(1), y: +y.toFixed(1), type: sn.type });
+      // A stand may carry its own size / height too (`s`, `h`), applied to every tree in it.
+      extraTrees.push({ x: +x.toFixed(1), y: +y.toFixed(1), type: sn.type,
+        ...(sn.s != null ? { s: sn.s } : {}), ...(sn.h != null ? { h: sn.h } : {}) });
     }
   }
 
@@ -996,10 +998,16 @@ export function makeHole(spec) {
     slope: slopeFrom(spec.slope || { fall: [0, -0.15] }, slopeK),
   };
 
+  // A HAND-PLACED TREE MAY CARRY ITS OWN SIZE AND HEIGHT (2026-09-16, for the hole editor - Matt:
+  // *"Can i edit the size and height of trees?"*). `s` multiplies the type's trunk and canopy, the
+  // same field belt trees get from `treeScale`; `h` REPLACES the type's height in yards. Both are
+  // optional and both are read by shot.js's `treeHit` and the renderer alike, so what is drawn is
+  // still exactly what stops the ball. Absent, a tree is its type, as before.
+  const own = (tr) => ({ ...(tr.s != null ? { s: tr.s } : {}), ...(tr.h != null ? { h: tr.h } : {}) });
   const trees = (spec.trees || []).map(byYd).map((tr) => {
-    if (tr.x != null) return { x: tr.x, y: tr.y, type: tr.type || 0 };
+    if (tr.x != null) return { x: tr.x, y: tr.y, type: tr.type || 0, ...own(tr) };
     const [x, y] = place(stations, tr.at, tr.side == null ? 0 : tr.side, tr.off || 0);
-    return { x: +x.toFixed(1), y: +y.toFixed(1), type: tr.type || 0 };
+    return { x: +x.toFixed(1), y: +y.toFixed(1), type: tr.type || 0, ...own(tr) };
   }).concat(extraTrees);
 
   const decor = spec.decor || [];

@@ -290,6 +290,12 @@ An object is `{x, y, type}` where `type` indexes `treeTypes`. A type is
   punched low risks the trunk while a wedge clears the canopy and gives up the yardage. That is the
   whole mechanic, with no extra UI.
 
+A tree object may also carry **`s`** (a multiple of its type's trunk and canopy - belt trees get
+theirs from `treeScale`, a hand-placed one from the hole editor) and, since 2026-09-16, **`h`**
+(its own height in yards, replacing the type's). Both are optional, both are read by `shot.js`'s
+`treeHit` AND the renderer, and `makeHole` carries them through for `trees` and `sentinels`
+entries. What is drawn is what stops the ball, whichever field set the size.
+
 `treeBelts` is `{poly, type, spacing, seed}` - the belts lining a hole are hundreds of trees and
 must not be hundreds of hand-written entries. **At load a belt expands into ordinary tree objects**
 using a stated PRNG seeded by `seed`, so it is deterministic: the same belt is the same trees on

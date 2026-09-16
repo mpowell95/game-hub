@@ -20,7 +20,7 @@ import * as CL from './clubs.js';
 import * as SW from './swing.js';
 import * as SH from './shot.js';
 import { STRINGS } from './strings.js';
-import { BEHIND_TEE_YD } from './holegen.js';
+import { BEHIND_TEE_YD, makeHole } from './holegen.js';
 import fs from 'node:fs';   // section 12b reads the shipped ui.js/render.js as text
 
 let fail = 0;
@@ -989,6 +989,25 @@ console.log('\n-- 10. trees block the ball, and loft is the way past them --');
   const dead = SH.resolveShot({ hole: h3, from: [tree.x, tree.y - 20], aimRad: 0, club: CLUBS[13], power: 1, mishitDeg: 0 });
   ok('a trunk blocks even a shot lofted 19 yds over it', !!dead.blocked);
 
+  // --- A HAND-PLACED TREE'S OWN HEIGHT AND SIZE (2026-09-16, the hole editor) -----------------
+  //
+  // Matt: *"Can i edit the size and height of trees?"* `h` replaces the type's height, `s` scales
+  // trunk and canopy. Both live on the tree object, carried by makeHole and read by treeHit.
+  {
+    const tall = { ...h3, trees: [{ ...tree, h: 40 }] };            // the same oak, 40 yds tall
+    const over = SH.resolveShot({ hole: tall, from, aimRad: 0, club: CLUBS[13], power: 1, mishitDeg: 0 });
+    ok('the same lob wedge that clears a 13 yd oak is stopped by it at h: 40', !!over.blocked);
+    const small = { ...h3, trees: [{ ...tree, s: 0.3 }] };           // canopy 8 -> 2.4 yds
+    const past = SH.resolveShot({ hole: small, from, aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 0 });
+    ok('...and the driver that a full-size oak stops passes a 0.3x one 4 yds off its trunk', !past.blocked);
+    ok('validateHole refuses a non-positive tree height', validateHole({ ...h3, trees: [{ ...tree, h: 0 }] }).some((e) => /height h 0/.test(e)));
+    ok('...and a non-positive size', validateHole({ ...h3, trees: [{ ...tree, s: -1 }] }).some((e) => /size s -1/.test(e)));
+    const carried = makeHole({ n: 1, par: 4, path: [[0, 5], [0, 300]], treeTypes: h3.treeTypes,
+      trees: [{ yd: 150, side: 1, off: 20, type: 0, s: 1.5, h: 22 }], sentinels: [{ yd: 200, side: -1, off: 25, type: 0, n: 2, s: 0.8, h: 30 }] });
+    ok('makeHole carries s and h through for a placed tree', carried.trees[0].s === 1.5 && carried.trees[0].h === 22);
+    ok('...and for every tree of a stand', carried.trees.slice(1).every((t) => t.s === 0.8 && t.h === 30));
+  }
+
   // --- A TREE'S OWN SIZE, AND THE ONE CONTRACT IT MUST NOT BREAK -----------------------------
   //
   // Matt, 2026-09-06: *"Make some trees bigger. Like their diameter and circumference."* Belt trees
@@ -1688,7 +1707,9 @@ console.log('\n-- 12e. THE COURSE ART PASS --');
   // Tree shadows: measured off the reference, offset by the tree's own HEIGHT and composited in
   // ONE pass - stacking them per tree would blotch a wood with its own darker seams.
   ok('trees cast a shadow, offset by their own height',
-    /SHADOW_LEN/.test(rn) && /type\.height \* SHADOW_LEN/.test(rn) && /type\.height \* SHADOW_DROP/.test(rn));
+    // `th` is the tree's own height when it has one (`t.h`, 2026-09-16), else the type's.
+    /SHADOW_LEN/.test(rn) && /const th = t\.h != null \? t\.h : type\.height/.test(rn)
+      && /th \* SHADOW_LEN/.test(rn) && /th \* SHADOW_DROP/.test(rn));
   ok('...composited once at SHADOW_ALPHA, not drawn per tree',
     /ctx\.globalAlpha = SHADOW_ALPHA;\s*\n\s*ctx\.drawImage\(sh, 0, 0\)/.test(rn));
 

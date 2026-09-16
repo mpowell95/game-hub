@@ -421,8 +421,9 @@ export function buildMap(hole, theme) {
       const type = hole.treeTypes[t.type];
       const rr = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
       const [tx, ty] = toPx(t.x, t.y);
+      const th = t.h != null ? t.h : type.height;   // a hand-placed tree's own height, if it has one
       sc.beginPath();
-      sc.ellipse(tx - type.height * SHADOW_LEN * MAP_PPY, ty + type.height * SHADOW_DROP * MAP_PPY,
+      sc.ellipse(tx - th * SHADOW_LEN * MAP_PPY, ty + th * SHADOW_DROP * MAP_PPY,
         rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
       sc.fill();
     }
@@ -813,30 +814,46 @@ export function drawSlope(ctx, hole, cam, sx, sy, pal) {
   ctx.lineWidth = Math.max(1.5, size * 0.28);
   ctx.lineCap = 'butt';
   ctx.lineJoin = 'miter';
-  const arm = size / 2;
+  const cw = (gb.maxX - gb.minX) / sl.cols;
+  const ch = (gb.maxY - gb.minY) / sl.rows;
   for (let r = 0; r < sl.rows; r++) {
     for (let c = 0; c < sl.cols; c++) {
       const g = sl.cells[r * sl.cols + c] || [0, 0];
       const mag = Math.hypot(g[0], g[1]);
       if (mag < SLOPE_FLAT) continue;
-      const cxw = gb.minX + ((c + 0.5) * (gb.maxX - gb.minX)) / sl.cols;
-      const cyw = gb.minY + ((r + 0.5) * (gb.maxY - gb.minY)) / sl.rows;
-      const px = sx(cxw); const py = sy(cyw);
       // The chevron points DOWNHILL. `a` is the screen angle of the gradient; the two arms come
       // back from the point at +/- 135 deg, which is the V in the reference.
       const a = slopeGlyphAngle(g);
-      const tipX = px + Math.cos(a) * arm * 0.55;
-      const tipY = py + Math.sin(a) * arm * 0.55;
-      ctx.beginPath();
-      for (const d of [2.356, -2.356]) {
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
+      // STEEPER IS DENSER (Matt, 2026-09-16: "the arrows should be more densely drawn the steeper
+      // the hill"). A cell draws a 1x1, 2x2 or 3x3 grid of chevrons by its gradient's magnitude,
+      // so the read is the same everywhere: more arrows, more break. `slopeChevronGrid` is the
+      // one rule; the hole editor draws its own chevrons from the same function.
+      const n = slopeChevronGrid(mag);
+      const arm = (size * (n === 1 ? 1 : 0.8)) / 2;
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const cxw = gb.minX + (c + (i + 0.5) / n) * cw;
+          const cyw = gb.minY + (r + (j + 0.5) / n) * ch;
+          const px = sx(cxw); const py = sy(cyw);
+          const tipX = px + Math.cos(a) * arm * 0.55;
+          const tipY = py + Math.sin(a) * arm * 0.55;
+          ctx.beginPath();
+          for (const d of [2.356, -2.356]) {
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
+          }
+          ctx.stroke();
+        }
       }
-      ctx.stroke();
     }
   }
   ctx.restore();
 }
+
+/** How many chevrons ACROSS a slope cell draws (n x n in the cell) for a gradient magnitude:
+ *  1 up to a third, 2 up to two thirds, 3 beyond. Exported so the hole editor reads the same
+ *  rule and never draws a different green from the one the player gets. */
+export function slopeChevronGrid(mag) { return mag < 0.34 ? 1 : mag < 0.67 ? 2 : 3; }
 
 /** The golfer, in whole pixels. `w` is the sprite's width; it is drawn standing to the LEFT of the
  *  ball with its feet on the ball's own ground line, so the ball is never hidden by it.

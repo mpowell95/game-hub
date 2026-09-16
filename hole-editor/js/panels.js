@@ -161,7 +161,7 @@ export function renderObjectsList(el, doc, id, built) {
     groups.push(['Water', spec.water.map((w) => `${fmtYd(w.yd != null ? w.yd : 0)} yd`)]);
   }
   if (spec.trees && spec.trees.length) {
-    groups.push(['Trees', spec.trees.map((t) => `type ${t.type || 0} &middot; ${t.yd != null ? `${fmtYd(t.yd)} yd` : `${t.x}, ${t.y}`}`)]);
+    groups.push(['Trees', spec.trees.map((t) => `type ${t.type || 0} &middot; ${t.yd != null ? `${fmtYd(t.yd)} yd` : `${t.x}, ${t.y}`}${t.s != null ? ` &middot; x${t.s}` : ''}${t.h != null ? ` &middot; ${t.h} yd tall` : ''}`)]);
   }
   if (spec.sentinels && spec.sentinels.length) {
     groups.push(['Stands', spec.sentinels.map((s) => `${fmtYd(s.yd != null ? s.yd : 0)} yd`)]);
@@ -368,6 +368,8 @@ function renderTree(el, ctx) {
     ${seg('type', treeTypeOptions(built), type)}
     ${editingStand ? slider('he-t-n', 'n', 2, 9, 1, spec.sentinels[target.index].n) : ''}
     ${editingStand ? slider('he-t-spread', 'spread', 3, 15, 0.5, spec.sentinels[target.index].spread) : ''}
+    ${target ? slider('he-t-size', 'Size (x the type)', 0.4, 3, 0.05, (editingStand ? spec.sentinels : spec.trees)[target.index].s ?? 1) : ''}
+    ${target ? slider('he-t-height', 'Height (yd)', 1, 60, 0.5, (editingStand ? spec.sentinels : spec.trees)[target.index].h ?? ((built.treeTypes || [])[type] || {}).height ?? 15) : ''}
     ${!target ? '<div class="he-empty" style="margin-top:6px;">Click the hole to place it.</div>' : `<div class="he-empty" style="margin-top:6px;">Editing the selected ${editingStand ? 'stand' : 'tree'}.</div>`}
   `;
   wireSeg(el, 'mode', (val) => setToolState({ treeMode: val }));
@@ -383,6 +385,13 @@ function renderTree(el, ctx) {
     wireSlider(el, 'he-t-n', ops, (s, v) => ops.mutators.setSentinelField(s, target.index, { n: Math.round(v) }));
     wireSlider(el, 'he-t-spread', ops, (s, v) => ops.mutators.setSentinelField(s, target.index, { spread: v }));
   }
+  // Size and height (Matt, 2026-09-16: "Can i edit the size and height of trees?"). `s` multiplies
+  // the type's trunk and canopy; `h` replaces the type's height. Both are read by the game's
+  // treeHit and renderer (golf/CLAUDE.md, "Trees are TWO separate things"), so the tree drawn here
+  // is the tree that stops the ball. Written as-is; nothing is derived twice.
+  const setTree = (s, fields) => (editingStand ? ops.mutators.setSentinelField(s, target.index, fields) : ops.mutators.setTreeField(s, target.index, fields));
+  wireSlider(el, 'he-t-size', ops, (s, v) => setTree(s, { s: +v.toFixed(2) }));
+  wireSlider(el, 'he-t-height', ops, (s, v) => setTree(s, { h: +v.toFixed(1) }));
 }
 
 function renderBelts(el, ctx) {
@@ -405,10 +414,13 @@ function renderBelts(el, ctx) {
       if (!e.target.checked) ops.instant((s) => setBeltOff(s, side));
       refresh();
     });
-    const depth = el.querySelector(`#he-belt-${side}-depth`);
-    const spacing = el.querySelector(`#he-belt-${side}-spacing`);
-    if (depth) wireSlider(el, `he-belt-${side}-depth`, ops, (s, v) => ops.mutators.setBeltField(s, side, { depth: v }));
-    if (spacing) wireSlider(el, `he-belt-${side}-spacing`, ops, (s, v) => ops.mutators.setBeltField(s, side, { spacing: v }));
+    // BUG, found 2026-09-16 by driving the panel (Matt: "I can't get them to work"): this used to
+    // look for `#he-belt-left-depth`, an id that never exists - `slider()` renders `-r` and `-n` -
+    // so the two sliders were never wired and depth/spacing could not be changed at all. Turning a
+    // side off worked, which is what made it look like the tool did nothing. `wireSlider` already
+    // returns when the slider is absent (a side that is off), so no guard is needed.
+    wireSlider(el, `he-belt-${side}-depth`, ops, (s, v) => ops.mutators.setBeltField(s, side, { depth: v }));
+    wireSlider(el, `he-belt-${side}-spacing`, ops, (s, v) => ops.mutators.setBeltField(s, side, { spacing: v }));
   }
 }
 function setBeltOff(spec, side) {

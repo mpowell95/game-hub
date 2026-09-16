@@ -356,3 +356,29 @@ Also from the same review: `run-all-tests.mjs` now includes `test-hole-editor.mj
 had shipped under the SAME `CACHE` name (v846); a device already warmed on v846 would never have
 fetched them (the REST tier is cache-first and `warmRest()` skips paths already cached). Bumped
 to v847 with that fix. This one touches only `hole-editor/`, which is not in `sw.js`, so no bump.
+
+## Tree size and height; the Belts sliders were dead; slope arrows (2026-09-16)
+
+Matt: *"Can i edit the size and height of trees?"* Now yes. A placed tree or stand carries `s`
+(a multiple of its type's trunk and canopy, 0.4-3) and `h` (its own height in yards, 1-60),
+two sliders in the Tree panel when one is selected. **This is an engine change, not just an
+editor one**: `makeHole` carries both through (`trees` and `sentinels`), `shot.js`'s `treeHit`
+uses `h` as the canopy's top and `s` as before, `render.js` offsets the shadow by `h`, and
+`validateHole` refuses a non-positive value. `golf/js/test.js` section 10 proves a lob wedge that
+clears the 13 yd oak is stopped by the same oak at `h: 40`, and a driver that a full-size oak
+stops passes a 0.3x one. CACHE v848.
+
+Matt: *"double check how the slope and belt tools work. I can't get them to work."* Driven in
+Playwright, both:
+- **Belts: depth and spacing were never wired.** `renderBelts` guarded each `wireSlider` call on
+  `el.querySelector('#he-belt-left-depth')`, an id that does not exist (`slider()` renders `-r`
+  and `-n`), so only the On/Off checkbox ever did anything. Measured before: depth +10 and
+  spacing 7 left the tree count at 120; after: the same edits change it. Fixed by dropping the
+  guard (`wireSlider` already no-ops on a missing slider).
+- **Slope presets worked, but the arrows were invisible at the fit zoom.** The editor copied the
+  game's `SLOPE_MIN_PX` gate (3.5 px), and at the fit zoom a Red Mesa green's chevron is 2.2 px,
+  so nothing was drawn until you zoomed in. The editor now floors the glyph at 7 px and always
+  draws the read.
+- **Steeper is denser (Matt).** `render.js` exports `slopeChevronGrid(mag)`: a cell draws a 1x1,
+  2x2 or 3x3 grid of chevrons by its gradient's magnitude (thirds). The GAME draws it that way
+  now too, so the player's read and the editor's are the same rule.
