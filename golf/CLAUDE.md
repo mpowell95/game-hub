@@ -107,6 +107,24 @@ and smoothed traces, and the editor floors every waypoint at tee + 10 yd. The ne
 the same recipe: replace the file, `node golf/js/test.js`, check par against `GOLF_COURSE_PAR`,
 bump CACHE, validate, deploy.
 
+### The power putter, and a stated wind (2026-09-16)
+
+Matt, 75 ft from the cup on Red Mesa 5: *"the putter can't reach the hole and i can't switch to a
+different club. we need to have a power putter... but it should only be available on the green...
+you get the power but give up accuracy."* `POWER_PUTTER` in `clubs.js`: 150 ft at full power,
+offered ONLY on the green (`lockedToPutter`), where the ladder is now putter <-> power putter and
+`autoSelectClub` hands over the power putter past the putter's reach. The collar and the fairway
+still only ever get the plain putter, and a power putter carried off the green is handed back by
+`_activeClub`. The price: a wood's green band (`ZONE_POWER_PUTTER` 0.55), 2.5x the line error and
+2x the pace error (`swing.js`, `puttMishit` takes the club). `puttRangeFt(club)` is what the
+ladder, the HUD's feet and the stroke all read, so they cannot disagree. `isPutter(club)` is the
+"a putter is in hand" test everywhere; `club.id === 'putter'` is no longer that question.
+
+The same day a recipe gained `wind: { speed, deg }` (holegen.js passes it through as
+`hole.wind`, which `windFor` has always honoured), and the hole editor's Hole panel sets it:
+auto (the seeded derivation, one hole in six calm), or a speed 0-2 and one of eight directions,
+0 = blowing toward the green, 90 = left to right, 180 = into the player's face.
+
 ## Harbor Links is gone from the product, but its keys are not
 
 Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course

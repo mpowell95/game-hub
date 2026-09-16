@@ -751,7 +751,7 @@ export const MAX_PUTT_FT = 60;
  *  Kept as a function because the aim ladder, the shot resolver and the tests all ask the same
  *  question, and a single place to answer it is what stops the ladder and the physics disagreeing
  *  about where full power lands. */
-export function puttRangeFt() { return MAX_PUTT_FT; }
+export function puttRangeFt(club) { return (club && club.maxFeet) || MAX_PUTT_FT; }
 
 /** THE PUTTER'S POWER CURVE IS NOT LINEAR, and that is the whole reason short putts are makeable.
  *

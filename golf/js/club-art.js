@@ -21,7 +21,7 @@ export const CLUB_ART_VIEWBOX = '4 6 176 178';
 
 /** Which drawing a club uses. Fourteen clubs, five heads. */
 export function clubSymbol(id) {
-  if (id === 'putter') return 'putterArt';
+  if (id === 'putter' || id === 'powerputter') return 'putterArt';
   if (id === 'driver') return 'driverArt';
   if (id.endsWith('wood')) return 'woodArt';
   if (id.endsWith('wedge')) return 'wedgeArt';
@@ -50,7 +50,7 @@ const ART_CY = 95;
  *
  *  Anything absent is 1: the irons and wedges all share one size on purpose, because there are
  *  eight irons and no sensible ladder to draw between a 4 and a 5. */
-const CLUB_SCALE = { driver: 1.06, '3wood': 0.98, '5wood': 0.82 };
+const CLUB_SCALE = { driver: 1.06, '3wood': 0.98, '5wood': 0.82, powerputter: 1.12 };   // the power putter is the bigger of the two heads
 
 export function clubScale(id) { return CLUB_SCALE[id] || 1; }
 

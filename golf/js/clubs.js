@@ -38,10 +38,23 @@ export const CLUBS = [
 /** The putter is deliberately absent from the ladder above: it is measured in FEET, not yards, and
  *  a club with a yardage would sort into a bag it does not belong in. 60 ft at full power is ours;
  *  the reference never showed a putter's range. */
-export const PUTTER = { id: 'putter', maxFeet: 60 };
+export const PUTTER = { id: 'putter', maxFeet: 60, putter: true };
+
+/** THE POWER PUTTER (2026-09-16). Matt, 75 ft from the cup on Red Mesa 5: *"the putter can't reach
+ *  the hole and i can't switch to a different club. we need to have a power putter that can go
+ *  farther... but it should only be available on the green... but aiming should be trickier. you
+ *  get the power but give up accuracy."* Exactly that: 150 ft at full power, offered ONLY where the
+ *  putter is the only other choice (the green itself - never the fringe, never the fairway), and
+ *  paid for in the stroke: a narrower green band (`swingZone`), a line error and a pace error both
+ *  well above the putter's (`swing.js`, POWER_PUTT_LINE_MUL / POWER_PUTT_PACE_MUL). The drawn
+ *  greens the hole editor makes can be 60 yds across, which is what made 60 ft a bag problem. */
+export const POWER_PUTTER = { id: 'powerputter', maxFeet: 150, putter: true };
+
+/** Either putter in hand. The lie decides the camera; THIS decides how the stroke resolves. */
+export function isPutter(club) { return !!(club && club.putter); }
 
 export function clubById(id) {
-  return id === 'putter' ? PUTTER : CLUBS.find((c) => c.id === id);
+  return id === 'putter' ? PUTTER : id === 'powerputter' ? POWER_PUTTER : CLUBS.find((c) => c.id === id);
 }
 
 /** THE LIE TABLE (§21.2). Every bad lie does two things: it caps distance, and it narrows the
@@ -313,7 +326,7 @@ export function swingTempo(club) {
   return {
     upMs: UP_MS,
     downMs: DOWN_MS,
-    deadMs: (club && club.id === 'putter') ? PUTTER_DEAD_MS : 0,
+    deadMs: isPutter(club) ? PUTTER_DEAD_MS : 0,
   };
 }
 
@@ -354,13 +367,17 @@ export const ZONE_WEDGES = 1.00;
 
 /** Which tier a club is in: `woods` (driver, 3 wood, 5 wood), `irons` (2-9), `wedges` (p/s/l). */
 export function clubTier(club) {
-  if (!club || club.id === 'putter') return 'putter';
+  if (!club || isPutter(club)) return 'putter';
   if (club.id === 'driver' || /wood$/.test(club.id)) return 'woods';
   if (/wedge$/.test(club.id)) return 'wedges';
   return 'irons';
 }
 
+/** The power putter's green band: a wood's, not a wedge's. Power for accuracy - see POWER_PUTTER. */
+export const ZONE_POWER_PUTTER = 0.55;
+
 export function swingZone(club) {
+  if (club && club.id === 'powerputter') return ZONE_POWER_PUTTER;
   const tier = clubTier(club);
   if (tier === 'putter') return 1;
   if (tier === 'woods') return ZONE_WOODS;
@@ -395,7 +412,10 @@ export function autoSelectClub(distanceYd, lieKind) {
   // blasted clean over the green. Real golfers putt from the fringe; so does this.
   // ...but only while the cup is inside the putter's range. Beyond that the collar gets a club
   // that can actually reach it (see lockedToPutter above).
-  if (mustPutt(lieKind) && (lockedToPutter(lieKind) || distanceYd * 3 <= PUTTER_REACH_FT * 0.92)) return PUTTER;
+  // ON THE GREEN the choice is between the two putters: the putter while it can reach, the power
+  // putter beyond that (2026-09-16). The collar still only ever offers the plain putter.
+  if (lockedToPutter(lieKind)) return distanceYd * 3 <= PUTTER_REACH_FT * 0.92 ? PUTTER : POWER_PUTTER;
+  if (mustPutt(lieKind) && distanceYd * 3 <= PUTTER_REACH_FT * 0.92) return PUTTER;
   const reach = lieOf(lieKind).power;
   for (let i = CLUBS.length - 1; i >= 0; i--) {
     if (CLUBS[i].carry * reach >= distanceYd) return CLUBS[i];
@@ -416,8 +436,8 @@ export function autoSelectClub(distanceYd, lieKind) {
  *  the driver was thirteen taps the other way - and holding the button just sat there doing
  *  nothing, which reads as broken rather than as a limit. */
 export function stepClub(club, dir, lieKind) {
-  if (lockedToPutter(lieKind)) return PUTTER;
-  const ladder = canPutt(lieKind) ? [...CLUBS, PUTTER] : CLUBS;
+  // The green's ladder is two clubs long since 2026-09-16: the power putter is the "more club".
+  const ladder = lockedToPutter(lieKind) ? [POWER_PUTTER, PUTTER] : canPutt(lieKind) ? [...CLUBS, PUTTER] : CLUBS;
   const n = ladder.length;
   let i = ladder.findIndex((c) => c.id === club.id);
   if (i < 0) i = n - 1;                       // holding a putter on a lie that just lost it

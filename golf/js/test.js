@@ -179,6 +179,25 @@ console.log('\n-- 6. auto-select takes ENOUGH club, not the most club --');
 ok('360 yds off the tee offers the driver', autoSelectClub(360, 'tee').id === 'driver');
 ok('139 yds from the fairway offers the 6 iron', autoSelectClub(139, 'fairway').id === '6iron');
 ok('the green always offers the putter', autoSelectClub(4, 'green').id === 'putter');
+// THE POWER PUTTER (2026-09-16): the green's second club, and nobody else's.
+ok('beyond the putter\'s reach the green hands over the POWER putter', autoSelectClub(25, 'green').id === 'powerputter'
+  && CL.POWER_PUTTER.maxFeet > CL.PUTTER.maxFeet && CL.isPutter(CL.POWER_PUTTER) && !CL.isPutter(CLUBS[0]));
+ok('...but the collar and the fairway never do', autoSelectClub(25, 'fringe').id !== 'powerputter' && autoSelectClub(25, 'fairway').id !== 'powerputter'
+  && !stepClub(PUTTER, +1, 'fringe').id.startsWith('power') && !stepClub(PUTTER, -1, 'fairway').id.startsWith('power'));
+ok('on the green the ladder is putter <-> power putter and nothing else',
+  stepClub(PUTTER, +1, 'green').id === 'powerputter' && stepClub(CL.POWER_PUTTER, +1, 'green').id === 'putter'
+  && stepClub(CL.POWER_PUTTER, -1, 'green').id === 'putter' && CL.isPutter(stepClub(CLUBS[0], -1, 'green')));
+ok('the power putter pays for its reach: narrower band, worse line, worse pace',
+  CL.swingZone(CL.POWER_PUTTER) < CL.swingZone(PUTTER)
+  && Math.abs(SW.puttMishit(0.62, 1, CL.POWER_PUTTER).deg) > Math.abs(SW.puttMishit(0.62, 1, PUTTER).deg) * 2
+  && Math.abs(1 - SW.puttMishit(0.62, 1, CL.POWER_PUTTER).paceMul) > Math.abs(1 - SW.puttMishit(0.62, 1, PUTTER).paceMul) * 1.5);
+ok('a full-power power putt runs its own range, the putter still runs 60 ft',
+  Math.abs(SH.puttDistanceFt(1, SH.puttRangeFt(CL.POWER_PUTTER)) - CL.POWER_PUTTER.maxFeet) < 1e-9 && SH.puttRangeFt(PUTTER) === 60);
+{
+  const g = { ...flatGreen([0, 0]), pin: [0, 25] };   // 75 ft, the putt Matt could not reach
+  const p = SH.simulatePutt({ hole: g, from: [0, 0], aimRad: 0, power: SH.puttPowerFor(75, SH.puttRangeFt(CL.POWER_PUTTER)), rangeFt: SH.puttRangeFt(CL.POWER_PUTTER) });
+  ok(`a 75 ft power putt struck perfectly is holed (${p.holed ? 'holed' : 'rest ' + p.rest.map((v) => v.toFixed(1))})`, p.holed);
+}
 ok('a heavy-rough lie takes MORE club for the same distance',
   CLUBS.indexOf(autoSelectClub(139, 'heavyRough')) < CLUBS.indexOf(autoSelectClub(139, 'fairway')));
 // THE LADDER WRAPS AT BOTH ENDS. Matt, 2026-09-04: "if I press up all the way to driver, it
@@ -216,8 +235,8 @@ ok('and one step UP from the putter is the lob wedge again',
   stepClub(PUTTER, +1, 'fairway').id === LAST.id);
 ok('but the putter is absent from a rough ladder',
   stepClub(LAST, -1, 'heavyRough').id === 'driver');
-ok('the ladder does not move at all on the green',
-  stepClub(PUTTER, +1, 'green').id === 'putter' && stepClub(CLUBS[0], -1, 'green').id === 'putter');
+ok('the ladder on the green only ever moves between the two putters',
+  stepClub(PUTTER, +1, 'green').id === 'powerputter' && CL.isPutter(stepClub(CLUBS[0], -1, 'green')));
 {
   // A putter carried onto a lie that cannot hold one must not simply stay in hand.
   let seen = PUTTER;
@@ -1193,13 +1212,13 @@ console.log('\n-- 10d. THE COLLAR HANDS OVER A CLUB THAT CAN REACH --');
 // four Pine Valley holes, where the only club offered could not get there however well it was
 // struck. The putter is still the default on the collar; past its range the bag opens.
 {
-  ok('the green is still putter-only', CL.lockedToPutter('green') && autoSelectClub(30, 'green').id === 'putter');
+  ok('the green is still putters-only', CL.lockedToPutter('green') && CL.isPutter(autoSelectClub(30, 'green')) && autoSelectClub(15, 'green').id === 'putter');
   ok('the fringe is not locked', !CL.lockedToPutter('fringe'));
   ok('a short one off the collar is still a putt', autoSelectClub(5, 'fringe').id === 'putter');
   const far = autoSelectClub(23, 'fringe');          // 69 ft, past the putter's 60
   ok(`a 69 ft one off the collar gets a club that reaches (${far.id})`, far.id !== 'putter' && far.carry >= 23);
   ok('the club buttons work on the collar and not on the green',
-    stepClub(PUTTER, 1, 'fringe').id !== 'putter' && stepClub(PUTTER, 1, 'green').id === 'putter');
+    stepClub(PUTTER, 1, 'fringe').id !== 'putter' && CL.isPutter(stepClub(PUTTER, 1, 'green')));
   ok(`the two files agree on how far a putt goes (${CL.PUTTER_REACH_FT} ft vs ${SH.puttRangeFt()} ft)`,
     CL.PUTTER_REACH_FT === SH.puttRangeFt(), 'clubs.js cannot import shot.js, so this is the guard against drift');
 }
