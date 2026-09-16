@@ -5,7 +5,7 @@
 // R5: nothing here computes its own fairway polygon, route, bounds or yardage - everything drawn
 // is read off the BUILT hole (`buildHole()` in model.js), the same object the game itself plays.
 
-import { buildMap, paletteFor, slopeGlyphAngle, SLOPE_TINT, SLOPE_GLYPH_FRAC } from '../../golf/js/render.js';
+import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob } from '../../golf/js/holegen.js';
 
@@ -694,8 +694,12 @@ export class EditorCanvas {
       const gb = greenBox(built);
       const cellYd = Math.min((gb.maxX - gb.minX) / sl.cols, (gb.maxY - gb.minY) / sl.rows);
       const cellPx = cellYd * cam.ppy;
-      const size = cellPx * SLOPE_GLYPH_FRAC;
-      if (size >= SLOPE_MIN_PX) {
+      // THE EDITOR ALWAYS DRAWS THE READ. The game hides chevrons under SLOPE_MIN_PX because a
+      // 3 px smudge on a phone tells the player nothing; here, at the fit zoom, that gate hid
+      // every arrow (measured 2.2 px on Red Mesa 1), which is why Matt could not see the Slope
+      // tool doing anything. A floor of 7 px keeps them legible at any zoom.
+      const size = Math.max(7, cellPx * SLOPE_GLYPH_FRAC);
+      {
         ctx.save();
         ctx.beginPath();
         const poly = built.green.poly;
@@ -707,24 +711,31 @@ export class EditorCanvas {
         ctx.lineWidth = Math.max(1.5, size * 0.28);
         ctx.lineCap = 'butt';
         ctx.lineJoin = 'miter';
-        const arm = size / 2;
+        const cw = (gb.maxX - gb.minX) / sl.cols;
+        const chh = (gb.maxY - gb.minY) / sl.rows;
         for (let r = 0; r < sl.rows; r++) {
           for (let c = 0; c < sl.cols; c++) {
             const g = sl.cells[r * sl.cols + c] || [0, 0];
             const mag = Math.hypot(g[0], g[1]);
             if (mag < SLOPE_FLAT) continue;
-            const cxw = gb.minX + ((c + 0.5) * (gb.maxX - gb.minX)) / sl.cols;
-            const cyw = gb.minY + ((r + 0.5) * (gb.maxY - gb.minY)) / sl.rows;
-            const px = sx(cxw); const py = sy(cyw);
             const a = slopeGlyphAngle(g);
-            const tipX = px + Math.cos(a) * arm * 0.55;
-            const tipY = py + Math.sin(a) * arm * 0.55;
-            ctx.beginPath();
-            for (const d of [2.356, -2.356]) {
-              ctx.moveTo(tipX, tipY);
-              ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
+            // Steeper is denser: the game's own rule (render.js slopeChevronGrid), 1x1 to 3x3.
+            const n = slopeChevronGrid(mag);
+            const arm = (size * (n === 1 ? 1 : 0.8)) / 2;
+            for (let j = 0; j < n; j++) {
+              for (let i = 0; i < n; i++) {
+                const px = sx(gb.minX + (c + (i + 0.5) / n) * cw);
+                const py = sy(gb.minY + (r + (j + 0.5) / n) * chh);
+                const tipX = px + Math.cos(a) * arm * 0.55;
+                const tipY = py + Math.sin(a) * arm * 0.55;
+                ctx.beginPath();
+                for (const d of [2.356, -2.356]) {
+                  ctx.moveTo(tipX, tipY);
+                  ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
+                }
+                ctx.stroke();
+              }
             }
-            ctx.stroke();
           }
         }
         ctx.restore();

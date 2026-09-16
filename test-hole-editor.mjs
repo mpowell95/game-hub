@@ -12,7 +12,7 @@ import { makeHole } from './golf/js/holegen.js';
 import { SPECS, RM_DEFAULTS, RED_MESA } from './golf/courses/redmesa.js';
 import {
   normalise, createDocument, buildHole, mintId,
-  movePathPoint, deleteBunker, setBeltSide,
+  movePathPoint, deleteBunker, setBeltSide, addTree, setTreeField,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument,
 } from './hole-editor/js/model.js';
@@ -249,3 +249,20 @@ test('structural: validate-sw-assets.mjs carries the hole-editor exclusion', () 
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
+
+// --- a tree's own size and height (2026-09-16) --------------------------------------------------
+test('tree size/height: s and h on a placed tree survive build and export', async () => {
+  const doc = createDocument();
+  const id = 'rm-01';
+  let spec = doc.holes[id].spec;
+  spec = addTree(spec, { yd: 150, side: 1, off: 20, type: 0 });
+  spec = setTreeField(spec, spec.trees.length - 1, { s: 1.5, h: 22 });
+  doc.holes[id].spec = spec;
+  const built = buildHole(doc, id);
+  const placed = built.trees[built.trees.length - 1 - 0];
+  const mine = built.trees.find((t) => t.s === 1.5 && t.h === 22);
+  assert.ok(mine, 'the built hole carries s and h on the placed tree');
+  assert.ok(placed, 'built.trees is non-empty');
+  const src = generateSource(doc, '2026-09-16');
+  assert.match(src, /s: 1\.5, h: 22/, 'export prints s and h on the tree entry');
+});

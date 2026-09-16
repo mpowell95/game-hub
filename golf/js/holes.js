@@ -420,7 +420,11 @@ export function validateHole(hole) {
   if (!teeSurf.some((s) => pointInPoly(hole.tee, polyOf(s, hole)))) at('tee is not inside a tee surface');
 
   const types = hole.treeTypes || [];
-  for (const [i, t] of (hole.trees || []).entries()) if (!types[t.type]) at(`trees[${i}] type ${t.type} does not exist`);
+  for (const [i, t] of (hole.trees || []).entries()) {
+    if (!types[t.type]) at(`trees[${i}] type ${t.type} does not exist`);
+    if (t.s != null && !(t.s > 0)) at(`trees[${i}] size s ${t.s} must be positive`);
+    if (t.h != null && !(t.h > 0)) at(`trees[${i}] height h ${t.h} must be positive`);
+  }
   for (const [i, t] of (hole.treeBelts || []).entries()) {
     if (!types[t.type]) at(`treeBelts[${i}] type ${t.type} does not exist`);
     if (!(t.spacing > 0)) at(`treeBelts[${i}] spacing must be positive`);

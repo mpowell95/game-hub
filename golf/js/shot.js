@@ -350,7 +350,10 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const state = trees.map((t) => {
     const ty = hole.treeTypes[t.type];
     const sc = t.s || 1;
-    const type = sc === 1 ? ty : { ...ty, trunk: ty.trunk * sc, canopy: ty.canopy * sc };
+    // ...AND ITS OWN HEIGHT (`t.h`, a hand-placed tree's override, 2026-09-16) REPLACES THE TYPE'S.
+    // Same contract: render.js reads the same field for the shadow, holegen.js carries it through.
+    const hh = t.h != null ? t.h : ty.height;
+    const type = (sc === 1 && hh === ty.height) ? ty : { ...ty, trunk: ty.trunk * sc, canopy: ty.canopy * sc, height: hh };
     const d0 = Math.hypot(from[0] - t.x, from[1] - t.y);
     return { t, type, ignore: d0 <= type.trunk + 1.2, canopyOff: d0 <= type.canopy + SKIRT_YD || (inWood && d0 <= Math.max(ESCAPE_YD, type.canopy * 1.6)) };
   });
