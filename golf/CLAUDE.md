@@ -1011,7 +1011,10 @@ found the result screen, which this one had stopped 20 frames short of.
   than a wider view, but that is a feel call.
 - Flight is `0.9s + distance/60` with tap-to-skip, so a drive is ~4.5s. The reference's was 7.5s.
 - The aim step is 1.0 deg a tap since 2026-09-04, auto-repeating on a ramp from 4/s to 16/s after
-  400 ms, capped at +/- 60 deg.
+  400 ms. Capped at +/- 60 deg until 2026-09-16, now +/- 180 (any direction; Matt was walled in by
+  Red Mesa 4's saguaros with no way to turn round). The drop prompt fires for ANY tree since the
+  same day - `amongTrees` in shot.js - not only the painted `trees` surface, and the drop it
+  takes avoids trees by the same test.
 - There is still nothing between a lob wedge (50 yds) and the putter. Matt, asked: *"that's fine if
   the other stuff is fixed."* Revisit only if the short game still feels thin.
 

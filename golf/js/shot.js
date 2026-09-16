@@ -280,6 +280,36 @@ function isWater(hole, x, y) {
   return false;
 }
 
+/** Is this ball standing IN a stand of trees - the escape rule's own test (see treeHit): three
+ *  or more canopies within reach, or a lie painted as trees. Exported so the drop prompt and the
+ *  drop itself use the SAME answer the shot resolver does. */
+export function inWoodAt(hole, from, trees = treesOf(hole)) {
+  const near = trees.reduce((n, t) => {
+    const ty = hole.treeTypes[t.type];
+    const reach = Math.max(ESCAPE_YD, ty.canopy * (t.s || 1) * 1.6);
+    return n + (Math.hypot(from[0] - t.x, from[1] - t.y) <= reach ? 1 : 0);
+  }, 0);
+  return near >= 3 || surfaceAt(hole, from[0], from[1]) === 'trees';
+}
+
+/** IS THIS BALL "IN THE TREES" AS A PLAYER WOULD SAY IT (2026-09-16)? Matt, on Red Mesa 4, after
+ *  hitting the fairway saguaros: *"it's not saying that i'm in a tree and asking if i want to take
+ *  a drop, so i'm just stuck here and i'll have to hit into the tree until it gives me the max
+ *  score."* The drop prompt was gated on the LIE being the `trees` surface - the painted wood of
+ *  Pine Valley's belts - so a ball against a hand-placed tree on cut grass was "on the fairway" and
+ *  got no offer. A tree is a tree: under any crown (its skirt included), against any trunk, or
+ *  inside a stand, the player is asked. */
+export function amongTrees(hole, at) {
+  const trees = treesOf(hole);
+  if (!trees.length) return false;
+  if (inWoodAt(hole, at, trees)) return true;
+  return trees.some((t) => {
+    const ty = hole.treeTypes[t.type];
+    const sc = t.s || 1;
+    return Math.hypot(at[0] - t.x, at[1] - t.y) <= ty.canopy * sc + SKIRT_YD;
+  });
+}
+
 export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   const trees = treesOf(hole);
   if (!trees.length) return null;
@@ -325,12 +355,7 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   //    three or more canopies within reach means the ball is inside a stand, whatever the lie says.
   //    ONE tree ahead of you is not a stand and still blocks - which is deliberate, because that is
   //    Pine Valley 3's lone fairway oak, and being ten yards short of it is the whole hole.
-  const near = trees.reduce((n, t) => {
-    const ty = hole.treeTypes[t.type];
-    const reach = Math.max(ESCAPE_YD, ty.canopy * (t.s || 1) * 1.6);
-    return n + (Math.hypot(from[0] - t.x, from[1] - t.y) <= reach ? 1 : 0);
-  }, 0);
-  const inWood = near >= 3 || surfaceAt(hole, from[0], from[1]) === 'trees';
+  const inWood = inWoodAt(hole, from, trees);
 
   // AND A BALL AT THE DRIPLINE IS AN UNDER-THE-BRANCHES QUESTION, NOT A FLY-OVER ONE. `treeHit`
   // models a canopy as a solid cylinder from the ground up to `height`, which is not what a tree
@@ -413,7 +438,7 @@ export function dropNear(hole, from, isBad) {
       if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
       if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
       const on = surfaceAt(hole, cand[0], cand[1]);
-      if (isBad(on)) continue;
+      if (isBad(on, cand)) continue;   // the point too: "among trees" is not a surface
       const nearer = distYd(cand, hole.pin) < wasTo - 0.5;
       if (!best || (best.nearer && !nearer)) best = { rest: cand, restOn: on, nearer };
       if (!nearer) break;

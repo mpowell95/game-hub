@@ -19,7 +19,7 @@ import { validateHole, surfaceAt, distYd, greenBox } from './holes.js';
 import { SAVE_V, validateSave, resumePos, isComplete } from './save.js';
 import { CLUBS, PUTTER, clubById, autoSelectClub, stepClub, lieOf, mustPutt, canPutt, lockedToPutter, swingTempo, swingZone, clubTier, GREEN_FLOOR } from './clubs.js';
 import { Swing, PHASE, bandsFor, overZone, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
-import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, FT_PER_YD, PUTT_GAMMA } from './shot.js';
+import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, amongTrees, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
 import { recordGolf } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
@@ -155,8 +155,12 @@ const t = makeT(STRINGS);
 // is for placing the aim, holding is for crossing the arc, and they no longer have to be the same
 // number.
 const AIM_STEP_DEG = 0.35;
-const AIM_STEP_HOLD_DEG = 1.4;
-const AIM_LIMIT_DEG = 60;        // aim is limited to +/- 60 deg from the line to the hole
+const AIM_STEP_HOLD_DEG = 3.0;        // 1.4 until 2026-09-16; the arc tripled, so the hold sweeps faster
+// +/- 180 since 2026-09-16, i.e. any direction at all. It was 60: Matt, stopped against Red Mesa
+// 4's saguaros, *"the game doesn't let me aim past 45 degrees to either side... so I'm just stuck
+// here."* A golfer walled in can turn round and chip out backwards; the clamp only ever existed so
+// a held arrow could not spin past the hole, and at 180 it still cannot - it stops at straight back.
+const AIM_LIMIT_DEG = 180;
 // PRESS-AND-HOLD, ACCELERATING. It used to be a flat 8 taps a second after a 400 ms delay, which
 // is the worst of both: too fast to place the aim by holding, too slow to cross the arc. It now
 // starts at 4 a second - slow enough that letting go on the step you want is easy - and ramps to
@@ -1472,8 +1476,8 @@ class GolfGame {
     const step = AIM_STEP_DEG + (AIM_STEP_HOLD_DEG - AIM_STEP_DEG) * Math.max(0, Math.min(1, k));
     let next = this.aimRad + dir * step * DEG;
     const limit = AIM_LIMIT_DEG * DEG;
-    // Aim is limited to +/- 60 deg from the line to the hole, so the player can never lose the
-    // hole entirely by leaning on one arrow.
+    // Aim is bounded at +/- 180 deg from the line to the hole: any direction, but a held arrow
+    // stops at straight back instead of spinning round past the hole.
     let rel = next - base;
     while (rel > Math.PI) rel -= Math.PI * 2;
     while (rel < -Math.PI) rel += Math.PI * 2;
@@ -2155,7 +2159,9 @@ class GolfGame {
     // neither: a ball in the water was moved and a stroke added with nothing on screen saying so,
     // and a ball in the trees was simply yours to deal with.
     if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
-    else if (this._lie() === 'trees') this._showDropPrompt();
+    // ...and "in the trees" is any tree, not only the painted wood: a ball a tree just stopped, or
+    // one resting under a crown / against a trunk / inside a stand, gets the same two buttons.
+    else if (this._lie() === 'trees' || (a.res && a.res.blocked) || amongTrees(this.hole, this.ball)) this._showDropPrompt();
     // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
     // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
     // into mid-air as if it were lying there.
@@ -2310,7 +2316,7 @@ class GolfGame {
     this._on(el.querySelector('[data-role="drop-play"]'), 'click', close);
     this._on(el.querySelector('[data-role="drop-take"]'), 'click', () => {
       // Out of the trees AND never into the water; a stroke either way.
-      const moved = dropNear(this.hole, this.ball, (k) => k === 'trees' || k === 'water');
+      const moved = dropNear(this.hole, this.ball, (k, p) => k === 'trees' || k === 'water' || amongTrees(this.hole, p));
       if (moved) {
         this.ball = [...moved.rest];
         this.shotN += 1;
