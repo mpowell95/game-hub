@@ -115,3 +115,81 @@ still 19/19 (nothing in `model.js`/`export.js` changed), `node golf/js/test.js` 
 - `renderMapThumbnail`/camera code lives in `canvas.js` rather than a new file, since the file
   layout (section 2) only names `canvas.js` as owning "the canvas" and the thumbnails share its one
   piece of real logic (`buildMap` + letterbox).
+
+## Step 4 (2026-09-16): the 11 tools
+
+All eleven ribbon tools (section 6), wired end to end: hit-testing (5.5), object outlines matched
+by construction order (5.3), the local placement geometry section 6's preamble asks for (dense
+stations off `built.route`, since `holegen.js`'s real spline isn't exported), width handles found
+by ray-casting the fairway's own drawn edge (5.4/6.3, `fairwayEdgesAt`), the ruler, and undo
+wired per section 3.5's rule (`instant` for one-shot actions, `liveBegin`/`liveUpdate`/`liveEnd`
+for drags and sliders - one push per gesture, live-previewed throughout).
+
+**Also upgraded in this step, not one of the 11 but directly enabled by their mutators:** the Hole
+panel (section 4.3) went from step 3's read-only text to live controls - nickname, par (segmented),
+difficulty ramp, landing-zone pinch (with its auto checkbox), the defend checkbox, rough collar
+(with its auto checkbox) - since `setField` existed anyway and leaving core hole metadata
+uneditable would have made the tool materially incomplete. "Width at cursor" is shown both ways
+the spec mentions it: as a canvas-corner hover readout (5.2 step 9) and mirrored live into the Hole
+panel's own field (4.3).
+
+**The actual construction order for matching a spec entry to its built surface differs from
+section 5.3's prose, and the code wins.** 5.3 says specBunkers are "pushed in spec order, then the
+auto-defend bunkers, then the cross bands." Reading `holegen.js` directly: the real order is
+author bunkers, then guard-token bunkers, then cross-derived bunkers, then auto-defend, last.
+Author entries (the only ones this editor lets you select/drag/delete) still land at the FRONT of
+the array in their own authored order either way, so `listObjects`' indexing (`spec.bunkers[i]`
+maps to the built array's index `i`) is correct under the real order and would have been wrong
+under the prose's order. Verified directly against `RED_MESA.holes[0]`'s built `surfaces`, not
+assumed.
+
+**Cross hazards get an approximate outline, not an exact one.** `holegen.js` builds a cross band
+with its own wave maths (`stAt`/`faceS`/`across`), never `blob()`, so section 5.3's "draw it with
+`blob()`" instruction doesn't apply to it. The editor draws a straight rectangle across the
+corridor at the hazard's `yd` instead - enough to see and grab; the real wavy shape is still what
+`buildMap` paints underneath it (R5 - the ground truth is never redrawn, only the SELECTION AID is
+approximate).
+
+**Guard-derived and cross-derived bunkers/water are not separately selectable objects.** Only
+`spec.bunkers[]`/`spec.water[]`/`spec.trees[]`/`spec.sentinels[]`/`spec.cross[]` entries - the ones
+a tool actually authored - appear in `listObjects`/the Objects list; a green's guard tokens are
+checkboxes (section 6.8), never individual draggable shapes, and an auto-defend bunker is a
+consequence of `defend`, not a thing with its own identity to select.
+
+**Two real bugs found and fixed by interactive testing (not by reasoning about the code):**
+1. Deleting a selected object crashed: the Delete-key handler ran the mutation (which shrinks the
+   array) BEFORE clearing `selection`, so the context panel re-rendered against an index that no
+   longer existed. Fixed by clearing selection first, mutating second.
+2. A newly-placed object wasn't auto-selected, and - worse - the Tree panel's Single/Stand toggle
+   went inert the moment a tree was selected (it briefly bound to "the selected thing's mode",
+   which doesn't exist - you can't convert a placed tree into a stand). Fixed by making the
+   Single/Stand toggle always drive the NEXT placement, never the current selection, and by
+   selecting whatever a placement tool just created so its own edit controls appear immediately.
+
+**Verification:** interactive Playwright passes (not screenshots alone) drove every tool at least
+once: Select (click/drag/delete/undo on a bunker), Bunker/Water/Tree/Stand/Cross placement, Route
+(dogleg left, waypoint drag), Width (handle drag, double-click insert, base-width slider), Green
+(guard checkbox), Slope (preset swap), Belts (side off), Ruler (two clicks). Hole panel edits
+(nickname, par, defend) verified the same way. `node test-hole-editor.mjs` stayed 19/19 throughout
+(no model/export regressions).
+
+**Fold-back, per section 11 step 4's own instruction** ("edit hole 1 with it, Export, fold the
+export into a scratch copy and run `node golf/js/test.js` against it"): built a document with one
+edit per tool applied to hole 1 (nickname, bunker, water, tree, slope preset, belt depth, width
+scale), exported it, swapped it in for `golf/courses/redmesa.js` (backed up first via `cp`), ran
+`node golf/js/test.js`, then restored the backup immediately (`git diff` clean afterward either
+way) - this tool never writes to the game's own files (section 10), so the swap is always
+temporary and local to the check.
+
+- **First attempt, with a denser combination** (also adding a cross hazard and a stand near the
+  green, stacked without any thought to reachability) **produced a hole the 36-hole playthrough
+  test could not finish** and had to be killed after several minutes. This is not a bug in the
+  editor: the handoff spec explicitly excludes "difficulty measurement, playability sweep,
+  reachability" from scope (section 1), and `validateHole()` - which the editor's own future
+  Validate button runs - passed that same hole with zero errors, because geometry validity and
+  playability are different questions. Recorded here as confirmation that the tool will
+  cheerfully let you build an unplayable hole, exactly as designed; catching that is Matt's job
+  (or a future `sim`-style tool's), not this one's.
+- **Second attempt, with the same seven edits spread out and non-overlapping**, passed clean:
+  `node golf/js/test.js` → "all golf engine tests passed", including section 14's full 18-hole
+  playthrough of the edited course.

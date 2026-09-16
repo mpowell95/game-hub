@@ -1,14 +1,36 @@
-// hole-editor/js/main.js - boot, layout, keyboard, tool switching. Step 3: the canvas, thumbnails,
-// hole switching and reorder are wired end to end; the 11 tools (section 6) are step 4, so their
-// ribbon buttons render but are disabled here.
+// hole-editor/js/main.js - boot, layout, keyboard, tool switching. Step 4 wires the 11 tools
+// (section 6): ribbon buttons, keyboard shortcuts (V R W B H T L G S C M), and the edit-ops bridge
+// between canvas.js's hit-testing/dragging and model.js's pure mutators (undo pushed once per
+// instant action or once per drag/slider release - section 3.5).
 
 import {
   createDocument, buildHole, originalSpecs, HOLE_COUNT,
   createEditorState, pushUndo, undo, redo,
   serialiseDocument, loadDocument, STORAGE_KEY,
+  setField,
+  insertWaypoint, removeWaypoint, straightenPath, insertDogleg,
+  setWidthPoint, insertWidthPoint, deleteWidthPoint, scaleWidth,
+  addBunker, setBunkerField, rerollBunker, deleteBunker,
+  addWater, setWaterField, rerollWater, deleteWater,
+  addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
+  addCross, setCrossField, deleteCross, deleteObject,
+  setBeltField, setGreenField, rerollGreen, toggleGuard,
+  setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
 } from './model.js';
-import { EditorCanvas } from './canvas.js';
-import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip } from './panels.js';
+import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
+import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel } from './panels.js';
+
+const MUTATORS = {
+  setField,
+  insertWaypoint, removeWaypoint, straightenPath, insertDogleg,
+  setWidthPoint, insertWidthPoint, deleteWidthPoint, scaleWidth,
+  addBunker, setBunkerField, rerollBunker, deleteBunker,
+  addWater, setWaterField, rerollWater, deleteWater,
+  addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
+  addCross, setCrossField, deleteCross, deleteObject,
+  setBeltField, setGreenField, rerollGreen, toggleGuard,
+  setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
+};
 
 const TOOLS = [
   ['select', 'V', '↖', 'Select'],
@@ -89,6 +111,10 @@ let doc = loadDocument(localStorage.getItem(STORAGE_KEY));
 if (!doc) doc = createDocument();
 const editorState = createEditorState(doc);
 let currentId = doc.order[0];
+let currentTool = 'select';
+// Placement-time defaults for tools that need a choice BEFORE a click places anything (Tree's
+// single/stand + type, Cross's kind/depth/over) - never persisted, purely a UI convenience.
+let toolState = { treeMode: 'single', treePlantType: 0, crossKind: 'water', crossDepth: 22, crossOver: 8, slopeMode: 'preset' };
 
 let saveTimer = null;
 function scheduleSave() {
@@ -122,16 +148,29 @@ document.getElementById('he-fit').addEventListener('click', () => {
   editorCanvas.fit();
   zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy);
 });
+let lastWidthAtCursor = '-';
+function widthAtCursorText(w) {
+  if (!w) return '-';
+  // section 5.4: nearest station of the built route, cast both ways to the fairway's own edges.
+  const st = editorCanvas.stations;
+  if (!st.length) return '-';
+  let best = st[0]; let bestD = Infinity;
+  for (const p of st) { const d = Math.hypot(p.x - w.x, p.y - w.y); if (d < bestD) { bestD = d; best = p; } }
+  const edges = fairwayEdgesAt(editorCanvas.built, best.x, best.y, best.nx, best.ny);
+  if (edges.left == null || edges.right == null) return '-';
+  return `${(edges.left + edges.right).toFixed(1)} yd (fairway)`;
+}
 editorCanvas.onHoverChange = (w) => {
-  // Section 5.4's exact "width at cursor" (nearest fairway edge crossing) lands with the Width
-  // tool in step 4; for now this just proves the camera's world coordinates are right.
-  hoverEl.textContent = w ? `x ${w.x.toFixed(1)}, y ${w.y.toFixed(1)}` : 'Width at cursor: -';
+  lastWidthAtCursor = widthAtCursorText(w);
+  hoverEl.textContent = `Width at cursor: ${lastWidthAtCursor}`;
+  const holeField = document.getElementById('he-h-widthcursor');
+  if (holeField) holeField.textContent = lastWidthAtCursor;
 };
 
 // --- ribbon --------------------------------------------------------------------------------
 const ribbon = document.getElementById('he-ribbon');
 ribbon.innerHTML = [
-  ...TOOLS.map(([id, key, icon, label]) => `<button class="he-tool" data-tool="${id}" title="${label} (${key})" disabled><span class="he-tool-icon">${icon}</span><span class="he-tool-label">${label}</span></button>`),
+  ...TOOLS.map(([id, key, icon, label]) => `<button class="he-tool" data-tool="${id}" title="${label} (${key})"><span class="he-tool-icon">${icon}</span><span class="he-tool-label">${label}</span></button>`),
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
   '<button class="he-tool" id="he-redo" title="Redo (Ctrl+Y)"><span class="he-tool-icon">↷</span><span class="he-tool-label">Redo</span></button>',
@@ -143,6 +182,16 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-export" title="Export (Ctrl+E)" disabled><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
 ].join('');
 
+const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
+
+function setTool(id) {
+  currentTool = id;
+  for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.setAttribute('aria-pressed', String(btn.dataset.tool === id));
+  editorCanvas.setTool(id);
+  refreshContext();
+}
+for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('click', () => setTool(btn.dataset.tool));
+
 // --- rendering the current hole into every panel ------------------------------------------------
 // buildHole() (model.js) already caches per document/id and invalidates on spec or order change
 // (section 3.3); nothing further to cache here.
@@ -150,7 +199,7 @@ function getBuilt(id) { return buildHole(doc, id); }
 
 function refreshPanels() {
   const built = getBuilt(currentId);
-  renderHolePanel(document.getElementById('he-hole'), doc, currentId, built);
+  renderHolePanel(document.getElementById('he-hole'), doc, currentId, built, editOps, lastWidthAtCursor);
   renderObjectsList(document.getElementById('he-objects'), doc, currentId, built);
 }
 
@@ -168,6 +217,7 @@ function selectHole(id) {
   editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
   refreshPanels();
   refreshStrip();
+  refreshContext();
 }
 
 function reorder(draggedId, dropOnId) {
@@ -183,8 +233,58 @@ function afterChange() {
   editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
   refreshPanels();
   refreshStrip();
+  refreshContext();
   scheduleSave();
 }
+
+// --- the edit-ops bridge (section 3.5's undo rule, applied uniformly) ---------------------------
+// `instant`: one push, one mutation, right now (a click placement, a checkbox, a reroll button).
+// `liveBegin`/`liveUpdate`/`liveEnd`: a drag or a slider - live-previewed with no undo pushes, then
+// ONE push of the PRE-drag state at the end, so the whole gesture undoes in one step.
+let liveBeforeSpec = null;
+const editOps = {
+  mutators: MUTATORS,
+  getTreeMode: () => toolState.treeMode,
+  getTreePlantType: () => toolState.treePlantType,
+  getCrossKind: () => toolState.crossKind,
+  getCrossDepth: () => toolState.crossDepth,
+  instant(mutateFn) {
+    pushUndo(editorState);
+    doc.holes[currentId].spec = mutateFn(doc.holes[currentId].spec, getBuilt(currentId));
+    afterChange();
+  },
+  liveBegin() { liveBeforeSpec = doc.holes[currentId].spec; },
+  liveUpdate(mutateFn) {
+    doc.holes[currentId].spec = mutateFn(doc.holes[currentId].spec, getBuilt(currentId));
+    afterChange();
+  },
+  liveEnd() {
+    if (liveBeforeSpec == null) return;
+    const finalSpec = doc.holes[currentId].spec;
+    doc.holes[currentId].spec = liveBeforeSpec;
+    pushUndo(editorState);
+    doc.holes[currentId].spec = finalSpec;
+    liveBeforeSpec = null;
+    afterChange();
+  },
+};
+editorCanvas.ops = editOps;
+
+const contextHeadEl = document.querySelector('[data-panel="context"] .he-panel__head');
+function refreshContext() {
+  contextHeadEl.textContent = TOOLS.find(([id]) => id === currentTool)?.[3] || 'Tool';
+  renderContextPanel(document.getElementById('he-context'), {
+    tool: currentTool,
+    spec: doc.holes[currentId].spec,
+    built: getBuilt(currentId),
+    selection: editorCanvas.selection,
+    ops: editOps,
+    toolState,
+    setToolState(patch) { toolState = { ...toolState, ...patch }; refreshContext(); },
+    refresh: refreshContext,
+  });
+}
+editorCanvas.onSelectionChange = () => refreshContext();
 
 document.getElementById('he-undo').addEventListener('click', () => { if (undo(editorState)) afterChange(); });
 document.getElementById('he-redo').addEventListener('click', () => { if (redo(editorState)) afterChange(); });
@@ -192,19 +292,27 @@ document.getElementById('he-redo').addEventListener('click', () => { if (redo(ed
 renderLegend(document.getElementById('he-legend'));
 renderLayers(document.getElementById('he-layers'), layers, () => editorCanvas.draw());
 
-// --- keyboard (the subset that already does something in step 3; the rest lands in step 6) ------
+// --- keyboard (section 4.1) ----------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); if (undo(editorState)) afterChange(); return; }
   if ((e.ctrlKey && e.key.toLowerCase() === 'y') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); if (redo(editorState)) afterChange(); return; }
   if (e.key === 'f' || e.key === 'F') { editorCanvas.fit(); zoomSlider.value = ppyToSlider(editorCanvas.camera.ppy); return; }
+  if (e.key === '+' || e.key === '=') { editorCanvas.zoomBy(1.1); return; }
+  if (e.key === '-' || e.key === '_') { editorCanvas.zoomBy(1 / 1.1); return; }
   if (e.key === '[') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i - 1 + HOLE_COUNT) % HOLE_COUNT]); return; }
   if (e.key === ']') { const i = doc.order.indexOf(currentId); selectHole(doc.order[(i + 1) % HOLE_COUNT]); return; }
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) { setTool(TOOL_KEYS[e.key.toLowerCase()]); }
 });
+
+// A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
+// without a second copy of it. Nothing reads this at runtime.
+window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, editorCanvas, getBuilt };
 
 // --- boot ---------------------------------------------------------------------------------
 editorCanvas.resize();
 editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
 refreshPanels();
 refreshStrip();
+setTool(currentTool);
