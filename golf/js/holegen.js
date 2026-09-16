@@ -535,8 +535,8 @@ function place(stations, at, side, off) {
  *   rough             how far the light-rough collar extends past the fairway  (default 11)
  *   greenR / greenRy  green radii; the fringe is greenR + 6
  *   slope             {fall, spine, back} for slopeGrid
- *   bunkers           [{at, side, off, r, ry, kind, seed}]
- *   water             [{at, side, off, rx, ry, seed}] or [{poly}]
+ *   bunkers           [{at, side, off, r, ry, kind, seed}]   (`yd` from the tee instead of `at`)
+ *   water             [{at, side, off, rx, ry, seed}] or [{poly}]   (`yd` likewise; also trees, sentinels)
  *   belts             {left, right} each false or {from, to, depth, spacing, type, seed}
  *   trees             hand-placed specimens [{at, side, off, type}] or [{x, y, type}]
  *   treeTypes         the specimen table
@@ -709,8 +709,13 @@ export function makeHole(spec) {
       type: b.type || 0, spacing: b.spacing || 9, seed: b.seed || (seed0 + (side > 0 ? 7 : 3)) });
   }
 
-  const specBunkers = [...(spec.bunkers || [])];
-  const specWater = spec.water || [];
+  // EVERY PLACED THING MAY BE AUTHORED IN YARDS FROM THE TEE (`yd`), the way `cross` always was.
+  // Matt, 2026-09-16, on the hole editor: *"everything should be stored as yards from the tee"* -
+  // a hazard must stay where it is when the hole is lengthened, and a fraction (`at`) slides with
+  // the length. `at` keeps working for the specs already written; `yd` wins when both are given.
+  const byYd = (o) => (o && o.yd != null ? { ...o, at: o.yd / length } : o);
+  const specBunkers = (spec.bunkers || []).map(byYd);
+  const specWater = (spec.water || []).map(byYd);
   const extraTrees = [];
 
   // ---- THE GREEN COMPLEX -------------------------------------------------------------------
@@ -924,7 +929,7 @@ export function makeHole(spec) {
   // 120 yds, and that peak is reached halfway. A stand whose `height` is over ~34 yds cannot be
   // flown by anything, from anywhere - so a corner planted with one has to be gone AROUND, and the
   // dogleg becomes a real change of direction instead of a suggestion.
-  for (const sn of spec.sentinels || []) {
+  for (const sn of (spec.sentinels || []).map(byYd)) {
     const cnt = sn.n == null ? 5 : sn.n;
     const spread = sn.spread == null ? 7 : sn.spread;
     for (let i = 0; i < cnt; i++) {
@@ -991,7 +996,7 @@ export function makeHole(spec) {
     slope: slopeFrom(spec.slope || { fall: [0, -0.15] }, slopeK),
   };
 
-  const trees = (spec.trees || []).map((tr) => {
+  const trees = (spec.trees || []).map(byYd).map((tr) => {
     if (tr.x != null) return { x: tr.x, y: tr.y, type: tr.type || 0 };
     const [x, y] = place(stations, tr.at, tr.side == null ? 0 : tr.side, tr.off || 0);
     return { x: +x.toFixed(1), y: +y.toFixed(1), type: tr.type || 0 };
