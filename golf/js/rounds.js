@@ -10,7 +10,15 @@ import OASIS_SANDS from '../courses/oasissands.js';
 
 export const COURSES = [PINE_VALLEY, RED_MESA, OASIS_SANDS];
 
-export function courseById(id) { return COURSES.find((c) => c.id === id) || COURSES[0]; }
+// HANDOFF-GOLF-HOLE-EDITOR.md phase 2: the hole editor's Play button opens the game with
+// `?editor=1`, which builds a course object from the editor's own localStorage document and sets
+// this override BEFORE init() runs (golf/index.html) - so a practice round can play an edited hole
+// without the edit ever touching golf/courses/redmesa.js. Guarded by id so the override only ever
+// substitutes for the course it was actually built from.
+export function courseById(id) {
+  if (globalThis.__gfCourseOverride && globalThis.__gfCourseOverride.id === id) return globalThis.__gfCourseOverride;
+  return COURSES.find((c) => c.id === id) || COURSES[0];
+}
 
 /** HOW A COURSE IS PLAYED. Matt, 2026-09-05: *"I want 3 modes: 3 hole, 9 hole, and 18 hole.
  *  That's the first selection. Then the second selection should be the course. If I chose 3 holes,

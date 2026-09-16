@@ -122,11 +122,13 @@ let currentTool = 'select';
 let toolState = { treeMode: 'single', treePlantType: 0, crossKind: 'water', crossDepth: 22, crossOver: 8, slopeMode: 'preset' };
 
 let saveTimer = null;
+function saveNow() {
+  clearTimeout(saveTimer);
+  try { localStorage.setItem(STORAGE_KEY, serialiseDocument(doc)); } catch { /* best effort */ }
+}
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORAGE_KEY, serialiseDocument(doc)); } catch { /* best effort */ }
-  }, 300);
+  saveTimer = setTimeout(saveNow, 300);
 }
 
 const layers = { ...DEFAULT_LAYERS };
@@ -185,6 +187,7 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-reset" title="Reset hole"><span class="he-tool-icon">↺</span><span class="he-tool-label">Reset hole</span></button>',
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-export" title="Export (Ctrl+E)"><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
+  '<button class="he-tool" id="he-play" title="Play this hole" style="width:auto;padding:0 8px;"><span class="he-tool-icon">▶</span><span class="he-tool-label">Play</span></button>',
   '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
 ].join('');
 
@@ -340,6 +343,14 @@ document.getElementById('he-copy-json').addEventListener('click', () => {
   navigator.clipboard?.writeText(generateJSON(doc));
 });
 
+// section 9 (phase 2): opens the game itself, reading this exact document from localStorage.
+// Saving is normally debounced 300ms, so a click right after an edit could otherwise open the
+// game on the PREVIOUS save - flush immediately first so Play always reflects what is on screen.
+document.getElementById('he-play').addEventListener('click', () => {
+  saveNow();
+  window.open('../golf/?editor=1', '_blank');
+});
+
 // section 3.6: "Discard ALL edits" - confirm, then the fresh (unedited) document, whole course.
 document.getElementById('he-discard-all').addEventListener('click', () => {
   if (!window.confirm('Discard ALL edits on every hole and start over from the original Red Mesa? This cannot be undone.')) return;
@@ -388,6 +399,7 @@ window.addEventListener('keydown', (e) => {
 window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, editorCanvas, getBuilt };
 
 // --- boot ---------------------------------------------------------------------------------
+window.addEventListener('beforeunload', saveNow);
 editorCanvas.resize();
 editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
 refreshPanels();

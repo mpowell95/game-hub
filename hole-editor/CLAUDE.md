@@ -264,3 +264,56 @@ zoom (step 4), `[`/`]` previous/next hole (step 3), `Esc` deselect-then-clear-ru
 Sections 1-8 (scope, layout, model, canvas, tools, validate/compare/reset, export, keyboard/
 layers/legend/persistence) are now built and tested end to end. Only section 9 (Phase 2 - the
 three guarded game-side edits and the editor's Play button) remains.
+
+## Phase 2 (2026-09-16): the three guarded game edits, and the Play button
+
+Exactly the three edits section 9 lists, nothing more:
+
+1. `golf/js/rounds.js`'s `courseById(id)` returns `globalThis.__gfCourseOverride` when it exists
+   AND its own `id` matches the one asked for - so the override can only ever substitute for the
+   course it was actually built from, never leak into a request for a different one.
+2. `golf/index.html`: if `location.search` contains `editor=1`, BEFORE `init()`, reads
+   `localStorage['golf.holeEditor.redmesa.v1']`, builds every hole with the real `makeHole`/
+   `RM_DEFAULTS` (R5 - no second course-builder), and sets `globalThis.__gfCourseOverride` and
+   `globalThis.__gfNoRecord = true`. A missing/malformed/wrong-version document is caught and
+   falls through to the shipped course, logged rather than silent. `requireName()` still runs
+   exactly as before - it is not skipped.
+3. `golf/js/ui.js`: both `recordGolf` call sites (`_recordRound`, `_recordHole`) return at the top
+   when `globalThis.__gfNoRecord` is true, before touching anything else.
+
+**The editor's Play button** (ribbon, after Export - `he-play`) opens `../golf/?editor=1` in a new
+tab. It flushes the debounced localStorage save FIRST (`saveNow()`, new in `main.js` - the normal
+save is 300ms debounced, and a click right after an edit must not open the game on the previous
+save). No deep link into a specific hole - Matt picks it from the game's own Practice list, exactly
+as section 9 specifies ("that would be a fourth game change and the setup screen is one tap away").
+
+**Test, per section 9's own instruction**: `test-hole-editor-play.mjs` (repo root, Playwright,
+`test-visual.mjs`'s conventions - profile seeded via `addInitScript` since every standalone page is
+name-gated). It builds a document with hole 1 lengthened by a real dogleg edit (so its `bounds` -
+and so `holeAspect()`, what the setup screen's course strip actually keys off - measurably differ
+from the shipped hole), seeds it into `localStorage` alongside a profile and `gamehub.golf.v1`
+pointing `lastCourse` at `redmesa` (Red Mesa is locked-by-default for a fresh ladder, per
+`golf/CLAUDE.md`'s "Who can play it right now" - going through `data-course` chip click would need
+a dev-hashed name; setting the setup screen's own initial-course setting has no such lock and is
+exactly what a preview button needs), then asserts the strip's hole-1 thumbnail's `--gf-ar` custom
+property equals the EDITED hole's aspect, not the shipped one - proving the override actually
+reached the setup screen rather than merely not crashing it.
+
+### Tests run and their result
+
+- `node test-hole-editor-play.mjs` - green: "the setup screen course strip reflects the hole
+  editor override, not the shipped course."
+- `node golf/js/test.js` - unaffected by these three edits (none of them run when `editor=1` is
+  absent from the URL, and `courseById`'s new branch is a no-op with no override set) - full suite
+  still "all golf engine tests passed."
+- `node test-hole-editor.mjs` - still 19/19 (model/export untouched this step).
+- `node validate-sw-assets.mjs` - rewrote `sw.js`'s `REST_MANIFEST` for the three changed golf
+  files (expected and required per its own header: "re-run it... and commit sw.js after changing
+  any game file"); committed alongside.
+
+This is real game code, unlike the tool itself, so it follows the root CLAUDE.md's normal rule:
+committed, pushed, and taken to a merged, deployed `main` rather than left on the branch - the
+handoff spec's own text says so directly ("Deploy nothing until phase 2... phase 2's game edits
+are [deployed]"). The override is inert for every player who has never opened the hole editor -
+`__gfCourseOverride` is only ever set by code that runs after `?editor=1` finds a matching
+document in that browser's own `localStorage`, which nothing else ever writes.
