@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v854';
+const CACHE = 'game-hub-v855';
 
 const ASSETS = [
   './',
@@ -688,8 +688,8 @@ const REST_MANIFEST = {
   './pipes/js/strings.js': '22f714a5c0',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
-  './sudoku/css/sudoku.css': 'e34af4f6ee',
-  './sudoku/js/ui.js': '9928f28486',
+  './sudoku/css/sudoku.css': 'd27cef9c33',
+  './sudoku/js/ui.js': 'eb3c42f749',
   './sudoku/js/game.js': 'a49c5bbb46',
   './sudoku/js/generator.js': '759ae04ca7',
   './sudoku/js/solver.js': 'c12fe83ae8',
