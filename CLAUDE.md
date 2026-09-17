@@ -47,10 +47,16 @@ binding because each encodes a way THE LAW actually got violated once. One line 
 full rules with rationale and incident history are in `js/CLAUDE.md` (auto-loaded when working
 on the stats/sync code they mostly govern):
 
-1. **Stored is not enough; data must stay visible** — history no screen shows reads as deleted;
-   prove every UI gate still shows pre-change data.
-2. **Writes are additive, only** — counters increment, bests only improve (`Math.max`). One-tap
-   recreatable preferences (e.g. launcher favorites) are exempt; earned history never is.
+1. **Matt must always be able to reach every stat, ever — a player's own screen doesn't have to
+   show all of it.** Data neither Matt nor any screen can reach counts as lost. Claude may never
+   delete player data (scores, history, records) on its own judgement — see rule 2 for the one
+   way that changes.
+2. **Writes are additive, only, by default** — counters increment, bests only improve
+   (`Math.max`). One-tap recreatable preferences (e.g. launcher favorites) are exempt; earned
+   history never is without an override. **Claude never refuses a request by citing THE LAW and
+   stopping there** — explain plainly what will happen and what will be lost, then require Matt to
+   type `OVERRIDE AND PROCEED` before doing it. This override applies to any part of THE LAW, not
+   just this rule, and only Matt can invoke it.
 3. **Migrations carry forward everything that CAN be carried** — genuinely unit-incompatible
    values are archived under a legacy key and still SHOWN, honestly labeled.
 4. **Never fabricate conversions** between incomparable metrics.
@@ -58,8 +64,8 @@ on the stats/sync code they mostly govern):
 6. **No silent write failures** — verify by fresh re-read, or at minimum log loudly.
 7. **Test migrations against real history** (the actual old writer code from git), never fresh
    synthetic stores.
-8. **When a player reports missing data, believe them** — replay the code history before blaming
-   caches or user error.
+8. **Investigate before you dismiss** — when a player reports missing data, replay the code
+   history before blaming caches or user error.
 9. **A milestone is not done until CLAUDE.md reflects it** — undocumented conventions get
    silently re-derived (and re-diverged) by the next session.
 

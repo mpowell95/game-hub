@@ -14,16 +14,24 @@ LAW itself; this file holds the depth.
 The law itself is Matt's, two sentences, stated in the root `CLAUDE.md`. The nine rules below
 were distilled from real incidents by working sessions (first codified 2026-07-19, commit
 `3898a53`, the night after the Ball Run migration made Matt's history invisible; grown since,
-one incident at a time). They are the enforcement detail behind the root's one-line versions.
+one incident at a time; rules 1, 2 and 8 reworded 2026-09-17 to separate "what a player's screen
+shows" from "what Matt can reach," and to formalize the override Matt already exercised once, on
+2026-09-12). They are the enforcement detail behind the root's one-line versions. **Numbering is
+frozen** — dozens of files across this repo cite these rules by number (`rule 1`, `rule 5`, etc.);
+a rule's wording can be revised in place, but its slot never moves and is never reused, the same
+discipline rule 5 already requires of storage keys.
 
-1. **Stored is not enough; data must stay VISIBLE.** To a player, history that no screen
-   shows IS deleted, even if the bytes sit safely in localStorage. Before shipping any
-   change to a data shape, list every UI surface that displays that data and every gate
-   that decides visibility (e.g. `br.runs > 0` filters in game-stats-ui.js and
-   leaderboard-ui.js), and prove each one still shows pre-change history.
-2. **Writes are additive, only.** Counters increment. Bests only ever improve
-   (`Math.max`). Nothing is ever zeroed, decremented, or overwritten with less. This
-   already holds everywhere in `js/game-stats.js`; keep it that way.
+1. **Matt must always be able to reach every stat, ever.** A player's own screen doesn't have to
+   show every historical number — but Matt must have SOME path to it (My Stats, the admin page, a
+   raw Firebase read, whatever). If neither Matt nor any screen can reach a number, it is gone in
+   every way that matters. Before shipping any change to a data shape, list every UI surface and
+   admin path that displays that data and every gate that decides visibility (e.g. `br.runs > 0`
+   filters in game-stats-ui.js and leaderboard-ui.js), and prove each one still shows pre-change
+   history. Claude may never delete player data (scores, achievements, history) on its own
+   judgement — see rule 2 for the one way that changes.
+2. **Writes are additive, only, by default.** Counters increment. Bests only ever improve
+   (`Math.max`). Nothing is zeroed, decremented, or overwritten with less. This already holds
+   everywhere in `js/game-stats.js`; keep it that way.
 
    **Carve-out: THE LAW governs history and achievement data — data a player earned and
    cannot recreate.** A user-controlled preference the player can restore in one tap
@@ -34,6 +42,20 @@ one incident at a time). They are the enforcement detail behind the root's one-l
    the rule was never about preferences. If a future feature is ambiguous about which side
    of this line it's on, ask: can the player recreate this state in one tap with no loss? If
    yes, it's a preference, not history.
+
+   **THE LAW binds Claude, not Matt.** Matt cannot predict every future need, and a rule that
+   lets Claude say "I can't, THE LAW forbids it" and stop there is a rule that can trap him.
+   Precedent: 2026-09-12, Matt overruled THE LAW to authorize `delete-device-record.mjs` against a
+   confirmed cheater's account — *"It's my game, I control every aspect of it. If there's a rule
+   somewhere that doesn't allow for it, I can change the rules. The rules are for YOU. So YOU
+   cannot decide to do anything that violates the rules. I can decide to do anything I want."*
+   That is the standing mechanism, formalized: when ANY request conflicts with THE LAW — an edit, a
+   correction, a deletion, not just this rule — Claude explains, plainly and simply, exactly what
+   will happen and exactly what will be lost or cannot be recovered, then requires Matt to type
+   `OVERRIDE AND PROCEED` (that exact phrase) before doing it. Implied consent, "just do it," or
+   silence never counts. The override is Matt's to invoke, per incident — Claude never offers or
+   applies one on its own judgement, and none of this is standing permission to bend THE LAW again
+   later without him asking fresh.
 3. **Migrations carry everything forward that CAN be carried.** Only genuinely
    unit-incompatible values (e.g. meters vs obstacle counts) may be archived instead of
    converted. Unit-agnostic data (play counts, totals, byDiff buckets, timestamps) always
@@ -55,8 +77,8 @@ one incident at a time). They are the enforcement detail behind the root's one-l
    (`git show <old-commit>:js/game-stats.js`), have it write the store the way real
    devices did, then load with current code and assert the data is intact AND visible.
    Two incidents were declared "verified" on fresh-store tests before this rule existed.
-8. **When a player reports missing data, believe them.** Do not blame caches, incognito
-   mode, or user error until the code history has been fully replayed and ruled out. The
+8. **Investigate before you dismiss.** When a player reports missing data, do not blame caches,
+   incognito mode, or user error until the code history has been fully replayed and ruled out. The
    one time that order was reversed, the bug was real and the deflection made it worse.
 9. **A milestone is not done until CLAUDE.md reflects it.** This project's "team" is a
    sequence of fresh AI sessions with no memory of each other; this file plus handoff notes
