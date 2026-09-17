@@ -523,3 +523,12 @@ nothing like the game, where their shade lay across the whole green and nothing 
 could fly them. `canvas.js` now paints the same ellipses at the same alpha before the crowns.
 The Height slider's units are yards; a palo verde is 8, a saguaro 15, a boulder 40, and the 8
 iron's apex, the highest in the bag, is 32.
+
+## The Hole panel's sliders were never wired (fixed 2026-09-17)
+
+Matt: *"when i slide the scale on the wind, the number doesnt change. when i manually input a
+number, it reverts to 1."* `slider(id, ...)` renders `#id-r` and `#id-n`; every optional slider's
+guard queried the bare `#id`, which never exists, so **pinch, rough, green ry and wind** were
+drawn and dead since the day each shipped. `test-hole-editor-ui.mjs` now types into wind and
+rough and reads the spec back. The editor is not in `sw.js`, so no CACHE bump - but GitHub Pages
+caches for ten minutes and a browser holds the old `panels.js` until a hard refresh.

@@ -157,6 +157,22 @@ ok('...which are now ordinary, selectable objects', (await page.evaluate(() => (
 await key('Control+z');
 for (let i = 0; i < 15; i++) await key('[');
 
+console.log('\n-- Hole panel sliders actually write (wind, rough, pinch) --');
+// [KNOWN-BUG PROBE] every guard read `#he-h-<x>` while the slider's inputs are `#he-h-<x>-r` /
+// `-n`, so pinch, rough and (2026-09-16) wind were rendered and never wired: the range moved,
+// the number stayed, and typing a number reverted. Matt: "when i slide the scale on the wind, the
+// number doesnt change. when i manually input a number, it reverts to 1. why?"
+await page.click('#he-h-wind-auto'); await settle();
+await page.fill('#he-h-wind-speed-n', '0.4'); await page.keyboard.press('Tab'); await settle();
+ok('[KNOWN-BUG PROBE] typing a wind speed writes it', (await spec()).wind && (await spec()).wind.speed === 0.4, JSON.stringify((await spec()).wind));
+await page.click('[data-seg="wind-deg"] [data-val="90"]'); await settle();
+ok('...and a direction button writes deg', (await spec()).wind && (await spec()).wind.deg === 90);
+await page.click('#he-h-rough-auto'); await settle();
+await page.fill('#he-h-rough-n', '12'); await page.keyboard.press('Tab'); await settle();
+ok('[KNOWN-BUG PROBE] the rough slider writes', (await spec()).rough === 12, String((await spec()).rough));
+await page.click('#he-h-rough-auto'); await settle(); await page.click('#he-h-wind-auto'); await settle();
+ok('...and auto clears both again', (await spec()).rough === undefined && (await spec()).wind === undefined);
+
 console.log('\n-- Green: drawn outline, fringe, pins --');
 await key('g');
 const gc = await page.evaluate(() => window.__he.editorCanvas.built.pin);
