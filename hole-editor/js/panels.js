@@ -143,16 +143,16 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResu
   wireSeg(el, 'par', (v) => ops.instant((s) => ops.mutators.setField(s, 'par', +v)));
   wireSlider(el, 'he-h-hard', ops, (s, v) => ops.mutators.setField(s, 'hard', v));
   el.querySelector('#he-h-pinch-auto').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'pinchTo', e.target.checked ? undefined : 0.6)));
-  const pinch = el.querySelector('#he-h-pinch');
+  const pinch = el.querySelector('#he-h-pinch-r');   // a slider's inputs are id-r / id-n (never bare id: this guard was dead until 2026-09-17)
   if (pinch) wireSlider(el, 'he-h-pinch', ops, (s, v) => ops.mutators.setField(s, 'pinchTo', v));
   el.querySelector('#he-h-defend').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'defend', e.target.checked ? undefined : false)));
   el.querySelector('#he-h-wind-auto').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'wind', e.target.checked ? undefined : { speed: 1.0, deg: 0 })));
-  if (el.querySelector('#he-h-wind-speed')) {
+  if (el.querySelector('#he-h-wind-speed-r')) {
     wireSlider(el, 'he-h-wind-speed', ops, (s, v) => ops.mutators.setField(s, 'wind', { ...(s.wind || {}), speed: +v.toFixed(1) }));
     wireSeg(el, 'wind-deg', (v) => ops.instant((s) => ops.mutators.setField(s, 'wind', { ...(s.wind || {}), deg: +v })));
   }
   el.querySelector('#he-h-rough-auto').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'rough', e.target.checked ? undefined : 10)));
-  const rough = el.querySelector('#he-h-rough');
+  const rough = el.querySelector('#he-h-rough-r');
   if (rough) wireSlider(el, 'he-h-rough', ops, (s, v) => ops.mutators.setField(s, 'rough', v));
 }
 
@@ -567,7 +567,7 @@ function renderGreen(el, ctx) {
       ops.instant((s) => ops.mutators.setGreenField(s, { greenRy: e.target.checked ? undefined : s.greenR }));
       refresh();
     });
-    const ry = el.querySelector('#he-g-ry');
+    const ry = el.querySelector('#he-g-ry-r');
     if (ry) wireSlider(el, 'he-g-ry', ops, (s, v) => ops.mutators.setGreenField(s, { greenRy: v }));
     el.querySelector('#he-g-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollGreen(s)); refresh(); });
   }
