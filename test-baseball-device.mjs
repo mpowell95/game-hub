@@ -171,9 +171,20 @@ if (mountErr) {
   // pitch's RELEASE is resultMs + betweenMs + windupMs, measured on the real hub mount rather than
   // inferred from the code. No input is given, so every pitch is a take (ball or strike) and no
   // batted-ball animation enters the sum. The verdict is captured by wrapping the instance's own
-  // `_setLine1` (what `_onEngineEvent` paints through); the release is `state.pitcherFrame`
-  // reaching 3 (`_stepWindup`'s own release step). A half-inning transition adds its own beat and
-  // is excluded by its verdict text.
+  // `_setLine1` (what `_onEngineEvent` paints through).
+  //
+  // STAGE 5 (docs/BASEBALL-3D-BUILD.md section 3.10): the release signal changed. It used to be
+  // `state.pitcherFrame` reaching 3 (`_stepWindup`'s own sprite-frame step), which is deleted along
+  // with the rest of the sprite path this stage. The replacement wraps the instance's own
+  // `actors.play` and records `performance.now() + markAtMs` for every `('pitcher', 'Pitch', ...)`
+  // call - the same instant the OLD signal watched for (`_stepWindup` calls
+  // `actors.play('pitcher', 'Pitch', { markAtMs: WINDUP_MS })` at the moment frame 1 used to be set,
+  // so `call time + WINDUP_MS` is where frame 3 used to land; the human's own release calls it with
+  // `markAtMs: 0`, seeking straight to the mark, so `call time + 0` is the release instant itself).
+  // Proven equivalent BEFORE the sprite code was deleted: this block ran with BOTH signals
+  // instrumented in the same pass (state.pitcherFrame still existed then) and the two gap sets
+  // matched to within 1ms - baseball/CLAUDE.md has the numbers. A half-inning transition adds its
+  // own beat and is excluded by its verdict text.
   {
     const expected = await page.evaluate(async () => {
       const S = await import('/baseball/js/engine/settings.js');
@@ -185,12 +196,14 @@ if (mountErr) {
       window.__bbCadence = rec;
       const orig = inst._setLine1.bind(inst);
       inst._setLine1 = (txt) => { if (txt) rec.verdicts.push({ t: performance.now(), txt: String(txt) }); orig(txt); };
-      let last = inst.state.pitcherFrame;
-      rec.timer = setInterval(() => {
-        const f = inst.state.pitcherFrame;
-        if (f === 3 && last !== 3) rec.releases.push(performance.now());
-        last = f;
-      }, 10);
+      const origPlay = inst.actors.play.bind(inst.actors);
+      inst.actors.play = (role, name, opts) => {
+        if (role === 'pitcher' && name === 'Pitch') {
+          const markAtMs = (opts && opts.markAtMs != null) ? opts.markAtMs : 0;
+          rec.releases.push(performance.now() + markAtMs);
+        }
+        return origPlay(role, name, opts);
+      };
     });
     const deadline = Date.now() + 45000;
     let data = { releases: [], verdicts: [] };
@@ -199,7 +212,6 @@ if (mountErr) {
       data = await page.evaluate(() => ({ releases: window.__bbCadence.releases.slice(), verdicts: window.__bbCadence.verdicts.slice() }));
       if (data.releases.length >= 4) break;
     }
-    await page.evaluate(() => { clearInterval(window.__bbCadence.timer); });
     const gaps = [];
     for (let i = 0; i + 1 < data.releases.length; i++) {
       const v = data.verdicts.find((x) => x.t > data.releases[i] && x.t < data.releases[i + 1]);
@@ -391,143 +403,17 @@ await ctx.close();
   }
 }
 
-// 5. Batter hand/anchor correction (Matt): both frame sets are drawn RIGHT-handed, so the DEFAULT
-// (unflipped) stands at the LEFT box and a LEFT-handed batter (flipped) stands at the RIGHT box -
-// never the other way round. Rendered, not just reasoned about: draws the real batter frame via
-// field.js's own drawFrameCheck (a flat background, so the sprite's own pixels are trivial to
-// isolate) with flip false/true, and asserts the rendered bounding box's own center falls left of
-// canvas-center for the unflipped draw and right of it for the flipped one.
-{
-  const p2 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
-  await p2.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-  const bounds = await p2.evaluate(async () => {
-    const mod = await import('/baseball/js/field.js');
-    mod.preloadPlateImages();
-    await new Promise((r) => setTimeout(r, 800));
-    const measure = (flip) => {
-      const c = document.createElement('canvas');
-      c.width = 400; c.height = 700;
-      const ctx = c.getContext('2d');
-      mod.drawFrameCheck(ctx, c.width, c.height, 'batter', 'home', 5, true, flip);
-      const data = ctx.getImageData(0, 0, c.width, c.height).data;
-      // The flat #1c1c1c background is (28,28,28) - anything meaningfully different is the sprite
-      // or the ground line/center tick; restrict the scan to the sprite's own height band and
-      // ignore the thin overlay lines by requiring a wide-enough run.
-      let minX = Infinity, maxX = -Infinity;
-      const yTop = Math.round(c.height * 0.2), yBot = Math.round(c.height * 0.8);
-      for (let y = yTop; y < yBot; y++) {
-        for (let x = 0; x < c.width; x++) {
-          const i = (y * c.width + x) * 4;
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          const isBg = Math.abs(r - 28) < 6 && Math.abs(g - 28) < 6 && Math.abs(b - 28) < 6;
-          const isLine = (r > 200 && g < 100 && b < 100) || (r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 10 && Math.abs(g - b) < 10);
-          if (!isBg && !isLine) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
-        }
-      }
-      return { minX, maxX, center: (minX + maxX) / 2, canvasCenter: c.width / 2 };
-    };
-    return { unflipped: measure(false), flipped: measure(true) };
-  });
-  await p2.close();
-  if (!isFinite(bounds.unflipped.center) || !isFinite(bounds.flipped.center)) {
-    fail('batter-hand', `could not isolate the sprite's own pixels (unflipped=${JSON.stringify(bounds.unflipped)}, flipped=${JSON.stringify(bounds.flipped)})`);
-  } else {
-    if (bounds.unflipped.center < bounds.unflipped.canvasCenter) {
-      ok(`unflipped batter renders left of center (bbox center ${bounds.unflipped.center.toFixed(0)}px vs canvas center ${bounds.unflipped.canvasCenter}px)`);
-    } else {
-      fail('batter-hand', `unflipped batter's bounding box center (${bounds.unflipped.center.toFixed(0)}px) is not left of canvas center (${bounds.unflipped.canvasCenter}px)`);
-    }
-    if (bounds.flipped.center > bounds.flipped.canvasCenter) {
-      ok(`flipped (left-handed) batter renders right of center (bbox center ${bounds.flipped.center.toFixed(0)}px vs canvas center ${bounds.flipped.canvasCenter}px)`);
-    } else {
-      fail('batter-hand', `flipped batter's bounding box center (${bounds.flipped.center.toFixed(0)}px) is not right of canvas center (${bounds.flipped.canvasCenter}px)`);
-    }
-  }
-}
-
-// 6. The real pitcher frames (BB-3b addition): frame 1's rendered bounding box sits centered on
-// the mound anchor, and frame 3's own throwing-hand anchor (PLATE_ANCHORS.release) lands INSIDE
-// frame 3's rendered bounding box - not beside the head, which is what the old three-cartoon-pose
-// set's arbitrary offset produced. Renders the real drawPlateView (not the flat-background dev
-// tool) so this exercises the exact same cover-fit math the game itself uses.
-{
-  const p3 = await (await browser.newContext({ viewport: { width: 400, height: 700 } })).newPage();
-  await p3.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-  const result = await p3.evaluate(async () => {
-    const mod = await import('/baseball/js/field.js');
-    mod.preloadPlateImages();
-    await new Promise((r) => setTimeout(r, 900));
-    const w = 400, h = 700;
-    const render = (pitcherFrame) => {
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      const ctx = c.getContext('2d');
-      mod.drawPlateView(ctx, w, h, 'batting', false, { pitcherFrame, batterFrame: 1 });
-      return ctx.getImageData(0, 0, w, h).data;
-    };
-    // The pitcher's own colors (navy jersey ~#1F3864-ish, gray pants, pale skin) read as distinctly
-    // NOT-grass and NOT-dirt in a tight window around the mound; scan that window only, so the
-    // batter/plate/crowd elsewhere in frame never contaminate the bbox.
-    const isField = (r, g, b) => (g > r && g > b && g > 90) /* grass */ || (r > 140 && r < 210 && g > 90 && g < 160 && b < 130 && r > g) /* dirt */;
-    const bboxIn = (data, x0, x1, y0, y1) => {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const i = (y * w + x) * 4;
-          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-          if (a < 200) continue;
-          if (isField(r, g, b)) continue;
-          if (x < minX) minX = x; if (x > maxX) maxX = x;
-          if (y < minY) minY = y; if (y > maxY) maxY = y;
-        }
-      }
-      return { minX, maxX, minY, maxY };
-    };
-    // Mound-area window: PLATE_ANCHORS.mound projected through the same cover-fit math as
-    // drawPlateView, widened generously since the exact figure size depends on band height.
-    const plateImg = new Image();
-    plateImg.src = '/baseball/img/plate.webp';
-    await new Promise((r) => { if (plateImg.complete) r(); else plateImg.onload = r; });
-    const iw = plateImg.naturalWidth, ih = plateImg.naturalHeight;
-    const scale = Math.max(w / iw, h / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const offsetX = (w - drawW) / 2, offsetY = h - drawH;
-    const anchorPx = (frac) => ({ x: offsetX + frac.x * drawW, y: offsetY + frac.y * drawH });
-    const mound = anchorPx(mod.PLATE_ANCHORS.mound);
-    const release = anchorPx(mod.PLATE_ANCHORS.release);
-    const winHalf = 40;
-    const x0 = Math.max(0, Math.round(mound.x - winHalf)), x1 = Math.min(w, Math.round(mound.x + winHalf));
-    const y0 = Math.max(0, Math.round(mound.y - winHalf)), y1 = Math.min(h, Math.round(mound.y + winHalf));
-
-    const bbox1 = bboxIn(render(1), x0, x1, y0, y1);
-    const bbox3 = bboxIn(render(3), x0, x1, y0, y1);
-    return { mound, release, bbox1, bbox3, window: { x0, x1, y0, y1 } };
-  });
-  await p3.close();
-  const b1 = result.bbox1;
-  if (!isFinite(b1.minX)) {
-    fail('pitcher-frames', `could not isolate frame 1's sprite in the mound window (${JSON.stringify(result.window)})`);
-  } else {
-    const centerX = (b1.minX + b1.maxX) / 2;
-    const off = Math.abs(centerX - result.mound.x);
-    if (off <= 15) {
-      ok(`pitcher frame 1's bounding box is centered on the mound anchor (bbox center x=${centerX.toFixed(1)}, mound x=${result.mound.x.toFixed(1)}, off by ${off.toFixed(1)}px)`);
-    } else {
-      fail('pitcher-frames', `frame 1's bbox center x=${centerX.toFixed(1)} is ${off.toFixed(1)}px from the mound anchor x=${result.mound.x.toFixed(1)} (expected <=15px)`);
-    }
-  }
-  const b3 = result.bbox3;
-  if (!isFinite(b3.minX)) {
-    fail('pitcher-frames', `could not isolate frame 3's sprite in the mound window (${JSON.stringify(result.window)})`);
-  } else {
-    const inside = result.release.x >= b3.minX && result.release.x <= b3.maxX && result.release.y >= b3.minY && result.release.y <= b3.maxY;
-    if (inside) {
-      ok(`frame 3's own hand anchor (release=${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) lands inside its rendered bounding box (${JSON.stringify(b3)})`);
-    } else {
-      fail('pitcher-frames', `release anchor (${result.release.x.toFixed(1)},${result.release.y.toFixed(1)}) is outside frame 3's own bounding box (${JSON.stringify(b3)}) - "beside the head", not in the hand`);
-    }
-  }
-}
+// 5/6 (removed 2026-09-19, docs/BASEBALL-3D-BUILD.md section 3.10, stage 5): batter-hand and
+// pitcher-frame checks against `field.js`'s `drawFrameCheck`/`drawPlateView`'s sprite-drawing
+// branch, both deleted along with the rest of the sprite path this stage - there is nothing left
+// for either check to render. The invariants they pinned (a left-handed batter mirrors to the
+// opposite box, the pitcher's release hand is where the ball leaves from) now live in the 3D
+// figures instead: `test-baseball-actors.mjs`'s Chromium half checks the actor canvas paints a
+// real, non-transparent figure and that Set/Pitch/home/away reads differ pixel for pixel; the
+// hand/box mirroring itself is `actors.js`'s `setBatter`/`setPitcher` (`mirrored`, a negative
+// pivot scale) driven by the same `bats`/`throws` flip rules `_currentBatterFlip`/
+// `_currentPitcherFlip` always supplied, unchanged by this stage - proven by eye against the
+// sprite reference frames in stages 2/3 (`render-actor.mjs --beside`), not re-proven here.
 
 // 7. The overhead camera is now `overhead.webp` (BB-3b commit 5), a picture, not the old
 // procedural camera - check 3 above already proves the FALLBACK camera's own geometry is sane

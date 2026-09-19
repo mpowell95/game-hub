@@ -106,6 +106,17 @@
    held; opacity + a wait cursor, never color alone (nothing here is a colorblind pairing anyway). */
 .bb-play-btn[aria-disabled="true"] { opacity: 0.6; cursor: wait; }
 
+/* stage 5 (docs/BASEBALL-3D-BUILD.md section 3.6): the load-error screen, shown in place of setup
+   when the model failed to load (boggle/js/ui.js's renderLoadError() pattern) - reuses .bb-setup's
+   centering, just a readable message width above the retry button. */
+.bb-load-error-msg {
+  max-width: 280px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .bb-tune-open {
   background: none;
   border: 1px solid currentColor;

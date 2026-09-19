@@ -7,16 +7,13 @@
 //    (section 2.2) never keys a skin-tone colour; buildClip over a fake bones/restQ object yields
 //    one quaternion track per bone used and the right duration. STAGE 4 (section 3.9's own list)
 //    adds: `field.js` exports `plateCover`/`anchorPx`; `actors.dispose()` runs inside ui.js's own
-//    `destroy()`; a `visibilitychange` listener pauses/resumes the actor layer; ui.js's live play
-//    screen passes `noFigures` to `drawPlateView` so the 3D layer, when live, actually replaces the
-//    sprite figures rather than drawing under them - see that check's own comment for why this
-//    stands in for section 3.9's literal "no state.batterFrame/state.pitcherFrame writes remain":
-//    those writes are KEPT (the required sprite-path fallback - section 3.6's own "if initGL()
-//    returns false, the sprite path keeps running unchanged" - cannot work without them, and
-//    test-baseball-device.mjs's own r2-cadence probe watches state.pitcherFrame reach 3 as its
-//    release signal on both the CPU-pitches path and the human-pitches path), so a literal zero-
-//    writes check would have to fail against a stage that satisfies every other requirement in the
-//    same document.
+//    `destroy()`; a `visibilitychange` listener pauses/resumes the actor layer. STAGE 5 (2026-09-19,
+//    docs/BASEBALL-3D-BUILD.md section 3.10) DELETES the sprite path this file's own header used to
+//    explain the absence of: section 3.9's literal "no state.batterFrame/state.pitcherFrame writes
+//    remain" now holds for real (checked below), `field.js`'s `drawPlateView` no longer takes a
+//    `noFigures` option at all (nothing left to gate), and `test-baseball-device.mjs`'s r2-cadence
+//    probe's release signal is `actors.play('pitcher', 'Pitch', ...)`'s own call time + `markAtMs`,
+//    not a frame number - see that file's own comment for the before/after proof.
 // 2. CHROMIUM UNDER SWIFTSHADER (SKIPs without playwright-core; NOT in run-all-tests.mjs): loads
 //    the model through the real Actors class, checks the actor canvas exists and paints a
 //    non-transparent pixel block around an idle anchor, checks a pitcher read-back differs between
@@ -192,12 +189,10 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   if (allHavePants) ok('KEYS: both cast skins (skaterMaleA, criminalMaleA) carry a pants key on both sides');
 }
 
-// ============================================================== STAGE 4 structural checks (ui.js) ==
-// docs/BASEBALL-3D-BUILD.md section 3.9's own list, adapted per this file's header comment above:
-// `field.js` exports `plateCover`/`anchorPx`, `ui.js`'s `destroy()` disposes the actor layer, a
-// `visibilitychange` listener exists, and the live play screen actually hands `noFigures` to
-// `drawPlateView` rather than always drawing sprites underneath a 3D layer that would then be
-// drawing over them for nothing.
+// ============================================================== STAGE 4/5 structural checks (ui.js) ==
+// docs/BASEBALL-3D-BUILD.md section 3.9's own list. STAGE 5 (2026-09-19, section 3.10) checks the
+// literal "no state.batterFrame/state.pitcherFrame writes remain" this file's own header used to
+// explain away, now that the sprite path (and the `noFigures` option that used to gate it) is gone.
 {
   const fieldSrc = readFileSync('./baseball/js/field.js', 'utf8');
   const uiSrc = readFileSync('./baseball/js/ui.js', 'utf8');
@@ -208,16 +203,18 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   if (/export function anchorPx\(/.test(fieldSrc)) ok('field.js: anchorPx is exported');
   else fail('field.js anchorPx export', 'no "export function anchorPx(" found');
 
-  if (/noFigures\b/.test(fieldSrc) && /if \(!opts\.noFigures\)/.test(fieldSrc)) {
-    ok('field.js: drawPlateView accepts opts.noFigures and gates the sprite figures on it');
+  // Matches real code (a function definition, an opts.noFigures read), not the historical comments
+  // this file's own removal note is allowed to still mention by name.
+  if (!/function drawBatterFigure\(|function drawPitcherFigure\(|function drawFrameCheck\(|opts\.noFigures/.test(fieldSrc)) {
+    ok('field.js: the sprite-figure functions (drawBatterFigure/drawPitcherFigure/drawFrameCheck) and the noFigures option are gone');
   } else {
-    fail('field.js noFigures', 'drawPlateView does not gate drawBatterFigure/drawPitcherFigure on opts.noFigures');
+    fail('field.js sprite path', 'a sprite-figure symbol (drawBatterFigure/drawPitcherFigure/drawFrameCheck/noFigures) is still present as code');
   }
 
-  if (/noFigures:\s*this\._actorsLive/.test(uiSrc)) {
-    ok('ui.js: _drawStaticField passes noFigures: this._actorsLive to drawPlateView');
+  if (!/state\.pitcherFrame|state\.batterFrame|_actorsLive/.test(uiSrc)) {
+    ok('ui.js: no state.pitcherFrame/state.batterFrame writes and no _actorsLive fallback branches remain');
   } else {
-    fail('ui.js noFigures wiring', 'no "noFigures: this._actorsLive" found - the live play screen may still draw sprites over/under the 3D layer');
+    fail('ui.js sprite state', 'state.pitcherFrame, state.batterFrame or _actorsLive is still referenced');
   }
 
   const destroyMatch = uiSrc.match(/\n {2}destroy\(\) \{[\s\S]*?\n {2}\}\n/);
@@ -233,13 +230,19 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     fail('ui.js visibilitychange', 'no visibilitychange listener found calling actors.pause()/resume()');
   }
 
-  // The actor calls that replace each state.pitcherFrame/state.batterFrame write's DRAWING role
-  // (section 3.6's own mapping table) - present alongside the kept sprite-path writes, per this
-  // file's header comment.
+  // The load-error screen (stage 5, section 3.6's "Loading" bullet): a failed initGL()/load()
+  // sets _actorsFailed, the Play click routes it to _renderLoadError() instead of _startGame().
+  if (/_actorsFailed\s*=\s*true/.test(uiSrc) && /_renderLoadError/.test(uiSrc)) {
+    ok('ui.js: a failed load sets _actorsFailed and _renderLoadError() exists');
+  } else {
+    fail('ui.js load-error screen', '_actorsFailed / _renderLoadError not found');
+  }
+
+  // The actor calls that carry each pitch/swing signal (section 3.6's own mapping table).
   const wantCalls = [
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *WINDUP_MS *\}\)/, '_stepWindup calls actors.play(\'pitcher\',\'Pitch\',{markAtMs:WINDUP_MS})'],
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *0 *\}\)/, "HumanAgent.decidePitch's release calls actors.play('pitcher','Pitch',{markAtMs:0})"],
-    [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80 *\}\)/, "_startSwingTimeline calls actors.play('batter','Swing',{markAtMs:80})"],
+    [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80 *\}\)/, "the swing decision calls actors.play('batter','Swing',{markAtMs:80})"],
     [/actors\.setBall\(/, 'the pitch flight calls actors.setBall(...)'],
     [/actors\.setBatter\(\{/, '_syncActors calls actors.setBatter({...})'],
     [/actors\.setPitcher\(\{/, '_syncActors calls actors.setPitcher({...})'],

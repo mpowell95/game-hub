@@ -127,6 +127,13 @@ colours per skin, measured (RGB hex, pixel count), so stage 3 has something to s
 Skin tones are the `#f5xxxx` gradient family and hair the dark browns; never key those. Stage 3
 picks the exact key tables by rendering, and the dev screen shows home and away side by side.
 
+**Corrected against the real stage 3 build (2026-09-19)**: `skaterMaleA`'s `#f59170` above is NOT
+actually keyed. Re-measured against the shipped `KEYS` table in `actors.js`, `#f59170` sits only
+`(0,5,6)` away from the skin-tone anchor `#f58c6a` - well inside the default `COLOR_TOL` of 6 - so
+keying it would also recolour a sliver of skin every time a jersey changes colour. Left out on
+purpose; the tee's own gradient is covered by `#f2654c` and its neighbours instead (see
+`actors.js`'s own comment on that skin's per-column-sampled palette).
+
 Default casting: the human's batter and pitcher are `skaterMaleA` recoloured to the home colours;
 the CPU's are `criminalMaleA` recoloured to the away colours. The other two skins are available
 for later casting at no cost (same body, same skeleton).
@@ -317,10 +324,13 @@ export function buildClip(name, keyframes, bones, restQ, opts = {}) {
 }
 
 /** Every authored clip. `mark` is the instant (seconds) actors.js lines up with the engine:
- *  contact for Swing/Miss, release for Pitch. Times are the clip's own; actors.js rescales. */
+ *  contact for Swing/Miss, release for Pitch. Times are the clip's own; actors.js rescales.
+ *  Corrected against the real stage 2 build (2026-09-19): `Swing.mark` shipped as `0.22`, not the
+ *  `0.30` this template guessed - stage 2's own render-and-compare loop against
+ *  `batter-home-3..8.png` is what set the real number; `Miss.mark` did land on `0.30`. */
 export const CLIPS = {
   Idle:  { loop: true,  mark: null, keys: [ /* stage 2 */ ] },
-  Swing: { loop: false, mark: 0.30, keys: [ /* stage 2: matches batter-home-3..8 */ ] },
+  Swing: { loop: false, mark: 0.22, keys: [ /* stage 2: matches batter-home-3..8 */ ] },
   Miss:  { loop: false, mark: 0.30, keys: [ /* stage 2: Swing with a higher, later barrel */ ] },
   Set:   { loop: true,  mark: null, keys: [ /* stage 3: matches Pitcher-home-1 */ ] },
   Pitch: { loop: false, mark: 0.80, keys: [ /* stage 3: matches Pitcher-home-2..4 */ ] },
@@ -360,7 +370,11 @@ const TEAM = { home: { jersey: 0xf4f1ea, accent: 0x1c2a4a }, away: { jersey: 0x1
 const CROSSFADE_S = 0.15;
 const DPR_CAP = 2;
 // The bat, in fractions of the model's own height; tuned by eye in the dev screen (stage 3).
-export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0, 0], rot: [0, 0, 0], color: 0xc9a06a };
+// Corrected against the real stage 2/3 build (2026-09-19): `pos` shipped as `[0, 0.24, 0]`, not
+// `[0, 0, 0]` - a bat gripped at the model's own origin drew inside the hand with no visible
+// barrel past contact; actors.js's own comment records the fix as "one number... fixed now
+// because the sheet was unreadable without it."
+export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0.24, 0], rot: [0, 0, 0], color: 0xc9a06a };
 
 export class Actors {
   constructor(wrapEl) {
@@ -595,9 +609,16 @@ Two halves, and the header says which is which.
    parses; not Draco; under 4 MB; every `RIG_REQUIRED` name is a node in the file; the four
    skin PNGs in section 2.1 exist and are 1024x1024; `CLIPS.Swing` and `CLIPS.Pitch` have keys and a `mark`
    inside `[0, lastKey.t]`; `buildClip` over a fake bones/restQ object yields one quaternion track
-   per bone used and the right duration. Structural checks on `ui.js` once stage 4 lands: no
-   `state.batterFrame` / `state.pitcherFrame` writes remain; `actors.dispose()` inside `destroy()`;
-   `visibilitychange` handled; `plateCover`/`anchorPx` exported from `field.js`.
+   per bone used and the right duration. Structural checks on `ui.js` once stage 4 lands:
+   `actors.dispose()` inside `destroy()`; `visibilitychange` handled; `plateCover`/`anchorPx`
+   exported from `field.js`. **Corrected against the real stage 4 build (2026-09-19)**: "no
+   `state.batterFrame`/`state.pitcherFrame` writes remain" was NOT checkable at stage 4 - those
+   writes are the required sprite-path fallback (section 3.6's own "if `initGL()` returns false,
+   the sprite path keeps running unchanged"), and cannot work without them, and
+   `test-baseball-device.mjs`'s r2-cadence probe watched `state.pitcherFrame` reach 3 as its
+   release signal until stage 5. The literal zero-writes check only becomes true, and is only
+   checked, once stage 5 deletes the sprite path (section 3.10) and replaces the release signal
+   with `actors.play('pitcher', 'Pitch', ...)`'s own call time + `markAtMs`.
 2. **Chromium under swiftshader** (SKIPs without playwright-core; NOT in `run-all-tests.mjs`):
    mount Baseball in the real hub at 393x852 dpr3 with `window.__bbTest = true` set in an init
    script, start Quick Play, wait for `actors.ready`, then: the actor canvas exists and sits above
