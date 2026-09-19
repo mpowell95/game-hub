@@ -19,7 +19,17 @@ const TEAM = { home: { jersey: 0xf4f1ea, cap: 0x1c2a4a }, away: { jersey: 0x1c2a
 const CROSSFADE_S = 0.15;
 const DPR_CAP = 2;
 // The bat, in fractions of the model's own height; tuned by eye in the dev screen (stage 3).
-export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0, 0], rot: [0, 0, 0], color: 0xc9a06a };
+// STAGE 2 CORRECTION (coordinator review, round 1): the cylinder in _attachBat is built CENTERED
+// on its own local origin (CylinderGeometry's default), so at pos=[0,0,0] the hand held the
+// MIDDLE of the bat, with the knob sticking out past the grip - unreadable on the sheet ("the
+// grip is at the bat's middle... the knob should be in the hands and the barrel far from them").
+// pos[1] = length/2 shifts the whole mesh up its own (pre-rotation) local Y by half its own
+// length, so the knob end (local -Y) lands back at the hand's origin and the barrel end
+// (local +Y) sits a full bat-length away. This is expressed in the cylinder's OWN unrotated
+// frame - if a later `rot` moves off [0,0,0], this offset must rotate along with it or the grip
+// drifts off the hand again. Stage 3 owns the fine tuning; this one number is fixed now because
+// the sheet was unreadable without it.
+export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0.24, 0], rot: [0, 0, 0], color: 0xc9a06a };
 
 // STAGE 2: the default skin, painted as shipped (section 2.2 - no team colour-key remap yet, that
 // is stage 3). Loaded once and shared by every actor: `material.map` is the only per-actor thing,

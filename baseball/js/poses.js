@@ -71,55 +71,71 @@ export const CLIPS = {
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
   ] },
-  // Legs/hips stay close to Idle's stance through the whole swing (a real batter's back heel
-  // lifts and the front leg straightens on contact, but that foot-level detail doesn't move the
-  // silhouette the sprite frames are graded on - lean, arm height, leg spread, bat angle - so it's
-  // left for a later pass rather than guessed here).
+  // The back (right) leg stays close to Idle's stance throughout; the front (left) leg strides
+  // forward (upperLegL.x 15 -> 28) through the load and contact window, per the sprite frames -
+  // batter-home-3/4/5 all show that foot planted ahead of its Idle position. It eases back toward
+  // Idle's 15deg by the follow-through (t=0.42/0.55), once the swing is decided and the sprite's
+  // own stance relaxes again. A real batter's back heel also lifts on contact, but that foot-level
+  // detail doesn't move the silhouette the sprite frames are graded on, so it's left for later.
   // The left hand rides along with the right (both grip the same bat): giving upperArmL/lowerArmL
   // the SAME numbers as upperArmR/lowerArmR - not a mirrored (sign-flipped) copy - is what brings
   // the two hands together. The rig's L/R shoulders are already mirrored in the bind pose (found
   // rendering: a sign-flipped "mirror" sent the left hand flying out to its own side instead of
   // converging on the bat), so an identical local rotation on both arms is the one that reads as
   // one two-handed grip.
+  // Round 2 correction (coordinator review): round 1 tried to get the whole sweep out of the arm
+  // bones alone, which only has so much reach before the elbow folds back on itself (found
+  // rendering - upperArmR.y past ~50-55deg stops extending the arm further and starts curling it
+  // back toward the chest instead). The torso (spine Y) now carries most of the sweep - it winds
+  // up to 60deg at the load and unwinds toward zero by contact - while the arm's OWN local pose
+  // stays inside its safe, non-folding range throughout and just holds a level, extended reach;
+  // the two compose into the swing's full turn. `head` counter-rotates against `spine` at roughly
+  // 0.4x, so the face keeps reading as looking toward the pitcher instead of snapping fully around
+  // with the shoulders. spine.y=-10ish is a DEAD ZONE at this facing (found rendering a plain
+  // sweep of it in isolation): the torso reads as facing the CAMERA there, not the pitcher, before
+  // coming back around on the other side - t=0.30 stops at 0deg rather than continuing negative,
+  // and 0.42/0.55 jump straight to -30/-38, so no rendered keyframe ever lands inside that zone
+  // (the mixer still sweeps through it between keyframes, just never holds a still there).
   Swing: { loop: false, mark: 0.22, keys: [
-    // t=0.00 ~ batter-home-3 (loaded/cocked): torso twisted further than Idle, bat pulled back
-    // near the ear.
+    // t=0.00 ~ batter-home-3 (loaded/cocked): torso wound up, bat pulled back near the ear, front
+    // (left) leg already strode forward.
     { t: 0.00, pose: {
-      spine: [6, 60, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [65, -10, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [65, -10, 0],
+      spine: [6, 60, 0], head: [0, -24, 0],
+      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
+      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
-    // t=0.12 ~ batter-home-4 (swinging through): hips/torso untwisting, arm sweeping the bat
-    // forward and down out of the cock.
+    // t=0.12 ~ batter-home-4: torso unwinding, the arm swept out of the cock into the level reach.
     { t: 0.12, pose: {
-      spine: [4, 25, 0],
-      upperArmR: [48, 0, 0], lowerArmR: [35, -10, 35],
-      upperArmL: [48, 0, 0], lowerArmL: [35, -10, 35],
+      spine: [4, 35, 0], head: [0, -14, 0],
+      upperArmR: [15, 10, 0], lowerArmR: [15, 0, 25],
+      upperArmL: [15, 10, 0], lowerArmL: [15, 0, 25],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
-    // t=0.22 ~ batter-home-5 (contact): the mark. Arm extended, bat roughly horizontal reaching
-    // toward the pitcher.
+    // t=0.22 ~ batter-home-5 (contact): the mark. Both arms extended away from the torso, bat
+    // level at belt-to-chest height, pointing toward the pitcher.
     { t: 0.22, pose: {
-      spine: [2, 5, 0],
-      upperArmR: [42, 10, 0], lowerArmR: [0, 0, 62],
-      upperArmL: [42, 10, 0], lowerArmL: [0, 0, 62],
+      spine: [2, 10, 0], head: [0, -4, 0],
+      upperArmR: [-8, 48, 0], lowerArmR: [0, 0, 10],
+      upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
-    // t=0.30 ~ batter-home-6: just past contact, arm still extended, hips continuing to open.
+    // t=0.30 ~ batter-home-6: just past contact, still level, arm/bat unchanged from contact - the
+    // torso alone carries it on toward square (see the dead-zone note above; this is as far as
+    // spine.y goes before jumping past the zone between here and t=0.42).
     { t: 0.30, pose: {
-      spine: [0, -10, 0],
-      upperArmR: [38, 15, 0], lowerArmR: [-15, 0, 55],
-      upperArmL: [38, 15, 0], lowerArmL: [-15, 0, 55],
+      spine: [2, 0, 0], head: [0, 0, 0],
+      upperArmR: [-8, 48, 0], lowerArmR: [0, 0, 10],
+      upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     // t=0.42 ~ batter-home-7 (early follow-through): bat wrapping up over the far shoulder.
     { t: 0.42, pose: {
-      spine: [-2, -30, 0],
+      spine: [-2, -30, 0], head: [0, 12, 0],
       upperArmR: [42, 0, 0], lowerArmR: [-45, 0, -35],
       upperArmL: [42, 0, 0], lowerArmL: [-45, 0, -35],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
@@ -127,7 +143,7 @@ export const CLIPS = {
     }, hipsOffset: [0, 0.32, 0] },
     // t=0.55 ~ batter-home-8 (full follow-through, held).
     { t: 0.55, pose: {
-      spine: [-2, -38, 0],
+      spine: [-2, -38, 0], head: [0, 15, 0],
       upperArmR: [55, -15, 0], lowerArmR: [45, 0, -80],
       upperArmL: [55, -15, 0], lowerArmL: [45, 0, -80],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
@@ -135,48 +151,49 @@ export const CLIPS = {
     }, hipsOffset: [0, 0.32, 0] },
   ] },
   // A copy of Swing (section 3.4: "may start as a copy of Swing with a higher, later barrel") -
-  // the arm rides higher through the contact window (upperArm X +12 at the three middle
-  // keyframes, so the barrel passes above where Swing makes contact) and `mark` sits on the
-  // t=0.30 keyframe instead of t=0.22, so the whiff reads as a beat late as well as high.
+  // same spine/head/leg timing (the body commits to the same swing either way), but upperArmR/L's
+  // X rides 12-14deg higher through the reach-and-contact window (t=0.12/0.22/0.30) so the barrel
+  // passes above where Swing connects, and `mark` sits on the t=0.30 keyframe instead of Swing's
+  // t=0.22, so the whiff reads as a beat late as well as high.
   Miss:  { loop: false, mark: 0.30, keys: [
     { t: 0.00, pose: {
-      spine: [6, 60, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [65, -10, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [65, -10, 0],
+      spine: [6, 60, 0], head: [0, -24, 0],
+      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
+      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     { t: 0.12, pose: {
-      spine: [4, 25, 0],
-      upperArmR: [60, 0, 0], lowerArmR: [35, -10, 35],
-      upperArmL: [60, 0, 0], lowerArmL: [35, -10, 35],
+      spine: [4, 35, 0], head: [0, -14, 0],
+      upperArmR: [29, 10, 0], lowerArmR: [15, 0, 25],
+      upperArmL: [29, 10, 0], lowerArmL: [15, 0, 25],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     { t: 0.22, pose: {
-      spine: [2, 5, 0],
-      upperArmR: [54, 10, 0], lowerArmR: [0, 0, 62],
-      upperArmL: [54, 10, 0], lowerArmL: [0, 0, 62],
+      spine: [2, 10, 0], head: [0, -4, 0],
+      upperArmR: [6, 48, 0], lowerArmR: [0, 0, 10],
+      upperArmL: [6, 48, 0], lowerArmL: [0, 0, 10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     // t=0.30: the mark - bat swept through above and a beat later than where Swing connects.
     { t: 0.30, pose: {
-      spine: [0, -10, 0],
-      upperArmR: [50, 15, 0], lowerArmR: [-15, 0, 55],
-      upperArmL: [50, 15, 0], lowerArmL: [-15, 0, 55],
+      spine: [2, 0, 0], head: [0, 0, 0],
+      upperArmR: [8, 48, 0], lowerArmR: [0, 0, 5],
+      upperArmL: [8, 48, 0], lowerArmL: [0, 0, 5],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
-      upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
+      upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     { t: 0.42, pose: {
-      spine: [-2, -30, 0],
+      spine: [-2, -30, 0], head: [0, 12, 0],
       upperArmR: [42, 0, 0], lowerArmR: [-45, 0, -35],
       upperArmL: [42, 0, 0], lowerArmL: [-45, 0, -35],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     { t: 0.55, pose: {
-      spine: [-2, -38, 0],
+      spine: [-2, -38, 0], head: [0, 15, 0],
       upperArmR: [55, -15, 0], lowerArmR: [45, 0, -80],
       upperArmL: [55, -15, 0], lowerArmL: [45, 0, -80],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
