@@ -7,6 +7,7 @@
 import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
+import { loadProfile } from '../../js/profile-store.js';
 import { STRINGS } from './strings.js';
 
 import * as SETTINGS from './engine/settings.js';
@@ -14,8 +15,17 @@ import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
 import { resolveSteer, steerDirectionSign, clampSteerDx } from './engine/pitch.js';
-import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages, drawFrameCheck } from './field.js';
+import {
+  drawField, drawBall, drawLandingMarker, project, drawPlateView, preloadPlateImages,
+  PLATE_ANCHORS, plateCover, anchorPx, plateBallPos,
+  NEAR_BATTER_HEIGHT_FRAC, MOUND_PITCHER_HEIGHT_FRAC, BATTER_AIM_TRAVEL_FRAC,
+} from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
+// stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer. Loaded eagerly, not lazily -
+// unlike Boggle's dictionary, this is the PRIMARY visual for the live play screen, not an optional
+// extra, so there is no "first play only" moment to defer it past; ui.js itself is only requested
+// when Baseball actually mounts, so this import costs nothing before that.
+import { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } from './actors.js';
 
 const t = makeT(STRINGS);
 
@@ -55,10 +65,10 @@ const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
 // budget `_onEngineEvent`'s 'halfInningEnd'/'halfInningStart' pair splits around it.
 const FADE_MS = 150;
 
-// BB-3b correction: the real 8-frame swing sequence, timed from the swing decision (release), per
-// Matt's own spec - [msSinceRelease, frame]. Frame 5 (contact) lands at 80ms; frame 8 is the last
-// step and is held (see _startSwingTimeline) rather than looped back automatically.
-const SWING_TIMELINE = [[0, 3], [40, 4], [80, 5], [120, 6], [160, 7], [200, 8]];
+// STAGE 4: field.js now exports NEAR_BATTER_HEIGHT_FRAC/MOUND_PITCHER_HEIGHT_FRAC (see the import
+// above) - the dev-only 3D preview (_open3DCheck) used to carry its own mirrored copy here
+// (DEV3D_NEAR_BATTER_HEIGHT_FRAC/DEV3D_MOUND_PITCHER_HEIGHT_FRAC) because they were module-private;
+// both call sites now read the one real export, so there is nothing left to drift out of step.
 
 const LEAGUE_ORDER = SETTINGS.LEAGUES;
 /** The league's center-field fence, in feet, from the same FIELD table the game plays on - the
@@ -113,7 +123,36 @@ class BaseballPlayScreen {
     this.destroyed = false;
     this.screen = 'setup'; // setup | play | end
     this.league = LEAGUE_ORDER[0]; // Quick Play opens on Little League (the ladder's first rung), never mid-ladder
-    this.dev = isDevProfile();
+    // Found wrong against the real file while wiring the stage 1 dev screen (docs/BASEBALL-3D-BUILD.md
+    // section 3.7): this called `isDevProfile()` with no argument, so it could never match a real
+    // profile name and the Frames panel (and now the 3D preview inside it) was unreachable for
+    // anyone, dev names included. Every other caller in the repo passes the loaded profile's own
+    // name (skeeball/js/ui.js, golf/js/ui.js, js/hub.js) - matched here. `__bbDevForce` is a
+    // test-only seam, the same shape as skeeball's `__skTest`/yahtzee's `__yzTest`, for a headless
+    // screenshot that cannot know Matt's real secret name.
+    let profName = '';
+    try { profName = (loadProfile()?.name || '').trim(); } catch { /* stay non-dev */ }
+    this.dev = isDevProfile(profName) || !!globalThis.__bbDevForce;
+
+    // STAGE 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer starts loading here, at
+    // MOUNT (the setup screen), not at _startGame - a player who spends a few seconds picking a
+    // league gets that time for free against the model fetch. `this.actors.canvas` lives detached
+    // from the document until _renderPlay() reparents it into the real field-wrap (a DOM node can
+    // be built and even rendered into off-tree; only initGL()'s WebGL context needs the canvas to
+    // exist, which it does the moment `new Actors()` creates it).
+    // STAGE 5 (docs/BASEBALL-3D-BUILD.md section 3.10): there is no sprite path to fall back to any
+    // more, so `initGL()` returning false or `load()` rejecting sets `_actorsFailed` instead of
+    // silently carrying on - `_renderLoadError()` is what the Play button shows for it (see
+    // `_initActors3D`'s own header). Every place in this file that used to branch on a live-vs-
+    // sprite flag now just calls `this.actors` directly: by the time any of them can run,
+    // `_startGame` has already been reached, which is only possible past the Play click's own
+    // `_actorsFailed` check, so `this.actors` is guaranteed live there.
+    this._actorsHost = document.createElement('div');
+    this.actors = null;
+    this._actorsSettled = true;
+    this._actorsFailed = false;
+    this._actorsReadyPromise = null;
+    this._initActors3D();
 
     ensureCSS();
 
@@ -135,7 +174,17 @@ class BaseballPlayScreen {
       this.ro.observe(container);
       if (container.parentElement) this.ro.observe(container.parentElement);
     }
-    this._onVis = () => { if (document.visibilityState === 'visible') this._fit(); };
+    // STAGE 4: a backgrounded tab pauses the actor layer's own render loop (never a leaked RAF
+    // while nothing is visible) and resumes it on return, same shape as the resize/fit call this
+    // listener already made.
+    this._onVis = () => {
+      if (document.visibilityState === 'visible') {
+        this._fit();
+        if (this.actors) this.actors.resume();
+      } else if (this.actors) {
+        this.actors.pause();
+      }
+    };
     document.addEventListener('visibilitychange', this._onVis);
 
     // Rapid-tap cure (Hill Climb's own fix, root CLAUDE.md's Part 0 "iOS rapid-tap cure"): block
@@ -149,6 +198,80 @@ class BaseballPlayScreen {
     requestAnimationFrame(() => this._fit());
   }
 
+  /** STAGE 4: start the 3D model loading the moment Baseball mounts (the setup screen), per
+   *  docs/BASEBALL-3D-BUILD.md section 3.6's own "Loading" bullet. `this._actorsSettled` gates the
+   *  setup screen's Play button (`_renderSetup`/`_updatePlayButtonState`) - true the instant there
+   *  is nothing left to wait for, whichever way it went.
+   *  STAGE 5: there is no sprite path to fall back to any more. `initGL()` returning false (no
+   *  WebGL context at all - a permanent, hardware-level fact) or `load()` rejecting (WebGL works
+   *  but the fetch/parse of player.glb failed) both set `_actorsFailed` instead of silently
+   *  carrying on - the Play click checks it and shows `_renderLoadError()` in place of starting a
+   *  game with nothing to draw its two figures. */
+  _initActors3D() {
+    this._actorsFailed = false;
+    try {
+      const a = new Actors(this._actorsHost);
+      if (!a.initGL()) {
+        this.actors = null;
+        this._actorsSettled = true;
+        this._actorsFailed = true;
+        return;
+      }
+      this.actors = a;
+      this._actorsSettled = false;
+      // `globalThis.__bbModelUrlOverride` is a test-only seam (same shape as `_open3DCheck`'s own
+      // `__bbDevModelUrl`) for forcing a load failure from outside the app - a genuinely bad path
+      // that a service-worker interception can't quietly rescue, unlike a Playwright route abort
+      // on the real model URL, which the cache-first REST tier can already be holding.
+      const modelUrl = globalThis.__bbModelUrlOverride || new URL('../models/player.glb', import.meta.url).href;
+      this._actorsReadyPromise = a.load(modelUrl)
+        .catch((e) => {
+          console.warn('baseball 3D: player.glb failed to load', e);
+          this._actorsFailed = true;
+          if (this.actors) { this.actors.dispose(); this.actors = null; }
+        })
+        .then(() => { this._actorsSettled = true; this._updatePlayButtonState(); });
+    } catch (e) {
+      console.warn('baseball 3D: actor layer unavailable', e);
+      this.actors = null;
+      this._actorsSettled = true;
+      this._actorsFailed = true;
+    }
+  }
+
+  /** The setup screen's Play button, kept in sync with `_actorsSettled` without a full
+   *  `_renderSetup()` (which would also reset the league selection mid-load). A no-op once the
+   *  screen has moved on (`_renderSetup` calls this once up front; the load promise's own
+   *  `.then()` calls it again later, possibly after Play). */
+  _updatePlayButtonState() {
+    if (this.destroyed || this.screen !== 'setup') return;
+    const btn = this.rootEl && this.rootEl.querySelector('[data-act="play"]');
+    if (!btn) return;
+    btn.textContent = this._actorsSettled ? t('setup_play') : t('load_model');
+    if (this._actorsSettled) btn.removeAttribute('aria-disabled'); else btn.setAttribute('aria-disabled', 'true');
+  }
+
+  /** STAGE 5 (docs/BASEBALL-3D-BUILD.md section 3.6's own "Loading" bullet, boggle/js/ui.js's
+   *  `renderLoadError()` pattern): shown in place of the setup screen when the Play tap finds
+   *  `_actorsFailed` true, so a failed model load is a real, translated screen with a way back in
+   *  rather than a play screen with a blank field where two figures should be (docs/BUILDING-A-GAME.md
+   *  Part 0, "if you paint before the data has arrived, name the path back to the truth"). Retry
+   *  disposes whatever the failed attempt left behind and starts a fresh load. */
+  _renderLoadError() {
+    if (this.destroyed || !this.rootEl) return;
+    this.rootEl.innerHTML = `
+      <div class="bb-setup bb-load-error">
+        <p class="bb-load-error-msg">${t('load_error')}</p>
+        <button type="button" class="gh-btn gh-btn--primary" data-act="retry">${t('retry')}</button>
+      </div>`;
+    this.rootEl.querySelector('[data-act="retry"]').addEventListener('click', () => {
+      if (this.destroyed) return;
+      if (this.actors) { this.actors.dispose(); this.actors = null; }
+      this._initActors3D();
+      this._renderSetup();
+    });
+  }
+
   destroy() {
     this.destroyed = true;
     if (this.offViewport) this.offViewport();
@@ -158,10 +281,10 @@ class BaseballPlayScreen {
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
-    this._clearSwingTimers();
-    this._clearPitcherTimer();
+    if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
+    if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
     if (this.gameAbort) this.gameAbort();
   }
 
@@ -222,7 +345,7 @@ class BaseballPlayScreen {
             </button>
           `).join('')}
         </div>
-        <button type="button" class="gh-btn gh-btn--primary bb-play-btn" data-act="play">${t('setup_play')}</button>
+        <button type="button" class="gh-btn gh-btn--primary bb-play-btn" data-act="play"${this._actorsSettled ? '' : ' aria-disabled="true"'}>${this._actorsSettled ? t('setup_play') : t('load_model')}</button>
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="tune">${t('tune_open')}</button>` : ''}
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="frames">Frames</button>` : ''}
       </div>`;
@@ -236,7 +359,19 @@ class BaseballPlayScreen {
         });
       });
     });
-    this.rootEl.querySelector('[data-act="play"]').addEventListener('click', () => this._startGame());
+    // STAGE 4: the button stays a real, always-tappable <button> (never HTML `disabled`) so a
+    // tap that lands during the model load isn't silently dropped - it just awaits the same
+    // promise the button's own label is already counting down, then starts the game exactly as a
+    // tap after loading would. `_actorsReadyPromise` is null the instant there is nothing to wait
+    // for (no WebGL, or already settled), so this resolves immediately in that case.
+    // STAGE 5: once settled, a failed load (`_actorsFailed`) goes to `_renderLoadError()` instead
+    // of `_startGame()` - there is no sprite path left to play without the model.
+    this.rootEl.querySelector('[data-act="play"]').addEventListener('click', async () => {
+      if (this._actorsReadyPromise) await this._actorsReadyPromise;
+      if (this.destroyed || this.screen !== 'setup') return;
+      if (this._actorsFailed) { this._renderLoadError(); return; }
+      this._startGame();
+    });
     const tuneBtn = this.rootEl.querySelector('[data-act="tune"]');
     if (tuneBtn) tuneBtn.addEventListener('click', () => this._openTune());
     const framesBtn = this.rootEl.querySelector('[data-act="frames"]');
@@ -277,8 +412,6 @@ class BaseballPlayScreen {
       line1: '', line2: '',
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
-      pitcherFrame: 1,      // 1-4, the real delivery sequence - see field.js's drawPitcherFigure
-      batterFrame: 1,       // 1-8, the real swing sequence - see _startSwingTimeline
       pendingPitchType: null, // Line 2's readout - see _pitchReadout
     };
     this.gameAbort = () => { if (this.game) this.game.abort(); };
@@ -316,6 +449,18 @@ class BaseballPlayScreen {
     `;
     this.canvas = this.rootEl.querySelector('[data-role="canvas"]');
     this.ctx = this.canvas.getContext('2d');
+    const fieldwrap = this.rootEl.querySelector('[data-role="fieldwrap"]');
+    // STAGE 4: the actor canvas was built detached (constructor time, docs/BASEBALL-3D-BUILD.md
+    // section 3.6) so the model could start loading before this screen existed at all - reparent it
+    // into the real field-wrap now. A DOM append MOVES an existing node rather than cloning it, so
+    // the same live WebGL context (and whatever it has already rendered) survives the move; CSS
+    // (`.bb-actor-canvas`, baseball.css) stacks it over `.bb-field-canvas` and under `.bb-pop`.
+    // STAGE 5: `this.actors` is guaranteed non-null and ready here - the Play click that reached
+    // `_startGame` already routed a failed load to `_renderLoadError()` instead.
+    fieldwrap.appendChild(this.actors.canvas);
+    this.actors.idle('batter');
+    this.actors.idle('pitcher');
+    this.actors.start();
     this._sizeCanvas = () => {
       const wrap = this.rootEl.querySelector('[data-role="fieldwrap"]');
       if (!wrap) return;
@@ -329,6 +474,7 @@ class BaseballPlayScreen {
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this._fieldW = r.width;
       this._fieldH = r.height;
+      this.actors.resize(r.width, r.height, plateCover(r.width, r.height));
       this._drawStaticField();
     };
     const backBtn = this.rootEl.querySelector('[data-act="back"]');
@@ -345,19 +491,65 @@ class BaseballPlayScreen {
 
   /** The PLATE camera - live for every pitch (aiming, the throw, the swing). See field.js's own
    *  header for the camera (one fixed picture in both states, BB-3b) and baseball/CLAUDE.md's "The
-   *  camera was rebuilt to match the reference" for the history. */
+   *  camera was rebuilt to match the reference" for the history.
+   *  STAGE 5: `drawPlateView` now only draws the picture and the strike zone (the sprite figures it
+   *  used to draw are gone, section 3.10) - `_syncActors` places the real 3D figures on the canvas
+   *  above this one, unconditionally, since `this.actors` is guaranteed live for the whole play
+   *  screen (see `_startGame`'s own note). */
   _drawStaticField() {
     if (!this.ctx || !this._fieldW) return;
     const dark = document.documentElement.classList.contains('gh-dark');
     const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
-    drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark, {
-      pitcherFrame: this.state.pitcherFrame,
-      pitcherFlip: this._currentPitcherFlip(),
-      batterFrame: this.state.batterFrame,
-      batterFlip: this._currentBatterFlip(),
-      batterAimX: mode === 'batting' ? (this.state.batterAimX || 0) : 0,
+    drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark);
+    this._syncActors(mode);
+  }
+
+  /** STAGE 4: the 3D figures' own placement, mirroring `drawPlateView`'s sprite maths exactly
+   *  (same anchors, same aim shift, same side/flip rules - docs/BASEBALL-3D-BUILD.md section 3.6)
+   *  so the two paths can never draw a different picture. Fire-and-forget: `setBatter`/`setPitcher`
+   *  are async only on an actual side change (a real texture swap), which this screen does not need
+   *  to await on every redraw - `_syncActors` runs on every `_drawStaticField()` call, several times
+   *  a second during a pitch's flight. Skips the whole frame (not a crash, not a stale pose - just
+   *  a no-op, same as the sprite path's own "still loading" fallback) while `plate.webp` hasn't
+   *  resolved yet, since every anchor here is measured off its own cover-fit. */
+  _syncActors(mode) {
+    const cover = plateCover(this._fieldW, this._fieldH);
+    if (!cover) return;
+    const flip = this._currentBatterFlip();
+    const pitcherFlip = this._currentPitcherFlip();
+    const aimShift = mode === 'batting' ? (this.state.batterAimX || 0) * BATTER_AIM_TRAVEL_FRAC * cover.drawW : 0;
+    const nearXY = anchorPx(flip ? PLATE_ANCHORS.nearBoxRight : PLATE_ANCHORS.nearBoxLeft, cover);
+    const batterSide = mode === 'pitching' ? 'away' : 'home';
+    const pitcherSide = mode === 'pitching' ? 'home' : 'away';
+    this.actors.setBatter({
+      side: batterSide, bats: flip ? 'L' : 'R', aimX: this.state.batterAimX || 0, facingRad: BATTER_FACING_RAD,
+      anchor: { x: nearXY.x + aimShift, y: nearXY.y }, heightPx: this._fieldH * NEAR_BATTER_HEIGHT_FRAC,
+    });
+    this.actors.setPitcher({
+      side: pitcherSide, throws: pitcherFlip ? 'L' : 'R', facingRad: PITCHER_FACING_RAD,
+      anchor: anchorPx(PLATE_ANCHORS.mound, cover), heightPx: this._fieldH * MOUND_PITCHER_HEIGHT_FRAC,
     });
   }
+
+  /** STAGE 4: the pitch, in 3D - `field.js`'s own `plateBallPos` curve (identical position/size to
+   *  the 2D trail), blended toward the pitcher's REAL throwing-hand bone near release (weight
+   *  `depthFrac`, 1 at release fading linearly to 0 at the plate - `plateBallPos` already returns
+   *  it) rather than the flat `PLATE_ANCHORS.release` point the 2D camera anchors to. */
+  _actorBallAt(xFt, yFt) {
+    if (!this.actors) return;
+    const cover = plateCover(this._fieldW, this._fieldH);
+    if (!cover) return;
+    const pos = plateBallPos(this._fieldW, this._fieldH, cover, xFt, yFt);
+    const hand = this.actors.handWorldPx('pitcher');
+    let x = pos.x, y = pos.y;
+    if (hand) {
+      const releaseXY = anchorPx(PLATE_ANCHORS.release, cover);
+      x += (hand.x - releaseXY.x) * pos.depthFrac;
+      y += (hand.y - releaseXY.y) * pos.depthFrac;
+    }
+    this.actors.setBall({ x, y, r: pos.r });
+  }
+  _actorBallHide() { if (this.actors) this.actors.setBall(null); }
 
   /** Both frame sets are drawn RIGHT-handed (Matt's correction, field.js's own header); a
    *  LEFT-handed batter is the flip, standing at the opposite box (nearBoxRight instead of
@@ -386,67 +578,23 @@ class BaseballPlayScreen {
     return !!(pitcher && pitcher.throws === 'L');
   }
 
-  /** Starts the real swing frame sequence at the moment of the swing decision (release): frame 3
-   *  at 0ms, stepping through contact (frame 5, 80ms) to frame 8 at 200ms - see `SWING_TIMELINE`
-   *  and `field.js`'s `drawBatterFigure` header. Frame 8 is left standing - `_settleAtBat`'s own
-   *  result-beat hold and the next `_stepWindup`/`decidePitch` reset `state.batterFrame` back to
-   *  1, per spec. Both these writes and the flight loop's own per-frame redraw read the same
-   *  shared `state.batterFrame`, so there is no ordering hazard between them the way a continuous,
-   *  separately-tracked animation value would have. */
-  _startSwingTimeline() {
-    this._clearSwingTimers();
-    this._swingTimers = SWING_TIMELINE.map(([atMs, frame]) => setTimeout(() => {
-      if (this.destroyed) return;
-      this.state.batterFrame = frame;
-      this._drawStaticField();
-    }, atMs));
-  }
-
-  _clearSwingTimers() {
-    if (this._swingTimers) this._swingTimers.forEach((id) => clearTimeout(id));
-    this._swingTimers = null;
-  }
-
-  /** The pitcher steps frame 1 (idle) -> frame 2 (wind-up) -> frame 3 (release) before every
-   *  pitch the CPU throws to a human batter (spec section 9, R1). Frame 2 starts 400ms before
-   *  release; total lead-in is `FEEL.ui.windupMs`. Frame 3 is where the ball's first frame is
-   *  drawn (its own hand anchor, `PLATE_ANCHORS.release`) - the caller starts the flight right
-   *  after this resolves. Frame 4 (follow-through, 120ms later, held through the flight and the
-   *  result beat) is scheduled by the caller (`decideSwing`), not here, since it outlives this
-   *  method's own return. A human's OWN pitch (this.state.mode === 'pitching') steps the same
-   *  four frames instead in time with the throw ring's own fill - see
-   *  HumanAgent.decidePitch's tick(). */
+  /** The pitcher's real 1400ms delivery (spec section 9, R1) before every pitch the CPU throws to
+   *  a human batter: `actors.play('pitcher', 'Pitch', { markAtMs: WINDUP_MS })` starts the authored
+   *  delivery clip so its release keyframe (poses.js's `CLIPS.Pitch.mark`) lands exactly
+   *  `WINDUP_MS` from now - the same instant these two sleeps below time out at, which is what
+   *  makes that call a signal `test-baseball-device.mjs`'s r2-cadence probe can watch (call time +
+   *  `markAtMs`) instead of a frame number (STAGE 5, docs/BASEBALL-3D-BUILD.md section 3.10 -
+   *  proven equivalent to the frame-based signal it replaces before the frames were deleted;
+   *  baseball/CLAUDE.md has the measured numbers). The caller starts the flight right after this
+   *  resolves. A human's OWN pitch (`this.state.mode === 'pitching'`) steps the delivery a
+   *  different way instead - see `HumanAgent.decidePitch`'s `tick()`/`finish()`. */
   async _stepWindup() {
-    this._clearPitcherTimer();
     const total = WINDUP_MS;
     const leadIn = Math.max(0, total - 400);
-    this.state.pitcherFrame = 1;
-    this._drawStaticField();
+    this.actors.play('pitcher', 'Pitch', { markAtMs: WINDUP_MS });
     if (leadIn > 0) await sleep(leadIn);
     if (this.destroyed) return;
-    this.state.pitcherFrame = 2;
-    this._drawStaticField();
     await sleep(Math.min(400, total));
-    if (this.destroyed) return;
-    this.state.pitcherFrame = 3;
-    this._drawStaticField();
-  }
-
-  /** Frame 4 (follow-through), 120ms after release - see `_stepWindup`'s own header for why this
-   *  is scheduled separately rather than inside it. Cleared and restarted by the next
-   *  `_stepWindup`/`decidePitch` call, same pattern as `_clearSwingTimers`. */
-  _schedulePitcherFollowThrough() {
-    this._clearPitcherTimer();
-    this._pitcherTimer = setTimeout(() => {
-      if (this.destroyed) return;
-      this.state.pitcherFrame = 4;
-      this._drawStaticField();
-    }, 120);
-  }
-
-  _clearPitcherTimer() {
-    if (this._pitcherTimer) clearTimeout(this._pitcherTimer);
-    this._pitcherTimer = null;
   }
 
   /** The OVERHEAD camera - the cutaway that plays for the batted-ball flight, so the out-zone
@@ -675,8 +823,7 @@ class BaseballPlayScreen {
       const swap = () => {
         this.state.mode = this.game.half === 'top' ? 'batting' : 'pitching';
         this.state.lastPitches = [];
-        this.state.pitcherFrame = 1;
-        this.state.batterFrame = 1;
+        this.actors.idle('batter'); this.actors.idle('pitcher');
         this._paintHud(); this._paintStrip(); this._paintActionSlots(); this._paintModeLabels();
         this._drawStaticField();
       };
@@ -727,16 +874,15 @@ class BaseballPlayScreen {
     } else if (type === 'swing') {
       // BB-3b commit 4: additive event (game.js) - the only way this UI learns the CPU batter
       // swung when the HUMAN is pitching (the decision is otherwise made and consumed entirely
-      // inside playAtBat). Only relevant in the pitching state, where the away batter's frames
-      // are what's on screen (see field.js's header - the near-box sprite is always whichever
-      // team is BATTING). Irrelevant while batting (the human's own swing already drives
-      // state.batterFrame directly via HumanAgent.decideSwing's settle()).
+      // inside playAtBat). Only relevant in the pitching state, where the away batter is what's
+      // on screen (see field.js's header - the near-box figure is always whichever team is
+      // BATTING). Irrelevant while batting (the human's own swing already plays its own Swing
+      // clip directly via HumanAgent.decideSwing's settle()).
       if (this.state.mode === 'pitching') {
         if (payload.action === 'swing') {
-          this._startSwingTimeline();
+          this.actors.play('batter', 'Swing', { markAtMs: 80 });
         } else {
-          this._clearSwingTimers();
-          this.state.batterFrame = 1;
+          this.actors.idle('batter');
           this._drawStaticField();
         }
       }
@@ -805,6 +951,10 @@ class BaseballPlayScreen {
   }
 
   async _settleAtBat(payload) {
+    // The at-bat is over either way (a walk/strikeout with no batted ball, or a hit about to cut
+    // to the overhead camera) - the batter returns to its resting pose here, once, rather than at
+    // each of the several code paths below that used to each reset a sprite frame to 1.
+    this.actors.idle('batter');
     const outKind = payload.outcome;
     let word = t('res_' + outcomeWord(outKind, payload.bases));
     this._setLine1(word);
@@ -832,8 +982,14 @@ class BaseballPlayScreen {
    *  field.js's header for why: the out-zone geometry and the landing marker are both authored for
    *  a top-down view and don't translate to the close plate camera). The plate camera returns on
    *  the next `_drawStaticField()` call, which `decidePitch`/`decideSwing` make at the start of the
-   *  next pitch. */
+   *  next pitch.
+   *  STAGE 4: the overhead view stays 2D and unchanged (docs/BASEBALL-3D-BUILD.md's own scope
+   *  guard); the 3D layer is out of place here entirely (its figures are anchored to the plate
+   *  camera's picture, not this one), so it is paused and hidden for the cutaway's whole duration
+   *  and brought back only once the plate view is live again - never rendering a frame the player
+   *  cannot see, and never racing the overhead camera's own draw calls on the same 2D canvas. */
   _animateBattedBall(xFt, yFt, kind, label) {
+    this._actorBallHide(); this.actors.pause(); this.actors.canvas.style.display = 'none';
     return new Promise((resolve) => {
       const dur = 700;
       const t0 = performance.now();
@@ -846,6 +1002,7 @@ class BaseballPlayScreen {
           this._rafBall = requestAnimationFrame(step);
         } else {
           drawLandingMarker(this.ctx, this._fieldW, this._fieldH, xFt, yFt, kind, label, document.documentElement.classList.contains('gh-dark'));
+          this.actors.canvas.style.display = ''; this.actors.resume();
           resolve();
         }
       };
@@ -861,14 +1018,16 @@ class BaseballPlayScreen {
    *  would draw every pitch type identically; the bend shape is presentation only, per the spec
    *  ("curveball bends from release, slider from steerFromFrac") - it always reaches exactly
    *  `pitchResult.x` at t=1, so the engine's own value stays the truth at the plate. Also carries
-   *  a short fading trail and cycles through `ball-sheet`'s frames as it spins. */
+   *  a short fading trail and cycles through `ball-sheet`'s frames as it spins.
+   *  STAGE 5: `_actorBallAt` draws the ball, a real lit sphere at the same `xFt`/`yFt` this
+   *  function already computes, so the flight's timing/curve (the paragraph above) is unchanged.
+   *  There is no 2D ball/trail to draw under it any more. */
   _animatePitchFlight(pitchResult) {
     return new Promise((resolveP) => {
       const dur = pitchResult.timeToPlateS * 1000;
       const t0 = performance.now();
-      const trail = [];
       this._flightActive = true;
-      const resolve = () => { this._flightActive = false; resolveP(); };
+      const resolve = () => { this._actorBallHide(); this._flightActive = false; resolveP(); };
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
@@ -876,14 +1035,7 @@ class BaseballPlayScreen {
         const yFt = 60.5 * (1 - frac);
         const xFt = pitchResult.x * 8.5 * bendT;
         this._drawStaticField();
-        trail.push({ xFt, yFt });
-        if (trail.length > 4) trail.shift();
-        for (let i = 0; i < trail.length - 1; i++) {
-          const p = trail[i];
-          const alpha = 0.12 * ((i + 1) / trail.length);
-          drawPlateBall(this.ctx, this._fieldW, this._fieldH, p.xFt, p.yFt, 'batting', { alpha });
-        }
-        drawPlateBall(this.ctx, this._fieldW, this._fieldH, xFt, yFt, 'batting', { spin: frac * 3 });
+        this._actorBallAt(xFt, yFt);
         if (frac < 1) {
           this._pitchRaf = requestAnimationFrame(step);
         } else {
@@ -1022,71 +1174,172 @@ class BaseballPlayScreen {
 
   // -------------------------------------------------------------------------------- Frames panel (dev only)
   /** BB-3b correction: "Build the dev-only flip-through page first and check foot drift across
-   *  the eight frames before wiring the timeline." Steps through the batter's 8-frame swing and
-   *  the pitcher's 4-frame delivery, with a toggle to compare the raw (uncorrected) frames against
-   *  the offset-table correction - this is what proved the batter correction was needed (visible
-   *  floating on frames 5-8 without it) before any of the timeline work in this file was written.
-   *  Re-open this and re-check whenever either set's art is replaced. */
+   *  the eight frames before wiring the timeline." Originally a sprite flip-through with a "3D
+   *  preview" button beside it (stages 1-4); stage 5 (docs/BASEBALL-3D-BUILD.md section 3.10)
+   *  removed the sprite frames it flipped through along with the rest of the sprite path, so this
+   *  now opens straight on the 3D preview (`_open3DCheck`) - the only figures left to check. */
   _openFrameCheck() {
     if (!this.dev) return;
-    preloadPlateImages();
     const sheet = document.createElement('div');
     sheet.className = 'bb-tune-overlay';
     sheet.innerHTML = `
       <div class="bb-tune-sheet">
         <h2>Frames</h2>
-        <canvas data-role="fc-canvas" width="320" height="420" style="width:100%;max-width:320px;background:#1c1c1c;border-radius:8px"></canvas>
-        <label class="bb-tune-row"><span>Kind</span>
-          <select data-role="fc-kind"><option value="batter">batter (8)</option><option value="pitcher">pitcher (4)</option></select>
-        </label>
-        <label class="bb-tune-row"><span>Side</span>
-          <select data-role="fc-side"><option value="home">home</option><option value="away">away</option></select>
-        </label>
-        <label class="bb-tune-row"><span>Frame</span>
-          <input type="range" data-role="fc-frame" min="1" max="8" step="1" value="1">
-          <span class="bb-tune-val" data-role="fc-frame-val">1</span>
-        </label>
-        <label class="bb-tune-row"><span>Ground-corrected</span>
-          <input type="checkbox" data-role="fc-offset" checked>
-        </label>
-        <label class="bb-tune-row"><span>Flip (left-handed)</span>
-          <input type="checkbox" data-role="fc-flip">
-        </label>
         <div class="bb-tune-actions">
-          <button type="button" class="gh-btn" data-act="prev">&larr; Prev</button>
-          <button type="button" class="gh-btn" data-act="next">Next &rarr;</button>
           <button type="button" class="gh-btn gh-btn--primary" data-act="close">Close</button>
         </div>
       </div>`;
     document.body.appendChild(sheet);
-    const cv = sheet.querySelector('[data-role="fc-canvas"]');
-    const ctx = cv.getContext('2d');
-    const kindSel = sheet.querySelector('[data-role="fc-kind"]');
-    const sideSel = sheet.querySelector('[data-role="fc-side"]');
-    const frameInp = sheet.querySelector('[data-role="fc-frame"]');
-    const frameVal = sheet.querySelector('[data-role="fc-frame-val"]');
-    const offsetChk = sheet.querySelector('[data-role="fc-offset"]');
-    const flipChk = sheet.querySelector('[data-role="fc-flip"]');
-    const maxFrame = () => (kindSel.value === 'pitcher' ? 4 : 8);
-    kindSel.addEventListener('change', () => {
-      frameInp.max = maxFrame();
-      if (parseInt(frameInp.value, 10) > maxFrame()) frameInp.value = maxFrame();
+    sheet.querySelector('[data-act="close"]').addEventListener('click', () => {
+      if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
+      sheet.remove();
     });
-    let closed = false;
-    const redraw = () => {
-      frameVal.textContent = frameInp.value;
-      drawFrameCheck(ctx, cv.width, cv.height, kindSel.value, sideSel.value, parseInt(frameInp.value, 10), offsetChk.checked, flipChk.checked);
-      if (!this.destroyed && !closed) requestAnimationFrame(redraw);
-    };
-    requestAnimationFrame(redraw);
-    sheet.querySelector('[data-act="prev"]').addEventListener('click', () => {
-      frameInp.value = Math.max(1, parseInt(frameInp.value, 10) - 1);
-    });
-    sheet.querySelector('[data-act="next"]').addEventListener('click', () => {
-      frameInp.value = Math.min(maxFrame(), parseInt(frameInp.value, 10) + 1);
-    });
-    sheet.querySelector('[data-act="close"]').addEventListener('click', () => { closed = true; sheet.remove(); });
+    this._open3DCheck(sheet);
   }
+
+  /** docs/BASEBALL-3D-BUILD.md section 3.7: the 3D half of the Frames panel (stage 1's skeleton,
+   *  extended in stages 2-3). Both figures placed at the real PLATE_ANCHORS anchors over the real
+   *  plate.webp backdrop, in their real cast colours (setBatter/setPitcher - section 2.2), with
+   *  clip buttons/scrubber per role and a home/away toggle. No bat nudge buttons: stage 3 checked
+   *  `BAT` against all eight batter frames again and it still reads correctly (poses.js's own
+   *  header), so there was nothing to tune here this pass - `_attachBat`'s constants stay stage 2's.
+   *  The model path is `globalThis.__bbDevModelUrl` when a test harness sets it (so a screenshot
+   *  script can point this at the section 2.1 scaffold), else the real `baseball/models/player.glb`
+   *  - a missing/failed load is caught and shown in the panel, never thrown. */
+  async _open3DCheck(sheet) {
+    if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
+    const tuneSheet = sheet.querySelector('.bb-tune-sheet');
+    let wrap = sheet.querySelector('[data-role="dev3d-wrap"]');
+    if (wrap) wrap.remove();
+    // Stale clip buttons/scrubber from a previous open would otherwise keep listeners closed over
+    // the actors instance just disposed above - drop them here, unconditionally, not only on the
+    // success path below (a failed initGL()/load() must not leave a dead control behind).
+    const staleClipCtl = tuneSheet.querySelector('[data-role="dev3d-clipctl"]');
+    if (staleClipCtl) staleClipCtl.remove();
+    wrap = document.createElement('div');
+    wrap.dataset.role = 'dev3d-wrap';
+    wrap.className = 'bb-dev3d-wrap';
+    const bg = document.createElement('canvas');
+    bg.className = 'bb-dev3d-bg';
+    bg.width = 320; bg.height = 342;
+    wrap.appendChild(bg);
+    tuneSheet.insertBefore(wrap, tuneSheet.querySelector('.bb-tune-actions'));
+
+    const bgCtx = bg.getContext('2d');
+    const w = bg.width, h = bg.height;
+    const im = new Image();
+    im.src = new URL('../img/plate.webp', import.meta.url).href;
+    await new Promise((res) => { if (im.complete && im.naturalWidth) res(); else { im.onload = res; im.onerror = res; } });
+    let cover = { drawW: w, drawH: h, offsetX: 0, offsetY: 0 };
+    if (im.naturalWidth && im.naturalHeight) {
+      // Cover fit, bottom center - the same formula as field.js's own (private) plateCover(); see
+      // the DEV3D_* constants above for why this file mirrors rather than imports it.
+      const scale = Math.max(w / im.naturalWidth, h / im.naturalHeight);
+      const drawW = im.naturalWidth * scale, drawH = im.naturalHeight * scale;
+      cover = { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: h - drawH };
+      bgCtx.clearRect(0, 0, w, h);
+      bgCtx.drawImage(im, cover.offsetX, cover.offsetY, drawW, drawH);
+    }
+    const anchorPxLocal = (frac) => ({ x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH });
+
+    if (closedOrGoneCheck(this, sheet)) return;
+    const [{ Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD }, { CLIPS }] = await Promise.all([import('./actors.js'), import('./poses.js')]);
+    if (closedOrGoneCheck(this, sheet)) return;
+    const actors = new Actors(wrap);
+    this._devActors = actors;
+    if (!actors.initGL()) {
+      wrap.appendChild(Object.assign(document.createElement('div'), { className: 'bb-dev3d-err', textContent: 'No WebGL context' }));
+      return;
+    }
+    actors.resize(w, h, cover);
+    const modelUrl = globalThis.__bbDevModelUrl || new URL('../models/player.glb', import.meta.url).href;
+    try {
+      await actors.load(modelUrl);
+    } catch (e) {
+      console.warn('baseball 3D dev preview: model failed to load', e);
+      wrap.appendChild(Object.assign(document.createElement('div'), { className: 'bb-dev3d-err', textContent: 'No model yet (baseball/models/player.glb)' }));
+      return;
+    }
+    if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
+    await actors.setBatter({ side: 'home', anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * NEAR_BATTER_HEIGHT_FRAC, facingRad: BATTER_FACING_RAD });
+    await actors.setPitcher({ side: 'away', anchor: anchorPxLocal(PLATE_ANCHORS.mound), heightPx: h * MOUND_PITCHER_HEIGHT_FRAC, facingRad: PITCHER_FACING_RAD });
+    if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
+    actors.idle('pitcher');
+    actors.start();
+
+    // STAGE 2/3 (docs/BASEBALL-3D-BUILD.md section 3.7): clip buttons + a scrubber, so a pose can
+    // be seeked to and held next to a sprite frame on the phone. Every named CLIPS entry with
+    // authored keys gets a button, split into a batter row and a pitcher row (CLIP_ROLE below) so
+    // clicking one always plays it on the actor that actually owns that clip - Set/Pitch on the
+    // pitcher, Idle/Swing/Miss on the batter. The scrubber pauses the mixer action at the chosen
+    // time instead of racing the running render loop (start()'s own mixer.update would otherwise
+    // overwrite a manual seek on the very next frame). A home/away select recolours BOTH figures
+    // together (section 2.2's colour-key remap) - the quickest way to eyeball a side on a phone
+    // without leaving the panel.
+    const CLIP_ROLE = { Idle: 'batter', Swing: 'batter', Miss: 'batter', Set: 'pitcher', Pitch: 'pitcher' };
+    const clipCtl = document.createElement('div');
+    clipCtl.dataset.role = 'dev3d-clipctl';
+    clipCtl.className = 'bb-dev3d-clipctl';
+    const batterClips = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length && CLIP_ROLE[n] === 'batter');
+    const pitcherClips = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length && CLIP_ROLE[n] === 'pitcher');
+    clipCtl.innerHTML = `
+      <div class="bb-tune-actions" data-role="dev3d-clipbtns">
+        ${batterClips.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
+      </div>
+      <div class="bb-tune-actions" data-role="dev3d-clipbtns-pitcher">
+        ${pitcherClips.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
+      </div>
+      <label class="bb-tune-row"><span>Time</span>
+        <input type="range" data-role="dev3d-scrub" min="0" max="1" step="0.01" value="0">
+        <span class="bb-tune-val" data-role="dev3d-scrub-val">0.00s</span>
+      </label>
+      <label class="bb-tune-row"><span>Colours</span>
+        <select data-role="dev3d-side"><option value="home">home</option><option value="away">away</option></select>
+      </label>`;
+    tuneSheet.insertBefore(clipCtl, tuneSheet.querySelector('.bb-tune-actions'));
+    const scrub = clipCtl.querySelector('[data-role="dev3d-scrub"]');
+    const scrubVal = clipCtl.querySelector('[data-role="dev3d-scrub-val"]');
+    const sideSel = clipCtl.querySelector('[data-role="dev3d-side"]');
+    let currentClip = null;
+    let currentRole = null;
+    const playClip = (name) => {
+      const def = CLIPS[name];
+      if (!def || !def.keys.length) return;
+      currentClip = name;
+      currentRole = CLIP_ROLE[name] || 'batter';
+      const dur = def.keys[def.keys.length - 1].t;
+      scrub.max = String(dur || 1);
+      scrub.value = '0';
+      scrubVal.textContent = '0.00s';
+      actors.play(currentRole, name);
+      const a = actors.actors[currentRole].actions[name];
+      if (a) a.paused = false;
+    };
+    for (const btn of clipCtl.querySelectorAll('[data-clip]')) {
+      btn.addEventListener('click', () => playClip(btn.dataset.clip));
+    }
+    scrub.addEventListener('input', () => {
+      if (!currentClip || !currentRole) return;
+      const a = actors.actors[currentRole].actions[currentClip];
+      if (!a) return;
+      a.paused = true;
+      a.time = parseFloat(scrub.value);
+      scrubVal.textContent = `${a.time.toFixed(2)}s`;
+    });
+    sideSel.addEventListener('change', () => {
+      const side = sideSel.value;
+      actors.setBatter({ side });
+      actors.setPitcher({ side });
+    });
+    playClip('Idle');
+  }
+}
+
+/** True once the game instance or the Frames sheet itself is gone - checked after every await in
+ *  _open3DCheck so a slow model load never places actors into, or leaves a render loop running
+ *  against, a screen nobody is looking at any more. */
+function closedOrGoneCheck(screen, sheet) {
+  return screen.destroyed || !sheet.isConnected;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1115,9 +1368,9 @@ class HumanAgent {
     const s = this.screen;
     if (s.destroyed) return { type: 'fastball', aim: 0 };
     s.state.mode = 'pitching';
-    s.state.pitcherFrame = 1;
-    s._clearSwingTimers();
-    s.state.batterFrame = 1; // the away batter is static until commit 4's swing event
+    // 'Set' (== idle('pitcher')) for the whole hold - a continuous loop clip, so nothing needs to
+    // be replayed per tick below. The away batter is static until commit 4's swing event.
+    s.actors.idle('pitcher'); s.actors.idle('batter');
     s._paintStrip();
     s._paintModeLabels();
     s._setLine1(''); s._setLine2('');
@@ -1140,7 +1393,6 @@ class HumanAgent {
         if (s.destroyed) return;
         const elapsed = now - start;
         const frac = elapsed / meterMs;
-        s.state.pitcherFrame = frac < 0.55 ? 1 : 2;
         if (elapsed > meterMs) {
           s._paintRing('hung', Math.min(1, (elapsed - meterMs) / hangGraceMs));
         } else if (frac >= NICE_CENTER - NICE_HALF) {
@@ -1148,7 +1400,6 @@ class HumanAgent {
         } else {
           s._paintRing('filling', frac);
         }
-        s._drawStaticField();
         if (!released) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -1166,8 +1417,14 @@ class HumanAgent {
         s._onMainUp = null;
         const holdMs = performance.now() - start;
         s._paintRing('released', Math.min(1.3, holdMs / meterMs));
-        s.state.pitcherFrame = 3; // release - the ball's first frame draws at this frame's own
-                                   // hand anchor (PLATE_ANCHORS.release, re-measured from it)
+        // markAtMs:0 seeks straight to the release keyframe (poses.js's CLIPS.Pitch.mark) and
+        // plays forward from there at normal speed - the human controls WHEN this fires (their own
+        // release), unlike the CPU's fixed-lead-in _stepWindup, so there is no windup to time
+        // against; the clip's own follow-through tail (t=1.3) plays out over the flight that
+        // follows. This is also the release SIGNAL test-baseball-device.mjs's r2-cadence probe
+        // watches (call time + markAtMs) on the CPU-pitches-to-human path via `_stepWindup`'s own
+        // call - see its header.
+        s.actors.play('pitcher', 'Pitch', { markAtMs: 0 });
 
         const type = s.state.selectedPitch;
         const aimAtRelease = s.padX;
@@ -1209,16 +1466,10 @@ class HumanAgent {
         const dirSign = steerable ? steerDirectionSign(type, pitcherHand) : 1;
 
         const t0 = performance.now();
-        let followThroughShown = false;
         const flightStep = (now) => {
           if (s.destroyed) return finishFlight();
-          // Frame 4 (follow-through), 120ms after release - same fixed delay as the CPU's own
-          // wind-up case (_schedulePitcherFollowThrough), just driven by this loop's own clock
-          // instead of a separate timer since the flight is already ticking every frame.
-          if (!followThroughShown && now - t0 >= 120) {
-            followThroughShown = true;
-            s.state.pitcherFrame = 4;
-          }
+          // Follow-through: the Pitch clip's own tail (poses.js: t=1.3, past the mark) plays it on
+          // the mixer's own clock - nothing to schedule here any more.
           const frac = Math.min(1, (now - t0) / durationMs);
           const stepIdx = Math.round(frac * totalSteps);
           if (steerable) steerSamples.push({ step: stepIdx, dx: s.padX - aimAtRelease });
@@ -1227,7 +1478,7 @@ class HumanAgent {
           let liveX = baseX + netSteer * steerMaxOffset * breakMul;
           if (wasHang) liveX = liveX * (1 - SETTINGS.HANG_CENTER_PULL);
           s._drawStaticField();
-          drawPlateBall(s.ctx, s._fieldW, s._fieldH, liveX * 8.5 * frac, 60.5 * (1 - frac), 'pitching', { spin: frac * 3 });
+          s._actorBallAt(liveX * 8.5 * frac, 60.5 * (1 - frac));
           s._paintSteerArrow(steerable, netSteer);
           if (frac < 1) {
             s._flightRaf = requestAnimationFrame(flightStep);
@@ -1237,6 +1488,7 @@ class HumanAgent {
         };
         const finishFlight = () => {
           s._paintSteerArrow(false, 0);
+          s._actorBallHide();
           resolve({ type, aim: aimAtRelease, hold: holdMs, steer: steerSamples, scatter: scatterDraw });
         };
         s._flightRaf = requestAnimationFrame(flightStep);
@@ -1249,20 +1501,16 @@ class HumanAgent {
     const s = this.screen;
     if (s.destroyed) return { action: 'take' };
     s.state.mode = 'batting';
-    s._clearSwingTimers();
-    s.state.batterFrame = 1;
+    s.actors.idle('batter');
     s._paintModeLabels();
     const pitch = view.pitch;
     s.state.lastPitches.push({ type: pitch.type, isStrike: pitch.isStrike, mph: Math.round(pitchMph(pitch, this.league)) });
     s._paintStrip();
 
-    // The CPU's own wind-up (spec section 9, R1): frame 1 -> frame 2 (400ms before release) ->
-    // frame 3 (release), a fixed lead-in timed off FEEL.ui.windupMs, THEN the ball actually
-    // leaves the hand at frame 3's own throwing-hand anchor. Frame 4 (follow-through) lands
-    // 120ms later, independent of the flight's own duration.
+    // The CPU's own wind-up (spec section 9, R1): a real 1400ms delivery, timed off
+    // FEEL.ui.windupMs, THEN the ball actually leaves the hand - see _stepWindup's own header.
     await s._stepWindup();
     if (s.destroyed) return { action: 'take' };
-    s._schedulePitcherFollowThrough();
 
     const flightPromise = s._animatePitchFlight(pitch);
     s._paintRing('idle', 0);
@@ -1284,11 +1532,9 @@ class HumanAgent {
         const charged = heldMs >= F.chargeTime;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
         s._paintRing(charged ? 'charged' : 'idle', Math.min(1, heldMs / F.chargeTime));
-        // The real swing frame sequence (BB-3b correction, R3) - starts immediately at release,
-        // per spec (frame 3 at 0ms). A take (the timeout branch below) never calls this, so
-        // state.batterFrame stays on whatever the charge loop left it at (1 or 2) until the next
-        // decideSwing/decidePitch resets it.
-        s._startSwingTimeline();
+        // The real swing (BB-3b correction, R3) - starts immediately at release, per spec
+        // (`markAtMs: 80` lands the contact keyframe at the same 80ms the old sprite frame-5 did).
+        s.actors.play('batter', 'Swing', { markAtMs: 80 });
         resolve({ action: 'swing', aimX: s.padX, timingErrorMs: timing, charged });
       };
       s._onMainDown = () => {
@@ -1298,9 +1544,6 @@ class HumanAgent {
           const heldMs = performance.now() - downAt;
           const frac = Math.min(1, heldMs / F.chargeTime);
           s._paintRing(frac >= 1 ? 'charged' : 'charging', frac);
-          // Frame 2 while held past chargeTime (spec); frame 1 (idle) before that.
-          s.state.batterFrame = frac >= 1 ? 2 : 1;
-          s._drawStaticField();
           raf = requestAnimationFrame(loop);
         };
         raf = requestAnimationFrame(loop);
@@ -1313,9 +1556,8 @@ class HumanAgent {
         resolved = true;
         if (raf) cancelAnimationFrame(raf);
         s._onMainDown = null; s._onMainUp = null;
-        // A take stays on frame 1 (spec), even if the button was mid-hold when the pitch expired.
-        s.state.batterFrame = 1;
-        s._drawStaticField();
+        // A take: the batter never left Idle (no half-cock pose exists - inventing one is a
+        // feature not discussed, docs/BASEBALL-3D-BUILD.md section 3.6).
         resolve({ action: 'take' });
       }, timeoutMs);
     });

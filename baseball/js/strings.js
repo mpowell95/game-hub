@@ -8,6 +8,12 @@ export const STRINGS = {
     setup_quick: 'Quick Play',
     setup_fence: '{ft} ft',
     setup_play: 'Play',
+    // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the Play button's own label while
+    // baseball/js/actors.js is still fetching/parsing player.glb, and the (rare, since the sprite
+    // path is always the fallback) copy for a model load that never recovers.
+    load_model: 'Loading players...',
+    load_error: 'Could not load the players. Check your connection and try again.',
+    retry: 'Try again',
     tune_open: 'Tune',
     league_little: 'Little League',
     league_highschool: 'High School',
@@ -75,6 +81,9 @@ export const STRINGS = {
     setup_quick: 'Partida rápida',
     setup_fence: '{ft} ft',
     setup_play: 'Jugar',
+    load_model: 'Cargando jugadores...',
+    load_error: 'No se pudieron cargar los jugadores. Revisa tu conexión e inténtalo de nuevo.',
+    retry: 'Reintentar',
     tune_open: 'Ajustes',
     league_little: 'Infantil',
     league_highschool: 'Preparatoria',

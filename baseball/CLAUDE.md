@@ -4,6 +4,157 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Real 3D rigged characters replace the sixteen-frame sprites (2026-09-15 to 09-19, `game-hub-v843` and forward; this stage's own commits sit on `game-hub-v856` with `CACHE` deliberately not bumped - the orchestrator bumps it once, past `main`, at ship time)
+
+Matt, shown the sprite pass in play: *"C definitely."* - the third option offered (sprite sheets,
+a hand-authored 2D skeletal rig, or real 3D rigged characters animated in code), over Mixamo/Blender
+hand-animation, which he explicitly ruled out: nobody hand-animates, the swing and pitch are
+authored in code, bone by bone, against the shipped sprite frames as the visual target. Built by
+five sub-agent stages against `docs/BASEBALL-3D-BUILD.md` (the build document, written by the
+orchestrating session; read it for the full module-by-module plan and the per-stage record).
+`HANDOFF-BASEBALL-3C.md` is the pre-build plan and is now superseded by that file and by what
+actually shipped.
+
+**The model.** Kenney's "Animated Characters Protagonists" pack, Matt's pick from rendered
+candidates (three.js's own robot, KayKit's knight/rogue, Cesium Man, Quaternius's Universal Base
+Characters and Modular Men, and this one): *"Let's use this pack then. The Kenney."* Licence CC0
+1.0 (`reference/baseball/models/kenney/License.txt`: "personal, educational, and commercial
+purposes"), the zip archived alongside it with the pack's own preview. `convert-kenney.mjs` (repo
+root) builds the shipped `baseball/models/player.glb` (544,936 B, one body, one skeleton) and the
+four skin PNGs (`baseball/models/skins/{skaterMaleA,criminalMaleA,skaterFemaleA,cyborgFemaleA}.png`)
+from the pack's FBX through three's own `FBXLoader`/`GLTFExporter` in headless Chromium - no
+Blender, no hand step. Re-run it, never hand-edit the glb. `baseball/js/rig.js`'s `RIG` map is the
+Kenney skeleton's real bone names, resolved against the shipped file (`resolveRig`, throws naming
+the first missing REQUIRED bone).
+
+**The swing and the pitch are authored IN CODE against the shipped sprite frames, not against a
+new reference.** `baseball/js/poses.js`'s `CLIPS` (`Idle`, `Swing`, `Miss`, `Set`, `Pitch`) are
+lists of keyframed bone rotations (Euler degrees, composed on top of each bone's own bind-pose
+quaternion, captured once at load) built into real `THREE.AnimationClip`s by `buildClip`. Every
+pose was matched to a sprite frame by RENDERING, never by imagination:
+`render-actor.mjs --clip X --t N --beside <sprite.png>` draws the 3D figure at a clip time next to
+the sprite frame it must match, in one picture, so a silhouette can actually be compared (lean, arm
+height, leg spread, bat angle) instead of reasoned about. This is why `reference/baseball/batter-
+{home,away}-{1..8}.png` and `Pitcher-{home,away}-{1..4}.png` (the PNG originals of the sixteen-
+frame sprites this pass replaces) stay in the repo even though the sprites themselves are gone
+(THE LAW does not cover art, but the reference silhouettes are still the pose-authoring target for
+any future re-tune) - deleting them would strand `poses.js`'s whole authoring method with nothing
+to check a future edit against.
+
+**The camera is orthographic, in CANVAS PIXELS, mapped straight onto `field.js`'s existing
+`PLATE_ANCHORS`.** `actors.js`'s `Actors.resize(w, h, cover)` sets `camera.left/right/top/bottom`
+to the field canvas's own CSS pixel dimensions and positions every figure with world `(x, -y)` =
+screen `(x, y)` - so a figure's anchor is fed straight from `PLATE_ANCHORS`/`anchorPx()` (the SAME
+fractions the sprite path used, measured off `plate.webp`), and the two camera systems can never
+drift apart because there is only one set of anchors between them. `ui.js`'s `_syncActors` computes
+the near-box and mound anchors every `_drawStaticField()` call (several times a second during a
+pitch) and calls `setBatter`/`setPitcher` with them; the batter's aim shift
+(`BATTER_AIM_TRAVEL_FRAC`) is folded in exactly as it was for the sprite's `batterXY`.
+
+**The mark-time rule is what let R1 and R2 survive the swap untouched.** Every authored clip
+carries a `mark` (seconds, the clip's own timeline) - the contact instant for `Swing`/`Miss`, the
+release instant for `Pitch`. `Actors.play(role, name, { markAtMs })` sets the mixer action's
+`timeScale` so that `mark` lands exactly `markAtMs` after the call (`timeScale = mark / (markAtMs /
+1000)`; `markAtMs <= 0` seeks straight to `mark` and plays at `timeScale: 1`). This is called with
+the SAME numbers the sprite timeline used: `actors.play('batter', 'Swing', { markAtMs: 80 })` at
+the swing decision (matching the sprite's frame-5-at-80ms contact), and
+`actors.play('pitcher', 'Pitch', { markAtMs: WINDUP_MS })` at the start of `_stepWindup` (matching
+R1's real 1400ms delivery) or `{ markAtMs: 0 }` at a human's own release (seeking straight to the
+release keyframe the instant the ball actually leaves the hand). Nothing about WHEN anything
+happens in `ui.js` changed - `_stepWindup`'s two `sleep()` calls are still what paces the real
+1400ms wind-up; only the drawing changed.
+
+**The hand rule: mirror on `bats`/`throws`, `nearBoxLeft` vs `nearBoxRight`, unchanged from the
+sprite era.** `setBatter({ bats, ... })`/`setPitcher({ throws, ... })` set `actor.mirrored` and a
+negative `scale.x` on the actor's pivot group (three.js flips face winding itself off the world
+matrix determinant, so no material change is needed); `_currentBatterFlip()`/
+`_currentPitcherFlip()` in `ui.js` are untouched and still answer "is this player left-handed" from
+the real roster, the same functions that used to choose which sprite frame set and which box
+(`nearBoxLeft` for unflipped/right-handed, `nearBoxRight` for flipped/left-handed) to draw.
+
+**Team colours are a colour-key remap of the PAINTED skin texture** (there is no "Jersey" material
+to recolour - the uniform is in the picture, not the geometry): `actors.js`'s `KEYS` table lists,
+per skin per side, which source pixel colours get replaced and with what, drawn once per (skin,
+side) onto a 2D canvas and cached as a `CanvasTexture`. `criminalMaleA` needed one extra piece:
+its suit and its trousers are painted the IDENTICAL colour (`#ffffff`, verified by direct pixel
+sampling, not a near-white shade a tighter tolerance could tell apart), so colour alone cannot
+send the shirt to navy and the pants to light grey from one source pixel. The fix is `PANTS_RECT`
+(`[0.59, 0.74, 1.0, 1.0]`, fractions of the PAINTED IMAGE, not the 3D mesh) - found by rendering the
+real body with a labelled test-grid texture in place of the skin to see which image region lands on
+which body part, then tightened to the navy pixels' own measured bounding box on `skaterMaleA`'s
+jeans (both skins share one UV layout). The pants key is listed BEFORE the shirt key for both
+skins/sides so a white pixel inside the box is claimed by pants first; every other white pixel
+falls through to the shirt rule, which carries no `rect` and matches everywhere else. Default
+casting: home is `skaterMaleA`, away is `criminalMaleA` (`skinForSide`).
+
+**A software-GL render-rate cap exists, and it is deliberately gated to never reach a real
+device.** `actors.js`'s `start()` caps rendering at 20fps (`RENDER_FRAME_MS`) but ONLY when
+`isSoftGL()` (copied from `pinball/js/render3d.js`) detects a software rasteriser (SwiftShader,
+llvmpipe - every headless test environment, never a real phone GPU). Measured cause: under
+SwiftShader, real main-thread contention between the render loop's own synchronous `render()` calls
+and `_stepWindup`'s `setTimeout`-based sleeps was stretching R2's cadence past its tolerance - not
+a change to any awaited duration, a scheduling fight for the same thread. The first cut capped the
+render rate unconditionally, which would have cost a real device 7 of the ~21 frames it renders
+through the fastest motion in the game (`Swing`, ~350ms) for a problem that does not exist on real
+hardware, where the render call returns to the driver almost immediately. `mixer.update(dt)` runs
+at whichever rate `render()` does either way, with `dt` measured from the last frame that actually
+did work, so a clip's `mark` still lands at the right REAL time regardless of how many rAF ticks
+were skipped - a lower tick rate, never dropped time.
+
+**What stays 2D, unchanged, per the doc's own scope guard**: the painted backdrop (`plate.webp`)
+and the overhead cut on contact (`overhead.webp`, `drawField`/`drawBall`/`drawLandingMarker`), the
+HUD, the strip, the pitch/swing ring, and the 44px popup (`_showPop`). The ball's short fading
+trail was DROPPED, not carried into 3D: the batting-side flight and the human's own pitching flight
+both draw the ball as a single real, lit sphere via `actors.setBall`/`_actorBallAt` now (blended
+toward the pitcher's real throwing-hand bone near release, weighted by `plateBallPos`'s own
+`depthFrac`), with no 2D trail drawn under or behind it - a trail under a 3D ball read as two
+nearly-but-not-quite overlapping balls, worse than either alone.
+
+**Stage 5 (2026-09-19) deleted the sprite path**, the fallback every earlier stage kept live for a
+device with no WebGL: `drawBatterFigure`/`drawPitcherFigure`/`FRAME_Y_OFFSET_FRAC`/
+`PITCHER_FRAME_Y_OFFSET_FRAC`/`drawFrameCheck` from `field.js`, `SWING_TIMELINE`/
+`_startSwingTimeline`/`_schedulePitcherFollowThrough`/every `state.pitcherFrame`/`state.batterFrame`
+write from `ui.js`, and the 24 sprite images themselves (`baseball/img/batter-{home,away}-
+{1-8}.webp`, `baseball/img/pitcher-{home,away}-{1-4}.webp` - the build document's own count of 32
+was checked against the real files and corrected to 24: 16 batter frames + 8 pitcher frames, not
+32). `baseball/js/ui.js` now calls `this.actors` unconditionally wherever it used to branch on a
+live-vs-sprite flag, since by the time any of those calls can run, the Play button's own click
+handler has already routed a failed model load to a translated error screen
+(`_renderLoadError()`, `load_error`/`retry` in `strings.js`, the `boggle/js/ui.js` `renderLoadError`
+pattern) instead of starting a game with nothing to draw its two figures - `initGL()` returning
+false and `load()` rejecting both set `_actorsFailed` for exactly this. `plate.webp`,
+`overhead.webp` and `ball-sheet.webp` stay (the backdrop, the overhead cut, and `drawPlateBall`,
+which stays exported - `test-baseball-device.mjs`'s `plate-camera` check asserts it - even though
+nothing in the plate camera calls it any more).
+
+**The release signal `test-baseball-device.mjs`'s `r2-cadence` check watches was replaced, and
+proven equivalent BEFORE the sprite code it used to read was deleted.** The check used to watch
+`state.pitcherFrame` reach 3 (`_stepWindup`'s own sprite-frame step); the replacement wraps the
+instance's own `actors.play` and records `performance.now() + markAtMs` for every
+`('pitcher', 'Pitch', ...)` call - the mark-time rule above means this is the SAME instant the old
+signal watched for, one level up (the call itself, not the state write it used to schedule). Proven
+by running both signals instrumented in the same pass, against the pre-deletion code: three
+release events both signals could see (a fourth, the game's very first pitch, was visible only to
+the polling-based old signal, an instrumentation-order artifact - the new signal's wrapper is
+installed a moment after that first `actors.play` call already fired, not a disagreement in the
+underlying signal) matched to within **8.0ms, 9.5ms and 17.7ms** - all comfortably under the 20ms
+stop-and-report threshold. Measured after the sprite code was deleted, on the new signal alone,
+across three separate runs: **6201/6212/6201ms**, **6223/6207/6219ms**, **6219/6220/6225ms**,
+against the 6200ms target (1800 result + 3000 between + 1400 windup) and the same 150ms tolerance
+r2-cadence has held to since it was written.
+
+```
+node test-baseball-device.mjs     -> all checks passed (r2-cadence 6223/6207/6219ms vs 6200ms target)
+node test-baseball-actors.mjs     -> node half + both Chromium halves passed (24 + 7 + 7 checks)
+node test-visual.mjs baseball     -> 13 passed, 0 failed
+node check-no-scroll.mjs baseball -> 4 screens, 0 scroll
+node test-game-conventions.mjs    -> 11 passed, 0 failed
+node test-i18n-strings.mjs        -> 0 failures (64 en keys, incl. new retry/load_error wording)
+node baseball/js/test.js          -> 2563 passed, 0 failed (no engine file touched)
+node test-sw-strategy.mjs         -> 107 passed, 0 failed
+node validate-sw-assets.mjs       -> ok (game-hub-v856, REST_MANIFEST regenerated, 24 entries removed)
+```
+
 ## The pitch you can actually hit: perspective flight, zone-center crossing, the batter moves (2026-09-15, `game-hub-v842` → `game-hub-v843`)
 
 Matt, testing v842, three reports in one message. All three were the plate camera's own maths in
