@@ -375,6 +375,17 @@ const ASSETS = [
   './baseball/js/vendor/GLTFLoader.js',
   './baseball/js/vendor/SkeletonUtils.js',
   './baseball/js/vendor/BufferGeometryUtils.js',
+  // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D model + its four team-skin textures.
+  // Plain REST tier, not LAZY - unlike Boggle's word lists this is the PRIMARY visual for the live
+  // play screen (baseball/js/ui.js loads it the moment the game mounts, at the setup screen, never
+  // waiting for a first play to justify it), so warming it with the rest of the game's files is the
+  // right default. `validate-sw-assets.mjs`/REST_MANIFEST and the CACHE bump are the orchestrator's
+  // job at ship time (docs/BASEBALL-3D-BUILD.md section 0), not this stage's.
+  './baseball/models/player.glb',
+  './baseball/models/skins/skaterMaleA.png',
+  './baseball/models/skins/criminalMaleA.png',
+  './baseball/models/skins/skaterFemaleA.png',
+  './baseball/models/skins/cyborgFemaleA.png',
   './baseball/img/plate.webp',
   './baseball/img/overhead.webp',
   './baseball/img/batter-home-1.webp',

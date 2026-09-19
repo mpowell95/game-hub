@@ -750,15 +750,17 @@ export const PLATE_ANCHORS = {
 const PLATE_ZONE_FLOOR = 0.30;
 // Sizes as fractions of the field BAND height (not the picture), per the handoff's own measurement
 // off the mock: the near batter fills about half the band, the mound pitcher about a ninth of it.
-const NEAR_BATTER_HEIGHT_FRAC = 0.50;
-const MOUND_PITCHER_HEIGHT_FRAC = 0.11;
+// Exported (stage 4, docs/BASEBALL-3D-BUILD.md section 3.6) so the 3D actor layer sizes off the
+// same two fractions the sprites always used, rather than a second, driftable copy in ui.js.
+export const NEAR_BATTER_HEIGHT_FRAC = 0.50;
+export const MOUND_PITCHER_HEIGHT_FRAC = 0.11;
 
 /** `plate.webp` fitted to a `w`x`h` canvas the way CSS `background-size: cover; background-position:
  *  bottom center` would: scaled up to cover both dimensions (cropping whichever axis overflows),
  *  anchored at the bottom so the plate itself sits a fixed pixel distance from the band's own
  *  bottom edge at every phone height - see spec section 6, "so a cut between them moves nothing
  *  else on the screen." Returns null while the image is still loading. */
-function plateCover(w, h) {
+export function plateCover(w, h) {
   const im = plateImg('plate.webp');
   if (!im) return null;
   const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
@@ -769,7 +771,7 @@ function plateCover(w, h) {
 }
 /** A `PLATE_ANCHORS`-shaped `{x,y}` fraction of the picture -> screen px, given a `plateCover()`
  *  transform. Every on-screen position in this camera goes through this one function. */
-function anchorPx(frac, cover) {
+export function anchorPx(frac, cover) {
   return { x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH };
 }
 
@@ -883,7 +885,13 @@ function drawPitcherFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
  *  see ui.js's swing timeline), `batterFlip` (bool, true for a LEFT-handed batter - see the
  *  section header's own note on the correction: both frame sets are drawn RIGHT-handed, so the
  *  DEFAULT is unflipped, standing at the third-base side box (`nearBoxLeft`, screen left from
- *  behind the plate); a left-handed batter is the flipped frame, standing at `nearBoxRight`). */
+ *  behind the plate); a left-handed batter is the flipped frame, standing at `nearBoxRight`).
+ *  `noFigures` (stage 4, docs/BASEBALL-3D-BUILD.md section 3.6): skip `drawBatterFigure`/
+ *  `drawPitcherFigure` entirely - the picture, the strike zone and the batter's aim shift still
+ *  draw exactly as today, only the two sprite figures are left out, because `baseball/js/actors.js`
+ *  is drawing them instead on its own canvas above this one. The sprite-drawing code itself is
+ *  untouched and still runs (`noFigures` defaults to falsy) so a device with no WebGL keeps the
+ *  sprite path exactly as it is today - stage 5 deletes the sprite code, not this stage. */
 export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
@@ -928,8 +936,10 @@ export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
   // the pad marker does - toward the plate for a righty (left box), away from it for a lefty.
   const aimShift = (opts.batterAimX || 0) * BATTER_AIM_TRAVEL_FRAC * cover.drawW;
   const batterXY = { x: nearXY.x + aimShift, y: nearXY.y };
-  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, batterXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
-  drawPitcherFigure(ctx, pitcherSide, opts.pitcherFrame || 1, moundXY, h * MOUND_PITCHER_HEIGHT_FRAC, { flip: !!opts.pitcherFlip });
+  if (!opts.noFigures) {
+    drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, batterXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
+    drawPitcherFigure(ctx, pitcherSide, opts.pitcherFrame || 1, moundXY, h * MOUND_PITCHER_HEIGHT_FRAC, { flip: !!opts.pitcherFlip });
+  }
 
   ctx.restore();
 }
@@ -954,7 +964,8 @@ const PLATE_BALL_RADIUS_NEAR_PX = 14;
 const PLATE_CAMERA_FT = 24;
 // How far the batter's own figure travels across the box for the pad's full -1..1, as a fraction
 // of the picture's drawn width. +/-0.06 keeps both feet inside the painted box at either end.
-const BATTER_AIM_TRAVEL_FRAC = 0.06;
+// Exported (stage 4) so the 3D actor layer folds the same shift into its own anchor.
+export const BATTER_AIM_TRAVEL_FRAC = 0.06;
 
 /** The strike zone rectangle, in screen px: floored to 0.30 of the CANVAS width (spec section 6)
  *  so a narrow phone never turns the pad's travel into a slider of a few pixels, standing on the
@@ -1108,4 +1119,5 @@ export function drawFrameCheck(ctx, w, h, kind, side, frame, useOffset, flip) {
 export default {
   project, drawField, drawBall, drawLandingMarker, planGeometry,
   preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, drawFrameCheck, zoneRect, plateBallPos,
+  plateCover, anchorPx, NEAR_BATTER_HEIGHT_FRAC, MOUND_PITCHER_HEIGHT_FRAC, BATTER_AIM_TRAVEL_FRAC,
 };

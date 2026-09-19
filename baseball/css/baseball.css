@@ -101,6 +101,10 @@
   min-width: 160px;
   min-height: 44px;
 }
+/* stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the model-loading state. Not HTML `disabled` -
+   see ui.js's own note on the click handler - so this is the only visible sign the tap is being
+   held; opacity + a wait cursor, never color alone (nothing here is a colorblind pairing anyway). */
+.bb-play-btn[aria-disabled="true"] { opacity: 0.6; cursor: wait; }
 
 .bb-tune-open {
   background: none;

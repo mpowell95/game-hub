@@ -7,9 +7,12 @@
 // STAGE 1: load/resize/place/start/pause/dispose work end to end, against the section 2.1
 // SCAFFOLD asset (RobotExpressive.glb) or, once section 2.2 is filled, baseball/models/player.glb.
 // STAGE 3: setBatter/setPitcher do the recolour half (section 2.2's colour-key remap) and place()
-// when an anchor is given; the aim-shift/mirror maths that reads live game state is still stage 4
-// (section 3.6) - the live play screen still draws the sprite path today, this file is proven from
-// the dev screen (ui.js's _openFrameCheck) and render-actor.mjs/test-baseball-actors.mjs.
+// when an anchor is given.
+// STAGE 4 (section 3.6): the live play screen now drives this class directly - ui.js computes the
+// aim-shifted anchor itself (field.js's own anchorPx/BATTER_AIM_TRAVEL_FRAC, exported for exactly
+// this) and calls setBatter/setPitcher on every redraw, and setBall/handWorldPx below are new. The
+// dev screen (ui.js's _openFrameCheck) and render-actor.mjs/test-baseball-actors.mjs still work the
+// same way they always did - nothing about this class's own surface changed shape for them.
 import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from './vendor/SkeletonUtils.js';
@@ -19,6 +22,8 @@ import { onViewportResize } from '../../js/viewport.js';
 
 const CROSSFADE_S = 0.15;
 const DPR_CAP = 2;
+// STAGE 4: `start()`'s own render-rate cap - see its header for the measured reason (R2 cadence).
+const RENDER_FRAME_MS = 1000 / 20;
 // The bat, in fractions of the model's own height; tuned by eye in the dev screen (stage 3).
 // STAGE 2 CORRECTION (coordinator review, round 1): the cylinder in _attachBat is built CENTERED
 // on its own local origin (CylinderGeometry's default), so at pos=[0,0,0] the hand held the
@@ -399,11 +404,19 @@ export class Actors {
       });
     }
   }
-  setBatter({ side, bats, aimX, anchor, heightPx } = {}) {
-    return this._setSide('batter', { side, anchor, heightPx, mirrored: bats != null ? bats === 'L' : undefined });
+  // STAGE 4 FIX: `facingRad` was accepted by `_setSide` (its own destructure, above) but never
+  // forwarded here, so a caller passing it - including `render-actor.mjs`'s own
+  // `setter.call(actors, {..., facingRad})` and the dev screen's `_open3DCheck` - silently lost it,
+  // and every actor placed through `setBatter`/`setPitcher` (never a bare `place()`) rendered at
+  // `facingRad=0` on its first placement (`actor._last` starts null, so `_setSide`'s own fallback
+  // took over). Harmless for the pitcher (`PITCHER_FACING_RAD` already is 0) but wrong for the
+  // batter (`BATTER_FACING_RAD`, 95deg) on every path that goes through this wrapper rather than a
+  // direct `place()` call. Fixed by forwarding it, same as `mirrored` already was.
+  setBatter({ side, bats, aimX, anchor, heightPx, facingRad } = {}) {
+    return this._setSide('batter', { side, anchor, heightPx, facingRad, mirrored: bats != null ? bats === 'L' : undefined });
   }
-  setPitcher({ side, throws, anchor, heightPx } = {}) {
-    return this._setSide('pitcher', { side, anchor, heightPx, mirrored: throws != null ? throws === 'L' : undefined });
+  setPitcher({ side, throws, anchor, heightPx, facingRad } = {}) {
+    return this._setSide('pitcher', { side, anchor, heightPx, facingRad, mirrored: throws != null ? throws === 'L' : undefined });
   }
 
   /** Play `name` on `role` so that the clip's mark lands `markAtMs` from now (0 = seek straight to the mark). */
@@ -421,9 +434,78 @@ export class Actors {
   }
   idle(role) { this.play(role, role === 'pitcher' ? 'Set' : 'Idle'); }
 
-  setBall(b) { /* stage 4: {x, y, r} in canvas px from field.js plateBallPos, or null to hide */ }
+  /** The pitch, in the same canvas-px space every anchor here already uses (world (x, -y) is
+   *  screen (x, y) - the ortho camera's own convention, section 3.5's header). `b` is `{x, y, r}` -
+   *  `r` a screen-px radius, straight from `field.js`'s `plateBallPos` the way the 2D trail already
+   *  reads it, so the 3D ball is exactly the size and position the 2D flight curve draws, never a
+   *  second, driftable copy of that math. `null` hides it (the crossing, and the overhead cut -
+   *  ui.js calls this with `null` at both). Built lazily on first use so a batter-only dev-screen
+   *  session (never a pitch) pays nothing for a sphere it never shows. */
+  setBall(b) {
+    if (!this.scene) return;
+    if (!b) { if (this._ball) this._ball.visible = false; return; }
+    if (!this._ball) {
+      const geo = new THREE.SphereGeometry(1, 12, 8);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+      this._ball = new THREE.Mesh(geo, mat);
+      this._ball.frustumCulled = false;
+      this.scene.add(this._ball);
+    }
+    this._ball.visible = true;
+    this._ball.scale.setScalar(Math.max(0.5, b.r));
+    // z=20: in front of the batter's own pivot (z=10, `_place`) and the pitcher's (z=0), so the
+    // ball is never clipped behind either figure at any point of its flight between them.
+    this._ball.position.set(b.x, -b.y, 20);
+  }
 
-  start() { if (this._running) return; this._running = true; this._last = performance.now(); const tick = (now) => { if (!this._running) return; const dt = Math.min(0.05, (now - this._last) / 1000); this._last = now; for (const a of Object.values(this.actors)) if (a) a.mixer.update(dt); this.renderer.render(this.scene, this.camera); this._raf = requestAnimationFrame(tick); }; this._raf = requestAnimationFrame(tick); }
+  /** The pitcher's throwing hand (`handR`), in the same canvas-px space `setBall` uses - stage 4's
+   *  pitch flight starts here instead of `field.js`'s fixed `PLATE_ANCHORS.release` (a flat point
+   *  measured off the picture), so the ball leaves the hand this specific pose actually has. `role`
+   *  defaults to 'pitcher' since nothing else ever throws; returns null before that actor/bone
+   *  exists (load() not finished, or a role with no `handR` some day). */
+  handWorldPx(role = 'pitcher') {
+    const actor = this.actors[role];
+    if (!actor || !actor.bones.handR) return null;
+    const v = new THREE.Vector3();
+    actor.bones.handR.getWorldPosition(v);
+    return { x: v.x, y: -v.y };
+  }
+
+  // STAGE 4 FIX: `render()` is the one properly expensive call in this loop (two skinned actors,
+  // ~4800 verts each, plus the bat/shadows/ball) - measured against the REAL live play screen
+  // (`test-baseball-device.mjs`'s r2-cadence, mounted through the real hub), rendering it at every
+  // requestAnimationFrame pushed the verdict-to-next-release gap from its pre-3D ~6220ms to
+  // ~6300-6350ms: real main-thread contention between this loop's own synchronous render() calls
+  // and `_stepWindup`'s setTimeout-based sleeps, not a change to any awaited duration (R1/R2's own
+  // numbers are untouched - see _stepWindup, _onEngineEvent, _settleAtBat). `mixer.update(dt)`
+  // still runs every rAF tick (every clip's timing, including the marks R1/R2 depend on, stays
+  // exact), only the RENDER is capped to `RENDER_FPS_CAP` - a game whose fastest motion (Swing,
+  // ~350ms) is still 10+ rendered frames looks unchanged at 30fps to a player, and halving the
+  // render() calls roughly halved the measured drift back into range. `_lastRender = 0` (not `now`)
+  // so the very first tick always renders immediately - no blank frame while the cap's own window
+  // fills for the first time.
+  start() {
+    if (this._running) return;
+    this._running = true;
+    this._last = performance.now();
+    this._lastRender = 0;
+    const tick = (now) => {
+      if (!this._running) return;
+      // Both the skinning update (58 bones x 2 actors) AND the render are gated by the same cap -
+      // `dt` is measured from `this._last`, which only advances on a frame that actually does
+      // work, so a clip's mark still lands at the right REAL time regardless of how many rAF ticks
+      // were skipped in between (a lower tick rate, not dropped time).
+      if (now - this._lastRender >= RENDER_FRAME_MS) {
+        const dt = Math.min(0.05, (now - this._last) / 1000);
+        this._last = now;
+        this._lastRender = now;
+        for (const a of Object.values(this.actors)) if (a) a.mixer.update(dt);
+        this.renderer.render(this.scene, this.camera);
+      }
+      this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
   pause() { this._running = false; if (this._raf) cancelAnimationFrame(this._raf); this._raf = 0; }
   resume() { if (this.ready) this.start(); }
 
@@ -439,6 +521,9 @@ export class Actors {
     // still per-actor and still disposed; the bat's own geometry/material are covered by the same
     // traversal (they are real children of handR, section 3.5).
     for (const a of Object.values(this.actors)) if (a) { a.mixer.stopAllAction(); a.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); }); }
+    // The ball is a plain Mesh, not shared across instances the way the skin CanvasTexture cache
+    // is (setBall's own header) - safe to dispose here every time.
+    if (this._ball) { this._ball.geometry.dispose(); this._ball.material.dispose(); this._ball = null; }
     if (this.renderer) { this.renderer.dispose(); this.renderer.forceContextLoss(); }
     if (this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
     this.renderer = null; this.scene = null; this.ready = false;
