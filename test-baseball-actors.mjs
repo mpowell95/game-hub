@@ -232,6 +232,12 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
 
   // The load-error screen (stage 5, section 3.6's "Loading" bullet): a failed initGL()/load()
   // sets _actorsFailed, the Play click routes it to _renderLoadError() instead of _startGame().
+  {
+    const m = uiSrc.match(/\n {2}_animateBattedBall\([\s\S]*?\n {2}\}\n/);
+    const body = m ? m[0] : '';
+    if (body && !/display = ''|\.resume\(\)|_showActors\(\)/.test(body) && /_drawStaticField\(\) \{[\s\S]*?_showActors\(\);/.test(uiSrc)) ok('structural: _animateBattedBall never re-shows the 3D layer; _drawStaticField does (v858)');
+    else fail('structural: cutaway show/hide', '_animateBattedBall re-shows the actor canvas, or _drawStaticField does not call _showActors()');
+  }
   if (/_actorsFailed\s*=\s*true/.test(uiSrc) && /_renderLoadError/.test(uiSrc)) {
     ok('ui.js: a failed load sets _actorsFailed and _renderLoadError() exists');
   } else {
@@ -577,6 +583,36 @@ async function runMountInHubHalf() {
   }));
   if (swingDiff.idleSum !== swingDiff.swingSum) ok(`batter read-back differs, idle vs 150ms into Swing (${swingDiff.idleSum} vs ${swingDiff.swingSum})`);
   else fail('mount-in-hub Swing read-back', `identical checksum ${swingDiff.idleSum} - the swing did not visibly change the render`);
+
+  // [KNOWN-BUG PROBE] The overhead cutaway must keep the 3D layer hidden for its WHOLE duration,
+  // not just the 700 ms ball flight. Matt's first recording of v857 (2026-09-19) showed the batter
+  // frozen over the overhead diamond for ~7 s after every ball in play: `_animateBattedBall` used
+  // to re-show the canvas the moment the landing marker was drawn, while the overhead picture
+  // stayed up through the result beat and the between-pitches beat. Now only `_drawStaticField()`
+  // (the plate view) brings it back. Drives the real cutaway and reads the canvas state after the
+  // flight has finished, then after the plate view is redrawn.
+  const cutaway = await page.evaluate(async () => {
+    const inst = document.querySelector('.hub-game')._bbInstance;
+    const cv = () => document.querySelector('canvas.bb-actor-canvas');
+    // The CPU's own pitch loop is running on this mounted screen and redraws the plate view every
+    // frame of a flight; in the real game the cutaway runs between at-bats when no such loop is
+    // live. Hold the plate redraw off for the probe's window so what is measured is
+    // `_animateBattedBall`'s own behaviour, then restore it and redraw the plate view for real.
+    const realDraw = inst._drawStaticField;
+    inst._drawStaticField = () => {};
+    await inst._animateBattedBall(40, 180, 'hit', '1B');
+    await new Promise((r) => setTimeout(r, 300));
+    const afterFlight = { display: cv().style.display, running: !!inst.actors._running };
+    inst._drawStaticField = realDraw;
+    inst._drawStaticField();
+    await new Promise((r) => setTimeout(r, 100));
+    const afterPlate = { display: cv().style.display, running: !!inst.actors._running };
+    return { afterFlight, afterPlate };
+  });
+  if (cutaway.afterFlight.display === 'none' && !cutaway.afterFlight.running) ok('overhead cutaway: actor canvas stays hidden and paused after the ball flight ends');
+  else fail('overhead cutaway hide', `after the flight: display="${cutaway.afterFlight.display}", running=${cutaway.afterFlight.running} (the frozen-batter-over-the-diamond bug)`);
+  if (cutaway.afterPlate.display !== 'none' && cutaway.afterPlate.running) ok('plate view redraw brings the actor canvas back and restarts the loop');
+  else fail('overhead cutaway show', `after _drawStaticField: display="${cutaway.afterPlate.display}", running=${cutaway.afterPlate.running}`);
 
   await page.evaluate(() => { document.querySelector('.hub-game')._bbInstance.destroy(); });
   const afterDestroy = await page.evaluate(() => {

@@ -4,6 +4,27 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The batter frozen over the overhead diamond (2026-09-19, `game-hub-v857` → `game-hub-v858`)
+
+Matt's first screen recording of the shipped 3D build, watched frame by frame: after every ball in
+play the plate-view batter stayed on screen, frozen mid follow-through and then idling, on top of
+the overhead cutaway for about seven seconds, hiding the landing marker, three pitches out of
+three. Cause: `_animateBattedBall` hid the actor canvas for the 700 ms ball flight and showed it
+again the moment the landing marker was drawn, while the overhead picture stays up through the
+whole result beat and between-pitches beat. The stage 4 and 5 screenshots of the cutaway were all
+taken inside those 700 ms, which is why it passed review.
+
+Fix: the 3D layer is hidden by `_hideActors()` when the cutaway starts and brought back ONLY by
+`_drawStaticField()` (the plate view) via `_showActors()`, so the figures, which are anchored to
+the plate camera's picture, can never appear over the overhead one. The `visibilitychange` resume
+respects the hidden state. `test-baseball-actors.mjs` gained a `[KNOWN-BUG PROBE]` that drives the
+real cutaway and reads the canvas state after the flight and after the plate redraw, plus a
+structural check that `_animateBattedBall` never re-shows the layer.
+
+Two other things the recording established: the ~1 s flat green field after Play did NOT appear
+on the phone (the stadium was up within one 30 fps frame), so that one is a container artefact,
+and the wind-up to verdict cadence measured 1.40 s on both pitches it could time, as designed.
+
 ## Real 3D rigged characters replace the sixteen-frame sprites (2026-09-15 to 09-19, `game-hub-v843` and forward; this stage's own commits sit on `game-hub-v856` with `CACHE` deliberately not bumped - the orchestrator bumps it once, past `main`, at ship time)
 
 Matt, shown the sprite pass in play: *"C definitely."* - the third option offered (sprite sheets,
