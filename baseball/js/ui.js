@@ -180,7 +180,9 @@ class BaseballPlayScreen {
     this._onVis = () => {
       if (document.visibilityState === 'visible') {
         this._fit();
-        if (this.actors) this.actors.resume();
+        // Only if the plate view is up: during the overhead cutaway the canvas is hidden and the
+        // loop stays paused until `_drawStaticField()` brings both back (v858, `_showActors`).
+        if (this.actors && this.actors.canvas && this.actors.canvas.style.display !== 'none') this.actors.resume();
       } else if (this.actors) {
         this.actors.pause();
       }
@@ -502,6 +504,30 @@ class BaseballPlayScreen {
     const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
     drawPlateView(this.ctx, this._fieldW, this._fieldH, mode, dark);
     this._syncActors(mode);
+    // The plate view is on screen again: THIS is where the 3D layer comes back after the overhead
+    // cutaway, never at the end of the batted ball's own 700 ms flight. Matt's first recording of
+    // the shipped 3D build (2026-09-19, v857) showed the batter standing frozen over the overhead
+    // diamond for about seven seconds after every ball in play, because `_animateBattedBall` used
+    // to show the canvas again the moment the landing marker was drawn, while the overhead picture
+    // stayed up for the whole result beat and the between-pitches beat. The figures are anchored to
+    // the plate camera's picture and mean nothing over the overhead one, so they stay hidden until
+    // that picture is actually redrawn here.
+    this._showActors();
+  }
+
+  /** Show the 3D layer and restart its loop, for the plate view only. Idempotent. */
+  _showActors() {
+    if (!this.actors || !this.actors.canvas) return;
+    if (this.actors.canvas.style.display === 'none') this.actors.canvas.style.display = '';
+    this.actors.resume();
+  }
+
+  /** Hide the 3D layer and stop its loop, for the overhead cutaway. Idempotent. */
+  _hideActors() {
+    if (!this.actors || !this.actors.canvas) return;
+    this._actorBallHide();
+    this.actors.pause();
+    this.actors.canvas.style.display = 'none';
   }
 
   /** STAGE 4: the 3D figures' own placement, mirroring `drawPlateView`'s sprite maths exactly
@@ -985,11 +1011,11 @@ class BaseballPlayScreen {
    *  next pitch.
    *  STAGE 4: the overhead view stays 2D and unchanged (docs/BASEBALL-3D-BUILD.md's own scope
    *  guard); the 3D layer is out of place here entirely (its figures are anchored to the plate
-   *  camera's picture, not this one), so it is paused and hidden for the cutaway's whole duration
-   *  and brought back only once the plate view is live again - never rendering a frame the player
-   *  cannot see, and never racing the overhead camera's own draw calls on the same 2D canvas. */
+   *  camera's picture, not this one), so it is paused and hidden for the cutaway's WHOLE duration,
+   *  result beat and between-pitches beat included, and brought back only by `_drawStaticField()`
+   *  when the plate view is actually live again (v858 fix; see `_showActors`). */
   _animateBattedBall(xFt, yFt, kind, label) {
-    this._actorBallHide(); this.actors.pause(); this.actors.canvas.style.display = 'none';
+    this._hideActors();
     return new Promise((resolve) => {
       const dur = 700;
       const t0 = performance.now();
@@ -1002,7 +1028,8 @@ class BaseballPlayScreen {
           this._rafBall = requestAnimationFrame(step);
         } else {
           drawLandingMarker(this.ctx, this._fieldW, this._fieldH, xFt, yFt, kind, label, document.documentElement.classList.contains('gh-dark'));
-          this.actors.canvas.style.display = ''; this.actors.resume();
+          // The 3D layer stays hidden: the overhead picture is still up. `_drawStaticField()`
+          // brings it back with the plate view (see `_showActors` there).
           resolve();
         }
       };
