@@ -681,3 +681,41 @@ Fielders, runners, a catcher, a glove, a crowd, any camera motion, shadow maps, 
 cue, the Career/Quick Play setup screen (phase 4, held by Matt), any change under
 `baseball/js/engine/`, any change to `settings.js` timings, the ring, the strip, the HUD, the
 popup. If you think one is needed, say so in the report and build nothing for it.
+
+---
+
+## 7. Stages 6 and 7: motion and flow (2026-09-19, after Matt's recordings of v857 and v858)
+
+Matt, on two screen recordings of the shipped 3D build: *"They look way too much like just flat
+images (because they are)... Timing is a huge issue as well, timing of everything. Nothing really
+makes sense."* Measured frame by frame (every frame of both clips diffed; the live game probed
+for clip clocks and bone positions), the causes, each with its fix and its stage:
+
+| # | Measured | Fix | Stage |
+|---|---|---|---|
+| 1 | The batter's `Idle` loops but moves no bone: hand world position constant to the pixel for the whole loop | A visible idle: weight shift foot to foot, bat waggle, head turn to the pitcher. Hand travel at the batter's real size (214 px tall) at least 8 px | 6 |
+| 2 | The pitcher's throwing hand travels ~20 px across the whole `Pitch` at his real size (47 px tall), no visible leg kick or body turn; the first 30% of the clip moves nothing | An exaggerated, game-style delivery: leg kick to hip height, full body turn, the arm over the top. At 47 px: hand path length at least 45 px with at least 20 px vertical; front foot lift at least 10 px; motion from the first keyframe | 6 |
+| 3 | After the throw the pitcher holds the follow-through for ~5.5 s until the next `Pitch` snaps him back; there is no return to set | A `Set` return: cross-fade back to `Set` 400 ms after the ball crosses (both the CPU's and the human's pitch) | 7 |
+| 4 | On a ball in play the cut to the overhead comes 1 to 2 frames after contact and `Swing` starts with a 150 ms cross-fade, so the swing is never seen on contact | `Swing` and `Miss` start with NO cross-fade; the plate view holds 400 ms after contact (swing follow-through, 3D ball leaving up and away from the bat) before the cut | 7 |
+| 5 | The overhead is a still picture for ~5.5 s (0.7 s flight, then the 1.8 s result beat and 3.0 s between beat on top of it) | Overhead: flight 1.0 s, marker hold 1.0 s, then cut BACK to the plate view where the rest of the between beat runs (batter idle, pitcher to set). The verdict-to-next-release cadence stays 6.2 s (R2): 0.4 hold + 1.0 flight + 1.0 marker + 2.4 plate + 1.4 wind-up | 7 |
+| 6 | On a hit the batter appears over the overhead: a slider touch during the cutaway redraws the plate view underneath and re-shows the layer (v858 fixed one path only) | One `this._cutawayUp` flag set by the cutaway and cleared only when the flow itself returns to the plate view; `_drawStaticField()` is a no-op while it is set | 7 |
+| 7 | ~1.1 s of flat green after Play on the phone, and the first wind-up starts under it | Preload `plate.webp` at Baseball's mount (the setup screen), and the first wind-up waits until the plate picture has painted once | 7 |
+
+Timings above are Matt's numbers ("Sounds good", 2026-09-19). `settings.js` is untouched: the 4.8 s
+of result + between is re-partitioned by `ui.js`, not changed.
+
+**Stage 6 (Opus): motion.** Owns `poses.js` and the facing constants only. Deliverables: (a) each
+clip rendered at 15 fps at its REAL on-screen height (batter 214 px, pitcher 47 px, plus 4x
+enlargements for review) as one sheet per clip; (b) the measured numbers in the table, from a
+new chromium check in `test-baseball-actors.mjs` that plays each clip and samples bone world
+positions at the real heights; (c) the batter sheet against `batter-home-1..8.png` and the
+pitcher sheet against `Pitcher-home-1..4.png` still agree at the marks (contact, release). Bigger
+than the sprites is the point; the sprites are the pose reference, not the motion budget.
+
+**Stage 7 (Sonnet): flow.** Owns `ui.js`, `actors.js`'s `play()` fade option and a `toSet()`
+helper, `test-baseball-device.mjs` and `test-baseball-actors.mjs`'s cutaway probe. Deliverables:
+the cutaway state flag with the probe extended (a pad move during the cutaway must NOT re-show
+the layer; the plate view must return on its own before the next wind-up); the contact hold; the
+re-partitioned overhead; the set return; the preload; r2-cadence unchanged at 6.2 s; ten stills
+100 ms apart through one ball in play on the real play screen showing swing, ball leaving, cut,
+flight, marker, return to plate, pitcher to set.
