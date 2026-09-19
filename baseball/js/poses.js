@@ -248,33 +248,43 @@ export const CLIPS = {
   // hand you see extend forward at the release keyframe below is the model's RightHand, appearing
   // screen-left, exactly like Pitcher-home-3's visible throwing arm.
   //
-  // The two-handed "ball tucked in the glove" grip reuses the batter load-pose's own trick -
-  // IDENTICAL (not mirrored) local rotations on upperArmR/L, lowerArmR/L and handR/L converge both
-  // hands on the body's centerline regardless of which way the root faces, because the rig's own
-  // L/R rest orientations are already mirror images of each other. Getting the HEIGHT right took
-  // several rendered rounds: the batter's own [60,0,60]/[100,0,15] load numbers (same order of
-  // magnitude) put the hands at the chin, not the collar - upperArm Z near +60 keeps RAISING from
-  // the T-pose's shoulder-height rest, it doesn't lower toward the chest. Negative Z (around -25)
-  // is what brings the tucked hands down to the sternum/collar band Pitcher-home-1 actually shows.
+  // ROUND 2 correction (coordinator review): the two-handed grip is NOT a case of "identical local
+  // rotations always converge on the centerline" - that was round 1's claim, copied from the
+  // batter's load pose, and it is false in general. Measured directly (a rest-pose printout,
+  // `restQ` as Euler angles): the rig's L/R arm bones are NOT simple mirror images of each other in
+  // their bind pose (`handR` rest reads `[0.9, 0, -3.8]` degrees, `handL` rest reads
+  // `[-173.8, 87, 169.9]` - wildly different Euler triples, not a sign flip), so applying the SAME
+  // local offset composes into a DIFFERENT world rotation per side. It only looked like a universal
+  // rule because the batter's specific numbers happened to still converge; here they did not -
+  // round 1 shipped a Set pose with `upperArmR:[65,0,-25]` reused verbatim from that batter number,
+  // and it put handR ABOVE the head (world y=-77, HIGHER than head's own y=-128) while handL landed
+  // at a normal chest height (y=-180) - exactly the reported "one hand up beside the head" defect.
+  // The fix is empirical, not a formula: `upperArmR` was swept on its own (a bones-only probe, no
+  // render, reading `handR`'s world position directly) until it reached roughly the SAME world
+  // position handL already had (`[65,0,120]` lands handR at world `[237,-181,63]` against handL's
+  // own `[234,-180,86]` - close enough that the two hands read as touching), then confirmed by
+  // rendering beside Pitcher-home-1.png. `lowerArmR`/`handR` did not need to change, only
+  // `upperArmR`'s own Z swung from -25 to +120 - this rig's mirror asymmetry lives in how far each
+  // side's Z axis has to travel from its own rest, not in the other two axes.
   Set:   { loop: true, mark: null, keys: [
     // Static hands-tucked stance, held (matches Pitcher-home-1). hipsOffset/spine only move at the
     // middle keyframe (see below) so the loop is a small bob and weight shift, not a held freeze -
     // small enough that a screenshot still reads as "standing still" (section 3.4's own rule for
     // Idle/Set), same discipline as the batter's Idle loop.
     { t: 0, pose: {
-      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
     } },
     // Mid-loop: a hair of lift (hipsOffset Y) and a hair of side lean (spine Z) - a breathing bob
     // and a weight shift, per section 3.4's own line for this clip. Arms untouched: the grip itself
     // doesn't need to move for this to read as "alive."
     { t: 1, pose: {
-      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
       spine: [0, 0, 3],
     }, hipsOffset: [0, 0.01, 0] },
     { t: 2, pose: {
-      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
     } },
   ] },
@@ -298,7 +308,7 @@ export const CLIPS = {
     // t=0: identical to Set's own base pose, so the Set->Pitch crossfade (actors.js CROSSFADE_S)
     // has nothing to blend across.
     { t: 0.00, pose: {
-      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
     } },
     // t=0.45 (45% to the mark): leg lift, ~Pitcher-home-2. Hands stay tucked exactly as in Set -
@@ -307,7 +317,7 @@ export const CLIPS = {
     // under the thigh - a first pass at 90 read as a runner's stride, not a pitcher's balanced
     // lift; rendered both and 65 is the one that reads as the sprite's relaxed hanging shin).
     { t: 0.45, pose: {
-      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
       upperLegR: [-80, 0, 0], lowerLegR: [0, 0, 65],
       upperLegL: [0, 0, 0], lowerLegL: [0, 0, 5],

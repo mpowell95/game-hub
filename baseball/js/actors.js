@@ -42,44 +42,75 @@ export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0.24, 
 // used below, so keying it would also recolour a sliver of skin every time a jersey changes
 // colour. Left out on purpose.
 const COLOR_TOL = 6;   // default, per channel - "a few units" (section 2.2)
-// Sampled from reference/baseball/batter-home-1.png (cream jersey, navy pinstripe/cap trim) and
-// batter-away-1.png (navy jersey; pants grey reused here as the away trim, since criminalMaleA's
-// own away needs a light colour for its green trim and the away sprite set has no third hue).
-const HOME_CREAM = 0xf5ecd6;
-const NAVY = 0x25395c;
-const AWAY_GREY = 0xc9c9c9;
-// skaterMaleA's tee is PAINTED AS A GRADIENT, not a flat fill - a vertical light falloff from
-// #ea3031 (dark, the collar/hem) up to #f2654c (bright, the torso's own middle) and back down,
-// measured sampling a column straight down the shirt (`python3 -c "PIL...getpixel"` every 40px).
-// A single default-tolerance key at #f2654c (COLOR_TOL=6) only ever covered the mid-band - the
-// first render of this clip against Pitcher-home-1.png still showed a visible red-orange collar
-// and hem, uncorrected, which is what caught this. The gradient's own G channel runs 48..101 (the
-// widest-swinging channel); a tolerance of 28 on EACH of the two measured endpoints closes the gap
-// between them (their tolerance windows overlap at G=73..76) while staying clear of skin: skin's
-// own G is 140+, a 39-unit gap from the brighter endpoint's own G=101, so no COLOR_TOL widening
-// here ever risks keying skin. `#e4783e`, the shirt's separate fold-shadow colour, needs no key of
-// its own - it already falls inside `#f2654c`'s widened window (measured).
+// Sampled from reference/baseball/batter-home-1.png (off-white shirt AND pants, navy pinstripe/
+// trim/cap) and batter-away-1.png (navy shirt, light grey pants, white piping) - coordinator
+// review, round 2: the round-1 palette (dull cream everywhere, navy-on-navy away) read as one flat
+// team, not two, at the size these figures actually draw on screen (the pitcher is 11% of the
+// field height - checked at height 90px, not only 400, this round).
+const HOME_CREAM = 0xf2ead2;   // off-white shirt + pants, home
+const NAVY = 0x25395c;         // trim, home; shirt, away
+const AWAY_GREY = 0xc9c9c9;    // pants, away (sampled from batter-away-1.png's own pants fill)
+const AWAY_TRIM = 0xf2f2f2;    // trim, away ("white trim" per the brief; a hair off pure white so it
+                                // never exact-matches a key meant for something else)
+// skaterMaleA's tee AND its jeans are each painted as their OWN vertical gradient (a light falloff
+// top to bottom), not a flat fill - measured sampling a column straight down each
+// (`python3 -c "PIL...getpixel"` every 20-40px). A single default-tolerance key at one shade only
+// ever covered that shade's own mid-band; the first render of this clip against Pitcher-home-1.png
+// still showed an uncorrected red-orange collar/hem before the shirt got its second endpoint, which
+// is what caught the shape of the problem. Two measured endpoints each, at a wider tolerance that
+// closes the gap between them, fixes both: the shirt's G channel runs 48..101 (tol 28 overlaps at
+// G=73..76); the jeans' G channel runs 65..90 (tol 20 overlaps at G=75..85, and R alone - jeans
+// R 18..24 against the shirt's R 234..245 - keeps the two gradients from ever cross-matching each
+// other even before G/B are checked). Both stay clear of skin (G 140+, at least 39 units past
+// either gradient's own brighter endpoint) at these tolerances.
 const SHIRT_TOL = 28;
+const PANTS_TOL = 20;
+// criminalMaleA's suit and its trousers are painted with the IDENTICAL colour (#ffffff, verified
+// by direct pixel sampling - not a near-white shade that a tighter tolerance could still tell
+// apart) - one flat fill covers the whole lower body, the shirt and the pants share one source
+// pixel value. Colour alone cannot key them to two different away colours, which is what "away
+// shirt navy, away pants light grey" needs. `rect` (fractions of the texture, [x0,y0,x1,y1])
+// restricts a key to a region of the PAINTED IMAGE, not the 3D mesh - found by rendering the real
+// body with a labelled test-grid texture in place of the skin (a scratchpad-only tool, not
+// shipped) to see which image region lands on which body part, then tightened to the navy pixels'
+// own measured bounding box (a Python bbox scan restricted to blue-ish pixels, skaterMaleA's own
+// jeans - both skins share one UV layout, so the same box applies to criminalMaleA's trousers).
+// The pants key is listed BEFORE the shirt key for both skins/both sides so a white pixel inside
+// the box is claimed by the pants rule first; every other white pixel (the shirt, sleeves, cuffs)
+// falls through to the shirt rule, which carries no rect and matches everywhere else.
+const PANTS_RECT = [0.59, 0.74, 1.0, 1.0];
 export const KEYS = {
   skaterMaleA: {
     home: [
-      { from: [0xea, 0x30, 0x31], to: HOME_CREAM, tol: SHIRT_TOL },
-      { from: [0xf2, 0x65, 0x4c], to: HOME_CREAM, tol: SHIRT_TOL },
+      { from: [0x12, 0x41, 0x63], to: HOME_CREAM, tol: PANTS_TOL, part: 'pants' },
+      { from: [0x18, 0x5a, 0x84], to: HOME_CREAM, tol: PANTS_TOL, part: 'pants' },
+      { from: [0xea, 0x30, 0x31], to: HOME_CREAM, tol: SHIRT_TOL, part: 'shirt' },
+      { from: [0xf2, 0x65, 0x4c], to: HOME_CREAM, tol: SHIRT_TOL, part: 'shirt' },
     ],
     away: [
-      { from: [0xea, 0x30, 0x31], to: NAVY, tol: SHIRT_TOL },
-      { from: [0xf2, 0x65, 0x4c], to: NAVY, tol: SHIRT_TOL },
+      { from: [0x12, 0x41, 0x63], to: AWAY_GREY, tol: PANTS_TOL, part: 'pants' },
+      { from: [0x18, 0x5a, 0x84], to: AWAY_GREY, tol: PANTS_TOL, part: 'pants' },
+      { from: [0xea, 0x30, 0x31], to: NAVY, tol: SHIRT_TOL, part: 'shirt' },
+      { from: [0xf2, 0x65, 0x4c], to: NAVY, tol: SHIRT_TOL, part: 'shirt' },
     ],
   },
   criminalMaleA: {
-    // Flat fills, not a gradient (measured the same way) - the default COLOR_TOL is enough. Home
-    // is "as painted" (section 2.2): the white suit is untouched, only the collar/cuff trim (its
-    // main fill #009f78 and its own fold-shadow #037e60) is keyed, to the navy accent.
-    home: [{ from: [0x00, 0x9f, 0x78], to: NAVY }, { from: [0x03, 0x7e, 0x60], to: NAVY }],
-    // Away: the white suit (#ffffff, the skin's single biggest fill - measured 373k of 1,048,576
-    // px) becomes the navy jersey; the trim keys to grey/white instead of navy so it still reads
-    // as trim against a now-navy body.
-    away: [{ from: [0xff, 0xff, 0xff], to: NAVY }, { from: [0x00, 0x9f, 0x78], to: AWAY_GREY }, { from: [0x03, 0x7e, 0x60], to: AWAY_GREY }],
+    // Trim (collar/cuff, its main fill #009f78 and its own fold-shadow #037e60) keys to the navy
+    // accent on both sides, same as round 1. The suit's white (#ffffff) is split by PANTS_RECT:
+    // home sends BOTH halves to the same off-white (so shirt and pants still read as one uniform,
+    // matching skaterMaleA's own home treatment); away sends the boxed pants pixels to light grey
+    // and every other white pixel (the shirt) to navy - two different colours from one source
+    // shade, which is the whole reason PANTS_RECT exists for this skin.
+    home: [
+      { from: [0xff, 0xff, 0xff], to: HOME_CREAM, rect: PANTS_RECT, part: 'pants' },
+      { from: [0x00, 0x9f, 0x78], to: NAVY, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: NAVY, part: 'trim' },
+      { from: [0xff, 0xff, 0xff], to: HOME_CREAM, part: 'shirt' },
+    ],
+    away: [
+      { from: [0xff, 0xff, 0xff], to: AWAY_GREY, rect: PANTS_RECT, part: 'pants' },
+      { from: [0x00, 0x9f, 0x78], to: AWAY_TRIM, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: AWAY_TRIM, part: 'trim' },
+      { from: [0xff, 0xff, 0xff], to: NAVY, part: 'shirt' },
+    ],
   },
 };
 
@@ -114,15 +145,24 @@ async function skinTexture(skinName, side) {
   ctx.drawImage(img, 0, 0);
   const keys = (KEYS[skinName] && KEYS[skinName][side]) || [];
   if (keys.length) {
-    const targets = keys.map((k) => ({ from: k.from, to: [(k.to >> 16) & 255, (k.to >> 8) & 255, k.to & 255], tol: k.tol || COLOR_TOL }));
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const w = canvas.width, h = canvas.height;
+    const targets = keys.map((k) => ({
+      from: k.from, to: [(k.to >> 16) & 255, (k.to >> 8) & 255, k.to & 255], tol: k.tol || COLOR_TOL,
+      // rect (image fractions) -> pixel bounds, once, so the per-pixel loop below is a plain
+      // integer compare rather than four multiplies every pixel.
+      px: k.rect ? [Math.floor(k.rect[0] * w), Math.floor(k.rect[1] * h), Math.ceil(k.rect[2] * w), Math.ceil(k.rect[3] * h)] : null,
+    }));
+    const imgData = ctx.getImageData(0, 0, w, h);
     const d = imgData.data;
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;   // transparent: nothing to key
+      const px = (i / 4) % w, py = Math.floor((i / 4) / w);
       for (const k of targets) {
+        if (k.px && (px < k.px[0] || px >= k.px[2] || py < k.px[1] || py >= k.px[3])) continue;   // outside this key's rect
         if (Math.abs(d[i] - k.from[0]) <= k.tol && Math.abs(d[i + 1] - k.from[1]) <= k.tol && Math.abs(d[i + 2] - k.from[2]) <= k.tol) {
           d[i] = k.to[0]; d[i + 1] = k.to[1]; d[i + 2] = k.to[2];
-          break;   // first matching key wins; KEYS never lists two overlapping sources for one skin/side
+          break;   // first matching key wins - this is what lets a rect-restricted key claim its
+                   // box before a same-coloured, rect-free key further down matches everywhere else
         }
       }
     }

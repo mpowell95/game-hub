@@ -164,6 +164,23 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   else fail('KEYS skin-tone guard', offenders.join(', '));
 }
 
+// STAGE 3 round 2 (coordinator review): away read as one dark navy-on-navy mass at the size these
+// figures actually draw, because KEYS never touched the pants at all - only the shirt. A pants key
+// on both CAST skins (skaterMaleA/skinForSide('home'), criminalMaleA/skinForSide('away')), both
+// sides, is what a future edit must not quietly drop again.
+{
+  const CAST_SKINS = ['skaterMaleA', 'criminalMaleA'];   // the two skins section 2.2's casting rule actually uses
+  let allHavePants = true;
+  for (const skinName of CAST_SKINS) {
+    for (const side of ['home', 'away']) {
+      const keys = (KEYS[skinName] && KEYS[skinName][side]) || [];
+      const hasPants = keys.some((k) => k.part === 'pants');
+      if (!hasPants) { allHavePants = false; fail(`KEYS.${skinName}.${side} pants key`, 'no entry tagged part:"pants"'); }
+    }
+  }
+  if (allHavePants) ok('KEYS: both cast skins (skaterMaleA, criminalMaleA) carry a pants key on both sides');
+}
+
 console.log(failed ? `\n${failed} FAILED (node half)\n` : '\nnode half: all checks passed\n');
 
 // ================================================================= Chromium half (load/dispose) ==
