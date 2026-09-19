@@ -21,6 +21,29 @@ const DPR_CAP = 2;
 // The bat, in fractions of the model's own height; tuned by eye in the dev screen (stage 3).
 export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0, 0], rot: [0, 0, 0], color: 0xc9a06a };
 
+// STAGE 2: the default skin, painted as shipped (section 2.2 - no team colour-key remap yet, that
+// is stage 3). Loaded once and shared by every actor: `material.map` is the only per-actor thing,
+// so a cloned material can hold this same texture without a second network fetch.
+const DEFAULT_SKIN_URL = new URL('../models/skins/skaterMaleA.png', import.meta.url).href;
+let _skinTexPromise = null;
+function loadDefaultSkinTexture() {
+  // three's TextureLoader default (flipY = true) is correct for this glb (section 2.1 TEXTURE
+  // RULE: the UVs came through FBXLoader in three's own convention) - do not set flipY false.
+  if (!_skinTexPromise) _skinTexPromise = new THREE.TextureLoader().loadAsync(DEFAULT_SKIN_URL)
+    .then((tex) => { tex.colorSpace = THREE.SRGBColorSpace; return tex; });
+  return _skinTexPromise;
+}
+
+// STAGE 2: the batter's facing (docs/BASEBALL-3D-BUILD.md section 3.5's `_place` facingRad). The
+// sprite frames (reference/baseball/batter-home-1..8.png) show a right-handed batter seen from
+// behind the plate: mostly his back and right shoulder, with the chest only partly turned toward
+// the camera. rotation.y = +90deg alone (the model's +Z front pointed exactly screen-right) read
+// as a flatter profile than the sprites; tuned by rendering CLIPS.Idle beside batter-home-1.png
+// (render-actor.mjs --facing 90/100/105/110) - 95deg was the closest match and is barely
+// distinguishable from the neighbouring angles tried, so this is a small, deliberately round
+// number in that range, not a fit to the exact pixel.
+export const BATTER_FACING_RAD = 95 * Math.PI / 180;
+
 export class Actors {
   constructor(wrapEl) {
     this.wrapEl = wrapEl;
@@ -61,9 +84,13 @@ export class Actors {
   }
 
   async load(url) {
-    const gltf = await new GLTFLoader().loadAsync(url);
+    // Loaded together: the model has no embedded texture (section 2.1 - one "Skin" material, no
+    // image in the file), so a render before the skin arrives would be flat grey. Stage 3 replaces
+    // this with the colour-keyed, per-team remap (section 2.2); stage 2 only needs it readable.
+    const [gltf, skinTex] = await Promise.all([new GLTFLoader().loadAsync(url), loadDefaultSkinTexture()]);
     this._proto = gltf.scene;
     this._fileClips = gltf.animations || [];
+    this._defaultSkinTex = skinTex;
     for (const role of ['batter', 'pitcher']) this.actors[role] = this._makeActor(role);
     this.ready = true;
   }
@@ -77,7 +104,16 @@ export class Actors {
     const heightWorld = box.max.y - box.min.y;
     const footY = box.min.y;   // so the feet, not the origin, sit on the anchor
     // Recolour by team: clone the materials this actor touches so the two figures stay independent.
-    root.traverse((o) => { if (o.isMesh) { o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); o.frustumCulled = false; } });
+    // STAGE 2: the skin PNG as painted, `material.color` left white so the texture shows true (a
+    // tint here would colour skin and hair along with the uniform - section 3.5's own note, and
+    // exactly what stage 3's colour-key remap exists to avoid doing the cheap way).
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
+      o.frustumCulled = false;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) { m.map = this._defaultSkinTex; m.color.set(0xffffff); m.needsUpdate = true; }
+    });
     const mixer = new THREE.AnimationMixer(root);
     const actions = {};
     // Every clip the FILE itself carries, playable by its own name (e.g. the scaffold's 'Idle',

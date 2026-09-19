@@ -1124,6 +1124,11 @@ class BaseballPlayScreen {
     const tuneSheet = sheet.querySelector('.bb-tune-sheet');
     let wrap = sheet.querySelector('[data-role="dev3d-wrap"]');
     if (wrap) wrap.remove();
+    // Stale clip buttons/scrubber from a previous open would otherwise keep listeners closed over
+    // the actors instance just disposed above - drop them here, unconditionally, not only on the
+    // success path below (a failed initGL()/load() must not leave a dead control behind).
+    const staleClipCtl = tuneSheet.querySelector('[data-role="dev3d-clipctl"]');
+    if (staleClipCtl) staleClipCtl.remove();
     wrap = document.createElement('div');
     wrap.dataset.role = 'dev3d-wrap';
     wrap.className = 'bb-dev3d-wrap';
@@ -1151,7 +1156,7 @@ class BaseballPlayScreen {
     const anchorPxLocal = (frac) => ({ x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH });
 
     if (closedOrGoneCheck(this, sheet)) return;
-    const { Actors } = await import('./actors.js');
+    const [{ Actors, BATTER_FACING_RAD }, { CLIPS }] = await Promise.all([import('./actors.js'), import('./poses.js')]);
     if (closedOrGoneCheck(this, sheet)) return;
     const actors = new Actors(wrap);
     this._devActors = actors;
@@ -1169,11 +1174,56 @@ class BaseballPlayScreen {
       return;
     }
     if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
-    actors.place('batter', { anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * DEV3D_NEAR_BATTER_HEIGHT_FRAC, facingRad: 0 });
+    actors.place('batter', { anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * DEV3D_NEAR_BATTER_HEIGHT_FRAC, facingRad: BATTER_FACING_RAD });
     actors.place('pitcher', { anchor: anchorPxLocal(PLATE_ANCHORS.mound), heightPx: h * DEV3D_MOUND_PITCHER_HEIGHT_FRAC, facingRad: 0 });
-    actors.idle('batter');
     actors.idle('pitcher');
     actors.start();
+
+    // STAGE 2 (docs/BASEBALL-3D-BUILD.md section 3.7): clip buttons + a scrubber on the batter, so
+    // a pose can be seeked to and held next to a sprite frame on the phone. Every named CLIPS entry
+    // with authored keys gets a button; the scrubber pauses the mixer action at the chosen time
+    // instead of racing the running render loop (start()'s own mixer.update would otherwise
+    // overwrite a manual seek on the very next frame).
+    const clipCtl = document.createElement('div');
+    clipCtl.dataset.role = 'dev3d-clipctl';
+    clipCtl.className = 'bb-dev3d-clipctl';
+    const clipNames = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length);
+    clipCtl.innerHTML = `
+      <div class="bb-tune-actions" data-role="dev3d-clipbtns">
+        ${clipNames.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
+      </div>
+      <label class="bb-tune-row"><span>Time</span>
+        <input type="range" data-role="dev3d-scrub" min="0" max="1" step="0.01" value="0">
+        <span class="bb-tune-val" data-role="dev3d-scrub-val">0.00s</span>
+      </label>`;
+    tuneSheet.insertBefore(clipCtl, tuneSheet.querySelector('.bb-tune-actions'));
+    const scrub = clipCtl.querySelector('[data-role="dev3d-scrub"]');
+    const scrubVal = clipCtl.querySelector('[data-role="dev3d-scrub-val"]');
+    let currentClip = null;
+    const playClip = (name) => {
+      const def = CLIPS[name];
+      if (!def || !def.keys.length) return;
+      currentClip = name;
+      const dur = def.keys[def.keys.length - 1].t;
+      scrub.max = String(dur || 1);
+      scrub.value = '0';
+      scrubVal.textContent = '0.00s';
+      actors.play('batter', name);
+      const a = actors.actors.batter.actions[name];
+      if (a) a.paused = false;
+    };
+    for (const btn of clipCtl.querySelectorAll('[data-clip]')) {
+      btn.addEventListener('click', () => playClip(btn.dataset.clip));
+    }
+    scrub.addEventListener('input', () => {
+      if (!currentClip) return;
+      const a = actors.actors.batter.actions[currentClip];
+      if (!a) return;
+      a.paused = true;
+      a.time = parseFloat(scrub.value);
+      scrubVal.textContent = `${a.time.toFixed(2)}s`;
+    });
+    playClip('Idle');
   }
 }
 

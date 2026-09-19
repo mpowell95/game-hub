@@ -1,24 +1,24 @@
 // test-baseball-actors.mjs - the 3D actor layer (docs/BASEBALL-3D-BUILD.md section 3.9), two halves.
 //
 // 1. NODE, NO BROWSER (add to run-all-tests.mjs): readGlb parses the model; not Draco; under 4MB;
-//    every RIG_REQUIRED name is a node in the file; the shirt material named in section 2.2 exists;
-//    CLIPS.Swing/CLIPS.Pitch have keys and a mark inside [0, lastKey.t]; buildClip over a fake
-//    bones/restQ object yields one quaternion track per bone used and the right duration.
+//    every RIG_REQUIRED name is a node in the file; the four skin PNGs (section 2.1) exist and are
+//    1024x1024; CLIPS.Swing/CLIPS.Miss/CLIPS.Pitch have keys and a mark inside [0, lastKey.t];
+//    buildClip over a fake bones/restQ object yields one quaternion track per bone used and the
+//    right duration.
 // 2. CHROMIUM UNDER SWIFTSHADER (SKIPs without playwright-core; NOT in run-all-tests.mjs): loads
 //    the model through the real Actors class, checks the actor canvas exists and paints a
 //    non-transparent pixel block around an idle anchor, then checks dispose() actually tears it
 //    down (canvas removed, renderer gone).
 //
-// STAGE 1: section 2.2 is unfilled, so `baseball/models/player.glb` does not exist yet and every
-// model-dependent check SKIPs with a printed reason instead of failing - pass a real file to check
-// it for real, either the section 2.1 scaffold or, once it exists, the real player.glb:
+// A real file is checked by default now that section 2.2 is filled (baseball/models/player.glb
+// ships in the repo); pass a different one (e.g. the retired section 2.1 scaffold) with:
 //
-//   node test-baseball-actors.mjs --model <path-to-scaffold-or-player.glb>
+//   node test-baseball-actors.mjs --model <path>
 //   BB_MODEL_PATH=<path> node test-baseball-actors.mjs
 //
-// Stage 2/3 fill poses.js's CLIPS.Swing/Miss/Set/Pitch keys; until then those two marks SKIP too,
-// on purpose - poses.js ships stage 1 with every clip's `keys` empty (see its own header).
-import { existsSync } from 'node:fs';
+// Stage 3 still owes poses.js's CLIPS.Set/Pitch keys - those two SKIP until then, on purpose (see
+// poses.js's own header).
+import { existsSync, readFileSync } from 'node:fs';
 import { readGlb, summarize } from './glb-info.mjs';
 import { RIG, RIG_REQUIRED } from './baseball/js/rig.js';
 import { CLIPS, buildClip } from './baseball/js/poses.js';
@@ -32,9 +32,21 @@ const skipLine = (label, why) => console.log(`SKIP  ${label}: ${why}`);
 const args = process.argv.slice(2);
 const modelArgIdx = args.indexOf('--model');
 const MODEL_PATH = (modelArgIdx !== -1 && args[modelArgIdx + 1]) || process.env.BB_MODEL_PATH || 'baseball/models/player.glb';
-// section 2.2 (docs/BASEBALL-3D-BUILD.md) - filled in once Matt picks the model. Until then this
-// stays null and the one check that needs it SKIPs.
-const SHIRT_MATERIAL = null;
+// section 2.2 (docs/BASEBALL-3D-BUILD.md): the four painted skins for the one shared "Skin"
+// material/body. No PNG library in this repo (`js/CLAUDE.md`'s no-dependency rule), so the size
+// check below reads the IHDR chunk's own width/height bytes directly.
+const SKIN_PNGS = ['skaterMaleA', 'criminalMaleA', 'skaterFemaleA', 'cyborgFemaleA'].map((n) => `baseball/models/skins/${n}.png`);
+/** A PNG's width/height, read straight from its IHDR chunk (signature[8] + length[4] + "IHDR"[4] +
+ *  width[4BE] + height[4BE], per the PNG spec) - no decode, no dependency. Throws if the file isn't
+ *  a PNG or its first chunk isn't IHDR (true for every PNG this repo would ever ship). */
+function pngSize(path) {
+  const buf = readFileSync(path);
+  const sig = buf.subarray(0, 8).toString('hex');
+  if (sig !== '89504e470d0a1a0a') throw new Error(`${path}: not a PNG (bad signature)`);
+  const chunkType = buf.toString('ascii', 12, 16);
+  if (chunkType !== 'IHDR') throw new Error(`${path}: first chunk is "${chunkType}", not IHDR`);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
 
 console.log('=== node half ===');
 console.log(`model: ${MODEL_PATH}${existsSync(MODEL_PATH) ? '' : ' (missing)'}`);
@@ -71,12 +83,17 @@ if (!existsSync(MODEL_PATH)) {
     }
     if (allRigFound) ok(`every RIG_REQUIRED name is a node in the file (${RIG_REQUIRED.length} checked)`);
 
-    if (SHIRT_MATERIAL) {
-      if (s.materials.includes(SHIRT_MATERIAL)) ok(`shirt material "${SHIRT_MATERIAL}" exists`);
-      else fail('shirt material', `"${SHIRT_MATERIAL}" not in [${s.materials.join(', ')}]`);
-    } else {
-      skipLine('shirt material check', 'section 2.2 SHIRT MATERIAL not filled yet');
+    let allSkinsOk = true;
+    for (const p of SKIN_PNGS) {
+      if (!existsSync(p)) { fail(`skin PNG ${p}`, 'file does not exist'); allSkinsOk = false; continue; }
+      try {
+        const { width, height } = pngSize(p);
+        if (width === 1024 && height === 1024) continue;
+        fail(`skin PNG ${p}`, `${width}x${height}, expected 1024x1024`);
+        allSkinsOk = false;
+      } catch (e) { fail(`skin PNG ${p}`, e.message); allSkinsOk = false; }
     }
+    if (allSkinsOk) ok(`the four skin PNGs exist and are 1024x1024 (${SKIN_PNGS.length} checked)`);
   } catch (e) {
     fail('model checks', e.message);
   }
@@ -105,13 +122,13 @@ if (!existsSync(MODEL_PATH)) {
   else fail('buildClip duration', `${clip.duration}, expected 0.5`);
 }
 
-// CLIPS.Swing / CLIPS.Pitch marks: only assert once a stage has authored real keys (stage 2 for
-// Swing/Miss, stage 3 for Set/Pitch) - poses.js ships stage 1 with every clip's keys EMPTY on
-// purpose (see its own header), so asserting a mark against an empty key list would always fail
-// for a reason that has nothing to do with this stage.
-for (const name of ['Swing', 'Pitch']) {
+// CLIPS.Swing / CLIPS.Miss / CLIPS.Pitch marks: only assert once a stage has authored real keys
+// (stage 2 for Swing/Miss, stage 3 for Set/Pitch) - poses.js ships stage 1 with every clip's keys
+// EMPTY on purpose (see its own header), so asserting a mark against an empty key list would
+// always fail for a reason that has nothing to do with this stage.
+for (const name of ['Swing', 'Miss', 'Pitch']) {
   const def = CLIPS[name];
-  if (!def.keys.length) { skipLine(`CLIPS.${name}.mark`, 'keys not authored yet (stage 2 for Swing, stage 3 for Pitch)'); continue; }
+  if (!def.keys.length) { skipLine(`CLIPS.${name}.mark`, 'keys not authored yet (stage 2 for Swing/Miss, stage 3 for Pitch)'); continue; }
   const lastT = def.keys[def.keys.length - 1].t;
   if (def.mark != null && def.mark >= 0 && def.mark <= lastT) ok(`CLIPS.${name}.mark (${def.mark}) inside [0, ${lastT}]`);
   else fail(`CLIPS.${name}.mark`, `${def.mark} not inside [0, ${lastT}]`);
