@@ -249,6 +249,20 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     if (!re.test(uiSrc)) { fail('ui.js actor call', `missing: ${label}`); allCallsFound = false; }
   }
   if (allCallsFound) ok(`ui.js: every section 3.6 mapping-table actor call is present (${wantCalls.length} checked)`);
+
+  // Coordinator review (post stage-4 commit 5cd2f21): the render-rate cap that keeps r2-cadence in
+  // range under software GL must not reach real hardware - asserts the cap is GATED on isSoftGL(),
+  // not applied unconditionally, so a later edit can't quietly re-cap every real device again.
+  const actorsSrc = readFileSync('./baseball/js/actors.js', 'utf8');
+  if (/function isSoftGL\(/.test(actorsSrc)) ok('actors.js: isSoftGL() probe is present (copied from pinball/js/render3d.js)');
+  else fail('actors.js isSoftGL', 'no "function isSoftGL(" found');
+
+  const startMatch = actorsSrc.match(/\n {2}start\(\) \{[\s\S]*?\n {2}\}\n/);
+  if (startMatch && /const soft = isSoftGL\(\)/.test(startMatch[0]) && /if \(!soft \|\| now - this\._lastRender >= RENDER_FRAME_MS\)/.test(startMatch[0])) {
+    ok('actors.js: start()\'s render-rate cap is gated on isSoftGL() (uncapped on real hardware)');
+  } else {
+    fail('actors.js render cap gating', 'start() does not gate RENDER_FRAME_MS on isSoftGL() - a real device would be capped unconditionally');
+  }
 }
 
 console.log(failed ? `\n${failed} FAILED (node half)\n` : '\nnode half: all checks passed\n');

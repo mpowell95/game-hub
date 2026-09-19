@@ -22,8 +22,34 @@ import { onViewportResize } from '../../js/viewport.js';
 
 const CROSSFADE_S = 0.15;
 const DPR_CAP = 2;
-// STAGE 4: `start()`'s own render-rate cap - see its header for the measured reason (R2 cadence).
+// STAGE 4: `start()`'s own render-rate cap, applied ONLY under software GL - see `isSoftGL()` and
+// `start()`'s own header for the measured reason (R2 cadence) and why it must not reach real
+// hardware.
 const RENDER_FRAME_MS = 1000 / 20;
+
+/** Is this a SOFTWARE GL context (SwiftShader, llvmpipe)? Copied from `pinball/js/render3d.js`
+ *  (lines 78-95 as of this stage - that file's own header: "a software rasteriser cannot afford
+ *  [the full cost]... the headless browsers the visual suite runs in are all software"). Memoised,
+ *  so the probe happens once per page rather than once per Actors instance, and the probe context
+ *  is handed back immediately - never throws, an unanswerable probe means "not software". */
+let SOFT_GL = null;
+function isSoftGL() {
+  if (SOFT_GL !== null) return SOFT_GL;
+  let soft = false;
+  let probe = null;
+  try {
+    probe = document.createElement('canvas').getContext('webgl');
+    const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
+    const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+    soft = /swiftshader|software|llvmpipe/i.test(String(name));
+  } catch { soft = false; }
+  try {
+    const lose = probe && probe.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch { /* nothing to give back */ }
+  SOFT_GL = soft;
+  return soft;
+}
 // The bat, in fractions of the model's own height; tuned by eye in the dev screen (stage 3).
 // STAGE 2 CORRECTION (coordinator review, round 1): the cylinder in _attachBat is built CENTERED
 // on its own local origin (CylinderGeometry's default), so at pos=[0,0,0] the hand held the
@@ -471,31 +497,38 @@ export class Actors {
     return { x: v.x, y: -v.y };
   }
 
-  // STAGE 4 FIX: `render()` is the one properly expensive call in this loop (two skinned actors,
-  // ~4800 verts each, plus the bat/shadows/ball) - measured against the REAL live play screen
-  // (`test-baseball-device.mjs`'s r2-cadence, mounted through the real hub), rendering it at every
-  // requestAnimationFrame pushed the verdict-to-next-release gap from its pre-3D ~6220ms to
-  // ~6300-6350ms: real main-thread contention between this loop's own synchronous render() calls
+  // STAGE 4 FIX, corrected after coordinator review: `render()` is the one properly expensive call
+  // in this loop (two skinned actors, ~4800 verts each, plus the bat/shadows/ball) - measured
+  // against the REAL live play screen (`test-baseball-device.mjs`'s r2-cadence, mounted through
+  // the real hub), rendering it at every requestAnimationFrame pushed the verdict-to-next-release
+  // gap from its pre-3D ~6220ms to ~6300-6350ms under this sandbox's SOFTWARE renderer
+  // (SwiftShader): real main-thread contention between this loop's own synchronous render() calls
   // and `_stepWindup`'s setTimeout-based sleeps, not a change to any awaited duration (R1/R2's own
-  // numbers are untouched - see _stepWindup, _onEngineEvent, _settleAtBat). `mixer.update(dt)`
-  // still runs every rAF tick (every clip's timing, including the marks R1/R2 depend on, stays
-  // exact), only the RENDER is capped to `RENDER_FPS_CAP` - a game whose fastest motion (Swing,
-  // ~350ms) is still 10+ rendered frames looks unchanged at 30fps to a player, and halving the
-  // render() calls roughly halved the measured drift back into range. `_lastRender = 0` (not `now`)
-  // so the very first tick always renders immediately - no blank frame while the cap's own window
-  // fills for the first time.
+  // numbers are untouched - see _stepWindup, _onEngineEvent, _settleAtBat).
+  //
+  // The first cut of this fix capped the render rate EVERYWHERE, unconditionally - which pays for
+  // a sandbox artifact with every real player's frame rate. A real phone renders this scene on a
+  // real GPU, where the contention this fix exists for does not arise (the render call returns to
+  // the driver almost immediately instead of blocking the main thread while software-rasterising
+  // two figures), so a permanent 20fps cap would cost 7 of the ~21 rendered frames a real device
+  // gets through the fastest motion in the game (Swing, ~350ms) for a problem that is not there on
+  // that device. The cap is gated on `isSoftGL()` now: capped under software rendering (this
+  // sandbox, and any headless test), uncapped on real hardware (`requestAnimationFrame`'s own
+  // display-rate cap is the only limit there). `mixer.update(dt)` runs at whichever rate `render()`
+  // does either way, and `dt` is measured from `this._last`, which only advances on a frame that
+  // actually did work - so a clip's mark lands at the right REAL time regardless of how many rAF
+  // ticks were skipped in between (a lower tick rate, not dropped time), on both paths.
+  // `_lastRender = 0` (not `now`) so the very first tick always renders immediately - no blank
+  // frame while the cap's own window fills for the first time.
   start() {
     if (this._running) return;
     this._running = true;
     this._last = performance.now();
     this._lastRender = 0;
+    const soft = isSoftGL();
     const tick = (now) => {
       if (!this._running) return;
-      // Both the skinning update (58 bones x 2 actors) AND the render are gated by the same cap -
-      // `dt` is measured from `this._last`, which only advances on a frame that actually does
-      // work, so a clip's mark still lands at the right REAL time regardless of how many rAF ticks
-      // were skipped in between (a lower tick rate, not dropped time).
-      if (now - this._lastRender >= RENDER_FRAME_MS) {
+      if (!soft || now - this._lastRender >= RENDER_FRAME_MS) {
         const dt = Math.min(0.05, (now - this._last) / 1000);
         this._last = now;
         this._lastRender = now;
