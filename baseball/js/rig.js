@@ -19,12 +19,12 @@
 // splits straight into three finger-root "Palm" bones - so `handL`/`handR` use `Palm2L`/`Palm2R`,
 // the middle-finger root, as the nearest stand-in.
 export const RIG = {
-  hips: 'Hips', spine: 'Abdomen', chest: null, neck: 'Neck', head: 'Head',
-  shoulderL: 'ShoulderL', shoulderR: 'ShoulderR',
-  upperArmL: 'UpperArmL', upperArmR: 'UpperArmR', lowerArmL: 'LowerArmL', lowerArmR: 'LowerArmR',
-  handL: 'Palm2L', handR: 'Palm2R',
-  upperLegL: 'UpperLegL', upperLegR: 'UpperLegR', lowerLegL: 'LowerLegL', lowerLegR: 'LowerLegR',
-  footL: 'FootL', footR: 'FootR',
+  hips: 'Hips', spine: 'Spine', chest: 'Chest', neck: 'Neck', head: 'Head',
+  shoulderL: 'LeftShoulder', shoulderR: 'RightShoulder',
+  upperArmL: 'LeftArm', upperArmR: 'RightArm', lowerArmL: 'LeftForeArm', lowerArmR: 'RightForeArm',
+  handL: 'LeftHand', handR: 'RightHand',
+  upperLegL: 'LeftUpLeg', upperLegR: 'RightUpLeg', lowerLegL: 'LeftLeg', lowerLegR: 'RightLeg',
+  footL: 'LeftFoot', footR: 'RightFoot',
 };
 export const RIG_REQUIRED = ['hips', 'spine', 'head', 'upperArmL', 'upperArmR', 'lowerArmL', 'lowerArmR',
   'handL', 'handR', 'upperLegL', 'upperLegR', 'lowerLegL', 'lowerLegR', 'footL', 'footR'];
