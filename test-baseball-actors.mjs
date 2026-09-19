@@ -3,25 +3,27 @@
 // 1. NODE, NO BROWSER (add to run-all-tests.mjs): readGlb parses the model; not Draco; under 4MB;
 //    every RIG_REQUIRED name is a node in the file; the four skin PNGs (section 2.1) exist and are
 //    1024x1024; CLIPS.Swing/CLIPS.Miss/CLIPS.Pitch have keys and a mark inside [0, lastKey.t];
-//    buildClip over a fake bones/restQ object yields one quaternion track per bone used and the
-//    right duration.
+//    CLIPS.Set has keys (mark:null by design, so no mark check); actors.js's KEYS colour-key table
+//    (section 2.2) never keys a skin-tone colour; buildClip over a fake bones/restQ object yields
+//    one quaternion track per bone used and the right duration.
 // 2. CHROMIUM UNDER SWIFTSHADER (SKIPs without playwright-core; NOT in run-all-tests.mjs): loads
 //    the model through the real Actors class, checks the actor canvas exists and paints a
-//    non-transparent pixel block around an idle anchor, then checks dispose() actually tears it
-//    down (canvas removed, renderer gone).
+//    non-transparent pixel block around an idle anchor, checks a pitcher read-back differs between
+//    Set and mid-Pitch and a batter shirt pixel differs between home and away (section 2.2's
+//    colour-key remap), then checks dispose() actually tears it down (canvas removed, renderer
+//    gone, and - stage 3's own fix - without disposing the module-cached skin textures every OTHER
+//    Actors instance still holds, see actors.js's dispose() comment).
 //
 // A real file is checked by default now that section 2.2 is filled (baseball/models/player.glb
 // ships in the repo); pass a different one (e.g. the retired section 2.1 scaffold) with:
 //
 //   node test-baseball-actors.mjs --model <path>
 //   BB_MODEL_PATH=<path> node test-baseball-actors.mjs
-//
-// Stage 3 still owes poses.js's CLIPS.Set/Pitch keys - those two SKIP until then, on purpose (see
-// poses.js's own header).
 import { existsSync, readFileSync } from 'node:fs';
 import { readGlb, summarize } from './glb-info.mjs';
 import { RIG, RIG_REQUIRED } from './baseball/js/rig.js';
 import { CLIPS, buildClip } from './baseball/js/poses.js';
+import { KEYS } from './baseball/js/actors.js';
 import * as THREE from './baseball/js/vendor/three.module.min.js';
 
 let failed = 0;
@@ -134,6 +136,34 @@ for (const name of ['Swing', 'Miss', 'Pitch']) {
   else fail(`CLIPS.${name}.mark`, `${def.mark} not inside [0, ${lastT}]`);
 }
 
+// CLIPS.Set: loop:true, mark:null by design (Idle/Set never have a mark - section 3.4's own
+// table), so it needs its own presence check rather than the mark-range loop above.
+if (CLIPS.Set && CLIPS.Set.keys.length) ok(`CLIPS.Set has keys (${CLIPS.Set.keys.length})`);
+else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md section 3.4)');
+
+// actors.js's KEYS (section 2.2's colour-key remap table) must never key a skin-tone colour - the
+// #f58c6a..#f59777 AA family every skin's face/arms shade through. A source this close to skin
+// recolours a sliver of it every time a jersey changes colour (poses.js's own header has the
+// measured near-miss, skaterMaleA's `#f59170`, that this guards against staying out of the table).
+{
+  const SKIN_LO = [0xf5, 0x8c, 0x6a], SKIN_HI = [0xf5, 0x97, 0x77];
+  let sawSkinKey = false;
+  const offenders = [];
+  for (const skinName of Object.keys(KEYS)) {
+    for (const side of Object.keys(KEYS[skinName])) {
+      for (const k of KEYS[skinName][side]) {
+        const [r, g, b] = k.from;
+        if (r >= SKIN_LO[0] && r <= SKIN_HI[0] && g >= SKIN_LO[1] && g <= SKIN_HI[1] && b >= SKIN_LO[2] && b <= SKIN_HI[2]) {
+          sawSkinKey = true;
+          offenders.push(`${skinName}.${side} [${r},${g},${b}]`);
+        }
+      }
+    }
+  }
+  if (!sawSkinKey) ok('KEYS: no key source in the #f58c6a..#f59777 skin-tone range');
+  else fail('KEYS skin-tone guard', offenders.join(', '));
+}
+
 console.log(failed ? `\n${failed} FAILED (node half)\n` : '\nnode half: all checks passed\n');
 
 // ================================================================= Chromium half (load/dispose) ==
@@ -186,7 +216,7 @@ async function runChromiumHalf() {
   await page.evaluate(() => { window.__bbTest = true; });
 
   const result = await page.evaluate(async ({ modelUrl }) => {
-    const { Actors } = await import('/baseball/js/actors.js');
+    const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } = await import('/baseball/js/actors.js');
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:fixed; left:0; top:0; width:300px; height:300px;';
     document.body.appendChild(wrap);
@@ -208,11 +238,62 @@ async function runChromiumHalf() {
     gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const hasCanvas = !!document.querySelector('canvas.bb-actor-canvas');
     const alpha = px[3];
+
+    // STAGE 3: a read-back of the pitcher region differs between Set and mid-Pitch (section 3.9).
+    // A checksum over a block covering the WHOLE figure (full canvas height, not just the upper
+    // body), not one pixel - CLIPS.Pitch's own leg-lift keyframe (t=0.45) deliberately leaves the
+    // arms exactly as Set (poses.js: "hands stay tucked... only the leg has moved"), so a sample
+    // window that missed the legs found no difference at all here first (identical checksums) even
+    // though the pose plainly changed - the release keyframe (t=1.0, the mark) moves the arms too,
+    // and is used below as "mid-Pitch" for the widest possible margin.
+    const checksum = (x0, y0, w, h) => {
+      const buf = new Uint8Array(w * h * 4);
+      gl.readPixels(x0, y0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i];
+      return sum;
+    };
+    actors.place('pitcher', { anchor: { x: 150, y: 280 }, heightPx: 200, facingRad: PITCHER_FACING_RAD });
+    actors.play('pitcher', 'Set');
+    actors.actors.pitcher.actions.Set.time = 0; actors.actors.pitcher.actions.Set.paused = true;
+    actors.actors.pitcher.mixer.update(0);
+    actors.renderer.render(actors.scene, actors.camera);
+    const setChecksum = checksum(0, 0, dw, dh);
+    actors.play('pitcher', 'Pitch');
+    actors.actors.pitcher.actions.Pitch.time = 1.0; actors.actors.pitcher.actions.Pitch.paused = true;
+    // play()'s crossFadeTo schedules Pitch's weight 0->1 (and Set's 1->0) over CROSSFADE_S,
+    // starting from THIS mixer.time - a dt=0 update evaluates that schedule at its own start (0),
+    // so Pitch would render at zero weight even with its `.time` set. update() past CROSSFADE_S
+    // completes the fade (both actions stay paused, so this does not also advance either one's own
+    // clip time - only the fade envelope moves).
+    actors.actors.pitcher.mixer.update(0.2);
+    actors.renderer.render(actors.scene, actors.camera);
+    const pitchChecksum = checksum(0, 0, dw, dh);
+
+    // STAGE 3: a read-back of the batter's shirt pixel differs between home and away (section 3.9,
+    // 2.2's colour-key remap). Re-place at BATTER_FACING_RAD (the real facing, not this file's
+    // load/dispose check's facingRad=0) so the sample point is the same one every other batter
+    // render in this stage used.
+    actors.place('batter', { anchor: { x: 150, y: 280 }, heightPx: 260, facingRad: BATTER_FACING_RAD });
+    actors.idle('batter');
+    actors.actors.batter.mixer.update(0);
+    await actors.setBatter({ side: 'home' });
+    actors.renderer.render(actors.scene, actors.camera);
+    const shirtPxHome = new Uint8Array(4);
+    gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, shirtPxHome);
+    await actors.setBatter({ side: 'away' });
+    actors.renderer.render(actors.scene, actors.camera);
+    const shirtPxAway = new Uint8Array(4);
+    gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, shirtPxAway);
+
     actors.dispose();
     const canvasGoneAfterDispose = !document.querySelector('canvas.bb-actor-canvas');
     const rendererGone = actors.renderer === null;
     wrap.remove();
-    return { hasCanvas, alpha, canvasGoneAfterDispose, rendererGone };
+    return {
+      hasCanvas, alpha, canvasGoneAfterDispose, rendererGone,
+      setChecksum, pitchChecksum,
+      shirtPxHome: Array.from(shirtPxHome), shirtPxAway: Array.from(shirtPxAway),
+    };
   }, { modelUrl });
 
   if (localSrv) localSrv.close();
@@ -233,6 +314,15 @@ async function runChromiumHalf() {
   else fail('dispose() canvas', 'canvas.bb-actor-canvas still present after dispose()');
   if (result.rendererGone) ok('dispose(): renderer is null (not reachable)');
   else fail('dispose() renderer', 'actors.renderer is not null after dispose()');
+
+  if (result.setChecksum !== result.pitchChecksum) ok(`pitcher read-back differs, Set vs mid-Pitch (${result.setChecksum} vs ${result.pitchChecksum})`);
+  else fail('pitcher Set vs Pitch read-back', `identical checksum ${result.setChecksum} - the pose did not visibly change`);
+
+  const shirtDiff = result.shirtPxHome && result.shirtPxAway
+    ? Math.abs(result.shirtPxHome[0] - result.shirtPxAway[0]) + Math.abs(result.shirtPxHome[1] - result.shirtPxAway[1]) + Math.abs(result.shirtPxHome[2] - result.shirtPxAway[2])
+    : 0;
+  if (shirtDiff > 20) ok(`batter shirt pixel differs, home vs away (home ${JSON.stringify(result.shirtPxHome)}, away ${JSON.stringify(result.shirtPxAway)})`);
+  else fail('batter shirt pixel home vs away', `too close (home ${JSON.stringify(result.shirtPxHome)}, away ${JSON.stringify(result.shirtPxAway)})`);
 }
 
 await runChromiumHalf();

@@ -15,6 +15,10 @@
 //
 // --sheet renders several times and lays them in one row; --beside puts the named sprite frames
 // under them, scaled to the same height, so a silhouette comparison is one picture, not several.
+// --role batter|pitcher (default batter) picks which actor is placed and played - the pitcher has
+// no bat attached (_attachBat only runs for 'batter' in actors.js), which matters for Set/Pitch.
+// --side home|away (default home, stage 3) calls setBatter/setPitcher with that side first, for a
+// recolour check; anchor/heightPx are the same square this script already places the actor at.
 // --beside paths are resolved against the dev server root (so a repo-relative path like
 // reference/baseball/batter-home-3.png just works); an absolute local path is served the same way
 // as --model. Chromium flags: ['--no-sandbox', '--use-gl=swiftshader']; preserveDrawingBuffer on;
@@ -38,10 +42,12 @@ const sheetArg = opt('sheet');
 const besideArg = opt('beside');
 const height = Number(opt('height', '400'));
 const facingDeg = Number(opt('facing', '0'));
+const role = opt('role', 'batter');   // stage 3: 'pitcher' renders the pitcher actor (no bat attached)
+const side = opt('side', 'home');     // stage 3: 'home' or 'away', for a recolour check
 const out = opt('out');
 
 if (!modelArg || !out) {
-  console.error('usage: node render-actor.mjs --model <path-or-url> [--clip Idle] [--t 0] [--sheet t1,t2,...] [--beside a.png,b.png] [--height 400] [--facing 0] --out <file.png>');
+  console.error('usage: node render-actor.mjs --model <path-or-url> [--clip Idle] [--t 0] [--sheet t1,t2,...] [--beside a.png,b.png] [--height 400] [--facing 0] [--role batter|pitcher] [--side home|away] --out <file.png>');
   process.exit(2);
 }
 
@@ -110,7 +116,7 @@ page.on('pageerror', (e) => console.error('[page error]', e.message));
 await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
 await page.evaluate(() => { window.__bbTest = true; });   // preserveDrawingBuffer, for toDataURL readback
 
-const frames = await page.evaluate(async ({ modelUrl, clipName, sheetTimes, height, facingDeg }) => {
+const frames = await page.evaluate(async ({ modelUrl, clipName, sheetTimes, height, facingDeg, role, side }) => {
   const { Actors } = await import('/baseball/js/actors.js');
   const wrap = document.createElement('div');
   wrap.style.cssText = `position:fixed; left:0; top:0; width:${height + 40}px; height:${height + 40}px; background:transparent;`;
@@ -120,20 +126,23 @@ const frames = await page.evaluate(async ({ modelUrl, clipName, sheetTimes, heig
   if (!okGL) throw new Error('initGL() failed - no WebGL context (headless Chromium without --use-gl=swiftshader?)');
   await actors.load(modelUrl);
   actors.resize(height + 40, height + 40, null);
-  actors.place('batter', { anchor: { x: (height + 40) / 2, y: height + 20 }, heightPx: height, facingRad: facingDeg * Math.PI / 180 });
+  // The setter (setBatter/setPitcher) recolours AND places in one call (stage 3) - always going
+  // through it, never a bare place(), is what lets --side render the away recolour too.
+  const setter = role === 'pitcher' ? actors.setPitcher : actors.setBatter;
+  await setter.call(actors, { side, anchor: { x: (height + 40) / 2, y: height + 20 }, heightPx: height, facingRad: facingDeg * Math.PI / 180 });
   const out = [];
   for (const t of sheetTimes) {
-    actors.play('batter', clipName);
-    const a = actors.actors.batter.actions[clipName];
+    actors.play(role, clipName);
+    const a = actors.actors[role].actions[clipName];
     if (a) { a.time = t; a.paused = true; }
-    actors.actors.batter.mixer.update(0);
+    actors.actors[role].mixer.update(0);
     actors.renderer.render(actors.scene, actors.camera);
     out.push(actors.canvas.toDataURL('image/png'));
   }
   actors.dispose();
   wrap.remove();
   return out;
-}, { modelUrl, clipName, sheetTimes, height, facingDeg });
+}, { modelUrl, clipName, sheetTimes, height, facingDeg, role, side });
 
 if (frames.some((f) => !f || f.length < 100)) {
   console.error('render produced no image data');

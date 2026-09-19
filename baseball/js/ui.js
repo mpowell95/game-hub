@@ -1112,13 +1112,15 @@ class BaseballPlayScreen {
     });
   }
 
-  /** docs/BASEBALL-3D-BUILD.md section 3.7: the 3D half of the Frames panel, stage 1. Both figures
-   *  idle, at the real PLATE_ANCHORS anchors, over the real plate.webp backdrop - proof that the
-   *  loader, the mixer, the camera and the rig resolve against a real skinned file before any pose
-   *  is authored (stages 2-3). The model path is `globalThis.__bbDevModelUrl` when a test harness
-   *  sets it (so a screenshot script can point this at the section 2.1 scaffold), else the real
-   *  `baseball/models/player.glb`, which does not exist until section 2.2 is filled - that failure
-   *  is caught and shown in the panel, never thrown. */
+  /** docs/BASEBALL-3D-BUILD.md section 3.7: the 3D half of the Frames panel (stage 1's skeleton,
+   *  extended in stages 2-3). Both figures placed at the real PLATE_ANCHORS anchors over the real
+   *  plate.webp backdrop, in their real cast colours (setBatter/setPitcher - section 2.2), with
+   *  clip buttons/scrubber per role and a home/away toggle. No bat nudge buttons: stage 3 checked
+   *  `BAT` against all eight batter frames again and it still reads correctly (poses.js's own
+   *  header), so there was nothing to tune here this pass - `_attachBat`'s constants stay stage 2's.
+   *  The model path is `globalThis.__bbDevModelUrl` when a test harness sets it (so a screenshot
+   *  script can point this at the section 2.1 scaffold), else the real `baseball/models/player.glb`
+   *  - a missing/failed load is caught and shown in the panel, never thrown. */
   async _open3DCheck(sheet) {
     if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
     const tuneSheet = sheet.querySelector('.bb-tune-sheet');
@@ -1156,7 +1158,7 @@ class BaseballPlayScreen {
     const anchorPxLocal = (frac) => ({ x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH });
 
     if (closedOrGoneCheck(this, sheet)) return;
-    const [{ Actors, BATTER_FACING_RAD }, { CLIPS }] = await Promise.all([import('./actors.js'), import('./poses.js')]);
+    const [{ Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD }, { CLIPS }] = await Promise.all([import('./actors.js'), import('./poses.js')]);
     if (closedOrGoneCheck(this, sheet)) return;
     const actors = new Actors(wrap);
     this._devActors = actors;
@@ -1174,54 +1176,75 @@ class BaseballPlayScreen {
       return;
     }
     if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
-    actors.place('batter', { anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * DEV3D_NEAR_BATTER_HEIGHT_FRAC, facingRad: BATTER_FACING_RAD });
-    actors.place('pitcher', { anchor: anchorPxLocal(PLATE_ANCHORS.mound), heightPx: h * DEV3D_MOUND_PITCHER_HEIGHT_FRAC, facingRad: 0 });
+    await actors.setBatter({ side: 'home', anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * DEV3D_NEAR_BATTER_HEIGHT_FRAC, facingRad: BATTER_FACING_RAD });
+    await actors.setPitcher({ side: 'away', anchor: anchorPxLocal(PLATE_ANCHORS.mound), heightPx: h * DEV3D_MOUND_PITCHER_HEIGHT_FRAC, facingRad: PITCHER_FACING_RAD });
+    if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
     actors.idle('pitcher');
     actors.start();
 
-    // STAGE 2 (docs/BASEBALL-3D-BUILD.md section 3.7): clip buttons + a scrubber on the batter, so
-    // a pose can be seeked to and held next to a sprite frame on the phone. Every named CLIPS entry
-    // with authored keys gets a button; the scrubber pauses the mixer action at the chosen time
-    // instead of racing the running render loop (start()'s own mixer.update would otherwise
-    // overwrite a manual seek on the very next frame).
+    // STAGE 2/3 (docs/BASEBALL-3D-BUILD.md section 3.7): clip buttons + a scrubber, so a pose can
+    // be seeked to and held next to a sprite frame on the phone. Every named CLIPS entry with
+    // authored keys gets a button, split into a batter row and a pitcher row (CLIP_ROLE below) so
+    // clicking one always plays it on the actor that actually owns that clip - Set/Pitch on the
+    // pitcher, Idle/Swing/Miss on the batter. The scrubber pauses the mixer action at the chosen
+    // time instead of racing the running render loop (start()'s own mixer.update would otherwise
+    // overwrite a manual seek on the very next frame). A home/away select recolours BOTH figures
+    // together (section 2.2's colour-key remap) - the quickest way to eyeball a side on a phone
+    // without leaving the panel.
+    const CLIP_ROLE = { Idle: 'batter', Swing: 'batter', Miss: 'batter', Set: 'pitcher', Pitch: 'pitcher' };
     const clipCtl = document.createElement('div');
     clipCtl.dataset.role = 'dev3d-clipctl';
     clipCtl.className = 'bb-dev3d-clipctl';
-    const clipNames = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length);
+    const batterClips = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length && CLIP_ROLE[n] === 'batter');
+    const pitcherClips = Object.keys(CLIPS).filter((n) => CLIPS[n].keys.length && CLIP_ROLE[n] === 'pitcher');
     clipCtl.innerHTML = `
       <div class="bb-tune-actions" data-role="dev3d-clipbtns">
-        ${clipNames.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
+        ${batterClips.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
+      </div>
+      <div class="bb-tune-actions" data-role="dev3d-clipbtns-pitcher">
+        ${pitcherClips.map((n) => `<button type="button" class="gh-btn" data-clip="${n}">${n}</button>`).join('')}
       </div>
       <label class="bb-tune-row"><span>Time</span>
         <input type="range" data-role="dev3d-scrub" min="0" max="1" step="0.01" value="0">
         <span class="bb-tune-val" data-role="dev3d-scrub-val">0.00s</span>
+      </label>
+      <label class="bb-tune-row"><span>Colours</span>
+        <select data-role="dev3d-side"><option value="home">home</option><option value="away">away</option></select>
       </label>`;
     tuneSheet.insertBefore(clipCtl, tuneSheet.querySelector('.bb-tune-actions'));
     const scrub = clipCtl.querySelector('[data-role="dev3d-scrub"]');
     const scrubVal = clipCtl.querySelector('[data-role="dev3d-scrub-val"]');
+    const sideSel = clipCtl.querySelector('[data-role="dev3d-side"]');
     let currentClip = null;
+    let currentRole = null;
     const playClip = (name) => {
       const def = CLIPS[name];
       if (!def || !def.keys.length) return;
       currentClip = name;
+      currentRole = CLIP_ROLE[name] || 'batter';
       const dur = def.keys[def.keys.length - 1].t;
       scrub.max = String(dur || 1);
       scrub.value = '0';
       scrubVal.textContent = '0.00s';
-      actors.play('batter', name);
-      const a = actors.actors.batter.actions[name];
+      actors.play(currentRole, name);
+      const a = actors.actors[currentRole].actions[name];
       if (a) a.paused = false;
     };
     for (const btn of clipCtl.querySelectorAll('[data-clip]')) {
       btn.addEventListener('click', () => playClip(btn.dataset.clip));
     }
     scrub.addEventListener('input', () => {
-      if (!currentClip) return;
-      const a = actors.actors.batter.actions[currentClip];
+      if (!currentClip || !currentRole) return;
+      const a = actors.actors[currentRole].actions[currentClip];
       if (!a) return;
       a.paused = true;
       a.time = parseFloat(scrub.value);
       scrubVal.textContent = `${a.time.toFixed(2)}s`;
+    });
+    sideSel.addEventListener('change', () => {
+      const side = sideSel.value;
+      actors.setBatter({ side });
+      actors.setPitcher({ side });
     });
     playClip('Idle');
   }

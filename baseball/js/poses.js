@@ -7,14 +7,13 @@
 // downstream is the standard mixer: cross-fades, timeScale, LoopOnce, marks.
 //
 // Stage 1 shipped this file with every CLIPS entry's `keys` EMPTY on purpose: it was
-// infrastructure actors.js needed to import and run before any pose existed. Stage 2 fills
-// Idle/Swing/Miss below, authored against batter-home-1..8.png by rendering (render-actor.mjs)
-// and comparing, never by imagining what a rotation does - see each clip's own comments for what
-// keyframe matches which sprite frame. Stage 3 still owes Set/Pitch (matched to
-// Pitcher-home-1..4.png) and the bat/team-colour work; those two keep empty `keys` until then.
-// Until a clip has keys, actors.js falls back to a same-named clip carried by the GLB file itself
-// (player.glb's own "Idle"), which is what lets Set play something (the file's Idle) rather than
-// nothing on the pitcher today.
+// infrastructure actors.js needed to import and run before any pose existed. Stage 2 filled
+// Idle/Swing/Miss, authored against batter-home-1..8.png by rendering (render-actor.mjs) and
+// comparing, never by imagining what a rotation does. Stage 3 fills Set/Pitch the same way,
+// against Pitcher-home-1..4.png - see each clip's own comments for what keyframe matches which
+// sprite frame, and actors.js for the team-colour/bat work done alongside it. Until a clip has
+// keys, actors.js falls back to a same-named clip carried by the GLB file itself (player.glb's own
+// "Idle") - true of nothing now that every CLIPS entry below carries real keys.
 import * as THREE from './vendor/three.module.min.js';
 
 const DEG = Math.PI / 180;
@@ -238,6 +237,109 @@ export const CLIPS = {
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
   ] },
-  Set:   { loop: true,  mark: null, keys: [ /* stage 3: matches Pitcher-home-1 */ ] },
-  Pitch: { loop: false, mark: 0.80, keys: [ /* stage 3: matches Pitcher-home-2..4 */ ] },
+  // STAGE 3: the pitcher, at PITCHER_FACING_RAD (actors.js - 0, the model's own front axis, since
+  // the pitcher faces the camera square-on rather than sideways like the batter). Measured
+  // rendering `probe`-style raw poses against Pitcher-home-1..4.png before these numbers were
+  // ever written into a clip (same method as the batter's load-pose rounds): a bone-position
+  // check (rotate just upperLegR, render, look) proved facingRad=0 does NOT mirror the model's own
+  // R/L bones onto the SAME screen side you'd guess from "front axis is +Z" alone - `handR` and
+  // `upperLegR` both land on the SCREEN-LEFT side, same convention as a real person facing you.
+  // That is what fixes `handR` as the throwing hand per the brief ("the ball leaves handR"): the
+  // hand you see extend forward at the release keyframe below is the model's RightHand, appearing
+  // screen-left, exactly like Pitcher-home-3's visible throwing arm.
+  //
+  // The two-handed "ball tucked in the glove" grip reuses the batter load-pose's own trick -
+  // IDENTICAL (not mirrored) local rotations on upperArmR/L, lowerArmR/L and handR/L converge both
+  // hands on the body's centerline regardless of which way the root faces, because the rig's own
+  // L/R rest orientations are already mirror images of each other. Getting the HEIGHT right took
+  // several rendered rounds: the batter's own [60,0,60]/[100,0,15] load numbers (same order of
+  // magnitude) put the hands at the chin, not the collar - upperArm Z near +60 keeps RAISING from
+  // the T-pose's shoulder-height rest, it doesn't lower toward the chest. Negative Z (around -25)
+  // is what brings the tucked hands down to the sternum/collar band Pitcher-home-1 actually shows.
+  Set:   { loop: true, mark: null, keys: [
+    // Static hands-tucked stance, held (matches Pitcher-home-1). hipsOffset/spine only move at the
+    // middle keyframe (see below) so the loop is a small bob and weight shift, not a held freeze -
+    // small enough that a screenshot still reads as "standing still" (section 3.4's own rule for
+    // Idle/Set), same discipline as the batter's Idle loop.
+    { t: 0, pose: {
+      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+    } },
+    // Mid-loop: a hair of lift (hipsOffset Y) and a hair of side lean (spine Z) - a breathing bob
+    // and a weight shift, per section 3.4's own line for this clip. Arms untouched: the grip itself
+    // doesn't need to move for this to read as "alive."
+    { t: 1, pose: {
+      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+      spine: [0, 0, 3],
+    }, hipsOffset: [0, 0.01, 0] },
+    { t: 2, pose: {
+      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+    } },
+  ] },
+  // mark=1.0 is the release keyframe (t=1.0 below); actors.js's `play()` sets `timeScale` so that
+  // instant lands at exactly WINDUP_MS (1400ms) after the clip starts (R1). The leg lift keyframe
+  // sits at t=0.45 - 45% of the way to the mark, per section 3.4's own rule - which the timeScale
+  // rescale carries into real time unchanged (630ms into the 1400ms windup, still 45%). The
+  // follow-through keyframe at t=1.3 is the clip's own tail, 300ms of clip time past the mark
+  // (~420ms of real windup time at this clip's timeScale), then clamped and held (LoopOnce,
+  // clampWhenFinished) until the next pitch's Set/Pitch crossfade takes over.
+  //
+  // Legs: rendering (not guessing) settled which of the rig's L/R legs plants and which trails.
+  // Pitcher-home-2 (leg lift) shows the STANDING leg on screen-right and the RAISED leg on
+  // screen-left; by the facingRad=0 mapping above (R bones -> screen-left), that is upperLegL
+  // standing, upperLegR lifting - so upperLegR carries the whole lift/trail motion (leg lift ->
+  // still swinging behind at release -> swung up high at follow-through) while upperLegL only
+  // ever plants (neutral at the lift, forward and weight-bearing from release on). This also means
+  // the leg that lifts and drives is the SAME side as the throwing arm (`handR`), and the leg that
+  // plants and strides is the opposite (glove) side - real pitching mechanics, not a coincidence.
+  Pitch: { loop: false, mark: 1.0, keys: [
+    // t=0: identical to Set's own base pose, so the Set->Pitch crossfade (actors.js CROSSFADE_S)
+    // has nothing to blend across.
+    { t: 0.00, pose: {
+      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+    } },
+    // t=0.45 (45% to the mark): leg lift, ~Pitcher-home-2. Hands stay tucked exactly as in Set -
+    // the delivery hasn't started yet, only the leg has moved. upperLegR down to -80 (big hip
+    // flexion, knee up near the chest) with lowerLegR bent to 65 (shin hanging, not tucked flat
+    // under the thigh - a first pass at 90 read as a runner's stride, not a pitcher's balanced
+    // lift; rendered both and 65 is the one that reads as the sprite's relaxed hanging shin).
+    { t: 0.45, pose: {
+      upperArmR: [65, 0, -25], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+      upperLegR: [-80, 0, 0], lowerLegR: [0, 0, 65],
+      upperLegL: [0, 0, 0], lowerLegL: [0, 0, 5],
+    } },
+    // t=1.0, the mark (~Pitcher-home-3): the release. upperArmR/lowerArmR/handR carry the whole
+    // throw - Y is the axis that extends the arm forward (section 3.4's own note, from the
+    // batter's contact keyframe), so upperArmR.y=50 reaches the hand out toward the camera; a
+    // little Z keeps it above level ("high", per the brief). handL/lowerArmL/upperArmL are left
+    // exactly as Set - the glove stays tucked at the chest through the whole release, only the
+    // throwing arm moves. Legs: upperLegL now the planted stride leg (forward, weight-bearing),
+    // upperLegR still trailing behind mid-swing (same numbers a real drive leg would still be
+    // carrying through, not yet fully extended - that's the follow-through's job). spine/head lean
+    // into the throw.
+    { t: 1.00, pose: {
+      upperArmR: [0, 50, 15], lowerArmR: [10, 0, 0], handR: [0, 0, 0],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+      upperLegL: [35, 0, 0], lowerLegL: [0, 0, 15],
+      upperLegR: [-25, 0, 0], lowerLegR: [0, 0, 40],
+      spine: [15, 0, 0], head: [-10, 0, 0],
+    } },
+    // t=1.3: follow-through (~Pitcher-home-4), the clip's own tail, held after the mark. The
+    // throwing arm sweeps down and across the body to decelerate (upperArmR.y goes negative,
+    // opposite sign from the release keyframe) rather than staying held out - rendering the
+    // release's own arm numbers un-changed here read as a frozen reach, not a finished throw.
+    // upperLegR keeps swinging up high behind (the drive leg's follow-through); upperLegL settles
+    // deeper into the plant. spine/head lean further forward.
+    { t: 1.30, pose: {
+      upperArmR: [10, -40, -30], lowerArmR: [20, 0, -10], handR: [0, 0, 0],
+      upperArmL: [55, 0, -15], lowerArmL: [70, 0, 10], handL: [10, 0, -15],
+      upperLegL: [25, 0, 0], lowerLegL: [0, 0, 30],
+      upperLegR: [-55, 0, 0], lowerLegR: [0, 0, 70],
+      spine: [28, 0, 0], head: [-18, 0, 0],
+    } },
+  ] },
 };
