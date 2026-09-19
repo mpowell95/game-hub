@@ -7,6 +7,7 @@
 import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
+import { loadProfile } from '../../js/profile-store.js';
 import { STRINGS } from './strings.js';
 
 import * as SETTINGS from './engine/settings.js';
@@ -14,7 +15,7 @@ import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
 import { resolveSteer, steerDirectionSign, clampSteerDx } from './engine/pitch.js';
-import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages, drawFrameCheck } from './field.js';
+import { drawField, drawBall, drawLandingMarker, project, drawPlateView, drawPlateBall, preloadPlateImages, drawFrameCheck, PLATE_ANCHORS } from './field.js';
 import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
 
 const t = makeT(STRINGS);
@@ -54,6 +55,13 @@ const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
 // side of `_crossFadeSwap`'s own round trip (fade out, then in), well inside the BETWEEN_MS/2
 // budget `_onEngineEvent`'s 'halfInningEnd'/'halfInningStart' pair splits around it.
 const FADE_MS = 150;
+
+// docs/BASEBALL-3D-BUILD.md section 1: field.js's own NEAR_BATTER_HEIGHT_FRAC/MOUND_PITCHER_HEIGHT_FRAC
+// are module-private today (stage 4 exports them for the live play screen). The stage 1 dev-only 3D
+// preview (_open3DCheck) mirrors their values here rather than reaching into field.js's internals;
+// keep these two in step with field.js until stage 4 unifies them.
+const DEV3D_NEAR_BATTER_HEIGHT_FRAC = 0.50;
+const DEV3D_MOUND_PITCHER_HEIGHT_FRAC = 0.11;
 
 // BB-3b correction: the real 8-frame swing sequence, timed from the swing decision (release), per
 // Matt's own spec - [msSinceRelease, frame]. Frame 5 (contact) lands at 80ms; frame 8 is the last
@@ -113,7 +121,16 @@ class BaseballPlayScreen {
     this.destroyed = false;
     this.screen = 'setup'; // setup | play | end
     this.league = LEAGUE_ORDER[0]; // Quick Play opens on Little League (the ladder's first rung), never mid-ladder
-    this.dev = isDevProfile();
+    // Found wrong against the real file while wiring the stage 1 dev screen (docs/BASEBALL-3D-BUILD.md
+    // section 3.7): this called `isDevProfile()` with no argument, so it could never match a real
+    // profile name and the Frames panel (and now the 3D preview inside it) was unreachable for
+    // anyone, dev names included. Every other caller in the repo passes the loaded profile's own
+    // name (skeeball/js/ui.js, golf/js/ui.js, js/hub.js) - matched here. `__bbDevForce` is a
+    // test-only seam, the same shape as skeeball's `__skTest`/yahtzee's `__yzTest`, for a headless
+    // screenshot that cannot know Matt's real secret name.
+    let profName = '';
+    try { profName = (loadProfile()?.name || '').trim(); } catch { /* stay non-dev */ }
+    this.dev = isDevProfile(profName) || !!globalThis.__bbDevForce;
 
     ensureCSS();
 
@@ -162,6 +179,7 @@ class BaseballPlayScreen {
     this._clearPitcherTimer();
     if (this._popTimer) clearTimeout(this._popTimer);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
+    if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
     if (this.gameAbort) this.gameAbort();
   }
 
@@ -1055,10 +1073,12 @@ class BaseballPlayScreen {
         <div class="bb-tune-actions">
           <button type="button" class="gh-btn" data-act="prev">&larr; Prev</button>
           <button type="button" class="gh-btn" data-act="next">Next &rarr;</button>
+          <button type="button" class="gh-btn" data-act="3d">3D preview</button>
           <button type="button" class="gh-btn gh-btn--primary" data-act="close">Close</button>
         </div>
       </div>`;
     document.body.appendChild(sheet);
+    sheet.querySelector('[data-act="3d"]').addEventListener('click', () => this._open3DCheck(sheet));
     const cv = sheet.querySelector('[data-role="fc-canvas"]');
     const ctx = cv.getContext('2d');
     const kindSel = sheet.querySelector('[data-role="fc-kind"]');
@@ -1085,8 +1105,83 @@ class BaseballPlayScreen {
     sheet.querySelector('[data-act="next"]').addEventListener('click', () => {
       frameInp.value = Math.min(maxFrame(), parseInt(frameInp.value, 10) + 1);
     });
-    sheet.querySelector('[data-act="close"]').addEventListener('click', () => { closed = true; sheet.remove(); });
+    sheet.querySelector('[data-act="close"]').addEventListener('click', () => {
+      closed = true;
+      if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
+      sheet.remove();
+    });
   }
+
+  /** docs/BASEBALL-3D-BUILD.md section 3.7: the 3D half of the Frames panel, stage 1. Both figures
+   *  idle, at the real PLATE_ANCHORS anchors, over the real plate.webp backdrop - proof that the
+   *  loader, the mixer, the camera and the rig resolve against a real skinned file before any pose
+   *  is authored (stages 2-3). The model path is `globalThis.__bbDevModelUrl` when a test harness
+   *  sets it (so a screenshot script can point this at the section 2.1 scaffold), else the real
+   *  `baseball/models/player.glb`, which does not exist until section 2.2 is filled - that failure
+   *  is caught and shown in the panel, never thrown. */
+  async _open3DCheck(sheet) {
+    if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
+    const tuneSheet = sheet.querySelector('.bb-tune-sheet');
+    let wrap = sheet.querySelector('[data-role="dev3d-wrap"]');
+    if (wrap) wrap.remove();
+    wrap = document.createElement('div');
+    wrap.dataset.role = 'dev3d-wrap';
+    wrap.className = 'bb-dev3d-wrap';
+    const bg = document.createElement('canvas');
+    bg.className = 'bb-dev3d-bg';
+    bg.width = 320; bg.height = 342;
+    wrap.appendChild(bg);
+    tuneSheet.insertBefore(wrap, tuneSheet.querySelector('.bb-tune-actions'));
+
+    const bgCtx = bg.getContext('2d');
+    const w = bg.width, h = bg.height;
+    const im = new Image();
+    im.src = new URL('../img/plate.webp', import.meta.url).href;
+    await new Promise((res) => { if (im.complete && im.naturalWidth) res(); else { im.onload = res; im.onerror = res; } });
+    let cover = { drawW: w, drawH: h, offsetX: 0, offsetY: 0 };
+    if (im.naturalWidth && im.naturalHeight) {
+      // Cover fit, bottom center - the same formula as field.js's own (private) plateCover(); see
+      // the DEV3D_* constants above for why this file mirrors rather than imports it.
+      const scale = Math.max(w / im.naturalWidth, h / im.naturalHeight);
+      const drawW = im.naturalWidth * scale, drawH = im.naturalHeight * scale;
+      cover = { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: h - drawH };
+      bgCtx.clearRect(0, 0, w, h);
+      bgCtx.drawImage(im, cover.offsetX, cover.offsetY, drawW, drawH);
+    }
+    const anchorPxLocal = (frac) => ({ x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH });
+
+    if (closedOrGoneCheck(this, sheet)) return;
+    const { Actors } = await import('./actors.js');
+    if (closedOrGoneCheck(this, sheet)) return;
+    const actors = new Actors(wrap);
+    this._devActors = actors;
+    if (!actors.initGL()) {
+      wrap.appendChild(Object.assign(document.createElement('div'), { className: 'bb-dev3d-err', textContent: 'No WebGL context' }));
+      return;
+    }
+    actors.resize(w, h, cover);
+    const modelUrl = globalThis.__bbDevModelUrl || new URL('../models/player.glb', import.meta.url).href;
+    try {
+      await actors.load(modelUrl);
+    } catch (e) {
+      console.warn('baseball 3D dev preview: model failed to load', e);
+      wrap.appendChild(Object.assign(document.createElement('div'), { className: 'bb-dev3d-err', textContent: 'No model yet (baseball/models/player.glb)' }));
+      return;
+    }
+    if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
+    actors.place('batter', { anchor: anchorPxLocal(PLATE_ANCHORS.nearBoxLeft), heightPx: h * DEV3D_NEAR_BATTER_HEIGHT_FRAC, facingRad: 0 });
+    actors.place('pitcher', { anchor: anchorPxLocal(PLATE_ANCHORS.mound), heightPx: h * DEV3D_MOUND_PITCHER_HEIGHT_FRAC, facingRad: 0 });
+    actors.idle('batter');
+    actors.idle('pitcher');
+    actors.start();
+  }
+}
+
+/** True once the game instance or the Frames sheet itself is gone - checked after every await in
+ *  _open3DCheck so a slow model load never places actors into, or leaves a render loop running
+ *  against, a screen nobody is looking at any more. */
+function closedOrGoneCheck(screen, sheet) {
+  return screen.destroyed || !sheet.isConnected;
 }
 
 // ---------------------------------------------------------------------------------------------

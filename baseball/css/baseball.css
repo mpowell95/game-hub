@@ -198,7 +198,16 @@
   overflow: hidden;
   background: #3f6b34;
 }
-.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; }
+/* The WebGL actor layer (docs/BASEBALL-3D-BUILD.md section 3.5): the two figures, painted over the
+ * 2D field canvas underneath. Never intercepts touch; the field canvas and the controls below it
+ * still own input. */
+.bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
+/* Stage 1 dev-only 3D preview (_open3DCheck, inside the Frames panel): the real backdrop and the
+ * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
+.bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
+.bb-dev3d-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bb-dev3d-err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; text-align: center; padding: 8px; }
 .bb-lines {
   position: absolute;
   left: 50%;
