@@ -55,18 +55,38 @@ export function buildClip(name, keyframes, bones, restQ, opts = {}) {
 /** Every authored clip. `mark` is the instant (seconds) actors.js lines up with the engine:
  *  contact for Swing/Miss, release for Pitch. Times are the clip's own; actors.js rescales. */
 export const CLIPS = {
+  // THE LOAD POSE (round 3 correction, coordinator review). Rounds 1 and 2 held the bat straight
+  // up out of the top of the frame with the hands at head height; batter-home-1/2/3 hold it BEHIND
+  // the rear (right) shoulder, hands together at shoulder height, elbows bent. Three measured facts
+  // got it there, all read off render-actor/probe renders of the real glb, never guessed:
+  //   1. The arm bones reach the load from upperArm Z, not X. upperArmR/L [50,-40,0] (rounds 1-2)
+  //      puts the hand 72 px ABOVE the shoulder bone at a 400 px figure. A grid over X and Y alone
+  //      cannot get it down: the best of 3,500 such poses still left the hand about 50 px above the
+  //      shoulder. upperArm Z is the axis that drops the arm - [60, 0, 60] with the elbow folded
+  //      hard (lowerArm [100, 0, 15]) lands the hand at the rear shoulder, and the two hands 3 px
+  //      apart on screen instead of 109, so this is also the first pose where the two-handed grip
+  //      is real rather than just hidden by the camera.
+  //   2. The bat's angle is the WRIST, and the wrist is handR/handL Z. The bat is a rigid cylinder
+  //      along the hand bone's own Y (so hand Y rotation only spins it about its own axis, measured:
+  //      zero screen change), and BAT.rot is a fixed offset shared by every frame of every clip -
+  //      changing it would move the bat at contact and through the follow-through, which already
+  //      agree with the sprites. So the angle is posed per keyframe on the hands instead.
+  //   3. The sprite's own bat angles, measured from the PNG's wood pixels (a principal-axis fit over
+  //      batter-home-1 and -3 above the hands): 34 degrees off vertical at the load, 69 degrees by
+  //      the last cocked frame as the barrel flattens out. handR/L [10,0,-50] renders 38 degrees and
+  //      [10,0,-10] renders 67, which is what the two keyframes below carry.
   Idle:  { loop: true,  mark: null, keys: [
     { t: 0, pose: {
       spine: [4, 45, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
+      upperArmR: [60, 0, 60], lowerArmR: [100, 0, 15], handR: [10, 0, -50],
+      upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
     { t: 1, pose: {
       spine: [4, 45, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
+      upperArmR: [60, 0, 60], lowerArmR: [100, 0, 15], handR: [10, 0, -50],
+      upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
@@ -97,12 +117,16 @@ export const CLIPS = {
   // and 0.42/0.55 jump straight to -30/-38, so no rendered keyframe ever lands inside that zone
   // (the mixer still sweeps through it between keyframes, just never holds a still there).
   Swing: { loop: false, mark: 0.22, keys: [
-    // t=0.00 ~ batter-home-3 (loaded/cocked): torso wound up, bat pulled back near the ear, front
-    // (left) leg already strode forward.
+    // t=0.00 ~ batter-home-3 (loaded/cocked): torso wound up, hands together at the rear shoulder,
+    // barrel back over that shoulder, front (left) leg already strode forward. Same arm and elbow
+    // numbers as Idle (see the load-pose note above it); only the wrist differs, at [10,0,-10]
+    // rather than Idle's [10,0,-50], because this is the frame where the barrel has flattened out
+    // from 34 to 69 degrees off vertical in the sprites. The wrist unwinds to zero by t=0.12 and
+    // stays there, so every keyframe from contact on is untouched by this.
     { t: 0.00, pose: {
       spine: [6, 60, 0], head: [0, -24, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
+      upperArmR: [60, 0, 60], lowerArmR: [100, 0, 15], handR: [10, 0, -10],
+      upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
@@ -123,13 +147,21 @@ export const CLIPS = {
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
-    // t=0.30 ~ batter-home-6: just past contact, still level, arm/bat unchanged from contact - the
+    // t=0.30 ~ batter-home-6: just past contact, still level, arms unchanged from contact - the
     // torso alone carries it on toward square (see the dead-zone note above; this is as far as
     // spine.y goes before jumping past the zone between here and t=0.42).
+    // Round 3 correction (coordinator review): the BAT vanished here. Measured, this keyframe was
+    // the instant the barrel pointed almost straight at the camera (tip 34 px right of the knob and
+    // 189 px toward the viewer), so it rendered as a stub behind the arm. The wrists roll over here
+    // - handR/L [50,0,-30] - which carries the barrel on round the arc to 138 px of visible length,
+    // level (2 px of screen rise over its whole length) and still 134 px toward the camera. It is
+    // the direction the swing is already travelling, measured in the xz plane: 20 degrees at
+    // contact, -46 here, -62 at t=0.42, so the barrel sweeps one way throughout with no hitch. The
+    // wrist is back at zero by t=0.42, which is why the follow-through frames are unchanged.
     { t: 0.30, pose: {
       spine: [2, 0, 0], head: [0, 0, 0],
-      upperArmR: [-8, 48, 0], lowerArmR: [0, 0, 10],
-      upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10],
+      upperArmR: [-8, 48, 0], lowerArmR: [0, 0, 10], handR: [50, 0, -30],
+      upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10], handL: [50, 0, -30],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
@@ -156,10 +188,12 @@ export const CLIPS = {
   // passes above where Swing connects, and `mark` sits on the t=0.30 keyframe instead of Swing's
   // t=0.22, so the whiff reads as a beat late as well as high.
   Miss:  { loop: false, mark: 0.30, keys: [
+    // Same load pose as Swing, bone for bone (round 3): a batter has not decided to miss yet when
+    // he loads, and the two clips cross-fade into each other from Idle.
     { t: 0.00, pose: {
       spine: [6, 60, 0], head: [0, -24, 0],
-      upperArmR: [50, -40, 0], lowerArmR: [60, 0, 0],
-      upperArmL: [50, -40, 0], lowerArmL: [60, 0, 0],
+      upperArmR: [60, 0, 60], lowerArmR: [100, 0, 15], handR: [10, 0, -10],
+      upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
@@ -177,11 +211,15 @@ export const CLIPS = {
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
-    // t=0.30: the mark - bat swept through above and a beat later than where Swing connects.
+    // t=0.30: the mark - bat swept through above and a beat later than where Swing connects. The
+    // wrists carry the SAME [50,0,-30] roll as Swing's own t=0.30 (round 3), so the barrel is in
+    // view at the whiff instant rather than end-on to the camera; measured on this clip's own
+    // higher arm it renders 146 px long with the tip 24 px ABOVE the knob, against Swing's level
+    // 138 px - the miss reads high, which is the whole point of the clip.
     { t: 0.30, pose: {
       spine: [2, 0, 0], head: [0, 0, 0],
-      upperArmR: [8, 48, 0], lowerArmR: [0, 0, 5],
-      upperArmL: [8, 48, 0], lowerArmL: [0, 0, 5],
+      upperArmR: [8, 48, 0], lowerArmR: [0, 0, 5], handR: [50, 0, -30],
+      upperArmL: [8, 48, 0], lowerArmL: [0, 0, 5], handL: [50, 0, -30],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
     }, hipsOffset: [0, 0.32, 0] },
