@@ -1505,6 +1505,174 @@ if (!process.env.BB_DEVICE_QUICK) {
   await p16.close();
 }
 
+// 17. R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): SIDES-MATCH. Every one of the fifteen roles
+// wears the team the CURRENT HALF says, never `mode` (which control the human happens to be
+// holding this turn) - the old `_syncActors` picked the batter's/pitcher's side off `mode` and
+// got it backwards for the human (the human is always `away`, so the pitching state's batter is
+// `home`, not `away`). Forces both halves through `window.__bbTest.forceHalf` and reads every
+// VISIBLE actor's own `side` straight off `inst.actors.actors` - the same object `_setSide`
+// writes - never re-deriving it a second way.
+{
+  const p17 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page17 = await p17.newPage();
+  const errs17 = [];
+  page17.on('pageerror', (e) => errs17.push(String((e && e.message) || e)));
+  await page17.addInitScript(() => {
+    window.__bbDevForce = true;
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Sides Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr17 = await mountInHub(page17);
+  if (mountErr17) {
+    fail('sides-match', `mount failed: ${mountErr17}`);
+  } else {
+    await page17.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page17.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page17.waitForTimeout(400);
+    const res = await page17.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      if (!window.__bbTest || typeof window.__bbTest.forceHalf !== 'function') {
+        return { error: 'window.__bbTest.forceHalf is not available - dev flag not honored, or the seam is missing' };
+      }
+      const FIELDER_ROLES = ['f1b', 'f2b', 'f3b', 'fss', 'flf', 'fcf', 'frf'];
+      const RUNNER_ROLES = ['r1', 'r2', 'r3'];
+      const check = (half) => {
+        window.__bbTest.forceHalf(half);
+        inst._drawStaticField();
+        const battingSide = half === 'top' ? 'away' : 'home';
+        const defenseSide = battingSide === 'away' ? 'home' : 'away';
+        const bad = [];
+        const batter = inst.actors.actors.batter;
+        if (!batter || batter.side !== battingSide) bad.push(`batter side "${batter && batter.side}" != "${battingSide}"`);
+        const pitcher = inst.actors.actors.pitcher;
+        if (!pitcher || pitcher.side !== defenseSide) bad.push(`pitcher side "${pitcher && pitcher.side}" != "${defenseSide}"`);
+        const catcher = inst.actors.actors.catcher;
+        if (!catcher || catcher.side !== defenseSide) bad.push(`catcher side "${catcher && catcher.side}" != "${defenseSide}"`);
+        for (const role of FIELDER_ROLES) {
+          const a = inst.actors.actors[role];
+          if (a && a.pivot.visible && a.side !== defenseSide) bad.push(`${role} side "${a.side}" != "${defenseSide}"`);
+        }
+        for (const role of RUNNER_ROLES) {
+          const a = inst.actors.actors[role];
+          if (a && a.pivot.visible && a.side !== battingSide) bad.push(`${role} side "${a.side}" != "${battingSide}"`);
+        }
+        return { half, battingSide, batterSide: batter && batter.side, pitcherSide: pitcher && pitcher.side, bad };
+      };
+      const top = check('top');
+      const bottom = check('bottom');
+      // Leave the game in a real state for anything after this in the same page (none here, but
+      // cheap insurance): top is this game's own natural first half.
+      window.__bbTest.forceHalf('top'); inst._drawStaticField();
+      return { top, bottom };
+    });
+    if (res.error) {
+      fail('sides-match', res.error);
+    } else if (res.top.bad.length || res.bottom.bad.length) {
+      fail('sides-match', `top: ${res.top.bad.join('; ') || 'ok'} | bottom: ${res.bottom.bad.join('; ') || 'ok'}`);
+    } else {
+      ok(`sides-match: half "top" bats away/pitches home (batter ${res.top.batterSide}, pitcher ${res.top.pitcherSide}); `
+        + `half "bottom" bats home/pitches away (batter ${res.bottom.batterSide}, pitcher ${res.bottom.pitcherSide})`);
+    }
+  }
+  if (errs17.length) fail('sides-match', `page errors: ${errs17.slice(0, 3).join(' | ')}`);
+  else ok('no page errors during sides-match');
+  await p17.close();
+}
+
+// 18. R6: ONE-BATTER. After a play resolves as an out, exactly one figure stands in the batter's
+// box once the plate view returns and the next batter is placed - `rb` (the batter-runner) must
+// never still be visible from a play that has already ended. Drives `_settleAtBat` directly with a
+// synthetic short-out payload (`homerun-strip`'s own pattern, above - no engine, no real at-bat
+// needed) and forces the EXACT race this stage closes: `_returnToPlate()` is called manually WHILE
+// `rb` is still mid-run (well before his own ~2000ms natural finish), the same shape as a cutaway
+// landing early. Born red against the unfixed `_animateRunners`/`_returnToPlate` (verified by
+// stashing the fix and re-running this exact scenario by hand - see the stage report).
+{
+  const p18 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page18 = await p18.newPage();
+  const errs18 = [];
+  page18.on('pageerror', (e) => errs18.push(String((e && e.message) || e)));
+  await page18.addInitScript(() => {
+    window.__bbDevForce = true;
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'One Batter Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr18 = await mountInHub(page18);
+  if (mountErr18) {
+    fail('one-batter', `mount failed: ${mountErr18}`);
+  } else {
+    await page18.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page18.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page18.waitForTimeout(500);
+    const res = await page18.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const side = inst.game.half === 'top' ? 'away' : 'home';
+      // A short groundout: the batter is out at first, distanceFt well inside "short" - the exact
+      // shape of Matt's v865 report ("a 0 ft out today, any short out after R5").
+      const payload = {
+        batterId: 'test-batter-onebatter', side, outcome: 'groundout', bases: 0, runsScored: 0,
+        q: 0.4, exitVeloMph: 60, centered: false, distanceFt: 45, sprayAngleDeg: -10,
+        battedKind: 'ground', launchAngleDeg: 1, timingWord: null,
+        basesBefore: [null, null, null], runnersOut: [],
+      };
+      // Fire-and-forget, same as `homerun-strip` - `_settleAtBat` runs its own ~2s sequence.
+      window.__bbOneBatterP = inst._settleAtBat(payload);
+      // FORCE THE RACE: cut back to the plate at 300ms, well before rb's own natural finish
+      // (his 90ft run is sped up to land at RUN_WINDOW_MS = 2000ms) - the exact shape of a cutaway
+      // landing early relative to `_animateRunners`'s own independently-clocked rAF loop.
+      await new Promise((r) => setTimeout(r, 300));
+      inst._returnToPlate();
+      // THE NEXT AT-BAT'S FIRST PITCH: the real `HumanAgent.decidePitch`/`decideSwing` both call
+      // `_drawStaticField()` as their very first act (ui.js, both headers) - mirrored here rather
+      // than waiting on real engine/agent turn-taking, which this synthetic payload has no real
+      // at-bat behind to drive.
+      inst._drawStaticField();
+      // Sample well past where the OLD code would still show rb mid-run (1500ms after contact,
+      // comfortably inside his old ~2000ms natural window).
+      await new Promise((r) => setTimeout(r, 1200));
+      const box = inst.actors.actors.batter.pivot.position;
+      const within = [];
+      for (const role of Object.keys(inst.actors.actors)) {
+        const a = inst.actors.actors[role];
+        if (!a || !a.pivot.visible) continue;
+        const d = Math.hypot(a.pivot.position.x - box.x, a.pivot.position.z - box.z);
+        if (d <= 4) within.push({ role, d });
+      }
+      const rb = inst.actors.actors.rb;
+      return {
+        rbVisible: !!(rb && rb.pivot.visible),
+        rbActive: !!inst._rbActive,
+        within,
+      };
+    });
+    if (res.rbVisible) {
+      fail('one-batter', `'rb' is still visible 1.5s after a forced early _returnToPlate() (rbActive=${res.rbActive})`);
+    } else if (res.within.length !== 1) {
+      fail('one-batter', `${res.within.length} figures within 4ft of the batter's box (want exactly 1): ${res.within.map((w) => `${w.role} ${w.d.toFixed(2)}ft`).join(', ')}`);
+    } else if (res.within[0].role !== 'batter') {
+      fail('one-batter', `the one figure in the box is "${res.within[0].role}", not the batter`);
+    } else {
+      ok(`one-batter: after a forced early cutaway, exactly one figure (the batter) stands in the box and 'rb' is hidden`);
+    }
+    await page18.evaluate(() => window.__bbOneBatterP).catch(() => {});
+  }
+  if (errs18.length) fail('one-batter', `page errors: ${errs18.slice(0, 3).join(' | ')}`);
+  else ok('no page errors during one-batter');
+  await p18.close();
+}
+
 await browser.close();
 
 console.log('');

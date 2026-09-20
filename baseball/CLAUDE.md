@@ -4,6 +4,94 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R6: figures and runners (2026-09-20)
+
+The seventh stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R6"), against Matt's
+recording of v865, items 2-4. Presentation only, as the spec says: no engine change, no beat
+change, no camera change (R7 owns the cameras). Three fixes, none of them related to each other
+except that all three came off the same recording.
+
+**Bug 1, the team swap: `_syncActors` read the side off `mode`, not `this.game.half`.** `mode` is
+which CONTROL the human is holding this turn (`'pitching'` means the human is pitching), and the
+human is always `away` (`new Game({ home: cpuTeam, away: playerTeam })` in `_startGame`). The old
+line was `batterSide = mode === 'pitching' ? 'away' : 'home'` - backwards: in the pitching state
+the team AT BAT is `home` (the CPU), not `away`, so that line cast the batter to the HUMAN's own
+colours exactly when the human was NOT batting. Fielders and runners never had this bug -
+`_syncFielders`/`_syncBaseRunners` already derived their side from `this.game.half === 'top' ?
+'away' : 'home'` - so the defense and the offense already agreed with each other, just not with
+the batter/pitcher/catcher. Fixed to the one rule the spec asks for, for all fifteen roles:
+battingSide from `this.game.half`, defense the other side, umpire his own. `mode` is no longer read
+for a side anywhere in `ui.js`; `_syncActors()` takes no argument any more (the camera and the
+overlay, the only other things that read `mode`, both live one level up in `_drawStaticField`,
+unchanged).
+
+**Bug 2, one batter in the box: `rb` (the batter-runner) could outlive his own play.**
+`_animateRunners` is deliberately never awaited by `_settleAtBat` (see `RUN_WINDOW_MS`'s own
+header - awaiting it risks lengthening the beat), so its rAF-driven run and the contact-hold/
+flight/marker-hold chain that ends in `_returnToPlate()` are two independently-clocked things with
+nothing forcing one to wait for the other. In THEORY they always land together - `RUN_WINDOW_MS`
+(2000ms) is exactly `CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS`, and a lone batter-runner's own
+90ft run is scaled to finish at exactly that window - but nothing actually LOCKS the two clocks
+together, and `_returnToPlate()`'s own `_drawStaticField()` redraw (which places the batter for
+whichever at-bat is live) does not check whether `rb`'s own mover has actually reached `frac >= 1`
+yet. Reproduced directly (not inferred): calling `inst._returnToPlate()` by hand 300ms after a
+synthetic short-out payload's contact (rb about a third of the way to first) left `rb` VISIBLE and
+STILL RUNNING for the rest of the sampled window against the unfixed code - `_returnToPlate()` did
+nothing to him at all, since nothing in it, or in `_syncActors`/`_syncBaseRunners` (which only ever
+manage r1/r2/r3, never `rb`), had any opinion about him. Two hundred-plus rAF-sampled real auto-play
+transitions (including one genuine half-inning-ending out, captured live) never showed the race
+naturally in this container - the two clocks are close enough in practice that it takes real
+frame-time jitter (a dropped frame on a slower device, most likely) to separate them - which is why
+the fix is structural rather than "make the timing tighter":
+
+- `this._rbActive`, a new field: true only for the exact window a REAL `rb` mover is running this
+  play. Set from `_animateRunners`'s own `raw` array (`raw.some((m) => m.role === 'rb')`) the
+  instant it is built - so a strikeout, or any other play with no batter-runner, immediately
+  retires whatever `rb` a PREVIOUS play left active. Cleared the moment that mover reaches its own
+  natural finish (inside the step loop, right where it already called `hide()`), AND
+  unconditionally by `_returnToPlate()` - "whichever comes first," the spec's own words.
+- The step loop itself now checks `_rbActive` for the `'rb'` mover specifically, every frame,
+  BEFORE placing him: if retired, he is marked done and hidden right there instead of being
+  re-placed. This is the part that actually closes the race - `place()` sets `pivot.visible = true`
+  UNCONDITIONALLY (`actors.js`'s own comment on that), so an external `hide()` call alone is not
+  enough while the loop is still running; the loop has to stop trying to show him.
+- `_syncActors` (called from every `_drawStaticField()`, many times a second) now also calls a new
+  `_syncBatterRunner()`: `if (!this._rbActive) this.actors.hide('rb')`. This is the backstop - even
+  if something races past the two guards above, the very next redraw (and there is always one
+  within a frame or two, every pitch, every button press) puts him back to invisible.
+
+Verified both ways: stashed the fix and re-ran the exact forced-race scenario above - against the
+unfixed tree `rb` stayed visible and moving for the whole 1.8s sampled after the forced
+`_returnToPlate()`; with the fix restored he was hidden on the very next frame and stayed hidden
+for the same window. `test-baseball-device.mjs`'s new `one-batter` probe is this exact scenario,
+automated.
+
+**Bug 3, the diamond widget was mirrored.** `.bb-diamond-cell[data-cell="1b"]` was at `left: 12%`
+and `"3b"` at `left: 88%` - first base on the LEFT. From behind home plate (the reference game's
+own view, and the view every camera in this build uses), first base is on the RIGHT. Swapped both
+cells' `left`. The moving dot does NOT read the CSS - `DIAMOND_PCT` in `ui.js` is a SEPARATE
+hardcoded array of the same four points, used by `lerpDiamondPct` for the in-transit dot - so it
+had to be swapped too, by hand, in the same commit, or the dot would have kept sliding to the
+now-wrong corner while the resting cells were correct. Both are updated together now; a comment on
+each points at the other.
+
+**The HUD's own mini-diamond was un-mirrored in the same ship (orchestrator's review).** `basesSvg()` (`.bb-hud-bases`, drawn every `_paintHud`) carried the SAME mirror the chase-time widget had, first base on the left; the stage left it alone because the spec never named it, and the two widgets would have disagreed with each other. Its first-base rect is now the right-hand one (x 28) and third the left (x 4). Three copies of "which side is first" exist now (`DIAMOND_PCT`, the CSS cells, `basesSvg`), and all three must agree.
+
+**Facts for whoever reads this next:**
+- `_syncActors()` takes no argument. `mode` (`'batting'`/`'pitching'`) is still read in
+  `_drawStaticField` for the camera (`setCamera`) and the overlay (`_drawOverlay`), unchanged -
+  only the SIDE decision moved off it.
+- `this._rbActive` is the one source of truth for "is a real batter-runner running right now."
+  Nothing else should ever call `this.actors.setActor('rb', ...)`/`place('rb', ...)` - the ONLY
+  legitimate caller is `_animateRunners`'s own step loop, gated on this flag.
+- The batter camera's own frustum does not actually show first or third base (only second) at
+  393px - this is an R1 camera fact (`docs/BASEBALL-3D-BUILD.md`'s own R1 record already noted the
+  same thing for the pitcher camera and the infielders), unrelated to this stage, and is why this
+  stage's own colour-agreement stills use a runner on SECOND rather than first.
+- `DIAMOND_PCT` (ui.js) and `.bb-diamond-cell[data-cell]` (baseball.css) are two independent
+  copies of the same four points and must be edited together - there is no single source for the
+  widget's geometry.
+
 ## R5: contact and carry (2026-09-20)
 
 The sixth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R5"), and the first since R2

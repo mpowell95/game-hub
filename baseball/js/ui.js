@@ -336,6 +336,13 @@ class BaseballPlayScreen {
     this._runnerStanding = { r1: null, r2: null, r3: null };
     this._runnersInMotion = null;
     this._chasingFielderRole = null;
+    // R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): true only for the exact window a REAL 'rb'
+    // mover is running (`_animateRunners` set it, this play has a batter-runner). `_syncActors`
+    // (below, via `_syncBatterRunner`) hides 'rb' on every redraw whenever this is false - so a
+    // batter-runner can never outlive his own play, no matter how `_returnToPlate()` or the next
+    // at-bat races against his own animation loop. See `_syncBatterRunner`'s own header for the
+    // exact bug this closes.
+    this._rbActive = false;
 
     ensureCSS();
 
@@ -811,7 +818,7 @@ class BaseballPlayScreen {
     if (!this.ctx || !this._fieldW) return;
     const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
     this.actors.setCamera(mode === 'pitching' ? 'pitcher' : 'batter');
-    this._syncActors(mode);
+    this._syncActors();
     this._drawOverlay(mode);
   }
 
@@ -1004,7 +1011,17 @@ class BaseballPlayScreen {
    *  first is what lets that call do anything). Also where the beat's own end-of-delivery poses
    *  land: the batter drops out of its held Swing follow-through into Idle and the pitcher
    *  cross-fades into Set, called from here rather than scattered across every caller of
-   *  `_animateBattedBall` since this is the one place that always runs once, on the way back. */
+   *  `_animateBattedBall` since this is the one place that always runs once, on the way back.
+   *
+   *  R6: also the OTHER way `'rb'` retires (`_syncBatterRunner`'s own header - "whichever comes
+   *  first," his own natural finish or this). `_animateRunners` is never awaited (its own header:
+   *  awaiting it would risk lengthening the beat), so its rAF loop and this call are on two
+   *  independently-clocked timers with nothing forcing one to wait for the other - clearing
+   *  `_rbActive` HERE, unconditionally, is what stops a batter-runner still mid-run from
+   *  outliving the cutaway that is about to put the NEXT batter in the same box. The explicit
+   *  `hide('rb')` covers the one frame between this call and the `_drawStaticField()` a few lines
+   *  down (which reaches the same backstop via `_syncActors` -> `_syncBatterRunner`) - belt and
+   *  braces, cheap and idempotent either way. */
   _returnToPlate() {
     this._cutawayUp = false;
     this._setDiamondVisible(false);
@@ -1013,11 +1030,13 @@ class BaseballPlayScreen {
     // marker hold it belongs to (its own header: "no engine/timing change... just an animation
     // whose full length may not always be seen").
     this._hideHomerun();
+    this._rbActive = false;
     if (this.actors) {
       this.actors.clearMarker();
       this.actors.setBall(null);
       this.actors.idle('batter');
       this.actors.toSet();
+      this.actors.hide('rb');
     }
     this._drawStaticField();
   }
@@ -1028,16 +1047,33 @@ class BaseballPlayScreen {
    *  pitcher stands on the rubber; the catcher crouches behind the plate and the umpire stands
    *  behind him, both fixed. Fire-and-forget: `setBatter`/`setPitcher` are async only on an actual
    *  side change (a real texture swap), which this screen does not need to await on every redraw -
-   *  this runs on every `_drawStaticField()` call, several times a second during a pitch. */
-  _syncActors(mode) {
+   *  this runs on every `_drawStaticField()` call, several times a second during a pitch.
+   *
+   *  R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): the batting side comes from `this.game.half`,
+   *  never from `mode`. `mode` is which CONTROL the human is holding this turn ('pitching' means
+   *  the human is pitching), and the human is always `away` - so in the pitching state the team AT
+   *  BAT is `home` (the CPU), not `away`. The old `mode === 'pitching' ? 'away' : 'home'` line read
+   *  that backwards: it cast the batter to `away` (the human's own colours) exactly when the human
+   *  was NOT batting, which is why the CPU's batter and the CPU's runners wore the human's cream
+   *  and the human's own batter/runners wore the CPU's navy (Matt's v865 recording, items 2-4).
+   *  Fielders and runners already read `this.game.half` correctly (`_syncFielders`/
+   *  `_syncBaseRunners`, both below) - one rule for all fifteen roles now. Before `this.game`
+   *  exists (the very first `_drawStaticField()`, called from `_sizeCanvas` inside `_renderPlay`,
+   *  which itself runs after `this.game = new Game(...)` in `_startGame` - so in practice this
+   *  branch is a defensive fallback, never actually taken on the live path) the human bats, so the
+   *  batter is `away`, matching the spec's own words. Takes no argument any more - `mode` (which
+   *  control the human is holding) never belonged in this decision; `_drawStaticField` still needs
+   *  it for the camera and the overlay, both unchanged. */
+  _syncActors() {
     const flip = this._currentBatterFlip();
     const pitcherFlip = this._currentPitcherFlip();
     // R2: the batter STANDS STILL. The pad used to walk him across his own box (the 1-D aim), and
     // it now moves a cursor drawn over the zone instead - which is the reference game's own
     // picture, and the only one that can mean anything in two axes (nobody aims a bat by jumping).
     const boxX = flip ? BATTER_BOX.x : -BATTER_BOX.x;
-    const batterSide = mode === 'pitching' ? 'away' : 'home';
-    const pitcherSide = mode === 'pitching' ? 'home' : 'away';
+    const battingSide = this.game ? (this.game.half === 'top' ? 'away' : 'home') : 'away';
+    const batterSide = battingSide;
+    const pitcherSide = battingSide === 'away' ? 'home' : 'away';
     this.actors.setBatter({
       side: batterSide, bats: flip ? 'L' : 'R', facingRad: BATTER_FACING_RAD,
       pos: { x: boxX, y: 0, z: BATTER_BOX.z }, heightFt: FIGURE_HEIGHT_FT,
@@ -1057,6 +1093,8 @@ class BaseballPlayScreen {
     // (called every `_drawStaticField()`, several times a second) never fights either animation.
     this._syncFielders();
     this._syncBaseRunners();
+    // R6: 'rb' forced hidden on every redraw unless a real batter-runner mover owns him right now.
+    this._syncBatterRunner();
   }
 
   /** R3: the nine fielders' own spots (docs/BASEBALL-3D-BUILD.md section 9) - the four infielders
@@ -1123,6 +1161,32 @@ class BaseballPlayScreen {
         this.actors.hide(role);
       }
     }
+  }
+
+  /** R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): THE ONE-BATTER RULE, structurally. `'rb'` has
+   *  no bag to stand on between pitches (unlike r1/r2/r3, `_syncBaseRunners` above never places or
+   *  shows him) - the ONLY role that is ever allowed to place/show him is `_animateRunners`'s own
+   *  step loop, and only while `this._rbActive` is true (set the instant a real batter-runner mover
+   *  is built, cleared the instant he finishes, is retired, or this play never had one at all - see
+   *  `_animateRunners`'s own header). Called every `_syncActors()` - so every `_drawStaticField()`,
+   *  many times a second - this is the backstop: whatever raced, whatever got cut short, whatever a
+   *  stale mover's own rAF frame did a moment ago, the very next redraw puts him back to invisible
+   *  unless something legitimate is currently running him.
+   *
+   *  What this closes (Matt's v865 recording, item 3 - "the batter-runner figure is still standing
+   *  on the plate when the next batter is placed"): `_animateRunners` is deliberately never awaited
+   *  by `_settleAtBat` (see `RUN_WINDOW_MS`'s own header - awaiting it would risk lengthening the
+   *  beat), so its own rAF-driven finish and `_returnToPlate()`'s cutaway-clearing redraw are two
+   *  independently-clocked things with no lock between them. Under real frame-time jitter (a
+   *  dropped frame, a slow paint) the loop's own `this.actors.setActor('rb', {...})` can land AFTER
+   *  `_returnToPlate()` has already put the NEXT batter's own figure up, which is what put two
+   *  figures in the box for a beat. `_returnToPlate()` also clears `_rbActive` unconditionally
+   *  (its own header), so the cutaway returning to the plate is the OTHER thing (besides the
+   *  mover's own natural finish) that closes this - "whichever comes first", the spec's own
+   *  words. */
+  _syncBatterRunner() {
+    if (!this.actors || this._rbActive) return;
+    this.actors.hide('rb');
   }
 
   /** THE PITCH, in the world (R1). `xNorm` is the engine's own lateral aim (-1 at the zone's left
@@ -2291,6 +2355,12 @@ class BaseballPlayScreen {
       const speedFt = payload.outcome === 'walk' ? WALK_RUNNER_SPEED_FT_S : RUNNER_SPEED_FT_S;
       raw.push({ role: 'rb', from: -1, to: toIdx, speedFt });
     }
+    // R6: this play's own answer to "is there a real batter-runner running right now" -
+    // `_syncBatterRunner()` (called from every `_syncActors()`) hides 'rb' on every redraw unless
+    // this is true, so a strikeout (no 'rb' pushed above) or any other play with no batter-runner
+    // immediately retires whatever 'rb' a PREVIOUS play left active - "a fresh at-bat never
+    // inherits a visible rb," the spec's own words.
+    this._rbActive = raw.some((m) => m.role === 'rb');
     if (!raw.length) { this._runnersInMotion = null; return undefined; }
     const movers = raw.map((m) => {
       const wp = path.slice(m.from + 1, m.to + 2);
@@ -2319,10 +2389,20 @@ class BaseballPlayScreen {
         let allDone = true;
         for (const m of movers) {
           if (m.done) continue;
+          // R6: 'rb' can be RETIRED from outside this loop (`_returnToPlate()`, on the cutaway
+          // returning to the plate before this mover's own natural finish - "whichever comes
+          // first," the spec's own words). Once retired, this loop must never place or show him
+          // again, or the very next frame would undo `_returnToPlate()`'s own hide() - `place()`
+          // sets `pivot.visible = true` unconditionally (actors.js's own comment on that).
+          if (m.role === 'rb' && !this._rbActive) { m.done = true; motion.delete(m.role); this.actors.hide(m.role); continue; }
           if (!m.started) { m.started = true; this.actors.play(m.role, 'Run'); }
           m.frac = m.durMs > 0 ? Math.min(1, (now - t0) / m.durMs) : 1;
           if (m.frac < 1) { allDone = false; }
-          else { m.done = true; motion.delete(m.role); this.actors.hide(m.role); continue; }
+          else {
+            m.done = true; motion.delete(m.role); this.actors.hide(m.role);
+            if (m.role === 'rb') this._rbActive = false; // reached his own finish honestly - the other way this closes
+            continue;
+          }
           const p = this._pointOnPath(m.wp, m.frac);
           this.actors.setActor(m.role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad: m.facingRad });
         }
@@ -3255,23 +3335,29 @@ function dots(n, max, cls) {
   return out;
 }
 
+/** R6 (orchestrator's ship review): the HUD's own mini-diamond reads from behind the plate like
+ *  the chase-time widget, first base on the RIGHT (x 28..36) and third on the LEFT (x 4..12). */
 function basesSvg(bases) {
   const on = (i) => bases[i] != null;
   return `<svg viewBox="0 0 40 40" class="bb-bases-svg">
     <rect x="18" y="4" width="8" height="8" transform="rotate(45 22 8)" class="${on(1) ? 'is-on' : ''}"></rect>
-    <rect x="4" y="18" width="8" height="8" transform="rotate(45 8 22)" class="${on(0) ? 'is-on' : ''}"></rect>
-    <rect x="28" y="18" width="8" height="8" transform="rotate(45 32 22)" class="${on(2) ? 'is-on' : ''}"></rect>
+    <rect x="28" y="18" width="8" height="8" transform="rotate(45 32 22)" class="${on(0) ? 'is-on' : ''}"></rect>
+    <rect x="4" y="18" width="8" height="8" transform="rotate(45 8 22)" class="${on(2) ? 'is-on' : ''}"></rect>
   </svg>`;
 }
 
 // ---------------------------------------------------------------------------------------------
-// R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Four cells, the same left/right
-// assignment `basesSvg` above already drew (first on the left, third on the right, seen from
-// behind the plate) so the two never disagree about which corner is which. Percent positions
+// R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Four cells, percent positions
 // within the widget's own 84x84 box; `-1`/`3` (home, both ends) share one entry, same as
 // `field.js`'s `runnerPath()` shares its own `home` at both ends of the array this indexes into.
+// R6: first base is on the RIGHT and third on the LEFT, seen from behind home plate (the
+// reference game's own view) - this array is a SEPARATE hardcoded copy of the CSS positions
+// (`.bb-diamond-cell[data-cell]` in baseball.css), not derived from them, so R3's original mirror
+// had to be undone in both places, together (Matt's v865 recording, item 4). It no longer claims
+// to agree with `basesSvg` above - that widget (the HUD's own persistent mini-diamond, `_paintHud`)
+// still draws first base on the left; see this stage's report for that inconsistency.
 const DIAMOND_PCT = [
-  { x: 50, y: 88 }, { x: 12, y: 50 }, { x: 50, y: 12 }, { x: 88, y: 50 }, { x: 50, y: 88 },
+  { x: 50, y: 88 }, { x: 88, y: 50 }, { x: 50, y: 12 }, { x: 12, y: 50 }, { x: 50, y: 88 },
 ];
 /** A point along the widget's own diamond edges between base index `from` and `to` (the same -1..3
  *  domain `runnerPath()` uses), `frac` of the way there by DISTANCE (not by corner count), so a
