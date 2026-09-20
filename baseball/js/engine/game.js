@@ -15,7 +15,7 @@
 import { RULES_V, LEAGUES, MECHANICS, PITCH_TYPES, PATTERN_WINDOW } from './settings.js';
 import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
-import { swing } from './swing.js';
+import { swing, modeOf as swingMode } from './swing.js';
 import { resolveContact } from './outcomes.js';
 import { zonesFor } from './zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
@@ -510,25 +510,27 @@ export class Game {
       // commit, and every existing seeded test/sim stays byte-identical. The draw itself is the
       // SAME one flyPitch would otherwise make internally for its own aim-scatter term (see
       // pitch.js's header) - pre-rolling it here just lets the UI show it before flyPitch runs.
-      if (defenseAgent && defenseAgent.previewsPitch) pitchView.scatterDraw = this._rand();
+      // R2 (docs/BASEBALL-3D-BUILD.md section 9): FOUR pre-rolled draws, not one - the two aim
+      // scatters and the two a knuckleball's break reads (`flyPitch`'s own header). A human
+      // pitcher's UI runs the identical `flyPitch` on them while the ball is still in the air, so
+      // what the player watches IS what this function scores a moment later.
+      if (defenseAgent && defenseAgent.previewsPitch) {
+        pitchView.scatterDraw = { x: this._rand(), y: this._rand(), bx: this._rand(), by: this._rand() };
+      }
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
-      const aimX = (pitchDecision && typeof pitchDecision.aim === 'number') ? pitchDecision.aim : 0;
+      // R2: the aim is 2-D. A plain number still means "x, at the middle of the zone's height" -
+      // `flyPitch` accepts both shapes, so a scripted agent or an old fixture keeps working.
+      const aim = (pitchDecision && pitchDecision.aim != null) ? pitchDecision.aim : 0;
       // Captured BEFORE `_recordPitch` appends the pitch about to be thrown - see
       // `_buildSwingView`'s own header for why this ordering matters.
       const priorPitchHistory = (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW);
-      // BB-3: a human pitcher's decision may carry `hold`/`steer` (the hold-and-release meter and
-      // in-flight steering, see pitch.js) - passed through as pitchExtras; a CPU/model agent never
-      // sets either, so their pitches are byte-identical to before this phase. BB-3b commit 4:
-      // `scatter` (the pre-rolled draw above) rides along the same way, present only when it was
-      // actually drawn.
-      // `pitcherHand` (pitcher.throws) is what steerDirectionSign clamps a curveball/slider's
-      // break to (doc §11, [Locked]: "never which way") - always the REAL pitcher's own hand,
-      // whether they're human or CPU, so a steer array built any other way (a future agent, a
-      // test) still clamps correctly rather than silently defaulting to 'R'.
-      const pitchExtras = pitchDecision && (pitchDecision.hold != null || pitchDecision.steer || pitchView.scatterDraw != null)
-        ? { hold: pitchDecision.hold, steer: pitchDecision.steer, scatter: pitchView.scatterDraw, pitcherHand: pitcher.throws } : null;
-      const pitchResult = flyPitch(type, aimX, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
+      // `pitcherHand` (pitcher.throws) is which way a handed break goes (doc §11, [Locked]:
+      // "never which way") - always the REAL pitcher's own hand, whether they're human or CPU.
+      // `scatter` is the pre-rolled draw set above, present only when it was actually drawn.
+      // R2 deleted the `hold`/`steer` fields the meter and the steer pad used to put here.
+      const pitchExtras = { scatter: pitchView.scatterDraw || null, pitcherHand: pitcher.throws };
+      const pitchResult = flyPitch(type, aim, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
@@ -537,7 +539,9 @@ export class Game {
       // BB-3b commit 4: additive event, so the UI can animate a CPU batter's swing when a human
       // is pitching (nothing told it before - the decision was made and consumed entirely inside
       // this function). No existing listener reacts to an event type it doesn't recognize.
-      await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action, charged: !!(swingDecision && swingDecision.charged) });
+      // R2: `mode` (contact/power) replaces `charged` - the charged swing is deleted, and which
+      // mode the batter was in is the thing a UI would want to show instead.
+      await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action, mode: swingMode(swingDecision) });
       const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
       // BB-3b commit 6: two additive readouts for Line 1 (SPEC.md section 3/9) - `verdict` names
       // what the pitch itself was (a called ball/strike, a foul, or a swing that missed

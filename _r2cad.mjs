@@ -1,0 +1,33 @@
+import { chromium } from 'playwright-core';
+const BASE='http://localhost:8123';
+const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium', args:['--no-sandbox','--use-gl=swiftshader'] });
+const ctx = await b.newContext({ viewport:{width:393,height:852}, deviceScaleFactor:3, isMobile:true, hasTouch:true });
+const page = await ctx.newPage();
+await page.addInitScript(()=>{ localStorage.setItem('gamehub.profile', JSON.stringify({name:'Cadence',emoji:'⚾',opponents:[]})); });
+await page.goto(BASE+'/', {waitUntil:'domcontentloaded'});
+await page.waitForFunction(()=>!!window.__ghHub,null,{timeout:20000});
+await page.waitForTimeout(600);
+await page.evaluate(async()=>{ const m=await import('/js/hub.js'); const hub=window.__ghHub;
+  if(!hub.games.some(x=>x.id==='baseball')) hub.games=[...hub.games, m.GAMES.find(x=>x.id==='baseball')];
+  await hub.launch('baseball'); });
+await page.waitForTimeout(2000);
+await page.evaluate(()=>document.querySelector('.bb-play-btn').click());
+await page.waitForSelector('.bb-play',{timeout:8000});
+await page.evaluate(()=>{
+  const inst=document.querySelector('.hub-game')._bbInstance;
+  const rec={marks:[]}; window.__cad=rec;
+  const mark=(k)=>rec.marks.push({k,t:performance.now()});
+  const l1=inst._setLine1.bind(inst); inst._setLine1=(t)=>{ if(t) mark('verdict:'+t); return l1(t); };
+  const sw=inst._stepWindup.bind(inst); inst._stepWindup=async()=>{ mark('windup-enter'); const r= await sw(); mark('windup-exit'); return r; };
+  const play=inst.actors.play.bind(inst.actors); inst.actors.play=(r,n,o)=>{ if(r==='pitcher'&&n==='Pitch') mark('play+'+((o&&o.markAtMs)||0)); return play(r,n,o); };
+  let handler=inst._onMainDown||null;
+  const fire=(fn)=>{ if(fn&&inst.state&&inst.state.actionLabel==='act_ready') setTimeout(()=>{ if(handler===fn){ mark('ready-tap'); fn(); } },0); };
+  Object.defineProperty(inst,'_onMainDown',{configurable:true,get(){return handler;},set(fn){handler=fn; fire(fn);}});
+  const ds = inst.human.decideSwing.bind(inst.human); inst.human.decideSwing=(v)=>{ mark('decideSwing-enter'); return ds(v); };
+  fire(handler);
+});
+await page.waitForTimeout(16000);
+const marks = await page.evaluate(()=>window.__cad.marks);
+let prev=null;
+for(const m of marks){ console.log((prev?('+'+(m.t-prev).toFixed(0)).padStart(7):'      -'), m.k); prev=m.t; }
+await b.close();

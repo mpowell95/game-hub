@@ -4,6 +4,85 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R2: the controls, re-timed to the reference (2026-09-20)
+
+The second stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R2"), against Matt's
+reference catalogue `docs/BASEBALL-REFERENCE-B9.md`. R1 put the game in a real stadium and changed
+nothing about how it plays; this changes how it plays and nothing about the stadium.
+
+**The zone and both aims are 2-D.** `pitch.js`'s `flyPitch` takes `aim: {x, y}` (a plain number
+still means x, so every old fixture keeps working), scatters BOTH axes with the same skill model,
+and a strike is `|x| <= 1 && |y| <= 1`. It returns `straightX`/`straightY` beside `x`/`y`: where the
+pitch would have crossed with no break, which is where the batting target marker starts.
+
+**The meter, Nice, hang and steering are deleted** - `FEEL.engine`'s `meterTime`/`niceWidth`/
+`niceBoost`/`niceBreak`, `HANG_*`, `STEERABLE_PITCHES`, `STEER_MAX_OFFSET`, `resolveSteer`,
+`clampSteerDx`, `steerDirectionSign`, `ring.js`'s whole throw mode, `ui.js`'s meter loop and steer
+arrow, and `test-baseball-ring.mjs` (which existed to prove the drawn Nice zone agreed with
+`flyPitch`'s `wasNice`; both are gone, so it is deleted from the repo and from
+`run-all-tests.mjs`). What replaces steering is **`BREAK_OFFSET`** (settings.js): a break is a fact
+of the pitch TYPE and the pitcher's own arm, applied at the plate, in zone units, and the yellow
+POINT CURSOR shows where it will end before the ball is thrown. doc §11's [Locked] "never which
+way" is now "never which way and never how much", which is what the reference game does.
+
+**Pitching is tap PITCH, then drag.** One tap plays the delivery (`markAtMs: PITCH_DRAG_MS`, 700 ms);
+the 2-D pad is live through it; at the mark the cursor is sampled and that is the pitch. There is no
+second tap. `HumanAgent._throw` runs the REAL `flyPitch` on the REAL pre-rolled draws
+(`game.js`'s `previewsPitch` seam now pre-rolls FOUR: two aim scatters, two the knuckleball's break
+reads) - so BB-3's hand-copied replica of the scatter formula is gone and the drawn ball and the
+scored pitch are the same object by construction.
+
+**Batting is READY, then a 2-D cursor, then one tap.** The charged swing is deleted; CONTACT
+(circle radius 0.55 zone units) and POWER (0.35, x1.12 exit velocity) replace it, cycled by tapping
+the pad. `swing.js` scores contact as timing quality x `max(0, 1 - d/cursorR)` in two axes: outside
+the circle is a miss (the R2 form of `batReach`), the horizontal offset sprays, and the VERTICAL
+offset picks the batted-ball kind (under it = fly or pop-up, over it = grounder, on it = line
+drive), replacing the sweet-spot rule. At release a target marker appears at the straight-line spot
+and slides to the real crossing point over the flight.
+
+**The beats.** `fastballMs` 1500 -> 650, `windupMs` 1400 -> 1000, `resultMs` 1800 -> 1200,
+`betweenMs` 3000 -> 800; `FLIGHT_MS` 1000 -> 900 and `MARKER_HOLD_MS` 1000 -> 700 so the in-play
+budget (400 + 900 + 700) still fits `RESULT_MS + BETWEEN_MS` (2000) exactly. Measured on a real
+phone-sized hub mount: verdict to next release **3010 to 3106 ms** against a 3000 ms target (was
+6202 to 6259). The batted-ball apex is halved (`min(80, distanceFt * 0.22)`), which is R1's own
+recorded defect - a home run's wall used to leave the chase frame.
+
+**Where the spec was wrong, and what was done instead.** It puts the pop-up threshold at 0.7 zone
+units above the cursor's centre while the CONTACT circle's radius is 0.55 - a ball 0.7 above the
+centre is already outside the circle, so a pop-up could never happen and `outcomes.js`'s whole
+`popout` branch would have been dead code. The thresholds are FRACTIONS of the cursor's own radius
+instead (`flyOffsetFrac` 0.545, `popupOffsetFrac` 0.85), which lands the fly threshold on exactly
+the spec's 0.30 in CONTACT mode and puts the pop-up band inside the rim at 0.47.
+
+### The sim scoreboard, R2 (`node sim-baseball.mjs --assert`, full sample, 82.0s)
+
+Pasted as run, passing or not (`sim-baseball.mjs` reports, it does not lock), beside the last
+pre-R2 full run for comparison:
+
+```
+[FAIL] SEASON_WINRATE_BAND.little      0.904  [0.92,0.98]   (pre-R2 0.938 PASS)
+[PASS] SEASON_WINRATE_BAND.highschool  0.725  [0.70,0.80]   (pre-R2 0.745)
+[PASS] SEASON_WINRATE_BAND.college     0.571  [0.57,0.67]   (pre-R2 0.586)
+[PASS] SEASON_WINRATE_BAND.minors      0.546  [0.49,0.59]   (pre-R2 0.566)
+[FAIL] SEASON_WINRATE_BAND.majors      0.516  [0.41,0.51]   (pre-R2 0.485 PASS)
+[PASS] SEASONS_TO_GOLD.little 1.29 / .highschool 1.81
+[FAIL] SEASONS_TO_GOLD.college 3.37 (<=2.75) / .minors 3.85 (<=3.75) / .majors 5.36 (<=5.25)
+       - all three IMPROVED under R2 (pre-R2: 4.29 / 5.00 / 8.57), all three still miss.
+[PASS] CHAMPION_GAME_WIN_MIN_MEDIAN 0.455, PERFECT_SEASON_REACHABLE 0.153, LADDER_MONOTONE
+       (across-league) [0.908,0.728,0.578,0.554,0.543], NUDGE_A_B every league, CPU_LEVEL_SHORTFALL,
+       both DOC_*_TABLE_MATCHES.
+[FAIL] SLOT_WINRATE_BAND weakest [0.929,0.77,0.633,0.608,0.565] / champion
+       [0.883,0.735,0.577,0.517,0.519]; CHAMPION_IS_HARDEST / within-league LADDER_MONOTONE;
+       CAP_BINDS_ONLY highschool 2.1 vs <=2.0 - every one of these is the same structural finding
+       every phase back to BB-2b has reported, unchanged in KIND by R2.
+```
+
+R2 compressed the league spread slightly: Little League got a little harder (0.938 -> 0.904) and
+Majors a little easier (0.485 -> 0.516), both by about 0.02 to 0.03, both now just outside their
+own band. Nothing was tuned to chase them - the CPU/CAPS/SKILL_EFFECT tables are untouched by R2
+and re-tuning them against the new contact model is its own job, with this scoreboard as its
+before-picture.
+
 ## The clone begins: a real 3D stadium and the reference's cameras (2026-09-20, `game-hub-v860` → `game-hub-v861`)
 
 Matt, with a 3:20 recording of Baseball 9's tutorial: *"does exactly what I want our game to look

@@ -163,20 +163,59 @@ export const FEEL = {
   engine: {
     dtS: 1 / 120,           // fixed timestep, seconds - matches Golf/Hill Climb (doc §15's own units note)
     maxSteps: 5,            // catch-up cap per advance() call: never spiral on a slow/batched tick
-    fastballMs: 1500,       // [Tested] doc §14 - fastball travel time; every other pitch is this x PITCH_TRAVEL_MULT
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): 1500 -> 650. The reference game's pitch is in the
+    // air for 0.35 to 0.45 s (docs/BASEBALL-REFERENCE-B9.md's measured table); ours took a second
+    // and a half, which is most of why "their beats are 2 to 3x faster than ours everywhere".
+    // 650 ms is the fastball at the SLOWEST league's own travel multiple of 1.0 and lands the
+    // faster pitches inside the reference's window once PITCH_TRAVEL_MULT and the pitcher's own
+    // speed skill are applied. The timing window (below) is unchanged, so a shorter flight does
+    // NOT make contact harder - it only shortens the wait.
+    fastballMs: 650,        // R2 - fastball travel time; every other pitch is this x PITCH_TRAVEL_MULT
     timingWindow: 100,      // [Tested] doc §14 - good-contact timing window, ms
     foulMult: 1.7,          // [Tested] doc §14 - foul margin, x timingWindow
     swingDelay: 60,         // [Tested] doc §14 - swing start delay, ms
-    sweetSpot: 0.28,        // [Tested] doc §14 - sweet spot size, fraction of plate half-width
-    batReach: 0.8,          // [Tested] doc §14 - bat reach
-    chargeTime: 300,        // [Tested] doc §14 - hold needed to charge a swing, ms
-    chargeWindowMult: 0.6,  // [Tested] doc §14 - charged swing timing window, x
-    chargePower: 1.22,      // [Tested] doc §14 - charged swing power, x
-    meterTime: 1100,        // [Tested] doc §14 - pitch meter fill time, ms (UI concept; not consumed headless)
-    niceWidth: 0.12,        // [Tested] doc §14 - Nice zone width
-    niceBoost: 1.06,        // [Tested] doc §14 - Nice pitch speed, x
-    niceBreak: 1.3,         // [Tested] doc §14 - Nice pitch bend, x
     aimScatter: 0.12,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
+
+    // ---- R2: the 2-D batting cursor (docs/BASEBALL-3D-BUILD.md section 9) --------------------
+    // The batter no longer has a 1-D "sweet spot" on a line (`sweetSpot`/`batReach`, deleted with
+    // the 1-D pad): he has a CIRCLE he drags over the zone, and the pitch either crosses inside it
+    // or it does not. `cursorR` is that circle's radius in zone units (1 = the zone's own half
+    // width / half height) per batting mode, and `modeExitMult` is what the mode pays or earns for
+    // it - CONTACT is the big circle at ordinary power, POWER is the small circle at x1.12. That
+    // trade IS the mode choice; it replaces the charged swing (hold-to-charge) entirely.
+    cursorR: { contact: 0.55, power: 0.35 },
+    modeExitMult: { contact: 1.0, power: 1.12 },
+    // How far off the cursor's centre, VERTICALLY, the ball has to cross before the contact stops
+    // being a line drive: past `flyOffsetFrac` above the centre the batter got under it (fly),
+    // past `popupOffsetFrac` he got right under it (pop-up), past `flyOffsetFrac` below it he
+    // topped it (grounder).
+    //
+    // FRACTIONS OF THE CURSOR'S OWN RADIUS, not the absolute zone units R2's spec names (0.3 and
+    // 0.7). Absolute numbers cannot work: the CONTACT circle's radius is 0.55, so a ball crossing
+    // 0.7 above the cursor's centre is OUTSIDE the circle and is already a miss - a pop-up could
+    // never happen at all, and `outcomes.js`'s whole `popout` branch would be dead code. As
+    // fractions the rule scales with the circle it is measured against, which is the honest
+    // reading of "off centre": 0.545 x 0.55 is 0.30, exactly the spec's own fly threshold in
+    // CONTACT mode, and the pop-up band sits inside the rim at 0.47 instead of past it. In POWER
+    // mode (radius 0.35) the same fractions give 0.19 and 0.30 - a smaller circle makes every
+    // part of it proportionally closer to the rim, which is what the mode is buying.
+    flyOffsetFrac: 0.545,
+    popupOffsetFrac: 0.85,
+    // A fly ball's own launch-angle band (deg). `outcomes.js`'s `battedBallKind` calls 26 to 52
+    // a fly, so this sits inside it with room at both ends; the line-drive band below it is the
+    // existing lineDriveCenterDeg/Spread pair, unchanged, and the pop-up and grounder bands are
+    // the ones swing.js already used. R2's choice, not measured - `sim-baseball.mjs` is what
+    // measures what it does to the batted-ball census.
+    flyCenterDeg: 39,
+    flySpreadDeg: 9,
+    // How far a ball crossing off the cursor's centre HORIZONTALLY sprays, at the edge of the
+    // circle (deg). The doc's own rule ("the horizontal offset adds to pull/opposite direction
+    // exactly as aimX did") gives no number; 18 deg is about half of `pullMaxDeg`, so where you
+    // meet the ball matters, and matters less than when. R2's choice.
+    offsetSprayDeg: 18,
+    // The flat mph a badly-placed ball loses, at the very edge of the cursor circle. Carried over
+    // verbatim from the 1-D model's own `qualityFrac * 18` placement penalty, which this replaces.
+    placementPenaltyMph: 18,
 
     // ---- Contact-quality axis (BB-2a, 2026-09-12) -------------------------------------------
     // Draft, new. Fixes the mechanism the BB-2 handoff diagnosed: `absTiming` used to decide only
@@ -194,9 +233,13 @@ export const FEEL = {
     perfectSpraySpreadDeg: 8, // Draft, BB-2a - how narrow the q=1 spray band is around whichever gap it picked
   },
   ui: {
-    betweenMs: 3000,        // [Tested] doc §14 - pause between pitches
-    windupMs: 1400,         // [Tested] doc §14 - CPU pitcher windup
-    resultMs: 1800,         // [Tested] doc §14 - how long a hit result shows
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): re-timed to docs/BASEBALL-REFERENCE-B9.md's own
+    // measured table (verdict ~1.2 s, pitch tap to next ready ~2.2 s, READY to release ~1.0 s).
+    // Was 3000 / 1400 / 1800. `test-baseball-device.mjs`'s r2-cadence probe computes its expected
+    // sum from these three, never from a literal, so it follows a change here.
+    betweenMs: 800,         // R2 - pause between pitches
+    windupMs: 1000,         // R2 - CPU pitcher windup
+    resultMs: 1200,         // R2 - how long a hit result shows
     inputOffset: 0,         // [Tested] doc §14 - input lag offset
   },
 };
@@ -1018,29 +1061,34 @@ export const CHAMPION_CEILING = 'nextLeagueRow';
 export const SLOT_SIGMA_DESCENT = { bindThroughSlot: 4, descentToSlot: 7 };
 
 // ---------------------------------------------------------------------------------------------
-// Phase 3 (BB-3): the UI input seams the engine had constants for but no way to feed. Doc §12/§14
-// name hold-and-release pitching and steerable breaks; FEEL.engine already carried meterTime/
-// niceWidth/niceBoost/niceBreak from phase 1 with nothing reading them. Draft, new this phase.
-
-// How far past the meter's own fill time (FEEL.engine.meterTime) a release still counts as "in
-// the meter" before it is scored a hang - the meter doesn't stop dead at meterTimeMs, a release a
-// little past it is a LATE-but-still-active release, not a broken input.
-export const HANG_GRACE_FRAC = 0.25; // Draft, new
-// A pitch held into the hang region: slower (this multiplies timeToPlateS) and less steerable
-// (this multiplies steer's own effect) than a normal throw, and drifts toward the center of the
-// zone rather than landing on the pitcher's aim - overheld, everything about it goes soft.
-export const HANG_SPEED_MULT = 1.18;   // Draft, new
-export const HANG_BREAK_MULT = 0.4;    // Draft, new
-export const HANG_CENTER_PULL = 0.6;   // Draft, new - 0 = no pull toward center, 1 = lands dead center
-
-// Steering: only these two pitch types steer at all (doc §11, [Locked]: curve/slider break away
-// from the throwing arm; a human steers HOW MUCH and WHEN, never which way). `steerFromFrac` is
-// the fraction of the pitch's own flight (0..1) before which a steer sample is ignored - curveball
-// steers from the moment it leaves the hand, slider only once it's already halfway home.
-export const STEERABLE_PITCHES = { curveball: { steerFromFrac: 0 }, slider: { steerFromFrac: 0.5 } };
-// How much a fully-weighted steer stream can bend the pitch, as a fraction of the plate half-width
-// - bounded well under a full zone width so steering nudges a break, it does not relocate the pitch.
-export const STEER_MAX_OFFSET = 0.35; // Draft, new
+// R2 (docs/BASEBALL-3D-BUILD.md section 9): HOW EACH PITCH TYPE BREAKS.
+//
+// This block REPLACES phase 3's hold-and-release and steering seams (HANG_GRACE_FRAC,
+// HANG_SPEED_MULT, HANG_BREAK_MULT, HANG_CENTER_PULL, STEERABLE_PITCHES, STEER_MAX_OFFSET, and
+// FEEL.engine's meterTime/niceWidth/niceBoost/niceBreak), all deleted with the meter they served.
+// The reference game has no meter and no steering after release: you tap once, aim during the
+// wind-up, and the pitch's own break carries it from where you aimed to where it ends
+// (docs/BASEBALL-REFERENCE-B9.md section 1, pitching steps 2 and 3 - "a second, yellow point
+// cursor... shows where the pitch will END; the ball goes to the point cursor").
+//
+// So a break is now a FACT OF THE PITCH TYPE, in zone units (1 = the zone's own half width or
+// half height), applied at the plate: the pitch crosses at aim + scatter + break. `handed: true`
+// multiplies `x` by the pitcher's own arm sign (+1 right, -1 left), which is doc §11's [Locked]
+// rule - "curve and slider break away from the pitcher's throwing arm. Screwball breaks the other
+// way. You control how much and when, never which way" - now expressed as the one thing the
+// player never chooses rather than as a drag the engine had to clamp.
+export const BREAK_OFFSET = {
+  fastball:    { x: 0,     y: 0 },                    // it is the baseline; it does not break
+  changeup:    { x: 0,     y: -0.25 },                // dies straight down
+  curveball:   { x: 0.45,  y: -0.35, handed: true },  // the biggest break in both axes
+  slider:      { x: 0.35,  y: -0.10, handed: true },  // mostly sideways
+  screwball:   { x: -0.35, y: -0.15, handed: true },  // the mirror of a slider, doc §11
+  cutter:      { x: 0.18,  y: 0,     handed: true },  // a late, small cut
+  knuckleball: { x: 0,     y: 0, random: 0.3 },       // +-0.3 both axes, from the pitch's own draws
+  eephus:      { x: 0,     y: -0.1, hump: 0.5 },      // `hump` is PRESENTATION only (ui.js arcs it
+                                                      // up 0.5 then down 0.6 through the flight);
+                                                      // the engine only ever scores the -0.1 end.
+};
 
 export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
@@ -1061,5 +1109,5 @@ export default {
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
   LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights, CHAMPION_SIGMA_HEADROOM_FRAC,
-  HANG_GRACE_FRAC, HANG_SPEED_MULT, HANG_BREAK_MULT, HANG_CENTER_PULL, STEERABLE_PITCHES, STEER_MAX_OFFSET,
+  BREAK_OFFSET,
 };

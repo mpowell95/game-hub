@@ -6,12 +6,17 @@
 //  1. TIMING (early/late, ms) decides contact quality (perfect/foul/miss) AND, per doc, "Early
 //     contact pulls the ball. Late contact goes the opposite way" - so timing also drives spray
 //     direction (pull vs opposite field).
-//  2. LATERAL PLACEMENT (where the bat's sweet spot was dragged to, vs. where the pitch actually
-//     crossed) decides hit TYPE: "Centered on the sweet spot: line drive or fly ball. Off-center:
-//     grounder toward the bat's end, pop-up toward the handle."
-// Which side of "off-center" is the bat's end vs. the handle is not given a number by the doc
-// (only the qualitative rule) - the sign convention below (further from the batter = the end,
-// closer = the handle) is this engine's own invented, but doc-consistent, choice.
+//  2. PLACEMENT - R2 (docs/BASEBALL-3D-BUILD.md section 9): the batter drags a 2-D CURSOR over
+//     the zone and the pitch either crosses inside its circle or it does not. The 2-D distance
+//     from the crossing point to the cursor's centre scales contact quality
+//     (`max(0, 1 - d / cursorR)`, and a ball outside the circle is a miss outright); the
+//     HORIZONTAL offset sprays the ball; the VERTICAL offset decides the batted-ball KIND - under
+//     the ball (it crossed above the cursor's centre) is a fly or a pop-up, over it is a
+//     grounder, on it is a line drive. This replaces BB-1a's 1-D `sweetSpot`/`batReach` pair and
+//     its "bat's end vs. the handle" sign convention, both deleted with the 1-D pad.
+//     The CHARGED swing (hold to charge, `chargeTime`/`chargeWindowMult`/`chargePower`) is
+//     deleted too: POWER mode is what replaces it - a smaller circle for more exit velocity, a
+//     choice made before the pitch rather than a hold during it.
 //
 // BB-2a (2026-09-12): the CONTACT-QUALITY AXIS. The shipped BB-2 engine made timing binary inside
 // its own window - `absTiming` decided miss/foul/contact and then never appeared again, so a swing
@@ -44,6 +49,23 @@ export function computeSwingTiming({ releaseMs, timeToPlateS, swingDelayMs = 0, 
   return { timingErrorMs, swingStep };
 }
 
+/** The batting cursor a decision carries: `{x, y}` in zone units. R2 - a decision with no cursor
+ *  at all swings at the middle of the zone rather than throwing, so a malformed agent decision
+ *  can never crash a half-inning (game.js legalizes nothing here). */
+function cursorOf(decision) {
+  const c = decision && decision.cursor;
+  return {
+    x: c && typeof c.x === 'number' ? c.x : 0,
+    y: c && typeof c.y === 'number' ? c.y : 0,
+  };
+}
+
+/** The batting mode a decision carries - 'contact' (big circle, ordinary power) or 'power' (small
+ *  circle, x1.12 exit velocity). Anything else reads as CONTACT, which is the forgiving one. */
+export function modeOf(decision) {
+  return decision && decision.mode === 'power' ? 'power' : 'contact';
+}
+
 export function swing(pitchResult, batterSkills, decision, settings, rand01, league) {
   if (!decision || decision.action !== 'swing') {
     return { swung: false, contact: false, foul: false, inPlay: false };
@@ -54,9 +76,8 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   const hitPowPts = Math.max(0, batterSkills.hitPow || 0);
   const effect = settings.SKILL_EFFECT;
 
-  const charged = !!decision.charged;
-  const timingWindowMs = F.timingWindow * (charged ? F.chargeWindowMult : 1)
-    * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  const mode = modeOf(decision);
+  const timingWindowMs = F.timingWindow * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
   const foulBoundaryMs = timingWindowMs * F.foulMult;
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);
@@ -65,14 +86,20 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: true, contact: false, foul: false, inPlay: false };
   }
 
-  // Lateral offset between where the bat's sweet spot was placed and where the pitch actually
-  // crossed - both already in the doc's own unit (a fraction of the plate half-width).
-  const aimX = decision.aimX != null ? decision.aimX : 0;
-  const offset = pitchResult.x - aimX;
-  const batReach = F.batReach;
-  if (Math.abs(offset) > batReach) {
-    // The bat was placed somewhere this pitch could never reach from - an automatic miss,
-    // whatever the timing was. This is the "reach" half of the doc's bat model, not a timing miss.
+  // R2: the 2-D offset between where the cursor was and where the pitch actually crossed, both in
+  // zone units. `offX`/`offY` are measured BALL MINUS CURSOR - a positive `offY` means the ball
+  // crossed ABOVE the middle of the circle, i.e. the batter swung under it.
+  const cursor = cursorOf(decision);
+  const offX = pitchResult.x - cursor.x;
+  const offY = (pitchResult.y || 0) - cursor.y;
+  const d = Math.hypot(offX, offY);
+  // The cursor's own radius widens with hitAcc, the same skill that already widened the 1-D sweet
+  // spot ("bigger timing window and bigger sweet spot", doc §6) - the mode sets the base.
+  const cursorR = (F.cursorR[mode] || F.cursorR.contact) * (1 + hitAccPts * (effect.hitAcc.contactRadiusInPerPt || 0));
+  // The placement half of contact quality. A ball that crosses outside the circle is a MISS,
+  // whatever the timing was - the R2 statement of the old `batReach` rule, in two axes.
+  const placeQ = Math.max(0, 1 - d / cursorR);
+  if (placeQ <= 0) {
     return { swung: true, contact: false, foul: false, inPlay: false };
   }
 
@@ -80,58 +107,56 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: true, contact: true, foul: true, inPlay: false };
   }
 
-  // Contact. sweetSpot widens with hitAcc ("bigger timing window and bigger sweet spot", doc §6).
-  const sweetSpotWidth = F.sweetSpot * (1 + hitAccPts * (effect.hitAcc.contactRadiusInPerPt || 0));
-  const centered = Math.abs(offset) <= sweetSpotWidth;
+  // The contact-quality axis (BB-2a), now with R2's placement term folded in: `qualityFor` is 1 at
+  // dead-on timing falling to 0 at the window's own edge, and `placeQ` is 1 dead centre in the
+  // circle falling to 0 at its rim. Both have to be good for the ball to be squared up.
+  const q = qualityFor(absTiming, F.perfectMs, timingWindowMs) * placeQ;
+  const placeFrac = Math.min(1, d / cursorR);
+  // "Centered" is now "inside the inner half of the circle" - the R2 statement of the sweet spot,
+  // kept because `sim-baseball.mjs --attribute` measures the share of centered contact.
+  const centered = d <= cursorR * 0.5;
 
-  // The contact-quality axis (BB-2a): 1 at dead-on timing, falling linearly to 0 at the window's
-  // own edge. Independent of the lateral placement axis below - a batter can be perfectly timed
-  // and still jammed, or sloppily timed and still centered.
-  const q = qualityFor(absTiming, F.perfectMs, timingWindowMs);
+  // The vertical bands, in zone units, from this cursor's own radius (settings.js's
+  // `flyOffsetFrac`/`popupOffsetFrac` carry why they are fractions and not the spec's absolutes).
+  const flyOffY = cursorR * F.flyOffsetFrac;
+  const popupOffY = cursorR * F.popupOffsetFrac;
 
   let launchAngleDeg;
   let kind;
-  if (centered) {
-    // Centered: a line drive or a fly ball. The band NARROWS toward a tight line-drive spread as
-    // timing quality rises, and WIDENS toward topped (low angle) and popped-up (high angle) as it
-    // falls - a squared-up ball flies true; a mistimed-but-centered one still gets under or over it.
-    const spread = F.lineDriveSpreadMaxDeg - q * (F.lineDriveSpreadMaxDeg - F.lineDriveSpreadMinDeg);
-    launchAngleDeg = Math.max(0, F.lineDriveCenterDeg + (rand01() * 2 - 1) * spread);
-    kind = launchAngleDeg > 26 ? 'fly' : 'line';
-  } else if (offset > 0) {
-    // Toward the bat's end (this engine's sign convention, see header): a low, hard grounder.
+  if (offY > popupOffY) {
+    // Right under it: a weak pop-up (the band swing.js has always used for one).
+    launchAngleDeg = 55 + rand01() * 15;
+    kind = 'popup';
+  } else if (offY > flyOffY) {
+    // Under it: a fly ball, inside `outcomes.js`'s own 26-to-52 deg fly band.
+    launchAngleDeg = F.flyCenterDeg + (rand01() * 2 - 1) * F.flySpreadDeg;
+    kind = 'fly';
+  } else if (offY < -flyOffY) {
+    // Over it: a low, hard grounder (the band swing.js has always used for one).
     launchAngleDeg = rand01() * 8;
     kind = 'ground';
   } else {
-    // Toward the handle: a weak pop-up.
-    launchAngleDeg = 55 + rand01() * 15;
-    kind = 'popup';
+    // On it: a line drive or a fly ball. The band NARROWS toward a tight line-drive spread as
+    // timing quality rises, and WIDENS toward topped (low angle) and popped-up (high angle) as it
+    // falls - a squared-up ball flies true; a mistimed-but-centered one still gets under or over
+    // it. Unchanged from BB-2a, which is what keeps this branch's own calibration.
+    const spread = F.lineDriveSpreadMaxDeg - q * (F.lineDriveSpreadMaxDeg - F.lineDriveSpreadMinDeg);
+    launchAngleDeg = Math.max(0, F.lineDriveCenterDeg + (rand01() * 2 - 1) * spread);
+    kind = launchAngleDeg > 26 ? 'fly' : 'line';
   }
-  // BB-2d commit 1: `kind` (ground/line/fly/popup) exposed for measurement (`sim-baseball.mjs
-  // --range`'s batted-ball census needs the SWING's own kind, not outcomes.js's re-derivation,
-  // since the two must agree for a fly-ball-clears-the-fence share to mean anything) - purely
-  // additive; outcomes.js still re-derives its own copy from launchAngleDeg and does not read this.
 
   // Exit velocity: TIMING QUALITY (q) gates how much of the swing's power actually reaches the
   // ball - power multiplies a good swing, it never rescues a bad one. `qualityFloor` is the share
   // of the no-power base a swing barely inside the window (q=0) still keeps; the power skill's own
-  // contribution is itself scaled by q, so a max-Power swing with q=0 caps at `qualityFloor` of
-  // base and nothing more. The LATERAL placement penalty (how far off dead center of the sweet
-  // spot) stays as its own, separate, flat-mph subtraction - placement and timing are two axes,
-  // per doc §12, and neither substitutes for the other.
+  // contribution is itself scaled by q. The PLACEMENT penalty stays as its own, separate, flat-mph
+  // subtraction (`placementPenaltyMph`, the 18 the 1-D model already charged) - placement and
+  // timing are two axes, per doc §12, and neither substitutes for the other.
   const powerBonus = hitPowPts * effect.hitPow.exitVeloMphPerPt;
-  const qualityFrac = Math.min(1, Math.abs(offset) / Math.max(sweetSpotWidth, batReach));
-  const chargeMul = charged ? F.chargePower : 1;
+  const modeMul = (F.modeExitMult && F.modeExitMult[mode]) || 1;
   // BB-2d commit 4: the batted ball itself now scales with the league's own field
   // (`LEAGUE_POWER_SCALE`, settings.js). Scaled relative to `CARRY_ZERO_MPH` (carryFt's own "no
-  // carry below this speed" baseline), not multiplied against the raw mph value - a straight
-  // multiply pushed Little League's whole axis, baseline included, below the point where ANY ball
-  // carries at all (measured: every census carry rounded to 0ft), while Majors' multiply compounded
-  // onto the new, much larger CARRY_SCALE into carries past 700ft. Scaling only the EXCESS above
-  // the baseline keeps the baseline fixed and stretches/compresses how far above it a swing can
-  // reach - see settings.js's own CARRY_ZERO_MPH comment for the measured comparison. At College
-  // (leaguePowerScale=1) this is the identity transform, so the calibration settings.js's own
-  // header describes is untouched.
+  // carry below this speed" baseline), not multiplied against the raw mph value - see settings.js's
+  // own CARRY_ZERO_MPH comment for the measured comparison.
   const leaguePowerScale = (settings.LEAGUE_POWER_SCALE && settings.LEAGUE_POWER_SCALE[league]) != null
     ? settings.LEAGUE_POWER_SCALE[league] : 1;
   const carryZeroMph = settings.CARRY_ZERO_MPH != null ? settings.CARRY_ZERO_MPH : 30;
@@ -142,25 +167,24 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   const timedExitVelo = scaleAboveZero(rawTimedExitVelo);
   const rawMinExitVelo = settings.MIN_EXIT_VELO_MPH != null ? settings.MIN_EXIT_VELO_MPH : baseExitVelo * (35 / 62);
   const minExitVelo = scaleAboveZero(rawMinExitVelo);
-  const exitVeloMph = Math.max(minExitVelo, (timedExitVelo - qualityFrac * 18) * chargeMul + (rand01() * 2 - 1) * 4);
+  const exitVeloMph = Math.max(minExitVelo,
+    (timedExitVelo - placeFrac * F.placementPenaltyMph) * modeMul + (rand01() * 2 - 1) * 4);
 
   // Spray: "Early contact pulls the ball, late contact goes the opposite way" (doc §12), but a
-  // PERFECTLY-timed swing must not spray toward the worst part of the field (BB-2a step 3 fixes
-  // the geometry that made straightaway-center the deepest fence and the softest out-zone). The
-  // pull/opposite-field magnitude a sloppy swing can reach SHRINKS toward zero as q rises
-  // (`pullMaxDeg` at q=0, none of it at q=1); at q=1 the swing instead centers on whichever GAP its
-  // timing sign points toward (`perfectSprayDeg`, one of the two, narrow spread) - a squared-up
-  // ball is aimed at a gap, not at dead center where a fielder stands and the fence is deepest.
+  // PERFECTLY-timed swing must not spray toward the worst part of the field. The pull/opposite
+  // magnitude a sloppy swing can reach SHRINKS toward zero as q rises (`pullMaxDeg` at q=0); at
+  // q=1 the swing instead centers on whichever GAP its timing sign points toward
+  // (`perfectSprayDeg`). R2 adds the third term: WHERE ON THE CURSOR the ball was met - a ball
+  // crossing off the circle's centre goes that way, which is what "the horizontal offset adds to
+  // pull/opposite direction exactly as aimX did" means in two axes.
   const timingSign = timingErrorMs < 0 ? 1 : -1; // early (negative error) pulls; late goes opposite
   const pullFrac = Math.max(-1, Math.min(1, -timingErrorMs / Math.max(1, timingWindowMs)));
   const pullSprayDeg = pullFrac * F.pullMaxDeg * (1 - q);
   const gapSprayDeg = timingSign * F.perfectSprayDeg * q + (rand01() * 2 - 1) * F.perfectSpraySpreadDeg * q;
-  const sprayAngleDeg = pullSprayDeg + gapSprayDeg + (rand01() * 2 - 1) * 10 * (1 - q);
+  const offsetSprayDeg = Math.max(-1, Math.min(1, offX / cursorR)) * F.offsetSprayDeg;
+  const sprayAngleDeg = pullSprayDeg + gapSprayDeg + offsetSprayDeg + (rand01() * 2 - 1) * 10 * (1 - q);
 
-  // BB-2c commit 1: `centered` exposed for measurement (`sim-baseball.mjs --attribute`'s
-  // "share of centered contact") - already computed above to pick the launch-angle branch, just
-  // not previously returned. Purely additive; no existing caller reads it.
-  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered, kind };
+  return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered, kind, mode };
 }
 
-export default { swing, qualityFor, computeSwingTiming };
+export default { swing, qualityFor, computeSwingTiming, modeOf };
