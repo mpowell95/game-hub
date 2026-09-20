@@ -1163,3 +1163,56 @@ batting state and the pitching state with a runner on base, showing the colours 
 widget with a runner on first, dot on the right. `node test-baseball-device.mjs` (with
 `BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
 `node test-game-conventions.mjs` green.
+
+### R7: camera and presentation, what the recording showed against the reference
+
+Matt's recording of v865, items 5 to 10 of the analysis. Presentation and cameras only: no
+engine change, no beat change, no control change. Every still is taken beside the reference
+frame for the same moment (`docs/BASEBALL-REFERENCE-B9.md`'s catalogue; the orchestrator supplies
+the frames).
+
+- **The verdict word stays on screen and stays put.** `_positionPop` clamps the CENTRE 12 px from
+  the band's edge, so a wide word ("Perfect" for a left-handed batter) runs half off the right
+  edge; and it re-projects through whichever camera is live, so the word jumps across the screen
+  when the chase cuts in. Clamp by the element's own measured width and height (half of each
+  plus the margin); position ONCE per `_showPop` and never re-project it; hide the pop the moment
+  the camera cuts to the chase (the reference shows no word over the chase; the outcome word
+  is the marker hold's job).
+- **The chase never starts inside the catcher.** On a short ball the first chase frames are the
+  catcher's head filling the foreground. Give the chase a minimum start: the camera's first
+  position is at least `CHASE_MIN_HEIGHT_FT` up and `CHASE_MIN_BACK_FT` behind the ball
+  (numbers chosen by measurement, written in `field.js`'s CAMERAS comment), and the catcher and
+  umpire are hidden from the chase camera (`_applyCameraVisibility` already hides the umpire
+  from the batter camera; same mechanism).
+- **The pitch is visible from the pitcher camera.** During the human's own pitch the ball at
+  60 ft draws about 3 px and no frame of the recording shows it. A pixel-size floor for the ball
+  on the pitcher camera (scale the sphere so it never draws under `BALL_MIN_PX`, the same
+  about-the-centre idea `PITCHING_ZONE_MIN_W_FRAC` uses for the box; never on the batter or
+  chase cameras), and the fire trail (`_maybeDrawFireTrail`) drawn on that camera too.
+- **The batting target marker is something you can steer onto.** `TARGET_MARKER_R` 0.12 draws a
+  5 px ring; the reference's is a clear square about 30 px across on a 393 px phone. A square
+  marker with the existing crosshair, about `0.3` zone units on a side (through `_zoneMap`, so
+  it scales with the batting camera's 1.6 x), drawn UNDER the cursor circle; the `target-marker`
+  probe reads `_targetMarkerPx` and must still pass.
+- **Stands behind home plate.** From the pitcher camera there is grass to the horizon behind the
+  batter. `standsPoints` runs -75 to +75 deg and tapers; close the ring: a short backstop
+  section of stands behind the plate (two tiers, about 20 ft behind the umpire, spanning the
+  angles the pitcher camera sees), with the same crowd texture. The batter camera must still
+  see the field, not a wall (it sits at z 13.1; keep the backstop behind it or make it
+  invisible on that camera).
+- **No flat green frame at the half-inning swap.** Between halves the scene shows an empty
+  field for a beat with "Side retired" over it. `_crossFadeSwap` fades every element out, swaps,
+  fades in; the empty frame is the swap's own `_drawStaticField()` before the actors are
+  re-placed. Cross-fade over the LAST RENDERED FRAME: snapshot the WebGL canvas to an image
+  before the fade (`toDataURL` or a copy canvas), hold it over the scene through the swap, fade
+  it out once the new half's first frame has painted.
+
+**Deliverables.** Stills, each beside its reference frame: the pop for a left-handed batter's
+"Perfect" fully on screen; the first chase frame after a short grounder (no catcher); the ball
+mid-flight from the pitcher camera with the trail; the batting idle with the square marker; the
+pitcher camera with stands behind the plate; the batter camera unchanged. Probes in
+`test-baseball-device.mjs`: `pop-onscreen` (a left-handed batter, the pop's bounding rect
+inside the band), `chase-start` (the chase camera's first position at least the minimum height
+and distance from the ball), `ball-visible-pitcher` (the ball's projected radius on the pitcher
+camera at 60 ft is at least `BALL_MIN_PX`). `node test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
