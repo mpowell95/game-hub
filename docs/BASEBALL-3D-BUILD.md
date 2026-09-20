@@ -1004,6 +1004,23 @@ type. Career keeps the ladder's unlocks.
 each button in the right state and asserts the event and the widget; stills of each action.
 
 
+### RA record (shipped v864, 2026-09-20)
+
+From the stage's report: a steal is eligible from first and second only (a "next base empty"
+rule would offer a steal of home on every pitch with a runner on third, which no number here is
+calibrated for). Quick Play's CPU mix is one distribution, `QUICK_PLAY_PITCH_MIX` (College's four
+renormalised to 0.76 plus the four named weights), the per-league career rows untouched. The
+swing view carries `steal {runnerId, from, to, hitSpd}` because the CPU batter has no roster.
+The swing is scored first, then the steal resolved, then the count applied, so "void when in
+play" is decidable; a third out on a caught steal needs the same half-inning guard as a
+pickoff's. An `if (aborted) return` between the steal and the count broke the at-bat's atomic
+resume unit (2 of 960 seed pairs); the line is gone with a comment. The Pickoff clip's turn was
+first authored toward third; only a rendered frame caught it. First base is outside the pitcher
+camera's frame and a steal from first is outside the batter camera's, so the widget carries both
+plays. `sacrifice` is an out whose name does not end in "out"; every `/out$/` branch has a fourth
+case. Sim drift with the CPU stealing, bunting and picking off: every league 0.01 to 0.07 harder
+for the player (Majors and Minors moved INTO their bands, High School out), nothing tuned.
+
 ### R4: presentation, the reference's feedback layer
 
 Everything here is DOM or 2-D overlay over the scene; no engine change, no timing change beyond

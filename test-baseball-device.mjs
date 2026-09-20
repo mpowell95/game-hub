@@ -770,8 +770,13 @@ await ctx.close();
     } else {
       const dFirst = Math.hypot(res.first.x - res.wantFirst.x, res.first.y - res.wantFirst.y);
       const dLast = Math.hypot(res.last.x - res.wantLast.x, res.last.y - res.wantLast.y);
-      if (dFirst > 2) {
-        fail('target-marker', `the marker starts ${dFirst.toFixed(2)} px from the pitch's straight-line spot (budget 2 px)`);
+      // The FIRST sample is whichever frame the probe caught first, which on a loaded software
+      // renderer can be a frame or two into the slide (RA's ship runs: 0.04 to 3.87 px, one flake at
+      // 2.12 and one at 3.87 under a full suite); the END sample is the exact point and keeps its
+      // 2 px budget. 6 px on the start is under half of the marker's own 13 to 16 px travel, so a
+      // marker that starts at the crossing point instead of the straight spot still fails.
+      if (dFirst > 6) {
+        fail('target-marker', `the marker starts ${dFirst.toFixed(2)} px from the pitch's straight-line spot (budget 6 px)`);
       } else if (dLast > 2) {
         fail('target-marker', `the marker ends ${dLast.toFixed(2)} px from where the ball actually crosses (budget 2 px)`);
       } else if (res.moved < 3) {

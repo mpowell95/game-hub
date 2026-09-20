@@ -2036,18 +2036,26 @@ class BaseballPlayScreen {
     const availS = RUN_WINDOW_MS / 1000;
     const scale = longestS > availS ? longestS / availS : 1;
     for (const m of movers) m.durMs = (m.naturalS / scale) * 1000;
-    this._runnersInMotion = new Set(movers.map((m) => m.role));
+    // Orchestrator's RA ship review: this loop and `_animateSteal`'s used to share ONE
+    // `this._runnersInMotion` Set and each nulled it on finishing - so when a steal's run and a
+    // hit's run overlapped (a caught-stealing beat still animating when the next ball in play
+    // cut), the survivor's frame called `.delete` on null. Measured as a page error in the
+    // runners-move probe. Each animation owns its own Set now and only clears the field if it is
+    // still the one it installed; a previous runners loop is cancelled rather than raced.
+    if (this._runnersRaf) cancelAnimationFrame(this._runnersRaf);
+    const motion = new Set(movers.map((m) => m.role));
+    this._runnersInMotion = motion;
     const t0 = performance.now();
     return new Promise((resolve) => {
       const step = (now) => {
-        if (this.destroyed) { this._runnersInMotion = null; return resolve(); }
+        if (this.destroyed) { if (this._runnersInMotion === motion) this._runnersInMotion = null; return resolve(); }
         let allDone = true;
         for (const m of movers) {
           if (m.done) continue;
           if (!m.started) { m.started = true; this.actors.play(m.role, 'Run'); }
           m.frac = m.durMs > 0 ? Math.min(1, (now - t0) / m.durMs) : 1;
           if (m.frac < 1) { allDone = false; }
-          else { m.done = true; this._runnersInMotion.delete(m.role); this.actors.hide(m.role); continue; }
+          else { m.done = true; motion.delete(m.role); this.actors.hide(m.role); continue; }
           const p = this._pointOnPath(m.wp, m.frac);
           this.actors.setActor(m.role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad: m.facingRad });
         }
@@ -2056,7 +2064,7 @@ class BaseballPlayScreen {
           this._runnersRaf = requestAnimationFrame(step);
         } else {
           this._runnersRaf = 0;
-          this._runnersInMotion = null;
+          if (this._runnersInMotion === motion) this._runnersInMotion = null;
           this._syncBaseRunners(); // hand every mover off to the slot role that actually owns its base now
           resolve();
         }
@@ -2149,20 +2157,21 @@ class BaseballPlayScreen {
     const wp = runnerPath().slice(payload.from + 1, payload.to + 2);
     if (wp.length < 2) return undefined;
     const facingRad = Math.atan2(wp[1].x - wp[0].x, wp[1].z - wp[0].z);
-    this._runnersInMotion = new Set([role]);
+    const motion = new Set([role]); // own Set - see `_animateRunners`'s comment on the shared-null bug
+    this._runnersInMotion = motion;
     this._setDiamondVisible(true);
     this.actors.play(role, 'Run');
     const t0 = performance.now();
     return new Promise((resolve) => {
       const step = (now) => {
-        if (this.destroyed || !this.actors) { this._runnersInMotion = null; resolve(); return; }
+        if (this.destroyed || !this.actors) { if (this._runnersInMotion === motion) this._runnersInMotion = null; resolve(); return; }
         const frac = Math.min(1, (now - t0) / STEAL_RUN_MS);
         const p = this._pointOnPath(wp, frac);
         this.actors.setActor(role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad });
         this._paintDiamondWidget([{ from: payload.from, to: payload.to, frac }]);
         if (frac < 1) { this._stealRaf = requestAnimationFrame(step); return; }
         this._stealRaf = 0;
-        this._runnersInMotion = null;
+        if (this._runnersInMotion === motion) this._runnersInMotion = null;
         this.actors.hide(role);
         this._runnerStanding = {};
         this._syncBaseRunners();   // the slot role that owns his new bag re-derives him, standing
