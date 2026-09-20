@@ -39,7 +39,7 @@
 // pre-installed there) and stays out of the way on a laptop that hasn't opted in.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, rmSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -286,6 +286,37 @@ const MOTION = {
     minTravelPx: 40,   // the illustration is small; the hand crosses a third of it, not a screen
     async drive(page) {
       await page.click('[data-action="howto"]');
+    },
+  },
+  // R4 (docs/BASEBALL-3D-BUILD.md section 9): the verdict pop, now anchored over the batter's head
+  // instead of a fixed band position. Unlike the three probes above, this one is not measuring
+  // TRAVEL (the batter's head barely moves between pitches - the pop is right to stay put over
+  // it) - it is measuring DURATION, the spec's own ask ("visible for at least 600ms"), so
+  // `minTravelPx: 0` keeps the harness's travel check a no-op here. `.bb-pop.is-on` is the exact
+  // class `_showPop`/its own timeout toggle, so the tracker's "element disappeared" stop condition
+  // fires at the real moment the pop actually hides, not a guess.
+  baseball: {
+    what: 'the verdict pop anchored over the batter',
+    selector: '.bb-pop.is-on',
+    minMs: 600,
+    minTravelPx: 0,
+    async drive(page) {
+      await page.click('.bb-play-btn').catch(() => {});
+      await page.waitForSelector('.bb-play', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      // Auto-tap READY the instant it is next offered, never SWING - the same seam
+      // test-baseball-device.mjs's r2-cadence probe uses. Every pitch then resolves as a plain
+      // called take and pops the verdict over the batter within a couple of seconds.
+      await page.evaluate(() => {
+        const inst = document.getElementById('baseball') && document.getElementById('baseball')._bbInstance;
+        if (!inst) return;
+        let handler = inst._onMainDown || null;
+        const fire = (fn) => { if (fn && inst.state && inst.state.actionLabel === 'act_ready') setTimeout(() => { if (handler === fn) fn(); }, 0); };
+        Object.defineProperty(inst, '_onMainDown', {
+          configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); },
+        });
+        fire(handler);
+      });
     },
   },
 };
@@ -1257,6 +1288,46 @@ for (const game of GAMES) {
   await checkFit(game);
   if (MOTION[game]) await checkMotion(game, MOTION[game]);
   if (PLAY[game]) await checkPlay(game, PLAY[game]);
+}
+
+// R4 (docs/BASEBALL-3D-BUILD.md section 9), reduced motion: "no trail, no burst, no confetti; the
+// words and strips still show." A pixel probe here is impractical (all three are timing-sensitive
+// additive-blend canvas draws, exactly the shape `MOTION` above exists to sample, not to prove
+// ABSENT), so this is a STRUCTURAL check instead: the shipped source is read (never re-typed) and
+// asserted to gate every one of the three drawing calls behind `_reducedMotion()`, the same
+// function every other R4 effect in `baseball/js/ui.js` already reads through. A gate that moved,
+// or a new call site added outside it, fails this the same way a missing gate would.
+if (GAMES.includes('baseball')) {
+  const src = readFileSync(join(ROOT, 'baseball/js/ui.js'), 'utf8');
+  const RM_CHECKS = [
+    // The fire trail: `_maybeDrawFireTrail` is the ONE call site both flight loops use, and it
+    // must refuse before ever reaching `_drawFireTrail`.
+    { what: 'fire trail (_maybeDrawFireTrail early-returns under reduced motion)',
+      re: /_maybeDrawFireTrail\(pitchResult, frac\)\s*\{[^}]*this\._reducedMotion\(\)/s },
+    // The contact burst: `_contactHold` must never arm `_contactBurstStart` under reduced motion,
+    // which is what keeps `_drawContactBurst` from ever being called with a real elapsed time.
+    { what: 'contact burst (_contactHold never arms _contactBurstStart under reduced motion)',
+      re: /if \(!this\._reducedMotion\(\)[^)]*\)\s*\{\s*this\._contactBurstStart = performance\.now\(\)/s },
+    // HOME RUN confetti, two gates: the particles are never seeded under reduced motion...
+    { what: 'confetti (_triggerHomerun never seeds particles under reduced motion)',
+      re: /_triggerHomerun\(stats\)\s*\{[^}]*if \(!this\._reducedMotion\(\)\) this\._initConfetti\(\)/s },
+    // ...and the per-frame draw call itself is gated a second time, so a stray leftover particle
+    // array from BEFORE a mid-flight reduced-motion toggle still can't paint anything.
+    { what: 'confetti (the per-frame _drawConfetti call is itself gated on reduced motion)',
+      re: /this\._homerActive && !this\._reducedMotion\(\)\)\s*this\._drawConfetti/ },
+  ];
+  for (const c of RM_CHECKS) {
+    if (c.re.test(src)) ok('baseball', 'reduced-motion (structural)', c.what);
+    else fail('baseball', 'reduced-motion (structural)', `NOT FOUND in baseball/js/ui.js: ${c.what}`);
+  }
+  // The word/strip/lines still show under reduced motion - opacity/CSS-only, no JS gate needed,
+  // but the CSS override that withholds ONLY the scale-in animation (never opacity) must exist.
+  const css = readFileSync(join(ROOT, 'baseball/css/baseball.css'), 'utf8');
+  if (/prefers-reduced-motion: reduce\)\s*\{[^}]*\.bb-homerun-word\s*\{\s*animation: none/s.test(css)) {
+    ok('baseball', 'reduced-motion (structural)', 'the HOME RUN word keeps its 0.6->1.0 scale-in withheld (animation: none) under reduced motion, opacity untouched');
+  } else {
+    fail('baseball', 'reduced-motion (structural)', 'NOT FOUND in baseball/css/baseball.css: .bb-homerun-word\'s reduced-motion override');
+  }
 }
 
 await browser.close();

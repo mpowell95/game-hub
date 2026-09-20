@@ -724,9 +724,15 @@ export class Game {
         // R3: `basesBefore` (captured above, at atBatStart) and `runnersOut` (this play's own
         // removed-without-scoring runners, e.g. the double-play victim) - additive, so the UI can
         // run baserunning off the engine's before/after state instead of inventing its own.
+        // R4 (docs/BASEBALL-3D-BUILD.md section 9): `launchAngleDeg` - additive, straight off
+        // `swingResult` the same way `exitVeloMph`/`sprayAngleDeg` already ride here. It is what the
+        // HOME RUN stats strip's `{deg}` reads; a bunt has no launch angle worth reporting
+        // (`resolveBunt`'s own swingResult carries `launchAngleDeg: 0`, never a homer candidate) so
+        // this is honest there too.
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
           q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
           distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind,
+          launchAngleDeg: swingResult.launchAngleDeg,
           timingWord, basesBefore: basesBeforeAtBat, runnersOut });
         return;
       }

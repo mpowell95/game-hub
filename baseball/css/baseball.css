@@ -314,36 +314,63 @@
 /* The big word (Early / Late / Perfect / Nice / Hung). One reserved element, empty between
  * beats; rises and fades on transform/opacity only. Matt, 2026-09-15: "They should be big and on
  * the screen, not in tiny text on a line somewhere." Shape rides with the word (chevron, star) so
- * the color is never the only cue. */
+ * the color is never the only cue.
+ * R4 (docs/BASEBALL-3D-BUILD.md section 9): `.bb-pop` is now a small flex column (word + two lines
+ * under it) instead of one text element, and its `left`/`top` are set from JS every time it shows
+ * (`_positionPop`, projected from the batter's head through the live camera) - the 50%/26% below
+ * is only the pre-first-pop fallback, never read once a pitch has crossed. The whole block is
+ * CENTRED on that projected point (`translate(-50%, -50%)`, same rule `.bb-homerun` uses below),
+ * not top-anchored to it - the rise/fall keyframes add their own small offset on top via calc(). */
 .bb-pop {
   position: absolute;
   left: 50%;
   top: 26%;
-  transform: translate(-50%, 0);
-  font-size: 44px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  color: #fff;
-  -webkit-text-stroke: 1.5px #111;
-  text-shadow: 0 3px 0 #111, 0 0 14px rgba(0,0,0,0.55);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   z-index: 3;
 }
+.bb-pop-word {
+  font-size: 44px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #fff;
+  -webkit-text-stroke: 1.5px #111;
+  text-shadow: 0 3px 0 #111, 0 0 14px rgba(0,0,0,0.55);
+}
+/* R4: the pitch line (`Fastball 84 mph`) and the swing line (`Swing and a miss`, ...) - the pop's
+ * own two lines, moved out of `.bb-line1`/`.bb-line2` at the band's bottom (those go empty on
+ * every pitch now) so they travel WITH the word wherever `_positionPop` puts it. `:empty` collapses
+ * whichever one a caller left blank (a pickoff's plain Out/Safe pop has neither) so the gap above
+ * does not leave a visible blank line. */
+.bb-pop-line {
+  min-height: 15px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 15px;
+  color: #fff;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.6);
+}
+.bb-pop-line:empty { display: none; }
 .bb-pop.is-on { animation: bb-pop-rise 1800ms ease-out forwards; }
-.bb-pop.is-perfect, .bb-pop.is-nice { color: #ffce3a; }
+.bb-pop.is-perfect .bb-pop-word, .bb-pop.is-nice .bb-pop-word { color: #ffce3a; }
 /* STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 6): .bb-pop.is-hung removed - a release past
  * the meter now pops with kind 'late' (v_hung's own word became "Late"/"Tarde"), which reads in
  * the same default white as every other non-gold word (the (right-arrow) chevron is the cue, not a
  * colour); nothing sets kind 'hung' on this element any more. */
 @keyframes bb-pop-rise {
-  0%   { opacity: 0; transform: translate(-50%, 8px) scale(0.85); }
-  12%  { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
-  20%  { transform: translate(-50%, 0) scale(1); }
-  75%  { opacity: 1; transform: translate(-50%, -6px); }
-  100% { opacity: 0; transform: translate(-50%, -12px); }
+  0%   { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.85); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  20%  { transform: translate(-50%, -50%) scale(1); }
+  75%  { opacity: 1; transform: translate(-50%, calc(-50% - 6px)); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 12px)); }
 }
 @keyframes bb-pop-hold { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
@@ -359,6 +386,51 @@
   white-space: nowrap;
 }
 .bb-line2 { font-size: 11px; font-weight: 700; opacity: 0.92; }
+
+/* R4 (docs/BASEBALL-3D-BUILD.md section 9): HOME RUN. Fixed geometry - a reserved spot centred in
+ * the field band, opacity/transform only, so nothing else in the band ever moves when it shows.
+ * `.is-on` is toggled by `_showHomerun`/`_hideHomerun`; the confetti itself is drawn on the 2-D
+ * overlay canvas (`_drawConfetti`), never here - this element is only ever the word and the strip. */
+.bb-homerun {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+  white-space: nowrap;
+}
+.bb-homerun.is-on { opacity: 1; }
+.bb-homerun-word {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ffce3a;
+  -webkit-text-stroke: 1.5px #16240f;
+  text-shadow: 0 3px 0 #16240f, 0 0 18px rgba(0,0,0,0.6);
+  transform: scale(0.6);
+  animation: bb-homerun-scale 300ms ease-out forwards;
+}
+@keyframes bb-homerun-scale {
+  0%   { transform: scale(0.6); }
+  100% { transform: scale(1); }
+}
+.bb-homerun-strip {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.6);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The word and strip still show - only the scale-in (and the overlay's own confetti/fire
+   * trail/contact burst, gated in JS) are withheld. */
+  .bb-homerun-word { animation: none; transform: scale(1); }
+}
 
 .bb-strip {
   height: 108px;
@@ -495,6 +567,10 @@
   pointer-events: none;
   z-index: 3;
 }
+/* R4 (docs/BASEBALL-3D-BUILD.md section 9): "the batting mode toggle gets the strip's tile
+ * styling" - the same bordered, rounded look `.bb-pitch-tile` (the strip below) already has,
+ * at this row's own unchanged 24px height (fixed geometry - only the SURFACE changed, never the
+ * size or position of anything in this band). */
 .bb-pad-tile {
   flex: 1 1 0;
   min-width: 0;
@@ -503,15 +579,17 @@
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
-  color: rgba(255,255,255,0.55);
-  background: rgba(255,255,255,0.05);
-  border-bottom: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
   overflow: hidden;
   white-space: nowrap;
 }
 .bb-pad-tile.is-sel {
   color: #16240f;
   background: #ffce3a;
+  border: 2px solid #16240f;
   font-weight: 900;
 }
 .bb-pad-marker {
