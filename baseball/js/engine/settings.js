@@ -123,7 +123,12 @@ export const TITLE_PITCH_UNLOCKS = [
 /** Every pitch type unlocked for a league, plus whatever `wsTitles` titles have unlocked. Titles
  *  are a career-progress fact no CPU team ever carries (CPU rosters are fixed, doc §8), so CPU
  *  agents always call this with `wsTitles` omitted/0. */
-export function unlockedPitchesFor(league, wsTitles = 0) {
+export function unlockedPitchesFor(league, wsTitles = 0, opts = null) {
+  // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY UNLOCKS ALL EIGHT, for both sides. The
+  // ladder above is CAREER's own progression (doc §11, [Locked]) and is untouched by this: a Quick
+  // Play game is not career progress, so gating a one-off exhibition behind titles nobody in it
+  // has earned only ever hid six pitches from every player who never plays a career.
+  if (opts && opts.quickPlay) return PITCH_TYPES.slice();
   const list = (PITCH_UNLOCKS[league] || PITCH_UNLOCKS.majors).slice();
   for (const t of TITLE_PITCH_UNLOCKS) if (wsTitles >= t.titles) list.push(t.pitch);
   return list;
@@ -617,9 +622,9 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 export const SKILL_EFFECT = {                // Draft [Open item 4]
   hitAcc:    { contactRadiusInPerPt: 0.09, whiffReductionPerPt: 0.006 }, // "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
   hitPow:    { exitVeloMphPerPt: 0.07 },                                 // "more distance, stronger charged swings" - BB-2d commit 4 retune (was 0.35, BB-2a step 6's own value): the BASE_EXIT_VELO/CARRY_SCALE recalibration below could not hit both HR_CARRY_FRAC and MEDIAN_CARRY_FRAC at the old 0.35 without breaking the contact grid's TIMING_OVER_POWER/ceiling margins (power came to dominate a much-lower BASE_EXIT_VELO too heavily); 0.07 is the largest value (of a small candidate sweep - 0.35/0.21/0.14/0.105/0.07 measured against the real `--contact-grid` tool) that keeps both contact-grid ratio checks inside their own margins - see the BASE_EXIT_VELO/CARRY_SCALE comment below for the joint derivation
-  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - sprintFtPerSPerPt/stealSuccessPerPt still unused (no steal/bunt this phase, see RESERVED_PHASE_6); the beat-out HALF is now wired, via MECHANICS.beatOutPerPt in outcomes.js
+  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - RA wired stealSuccessPerPt (game.js's steal roll, with STEAL_BASE/STEAL_MIN/STEAL_MAX below) and the BUNT reads the same beat-out roll the infield grounder does (MECHANICS.beatOutPerPt, outcomes.js); sprintFtPerSPerPt is still unused (nothing here models a runner's speed over the ground)
   pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
-  pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - pickoff unused this phase
+  pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - RA wired pickoffPerPt (game.js's pickoff roll, with PICKOFF_BASE/PICKOFF_MAX below)
   pitchSpin: { breakPerPt: 0.02, changeupGapPerPt: 0.01 },               // "more bend on curve/slider/screwball; bigger changeup speed gap" - unused this phase, no steering modeled yet
 };
 export const SKILL_EFFECT_MAX_PER_POINT = 0.03; // as given by BB-1a's handoff; a soft ceiling for future tuning, not yet enforced anywhere
@@ -747,11 +752,77 @@ export const CARRY_ZERO_MPH = 30;
 export const LINE_THROUGH_Q = 0.75;
 export const LINE_THROUGH_MAX_FT = 220;
 
-// Reserved for phase 6 (doc §3/§17 Open item 8): steal, bunt, and pickoff are [Locked] FEATURES
-// with reserved input slots, but "how each works in play" is undecided and no baserunning happens
-// between pitches this phase (bases.js's own header). Named here so a future phase does not have
-// to rediscover that the hook is deliberately absent rather than forgotten.
-export const RESERVED_PHASE_6 = ['steal', 'bunt', 'pickoff'];
+// ---------------------------------------------------------------------------------------------
+// RA (docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF. `RESERVED_PHASE_6` (the marker
+// that said these three were [Locked] FEATURES with no rules yet) RETIRES here - doc §3's own
+// [Open] line "how each works in play" is closed by the constants below and by the branches in
+// game.js/swing.js/outcomes.js/agents.js that read them. bases.js's header no longer describes
+// this engine: a runner CAN now move between pitches.
+//
+// Every number here is RA's own, either the spec's or (where it left one to this stage) chosen and
+// said so at its own definition. None of them touch CPU/CAPS/SKILL_EFFECT, which stay exactly as
+// the ladder tuning left them.
+
+// THE STEAL. Success is `clamp(STEAL_BASE + SKILL_EFFECT.hitSpd.stealSuccessPerPt * runner.hitSpd
+// - STEAL_PER_ACC * pitcher.pitchAcc, STEAL_MIN, STEAL_MAX)` - the runner's own legs against the
+// pitcher's ability to hold him, which is the doc §6 [Locked] pair ("Batter Speed raises steal and
+// bunt success. Pitcher Accuracy improves pickoffs", and a quick pitcher's accuracy is what a
+// catcher throws behind).
+export const STEAL_BASE = 0.45;
+export const STEAL_PER_ACC = 0.005;
+export const STEAL_MIN = 0.20;
+export const STEAL_MAX = 0.90;
+
+// THE PICKOFF. `clamp(PICKOFF_BASE + SKILL_EFFECT.pitchAcc.pickoffPerPt * pitcher.pitchAcc,
+// PICKOFF_BASE, PICKOFF_MAX)`; at the Majors cap (26 points) that is 0.32, just inside the ceiling.
+export const PICKOFF_BASE = 0.06;
+export const PICKOFF_MAX = 0.35;
+// RA's own choice, not the spec's: a SAFETY VALVE, not a rule. Nothing in the at-bat loop advances
+// the count on a pickoff (that is the whole point of it), so an agent that answered `pickoff` every
+// time would spin `playAtBat`'s pitch loop for ever. Three throws to the same bag inside one at-bat
+// is already more than any real pitcher gets (MLB's own disengagement limit is two), so a cap here
+// can never bind on honest play while it makes the loop provably terminate.
+export const PICKOFF_MAX_PER_AT_BAT = 3;
+
+// THE BUNT. A bunt is contact-only: the timing window widens by BUNT_WINDOW_MULT, the ball is
+// always a grounder, it travels BUNT_DIST_FT[0]..[1] feet and sprays inside +/-BUNT_SPRAY_DEG.
+// Those are the spec's own numbers. The beat-out roll a bunt for a hit turns on is
+// `MECHANICS.beatOutPerPt` - the SAME roll an infield grounder already uses, never a second one.
+export const BUNT_WINDOW_MULT = 1.6;
+export const BUNT_DIST_FT = [8, 40];
+export const BUNT_SPRAY_DEG = 30;
+
+// WHAT THE CPU DOES WITH THEM (doc §3's [Open] half, for the side the player does not control).
+export const CPU_STEAL_BASE = 0.12;
+export const CPU_STEAL_PER_SPD = 0.004;
+export const CPU_PICKOFF_RATE = 0.08;
+// The spec's own bunt rate, plus the two conditions it names. `CPU_BUNT_POW_FRAC` is RA's own
+// reading of "the batter's hitPow is in the bottom third": the bottom third OF THIS LEAGUE'S CAP
+// (`CAPS[league]`), which is the only scale a hitPow number here can be compared against - a
+// Majors 8 and a Little League 8 are not the same batter.
+export const CPU_BUNT_RATE = 0.06;
+export const CPU_BUNT_POW_FRAC = 1 / 3;
+
+// QUICK PLAY'S OWN PITCH MIX. Quick Play unlocks all eight pitches for both sides (section 9's own
+// rule, `unlockedPitchesFor(league, 0, { quickPlay: true })`), so the CPU needs a mix that names
+// all eight - and the per-league `CPU[league].pitchMix` rows cannot supply one, because they are
+// CAREER's ladder (Little League throws fastballs; Majors has never held a cutter) and this stage
+// does not touch that table. So this is ONE distribution, not five.
+//
+// The base is College's own four-pitch row - the prototype's single [Tested] tier, equal weights -
+// and the four types the career ladder gates behind Minors and World Series titles ride on top at
+// the spec's own modest weights. Normalised, so it sums to exactly 1 and every entry is a real
+// probability rather than a weight that means nothing without its neighbours.
+export const QUICK_PLAY_PITCH_MIX = (() => {
+  const adds = { knuckleball: 0.05, screwball: 0.06, eephus: 0.03, cutter: 0.10 };
+  const base = { fastball: 1, changeup: 1, curveball: 1, slider: 1 };
+  const addSum = Object.values(adds).reduce((a, b) => a + b, 0);
+  const baseSum = Object.values(base).reduce((a, b) => a + b, 0);
+  const out = {};
+  for (const [k, v] of Object.entries(base)) out[k] = (v / baseSum) * (1 - addSum);
+  for (const [k, v] of Object.entries(adds)) out[k] = v;
+  return out;
+})();
 
 // ---------------------------------------------------------------------------------------------
 // BB-2b commit 2: doc §4/§13's own "Open item 13" (schedule shape and standings tie-breakers) -
@@ -1101,7 +1172,11 @@ export default {
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,
   SKILL_EFFECT, SKILL_EFFECT_MAX_PER_POINT, BASE_EXIT_VELO, CARRY_SCALE, HR_CARRY_FRAC, MEDIAN_CARRY_FRAC,
   MEDIAN_HIT_POW_FRAC, LEAGUE_POWER_SCALE, DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, MIN_EXIT_VELO_MPH, CARRY_ZERO_MPH,
-  LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS, RESERVED_PHASE_6,
+  LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS,
+  STEAL_BASE, STEAL_PER_ACC, STEAL_MIN, STEAL_MAX, PICKOFF_BASE, PICKOFF_MAX, PICKOFF_MAX_PER_AT_BAT,
+  BUNT_WINDOW_MULT, BUNT_DIST_FT, BUNT_SPRAY_DEG,
+  CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
+  QUICK_PLAY_PITCH_MIX,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,

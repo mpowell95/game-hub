@@ -139,7 +139,9 @@ if (!existsSync(MODEL_PATH)) {
 // (stage 2 for Swing/Miss, stage 3 for Set/Pitch) - poses.js ships stage 1 with every clip's keys
 // EMPTY on purpose (see its own header), so asserting a mark against an empty key list would
 // always fail for a reason that has nothing to do with this stage.
-for (const name of ['Swing', 'Miss', 'Pitch']) {
+// RA (docs/BASEBALL-3D-BUILD.md section 9): `Pickoff` joins the marked clips - its mark is the
+// release, the instant ui.js's `_playPickoff` sends the ball from the pitcher's hand to the bag.
+for (const name of ['Swing', 'Miss', 'Pitch', 'Pickoff']) {
   const def = CLIPS[name];
   if (!def.keys.length) { skipLine(`CLIPS.${name}.mark`, 'keys not authored yet (stage 2 for Swing/Miss, stage 3 for Pitch)'); continue; }
   const lastT = def.keys[def.keys.length - 1].t;
@@ -161,6 +163,27 @@ if (CLIPS.Crouch && CLIPS.Crouch.keys.length >= 2 && CLIPS.Crouch.loop && CLIPS.
   else fail('CLIPS.Crouch loop', 'the first and last keyframes differ, so the loop pops every time round');
 } else {
   fail('CLIPS.Crouch', 'missing, or not a mark-less looping clip with at least two keyframes');
+}
+
+// RA: `Bunt` is a LOOP with no mark, like Crouch - the batter squares and HOLDS the stance through
+// the pitch and through contact (there is no bunt "swing"), so it has to close on its own first
+// keyframe or the square pops every time round.
+if (CLIPS.Bunt && CLIPS.Bunt.keys.length >= 2 && CLIPS.Bunt.loop === true && CLIPS.Bunt.mark == null) {
+  const first = CLIPS.Bunt.keys[0], last = CLIPS.Bunt.keys[CLIPS.Bunt.keys.length - 1];
+  const same = JSON.stringify(first.pose) === JSON.stringify(last.pose) && JSON.stringify(first.hipsOffset) === JSON.stringify(last.hipsOffset);
+  if (same) ok(`CLIPS.Bunt loops seamlessly (${CLIPS.Bunt.keys.length} keys, ${last.t}s)`);
+  else fail('CLIPS.Bunt loop', 'the first and last keyframes differ, so the square pops every time round');
+} else {
+  fail('CLIPS.Bunt', 'missing, or not a mark-less looping clip with at least two keyframes');
+}
+// RA: and `Pickoff` opens on SET's own base pose, bone for bone, for the same reason Swing/Miss
+// open on Idle's: actors.js cross-fades from whatever is playing, and the pitcher is always on Set
+// when this starts, so a clip that opened anywhere else would blend through a pose nobody authored.
+{
+  const set0 = JSON.stringify(CLIPS.Set.keys[0].pose);
+  const pick0 = JSON.stringify(CLIPS.Pickoff.keys[0].pose);
+  if (set0 === pick0) ok('Pickoff opens on Set\'s own base pose (nothing to blend across)');
+  else fail('Pickoff first keyframe', `differs from Set's t=0 pose\n      Set: ${set0}\n      Pickoff: ${pick0}`);
 }
 
 // actors.js's KEYS (section 2.2's colour-key remap table) must never key a skin-tone colour - the
@@ -896,6 +919,15 @@ const MOTION_FLOORS = {
   pitchHandRise: 76,      // pitcher Pitch, handR max y minus min y. Measured 127.2. Stage 6's floor was 20: 3.8x
   pitchFootLift: 57,      // pitcher Pitch, the foot that leaves the ground. Measured 95.9. Stage 6's floor was 10: 5.7x
   pitchEarlyMove: 7,      // pitcher Pitch, handR inside the first 20% of the clip. Measured 13.1. Stage 6's floor was 2: 3.5x
+  // RA (docs/BASEBALL-3D-BUILD.md section 9), same rule as every row above: 60% of what this build
+  // actually produces, measured through the camera each clip is seen through, at the size it is
+  // drawn. BUNT is deliberately the smallest number in this table - a square is a STANCE, and the
+  // only thing its floor has to catch is the clip going flat (two identical keyframes holding one
+  // pose, the "flat image" defect stage 6 was written to kill); the give is 9.7 px of hand travel
+  // on a 200.5 px batter, against Idle's own 17.1.
+  buntHandTravel: 5,      // batter Bunt, handR, batterCam. Measured 9.7
+  pickoffHandPath: 84,    // pitcher Pickoff, handR path length, pitcherCam. Measured 140.9 (Pitch's own is 447.4 over 1.30s; this is 0.50s)
+  pickoffEarlyMove: 18,   // pitcher Pickoff, handR inside the first 20%. Measured 31.4 - a pickoff is all in its first beat, which is the opposite shape to the delivery's own 13.1 over a much longer clip
 };
 
 console.log('\n=== chromium half: motion at the real on-screen sizes (R1: through the real cameras) ===');
@@ -992,6 +1024,11 @@ async function runMotionHalf() {
       set: run('pitcher', 'Set', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
       pitch: run('pitcher', 'Pitch', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
       run: run('r1', 'Run', runnerPos, 0, 'chase'),
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): the two new clips, through the cameras that
+      // actually show them - the batter squares in front of `batterCam`, the pitcher throws over
+      // in front of `pitcherCam`, exactly like Idle/Swing and Set/Pitch above.
+      bunt: run('batter', 'Bunt', batterPos, BATTER_FACING_RAD, 'batter'),
+      pickoff: run('pitcher', 'Pickoff', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
     };
     actors.dispose();
     wrap.remove();
@@ -1003,7 +1040,7 @@ async function runMotionHalf() {
   if (measured.error) { fail('motion half', measured.error); return; }
 
   const n = (v) => v.toFixed(1);
-  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch', 'run']) {
+  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch', 'run', 'bunt', 'pickoff']) {
     const m = measured[k];
     if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue; }
     console.log(`      ${m.role}/${m.name} through ${m.cam}Cam, ${n(m.heightPx)}px tall, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
@@ -1033,6 +1070,16 @@ async function runMotionHalf() {
   const runFootTravel = Math.max(measured.run.footL.travel, measured.run.footR.travel);
   const runFloor = 20 * (measured.run.heightPx / 100);
   check(`Run (r1, chaseCam, ${n(measured.run.heightPx)}px tall): foot travel`, runFootTravel, runFloor);
+  // RA: the two new clips, held to the same rule as every other one - 60% of what this build
+  // actually produces, measured through the camera each is seen through, at the size it is drawn.
+  // BUNT is the small one on purpose (a square is a stance, not a move), so its floor is about the
+  // idle's: what it must never become is another pair of identical keyframes holding one pose,
+  // which is precisely the "flat image" defect stage 6 was written to kill.
+  check('Bunt (batter, batterCam): handR travel', measured.bunt.handR.travel, MOTION_FLOORS.buntHandTravel);
+  if (measured.bunt.hips.travel > 2) ok(`Bunt (batter, batterCam): hips sink ${n(measured.bunt.hips.travel)}px through the give`);
+  else fail('Bunt hips give', `${n(measured.bunt.hips.travel)}px - the bat is not being given with, the batter is a statue`);
+  check('Pickoff (pitcher, pitcherCam): handR path length', measured.pickoff.handR.path, MOTION_FLOORS.pickoffHandPath);
+  check('Pickoff (pitcher, pitcherCam): handR moves inside the first 20% of the clip', measured.pickoff.early, MOTION_FLOORS.pickoffEarlyMove);
 }
 
 // Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
@@ -1059,7 +1106,12 @@ console.log('\n=== r2-cadence (delegated to test-baseball-device.mjs) ===');
     // R3 (orchestrator's ship review): the device suite's runners-move probe plays real games until
     // a runner advances, up to 360 s, so a 120 s spawn timeout killed it mid-run and this row read
     // "exit 1" under a passing r2-cadence line. 480 s covers the probe's own budget with margin.
-    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 480000 });
+    // RA: 480 s -> 720 s. The device suite grew an `actions-live` probe that plays real at-bats
+    // until an armed bunt is actually put in play (its own 120 s budget), on top of runners-move's
+    // existing 360 s - the two worst cases together can pass 480 s, and a spawn killed mid-run
+    // reports as an exit code against a passing r2-cadence line, which is the exact confusion the
+    // R3 bump above was written to remove.
+    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 720000 });
     const out = (r.stdout || '') + (r.stderr || '');
     const cadenceLine = out.split('\n').find((l) => /r2-cadence/.test(l)) || '(no r2-cadence line in output)';
     if (r.status === 0) ok(`test-baseball-device.mjs passed - ${cadenceLine.trim()}`);

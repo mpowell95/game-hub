@@ -19,7 +19,9 @@ import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitche
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
-  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, LEAGUES,
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, LEAGUES, CAPS,
+  CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
+  QUICK_PLAY_PITCH_MIX,
   SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
@@ -117,8 +119,24 @@ export class CpuPitcher {
     const changeupShare = (this.ladderOffset && this.ladderOffset.changeupShare) || 0;
     const ceilingRow = championCeilingRow(this.league, this.settings);
 
-    const unlocked = unlockedPitchesFor(this.league, 0);
-    const mix = { ...(cpu.pitchMix || {}) };
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): THROW OVER TO FIRST. Decided before anything else
+    // about the pitch, because a pickoff IS NOT a pitch - `game.js` resolves it, announces it and
+    // comes straight back here for the same batter. The draw is taken ONLY when a runner is
+    // actually on first, so a CPU pitcher's position in the seeded stream is unchanged on every
+    // pitch with the bag empty and every existing fixture keeps its exact sequence.
+    if (view.runnerOnFirst) {
+      const rate = this.settings.CPU_PICKOFF_RATE != null ? this.settings.CPU_PICKOFF_RATE : CPU_PICKOFF_RATE;
+      if (view.rand01() < rate) return { pickoff: true };
+    }
+
+    // RA: in QUICK PLAY both sides hold all eight pitches, so the CPU throws from
+    // `QUICK_PLAY_PITCH_MIX` (settings.js's own one-distribution-for-eight-types block) rather than
+    // this league's career `pitchMix`, which names only what the ladder has unlocked by here.
+    const quickPlay = !!view.quickPlay;
+    const unlocked = unlockedPitchesFor(this.league, 0, { quickPlay });
+    const mix = quickPlay
+      ? { ...(this.settings.QUICK_PLAY_PITCH_MIX || QUICK_PLAY_PITCH_MIX) }
+      : { ...(cpu.pitchMix || {}) };
     if (unlocked.includes('changeup')) mix.changeup = (mix.changeup || 1) + changeupShare;
     const weights = unlocked.map((t) => (mix && mix[t]) || 1);
     const type = pickWeighted(view.rand01, unlocked, weights);
@@ -190,12 +208,46 @@ export class CpuBatter {
     const cpu = this.settings.CPU[this.league] || CPU.college;
     const pitch = view.pitch;
 
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): SEND THE RUNNER, and SQUARE TO BUNT. Both are
+    // decided BEFORE the ordinary swing/take logic and both ride out on whatever that logic
+    // returns - a steal happens on a take exactly as it happens on a swing (`game.js` reads
+    // `decision.steal` either way), and a bunt is simply the shape a swing takes when the batter
+    // has squared. Neither draws from the stream unless it is genuinely available, so a CPU
+    // batter's position in the seeded sequence is unchanged on every pitch with the bases empty.
+    //
+    // The steal's rate is the spec's `CPU_STEAL_BASE + CPU_STEAL_PER_SPD * hitSpd`, read off the
+    // RUNNER's own legs (`view.steal.hitSpd`, resolved by game.js - this agent has no roster to
+    // look him up in), and it is never sent with two outs and a three-ball count: the runner would
+    // be running into the third out of the inning on a pitch the batter is most likely to take.
+    let steal = false;
+    const stealGuard = !(view.outs >= 2 && view.balls >= 3);
+    if (view.steal && stealGuard) {
+      const base = this.settings.CPU_STEAL_BASE != null ? this.settings.CPU_STEAL_BASE : CPU_STEAL_BASE;
+      const perSpd = this.settings.CPU_STEAL_PER_SPD != null ? this.settings.CPU_STEAL_PER_SPD : CPU_STEAL_PER_SPD;
+      steal = view.rand01() < base + perSpd * Math.max(0, view.steal.hitSpd || 0);
+    }
+
+    // The bunt's three conditions are the spec's: a runner is on, fewer than two outs, and this
+    // batter's power is in the BOTTOM THIRD - of his own league's CAP, which is the only scale a
+    // raw hitPow can be judged on (settings.js's `CPU_BUNT_POW_FRAC` carries why).
+    let bunt = false;
+    const caps = this.settings.CAPS || CAPS;
+    const cap = caps[this.league] != null ? caps[this.league] : caps.majors;
+    const powFrac = this.settings.CPU_BUNT_POW_FRAC != null ? this.settings.CPU_BUNT_POW_FRAC : CPU_BUNT_POW_FRAC;
+    const runnerOn = Array.isArray(view.bases) && view.bases.some((b) => b != null);
+    const weakPower = Math.max(0, (this.skills && this.skills.hitPow) || 0) <= cap * powFrac;
+    if (runnerOn && view.outs < 2 && weakPower) {
+      const rate = this.settings.CPU_BUNT_RATE != null ? this.settings.CPU_BUNT_RATE : CPU_BUNT_RATE;
+      bunt = view.rand01() < rate;
+    }
+
     const behavior = (this.settings.STYLE_BEHAVIOR || STYLE_BEHAVIOR)[this.styleId];
     const chaseMul = (behavior && behavior.chaseMul != null) ? behavior.chaseMul : 1;
     const chaseOffset = (this.ladderOffset && this.ladderOffset.chase) || 0;
     const chaseChance = Math.max(0, Math.min(1, cpu.chase * chaseMul + chaseOffset));
     const swingChance = pitch.isStrike ? cpu.swingIn : chaseChance;
-    if (view.rand01() >= swingChance) return { action: 'take' };
+    // RA: a take still carries the steal - the runner left on the pitch, not on the swing.
+    if (view.rand01() >= swingChance) return { action: 'take', steal };
 
     // BB-2d commit 5: `behaviorMul` (this batting team's own ladder-slot offset) scales
     // patternWeight too, bounded by CHAMPION_CEILING (the next league's own base patternWeight) -
@@ -261,7 +313,7 @@ export class CpuBatter {
       const leanWeight = patternWeight * LOCATION_LEAN_WEIGHT * (cpu.guess != null ? cpu.guess : 1);
       aimX = aimX * (1 - leanWeight) + locationLean * leanWeight;
     }
-    return { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills, view.rand01) };
+    return { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills, view.rand01), bunt, steal };
   }
 }
 

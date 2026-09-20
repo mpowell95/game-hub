@@ -9,8 +9,13 @@
 // Rules decided here, because the (unavailable) design doc does not settle them and a real-rules
 // baseline is the least invented choice available (see settings.js's own "Rules the doc does not
 // settle" block for the sibling list of decisions made in that file):
-//   - No baserunning between pitches is modeled this phase: no steals, no leads, no pickoffs. A
-//     runner only ever moves as a direct consequence of the CURRENT play being resolved.
+//   - RA (docs/BASEBALL-3D-BUILD.md section 9): a runner CAN now move between pitches - a steal
+//     advances him, a caught steal or a pickoff removes him. Both are applied by game.js against
+//     `this.bases` directly (one runner, one index, nothing to advance around him), so neither
+//     needed a function here; what this file still owns is every movement a PLAY causes. Until RA
+//     the line here read "no steals, no leads, no pickoffs", which is no longer true of the engine.
+//   - A sacrifice bunt (RA, `advanceSacBunt` below) moves EVERY runner up one base while the
+//     batter is out - unlike the sacrifice FLY above, which only ever scores the runner from third.
 //   - A hit of N bases (single=1 .. homer=4) advances the batter AND every existing runner by
 //     exactly N bases. This is a simplification of real baserunning (a real runner's advance on a
 //     single depends on their speed, the fielder, the game situation) - deliberately fixed rather
@@ -87,6 +92,23 @@ export function advanceSacFly(bases) {
   return { bases: next, runsScored: 1, wasSacFly: true };
 }
 
+/** RA (docs/BASEBALL-3D-BUILD.md section 9): A SACRIFICE BUNT. Every runner moves up exactly one
+ *  base (the runner from third scores); the batter is out and the caller records that out, the same
+ *  split `advanceSacFly` already uses. The batter never reaches base here - a bunt the batter DOES
+ *  beat out is a `bunt-single`, which is an ordinary one-base hit and goes through `advanceAll`
+ *  like any other single, so this function only ever describes the play where he is thrown out. */
+export function advanceSacBunt(bases) {
+  const next = emptyBases();
+  let runsScored = 0;
+  for (let i = 2; i >= 0; i--) {
+    const runner = bases[i];
+    if (runner == null) continue;
+    if (i + 1 >= 3) runsScored += 1;
+    else next[i + 1] = runner;
+  }
+  return { bases: next, runsScored };
+}
+
 /** An out on a batted ball with nobody sacrificing: nobody advances. */
 export function noAdvance(bases) {
   return { bases, runsScored: 0 };
@@ -100,4 +122,4 @@ export function advanceDoublePlay(bases) {
   return next;
 }
 
-export default { emptyBases, advanceAll, advanceWalk, advanceSacFly, noAdvance, advanceDoublePlay };
+export default { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceSacBunt, noAdvance, advanceDoublePlay };

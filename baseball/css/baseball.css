@@ -549,6 +549,25 @@
   padding: 2px;
 }
 .bb-slot.is-empty { background: rgba(255,255,255,0.02); }
+/* RA (docs/BASEBALL-3D-BUILD.md section 9): the three wells are live buttons now. Their SIZE and
+ * POSITION are untouched - fixed geometry, the rule this band exists to hold - and only their
+ * surface changes: a live well is solid-bordered and readable, a disabled one keeps the dashed,
+ * dim placeholder look it has always had. ARMED adds the hub's standing selection accent
+ * (#ffce3a, root CLAUDE.md) AND a filled circle in front of the label (`_paintActionSlots`), so
+ * the armed state is never carried by colour alone. */
+.bb-slot.is-live {
+  border-style: solid;
+  border-color: rgba(255,255,255,0.32);
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.92);
+  touch-action: manipulation;
+}
+.bb-slot.is-live:active { background: rgba(255,255,255,0.18); }
+.bb-slot.is-armed {
+  border-color: #ffce3a;
+  color: #ffce3a;
+  background: rgba(255,206,58,0.18);
+}
 
 /* The Swing/Throw control: one canvas draws BOTH the progress ring and the fill button
  * (`ring.js`, ported from the mocks) - never a CSS-colored button overlapping a separate SVG

@@ -16,9 +16,9 @@ import { RULES_V, LEAGUES, MECHANICS, PITCH_TYPES, PATTERN_WINDOW } from './sett
 import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
 import { swing, modeOf as swingMode } from './swing.js';
-import { resolveContact } from './outcomes.js';
+import { resolveContact, resolveBunt } from './outcomes.js';
 import { zonesFor } from './zones.js';
-import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './bases.js';
+import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceSacBunt, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
 
 // BB-2f: bumped 1 -> 2, forward-only (doc §15, [Locked]: "SNAP_V is bumped and migrated
@@ -75,7 +75,13 @@ export class Game {
    * @param {string} [opts.parkId] - a settings.PARKS key; falls back to 'default'
    * @param {object} [opts.settings] - override settings (tests only); merged over the real module
    */
-  constructor({ home, away, seed, agents, parkId = 'default', settings }) {
+  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false }) {
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. The one thing it changes inside the
+    // engine is which pitches exist: all eight, for both sides (`unlockedPitchesFor`'s own
+    // `quickPlay` option, and the CPU's `QUICK_PLAY_PITCH_MIX`). It rides on the pitch view rather
+    // than being read from a module global, so a CAREER game constructed in the same page is
+    // unaffected - career passes nothing and keeps the ladder's unlocks.
+    this.quickPlay = !!quickPlay;
     this.home = home;
     this.away = away;
     this.agents = agents;
@@ -145,6 +151,7 @@ export class Game {
     g.away = snap.away;
     g.agents = agents;
     g.parkId = snap.parkId || 'default';
+    g.quickPlay = !!snap.quickPlay; // RA: additive; an older snapshot simply resumes as a career game
     g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
     g.rngState = snap.rngState >>> 0;
@@ -198,6 +205,7 @@ export class Game {
       home: this.home,
       away: this.away,
       parkId: this.parkId,
+      quickPlay: this.quickPlay,
       inning: this.inning,
       half: this.half,
       outs: this.outs,
@@ -298,6 +306,11 @@ export class Game {
       bases: this.bases.slice(),
       score: { ...this.score },
       batterId,
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): the one fact a PICKOFF decision turns on. `bases`
+      // is already here, but a pitcher deciding whether to throw over asks exactly one question and
+      // this is it, named, so an agent cannot get the index wrong.
+      runnerOnFirst: this.bases[0] != null,
+      quickPlay: this.quickPlay,
       pitchHistory: (this.pitchHistory[batterId] || []).slice(-PATTERN_WINDOW),
       weakZone: this._weakZoneFor(batterId),
       rand01: () => this._rand(),
@@ -324,8 +337,54 @@ export class Game {
       batterId: this._currentBatterId(battingSide),
       pitch: pitchResult,
       pitchHistory: priorPitchHistory,
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): WHO COULD STEAL, if this side asked for one -
+      // `null` when nobody can. The agent deciding the steal is the BATTING agent, which knows its
+      // own batter and nothing about the runner standing on second, so the runner's own `hitSpd`
+      // (the skill the CPU's rate reads, and the engine's own success roll) is resolved here, where
+      // the roster actually is, instead of being guessed from the batter's.
+      steal: this._stealCandidate(battingSide),
       rand01: () => this._rand(),
     };
+  }
+
+  /** RA: the LEAD eligible runner - the one closest to home whose next base is empty - or `null`.
+   *
+   *  ONLY FIRST AND SECOND ARE ELIGIBLE, which is RA's own narrowing of the spec's "a runner on a
+   *  base whose next base is empty": third's next base is HOME, which is empty by definition, so
+   *  the wider reading makes a steal of home available on every pitch with a runner on third. That
+   *  is a run-scoring play, and neither the spec's success formula (0.45 at zero skill) nor the
+   *  CPU's own rate (0.12 a pitch) is calibrated for one - a CPU runner would have walked home from
+   *  third several times a game. A steal of home is a different play and is not modelled. */
+  _stealCandidate(battingSide) {
+    for (let i = 1; i >= 0; i--) {
+      const runnerId = this.bases[i];
+      if (runnerId == null || this.bases[i + 1] != null) continue;
+      const team = this[battingSide];
+      const runner = team.players.find((p) => p.id === runnerId);
+      // The extra-innings ghost runner (`EXTRA_INNING_RUNNER_ID`) is on no roster and has no
+      // skills - he runs at the formula's own base rate rather than crashing the lookup.
+      return { runnerId, from: i, to: i + 1, hitSpd: (runner && runner.skills.hitSpd) || 0 };
+    }
+    return null;
+  }
+
+  /** RA: the steal's own success probability (settings.js's STEAL_* block and
+   *  `SKILL_EFFECT.hitSpd.stealSuccessPerPt`, doc §6 [Locked]: "Batter Speed raises steal... success"). */
+  _stealChance(runnerHitSpd, pitcher) {
+    const S = this.settings;
+    const perPt = (S.SKILL_EFFECT.hitSpd && S.SKILL_EFFECT.hitSpd.stealSuccessPerPt) || 0;
+    const acc = Math.max(0, (pitcher && pitcher.skills.pitchAcc) || 0);
+    const raw = S.STEAL_BASE + perPt * Math.max(0, runnerHitSpd || 0) - S.STEAL_PER_ACC * acc;
+    return Math.max(S.STEAL_MIN, Math.min(S.STEAL_MAX, raw));
+  }
+
+  /** RA: the pickoff's own success probability (doc §6, [Locked]: "Pitcher Accuracy improves
+   *  pickoffs" - `SKILL_EFFECT.pitchAcc.pickoffPerPt`, floored and capped by settings.js). */
+  _pickoffChance(pitcher) {
+    const S = this.settings;
+    const perPt = (S.SKILL_EFFECT.pitchAcc && S.SKILL_EFFECT.pitchAcc.pickoffPerPt) || 0;
+    const acc = Math.max(0, (pitcher && pitcher.skills.pitchAcc) || 0);
+    return Math.max(S.PICKOFF_BASE, Math.min(S.PICKOFF_MAX, S.PICKOFF_BASE + perPt * acc));
   }
 
   _currentBatterId(battingSide) {
@@ -502,6 +561,12 @@ export class Game {
     await this.emit('atBatStart', { batterId, side: battingSide, shiftDeg: this._shiftDegFor(defenseTeam, batterId) });
     if (this.aborted) return;
 
+    // RA: how many times the defense has thrown over to first during THIS at-bat, against
+    // `PICKOFF_MAX_PER_AT_BAT`'s safety valve (settings.js's own comment says why a cap exists at
+    // all: a pickoff does not advance the count, so an agent that only ever picks off would spin
+    // this loop for ever).
+    let pickoffsThisAtBat = 0;
+
     // A single pass through this loop (one pitch AND its swing decision) is the atomic unit of
     // play - `abort()` is honored only BETWEEN passes (the loop condition), never in the middle
     // of one. A pitch that has already been thrown always gets its swing decided against it: the
@@ -526,6 +591,29 @@ export class Game {
         pitchView.scatterDraw = { x: this._rand(), y: this._rand(), bx: this._rand(), by: this._rand() };
       }
       const pitchDecision = await defenseAgent.decidePitch(pitchView);
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): A PICKOFF THROWS NO PITCH. It is resolved here,
+      // announced, and then this loop goes straight back round to the next `decidePitch` for the
+      // SAME batter with the SAME count - the one decision in this engine that consumes a trip
+      // through the pitch loop without consuming a pitch. `_advanceLineup` is deliberately not
+      // called and balls/strikes are deliberately untouched.
+      if (pitchDecision && pitchDecision.pickoff && this.bases[0] != null
+          && pickoffsThisAtBat < this.settings.PICKOFF_MAX_PER_AT_BAT) {
+        pickoffsThisAtBat += 1;
+        const runnerId = this.bases[0];
+        const out = this._rand() < this._pickoffChance(pitcher);
+        if (out) { this.bases[0] = null; this.outs += 1; }
+        await this.emit('pickoff', { runnerId, from: 0, out });
+        // A third out from a pickoff ends the half-inning through exactly the path a strikeout's
+        // third out takes: close the at-bat and return, and `playHalfInning`'s own loop condition
+        // (`outs < outsPerInning`) does the rest. The lineup pointer stays on THIS batter, so he
+        // leads off the next time this side bats - the standard rule, and the same one a caught
+        // steal's third out follows below.
+        if (this.outs >= this.settings.MECHANICS.outsPerInning) {
+          this._atBatOpen = false;
+          return;
+        }
+        continue;
+      }
       const type = PITCH_TYPES.includes(pitchDecision && pitchDecision.type) ? pitchDecision.type : 'fastball';
       // R2: the aim is 2-D. A plain number still means "x, at the middle of the zone's height" -
       // `flyPitch` accepts both shapes, so a scripted agent or an old fixture keeps working.
@@ -543,14 +631,44 @@ export class Game {
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 
       const swingView = this._buildSwingView(battingSide, pitchResult, priorPitchHistory);
+      // RA: WHO would run, read once from the view the agent was actually shown, so the runner the
+      // agent decided about and the runner the engine moves can never be two different people (the
+      // bases cannot change between these two lines, but reading it twice would invite it to).
+      const stealCandidate = swingView.steal;
       const swingDecision = await battingAgent.decideSwing(swingView);
       // BB-3b commit 4: additive event, so the UI can animate a CPU batter's swing when a human
       // is pitching (nothing told it before - the decision was made and consumed entirely inside
       // this function). No existing listener reacts to an event type it doesn't recognize.
       // R2: `mode` (contact/power) replaces `charged` - the charged swing is deleted, and which
       // mode the batter was in is the thing a UI would want to show instead.
-      await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action, mode: swingMode(swingDecision) });
+      // RA: `bunt` rides the swing event too - it is the only way the UI learns a CPU batter
+      // squared to bunt while the human is pitching (same reasoning as BB-3b commit 4's own note
+      // above about why this event exists at all). Additive; no existing listener reads it.
+      await this.emit('swing', { side: battingSide, action: swingDecision && swingDecision.action,
+        mode: swingMode(swingDecision), bunt: !!(swingDecision && swingDecision.bunt) });
       const swingResult = swing(pitchResult, batter.skills, swingDecision, this.settings, () => this._rand(), this.league);
+
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): THE STEAL, resolved after the pitch has been
+      // flown and the swing has been scored, but before any of it is applied to the count or the
+      // bases. THE ONE EXCEPTION IS A BALL IN PLAY: "if the batter puts the ball in play the steal
+      // is moot and the play resolves as normal" - the runner was already moving, and `advanceAll`
+      // advances him from the base he is still credited with. Nothing is emitted in that case, so a
+      // UI never shows a steal that did not happen.
+      const stealAsked = !!(swingDecision && swingDecision.steal) && !!stealCandidate;
+      if (stealAsked && !swingResult.inPlay) {
+        const safe = this._rand() < this._stealChance(stealCandidate.hitSpd, pitcher);
+        this.bases[stealCandidate.from] = null;
+        if (safe) this.bases[stealCandidate.to] = stealCandidate.runnerId;
+        else this.outs += 1;
+        // No `if (this.aborted) return` here, deliberately, and the resume sweep in
+        // `baseball/js/test.js` section 12b is what proves it matters: `abort()` fires during the
+        // 'pitch' emit, and a pitch already thrown ALWAYS gets its swing decided and its count
+        // applied (this loop's own header). Returning mid-pass would snapshot a state where the
+        // runner had moved but the pitch that carried him was never scored, and the resumed game
+        // would diverge from an uninterrupted one from that moment on.
+        await this.emit('steal', { runnerId: stealCandidate.runnerId, from: stealCandidate.from,
+          to: stealCandidate.to, safe });
+      }
       // BB-3b commit 6: two additive readouts for Line 1 (SPEC.md section 3/9) - `verdict` names
       // what the pitch itself was (a called ball/strike, a foul, or a swing that missed
       // entirely), and `timingWord` is the swing's own early/late/perfect classification, read
@@ -575,11 +693,23 @@ export class Game {
         this.strikes += 1;
       } else if (swingResult.foul) {
         verdict = 'foul';
-        if (this.strikes < 2) this.strikes += 1;
+        // RA (docs/BASEBALL-3D-BUILD.md section 9): "A foul bunt with 2 strikes is a strikeout."
+        // `MECHANICS.foulNeverThirdStrike` (doc §3, [Locked]) is about an ordinary foul BALL; the
+        // foul bunt is the real game's one exception to it, and `swingResult.bunt` is what tells
+        // the two apart. The strike below pushes the count to three and the strikeout branch at the
+        // bottom of this loop converts it, so there is one strikeout path, not two.
+        if (swingResult.bunt || this.strikes < 2) this.strikes += 1;
       } else {
         const shiftDeg = this._shiftDegFor(defenseTeam, batterId);
         const zones = zonesFor(this.league, shiftDeg);
-        const outcome = resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
+        // RA: a bunt is not a carried ball, so it never meets the out-zone geometry - `resolveBunt`
+        // is its whole rule book (outcomes.js's own header says why it could not be a branch inside
+        // `resolveContact`). Everything AFTER this line is identical for both, which is the point:
+        // `_resolveBattedBall` applies it, and `basesBefore`/`runnersOut`/`runsScored` come out of
+        // the same place they always did.
+        const outcome = swingResult.bunt
+          ? resolveBunt(swingResult, this.bases, this.outs, batter.skills.hitSpd, this.settings, () => this._rand())
+          : resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
         const { bases, runsScored, runnersOut } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
@@ -602,6 +732,16 @@ export class Game {
       }
 
       await this.emit('count', { balls: this.balls, strikes: this.strikes, verdict, timingWord });
+      // RA: A CAUGHT STEAL CAN MAKE THE THIRD OUT on a pitch that was itself an ordinary ball or
+      // strike. The half-inning is over the moment that out is recorded, so this pitch's count is
+      // announced (it happened) but no strikeout or walk is converted off it - there is no fourth
+      // out, and a walk into a finished inning means nothing. The lineup pointer stays on this
+      // batter: he leads off the next time this side bats, the standard rule, and the same one the
+      // pickoff's own third out above follows. `playHalfInning` clears the count when it closes.
+      if (this.outs >= this.settings.MECHANICS.outsPerInning) {
+        this._atBatOpen = false;
+        return;
+      }
       // BB-2f fix: no early `return` here either, for the same reason as the two removed above -
       // an abort can land on the exact pitch that pushes strikes/balls to their own threshold, and
       // returning here BEFORE the strikeout/walk checks below would snapshot an invalid, stuck
@@ -637,6 +777,19 @@ export class Game {
    *  `await this.emit(...)`, preserving the "decide, then announce" ordering `_finalize` depends
    *  on. */
   _resolveBattedBall(outcome, batterId, battingSide, rand01) {
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): THE SACRIFICE BUNT - the one out in this engine
+    // that ADVANCES every runner instead of freezing them (bases.js's `advanceSacBunt`). Checked
+    // before the generic out branch below, which would otherwise leave the runners exactly where
+    // they stood and quietly turn a sacrifice into a plain out.
+    if (outcome.kind === 'sacrifice') {
+      const { bases, runsScored } = advanceSacBunt(this.bases);
+      this.bases = bases;
+      this.outs += 1; // no hit credited - the batter traded himself for the base
+      this._addRuns(battingSide, runsScored);
+      // Every runner ADVANCED; nobody was removed without scoring, so `runnersOut` is [] exactly as
+      // it is for a sac fly (its own note below).
+      return { bases: 0, runsScored, runnersOut: [] };
+    }
     if (outcome.isFoul || outcome.result === 'out') {
       // doc §3, [Locked]: "Deep fly out scores the runner from third (sac fly)" - DEEP, not any
       // fly out; MECHANICS.sacFlyMinDepthFt is how deep (Draft, new).

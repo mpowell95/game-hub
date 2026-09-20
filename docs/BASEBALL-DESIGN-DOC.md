@@ -47,7 +47,49 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 - **[Locked]** Steal button (batting, runner on). Bunt button (batting). Pickoff button (pitching, runner on). All sit in reserved fixed slots that never move.
 - **[Locked]** All three are tap, never hold.
 - **[Locked]** Batter Speed raises steal and bunt success. Pitcher Accuracy improves pickoffs.
-- **[Open]** How each works in play (timing, success odds, what the CPU does).
+- **[Locked, RA]** **How each works in play.** Built as `docs/BASEBALL-3D-BUILD.md` section 9's "RA"
+  stage specifies; the constants are settings.js's own STEAL_*/PICKOFF_*/BUNT_*/CPU_* block and the
+  rules are in game.js (the at-bat loop), swing.js (`buntSwing`), outcomes.js (`resolveBunt`),
+  bases.js (`advanceSacBunt`) and agents.js (the CPU's three decisions). Everything is decided in
+  the engine and emitted as an event; the UI only presents it.
+
+  - **Steal.** Armed between pitches, before READY, when a runner's next base is empty - FIRST AND
+    SECOND ONLY; a steal of home is not modelled (the success formula is not calibrated for a
+    run-scoring play, and at the CPU's own rate a runner on third would walk home most innings).
+    The lead eligible runner (the one closest to home) goes on the next pitch, and the figure takes
+    a 4 ft lead while the well is armed. Resolved after the pitch is flown and after the swing is
+    scored: safe with probability `clamp(0.45 + 0.01 * runner.hitSpd - 0.005 * pitcher.pitchAcc,
+    0.20, 0.90)`. Safe advances him one base; caught is an out and the at-bat continues. **If the
+    batter puts the ball in play the steal is void** - no event, the runner was already moving, and
+    the play resolves exactly as it always did. A caught steal that makes the third out ends the
+    half-inning, and the batter at the plate keeps the lineup pointer: he leads off the next time
+    that side bats. Emitted as `steal {runnerId, from, to, safe}`.
+  - **Bunt.** Armed before READY, always available; the mode row reads BUNT and the batter squares
+    on the `Bunt` clip at the wind-up. Contact is TIMING ONLY, on a window 1.6x the ordinary one -
+    there is no cursor, no mode and no miss: a bunt timed outside that window is a FOUL, and a foul
+    bunt with two strikes is a strikeout (the one exception to "a foul can never be strike 3").
+    A bunt in play is always a grounder, 8 to 40 ft, spraying inside +/-30 deg. With runners on and
+    fewer than two outs it is a **sacrifice**: every runner moves up one (the runner from third
+    scores) and the batter is out, unless he beats the throw - the SAME `MECHANICS.beatOutPerPt` x
+    hitSpd roll an infield grounder already uses - in which case it is a **bunt single** and the
+    runners still move up one. With nobody on (or with two outs) it is a bunt for a hit: that same
+    roll, else a **bunt out**. Bunt mode clears after the pitch, and a take in bunt mode is an
+    ordinary take. Emitted on `atBatEnd` as `outcome: 'bunt-out' | 'bunt-single' | 'sacrifice'`.
+  - **Pickoff.** Offered while pitching, before PITCH, when a runner is on first. Tapping it
+    THROWS NO PITCH: the pitcher turns and throws to first (`Pickoff` clip, 0.5 s, release at
+    0.3 s), the runner is out with probability `clamp(0.06 + 0.01 * pitcher.pitchAcc, 0.06, 0.35)`,
+    and otherwise nothing changes. Either way the count is untouched, the lineup does not advance,
+    the beat is 1.5 s and the same batter is up for the next pitch. A steal armed for that pitch is
+    cancelled by the throw over. A third out from a pickoff ends the half-inning by the same path a
+    strikeout's third out takes. A safety valve caps it at three throws per at-bat - not a rule, a
+    guarantee that the pitch loop terminates. Emitted as `pickoff {runnerId, from, out}`.
+  - **What the CPU does.** Batting: it steals when eligible with probability
+    `0.12 + 0.004 * runner.hitSpd` per pitch, never with two outs and a three-ball count; it bunts
+    with probability 0.06 when a runner is on, there are fewer than two outs, and the batter's
+    hitPow is in the bottom third of his league's cap. Pitching: it throws over with probability
+    0.08 per pitch when a runner is on first. Every one of those draws comes from the game's own
+    seeded stream, and none of them is taken at all when the situation does not arise, so a pitch
+    with the bases empty consumes exactly the randomness it always did.
 
 ## 4. Career
 
@@ -248,6 +290,12 @@ Major League	62%	40 to 52%
 ## 11. Pitches
 
 ### Unlocks
+- **[Locked, RA]** The ladder below is CAREER's. **Quick Play unlocks all eight for both sides**
+  (`unlockedPitchesFor(league, wsTitles, { quickPlay: true })`), and the CPU throws them from
+  `QUICK_PLAY_PITCH_MIX` - one distribution over all eight rather than the per-league career rows,
+  which name only what the ladder has reached. A Quick Play game is not career progress, so gating
+  an exhibition behind titles nobody in it has earned only ever hid six pitches from every player
+  who never starts a career.
 - **[Locked]**
 
 ```

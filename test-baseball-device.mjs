@@ -999,6 +999,273 @@ await ctx.close();
   await p12.close();
 }
 
+// 13. RA (docs/BASEBALL-3D-BUILD.md section 9): ACTIONS-LIVE. The three wells that were disabled
+// placeholders in every build up to R3 now DO something, and this drives each one through the real
+// hub with real taps and asserts on the engine's own events, never on the button's appearance:
+//   (a) batting with a runner on first - STEAL is enabled, arming it and taking the pitch fires a
+//       `steal` event, and the runner figure ends up on the next bag (safe) or hidden (caught),
+//       with the verdict word on screen either way;
+//   (b) BUNT armed, then a swing tap, yields an `atBatEnd` carrying one of the three bunt kinds;
+//   (c) pitching with a runner on first - PICKOFF is enabled, tapping it fires a `pickoff` event
+//       with NO pitch event, and the RIGHT button is back to PITCH within 2 s;
+//   (d) Quick Play's strip shows all eight pitch tiles unlocked.
+// Both halves use the dev-only `window.__bbTest.putOnFirst()` seam (ui.js) to put a real roster
+// player on first rather than playing until somebody happens to reach base - the alternative is
+// the runners-move probe's own six-minute auto-play budget, three more times over.
+{
+  // --- (a) and (b): the batting half -----------------------------------------------------------
+  const p13 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page13 = await p13.newPage();
+  const errs13 = [];
+  page13.on('pageerror', (e) => errs13.push(String((e && e.message) || e)));
+  await page13.addInitScript(() => {
+    window.__bbDevForce = true;
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Actions Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr13 = await mountInHub(page13);
+  if (mountErr13) {
+    fail('actions-live', `mount failed: ${mountErr13}`);
+  } else {
+    await page13.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page13.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+
+    const steal = await page13.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const events = [];
+      const origEvent = inst.game.onEvent;
+      inst.game.onEvent = (type, pl) => { events.push({ type, pl }); return origEvent(type, pl); };
+      const waitFor = async (fn, ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
+        return false;
+      };
+      const tap = (el) => {
+        el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      };
+      // Wait for the human's batting turn to be OFFERING Ready (the state the wells light up in).
+      const ready = await waitFor(() => inst.state.actionLabel === 'act_ready', 20000);
+      if (!ready) return { error: 'never reached a batting turn offering READY within 20s' };
+      const runnerId = window.__bbTest.putOnFirst();
+      if (!runnerId) return { error: 'putOnFirst seam returned nothing' };
+      const F = await import('/baseball/js/field.js');
+      const BAGS = [F.basePositions().first, F.basePositions().second, F.basePositions().third];
+      let armed = false, leadFt = null, enabled = false;
+      // The seam writes `game.bases[0]` while this at-bat's FIRST swing view has already been
+      // built and handed to the agent (the engine builds it immediately before awaiting the
+      // decision, which is exactly the moment this probe is standing in), so the steal it offers
+      // cannot be in that view - the engine rebuilds the view for every PITCH, so the arm has to
+      // land on a later one. Real play never has this gap: nothing moves a runner between the view
+      // and the decision, and a steal that DOES move one rebuilds the view for the next pitch.
+      // So: arm and take, pitch after pitch, until the engine actually runs one.
+      const deadline = Date.now() + 40000;
+      while (Date.now() < deadline && !events.some((e) => e.type === 'steal')) {
+        if (inst.state.actionLabel !== 'act_ready') { await new Promise((r) => setTimeout(r, 80)); continue; }
+        const stealBtn = document.querySelector('[data-act="steal"]');
+        enabled = !!(stealBtn && !stealBtn.disabled);
+        if (!enabled) return { error: 'the STEAL well is disabled with a runner on base before READY' };
+        stealBtn.click();
+        // `_paintActionSlots` rebuilds the wells on every repaint, so the armed class has to be
+        // read off a FRESHLY queried node - the one that was clicked is already detached.
+        const after = document.querySelector('[data-act="steal"]');
+        armed = !!(after && after.classList.contains('is-armed'));
+        if (!armed) return { error: 'tapping STEAL did not arm the well (.is-armed)' };
+        // The 4 ft lead: the runner the STEAL well would actually send - whichever base he is on -
+        // should not be standing ON his bag any more.
+        const side = inst.game.half === 'top' ? 'away' : 'home';
+        const cand = inst.game._stealCandidate(side);
+        const runner = cand ? inst.actors.actors[['r1', 'r2', 'r3'][cand.from]] : null;
+        if (cand && runner && runner.pivot.visible) {
+          leadFt = Math.hypot(runner.pivot.position.x - BAGS[cand.from].x, runner.pivot.position.z - BAGS[cand.from].z);
+        }
+        tap(document.querySelector('[data-role="mainbtn"]'));   // READY, then take the pitch
+        await waitFor(() => events.some((e) => e.type === 'steal') || inst.state.actionLabel === 'act_ready', 12000);
+      }
+      const fired = events.some((e) => e.type === 'steal');
+      if (!fired) return { error: 'no steal event within 40s of arming STEAL and taking pitches' };
+      const ev = events.find((e) => e.type === 'steal').pl;
+      await new Promise((r) => setTimeout(r, 1200));   // the run (STEAL_RUN_MS) plus a settle beat
+      const nowAt = inst.game.bases.indexOf(ev.runnerId);
+      const roleNow = ['r1', 'r2', 'r3'][nowAt];
+      const actorNow = roleNow ? inst.actors.actors[roleNow] : null;
+      const target = BAGS[ev.to];
+      const dist = actorNow && actorNow.pivot.visible && target
+        ? Math.hypot(actorNow.pivot.position.x - target.x, actorNow.pivot.position.z - target.z) : null;
+      const fromRole = ['r1', 'r2', 'r3'][ev.from];
+      const caughtGone = !!(inst.actors.actors[fromRole] && !inst.actors.actors[fromRole].pivot.visible);
+      const pop = document.querySelector('[data-role="pop"]');
+      return { armed, leadFt, ev, nowAt, dist, caughtGone, popText: pop ? pop.textContent : '' };
+    });
+    if (steal.error) {
+      fail('actions-live (a) steal', steal.error);
+    } else {
+      if (!steal.armed) fail('actions-live (a) steal', 'tapping STEAL did not arm the well (.is-armed)');
+      else if (!(steal.leadFt > 1)) fail('actions-live (a) steal', `the armed runner is ${steal.leadFt} ft off the bag - no lead was taken`);
+      else if (steal.ev.safe && !(steal.dist != null && steal.dist <= 3)) {
+        fail('actions-live (a) steal', `the runner was safe but ended ${steal.dist} ft from base index ${steal.ev.to} (budget 3 ft)`);
+      } else if (!steal.ev.safe && (steal.stillOnBase || !steal.caughtGone)) {
+        fail('actions-live (a) steal', `the runner was thrown out but he is ${steal.stillOnBase ? 'still on a base in the engine' : 'still drawn on the field'}`);
+      } else if (!/Safe|Quieto|Out/.test(steal.popText || '')) {
+        fail('actions-live (a) steal', `no Safe/Out verdict word on screen (pop read "${steal.popText}")`);
+      } else {
+        ok(`actions-live (a): STEAL armed (lead ${steal.leadFt.toFixed(1)} ft), the take fired a steal event `
+          + `${steal.ev.from}->${steal.ev.to} ${steal.ev.safe ? `safe (runner ${steal.dist.toFixed(2)} ft from the bag)` : 'caught (figure removed)'}, `
+          + `verdict word "${(steal.popText || '').trim()}"`);
+      }
+    }
+
+    const bunt = await page13.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const S = await import('/baseball/js/engine/settings.js');
+      const swingDelayMs = S.FEEL.engine.swingDelay;
+      const ends = [];
+      const origEvent = inst.game.onEvent;
+      inst.game.onEvent = (type, pl) => { if (type === 'atBatEnd') ends.push(pl); return origEvent(type, pl); };
+      let timeToPlateS = null;
+      const origFlight = inst._animatePitchFlight.bind(inst);
+      inst._animatePitchFlight = (p) => { timeToPlateS = p.timeToPlateS; return origFlight(p); };
+      const tap = (el) => {
+        el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      };
+      const BUNT_KINDS = ['bunt-out', 'bunt-single', 'sacrifice'];
+      const deadline = Date.now() + 120000;
+      let attempts = 0, squared = false;
+      while (Date.now() < deadline && !ends.some((e) => BUNT_KINDS.includes(e.outcome))) {
+        // Only ever act on the human's own batting turn, offering Ready.
+        if (inst.state.mode !== 'batting' || inst.state.actionLabel !== 'act_ready') {
+          // A human PITCHING turn would stall for ever without a tap - drive it with one.
+          if (inst.state.mode === 'pitching' && inst.state.actionLabel === 'act_pitch') {
+            tap(document.querySelector('[data-role="mainbtn"]'));
+          }
+          await new Promise((r) => setTimeout(r, 120));
+          continue;
+        }
+        const buntBtn = document.querySelector('[data-act="bunt"]');
+        if (!buntBtn || buntBtn.disabled) return { error: 'the BUNT well is disabled during a batting turn before READY' };
+        buntBtn.click();
+        // Freshly queried, for the same reason the steal block above says: the well that was
+        // clicked has already been replaced by `_paintActionSlots`'s own repaint.
+        const armedBtn = document.querySelector('[data-act="bunt"]');
+        if (!armedBtn || !armedBtn.classList.contains('is-armed')) return { error: 'tapping BUNT did not arm the well' };
+        attempts += 1;
+        timeToPlateS = null;
+        tap(document.querySelector('[data-role="mainbtn"]'));   // READY
+        // Wait for the flight to start so the crossing time is known, then tap SWING on it.
+        const flightEnd = Date.now() + 6000;
+        while (timeToPlateS == null && Date.now() < flightEnd) await new Promise((r) => setTimeout(r, 20));
+        if (timeToPlateS == null) { await new Promise((r) => setTimeout(r, 200)); continue; }
+        if (inst.actors.actors.batter && inst.actors.actors.batter.current) {
+          const clip = inst.actors.actors.batter.current.getClip();
+          if (clip && clip.name === 'Bunt') squared = true;
+        }
+        await new Promise((r) => setTimeout(r, Math.max(0, timeToPlateS * 1000 - swingDelayMs)));
+        if (inst._onMainDown) tap(document.querySelector('[data-role="mainbtn"]'));
+        await new Promise((r) => setTimeout(r, 2600));
+      }
+      const hit = ends.find((e) => BUNT_KINDS.includes(e.outcome));
+      return { attempts, squared, outcome: hit ? hit.outcome : null, battedKind: hit ? hit.battedKind : null,
+        kinds: ends.map((e) => e.outcome).slice(-6) };
+    });
+    if (bunt.error) fail('actions-live (b) bunt', bunt.error);
+    else if (!bunt.outcome) fail('actions-live (b) bunt', `${bunt.attempts} armed bunts in 120s never produced a bunt outcome (saw ${bunt.kinds.join(',')})`);
+    else if (!bunt.squared) fail('actions-live (b) bunt', 'the batter never played the Bunt clip while armed');
+    else if (bunt.battedKind !== 'ground') fail('actions-live (b) bunt', `the bunt's battedKind is "${bunt.battedKind}", not "ground"`);
+    else ok(`actions-live (b): BUNT armed, the batter squared on the Bunt clip, and a swing tap produced atBatEnd outcome "${bunt.outcome}" (battedKind ground) after ${bunt.attempts} attempt(s)`);
+  }
+  if (errs13.length) fail('actions-live', `page errors in the batting half: ${errs13.slice(0, 3).join(' | ')}`);
+  else ok('no page errors during the actions-live batting half');
+  await p13.close();
+
+  // --- (c) and (d): the pitching half ------------------------------------------------------------
+  const p13b = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page13b = await p13b.newPage();
+  const errs13b = [];
+  page13b.on('pageerror', (e) => errs13b.push(String((e && e.message) || e)));
+  await page13b.addInitScript(() => {
+    window.__bbDevForce = true;
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Pickoff Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr13b = await mountInHub(page13b);
+  if (mountErr13b) {
+    fail('actions-live (c) pickoff', `mount failed: ${mountErr13b}`);
+  } else {
+    await page13b.evaluate(() => {
+      window.__bbForceHalfNext = 'bottom';
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page13b.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    const res = await page13b.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      if (!window.__bbTest || !window.__bbTest.forceHalf) return { error: 'the __bbTest seam is missing - dev flag not honored' };
+      window.__bbTest.forceHalf('bottom');
+      const events = [];
+      const origEvent = inst.game.onEvent;
+      inst.game.onEvent = (type, pl) => { events.push({ type, pl }); return origEvent(type, pl); };
+      const waitFor = async (fn, ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
+        return false;
+      };
+      const pitching = await waitFor(() => inst.state.mode === 'pitching' && inst.state.actionLabel === 'act_pitch', 25000);
+      if (!pitching) return { error: "never reached the human's own pitching turn within 25s" };
+      // (d) the strip: eight tiles, none locked, in Quick Play.
+      const tiles = document.querySelectorAll('.bb-strip .bb-pitch-tile');
+      const unlocked = document.querySelectorAll('.bb-strip [data-pitch]');
+      const locked = document.querySelectorAll('.bb-strip .bb-pitch-tile.is-locked');
+      const strip = { tiles: tiles.length, unlocked: unlocked.length, locked: locked.length,
+        pitches: [...unlocked].map((b) => b.dataset.pitch) };
+      // (c) the pickoff.
+      window.__bbTest.putOnFirst();
+      const btn = document.querySelector('[data-act="pickoff"]');
+      const enabled = !!(btn && !btn.disabled);
+      if (!enabled) return { error: 'the PICKOFF well is still disabled with a runner on first before PITCH', strip };
+      const eventsBefore = events.length;
+      const t0 = performance.now();
+      btn.click();
+      const fired = await waitFor(() => events.slice(eventsBefore).some((e) => e.type === 'pickoff'), 8000);
+      if (!fired) return { error: 'no pickoff event within 8s of tapping the well', strip };
+      const after = events.slice(eventsBefore);
+      const pickIdx = after.findIndex((e) => e.type === 'pickoff');
+      const pitchIdx = after.findIndex((e) => e.type === 'pitch');
+      const backToPitch = await waitFor(() => inst.state.actionLabel === 'act_pitch', 2000);
+      return {
+        strip, enabled,
+        pickoff: after[pickIdx].pl,
+        pitchBefore: pitchIdx >= 0 && pitchIdx < pickIdx,
+        backToPitch, backMs: performance.now() - t0,
+        label: (document.querySelector('[data-role="ringlabel"]') || {}).textContent,
+      };
+    });
+    if (res.strip) {
+      if (res.strip.tiles !== 8 || res.strip.unlocked !== 8 || res.strip.locked !== 0) {
+        fail('actions-live (d) strip', `Quick Play's strip shows ${res.strip.tiles} tiles, ${res.strip.unlocked} unlocked, ${res.strip.locked} locked - expected 8/8/0`);
+      } else {
+        ok(`actions-live (d): Quick Play's strip shows all eight pitches unlocked (${res.strip.pitches.join(', ')})`);
+      }
+    }
+    if (res.error) fail('actions-live (c) pickoff', res.error);
+    else if (res.pitchBefore) fail('actions-live (c) pickoff', 'a pitch was thrown before the pickoff - the tap did not replace the pitch');
+    else if (!res.backToPitch) fail('actions-live (c) pickoff', `the RIGHT button did not return to PITCH within 2s (reads "${res.label}")`);
+    else ok(`actions-live (c): PICKOFF enabled with a runner on first, the tap fired a pickoff event (out=${res.pickoff.out}) with no pitch thrown, and the button was back to PITCH in ${res.backMs.toFixed(0)} ms`);
+  }
+  if (errs13b.length) fail('actions-live', `page errors in the pitching half: ${errs13b.slice(0, 3).join(' | ')}`);
+  else ok('no page errors during the actions-live pitching half');
+  await p13b.close();
+}
+
 await browser.close();
 
 console.log('');

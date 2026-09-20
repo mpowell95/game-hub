@@ -142,6 +142,22 @@ const WALK_RUNNER_SPEED_FT_S = RUNNER_SPEED_FT_S / 2; // "the forced runners wal
 const FIELDER_SPEED_FT_S = 27;
 const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
+// RA (docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF - presentation only. Every rule
+// these four numbers pace is decided in the engine and arrives here as an event.
+const STEAL_LEAD_FT = 4;        // the spec's own lead: how far off the bag an ARMED runner stands
+// The steal's own run. It has to finish inside RESULT_MS (the beat the verdict word already holds
+// for), because the next pitch's wind-up starts at the end of that beat and a runner still sliding
+// into second while the pitcher is delivering is two plays at once. 700 ms covers 90 ft at a
+// sprint; the runner is started at the crossing (when the engine tells us) rather than at release,
+// which is the one place this presentation is honestly behind the play - see `_animateSteal`.
+const STEAL_RUN_MS = 700;
+// The pickoff's whole beat: 1.5 s, the spec's number, spent as `Pickoff`'s own 0.5 s clip with the
+// ball leaving the hand at its 0.3 s mark and flying to the bag over PICKOFF_BALL_MS, then the
+// verdict word for whatever is left.
+const PICKOFF_BEAT_MS = 1500;
+const PICKOFF_BALL_MS = 400;
+const PICKOFF_MARK_MS = 300;
+
 // ---------------------------------------------------------------------------------------------
 // R2 (docs/BASEBALL-3D-BUILD.md section 9): THE CONTROLS.
 //
@@ -435,6 +451,11 @@ class BaseballPlayScreen {
     // loops that can be mid-flight exactly like the ball's own, and both need the same guard.
     if (this._runnersRaf) cancelAnimationFrame(this._runnersRaf);
     if (this._fielderRaf) cancelAnimationFrame(this._fielderRaf);
+    // RA: the steal's run and the pickoff's throw, both rAF loops that can be mid-flight, plus the
+    // widget's own hold timer - the same guard every other loop on this screen already has.
+    if (this._stealRaf) cancelAnimationFrame(this._stealRaf);
+    if (this._pickoffRaf) cancelAnimationFrame(this._pickoffRaf);
+    if (this._stealWidgetTimer) clearTimeout(this._stealWidgetTimer);
     if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
@@ -556,13 +577,17 @@ class BaseballPlayScreen {
       },
     };
 
-    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS });
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): this screen is QUICK PLAY and nothing else, so all
+    // eight pitch types are unlocked for both sides - the human's strip shows eight live tiles and
+    // the CPU throws from `QUICK_PLAY_PITCH_MIX`. Career, when it exists, constructs its own Game
+    // without this flag and keeps the ladder's unlocks.
+    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = {
       mode: 'batting', // 'batting' | 'pitching'
       selectedPitch: 'fastball',
-      unlockedPitches: SETTINGS.unlockedPitchesFor(league, 0),
+      unlockedPitches: SETTINGS.unlockedPitchesFor(league, 0, { quickPlay: true }),
       line1: '', line2: '',
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
@@ -572,6 +597,12 @@ class BaseballPlayScreen {
       // while batting) and the word on the RIGHT button, both painted by `_paintModeLabels`.
       battingMode: 'contact',
       actionLabel: 'act_ready',
+      // RA: what the three action wells have been ARMED for, if anything. Both are one-pitch
+      // choices made between pitches and both clear the instant that pitch resolves - a steal
+      // because the runner has already gone, a bunt because the spec says so ("Bunt mode clears
+      // after the pitch").
+      armedSteal: false,
+      armedBunt: false,
     };
     // THE 2-D CURSOR, in zone units, shared by both states (R2) - the pitcher's aim while
     // pitching, the batter's circle while batting. It deliberately PERSISTS across pitches and
@@ -603,7 +634,26 @@ class BaseballPlayScreen {
       // decoration: `_throw` writes the pinned draws back into the SAME `view.scatterDraw` object
       // `game.js` reads after `decidePitch` resolves, so the engine scores the identical pitch the
       // screen drew - the one property the whole seam exists to check.
-      window.__bbTest = { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; } };
+      // RA test seam (docs/BASEBALL-3D-BUILD.md section 9), for `test-baseball-device.mjs`'s
+      // actions-live probe: put a REAL roster player (never the batter at the plate, and never an
+      // invented id - the engine looks his skills up) on first, so the STEAL and PICKOFF wells can
+      // be driven without first playing until somebody happens to reach base. It writes only
+      // `game.bases[0]`, which is ordinary engine state that a single, a walk or an error would
+      // have written the same way, and repaints whatever reads it.
+      const putOnFirst = () => {
+        if (!this.game) return null;
+        const side = this.game.half === 'top' ? 'away' : 'home';
+        const team = this.game[side];
+        const batterId = this.game._currentBatterId(side);
+        const id = team.battingOrder.find((x) => x !== batterId) || team.battingOrder[0];
+        this.game.bases[0] = id;
+        this._runnerStanding = {};
+        this._paintHud();
+        this._paintActionSlots();
+        if (!this._flightActive) this._drawStaticField();
+        return id;
+      };
+      window.__bbTest = { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; }, putOnFirst };
     }
 
     this.screen = 'play';
@@ -964,13 +1014,30 @@ class BaseballPlayScreen {
     const ROLE = ['r1', 'r2', 'r3'];
     const AT = [pos.first, pos.second, pos.third];
     const bases = this.game.bases;
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): "the runner figure takes a 4 ft lead when armed."
+    // Only the runner the STEAL button would actually send - the engine's own candidate - and only
+    // while the well is armed; the lead is along his own base path, so he is visibly leaning the
+    // way he is about to run rather than just standing next to the bag.
+    const armedIdx = (this.state && this.state.armedSteal) ? (this._stealCandidate() || {}).from : null;
+    const NEXT = [pos.second, pos.third, pos.home];   // third's own next base is home; the engine never offers it (see its `_stealCandidate`)
     for (let i = 0; i < 3; i++) {
       const role = ROLE[i];
       const occupant = bases[i];
       if (occupant != null) {
-        if (this._runnerStanding[role] === occupant) continue;
-        this._runnerStanding[role] = occupant;
-        this.actors.setActor(role, { side: battingSide, pos: AT[i], heightFt: FIGURE_HEIGHT_FT, facingRad: RUNNER_STAND_FACING_RAD });
+        const lead = armedIdx === i;
+        // The memo carries the lead, not just the occupant: an unchanged runner who has just been
+        // armed still has to be re-placed, and one who has just been disarmed has to go back.
+        const memo = occupant + (lead ? '|lead' : '');
+        if (this._runnerStanding[role] === memo) continue;
+        this._runnerStanding[role] = memo;
+        let at = AT[i];
+        if (lead) {
+          const to = NEXT[i];
+          const dx = to.x - at.x, dz = to.z - at.z;
+          const len = Math.hypot(dx, dz) || 1;
+          at = { x: at.x + (dx / len) * STEAL_LEAD_FT, y: 0, z: at.z + (dz / len) * STEAL_LEAD_FT };
+        }
+        this.actors.setActor(role, { side: battingSide, pos: at, heightFt: FIGURE_HEIGHT_FT, facingRad: RUNNER_STAND_FACING_RAD });
         this.actors.idle(role);
       } else if (this._runnerStanding[role] !== null) {
         this._runnerStanding[role] = null;
@@ -1220,18 +1287,87 @@ class BaseballPlayScreen {
     this._paintPadMarker();
   }
 
-  /** SPEC.md section 5's control-band table: the three action slots differ by state - batting
-   *  carries Bunt and Steal (slot 3 an empty well), pitching carries Pickoff (slots 1-2 empty
-   *  wells). All three stay disabled either way (steal/bunt/pickoff are `RESERVED_PHASE_6`) -
-   *  only which WELL is occupied changes, per state. R2 does not touch them. */
+  /** RA (docs/BASEBALL-3D-BUILD.md section 9): THE THREE ACTION WELLS ARE LIVE. Their geometry,
+   *  their labels and which well each one occupies are exactly as SPEC.md section 5's control-band
+   *  table set them and as every build since has drawn them - batting carries Bunt and Steal with
+   *  slot 3 empty, pitching carries Pickoff with slots 1-2 empty. What changed is that they are no
+   *  longer permanently `disabled`: each one is enabled by STATE.
+   *
+   *  The state each turns on is the spec's: STEAL between pitches (before READY) when a runner's
+   *  next base is empty, BUNT before READY always, PICKOFF before PITCH when a runner is on first.
+   *  "Before READY"/"before PITCH" is `state.actionLabel` - the word on the RIGHT button IS which
+   *  half of the turn we are in, so the two can never disagree.
+   *
+   *  WHO CAN STEAL IS THE ENGINE'S ANSWER, NOT THIS FILE'S: `game._stealCandidate(side)` is the
+   *  same function `_buildSwingView` feeds the agents, so an enabled button and a steal the engine
+   *  would actually run are the same thing by construction. A disabled well keeps `disabled` and
+   *  the `locked` title exactly as it had them.
+   *
+   *  ARMED is shown with a filled circle in front of the label as well as the accent colour, never
+   *  colour alone (root CLAUDE.md's colorblind-safe rule). */
   _paintActionSlots() {
     const actions = this.rootEl.querySelector('[data-role="actions"]');
     if (!actions) return;
+    const label = this.state.actionLabel;
+    const batting = this.state.mode !== 'pitching';
+    const preReady = batting && label === 'act_ready';
+    const prePitch = !batting && label === 'act_pitch';
+    const canSteal = preReady && !!this._stealCandidate();
+    const canPickoff = prePitch && !!(this.game && this.game.bases[0] != null);
     const empty = () => `<div class="bb-slot is-empty" aria-hidden="true"></div>`;
-    const slot = (act) => `<button type="button" class="bb-slot" data-act="${act}" disabled title="${t('locked')}">${t('act_' + act)}</button>`;
-    actions.innerHTML = this.state.mode === 'pitching'
-      ? `${empty()}${empty()}${slot('pickoff')}`
-      : `${slot('bunt')}${slot('steal')}${empty()}`;
+    const slot = (act, enabled, armed) => (enabled
+      ? `<button type="button" class="bb-slot is-live${armed ? ' is-armed' : ''}" data-act="${act}" aria-pressed="${armed ? 'true' : 'false'}">${armed ? '\u25CF ' : ''}${t('act_' + act)}</button>`
+      : `<button type="button" class="bb-slot" data-act="${act}" disabled title="${t('locked')}">${t('act_' + act)}</button>`);
+    actions.innerHTML = !batting
+      ? `${empty()}${empty()}${slot('pickoff', canPickoff, false)}`
+      : `${slot('bunt', preReady, this.state.armedBunt)}${slot('steal', canSteal, this.state.armedSteal)}${empty()}`;
+    actions.querySelectorAll('button[data-act]:not([disabled])').forEach((b) => {
+      b.style.touchAction = 'manipulation';
+      b.addEventListener('click', () => this._onActionSlot(b.dataset.act));
+    });
+  }
+
+  /** RA: the engine's own "who could run", read through the live Game so this screen can never
+   *  offer a steal the engine would refuse (or hide one it would allow). `null` between games and
+   *  whenever nobody is eligible. */
+  _stealCandidate() {
+    if (!this.game || !this.game._stealCandidate) return null;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    return this.game._stealCandidate(battingSide);
+  }
+
+  /** RA: a tap on one of the three wells. STEAL and BUNT ARM for the next pitch (tap again to
+   *  disarm - they are toggles, and a player who armed one by accident must be able to take it
+   *  back without throwing a pitch away); PICKOFF is not an arming action at all, it IS the
+   *  decision, so it resolves the pitching turn immediately with no pitch thrown. Every one of
+   *  them is a TAP, never a hold (doc §3, [Locked]). */
+  _onActionSlot(act) {
+    if (act === 'steal') {
+      this.state.armedSteal = !this.state.armedSteal;
+      this._paintActionSlots();
+      // The lead is drawn from `_syncBaseRunners`, which reads `armedSteal` - so the figure steps
+      // off the bag the instant the well lights up.
+      this._runnerStanding = {};
+      if (!this._flightActive) this._drawStaticField();
+    } else if (act === 'bunt') {
+      this.state.armedBunt = !this.state.armedBunt;
+      this._paintActionSlots();
+      this._paintModeLabels();
+    } else if (act === 'pickoff') {
+      if (this._onPickoff) this._onPickoff();
+    }
+  }
+
+  /** RA: both one-pitch arms, cleared the moment the pitch that carried them resolves. Called from
+   *  the two places a batting decision is actually returned (`HumanAgent.decideSwing`'s swing tap
+   *  and its take timeout), never from an event handler - the decision object has already been
+   *  built by then, so clearing here cannot change what the engine was told. */
+  _clearArmed() {
+    this.state.armedSteal = false;
+    this.state.armedBunt = false;
+    this._runnerStanding = {};
+    this._paintActionSlots();
+    this._paintModeLabels();
   }
 
   /** The main button's word (PITCH / READY / SWING) and the pad's head row, repainted together
@@ -1249,6 +1385,15 @@ class BaseballPlayScreen {
     if (!head) return;
     if (this.state.mode === 'pitching') {
       head.innerHTML = `<div class="bb-pad-tile is-sel">${t('pitchname_' + this.state.selectedPitch)}</div>`;
+    } else if (this.state.armedBunt) {
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): "the mode bar highlights BUNT". Two tiles, the
+      // same two this row always has (fixed geometry - nothing in this band may change size or
+      // count between states), with the FIRST one reading BUNT and selected: in bunt mode the
+      // contact/power circle is not what the pitch is met with, so naming the mode there would be
+      // saying something untrue. The second tile still names the mode the batter will be back in
+      // the moment the bunt clears.
+      head.innerHTML = `<div class="bb-pad-tile is-sel">\u25CF ${t('mode_bunt')}</div>`
+        + `<div class="bb-pad-tile">${t('mode_' + this.state.battingMode)}</div>`;
     } else {
       head.innerHTML = ['contact', 'power'].map((m) => (
         `<div class="bb-pad-tile${m === this.state.battingMode ? ' is-sel' : ''}">${m === this.state.battingMode ? '\u25CF ' : ''}${t('mode_' + m)}</div>`
@@ -1469,7 +1614,11 @@ class BaseballPlayScreen {
       // BATTING). Irrelevant while batting (the human's own swing already plays its own Swing
       // clip directly via HumanAgent.decideSwing's settle()).
       if (this.state.mode === 'pitching') {
-        if (payload.action === 'swing') {
+        if (payload.bunt) {
+          // RA: the CPU batter squared to bunt. It is a LOOP, held from here through contact, so
+          // there is no swing to snap into and the ordinary cross-fade is right.
+          this.actors.play('batter', 'Bunt');
+        } else if (payload.action === 'swing') {
           // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 4): fade:0 - a swing is a snap, never
           // a 150ms dissolve in from Idle.
           this.actors.play('batter', 'Swing', { markAtMs: 80, fade: 0 });
@@ -1478,6 +1627,16 @@ class BaseballPlayScreen {
           this._drawStaticField();
         }
       }
+    } else if (type === 'pickoff') {
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): the throw over to first, the whole 1.5 s beat.
+      // AWAITED, unlike the steal below: the engine goes straight back to the next pitch decision
+      // the instant this resolves, so this IS the beat rather than something running beside one.
+      await this._playPickoff(payload);
+    } else if (type === 'steal') {
+      // RA: the runner's own run, started here and deliberately NOT awaited - it has to run
+      // alongside the verdict beat the 'count' event is about to hold (`_animateSteal`'s own
+      // header), never in front of it, or every steal would add a second to the game's cadence.
+      this._animateSteal(payload);
     } else if (type === 'atBatEnd') {
       this._paintHud();
       await this._settleAtBat(payload);
@@ -1511,8 +1670,11 @@ class BaseballPlayScreen {
     // baseball.css's `.bb-pitch-tile`) so the big word and the strip agree at a glance - color is
     // never the only cue (root CLAUDE.md's colorblind-safe rule). Foul keeps its own word alone
     // (it was never a shape in the strip either).
+    // RA: Out and Safe carry the SAME two shapes Strike and Ball already do - a square for the
+    // verdict that costs you something, a circle for the one that does not - so a player reads the
+    // shape without having to learn a second vocabulary, and colour is never the only cue.
     const mark = kind === 'early' ? '\u25C0 ' : (kind === 'perfect' || kind === 'nice') ? '\u2605 '
-      : kind === 'ball' ? '\u25CF ' : kind === 'strike' ? '\u25A0 ' : '';
+      : (kind === 'ball' || kind === 'safe') ? '\u25CF ' : (kind === 'strike' || kind === 'out') ? '\u25A0 ' : '';
     const tail = kind === 'late' ? ' \u25B6' : '';
     el.textContent = mark + word + tail;
     el.className = 'bb-pop is-' + kind;
@@ -1574,7 +1736,9 @@ class BaseballPlayScreen {
     }
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
     if (inPlay) {
-      const isOut = /out$/.test(outKind) || outKind === 'strikeout';
+      // RA: 'sacrifice' is an out that does not END in "out" - the landing marker would otherwise
+      // draw a bunt the batter was thrown out on in the green of a base hit.
+      const isOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice';
       const isHr = outKind === 'homer';
       const rad = (payload.sprayAngleDeg * Math.PI) / 180;
       const xFt = Math.sin(rad) * payload.distanceFt;
@@ -1853,7 +2017,9 @@ class BaseballPlayScreen {
       raw.push({ role: RUNNER_ROLE[i], from: i, to: toIdx, speedFt: RUNNER_SPEED_FT_S });
     }
     if (payload.outcome !== 'strikeout') {
-      const wasOut = /out$/.test(payload.outcome || '');
+      // RA: same exception `_settleAtBat` makes - on a sacrifice the batter-runner jogs to first
+      // and vanishes there like any other out, while the runners he moved up keep running.
+      const wasOut = /out$/.test(payload.outcome || '') || payload.outcome === 'sacrifice';
       const toIdx = payload.outcome === 'walk' ? 0 : (wasOut ? 0 : (payload.bases || 1) - 1);
       const speedFt = payload.outcome === 'walk' ? WALK_RUNNER_SPEED_FT_S : RUNNER_SPEED_FT_S;
       raw.push({ role: 'rb', from: -1, to: toIdx, speedFt });
@@ -1896,6 +2062,121 @@ class BaseballPlayScreen {
         }
       };
       this._runnersRaf = requestAnimationFrame(step);
+    });
+  }
+
+  /** RA (docs/BASEBALL-3D-BUILD.md section 9): THE PICKOFF, from the tap to the next pitch. The
+   *  whole 1.5 s beat lives here and is AWAITED by the event handler, because the engine's next
+   *  `decidePitch` fires the instant this returns - so the beat is this method's own duration,
+   *  never a number computed somewhere else and hoped to match.
+   *
+   *  What happens, in order: the `Pickoff` clip plays with its mark (the release) at
+   *  PICKOFF_MARK_MS; at the mark the ball leaves the pitcher's REAL hand (`actors.handWorld`, the
+   *  same sample the pitch flight takes, so the ball and the arm can never disagree) and flies to
+   *  the bag over PICKOFF_BALL_MS; the verdict pops as soon as it arrives; the pitcher returns to
+   *  Set and whatever is left of the beat is spent holding the word.
+   *
+   *  The runner needs no clip of his own - the spec says so ("`Idle` is fine, no new clip"), and
+   *  `_syncBaseRunners` puts him back flat on the bag on the next redraw because the LEAD is
+   *  cleared here: a pickoff throw is exactly the thing that sends a leaning runner back. If the
+   *  engine says he was out, `game.bases[0]` is already null by the time this runs, so the same
+   *  redraw hides him with no second decision made here. */
+  async _playPickoff(payload) {
+    if (this.destroyed || !this.actors) return;
+    // "Either way a CPU steal planned for that pitch is cancelled" - for the HUMAN batting side,
+    // the plan is `armedSteal`, and the throw over is what cancels it. (A CPU batter's own steal
+    // needs no cancelling: it is decided inside `decideSwing`, which a pickoff never reaches.)
+    if (this.state.armedSteal) { this.state.armedSteal = false; this._paintActionSlots(); }
+    this._runnerStanding = {};
+    const t0 = performance.now();
+    this.actors.play('pitcher', 'Pickoff', { markAtMs: PICKOFF_MARK_MS });
+    this._drawStaticField();
+    await sleep(PICKOFF_MARK_MS);
+    if (this.destroyed || !this.actors) return;
+    // The throw, in world feet, hand to bag.
+    const from = this.actors.handWorld('pitcher') || { x: RUBBER.x, y: RUBBER.y + 5, z: RUBBER.z };
+    const bag = basePositions().first;
+    const to = { x: bag.x, y: 2.5, z: bag.z };
+    await new Promise((resolve) => {
+      const start = performance.now();
+      const step = (now) => {
+        if (this.destroyed || !this.actors) { resolve(); return; }
+        const frac = Math.min(1, (now - start) / PICKOFF_BALL_MS);
+        // A flat throw with a touch of arc, the same shape the pitch's own sag draws: a parabola
+        // through both ends lying above its chord.
+        const lift = PITCH_SAG_FT * 4 * frac * (1 - frac);
+        this.actors.setBall({
+          x: from.x + (to.x - from.x) * frac,
+          y: from.y + (to.y - from.y) * frac + lift,
+          z: from.z + (to.z - from.z) * frac,
+        });
+        this._drawStaticField();
+        if (frac < 1) this._pickoffRaf = requestAnimationFrame(step);
+        else { this._pickoffRaf = 0; resolve(); }
+      };
+      this._pickoffRaf = requestAnimationFrame(step);
+    });
+    if (this.destroyed || !this.actors) return;
+    this._showPop(t(payload.out ? 'v_out' : 'v_safe'), payload.out ? 'out' : 'safe');
+    this._setLine1(t(payload.out ? 'v_out' : 'v_safe'));
+    this.actors.setBall(null);
+    this.actors.toSet();
+    this._drawStaticField();
+    await sleep(Math.max(0, PICKOFF_BEAT_MS - (performance.now() - t0)));
+    if (this.destroyed) return;
+    this._setLine1('');
+  }
+
+  /** RA: THE STEAL, as a picture. NOT awaited by its caller, on purpose: the engine emits 'steal'
+   *  and then goes straight on to emit 'count', whose own handler already holds RESULT_MS +
+   *  BETWEEN_MS - so this run happens INSIDE a beat that exists rather than adding one, exactly
+   *  the rule `_animateRunners` follows for the same reason (see `RUN_WINDOW_MS`'s header). The
+   *  run is STEAL_RUN_MS, comfortably inside RESULT_MS, so the runner is standing on his new bag
+   *  before the next wind-up begins.
+   *
+   *  `this.game.bases` is already the after-state when this fires (the engine mutates it
+   *  synchronously before the emit), so `_runnersInMotion` is what stops `_syncBaseRunners` from
+   *  snapping the runner straight to where he is headed - the identical guard, for the identical
+   *  reason, as a runner advancing on a hit. A runner who was thrown out is hidden at the bag he
+   *  was running to, which is where the play ended. */
+  _animateSteal(payload) {
+    if (!this.actors || this.destroyed || !this.game) return undefined;
+    if (this._stealRaf) cancelAnimationFrame(this._stealRaf);
+    const ROLE = ['r1', 'r2', 'r3'];
+    const role = ROLE[payload.from];
+    if (!role) return undefined;
+    const side = this.game.half === 'top' ? 'away' : 'home';
+    const wp = runnerPath().slice(payload.from + 1, payload.to + 2);
+    if (wp.length < 2) return undefined;
+    const facingRad = Math.atan2(wp[1].x - wp[0].x, wp[1].z - wp[0].z);
+    this._runnersInMotion = new Set([role]);
+    this._setDiamondVisible(true);
+    this.actors.play(role, 'Run');
+    const t0 = performance.now();
+    return new Promise((resolve) => {
+      const step = (now) => {
+        if (this.destroyed || !this.actors) { this._runnersInMotion = null; resolve(); return; }
+        const frac = Math.min(1, (now - t0) / STEAL_RUN_MS);
+        const p = this._pointOnPath(wp, frac);
+        this.actors.setActor(role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad });
+        this._paintDiamondWidget([{ from: payload.from, to: payload.to, frac }]);
+        if (frac < 1) { this._stealRaf = requestAnimationFrame(step); return; }
+        this._stealRaf = 0;
+        this._runnersInMotion = null;
+        this.actors.hide(role);
+        this._runnerStanding = {};
+        this._syncBaseRunners();   // the slot role that owns his new bag re-derives him, standing
+        this._showPop(t(payload.safe ? 'v_safe' : 'v_out'), payload.safe ? 'safe' : 'out');
+        this._paintHud();
+        // The widget holds one beat on the finished play, then clears - it is only ever shown for
+        // something in motion (R3's own rule: shown from the cut, cleared at `_returnToPlate`).
+        this._stealWidgetTimer = setTimeout(() => {
+          this._stealWidgetTimer = null;
+          if (!this.destroyed) this._setDiamondVisible(false);
+        }, RESULT_MS);
+        resolve();
+      };
+      this._stealRaf = requestAnimationFrame(step);
     });
   }
 
@@ -2343,6 +2624,7 @@ class HumanAgent {
     // replayed per tick. The away batter is static until the 'swing' event.
     s.actors.idle('pitcher'); s.actors.idle('batter');
     s.state.actionLabel = 'act_pitch';
+    s._onPickoff = null;   // RA: rebound below, per turn - a stale handler would answer a dead promise
     s._paintStrip();
     s._paintModeLabels();
     s._paintActionSlots();
@@ -2360,10 +2642,28 @@ class HumanAgent {
     return new Promise((resolve) => {
       let thrown = false;
       s._onMainUp = null;
+      // RA (docs/BASEBALL-3D-BUILD.md section 9): THE PICKOFF WELL. It is not an arming action -
+      // tapping it IS the decision, so it resolves this turn with `{pickoff: true}` and no pitch is
+      // thrown at all. It shares `thrown` with the PITCH tap below, so whichever comes first wins
+      // and the other is dead: a tap on PICKOFF while the wind-up is already running cannot throw
+      // a second ball from the same hand. The well is only enabled before PITCH in the first place
+      // (`_paintActionSlots`), and it is cleared the moment either path fires.
+      s._onPickoff = () => {
+        if (s.destroyed || thrown) return;
+        thrown = true;
+        s._onPickoff = null; s._onMainDown = null;
+        s.state.actionLabel = null;
+        s._paintModeLabels(); s._paintActionSlots();
+        resolve({ pickoff: true, type: s.state.selectedPitch, aim: { x: s.cursor.x, y: s.cursor.y } });
+      };
       s._onMainDown = () => {
         if (s.destroyed || thrown) return;
         thrown = true;
         s._onMainDown = null;
+        // RA: the delivery has started, so the pickoff well goes dead and dark with it.
+        s._onPickoff = null;
+        s.state.actionLabel = null;
+        s._paintActionSlots();
         s.actors.play('pitcher', 'Pitch', { markAtMs: PITCH_DRAG_MS });
         // The sample happens at the MARK, not at the tap: everything the thumb does in between is
         // the aim. Cancelled on destroy (`_pitchDragTimer`, cleared in `destroy()`), so a screen
@@ -2446,6 +2746,7 @@ class HumanAgent {
     s.state.mode = 'batting';
     s.actors.idle('batter');
     s.state.actionLabel = 'act_ready';
+    s._onPickoff = null;   // RA: this is the batting turn; nothing here answers the pickoff well
     s._paintModeLabels();
     s._paintActionSlots();
     s._paintPadMarker();
@@ -2468,13 +2769,20 @@ class HumanAgent {
       s._pendingReady = () => { s._pendingReady = null; s._onMainDown = null; ready(); };
       s._onMainDown = () => { s._pendingReady = null; s._onMainDown = null; ready(); };
     });
-    if (s.destroyed) return { action: 'take' };
+    if (s.destroyed) return { action: 'take', steal: !!s.state.armedSteal };
     s.state.actionLabel = 'act_swing';
     s._paintModeLabels();
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): READY has been tapped, so STEAL and BUNT are no
+    // longer offered - both are decisions made BETWEEN pitches, and the pitch is now coming.
+    s._paintActionSlots();
+    // RA: "the batter squares on `Bunt` clip at the wind-up". A loop, held from here through the
+    // pitch and through contact - a bunt has no separate swing, the bat is already where it is
+    // going to meet the ball, which is exactly what `swing.js`'s timing-only bunt branch scores.
+    if (s.state.armedBunt) s.actors.play('batter', 'Bunt');
 
     // The CPU's own wind-up (FEEL.ui.windupMs), THEN the ball leaves the hand.
     await s._stepWindup();
-    if (s.destroyed) return { action: 'take' };
+    if (s.destroyed) return { action: 'take', steal: !!s.state.armedSteal };
 
     const flightPromise = s._animatePitchFlight(pitch);
 
@@ -2492,10 +2800,16 @@ class HumanAgent {
         s._onMainDown = null; s._onMainUp = null;
         const releaseMs = performance.now() - releaseMs0;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
+        // RA: the two one-pitch arms are read into the decision BEFORE they are cleared, so what
+        // the engine is told and what the player armed are the same thing.
+        const bunt = !!s.state.armedBunt;
+        const steal = !!s.state.armedSteal;
         // STAGE 7 row 4: fade:0 - no cross-fade in, so the swing is visible on the very frame it
         // starts (`markAtMs: 80` lands the contact keyframe where the old sprite frame 5 did).
-        s.actors.play('batter', 'Swing', { markAtMs: 80, fade: 0 });
-        resolve({ action: 'swing', cursor: { x: s.cursor.x, y: s.cursor.y }, timingErrorMs: timing, mode: s.state.battingMode });
+        // RA: a BUNT plays no swing at all - the batter is already squared and stays squared.
+        if (!bunt) s.actors.play('batter', 'Swing', { markAtMs: 80, fade: 0 });
+        s._clearArmed();
+        resolve({ action: 'swing', cursor: { x: s.cursor.x, y: s.cursor.y }, timingErrorMs: timing, mode: s.state.battingMode, bunt, steal });
       };
       s._onMainDown = settle;
       s._onMainUp = null;
@@ -2507,7 +2821,11 @@ class HumanAgent {
         s._onMainDown = null; s._onMainUp = null;
         // A take: the batter never left Idle (no half-cock pose exists - inventing one is a
         // feature not discussed, docs/BASEBALL-3D-BUILD.md section 3.6).
-        resolve({ action: 'take' });
+        // RA: a take still carries the steal - the runner left with the pitch, not with the swing.
+        // The bunt is dropped with the rest of the arm: "a take in bunt mode is an ordinary take."
+        const steal = !!s.state.armedSteal;
+        s._clearArmed();
+        resolve({ action: 'take', steal });
       }, timeoutMs);
       // The flight promise is what the crossing hold and the pitcher's return hang off; nothing
       // here waits on it (the swing resolves on its own tap or its own timeout), but a rejection
@@ -2634,6 +2952,14 @@ function diamondWidgetHTML() {
  *  `resolveContact` already resolves), never re-derived from the finer-grained `kind` string
  *  (`ground-gap`/`blooper`/`line-through`/... - those exist for measurement, not for display). */
 function outcomeWord(kind, bases) {
+  // RA (docs/BASEBALL-3D-BUILD.md section 9): the three bunt outcomes get their own words. They
+  // have to be named BEFORE the generic tests below, both because 'bunt-out' ends in "out" and
+  // would otherwise read as a plain Out, and because 'bunt-single' carries bases 1 and would read
+  // as a plain Single - true in both cases, and in both cases losing the only thing that made the
+  // play worth a button.
+  if (kind === 'bunt-out') return 'bunt_out';
+  if (kind === 'bunt-single') return 'bunt_single';
+  if (kind === 'sacrifice') return 'sacrifice';
   if (kind === 'homer') return 'homer';
   if (kind === 'walk') return 'walk';
   if (kind === 'strikeout') return 'strikeout';
