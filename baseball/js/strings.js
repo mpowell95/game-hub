@@ -84,6 +84,18 @@ export const STRINGS = {
     v_safe: 'Safe',
     // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
     // meter - a release can no longer be early, Nice or hung, because there is no release to time.
+    // R4 (docs/BASEBALL-3D-BUILD.md section 9): the pop's own THIRD line - which SWING outcome this
+    // was, distinct from the big word above it (which stays Ball/Strike/Early/Late/Perfect/Foul).
+    // Shown only when a real swing happened; see ui.js's `_swingLine` for the mapping.
+    swing_miss: 'Swing and a miss',
+    swing_late: 'Late swing',
+    swing_early: 'Early swing',
+    swing_foul: 'Foul',
+    // R4: the home run word and its stats strip (ft/mph/deg - degrees is a bare symbol, not a
+    // string, same as every other unit-only number this screen prints).
+    homerun: 'HOME RUN',
+    stats_ft: '{n} ft',
+    stats_mph: '{n} mph',
     // R3: the diamond widget's own four cell labels (docs/BASEBALL-3D-BUILD.md section 9, "R3").
     widget_home: 'Home',
     widget_1b: '1B',
@@ -162,6 +174,13 @@ export const STRINGS = {
     v_perfect: 'Perfecto',
     v_out: 'Out',
     v_safe: 'Quieto',
+    swing_miss: 'Swing y fallo',
+    swing_late: 'Swing tarde',
+    swing_early: 'Swing antes',
+    swing_foul: 'Foul',
+    homerun: 'JONRÓN',
+    stats_ft: '{n} ft',
+    stats_mph: '{n} mph',
     widget_home: 'Casa',
     widget_1b: '1B',
     widget_2b: '2B',

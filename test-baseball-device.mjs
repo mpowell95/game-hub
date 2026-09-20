@@ -172,7 +172,13 @@ if (mountErr) {
   // pitch's RELEASE is resultMs + betweenMs + windupMs, measured on the real hub mount rather than
   // inferred from the code. No input is given, so every pitch is a take (ball or strike) and no
   // batted-ball animation enters the sum. The verdict is captured by wrapping the instance's own
-  // `_setLine1` (what `_onEngineEvent` paints through).
+  // `_showPop` (what `_onEngineEvent` paints the verdict through).
+  // R4 (docs/BASEBALL-3D-BUILD.md section 9): this used to wrap `_setLine1`, which painted the
+  // verdict word on every 'count' - R4 moved that word OUT of `.bb-lines` and into `.bb-pop`
+  // itself (over the batter's head), so `.bb-lines` now goes empty on every pitch and Line 1 only
+  // ever carries an AT-BAT'S OWN outcome word or "Side retired". `_showPop` is called at the exact
+  // same synchronous point Line 1 used to be set (every 'count'/in-play 'atBatEnd'), so this is the
+  // same measurement through the correct current signal, not a new one.
   //
   // STAGE 5 (docs/BASEBALL-3D-BUILD.md section 3.10): the release signal changed. It used to be
   // `state.pitcherFrame` reaching 3 (`_stepWindup`'s own sprite-frame step), which is deleted along
@@ -215,8 +221,8 @@ if (mountErr) {
         set(fn) { handler = fn; fire(fn); },
       });
       fire(handler);
-      const orig = inst._setLine1.bind(inst);
-      inst._setLine1 = (txt) => { if (txt) rec.verdicts.push({ t: performance.now(), txt: String(txt) }); orig(txt); };
+      const origPop = inst._showPop.bind(inst);
+      inst._showPop = (word, kind, opts) => { rec.verdicts.push({ t: performance.now(), txt: String(word) }); return origPop(word, kind, opts); };
       const origPlay = inst.actors.play.bind(inst.actors);
       inst.actors.play = (role, name, opts) => {
         if (role === 'pitcher' && name === 'Pitch') {
@@ -235,8 +241,10 @@ if (mountErr) {
     }
     const allGaps = [];
     for (let i = 0; i + 1 < data.releases.length; i++) {
+      // R4: no "retired"/half-inning text filter needed any more - `_showPop` (unlike the old
+      // `_setLine1` wrap) is never called with that text at all, only with a real verdict word.
       const v = data.verdicts.find((x) => x.t > data.releases[i] && x.t < data.releases[i + 1]);
-      if (v && !/retired|end of|fin de/i.test(v.txt)) allGaps.push({ gap: data.releases[i + 1] - v.t, txt: v.txt });
+      if (v) allGaps.push({ gap: data.releases[i + 1] - v.t, txt: v.txt });
     }
     // THE FIRST GAP IS DROPPED, and it is the only one that is. It is measured across the busiest
     // seconds this game ever has - the model has just finished loading, `Actors.warm()` is
@@ -722,7 +730,6 @@ await ctx.close();
     await page10.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
     const res = await page10.evaluate(async () => {
       const inst = document.querySelector('.hub-game')._bbInstance;
-      const field = await import('/baseball/js/field.js');
       // Capture the pitch the flight is drawing, and sample the marker as it goes.
       // Force the CPU to throw a CURVEBALL. A fastball does not break, so its marker starts and
       // ends in the same place and "it slid to the right spot" would be true of a marker that
@@ -752,10 +759,16 @@ await ctx.close();
       await new Promise((r) => setTimeout(r, 400));
       clearInterval(poll);
       if (!pitch || samples.length < 2) return { samples: samples.length, pitch: !!pitch };
-      const w = inst._fieldW, h = inst._fieldH;
-      const z = field.zoneRectFt();
-      const project = (u, v) => field.projectToCanvas(inst.actors.camera,
-        { x: u * field.ZONE.halfW, y: z.cy + v * (z.h / 2), z: field.ZONE.z }, w, h);
+      // R4 (docs/BASEBALL-3D-BUILD.md section 9): the batting camera's own zone box (and both its
+      // cursors, the target marker included) is now drawn at BATTING_ZONE_SCALE about the box's
+      // centre (`_zoneMap('batting')`) - so the "true" projected point this probe compares against
+      // has to go through that SAME map, or every sample would read as off by the scale factor
+      // rather than by anything the marker-tracking logic actually got wrong. `_zoneMap`'s own true
+      // (unscaled) box is independently checked by the `zone-world`/`zone-scale` probes elsewhere in
+      // this file, so reusing it here still tests THIS probe's own concern - does the marker follow
+      // the pitch's bend and land on the real crossing point - without re-deriving the scale rule a
+      // second time.
+      const project = (u, v) => inst._zoneMap('batting').toPx(u, v);
       return {
         samples: samples.length,
         first: samples[0], last: samples[samples.length - 1],
@@ -852,7 +865,10 @@ await ctx.close();
 // was live at some point during the cut. Also drives the human's OWN pitching turns (tap PITCH,
 // once, R2 has no second tap) so a half-inning does not stall waiting on a human decision that
 // never comes.
-{
+// BB_DEVICE_QUICK=1 skips this block: it is a six-minute probabilistic hunt for a play, and the
+// actors suite delegates this whole file only to read the cadence line (orchestrator's R4 ship
+// review: that delegated copy timed out on this hunt twice under a full suite load).
+if (!process.env.BB_DEVICE_QUICK) {
   const p12 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page12 = await p12.newPage();
   const pageErrors12 = [];
@@ -1269,6 +1285,224 @@ await ctx.close();
   if (errs13b.length) fail('actions-live', `page errors in the pitching half: ${errs13b.slice(0, 3).join(' | ')}`);
   else ok('no page errors during the actions-live pitching half');
   await p13b.close();
+}
+
+// R4 (docs/BASEBALL-3D-BUILD.md section 9): the presentation layer - the pop anchored over the
+// batter, the batting box's own 1.6x scale, and the HOME RUN word/strip. Three probes, each
+// reading the real mounted screen through `document.querySelector('.hub-game')._bbInstance`, same
+// seam every probe above already uses.
+{
+  // zone-scale: the drawn BATTING box is BATTING_ZONE_SCALE (1.6x) the TRUE box, both read off
+  // the instance itself (`_zoneMap('batting')` vs `_zoneBoxPx()`) so a change to either one alone
+  // shows up here, not just in `zone-world`'s independent, `field.js`-only computation above.
+  const p14 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page14 = await p14.newPage();
+  await page14.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Zone Scale Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr14 = await mountInHub(page14);
+  if (mountErr14) {
+    fail('zone-scale', `mount failed: ${mountErr14}`);
+  } else {
+    await page14.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page14.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page14.waitForTimeout(500);
+    const res = await page14.evaluate(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      if (!inst) return { error: 'no _bbInstance' };
+      const truth = inst._zoneBoxPx();
+      const scaled = inst._zoneMap('batting');
+      if (!truth || !scaled) return { error: 'zone map unavailable (camera or canvas not ready)' };
+      return {
+        trueW: truth.x1 - truth.x0, trueH: truth.y1 - truth.y0,
+        scaledW: scaled.x1 - scaled.x0, scaledH: scaled.y1 - scaled.y0,
+      };
+    });
+    if (res.error) {
+      fail('zone-scale', res.error);
+    } else {
+      const WANT_SCALE = 1.6;
+      const wOff = Math.abs(res.scaledW - res.trueW * WANT_SCALE);
+      const hOff = Math.abs(res.scaledH - res.trueH * WANT_SCALE);
+      if (wOff > 2 || hOff > 2) {
+        fail('zone-scale', `drawn batting box ${res.scaledW.toFixed(1)}x${res.scaledH.toFixed(1)} is not ${WANT_SCALE}x the true box ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)} (off by ${wOff.toFixed(2)}/${hOff.toFixed(2)}px, budget 2px)`);
+      } else {
+        ok(`zone-scale: the drawn batting box (${res.scaledW.toFixed(1)}x${res.scaledH.toFixed(1)}) is ${WANT_SCALE}x the true box (${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)}), within 2px`);
+      }
+      // The true box is unchanged from what `zone-world` measured independently above (~50.6x61.3px).
+      if (Math.abs(res.trueW - 50.6) > 3 || Math.abs(res.trueH - 61.3) > 3) {
+        fail('zone-scale', `the TRUE (unscaled) box drifted from the measured 50.6x61.3px baseline (got ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)})`);
+      } else {
+        ok(`zone-scale: the true (unscaled) box is unchanged at ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)}px`);
+      }
+    }
+  }
+  await p14.close();
+}
+
+{
+  // pop-anchor: on a called strike, `.bb-pop`'s own rendered centre lands within 30px of the
+  // batter's head projected fresh (independently, through `field.js`'s own `projectToCanvas`,
+  // never by reading `_positionPop`'s own output back), and the pitch line reads
+  // `pitchname_* + mph`. Drives the human's batting turn with nothing but auto-READY taps (never a
+  // swing tap), same seam `r2-cadence` above uses - every pitch then resolves as a called
+  // ball/strike, and this waits for the first STRIKE among them.
+  const p15 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page15 = await p15.newPage();
+  await page15.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Pop Anchor Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr15 = await mountInHub(page15);
+  if (mountErr15) {
+    fail('pop-anchor', `mount failed: ${mountErr15}`);
+  } else {
+    await page15.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page15.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page15.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      window.__bbField = await import('/baseball/js/field.js');
+      const rec = { strikes: [] };
+      window.__bbPopRec = rec;
+      const origShowPop = inst._showPop.bind(inst);
+      inst._showPop = (word, kind, opts) => {
+        if (kind === 'strike') rec.strikes.push({ t: performance.now(), pitchLine: (opts && opts.pitchLine) || '' });
+        return origShowPop(word, kind, opts);
+      };
+      // Same auto-READY seam r2-cadence uses above: fire `_onMainDown` the instant it is next
+      // assigned, but only while the button reads READY - never SWING, so every pitch resolves as
+      // a plain called take (ball/strike), never a swing.
+      let handler = inst._onMainDown || null;
+      const fire = (fn) => { if (fn && inst.state && inst.state.actionLabel === 'act_ready') setTimeout(() => { if (handler === fn) fn(); }, 0); };
+      Object.defineProperty(inst, '_onMainDown', {
+        configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); },
+      });
+      fire(handler);
+    });
+    const deadline = Date.now() + 45000;
+    let strikeSeen = false;
+    while (Date.now() < deadline) {
+      strikeSeen = await page15.evaluate(() => window.__bbPopRec.strikes.length > 0);
+      if (strikeSeen) break;
+      await page15.waitForTimeout(150);
+    }
+    if (!strikeSeen) {
+      fail('pop-anchor', 'never observed a called strike in 45s of auto-READY takes');
+    } else {
+      const res = await page15.evaluate(() => {
+        const inst = document.querySelector('.hub-game')._bbInstance;
+        const field = window.__bbField;
+        const flip = inst._currentBatterFlip();
+        const boxX = flip ? field.BATTER_BOX.x : -field.BATTER_BOX.x;
+        const head = { x: boxX, y: 6.9, z: field.BATTER_BOX.z };
+        const proj = field.projectToCanvas(inst.actors.camera, head, inst._fieldW, inst._fieldH);
+        const wrap = document.querySelector('[data-role="fieldwrap"]');
+        const wrapRect = wrap.getBoundingClientRect();
+        const popEl = document.querySelector('[data-role="pop"]');
+        const popRect = popEl.getBoundingClientRect();
+        const popCenterX = popRect.left + popRect.width / 2 - wrapRect.left;
+        const popCenterY = popRect.top + popRect.height / 2 - wrapRect.top;
+        const insideBand = popRect.left >= wrapRect.left - 1 && popRect.right <= wrapRect.right + 1
+          && popRect.top >= wrapRect.top - 1 && popRect.bottom <= wrapRect.bottom + 1;
+        return {
+          proj, popCenterX, popCenterY, insideBand, behind: proj.behind,
+          pitchLine: (popEl.querySelector('[data-role="popline1"]') || {}).textContent,
+          strikePitchLine: window.__bbPopRec.strikes[0].pitchLine,
+        };
+      });
+      const dist = Math.hypot(res.popCenterX - res.proj.x, res.popCenterY - res.proj.y);
+      if (res.behind) {
+        fail('pop-anchor', 'the projected batter head point is behind the camera - camera fact changed?');
+      } else if (dist > 30) {
+        fail('pop-anchor', `.bb-pop centre (${res.popCenterX.toFixed(1)},${res.popCenterY.toFixed(1)}) is ${dist.toFixed(1)}px from the projected head (${res.proj.x.toFixed(1)},${res.proj.y.toFixed(1)}), budget 30px`);
+      } else if (!res.insideBand) {
+        fail('pop-anchor', 'the pop element is not fully inside the field band');
+      } else if (!/^\S+ \d+$/.test(res.strikePitchLine || '')) {
+        fail('pop-anchor', `the pop's pitch line does not read "<name> <mph>" (got "${res.strikePitchLine}")`);
+      } else {
+        ok(`pop-anchor: .bb-pop centre is ${dist.toFixed(1)}px from the projected batter head (budget 30px), inside the band, pitch line "${res.strikePitchLine}"`);
+      }
+    }
+  }
+  await p15.close();
+}
+
+{
+  // homerun-strip: drive `_settleAtBat` directly with a synthetic homer payload (no engine, no
+  // real at-bat - same directness R1/R3's own stills used to check `_animateBattedBall`/
+  // `_runMarkerHold`) and confirm the HOME RUN element becomes visible with a strip reading
+  // `{ft} ft {mph} mph {deg}°` from the payload's own numbers.
+  const p16 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page16 = await p16.newPage();
+  await page16.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Homerun Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr16 = await mountInHub(page16);
+  if (mountErr16) {
+    fail('homerun-strip', `mount failed: ${mountErr16}`);
+  } else {
+    await page16.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page16.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page16.waitForTimeout(500);
+    await page16.evaluate(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const payload = {
+        batterId: 'test-batter', side: 'away', outcome: 'homer', bases: 4, runsScored: 1,
+        q: 1, exitVeloMph: 101.7, centered: true, distanceFt: 412, sprayAngleDeg: 0,
+        battedKind: 'fly', launchAngleDeg: 31.4, timingWord: 'perfect',
+        basesBefore: [null, null, null], runnersOut: [],
+      };
+      // Fire-and-forget - `_settleAtBat` runs its own ~2s contact/chase/marker sequence; this test
+      // only needs to observe the HOME RUN element mid-way through it, not wait for it to finish.
+      window.__bbHomerRun = inst._settleAtBat(payload);
+    });
+    const deadline = Date.now() + 6000;
+    let seen = null;
+    while (Date.now() < deadline) {
+      seen = await page16.evaluate(() => {
+        const el = document.querySelector('[data-role="homerun"]');
+        if (!el || !el.classList.contains('is-on')) return null;
+        return {
+          word: (el.querySelector('[data-role="hrword"]') || {}).textContent,
+          strip: (el.querySelector('[data-role="hrstrip"]') || {}).textContent,
+        };
+      });
+      if (seen) break;
+      await page16.waitForTimeout(100);
+    }
+    if (!seen) {
+      fail('homerun-strip', 'the HOME RUN element never became visible within 6s of a homer payload');
+    } else if (!/ft/.test(seen.strip) || !/mph/.test(seen.strip) || !/°/.test(seen.strip)) {
+      fail('homerun-strip', `the stats strip is missing ft/mph/deg (got "${seen.strip}")`);
+    } else if (!/412/.test(seen.strip) || !/102/.test(seen.strip) || !/31/.test(seen.strip)) {
+      // Rounded from the payload's 412/101.7/31.4 - 412, 102, 31.
+      fail('homerun-strip', `the stats strip does not reflect the payload's own numbers (got "${seen.strip}", expected ~412ft/102mph/31deg)`);
+    } else {
+      ok(`homerun-strip: the HOME RUN element shows "${seen.word}" with strip "${seen.strip}"`);
+    }
+    await page16.evaluate(() => window.__bbHomerRun).catch(() => {});
+  }
+  await p16.close();
 }
 
 await browser.close();

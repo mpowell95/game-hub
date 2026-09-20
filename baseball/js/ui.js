@@ -21,6 +21,10 @@ import {
   ZONE, BATTER_BOX, RUBBER, CATCHER, UMPIRE, FIGURE_HEIGHT_FT,
   // R3 (docs/BASEBALL-3D-BUILD.md section 9): the fielders' own spots and the runners' base paths.
   fielderWorld, FIELDER_FACING_RAD, basePositions, runnerPath,
+  // R4: the ball's own real-world size, for the fire trail's discs (a fraction of the ball's OWN
+  // projected radius, never a literal pixel count - baseball.css's own header on why nothing here
+  // hardcodes a screen size).
+  BALL_RADIUS_FT,
 } from './field.js';
 import { drawRingState, RING_D } from './ring.js';
 // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer. Loaded eagerly, not lazily -
@@ -114,6 +118,36 @@ const BATTED_GROUNDER_APEX_FT = 4;
 // measured size so the target reads the same in both states. The ball is NOT scaled with it: what
 // is drawn large is the aiming frame, never the thing being judged.
 const PITCHING_ZONE_MIN_W_FRAC = 0.13;
+// R4 (docs/BASEBALL-3D-BUILD.md section 9): "the batting box reads bigger" - the drawn zone box
+// and both cursors on the BATTING camera, scaled about the box's own centre by this factor
+// (51px -> ~82px wide, the spec's own numbers). The same `k`-about-centre code `_zoneMap` already
+// runs for `PITCHING_ZONE_MIN_W_FRAC` on the other camera; this is that same rule, applied as a
+// flat multiplier instead of a "at least this wide" floor because batting's true box is already
+// legible - it just reads small next to the batter figure filling the frame. The ball is NEVER
+// scaled: it is a real sphere positioned in world feet by `_actorBallAt`/`_pitchWorldPoint`, never
+// routed through this zone-unit map at all, so there is nothing here that could scale it.
+const BATTING_ZONE_SCALE = 1.6;
+
+// R4 (docs/BASEBALL-3D-BUILD.md section 9): the fire trail. Presentation only, 2-D overlay,
+// skipped entirely under reduced motion (`_reducedMotion()`). Drawn over the pitch's OWN last 40%
+// (frac >= FIRE_TRAIL_FROM_FRAC) when `pitchResult.isStrike` - known at release, both for the
+// CPU's pitch and the human's own (`flyPitch` returns it before either flight animation starts).
+const FIRE_TRAIL_FROM_FRAC = 0.6;
+const FIRE_TRAIL_DISCS = 7;
+const FIRE_TRAIL_STEP_FRAC = 0.05; // how far apart the discs sit along the path, in flight-fraction
+// Contact burst: 12 lines radiating from the contact point, 18 to 40px, 250ms, white to gold.
+const CONTACT_BURST_MS = 250;
+const CONTACT_BURST_LINES = 12;
+const CONTACT_BURST_R0 = 18;
+const CONTACT_BURST_R1 = 40;
+// HOME RUN word + confetti. The word's own 0.6->1.0 scale-in is a pure CSS keyframe
+// (`bb-homerun-scale`, baseball.css - 300ms, the spec's own number); confetti falls for this long
+// once triggered (cut short, cleanly, whenever `_returnToPlate()` hides the element first - no
+// engine/timing change here, the spec's own rule, just an animation whose full length may not
+// always be seen).
+const CONFETTI_MS = 2000;
+const CONFETTI_COUNT = 40;
+const CONFETTI_COLORS = ['#ffce3a', '#E0532F', '#1F5FA8', '#178A7A', '#ffffff', '#ff9a2e'];
 
 // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 3): Matt, on v859: "you can't see where the
 // ball goes" applied to the PLATE view too - the 3D ball vanished the instant it crossed, so a
@@ -674,11 +708,19 @@ class BaseballPlayScreen {
         <div class="bb-top-spacer" data-role="topspacer"></div>
         <div class="bb-hud" data-role="hud"></div>
         <div class="bb-field-wrap" data-role="fieldwrap">
-          <div class="bb-pop" data-role="pop" aria-live="polite"></div>
+          <div class="bb-pop" data-role="pop" aria-live="polite">
+            <div class="bb-pop-word" data-role="popword"></div>
+            <div class="bb-pop-line" data-role="popline1"></div>
+            <div class="bb-pop-line" data-role="popline2"></div>
+          </div>
           <canvas class="bb-field-canvas" data-role="canvas"></canvas>
           <div class="bb-lines">
             <div class="bb-line1" data-role="line1"></div>
             <div class="bb-line2" data-role="line2"></div>
+          </div>
+          <div class="bb-homerun" data-role="homerun" aria-live="polite">
+            <div class="bb-homerun-word" data-role="hrword"></div>
+            <div class="bb-homerun-strip" data-role="hrstrip"></div>
           </div>
           ${diamondWidgetHTML()}
         </div>
@@ -792,26 +834,51 @@ class BaseballPlayScreen {
     else this._drawBatCursor(map);
   }
 
+  /** R4: the TRUE, unscaled projected strike-zone box - four world corners through the live
+   *  camera, nothing else. This is what `test-baseball-device.mjs`'s `zone-world`/`zone-scale`
+   *  probes read (independently, straight off `field.js`), and what `_zoneMap` below scales UP
+   *  from for drawing - one true box, read once, never two competing computations of "how big is
+   *  the zone" that could silently drift apart. `null` when nothing is mounted yet or the zone is
+   *  behind the camera (should not happen at either camera; guarded anyway). */
+  _zoneBoxPx() {
+    const w = this._fieldW, h = this._fieldH;
+    const cam = this.actors && this.actors.camera;
+    if (!cam || !w) return null;
+    const pts = zoneCornersFt().map((p) => projectToCanvas(cam, p, w, h));
+    if (pts.some((p) => p.behind)) return null;
+    const x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x));
+    const y0 = Math.min(...pts.map((p) => p.y)), y1 = Math.max(...pts.map((p) => p.y));
+    return { x0, y0, x1, y1 };
+  }
+
   /** THE ONE PLACE zone units become canvas pixels (R2). `toPx(u, v)` projects the real world
-   *  point at zone-unit `(u, v)` through the live camera and then applies the pitching camera's
-   *  own box scale about the box's centre, so a cursor at (0,0) is always in the middle of the
-   *  drawn box and one at (1,1) is always on its top-right corner, at either camera. `unit` is
-   *  how many px one zone unit spans in each axis, for radii. */
+   *  point at zone-unit `(u, v)` through the live camera and then applies this mode's own box
+   *  scale about the box's centre, so a cursor at (0,0) is always in the middle of the drawn box
+   *  and one at (1,1) is always on its top-right corner, at either camera. `unit` is how many px
+   *  one zone unit spans in each axis, for radii.
+   *
+   *  R4: the batting camera now scales too (`BATTING_ZONE_SCALE`, "the batting box reads bigger"),
+   *  the same about-centre rule `PITCHING_ZONE_MIN_W_FRAC` already applied on the other camera -
+   *  both read the SAME true box from `_zoneBoxPx()`, so neither can drift from what
+   *  `test-baseball-device.mjs`'s `zone-world`/`zone-scale` probes measure independently. */
   _zoneMap(mode) {
     const w = this._fieldW, h = this._fieldH;
     const cam = this.actors && this.actors.camera;
     if (!cam || !w) return null;
+    const box = this._zoneBoxPx();
+    if (!box) return null;
     const z = zoneRectFt();
     const halfH = z.h / 2;
-    const pts = zoneCornersFt().map((p) => projectToCanvas(cam, p, w, h));
-    if (pts.some((p) => p.behind)) return null;
-    let x0 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x));
-    let y0 = Math.min(...pts.map((p) => p.y)), y1 = Math.max(...pts.map((p) => p.y));
+    let { x0, y0, x1, y1 } = box;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     let k = 1;
     if (mode === 'pitching') {
       const want = w * PITCHING_ZONE_MIN_W_FRAC;
       k = Math.max(1, want / Math.max(1e-6, x1 - x0));
+    } else if (mode === 'batting') {
+      k = BATTING_ZONE_SCALE;
+    }
+    if (k !== 1) {
       x0 = cx - (cx - x0) * k; x1 = cx + (x1 - cx) * k;
       y0 = cy - (cy - y0) * k; y1 = cy + (y1 - cy) * k;
     }
@@ -934,6 +1001,11 @@ class BaseballPlayScreen {
   _returnToPlate() {
     this._cutawayUp = false;
     this._setDiamondVisible(false);
+    // R4: whatever the HOME RUN word/confetti was doing, it is done the moment the plate view
+    // comes back - cut cleanly rather than let a 2s confetti fall or a 300ms scale-in outlive the
+    // marker hold it belongs to (its own header: "no engine/timing change... just an animation
+    // whose full length may not always be seen").
+    this._hideHomerun();
     if (this.actors) {
       this.actors.clearMarker();
       this.actors.setBall(null);
@@ -1059,23 +1131,77 @@ class BaseballPlayScreen {
    *  and the old screen-space curve is not just unnecessary, it would fight the camera. */
   _actorBallAt(xNorm, yNorm, frac) {
     if (!this.actors) return;
+    this.actors.setBall(this._pitchWorldPoint(xNorm, yNorm, frac));
+  }
+  /** R4: the same line `_actorBallAt` used to compute inline, pulled out so the fire trail
+   *  (`_drawFireTrail`) can ask "where was the ball at an EARLIER frac of this same flight" without
+   *  touching `this.actors` at all - it only ever reads world points, it never sets the 3D ball's
+   *  position (that stays `_actorBallAt`'s own job, called once per frame from the real flight
+   *  loop). Samples the pitcher's real hand once per flight, same as before. */
+  _pitchWorldPoint(xNorm, yNorm, frac) {
     if (!this._releaseFrom) {
-      const hand = this.actors.handWorld('pitcher');
+      const hand = this.actors && this.actors.handWorld('pitcher');
       this._releaseFrom = hand || { x: RUBBER.x, y: RUBBER.y + 5, z: RUBBER.z + 1 };
     }
     const z = zoneRectFt();
     const from = this._releaseFrom;
     const to = { x: xNorm * ZONE.halfW, y: z.cy + yNorm * (z.h / 2), z: ZONE.z };
     const f = Math.max(0, Math.min(1, frac));
-    this.actors.setBall({
+    return {
       x: from.x + (to.x - from.x) * f,
       y: from.y + (to.y - from.y) * f + PITCH_SAG_FT * f * (1 - f),
       z: from.z + (to.z - from.z) * f,
-    });
+    };
   }
   /** Forget the release point, so the NEXT pitch samples the hand again at its own release rather
    *  than re-using the last one. Called at the start of every flight. */
   _resetReleasePoint() { this._releaseFrom = null; }
+
+  /** R4 (docs/BASEBALL-3D-BUILD.md section 9): the fire trail - 7 fading discs behind the ball,
+   *  drawn on the 2-D overlay over the last 40% of a STRIKE's flight (`pitchResult.isStrike`, known
+   *  at release for both the CPU's pitch and the human's own - `flyPitch` returns it before either
+   *  flight animation starts). Each disc samples an EARLIER point of the SAME path
+   *  (`_pitchWorldPoint`/`pitchPointAt`, never a second curve), projected through the live camera,
+   *  sized down from the ball's own projected radius (0.9x nearest, 0.3x farthest) and faded
+   *  (alpha 0.6 to 0.1, orange to white), `globalCompositeOperation: 'lighter'` so overlapping
+   *  discs brighten. Drawn AFTER `_drawStaticField()`'s own zone-box redraw in the same frame,
+   *  never clearing it. Skipped entirely under reduced motion (the caller's own gate). */
+  _drawFireTrail(pitchResult, frac) {
+    if (!this.ctx || !this._fieldW || !this.actors || !this.actors.camera) return;
+    const ballPos = this.actors.lastBallPos();
+    if (!ballPos) return;
+    const p0 = projectToCanvas(this.actors.camera, ballPos, this._fieldW, this._fieldH);
+    if (p0.behind) return;
+    const p1 = projectToCanvas(this.actors.camera,
+      { x: ballPos.x + BALL_RADIUS_FT, y: ballPos.y, z: ballPos.z }, this._fieldW, this._fieldH);
+    const baseR = Math.max(2, Math.hypot(p1.x - p0.x, p1.y - p0.y));
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 1; i <= FIRE_TRAIL_DISCS; i++) {
+      const tf = Math.max(0, frac - i * FIRE_TRAIL_STEP_FRAC);
+      const wp = pitchPointAt(pitchResult, tf);
+      const world = this._pitchWorldPoint(wp.x, wp.y + (wp.hump || 0), tf);
+      const proj = projectToCanvas(this.actors.camera, world, this._fieldW, this._fieldH);
+      if (proj.behind) continue;
+      const kk = (i - 1) / Math.max(1, FIRE_TRAIL_DISCS - 1);
+      const r = baseR * (0.9 - 0.6 * kk);
+      const alpha = 0.6 - 0.5 * kk;
+      const col = lerpColor([255, 154, 46], [255, 255, 255], kk);
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, Math.max(1, r), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** The one gate `_animatePitchFlight` and `HumanAgent._throw`'s own flight loop both call before
+   *  drawing the trail - a STRIKE, past FIRE_TRAIL_FROM_FRAC of its flight, and motion allowed. */
+  _maybeDrawFireTrail(pitchResult, frac) {
+    if (!pitchResult.isStrike || frac < FIRE_TRAIL_FROM_FRAC || this._reducedMotion()) return;
+    this._drawFireTrail(pitchResult, frac);
+  }
   _actorBallHide() { if (this.actors) this.actors.setBall(null); }
 
   /** A batted ball's world position at `frac` of its flight: a parabola from the contact point to
@@ -1209,8 +1335,12 @@ class BaseballPlayScreen {
           if (!this.state.unlockedPitches.includes(p)) {
             return `<div class="bb-pitch-tile is-locked" aria-hidden="true">&#128274;</div>`;
           }
+          // R4 (docs/BASEBALL-3D-BUILD.md section 9): "each unlocked pitch tile shows its readout
+          // mph under the code" - the same `pitchMph`/READOUT this pitch itself is thrown at
+          // (`_throw`'s own `flyPitch` call), never a second number.
           return `<button type="button" class="bb-pitch-tile${p === this.state.selectedPitch ? ' is-sel' : ''}" data-pitch="${p}">
             <span class="bb-pitch-name">${t('pitch_' + p)}</span>
+            <span class="bb-pitch-mph">${Math.round(pitchMph({ type: p }, this.league))}</span>
           </button>`;
         }).join('')
       }</div>`;
@@ -1567,20 +1697,25 @@ class BaseballPlayScreen {
       this._paintHud();
     } else if (type === 'count') {
       this._paintHud();
-      this._setLine1(this._verdictWord(payload.verdict, payload.timingWord));
-      this._setLine2(this._pitchReadout());
+      // R4 (docs/BASEBALL-3D-BUILD.md section 9): Line 1/Line 2 (`.bb-lines`, the band's bottom)
+      // go EMPTY on a pitch - the verdict word, the pitch readout and the swing line all moved into
+      // the pop itself, anchored over the batter. `_settleAtBat` still sets Line 1 to the at-bat's
+      // own outcome word (Single/Strikeout/...) below; that is unchanged.
+      this._setLine1(''); this._setLine2('');
       // STAGE 8 row 5: the strip tile (type, mph AND the (bullet)/(square) result mark) is pushed
-      // and painted HERE, at plate crossing - the same moment Line 2 already paints - never at the
-      // pitch DECISION (`decideSwing`'s own header explains why that read as precognition).
+      // and painted HERE, at plate crossing - the same moment the pop's pitch line already reads -
+      // never at the pitch DECISION (`decideSwing`'s own header explains why that read as
+      // precognition).
       this._flushPendingPitch();
+      const opts = { pitchLine: this._pitchReadout(), swingLine: this._swingLine(payload.verdict, payload.timingWord) };
       if (payload.timingWord) {
-        this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+        this._showPop(t('v_' + payload.timingWord), payload.timingWord, opts);
       } else if (payload.verdict === 'ball') {
-        this._showPop(t('v_ball'), 'ball');
+        this._showPop(t('v_ball'), 'ball', opts);
       } else if (payload.verdict === 'strike') {
-        this._showPop(t('v_strike'), 'strike');
+        this._showPop(t('v_strike'), 'strike', opts);
       } else if (payload.verdict === 'foul') {
-        this._showPop(t('v_foul'), 'foul');
+        this._showPop(t('v_foul'), 'foul', opts);
       }
       // R2 (handoff section 5): "the verdict holds for resultMs, then betweenMs passes, then the
       // wind-up runs for windupMs, then the flight." `_settleAtBat` already applies the same
@@ -1657,13 +1792,58 @@ class BaseballPlayScreen {
     }
   }
 
+  /** R4 (docs/BASEBALL-3D-BUILD.md section 9): true whenever the OS/browser asks for reduced
+   *  motion. Read fresh every call (never cached) - the same check `_crossFadeSwap`/
+   *  `_runMarkerHold` already make inline; this is the one place the new R4 effects (fire trail,
+   *  contact burst, HOME RUN confetti/scale) all gate through, so there is exactly one query to
+   *  keep honest rather than four copies of the same media-query string. */
+  _reducedMotion() {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+  }
+
+  /** R4: the batter's own head, in world feet - 6.9 ft above his stand position. There is only
+   *  ONE batter figure (`_syncActors` never moves him between modes, only the CAMERA changes), so
+   *  "the near batter's position in the batting state, the far batter's in the pitching state"
+   *  (the spec's own words) is the same world point either way; what differs is only which camera
+   *  projects it, which `_positionPop` reads off `this.actors.camera` at call time. */
+  _batterHeadWorld() {
+    const flip = this._currentBatterFlip();
+    const boxX = flip ? BATTER_BOX.x : -BATTER_BOX.x;
+    return { x: boxX, y: 6.9, z: BATTER_BOX.z };
+  }
+
+  /** R4: places `.bb-pop` at the batter's head, projected through whichever camera is live right
+   *  now, clamped to stay inside the field band with a 12px margin either side (the spec's own
+   *  number) so the word can never run off the edge of a narrow phone. A behind-camera projection
+   *  (should not happen - both cameras always frame the batter) leaves the element at its last
+   *  position rather than snapping it to (0,0). */
+  _positionPop() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
+    if (!el || !this.actors || !this.actors.camera || !this._fieldW) return;
+    const p = projectToCanvas(this.actors.camera, this._batterHeadWorld(), this._fieldW, this._fieldH);
+    if (p.behind) return;
+    const margin = 12;
+    const x = Math.max(margin, Math.min(this._fieldW - margin, p.x));
+    const y = Math.max(margin, Math.min(this._fieldH - margin, p.y));
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+  }
+
   /** THE BIG WORD. Matt (2026-09-15): *"They should be obvious... They should be big and on the
    *  screen, not in tiny text on a line somewhere."* Early / Late / Perfect on every swing (a miss
    *  included, since which WAY you missed is the whole point), Nice / Hung on your own release.
    *  One reserved element in the field band, empty except for the beat after the event, so nothing
-   *  else moves (fixed geometry). Each word carries its own shape (chevrons for early/late, a star
-   *  for perfect/nice), never color alone. Transform/opacity only; reduced motion holds it still. */
-  _showPop(word, kind) {
+   *  else moves (fixed geometry - only WHERE inside the band it sits moves, via `_positionPop`,
+   *  never its size or the layout around it). Each word carries its own shape (chevrons for
+   *  early/late, a star for perfect/nice), never color alone. Transform/opacity only; reduced
+   *  motion holds it still.
+   *
+   *  R4: moved from a fixed 26%-down spot to a point projected from the world, over the batter's
+   *  head (`_positionPop`), and grew two lines under the word - `opts.pitchLine` (pitch name + mph)
+   *  and `opts.swingLine` (which swing outcome this was), both optional and both cleared when not
+   *  supplied so no stale text from the last pop (e.g. a pickoff's plain Out/Safe) survives under
+   *  it. */
+  _showPop(word, kind, opts) {
     const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
     if (!el) return;
     // STAGE 8 row 3: Ball/Strike carry the SAME shape marks the strip already uses for them (\u25CF/\u25A0,
@@ -1676,32 +1856,44 @@ class BaseballPlayScreen {
     const mark = kind === 'early' ? '\u25C0 ' : (kind === 'perfect' || kind === 'nice') ? '\u2605 '
       : (kind === 'ball' || kind === 'safe') ? '\u25CF ' : (kind === 'strike' || kind === 'out') ? '\u25A0 ' : '';
     const tail = kind === 'late' ? ' \u25B6' : '';
-    el.textContent = mark + word + tail;
+    const wordEl = el.querySelector('[data-role="popword"]');
+    const line1El = el.querySelector('[data-role="popline1"]');
+    const line2El = el.querySelector('[data-role="popline2"]');
+    if (wordEl) wordEl.textContent = mark + word + tail;
+    if (line1El) line1El.textContent = (opts && opts.pitchLine) || '';
+    if (line2El) line2El.textContent = (opts && opts.swingLine) || '';
     el.className = 'bb-pop is-' + kind;
+    this._positionPop();
     if (this._popTimer) clearTimeout(this._popTimer);
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
     el.classList.add('is-on');
-    this._popTimer = setTimeout(() => { el.classList.remove('is-on'); el.textContent = ''; }, RESULT_MS);
+    this._popTimer = setTimeout(() => { el.classList.remove('is-on'); if (wordEl) wordEl.textContent = ''; if (line1El) line1El.textContent = ''; if (line2El) line2El.textContent = ''; }, RESULT_MS);
   }
 
   _setLine1(text) { const el = this.rootEl.querySelector('[data-role="line1"]'); if (el) el.textContent = text; }
   _setLine2(text) { const el = this.rootEl.querySelector('[data-role="line2"]'); if (el) el.textContent = text; }
 
-  /** SPEC.md section 3/9: Line 1's per-pitch verdict, before the outcome is known - a swing
-   *  ALWAYS reads as its own timing quality (Early/Late/Perfect) rather than a generic "Strike",
-   *  except a foul (which keeps its own word regardless of timing); a take reads Ball/Strike
-   *  (called). `game.js`'s 'count'/'atBatEnd' events carry `verdict`/`timingWord` for exactly
-   *  this - see its own header for the classification. */
-  _verdictWord(verdict, timingWord) {
-    if (verdict === 'foul') return t('v_foul');
-    if (timingWord) return t('v_' + timingWord);
-    if (verdict === 'ball') return t('v_ball');
-    return t('v_strike');
+  /** R4 (docs/BASEBALL-3D-BUILD.md section 9): the pop's OWN third line - which swing outcome this
+   *  was, distinct from the big word above it (which stays Ball/Strike/Early/Late/Perfect/Foul,
+   *  `_showPop`'s own vocabulary, unchanged). Shown only "when there was one" (the spec's own
+   *  words): a swing-and-miss always reads `swing_miss` regardless of its timing (the miss is the
+   *  headline fact), a foul reads `swing_foul`, and a swing that connected reads `swing_late`/
+   *  `swing_early` ONLY when its timing missed the perfect window - a perfectly-timed swing (or a
+   *  called ball/strike, which is not a swing at all) gets no second line, same as the reference
+   *  game's own third line only ever appearing on a miss. */
+  _swingLine(verdict, timingWord) {
+    if (verdict === 'miss') return t('swing_miss');
+    if (verdict === 'foul') return t('swing_foul');
+    if (timingWord === 'late') return t('swing_late');
+    if (timingWord === 'early') return t('swing_early');
+    return '';
   }
 
-  /** SPEC.md section 5: Line 2, "pitch name and mph, painted the instant the ball crosses the
-   *  plate" - `state.pendingPitchType` was recorded at release (the 'pitch' event) since the
-   *  resolving events ('count'/'atBatEnd') don't carry the pitch's own type. */
+  /** The pop's own pitch line: "pitch name + mph", painted the instant the ball crosses the plate -
+   *  `state.pendingPitchType` was recorded at release (the 'pitch' event) since the resolving
+   *  events ('count'/'atBatEnd') don't carry the pitch's own type. R4: moved out of Line 2 (which
+   *  is now empty on every pitch) and into the pop itself; the function is unchanged, only its
+   *  caller. */
   _pitchReadout() {
     const type = this.state.pendingPitchType;
     if (!type) return '';
@@ -1720,19 +1912,27 @@ class BaseballPlayScreen {
     if (!inPlay) this.actors.idle('batter');
     let word = t('res_' + outcomeWord(outKind, payload.bases));
     this._setLine1(word);
-    this._setLine2(this._pitchReadout());
-    // STAGE 8 row 5: same push point as the 'count' handler - this is the OTHER moment Line 2
-    // paints (a pitch that concludes the at-bat gets 'atBatEnd', not 'count'), so the strip tile
-    // still lands at crossing either way. `_flushPendingPitch` no-ops if 'count' already flushed it
-    // for this exact pitch (the strikeout/walk double-fire case, its own header).
+    // R4: Line 2 goes empty here too - its old job (the pitch readout) now lives under the pop's
+    // own word (`opts.pitchLine` below), same as 'count'. Line 1 keeps its at-bat outcome word,
+    // unchanged (the spec's own words: "the result word Strikeout/Walk/Single etc. still shows on
+    // Line 1 for at-bat ends, as now").
+    this._setLine2('');
+    // STAGE 8 row 5: same push point as the 'count' handler - this is the OTHER moment the pop's
+    // pitch line paints (a pitch that concludes the at-bat gets 'atBatEnd', not 'count'), so the
+    // strip tile still lands at crossing either way. `_flushPendingPitch` no-ops if 'count' already
+    // flushed it for this exact pitch (the strikeout/walk double-fire case, its own header).
     this._flushPendingPitch();
     // STAGE 8 row 3: only a ball IN PLAY pops from here. game.js emits 'count' BEFORE 'atBatEnd'
     // on the exact same pitch for a strikeout or a walk (that handler's own header), and 'count'
     // already popped that pitch's word (the timing word, or Strike/Ball for a take) - popping it
     // again here restarted the same word's animation a few ms later, a visible flicker. A ball in
-    // play never gets a 'count' event, so its timing word is popped here and nowhere else.
+    // play never gets a 'count' event, so its timing word is popped here and nowhere else. There is
+    // no `verdict` on a ball-in-play payload (game.js never sets one for that branch), so
+    // `_swingLine` only ever reads its timingWord here - exactly right, since a miss/foul can never
+    // put a ball in play.
     if (inPlay && payload.timingWord) {
-      this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+      this._showPop(t('v_' + payload.timingWord), payload.timingWord,
+        { pitchLine: this._pitchReadout(), swingLine: this._swingLine(undefined, payload.timingWord) });
     }
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
     if (inPlay) {
@@ -1756,7 +1956,7 @@ class BaseballPlayScreen {
       // actually carried - `game.js`'s own `_onEngineEvent`/`atBatEnd` payload already carries both
       // (`swingResult.kind`, `outcome.distanceFt`). R3 adds `sprayAngleDeg`, for the chasing
       // fielder to find the fence at the SAME angle on a home run.
-      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt, payload.sprayAngleDeg);
+      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt, payload.sprayAngleDeg, payload.exitVeloMph, payload.launchAngleDeg);
       // Book-keeping (section 7's own paragraph): 0.4 hold + 1.0 flight + 1.0 marker + 2.4 on the
       // plate = 4.8s = RESULT_MS + BETWEEN_MS - computed FROM those two constants, never a literal
       // 4800, so a settings change still flows through. The between beat is skipped at the end of a
@@ -1811,17 +2011,56 @@ class BaseballPlayScreen {
       // How much of the flight is spent on the pitch camera before the cut. The chase then covers
       // the rest, so the two together are one continuous arc, not two.
       const preFrac = CONTACT_HOLD_MS / (CONTACT_HOLD_MS + FLIGHT_MS);
+      // R4: the contact burst - 12 lines radiating from the CONTACT POINT, projected ONCE here
+      // (the point itself does not move; only the ball leaving it does) and drawn every frame for
+      // CONTACT_BURST_MS (< CONTACT_HOLD_MS, so it always finishes inside this hold). Skipped
+      // entirely under reduced motion.
+      if (!this._reducedMotion() && this._fieldW && this.actors.camera) {
+        this._contactBurstStart = performance.now();
+        this._contactBurstPx = projectToCanvas(this.actors.camera, start, this._fieldW, this._fieldH);
+      } else {
+        this._contactBurstStart = null;
+      }
       const t0 = performance.now();
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / CONTACT_HOLD_MS);
         this.actors.setBall(this._battedBallAt(start, land, apexFt, frac * preFrac));
         this._drawStaticField();
+        if (this._contactBurstStart != null) this._drawContactBurst(now - this._contactBurstStart);
         if (frac < 1) this._contactRaf = requestAnimationFrame(step);
         else resolve();
       };
       this._contactRaf = requestAnimationFrame(step);
     });
+  }
+
+  /** R4: the contact burst itself - 12 lines flying out from `_contactBurstPx` (set once, at
+   *  contact), 18 to 40px over CONTACT_BURST_MS, white fading to the hub's gold accent, then gone.
+   *  Drawn on TOP of `_drawStaticField()`'s own zone-box redraw (never cleared by it - this call
+   *  always comes after, in `_contactHold`'s step), `globalCompositeOperation: 'lighter'` so
+   *  overlapping lines brighten rather than muddy. */
+  _drawContactBurst(elapsedMs) {
+    if (!this.ctx || !this._contactBurstPx || this._contactBurstPx.behind || elapsedMs > CONTACT_BURST_MS) return;
+    const frac = Math.max(0, Math.min(1, elapsedMs / CONTACT_BURST_MS));
+    const r0 = CONTACT_BURST_R0 + (CONTACT_BURST_R1 - CONTACT_BURST_R0) * frac;
+    const alpha = 1 - frac;
+    const { x, y } = this._contactBurstPx;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < CONTACT_BURST_LINES; i++) {
+      const ang = (i / CONTACT_BURST_LINES) * Math.PI * 2;
+      const inner = r0 * 0.4;
+      const col = lerpColor([255, 255, 255], [255, 206, 58], frac);
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(ang) * inner, y + Math.sin(ang) * inner);
+      ctx.lineTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** The ball is IN PLAY - R1 cuts to the CHASE CAMERA, which follows the ball over the field, in
@@ -1840,10 +2079,22 @@ class BaseballPlayScreen {
    *  R3: THE CUT is also when the diamond widget appears (`_setDiamondVisible(true)`, hidden again
    *  only by `_returnToPlate()`) and when the nearest fielder starts his own run
    *  (`_animateFielderChase`) - the spec's own words, "starting at the cut". `sprayAngleDeg` rides
-   *  along only for that: finding the fence at the SAME angle on a ball that clears it. */
-  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg) {
+   *  along only for that: finding the fence at the SAME angle on a ball that clears it.
+   *
+   *  R4: on a homer (`kind === 'hr'`), the HOME RUN word triggers HERE, mid-chase, the moment the
+   *  ball's own ground distance from home crosses `fenceFtAt(spray)` (the spec's own rule: "the
+   *  flight's frac where the ball's plan distance crosses the fence"). Ground distance is linear in
+   *  the flight's total completion fraction (`_battedBallAt`'s x/z are a straight lerp from contact
+   *  to the landing point, which sits exactly `distanceFt` from home along `spray` - only the
+   *  height arcs), so `homerCrossFrac = fenceFt / distanceFt` needs no per-frame trig, just a
+   *  threshold on the same `totalFrac` the ball's own position already uses. */
+  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg, exitVeloMph, launchAngleDeg) {
     this._cutawayUp = true;
     this._setDiamondVisible(true);
+    const isHr = kind === 'hr';
+    const homerCrossFrac = (isHr && distanceFt > 0)
+      ? Math.max(0, Math.min(1, fenceFtAt(sprayAngleDeg, this._fenceFt()) / distanceFt)) : null;
+    let homerShown = false;
     return new Promise((resolve) => {
       const from = this._battedFrom || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
       const to = engineToWorld(xFt, yFt, 0);
@@ -1858,10 +2109,15 @@ class BaseballPlayScreen {
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
-        const p = this._battedBallAt(from, to, apexFt, preFrac + (1 - preFrac) * frac);
+        const totalFrac = preFrac + (1 - preFrac) * frac;
+        const p = this._battedBallAt(from, to, apexFt, totalFrac);
         this.actors.setBall(p);
         this.actors.chaseAt(p);
         this._drawOverlayChase(null);
+        if (!homerShown && homerCrossFrac != null && totalFrac >= homerCrossFrac) {
+          homerShown = true;
+          this._triggerHomerun({ distanceFt, exitVeloMph, launchAngleDeg });
+        }
         if (frac < 1) {
           this._rafBall = requestAnimationFrame(step);
         } else {
@@ -2248,6 +2504,10 @@ class BaseballPlayScreen {
     const ctx = this.ctx, w = this._fieldW, h = this._fieldH;
     if (!ctx || !w) return;
     ctx.clearRect(0, 0, w, h);
+    // R4: confetti draws on every frame the chase overlay redraws, marker or not - a homer can
+    // trigger mid-flight (`marker` still null then) and confetti must keep falling on into the
+    // marker hold that follows, right up until `_returnToPlate()` (`_hideHomerun`) cuts it off.
+    if (this._homerActive && !this._reducedMotion()) this._drawConfetti(performance.now() - this._homerConfettiStart);
     if (!marker || !this.actors || !this.actors.camera) return;
     const p = projectToCanvas(this.actors.camera, { x: marker.land.x, y: 0.3, z: marker.land.z }, w, h);
     if (p.behind) return;
@@ -2262,6 +2522,79 @@ class BaseballPlayScreen {
     ctx.strokeText(text, p.x, p.y);
     ctx.fillStyle = marker.kind === 'hr' ? '#111' : '#fff';
     ctx.fillText(text, p.x, p.y);
+    ctx.restore();
+  }
+
+  /** R4 (docs/BASEBALL-3D-BUILD.md section 9): fires once per home run, from
+   *  `_animateBattedBall`'s own step the instant the ball's ground distance crosses the fence.
+   *  Seeds the confetti particles (so every particle's own random fall is fixed for this one homer,
+   *  not re-rolled every frame) and shows the DOM word/strip. */
+  _triggerHomerun(stats) {
+    this._homerConfettiStart = performance.now();
+    this._homerActive = true;
+    if (!this._reducedMotion()) this._initConfetti();
+    this._showHomerun(stats);
+  }
+
+  /** The `HOME RUN` word and its stats strip (`{ft} ft  {mph} mph  {deg}°`) - one DOM element,
+   *  opacity/transform only (fixed geometry: it has a reserved spot in the field band, `.bb-homerun`
+   *  in baseball.css, and never affects layout). Reduced motion still shows both, just without the
+   *  0.6->1.0 scale-in (`.bb-homerun.is-on` under `prefers-reduced-motion: reduce`, baseball.css). */
+  _showHomerun(stats) {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="homerun"]');
+    if (!el) return;
+    const wordEl = el.querySelector('[data-role="hrword"]');
+    const stripEl = el.querySelector('[data-role="hrstrip"]');
+    if (wordEl) wordEl.textContent = t('homerun');
+    if (stripEl) {
+      const ft = Math.round(stats.distanceFt || 0);
+      const mph = Math.round(stats.exitVeloMph || 0);
+      const deg = Math.round(stats.launchAngleDeg || 0);
+      stripEl.textContent = `${t('stats_ft', { n: ft })}   ${t('stats_mph', { n: mph })}   ${deg}°`;
+    }
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    el.classList.add('is-on');
+  }
+
+  /** The homer element's only hide - `_returnToPlate()`'s own call, so it can never outlive the
+   *  cutaway (a homer that somehow never got here would leave the word stuck over the plate view). */
+  _hideHomerun() {
+    this._homerActive = false;
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="homerun"]');
+    if (el) el.classList.remove('is-on');
+  }
+
+  /** CONFETTI_COUNT rectangles, each with a fixed x/delay/colour/spin drawn ONCE per homer so every
+   *  frame's fall is deterministic relative to its own start rather than re-randomised. */
+  _initConfetti() {
+    this._confettiParticles = Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
+      x: Math.random(),
+      delay: Math.random() * (CONFETTI_MS * 0.3),
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      rot: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.006,
+    }));
+  }
+
+  /** 40 falling 6x10px rectangles, from the top of the field band, over CONFETTI_MS - drawn on the
+   *  overlay canvas by `_drawOverlayChase`, every frame `_homerActive` is set. A particle past
+   *  CONFETTI_MS (relative to its own staggered `delay`) is simply skipped, so the fall thins out
+   *  rather than snapping off all at once. */
+  _drawConfetti(elapsedMs) {
+    const ctx = this.ctx, w = this._fieldW, h = this._fieldH;
+    if (!ctx || !w || !this._confettiParticles) return;
+    ctx.save();
+    for (const p of this._confettiParticles) {
+      const t2 = elapsedMs - p.delay;
+      if (t2 < 0 || t2 > CONFETTI_MS) continue;
+      const frac = t2 / CONFETTI_MS;
+      ctx.save();
+      ctx.translate(p.x * w, frac * h);
+      ctx.rotate(p.rot + p.spin * t2);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-3, -5, 6, 10);
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -2320,6 +2653,10 @@ class BaseballPlayScreen {
         this._target = p;
         this._drawStaticField();
         this._actorBallAt(p.x, p.y + (p.hump || 0), frac);
+        // R4: the fire trail, drawn on top of `_drawStaticField()`'s own zone-box redraw this same
+        // frame - never before `_actorBallAt`, or the trail would sample a ball position one frame
+        // stale.
+        this._maybeDrawFireTrail(pitchResult, frac);
         if (frac < 1) {
           this._pitchRaf = requestAnimationFrame(step);
         } else {
@@ -2721,6 +3058,9 @@ class HumanAgent {
       const p = pitchPointAt(preview, frac);
       s._drawStaticField();
       s._actorBallAt(p.x, p.y + (p.hump || 0), frac);
+      // R4: the human's OWN pitch gets the same fire trail as the CPU's - `preview.isStrike` is
+      // known here the same way (`flyPitch` already ran, above).
+      s._maybeDrawFireTrail(preview, frac);
       if (frac < 1) s._flightRaf = requestAnimationFrame(flightStep);
       else finishFlight();
     };
@@ -2853,6 +3193,12 @@ function timingFromRelease(releaseMs, timeToPlateS, F) {
 function pitchMph(pitch, league) {
   const readout = (SETTINGS.READOUT[league] || SETTINGS.READOUT.majors);
   return readout[pitch.type] || readout.fastball;
+}
+
+/** R4: a flat [r,g,b] lerp, shared by the fire trail (orange->white) and the contact burst
+ *  (white->gold) - the two R4 effects that fade a colour over a fraction 0..1. */
+function lerpColor(a, b, t) {
+  return [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t));
 }
 
 /** Presentation-only break SHAPE: what fraction of the pitch's own total break has happened at

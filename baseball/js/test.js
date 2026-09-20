@@ -2456,5 +2456,33 @@ await (async function section30() {
 })();
 
 // ---------------------------------------------------------------------------------------------
+// Section 31 (R4, docs/BASEBALL-3D-BUILD.md section 9): `atBatEnd` carries `launchAngleDeg` on a
+// ball in play - additive, straight off `swingResult.launchAngleDeg`, the same discipline as
+// `exitVeloMph`/`sprayAngleDeg` before it. It is what the HOME RUN stats strip's `{deg}` reads.
+console.log('\n-- 31. R4: atBatEnd carries launchAngleDeg --');
+await (async function section31() {
+  const seed = 5150;
+  const homeTeam = makeTeam('majors', 0, mulberry32(seed));
+  const awayTeam = makeTeam('majors', 1, mulberry32(seed + 1));
+  const g = new Game({
+    home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+    agents: {
+      // A dead-center fastball, swung PERFECT-timed contact/power every time, so this at-bat is
+      // guaranteed to put a ball in play rather than strike out or walk.
+      home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }),
+        decideSwing: async (v) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }),
+        decideSwing: async (v) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }) },
+    },
+  });
+  let payload = null;
+  g.onEvent = async (type, p) => { if (type === 'atBatEnd' && payload == null) payload = p; };
+  await g.playAtBat();
+  ok(!!payload, 'a perfect-timed swing at a centered fastball resolved with an atBatEnd event');
+  ok(payload && typeof payload.launchAngleDeg === 'number',
+    `atBatEnd carries a numeric launchAngleDeg on a ball in play (got ${payload && payload.launchAngleDeg})`);
+})();
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;

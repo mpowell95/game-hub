@@ -4,6 +4,130 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R4: presentation, the reference's feedback layer (2026-09-20)
+
+The fifth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R4"), and the first stage
+that touches nothing under `baseball/js/engine/` except one additive field. Everything else is the
+2-D overlay canvas or DOM over the scene R1-RA already built: the verdict pop moves onto the
+batter's own head, a strike leaves a fire trail and contact leaves a burst, a homer gets its word
+and confetti, the pitch bar carries mph, the mode toggle matches the strip's own tiles, and the
+batting camera's zone box and cursors read 1.6x bigger. **No beat, no engine number and no control
+changed** - the seven bullets, exactly, and the report below says where each one landed.
+
+**The pop is now three stacked elements, not one, and it is positioned, not pinned.** `.bb-pop`
+went from a single text node fixed at `top: 26%` to a flex column (`.bb-pop-word` /
+`.bb-pop-line` x2) whose `left`/`top` `_positionPop()` sets fresh on every `_showPop()` call, from
+the batter's own head projected through whichever camera is live (`_batterHeadWorld()`: the
+batter's box position + 6.9 ft, the same point at both cameras - there is only ONE batter figure,
+`_syncActors` never moves him between modes, only the camera does, so "the near batter" and "the
+far batter" the spec's own words name are the SAME world point). **The whole block is CENTRED on
+that point** (`transform: translate(-50%, -50%)`, the `bb-pop-rise` keyframes rewritten with
+`calc(-50% ± Npx)` so the existing rise/fade still layers on top of it) - not top-anchored to it,
+which is what `test-baseball-device.mjs`'s new `pop-anchor` probe means by "the element's centre".
+
+**The two new lines under the word are NOT the same fact twice.** `opts.pitchLine` is the existing
+`_pitchReadout()` (pitch name + mph), moved out of Line 2 verbatim. `opts.swingLine` is new
+(`_swingLine(verdict, timingWord)`, four new strings `swing_miss`/`swing_late`/`swing_early`/
+`swing_foul`) and reads: a swing-and-miss always as `swing_miss` regardless of its own timing (the
+miss is the headline fact), a foul as `swing_foul`, and a swing that connected as `swing_late`/
+`swing_early` ONLY when its timing missed the perfect window - a perfectly-timed take or contact
+gets no second line, matching the reference's own third line (`docs/BASEBALL-REFERENCE-B9.md`:
+"SWING AND A MISS/LATE SWING/EARLY SWING", never shown on good contact). **`.bb-lines` (Line
+1/Line 2 at the band's bottom) go empty on every pitch now** - their old job is the pop's job - and
+Line 1 keeps ONLY its pre-existing at-bat-outcome word (Single/Strikeout/...); Line 2 is empty
+everywhere now, including at an at-bat's end, since the pitch readout it used to hold lives in the
+pop.
+
+**Facts learned building `_swingLine`, worth knowing before touching the pop again**: `verdict`
+('ball'/'strike'/'miss'/'foul') and `timingWord` ('early'/'late'/'perfect') are not independent -
+`timingErrorMs` (and so `timingWord`) is set whenever a real swing was attempted AT ALL, miss and
+foul included, never only on contact. `_showPop`'s own call-site precedence in the 'count' handler
+(`if (payload.timingWord) {...} else if (verdict==='ball') ... else if 'foul' ...`, pre-existing,
+untouched by R4) checks `timingWord` FIRST, so the `else if (verdict === 'foul')` branch there has
+been dead code since before this stage - a foul or a miss ALWAYS has a timingWord and so ALWAYS
+pops as Early/Late/Perfect, never literally "Foul". That is exactly why the swing line matters: it
+is the only place "Foul" or "a miss" is ever actually said out loud. Not a bug to fix under R4 -
+changing that precedence is a different, undiscussed decision - but worth knowing so a future
+session does not read the dead branch as evidence the main word can say "Foul".
+
+**Fire trail and contact burst are both presentation drawn OVER a `_drawStaticField()`/actor-canvas
+frame that has already been painted this same tick, never a second clear.** The fire trail
+(`_maybeDrawFireTrail`, gated on `pitchResult.isStrike` - known at RELEASE for both the CPU's pitch
+and the human's own, since `flyPitch` returns it before either flight loop starts - and on
+`frac >= 0.6`) samples 7 EARLIER points of the SAME path (`pitchPointAt` + the newly-extracted
+`_pitchWorldPoint`, pulled out of `_actorBallAt` so the trail can ask "where was the ball" without
+ever calling `actors.setBall`) and projects each one fresh; it never re-derives a second curve. The
+contact burst projects the CONTACT POINT exactly once, at the top of `_contactHold` (before the
+ball starts moving off it), and redraws from that fixed pixel every frame for 250ms - a burst whose
+centre re-projected every frame would drift as the camera... doesn't move, but the discipline is
+the same one the trail follows, and it is cheaper besides.
+
+**The HOME RUN trigger is a threshold on the SAME `totalFrac` the chase already animates on, not a
+second physics question.** `_battedBallAt`'s x/z are a straight lerp from contact to the landing
+point (only height arcs), so ground distance from home is exactly `totalFrac * distanceFt` - which
+means `homerCrossFrac = fenceFtAt(sprayAngleDeg, fenceFt) / distanceFt` needs no trig, just a `>=`
+check against the same fraction `_animateBattedBall`'s step already computes. `launchAngleDeg` is
+now additive on `atBatEnd` (`swingResult.launchAngleDeg`, the exact discipline `exitVeloMph` used
+before it - `game.js`'s only change this stage, one field, cited `test.js` section 31). Confetti is
+40 rectangles seeded ONCE per homer (`_initConfetti`, fixed x/delay/colour/spin) and drawn every
+frame `_homerActive` is set from `_drawOverlayChase` (both the mid-flight, marker-less calls and
+the marker-hold calls - the early-return for "no marker" sits BELOW the confetti draw, or a homer
+that triggers mid-chase would never show any). **Nothing times the confetti or the word against the
+marker hold** - `_hideHomerun()` is called from `_returnToPlate()` alone, so a 2s confetti fall or a
+300ms scale-in is simply cut wherever the cutaway already ends; the spec's own words, "no
+engine/timing change... just an animation whose full length may not always be seen".
+
+**`BATTING_ZONE_SCALE` (1.6) reuses the SAME about-centre `k` code `PITCHING_ZONE_MIN_W_FRAC`
+already ran, unified this stage into one `_zoneMap(mode)` body** - both modes now read the TRUE box
+from a new `_zoneBoxPx()` (four world corners through the live camera, nothing else) before
+applying their own `k`. This is the fact that broke two PRE-EXISTING probes and is the one thing in
+this stage worth flagging loudest: `test-baseball-device.mjs`'s `target-marker` probe computed its
+OWN "true" projection independently (bypassing `_zoneMap` on purpose, to check the drawing code
+against a second implementation) - which is exactly what made it start failing (14.2px off, budget
+2px) the moment the batting camera stopped being 1:1. The fix is not to relax the budget; it is to
+have that probe's `project(u,v)` call `inst._zoneMap('batting').toPx(u, v)` instead of
+re-deriving the transform by hand, since the box's own TRUTH is independently covered elsewhere now
+(`zone-world`, and this stage's new `zone-scale`). **Any future probe that hand-derives a batting-
+camera pixel position from `field.js` alone, bypassing `_zoneMap`, will be off by 1.6x. Route it
+through `_zoneMap`/`_zoneBoxPx` instead.**
+
+**r2-cadence also broke, for a related reason, and is fixed the same way.** It measured
+pitch-to-pitch cadence by wrapping `_setLine1` and recording every non-empty text as a verdict
+timestamp - which stopped working the instant Line 1 went empty on every pitch (R4's own change,
+above). Fixed by wrapping `_showPop` instead: it fires at the exact same synchronous point Line 1
+used to update, so the measurement is unchanged, only the hook is. (The old `/retired|end of|fin
+de/i` filter is gone with it - `_showPop` is never called with "Side retired" at all, so there was
+never anything to filter once the hook moved.) **Say this plainly for the next stage: any future
+change to WHERE a verdict is signalled must grep `test-baseball-device.mjs` for `_setLine1`/
+`_showPop` before shipping, or a passing suite will quietly stop measuring anything.**
+
+**The `test-visual.mjs` MOTION probe measures DURATION here, not travel** - `minTravelPx: 0`,
+`selector: '.bb-pop.is-on'`. Every other entry in that table (Battleship's cannonball, Mancala's
+sow, Yahtzee's pointing hand) is about something crossing the screen; the pop is anchored to a
+batter who does not move between pitches, so 0px of travel over >= 600ms is the right assertion,
+not a workaround. `.bb-pop.is-on` (not `.bb-pop`) is what makes the harness's own "element vanished,
+stop tracking" condition fire at the real moment - `.bb-pop` itself is always in the DOM.
+
+**Reduced motion is checked STRUCTURALLY (source-text, not a live pixel probe), in `test-visual.mjs`,
+gated on `GAMES.includes('baseball')`.** All three effects are additive-blend canvas draws
+(`globalCompositeOperation: 'lighter'`) that are ALSO timing-sensitive per-frame animations - the
+same shape `MOTION` exists to sample, not to prove absent, and a pixel diff against a 5-frame
+software-rasterised canvas would be exactly the kind of flaky probe this repo has learned to avoid.
+So instead: the shipped `baseball/js/ui.js` and `baseball/css/baseball.css` are read (never
+re-typed) and regex-matched for the four JS gates and the one CSS override this report already
+named. This is weaker than a runtime check in one sense (it cannot catch a gate that exists but
+reads the wrong condition) and stronger in another (it never flakes on a slow container) - a
+future stage with more time budget could upgrade it to instrumented call-counting (wrap
+`_drawFireTrail`/`_drawContactBurst`/`_drawConfetti`, drive a strike/contact/homer under
+`reducedMotion:'reduce'`, assert zero calls), which was scoped out here only for time, not because
+it would be wrong.
+
+**The stills were captured by calling the real internal methods directly** (`_showPop`,
+`_actorBallAt`, `_maybeDrawFireTrail`, `_contactBurstPx`/`_drawContactBurst`, `_triggerHomerun`),
+the same directness `stills.mjs` (this scratchpad, R1) used for the cutaway - a real pitch/swing/
+contact sequence is 2-4s of real time per shot and nothing about "does this effect draw correctly"
+needs the engine to have actually thrown that exact pitch.
+
 ## RA: steal, bunt, pickoff, and every pitch type in Quick Play (2026-09-20)
 
 The fourth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "RA"). Matt, 2026-09-20:
