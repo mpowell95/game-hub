@@ -4,6 +4,44 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The PLAY probe (2026-09-20)
+
+Baseball was the one game `test-visual.mjs`'s own "NEVER PLAYED BY ANYTHING" list still named -
+every other suite either looks at a screenshot or drives the engine directly; nothing drove the
+real hub-mounted UI with real touch and checked that something only PLAYING could change. `PLAY.
+baseball` in `test-visual.mjs` closes that gap, in the standalone host `checkPlay` already mounts
+every `PLAY` entry through (`document.getElementById('baseball')._bbInstance`, the same seam the
+`MOTION.baseball` probe already used - not `.hub-game`, which only `test-baseball-device.mjs`'s own
+hub-launched probes read).
+
+**Batting, the natural first half (no seam needed - the human is always "away" and away bats top
+of the inning first):** tap Play, wait for the first at-bat offering READY, tap READY with real
+touch, wait for the button to offer SWING, tap it immediately (an honest swing-and-a-miss, not a
+timed one - the point is a real tap reaching the engine, not landing a hit). Asserts: the engine's
+own `count`/`atBatEnd` event actually fired (wrapping `game.onEvent`, the same instrumentation
+`test-baseball-device.mjs`'s `actions-live`/`sides-match` probes use), `_showPop` painted a real
+word, the HUD's `innerHTML` changed (its ball/strike/out dots are an `is-on` CLASS on an empty
+`<span>`, never text - a first draft compared `textContent` and a real strike landing still read as
+"identical" until this was found and fixed to `innerHTML`), and R6's own rule holds at the next
+turn: exactly one figure (the batter) stands in the batter's box, `rb` hidden.
+
+**Pitching, forced through the same dev-only seam `test-baseball-device.mjs`'s `pitch-drag` probe
+uses:** a fresh page reload, `window.__bbForceHalfNext = 'bottom'` set before Play is tapped the
+second time. One real wrinkle found building this: `window.__bbDevForce` (which gates the whole
+`__bbTest`/`__bbForceHalfNext` seam) is read once, at `BaseballPlayScreen`'s own CONSTRUCTION -
+setting it with a plain `page.evaluate()` after the reload lands too late, since the constructor
+has already run by the time that round trip gets a turn. `page.addInitScript()` before the reload
+is the fix - the one thing guaranteed to run before any script the page's own module runs. Once
+pitching is reached: tap PITCH with real touch, then a real drag on `[data-role="pad"]` (raw CDP
+touch events, the same technique `pool`/`battleship`/`skeeball`'s own PLAY probes already use for a
+drag - never a synthetic event on the instance) inside the 700ms wind-up. Asserts the drag actually
+reached the engine's own sampled aim (`inst._lastThrow.aim`, off dead centre), that a verdict event
+fired and a pop painted, and that the game is still mounted and responsive afterward.
+
+Green: `node test-visual.mjs baseball` (20 passed, 0 failed, ~39s). Screenshot at
+`.visual-out/baseball--played.png`. No file under `baseball/` was touched - the probe drives the
+shipped UI exactly as it already ships.
+
 ## R7: camera and presentation (2026-09-20)
 
 The eighth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R7"), against Matt's
