@@ -25,7 +25,7 @@
  * (docs/BUILDING-A-GAME.md Part 0). Reduced motion skips the fade (ui.js's own check), landing the
  * swap instantly at the beat's midpoint instead - the transition here is untouched by it because
  * `.bb-fading` is never applied in that path at all. */
-.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas {
+.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas, .bb-actor-canvas {
   transition: opacity var(--gh-dur-mid, 200ms) ease;
 }
 .bb-fading { opacity: 0; }
@@ -211,17 +211,20 @@
   min-height: calc(28 * var(--bb-fh-unit, 1px));
   position: relative;
   overflow: hidden;
-  background: #3f6b34;
+  /* R1: what shows for the frame or two before the scene's first render - the sky's own horizon
+     over the grass, so the gap reads as the stadium arriving rather than as a green error. */
+  background: linear-gradient(#9cc8ea 0%, #d9ecf8 46%, #3f8f3a 54%, #3f8f3a 100%);
 }
-.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; }
-/* The WebGL actor layer (docs/BASEBALL-3D-BUILD.md section 3.5): the two figures, painted over the
- * 2D field canvas underneath. Never intercepts touch; the field canvas and the controls below it
- * still own input. */
-.bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
+/* R1 (docs/BASEBALL-3D-BUILD.md section 9): the two canvases SWAPPED. The WebGL canvas draws the
+ * whole stadium now, so it is the bottom layer; the 2-D canvas above it carries only the
+ * strike-zone box and the landing-marker label, projected from the world through whichever camera
+ * is live. Before R1 it was the other way round: the 2-D canvas held the painted backdrop and the
+ * WebGL canvas held two figures over it. Neither ever intercepts touch. */
+.bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
+.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
 /* Stage 1 dev-only 3D preview (_open3DCheck, inside the Frames panel): the real backdrop and the
  * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
 .bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
-.bb-dev3d-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .bb-dev3d-err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; text-align: center; padding: 8px; }
 .bb-lines {
   position: absolute;

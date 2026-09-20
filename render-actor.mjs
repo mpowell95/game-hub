@@ -15,8 +15,8 @@
 //
 // --sheet renders several times and lays them in one row; --beside puts the named sprite frames
 // under them, scaled to the same height, so a silhouette comparison is one picture, not several.
-// --role batter|pitcher (default batter) picks which actor is placed and played - the pitcher has
-// no bat attached (_attachBat only runs for 'batter' in actors.js), which matters for Set/Pitch.
+// --role batter|pitcher|catcher|umpire (default batter) picks which actor is placed and played -
+// only the batter has a bat attached (_attachBat in actors.js), which matters for Set/Pitch/Crouch.
 // --side home|away (default home, stage 3) calls setBatter/setPitcher with that side first, for a
 // recolour check; anchor/heightPx are the same square this script already places the actor at.
 // --beside paths are resolved against the dev server root (so a repo-relative path like
@@ -47,7 +47,7 @@ const side = opt('side', 'home');     // stage 3: 'home' or 'away', for a recolo
 const out = opt('out');
 
 if (!modelArg || !out) {
-  console.error('usage: node render-actor.mjs --model <path-or-url> [--clip Idle] [--t 0] [--sheet t1,t2,...] [--beside a.png,b.png] [--height 400] [--facing 0] [--role batter|pitcher] [--side home|away] --out <file.png>');
+  console.error('usage: node render-actor.mjs --model <path-or-url> [--clip Idle] [--t 0] [--sheet t1,t2,...] [--beside a.png,b.png] [--height 400] [--facing 0] [--role batter|pitcher|catcher|umpire] [--side home|away|umpire] --out <file.png>');
   process.exit(2);
 }
 
@@ -118,6 +118,7 @@ await page.evaluate(() => { window.__bbTest = true; });   // preserveDrawingBuff
 
 const frames = await page.evaluate(async ({ modelUrl, clipName, sheetTimes, height, facingDeg, role, side }) => {
   const { Actors } = await import('/baseball/js/actors.js');
+  const THREE = await import('/baseball/js/vendor/three.module.min.js');
   const wrap = document.createElement('div');
   wrap.style.cssText = `position:fixed; left:0; top:0; width:${height + 40}px; height:${height + 40}px; background:transparent;`;
   document.body.appendChild(wrap);
@@ -125,11 +126,26 @@ const frames = await page.evaluate(async ({ modelUrl, clipName, sheetTimes, heig
   const okGL = actors.initGL();
   if (!okGL) throw new Error('initGL() failed - no WebGL context (headless Chromium without --use-gl=swiftshader?)');
   await actors.load(modelUrl);
-  actors.resize(height + 40, height + 40, null);
-  // The setter (setBatter/setPitcher) recolours AND places in one call (stage 3) - always going
-  // through it, never a bare place(), is what lets --side render the away recolour too.
-  const setter = role === 'pitcher' ? actors.setPitcher : actors.setBatter;
-  await setter.call(actors, { side, anchor: { x: (height + 40) / 2, y: height + 20 }, heightPx: height, facingRad: facingDeg * Math.PI / 180 });
+  const side_ = height + 40;
+  actors.resize(side_, side_);
+  // R1 (docs/BASEBALL-3D-BUILD.md section 9): actors.js is world-space now, so this script places
+  // the figure at the world origin, 6 ft tall, and builds its OWN camera framing a 6 ft figure to
+  // exactly `height` pixels of the square canvas. The game's three cameras are compositions of a
+  // whole stadium; this one exists to compare ONE silhouette against a sprite frame, which is a
+  // different job, so it is a plain head-on shot at the same fov.
+  const FIG_FT = 6;
+  const fov = 50;
+  const dist = (FIG_FT * side_) / (height * 2 * Math.tan((fov / 2) * Math.PI / 180));
+  const cam = new THREE.PerspectiveCamera(fov, 1, 0.1, 400);
+  cam.position.set(0, FIG_FT / 2, dist);
+  cam.lookAt(0, FIG_FT / 2, 0);
+  actors.camera = cam;
+  // The setter (setBatter/setPitcher/setCatcher/setUmpire) recolours AND places in one call -
+  // always going through it, never a bare place(), is what lets --side render a recolour too.
+  const setter = role === 'pitcher' ? actors.setPitcher
+    : role === 'catcher' ? actors.setCatcher
+    : role === 'umpire' ? actors.setUmpire : actors.setBatter;
+  await setter.call(actors, { side, pos: { x: 0, y: 0, z: 0 }, heightFt: FIG_FT, facingRad: facingDeg * Math.PI / 180 });
   const out = [];
   for (const t of sheetTimes) {
     actors.play(role, clipName);

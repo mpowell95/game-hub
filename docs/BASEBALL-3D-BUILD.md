@@ -755,3 +755,156 @@ apart through one ball in play on the overhead showing ball, shadow, trail and m
 view 300 ms after a called ball and a called strike with the ball held at its crossing point and
 the big word up; the batting strip before and after a crossing; (d) r2-cadence unchanged at 6.2 s;
 (e) every suite named in section 5 green.
+
+## 9. The clone: rebuilding Baseball around the reference game (2026-09-20)
+
+Matt, with a recording of Baseball 9's tutorial: *"does exactly what I want our game to look like...
+Ours should be as close to a clone of this game as possible."* `docs/BASEBALL-REFERENCE-B9.md` is the
+measured catalogue of that recording and the gap list; read it first. Decisions, all Matt's
+("Yes go", 2026-09-20): **portrait** stays; the field becomes **real three.js geometry** with three
+cameras; the controls become **tap-then-drag-during-wind-up** with **2-D cursors**; **our own art
+and words**, nothing lifted from the recording. Stages R1 to R4, in order, each shipped and
+reviewed on its own.
+
+### R1: the field in 3D, three cameras, actors in world units
+
+**World.** Feet. Home plate's rear point at the origin. `+x` toward first base, `+y` up, `-z`
+toward the mound and centre field (three.js cameras look down `-z`). The engine's batted-ball
+`(xFt, yFt)` (`+y` toward centre) maps to world `(xFt, 0, -yFt)`. The rubber is at `(0, 0.83, -60.5)`
+(mound crown 10 in above the grass, a shallow cone of radius 9 ft); bases at 90 ft along the
+lines; the strike zone is a vertical rectangle in the plane `z = 0.7` (the front of the plate),
+width 1.417 ft (17 in) with the engine's `x` in `[-1, 1]` mapping to `[-0.708, +0.708]` ft, bottom
+1.6 ft, top 3.4 ft. A right-handed batter stands with his feet centred at `(-2.6, 0, 0.4)`, facing
+`+x`; left-handed mirrors `x` (the existing mirror flag). Pitcher's feet on the rubber, facing
+`+z`. Catcher crouched at `(0, 0, 5.5)` facing `-z`, umpire standing at `(0.8, 0, 8)` in dark
+clothes: both are static figures for R1 (a `Crouch` loop for the catcher goes in `poses.js`, one
+keyframe pair, no motion floor; the umpire uses `Idle`). Fielders and runners are R3.
+
+**Geometry (all generated in code, no image files; low triangle counts, one material each).**
+Grass: a plane 900 x 900 ft with a procedural canvas texture (two greens in 12 ft mowing stripes
+parallel to the foul lines' bisector). Infield dirt: the 90 ft diamond's skin as a flat shape
+(base paths 6 ft wide plus the dirt arc of radius 95 ft from the mound, the standard shape),
+brown; grass inside the diamond. Home plate area: a 26 ft dirt circle. Mound: the cone. Foul
+lines, batter's boxes, base bags, the plate: white geometry 0.02 ft above the ground. Fence: a
+wall 8 ft high following each league's five-point `FIELD[league].fenceFt` shape through
+`fenceFtAt` sampled every 2 deg, blue-green with a yellow top rail. Behind it, a stadium ring:
+three stepped tiers of stands 12 ft deep each rising to 40 ft, from foul pole to foul pole plus
+30 deg behind the plate, faced with a procedural crowd texture (random dots of six colours on
+dark grey). Sky: a large half-sphere with a vertical gradient (light horizon to blue zenith), no
+clouds. Two lights: hemisphere plus one directional with no shadow maps (the existing blob
+shadows under the actors stay). Everything sized off the league's `fieldScale` where the engine
+already scales.
+
+**Cameras (perspective, aspect = the field canvas's portrait aspect, fov 50).**
+- `batterCam` (batting): position `(1.5, 5.5, 13)`, look at `(0, 3.2, -30)`. The batter fills
+  about 45% of the frame height, right of centre; the mound sits just above the middle of the
+  frame with the pitcher about 8% tall. Match the reference's composition, not its numbers.
+- `pitcherCam` (pitching): position `(-3.5, 7, -76)`, look at `(0, 2.5, 0)`. The pitcher is about
+  55% tall, left of centre, back to the camera; catcher and batter about 30% at centre-right with
+  the zone box drawn in the world between them.
+- `chaseCam` (ball in play, R3 finishes it; R1 uses it for the batted-ball flight): follows the
+  ball at an offset `(0, 12, +28)` from it, smoothed with a 0.15 lerp per frame, looking at the
+  ball. For R1 the batted ball flies a world parabola (apex from `distanceFt` as stage 8's rule,
+  in feet: `apexFt = min(120, distanceFt * 0.35)` for fly/line/popup, 4 ft for a grounder) to
+  its landing point over `FLIGHT_MS`; the landing marker is a flat disc in the world at the
+  landing point (14 in radius, the stage 8 colours, pulse kept), and the plate view returns
+  after `MARKER_HOLD_MS` exactly as now. Home run: the ball clears the fence and the marker sits
+  where it lands beyond it.
+
+**Actors.** `actors.js` drops the orthographic canvas-px camera and anchors: `place(role, {pos,
+facingRad, heightFt})` puts a figure at a world position with its feet on the ground and scales it
+to `heightFt` (6.0 for every figure; the model's own height units are already measured). Ball:
+`setBall({x, y, z})` in feet, radius 0.36 ft (bigger than a real ball on purpose, the reference
+draws it large). `handWorldPx` becomes `handWorld(role)` returning feet. The pitch flight is a
+straight line from the pitcher's hand at release to the crossing point `(zoneX, zoneY, 0.7)` over
+`timeToPlateS`, with the presentation-only lateral bend (`pitchBendFrac`) applied to `x` and a
+small gravity sag on `y` (0.8 ft over the flight); no pinhole law, no `plateBallPos`. Everything
+the old plate camera measured in px (batter aim shift, ball radius) is gone.
+
+**Rendering.** One WebGL canvas (the existing actor canvas) draws the whole scene; the 2-D field
+canvas keeps only the strike-zone-box and cursor overlays, drawn by projecting world points
+through the active camera (`camera.project`). `_drawStaticField()` becomes `_setCamera(which)` +
+a redraw of the overlay; the paintings, `plateCover`, `projectOverhead`, the homography and the
+sprite-era anchors are deleted with their tests. `plate.webp`, `overhead.webp` and
+`ball-sheet.webp` are deleted from disk and from `sw.js`'s `ASSETS` list (the ONLY edit to
+`sw.js` this stage; `CACHE` is the orchestrator's). Render-rate cap unchanged (`isSoftGL()`).
+
+**Not in R1.** No control changes (the meter, pads and beats stay exactly as v860); no fielders,
+runners, chase logic beyond the offset follow; no verdict re-layout; no bunt/power modes. R1 is
+"the same game, in a real stadium, seen from the reference's cameras".
+
+**Deliverables.** (a) Stills at 393x852 mounted in the hub: batting idle, pitching idle, the
+pitch mid-flight from each camera, a batted ball mid-chase, the landing marker, a home run
+clearing the fence, in light mode. (b) `test-baseball-device.mjs`: the plate-flight and homography
+probes replaced by world-space ones (crossing lands in the zone rectangle; `x = +1/-1` lands on
+the zone's edges; the ball's projected radius grows monotonically toward the batter camera; the
+fence wall passes through each league's five named distances within 1 ft); r2-cadence and the
+tap-tap probe unchanged and green. (c) `test-baseball-actors.mjs`: motion floors re-measured
+through the batter camera's projection at the on-screen sizes R1 produces (report the new px
+numbers; floors scale with the new sizes, ratios kept). (d) The frame time on the container's
+software renderer for each camera, and the scene's triangle count. (e) All suites in section 5
+green, `validate-sw-assets.mjs` clean.
+### R1 record (shipped v861, 2026-09-20)
+
+Where the R1 spec was wrong against the real files, from the stage's report: the batter and the
+zone cannot both be centred (the zone is, the righty lands at 24% across); the pitcher camera's
+55% and 30% figures were incompatible at fov 50 (pitcher 54%, batter 9%); the doc's camera x
+signs put both figures on the wrong side (pitcher camera flipped to x = -2.4); the umpire at
+z = 8 filled the batter camera (he is hidden from that camera; catcher moved to z = 7.8, umpire
+to 10.2); the true zone box is 9 px wide from the pitcher camera (drawn box floored to 13% of
+the canvas, the ball never scaled); `fieldScale` never scaled the diamond in the engine, so the
+diamond is regulation at every league; the apex rule `min(120, 0.35 * distanceFt)` is ~40% too
+high and puts the wall out of the chase frame on a home run (R2 halves the coefficient); the
+chase offset `(0, 12, 28)` drew a 5 px ball (now `(0, 10, 22)` with a ground shadow).
+
+### R2: the controls, re-timed to the reference
+
+Everything below replaces the design doc's section 12 and the meter (stage 8's ring geometry test
+retires with it). The engine's timing window and contact-quality model stay; the zone and the aim
+become 2-D.
+
+**The zone is 2-D.** `pitch.js` gets `y` in `[-1, 1]` beside `x` (the engine's zone unit: 1 = the
+zone's half height, 0.9 ft); a strike is `|x| <= 1 && |y| <= 1`. `swing.js`'s sweet spot is the
+batting cursor's centre `(cx, cy)`; contact quality multiplies the existing timing quality by a
+distance term `max(0, 1 - d / cursorR)` where `d` is the 2-D distance from the crossing point to
+the cursor centre and `cursorR` is the mode's circle radius (contact 0.55, power 0.35 zone units).
+The horizontal offset adds to pull/opposite direction exactly as `aimX` did; the vertical offset
+sets the batted-ball kind (ball above the centre by more than 0.3 = fly or pop, below by more
+than 0.3 = grounder, between = line drive), replacing the sweet-spot centred/off-centre rule.
+The charged swing (hold) is removed; POWER mode replaces it (exit velocity x1.12, circle 0.35).
+CPU agents aim in 2-D with the same scatter model in `y` as in `x`. `sim-baseball.mjs` must run
+and its scoreboard is pasted into `baseball/CLAUDE.md`, passing or not.
+
+**Pitching.** Idle: pitcher on Set, the zone box drawn in the world at the plate through
+`pitcherCam`, the control cursor (a ring with a crosshair) at the last aim. The strip shows the
+pitch types with the readout mph. LEFT button = select pitch type (cycles) or tap a strip tile.
+RIGHT = PITCH. Tap PITCH once: the wind-up plays (`Pitch` clip, mark at `PITCH_DRAG_MS` = 700 ms,
+no hold) and the LEFT button becomes a 2-D pad: drag moves the control cursor over the zone
+(travel x ±1.6, y ±1.4 units; the cursor moves 1:1 with the finger in pad units mapped to zone
+units). For a breaking pitch a second, yellow point cursor sits at cursor + break vector (type x
+pitcher hand, `BREAK_OFFSET[type]` in zone units, replacing STEER_MAX_OFFSET/steer samples) and
+the ball ends there. At the mark the aim is sampled and the pitch scatters from it by the
+existing skill-based `aimScatter` (Nice, hang, the meter and steering after release are all
+deleted from settings, pitch.js, ui.js, ring.js's throw mode, and the design doc). The ball
+flies `fastballMs` x `PITCH_TRAVEL_MULT` (fastball 650 ms). The verdict shows at the crossing.
+
+**Batting.** Idle: batter in stance, the zone square and the mode's circle cursor drawn in the
+world at the plate through `batterCam`. LEFT = change batting mode (CONTACT, POWER; BUNT I and
+II stay locked wells as now). RIGHT = READY. Tap READY: the CPU wind-up plays (`windupMs` 1000)
+and LEFT becomes the 2-D batting pad (drag moves the circle, travel ±1.5 units), RIGHT becomes
+SWING. At release the pitch's TARGET marker (a small ring) appears at the pitch's final `(x, y)`;
+for a breaking pitch it appears at the straight-line spot and slides to the final spot over the
+flight, matching the ball's bend. Swing = one tap; timing is scored as now against the crossing.
+
+**Batted-ball apex.** `_battedApexFt` becomes `min(80, distanceFt * 0.22)` for fly/line/popup, 4 ft for a grounder, so a home run's wall stays in the chase frame.
+
+**Beats (FEEL.ui / FEEL.engine).** `fastballMs` 650, `windupMs` 1000, `resultMs` 1200,
+`betweenMs` 800, `PITCH_DRAG_MS` 700. Pitch tap to next ready about 3.0 s; verdict to next
+release about 3.0 s. r2-cadence's expected sum follows the constants, not a literal.
+
+**Deliverables.** Stills: pitching idle with cursor, mid-drag with a breaking-pitch point cursor,
+batting idle with the contact circle and the power circle, mid-flight with the target marker,
+a breaking pitch's marker sliding. Probes: `pitch-drag` (tap, drag, release: the engine's `x, y`
+equal the cursor within scatter=0 when the pitcher's accuracy is at cap), `target-marker`
+(appears at release, ends at the pitch's `(x, y)`), `two-d-strike` (engine: `y = 1.2` is a ball
+at `x = 0`). Engine tests updated for 2-D; sim-baseball scoreboard pasted.

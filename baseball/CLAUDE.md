@@ -4,6 +4,49 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The clone begins: a real 3D stadium and the reference's cameras (2026-09-20, `game-hub-v860` → `game-hub-v861`)
+
+Matt, with a 3:20 recording of Baseball 9's tutorial: *"does exactly what I want our game to look
+like... Ours should be as close to a clone of this game as possible."* The catalogue of that
+recording, measured, is `docs/BASEBALL-REFERENCE-B9.md`; the stage plan and each stage's spec is
+`docs/BASEBALL-3D-BUILD.md` section 9. Decisions, all Matt's: portrait stays; the field is real
+three.js geometry; the controls become tap-then-drag with 2-D cursors (R2); our own art and words,
+nothing lifted from the recording. Legal line, plainly: mechanics and feel are copied, assets and
+names are not.
+
+**R1 (this entry): the field in 3D, three cameras, actors in world feet.** `field.js` is rewritten:
+the two paintings, the pinhole plate camera, the overhead homography and every px anchor are gone
+(`plate.webp`, `overhead.webp`, `ball-sheet.webp` deleted from disk and from `sw.js`'s `ASSETS`).
+World units are feet, home plate's rear point at the origin, `+x` first base, `+y` up, `-z` toward
+the mound; `engineToWorld(xFt, yFt)` is the one conversion (`z = -yFt`). The stadium is generated
+in code (grass with mowing stripes, the infield skin, mound, lines, bases, an 8 ft fence following
+each league's five-point `fenceFt` shape exactly, three tiers of stands with a procedural crowd,
+a gradient sky): 8.7k triangles, 14 to 19 draw calls, 0.4 ms a frame on the container's software
+renderer. Three perspective cameras in `field.js`'s `CAMERAS`: `batter` at `(0.6, 7.8, 13.1)`
+looking at `(0, 2.3, -30)` (righty 47% tall at 24% across, zone box 51 x 61 px centred), `pitcher`
+at `(-2.4, 6.4, -72)` looking at `(0, 3, 0.7)` (pitcher 54% tall left of centre, the true zone box
+is 9 px wide at that distance so the DRAWN box is floored to 13% of the canvas width, the ball is
+never scaled), `chase` at offset `(0, 10, 22)` from the batted ball with a 0.15 lerp. Actors are
+placed with `place(role, {pos, heightFt, facingRad, mirrored})` at 6 ft; a crouched catcher
+(`CLIPS.Crouch`) at `z = 7.8` and a standing umpire at `z = 10.2` are static figures; the umpire
+is hidden from the batter camera because that camera stands where his head is. The pitch flies
+from the pitcher's real hand to `(x * 0.708, 2.5, 0.7)` ft with a 0.8 ft sag; a batted ball flies
+a world parabola to its landing point under the chase camera, with a world-disc landing marker.
+
+Facts learned, each now a comment at its definition: `ShapeGeometry.rotateX(+90deg)` puts the
+infield BEHIND the plate (it must be -90); this rig's `hipsOffset` +y moves the figure DOWN; a
+mixer `dt` clamped at the render cap's frame time ran every clip at HALF speed whenever a frame
+took longer than 50 ms (the tap-tap probe measured a 1100 ms meter reaching its mark at 2000 ms;
+clamp is 0.25 s now); and the render loop at device pixel ratio 2 starved the page's timers by
+~500 ms over a 6.2 s chain on the software renderer, so the pixel ratio is capped at 1 under
+`isSoftGL()` only. `Actors.warm()` compiles the shaders at mount, so the scene first renders 44 ms
+after Play. Gameplay, controls and every beat are exactly v860's; r2-cadence 6202 to 6259 ms.
+
+Known and deferred to R2/R4: the batted-ball apex rule (`min(120, distanceFt * 0.35)` ft) is
+about 40% too high for a real fly ball and puts the wall out of the chase camera's frame on a
+home run; there are no stands behind the plate yet (the pitcher camera sees grass to the horizon
+behind the batter).
+
 ## The pitch meter, the verdict and the overhead (2026-09-20, `game-hub-v859` → `game-hub-v860`)
 
 Matt, on two recordings of v859: *"It's not obvious if something is a ball or a strike. After

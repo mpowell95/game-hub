@@ -506,4 +506,44 @@ export const CLIPS = {
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 30],
     }, hipsOffset: [0, 0.23, 0] },
   ] },
+  // THE CATCHER (R1, docs/BASEBALL-3D-BUILD.md section 9: "a `Crouch` loop for the catcher goes in
+  // poses.js, one keyframe pair, no motion floor"). He is a static figure behind the plate, 3.9 ft
+  // tall once folded up, drawn at 38 px on the pitching camera and at the very bottom of the
+  // batting one - so this is a squat and a breath, nothing more, and no motion floor is asserted
+  // against it.
+  //
+  // Three facts about the rig that this pose had to be built around, all measured by rendering
+  // rather than assumed. Hip flexion is +x on `upperLeg` (Pitch's follow-through uses -70 to throw
+  // the leg up BEHIND, so forward is the other way) and the knee is +z on `lowerLeg`. And the feet
+  // are placed from the BIND-pose bounding box (actors.js `_place` sets `root.position.y =
+  // -footY`), so folding the legs without dropping the hips leaves the figure hovering - here, 2.4
+  // ft of clear air under it in the first render. `hipsOffset` is what puts the feet back on the
+  // dirt, and the third fact is its SIGN: **+y on this rig's hips moves the figure DOWN**, not up
+  // (the hips bone's own bind orientation), which is why Idle's own weight shift settles LOWER at
+  // its larger y. Measured while fixing the float: 1 unit of hipsOffset is 1.6 ft at the 6 ft
+  // scale, and +0.78 is what landed the shoes on the ground plane.
+  Crouch: { loop: true, mark: null, keys: [
+    { t: 0.00, pose: {
+      spine: [20, 0, 0], head: [-16, 0, 0],
+      upperArmR: [58, 0, 34], lowerArmR: [72, 0, 10], handR: [0, 0, 0],
+      upperArmL: [52, 0, -38], lowerArmL: [64, 0, 10], handL: [0, 0, 0],
+      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
+      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
+    }, hipsOffset: [0, 0.78, 0] },
+    // The breath: the glove hand lifts a touch and the back rounds. Small on purpose.
+    { t: 1.20, pose: {
+      spine: [23, 0, 0], head: [-14, 0, 0],
+      upperArmR: [62, 0, 34], lowerArmR: [70, 0, 10], handR: [0, 0, 0],
+      upperArmL: [56, 0, -38], lowerArmL: [60, 0, 10], handL: [0, 0, 0],
+      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
+      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
+    }, hipsOffset: [0, 0.80, 0] },
+    { t: 2.40, pose: {
+      spine: [20, 0, 0], head: [-16, 0, 0],
+      upperArmR: [58, 0, 34], lowerArmR: [72, 0, 10], handR: [0, 0, 0],
+      upperArmL: [52, 0, -38], lowerArmL: [64, 0, 10], handL: [0, 0, 0],
+      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
+      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
+    }, hipsOffset: [0, 0.78, 0] },
+  ] },
 };

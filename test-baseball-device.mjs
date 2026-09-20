@@ -19,10 +19,11 @@
 //   1. `.bb-hud` sits entirely BELOW `.hub-back`'s real bottom edge (no overlap).
 //   2. Across several simulated at-bats, the verdict line (`[data-role="line1"]`) never overlaps
 //      `.hub-back` either - the exact symptom from the report ("Strikeout" behind the Hub button).
-//   3. The field canvas's own projected geometry is a plausible diamond, not a collapsed sliver:
-//      first base and third base project to screen-x positions meaningfully separated (at least
-//      15% of the canvas width apart from home plate), read straight out of the shipped
-//      `field.js` module rather than by inspecting pixels.
+//   3. R1 (docs/BASEBALL-3D-BUILD.md section 9): the world-space probes that replaced the painted
+//      cameras' own - `zone-world` (the pitch crosses inside the projected strike-zone box, and the
+//      engine's x = +1/-1 land on its edges), `ball-grows` (a constant-speed flight's projected
+//      ball radius rises monotonically), `fence-shape` (the shipped fence ribbon passes through
+//      every league's five named distances within 1 ft).
 //   4. The main swing/pitch button is exactly 101x101 CSS px (the spec size; the report showed it
 //      "far larger").
 //   5. No duplicate back button is drawn inside the game when mounted in the hub (the hub's own
@@ -278,196 +279,134 @@ if (mountErr) {
     ok('verdict line never overlaps the hub back pill across simulated at-bats');
   }
 
-  // The field canvas (BB-3b: now a real picture, baseball/img/plate.webp, fitted via
-  // field.js's `plateCover()`) mounted at a real, usable size - proof the band's own picture had
-  // somewhere honest to draw into, ahead of `PLATE_ANCHORS`' own sanity checks below.
+  // R1: both canvases mounted at a real, usable size, with the WebGL one UNDER the 2-D overlay
+  // (they swapped when the scene became the field - baseball.css's own note).
   const canvasSize = await page.evaluate(() => {
     const c = document.querySelector('.bb-field-canvas');
-    if (!c) return null;
+    const a = document.querySelector('.bb-actor-canvas');
+    if (!c || !a) return null;
     const r = c.getBoundingClientRect();
-    return { width: r.width, height: r.height };
+    return { width: r.width, height: r.height, overlayZ: +getComputedStyle(c).zIndex, sceneZ: +getComputedStyle(a).zIndex };
   });
   if (!canvasSize || canvasSize.width < 8) {
-    fail('plate-camera', 'field canvas has no usable width to check the strike-zone floor against');
+    fail('field-canvas', 'the field canvases are missing or have no usable width');
+  } else if (!(canvasSize.overlayZ > canvasSize.sceneZ)) {
+    fail('field-canvas', `the 2-D overlay (z ${canvasSize.overlayZ}) does not sit above the WebGL scene (z ${canvasSize.sceneZ})`);
   } else {
-    ok(`field canvas mounted at ${canvasSize.width.toFixed(0)}px wide (0.30W strike-zone floor = ${(canvasSize.width * 0.3).toFixed(0)}px)`);
+    ok(`field canvases mounted at ${canvasSize.width.toFixed(0)}px wide, overlay z ${canvasSize.overlayZ} above scene z ${canvasSize.sceneZ}`);
   }
 }
 await ctx.close();
 
-// 3. The field projection itself: first/third base must project meaningfully off-center, not
-// collapse toward a vertical sliver through the middle of the canvas.
+// R1 (docs/BASEBALL-3D-BUILD.md section 9). The three probes below REPLACE the ones that used to
+// sit here - `field-projection` (the 2-D overhead camera's own spread), `plate-camera`
+// (PLATE_ANCHORS' internal sanity) and `plate-flight` (the pinhole curve `plateBallPos` drew), plus
+// check 7's `overhead-homography`. All four measured a PAINTING. There is no painting: the field is
+// real three.js geometry seen through a real perspective camera, so what has to be true is stated
+// in the world and checked through the camera's own projection.
+//
+// All three run in plain node - `field.js` imports three and nothing DOM-shaped at module scope, so
+// the cameras and the fence curve can be built and measured with no browser at all.
 {
   const mod = await import('./baseball/js/field.js');
-  if (typeof mod.project !== 'function') {
-    fail('field-projection', 'field.js does not export project(xFt, yFt, w, h)');
-  } else {
-    const W = 393, H = 400;
-    const home = mod.project(0, 0, W, H);
-    const first = mod.project(63.9, 63.9, W, H);   // roughly first base, 90ft basepath at 45deg
-    const third = mod.project(-63.9, 63.9, W, H);  // roughly third base
-    const spread = Math.abs(first.x - third.x);
-    const minSpread = W * 0.15;
-    if (spread < minSpread) {
-      fail('field-projection', `first/third base only ${spread.toFixed(1)}px apart on a ${W}px canvas (need >= ${minSpread.toFixed(1)}px) - looks like a collapsed sliver`);
-    } else {
-      ok(`field projects a real spread: first/third ${spread.toFixed(1)}px apart on a ${W}px canvas`);
-    }
-    if (Math.abs(home.x - W / 2) > W * 0.05) {
-      fail('field-projection', `home plate x=${home.x.toFixed(1)} is not centered on a ${W}px canvas`);
-    } else {
-      ok('home plate centered horizontally');
-    }
-  }
-}
+  const SET = await import('./baseball/js/engine/settings.js');
+  const W = 393, H = 429;   // the real field band on a 393x852 phone, measured in the hub
+  const cams = mod.makeCameras(W / H);
 
-// 4. The PLATE camera (rebuilt again 2026-09-14, BB-3b art pass: a real picture,
-// `baseball/img/plate.webp`, replaces the procedural pinhole projection the prior round built).
-// There is no more per-point projection to probe scale/foreshortening on - the picture supplies
-// that - so this checks the thing that replaced it: `PLATE_ANCHORS`, measured off the picture, are
-// internally sane (the plate sits below the mound, both land inside the canvas) and the rendered
-// strike zone honors its own 0.30W floor (spec section 6) rather than shrinking to a sliver on a
-// narrow phone.
-{
-  const mod = await import('./baseball/js/field.js');
-  if (!mod.PLATE_ANCHORS) {
-    fail('plate-camera', 'field.js does not export PLATE_ANCHORS');
-  } else {
-    const a = mod.PLATE_ANCHORS;
-    const within01 = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
-    if (!within01(a.plate) || !within01(a.mound)) {
-      fail('plate-camera', `PLATE_ANCHORS.plate/mound fall outside the picture's own 0..1 frame (plate=${JSON.stringify(a.plate)}, mound=${JSON.stringify(a.mound)})`);
+  // zone-world: the pitch crosses at the zone's own centre, and the engine's x = +1 / -1 land on
+  // the zone's right and left edges. Same invariant the 2-D `plate-flight` probe pinned (Matt,
+  // 2026-09-15: "contact only happened once the ball was almost OUT of the strike zone"), now
+  // stated where it belongs - in the world, through the batting camera's own projection.
+  {
+    const z = mod.zoneRectFt();
+    const P = (x, y) => mod.projectToCanvas(cams.batter, { x, y, z: z.z }, W, H);
+    const corners = mod.zoneCornersFt().map((c) => mod.projectToCanvas(cams.batter, c, W, H));
+    const left = Math.min(...corners.map((c) => c.x)), right = Math.max(...corners.map((c) => c.x));
+    const top = Math.min(...corners.map((c) => c.y)), bottom = Math.max(...corners.map((c) => c.y));
+    const mid = P(0, z.cy);
+    if (mid.x <= left || mid.x >= right || mid.y <= top || mid.y >= bottom) {
+      fail('zone-world', `x=0 crosses at (${mid.x.toFixed(1)}, ${mid.y.toFixed(1)}), outside the projected zone box ${left.toFixed(1)}..${right.toFixed(1)} x ${top.toFixed(1)}..${bottom.toFixed(1)}`);
     } else {
-      ok('PLATE_ANCHORS.plate and .mound both land inside the picture');
+      ok(`zone-world: x=0 crosses inside the projected zone box (${mid.x.toFixed(1)}, ${mid.y.toFixed(1)}) in ${left.toFixed(1)}..${right.toFixed(1)} x ${top.toFixed(1)}..${bottom.toFixed(1)}, box ${(right - left).toFixed(1)}x${(bottom - top).toFixed(1)} px`);
     }
-    if (a.plate.y <= a.mound.y) {
-      fail('plate-camera', `plate anchor (y=${a.plate.y}) is not below the mound anchor (y=${a.mound.y}) - the plate should read nearer the bottom of the frame`);
+    const rightEdge = P(mod.ZONE.halfW, z.cy), leftEdge = P(-mod.ZONE.halfW, z.cy);
+    const dr = Math.abs(rightEdge.x - right), dl = Math.abs(leftEdge.x - left);
+    if (dr > 2 || dl > 2) {
+      fail('zone-world', `x=+1/-1 land ${dr.toFixed(2)}/${dl.toFixed(2)} px off the zone's right/left edges (budget 2 px)`);
     } else {
-      ok(`plate anchor sits below the mound anchor (plate.y=${a.plate.y}, mound.y=${a.mound.y})`);
+      ok(`zone-world: x=+1 and x=-1 land on the zone's right/left edges (${dr.toFixed(2)}/${dl.toFixed(2)} px off, budget 2)`);
     }
   }
-  // [KNOWN-BUG PROBE] The pitch's flight, as pure geometry (Matt, 2026-09-15, three reports in one
-  // message): (1) the ball spent ~half its flight crawling through the strike zone, because the old
-  // drawPlateBall lerped screen position LINEARLY in depth; (2) the flight ENDED on the ground at
-  // the plate, below the zone, so "swing when it is in the middle of the zone" was always Early and
-  // contact only came once the ball was "almost OUT of the strike zone"; (3) the lateral offset was
-  // multiplied by depthFrac, so EVERY pitch crossed dead center on screen - a pitch's x was never
-  // visible where it mattered. `plateBallPos` is the fix; this pins all three against a synthetic
-  // cover (the real 393x380 fit of the 1200x1585 picture), no browser needed.
-  if (typeof mod.plateBallPos !== 'function' || typeof mod.zoneRect !== 'function') {
-    fail('plate-flight', 'field.js does not export plateBallPos/zoneRect');
-  } else {
-    const W = 393, H = 380;
-    const cover = { drawW: 393, drawH: 519.1, offsetX: 0, offsetY: H - 519.1, scale: 0.3275 };
-    const z = mod.zoneRect(W, cover);
-    const inZone = (p) => p.x >= z.left && p.x <= z.left + z.w && p.y >= z.top && p.y <= z.top + z.h;
-    const end = mod.plateBallPos(W, H, cover, 0, 0);
-    if (Math.abs(end.y - z.cy) > 0.5 || Math.abs(end.x - z.cx) > 0.5) {
-      fail('plate-flight', `crossing (yFt=0) draws at (${end.x.toFixed(1)}, ${end.y.toFixed(1)}), not the zone center (${z.cx.toFixed(1)}, ${z.cy.toFixed(1)})`);
-    } else {
-      ok('the pitch crosses at the strike zone\'s own center, not on the ground at the plate');
-    }
-    let inside = 0; const N = 1000; let mono = true; let prevR = 0;
+
+  // ball-grows: a ball flown at constant speed from the pitcher's release point to the crossing
+  // point must grow, monotonically, on the batting camera. The 2-D camera had to write a pinhole
+  // law out by hand to get this (`PLATE_CAMERA_FT`); a real camera does it for free, and this is
+  // the check that it actually does - a camera pointed the wrong way, or a flight that ran away
+  // from the plate instead of toward it, would show a ball that shrinks.
+  {
+    const z = mod.zoneRectFt();
+    const from = { x: -1.2, y: 6.0, z: mod.RUBBER.z + 4 };   // about where a release lands
+    const to = { x: 0, y: z.cy, z: z.z };
+    const N = 200;
+    let prev = -1, mono = true, first = 0, last = 0;
     for (let i = 0; i <= N; i++) {
-      const p = mod.plateBallPos(W, H, cover, 0, 60.5 * (1 - i / N));
-      if (inZone(p)) inside++;
-      if (p.r < prevR) mono = false;
-      prevR = p.r;
+      const f = i / N;
+      const c = { x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f, z: from.z + (to.z - from.z) * f };
+      // The projected RADIUS: the centre, and a point one ball-radius to the camera's right at the
+      // same depth. A sphere's projected size is what a player reads as "it is coming".
+      const a = mod.projectToCanvas(cams.batter, c, W, H);
+      const b = mod.projectToCanvas(cams.batter, { x: c.x + mod.BALL_RADIUS_FT, y: c.y, z: c.z }, W, H);
+      const r = Math.abs(b.x - a.x);
+      if (i === 0) first = r;
+      if (i === N) last = r;
+      if (r < prev - 1e-9) mono = false;
+      prev = r;
     }
-    const frac = inside / (N + 1);
-    if (frac > 0.15) {
-      fail('plate-flight', `ball center is inside the zone for ${(frac * 100).toFixed(1)}% of a constant-speed flight (need <= 15%) - the linear crawl is back`);
-    } else {
-      ok(`ball is inside the zone for the last ${(frac * 100).toFixed(1)}% of the flight (perspective, not a linear crawl)`);
-    }
-    if (!mono) fail('plate-flight', 'ball radius does not grow monotonically toward the plate');
-    const right = mod.plateBallPos(W, H, cover, 8.5, 0), left = mod.plateBallPos(W, H, cover, -8.5, 0);
-    if (Math.abs(right.x - (z.left + z.w)) > 0.5 || Math.abs(left.x - z.left) > 0.5) {
-      fail('plate-flight', `x=+1/-1 cross at ${right.x.toFixed(1)}/${left.x.toFixed(1)}, not the zone edges ${(z.left + z.w).toFixed(1)}/${z.left.toFixed(1)}`);
-    } else {
-      ok('x=+1 / x=-1 cross at the zone\'s right / left edge (the pitch location is visible at the plate)');
-    }
+    if (!mono) fail('ball-grows', 'the projected ball radius is not monotonically increasing over the flight');
+    else ok(`ball-grows: the projected ball radius rises monotonically, ${first.toFixed(2)} px at release to ${last.toFixed(2)} px at the crossing (${(last / first).toFixed(1)}x)`);
   }
-  if (typeof mod.drawPlateView !== 'function' || typeof mod.drawPlateBall !== 'function') {
-    fail('plate-camera', 'field.js does not export drawPlateView/drawPlateBall');
-  } else {
-    ok('drawPlateView and drawPlateBall are exported');
-  }
-  if (mod.PLATE_ANCHORS) {
-    const a = mod.PLATE_ANCHORS;
-    if (a.nearBoxLeft.x < a.plate.x && a.plate.x < a.nearBoxRight.x) {
-      ok('nearBoxLeft sits left of the plate, nearBoxRight sits right of it (anchor fractions)');
-    } else {
-      fail('plate-camera', `nearBoxLeft/nearBoxRight do not straddle the plate anchor (left=${a.nearBoxLeft.x}, plate=${a.plate.x}, right=${a.nearBoxRight.x})`);
+
+  // fence-shape: the wall that ships has to be the wall the engine scored the home run against. It
+  // is built from `outcomes.js`'s own `fenceFtAt`, so this samples the SHIPPED ribbon (the exact
+  // points `buildStadium` extrudes) at the five named spray angles and measures the distance from
+  // home plate. Within 1 ft, per R1's own budget, which is the sampling step's own error.
+  {
+    const NAMED = [['left', -45], ['leftCenter', -22.5], ['center', 0], ['rightCenter', 22.5], ['right', 45]];
+    let worst = 0, worstWhere = '';
+    for (const league of SET.LEAGUES) {
+      const fenceFt = SET.FIELD[league].fenceFt;
+      const pts = mod.fencePoints(fenceFt, 2);
+      for (const [name, deg] of NAMED) {
+        // The ribbon's own wall AT this angle. The samples are every 2 degrees, so a named angle
+        // that falls between two of them (leftCenter and rightCenter do, at -22.5 and +22.5) is
+        // read by interpolating along the SEGMENT the wall actually is there - taking the nearest
+        // sample instead measured a point up to a degree away and read 1.56 ft out at college
+        // centre, which is a sampling error being reported as a geometry error.
+        const ang = (p) => (Math.atan2(p.x, -p.z) * 180) / Math.PI;
+        let a = pts[0], b = pts[1];
+        for (let i = 0; i + 1 < pts.length; i++) {
+          if (ang(pts[i]) <= deg && deg <= ang(pts[i + 1])) { a = pts[i]; b = pts[i + 1]; break; }
+        }
+        const span = ang(b) - ang(a);
+        const t = span === 0 ? 0 : (deg - ang(a)) / span;
+        const hit = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+        const r = Math.hypot(hit.x, hit.z);
+        const err = Math.abs(r - fenceFt[name]);
+        if (err > worst) { worst = err; worstWhere = `${league} ${name}`; }
+      }
     }
+    if (worst > 1) fail('fence-shape', `worst named-distance error ${worst.toFixed(2)} ft at ${worstWhere} (budget 1 ft)`);
+    else ok(`fence-shape: every league's five named fence distances are within ${worst.toFixed(2)} ft of FIELD[league].fenceFt (worst: ${worstWhere}, budget 1 ft)`);
   }
 }
 
-// 5/6 (removed 2026-09-19, docs/BASEBALL-3D-BUILD.md section 3.10, stage 5): batter-hand and
-// pitcher-frame checks against `field.js`'s `drawFrameCheck`/`drawPlateView`'s sprite-drawing
-// branch, both deleted along with the rest of the sprite path this stage - there is nothing left
-// for either check to render. The invariants they pinned (a left-handed batter mirrors to the
-// opposite box, the pitcher's release hand is where the ball leaves from) now live in the 3D
-// figures instead: `test-baseball-actors.mjs`'s Chromium half checks the actor canvas paints a
-// real, non-transparent figure and that Set/Pitch/home/away reads differ pixel for pixel; the
-// hand/box mirroring itself is `actors.js`'s `setBatter`/`setPitcher` (`mirrored`, a negative
-// pivot scale) driven by the same `bats`/`throws` flip rules `_currentBatterFlip`/
-// `_currentPitcherFlip` always supplied, unchanged by this stage - proven by eye against the
-// sprite reference frames in stages 2/3 (`render-actor.mjs --beside`), not re-proven here.
-
-// 7. The overhead camera is now `overhead.webp` (BB-3b commit 5), a picture, not the old
-// procedural camera - check 3 above already proves the FALLBACK camera's own geometry is sane
-// (it runs before the picture has had time to load); this proves the PICTURE camera's own
-// homography is, once `overhead.webp` has actually loaded: the four bases and the mound project
-// to a topologically sane diamond (first right of home, third left of home, second and the mound
-// both above home and in that order) - not an exact-pixel match (that would just restate the
-// measured matrix back at itself), but the shape a homography bug (a transposed row, a stale
-// coefficient) would visibly break.
-{
-  const p4 = await (await browser.newContext({ viewport: { width: 393, height: 852 } })).newPage();
-  await p4.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-  const result = await p4.evaluate(async () => {
-    const mod = await import('/baseball/js/field.js');
-    mod.preloadPlateImages();
-    await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = resolve;
-      img.onerror = () => reject(new Error('overhead.webp failed to load'));
-      img.src = '/baseball/img/overhead.webp';
-    });
-    // Give field.js's own internal cache a moment to pick up the now-loaded image too.
-    await new Promise((r) => setTimeout(r, 50));
-    const w = 393, h = 500;
-    const home = mod.project(0, 0, w, h);
-    const first = mod.project(63.64, 63.64, w, h);
-    const third = mod.project(-63.64, 63.64, w, h);
-    const second = mod.project(0, 127.28, w, h);
-    const mound = mod.project(0, 60.5, w, h);
-    return { home, first, third, second, mound };
-  });
-  await p4.close();
-  const { home, first, third, second, mound } = result;
-  const checks = [
-    ['first base sits right of home', first.x > home.x],
-    ['third base sits left of home', third.x < home.x],
-    ['second base sits above home (further into the outfield)', second.y < home.y],
-    ['the mound sits above home', mound.y < home.y],
-    ['the mound sits below second (between home and second)', mound.y > second.y],
-  ];
-  const allPass = checks.every(([, pass]) => pass);
-  if (allPass) {
-    ok(`overhead picture homography: a sane diamond (home ${JSON.stringify(home)}, first ${JSON.stringify(first)}, second ${JSON.stringify(second)}, third ${JSON.stringify(third)}, mound ${JSON.stringify(mound)})`);
-  } else {
-    for (const [label, pass] of checks) if (!pass) fail('overhead-homography', label);
-  }
-}
-
-// 8. STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 7): THE PRELOAD. Matt's report: "~1.1s of
-// flat green after Play, and the first wind-up starts under it." `preloadPlateImages()` moved to
-// Baseball's mount and `_stepWindup` now awaits `plateReady()` (capped 3s) before the FIRST
-// wind-up of a game, painting the stadium the instant it resolves. A FRESH mount (own context), not
-// the page already deep into r2-cadence's own drive above, so this actually catches the very first
-// Play tap of a game.
+// 8. FIRST-FRAME (was `preload`; R1, docs/BASEBALL-3D-BUILD.md section 9). Matt's report was "~1.1s
+// of flat green after Play, and the first wind-up starts under it", and stage 7 fixed it by waiting
+// for `plate.webp` to DECODE. There is no picture any more, so the thing to wait for is the SCENE:
+// `_stepWindup` awaits `actors.firstFrame()`, which resolves inside the render loop the moment
+// `renderer.render` has actually run once. Same assertion, same 300 ms budget against the Play tap,
+// against the thing that replaced the picture. A FRESH mount (own context), not the page already
+// deep into r2-cadence's own drive above, so this catches the very first Play tap of a game.
 //
 // Timed by wrapping `_drawStaticField`/`actors.play` themselves (each records its own
 // `performance.now()` INSIDE the call, synchronously) rather than by polling the canvas from
@@ -479,16 +418,18 @@ await ctx.close();
 // its next tick happens to land - telling nothing real about which one actually ran first. An
 // in-line timestamp taken at the moment each call actually executes has no such gap: it is exactly
 // as accurate whether the main thread was free or busy around it, since it runs synchronously,
-// inline, either way. A single canvas sky-pixel sample AFTER both signals is taken as corroboration
-// that a real picture (not the fallback fill) is what actually painted - measured directly against
-// the real shipped images beforehand (a one-off script, not part of this file): a cover-fit
-// `plate.webp` reads ~52% "sky" by this test in its top quarter, `overhead.webp` ~0.007%, the
-// loading-fallback flat fill (`#2f4a22`) 0% - so a `> 10%` frac cleanly tells "the stadium is
-// painted" apart from "still the fallback fill".
+// inline, either way. A single sky-pixel sample AFTER both signals corroborates that the
+// stadium is really on screen: it reads the WebGL canvas's own top quarter, which the sky sphere
+// fills, so a frac above 10% separates "the scene rendered" from "an empty canvas over the CSS
+// gradient". It is read by drawing that canvas into a scratch 2-D one, because a WebGL canvas has
+// no 2-D context to ask for pixels.
 {
   const p8 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page8 = await p8.newPage();
   await page8.addInitScript(() => {
+    // R1: the sky-pixel corroboration reads the WebGL canvas back, which needs
+    // preserveDrawingBuffer - the same seam actors.js already gates on (`__bbTest`).
+    window.__bbTest = true;
     localStorage.setItem('gamehub.profile', JSON.stringify({
       name: 'Preload Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
     }));
@@ -496,18 +437,20 @@ await ctx.close();
   });
   const mountErr8 = await mountInHub(page8);
   if (mountErr8) {
-    fail('preload-flat-green', `mount failed: ${mountErr8}`);
+    fail('first-frame', `mount failed: ${mountErr8}`);
   } else {
     const result = await page8.evaluate(async () => {
       const root = document.querySelector('.hub-game');
       const inst = root._bbInstance;
-      const fieldMod = await import('/baseball/js/field.js');
-      const canvas = () => document.querySelector('.bb-field-canvas');
+      const canvas = () => document.querySelector('.bb-actor-canvas');
       const skyFrac = () => {
         const c = canvas();
         if (!c || !c.width || !c.height) return 0;
-        const ctx2 = c.getContext('2d');
         const w = c.width, bandH = Math.max(1, Math.round(c.height * 0.25));
+        const scratch = document.createElement('canvas');
+        scratch.width = w; scratch.height = bandH;
+        const ctx2 = scratch.getContext('2d');
+        try { ctx2.drawImage(c, 0, 0, w, bandH, 0, 0, w, bandH); } catch { return 0; }
         const d = ctx2.getImageData(0, 0, w, bandH).data;
         let sky = 0, n = 0;
         for (let i = 0; i < d.length; i += 4) {
@@ -517,32 +460,36 @@ await ctx.close();
         }
         return n ? sky / n : 0;
       };
-      const origDraw = inst._drawStaticField.bind(inst);
+      // "Painted" is the scene's own first rendered frame - the exact signal `_stepWindup` waits
+      // on, read from the render loop's own resolve rather than by polling pixels from outside.
       let firstPaintAt = null;
-      inst._drawStaticField = (...a) => {
-        // "Painted" means plateCover() actually resolves (the real picture, not the fallback fill)
-        // AND the canvas has real dimensions - the same two facts _drawStaticField's own body
-        // checks before it draws anything.
-        if (firstPaintAt == null && inst._fieldW && fieldMod.plateCover(inst._fieldW, inst._fieldH)) {
-          firstPaintAt = performance.now();
-        }
-        return origDraw(...a);
-      };
+      inst.actors.firstFrame().then(() => { if (firstPaintAt == null) firstPaintAt = performance.now(); });
       const origPlay = inst.actors.play.bind(inst.actors);
       let firstPitchAt = null;
       inst.actors.play = (role, name, opts) => {
         if (firstPitchAt == null && role === 'pitcher' && name === 'Pitch') firstPitchAt = performance.now();
         return origPlay(role, name, opts);
       };
+      // Wait for Play to be ACTIONABLE before starting the clock. Until the model has loaded the
+      // button reads `load_model` and carries aria-disabled, and its own handler awaits the load
+      // promise anyway - so a click before that measures the model fetch, not the field appearing,
+      // and no player can meaningfully make it. R1 matters here because the stadium's shaders are
+      // compiled at MOUNT (`Actors.warm()`, 227 ms on this container's software rasteriser) and
+      // that work sits inside the same load promise: measured from an early click the gap is about
+      // 630 ms, measured from the moment Play actually offers itself it is about 90 ms.
       const btn = root.querySelector('.bb-play-btn');
+      const settleDeadline = performance.now() + 15000;
+      while (!inst._actorsSettled && performance.now() < settleDeadline) await new Promise((r) => setTimeout(r, 30));
       const clickAt = performance.now();
       if (btn) btn.click();
       const deadline = clickAt + 3000;
       while (performance.now() < deadline && (firstPaintAt == null || firstPitchAt == null)) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      // One settle beat past both signals, then a single real pixel sample as corroboration.
+      // One settle beat past both signals, then a single real pixel sample as corroboration. The
+      // render is forced first so the read-back cannot land on a frame the compositor already took.
       await new Promise((r) => setTimeout(r, 200));
+      inst.actors.renderer.render(inst.actors.scene, inst.actors.camera);
       return {
         flatGreenMs: firstPaintAt != null ? firstPaintAt - clickAt : null,
         firstPitchAtMs: firstPitchAt != null ? firstPitchAt - clickAt : null,
@@ -550,17 +497,17 @@ await ctx.close();
       };
     });
     if (result.flatGreenMs == null) {
-      fail('preload-flat-green', 'the stadium picture never actually painted (plateCover() never resolved) within 3s of Play');
+      fail('first-frame', 'the scene never rendered a frame (actors.firstFrame() never resolved) within 3s of Play');
     } else if (result.firstPitchAtMs == null) {
-      fail('preload-flat-green', "the first actors.play('pitcher','Pitch') call was never observed within 3s of Play");
+      fail('first-frame', "the first actors.play('pitcher','Pitch') call was never observed within 3s of Play");
     } else if (result.finalSkyFrac <= 0.10) {
-      fail('preload-flat-green', `sky frac ${result.finalSkyFrac.toFixed(3)} after both signals - the canvas does not actually show the painted stadium`);
+      fail('first-frame', `sky frac ${result.finalSkyFrac.toFixed(3)} after both signals - the canvas does not actually show the stadium`);
     } else if (result.flatGreenMs >= result.firstPitchAtMs) {
-      fail('preload-flat-green', `stadium painted at ${result.flatGreenMs.toFixed(0)}ms, AFTER the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms - the wind-up started under the flat fill`);
+      fail('first-frame', `scene first rendered at ${result.flatGreenMs.toFixed(0)}ms, AFTER the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms - the wind-up started under an empty field`);
     } else if (result.flatGreenMs >= 300) {
-      fail('preload-flat-green', `flat-green duration ${result.flatGreenMs.toFixed(0)}ms >= 300ms budget (was 1050ms before the fix)`);
+      fail('first-frame', `first rendered frame ${result.flatGreenMs.toFixed(0)}ms after Play >= 300ms budget (was 1050ms before stage 7's own fix)`);
     } else {
-      ok(`stadium painted ${result.flatGreenMs.toFixed(0)}ms after Play, before the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms (budget 300ms, was 1050ms; sky frac ${result.finalSkyFrac.toFixed(3)})`);
+      ok(`scene first rendered ${result.flatGreenMs.toFixed(0)}ms after Play, before the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms (budget 300ms; sky frac ${result.finalSkyFrac.toFixed(3)})`);
     }
   }
   await p8.close();
@@ -683,17 +630,20 @@ await ctx.close();
           // Past the top of the meter, the pitcher's hand should be HELD - two samples 300ms apart
           // read the same world position.
           await page9.waitForTimeout(Math.max(0, 1500 - 200));
-          const posA = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorldPx('pitcher'));
+          // R1: `handWorldPx` became `handWorld` and answers in FEET, so the budget is a real
+          // distance now - 0.01 ft is an eighth of an inch, well under anything a paused mixer
+          // could drift and far inside the 0.5 px this used to allow at the old on-screen scale.
+          const posA = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorld('pitcher'));
           await page9.waitForTimeout(300);
-          const posB = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorldPx('pitcher'));
+          const posB = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorld('pitcher'));
           if (!posA || !posB) {
-            fail('tap-tap-pitch', "handWorldPx('pitcher') unavailable to check the hold");
+            fail('tap-tap-pitch', "handWorld('pitcher') unavailable to check the hold");
           } else {
-            const moved = Math.hypot(posB.x - posA.x, posB.y - posA.y);
-            if (moved > 0.5) {
-              fail('tap-tap-pitch', `pitcher's hand moved ${moved.toFixed(2)}px over 300ms while it should be held at the mark (${JSON.stringify(posA)} -> ${JSON.stringify(posB)})`);
+            const moved = Math.hypot(posB.x - posA.x, posB.y - posA.y, posB.z - posA.z);
+            if (moved > 0.01) {
+              fail('tap-tap-pitch', `pitcher's hand moved ${moved.toFixed(4)} ft over 300ms while it should be held at the mark (${JSON.stringify(posA)} -> ${JSON.stringify(posB)})`);
             } else {
-              ok(`pitcher's hand held stationary at the mark across 300ms (moved ${moved.toFixed(3)}px)`);
+              ok(`pitcher's hand held stationary at the mark across 300ms (moved ${moved.toFixed(5)} ft)`);
             }
           }
 

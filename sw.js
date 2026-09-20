@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v860';
+const CACHE = 'game-hub-v861';
 
 const ASSETS = [
   './',
@@ -386,9 +386,6 @@ const ASSETS = [
   './baseball/models/skins/criminalMaleA.png',
   './baseball/models/skins/skaterFemaleA.png',
   './baseball/models/skins/cyborgFemaleA.png',
-  './baseball/img/plate.webp',
-  './baseball/img/overhead.webp',
-  './baseball/img/ball-sheet.webp',
   './baseball/js/engine/rng.js',
   './baseball/js/engine/settings.js',
   './baseball/js/engine/pitch.js',
@@ -841,14 +838,14 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '2cb57f00bc',
-  './baseball/js/ui.js': 'cc42057518',
-  './baseball/js/field.js': 'd805523292',
+  './baseball/css/baseball.css': '8ce83f3b68',
+  './baseball/js/ui.js': '38216b3ba1',
+  './baseball/js/field.js': '1b317c88d9',
   './baseball/js/ring.js': '8b26d43e53',
   './baseball/js/strings.js': 'ef1671a0ec',
   './baseball/js/rig.js': '15167015a3',
-  './baseball/js/actors.js': 'fa13af5868',
-  './baseball/js/poses.js': 'bb14d2726c',
+  './baseball/js/actors.js': '91221118cd',
+  './baseball/js/poses.js': '44d36d9d45',
   './baseball/js/vendor/three.core.min.js': '05b2609338',
   './baseball/js/vendor/three.module.min.js': '86bcee248b',
   './baseball/js/vendor/GLTFLoader.js': 'e2ab44d6c6',
@@ -859,9 +856,6 @@ const REST_MANIFEST = {
   './baseball/models/skins/criminalMaleA.png': 'e2f66e682c',
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
-  './baseball/img/plate.webp': 'd294f2f89f',
-  './baseball/img/overhead.webp': '6c442185b5',
-  './baseball/img/ball-sheet.webp': '9d6a7cf9f8',
   './baseball/js/engine/rng.js': '8119f3c46a',
   './baseball/js/engine/settings.js': '6512e72eba',
   './baseball/js/engine/pitch.js': 'efec39994a',
