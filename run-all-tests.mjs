@@ -64,12 +64,12 @@ const SUITES = [
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
   { file: 'baseball/js/test.js' },
-  // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8): the pitch meter's own geometry against the real
-  // flyPitch - born red against the pre-stage-8 ring.js (see the file's own header). NOTE: this sits
-  // "beside test-baseball-actors.mjs" per the stage 8 instruction, but that file is not actually
-  // registered here despite root CLAUDE.md's tooling table saying its node half is - a pre-existing
-  // gap outside this stage's scope (reported, not fixed).
-  { file: 'test-baseball-ring.mjs' },
+  // R2 (docs/BASEBALL-3D-BUILD.md section 9): `test-baseball-ring.mjs` was DELETED here. It existed
+  // to prove the pitch meter's drawn Nice zone agreed with `flyPitch`'s own `wasNice`, and R2
+  // deleted the meter, the Nice zone and `wasNice` together - there is no mechanic left for it to
+  // check. The button it drew is still pinned at 137px by `test-baseball-device.mjs`.
+  // (Still true and still outside any baseball stage's scope: `test-baseball-actors.mjs` is not
+  // registered here despite root CLAUDE.md's tooling table saying its node half is.)
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'test-emoji.mjs' },

@@ -30,6 +30,11 @@ export const STRINGS = {
     act_pickoff: 'Pickoff',
     act_pitch: 'Pitch',
     act_swing: 'Swing',
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): the batting turn's own first word - nothing moves
+    // until the player asks for the pitch - and the two batting modes the LEFT pad cycles.
+    act_ready: 'Ready',
+    mode_contact: 'Contact',
+    mode_power: 'Power',
     pitch_fastball: 'FB',
     pitch_changeup: 'CH',
     pitch_curveball: 'CB',
@@ -63,12 +68,8 @@ export const STRINGS = {
     v_early: 'Early',
     v_late: 'Late',
     v_perfect: 'Perfect',
-    v_nice: 'Nice',
-    // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 6): Matt, on v859: "What does 'Hung' mean
-    // when I'm pitching?" - the same word batting already teaches for a late swing (see `v_late`
-    // above), so a release past the meter's own top reads with vocabulary the player already has.
-    // The key stays `v_hung` - only the word changes.
-    v_hung: 'Late',
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
+    // meter - a release can no longer be early, Nice or hung, because there is no release to time.
     cancel: 'Cancel',
     leave: 'Leave',
     half_end: 'Side retired',
@@ -104,6 +105,9 @@ export const STRINGS = {
     act_pickoff: 'Sorpresa',
     act_pitch: 'Lanzar',
     act_swing: 'Batear',
+    act_ready: 'Listo',
+    mode_contact: 'Contacto',
+    mode_power: 'Poder',
     pitch_fastball: 'RE',
     pitch_changeup: 'CA',
     pitch_curveball: 'CU',
@@ -133,8 +137,6 @@ export const STRINGS = {
     v_early: 'Antes',
     v_late: 'Tarde',
     v_perfect: 'Perfecto',
-    v_nice: 'Genial',
-    v_hung: 'Tarde', // STAGE 8 row 6: same word as v_late above, same reasoning as the EN dict
     cancel: 'Cancelar',
     leave: 'Salir',
     half_end: 'Fin de la entrada',

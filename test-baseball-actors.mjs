@@ -305,16 +305,13 @@ if (CLIPS.Crouch && CLIPS.Crouch.keys.length >= 2 && CLIPS.Crouch.loop && CLIPS.
   // The actor calls that carry each pitch/swing signal (section 3.6's own mapping table).
   const wantCalls = [
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *WINDUP_MS *\}\)/, '_stepWindup calls actors.play(\'pitcher\',\'Pitch\',{markAtMs:WINDUP_MS})'],
-    // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2) SUPERSEDES this row: Matt: "I should tap
-    // it to start it then tap again to stop it." The wind-up now starts on the FIRST tap
-    // (`play('pitcher','Pitch',{markAtMs:meterMs,holdAtMark:true})`, checked separately below) and
-    // HOLDS at its release keyframe until the second tap, which calls `actors.release('pitcher')`
-    // instead of seeking there directly - see actors.js's own `release()` header for why a single
-    // call covers both the ordinary (already paused at the hold) and early-release (still
-    // travelling toward it) cases. The literal markAtMs:0 seek this row used to assert is gone by
-    // design.
-    [/actors\.release\('pitcher'\)/, "HumanAgent.decidePitch's release calls actors.release('pitcher')"],
-    [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *meterMs, *holdAtMark: *true *\}\)/, "HumanAgent.decidePitch's first tap calls actors.play('pitcher','Pitch',{markAtMs:meterMs,holdAtMark:true})"],
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9) SUPERSEDES stage 8's two rows here. There is no
+    // meter and no second tap: ONE tap plays the delivery with its mark at `PITCH_DRAG_MS`, the
+    // pad is dragged through it, and the cursor is sampled at that mark - so there is nothing to
+    // HOLD at and nothing to release. `holdAtMark`/`actors.release()` stay in actors.js (the dev
+    // frame-check screen drives them, and they are the API for any future paused delivery); what
+    // is asserted here is that the PLAY SCREEN no longer uses either.
+    [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *PITCH_DRAG_MS *\}\)/, "HumanAgent.decidePitch's single tap calls actors.play('pitcher','Pitch',{markAtMs:PITCH_DRAG_MS})"],
     [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80, *fade: *0 *\}\)/, "the swing decision calls actors.play('batter','Swing',{markAtMs:80,fade:0})"],
     [/actors\.setBall\(/, 'the pitch flight calls actors.setBall(...)'],
     [/actors\.setBatter\(\{/, '_syncActors calls actors.setBatter({...})'],
@@ -332,6 +329,19 @@ if (CLIPS.Crouch && CLIPS.Crouch.keys.length >= 2 && CLIPS.Crouch.loop && CLIPS.
     if (!re.test(uiSrc)) { fail('ui.js actor call', `missing: ${label}`); allCallsFound = false; }
   }
   if (allCallsFound) ok(`ui.js: every section 3.6 mapping-table actor call is present (${wantCalls.length} checked)`);
+
+  // R2: the meter is gone from the PLAY SCREEN - not merely unused but unreachable. A `holdAtMark`
+  // or an `actors.release()` left in `ui.js` would mean a delivery that pauses mid-throw waiting
+  // for a second tap that nothing sends any more, which is the one way this change could strand a
+  // half-inning. (`baseball/js/actors.js` keeps both; the dev frame-check screen drives them.)
+  {
+    const strays = [];
+    if (/holdAtMark/.test(uiSrc)) strays.push('holdAtMark');
+    if (/actors\.release\(/.test(uiSrc)) strays.push('actors.release(');
+    if (/meterTime|niceWidth|HANG_[A-Z]|STEER_|STEERABLE|\bcharged\s*[:=]|chargeTime|chargePower|chargeWindowMult/.test(uiSrc)) strays.push('a meter/steer/charge symbol');
+    if (strays.length) fail('ui.js R2 cleanup', `the play screen still references ${strays.join(', ')} - the meter, the steering and the charged swing are all deleted by R2`);
+    else ok('ui.js: no holdAtMark, no actors.release(), and no meter/steer/charge symbol survives in the play screen (R2)');
+  }
 
   // Coordinator review (post stage-4 commit 5cd2f21): the render-rate cap that keeps r2-cadence in
   // range under software GL must not reach real hardware - asserts the cap is GATED on isSoftGL(),

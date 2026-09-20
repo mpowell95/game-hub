@@ -376,27 +376,71 @@
   touch-action: none;
   overflow: hidden;
 }
-/* The sweet-spot / strike-zone bar: a horizontal band across the pad's own vertical centre
- * representing the plate's lateral span, so dragging reads as moving a bat/aim point along a
- * real zone rather than pushing a bare dot around an empty square. */
-.bb-pad-zone {
+/* R2 (docs/BASEBALL-3D-BUILD.md section 9): THE 2-D PAD. Same 159px square, same place, same
+ * fixed geometry - what changed is that the marker moves in BOTH axes and the drawn furniture is
+ * a zone SQUARE with a centre crosshair instead of the old lateral bar. `.bb-pad-zone`'s bar,
+ * `.bb-pad-sweet` and `.bb-pad-steerarrow` are deleted with the 1-D aim and the steering they
+ * belonged to. The box is drawn at the fraction of the pad's travel the strike zone actually
+ * occupies (|u| <= 1 of PAD_TRAVEL in ui.js: 1/1.6 laterally, 1/1.4 vertically while pitching -
+ * the batting travel is 1/1.5 both ways), so what the marker is inside on the pad is what the
+ * cursor is inside in the world. */
+.bb-pad-box {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 42%;
-  height: 16%;
+  left: 50%;
+  top: 50%;
+  /* 90% of the pad (the marker's own travel, +-45%) divided by the pitching travel: 0.90/1.6
+   * across and 0.90/1.4 up. `[data-mode="batting"]` below is the batting travel's own 0.90/1.5. */
+  width: 56%;
+  height: 64%;
+  transform: translate(-50%, -50%);
   border: 2px solid rgba(255,255,255,0.5);
   border-radius: 3px;
 }
-.bb-pad-sweet {
+.bb-pad[data-mode="batting"] .bb-pad-box { width: 60%; height: 60%; }
+.bb-pad-cross {
   position: absolute;
-  top: 50%;
   left: 50%;
-  width: 34px;
-  height: 6px;
-  transform: translate(-50%, -50%);
-  background: #178A7A;
-  border-radius: 3px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255,255,255,0.45), rgba(255,255,255,0.45)) center/100% 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.45), rgba(255,255,255,0.45)) center/1px 100% no-repeat;
+}
+/* The head row: two fixed tiles saying what a TAP on the pad cycles (the batting mode, or the
+ * selected pitch). Two tiles either way, always the same height, so neither state reflows the
+ * other - `pointer-events: none` because the whole pad, this row included, is the drag surface. */
+.bb-pad-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 24px;
+  display: flex;
+  gap: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+.bb-pad-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bb-pad-tile.is-sel {
+  color: #16240f;
+  background: #ffce3a;
+  font-weight: 900;
 }
 .bb-pad-marker {
   position: absolute;
@@ -408,19 +452,6 @@
   background: #ffce3a;
   border: 2px solid #16240f;
   z-index: 2;
-}
-/* Break-direction arrow (spec section 8): shown only while a curveball/slider is in flight, from
- * release to plate crossing - see ui.js's _paintSteerArrow. Positioned centered on the pad; JS
- * only ever toggles display and flips it horizontally (scaleX) toward the current steer side. */
-.bb-pad-steerarrow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 22px;
-  color: #ffce3a;
-  z-index: 3;
-  pointer-events: none;
 }
 
 .bb-actions {
