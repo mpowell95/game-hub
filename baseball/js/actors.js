@@ -1,24 +1,29 @@
-// actors.js - the WebGL layer (docs/BASEBALL-3D-BUILD.md section 3.5). One class, no engine
-// knowledge. It owns a second canvas over the painted field and the two figures. field.js keeps
-// painting the backdrop, the zone, the ball's trail and the overhead cut on the 2D canvas
-// underneath (`.bb-field-canvas`, z-index 1); this canvas (`.bb-actor-canvas`) sits above it at
-// z-index 2, `.bb-pop` stays at 3.
+// actors.js - THE WEBGL LAYER. R1, docs/BASEBALL-3D-BUILD.md section 9.
 //
-// STAGE 1: load/resize/place/start/pause/dispose work end to end, against the section 2.1
-// SCAFFOLD asset (RobotExpressive.glb) or, once section 2.2 is filled, baseball/models/player.glb.
-// STAGE 3: setBatter/setPitcher do the recolour half (section 2.2's colour-key remap) and place()
-// when an anchor is given.
-// STAGE 4 (section 3.6): the live play screen now drives this class directly - ui.js computes the
-// aim-shifted anchor itself (field.js's own anchorPx/BATTER_AIM_TRAVEL_FRAC, exported for exactly
-// this) and calls setBatter/setPitcher on every redraw, and setBall/handWorldPx below are new. The
-// dev screen (ui.js's _openFrameCheck) and render-actor.mjs/test-baseball-actors.mjs still work the
-// same way they always did - nothing about this class's own surface changed shape for them.
+// One class. It owns the WebGL canvas, the scene, the three cameras (field.js's `makeCameras`),
+// the stadium (field.js's `buildStadium`), the four figures, the ball and the landing marker. It
+// has no engine knowledge: ui.js tells it where things are, in FEET.
+//
+// WHAT R1 CHANGED HERE, and it is the whole point of the stage: until v860 this class rendered
+// two figures through an ORTHOGRAPHIC camera measured in CANVAS PIXELS, on top of a painted
+// backdrop, with every position fed from `field.js`'s picture anchors. There is no backdrop now -
+// this canvas draws the entire scene - so the camera is a real perspective one, every position is
+// a world position in feet, and the 2-D canvas above it draws only the strike-zone box and the
+// landing-marker label by projecting world points back through the active camera
+// (`field.js`'s `projectToCanvas`). `handWorldPx` became `handWorld` and returns feet.
+//
+// Kept exactly as they were, because nothing about them was a camera fact: the skin colour-key
+// remap (section 2.2), the authored clips and their `mark` times (poses.js), `play`/`release`/
+// `toSet`/`idle`, the `holdAtMark` hold, the `isSoftGL()` render cap, and `dispose()`.
 import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from './vendor/SkeletonUtils.js';
 import { RIG, resolveRig } from './rig.js';
 import { CLIPS, buildClip } from './poses.js';
 import { onViewportResize } from '../../js/viewport.js';
+import {
+  makeCameras, buildStadium, CAMERAS, CHASE_LERP, BALL_RADIUS_FT, MARKER,
+} from './field.js';
 
 const CROSSFADE_S = 0.15;
 // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 3): the SET RETURN's own cross-fade, named so
@@ -115,6 +120,8 @@ const PANTS_TOL = 20;
 // the box is claimed by the pants rule first; every other white pixel (the shirt, sleeves, cuffs)
 // falls through to the shirt rule, which carries no rect and matches everywhere else.
 const PANTS_RECT = [0.59, 0.74, 1.0, 1.0];
+const UMP_DARK = 0x23262b;     // R1: the umpire's suit, dark enough to read as "not a player"
+
 export const KEYS = {
   skaterMaleA: {
     home: [
@@ -146,6 +153,15 @@ export const KEYS = {
       { from: [0xff, 0xff, 0xff], to: AWAY_GREY, rect: PANTS_RECT, part: 'pants' },
       { from: [0x00, 0x9f, 0x78], to: AWAY_TRIM, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: AWAY_TRIM, part: 'trim' },
       { from: [0xff, 0xff, 0xff], to: NAVY, part: 'shirt' },
+    ],
+    // R1 (docs/BASEBALL-3D-BUILD.md section 9): the umpire, "in dark clothes". The same skin and
+    // the same two source colours as the away kit, sent somewhere else: the suit to near-black and
+    // the collar/cuff trim to the same near-black, so he reads as one dark figure at the 38 px he
+    // actually draws at on the pitching camera rather than as a third team.
+    umpire: [
+      { from: [0xff, 0xff, 0xff], to: UMP_DARK, rect: PANTS_RECT, part: 'pants' },
+      { from: [0x00, 0x9f, 0x78], to: UMP_DARK, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: UMP_DARK, part: 'trim' },
+      { from: [0xff, 0xff, 0xff], to: UMP_DARK, part: 'shirt' },
     ],
   },
 };
@@ -214,7 +230,7 @@ async function skinTexture(skinName, side) {
 /** Casting (section 2.2): home is skaterMaleA, away is criminalMaleA. Not a free choice per actor
  *  today - the human's team is always home, the CPU's is always away, so the skin follows the
  *  side. A later phase that lets a person pick a skin independent of side would take this over. */
-function skinForSide(side) { return side === 'away' ? 'criminalMaleA' : 'skaterMaleA'; }
+function skinForSide(side) { return (side === 'away' || side === 'umpire') ? 'criminalMaleA' : 'skaterMaleA'; }
 
 // STAGE 2: the batter's facing (docs/BASEBALL-3D-BUILD.md section 3.5's `_place` facingRad). The
 // sprite frames (reference/baseball/batter-home-1..8.png) show a right-handed batter seen from
@@ -237,6 +253,16 @@ export const BATTER_FACING_RAD = 95 * Math.PI / 180;
 // is what fixes CLIPS.Pitch's `handR` as the visible throwing arm at the release keyframe.
 export const PITCHER_FACING_RAD = 0;
 
+// R1: the two new static figures. The model's own front is +Z at facingRad 0 (the measured fact
+// above), and in R1's world -z runs toward the mound - so a figure who must look AT the mound is
+// turned 180 degrees. Both the catcher (crouched at z = 5.5) and the umpire (standing at z = 8)
+// face that way; the batter's own 95 degrees is unchanged, and it still means the same thing it
+// did, because the batting camera still stands behind the plate looking out.
+export const CATCHER_FACING_RAD = Math.PI;
+export const UMPIRE_FACING_RAD = Math.PI;
+/** Every role this class builds. Order matters only in that the batter is the one with a bat. */
+export const ROLES = ['batter', 'pitcher', 'catcher', 'umpire'];
+
 export class Actors {
   constructor(wrapEl) {
     this.wrapEl = wrapEl;
@@ -244,54 +270,81 @@ export class Actors {
     this.canvas.className = 'bb-actor-canvas';
     this.canvas.style.pointerEvents = 'none';
     wrapEl.appendChild(this.canvas);
-    this.renderer = null; this.scene = null; this.camera = null;
-    this.actors = { batter: null, pitcher: null };   // each: { role, pivot, root, bones, restQ, mixer, actions, current, heightWorld, footY, side, mirrored, _last }
-    this.ball = null;
+    this.renderer = null; this.scene = null;
+    this.cameras = null; this.camera = null; this.cameraName = 'batter';
+    this.actors = { batter: null, pitcher: null, catcher: null, umpire: null };
+    this.stadium = null;
     this.ready = false;
     this._raf = 0; this._last = 0; this._running = false;
     this._offResize = null;
-    this._w = 0; this._h = 0; this._cover = null;
+    this._w = 0; this._h = 0;
     this._proto = null; this._fileClips = [];
-    this._lastBallPx = null;
+    this._lastBall = null;
+    this._chaseTarget = null;
+    this._firstFrameResolve = null;
+    this._firstFramePromise = new Promise((res) => { this._firstFrameResolve = res; });
     this._preserve = !!(globalThis.__bbTest);   // the test reads pixels back; nobody else pays for it
   }
 
-  /** Create the renderer. Separate from the constructor so a missing WebGL context is a value the
-   *  caller can branch on, not a throw during mount. Returns false when WebGL is unavailable. */
+  /** Create the renderer, the scene, the lights and the three cameras. Separate from the
+   *  constructor so a missing WebGL context is a value the caller can branch on, not a throw
+   *  during mount. Returns false when WebGL is unavailable. */
   initGL() {
     try {
       this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true,
         powerPreference: 'low-power', preserveDrawingBuffer: this._preserve });
     } catch { this.renderer = null; return false; }
-    this.renderer.setClearColor(0x000000, 0);
-    this.renderer.setPixelRatio(Math.min(DPR_CAP, window.devicePixelRatio || 1));
+    // R1: this canvas draws the WHOLE scene now, not two figures over a picture, so the clear is
+    // opaque - the sky sphere covers every direction, and an alpha-0 clear would only ever show
+    // through as a bug.
+    this.renderer.setClearColor(0x7fb7e6, 1);
+    // R1, measured: the pixel ratio is capped at 1 under a SOFTWARE rasteriser, and at DPR_CAP on
+    // real hardware. Before R1 this canvas drew two figures over a painted backdrop; it draws the
+    // whole stadium now, so its fill cost went up fourfold and the cost is paid in the GPU process,
+    // where a software rasteriser starves the main thread's own timers. Measured on this container
+    // at 393x429 CSS: with the render loop running at dpr 2, a chain of setTimeouts totalling 6.2 s
+    // (the R2 verdict-to-next-release beat) came back 497 ms late; at dpr 1, 95 ms late; with the
+    // loop paused, 1 ms. `renderer.render` itself returns in 1.2 ms either way, so this is fill
+    // rate and nothing else. A real phone GPU does not have the problem, which is why this is
+    // gated - exactly the same reasoning, and the same probe, as RENDER_FRAME_MS above.
+    this.renderer.setPixelRatio(isSoftGL() ? 1 : Math.min(DPR_CAP, window.devicePixelRatio || 1));
     this.scene = new THREE.Scene();
+    // Stadium daylight: one hemisphere fill (sky above, grass bounce below) and one sun. No shadow
+    // maps (R1's own scope line) - the blob shadow under each figure is what grounds it.
     this.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x5a7a3a, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-300, 500, 400); this.scene.add(sun);
-    // Orthographic, in CANVAS PIXELS: world (x, -y) is screen (x, y). Every position below is fed
-    // straight from field.js's anchor fractions, so the figures cannot drift from the painted picture.
-    this.camera = new THREE.OrthographicCamera(0, 1, 0, -1, -2000, 2000);
-    this.camera.position.set(0, 0, 1000);
-    this.camera.lookAt(0, 0, 0);
+    this.cameras = makeCameras(1);
+    this.camera = this.cameras.batter;
     this._offResize = onViewportResize(() => { /* ui.js calls resize() with the real size */ });
     return true;
+  }
+
+  /** The stadium, for one league's fence shape. Called once per play screen (ui.js's _renderPlay),
+   *  never per frame; a second call replaces the first, which is what a league change would need. */
+  buildField(fenceFt) {
+    if (!this.scene || !fenceFt) return;
+    if (this.stadium) { this.stadium.dispose(); this.stadium = null; }
+    this.stadium = buildStadium(this.scene, { fenceFt });
   }
 
   async load(url) {
     // Loaded together: the model has no embedded texture (section 2.1 - one "Skin" material, no
     // image in the file), so a render before any skin arrives would be flat grey. The home
     // skaterMaleA texture is the placeholder every actor is BUILT with (_makeActor, below) so
-    // neither figure is ever untextured for a frame; load() then casts each role to its real side.
+    // no figure is ever untextured for a frame; load() then casts each role to its real side.
     const [gltf, placeholderTex] = await Promise.all([new GLTFLoader().loadAsync(url), skinTexture('skaterMaleA', 'home')]);
     this._proto = gltf.scene;
     this._fileClips = gltf.animations || [];
     this._placeholderTex = placeholderTex;
-    for (const role of ['batter', 'pitcher']) this.actors[role] = this._makeActor(role);
+    for (const role of ROLES) this.actors[role] = this._makeActor(role);
     // Default casting (section 2.2): the human's team (home) is skaterMaleA, the CPU (away) is
-    // criminalMaleA. A placeholder until stage 4's game-state wiring calls setBatter/setPitcher
-    // with the real per-half-inning side - it is what lets the dev screen and render-actor.mjs
-    // show a sensible home/away pair with no caller at all.
-    await Promise.all([this.setBatter({ side: 'home' }), this.setPitcher({ side: 'away' })]);
+    // criminalMaleA, the umpire is criminalMaleA in near-black. A placeholder until ui.js calls
+    // setBatter/setPitcher with the real per-half-inning side - it is what lets the dev screen and
+    // render-actor.mjs show a sensible pair with no caller at all.
+    await Promise.all([
+      this.setBatter({ side: 'home' }), this.setPitcher({ side: 'away' }),
+      this._setSide('catcher', { side: 'away' }), this._setSide('umpire', { side: 'umpire' }),
+    ]);
     this.ready = true;
   }
 
@@ -302,12 +355,11 @@ export class Actors {
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
     const heightWorld = box.max.y - box.min.y;
-    const footY = box.min.y;   // so the feet, not the origin, sit on the anchor
-    // Clone the materials this actor touches so the two figures stay independent (`setBatter`/
+    const footY = box.min.y;   // so the feet, not the origin, sit on the ground
+    // Clone the materials this actor touches so the figures stay independent (`setBatter`/
     // `setPitcher` swap `material.map` per actor). `material.color` stays white so the texture
     // shows true - a tint here would colour skin and hair along with the uniform, exactly what
-    // section 2.2's colour-key remap exists to avoid doing the cheap way. Painted with the home
-    // placeholder texture until `load()`'s own setBatter/setPitcher casts the real side below.
+    // section 2.2's colour-key remap exists to avoid doing the cheap way.
     root.traverse((o) => {
       if (!o.isMesh) return;
       o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
@@ -317,9 +369,6 @@ export class Actors {
     });
     const mixer = new THREE.AnimationMixer(root);
     const actions = {};
-    // Every clip the FILE itself carries, playable by its own name (e.g. the scaffold's 'Idle',
-    // 'Dance', 'Wave') - this is what lets play() and the dev screen work before any pose is
-    // authored. A CLIPS entry with the same name supplies loop/clamp; an unknown file clip loops.
     for (const fileClip of this._fileClips) {
       const def = CLIPS[fileClip.name];
       const a = mixer.clipAction(fileClip, root);
@@ -355,10 +404,7 @@ export class Actors {
     // The bat is a plain rigid Mesh, not a skinned one, so unlike the body it does NOT travel
     // through the skinning matrices that keep the mesh's WORLD size independent of any individual
     // bone's own scale. It is a real child of the hand bone, so its geometry must be authored in
-    // that bone's LOCAL space: divide the intended world-unit size by the hand bone's own world
-    // scale (usually 1, but this scaffold's Palm2R bakes in ~100x, an FBX cm->m correction, and a
-    // bat sized as if that scale were 1 fills the whole camera - found rendering the stage 1 dev
-    // screen against RobotExpressive.glb, not assumed).
+    // that bone's LOCAL space: divide the intended size by the hand bone's own world scale.
     const handScale = new THREE.Vector3(); actor.bones.handR.getWorldScale(handScale);
     const sx = handScale.x || 1, sy = handScale.y || 1;
     const g = new THREE.CylinderGeometry((BAT.barrelR * h) / sx, (BAT.knobR * h) / sx, (BAT.length * h) / sy, 12);
@@ -368,54 +414,45 @@ export class Actors {
     actor.bones.handR.add(bat); actor.bat = bat;
   }
 
-  /** Called by ui.js from _sizeCanvas with the 2D canvas's CSS size and field.js's plateCover(). */
-  resize(w, h, cover) {
-    if (!this.renderer) return;
-    this._w = w; this._h = h; this._cover = cover;
+  /** Called by ui.js from _sizeCanvas with the field canvas's own CSS size. R1: there is no
+   *  `cover` any more - a perspective camera needs the canvas's ASPECT, nothing else. */
+  resize(w, h) {
+    if (!this.renderer || !w || !h) return;
+    this._w = w; this._h = h;
     this.renderer.setSize(w, h, false);
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
-    this.camera.left = 0; this.camera.right = w; this.camera.top = 0; this.camera.bottom = -h;
-    this.camera.updateProjectionMatrix();
-    this._placeAll();
+    this.cameras.setAspect(w / h);
   }
 
-  /** anchor {x,y} in canvas px (feet), heightPx the figure's on-screen height. */
-  _place(actor, anchor, heightPx, facingRad) {
-    const s = heightPx / actor.heightWorld;
-    actor.pivot.position.set(anchor.x, -anchor.y, actor.role === 'batter' ? 10 : 0);
+  /** Put one figure at a WORLD position (feet), feet on the ground, scaled so it stands
+   *  `heightFt` tall. `facingRad` turns it about the world Y axis; `mirrored` flips it for a
+   *  left-handed player exactly as it always did (a negative pivot scale.x - three.js flips face
+   *  winding itself off the world matrix determinant, so no material change is needed). */
+  _place(actor, pos, heightFt, facingRad) {
+    const s = heightFt / actor.heightWorld;
+    actor.pivot.position.set(pos.x, pos.y || 0, pos.z);
     actor.pivot.scale.set(actor.mirrored ? -s : s, s, s);
     actor.root.position.y = -actor.footY;
     actor.root.rotation.y = facingRad;
     actor.shadow.scale.set(actor.heightWorld * 0.22, actor.heightWorld * 0.10, 1);
-    actor.shadow.position.y = 0.5;
+    actor.shadow.position.y = actor.heightWorld * 0.004;   // a hair above the ground, never inside it
   }
 
-  /** Place one actor now, and remember it so a later resize (a rotate, a keyboard opening) can
-   *  reflow it without the caller having to re-supply the anchor. setBatter/setPitcher (stage 4)
-   *  are expected to call this once they know the real per-frame anchor/aim math; stage 1's dev
-   *  screen (3.7) calls it directly with field.js's own PLATE_ANCHORS fractions, since those are
-   *  the "real anchors" the stage 1 check asks for. */
-  place(role, { anchor, heightPx, facingRad = 0, mirrored = false }) {
+  /** Place one actor now and remember it, so a later resize can reflow without the caller having
+   *  to re-supply the position. `{ pos, heightFt, facingRad, mirrored }`, all world feet. */
+  place(role, { pos, heightFt, facingRad = 0, mirrored = false }) {
     const actor = this.actors[role];
-    if (!actor) return;
+    if (!actor || !pos) return;
     actor.mirrored = mirrored;
-    actor._last = { anchor, heightPx, facingRad };
-    this._place(actor, anchor, heightPx, facingRad);
-  }
-  _placeAll() {
-    for (const actor of Object.values(this.actors)) {
-      if (actor && actor._last) this._place(actor, actor._last.anchor, actor._last.heightPx, actor._last.facingRad);
-    }
+    actor._last = { pos, heightFt, facingRad };
+    this._place(actor, pos, heightFt, facingRad);
   }
 
-  /** The recolour half of setBatter/setPitcher (section 2.2/3.5): cast `role` to `side`, remap its
-   *  materials to that side's CanvasTexture (skipping the swap when the side hasn't actually
-   *  changed and a texture is already applied, so a caller can pass `side` on every frame with no
-   *  per-frame texture churn), then place() when an anchor is supplied - `mirrored` is passed
-   *  through as given (undefined leaves the actor's current mirror state alone) so a caller that
-   *  only wants a recolour can omit it. The aim-shift maths (`aimX`, `bats`/`throws` beyond the
-   *  mirror flip) is stage 4's (section 3.6) - not read here yet. */
-  async _setSide(role, { side, anchor, heightPx, facingRad, mirrored } = {}) {
+  /** The recolour half of setBatter/setPitcher (section 2.2): cast `role` to `side`, remap its
+   *  materials to that side's CanvasTexture (skipping the swap when the side hasn't changed, so a
+   *  caller can pass `side` on every frame with no per-frame texture churn), then place() when a
+   *  position is supplied. */
+  async _setSide(role, { side, pos, heightFt, facingRad, mirrored } = {}) {
     const actor = this.actors[role];
     if (!actor) return;
     if (side && (side !== actor.side || !actor._skinApplied)) {
@@ -428,46 +465,75 @@ export class Actors {
       });
       actor._skinApplied = true;
     }
-    if (anchor && heightPx != null) {
+    if (pos && heightFt != null) {
       this.place(role, {
-        anchor, heightPx,
+        pos, heightFt,
         facingRad: facingRad != null ? facingRad : (actor._last ? actor._last.facingRad : 0),
         mirrored: mirrored != null ? mirrored : actor.mirrored,
       });
     }
   }
-  // STAGE 4 FIX: `facingRad` was accepted by `_setSide` (its own destructure, above) but never
-  // forwarded here, so a caller passing it - including `render-actor.mjs`'s own
-  // `setter.call(actors, {..., facingRad})` and the dev screen's `_open3DCheck` - silently lost it,
-  // and every actor placed through `setBatter`/`setPitcher` (never a bare `place()`) rendered at
-  // `facingRad=0` on its first placement (`actor._last` starts null, so `_setSide`'s own fallback
-  // took over). Harmless for the pitcher (`PITCHER_FACING_RAD` already is 0) but wrong for the
-  // batter (`BATTER_FACING_RAD`, 95deg) on every path that goes through this wrapper rather than a
-  // direct `place()` call. Fixed by forwarding it, same as `mirrored` already was.
-  setBatter({ side, bats, aimX, anchor, heightPx, facingRad } = {}) {
-    return this._setSide('batter', { side, anchor, heightPx, facingRad, mirrored: bats != null ? bats === 'L' : undefined });
+  setBatter({ side, bats, pos, heightFt, facingRad } = {}) {
+    return this._setSide('batter', { side, pos, heightFt, facingRad, mirrored: bats != null ? bats === 'L' : undefined });
   }
-  setPitcher({ side, throws, anchor, heightPx, facingRad } = {}) {
-    return this._setSide('pitcher', { side, anchor, heightPx, facingRad, mirrored: throws != null ? throws === 'L' : undefined });
+  setPitcher({ side, throws, pos, heightFt, facingRad } = {}) {
+    return this._setSide('pitcher', { side, pos, heightFt, facingRad, mirrored: throws != null ? throws === 'L' : undefined });
+  }
+  /** R1's two static figures. The catcher takes the DEFENCE's side, so he swaps with the
+   *  half-inning; the umpire is cast once, at load, and only ever needs placing. */
+  setCatcher({ side, pos, heightFt, facingRad } = {}) {
+    return this._setSide('catcher', { side, pos, heightFt, facingRad });
+  }
+  setUmpire({ pos, heightFt, facingRad } = {}) {
+    return this._setSide('umpire', { pos, heightFt, facingRad });
+  }
+
+  // ------------------------------------------------------------------ cameras ----
+  /** Switch the live camera: 'batter', 'pitcher' or 'chase'. R1 replaces the old "cut the 2-D
+   *  canvas to a different painting" with this one call, and it is what `_cutawayUp` now guards:
+   *  while a ball is in play the chase camera is live and no input path may switch it back. */
+  setCamera(name) {
+    if (!this.cameras) return;
+    const cam = this.cameras[name];
+    if (!cam) return;
+    this.cameraName = name;
+    this.camera = cam;
+    this._applyCameraVisibility();
+  }
+  /** The umpire is not drawn from the batting camera - he stands 5 ft in front of its lens and
+   *  would fill the frame. See field.js's CAMERAS comment for why no camera position avoids it at
+   *  fov 50, and why "the camera stands where the umpire's head is" is the honest reading. */
+  _applyCameraVisibility() {
+    const ump = this.actors.umpire;
+    if (ump) ump.pivot.visible = this.cameraName !== 'batter';
+  }
+  /** Aim the chase camera at a world point (the ball). `immediate` snaps it there instead of
+   *  easing, which is what the first frame of a cutaway wants so the chase does not fly in from
+   *  wherever the previous ball ended. The ease itself runs in the render loop, once per rendered
+   *  frame, so it is the same motion at 20 fps under software GL as at 60 on a phone. */
+  chaseAt(pos, immediate = false) {
+    this._chaseTarget = { x: pos.x, y: pos.y, z: pos.z };
+    if (immediate) this._stepChase(1);
+  }
+  _stepChase(alpha) {
+    const t = this._chaseTarget;
+    const cam = this.cameras && this.cameras.chase;
+    if (!t || !cam) return;
+    const off = CAMERAS.chase.offset;
+    const wantX = t.x + off[0], wantY = t.y + off[1], wantZ = t.z + off[2];
+    cam.position.x += (wantX - cam.position.x) * alpha;
+    cam.position.y += (wantY - cam.position.y) * alpha;
+    cam.position.z += (wantZ - cam.position.z) * alpha;
+    cam.lookAt(t.x, t.y, t.z);
   }
 
   /** Play `name` on `role` so that the clip's mark lands `markAtMs` from now (0 = seek straight to
    *  the mark). `fade` (seconds) is the cross-fade duration FROM whatever is currently playing -
-   *  default `CROSSFADE_S`. STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 4): Swing/Miss are
-   *  played with `fade: 0` everywhere a real swing happens, so the contact pose is visible on the
-   *  very frame it starts rather than dissolving in over 150ms - a swing is a snap, never a blend.
-   *  `fade: 0` still goes through `crossFadeTo` (three.js resolves a zero-duration fade by setting
-   *  the target weight immediately, the same call shape as every other duration), so there is only
-   *  one code path here, not two.
-   *  STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2): `holdAtMark` - the delivery reaches its
-   *  `mark` keyframe and STOPS there instead of playing through, so the human pitcher's own
-   *  wind-up can be tied to their SECOND tap rather than a fixed lead-in. `actor.holdAt` (the
-   *  instant, in the clip's own timeline, to freeze at) is read every frame by `start()`'s own tick
-   *  loop, below - stored on the actor (not the action) because `release()` needs it back after the
-   *  hold and a THREE.AnimationAction carries no field of its own for it. Every `play()` call clears
-   *  it (to `null` when `holdAtMark` isn't asked for) and resets `a.paused`, so `idle()`/`toSet()`/
-   *  any other clip change always leaves a clean slate - a hold from a PREVIOUS turn can never leak
-   *  into a new one. */
+   *  default `CROSSFADE_S`. STAGE 7 (section 7, row 4): Swing/Miss are played with `fade: 0`
+   *  everywhere a real swing happens, so the contact pose is visible on the very frame it starts.
+   *  STAGE 8 (section 8, row 2): `holdAtMark` - the delivery reaches its `mark` keyframe and STOPS
+   *  there instead of playing through, so the human pitcher's own wind-up can be tied to their
+   *  SECOND tap. `actor.holdAt` is read every frame by `start()`'s tick loop below. */
   play(role, name, { markAtMs = null, fade, holdAtMark = false } = {}) {
     const actor = this.actors[role]; const a = actor && actor.actions[name];
     if (!a) return;
@@ -483,16 +549,15 @@ export class Actors {
     if (actor.current && actor.current !== a) actor.current.crossFadeTo(a, fadeS, false);
     a.play(); actor.current = a;
   }
-  idle(role) { this.play(role, role === 'pitcher' ? 'Set' : 'Idle'); }
-  /** STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2): the human's own tap-to-release, paired
-   *  with `play()`'s `holdAtMark`. Two cases, unified by one assignment: the wind-up may already be
-   *  PAUSED at `actor.holdAt` (the ordinary case - the meter's own top was reached and the clip
-   *  stopped there to wait for this tap), in which case setting `a.time` to the value it already
-   *  holds is a no-op; or it may still be TRAVELLING toward the mark (an early tap, well inside the
-   *  meter), in which case this jumps it there. Either way the ball has to leave the hand AT the
-   *  release pose (R1, `HANDOFF-BASEBALL-3B.md`), never wherever the clip happened to be - the same
-   *  jump `play(..., { markAtMs: 0 })` already makes for the CPU's own delivery. A no-op when this
-   *  role never had a hold to release (nothing to clear). */
+  /** Each role's resting loop. R1 adds the two static figures: the catcher crouches, the umpire
+   *  stands (poses.js has no umpire clip of its own and inventing one is a feature not discussed). */
+  idle(role) {
+    const name = role === 'pitcher' ? 'Set' : (role === 'catcher' ? 'Crouch' : 'Idle');
+    this.play(role, name);
+  }
+  /** STAGE 8 row 2: the human's own tap-to-release, paired with `play()`'s `holdAtMark`. The
+   *  wind-up may already be PAUSED at `actor.holdAt` (the ordinary case) or still travelling
+   *  toward it (an early tap); either way the ball leaves the hand AT the release pose. */
   release(role) {
     const actor = this.actors[role];
     const a = actor && actor.current;
@@ -502,82 +567,143 @@ export class Actors {
     a.timeScale = 1;
     actor.holdAt = null;
   }
-  /** STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 3): the pitcher's own return-to-set beat,
-   *  after a delivery's follow-through has been allowed to play out - never called at release, only
-   *  once the ball has actually left the scene. A named helper instead of a bare
-   *  `play('pitcher', 'Set', { fade: ... })` at every call site so the SET_RETURN_FADE_MS number
-   *  lives in exactly one place. */
+  /** STAGE 7 (section 7, row 3): the pitcher's return-to-set beat, after a delivery's
+   *  follow-through has played out. A named helper so SET_RETURN_FADE_MS lives in one place. */
   toSet() { this.play('pitcher', 'Set', { fade: SET_RETURN_FADE_MS }); }
 
-  /** The pitch, in the same canvas-px space every anchor here already uses (world (x, -y) is
-   *  screen (x, y) - the ortho camera's own convention, section 3.5's header). `b` is `{x, y, r}` -
-   *  `r` a screen-px radius, straight from `field.js`'s `plateBallPos` the way the 2D trail already
-   *  reads it, so the 3D ball is exactly the size and position the 2D flight curve draws, never a
-   *  second, driftable copy of that math. `null` hides it (the crossing, and the overhead cut -
-   *  ui.js calls this with `null` at both). Built lazily on first use so a batter-only dev-screen
-   *  session (never a pitch) pays nothing for a sphere it never shows. */
+  // ------------------------------------------------------------------ ball and marker ----
+  /** The ball, in WORLD FEET (R1). `{x, y, z}`, or `null` to hide it. Radius is fixed at
+   *  `BALL_RADIUS_FT` - about five times a real baseball, on purpose, because the reference draws
+   *  it large and a true 1.45 inch sphere at 60 ft is a pixel. Built lazily on first use. */
   setBall(b) {
     if (!this.scene) return;
-    // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7): `_lastBallPx` is kept even while hidden (a
-    // `null` call below only sets `visible = false`, never clears it) - it is THE CONTACT HOLD's
-    // own starting point (ui.js's `_contactHold`), the ball's last real position (the pitch's
-    // crossing point) rather than a second, driftable guess at where contact happened.
-    if (!b) { if (this._ball) this._ball.visible = false; return; }
+    // `_lastBall` is kept even while hidden (a `null` call only sets `visible = false`) - it is
+    // THE CONTACT HOLD's own starting point (ui.js's `_contactHold`), the ball's last real
+    // position rather than a second, driftable guess at where contact happened.
+    if (!b) { if (this._ball) this._ball.visible = false; if (this._ballShadow) this._ballShadow.visible = false; return; }
     if (!this._ball) {
-      const geo = new THREE.SphereGeometry(1, 12, 8);
+      const geo = new THREE.SphereGeometry(BALL_RADIUS_FT, 12, 8);
       const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
       this._ball = new THREE.Mesh(geo, mat);
       this._ball.frustumCulled = false;
       this.scene.add(this._ball);
+      // The ball's own ground shadow. Stage 8 learned this on the 2-D overhead and it carries over
+      // unchanged: "what actually sells the ball as airborne is the gap between this and the ball
+      // itself, not the ball's own shape." Hidden while the ball is near the ground, where a
+      // shadow directly under it says nothing and only doubles the dot.
+      const sgeo = new THREE.CircleGeometry(BALL_RADIUS_FT, 16);
+      sgeo.rotateX(-Math.PI / 2);
+      this._ballShadow = new THREE.Mesh(sgeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+      this._ballShadow.frustumCulled = false;
+      this.scene.add(this._ballShadow);
     }
     this._ball.visible = true;
-    this._ball.scale.setScalar(Math.max(0.5, b.r));
-    // z=20: in front of the batter's own pivot (z=10, `_place`) and the pitcher's (z=0), so the
-    // ball is never clipped behind either figure at any point of its flight between them.
-    this._ball.position.set(b.x, -b.y, 20);
-    this._lastBallPx = { x: b.x, y: b.y, r: b.r };
+    this._ball.position.set(b.x, b.y, b.z);
+    const high = b.y > 2.5;
+    this._ballShadow.visible = high;
+    if (high) {
+      this._ballShadow.position.set(b.x, 0.07, b.z);
+      // Wider and softer the higher it is, the way a real shadow spreads. The numbers are set by
+      // what the chase camera can actually SEE: at a 115 ft apex the shadow is ~113 ft from the
+      // lens, so it needs to be about 6 ft across to read at all, and an opacity that fades to
+      // nothing takes the cue away exactly when the height is worth showing.
+      const k = Math.min(8, 1 + b.y / 15);
+      this._ballShadow.scale.set(k, 1, k);
+      this._ballShadow.material.opacity = Math.max(0.12, 0.32 - b.y / 500);
+    }
+    this._lastBall = { x: b.x, y: b.y, z: b.z };
   }
-  /** The ball's last SET position (screen px, `{x,y,r}`), whether or not it is currently visible -
-   *  see `setBall`'s own comment. `null` before anything has ever been set (a dev-screen session
-   *  that never pitches). */
-  lastBallPx() { return this._lastBallPx || null; }
+  /** The ball's last SET position (world feet), whether or not it is currently visible. `null`
+   *  before anything has ever been set. */
+  lastBallPos() { return this._lastBall || null; }
 
-  /** The pitcher's throwing hand (`handR`), in the same canvas-px space `setBall` uses - stage 4's
-   *  pitch flight starts here instead of `field.js`'s fixed `PLATE_ANCHORS.release` (a flat point
-   *  measured off the picture), so the ball leaves the hand this specific pose actually has. `role`
-   *  defaults to 'pitcher' since nothing else ever throws; returns null before that actor/bone
-   *  exists (load() not finished, or a role with no `handR` some day). */
-  handWorldPx(role = 'pitcher') {
+  /** The landing marker: a flat disc on the ground at the world point where the ball came down,
+   *  in the stage 8 colours (green 1B/2B/3B, gold HR, red out), with the pulse ring stage 8 added.
+   *  `pulseT` is 0..1 across the hold; ui.js withholds it under reduced motion, exactly as the 2-D
+   *  marker did, and draws the label itself by projecting this same point. */
+  setMarker({ x, z, kind }) {
+    if (!this.scene) return;
+    if (!this._marker) {
+      const discGeo = new THREE.CircleGeometry(MARKER.radiusFt, 28);
+      discGeo.rotateX(-Math.PI / 2);
+      const discMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
+      this._marker = new THREE.Mesh(discGeo, discMat);
+      this._marker.renderOrder = 2;
+      const ringGeo = new THREE.RingGeometry(1, 1.14, 28);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+      this._markerRing = new THREE.Mesh(ringGeo, ringMat);
+      this._markerRing.renderOrder = 2;
+      this.scene.add(this._marker); this.scene.add(this._markerRing);
+    }
+    const color = kind === 'out' ? MARKER.out : (kind === 'hr' ? MARKER.hr : MARKER.hit);
+    this._marker.material.color.setHex(color);
+    this._markerRing.material.color.setHex(color);
+    this._marker.position.set(x, 0.08, z);
+    this._markerRing.position.set(x, 0.09, z);
+    this._marker.visible = true;
+    this._markerRing.visible = false;
+  }
+  markerPulse(pulseT) {
+    if (!this._markerRing) return;
+    if (pulseT == null) { this._markerRing.visible = false; return; }
+    const t = (pulseT * 2) % 1;                       // two pulses across the hold, as stage 8 drew
+    const r = MARKER.radiusFt * (1 + 2.2 * t);
+    this._markerRing.visible = true;
+    this._markerRing.scale.set(r, 1, r);
+    this._markerRing.material.opacity = 0.6 * (1 - t);
+  }
+  clearMarker() {
+    if (this._marker) this._marker.visible = false;
+    if (this._markerRing) this._markerRing.visible = false;
+  }
+
+  /** The pitcher's throwing hand (`handR`), in WORLD FEET (R1 renamed this from `handWorldPx`).
+   *  The pitch flight starts here, so the ball leaves the hand this specific pose actually has.
+   *  `null` before that actor/bone exists. */
+  handWorld(role = 'pitcher') {
     const actor = this.actors[role];
     if (!actor || !actor.bones.handR) return null;
     const v = new THREE.Vector3();
     actor.bones.handR.getWorldPosition(v);
-    return { x: v.x, y: -v.y };
+    return { x: v.x, y: v.y, z: v.z };
   }
 
-  // STAGE 4 FIX, corrected after coordinator review: `render()` is the one properly expensive call
-  // in this loop (two skinned actors, ~4800 verts each, plus the bat/shadows/ball) - measured
-  // against the REAL live play screen (`test-baseball-device.mjs`'s r2-cadence, mounted through
-  // the real hub), rendering it at every requestAnimationFrame pushed the verdict-to-next-release
-  // gap from its pre-3D ~6220ms to ~6300-6350ms under this sandbox's SOFTWARE renderer
-  // (SwiftShader): real main-thread contention between this loop's own synchronous render() calls
-  // and `_stepWindup`'s setTimeout-based sleeps, not a change to any awaited duration (R1/R2's own
-  // numbers are untouched - see _stepWindup, _onEngineEvent, _settleAtBat).
-  //
-  // The first cut of this fix capped the render rate EVERYWHERE, unconditionally - which pays for
-  // a sandbox artifact with every real player's frame rate. A real phone renders this scene on a
-  // real GPU, where the contention this fix exists for does not arise (the render call returns to
-  // the driver almost immediately instead of blocking the main thread while software-rasterising
-  // two figures), so a permanent 20fps cap would cost 7 of the ~21 rendered frames a real device
-  // gets through the fastest motion in the game (Swing, ~350ms) for a problem that is not there on
-  // that device. The cap is gated on `isSoftGL()` now: capped under software rendering (this
-  // sandbox, and any headless test), uncapped on real hardware (`requestAnimationFrame`'s own
-  // display-rate cap is the only limit there). `mixer.update(dt)` runs at whichever rate `render()`
-  // does either way, and `dt` is measured from `this._last`, which only advances on a frame that
-  // actually did work - so a clip's mark lands at the right REAL time regardless of how many rAF
-  // ticks were skipped in between (a lower tick rate, not dropped time), on both paths.
-  // `_lastRender = 0` (not `now`) so the very first tick always renders immediately - no blank
-  // frame while the cap's own window fills for the first time.
+  /** Compile the shaders and upload the textures BEFORE the play screen needs them. Measured on
+   *  this container: the very first `renderer.render` of a built stadium costs 227 ms (program
+   *  compilation and texture upload under a software rasteriser), which landed squarely between the
+   *  Play tap and the first wind-up and blew the 300 ms budget the `first-frame` probe holds. Doing
+   *  it at MOUNT, into a 32x32 buffer, is the same trick stage 7 played with `plate.webp`: a player
+   *  picking a league pays for it instead. Deliberately does NOT resolve `firstFrame()` - that
+   *  promise means "the scene has been drawn AT ITS REAL SIZE by the render loop", which is what a
+   *  wind-up must not start before. */
+  warm() {
+    if (!this.renderer || !this.scene || !this.cameras) return;
+    const w = this._w, h = this._h;
+    this.renderer.setSize(32, 32, false);
+    this.renderer.render(this.scene, this.cameras.batter);
+    if (w && h) this.renderer.setSize(w, h, false);
+  }
+
+  /** Resolves once the scene has actually RENDERED a frame. R1 replaces `field.js`'s old
+   *  `plateReady()` (which waited on plate.webp decoding) with this: the first wind-up of a game
+   *  waits for the stadium to have been drawn at least once, so a delivery never runs under an
+   *  empty field. Already-resolved on every later call, so it only ever costs time once. */
+  firstFrame() { return this._firstFramePromise; }
+
+  /** What the scene costs, for the report and for the R1 triangle/draw-call budget. Read after a
+   *  render; `renderer.info.render` is per-frame and resets on the next one. */
+  renderStats() {
+    if (!this.renderer) return null;
+    const r = this.renderer.info.render;
+    return { triangles: r.triangles, calls: r.calls, points: r.points, lines: r.lines };
+  }
+
+  // The render-rate cap (stage 4, kept): rendering at every rAF under a SOFTWARE rasteriser put
+  // real main-thread contention between this loop's synchronous render() calls and _stepWindup's
+  // setTimeout sleeps, and pushed the measured R2 cadence out of range. It is gated on isSoftGL()
+  // so a real phone GPU is never capped. `dt` is measured from `this._last`, which only advances on
+  // a frame that did work, so a clip's mark still lands at the right REAL time either way.
   start() {
     if (this._running) return;
     this._running = true;
@@ -587,24 +713,31 @@ export class Actors {
     const tick = (now) => {
       if (!this._running) return;
       if (!soft || now - this._lastRender >= RENDER_FRAME_MS) {
-        const dt = Math.min(0.05, (now - this._last) / 1000);
+        // R1 FIX, measured: this clamp used to be 0.05 s, which is exactly the render cap's own
+        // frame time - so on any device where one frame takes LONGER than the cap (this container's
+        // software rasteriser renders the whole stadium in about 100 ms) every clip ran at half
+        // real speed and a `markAtMs` landed at twice the time it was asked for. The tap-tap-pitch
+        // probe caught it: the delivery reached its release keyframe 2000 ms after a 1100 ms meter.
+        // The clamp exists only to stop a tab that was hidden from fast-forwarding a clip past its
+        // own mark on the first frame back, and `visibilitychange` already pauses the loop for that
+        // case, so 0.25 s is far above any real frame and still well under a backgrounded gap.
+        const dt = Math.min(0.25, (now - this._last) / 1000);
         this._last = now;
         this._lastRender = now;
         for (const actor of Object.values(this.actors)) {
           if (!actor) continue;
           actor.mixer.update(dt);
-          // STAGE 8 row 2's HOLD: checked every frame, after the mixer has already advanced this
-          // actor's clip - the instant `a.time` reaches `actor.holdAt` (set by `play(...,
-          // {holdAtMark:true})`), freeze it there rather than letting it play through. `release()`
-          // is the only way `actor.holdAt` clears once set, so this keeps re-clamping every frame
-          // for as long as the player keeps holding (arbitrarily long - nothing times it out).
+          // STAGE 8 row 2's HOLD: the instant `a.time` reaches `actor.holdAt`, freeze it there.
+          // `release()` is the only thing that clears `actor.holdAt` once set.
           const a = actor.current;
           if (a && actor.holdAt != null && a.time >= actor.holdAt) {
             a.paused = true;
             a.time = actor.holdAt;
           }
         }
+        if (this.cameraName === 'chase') this._stepChase(CHASE_LERP);
         this.renderer.render(this.scene, this.camera);
+        if (this._firstFrameResolve) { const r = this._firstFrameResolve; this._firstFrameResolve = null; r(); }
       }
       this._raf = requestAnimationFrame(tick);
     };
@@ -617,19 +750,17 @@ export class Actors {
     this.pause();
     if (this._offResize) this._offResize();
     // Materials are cloned per actor (_makeActor) so disposing them here is safe; their `.map` is
-    // NOT - skinTexture()'s CanvasTexture cache is module-level, shared by every Actors instance
-    // and every (skin, side) it has ever cast, on purpose (a side change or a dev-screen reopen
-    // must never re-fetch or re-remap). Disposing a shared texture here would leave every OTHER
-    // instance still holding that cache entry pointed at a dead GPU resource - the very next
-    // setBatter/setPitcher call (or dev-screen reopen) would render that side blank. Geometry is
-    // still per-actor and still disposed; the bat's own geometry/material are covered by the same
-    // traversal (they are real children of handR, section 3.5).
+    // NOT - skinTexture()'s CanvasTexture cache is module-level and shared by every Actors instance
+    // and every (skin, side) it has ever cast, on purpose. Disposing a shared texture here would
+    // leave every OTHER instance holding a cache entry pointed at a dead GPU resource.
     for (const a of Object.values(this.actors)) if (a) { a.mixer.stopAllAction(); a.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); }); }
-    // The ball is a plain Mesh, not shared across instances the way the skin CanvasTexture cache
-    // is (setBall's own header) - safe to dispose here every time.
+    if (this.stadium) { this.stadium.dispose(); this.stadium = null; }
     if (this._ball) { this._ball.geometry.dispose(); this._ball.material.dispose(); this._ball = null; }
+    if (this._ballShadow) { this._ballShadow.geometry.dispose(); this._ballShadow.material.dispose(); this._ballShadow = null; }
+    if (this._marker) { this._marker.geometry.dispose(); this._marker.material.dispose(); this._marker = null; }
+    if (this._markerRing) { this._markerRing.geometry.dispose(); this._markerRing.material.dispose(); this._markerRing = null; }
     if (this.renderer) { this.renderer.dispose(); this.renderer.forceContextLoss(); }
     if (this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
-    this.renderer = null; this.scene = null; this.ready = false;
+    this.renderer = null; this.scene = null; this.cameras = null; this.camera = null; this.ready = false;
   }
 }

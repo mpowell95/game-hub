@@ -3,7 +3,7 @@
 // 1. NODE, NO BROWSER (add to run-all-tests.mjs): readGlb parses the model; not Draco; under 4MB;
 //    every RIG_REQUIRED name is a node in the file; the four skin PNGs (section 2.1) exist and are
 //    1024x1024; CLIPS.Swing/CLIPS.Miss/CLIPS.Pitch have keys and a mark inside [0, lastKey.t];
-//    CLIPS.Set has keys (mark:null by design, so no mark check); actors.js's KEYS colour-key table
+//    CLIPS.Set and CLIPS.Crouch have keys (mark:null by design); actors.js's KEYS colour-key table
 //    (section 2.2) never keys a skin-tone colour; buildClip over a fake bones/restQ object yields
 //    one quaternion track per bone used and the right duration. STAGE 4 (section 3.9's own list)
 //    adds: `field.js` exports `plateCover`/`anchorPx`; `actors.dispose()` runs inside ui.js's own
@@ -15,12 +15,15 @@
 //    probe's release signal is `actors.play('pitcher', 'Pitch', ...)`'s own call time + `markAtMs`,
 //    not a frame number - see that file's own comment for the before/after proof.
 // 2. CHROMIUM UNDER SWIFTSHADER (SKIPs without playwright-core; NOT in run-all-tests.mjs): loads
-//    the model through the real Actors class, checks the actor canvas exists and paints a
-//    non-transparent pixel block around an idle anchor, checks a pitcher read-back differs between
-//    Set and mid-Pitch and a batter shirt pixel differs between home and away (section 2.2's
-//    colour-key remap), then checks dispose() actually tears it down (canvas removed, renderer
-//    gone, and - stage 3's own fix - without disposing the module-cached skin textures every OTHER
-//    Actors instance still holds, see actors.js's dispose() comment).
+//    the model through the real Actors class and checks the batter actually PAINTS (the frame
+//    differs with him and without him - R1 made the canvas's clear colour opaque sky, so an alpha
+//    test means nothing any more), that a pitcher read-back differs between Set and mid-Pitch, that
+//    a batter shirt pixel differs between home and away (section 2.2's colour-key remap), then that
+//    dispose() tears it down (canvas removed, renderer gone, and - stage 3's own fix - without
+//    disposing the module-cached skin textures every OTHER Actors instance still holds).
+//    R1 adds: the 2-D overlay now sits ABOVE the WebGL scene (they swapped), the cutaway probe asks
+//    `actors.cameraName` instead of a canvas's `display`, and the motion floors are measured by
+//    projecting bone world positions through the real batter/pitcher cameras.
 //
 // A real file is checked by default now that section 2.2 is filled (baseball/models/player.glb
 // ships in the repo); pass a different one (e.g. the retired section 2.1 scaffold) with:
@@ -148,6 +151,17 @@ for (const name of ['Swing', 'Miss', 'Pitch']) {
 // table), so it needs its own presence check rather than the mark-range loop above.
 if (CLIPS.Set && CLIPS.Set.keys.length) ok(`CLIPS.Set has keys (${CLIPS.Set.keys.length})`);
 else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md section 3.4)');
+// R1 (section 9): the catcher's own resting loop. No mark and no motion floor by design - he is a
+// static figure behind the plate - but it has to LOOP (first and last keyframe identical, or the
+// crouch pops once a second) and it has to be a CROUCH, which is what the hips offset carries.
+if (CLIPS.Crouch && CLIPS.Crouch.keys.length >= 2 && CLIPS.Crouch.loop && CLIPS.Crouch.mark == null) {
+  const first = CLIPS.Crouch.keys[0], last = CLIPS.Crouch.keys[CLIPS.Crouch.keys.length - 1];
+  const same = JSON.stringify(first.pose) === JSON.stringify(last.pose) && JSON.stringify(first.hipsOffset) === JSON.stringify(last.hipsOffset);
+  if (same) ok(`CLIPS.Crouch loops seamlessly (${CLIPS.Crouch.keys.length} keys, ${last.t}s)`);
+  else fail('CLIPS.Crouch loop', 'the first and last keyframes differ, so the loop pops every time round');
+} else {
+  fail('CLIPS.Crouch', 'missing, or not a mark-less looping clip with at least two keyframes');
+}
 
 // actors.js's KEYS (section 2.2's colour-key remap table) must never key a skin-tone colour - the
 // #f58c6a..#f59777 AA family every skin's face/arms shade through. A source this close to skin
@@ -197,24 +211,62 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   const fieldSrc = readFileSync('./baseball/js/field.js', 'utf8');
   const uiSrc = readFileSync('./baseball/js/ui.js', 'utf8');
 
-  if (/export function plateCover\(/.test(fieldSrc)) ok('field.js: plateCover is exported');
-  else fail('field.js plateCover export', 'no "export function plateCover(" found');
-
-  if (/export function anchorPx\(/.test(fieldSrc)) ok('field.js: anchorPx is exported');
-  else fail('field.js anchorPx export', 'no "export function anchorPx(" found');
-
-  // Matches real code (a function definition, an opts.noFigures read), not the historical comments
-  // this file's own removal note is allowed to still mention by name.
+  // R1 (docs/BASEBALL-3D-BUILD.md section 9): field.js is THE WORLD now. These are the exports the
+  // rest of the game positions off, and they replace the painted camera's own
+  // (plateCover/anchorPx/plateBallPos/zoneRect/PLATE_ANCHORS/plateReady).
+  for (const name of ['zoneRectFt', 'zoneCornersFt', 'projectToCanvas', 'engineToWorld', 'makeCameras', 'buildStadium', 'fencePoints']) {
+    if (new RegExp(`export function ${name}\\(`).test(fieldSrc)) ok(`field.js: ${name} is exported`);
+    else fail(`field.js ${name} export`, `no "export function ${name}(" found`);
+  }
+  for (const name of ['ZONE', 'BATTER_BOX', 'BATTER_AIM_TRAVEL_FT', 'RUBBER', 'CATCHER', 'UMPIRE', 'CAMERAS', 'BALL_RADIUS_FT', 'FIGURE_HEIGHT_FT', 'MARKER']) {
+    if (new RegExp(`export const ${name} =`).test(fieldSrc)) ok(`field.js: ${name} is exported`);
+    else fail(`field.js ${name} export`, `no "export const ${name} =" found`);
+  }
+  // The painted-camera surface is DELETED, not merely unused - R1's own list. Matched against real
+  // code (a declaration), not the historical comments this file and field.js's own header are
+  // allowed to still mention by name.
+  {
+    const gone = ['plateCover', 'anchorPx', 'plateBallPos', 'zoneRect', 'PLATE_ANCHORS', 'plateReady', 'preloadPlateImages',
+      'drawPlateView', 'drawPlateBall', 'drawField', 'drawBall', 'drawLandingMarker', 'projectOverhead', 'drawOverheadPicture',
+      'plateCover', 'NEAR_BATTER_HEIGHT_FRAC', 'MOUND_PITCHER_HEIGHT_FRAC', 'BATTER_AIM_TRAVEL_FRAC', 'OVERHEAD_HOMOGRAPHY'];
+    const still = gone.filter((n) => new RegExp(`(export )?(function|const) ${n}\\b`).test(fieldSrc));
+    if (!still.length) ok(`field.js: every painted-camera symbol is gone (${gone.length} checked)`);
+    else fail('field.js painted camera', `still declared: ${still.join(', ')}`);
+  }
   if (!/function drawBatterFigure\(|function drawPitcherFigure\(|function drawFrameCheck\(|opts\.noFigures/.test(fieldSrc)) {
     ok('field.js: the sprite-figure functions (drawBatterFigure/drawPitcherFigure/drawFrameCheck) and the noFigures option are gone');
   } else {
     fail('field.js sprite path', 'a sprite-figure symbol (drawBatterFigure/drawPitcherFigure/drawFrameCheck/noFigures) is still present as code');
+  }
+  // R1 renamed the hand accessor because it changed UNITS: canvas px to world feet. A leftover
+  // caller would silently read `undefined` and place the ball at the origin, so both halves are
+  // checked - the new name present, the old one gone everywhere.
+  {
+    const actorsNow = readFileSync('./baseball/js/actors.js', 'utf8');
+    const uiNow = readFileSync('./baseball/js/ui.js', 'utf8');
+    // Matched as CALLS and a DEFINITION, not as bare names - both files' own headers are allowed
+    // to say "handWorldPx became handWorld" in prose, which is the record of the rename.
+    if (/handWorld\(role = 'pitcher'\)/.test(actorsNow) && !/handWorldPx\(/.test(actorsNow) && !/handWorldPx\(/.test(uiNow)) {
+      ok('actors.js: handWorld(role) replaces handWorldPx, and no caller still uses the old name');
+    } else {
+      fail('actors.js handWorld', 'handWorld(role) missing, or handWorldPx( is still called in actors.js/ui.js');
+    }
   }
 
   if (!/state\.pitcherFrame|state\.batterFrame|_actorsLive/.test(uiSrc)) {
     ok('ui.js: no state.pitcherFrame/state.batterFrame writes and no _actorsLive fallback branches remain');
   } else {
     fail('ui.js sprite state', 'state.pitcherFrame, state.batterFrame or _actorsLive is still referenced');
+  }
+
+  // R1: the three pictures are deleted from the repo AND from sw.js's ASSETS list.
+  {
+    const swSrc = readFileSync('./sw.js', 'utf8');
+    const imgs = ['plate.webp', 'overhead.webp', 'ball-sheet.webp'];
+    const onDisk = imgs.filter((f) => existsSync(`baseball/img/${f}`));
+    const inSw = imgs.filter((f) => swSrc.includes(`./baseball/img/${f}`));
+    if (!onDisk.length && !inSw.length) ok('R1: baseball/img/{plate,overhead,ball-sheet}.webp are gone from disk and from sw.js ASSETS');
+    else fail('R1 image removal', `still on disk: ${onDisk.join(', ') || 'none'}; still in sw.js: ${inSw.join(', ') || 'none'}`);
   }
 
   const destroyMatch = uiSrc.match(/\n {2}destroy\(\) \{[\s\S]*?\n {2}\}\n/);
@@ -232,11 +284,17 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
 
   // The load-error screen (stage 5, section 3.6's "Loading" bullet): a failed initGL()/load()
   // sets _actorsFailed, the Play click routes it to _renderLoadError() instead of _startGame().
+  // v858's own invariant, restated for R1: the cutaway is a CAMERA now, so what must not happen is
+  // `_animateBattedBall` putting the pitch camera back. Only `_drawStaticField` (guarded by
+  // `_cutawayUp`) and `_returnToPlate` (which clears it) may do that.
   {
     const m = uiSrc.match(/\n {2}_animateBattedBall\([\s\S]*?\n {2}\}\n/);
     const body = m ? m[0] : '';
-    if (body && !/display = ''|\.resume\(\)|_showActors\(\)/.test(body) && /_drawStaticField\(\) \{[\s\S]*?_showActors\(\);/.test(uiSrc)) ok('structural: _animateBattedBall never re-shows the 3D layer; _drawStaticField does (v858)');
-    else fail('structural: cutaway show/hide', '_animateBattedBall re-shows the actor canvas, or _drawStaticField does not call _showActors()');
+    const setsChase = /setCamera\('chase'\)/.test(body);
+    const setsPitchCam = /setCamera\('batter'\)|setCamera\('pitcher'\)/.test(body);
+    const drawSetsCamera = /_drawStaticField\(\) \{[\s\S]*?setCamera\(/.test(uiSrc);
+    if (setsChase && !setsPitchCam && drawSetsCamera) ok('structural: _animateBattedBall only ever switches TO the chase camera; _drawStaticField is what switches back (v858, R1)');
+    else fail('structural: cutaway camera', `_animateBattedBall setsChase=${setsChase} setsPitchCam=${setsPitchCam}; _drawStaticField sets a camera=${drawSetsCamera}`);
   }
   if (/_actorsFailed\s*=\s*true/.test(uiSrc) && /_renderLoadError/.test(uiSrc)) {
     ok('ui.js: a failed load sets _actorsFailed and _renderLoadError() exists');
@@ -261,6 +319,13 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     [/actors\.setBall\(/, 'the pitch flight calls actors.setBall(...)'],
     [/actors\.setBatter\(\{/, '_syncActors calls actors.setBatter({...})'],
     [/actors\.setPitcher\(\{/, '_syncActors calls actors.setPitcher({...})'],
+    // R1's own additions to the same table.
+    [/actors\.setCatcher\(\{/, '_syncActors calls actors.setCatcher({...})'],
+    [/actors\.setUmpire\(\{/, '_syncActors calls actors.setUmpire({...})'],
+    [/this\.actors\.buildField\(/, '_renderPlay builds the stadium (actors.buildField)'],
+    [/actors\.setCamera\('chase'\)/, 'the cutaway switches to the chase camera'],
+    [/actors\.chaseAt\(/, 'the batted-ball flight drives the chase camera (actors.chaseAt)'],
+    [/actors\.setMarker\(\{/, 'the marker hold places a world landing marker (actors.setMarker)'],
   ];
   let allCallsFound = true;
   for (const [re, label] of wantCalls) {
@@ -309,10 +374,11 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     } else {
       fail('actors.js toSet()', 'no toSet() helper found playing \'Set\' on the pitcher');
     }
-    if (/lastBallPx\(\)/.test(actorsSrc) && /this\._lastBallPx *= *\{/.test(actorsSrc)) {
-      ok('actors.js: setBall() tracks lastBallPx() for THE CONTACT HOLD');
+    // R1 renamed this with the units it carries: `lastBallPx` -> `lastBallPos`, world feet.
+    if (/lastBallPos\(\)/.test(actorsSrc) && /this\._lastBall *= *\{/.test(actorsSrc)) {
+      ok('actors.js: setBall() tracks lastBallPos() for THE CONTACT HOLD');
     } else {
-      fail('actors.js lastBallPx', 'setBall() does not track a lastBallPx() the contact hold can read');
+      fail('actors.js lastBallPos', 'setBall() does not track a lastBallPos() the contact hold can read');
     }
 
     // Row 3: the pitcher's return to Set fires from both flight-end paths.
@@ -338,25 +404,20 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     if (clearSites === 2) ok('ui.js: _cutawayUp = false appears in exactly 2 places (constructor init, _returnToPlate)');
     else fail('ui.js _cutawayUp single exit', `_cutawayUp = false appears in ${clearSites} places, expected 2`);
 
-    // Row 7: the preload moved to mount, and _stepWindup awaits plateReady() before the first
-    // wind-up of a game. Bounded to _startGame()'s own body (not a substring test on the whole
-    // file) so a comment mentioning the call by name elsewhere can't produce a false pass or fail.
-    const startGameMatch = uiSrc.match(/\n {2}_startGame\(\) \{[\s\S]*?\n {2}\}\n/);
-    const callsPreloadSomewhere = /(?<!\w)preloadPlateImages\(\);/.test(uiSrc);
-    const callsPreloadInStartGame = startGameMatch && /(?<!\w)preloadPlateImages\(\);/.test(startGameMatch[0]);
-    if (callsPreloadSomewhere && !callsPreloadInStartGame) {
-      ok('ui.js: preloadPlateImages() is called (and not from _startGame() any more)');
-    } else {
-      fail('ui.js preload placement', `preloadPlateImages() call ${callsPreloadSomewhere ? 'is' : 'is not'} present; ${callsPreloadInStartGame ? 'still' : 'not'} called from _startGame()`);
-    }
+    // Row 7, restated for R1: there is no picture to preload, so the first wind-up waits for the
+    // SCENE's own first rendered frame instead. Bounded to `_stepWindup`'s own body so a comment
+    // elsewhere mentioning the call by name can't produce a false pass or fail.
     const windupMatch = uiSrc.match(/\n {2}async _stepWindup\(\) \{[\s\S]*?\n {2}\}\n/);
-    if (windupMatch && /plateReady\(\)/.test(windupMatch[0]) && /PLATE_READY_CAP_MS/.test(windupMatch[0])) {
-      ok('ui.js: _stepWindup() awaits plateReady() with a cap');
+    if (windupMatch && /actors\.firstFrame\(\)/.test(windupMatch[0]) && /FIRST_FRAME_CAP_MS/.test(windupMatch[0])) {
+      ok('ui.js: _stepWindup() awaits actors.firstFrame() with a cap');
     } else {
-      fail('ui.js _stepWindup preload await', '_stepWindup() does not await plateReady() with a cap');
+      fail('ui.js _stepWindup first-frame await', '_stepWindup() does not await actors.firstFrame() with a cap');
     }
-    if (/export function plateReady\(/.test(fieldSrc)) ok('field.js: plateReady() is exported');
-    else fail('field.js plateReady export', 'no "export function plateReady(" found');
+    if (/firstFrame\(\) \{ return this\._firstFramePromise; \}/.test(actorsSrc)) {
+      ok('actors.js: firstFrame() resolves from the render loop');
+    } else {
+      fail('actors.js firstFrame', 'no firstFrame() returning the render loop\'s own promise');
+    }
   }
 }
 
@@ -416,24 +477,35 @@ async function runChromiumHalf() {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:fixed; left:0; top:0; width:300px; height:300px;';
     document.body.appendChild(wrap);
+    const F = await import('/baseball/js/field.js');
     const actors = new Actors(wrap);
     const glOk = actors.initGL();
     if (!glOk) return { error: 'initGL() returned false' };
     await actors.load(modelUrl);
-    actors.resize(300, 300, null);
-    actors.place('batter', { anchor: { x: 150, y: 280 }, heightPx: 260, facingRad: 0 });
+    actors.resize(300, 300);
+    // R1: world feet, and the batting camera (the class's own default) already looks at the box.
+    actors.place('batter', { pos: { x: -F.BATTER_BOX.x, y: 0, z: F.BATTER_BOX.z }, heightFt: F.FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD });
     actors.idle('batter');
     actors.actors.batter.mixer.update(0);
-    actors.renderer.render(actors.scene, actors.camera);
     const gl = actors.renderer.getContext();
-    const px = new Uint8Array(4);
-    // Canvas pixel space is y-down from the TOP; our anchor's "feet" are near the bottom of the
-    // 300x300 canvas, so sample a block partway up from there, at actual device pixels (dpr may
-    // scale the drawing buffer beyond the 300x300 CSS size).
     const dw = actors.canvas.width, dh = actors.canvas.height;
-    gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    // R1: the clear colour is opaque sky now (this canvas draws the whole scene), so "is anything
+    // there" cannot be an alpha test any more. Instead: render with the batter, render without him,
+    // and compare the same block. A figure that does not paint makes the two identical.
+    const blockSum = () => {
+      const buf = new Uint8Array(dw * dh * 4);
+      gl.readPixels(0, 0, dw, dh, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i];
+      return sum;
+    };
+    actors.renderer.render(actors.scene, actors.camera);
+    const withBatter = blockSum();
+    actors.actors.batter.pivot.visible = false;
+    actors.renderer.render(actors.scene, actors.camera);
+    const withoutBatter = blockSum();
+    actors.actors.batter.pivot.visible = true;
+    actors.renderer.render(actors.scene, actors.camera);
     const hasCanvas = !!document.querySelector('canvas.bb-actor-canvas');
-    const alpha = px[3];
 
     // STAGE 3: a read-back of the pitcher region differs between Set and mid-Pitch (section 3.9).
     // A checksum over a block covering the WHOLE figure (full canvas height, not just the upper
@@ -448,7 +520,8 @@ async function runChromiumHalf() {
       let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i];
       return sum;
     };
-    actors.place('pitcher', { anchor: { x: 150, y: 280 }, heightPx: 200, facingRad: PITCHER_FACING_RAD });
+    actors.place('pitcher', { pos: { x: F.RUBBER.x, y: F.RUBBER.y, z: F.RUBBER.z }, heightFt: F.FIGURE_HEIGHT_FT, facingRad: PITCHER_FACING_RAD });
+    actors.setCamera('pitcher');
     actors.play('pitcher', 'Set');
     actors.actors.pitcher.actions.Set.time = 0; actors.actors.pitcher.actions.Set.paused = true;
     actors.actors.pitcher.mixer.update(0);
@@ -478,24 +551,33 @@ async function runChromiumHalf() {
     // not on a colour. Hiding him restores what the check is actually about; nothing it asserts
     // changed.
     actors.actors.pitcher.pivot.visible = false;
-    actors.place('batter', { anchor: { x: 150, y: 280 }, heightPx: 260, facingRad: BATTER_FACING_RAD });
+    actors.setCamera('batter');
+    actors.place('batter', { pos: { x: -F.BATTER_BOX.x, y: 0, z: F.BATTER_BOX.z }, heightFt: F.FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD });
     actors.idle('batter');
     actors.actors.batter.mixer.update(0);
+    // R1: the sample point is the batter's own CHEST, projected through the live camera, rather
+    // than a fixed canvas fraction - the figure is placed in the world now, so where he lands on
+    // screen is the camera's business and a hard-coded pixel would be a guess about it.
+    actors.actors.batter.pivot.updateMatrixWorld(true);
+    const chestV = { x: 0, y: 0, z: 0 };
+    { const b = actors.actors.batter.bones.chest || actors.actors.batter.bones.spine;
+      const e = b.matrixWorld.elements; chestV.x = e[12]; chestV.y = e[13]; chestV.z = e[14]; }
+    const sp = F.projectToCanvas(actors.camera, chestV, dw, dh);
+    const sx = Math.max(0, Math.min(dw - 1, Math.round(sp.x))), sy = Math.max(0, Math.min(dh - 1, dh - Math.round(sp.y)));
+    const readAt = () => { const p = new Uint8Array(4); gl.readPixels(sx, sy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, p); return p; };
     await actors.setBatter({ side: 'home' });
     actors.renderer.render(actors.scene, actors.camera);
-    const shirtPxHome = new Uint8Array(4);
-    gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, shirtPxHome);
+    const shirtPxHome = readAt();
     await actors.setBatter({ side: 'away' });
     actors.renderer.render(actors.scene, actors.camera);
-    const shirtPxAway = new Uint8Array(4);
-    gl.readPixels(Math.floor(dw / 2), Math.floor(dh * 0.35), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, shirtPxAway);
+    const shirtPxAway = readAt();
 
     actors.dispose();
     const canvasGoneAfterDispose = !document.querySelector('canvas.bb-actor-canvas');
     const rendererGone = actors.renderer === null;
     wrap.remove();
     return {
-      hasCanvas, alpha, canvasGoneAfterDispose, rendererGone,
+      hasCanvas, withBatter, withoutBatter, canvasGoneAfterDispose, rendererGone,
       setChecksum, pitchChecksum,
       shirtPxHome: Array.from(shirtPxHome), shirtPxAway: Array.from(shirtPxAway),
     };
@@ -513,8 +595,8 @@ async function runChromiumHalf() {
   }
   if (result.hasCanvas) ok('actor canvas (class="bb-actor-canvas") exists after load()');
   else fail('actor canvas', 'canvas.bb-actor-canvas not found in the DOM');
-  if (result.alpha > 0) ok(`idle pixel block is non-transparent (alpha ${result.alpha})`);
-  else fail('idle pixel block', `alpha ${result.alpha}, expected > 0`);
+  if (result.withBatter !== result.withoutBatter) ok(`the idle batter actually paints (frame checksum ${result.withBatter} with him, ${result.withoutBatter} without)`);
+  else fail('idle batter paints', `identical checksum ${result.withBatter} with and without the batter - the figure is not being drawn`);
   if (result.canvasGoneAfterDispose) ok('dispose(): actor canvas removed from the DOM');
   else fail('dispose() canvas', 'canvas.bb-actor-canvas still present after dispose()');
   if (result.rendererGone) ok('dispose(): renderer is null (not reachable)');
@@ -607,7 +689,8 @@ async function runMountInHubHalf() {
     return !!(inst && inst.actors && inst.actors.actors.batter && inst.actors.actors.batter._last);
   }, null, { timeout: 8000 }).catch(() => {});
 
-  const layerCheck = await page.evaluate(() => {
+  const layerCheck = await page.evaluate(async () => {
+    const F = await import('/baseball/js/field.js');
     const fieldCanvas = document.querySelector('.bb-field-canvas');
     const actorCanvas = document.querySelector('.bb-actor-canvas');
     if (!fieldCanvas || !actorCanvas) return { error: `missing canvas (field=${!!fieldCanvas}, actor=${!!actorCanvas})` };
@@ -621,40 +704,45 @@ async function runMountInHubHalf() {
     // whatever frame happened to be sitting in the (preserveDrawingBuffer) buffer already.
     inst.actors.renderer.render(inst.actors.scene, inst.actors.camera);
     const gl = inst.actors.renderer.getContext();
-    const px = new Uint8Array(4);
     const dw = actorCanvas.width, dh = actorCanvas.height;
-    // Sample around the BATTER's own anchor (`place()`'s own last call - anchor is the feet, in CSS
-    // px), not a fixed screen fraction: the field band's own shape (a tall, narrow crop, see
-    // field.js's plateCover) puts the near-box batter low in the frame, not at a generic mid-canvas
-    // point a fixed-fraction guess would assume.
+    // R1: the clear colour is opaque sky (this canvas is the whole field now), so "is the batter
+    // there" cannot be an alpha test. Render the frame with him and without him and compare the
+    // block around his own PROJECTED position - the world position `place()` last got, through the
+    // live camera, rather than a guessed screen fraction.
+    inst.actors.actors.batter.pivot.updateMatrixWorld(true);
     const last = inst.actors.actors.batter._last;
-    const rect = actorCanvas.getBoundingClientRect();
-    const scaleX = dw / rect.width, scaleY = dh / rect.height;
-    // A BLOCK around the batter's own anchor, not one exact pixel: the figure is a silhouette with
-    // real gaps (between the arms and the torso, around the bat), so a single guessed point can
-    // land on a gap even when the figure is plainly on screen next to it - a real screenshot of
-    // this exact scene (mounted in the hub, this same anchor) confirmed the render itself is
-    // correct; only a one-pixel probe was too exact a claim to make about where "the batter" is.
-    // The block spans the anchor's own heightPx (feet to head) and a generous width either side.
-    const bw = Math.round((last ? last.heightPx : 100) * 0.7 * scaleX);
-    const bh = Math.round((last ? last.heightPx : 100) * scaleY);
-    const bx = Math.round(((last ? last.anchor.x : rect.width / 2) * scaleX) - bw / 2);
-    const by = Math.round(((last ? last.anchor.y : rect.height * 0.9) * scaleY) - bh);
-    const x0 = Math.max(0, Math.min(dw - 1, bx)), y0 = Math.max(0, Math.min(dh - 1, by));
+    const feet = last ? last.pos : { x: 0, y: 0, z: 0 };
+    const p0 = F.projectToCanvas(inst.actors.camera, feet, dw, dh);
+    const p1 = F.projectToCanvas(inst.actors.camera, { x: feet.x, y: F.FIGURE_HEIGHT_FT, z: feet.z }, dw, dh);
+    const hPx = Math.max(8, Math.abs(p0.y - p1.y));
+    const bw = Math.round(hPx * 0.7), bh = Math.round(hPx);
+    const x0 = Math.max(0, Math.min(dw - 1, Math.round(p0.x - bw / 2)));
+    const y0 = Math.max(0, Math.min(dh - 1, Math.round(dh - p0.y)));
     const w = Math.max(1, Math.min(dw - x0, bw)), h = Math.max(1, Math.min(dh - y0, bh));
-    const buf = new Uint8Array(w * h * 4);
-    gl.readPixels(x0, y0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-    let maxAlpha = 0;
-    for (let i = 3; i < buf.length; i += 4) if (buf[i] > maxAlpha) maxAlpha = buf[i];
-    return { fieldZ, actorZ, idleAlpha: maxAlpha };
+    const sum = () => {
+      const buf = new Uint8Array(w * h * 4);
+      gl.readPixels(x0, y0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      let t = 0; for (let i = 0; i < buf.length; i++) t += buf[i];
+      return t;
+    };
+    inst.actors.renderer.render(inst.actors.scene, inst.actors.camera);
+    const withBatter = sum();
+    inst.actors.actors.batter.pivot.visible = false;
+    inst.actors.renderer.render(inst.actors.scene, inst.actors.camera);
+    const withoutBatter = sum();
+    inst.actors.actors.batter.pivot.visible = true;
+    inst.actors.renderer.render(inst.actors.scene, inst.actors.camera);
+    return { fieldZ, actorZ, withBatter, withoutBatter, block: [x0, y0, w, h] };
   });
   if (layerCheck.error) {
     fail('mount-in-hub layering', layerCheck.error);
   } else {
-    if (layerCheck.actorZ > layerCheck.fieldZ) ok(`actor canvas sits above the field canvas (z-index ${layerCheck.actorZ} > ${layerCheck.fieldZ})`);
-    else fail('mount-in-hub layering', `actor canvas z-index ${layerCheck.actorZ} does not sit above field canvas z-index ${layerCheck.fieldZ}`);
-    if (layerCheck.idleAlpha > 0) ok(`idle pixel block is non-transparent on the real play screen (alpha ${layerCheck.idleAlpha})`);
-    else fail('mount-in-hub idle pixel', `alpha ${layerCheck.idleAlpha}, expected > 0`);
+    // R1 SWAPPED THE TWO CANVASES: the WebGL one draws the stadium, so it is the bottom layer and
+    // the 2-D overlay (the strike-zone box, the marker label) sits above it.
+    if (layerCheck.fieldZ > layerCheck.actorZ) ok(`the 2-D overlay sits above the WebGL scene (z-index ${layerCheck.fieldZ} > ${layerCheck.actorZ})`);
+    else fail('mount-in-hub layering', `overlay z-index ${layerCheck.fieldZ} does not sit above the scene's ${layerCheck.actorZ}`);
+    if (layerCheck.withBatter !== layerCheck.withoutBatter) ok(`the idle batter paints on the real play screen (block ${layerCheck.block.join('x')}, checksum ${layerCheck.withBatter} with him / ${layerCheck.withoutBatter} without)`);
+    else fail('mount-in-hub idle batter', `identical checksum ${layerCheck.withBatter} with and without the batter`);
   }
 
   // A read-back 150ms into Swing differs from the idle read-back - proves the live play screen's
@@ -679,97 +767,68 @@ async function runMountInHubHalf() {
   if (swingDiff.idleSum !== swingDiff.swingSum) ok(`batter read-back differs, idle vs 150ms into Swing (${swingDiff.idleSum} vs ${swingDiff.swingSum})`);
   else fail('mount-in-hub Swing read-back', `identical checksum ${swingDiff.idleSum} - the swing did not visibly change the render`);
 
-  // [KNOWN-BUG PROBE] The overhead cutaway must keep the 3D layer hidden for its WHOLE duration,
-  // not just the ball flight. Matt's first recording of v857 (2026-09-19) showed the batter frozen
-  // over the overhead diamond for ~7 s after every ball in play: `_animateBattedBall` used to
-  // re-show the canvas the moment the landing marker was drawn, while the overhead picture stayed
-  // up through the result beat and the between-pitches beat. v858 fixed that one call path
-  // (`_drawStaticField()`/`_showActors()` bringing it back); STAGE 7 (docs/BASEBALL-3D-BUILD.md
-  // section 7, row 6) found a second one - a slider touch mid-cutaway (`batterAimX`) redrawing the
-  // plate view underneath and re-showing the layer - and closes every path at once with a single
-  // flag (`_cutawayUp`) that makes `_drawStaticField()` a no-op for ANY caller while it is set.
-  // Drives the real cutaway (`_animateBattedBall`, unstubbed - the whole point is to prove the REAL
-  // `_drawStaticField()` no-ops on its own, not a stand-in for it), tries a pad move plus a direct
-  // manual call mid-cutaway and asserts it changed nothing, then makes NO further test calls and
-  // asserts the plate view returns BY ITSELF within 2.6s of the cut (CONTACT_HOLD_MS is spent
-  // before this function is even called, from `_settleAtBat`; FLIGHT_MS + MARKER_HOLD_MS = 2.0s is
-  // this function's own budget, so 2.6s is a real margin, not a tight one). The live game's own
-  // engine events are silenced for the probe's own window (`game.onEvent` -> a no-op) so nothing
-  // else calls `_animateBattedBall`/`_settleAtBat` concurrently and confuses the measurement - the
-  // function under test and the guard it exercises stay completely real either way.
+  // [KNOWN-BUG PROBE] The cutaway must stay on the CHASE camera for its WHOLE duration, and no
+  // input path may switch it back. The history: Matt's first recording of v857 showed the batter
+  // frozen over the overhead diamond for ~7 s after every ball in play, because
+  // `_animateBattedBall` re-showed the 3-D layer the moment the landing marker was drawn; v858
+  // fixed that one path, and stage 7 (section 7, row 6) found a second one - a slider touch
+  // mid-cutaway redrawing the plate view - and closed every path at once with `_cutawayUp`.
+  // R1 keeps the same flag and the same probe, one layer down: the cutaway is a camera move now,
+  // so "did it come back early" is asked of `actors.cameraName` rather than of a canvas's
+  // `display`. Drives the real `_animateBattedBall` (unstubbed - the whole point is to prove the
+  // REAL `_drawStaticField()` no-ops on its own), tries a pad move plus a direct manual call
+  // mid-cutaway and asserts neither changed the camera, then makes NO further test calls and
+  // asserts the pitch camera returns BY ITSELF within 2.6 s of the cut (CONTACT_HOLD_MS is spent
+  // before this function is even called; FLIGHT_MS + MARKER_HOLD_MS = 2.0 s is its own budget).
+  // The live game's own engine events are silenced for the probe's window so nothing else calls
+  // `_animateBattedBall`/`_settleAtBat` concurrently.
   const cutaway = await page.evaluate(async () => {
     const inst = document.querySelector('.hub-game')._bbInstance;
-    const cv = () => document.querySelector('canvas.bb-actor-canvas');
-    const fieldCv = () => document.querySelector('canvas.bb-field-canvas');
-    // Silence the LIVE game's own future engine events FIRST (game.js reads `this.onEvent` fresh on
-    // every call, so this takes effect for every event not already mid-dispatch) - `_settleAtBat`
-    // is only ever reached through this hook. An 'atBatEnd' dispatched a moment before this line
-    // could still be mid-flight through the OLD hook, so wait (bounded) for any such in-progress
-    // cutaway to finish on its own before starting the probe's own, rather than racing it.
+    const cam = () => inst.actors.cameraName;
     if (inst.game) inst.game.onEvent = () => {};
     {
       const settleDeadline = performance.now() + 4000;
       while (inst._cutawayUp && performance.now() < settleDeadline) await new Promise((r) => setTimeout(r, 50));
     }
-    // "sky-blue" in the top 25% of the 2D FIELD canvas is what tells the plate view (plate.webp's
-    // own crop keeps a strip of sky above the stands) apart from the overhead cut (overhead.webp,
-    // a straight-down aerial with none) without reading any internal flag - measured directly
-    // against the real shipped images: plate.webp reads ~52% "sky" by this test in its top quarter,
-    // overhead.webp ~0.007%.
-    const skyFrac = () => {
-      const c = fieldCv();
-      if (!c || !c.width || !c.height) return 0;
-      const ctx2 = c.getContext('2d');
-      const w = c.width, bandH = Math.max(1, Math.round(c.height * 0.25));
-      const d = ctx2.getImageData(0, 0, w, bandH).data;
-      let sky = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        n++;
-        const r = d[i], g = d[i + 1], b = d[i + 2];
-        if (b > r + 15 && b > g + 5 && b > 120) sky++;
-      }
-      return n ? sky / n : 0;
-    };
-    // Fire-and-forget, deliberately NOT awaited here - the whole point is to sample mid-flight
-    // state, and awaiting the promise would block until it has already resolved (~2s later).
-    inst._animateBattedBall(40, 180, 'hit', '1B');
+    // Fire-and-forget, deliberately NOT awaited - the whole point is to sample mid-flight state.
+    inst._animateBattedBall(40, 180, 'hit', '1B', 'fly', 200);
     const cutStart = performance.now();
     await new Promise((r) => setTimeout(r, 300));
-    const midFlight = { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac() };
+    const midFlight = { cam: cam(), running: !!inst.actors._running, cutawayUp: !!inst._cutawayUp };
 
     // Mid-cutaway: a pad move plus a DIRECT call to the real (never stubbed) _drawStaticField() -
     // both must be no-ops while `_cutawayUp` is set.
     inst.state.batterAimX = 0.5;
     inst._drawStaticField();
     await new Promise((r) => setTimeout(r, 50));
-    const afterManualDraw = { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac() };
+    const afterManualDraw = { cam: cam(), running: !!inst.actors._running, cutawayUp: !!inst._cutawayUp };
 
-    // No further test calls from here - the plate view must return on its own.
+    // No further test calls from here - the pitch camera must return on its own.
     const deadline = cutStart + 2600;
     let returnedAtMs = null;
     while (performance.now() < deadline) {
-      if (cv().style.display !== 'none' && !!inst.actors._running) { returnedAtMs = performance.now() - cutStart; break; }
+      if (cam() !== 'chase' && !inst._cutawayUp) { returnedAtMs = performance.now() - cutStart; break; }
       await new Promise((r) => setTimeout(r, 50));
     }
-    const afterReturn = returnedAtMs != null ? { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac(), ms: returnedAtMs } : null;
+    const afterReturn = returnedAtMs != null ? { cam: cam(), running: !!inst.actors._running, ms: returnedAtMs } : null;
     return { midFlight, afterManualDraw, afterReturn };
   });
-  if (cutaway.midFlight.display === 'none' && !cutaway.midFlight.running && cutaway.midFlight.skyFrac < 0.10) {
-    ok(`overhead cutaway: actor canvas hidden/paused and the 2D canvas shows the overhead (sky frac ${cutaway.midFlight.skyFrac.toFixed(3)}) mid-flight`);
+  if (cutaway.midFlight.cam === 'chase' && cutaway.midFlight.running && cutaway.midFlight.cutawayUp) {
+    ok('cutaway: the chase camera is live and the render loop is running mid-flight');
   } else {
-    fail('overhead cutaway hide', `mid-flight: display="${cutaway.midFlight.display}", running=${cutaway.midFlight.running}, skyFrac=${cutaway.midFlight.skyFrac.toFixed(3)} (the frozen-batter-over-the-diamond bug)`);
+    fail('cutaway camera', `mid-flight: camera="${cutaway.midFlight.cam}", running=${cutaway.midFlight.running}, cutawayUp=${cutaway.midFlight.cutawayUp}`);
   }
-  if (cutaway.afterManualDraw.display === 'none' && !cutaway.afterManualDraw.running && cutaway.afterManualDraw.skyFrac < 0.10) {
-    ok('a pad move + a direct _drawStaticField() call mid-cutaway changed nothing (the _cutawayUp no-op)');
+  if (cutaway.afterManualDraw.cam === 'chase' && cutaway.afterManualDraw.cutawayUp) {
+    ok('a pad move + a direct _drawStaticField() call mid-cutaway did not switch the camera (the _cutawayUp no-op)');
   } else {
-    fail('cutaway no-op', `after a manual _drawStaticField() mid-cutaway: display="${cutaway.afterManualDraw.display}", running=${cutaway.afterManualDraw.running}, skyFrac=${cutaway.afterManualDraw.skyFrac.toFixed(3)} - the cutaway was interrupted (slider-touch bug)`);
+    fail('cutaway no-op', `after a manual _drawStaticField() mid-cutaway the camera is "${cutaway.afterManualDraw.cam}" (cutawayUp=${cutaway.afterManualDraw.cutawayUp}) - the cutaway was interrupted (slider-touch bug)`);
   }
-  if (cutaway.afterReturn && cutaway.afterReturn.display !== 'none' && cutaway.afterReturn.running && cutaway.afterReturn.skyFrac > 0.10) {
-    ok(`the plate view returned by itself ${cutaway.afterReturn.ms.toFixed(0)}ms after the cut (sky frac ${cutaway.afterReturn.skyFrac.toFixed(3)}), no further test calls`);
+  if (cutaway.afterReturn && cutaway.afterReturn.cam !== 'chase' && cutaway.afterReturn.running) {
+    ok(`the pitch camera returned by itself ${cutaway.afterReturn.ms.toFixed(0)}ms after the cut (now "${cutaway.afterReturn.cam}"), no further test calls`);
   } else if (!cutaway.afterReturn) {
-    fail('cutaway auto-return', 'the plate view never returned on its own within 2.6s of the cut');
+    fail('cutaway auto-return', 'the pitch camera never came back on its own within 2.6s of the cut');
   } else {
-    fail('cutaway auto-return', `returned at ${cutaway.afterReturn.ms.toFixed(0)}ms but display="${cutaway.afterReturn.display}", running=${cutaway.afterReturn.running}, skyFrac=${cutaway.afterReturn.skyFrac.toFixed(3)}`);
+    fail('cutaway auto-return', `returned at ${cutaway.afterReturn.ms.toFixed(0)}ms but camera="${cutaway.afterReturn.cam}", running=${cutaway.afterReturn.running}`);
   }
 
   await page.evaluate(() => { document.querySelector('.hub-game')._bbInstance.destroy(); });
@@ -803,28 +862,33 @@ await runMountInHubHalf();
 // an Idle that moved no bone at all and a whole pitch delivery worth 20 px of hand travel: "They look
 // way too much like just flat images (because they are)."
 //
-// This block is the check that makes that failure loud. It plays each clip through its OWN duration
-// at timeScale 1 with the mixer stepped in fixed 1/60 s increments (mixer.update(1/60), never a wall
-// clock, so the numbers are identical on a fast machine and a loaded one), at the heights these
-// figures actually draw at on a 393x852 phone - the batter 214 px (field.js's NEAR_BATTER_HEIGHT_FRAC
-// 0.50 of the 429 px field band) and the pitcher 47 px (MOUND_PITCHER_HEIGHT_FRAC 0.11) - and samples
-// RIG bone WORLD positions every step. The ortho camera is in canvas pixels (actors.js's own
-// convention, world (x, -y) = screen (x, y)), so a world distance IS a screen distance in px.
+// R1 RE-BASED THIS BLOCK, because the thing it measures moved. Stage 6 placed each figure at a fixed
+// PIXEL height under an orthographic canvas-pixel camera, so a world distance simply WAS a screen
+// distance. There is no such camera now: every figure is 6 ft tall in the world and how big that is
+// on screen is the perspective camera's business. So the measurement is the same measurement, taken
+// one step later - bone WORLD positions sampled every 1/60 s through `mixer.update` (never a wall
+// clock, so the numbers are identical on a fast machine and a loaded one), then PROJECTED through
+// the camera that actually shows that figure (`batterCam` for the batter, `pitcherCam` for the
+// pitcher) onto the real 393x429 field band.
 //
-// The floors below are the brief's, and they are floors, not targets: a clip may move as much more as
-// it likes. Every measured number prints on every run whether it passes or not, because the number is
-// the point - "the batter's idle moves 20.7 px" is a fact a future session can compare against, and
-// "the idle looks alive" is not.
+// The floors below were re-measured the same way and set at 60% of what R1 actually produces, with
+// the ratio to stage 6's own floor beside each one. They are floors, not targets. Every measured
+// number prints on every run whether it passes or not, because the number is the point - "the
+// batter's idle moves 21 px" is a fact a future session can compare against, and "the idle looks
+// alive" is not.
+// measured on 2026-09-20 through the shipped cameras at 393x429: the batter draws 200.5 px tall on
+// batterCam and the pitcher 234.2 px on pitcherCam (he is 11 ft from that lens), which is why the
+// pitcher's numbers grew so much more than the batter's - stage 6 measured him at 47 px.
 const MOTION_FLOORS = {
-  idleHandTravel: 8,      // batter Idle, handR, at 214 px
-  setHandTravel: 2,       // pitcher Set, handR, at 47 px
-  pitchHandPath: 45,      // pitcher Pitch, handR path length, at 47 px
-  pitchHandRise: 20,      // pitcher Pitch, handR max y minus min y
-  pitchFootLift: 10,      // pitcher Pitch, the foot that leaves the ground
-  pitchEarlyMove: 2,      // pitcher Pitch, handR movement inside the first 20% of the clip
+  idleHandTravel: 10,     // batter Idle, handR, batterCam. Measured 17.1. Stage 6's floor was 8 at 214 px: 1.3x
+  setHandTravel: 13,      // pitcher Set, handR, pitcherCam. Measured 22.7. Stage 6's floor was 2 at 47 px: 6.5x
+  pitchHandPath: 268,     // pitcher Pitch, handR path length. Measured 447.4. Stage 6's floor was 45: 6.0x
+  pitchHandRise: 76,      // pitcher Pitch, handR max y minus min y. Measured 127.2. Stage 6's floor was 20: 3.8x
+  pitchFootLift: 57,      // pitcher Pitch, the foot that leaves the ground. Measured 95.9. Stage 6's floor was 10: 5.7x
+  pitchEarlyMove: 7,      // pitcher Pitch, handR inside the first 20% of the clip. Measured 13.1. Stage 6's floor was 2: 3.5x
 };
 
-console.log('\n=== chromium half: motion at the real on-screen sizes (stage 6) ===');
+console.log('\n=== chromium half: motion at the real on-screen sizes (R1: through the real cameras) ===');
 async function runMotionHalf() {
   if (!existsSync(MODEL_PATH)) { skipLine('motion half', `${MODEL_PATH} does not exist yet`); return; }
   let chromium;
@@ -842,24 +906,30 @@ async function runMotionHalf() {
 
   const measured = await page.evaluate(async () => {
     const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } = await import('/baseball/js/actors.js');
+    const F = await import('/baseball/js/field.js');
     const wrap = document.createElement('div');
-    const W = 400, H = 400;
+    // The REAL field band on a 393x852 phone, measured in the hub: 393 x 429 CSS px.
+    const W = 393, H = 429;
     wrap.style.cssText = `position:fixed; left:0; top:0; width:${W}px; height:${H}px;`;
     document.body.appendChild(wrap);
     const actors = new Actors(wrap);
     if (!actors.initGL()) return { error: 'initGL() returned false' };
     await actors.load(`${location.origin}/baseball/models/player.glb`);
-    actors.resize(W, H, null);
+    actors.resize(W, H);
 
-    // World position of a bone in CANVAS PIXELS, straight off its world matrix (no THREE import
-    // needed, and no dependence on anything the renderer does): elements 12/13/14 are the
-    // translation, and screen y is world -y.
-    const at = (bone) => ({ x: bone.matrixWorld.elements[12], y: -bone.matrixWorld.elements[13] });
+    // A bone's world position PROJECTED onto the field band, through the camera that actually shows
+    // this figure. Elements 12/13/14 of matrixWorld are the translation.
+    const screenAt = (bone, cam) => {
+      const e = bone.matrixWorld.elements;
+      const p = F.projectToCanvas(cam, { x: e[12], y: e[13], z: e[14] }, W, H);
+      return { x: p.x, y: p.y };
+    };
     const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-    const run = (role, name, heightPx, facingRad) => {
+    const run = (role, name, pos, facingRad, camName) => {
       const act = actors.actors[role];
-      actors.place(role, { anchor: { x: W / 2, y: H - 20 }, heightPx, facingRad });
+      const cam = actors.cameras[camName];
+      actors.place(role, { pos, heightFt: F.FIGURE_HEIGHT_FT, facingRad });
       act.mixer.stopAllAction();
       act.current = null;                  // no cross-fade from whatever ran before this clip
       actors.play(role, name);             // the real play(), with no markAtMs, so timeScale is 1
@@ -873,7 +943,7 @@ async function runMotionHalf() {
       for (let i = 0; i <= steps; i++) {
         if (i > 0) act.mixer.update(1 / 60);
         act.pivot.updateMatrixWorld(true);
-        samples.push({ t: i / 60, handR: at(act.bones.handR), footL: at(act.bones.footL), footR: at(act.bones.footR), hips: at(act.bones.hips) });
+        samples.push({ t: i / 60, handR: screenAt(act.bones.handR, cam), footL: screenAt(act.bones.footL, cam), footR: screenAt(act.bones.footR, cam), hips: screenAt(act.bones.hips, cam) });
       }
       act.mixer.stopAllAction();
       const stat = (key) => {
@@ -889,16 +959,22 @@ async function runMotionHalf() {
       const n20 = Math.max(1, Math.round(samples.length * 0.2));
       let early = 0;
       for (let i = 1; i <= n20 && i < samples.length; i++) early = Math.max(early, d2(samples[i].handR, samples[0].handR));
-      return { role, name, heightPx, dur, frames: samples.length,
+      // The figure's own on-screen height through this camera, so the numbers below can be read
+      // against the size they were measured at without re-deriving it.
+      const feet = F.projectToCanvas(cam, { x: pos.x, y: pos.y || 0, z: pos.z }, W, H);
+      const head = F.projectToCanvas(cam, { x: pos.x, y: (pos.y || 0) + F.FIGURE_HEIGHT_FT, z: pos.z }, W, H);
+      return { role, name, cam: camName, heightPx: Math.abs(feet.y - head.y), dur, frames: samples.length,
         handR: stat('handR'), hips: stat('hips'), footL: stat('footL'), footR: stat('footR'), early };
     };
 
+    const batterPos = { x: -F.BATTER_BOX.x, y: 0, z: F.BATTER_BOX.z };
+    const pitcherPos = { x: F.RUBBER.x, y: F.RUBBER.y, z: F.RUBBER.z };
     const out = {
-      idle: run('batter', 'Idle', 214, BATTER_FACING_RAD),
-      swing: run('batter', 'Swing', 214, BATTER_FACING_RAD),
-      miss: run('batter', 'Miss', 214, BATTER_FACING_RAD),
-      set: run('pitcher', 'Set', 47, PITCHER_FACING_RAD),
-      pitch: run('pitcher', 'Pitch', 47, PITCHER_FACING_RAD),
+      idle: run('batter', 'Idle', batterPos, BATTER_FACING_RAD, 'batter'),
+      swing: run('batter', 'Swing', batterPos, BATTER_FACING_RAD, 'batter'),
+      miss: run('batter', 'Miss', batterPos, BATTER_FACING_RAD, 'batter'),
+      set: run('pitcher', 'Set', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
+      pitch: run('pitcher', 'Pitch', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
     };
     actors.dispose();
     wrap.remove();
@@ -912,9 +988,8 @@ async function runMotionHalf() {
   const n = (v) => v.toFixed(1);
   for (const k of ['idle', 'swing', 'miss', 'set', 'pitch']) {
     const m = measured[k];
-    if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue;
-    }
-    console.log(`      ${m.role}/${m.name} at ${m.heightPx}px, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
+    if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue; }
+    console.log(`      ${m.role}/${m.name} through ${m.cam}Cam, ${n(m.heightPx)}px tall, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
     console.log(`         handR travel ${n(m.handR.travel)}px  path ${n(m.handR.path)}px  rise ${n(m.handR.rise)}px  first-20% ${n(m.early)}px`);
     console.log(`         hips travel ${n(m.hips.travel)}px  footL lift ${n(m.footL.rise)}px  footR lift ${n(m.footR.rise)}px`);
   }
@@ -923,17 +998,16 @@ async function runMotionHalf() {
     if (got >= floor) ok(`${label}: ${n(got)}px (floor ${floor}px)`);
     else fail(label, `${n(got)}px, below the ${floor}px floor - the clip reads as a still picture at the size it is drawn`);
   };
-  check('Idle (batter, 214px): handR travel', measured.idle.handR.travel, MOTION_FLOORS.idleHandTravel);
+  check('Idle (batter, batterCam): handR travel', measured.idle.handR.travel, MOTION_FLOORS.idleHandTravel);
   // The hips must carry part of it: an idle whose hands move while the body stands still is the
   // "flat image" defect wearing a wave.
-  if (measured.idle.hips.travel > 2) ok(`Idle (batter, 214px): hips shift ${n(measured.idle.hips.travel)}px`);
+  if (measured.idle.hips.travel > 2) ok(`Idle (batter, batterCam): hips shift ${n(measured.idle.hips.travel)}px`);
   else fail('Idle hips shift', `${n(measured.idle.hips.travel)}px - the weight shift is not moving the body`);
-  check('Set (pitcher, 47px): handR travel', measured.set.handR.travel, MOTION_FLOORS.setHandTravel);
-  check('Pitch (pitcher, 47px): handR path length', measured.pitch.handR.path, MOTION_FLOORS.pitchHandPath);
-  check('Pitch (pitcher, 47px): handR vertical range', measured.pitch.handR.rise, MOTION_FLOORS.pitchHandRise);
-  check('Pitch (pitcher, 47px): front-foot lift', Math.max(measured.pitch.footL.rise, measured.pitch.footR.rise), MOTION_FLOORS.pitchFootLift);
-  check('Pitch (pitcher, 47px): handR moves inside the first 20% of the clip', measured.pitch.early, MOTION_FLOORS.pitchEarlyMove);
-
+  check('Set (pitcher, pitcherCam): handR travel', measured.set.handR.travel, MOTION_FLOORS.setHandTravel);
+  check('Pitch (pitcher, pitcherCam): handR path length', measured.pitch.handR.path, MOTION_FLOORS.pitchHandPath);
+  check('Pitch (pitcher, pitcherCam): handR vertical range', measured.pitch.handR.rise, MOTION_FLOORS.pitchHandRise);
+  check('Pitch (pitcher, pitcherCam): front-foot lift', Math.max(measured.pitch.footL.rise, measured.pitch.footR.rise), MOTION_FLOORS.pitchFootLift);
+  check('Pitch (pitcher, pitcherCam): handR moves inside the first 20% of the clip', measured.pitch.early, MOTION_FLOORS.pitchEarlyMove);
 }
 
 // Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
