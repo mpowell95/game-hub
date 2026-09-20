@@ -908,3 +908,47 @@ a breaking pitch's marker sliding. Probes: `pitch-drag` (tap, drag, release: the
 equal the cursor within scatter=0 when the pitcher's accuracy is at cap), `target-marker`
 (appears at release, ends at the pitch's `(x, y)`), `two-d-strike` (engine: `y = 1.2` is a ball
 at `x = 0`). Engine tests updated for 2-D; sim-baseball scoreboard pasted.
+
+### R2 record (shipped v862, 2026-09-20)
+
+From the stage's report: the pop-up threshold (0.7 zone units above the cursor) sat outside the
+CONTACT circle's own radius (0.55), so a pop-up could never happen; the thresholds are fractions
+of the cursor radius instead (`flyOffsetFrac` 0.545, `popupOffsetFrac` 0.85). `game.js`'s
+`previewsPitch` seam pre-rolls four draws now (two scatter axes, two knuckleball reads) so the
+human's drawn pitch and the scored pitch are the same `flyPitch` call. `test-baseball-ring.mjs`
+is deleted with the meter. Sim scoreboard after R2 is in `baseball/CLAUDE.md`: the league spread
+compressed by 0.02 to 0.03 (Little League 0.904 against a 0.92 floor, Majors 0.516 against a
+0.51 ceiling); CPU/CAPS/SKILL_EFFECT untouched, re-tuning is its own job.
+
+### R3: fielders, runners, the chase, and the diamond widget
+
+The nine fielders and the runners are the same Kenney rig at 6 ft, in the fielding team's colour.
+Fielders stand at their positions (P on the rubber already; C already; 1B `(63, 0, -63)`, 2B
+`(30, 0, -100)`, SS `(-30, 0, -100)`, 3B `(-63, 0, -63)`, LF `(-150, 0, -215)`, CF `(0, 0, -265)`,
+RF `(150, 0, -215)`, scaled by the league's fence: multiply the outfielders' depth by
+`fenceFt.center / 405`) on the `Idle` loop, facing the plate. `game.js`'s shift (`_shiftDegFor`)
+rotates the outfielders' plan positions by the shift angle. No fielding AI: the ENGINE has already
+decided the outcome; the fielder nearest the landing point (or the fence, for a homer) jogs toward
+it during the chase (`Run` loop in poses.js: a two-key leg cycle, arms pumping) and stops there.
+
+Runners: a runner on a base is a figure standing on that bag on `Idle` (a runner's own team
+colour); on a hit the runners and the batter RUN the base paths (`Run` loop, 27 ft/s, so 90 ft
+takes 3.3 s, sped up to fit the chase + marker window if longer) to the bases `bases.js` decided;
+a scoring runner runs home and disappears at the plate; an out runner disappears at the base he
+was out at. The batter-runner on an out jogs to first and disappears. Between pitches the runner
+figures stand on their bags. All of it is driven from the `atBatEnd` payload's before/after bases
+(add `basesBefore` to the payload, additive) so the UI never decides baserunning.
+
+The chase camera (R1) is kept but now frames the PLAY, not only the ball: it follows the ball to
+its apex, then eases to a spot behind and above the landing point looking at the fielder there;
+on a home run it follows the ball over the wall and then holds on the stands for the marker. The
+overhead cut is gone for good.
+
+The diamond widget: a small rotated-square widget (four cells HOME/1B/2B/3B, the `basesSvg`
+already in the HUD grows into it) fixed at the top-right of the field band during the chase and
+the marker hold, runners shown as filled cells, the runner moving between cells as the figure
+runs; outs shown as the HUD's dots. Fixed geometry, no reflow.
+
+Deliverables: stills of a single with a runner advancing, a double play, a sac fly, a home run
+with two on, the widget; a device probe that plays until a hit with a runner on and asserts the
+runner figure moved from one bag to the next and the widget cell followed; every suite green.
