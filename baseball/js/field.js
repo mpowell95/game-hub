@@ -503,8 +503,14 @@ export function drawBall(ctx, w, h, xFt, yFt, opts = {}) {
  *  AND grass, same reasoning as the other two kinds' own solid discs) rather than bare crossed
  *  lines with nothing behind them. */
 export function drawLandingMarker(ctx, w, h, xFt, yFt, kind, label, dark, opts = {}) {
-  const p = project(xFt, yFt, w, h);
   const R = 14;
+  // Orchestrator's stage 8 review: a home run's true landing point projects ABOVE the picture
+  // (the fence arc leaves through the top of this camera - see the foul-line comment above), so
+  // the gold HR disc was never on screen at all: the ball flew off the top and nothing followed.
+  // The marker is clamped into the canvas with its own radius as the margin - it sits at the top
+  // edge in the ball's own direction, which is where the eye was already looking.
+  const raw = project(xFt, yFt, w, h);
+  const p = { x: Math.max(R + 4, Math.min(w - R - 4, raw.x)), y: Math.max(R + 4, Math.min(h - R - 4, raw.y)), scale: raw.scale };
   ctx.save();
   if (opts.pulseT != null) {
     const t = (opts.pulseT * 2) % 1;

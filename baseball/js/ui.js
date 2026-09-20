@@ -82,9 +82,12 @@ const PLATE_READY_CAP_MS = 3000; // the first wind-up's own cap on waiting for p
 // take (a called ball/strike) never showed WHERE it crossed relative to the zone, only the big word
 // after the fact. The ball now HOLDS at its crossing point for this long before hiding - long
 // enough to read against the zone rectangle, short enough to stay inside the beat's own budget
-// (RESULT_MS is 1800ms; this is well under it, and `_contactHold` below still takes the ball over
-// immediately on a ball IN PLAY, per its own header).
-const CROSSING_HOLD_MS = 600;
+// (`_contactHold` below still takes the ball over immediately on a ball IN PLAY, per its own
+// header). Orchestrator's review of the live probe: the verdict (and the big word) lands about
+// 250 ms AFTER the crossing (`decideSwing`'s own take timeout), so a 600 ms hold left the ball
+// and the word together for ~350 ms - the ball now stays exactly as long as the word does
+// (RESULT_MS), so what the word says and where the ball sits are readable in the same look.
+const CROSSING_HOLD_MS = RESULT_MS;
 
 // STAGE 4: field.js now exports NEAR_BATTER_HEIGHT_FRAC/MOUND_PITCHER_HEIGHT_FRAC (see the import
 // above) - the dev-only 3D preview (_open3DCheck) used to carry its own mirrored copy here
@@ -1135,15 +1138,13 @@ class BaseballPlayScreen {
     // still lands at crossing either way. `_flushPendingPitch` no-ops if 'count' already flushed it
     // for this exact pitch (the strikeout/walk double-fire case, its own header).
     this._flushPendingPitch();
-    // STAGE 8 row 3: the strikeout/walk pop word (result word stays on Line 1, unchanged above) - a
-    // called third strike pops Strike, a swinging one already popped its own timing word (the
-    // 'count' handler, same pitch, fires first), and ball four pops Ball.
-    if (payload.timingWord) {
+    // STAGE 8 row 3: only a ball IN PLAY pops from here. game.js emits 'count' BEFORE 'atBatEnd'
+    // on the exact same pitch for a strikeout or a walk (that handler's own header), and 'count'
+    // already popped that pitch's word (the timing word, or Strike/Ball for a take) - popping it
+    // again here restarted the same word's animation a few ms later, a visible flicker. A ball in
+    // play never gets a 'count' event, so its timing word is popped here and nowhere else.
+    if (inPlay && payload.timingWord) {
       this._showPop(t('v_' + payload.timingWord), payload.timingWord);
-    } else if (outKind === 'strikeout') {
-      this._showPop(t('v_strike'), 'strike');
-    } else if (outKind === 'walk') {
-      this._showPop(t('v_ball'), 'ball');
     }
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
     if (inPlay) {

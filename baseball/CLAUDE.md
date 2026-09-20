@@ -4,6 +4,66 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## The pitch meter, the verdict and the overhead (2026-09-20, `game-hub-v859` → `game-hub-v860`)
+
+Matt, on two recordings of v859: *"It's not obvious if something is a ball or a strike. After
+contact, it goes to the Birds Eye view, but you can't see where the ball goes or lands or anything
+at all. It tells me the type of pitch before it's even pitched. What does 'Hung' mean when I'm
+pitching? And that pitch meter thing starts with no warning. I should tap it to start it then tap
+again to stop it. And even if it's perfect, it doesn't show perfect. It's always like right past
+the perfect zone thing."* Every frame of both clips was read; the six causes and their fixes are
+the table in `docs/BASEBALL-3D-BUILD.md` section 8. Built as stage 8 (Sonnet), reviewed against
+live probes by the orchestrating session.
+
+- **The ring lied (`ring.js`).** The fill swept a full 360 deg lap and the Nice zone was drawn at
+  12 o'clock, which is 0.667 of that lap, while `pitch.js` scores Nice at 0.88 to 1.00 of
+  `meterTime`. A release inside the drawn zone was an ordinary pitch and a Nice release drew its
+  marker ~80 deg past the zone, since the ring shipped. Now the fill sweeps 240 deg from 4 o'clock
+  to the top, progress 1.0 IS the top, and the Nice zone is the last `niceWidth` of that sweep,
+  read from `SETTINGS.FEEL.engine`, never a second literal; the hang grace continues past the top
+  in grey, then drains. `test-baseball-ring.mjs` (node, in `run-all-tests.mjs`) asserts the ring's
+  zone agrees with `flyPitch`'s `wasNice` for every 10 ms hold; born red against the old file.
+- **Tap to start, tap to release (`decidePitch`, `actors.js`).** Nothing ticks until the first
+  tap on the button; the Nice ticks and diamond show on the idle ring so the target is known. The
+  first tap starts the fill AND the wind-up, `play('pitcher','Pitch',{markAtMs: meterTime,
+  holdAtMark: true})`: the delivery reaches the release keyframe at the top of the meter and holds
+  there (`actor.holdAt`, re-clamped every frame in the render loop) until the second tap calls
+  `actors.release('pitcher')`, which resumes from the mark, or seeks to it on an early tap. The
+  `tap-tap-pitch` probe in `test-baseball-device.mjs` (dev-gated `window.__bbTest.forceHalf`
+  seam) measured: ring idle before the tap, filling within 200 ms, hand held 0.000 px over 300 ms
+  at the mark, release 0.6 to 0.8 ms after the second tap.
+- **Ball, Strike, Foul are big words**, through the same `_showPop` as Early/Late/Perfect, with
+  the strip's own shapes (● ball, ■ strike) so the word and the strip agree and colour is never the
+  only cue. **The crossing ball holds at its crossing point** for `CROSSING_HOLD_MS` (= `RESULT_MS`,
+  so it stays exactly as long as the word; the verdict lands ~250 ms after the crossing and a
+  first 600 ms draft overlapped the word by only ~350 ms) and is cancelled by `_contactHold` on a
+  ball in play. 'count' fires before 'atBatEnd' on the same strikeout/walk pitch, so only 'count'
+  pops for those; `_settleAtBat` pops only a ball in play's timing word (a duplicate pop restarted
+  the same word's animation a few ms later, a visible flicker in the first draft).
+- **The overhead flight can be seen.** The ball was a 7 px dot times the picture's falloff, ~2 px
+  on a phone, on a straight line. Now: radius 9 with a 2 px outline, lifted on a parabola whose apex
+  is `min(0.22, distanceFt/1800)` of the band height (0.03 for a grounder; the engine's own
+  `battedKind` is `'ground'`, not `'grounder'`), a ground shadow, a fading trail; the landing marker
+  is a 14 px disc (green 1B/2B/3B, gold HR, red X on a white disc for an out) with a pulse ring
+  twice across the hold, drawn by a rAF loop instead of a bare timeout, static under reduced motion.
+  The marker is clamped into the canvas: a home run's true landing point projects above the
+  picture, so the gold disc was never on screen at all.
+- **The strip tile appears at plate crossing**, not at the CPU's decision (it used to be on screen
+  with the ●/■ result mark before the wind-up even started): `decideSwing` stages
+  `state.pendingPitch`, `_flushPendingPitch()` pushes it from 'count'/'atBatEnd'.
+- **"Hung" is "Late ▶"** (ES "Tarde"), the same word batting already teaches; the key stays `v_hung`.
+
+**Found during review and NOT fixed here, next on the list: most outs carry 0 ft.** Three real
+plays with Perfect timing at Little League: two `lineout`s at `distanceFt: 0`, drawn as a red X at
+home plate. `carryFt` (`engine/outcomes.js`) is `max(0, exitVeloMph - CARRY_ZERO_MPH) * ...`, so
+any contact under that speed is a 0 ft ball. A quick headless sweep (600 swings per league per
+timing band, a non-pitcher from `makeLeague`, straight `swing()` into `resolveContact()`): with
+ordinary timing (±80 ms) about 60% of balls in play are 0 ft in every league and about 90% of outs
+are; with near-perfect timing (±20 ms) 14% at Little League, 23% at Majors. This is engine tuning
+(`settings.js` / `outcomes.js`, guarded by `sim-baseball.mjs`), out of stage 8's scope by the build
+doc's own section 6, and it is the largest remaining reason the overhead "shows nothing": the
+picture is now right, the number it is given is often zero.
+
 ## Motion and flow: the figures move and the beats are alive (2026-09-20, `game-hub-v858` → `game-hub-v859`)
 
 Matt, on two recordings of v858: *"They look way too much like just flat images (because they
