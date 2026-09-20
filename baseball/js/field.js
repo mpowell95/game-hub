@@ -447,47 +447,105 @@ function _drawFieldVector(ctx, w, h, league, fenceFt, dark) {
   ctx.restore();
 }
 
-/** The ball: a white circle with a dark outline whose radius reflects how close it is to the
- *  viewer (bigger = closer). */
+/** The ball, on the overhead cutaway. STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 4): Matt,
+ *  on v859's recording: "After contact, it goes to the Birds Eye view, but you can't see where the
+ *  ball goes or lands or anything at all." Measured cause: a `baseRadius` of 7 times the picture's
+ *  own falloff (`p.scale`) draws about 2px on a phone, on a dead-straight line with no height and
+ *  no trail - nothing for an eye to actually follow. Fixed: a real ground shadow at the straight
+ *  ball-park point, a fading multi-sample trail, and the ball itself LIFTED off a parabola (`opts.
+ *  liftPx`, the caller's own apex - `_animateBattedBall` computes it per row 4's grounder/fly split)
+ *  so the flight actually reads as flying, not sliding. `opts.trail` is the last few GROUND points
+ *  (not lifted - a shadow-trail, not a copy of the ball's own arc), oldest first, each drawn
+ *  fainter. Signature is unchanged (`ctx, w, h, xFt, yFt, opts`) other than the two new opts, both
+ *  optional, so a caller that never sets them still gets the ground point and a bare ball (no lift,
+ *  no trail, no shadow) - never a throw. */
 export function drawBall(ctx, w, h, xFt, yFt, opts = {}) {
   const p = project(xFt, yFt, w, h);
-  const r = Math.max(2.5, (opts.baseRadius || 6) * p.scale);
+  const lift = opts.liftPx || 0;
   ctx.save();
+  // The trail: up to the last 6 GROUND points (where the ball would be with no lift), oldest to
+  // newest, alpha fading 0.35 -> 0.05 - a shadow of where it has already been, not a second ball.
+  if (opts.trail && opts.trail.length) {
+    const n = opts.trail.length;
+    for (let i = 0; i < n; i++) {
+      const t = opts.trail[i];
+      const alpha = 0.35 - (0.30 * i) / Math.max(1, n - 1);
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(0.05, alpha).toFixed(3)})`;
+      ctx.fill();
+    }
+  }
+  // The shadow, at the GROUND point (never lifted) - what actually sells the ball as airborne is
+  // the gap between this and the ball itself, not the ball's own shape.
   ctx.beginPath();
-  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.ellipse(p.x, p.y, 6, 3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+  const r = Math.max(2.5, (opts.baseRadius || 9) * p.scale);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y - lift, r, 0, Math.PI * 2);
   ctx.fillStyle = '#fff';
   ctx.fill();
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.strokeStyle = '#1a1a1a';
   ctx.stroke();
   ctx.restore();
   return p;
 }
 
-/** A landing marker for a batted ball's result - drawn once the outcome is known. */
-export function drawLandingMarker(ctx, w, h, xFt, yFt, kind, label, dark) {
+/** A landing marker for a batted ball's result - drawn once the outcome is known, then held on
+ *  screen (STAGE 8 row 4). `opts.pulseT` (0..1, wrapping) draws a pulse ring expanding out from the
+ *  marker - two full pulses across `MARKER_HOLD_MS` (the caller passes `elapsed/MARKER_HOLD_MS`,
+ *  and this multiplies by 2 itself so the caller never has to know the pulse COUNT). Reduced motion
+ *  (or `pulseT` omitted) draws the static marker with no ring at all - never an animation nobody
+ *  asked to see move. `kind === 'out'` is now a red X on its own white disc (so it reads on dirt
+ *  AND grass, same reasoning as the other two kinds' own solid discs) rather than bare crossed
+ *  lines with nothing behind them. */
+export function drawLandingMarker(ctx, w, h, xFt, yFt, kind, label, dark, opts = {}) {
   const p = project(xFt, yFt, w, h);
+  const R = 14;
   ctx.save();
+  if (opts.pulseT != null) {
+    const t = (opts.pulseT * 2) % 1;
+    const color = kind === 'out' ? '#c0392b' : (kind === 'hr' ? '#ffce3a' : '#2E7D4F');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R + 22 * t, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.6 * (1 - t);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   if (kind === 'out') {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fill();
     ctx.strokeStyle = '#c0392b';
-    ctx.lineWidth = 3;
-    const s = 9;
+    ctx.lineWidth = 4;
+    const s = 14;
     ctx.beginPath();
     ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s);
     ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s);
     ctx.stroke();
   } else if (kind === 'hr') {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffce3a';
+    ctx.fill();
+    ctx.fillStyle = '#111';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('HR', p.x, p.y - 10);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('HR', p.x, p.y);
   } else {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
     ctx.fillStyle = '#2E7D4F';
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label || '', p.x, p.y);

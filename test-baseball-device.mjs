@@ -566,6 +566,170 @@ await ctx.close();
   await p8.close();
 }
 
+// 9. STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2): TAP TO START, TAP TO RELEASE. Matt, on
+// v859: "that pitch meter thing starts with no warning. I should tap it to start it then tap
+// again to stop it." Drives the human's OWN pitching turn (needs the dev-only
+// `window.__bbTest.forceHalf('bottom')` seam - the top half never starts there) and checks, in
+// order: the ring is idle and no Pitch call has fired before any tap; the first tap starts the
+// fill AND the wind-up (`holdAtMark: true`, landing the delivery's release keyframe exactly at
+// the top of the meter); the pitcher's hand is genuinely HELD there (two samples 300ms apart,
+// taken well past the top of the meter, read the same world position) rather than merely paused
+// at a random point mid-swing; the second tap calls `actors.release('pitcher')` promptly and the
+// flight actually starts.
+{
+  const p9 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page9 = await p9.newPage();
+  await page9.addInitScript(() => {
+    window.__bbDevForce = true; // BaseballPlayScreen's own dev-gate override - see ui.js's `this.dev`
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Tap Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr9 = await mountInHub(page9);
+  if (mountErr9) {
+    fail('tap-tap-pitch', `mount failed: ${mountErr9}`);
+  } else {
+    const meterMs = await page9.evaluate(async () => (await import('/baseball/js/engine/settings.js')).FEEL.engine.meterTime);
+    // window.__bbForceHalfNext is set in the SAME evaluate call that taps Play - `_startGame`'s own
+    // comment explains why: it applies the flag synchronously, before `playGame()`'s first
+    // `playAtBat()` ever reads `this.half`, which a separate later evaluate() round-trip cannot
+    // reliably beat.
+    const clicked = await page9.evaluate(() => {
+      window.__bbForceHalfNext = 'bottom';
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+      return !!btn;
+    });
+    if (!clicked) {
+      fail('tap-tap-pitch', 'no .bb-play-btn to start Quick Play');
+    } else {
+      await page9.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+      const seamPresent = await page9.evaluate(() => {
+        // Defensive/idempotent re-apply (own header) in case the pre-set flag path ever changes -
+        // the real guarantee is the synchronous apply inside _startGame above.
+        if (!window.__bbTest || typeof window.__bbTest.forceHalf !== 'function') return false;
+        window.__bbTest.forceHalf('bottom');
+        return true;
+      });
+      if (!seamPresent) {
+        fail('tap-tap-pitch', 'window.__bbTest.forceHalf is not available - dev flag not honored, or the seam is missing');
+      } else {
+        // Instrument actors.play/release BEFORE the pitching turn is reached, so nothing is missed.
+        await page9.evaluate(() => {
+          const inst = document.querySelector('.hub-game')._bbInstance;
+          const rec = { plays: [], releases: [] };
+          window.__bbTap = rec;
+          const origPlay = inst.actors.play.bind(inst.actors);
+          inst.actors.play = (role, name, opts) => {
+            if (role === 'pitcher' && name === 'Pitch') rec.plays.push({ t: performance.now(), opts: opts ? { ...opts } : null });
+            return origPlay(role, name, opts);
+          };
+          const origRelease = inst.actors.release.bind(inst.actors);
+          inst.actors.release = (role) => {
+            rec.releases.push({ t: performance.now(), role });
+            return origRelease(role);
+          };
+        });
+        const reachedPitching = await page9.waitForFunction(() => {
+          const inst = document.querySelector('.hub-game')._bbInstance;
+          return !!(inst && inst.state && inst.state.mode === 'pitching');
+        }, null, { timeout: 15000 }).then(() => true).catch(() => false);
+        if (!reachedPitching) {
+          fail('tap-tap-pitch', "never reached the human's own pitching turn within 15s of forceHalf('bottom')");
+        } else {
+          const fillPixelCount = async () => page9.evaluate(() => {
+            const cv = document.querySelector('[data-role="ringcanvas"]');
+            const ctx2 = cv.getContext('2d');
+            const d = ctx2.getImageData(0, 0, cv.width, cv.height).data;
+            let n = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              // ring.js's own 'filling'/'nice' fill colour, #c9d4e0 - distinct from the bare
+              // track (translucent white) and the ticks/diamond (solid #fff).
+              if (Math.abs(d[i] - 0xc9) < 8 && Math.abs(d[i + 1] - 0xd4) < 8 && Math.abs(d[i + 2] - 0xe0) < 8 && d[i + 3] > 40) n++;
+            }
+            return n;
+          });
+          const idleFill = await fillPixelCount();
+          const idlePlays = await page9.evaluate(() => window.__bbTap.plays.length);
+          if (idleFill > 0 || idlePlays > 0) {
+            fail('tap-tap-pitch', `ring/pitch not idle before the first tap (fillPx=${idleFill}, Pitch calls=${idlePlays})`);
+          } else {
+            ok('ring idle (no fill pixels) and no Pitch call before the first tap');
+          }
+
+          // First tap: start.
+          await page9.evaluate(() => {
+            const main = document.querySelector('[data-role="mainbtn"]');
+            main.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+            main.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+          });
+          await page9.waitForTimeout(200);
+          const fillAfterTap1 = await fillPixelCount();
+          if (fillAfterTap1 === 0) {
+            fail('tap-tap-pitch', 'ring shows no fill within 200ms of the first tap');
+          } else {
+            ok(`ring filling within 200ms of the first tap (${fillAfterTap1} fill px)`);
+          }
+          const playsAfterTap1 = await page9.evaluate(() => window.__bbTap.plays.slice());
+          const holdPlay = playsAfterTap1.find((p) => p.opts && p.opts.holdAtMark === true && p.opts.markAtMs === meterMs);
+          if (!holdPlay) {
+            fail('tap-tap-pitch', `no actors.play('pitcher','Pitch',{markAtMs:${meterMs},holdAtMark:true}) observed after the first tap (plays=${JSON.stringify(playsAfterTap1)})`);
+          } else {
+            ok(`actors.play('pitcher','Pitch',{markAtMs:${meterMs},holdAtMark:true}) fired on the first tap`);
+          }
+
+          // Past the top of the meter, the pitcher's hand should be HELD - two samples 300ms apart
+          // read the same world position.
+          await page9.waitForTimeout(Math.max(0, 1500 - 200));
+          const posA = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorldPx('pitcher'));
+          await page9.waitForTimeout(300);
+          const posB = await page9.evaluate(() => document.querySelector('.hub-game')._bbInstance.actors.handWorldPx('pitcher'));
+          if (!posA || !posB) {
+            fail('tap-tap-pitch', "handWorldPx('pitcher') unavailable to check the hold");
+          } else {
+            const moved = Math.hypot(posB.x - posA.x, posB.y - posA.y);
+            if (moved > 0.5) {
+              fail('tap-tap-pitch', `pitcher's hand moved ${moved.toFixed(2)}px over 300ms while it should be held at the mark (${JSON.stringify(posA)} -> ${JSON.stringify(posB)})`);
+            } else {
+              ok(`pitcher's hand held stationary at the mark across 300ms (moved ${moved.toFixed(3)}px)`);
+            }
+          }
+
+          // Second tap: release.
+          const t1 = await page9.evaluate(() => {
+            const main = document.querySelector('[data-role="mainbtn"]');
+            const t = performance.now();
+            main.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+            main.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+            return t;
+          });
+          await page9.waitForTimeout(150);
+          const afterTap2 = await page9.evaluate(() => {
+            const inst = document.querySelector('.hub-game')._bbInstance;
+            return { releases: window.__bbTap.releases.slice(), flightRaf: !!inst._flightRaf };
+          });
+          const rel = afterTap2.releases.find((r) => r.role === 'pitcher' && r.t >= t1 - 5);
+          if (!rel) {
+            fail('tap-tap-pitch', `actors.release('pitcher') not observed after the second tap (releases=${JSON.stringify(afterTap2.releases)})`);
+          } else if (rel.t - t1 > 50) {
+            fail('tap-tap-pitch', `release fired ${(rel.t - t1).toFixed(1)}ms after the second tap (budget 50ms)`);
+          } else {
+            ok(`actors.release('pitcher') fired ${(rel.t - t1).toFixed(1)}ms after the second tap`);
+          }
+          if (!afterTap2.flightRaf) {
+            fail('tap-tap-pitch', 'the pitch flight never started after release (_flightRaf not set)');
+          } else {
+            ok('the pitch flight started after release');
+          }
+        }
+      }
+    }
+  }
+  await p9.close();
+}
+
 await browser.close();
 
 console.log('');
