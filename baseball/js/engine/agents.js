@@ -125,6 +125,7 @@ export class CpuPitcher {
 
     const zone = this.settings.ZONE || ZONE;
     const halfWidth = zone.xMax; // zone is symmetric about 0
+    const halfHeight = zone.yMax != null ? zone.yMax : 1; // R2: and about the middle of its height
 
     // BB-2d commit 5: CHAMPION_CEILING - the effective weakSpotWeight/cornerBias (after
     // behaviorMul) can never exceed the NEXT league's own base row for that field.
@@ -133,8 +134,11 @@ export class CpuPitcher {
       // doc §8, [Locked]: "Majors: attacks your weak spots." A small scatter around the exact
       // remembered zone, same shape as the ordinary aim scatter below - a pitcher that landed
       // exactly on the recorded x every time would be reading the batter's mind, not their habits.
+      // R2: the weak-spot memory (`_recordWeak`, game.js) is lateral only, so the HEIGHT of a
+      // weak-spot pitch is chosen the ordinary way rather than invented from a record that does
+      // not exist.
       const aimX = view.weakZone + (view.rand01() * 2 - 1) * WEAKSPOT_AIM_SCATTER;
-      return { type, aim: aimX };
+      return { type, aim: { x: aimX, y: (view.rand01() * 2 - 1) * halfHeight * AIM_INZONE_BIAS } };
     }
 
     // cornerBias: how often the aim leaves the middle of the zone, and how far, both rising with
@@ -146,9 +150,14 @@ export class CpuPitcher {
     const inZoneBias = view.rand01() < (1 - cornerBias * AIM_CORNER_CHANCE_MULT)
       ? AIM_INZONE_BIAS : (AIM_CORNER_BIAS_BASE + cornerBias * AIM_CORNER_BIAS_SCALE);
     const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
-    return { type, aim: aimX };
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): the aim is 2-D now, so a CPU pitcher picks a
+    // HEIGHT the same way it picks a side - the same `inZoneBias`, so a corner-working league
+    // works the top and bottom of the zone exactly as hard as it works the edges, and one pitcher
+    // does not become a machine that lives at the belt.
+    return { type, aim: { x: aimX, y: (view.rand01() * 2 - 1) * halfHeight * inZoneBias } };
   }
 }
+
 
 /** A CPU batter. Swings at strikes at its league's `swingIn` rate and chases pitches outside the
  *  zone at its `chase` rate (doc §14; per-league since Step 2, see settings.js's CPU table). Times
@@ -233,7 +242,16 @@ export class CpuBatter {
     // constant at or above `CPU_PLACEMENT_MIN`) - `guess` no longer touches it at all. `guess`
     // instead drives ONLY how far the aim leans toward the pattern-read `locationLean` (doc §8:
     // "how much CPU leans to your recent spot" - a reading skill, not a placement-precision one).
-    let aimX = pitch.x + (view.rand01() * 2 - 1) * cpu.placementNoise;
+    // R2 (docs/BASEBALL-3D-BUILD.md section 9): a CPU batter aims its CURSOR, in two axes, at the
+    // pitch's STRAIGHT point (`straightX`/`straightY` - where the ball appears to be going when it
+    // leaves the hand), never at where it will actually end up. That is the honest model of what a
+    // batter can see, and it is what makes a breaking ball worth throwing: the break is exactly the
+    // distance the CPU's cursor is off by. A pitch from a fixture with no straight point (a plain
+    // `{x}` object in a test) falls back to its own final position, which is the pre-R2 behaviour.
+    const seenX = pitch.straightX != null ? pitch.straightX : pitch.x;
+    const seenY = pitch.straightY != null ? pitch.straightY : (pitch.y || 0);
+    let aimX = seenX + (view.rand01() * 2 - 1) * cpu.placementNoise;
+    const aimY = seenY + (view.rand01() * 2 - 1) * cpu.placementNoise;
     if (patternWeight > 0 && locationLean != null) {
       // "Keep hitting one spot and he waits there" - a batter who has been leaning on a location
       // read has their aim pulled toward it, for better or worse depending on whether THIS pitch
@@ -243,10 +261,23 @@ export class CpuBatter {
       const leanWeight = patternWeight * LOCATION_LEAN_WEIGHT * (cpu.guess != null ? cpu.guess : 1);
       aimX = aimX * (1 - leanWeight) + locationLean * leanWeight;
     }
-    // The CPU never charges its swing this phase - doc's charge mechanic is a held-input UI
-    // concern (§12), and no CPU tuning field here says how often a CPU would choose to charge.
-    return { action: 'swing', aimX, timingErrorMs, charged: false };
+    return { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills, view.rand01) };
   }
+}
+
+/** R2 (docs/BASEBALL-3D-BUILD.md section 9): WHICH BATTING MODE a non-human batter picks. POWER is
+ *  a smaller cursor circle for x1.12 exit velocity (settings.js's `cursorR`/`modeExitMult`), so it
+ *  is a bet a strong batter is right to make more often - the chance rises with hitPow and is
+ *  capped well under "always", because a CPU that never chose CONTACT would simply miss more.
+ *  `POWER_MODE_PER_HITPOW`/`POWER_MODE_MAX` are R2's own choice, not a measured value; what
+ *  measures it is `sim-baseball.mjs`'s batted-ball census. Always consumes exactly one draw, so
+ *  its cost in the seeded stream is fixed. */
+const POWER_MODE_PER_HITPOW = 0.05;
+const POWER_MODE_MAX = 0.6;
+export function pickMode(skills, rand01, override) {
+  const chance = override != null ? override
+    : Math.min(POWER_MODE_MAX, Math.max(0, (skills && skills.hitPow) || 0) * POWER_MODE_PER_HITPOW);
+  return rand01() < chance ? 'power' : 'contact';
 }
 
 /** A cheap four-draw approximation of a standard normal (Irwin-Hall(4), mean 0, sd ~= 0.577),
@@ -269,12 +300,17 @@ export class ModelBatter {
    *  `settings` (BB-2b commit 3, optional) is only needed for `PITCH_TRAVEL_MULT`/
    *  `SPEED_SURPRISE_MS_PER_MULT` overrides in a settings-sweep test; the real module's own values
    *  are the default. */
-  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20, settings }) {
+  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20, settings, skills, powerChance }) {
     this.timingSigmaMs = timingSigmaMs;
     this.placementSigma = placementSigma;
     this.swingIn = swingIn;
     this.chase = chase;
     this.settings = settings;
+    // R2: a model human picks CONTACT or POWER like anyone else. `skills` (optional) lets
+    // `pickMode` read hitPow; `powerChance` overrides the whole decision for a sweep that wants
+    // one mode held fixed.
+    this.skills = skills;
+    this.powerChance = powerChance;
   }
   async decideSwing(view) {
     const pitch = view.pitch;
@@ -291,8 +327,13 @@ export class ModelBatter {
     const surpriseMs = speedSurpriseMs(actualMult, expectedMult, msPerMult);
     const effectiveSigma = this.timingSigmaMs + surpriseMs;
     const timingErrorMs = gaussianLite(view.rand01) * effectiveSigma;
-    const aimX = pitch.x + (view.rand01() * 2 - 1) * this.placementSigma;
-    return { action: 'swing', aimX, timingErrorMs, charged: false };
+    // R2: the same 2-D cursor a CPU batter places, and against the same STRAIGHT point (see
+    // `CpuBatter.decideSwing`'s own note) - a model human reads the pitch out of the hand too.
+    const seenX = pitch.straightX != null ? pitch.straightX : pitch.x;
+    const seenY = pitch.straightY != null ? pitch.straightY : (pitch.y || 0);
+    const aimX = seenX + (view.rand01() * 2 - 1) * this.placementSigma;
+    const aimY = seenY + (view.rand01() * 2 - 1) * this.placementSigma;
+    return { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills || {}, view.rand01, this.powerChance) };
   }
 }
 
@@ -332,7 +373,8 @@ export class ModelPitcher {
     const inZoneBias = view.rand01() < (1 - this.cornerBias * AIM_CORNER_CHANCE_MULT)
       ? AIM_INZONE_BIAS : (AIM_CORNER_BIAS_BASE + this.cornerBias * AIM_CORNER_BIAS_SCALE);
     const aimX = (view.rand01() * 2 - 1) * halfWidth * inZoneBias;
-    return { type, aim: aimX };
+    const halfHeight = zone.yMax != null ? zone.yMax : 1;
+    return { type, aim: { x: aimX, y: (view.rand01() * 2 - 1) * halfHeight * inZoneBias } };
   }
 }
 
@@ -357,4 +399,4 @@ export class ScriptedAgent {
   }
 }
 
-export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs };
+export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs, pickMode };
