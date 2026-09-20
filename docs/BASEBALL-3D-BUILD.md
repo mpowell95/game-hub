@@ -844,3 +844,67 @@ through the batter camera's projection at the on-screen sizes R1 produces (repor
 numbers; floors scale with the new sizes, ratios kept). (d) The frame time on the container's
 software renderer for each camera, and the scene's triangle count. (e) All suites in section 5
 green, `validate-sw-assets.mjs` clean.
+### R1 record (shipped v861, 2026-09-20)
+
+Where the R1 spec was wrong against the real files, from the stage's report: the batter and the
+zone cannot both be centred (the zone is, the righty lands at 24% across); the pitcher camera's
+55% and 30% figures were incompatible at fov 50 (pitcher 54%, batter 9%); the doc's camera x
+signs put both figures on the wrong side (pitcher camera flipped to x = -2.4); the umpire at
+z = 8 filled the batter camera (he is hidden from that camera; catcher moved to z = 7.8, umpire
+to 10.2); the true zone box is 9 px wide from the pitcher camera (drawn box floored to 13% of
+the canvas, the ball never scaled); `fieldScale` never scaled the diamond in the engine, so the
+diamond is regulation at every league; the apex rule `min(120, 0.35 * distanceFt)` is ~40% too
+high and puts the wall out of the chase frame on a home run (R2 halves the coefficient); the
+chase offset `(0, 12, 28)` drew a 5 px ball (now `(0, 10, 22)` with a ground shadow).
+
+### R2: the controls, re-timed to the reference
+
+Everything below replaces the design doc's section 12 and the meter (stage 8's ring geometry test
+retires with it). The engine's timing window and contact-quality model stay; the zone and the aim
+become 2-D.
+
+**The zone is 2-D.** `pitch.js` gets `y` in `[-1, 1]` beside `x` (the engine's zone unit: 1 = the
+zone's half height, 0.9 ft); a strike is `|x| <= 1 && |y| <= 1`. `swing.js`'s sweet spot is the
+batting cursor's centre `(cx, cy)`; contact quality multiplies the existing timing quality by a
+distance term `max(0, 1 - d / cursorR)` where `d` is the 2-D distance from the crossing point to
+the cursor centre and `cursorR` is the mode's circle radius (contact 0.55, power 0.35 zone units).
+The horizontal offset adds to pull/opposite direction exactly as `aimX` did; the vertical offset
+sets the batted-ball kind (ball above the centre by more than 0.3 = fly or pop, below by more
+than 0.3 = grounder, between = line drive), replacing the sweet-spot centred/off-centre rule.
+The charged swing (hold) is removed; POWER mode replaces it (exit velocity x1.12, circle 0.35).
+CPU agents aim in 2-D with the same scatter model in `y` as in `x`. `sim-baseball.mjs` must run
+and its scoreboard is pasted into `baseball/CLAUDE.md`, passing or not.
+
+**Pitching.** Idle: pitcher on Set, the zone box drawn in the world at the plate through
+`pitcherCam`, the control cursor (a ring with a crosshair) at the last aim. The strip shows the
+pitch types with the readout mph. LEFT button = select pitch type (cycles) or tap a strip tile.
+RIGHT = PITCH. Tap PITCH once: the wind-up plays (`Pitch` clip, mark at `PITCH_DRAG_MS` = 700 ms,
+no hold) and the LEFT button becomes a 2-D pad: drag moves the control cursor over the zone
+(travel x ±1.6, y ±1.4 units; the cursor moves 1:1 with the finger in pad units mapped to zone
+units). For a breaking pitch a second, yellow point cursor sits at cursor + break vector (type x
+pitcher hand, `BREAK_OFFSET[type]` in zone units, replacing STEER_MAX_OFFSET/steer samples) and
+the ball ends there. At the mark the aim is sampled and the pitch scatters from it by the
+existing skill-based `aimScatter` (Nice, hang, the meter and steering after release are all
+deleted from settings, pitch.js, ui.js, ring.js's throw mode, and the design doc). The ball
+flies `fastballMs` x `PITCH_TRAVEL_MULT` (fastball 650 ms). The verdict shows at the crossing.
+
+**Batting.** Idle: batter in stance, the zone square and the mode's circle cursor drawn in the
+world at the plate through `batterCam`. LEFT = change batting mode (CONTACT, POWER; BUNT I and
+II stay locked wells as now). RIGHT = READY. Tap READY: the CPU wind-up plays (`windupMs` 1000)
+and LEFT becomes the 2-D batting pad (drag moves the circle, travel ±1.5 units), RIGHT becomes
+SWING. At release the pitch's TARGET marker (a small ring) appears at the pitch's final `(x, y)`;
+for a breaking pitch it appears at the straight-line spot and slides to the final spot over the
+flight, matching the ball's bend. Swing = one tap; timing is scored as now against the crossing.
+
+**Batted-ball apex.** `_battedApexFt` becomes `min(80, distanceFt * 0.22)` for fly/line/popup, 4 ft for a grounder, so a home run's wall stays in the chase frame.
+
+**Beats (FEEL.ui / FEEL.engine).** `fastballMs` 650, `windupMs` 1000, `resultMs` 1200,
+`betweenMs` 800, `PITCH_DRAG_MS` 700. Pitch tap to next ready about 3.0 s; verdict to next
+release about 3.0 s. r2-cadence's expected sum follows the constants, not a literal.
+
+**Deliverables.** Stills: pitching idle with cursor, mid-drag with a breaking-pitch point cursor,
+batting idle with the contact circle and the power circle, mid-flight with the target marker,
+a breaking pitch's marker sliding. Probes: `pitch-drag` (tap, drag, release: the engine's `x, y`
+equal the cursor within scatter=0 when the pitcher's accuracy is at cap), `target-marker`
+(appears at release, ends at the pitch's `(x, y)`), `two-d-strike` (engine: `y = 1.2` is a ball
+at `x = 0`). Engine tests updated for 2-D; sim-baseball scoreboard pasted.
