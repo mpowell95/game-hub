@@ -1111,7 +1111,7 @@ console.log('\n=== r2-cadence (delegated to test-baseball-device.mjs) ===');
     // existing 360 s - the two worst cases together can pass 480 s, and a spawn killed mid-run
     // reports as an exit code against a passing r2-cadence line, which is the exact confusion the
     // R3 bump above was written to remove.
-    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 720000 });
+    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 480000, env: { ...process.env, BB_DEVICE_QUICK: '1' } });
     const out = (r.stdout || '') + (r.stderr || '');
     const cadenceLine = out.split('\n').find((l) => /r2-cadence/.test(l)) || '(no r2-cadence line in output)';
     if (r.status === 0) ok(`test-baseball-device.mjs passed - ${cadenceLine.trim()}`);

@@ -865,7 +865,10 @@ await ctx.close();
 // was live at some point during the cut. Also drives the human's OWN pitching turns (tap PITCH,
 // once, R2 has no second tap) so a half-inning does not stall waiting on a human decision that
 // never comes.
-{
+// BB_DEVICE_QUICK=1 skips this block: it is a six-minute probabilistic hunt for a play, and the
+// actors suite delegates this whole file only to read the cadence line (orchestrator's R4 ship
+// review: that delegated copy timed out on this hunt twice under a full suite load).
+if (!process.env.BB_DEVICE_QUICK) {
   const p12 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page12 = await p12.newPage();
   const pageErrors12 = [];

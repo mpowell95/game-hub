@@ -1052,3 +1052,16 @@ Deliverables: stills of a called strike, a swinging miss, a contact burst frame,
 mid-flight, HOME RUN with confetti, the stats strip, the pitch bar with numbers; `test-visual`
 motion probe for the pop; reduced-motion stills showing no trail, burst or confetti; every
 suite green.
+
+### R4 record (shipped v865, 2026-09-20)
+
+From the stage's report: the pop is centred on the batter's head point (place position + 6.9 ft,
+the doc's extra 1.2 ft was not added on top) and clamped into the band; `.bb-lines` go empty on
+every pitch (the verdict, pitch line and swing line live in the pop; Line 1 keeps only the
+at-bat outcome word). `_zoneBoxPx()` is the one true unscaled box and `_zoneMap(mode)` applies
+`BATTING_ZONE_SCALE` 1.6 or the pitcher camera's floor; any probe that hand-derives a batting
+camera pixel from field.js alone is off by 1.6x. `_pitchWorldPoint(xNorm, yNorm, frac)` is the
+one pitch-to-world function the ball and the fire trail share. `timingWord` is set on every real
+swing, so the `'foul'` pop branch was already dead; "Foul" and "Swing and a miss" are said by the
+swing line only. The reduced-motion check in `test-visual.mjs` is structural (source regex), not
+a call-count probe. r2-cadence watches `_showPop` now, not Line 1.
