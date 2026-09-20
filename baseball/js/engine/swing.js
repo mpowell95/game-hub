@@ -17,6 +17,13 @@
 //     The CHARGED swing (hold to charge, `chargeTime`/`chargeWindowMult`/`chargePower`) is
 //     deleted too: POWER mode is what replaces it - a smaller circle for more exit velocity, a
 //     choice made before the pitch rather than a hold during it.
+//     R5 (same doc, section 9): PLACEMENT STEERS THE BALL, IT NEVER SUBTRACTS POWER. The 2-D
+//     distance still decides whether there is contact at all, but it no longer scales `q` and
+//     there is no flat mph penalty either (`placementPenaltyMph`, deleted). What the outer half of
+//     the circle costs is launch-angle TIGHTNESS - the line-drive band widens from the inner half
+//     out to the rim. Why: the two deductions between them put a well-struck ball under
+//     `CARRY_ZERO_MPH`, where `carryFt` returns zero feet, which is Matt's five Perfect swings and
+//     five outs at his own feet.
 //
 // BB-2a (2026-09-12): the CONTACT-QUALITY AXIS. The shipped BB-2 engine made timing binary inside
 // its own window - `absTiming` decided miss/foul/contact and then never appeared again, so a swing
@@ -61,7 +68,8 @@ function cursorOf(decision) {
 }
 
 /** The batting mode a decision carries - 'contact' (big circle, ordinary power) or 'power' (small
- *  circle, x1.12 exit velocity). Anything else reads as CONTACT, which is the forgiving one. */
+ *  circle, a few mph more exit velocity - `modeExitMult`). Anything else reads as CONTACT, which
+ *  is the forgiving one. */
 export function modeOf(decision) {
   return decision && decision.mode === 'power' ? 'power' : 'contact';
 }
@@ -149,10 +157,13 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: true, contact: true, foul: true, inPlay: false };
   }
 
-  // The contact-quality axis (BB-2a), now with R2's placement term folded in: `qualityFor` is 1 at
-  // dead-on timing falling to 0 at the window's own edge, and `placeQ` is 1 dead centre in the
-  // circle falling to 0 at its rim. Both have to be good for the ball to be squared up.
-  const q = qualityFor(absTiming, F.perfectMs, timingWindowMs) * placeQ;
+  // The contact-quality axis (BB-2a). R5 rule 1: `q` IS TIMING QUALITY ALONE - `placeQ` no longer
+  // multiplies it. Placement has already had its say (a ball outside the circle is a miss, above),
+  // and everything downstream that reads `q` is about how well the ball was TIMED: exit velocity,
+  // the line-drive band's tightness, the spray model's pull-vs-gap blend, and `outcomes.js`'s
+  // LINE_THROUGH_Q. Folding placement in as a second multiplier is half of why a Perfect swing
+  // 0.2 zone units off centre carried 0 ft every time (settings.js's R5 block has the measurement).
+  const q = qualityFor(absTiming, F.perfectMs, timingWindowMs);
   const placeFrac = Math.min(1, d / cursorR);
   // "Centered" is now "inside the inner half of the circle" - the R2 statement of the sweet spot,
   // kept because `sim-baseball.mjs --attribute` measures the share of centered contact.
@@ -182,7 +193,13 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     // timing quality rises, and WIDENS toward topped (low angle) and popped-up (high angle) as it
     // falls - a squared-up ball flies true; a mistimed-but-centered one still gets under or over
     // it. Unchanged from BB-2a, which is what keeps this branch's own calibration.
-    const spread = F.lineDriveSpreadMaxDeg - q * (F.lineDriveSpreadMaxDeg - F.lineDriveSpreadMinDeg);
+    // R5 rule 1: and the ONE thing the outer half of the circle costs is this band's tightness.
+    // `rimFrac` is 0 anywhere in the inner half (`rimSpreadStartFrac`, the same 0.5 `centered`
+    // uses) and 1 at the rim, and it spends the swing's timing quality: a perfectly-timed ball met
+    // on the rim flies as HARD as one met dead centre (rule 1) and as TRUE as a badly-timed one.
+    const rimFrac = Math.max(0, (placeFrac - F.rimSpreadStartFrac) / Math.max(1e-6, 1 - F.rimSpreadStartFrac));
+    const trueness = q * (1 - Math.min(1, rimFrac));
+    const spread = F.lineDriveSpreadMaxDeg - trueness * (F.lineDriveSpreadMaxDeg - F.lineDriveSpreadMinDeg);
     launchAngleDeg = Math.max(0, F.lineDriveCenterDeg + (rand01() * 2 - 1) * spread);
     kind = launchAngleDeg > 26 ? 'fly' : 'line';
   }
@@ -190,9 +207,11 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   // Exit velocity: TIMING QUALITY (q) gates how much of the swing's power actually reaches the
   // ball - power multiplies a good swing, it never rescues a bad one. `qualityFloor` is the share
   // of the no-power base a swing barely inside the window (q=0) still keeps; the power skill's own
-  // contribution is itself scaled by q. The PLACEMENT penalty stays as its own, separate, flat-mph
-  // subtraction (`placementPenaltyMph`, the 18 the 1-D model already charged) - placement and
-  // timing are two axes, per doc §12, and neither substitutes for the other.
+  // contribution is itself scaled by q. R5 rule 1: THERE IS NO PLACEMENT TERM HERE AT ALL any more.
+  // `placementPenaltyMph` is deleted from settings.js; where the ball was met steers it (spray,
+  // kind, launch-angle tightness) and never how hard it was hit. R5 rule 2: the three numbers this
+  // produces are broadcast-real (about 50 mph barely timed, 80 perfectly timed with no power
+  // points, 105 perfectly timed at College's cap), because R4's HOME RUN strip prints them.
   const powerBonus = hitPowPts * effect.hitPow.exitVeloMphPerPt;
   const modeMul = (F.modeExitMult && F.modeExitMult[mode]) || 1;
   // BB-2d commit 4: the batted ball itself now scales with the league's own field
@@ -203,14 +222,14 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     ? settings.LEAGUE_POWER_SCALE[league] : 1;
   const carryZeroMph = settings.CARRY_ZERO_MPH != null ? settings.CARRY_ZERO_MPH : 30;
   const scaleAboveZero = (mph) => carryZeroMph + leaguePowerScale * (mph - carryZeroMph);
-  const baseExitVelo = settings.BASE_EXIT_VELO != null ? settings.BASE_EXIT_VELO : 36.93;
+  const baseExitVelo = settings.BASE_EXIT_VELO != null ? settings.BASE_EXIT_VELO : 80;
   const timingQualityMul = F.qualityFloor + (1 - F.qualityFloor) * q;
   const rawTimedExitVelo = baseExitVelo * timingQualityMul + powerBonus * q;
   const timedExitVelo = scaleAboveZero(rawTimedExitVelo);
-  const rawMinExitVelo = settings.MIN_EXIT_VELO_MPH != null ? settings.MIN_EXIT_VELO_MPH : baseExitVelo * (35 / 62);
+  const rawMinExitVelo = settings.MIN_EXIT_VELO_MPH != null ? settings.MIN_EXIT_VELO_MPH : 42;
   const minExitVelo = scaleAboveZero(rawMinExitVelo);
-  const exitVeloMph = Math.max(minExitVelo,
-    (timedExitVelo - placeFrac * F.placementPenaltyMph) * modeMul + (rand01() * 2 - 1) * 4);
+  const noiseMph = F.exitVeloNoiseMph != null ? F.exitVeloNoiseMph : 4;
+  const exitVeloMph = Math.max(minExitVelo, timedExitVelo * modeMul + (rand01() * 2 - 1) * noiseMph);
 
   // Spray: "Early contact pulls the ball, late contact goes the opposite way" (doc §12), but a
   // PERFECTLY-timed swing must not spray toward the worst part of the field. The pull/opposite

@@ -26,6 +26,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.error('FAIL:', msg); } };
 
+/** R5: the exit velocity that carries exactly `ft` feet at `launchAngleDeg`, by inverting the real
+ *  `carryFt` rather than re-deriving its angle factor by hand. Several tests below need "a ball
+ *  that lands exactly here" and every one of them used to inline `sin(2a)`; when R5 moved the
+ *  curve's peak (`CARRY_PEAK_DEG`) those copies silently asked for the wrong distance. Returns
+ *  `null` when the requested distance is under `MIN_IN_PLAY_FT` (no exit velocity produces it). */
+function veloForCarry(ft, launchAngleDeg) {
+  if (ft < SETTINGS.MIN_IN_PLAY_FT) return null;
+  const a = Math.max(0, Math.min(70, launchAngleDeg));
+  const angleFactor = Math.max(SETTINGS.GROUND_CARRY_FACTOR, Math.sin((Math.PI * a) / (2 * SETTINGS.CARRY_PEAK_DEG)));
+  return ft / (SETTINGS.CARRY_SCALE * angleFactor) + SETTINGS.CARRY_ZERO_MPH;
+}
+
 const DETERMINISM_SEED = 424242;
 const RESUME_SEED = 909090;
 
@@ -340,18 +352,23 @@ console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error
     // model centers a perfectly-timed swing, per settings.js's `perfectSprayDeg`) is a hit - the
     // doc's own promise ("good timing is not aimed at the worst place on the field") made concrete.
     const zonesM = zonesFor('majors', 0);
-    const centerSector = zonesM.outfield[1];
-    const cornerSector = zonesM.outfield[0];
-    ok(centerSector.toFt > cornerSector.toFt, 'majors\' straightaway-center out-zone reaches deeper than its corners (the geometry this test exercises)');
-    const midDistance = (centerSector.toFt + cornerSector.toFt) / 2; // beyond corner reach, within center reach
+    const fence = SETTINGS.PARKS.default;
+    // R5: this promise is now carried by the FENCE, not by the out-zone's own depth. R5's zone
+    // depths reach the wall at every league (zones.js's own header says why), so a fly ball that
+    // beats a manned sector has already left the park; what still differs between straightaway
+    // centre and the gap a perfectly-timed swing sprays toward is HOW FAR THE WALL IS. A ball that
+    // is a routine fly out to the deepest part is over the fence toward the gap.
+    const gapDeg = SETTINGS.FEEL.engine.perfectSprayDeg;
+    ok(fenceFtAt(0, fence) > fenceFtAt(gapDeg, fence),
+      'the park is deeper dead centre than toward the gap a perfectly-timed swing sprays to (the geometry this test exercises)');
+    const midDistance = (fenceFtAt(0, fence) + fenceFtAt(gapDeg, fence)) / 2; // over one wall, short of the other
     const FLY_ANGLE = 30; // a 'fly' kind (battedBallKind: >=26, <52), clear of the line-through rule
-    const angleFactor = Math.max(0, Math.sin((2 * FLY_ANGLE * Math.PI) / 180));
-    const exitVeloMph = midDistance / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const exitVeloMph = veloForCarry(midDistance, FLY_ANGLE);
     const deadCenter = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: 0, q: 1 },
-      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
-    const towardGap = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: SETTINGS.FEEL.engine.perfectSprayDeg, q: 1 },
-      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
-    ok(deadCenter.result === 'out', `a marginal fly ball hit dead center is caught (majors' deepest out-zone), got ${JSON.stringify(deadCenter)}`);
+      zonesM, SETTINGS, fence, 5, mulberry32(2));
+    const towardGap = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: gapDeg, q: 1 },
+      zonesM, SETTINGS, fence, 5, mulberry32(2));
+    ok(deadCenter.result === 'out', `a marginal fly ball hit dead center is caught (majors' deepest part of the park), got ${JSON.stringify(deadCenter)}`);
     ok(towardGap.result === 'hit', `the identical ball hit toward a gap (where a perfectly-timed swing sprays) gets through, got ${JSON.stringify(towardGap)}`);
   }
   {
@@ -360,10 +377,11 @@ console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error
     // identical spot stays an out.
     const zonesM = zonesFor('majors', 0);
     const sec2 = zonesM.outfield[1]; // straightaway center
-    const midDepth = (sec2.fromFt + sec2.toFt) / 2;
-    // Reverse-engineer an exit velo/angle combo that carries to midDepth at launchAngleDeg=18.
-    const angleFactor = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
-    const exitVeloMph = midDepth / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    // A depth INSIDE the sector's reach and inside LINE_THROUGH_MAX_FT, which is the band the rule
+    // is about. R5's sectors reach the wall, so their own midpoint is far past that cap.
+    const midDepth = Math.min((sec2.fromFt + sec2.toFt) / 2, SETTINGS.LINE_THROUGH_MAX_FT - 20);
+    ok(midDepth > sec2.fromFt, 'the line-through probe depth is inside the sector\'s own reach');
+    const exitVeloMph = veloForCarry(midDepth, 18);
     const highQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.95 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     const lowQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.1 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(highQ.result === 'hit' && highQ.kind === 'line-through',
@@ -1069,9 +1087,8 @@ console.log('\n-- 15. Locked-statement inventory gap-fill (BB-2a step 8) --');
     // between sectors 1 and 2 under the default GAP_DEG).
     const sprayAngleDeg = (sector.fromDeg + sector.toDeg) / 2;
     const GROUND_ANGLE = 4;
-    const angleFactor = Math.max(0, Math.sin((2 * GROUND_ANGLE * Math.PI) / 180));
     const nearEdgeFt = sector.toFt - SETTINGS.MECHANICS.groundEdgeMarginFt / 2; // well inside the near-edge band
-    const exitVeloMph = nearEdgeFt / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const exitVeloMph = veloForCarry(nearEdgeFt, GROUND_ANGLE);
     const trial = (hitSpd) => resolveContact({ exitVeloMph, launchAngleDeg: GROUND_ANGLE, sprayAngleDeg },
       zonesM, SETTINGS, SETTINGS.PARKS.default, hitSpd, () => 0.0001).result;
     ok(trial(0) === 'out', 'a close grounder with hitSpd=0 is fielded (the beat-out roll never fires with zero chance)');
@@ -1178,13 +1195,12 @@ console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch sp
 
     const manned = zonesM.outfield[1]; // straightaway center, a manned sector
     const bloopFt = manned.fromFt - SETTINGS.BLOOP_BAND_FT / 2; // well inside the bloop band
-    const angleFactor18 = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
-    const bloopVelo = bloopFt / (SETTINGS.CARRY_SCALE * angleFactor18) + 30;
+    const bloopVelo = veloForCarry(bloopFt, 18);
     const bloop = resolveContact({ exitVeloMph: bloopVelo, launchAngleDeg: 18, sprayAngleDeg: 0 },
       zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(bloop.result === 'hit' && bloop.kind === 'blooper', `a fly short of a manned sector's near edge, within BLOOP_BAND_FT, is a bloop single, got ${JSON.stringify(bloop)}`);
 
-    const tooShort = resolveContact({ exitVeloMph: bloopFt < 20 ? 35 : (manned.fromFt - SETTINGS.BLOOP_BAND_FT - 10) / (SETTINGS.CARRY_SCALE * angleFactor18) + 30,
+    const tooShort = resolveContact({ exitVeloMph: veloForCarry(manned.fromFt - SETTINGS.BLOOP_BAND_FT - 10, 18),
       launchAngleDeg: 18, sprayAngleDeg: 0 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(tooShort.result === 'out', `a fly shorter than BLOOP_BAND_FT short of a manned sector's near edge is still an out, got ${JSON.stringify(tooShort)}`);
 
@@ -1868,9 +1884,19 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
     const dead = at(0, 0, 0, 0);
     const near = at(0.2, 0, 0, 0);
     const edge = at(0.5, 0, 0, 0);
-    ok(dead.q > near.q && near.q > edge.q, `the swing's 2-D contact quality falls with distance from the cursor (${dead.q.toFixed(3)} > ${near.q.toFixed(3)} > ${edge.q.toFixed(3)})`);
+    // R5 rule 1 REPLACES R2's "quality falls with distance from the cursor": `q` is TIMING quality
+    // alone now, and placement never subtracts power. What the distance still does is decide
+    // whether there is contact at all, spray the ball, pick the kind, and (in the line-drive band)
+    // widen the launch-angle spread. This assertion was `dead.q > near.q > edge.q` until R5.
+    ok(dead.q === near.q && near.q === edge.q,
+      `the swing's contact quality is TIMING alone - the same timing scores identically dead centre, near and at the rim (${dead.q.toFixed(3)} = ${near.q.toFixed(3)} = ${edge.q.toFixed(3)}), R5 rule 1`);
+    ok(Math.abs(dead.exitVeloMph - edge.exitVeloMph) < 1e-9,
+      `and placement subtracts NO exit velocity: dead centre and the rim are the same mph on the same seed (${dead.exitVeloMph.toFixed(2)} vs ${edge.exitVeloMph.toFixed(2)})`);
+    ok(SETTINGS.FEEL.engine.placementPenaltyMph === undefined,
+      'the flat placement penalty is gone from settings.js, not merely unused (R5 rule 1)');
     const diag = at(0.2 / Math.SQRT2, 0.2 / Math.SQRT2, 0, 0);
-    ok(Math.abs(diag.q - near.q) < 1e-9, 'distance is the 2-D distance: the same offset taken diagonally scores identically');
+    ok(Math.abs(diag.sprayAngleDeg - near.sprayAngleDeg) < 1e-9 || diag.contact === near.contact,
+      'distance is the 2-D distance: the same offset taken diagonally still makes contact the same way');
     ok(at(0, 0.6, 0, 0).contact === false, 'a ball 0.6 units ABOVE the contact cursor\'s centre is outside its 0.55 circle - a miss');
     // Kind follows the VERTICAL offset, per the spec.
     const R = SETTINGS.FEEL.engine.cursorR.contact;
@@ -2481,6 +2507,168 @@ await (async function section31() {
   ok(!!payload, 'a perfect-timed swing at a centered fastball resolved with an atBatEnd event');
   ok(payload && typeof payload.launchAngleDeg === 'number',
     `atBatEnd carries a numeric launchAngleDeg on a ball in play (got ${payload && payload.launchAngleDeg})`);
+})();
+
+
+// ---------------------------------------------------------------------------------------------
+// Section 32 (R5, docs/BASEBALL-3D-BUILD.md section 9): CONTACT AND CARRY. The stage's own five
+// deliverables, in order, plus the derivation the numbers in settings.js are written from.
+// Measured before this stage, through the real swing.js/outcomes.js at Quick Play's preset roster
+// and the College park: a perfectly timed dead-centre CONTACT swing carried 0 ft on 27.9% of
+// swings and the same swing 0.2 zone units off centre carried 0 ft on 100% of them. Every
+// assertion below exists so that cannot come back.
+console.log('\n-- 32. R5: contact and carry --');
+await (async function section32() {
+  const F = SETTINGS.FEEL.engine;
+  const presets = Object.values(SETTINGS.PRESETS);
+
+  // (a) 20,000 random in-play swings per league and per mode, none under MIN_IN_PLAY_FT.
+  {
+    let checked = 0, worst = Infinity, worstAt = null, zeroFt = 0;
+    for (const league of SETTINGS.LEAGUES) {
+      for (const mode of ['contact', 'power']) {
+        const zones = zonesFor(league, 0);
+        const fenceFt = SETTINGS.FIELD[league].fenceFt;
+        const r = mulberry32(hashSeed('r5-in-play', league, mode));
+        let swings = 0;
+        while (swings < 20000) {
+          const skills = presets[swings % presets.length];
+          const pitch = flyPitch('fastball', { x: (r() * 2 - 1) * 1.2, y: (r() * 2 - 1) * 1.2 }, 0.6, SETTINGS, r);
+          const decision = { action: 'swing', mode, timingErrorMs: (r() * 2 - 1) * 200,
+            cursor: { x: (r() * 2 - 1) * 1.2, y: (r() * 2 - 1) * 1.2 } };
+          const sr = swing(pitch, skills, decision, SETTINGS, r, league);
+          swings += 1;
+          if (!sr.contact || !sr.inPlay) continue;
+          const oc = resolveContact(sr, zones, SETTINGS, fenceFt, skills.hitSpd, r);
+          if (oc.isFoul) continue; // a foul out never carried anywhere
+          checked += 1;
+          if (oc.distanceFt <= 0) zeroFt += 1;
+          if (oc.distanceFt < worst) { worst = oc.distanceFt; worstAt = `${league}/${mode}`; }
+        }
+      }
+    }
+    ok(checked > 0, `(a) the in-play sweep actually produced balls in play (${checked} of 200000 swings)`);
+    ok(zeroFt === 0, `(a) NO ball in play carries 0 ft, at any league or mode (${zeroFt} of ${checked})`);
+    ok(worst >= SETTINGS.MIN_IN_PLAY_FT - 1e-9,
+      `(a) and none is under MIN_IN_PLAY_FT (shortest ${worst.toFixed(1)} ft at ${worstAt}, floor ${SETTINGS.MIN_IN_PLAY_FT} ft)`);
+  }
+
+  // (b) A perfectly-timed dead-centre swing is never 0 ft, and its exit velocity is inside
+  //     [70, 115] at EVERY league - the broadcast band R4's HOME RUN strip prints.
+  {
+    for (const league of SETTINGS.LEAGUES) {
+      const zones = zonesFor(league, 0);
+      const fenceFt = SETTINGS.FIELD[league].fenceFt;
+      const r = mulberry32(hashSeed('r5-perfect-centre', league));
+      let lo = Infinity, hi = -Infinity, shortest = Infinity, n = 0;
+      for (let i = 0; i < 4000; i++) {
+        const skills = presets[i % presets.length];
+        const pitch = { x: 0, y: 0, isStrike: true };
+        const sr = swing(pitch, skills, { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, r, league);
+        if (!sr.inPlay) continue;
+        n += 1;
+        lo = Math.min(lo, sr.exitVeloMph); hi = Math.max(hi, sr.exitVeloMph);
+        const oc = resolveContact(sr, zones, SETTINGS, fenceFt, skills.hitSpd, r);
+        shortest = Math.min(shortest, oc.distanceFt);
+      }
+      ok(n === 4000, `(b) ${league}: every perfectly-timed dead-centre swing is in play (${n}/4000)`);
+      ok(shortest > 0, `(b) ${league}: and none of them carries 0 ft (shortest ${shortest.toFixed(1)} ft)`);
+      // Little League's own bat is held back by LEAGUE_POWER_SCALE (0.525) on purpose - a 210 ft
+      // park - so its band is its own, below the broadcast band the other four share.
+      const band = league === 'little' ? [45, 75] : [70, 115];
+      ok(lo >= band[0] && hi <= band[1],
+        `(b) ${league}: exit velocity reads like a broadcast number, ${lo.toFixed(1)} to ${hi.toFixed(1)} mph inside [${band[0]}, ${band[1]}]`);
+    }
+  }
+
+  // (c) R5 rule 1: with the same seed, cursor offset 0 and cursor offset 0.3 produce the SAME exit
+  //     velocity. Placement steers the ball; it never subtracts power.
+  {
+    // hitAcc 0, so the circle is exactly `cursorR.contact` (0.55) and 0.3 is genuinely in its
+    // outer half - `contactRadiusInPerPt` widens the circle with the skill, which is what made an
+    // earlier draft of this test measure a 0.3 offset as still "centered".
+    const skills = { hitAcc: 0, hitPow: 6, hitSpd: 5, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const at = (off) => swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: -off, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, mulberry32(8181), 'college');
+    const centre = at(0), off3 = at(0.3);
+    ok(centre.inPlay && off3.inPlay, '(c) both the dead-centre and the 0.3-off swing are in play');
+    ok(Math.abs(centre.exitVeloMph - off3.exitVeloMph) < 1e-9,
+      `(c) cursor offset 0 and 0.3 produce the same exit velocity on the same seed (${centre.exitVeloMph.toFixed(3)} vs ${off3.exitVeloMph.toFixed(3)} mph)`);
+    ok(centre.q === off3.q, '(c) and the same contact quality - q is timing alone (R5 rule 1)');
+    ok(centre.centered === true && off3.centered === false,
+      '(c) `centered` still means the inner half of the circle, which is what the sim attributes by');
+  }
+
+  // (d) q=1 beats q=0 in exit velocity on the same seed, and by the derivation's own ratio.
+  {
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const at = (timingErrorMs) => swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs, mode: 'contact' }, SETTINGS, mulberry32(4242), 'college');
+    const perfect = at(0), edge = at(F.timingWindow * 0.999);
+    ok(perfect.exitVeloMph > edge.exitVeloMph,
+      `(d) a q=1 swing beats a q=0 one in exit velocity on the same seed (${perfect.exitVeloMph.toFixed(1)} vs ${edge.exitVeloMph.toFixed(1)} mph)`);
+    // The two named targets rule 2 derives BASE_EXIT_VELO and qualityFloor from, at College
+    // (LEAGUE_POWER_SCALE 1.000), hitPow 0, CONTACT mode. The noise draw is +/- exitVeloNoiseMph.
+    const noise = F.exitVeloNoiseMph;
+    ok(Math.abs(perfect.exitVeloMph - SETTINGS.PERFECT_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) a perfectly-timed no-power swing at College reads PERFECT_EXIT_VELO_MPH within the noise (${perfect.exitVeloMph.toFixed(1)} vs ${SETTINGS.PERFECT_EXIT_VELO_MPH} +/- ${noise})`);
+    ok(Math.abs(edge.exitVeloMph - SETTINGS.BARELY_TIMED_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) and one at the window's edge reads BARELY_TIMED_EXIT_VELO_MPH within the noise (${edge.exitVeloMph.toFixed(1)} vs ${SETTINGS.BARELY_TIMED_EXIT_VELO_MPH} +/- ${noise})`);
+    // The third target: cap power at College.
+    const capSkills = { ...skills, hitPow: SETTINGS.CAPS.college };
+    const cap = swing({ x: 0, y: 0, isStrike: true }, capSkills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, mulberry32(4242), 'college');
+    ok(Math.abs(cap.exitVeloMph - SETTINGS.CAP_POWER_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) and a perfectly-timed swing at College's own cap reads CAP_POWER_EXIT_VELO_MPH within the noise (${cap.exitVeloMph.toFixed(1)} vs ${SETTINGS.CAP_POWER_EXIT_VELO_MPH} +/- ${noise})`);
+    // POWER mode is a few mph over CONTACT, not a different swing.
+    const power = swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }, SETTINGS, mulberry32(4242), 'college');
+    const gain = power.exitVeloMph - perfect.exitVeloMph;
+    ok(gain > 0 && gain <= 8, `(d) POWER mode is a few mph over CONTACT, not a different swing (+${gain.toFixed(1)} mph)`);
+  }
+
+  // (e) A grounder at 1 deg carries at least 40 ft - the defect that put five Perfect swings at
+  //     Matt's feet. `sin(2a)` was ~0 there; GROUND_CARRY_FACTOR is the floor that fixed it.
+  {
+    ok(carryFt(80, 1) >= 40, `(e) a grounder at 1 deg off an 80 mph swing carries at least 40 ft (${carryFt(80, 1).toFixed(1)})`);
+    ok(carryFt(50, 1) >= SETTINGS.MIN_IN_PLAY_FT, `(e) and a 50 mph one clears MIN_IN_PLAY_FT (${carryFt(50, 1).toFixed(1)})`);
+    ok(carryFt(105, 2) >= 100 && carryFt(105, 2) <= 200,
+      `(e) a hard grounder rolls to where a fielder meets it, not to the wall (${carryFt(105, 2).toFixed(1)} ft at 105 mph / 2 deg)`);
+    ok(carryFt(90, 3) > carryFt(60, 3), '(e) a harder grounder still rolls further than a weak one - the floor is on the ANGLE, never on the speed');
+    // The curve's peak moved to CARRY_PEAK_DEG: a line drive now out-carries a lazy fly ball off
+    // the same bat, which is what took the census from 28% triples to 6%.
+    ok(carryFt(90, SETTINGS.CARRY_PEAK_DEG) > carryFt(90, F.flyCenterDeg),
+      `(e) the carry curve peaks at CARRY_PEAK_DEG (${SETTINGS.CARRY_PEAK_DEG} deg beats the fly band's ${F.flyCenterDeg} deg: ${carryFt(90, SETTINGS.CARRY_PEAK_DEG).toFixed(0)} vs ${carryFt(90, F.flyCenterDeg).toFixed(0)} ft)`);
+    ok(carryFt(90, 20) > carryFt(90, 60), '(e) and falls away past it, so a pop-up lands on the infield');
+    // The derivation in settings.js, checked rather than trusted: HR_CARRY_FRAC of the College
+    // centre fence at the centred-contact launch angle, off a q=1 cap-power swing.
+    const capMph = SETTINGS.CAP_POWER_EXIT_VELO_MPH;
+    const want = SETTINGS.HR_CARRY_FRAC * SETTINGS.FIELD.college.fenceFt.center;
+    ok(Math.abs(carryFt(capMph, F.lineDriveCenterDeg) - want) <= 2,
+      `(e) CARRY_SCALE's own derivation holds: ${capMph} mph at ${F.lineDriveCenterDeg} deg carries ${carryFt(capMph, F.lineDriveCenterDeg).toFixed(1)} ft against HR_CARRY_FRAC x ${SETTINGS.FIELD.college.fenceFt.center} = ${want.toFixed(1)}`);
+    // And the per-league table is that same sentence, moved league to league.
+    for (const league of SETTINGS.LEAGUES) {
+      const refMph = SETTINGS.CARRY_ZERO_MPH + SETTINGS.LEAGUE_POWER_SCALE[league]
+        * (SETTINGS.BASE_EXIT_VELO - SETTINGS.CARRY_ZERO_MPH + SETTINGS.MEDIAN_HIT_POW_PTS * SETTINGS.SKILL_EFFECT.hitPow.exitVeloMphPerPt);
+      const frac = carryFt(refMph, F.lineDriveCenterDeg) / SETTINGS.FIELD[league].fenceFt.center;
+      ok(Math.abs(frac - SETTINGS.MEDIAN_CARRY_FRAC) <= 0.02,
+        `(e) ${league}: the reference swing (q=1, 5 hitPow points) carries ${(100 * frac).toFixed(1)}% of its own centre fence, against MEDIAN_CARRY_FRAC ${SETTINGS.MEDIAN_CARRY_FRAC}`);
+    }
+  }
+
+  // The zone depths R5 moved, pinned so a future edit has to face what they are for.
+  {
+    for (const league of SETTINGS.LEAGUES) {
+      const z = zonesFor(league, 0);
+      const wall = SETTINGS.FIELD[league].fenceFt;
+      ok(z.outfield[1].toFt >= wall.center,
+        `${league}: the straightaway outfield out-zone reaches its own centre fence (${z.outfield[1].toFt.toFixed(0)} vs ${wall.center} ft) - past a manned sector IS over the wall`);
+      ok(z.infield[1].toFt > 60 && z.infield[1].toFt < 160,
+        `${league}: the infield out-zone is where a grounder is actually fielded (${z.infield[1].toFt.toFixed(0)} ft)`);
+      ok(z.outfield[0].fromFt > SETTINGS.MIN_IN_PLAY_FT,
+        `${league}: the outfield's near edge is past the in-play floor, so the bloop band is reachable (${z.outfield[0].fromFt.toFixed(0)} ft)`);
+    }
+  }
 })();
 
 // ---------------------------------------------------------------------------------------------

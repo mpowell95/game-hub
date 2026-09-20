@@ -4,21 +4,40 @@
 // is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
 
 import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT,
-  DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH } from './settings.js';
+  DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH, GROUND_CARRY_FACTOR, MIN_IN_PLAY_FT,
+  CARRY_PEAK_DEG } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
  *  monotonic model (more speed and a mid-range angle carry further); not aerodynamically real,
  *  and not meant to be - there is no reference to calibrate against, so this stays a plain,
  *  reproducible function of its two inputs rather than a "realistic" model with invented drag
- *  coefficients. Draft [Open item 23]: the exact carry curve; CARRY_SCALE lives in settings.js. */
-export function carryFt(exitVeloMph, launchAngleDeg) {
+ *  coefficients. Draft [Open item 23]: the exact carry curve; CARRY_SCALE lives in settings.js.
+ *
+ *  R5 rule 3: NO BALL IN PLAY EVER CARRIES 0 FT, and both halves of that are here.
+ *   - `GROUND_CARRY_FACTOR` floors the angle factor. The old `sin(2a)` was ~0 at 0 to 3 deg, so a
+ *     topped ball stopped dead at the plate; a topped ball in fact ROLLS, and what this engine
+ *     calls its distance is where a fielder meets it. The floor binds below 4.8 deg and above
+ *     55.2 deg, which are `battedBallKind`'s grounder and pop-up bands, and nothing between.
+ *   - `MIN_IN_PLAY_FT` is the flat floor under the result, whatever the angle.
+ *
+ *  `settings` (optional) lets a sweep measure a candidate CARRY_SCALE/floor without editing
+ *  settings.js - `sim-baseball.mjs --set` passes a settings OBJECT, and this module's own imports
+ *  are module-scope constants that such an override could never reach. `resolveContact` passes its
+ *  own settings through, so the engine and a sweep read the same numbers by construction. */
+export function carryFt(exitVeloMph, launchAngleDeg, settings) {
+  const scale = (settings && settings.CARRY_SCALE != null) ? settings.CARRY_SCALE : CARRY_SCALE;
+  const zeroMph = (settings && settings.CARRY_ZERO_MPH != null) ? settings.CARRY_ZERO_MPH : CARRY_ZERO_MPH;
+  const groundFactor = (settings && settings.GROUND_CARRY_FACTOR != null) ? settings.GROUND_CARRY_FACTOR : GROUND_CARRY_FACTOR;
+  const minFt = (settings && settings.MIN_IN_PLAY_FT != null) ? settings.MIN_IN_PLAY_FT : MIN_IN_PLAY_FT;
+  const peakDeg = (settings && settings.CARRY_PEAK_DEG != null) ? settings.CARRY_PEAK_DEG : CARRY_PEAK_DEG;
   const clampedAngle = Math.max(0, Math.min(70, launchAngleDeg));
-  // sin(2*angle) peaks at 45 degrees, which is where a real batted ball carries furthest for a
-  // given speed - the same shape a real projectile's range curve has, without modeling drag.
-  const angleFactor = Math.max(0, Math.sin((2 * clampedAngle * Math.PI) / 180));
-  const speedFactor = Math.max(0, exitVeloMph - CARRY_ZERO_MPH);
-  return Math.max(0, speedFactor * angleFactor * CARRY_SCALE);
+  // A half-sine that peaks at `CARRY_PEAK_DEG` and is back to zero at twice it. The old form was
+  // `sin(2a)`, the vacuum parabola's own range curve, which peaks at 45 deg - see CARRY_PEAK_DEG
+  // in settings.js for why a real batted ball peaks nearer 30 and why the difference mattered here.
+  const angleFactor = Math.max(groundFactor, Math.sin((Math.PI * clampedAngle) / (2 * peakDeg)));
+  const speedFactor = Math.max(0, exitVeloMph - zeroMph);
+  return Math.max(minFt, speedFactor * angleFactor * scale);
 }
 
 function battedBallKind(launchAngleDeg) {
@@ -63,7 +82,7 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   }
 
   const kind = battedBallKind(batted.launchAngleDeg);
-  const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg);
+  const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg, settings);
 
   if (kind === 'popup') {
     // doc §10, [Locked]: "Pop-ups in the infield are outs."
@@ -94,8 +113,15 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
 
   // Line drives and non-homer flies. Check the fence before the out-zone: a ball that clears the
   // wall was never catchable regardless of where the sector's reach ends.
+  //
+  // R5: a LINE DRIVE consults the fence too. This check used to read `kind === 'fly'` only, which
+  // was invisible while `carryFt` returned 0 ft for almost everything; at R5's real distances the
+  // line-drive band (`battedBallKind`, 8 to 26 deg) is where a squared-up swing actually lives, and
+  // the hardest ball in the game - a 470 ft liner off a cap-power q=1 swing - was being scored a
+  // TRIPLE because the fence was never asked. A ball that lands past the wall is over the wall,
+  // whatever angle it left at. A grounder or a pop-up still never reaches this branch.
   const wallFt = fenceFtAt(batted.sprayAngleDeg, fenceFt);
-  if (kind === 'fly' && distanceFt >= wallFt) {
+  if ((kind === 'fly' || kind === 'line') && distanceFt >= wallFt) {
     return { result: 'hit', bases: 4, kind: 'homer', distanceFt, isFoul: false };
   }
 
@@ -123,7 +149,9 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
       // into a sector" (the ordinary case below) stays an out, but a scorched line drive is not a
       // fly ball a fielder settles under; it is through the infielder's reach before an
       // outfielder can close.
-      if (kind === 'line' && (batted.q || 0) >= LINE_THROUGH_Q && distanceFt <= LINE_THROUGH_MAX_FT) {
+      const lineQ = settings.LINE_THROUGH_Q != null ? settings.LINE_THROUGH_Q : LINE_THROUGH_Q;
+      const lineMaxFt = settings.LINE_THROUGH_MAX_FT != null ? settings.LINE_THROUGH_MAX_FT : LINE_THROUGH_MAX_FT;
+      if (kind === 'line' && (batted.q || 0) >= lineQ && distanceFt <= lineMaxFt) {
         return { result: 'hit', bases: 1, kind: 'line-through', distanceFt, isFoul: false };
       }
       return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };

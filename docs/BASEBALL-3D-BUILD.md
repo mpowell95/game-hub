@@ -1065,3 +1065,173 @@ one pitch-to-world function the ball and the fire trail share. `timingWord` is s
 swing, so the `'foul'` pop branch was already dead; "Foul" and "Swing and a miss" are said by the
 swing line only. The reduced-motion check in `test-visual.mjs` is structural (source regex), not
 a call-count probe. r2-cadence watches `_showPop` now, not Line 1.
+
+### R5: contact and carry, so a Perfect swing is never an out at the plate
+
+Matt's recording of v865: five "★ Perfect" swings, five outs at the batter's feet, 0 ft. Measured
+through the real engine (`swing.js` + `outcomes.js`, Quick Play's preset roster, College park):
+perfect timing with the cursor dead centre carries 0 ft on 15% of swings; the cursor 0.2 zone
+units off centre (about two inches at the plate) carries 0 ft on 100%. Two causes, both numbers,
+not rules: `BASE_EXIT_VELO` (31.39) sits 1.4 mph above `CARRY_ZERO_MPH` (30), so every deduction
+between them (`placeFrac x placementPenaltyMph` 18, the ±4 mph noise, `placeQ` folded into `q`)
+drops the ball below the line where `carryFt` returns 0; and `carryFt`'s angle factor `sin(2a)` is
+near 0 for a grounder at 0 to 3 deg, so a topped ball stops at the plate. R5 owns
+`baseball/js/engine/` for this stage (section 6's blanket exclusion does not apply, exactly as R2's
+did not). It also owns item 11 of the same analysis: the season scoreboard drifted when RA gave the
+CPU its new plays and nothing was re-tuned.
+
+**Rules.**
+
+1. **Placement steers the ball, it never subtracts power.** `q` is timing quality alone
+   (`qualityFor`); `placeQ` stops multiplying it, and `placementPenaltyMph` is deleted. The vertical
+   offset still picks the kind (grounder / line / fly / pop-up) and the horizontal offset still
+   sprays, as R2 wrote them. A ball crossing outside the circle is still a miss. The one thing the
+   outer half of the circle may cost is launch-angle tightness (the spread widens from the inner
+   half to the rim), never mph. `centered` keeps its meaning for the sim's attribution.
+2. **Exit velocity is a real number.** The pop and the HOME RUN strip print it, so it has to read
+   like a broadcast: a barely-timed contact around 50 mph, a perfectly-timed swing with no power
+   points around 80, a perfectly-timed swing at cap power around 105 at College, POWER mode a few
+   mph over CONTACT, noise a few mph either way. `BASE_EXIT_VELO`, `MIN_EXIT_VELO_MPH`,
+   `SKILL_EFFECT.hitPow.exitVeloMphPerPt`, `modeExitMult` and `CARRY_SCALE` are all re-derived
+   together; `LEAGUE_POWER_SCALE` keeps scaling the excess above `CARRY_ZERO_MPH`. Write the
+   derivation in `settings.js` the way BB-2d's comment does, from named targets, so the next
+   fence change can redo it.
+3. **No ball in play ever carries 0 ft.** `carryFt` gets a grounder floor on its angle factor
+   (a ball hit at 2 deg rolls; its distance is where a fielder meets it, roughly 40 to 150 ft),
+   pop-ups land at least on the infield grass, and a new `MIN_IN_PLAY_FT` names the floor every
+   in-play result must clear. `resolveContact`'s geometry (sectors, bloop band, line-through,
+   double/triple fractions, the fence) stays; only what feeds it changes.
+4. **Perfect means something.** Measured at Quick Play's preset roster against Quick Play's CPU,
+   at the College park, 20,000 swings per cell (the `--contact-grid` harness, or a sibling
+   `--perfect` mode): a perfectly-timed swing (inside `perfectMs`) with the ball in the inner half
+   of the CONTACT circle is a hit at least 55% of the time and a home run at least 8%; the same
+   swing with the ball in the outer half is a hit at least 30%; a swing at the edge of the timing
+   window (q near 0) is still in play and a hit at most 25%. The existing contact-grid checks
+   (TIMING_OVER_POWER and the ceiling) must stay green: timing beats power is the doc's own lock.
+5. **The season scoreboard.** `node sim-baseball.mjs --quick --assert` before any change, pasted;
+   then the full `--assert` after. Every league's SEASON_WINRATE_BAND and SEASONS_TO_GOLD are the
+   targets. Knobs allowed: `CPU`, `CPU_LEVEL_SHORTFALL`, `SKILL_EFFECT`, the exit-velocity and
+   carry constants above, `LEAGUE_POWER_SCALE`, `zones.js`'s depths if the report says why. Not
+   allowed: any `FEEL.ui` beat, `cursorR`, `timingWindow`, `perfectMs`, `foulMult`, the steal /
+   bunt / pickoff constants, anything in `ui.js` beyond what the new numbers force (check
+   `_battedApexFt` and the chase against a 150 ft grounder and a 60 ft pop-up; they must still
+   look like a grounder and a pop-up).
+
+**Deliverables.** `baseball/js/test.js` section 32: (a) 20,000 random in-play swings per league
+and per mode, none under `MIN_IN_PLAY_FT`; (b) a perfectly-timed dead-centre swing is never 0 ft
+and its exit velocity is inside [70, 115] at every league; (c) with the same seed, cursor offset
+0 and cursor offset 0.3 produce the same exit velocity (placement does not subtract power);
+(d) q=1 beats q=0 in exit velocity on the same seed; (e) a grounder at 1 deg carries at least
+40 ft; (f) the eight existing contact-quality tests updated, none deleted. The sim scoreboard
+before and after, the contact-grid lines, and the rule-4 census, all pasted into
+`baseball/CLAUDE.md` exactly as run, passing or not. Every suite the stage touches green:
+`node baseball/js/test.js`, `node sim-baseball.mjs --contact-grid`, `node sim-baseball.mjs
+--assert`, `node test-baseball-device.mjs` (with `BB_DEVICE_QUICK=1`), `node test-visual.mjs
+baseball`. Stills: the pop and strip after a real homer showing a broadcast-looking mph, and a
+grounder chase ending in the infield, not at the plate.
+
+### R6: figures and runners, the team a figure wears and who stands at the plate
+
+Matt's recording of v865, items 2 to 4 of the analysis. Presentation only: no engine change, no
+beat change, no camera change (R7 owns the cameras).
+
+- **Every figure wears the team the inning half says.** `_syncActors` picks the batter's and the
+  pitcher's side from `mode` (`'pitching'` = away batter), which is inverted for the human (the
+  human is `away`; in the pitching state the CPU, `home`, bats) and disagrees with the runners and
+  fielders, which already derive from `this.game.half`. One rule for all fifteen roles:
+  `battingSide = half === 'top' ? 'away' : 'home'`, the defense is the other one, the umpire is
+  his own; the batter, pitcher, catcher, fielders and runners all read it. Before `this.game`
+  exists (the first `_drawStaticField()`), the human bats, so the batter is `away`.
+- **One batter at the plate, always.** After a play ends at or near home (a 0 ft out today, any
+  short out after R5), the batter-runner figure (`rb`) is still standing on the plate when the
+  next batter is placed, so two figures share the box for a beat. Find the exact path (the
+  `_animateRunners` mover whose run was cut by `_returnToPlate()`, or an `rb` never hidden when
+  `raw` skipped him) and close it: `rb` is hidden the moment his play resolves as an out at home
+  or when the cutaway returns to the plate, whichever comes first, and `_syncActors` hides `rb`
+  whenever no runner animation owns him. A fresh at-bat never inherits a visible `rb`.
+- **The diamond widget reads from behind the plate.** `.bb-diamond-cell[data-cell="1b"]` is at
+  `left: 12%` and `3b` at `88%`; from behind home, and in the reference, first base is on the
+  RIGHT. Swap the two. Check `_paintDiamondWidget`'s moving dot follows (it positions by cell, so
+  it should for free) and that no test pins the old sides.
+
+**Deliverables.** Two probes in `test-baseball-device.mjs`: `sides-match` (mount, force each
+half through `__bbForceHalfNext`, read every visible actor's `side` from `inst.actors` and assert
+the batter, the runners and the fielders agree with the half, at both halves) and `one-batter`
+(force a short out at home through the dev seams, wait for the next at-bat's first pitch, assert
+exactly one visible figure inside 4 ft of the batter's box and that `rb` is hidden). Stills: the
+batting state and the pitching state with a runner on base, showing the colours agree; the
+widget with a runner on first, dot on the right. `node test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
+`node test-game-conventions.mjs` green.
+
+### R7: camera and presentation, what the recording showed against the reference
+
+Matt's recording of v865, items 5 to 10 of the analysis. Presentation and cameras only: no
+engine change, no beat change, no control change. Every still is taken beside the reference
+frame for the same moment (`docs/BASEBALL-REFERENCE-B9.md`'s catalogue; the orchestrator supplies
+the frames).
+
+- **The verdict word stays on screen and stays put.** `_positionPop` clamps the CENTRE 12 px from
+  the band's edge, so a wide word ("Perfect" for a left-handed batter) runs half off the right
+  edge; and it re-projects through whichever camera is live, so the word jumps across the screen
+  when the chase cuts in. Clamp by the element's own measured width and height (half of each
+  plus the margin); position ONCE per `_showPop` and never re-project it; hide the pop the moment
+  the camera cuts to the chase (the reference shows no word over the chase; the outcome word
+  is the marker hold's job).
+- **The chase never starts inside the catcher.** On a short ball the first chase frames are the
+  catcher's head filling the foreground. Give the chase a minimum start: the camera's first
+  position is at least `CHASE_MIN_HEIGHT_FT` up and `CHASE_MIN_BACK_FT` behind the ball
+  (numbers chosen by measurement, written in `field.js`'s CAMERAS comment), and the catcher and
+  umpire are hidden from the chase camera (`_applyCameraVisibility` already hides the umpire
+  from the batter camera; same mechanism).
+- **The pitch is visible from the pitcher camera.** During the human's own pitch the ball at
+  60 ft draws about 3 px and no frame of the recording shows it. A pixel-size floor for the ball
+  on the pitcher camera (scale the sphere so it never draws under `BALL_MIN_PX`, the same
+  about-the-centre idea `PITCHING_ZONE_MIN_W_FRAC` uses for the box; never on the batter or
+  chase cameras), and the fire trail (`_maybeDrawFireTrail`) drawn on that camera too.
+- **The batting target marker is something you can steer onto.** `TARGET_MARKER_R` 0.12 draws a
+  5 px ring; the reference's is a clear square about 30 px across on a 393 px phone. A square
+  marker with the existing crosshair, about `0.3` zone units on a side (through `_zoneMap`, so
+  it scales with the batting camera's 1.6 x), drawn UNDER the cursor circle; the `target-marker`
+  probe reads `_targetMarkerPx` and must still pass.
+- **Stands behind home plate.** From the pitcher camera there is grass to the horizon behind the
+  batter. `standsPoints` runs -75 to +75 deg and tapers; close the ring: a short backstop
+  section of stands behind the plate (two tiers, about 20 ft behind the umpire, spanning the
+  angles the pitcher camera sees), with the same crowd texture. The batter camera must still
+  see the field, not a wall (it sits at z 13.1; keep the backstop behind it or make it
+  invisible on that camera).
+- **No flat green frame at the half-inning swap.** Between halves the scene shows an empty
+  field for a beat with "Side retired" over it. `_crossFadeSwap` fades every element out, swaps,
+  fades in; the empty frame is the swap's own `_drawStaticField()` before the actors are
+  re-placed. Cross-fade over the LAST RENDERED FRAME: snapshot the WebGL canvas to an image
+  before the fade (`toDataURL` or a copy canvas), hold it over the scene through the swap, fade
+  it out once the new half's first frame has painted.
+
+**Deliverables.** Stills, each beside its reference frame: the pop for a left-handed batter's
+"Perfect" fully on screen; the first chase frame after a short grounder (no catcher); the ball
+mid-flight from the pitcher camera with the trail; the batting idle with the square marker; the
+pitcher camera with stands behind the plate; the batter camera unchanged. Probes in
+`test-baseball-device.mjs`: `pop-onscreen` (a left-handed batter, the pop's bounding rect
+inside the band), `chase-start` (the chase camera's first position at least the minimum height
+and distance from the ball), `ball-visible-pitcher` (the ball's projected radius on the pitcher
+camera at 60 ft is at least `BALL_MIN_PX`). `node test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+
+### R5 record (shipped v866, 2026-09-20)
+
+From the stage's report: on the shipped v865 engine 96.5% to 98.6% of all balls in play carried
+0 ft (median exit velocity 16 to 20 mph), so every hit was decided by spray angle alone. After
+R5 the zero-feet rate is 0.0% in every cell measured; exit velocity reads 77 to 103 mph. The
+rule-4 census passes all seven lines. Rule 4's home-run floor and the contact grid's three
+ratio lines cannot both hold: the grid was green on v865 only because home runs were 0.1% of
+balls in play, so the grid's `ratio`, `cross` and `ceiling` lines are red and the sweep that
+shows why is in `baseball/CLAUDE.md`. Two things the spec said would stay had to move once
+balls carried: `zones.js`'s depths (in feet, never reached before) and `LINE_THROUGH_MAX_FT`
+(220 to 280); a line drive over the wall is now a homer, not a triple. `carryFt`'s angle curve
+peaks at `CARRY_PEAK_DEG` 30 instead of the vacuum curve's 45. `_battedApexFt` draws a pop-up
+as a pop-up. **Item 11 (the season re-tune) was NOT delivered**: the player is about 0.09
+stronger at every league and Gold is slower everywhere but Little League and High School; four
+knobs were tried and reverted, all written up. The `CPU`, `CPU_SIGMA_MIN_MS` and
+`CPU_LEVEL_SHORTFALL` tables are byte-identical to v865. That re-tune is its own stage, after
+R7. Also found: `zonesFor` ignores its settings argument, so `--set FIELD.*.outZoneMult` never
+reached a full-game sim; `--set` for top-level keys and `--contact-grid`'s `--set` are fixed.
