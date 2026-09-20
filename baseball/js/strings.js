@@ -35,6 +35,10 @@ export const STRINGS = {
     act_ready: 'Ready',
     mode_contact: 'Contact',
     mode_power: 'Power',
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): the mode row's own word while the bunt well is
+    // armed. 'Toque' is what a bunt is called in Spanish baseball, the same root as `res_sacrifice`
+    // and `res_bunt_single` below.
+    mode_bunt: 'Bunt',
     pitch_fastball: 'FB',
     pitch_changeup: 'CH',
     pitch_curveball: 'CB',
@@ -60,6 +64,12 @@ export const STRINGS = {
     res_homer: 'Home run',
     res_walk: 'Walk',
     res_strikeout: 'Strikeout',
+    // RA: a bunt's three outcomes. They are named apart from `res_out`/`res_single` on purpose -
+    // "Out" and "Single" are both true of them and both lose the only thing that made the play
+    // worth a button (`outcomeWord` in ui.js carries the same note).
+    res_bunt_out: 'Bunt out',
+    res_bunt_single: 'Bunt single',
+    res_sacrifice: 'Sacrifice',
     // SPEC.md section 3/13: Line 1's verdict vocabulary, one word per pitch before the outcome
     // is known (`js/ui.js`'s `verdictWord`/`timingWord` glue, BB-3b commit 6).
     v_ball: 'Ball',
@@ -68,6 +78,10 @@ export const STRINGS = {
     v_early: 'Early',
     v_late: 'Late',
     v_perfect: 'Perfect',
+    // RA: the steal's and the pickoff's own verdict words, popped through the same `_showPop` as
+    // every other big word, with the same two shapes Strike and Ball already carry.
+    v_out: 'Out',
+    v_safe: 'Safe',
     // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
     // meter - a release can no longer be early, Nice or hung, because there is no release to time.
     // R3: the diamond widget's own four cell labels (docs/BASEBALL-3D-BUILD.md section 9, "R3").
@@ -113,6 +127,7 @@ export const STRINGS = {
     act_ready: 'Listo',
     mode_contact: 'Contacto',
     mode_power: 'Poder',
+    mode_bunt: 'Toque',
     pitch_fastball: 'RE',
     pitch_changeup: 'CA',
     pitch_curveball: 'CU',
@@ -136,12 +151,17 @@ export const STRINGS = {
     res_homer: 'Jonrón',
     res_walk: 'Base por bolas',
     res_strikeout: 'Ponche',
+    res_bunt_out: 'Toque out',
+    res_bunt_single: 'Sencillo de toque',
+    res_sacrifice: 'Sacrificio',
     v_ball: 'Bola',
     v_strike: 'Strike',
     v_foul: 'Foul',
     v_early: 'Antes',
     v_late: 'Tarde',
     v_perfect: 'Perfecto',
+    v_out: 'Out',
+    v_safe: 'Quieto',
     widget_home: 'Casa',
     widget_1b: '1B',
     widget_2b: '2B',

@@ -4,6 +4,168 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## RA: steal, bunt, pickoff, and every pitch type in Quick Play (2026-09-20)
+
+The fourth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "RA"). Matt, 2026-09-20:
+*"We need the other buttons like bunt, steal, pick off to work. And we need the other pitch types."*
+R1 built the stadium, R2 re-timed the controls, R3 put fielders and runners on the field; this is
+the first stage where the three action wells under the pad do anything at all, and the first time
+this engine lets a runner move BETWEEN pitches. `RESERVED_PHASE_6` - the settings.js marker that
+had said since phase 1 that these three were [Locked] FEATURES with no rules yet - is deleted, and
+doc §3's own [Open] line "how each works in play" is rewritten into the rules as built.
+
+**Everything is decided in the ENGINE and emitted as an event; the UI only presents it.** That is
+the stage's one structural rule and it is what kept the diff honest: `ui.js` gained no rule of its
+own, not even "who can steal" - it asks `game._stealCandidate(side)`, the same function
+`_buildSwingView` feeds the agents, so an enabled button and a steal the engine would actually run
+are the same thing by construction.
+
+**The at-bat loop grew exactly two new shapes, and one of them consumes no pitch.** `decidePitch`
+may now resolve `{pickoff: true}`, which throws NOTHING: the engine rolls it, emits `pickoff
+{runnerId, from, out}`, applies the out if there is one, and loops straight back round to the next
+`decidePitch` for the SAME batter with the SAME count - `_advanceLineup` is not called and
+balls/strikes are untouched. `decideSwing` may now resolve `{..., bunt, steal}`, and both ride out
+on a TAKE exactly as they do on a swing (the runner left with the pitch, not with the bat).
+`PICKOFF_MAX_PER_AT_BAT` (3) is a safety valve, not a rule: a pickoff does not advance the count,
+so an agent that only ever picked off would spin that loop for ever.
+
+**The steal is resolved after the pitch is flown and after the swing is SCORED**, with one
+exception that matters: **if the batter puts the ball in play the steal is void** - no event at
+all - because the runner was already moving and `advanceAll` advances him from the base he is still
+credited with. `clamp(0.45 + 0.01 * runner.hitSpd - 0.005 * pitcher.pitchAcc, 0.20, 0.90)`;
+measured through the real loop at 10,000 attempts a band: 0.450 at zero skill, 0.708 with the
+runner at the Majors cap, 0.320 with the pitcher there.
+
+**ONLY FIRST AND SECOND ARE ELIGIBLE TO STEAL, and that is RA's own narrowing of the spec.** The
+spec says "a runner on a base whose next base is empty" - and third's next base is HOME, which is
+empty by definition, so the wider reading offers a steal of home on every pitch with a runner on
+third. Neither the success formula (0.45 at zero skill) nor the CPU's own rate (0.12 a pitch) is
+calibrated for a run-scoring play; a CPU runner would have walked home from third most innings. A
+steal of home is a different play and is not modelled.
+
+**A caught steal's third out ends the half-inning and the batter KEEPS THE LINEUP POINTER** - he
+leads off the next time that side bats, the standard rule, and the same one a pickoff's third out
+follows. It is enforced by one guard placed immediately after the `count` emit: the pitch that
+carried the inning-ending caught steal is still announced (it happened), but no strikeout or walk
+is converted off it, because there is no fourth out and a walk into a finished inning means nothing.
+
+**`if (this.aborted) return` after the steal's own emit cost a red resume gate, and that is the
+whole lesson.** `playAtBat`'s header already says it: a single pass through the pitch loop (one
+pitch AND its swing decision) is the atomic unit of play, and `abort()` fires during the 'pitch'
+emit. Returning between the steal and the count would snapshot a state where the runner had moved
+but the pitch that carried him was never scored, and a resumed game diverges from an uninterrupted
+one from that moment on. `test.js` section 12b's 24-seed x 40-stop-point sweep caught it in the
+first run; the line is gone and a comment at the spot says why.
+
+**The bunt is a different swing, so it is its own branch** (`buntSwing` in swing.js), not a flag
+threaded through the existing one: no cursor, no mode, no spray geometry off the bat, no exit
+velocity worth modelling. It has TIMING and nothing else, on a window x1.6, and `q` comes from
+timing alone. A mistimed bunt is a **foul, never a swinging miss** - a bat held in the zone nicks
+the ball - and what makes that a real cost is game.js's own rule that **a foul bunt with two
+strikes is strike three**, the one exception to `MECHANICS.foulNeverThirdStrike` (doc §3 [Locked],
+which is about a foul BALL). `swingResult.bunt` is what tells the two apart.
+
+**`resolveBunt` is the bunt's whole rule book** (outcomes.js), because `resolveContact` cannot
+answer it: that function's model is out-zone geometry against a ball that CARRIED, and a bunt that
+dies 20 ft in front of the plate is in nobody's sector at any depth. Runners on and fewer than two
+outs is a **sacrifice** (`advanceSacBunt` in bases.js - every runner up one, the runner from third
+scores, the batter out); the batter beating the throw makes it a **bunt single** and the runners
+still move up one; nobody on (or two outs) is a bunt for a hit. **The beat-out roll is the one that
+already exists** - `MECHANICS.beatOutPerPt` x hitSpd, the identical line an infield grounder at the
+edge of a sector already runs. A second, differently-calibrated speed roll for the same question
+would have been two answers to it.
+
+**`sacrifice` is an out whose name does not end in "out", and that costs three edits, not one.**
+`outcomeWord` has to name it before its generic tests (or a Bunt single reads as a plain Single and
+a Bunt out as a plain Out, both true and both losing the only thing that made the play worth a
+button); `_settleAtBat`'s landing marker has to treat it as an out (or a batter thrown out gets the
+green disc of a base hit); and `_animateRunners`'s `wasOut` has to include it (or the batter-runner
+stands on first instead of vanishing there). Every one of the three is a separate line, and the
+grep that finds them is `/out$/`.
+
+**Quick Play unlocks all eight pitches for both sides**, `unlockedPitchesFor(league, wsTitles,
+{ quickPlay: true })`, and the `Game` constructor carries a `quickPlay` option that rides out on the
+pitch view (career passes nothing and keeps the ladder's unlocks). The CPU cannot use its per-league
+`pitchMix` there - those rows ARE the career ladder, Little League throws fastballs and Majors has
+never held a cutter - so `QUICK_PLAY_PITCH_MIX` is one normalised distribution over all eight:
+College's own four-pitch row renormalised to 0.76, plus knuckleball 0.05, screwball 0.06, eephus
+0.03 and cutter 0.10. **The CPU/CAPS/SKILL_EFFECT tables are untouched by this stage.**
+
+**Two new clips, both authored by rendering** (`render-actor.mjs`), both with their own measured
+floor in `test-baseball-actors.mjs`. `Bunt` is a LOOP with no mark - the batter squares at the
+wind-up and HOLDS through the pitch and through contact, because a bunt has no separate swing and
+`buntSwing`'s timing-only scoring says exactly that. Its first draft put the bat on the camera's own
+axis (a wrist rotation, `handR` Z, turns the bat in the wrong plane at this rig's arm pose); what
+actually holds it level is the SWING's own contact-keyframe arm geometry (`upperArmR [.., 44, 0]`,
+`lowerArmR [12, 0, 10]`) with the elbow barely folded and the left arm folded harder to separate the
+hands. `Pickoff` is a 0.5 s one-shot with its mark (the release) at 0.3 s. **Its turn was authored
+the wrong way round and only a rendered frame caught it**: the pitcher faces +z and first base is
+off to his +x, so the torso swings POSITIVE in Y - the first draft turned him toward THIRD while the
+ball flew to first, which no amount of reading the numbers would have shown.
+
+**Measured, through the cameras each clip is actually seen through, at 393x429:** Bunt handR travel
+9.7 px with 3.1 px of hip sink (against Idle's own 17.1); Pickoff handR path 140.9 px with 31.4 px
+of it inside the first 20% of the clip - the opposite shape to the delivery's own 13.1 px early
+move over a much longer clip, which is what a pickoff is. Floors set at 60%: 5 / 84 / 18.
+
+**Facts learned, for R4:**
+- **The first-base bag is outside `pitcherCam`'s frame.** That camera sits at `(-2.4, 6.4, -72)`
+  with a 50 deg fov looking at the plate; first base is at `(63.6, 0, -63.6)`, 66 ft to the side and
+  8 ft in front of the lens. So on the HUMAN's own pickoff the ball leaves frame the moment it is
+  thrown, and what the player sees is the turn, then the verdict word. The same R1 camera fact R3
+  recorded about the infielders, reported rather than worked around.
+- **A steal from first is not visible from `batterCam` either** - the runner is off frame to the
+  right for the whole run. The diamond widget's moving dot is what actually carries that play, which
+  is why `_animateSteal` shows the widget for the run and holds it one beat after.
+- **`_animateSteal` is NOT awaited by its event handler**, the same rule `_animateRunners` follows:
+  the engine emits `steal` and then emits `count`, whose handler already holds RESULT_MS +
+  BETWEEN_MS, so a 700 ms run happens INSIDE a beat that exists rather than adding one. r2-cadence
+  measured 3032/3052/3156 ms with the whole layer live, against R2's own 3000 ms target.
+  `_playPickoff` is the opposite case and IS awaited - the engine goes straight back to the next
+  pitch decision when it returns, so that method's own duration IS the 1.5 s beat.
+- **A slot role is a base slot, not a person, and a probe that forgets it goes flaky.** The first
+  draft of `actions-live` sampled `r1`'s visibility 1200 ms after a caught steal to prove the runner
+  was gone; on a walk the next batter legitimately reaches first inside that same beat and `r1` is a
+  different man standing there. It awaits `_animateSteal`'s own promise and asks the ENGINE whether
+  the runner is on a base now.
+- New `__bbTest` seam (dev profile only, ui.js): `putOnFirst()` puts a real roster player - never
+  the batter at the plate, never an invented id - on first. **It cannot retroactively change a swing
+  view the engine has already built and handed to the agent**, so a probe that arms STEAL in the
+  same breath has to take a pitch first and arm on the next one. Real play never has that gap.
+- The three wells' DOM is rebuilt on every `_paintActionSlots()`, so a test that clicks one and then
+  reads `.is-armed` off the same node is reading a detached element. Query it again.
+
+### The sim scoreboard, RA (`node sim-baseball.mjs --quick --assert`, 8.7s)
+
+Pasted as run, passing or not (`sim-baseball.mjs` reports, it does not lock), beside the same
+command on the pre-RA commit for comparison. **Nothing was tuned**: the CPU now steals, bunts and
+throws over, and this is what that costs the player.
+
+```
+[FAIL] SEASON_WINRATE_BAND.little      0.889  [0.92,0.98]   (pre-RA 0.897 FAIL)
+[FAIL] SEASON_WINRATE_BAND.highschool  0.686  [0.70,0.80]   (pre-RA 0.753 PASS)
+[FAIL] SEASON_WINRATE_BAND.college     0.539  [0.57,0.67]   (pre-RA 0.569 FAIL)
+[PASS] SEASON_WINRATE_BAND.minors      0.528  [0.49,0.59]   (pre-RA 0.572 PASS)
+[PASS] SEASON_WINRATE_BAND.majors      0.489  [0.41,0.51]   (pre-RA 0.536 FAIL)
+[PASS] SEASONS_TO_GOLD.little 1.43 / .highschool 2.14 / .college 2.73 / .minors 2.14
+       (pre-RA 1.30 / 2.14 / 2.73 / 4.29 FAIL) ; [FAIL] .majors 7.50 (<=5.25, pre-RA 7.50)
+[PASS] CHAMPION_GAME_WIN_MIN_MEDIAN 0.400, PERFECT_SEASON_REACHABLE 0.2333, LADDER_MONOTONE
+       (across-league) [0.894,0.734,0.566,0.538,0.484], NUDGE_A_B every league, CPU_LEVEL_SHORTFALL,
+       both DOC_*_TABLE_MATCHES.
+[FAIL] SLOT_WINRATE_BAND weakest [0.86,0.77,0.56,0.62,0.52] / champion
+       [0.78,0.74,0.51,0.52,0.46]; CHAMPION_IS_HARDEST / within-league LADDER_MONOTONE;
+       CAP_BINDS_ONLY highschool 2.2 vs <=2.0 - every one of these is the same structural finding
+       every phase back to BB-2b has reported, unchanged in KIND by RA.
+```
+
+Every league got HARDER for the player by 0.01 to 0.07, which is the honest direction: the CPU has
+three plays it did not have before and the human has to choose to use them. Majors fell INTO its
+band (0.536 -> 0.489) and Minors' seasons-to-Gold fell from 4.29 to 2.14 (both now passing); High
+School fell OUT of its band (0.753 -> 0.686) and College drifted further below. `--quick` is a small
+sample and these are single runs, so the moves at the edges are worth re-measuring on a full run
+before anything is tuned against them. The CPU/CAPS/SKILL_EFFECT tables are untouched by RA, and
+re-tuning them against three new plays is its own job with this scoreboard as its before-picture.
+
 ## R3: fielders, runners, the chase, and the diamond widget (2026-09-20)
 
 The third stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R3"). R1 built the stadium

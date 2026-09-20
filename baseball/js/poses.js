@@ -575,6 +575,104 @@ export const CLIPS = {
   // swing is now +/-48 (with the trailing knee folding further, to 78 deg, so the arc gets LONGER
   // as well as wider) and a small hip drive (`hipsOffset` local z, the stride's own forward/back
   // reach) rides along with it. Measured after: footR travel 33.9 px against the 23.2 px floor.
+  // RA (docs/BASEBALL-3D-BUILD.md section 9): THE SQUARE. "the batter squares at the wind-up, a
+  // `Bunt` loop in poses.js: bat level, hands apart." A LOOP, not a one-shot: the batter squares as
+  // the delivery starts and holds the stance through the pitch and through contact, so there is no
+  // separate bunt "swing" - the bat is already where it is going to meet the ball, which is the
+  // whole of what a bunt is, and `swing.js`'s bunt branch scores it on timing alone to match.
+  //
+  // Three facts this pose is built from, all this rig's own (established by rendering in R1/R3 and
+  // re-used rather than re-derived): the bat is a child of `handR` running up that bone's local +Y,
+  // so the bat's angle off vertical is a handR Z rotation and nothing else - Idle's [10,0,-50] is
+  // 34 deg off vertical and the Swing's load pose [10,0,-10] is 69, so about 0.875 deg per unit,
+  // and +10 is the value that brings the barrel LEVEL. `spine` Y is how far the torso is turned
+  // away from the pitcher: Idle holds 45 (closed, the batting stance), and the square opens it to
+  // 12 (chest to the mound), which is what makes this read as a different stance at a glance
+  // rather than as the same stance holding the bat differently. And `hipsOffset` +y moves this rig
+  // DOWN, so the small extra knee bend here needs a slightly larger y than Idle's 0.32 or the shoes
+  // leave the dirt.
+  //
+  // The hands are APART on the bat, per the spec: `upperArmL`'s Z is pulled the other way from
+  // `upperArmR`'s and its elbow folds harder, which slides the bottom hand down the handle while
+  // the top hand cradles the barrel. Measured through batterCam at the size the batter is actually
+  // drawn, the same discipline stage 6 set for every clip: see test-baseball-actors.mjs's own
+  // MOTION_FLOORS.buntHandTravel for the number and the floor it is held to.
+  Bunt: { loop: true, mark: null, keys: [
+    { t: 0.00, pose: {
+      spine: [4, 8, 0], head: [0, -2, 0],
+      upperArmR: [10, 44, 0], lowerArmR: [12, 0, 10], handR: [0, 0, 0],
+      upperArmL: [-16, 30, -10], lowerArmL: [52, 0, 10], handL: [0, 0, 0],
+      upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 36],
+      upperLegL: [16, 0, 0], lowerLegL: [0, 0, 30],
+    }, hipsOffset: [0, 0.36, 0] },
+    // The GIVE: a real bunter does not hold the bat rigid, he lets it retreat toward the catcher so
+    // the ball dies at the plate instead of ricocheting off. The arms draw back and the knees sink
+    // a touch further; the bat stays level throughout (handR Z unchanged), because a bat that
+    // tipped here would stop reading as a bunt.
+    { t: 0.50, pose: {
+      spine: [7, 10, 0], head: [0, 0, 0],
+      upperArmR: [4, 37, 0], lowerArmR: [19, 0, 10], handR: [0, 0, 0],
+      upperArmL: [-14, 25, -10], lowerArmL: [60, 0, 10], handL: [0, 0, 0],
+      upperLegR: [-20, 0, 0], lowerLegR: [0, 0, 44],
+      upperLegL: [20, 0, 0], lowerLegL: [0, 0, 38],
+    }, hipsOffset: [0, 0.42, 0] },
+    // Closes on its own first keyframe exactly, so the loop has no seam (Crouch's own rule).
+    { t: 1.00, pose: {
+      spine: [4, 8, 0], head: [0, -2, 0],
+      upperArmR: [10, 44, 0], lowerArmR: [12, 0, 10], handR: [0, 0, 0],
+      upperArmL: [-16, 30, -10], lowerArmL: [52, 0, 10], handL: [0, 0, 0],
+      upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 36],
+      upperLegL: [16, 0, 0], lowerLegL: [0, 0, 30],
+    }, hipsOffset: [0, 0.36, 0] },
+  ] },
+  // RA: THROW OVER TO FIRST. "a `Pickoff` clip: quick turn, 0.5 s", mark (the ball leaving the
+  // hand) at 0.3. It is the Pitch delivery with everything slow taken out of it: no rock, no leg
+  // kick, no stride - the whole point of a pickoff is that none of that happens, and a pitcher who
+  // wound up first would never get anybody.
+  //
+  // It opens on Set's own base pose, bone for bone, exactly as Pitch does and for the same reason
+  // (actors.js cross-fades from whatever is playing, and a clip that opened somewhere else would
+  // blend through a pose nobody authored). `spine` Y carries the turn: the pitcher stands facing
+  // the plate (+z) and first base is off to his +x, so the torso swings POSITIVE in Y. The sign was
+  // wrong in the first draft and only a rendered frame caught it - he turned and threw toward THIRD
+  // while the ball flew to first, which no amount of reading the numbers would have shown. The arm comes over short and
+  // flat rather than over the top; the legs stay planted.
+  Pickoff: { loop: false, mark: 0.3, keys: [
+    { t: 0.00, pose: {
+      upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
+      upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
+    } },
+    // t=0.14: the turn. The whole body spins toward first and the throwing hand breaks up out of
+    // the glove to shoulder height - this is the beat that has to be quick, so it is most of the
+    // clip's rotation inside a third of its time.
+    { t: 0.14, pose: {
+      spine: [-2, 52, 0], head: [0, 26, 0],
+      upperArmR: [80, 10, 60], lowerArmR: [62, 0, 10], handR: [0, 0, 0],
+      upperArmL: [64, 0, -44], lowerArmL: [80, 0, 15], handL: [10, 0, -15],
+      upperLegR: [-10, 0, 0], lowerLegR: [0, 0, 16],
+      upperLegL: [10, 0, 0], lowerLegL: [0, 0, 12],
+    }, hipsOffset: [0, 0.04, 0] },
+    // t=0.30, THE MARK: the release. The arm is extended toward first, above the shoulder and out
+    // to the +x side, the glove tucked in against the chest. `_playPickoff` in ui.js samples the
+    // hand here and the ball leaves from exactly this point.
+    { t: 0.30, pose: {
+      spine: [6, 62, 0], head: [0, 30, 0],
+      upperArmR: [10, 46, 44], lowerArmR: [10, 0, 0], handR: [0, 0, 0],
+      upperArmL: [58, 0, -58], lowerArmL: [96, 0, 15], handL: [10, 0, -15],
+      upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 26],
+      upperLegL: [20, 0, 0], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.10, 0] },
+    // t=0.50: the short follow-through and the start of the turn back. Nothing dramatic - a
+    // pickoff throw is a flick, and a pitcher who finished it like a delivery would be off balance
+    // with a runner still standing on the bag.
+    { t: 0.50, pose: {
+      spine: [14, 40, 0], head: [0, 18, 0],
+      upperArmR: [34, 18, 96], lowerArmR: [48, 0, -10], handR: [0, 0, 0],
+      upperArmL: [54, 0, -30], lowerArmL: [70, 0, 10], handL: [10, 0, -15],
+      upperLegR: [-12, 0, 0], lowerLegR: [0, 0, 20],
+      upperLegL: [14, 0, 0], lowerLegL: [0, 0, 14],
+    }, hipsOffset: [0, 0.06, 0] },
+  ] },
   Run: { loop: 'pingpong', mark: null, keys: [
     { t: 0.00, pose: {
       spine: [8, 0, 0],

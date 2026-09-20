@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch } from './engine/pitch.js';
 import { swing, qualityFor, computeSwingTiming } from './engine/swing.js';
-import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
+import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
@@ -2049,6 +2049,410 @@ await (async function section29() {
     'atBatEnd carries basesBefore, the runner array exactly as it stood at the pitch (R3)');
   ok(payload && Array.isArray(payload.runnersOut) && payload.runnersOut.length === 0,
     'a walk removes no runner (runnersOut empty, R3)');
+})();
+
+// ---------------------------------------------------------------------------------------------
+// Section 30 (RA, docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF, and Quick Play's own
+// eight pitches. Every rule the spec states, one block each, driven through the REAL engine
+// wherever the rule is about the at-bat loop (a steal's third out, a pickoff throwing no pitch)
+// and through the real pure function where it is about the maths (the two success bands).
+console.log('\n-- 30. RA: steal, bunt, pickoff, and Quick Play\'s eight pitches --');
+await (async function section30() {
+  const RUNNER = 'stealer';
+  const BALL_OUTSIDE = { type: 'fastball', aim: { x: 5, y: 0 } };   // never a strike: past aimScatter's own spread
+
+  /** A two-team fixture with the runner's legs and the pitcher's accuracy pinned, so the steal's
+   *  own formula has exactly one value and an observed rate can be compared against it. */
+  function fixture(league, { runnerHitSpd = 0, pitcherAcc = 0, settings = null } = {}) {
+    const home = makeTeam(league, 0, mulberry32(11));
+    const away = makeTeam(league, 1, mulberry32(12));
+    for (const pl of away.players) pl.skills.hitSpd = runnerHitSpd;
+    const pitcher = home.players.find((pl) => pl.id === home.pitcherId);
+    pitcher.skills.pitchAcc = pitcherAcc;
+    // The man on first, renamed onto the roster so the engine's own skill lookup finds him. The
+    // batting order (and, defensively, the pitcher slot) hold IDS, so both are remapped with him -
+    // renaming the player alone leaves `_currentBatterId` pointing at somebody who no longer exists.
+    const wasId = away.players[3].id;
+    away.players[3].id = RUNNER;
+    away.battingOrder = away.battingOrder.map((id) => (id === wasId ? RUNNER : id));
+    if (away.pitcherId === wasId) away.pitcherId = RUNNER;
+    return { home, away, settings };
+  }
+
+  /** N steal attempts through the real `playAtBat`, counting the engine's own 'steal' events. The
+   *  bases/outs are reset before each at-bat so the sweep never ends a half-inning; every draw
+   *  still comes from the game's own seeded stream. */
+  async function stealTrials(league, opts, want) {
+    const { home, away, settings } = fixture(league, opts);
+    const g = new Game({
+      home, away, seed: 20260920, settings: settings || undefined,
+      agents: {
+        home: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take', steal: true }) },
+      },
+    });
+    let tries = 0, safe = 0;
+    g.onEvent = async (type, pl) => { if (type === 'steal') { tries += 1; if (pl.safe) safe += 1; } };
+    while (tries < want) {
+      g.bases = [RUNNER, null, null];
+      g.outs = 0; g.balls = 0; g.strikes = 0; g._atBatOpen = false;
+      await g.playAtBat();
+    }
+    return { tries, rate: safe / tries };
+  }
+
+  // --- the steal's success band, at zero skill and at the Majors cap -----------------------------
+  {
+    const cap = SETTINGS.CAPS.majors;
+    const perPt = SETTINGS.SKILL_EFFECT.hitSpd.stealSuccessPerPt;
+    const cases = [
+      { label: 'zero skill both sides', runnerHitSpd: 0, pitcherAcc: 0, want: SETTINGS.STEAL_BASE },
+      { label: 'runner at the Majors cap', runnerHitSpd: cap, pitcherAcc: 0, want: SETTINGS.STEAL_BASE + perPt * cap },
+      { label: 'pitcher at the Majors cap', runnerHitSpd: 0, pitcherAcc: cap, want: SETTINGS.STEAL_BASE - SETTINGS.STEAL_PER_ACC * cap },
+    ];
+    for (const c of cases) {
+      const wanted = Math.max(SETTINGS.STEAL_MIN, Math.min(SETTINGS.STEAL_MAX, c.want));
+      const got = await stealTrials('majors', { runnerHitSpd: c.runnerHitSpd, pitcherAcc: c.pitcherAcc }, 10000);
+      ok(Math.abs(got.rate - wanted) <= 0.03,
+        `steal band, ${c.label}: ${got.tries} attempts came back safe ${got.rate.toFixed(3)} of the time against the formula's ${wanted.toFixed(3)} (budget 0.03)`);
+    }
+    // The clamp is a real rule, not decoration: a runner well past any league's cap still tops out.
+    const g = new Game({ ...fixture('majors'), seed: 1, agents: { home: {}, away: {} } });
+    ok(g._stealChance(1000, { skills: { pitchAcc: 0 } }) === SETTINGS.STEAL_MAX, 'the steal chance is clamped at STEAL_MAX');
+    ok(g._stealChance(0, { skills: { pitchAcc: 1000 } }) === SETTINGS.STEAL_MIN, 'the steal chance is clamped at STEAL_MIN');
+  }
+
+  // --- the CPU's own 2-out/3-ball guard ---------------------------------------------------------
+  {
+    const skills = { hitAcc: 5, hitPow: 20, hitSpd: 20 };
+    const batter = new CpuBatter({ league: 'majors', skills, settings: SETTINGS });
+    const view = (outs, balls) => {
+      let seq = 0;
+      return {
+        side: 'away', inning: 1, half: 'top', outs, balls, strikes: 0,
+        bases: ['r', null, null], score: { home: 0, away: 0 }, batterId: 'b',
+        pitch: { type: 'fastball', x: 0, y: 0, isStrike: true, timeToPlateS: 0.5, straightX: 0, straightY: 0 },
+        pitchHistory: [], steal: { runnerId: 'r', from: 0, to: 1, hitSpd: 20 },
+        // a stream that always returns 0, so every probabilistic decision that CAN say yes does
+        rand01: () => { seq += 1; return 0; },
+      };
+    };
+    const guarded = await batter.decideSwing(view(2, 3));
+    ok(guarded.steal === false, 'the CPU never steals with 2 outs and a 3-ball count, even on a draw that would always say yes');
+    const free = await batter.decideSwing(view(1, 3));
+    ok(free.steal === true, 'the same CPU batter DOES steal with 1 out and a 3-ball count (the guard is the two together, not either alone)');
+    const free2 = await batter.decideSwing(view(2, 2));
+    ok(free2.steal === true, 'the same CPU batter DOES steal with 2 outs and a 2-ball count');
+    // ... and the draw is not taken at all when nobody can run, so an empty-bases pitch consumes
+    // exactly the draws it consumed before RA (the determinism note in agents.js).
+    const noRunner = { ...view(0, 0), steal: null, bases: [null, null, null] };
+    let drawsWith = 0, drawsWithout = 0;
+    const counting = (n) => ({ ...view(0, 0), rand01: () => { n.c += 1; return 0.99; } });
+    const a = { c: 0 }, b = { c: 0 };
+    await batter.decideSwing({ ...counting(a) });
+    await batter.decideSwing({ ...counting(b), steal: null, bases: [null, null, null] });
+    drawsWith = a.c; drawsWithout = b.c;
+    ok(drawsWith === drawsWithout + 1,
+      `a steal-eligible pitch costs exactly ONE extra draw (${drawsWith} against ${drawsWithout}) - an empty-bases pitch is untouched`);
+  }
+
+  // --- a caught steal is an out, and its third out ends the half-inning --------------------------
+  {
+    const never = { STEAL_BASE: 0, STEAL_MIN: 0, STEAL_MAX: 0 };
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 4242, settings: never,
+      agents: {
+        home: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take', steal: true }) },
+      },
+    });
+    g.outs = 2;
+    g.bases = [RUNNER, null, null];
+    g._resumeHalfPending = true;   // keep the outs we just set; this half is "already in progress"
+    const seen = [];
+    const lineupBefore = g.lineupPos.away;
+    g.onEvent = async (type, pl) => { seen.push([type, pl]); };
+    await g.playHalfInning();
+    const steal = seen.find(([t]) => t === 'steal');
+    ok(!!steal && steal[1].safe === false, 'the caught steal was emitted with safe:false');
+    ok(seen.some(([t]) => t === 'halfInningEnd'), 'a caught steal for the third out ends the half-inning through the ordinary path');
+    ok(g.outs >= SETTINGS.MECHANICS.outsPerInning, `the caught steal recorded the third out (outs=${g.outs})`);
+    ok(g.lineupPos.away === lineupBefore,
+      'the lineup pointer stays on the batter who was at the plate - he leads off the next time this side bats');
+    ok(!seen.some(([t, pl]) => t === 'atBatEnd' && pl && pl.outcome === 'walk'),
+      'no walk is converted off the pitch that carried the inning-ending caught steal');
+  }
+
+  // --- a steal is VOID when the batter puts the ball in play -------------------------------------
+  {
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 99, settings: { STEAL_BASE: 1, STEAL_MIN: 1, STEAL_MAX: 1 },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: {
+          decidePitch: async () => BALL_OUTSIDE,
+          // A swing with the cursor where the pitch is and perfect timing: contact, in play.
+          decideSwing: async (v) => ({ action: 'swing', steal: true, timingErrorMs: 0,
+            cursor: { x: v.pitch.x, y: v.pitch.y }, mode: 'contact' }),
+        },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    let stealEvents = 0, ended = null;
+    g.onEvent = async (type, pl) => { if (type === 'steal') stealEvents += 1; if (type === 'atBatEnd') ended = pl; };
+    await g.playAtBat();
+    ok(!!ended, 'the at-bat ended on a ball in play');
+    ok(stealEvents === 0, 'no steal event is emitted on a ball in play - the runner was already moving and the play resolves as normal');
+  }
+
+  // --- the pickoff's success band -----------------------------------------------------------------
+  {
+    const cap = SETTINGS.CAPS.majors;
+    const perPt = SETTINGS.SKILL_EFFECT.pitchAcc.pickoffPerPt;
+    for (const [label, acc, want] of [
+      ['zero accuracy', 0, SETTINGS.PICKOFF_BASE],
+      ['the Majors cap', cap, SETTINGS.PICKOFF_BASE + perPt * cap],
+    ]) {
+      const { home, away } = fixture('majors', { pitcherAcc: acc });
+      const g = new Game({
+        home, away, seed: 7777,
+        agents: {
+          home: { decidePitch: async () => ({ pickoff: true }), decideSwing: async () => ({ action: 'take' }) },
+          away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        },
+      });
+      let tries = 0, outs = 0;
+      g.onEvent = async (type, pl) => { if (type === 'pickoff') { tries += 1; if (pl.out) outs += 1; } };
+      while (tries < 10000) {
+        g.bases = [RUNNER, null, null];
+        g.outs = 0; g.balls = 0; g.strikes = 0; g._atBatOpen = false;
+        await g.playAtBat();
+      }
+      const wanted = Math.max(SETTINGS.PICKOFF_BASE, Math.min(SETTINGS.PICKOFF_MAX, want));
+      ok(Math.abs(outs / tries - wanted) <= 0.03,
+        `pickoff band, ${label}: ${tries} throws got the runner ${(outs / tries).toFixed(3)} of the time against the formula's ${wanted.toFixed(3)} (budget 0.03)`);
+    }
+    const { home, away } = fixture('majors');
+    const g2 = new Game({ home, away, seed: 1, agents: { home: {}, away: {} } });
+    ok(g2._pickoffChance({ skills: { pitchAcc: 1000 } }) === SETTINGS.PICKOFF_MAX, 'the pickoff chance is clamped at PICKOFF_MAX');
+    ok(g2._pickoffChance({ skills: { pitchAcc: 0 } }) === SETTINGS.PICKOFF_BASE, 'the pickoff chance floors at PICKOFF_BASE');
+  }
+
+  // --- a pickoff throws NO pitch and leaves the count alone ----------------------------------------
+  {
+    const { home, away } = fixture('college');
+    let threwOver = false;
+    const g = new Game({
+      home, away, seed: 31337, settings: { PICKOFF_BASE: 0, PICKOFF_MAX: 0 },  // never gets him
+      agents: {
+        home: {
+          decidePitch: async () => { if (!threwOver) { threwOver = true; return { pickoff: true }; } return BALL_OUTSIDE; },
+          decideSwing: async () => ({ action: 'take' }),
+        },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    const order = [];
+    const countAt = [];
+    g.onEvent = async (type, pl) => {
+      order.push(type);
+      if (type === 'pickoff') countAt.push({ balls: g.balls, strikes: g.strikes, outs: g.outs, lineup: g.lineupPos.away });
+      if (type === 'count' && pl.balls >= 1) g.abort();   // stop after the first real pitch resolves
+    };
+    await g.playAtBat();
+    const pickIdx = order.indexOf('pickoff');
+    const pitchIdx = order.indexOf('pitch');
+    ok(pickIdx >= 0, 'the pickoff was emitted');
+    ok(pitchIdx === -1 || pickIdx < pitchIdx, 'the pickoff threw no pitch - no pitch event precedes it');
+    ok(countAt[0] && countAt[0].balls === 0 && countAt[0].strikes === 0,
+      `the count is untouched by a pickoff (${countAt[0] && countAt[0].balls}-${countAt[0] && countAt[0].strikes})`);
+    ok(countAt[0] && countAt[0].lineup === 0, 'the lineup does not advance on a pickoff - the same batter is still up');
+    ok(g.bases[0] === RUNNER, 'a pickoff that misses leaves the runner exactly where he was');
+    // The safety valve: an agent that ONLY ever throws over still terminates the at-bat.
+    const g2 = new Game({
+      home, away, seed: 4, settings: { PICKOFF_BASE: 0, PICKOFF_MAX: 0 },
+      agents: {
+        home: { decidePitch: async () => ({ pickoff: true }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+      },
+    });
+    g2.bases = [RUNNER, null, null];
+    let picks = 0, pitches = 0;
+    g2.onEvent = async (type) => { if (type === 'pickoff') picks += 1; if (type === 'pitch') pitches += 1; };
+    await g2.playAtBat();
+    ok(picks === SETTINGS.PICKOFF_MAX_PER_AT_BAT,
+      `PICKOFF_MAX_PER_AT_BAT binds at ${SETTINGS.PICKOFF_MAX_PER_AT_BAT} throws (${picks}), so an all-pickoff agent cannot spin the pitch loop`);
+    ok(pitches > 0, 'and the at-bat goes on to real pitches once the cap binds');
+  }
+
+  // --- the bunt: a foul bunt with two strikes IS strike three --------------------------------------
+  {
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0 };
+    const pitch = { type: 'fastball', x: 0, y: 0, isStrike: true, timeToPlateS: 0.5 };
+    const wide = SETTINGS.FEEL.engine.timingWindow * SETTINGS.BUNT_WINDOW_MULT;
+    const foul = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: wide + 50 }, SETTINGS, () => 0.5, 'college');
+    ok(foul.foul === true && foul.inPlay === false && foul.bunt === true,
+      'a bunt timed outside the widened window is a foul, never a swinging miss');
+    const good = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: 0 }, SETTINGS, () => 0.5, 'college');
+    ok(good.inPlay === true && good.kind === 'ground' && good.bunt === true, 'a well-timed bunt is always a grounder in play');
+    ok(good.distanceFt >= SETTINGS.BUNT_DIST_FT[0] && good.distanceFt <= SETTINGS.BUNT_DIST_FT[1],
+      `a bunt travels inside BUNT_DIST_FT (${good.distanceFt.toFixed(1)} ft)`);
+    ok(Math.abs(good.sprayAngleDeg) <= SETTINGS.BUNT_SPRAY_DEG, 'a bunt sprays inside +/-BUNT_SPRAY_DEG');
+    ok(SETTINGS.BUNT_SPRAY_DEG < SETTINGS.FOUL_LINE_DEG, 'a bunt that makes contact is never in foul ground');
+    // The window really is WIDER than an ordinary swing's, which is the whole reason to bunt.
+    const ordinaryEdge = SETTINGS.FEEL.engine.timingWindow;
+    const stillFair = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: ordinaryEdge + 10 }, SETTINGS, () => 0.5, 'college');
+    ok(stillFair.inPlay === true, 'a bunt still makes contact at a timing error that would have fouled an ordinary swing');
+
+    // End to end: a two-strike foul bunt is a strikeout, through the real at-bat loop.
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 606,
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: {
+          decidePitch: async () => BALL_OUTSIDE,
+          decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: wide + 500 }),
+        },
+      },
+    });
+    let ended = null; const verdicts = [];
+    g.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended = pl; if (type === 'count') verdicts.push(pl.verdict); };
+    await g.playAtBat();
+    ok(ended && ended.outcome === 'strikeout',
+      `three foul bunts in a row is a strikeout (got ${ended && ended.outcome}, verdicts ${verdicts.join(',')})`);
+    // Three 'count' events, all reading 'foul': game.js emits the count for the third one too,
+    // BEFORE converting it into the strikeout (its own ordering note), so the player sees the pitch
+    // that got him as the foul bunt it was rather than as an unexplained third strike.
+    ok(verdicts.length === 3 && verdicts.every((v) => v === 'foul'),
+      `all three pitches read as fouls on the count (${verdicts.join(',')})`);
+  }
+
+  // --- the bunt: sacrifice, beat-out, and the nobody-on split ---------------------------------------
+  {
+    const batted = { distanceFt: 20, sprayAngleDeg: 10 };
+    const never = () => 1;     // the beat-out roll never succeeds
+    const always = () => 0;    // it always does
+    const sac = resolveBunt(batted, ['r1', null, null], 1, 0, SETTINGS, never);
+    ok(sac.kind === 'sacrifice' && sac.result === 'out', 'a bunt with a runner on and 1 out is a sacrifice');
+    const sacTwoOut = resolveBunt(batted, ['r1', null, null], 2, 0, SETTINGS, never);
+    ok(sacTwoOut.kind === 'bunt-out', 'with 2 outs it is not a sacrifice - it is a bunt for a hit that failed');
+    const beat = resolveBunt(batted, ['r1', null, null], 1, 20, SETTINGS, always);
+    ok(beat.kind === 'bunt-single' && beat.result === 'hit' && beat.bases === 1,
+      'the beat-out roll turns the sacrifice into a bunt single');
+    const alone = resolveBunt(batted, [null, null, null], 0, 20, SETTINGS, always);
+    ok(alone.kind === 'bunt-single', 'nobody on, the roll succeeds: a bunt single');
+    const aloneOut = resolveBunt(batted, [null, null, null], 0, 20, SETTINGS, never);
+    ok(aloneOut.kind === 'bunt-out', 'nobody on, the roll fails: a bunt out');
+    // Split BY SKILL, on the real roll: the beat-out chance is hitSpd x MECHANICS.beatOutPerPt.
+    const rateFor = (hitSpd) => {
+      let hits = 0; const N = 20000; let seed = 1234;
+      const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+      for (let i = 0; i < N; i++) {
+        if (resolveBunt(batted, [null, null, null], 0, hitSpd, SETTINGS, rnd).kind === 'bunt-single') hits += 1;
+      }
+      return hits / N;
+    };
+    const slow = rateFor(0), quick = rateFor(20);
+    const wantQuick = Math.min(0.5, 20 * SETTINGS.MECHANICS.beatOutPerPt);
+    ok(slow === 0, `a batter with no speed never beats out a bunt (${slow})`);
+    ok(Math.abs(quick - wantQuick) <= 0.02,
+      `a 20-point hitSpd batter beats out ${quick.toFixed(3)} of his bunts against MECHANICS.beatOutPerPt's ${wantQuick.toFixed(3)}`);
+
+    // End to end: the sacrifice actually MOVES the runner and records the out.
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 808, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    g.outs = 1;
+    let ended = null;
+    g.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended = pl; };
+    await g.playAtBat();
+    ok(ended && ended.outcome === 'sacrifice', `the at-bat ended as a sacrifice (got ${ended && ended.outcome})`);
+    ok(g.bases[1] === RUNNER && g.bases[0] == null, 'the runner advanced from first to second');
+    ok(g.outs === 2, `the batter is out (outs 1 -> ${g.outs})`);
+    ok(ended && ended.battedKind === 'ground', "atBatEnd carries battedKind 'ground' for a bunt");
+    ok(ended && Array.isArray(ended.basesBefore) && ended.basesBefore[0] === RUNNER,
+      'the sacrifice still carries basesBefore, exactly as every other atBatEnd does (R3)');
+    // A sacrifice with a runner on THIRD scores him.
+    const g2 = new Game({
+      home, away, seed: 909, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+      },
+    });
+    g2.bases = [null, null, RUNNER];
+    g2.outs = 0;
+    let ended2 = null;
+    g2.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended2 = pl; };
+    await g2.playAtBat();
+    ok(ended2 && ended2.runsScored === 1 && g2.score.away === 1, 'a squeeze scores the runner from third');
+  }
+
+  // --- Quick Play unlocks all eight, and the CPU's Quick Play mix names all eight -------------------
+  {
+    for (const lg of SETTINGS.LEAGUES) {
+      const all = SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true });
+      ok(all.length === SETTINGS.PITCH_TYPES.length && SETTINGS.PITCH_TYPES.every((t) => all.includes(t)),
+        `unlockedPitchesFor('${lg}', 0, {quickPlay:true}) returns all eight pitch types`);
+      const career = SETTINGS.unlockedPitchesFor(lg, 0);
+      ok(JSON.stringify(career) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `career's own ladder for '${lg}' is untouched by the quickPlay option`);
+    }
+    const mix = SETTINGS.QUICK_PLAY_PITCH_MIX;
+    const sum = Object.values(mix).reduce((a, b) => a + b, 0);
+    ok(Math.abs(sum - 1) < 1e-9, `QUICK_PLAY_PITCH_MIX sums to 1 (${sum})`);
+    ok(SETTINGS.PITCH_TYPES.every((t) => mix[t] > 0),
+      'QUICK_PLAY_PITCH_MIX names every one of the eight pitch types with a real weight');
+    // The CPU actually throws them: every type turns up over a long Quick Play sweep.
+    const seen = new Set();
+    const pitcher = new CpuPitcher({ league: 'little', settings: SETTINGS });
+    let seed = 5150;
+    const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+    for (let i = 0; i < 4000; i++) {
+      const d = await pitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: rnd });
+      seen.add(d.type);
+    }
+    ok(seen.size === SETTINGS.PITCH_TYPES.length,
+      `a Little League CPU in Quick Play throws all eight types (${seen.size}/8) - the career ladder would have given it two`);
+    // ... and career is unchanged: the same pitcher with no quickPlay flag throws Little League's two.
+    const careerSeen = new Set();
+    for (let i = 0; i < 2000; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
+      careerSeen.add(d.type);
+    }
+    ok(careerSeen.size === 2 && careerSeen.has('fastball') && careerSeen.has('changeup'),
+      'the same CPU pitcher in a CAREER game still throws only what Little League has unlocked');
+  }
+
+  // --- the CPU pitcher's own pickoff rate ------------------------------------------------------------
+  {
+    const pitcher = new CpuPitcher({ league: 'majors', settings: SETTINGS });
+    let seed = 24680;
+    const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+    let overs = 0; const N = 20000;
+    for (let i = 0; i < N; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: true, weakZone: null, rand01: rnd });
+      if (d.pickoff) overs += 1;
+    }
+    ok(Math.abs(overs / N - SETTINGS.CPU_PICKOFF_RATE) <= 0.01,
+      `the CPU pitcher throws over ${(overs / N).toFixed(3)} of the time against CPU_PICKOFF_RATE's ${SETTINGS.CPU_PICKOFF_RATE}`);
+    let noneWithEmptyBag = 0;
+    for (let i = 0; i < 2000; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
+      if (d.pickoff) noneWithEmptyBag += 1;
+    }
+    ok(noneWithEmptyBag === 0, 'and never throws over with nobody on first');
+  }
 })();
 
 // ---------------------------------------------------------------------------------------------

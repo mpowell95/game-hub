@@ -141,4 +141,49 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   return { result: 'hit', bases, kind: `${kind}-hit`, distanceFt, isFoul: false };
 }
 
-export default { carryFt, fenceFtAt, resolveContact };
+/** RA (docs/BASEBALL-3D-BUILD.md section 9): A BUNT'S OWN OUTCOME. `resolveContact` above cannot
+ *  answer this one - its whole model is out-zone geometry against a ball that CARRIED, and a bunt
+ *  that dies 20 ft in front of the plate is not in anybody's sector at any depth. So the bunt gets
+ *  its own three-line rule book, exactly as the spec writes it:
+ *
+ *    - Runners on and fewer than 2 outs: it is a SACRIFICE. Every runner moves up one (bases.js's
+ *      `advanceSacBunt`, applied by game.js) and the batter is out - UNLESS he beats the throw,
+ *      in which case it is a `bunt-single` and the runners still move up one, because a single
+ *      advances everybody by one anyway.
+ *    - Nobody on: a bunt for a hit. The same beat-out roll, and nothing else.
+ *    - With runners on and 2 outs it falls through to the second case: a sacrifice with two outs
+ *      trades the inning for a base, which is not a play anyone makes, so the batter is simply
+ *      bunting for a hit with runners aboard.
+ *
+ *  THE BEAT-OUT ROLL IS THE ONE THAT ALREADY EXISTS - `MECHANICS.beatOutPerPt` x the batter's
+ *  hitSpd, capped at 0.5, the identical line an infield grounder at the edge of a sector already
+ *  runs (see `resolveContact`'s `nearEdge` branch). Doc §6, [Locked]: "Batter Speed raises steal
+ *  and bunt success", and a second, differently-calibrated speed roll for the same question would
+ *  be two answers to it.
+ *
+ *  Returns the same shape `resolveContact` does (plus the bunt's own `distanceFt`/`sprayAngleDeg`,
+ *  which came off `swing.js` rather than out of `carryFt`), so `game.js`'s `_resolveBattedBall`
+ *  reads it with no special case beyond the one kind name it has to recognise.
+ *
+ *  @param {{distanceFt:number, sprayAngleDeg:number}} batted - `swing.js`'s bunt result
+ *  @param {Array} bases - `[first, second, third]`, ids or null
+ *  @param {number} outs - outs BEFORE this play
+ *  @param {number} hitSpd - the batter's hitSpd skill points
+ */
+export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
+  const distanceFt = batted.distanceFt || 0;
+  const sprayAngleDeg = batted.sprayAngleDeg || 0;
+  const beatOutChance = Math.min(0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
+  const beatOut = rand01() < beatOutChance;
+  const runnersOn = bases.some((b) => b != null);
+  const canSacrifice = runnersOn && outs < settings.MECHANICS.outsPerInning - 1;
+  if (beatOut) {
+    return { result: 'hit', bases: 1, kind: 'bunt-single', distanceFt, sprayAngleDeg, isFoul: false };
+  }
+  if (canSacrifice) {
+    return { result: 'out', bases: 0, kind: 'sacrifice', distanceFt, sprayAngleDeg, isFoul: false };
+  }
+  return { result: 'out', bases: 0, kind: 'bunt-out', distanceFt, sprayAngleDeg, isFoul: false };
+}
+
+export default { carryFt, fenceFtAt, resolveContact, resolveBunt };

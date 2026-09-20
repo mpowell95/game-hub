@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v863';
+const CACHE = 'game-hub-v864';
 
 const ASSETS = [
   './',
@@ -838,14 +838,14 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '0b112b844b',
-  './baseball/js/ui.js': '969313309d',
+  './baseball/css/baseball.css': 'c511636123',
+  './baseball/js/ui.js': 'bc7632c41e',
   './baseball/js/field.js': 'c7ff87c4f2',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': 'e055761f7b',
+  './baseball/js/strings.js': 'e6617c6b25',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '178d5252e5',
-  './baseball/js/poses.js': '1639d00b7d',
+  './baseball/js/poses.js': '4f033c2221',
   './baseball/js/vendor/three.core.min.js': '05b2609338',
   './baseball/js/vendor/three.module.min.js': '86bcee248b',
   './baseball/js/vendor/GLTFLoader.js': 'e2ab44d6c6',
@@ -857,13 +857,13 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': '5fcb85c85e',
+  './baseball/js/engine/settings.js': '7072ec0682',
   './baseball/js/engine/pitch.js': '9cccdc74f8',
-  './baseball/js/engine/swing.js': 'b107ee2a93',
-  './baseball/js/engine/outcomes.js': '0f250daa51',
-  './baseball/js/engine/bases.js': '9ec30c4ac6',
-  './baseball/js/engine/game.js': 'ecd849062e',
-  './baseball/js/engine/agents.js': 'd59408abc8',
+  './baseball/js/engine/swing.js': '200bd0a03a',
+  './baseball/js/engine/outcomes.js': 'ebc34e8474',
+  './baseball/js/engine/bases.js': '76c79f21c6',
+  './baseball/js/engine/game.js': '416ca9428e',
+  './baseball/js/engine/agents.js': '2062d75ed1',
   './baseball/js/engine/teams.js': 'e758dc9237',
   './baseball/js/engine/zones.js': '68a4d29009',
   './baseball/js/engine/season.js': '0aa26c6475',
