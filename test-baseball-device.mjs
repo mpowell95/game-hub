@@ -1673,6 +1673,218 @@ if (!process.env.BB_DEVICE_QUICK) {
   await p18.close();
 }
 
+// 19. R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): POP-ONSCREEN. A left-handed batter mirrors
+// to the SIDE OF THE BOX CLOSER TO THE BAND'S EDGE (field.js's own CAMERAS comment: a lefty lands
+// at 68% across, a righty at 24%) - so "Perfect" (the widest verdict word) for a left-handed
+// batter is the exact case Matt's recording showed running off-screen. Forces `_currentBatterFlip`
+// to true (never depends on which real roster player happens to be up - the point is the WORD and
+// the SIDE, not a specific at-bat) and calls `_showPop` directly, the same directness
+// `homerun-strip`/`one-batter` already use for a presentation effect that needs no real at-bat
+// behind it.
+//
+// Two checks: (a) the real left-handed geometry (measured: the head projects to ~70% across on
+// this container, comfortably inside the band on its own - a MARGIN-only clamp would already pass
+// it, so it alone would not have caught the old bug); (b) `_batterHeadWorld` forced to a world x
+// (5.25 ft) measured to project to ~372px, close enough to the 393px band's own right edge that a
+// MARGIN-only clamp (the old code: `Math.max(12, Math.min(fieldW - 12, p.x))`) leaves the centre
+// there unclamped and "Perfect"'s own ~178px width runs the right edge to ~461px, 68px past the
+// band - the exact failure mode the spec describes, reproduced on demand rather than hoped for.
+{
+  const p19 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page19 = await p19.newPage();
+  await page19.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Pop Onscreen Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr19 = await mountInHub(page19);
+  if (mountErr19) {
+    fail('pop-onscreen', `mount failed: ${mountErr19}`);
+  } else {
+    await page19.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page19.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page19.waitForTimeout(500);
+    const insideBandOf = (r, wrap) => r.left >= wrap.left - 1 && r.right <= wrap.right + 1
+      && r.top >= wrap.top - 1 && r.bottom <= wrap.bottom + 1;
+    const real = await page19.evaluate(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      inst._currentBatterFlip = () => true;   // force left-handed, no matter who is actually up
+      inst._showPop('Perfect', 'perfect', { pitchLine: 'Fastball 92', swingLine: '' });
+      const wrapRect = document.querySelector('[data-role="fieldwrap"]').getBoundingClientRect();
+      const popRect = document.querySelector('[data-role="pop"]').getBoundingClientRect();
+      return { wrapRect, popRect, flip: inst._currentBatterFlip() };
+    });
+    const forced = await page19.evaluate(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      // A world point measured (node, field.js's own makeCameras/projectToCanvas) to project close
+      // to the band's right edge - see this block's own header comment for the exact number.
+      inst._batterHeadWorld = () => ({ x: 5.25, y: 6.9, z: 0.4 });
+      inst._showPop('Perfect', 'perfect', { pitchLine: 'Fastball 92', swingLine: '' });
+      const wrapRect = document.querySelector('[data-role="fieldwrap"]').getBoundingClientRect();
+      const popRect = document.querySelector('[data-role="pop"]').getBoundingClientRect();
+      return { wrapRect, popRect };
+    });
+    if (!real.flip) {
+      fail('pop-onscreen', 'the forced left-handed override did not take (_currentBatterFlip() read false)');
+    } else if (!insideBandOf(real.popRect, real.wrapRect)) {
+      fail('pop-onscreen', `"Perfect" for a left-handed batter is NOT fully inside the field band - `
+        + `pop ${JSON.stringify(real.popRect)} vs band ${JSON.stringify(real.wrapRect)}`);
+    } else if (!insideBandOf(forced.popRect, forced.wrapRect)) {
+      fail('pop-onscreen', `a pop whose head point projects near the band's right edge is NOT clamped by its own `
+        + `measured width - pop ${JSON.stringify(forced.popRect)} vs band ${JSON.stringify(forced.wrapRect)}`);
+    } else {
+      ok(`pop-onscreen: "Perfect" for a left-handed batter sits fully inside the field band `
+        + `(pop left=${real.popRect.left.toFixed(1)} right=${real.popRect.right.toFixed(1)}, band right=${real.wrapRect.right.toFixed(1)}), `
+        + `and a pop forced near the edge is still clamped fully inside it `
+        + `(pop right=${forced.popRect.right.toFixed(1)}, band right=${forced.wrapRect.right.toFixed(1)})`);
+    }
+  }
+  await p19.close();
+}
+
+// 20. R7: CHASE-START. The chase camera's very first position, on a genuinely SHORT ball (45 ft,
+// just past R5's own MIN_IN_PLAY_FT floor of 40) - the exact shape of Matt's report ("on a short
+// ball the first chase frames are the catcher's head filling the foreground"). Wraps
+// `actors.chaseAt` to capture the camera's OWN position the instant the immediate (first) call
+// runs, and reads the catcher/umpire's visibility at that same moment - both straight off the real
+// objects `_applyCameraVisibility`/`chaseAt` write, never re-derived. Drives `_settleAtBat`
+// directly with a synthetic in-play payload (`homerun-strip`'s/`one-batter`'s own pattern) rather
+// than waiting for a real short grounder to happen to occur.
+{
+  const p20 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page20 = await p20.newPage();
+  await page20.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Chase Start Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr20 = await mountInHub(page20);
+  if (mountErr20) {
+    fail('chase-start', `mount failed: ${mountErr20}`);
+  } else {
+    await page20.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page20.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page20.waitForTimeout(500);
+    const res = await page20.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const F = await import('/baseball/js/field.js');
+      let captured = null;
+      const origChaseAt = inst.actors.chaseAt.bind(inst.actors);
+      inst.actors.chaseAt = (pos, immediate) => {
+        const r = origChaseAt(pos, immediate);
+        if (immediate && !captured) {
+          const cam = inst.actors.cameras.chase;
+          captured = {
+            camPos: { x: cam.position.x, y: cam.position.y, z: cam.position.z },
+            ballPos: { ...pos },
+            catcherVisible: inst.actors.actors.catcher.pivot.visible,
+            umpireVisible: inst.actors.actors.umpire.pivot.visible,
+          };
+        }
+        return r;
+      };
+      const side = inst.game.half === 'top' ? 'away' : 'home';
+      const payload = {
+        batterId: 'test-batter-chasestart', side, outcome: 'single', bases: 1, runsScored: 0,
+        q: 0.6, exitVeloMph: 75, centered: false, distanceFt: 45, sprayAngleDeg: 5,
+        battedKind: 'ground', launchAngleDeg: 3, timingWord: 'late',
+        basesBefore: [null, null, null], runnersOut: [],
+      };
+      window.__bbChaseStartP = inst._settleAtBat(payload);
+      const deadline = Date.now() + 4000;
+      while (Date.now() < deadline && !captured) await new Promise((r) => setTimeout(r, 20));
+      return { captured, minHeight: F.CHASE_MIN_HEIGHT_FT, minBack: F.CHASE_MIN_BACK_FT };
+    });
+    if (!res.captured) {
+      fail('chase-start', 'the chase camera never received an immediate chaseAt() call within 4s of a short grounder');
+    } else {
+      const { camPos, ballPos, catcherVisible, umpireVisible } = res.captured;
+      const gotHeight = camPos.y - ballPos.y, gotBack = camPos.z - ballPos.z;
+      const EPS = 0.05;
+      if (gotHeight < res.minHeight - EPS) {
+        fail('chase-start', `the chase camera's first height above the ball is ${gotHeight.toFixed(2)} ft, under CHASE_MIN_HEIGHT_FT (${res.minHeight})`);
+      } else if (gotBack < res.minBack - EPS) {
+        fail('chase-start', `the chase camera's first back-distance from the ball is ${gotBack.toFixed(2)} ft, under CHASE_MIN_BACK_FT (${res.minBack})`);
+      } else if (catcherVisible) {
+        fail('chase-start', 'the catcher is still visible on the first chase frame');
+      } else if (umpireVisible) {
+        fail('chase-start', 'the umpire is still visible on the first chase frame');
+      } else {
+        ok(`chase-start: the chase camera's first position is ${gotHeight.toFixed(2)} ft up (>= ${res.minHeight}) and `
+          + `${gotBack.toFixed(2)} ft behind the ball (>= ${res.minBack}), catcher and umpire both hidden`);
+      }
+    }
+    await page20.evaluate(() => window.__bbChaseStartP).catch(() => {});
+  }
+  await p20.close();
+}
+
+// 21. R7: BALL-VISIBLE-PITCHER. The ball's projected radius on the PITCHER camera, at the crossing
+// point (60.5 ft from the mound, the worst-case distance - field.js's own BALL_MIN_PX comment) is
+// floored to at least BALL_MIN_PX; the SAME world position on the batter and chase cameras is
+// never scaled (the spec's own rule - "never on the batter or chase cameras"). Calls
+// `actors.setCamera`/`setBall` directly rather than driving a real pitch, the same directness
+// `zone-scale` above already uses for a camera-and-projection fact that needs no live flight.
+{
+  const p21 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page21 = await p21.newPage();
+  await page21.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Ball Visible Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr21 = await mountInHub(page21);
+  if (mountErr21) {
+    fail('ball-visible-pitcher', `mount failed: ${mountErr21}`);
+  } else {
+    await page21.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page21.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page21.waitForTimeout(500);
+    const res = await page21.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const F = await import('/baseball/js/field.js');
+      const zone = F.zoneRectFt();
+      const crossing = { x: 0, y: zone.cy, z: F.ZONE.z };   // 60.5 ft from the mound on the pitcher camera
+      const measure = (camName) => {
+        inst.actors.setCamera(camName);
+        inst.actors.setBall(crossing);
+        const scale = inst.actors._ball.scale.x;
+        const a = F.projectToCanvas(inst.actors.camera, crossing, inst._fieldW, inst._fieldH);
+        const edge = F.projectToCanvas(inst.actors.camera,
+          { x: crossing.x + F.BALL_RADIUS_FT * scale, y: crossing.y, z: crossing.z }, inst._fieldW, inst._fieldH);
+        return { scale, px: Math.hypot(edge.x - a.x, edge.y - a.y) };
+      };
+      return { pitcher: measure('pitcher'), batter: measure('batter'), chase: measure('chase'), minPx: F.BALL_MIN_PX };
+    });
+    if (res.pitcher.px < res.minPx - 0.5) {
+      fail('ball-visible-pitcher', `the ball on the pitcher camera at the crossing draws ${res.pitcher.px.toFixed(2)} px, under BALL_MIN_PX (${res.minPx})`);
+    } else if (Math.abs(res.batter.scale - 1) > 1e-6) {
+      fail('ball-visible-pitcher', `the ball is scaled (${res.batter.scale.toFixed(3)}x) on the BATTER camera - the floor must never apply there`);
+    } else if (Math.abs(res.chase.scale - 1) > 1e-6) {
+      fail('ball-visible-pitcher', `the ball is scaled (${res.chase.scale.toFixed(3)}x) on the CHASE camera - the floor must never apply there`);
+    } else {
+      ok(`ball-visible-pitcher: the ball at the crossing draws ${res.pitcher.px.toFixed(2)} px on the pitcher camera `
+        + `(>= ${res.minPx}, scale ${res.pitcher.scale.toFixed(2)}x), unscaled on batter (${res.batter.px.toFixed(2)} px) and chase (${res.chase.px.toFixed(2)} px)`);
+    }
+  }
+  await p21.close();
+}
+
 await browser.close();
 
 console.log('');

@@ -222,6 +222,20 @@
  * WebGL canvas held two figures over it. Neither ever intercepts touch. */
 .bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
 .bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
+/* R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7", item 6): a frozen copy of the scene's own last
+ * rendered frame (both canvases above, composited together - `_showCrossfadeSnapshot` in ui.js),
+ * painted over them for the half-inning swap instead of letting them fade to `.bb-root`'s own flat
+ * page background (Matt: "a flat green frame... with 'Side retired' over it"). Sits above every
+ * other field-band element (`.bb-pop` 3, `.bb-diamond` 4, `.bb-homerun` 5) so it genuinely covers
+ * the whole scene through the swap, not just the two canvases. Opacity only, `.is-on` toggled by
+ * JS - the CSS transition is what makes ui.js's own hide (once the NEW half has painted) a fade
+ * rather than a cut, the same `var(--gh-dur-mid)` duration the rest of the swap already uses. */
+.bb-crossfade-snap {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  z-index: 6; pointer-events: none; opacity: 0;
+  transition: opacity var(--gh-dur-mid, 200ms) ease;
+}
+.bb-crossfade-snap.is-on { opacity: 1; }
 /* Stage 1 dev-only 3D preview (_open3DCheck, inside the Frames panel): the real backdrop and the
  * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
 .bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
@@ -315,6 +329,16 @@
   gap: 4px;
   pointer-events: none;
   text-align: center;
+  /* R7 item 6: an explicit z-index, ABOVE `.bb-crossfade-snap` (6). Before that element existed
+   * this had none and it never mattered - `.bb-field-canvas` (z-index 2) already painted "above"
+   * it by the same stacking rule, but that canvas is mostly `clearRect`-transparent outside its own
+   * drawn zone box, so Line 1's own pixels (down at `bottom: 14%`) were never actually covered.
+   * `.bb-crossfade-snap` is NOT transparent - it is the whole scene, opaque - so without this it
+   * would silently hide "Side retired" for the exact stretch of the swap it has to stay lit through
+   * (`_onEngineEvent`'s 'halfInningEnd' sets it BEFORE `_crossFadeSwap` ever runs, and it is cleared
+   * only AFTER `_crossFadeSwap` resolves - `.bb-lines` is deliberately never in `_crossFadeSwap`'s
+   * own `.bb-fading` list, so it must out-rank whatever covers the scene beneath it). */
+  z-index: 7;
 }
 /* The big word (Early / Late / Perfect / Nice / Hung). One reserved element, empty between
  * beats; rises and fades on transform/opacity only. Matt, 2026-09-15: "They should be big and on

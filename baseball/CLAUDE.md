@@ -4,6 +4,161 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R7: camera and presentation (2026-09-20)
+
+The eighth stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R7"), against Matt's
+recording of v865, items 5-10 of the analysis. Presentation and cameras only, as the spec says: no
+engine change, no beat change, no control change. Six independent fixes off the same recording.
+
+**Item 1, the verdict pop: clamped by its own measured size, and hidden at the cut.**
+`_positionPop()`'s old clamp bounded only the projected CENTRE point 12px from the band's edge
+(`Math.max(12, Math.min(fieldW - 12, p.x))`), never the element's own rendered width - so a wide
+word ("Perfect", the widest verdict) whose centre landed near the edge still ran its own half-width
+past it. Fixed by reading `getBoundingClientRect()` (AFTER `_showPop` has already set the word/
+lines, so it reflects the real content) and clamping by half that width/height plus the margin.
+Measured (a forced world point that projects to px≈372 on a 393px band, with "Perfect"'s own
+measured ~178px width): the OLD clamp left the centre unclamped (372 < 381, its own margin-only
+bound) and the word ran to px≈461, 68px past the band; the NEW clamp caps it at px≈292, keeping the
+whole box inside. `_hidePop()` (new) is the pop's only hide outside its own `RESULT_MS` timer,
+called the instant `_animateBattedBall` cuts the camera to `'chase'` - the pop was positioned
+through whichever camera was live AT THAT MOMENT and never re-projected (spec's own rule: "position
+ONCE per `_showPop`... never re-project it"), so once the chase camera takes over, the word is left
+floating over a scene it no longer describes unless something hides it. The reference shows no word
+over the chase at all; the outcome word (1B/2B/HR/X) is `_runMarkerHold`'s own job, unchanged.
+
+**Item 2, the chase camera: a minimum start, and the catcher/umpire hidden from it.** Matt: "on a
+short ball the first chase frames are the catcher's head filling the foreground." Measured (node,
+the real contact-hold-to-cut geometry swept over every `distanceFt` from `MIN_IN_PLAY_FT` (40, R5's
+own floor) to 100 and every spray angle): at the steady `CAMERAS.chase.offset` (10, 22), the
+catcher's own projected head height already blows past the frame at some distance in that range -
+not a gentle close-up, a near-lens pass - and it still does at every larger offset tried, because
+the chase camera's world z is `ball.z + offset.z` and the ball's own z sweeps continuously through
+the catcher's (z=7.8) and umpire's (z=10.2) fixed z for SOME distance no matter what constant is
+added; a fixed offset can only move which distance it happens at, never remove it. So the real fix
+is `Actors._applyCameraVisibility` hiding both of them from the chase camera outright (the exact
+mechanism the batter camera already uses on the umpire - "a camera cannot film the inside of its
+own operator" - just at a distance that varies instead of being fixed): the umpire now shows only on
+`'pitcher'` (was "not `'batter'`"), the catcher only when NOT `'chase'` (new). `_place()`'s
+auto-show-on-place line now excludes `'catcher'` alongside `'umpire'`, or `_syncActors()`'s own
+every-frame `setCatcher()` call would re-show him mid-chase exactly the way the umpire used to.
+`CHASE_MIN_HEIGHT_FT`/`CHASE_MIN_BACK_FT` (11, 24 - a modest ~10-15% over the steady 10/22) are the
+second, complementary half, applied only to `chaseAt`'s own IMMEDIATE (first) snap so a short play's
+opening frame reads a touch more pulled-back before easing (via the render loop's own `CHASE_LERP`)
+back down to the steady follow. Chosen small on purpose: measured worst-case ball size over the same
+sweep drops only from 6.85px to 6.27px, nowhere near the ~5px `CAMERAS.chase`'s own comment already
+rejected as illegible. Written down plainly so a future session does not re-derive it: **the number
+is not what closes this bug, the visibility hide is.**
+
+**Item 3, the pitch: a pixel-size floor for the ball on the pitcher camera, and the fire trail sized
+to match.** Measured (node, `CAMERAS.pitcher`'s real projection): the ball at RELEASE (close to the
+camera) draws ~13px, but at the CROSSING (72ft away, the worst case) it draws ~2.3px - matching the
+spec's own "about 3px... no frame of the recording shows it." `BALL_MIN_PX` (8, field.js) is a
+floor, not a fixed size: `Actors.setBall()` now computes the ball's true projected radius on
+whichever camera is active and, ONLY when `cameraName === 'pitcher'` and that radius is under the
+floor, scales the mesh UP about its own centre (a sphere needs no origin correction the way the zone
+box's `_zoneMap` does - growing its radius never moves where it sits in the world, so the crossing
+point the batter judges is untouched) so it never draws smaller than 8px; recomputed and reset to
+1x every call, so a cut back to batter/chase always returns the true size on the very next frame.
+Chosen against the batter camera's own crossing size (~12.8px, measured the same way) so the
+pitcher's own ball never reads bigger than the batter's close-up view of the same ball.
+`_drawFireTrail`'s `baseR` (ui.js) is floored the SAME way, reading the SAME `BALL_MIN_PX` constant
+- without this the trail's own discs, sized off the ball's TRUE (near-invisible) radius, would stay
+tiny while the ball itself visibly grew, an obvious mismatch. The fire trail was ALREADY being drawn
+on the pitcher camera before this stage (`HumanAgent._throw`'s own flight loop always called
+`_maybeDrawFireTrail`) - "drawn on that camera too" turned out to mean sized correctly there, not
+drawn there for the first time.
+
+**Item 4, the batting target: a square, drawn under the cursor circle.** The old marker
+(`TARGET_MARKER_R` 0.12, a ring) drew about 5px and was easy to lose against the mode's own circle,
+which was drawn AFTER it (on top). Now a true square - `TARGET_MARKER_R` (0.15) is HALF a side, so a
+full side is 0.3 zone units, the spec's own number - sized through BOTH `map.unitX` and `map.unitY`
+separately (never forced square in px, the same rule the mode circle already follows), and
+`_drawBatCursor` draws it FIRST, the mode circle SECOND, so the circle you are steering ends up on
+TOP of the square you are steering it onto (`docs/BASEBALL-REFERENCE-B9.md`, batting step 3: "you
+drag the cursor circle onto it"). `_targetMarkerPx` still reports the same point it always did -
+only the drawing shape and order changed - so `test-baseball-device.mjs`'s pre-existing
+`target-marker` probe needed no changes and still passes.
+
+**Item 5, the backstop: stands behind home plate, on the pitcher camera only.** `standsPoints()`
+runs -75 to +75 degrees (R1's own spec) and stops, leaving the whole rear ~210 degrees open - which
+is exactly what the pitcher camera looks straight into (Matt's recording: grass to the horizon
+behind the batter; the R1 record already flagged this as deferred). `backstopPoints()` (new,
+field.js) draws a short convex arc CENTRED behind the plate using the same `polar()` convention
+every other angle in the file already uses (0 = centre field, so directly behind home is 180).
+Measured (node, ray-casting the pitcher camera's own left/right frustum edges through a z=30 plane -
+`CAMERAS.pitcher`'s real position/lookAt): the frame spans about -55 to +54 degrees from home at
+that depth, so `BACKSTOP_HALF_SPAN_DEG` (60) is that plus a few degrees of margin. `BACKSTOP_DIST_FT`
+(30) is "about 20ft behind the umpire" (z=10.2), rounded. Two 12ft tiers (`BACKSTOP_TIER_DEPTH_FT`),
+rising to 24ft - shorter than the main bowl's 40ft, a backdrop behind a wall that does not exist
+here, not a stand anyone is ever seated in - built into the SAME `faceParts`/`deckParts` arrays the
+main bowl merges from, so it costs zero extra draw calls, and reuses the identical crowd texture.
+**The batter camera needed no visibility toggle at all**: it sits at z=13.1 looking toward -z, so
+anything at z=30 is physically BEHIND its own lens - "keep the backstop behind it," the spec's own
+simpler option, fell out of the geometry for free. Verified: the batter camera still shows grass to
+the horizon, unchanged (deliverable stills confirm both).
+
+**Item 6, the half-inning swap: cross-fades over the last rendered frame, not a blank gap.**
+`_crossFadeSwap` used to fade `.bb-hud`/`.bb-strip`/`.bb-actor-canvas`/`.bb-field-canvas`/etc to
+opacity 0 together, and with nothing behind the two game canvases but `.bb-root`'s own flat page
+background, that read as an empty field for the beat around the swap (Matt: "a flat green frame...
+with 'Side retired' over it"). `_showCrossfadeSnapshot()` (new) freezes the scene's own last
+rendered frame into a new `<canvas data-role="crossfadesnap">` (`.bb-crossfade-snap`, z-index 6,
+opacity-only `.is-on` toggle): both game canvases drawn into it via `drawImage`, in the same order
+they already stack (WebGL scene, then the 2-D overlay on top), with the renderer FORCED to render
+one more frame immediately before the read-back - the same discipline
+`test-baseball-device.mjs`'s own sky-pixel probe already uses to read a WebGL canvas back with no
+`preserveDrawingBuffer`: JS runs synchronously, so nothing can composite (and so clear) the drawing
+buffer between that render and the `drawImage` call. Sequence in `_crossFadeSwap`: show the
+snapshot (now covering the real scene at its own current pixels, so nothing visibly changes yet) →
+fade the underlying elements to 0 as before (invisible, since the snapshot occludes them) → run
+`swapFn()` (the actual state mutation, invisible underneath) → fade the underlying elements back to
+1 → hide the snapshot, which is what actually reveals the change, since `swapFn()` always ends in a
+synchronous `_drawStaticField()` that has already painted the new half by the time this line runs.
+A snapshot that fails to draw (context lost, zero size) degrades to exactly what shipped before this
+stage - `try/catch` around the whole thing, no new element shown at all on failure.
+
+**A stacking bug found building item 6, orchestrator's own review pass, not the spec's:**
+`.bb-lines` (Line 1, which carries "Side retired" itself) had no explicit `z-index`, and
+`.bb-field-canvas` (z-index 2) already painted "above" it by ordinary CSS stacking rules - this
+never mattered before because that canvas is `clearRect`-transparent everywhere it isn't actively
+drawing the zone box, so Line 1's own pixels (down at `bottom: 14%`) were never actually covered.
+`.bb-crossfade-snap` is NOT transparent - it is the whole frozen scene, opaque - so without a fix
+it silently hid "Side retired" for the exact stretch of the swap it has to stay lit through (set
+BEFORE `_crossFadeSwap` ever runs, in `_onEngineEvent`'s 'halfInningEnd' case, and cleared only
+AFTER `_crossFadeSwap` resolves; `.bb-lines` is deliberately never in `_crossFadeSwap`'s own
+`.bb-fading` list, so it has to out-rank whatever now covers the scene beneath it). Fixed with one
+line: `.bb-lines { z-index: 7; }`. Caught by actually looking at the captured still, not by any
+probe - `test-baseball-device.mjs` only ever reads `[data-role="line1"]`'s `textContent`, never its
+visibility, so a hidden-but-present Line 1 would have passed every existing check silently.
+
+**Facts for whoever reads this next:**
+- `_hidePop()` and `_showCrossfadeSnapshot()`/`_hideCrossfadeSnapshot()` are new methods on the
+  play-screen instance (ui.js), not on `Actors` - they read `this.canvas`/`this.actors.canvas`/
+  `this.rootEl` directly, the same seam every other presentation helper in this file already uses.
+- `Actors._applyCameraVisibility()` now manages TWO roles' visibility (umpire, catcher), both keyed
+  off `this.cameraName`, both excluded from `_place()`'s auto-show line. A THIRD role added to this
+  pattern later must join both places, or it will flicker visible for one frame whenever
+  `_syncActors()`'s own per-frame `setCatcher`-shaped call places it.
+- `Actors.chaseAt(pos, immediate)`'s immediate branch no longer calls `_stepChase(1)` - it computes
+  the wider start offset directly and sets the camera position/lookAt itself. `_stepChase` (the
+  per-frame ease) is untouched and still targets the steady `CAMERAS.chase.offset`.
+- `BALL_MIN_PX`, `CHASE_MIN_HEIGHT_FT`, `CHASE_MIN_BACK_FT`, `BACKSTOP_DIST_FT`,
+  `BACKSTOP_HALF_SPAN_DEG`, `BACKSTOP_TIER_DEPTH_FT` all live in `field.js`, beside the camera/world
+  constants they were measured against - not in `ui.js`, which owns only the zone-unit/pixel-space
+  constants (`TARGET_MARKER_R`, `PITCHING_ZONE_MIN_W_FRAC`, `BATTING_ZONE_SCALE`).
+- New probes in `test-baseball-device.mjs`: `pop-onscreen` (two checks - the real left-handed
+  geometry, which on THIS container does not actually overflow on its own since the head projects to
+  only ~70% across, well inside the band even under the old margin-only clamp; and `_batterHeadWorld`
+  forced to a world point measured to project near the edge, which DOES fail against the old clamp -
+  verified by hand, stashing the fix and re-running), `chase-start` (the immediate snap's height/back
+  against the two new constants, plus catcher/umpire visibility, off a synthetic short-grounder
+  payload via `_settleAtBat` - `homerun-strip`'s/`one-batter`'s own directness), `ball-visible-pitcher`
+  (the floored radius on pitcher, unscaled on batter and chase, via direct `setCamera`/`setBall`
+  calls - `zone-scale`'s own directness). All three, plus every pre-existing probe, pass.
+- `node baseball/js/test.js` (2712 checks), `test-baseball-actors.mjs` (both halves),
+  `test-visual.mjs baseball` and `check-no-scroll.mjs baseball` all green, unaffected - this stage
+  never touched `baseball/js/engine/`, `poses.js`, or any `FEEL` beat.
+
 ## R6: figures and runners (2026-09-20)
 
 The seventh stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R6"), against Matt's

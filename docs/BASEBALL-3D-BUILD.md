@@ -1249,3 +1249,21 @@ is false. `DIAMOND_PCT` (ui.js), the `.bb-diamond-cell` CSS and `basesSvg()` (th
 mini-diamond, un-mirrored at ship review) are three copies of which side first base is on. The
 batter camera's frustum shows second base only at 393 px; first projects at x 577 and third at
 x -170. Probes `sides-match` and `one-batter` are synthetic and run under `BB_DEVICE_QUICK=1`.
+
+### R7 record (shipped v868, 2026-09-20)
+
+From the stage's report: `_positionPop` clamps by the element's own measured half-size plus the
+12 px margin and `_hidePop()` runs at the cut to the chase. `_applyCameraVisibility` hides the
+catcher and the umpire from the chase camera (the umpire from the batter camera as before), and
+`_place()`'s auto-show excludes both; a minimum start offset (`CHASE_MIN_HEIGHT_FT` 11,
+`CHASE_MIN_BACK_FT` 24) applies to the first snap only, because no offset alone keeps a camera
+whose z tracks the ball's from passing through the catcher's fixed z. The ball's projected
+radius is floored to `BALL_MIN_PX` 8 on the pitcher camera only and the fire trail's base radius
+reads the same floor (the trail was already drawn on that camera). The target marker is a square
+drawn under the cursor circle; the stage set the side to the spec's 0.3 zone units (12 px on the
+1.6x box) and ship review raised it to 0.64 (26 px, the reference's own size). A backstop
+(`backstopPoints`, 30 ft behind the plate, ±60 deg, two tiers) is merged into the existing stands
+mesh; the batter camera sits inside it and never sees it. The half-inning swap fades over a
+snapshot canvas (`.bb-crossfade-snap`, z 6) of both game canvases; `.bb-lines` needed an explicit
+z 7 or "Side retired" vanished under it, caught by a still, not a probe. Probes `pop-onscreen`,
+`chase-start`, `ball-visible-pitcher`.

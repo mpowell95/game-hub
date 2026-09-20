@@ -24,7 +24,9 @@ import {
   // R4: the ball's own real-world size, for the fire trail's discs (a fraction of the ball's OWN
   // projected radius, never a literal pixel count - baseball.css's own header on why nothing here
   // hardcodes a screen size).
-  BALL_RADIUS_FT,
+  // R7 (item 3): the pitcher camera's own ball pixel floor, so the fire trail's discs stay
+  // proportionate to the ball they trail rather than sized off its true (near-invisible) radius.
+  BALL_RADIUS_FT, BALL_MIN_PX,
 } from './field.js';
 import { drawRingState, RING_D } from './ring.js';
 // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer. Loaded eagerly, not lazily -
@@ -220,9 +222,13 @@ const PAD_TRAVEL = {
 // cycles (the pitch type while pitching, the batting mode while batting) instead of flinging the
 // cursor to wherever the thumb landed. The reference game's left button does exactly this.
 const PAD_TAP_SLOP_PX = 8;
-// The batting target marker's own ring, in zone units - small enough to sit inside either mode's
-// circle and still be read against it.
-const TARGET_MARKER_R = 0.12;
+// R7 (item 4, docs/BASEBALL-3D-BUILD.md section 9): the batting target marker's own SQUARE, in zone
+// units - HALF a side, the same "radius" shape every other size constant in this file uses. The
+// spec named 0.3 zone units a side, which on the 1.6x batting box is 12 px: still a marker you
+// hunt for. The orchestrator's ship review set the side to 0.64 units (26 px on a 393 px phone,
+// the reference's own "about 30 px" square) - it sits under the CONTACT circle (0.55 radius) and
+// the POWER circle (0.35) alike, drawn first so both cursors stay legible over it.
+const TARGET_MARKER_R = 0.32;
 // An eephus is lobbed: `BREAK_OFFSET.eephus.hump` arcs the drawn ball this far ABOVE the straight
 // line at mid-flight before it drops to its own (low) crossing point. Presentation only - the
 // engine never sees it, exactly like `pitchBendFrac`.
@@ -728,6 +734,7 @@ class BaseballPlayScreen {
             <div class="bb-pop-line" data-role="popline2"></div>
           </div>
           <canvas class="bb-field-canvas" data-role="canvas"></canvas>
+          <canvas class="bb-crossfade-snap" data-role="crossfadesnap"></canvas>
           <div class="bb-lines">
             <div class="bb-line1" data-role="line1"></div>
             <div class="bb-line2" data-role="line2"></div>
@@ -948,12 +955,41 @@ class BaseballPlayScreen {
     ctx.stroke();
   }
 
-  /** BATTING: the mode's circle where the batter is holding it, and - from release to crossing -
-   *  the pitch's own TARGET marker, which starts at the straight-line spot and slides to where the
-   *  ball will really cross (`_targetAt`). The circle is drawn as an ellipse because one zone unit
-   *  is a different number of pixels across than it is up. */
+  /** BATTING: the pitch's own TARGET marker (from release to crossing, starting at the straight-
+   *  line spot and sliding to where the ball will really cross - `_targetAt`), and the mode's own
+   *  circle where the batter is holding it. The circle is drawn as an ellipse because one zone unit
+   *  is a different number of pixels across than it is up.
+   *
+   *  R7 (item 4, docs/BASEBALL-3D-BUILD.md section 9): the target is now a SQUARE, about
+   *  `TARGET_MARKER_R * 2` zone units on a side (the reference's own picture - "a clear square about
+   *  30 px across on a 393 px phone"; the old ring drew 5 px), and drawn FIRST so the cursor circle
+   *  you are steering ends up on TOP of it, the way docs/BASEBALL-REFERENCE-B9.md describes steering
+   *  ("you drag the cursor circle onto it"). Both axes go through `map.unitX`/`unitY` separately
+   *  (never forced square in px), the same rule the mode circle already follows below, so it scales
+   *  with `BATTING_ZONE_SCALE` exactly like everything else `_zoneMap` draws. */
   _drawBatCursor(map) {
     const ctx = this.ctx;
+    const tgt = this._target;
+    if (tgt) {
+      const p = map.toPx(tgt.x, tgt.y);
+      this._targetMarkerPx = { x: p.x, y: p.y };   // read by test-baseball-device.mjs's target-marker probe
+      const hx = Math.max(4, Math.abs(map.unitX * TARGET_MARKER_R));
+      const hy = Math.max(4, Math.abs(map.unitY * TARGET_MARKER_R));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(p.x - hx, p.y - hy, hx * 2, hy * 2);
+      ctx.strokeStyle = '#E0532F';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(p.x - hx, p.y - hy, hx * 2, hy * 2);
+      ctx.beginPath();
+      ctx.moveTo(p.x - hx * 1.4, p.y); ctx.lineTo(p.x + hx * 1.4, p.y);
+      ctx.moveTo(p.x, p.y - hy * 1.4); ctx.lineTo(p.x, p.y + hy * 1.4);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      this._targetMarkerPx = null;
+    }
     const c = this.cursor;
     const a = map.toPx(c.x, c.y);
     const r = SETTINGS.FEEL.engine.cursorR[this.state.battingMode] || SETTINGS.FEEL.engine.cursorR.contact;
@@ -967,24 +1003,6 @@ class BaseballPlayScreen {
     ctx.strokeStyle = this.state.battingMode === 'power' ? '#ffce3a' : '#fff';
     ctx.lineWidth = this.state.battingMode === 'power' ? 3 : 2;
     ctx.beginPath(); ctx.ellipse(a.x, a.y, Math.abs(map.unitX * r), Math.abs(map.unitY * r), 0, 0, Math.PI * 2); ctx.stroke();
-    const tgt = this._target;
-    if (tgt) {
-      const p = map.toPx(tgt.x, tgt.y);
-      this._targetMarkerPx = { x: p.x, y: p.y };   // read by test-baseball-device.mjs's target-marker probe
-      const tr = Math.max(4, Math.abs(map.unitX * TARGET_MARKER_R));
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.arc(p.x, p.y, tr, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = '#E0532F';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(p.x, p.y, tr, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(p.x - tr * 1.6, p.y); ctx.lineTo(p.x + tr * 1.6, p.y);
-      ctx.moveTo(p.x, p.y - tr * 1.6); ctx.lineTo(p.x, p.y + tr * 1.6);
-      ctx.stroke();
-    } else {
-      this._targetMarkerPx = null;
-    }
     ctx.restore();
   }
 
@@ -1236,7 +1254,11 @@ class BaseballPlayScreen {
    *  sized down from the ball's own projected radius (0.9x nearest, 0.3x farthest) and faded
    *  (alpha 0.6 to 0.1, orange to white), `globalCompositeOperation: 'lighter'` so overlapping
    *  discs brighten. Drawn AFTER `_drawStaticField()`'s own zone-box redraw in the same frame,
-   *  never clearing it. Skipped entirely under reduced motion (the caller's own gate). */
+   *  never clearing it. Skipped entirely under reduced motion (the caller's own gate).
+   *
+   *  R7 (item 3): on the PITCHER camera `baseR` is floored the same way `Actors.setBall` floors the
+   *  ball mesh itself (`BALL_MIN_PX`) - both read the same constant, so the trail's own discs never
+   *  read smaller than the ball they are supposed to trail behind. */
   _drawFireTrail(pitchResult, frac) {
     if (!this.ctx || !this._fieldW || !this.actors || !this.actors.camera) return;
     const ballPos = this.actors.lastBallPos();
@@ -1245,7 +1267,8 @@ class BaseballPlayScreen {
     if (p0.behind) return;
     const p1 = projectToCanvas(this.actors.camera,
       { x: ballPos.x + BALL_RADIUS_FT, y: ballPos.y, z: ballPos.z }, this._fieldW, this._fieldH);
-    const baseR = Math.max(2, Math.hypot(p1.x - p0.x, p1.y - p0.y));
+    let baseR = Math.max(2, Math.hypot(p1.x - p0.x, p1.y - p0.y));
+    if (this.actors.cameraName === 'pitcher') baseR = Math.max(baseR, BALL_MIN_PX);
     const ctx = this.ctx;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -1725,6 +1748,13 @@ class BaseballPlayScreen {
     // that faded only the 2-D overlay would have faded the strike-zone box and nothing else.
     const els = [...this.rootEl.querySelectorAll('[data-role="hud"], [data-role="strip"], [data-role="ringlabel"], [data-role="actions"], [data-role="canvas"]')];
     if (this.actors && this.actors.canvas) els.push(this.actors.canvas);
+    // R7 (item 6): the two canvases above fade to opacity 0 with everything else, which - with
+    // nothing behind them but `.bb-root`'s own flat page background - is exactly Matt's report ("a
+    // flat green frame... with 'Side retired' over it"). A snapshot of the scene's own last
+    // rendered frame, painted over the top at full opacity BEFORE the fade starts, covers that gap:
+    // the canvases (and the state under them) can do whatever they want while it sits there, and it
+    // only fades itself away once `swapFn()` has actually painted the new half.
+    this._showCrossfadeSnapshot();
     els.forEach((el) => el.classList.add('bb-fading'));
     await sleep(FADE_MS);
     if (this.destroyed) return;
@@ -1733,7 +1763,40 @@ class BaseballPlayScreen {
     // no visible transition at all (the fade-in would never be seen).
     void this.rootEl.offsetHeight;
     els.forEach((el) => el.classList.remove('bb-fading'));
+    // `swapFn()` above always ends in a synchronous `_drawStaticField()` (every caller's own swap
+    // does), so the new half's first frame is already painted by the time this line runs - safe to
+    // start fading the snapshot away right here, not after another sleep.
+    this._hideCrossfadeSnapshot();
     await sleep(FADE_MS);
+  }
+
+  /** R7 (item 6): freezes the scene's own last rendered frame into `.bb-crossfade-snap` - both
+   *  canvases (the WebGL scene UNDER the 2-D overlay, matching how they actually stack) drawn into
+   *  one 2-D canvas, in the same order they are already painted in. A render is forced immediately
+   *  before the read-back, the same discipline `test-baseball-device.mjs`'s own sky-pixel probe uses
+   *  to read a WebGL canvas back with no `preserveDrawingBuffer`: JS runs synchronously, so nothing
+   *  can composite (and so clear) the drawing buffer between that render and this `drawImage` call.
+   *  A snapshot that fails to draw (context lost, zero size) is not worth blocking the swap over -
+   *  `_crossFadeSwap`'s own `.bb-fading` toggle on the two canvases is what shipped before this
+   *  stage, and it still runs regardless, so a failed snapshot degrades to exactly that. */
+  _showCrossfadeSnapshot() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="crossfadesnap"]');
+    if (!el || !this.actors || !this.actors.renderer || !this.actors.canvas || !this.canvas || !this._fieldW) return;
+    try {
+      this.actors.renderer.render(this.actors.scene, this.actors.camera);
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      el.width = Math.round(this._fieldW * dpr);
+      el.height = Math.round(this._fieldH * dpr);
+      const ctx = el.getContext('2d');
+      ctx.clearRect(0, 0, el.width, el.height);
+      ctx.drawImage(this.actors.canvas, 0, 0, el.width, el.height);
+      ctx.drawImage(this.canvas, 0, 0, el.width, el.height);
+      el.classList.add('is-on');
+    } catch { /* degrade to the plain canvas fade below - nothing to clean up */ }
+  }
+  _hideCrossfadeSnapshot() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="crossfadesnap"]');
+    if (el) el.classList.remove('is-on');
   }
 
   // -------------------------------------------------------------------------------- engine glue
@@ -1891,17 +1954,48 @@ class BaseballPlayScreen {
    *  now, clamped to stay inside the field band with a 12px margin either side (the spec's own
    *  number) so the word can never run off the edge of a narrow phone. A behind-camera projection
    *  (should not happen - both cameras always frame the batter) leaves the element at its last
-   *  position rather than snapping it to (0,0). */
+   *  position rather than snapping it to (0,0).
+   *
+   *  R7 (item 1, docs/BASEBALL-3D-BUILD.md section 9): the OLD clamp bounded the projected CENTRE
+   *  point alone, never the element's own rendered size - so a wide word ("Perfect" for a
+   *  left-handed batter, who mirrors to the side of the box closer to the band's edge - field.js's
+   *  own CAMERAS comment: a lefty lands at 68% across) could still run half off the edge even
+   *  though its CENTRE was safely inside the margin. Clamped by the element's own measured width/
+   *  height now (`getBoundingClientRect`, read AFTER `_showPop` has already set the word/lines, so
+   *  it reflects the real content, not a stale layout) - half of each dimension plus the margin, so
+   *  the whole box, not just its centre, stays on screen. Called from `_showPop` only (never on a
+   *  timer, never per frame) - positioned ONCE per pop, exactly the spec's own rule. */
   _positionPop() {
     const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
     if (!el || !this.actors || !this.actors.camera || !this._fieldW) return;
     const p = projectToCanvas(this.actors.camera, this._batterHeadWorld(), this._fieldW, this._fieldH);
     if (p.behind) return;
     const margin = 12;
-    const x = Math.max(margin, Math.min(this._fieldW - margin, p.x));
-    const y = Math.max(margin, Math.min(this._fieldH - margin, p.y));
+    const rect = el.getBoundingClientRect();
+    const halfW = rect.width ? rect.width / 2 : 0;
+    const halfH = rect.height ? rect.height / 2 : 0;
+    const x = Math.max(margin + halfW, Math.min(this._fieldW - margin - halfW, p.x));
+    const y = Math.max(margin + halfH, Math.min(this._fieldH - margin - halfH, p.y));
     el.style.left = x + 'px';
     el.style.top = y + 'px';
+  }
+  /** R7 (item 1): the pop's ONLY hide outside its own `RESULT_MS` timer - called the instant the
+   *  camera cuts to the chase (`_animateBattedBall`, below), because the pop was positioned through
+   *  whichever camera was live AT THAT MOMENT (`_positionPop`'s own header: positioned once, never
+   *  re-projected) and a cut to the chase moves the whole scene out from under it - the reference
+   *  shows no word over the chase at all (the outcome word is the marker hold's own job, via
+   *  `_runMarkerHold`'s label). Idempotent: clearing an already-hidden pop is a no-op. */
+  _hidePop() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
+    if (!el) return;
+    if (this._popTimer) { clearTimeout(this._popTimer); this._popTimer = null; }
+    el.classList.remove('is-on');
+    const wordEl = el.querySelector('[data-role="popword"]');
+    const line1El = el.querySelector('[data-role="popline1"]');
+    const line2El = el.querySelector('[data-role="popline2"]');
+    if (wordEl) wordEl.textContent = '';
+    if (line1El) line1El.textContent = '';
+    if (line2El) line2El.textContent = '';
   }
 
   /** THE BIG WORD. Matt (2026-09-15): *"They should be obvious... They should be big and on the
@@ -2166,6 +2260,11 @@ class BaseballPlayScreen {
   _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg, exitVeloMph, launchAngleDeg) {
     this._cutawayUp = true;
     this._setDiamondVisible(true);
+    // R7 (item 1): the verdict pop is a plate-camera word, positioned once through whichever camera
+    // was live at contact - the moment the camera cuts to the chase it is no longer over anything
+    // real, so it is hidden here rather than left to fade out over its own RESULT_MS while the
+    // scene has already moved on (the reference shows no word over the chase at all).
+    this._hidePop();
     const isHr = kind === 'hr';
     const homerCrossFrac = (isHr && distanceFt > 0)
       ? Math.max(0, Math.min(1, fenceFtAt(sprayAngleDeg, this._fenceFt()) / distanceFt)) : null;

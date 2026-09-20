@@ -23,6 +23,9 @@ import { CLIPS, buildClip } from './poses.js';
 import { onViewportResize } from '../../js/viewport.js';
 import {
   makeCameras, buildStadium, CAMERAS, CHASE_LERP, BALL_RADIUS_FT, MARKER,
+  // R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the chase's own minimum start (item 2) and the
+  // pitcher camera's ball pixel floor (item 3), plus the world-point projection both need.
+  CHASE_MIN_HEIGHT_FT, CHASE_MIN_BACK_FT, BALL_MIN_PX, projectToCanvas,
 } from './field.js';
 
 const CROSSFADE_S = 0.15;
@@ -462,7 +465,10 @@ export class Actors {
     // the umpire, whose own visibility is a CAMERA fact (`_applyCameraVisibility`) that a place()
     // call must never override; his own place() calls happen every frame `_syncActors` runs, which
     // would otherwise re-show him from the batter camera the frame after every camera switch.
-    if (actor.role !== 'umpire') actor.pivot.visible = true;
+    // R7 (item 2): the catcher joins him - he is now ALSO hidden from the chase camera
+    // (`_applyCameraVisibility`), and `setCatcher` is called from the same every-`_syncActors()`
+    // path that would otherwise re-show him mid-chase, exactly the umpire's own problem.
+    if (actor.role !== 'umpire' && actor.role !== 'catcher') actor.pivot.visible = true;
   }
 
   /** Place one actor now and remember it, so a later resize can reflow without the caller having
@@ -542,18 +548,43 @@ export class Actors {
   }
   /** The umpire is not drawn from the batting camera - he stands 5 ft in front of its lens and
    *  would fill the frame. See field.js's CAMERAS comment for why no camera position avoids it at
-   *  fov 50, and why "the camera stands where the umpire's head is" is the honest reading. */
+   *  fov 50, and why "the camera stands where the umpire's head is" is the honest reading.
+   *
+   *  R7 (item 2, docs/BASEBALL-3D-BUILD.md section 9): the CHASE camera drops both of them - Matt's
+   *  recording: "on a short ball the first chase frames are the catcher's head filling the
+   *  foreground." Measured (field.js's own CHASE_MIN_HEIGHT_FT/CHASE_MIN_BACK_FT comment): the
+   *  chase camera's own world z is `ball.z + offset.z`, and the ball's z sweeps continuously
+   *  through the catcher's (z=7.8) and the umpire's (z=10.2) fixed positions for SOME distanceFt no
+   *  matter what constant offset is chosen - there is no camera position that keeps them clear of
+   *  the lens for every possible ball, the same "cannot film the inside of its own operator"
+   *  problem the batting camera already has with the umpire, just at a distance that now varies
+   *  instead of being fixed. Hiding them is what actually closes it, not a camera number. */
   _applyCameraVisibility() {
     const ump = this.actors.umpire;
-    if (ump) ump.pivot.visible = this.cameraName !== 'batter';
+    if (ump) ump.pivot.visible = this.cameraName === 'pitcher';
+    const catcher = this.actors.catcher;
+    if (catcher) catcher.pivot.visible = this.cameraName !== 'chase';
   }
   /** Aim the chase camera at a world point (the ball). `immediate` snaps it there instead of
    *  easing, which is what the first frame of a cutaway wants so the chase does not fly in from
-   *  wherever the previous ball ended. The ease itself runs in the render loop, once per rendered
-   *  frame, so it is the same motion at 20 fps under software GL as at 60 on a phone. */
+   *  wherever the previous ball ended.
+   *
+   *  R7 (item 2): the immediate snap uses a wider MINIMUM start offset
+   *  (`CHASE_MIN_HEIGHT_FT`/`CHASE_MIN_BACK_FT`, field.js's own comment on why these are modest and
+   *  not a collision guarantee) rather than the steady `CAMERAS.chase.offset` - a play's first
+   *  chase frame reads as a touch more pulled-back than the ordinary follow. Every LATER frame (the
+   *  ease itself, in the render loop, once per rendered frame - so the same motion at 20 fps under
+   *  software GL as at 60 on a phone) still targets the steady offset via `_stepChase`, unchanged -
+   *  the camera eases IN from this wider start rather than starting there and staying. */
   chaseAt(pos, immediate = false) {
     this._chaseTarget = { x: pos.x, y: pos.y, z: pos.z };
-    if (immediate) this._stepChase(1);
+    if (!immediate) return;
+    const cam = this.cameras && this.cameras.chase;
+    if (!cam) return;
+    const oy = Math.max(CAMERAS.chase.offset[1], CHASE_MIN_HEIGHT_FT);
+    const oz = Math.max(CAMERAS.chase.offset[2], CHASE_MIN_BACK_FT);
+    cam.position.set(pos.x + CAMERAS.chase.offset[0], pos.y + oy, pos.z + oz);
+    cam.lookAt(pos.x, pos.y, pos.z);
   }
   _stepChase(alpha) {
     const t = this._chaseTarget;
@@ -639,6 +670,21 @@ export class Actors {
     }
     this._ball.visible = true;
     this._ball.position.set(b.x, b.y, b.z);
+    // R7 (item 3, docs/BASEBALL-3D-BUILD.md section 9): a pixel-size floor for the ball, PITCHER
+    // camera only (field.js's `BALL_MIN_PX` comment has the measured 13px-at-release/2.3px-at-
+    // crossing numbers). Scaled about the ball's OWN centre - a sphere needs no origin correction
+    // the way the zone box's `_zoneMap` does, since growing its radius does not move where it sits
+    // in the world or where it visibly crosses the zone. Recomputed and reset every call (never
+    // just left at whatever the last camera needed), so a camera cut back to batter/chase always
+    // returns the ball to its true, unscaled size on the very next frame.
+    let ballScale = 1;
+    if (this.cameraName === 'pitcher' && this.camera && this._w && this._h) {
+      const centre = projectToCanvas(this.camera, b, this._w, this._h);
+      const edge = projectToCanvas(this.camera, { x: b.x + BALL_RADIUS_FT, y: b.y, z: b.z }, this._w, this._h);
+      const px = Math.hypot(edge.x - centre.x, edge.y - centre.y);
+      if (px > 0 && px < BALL_MIN_PX) ballScale = BALL_MIN_PX / px;
+    }
+    this._ball.scale.setScalar(ballScale);
     const high = b.y > 2.5;
     this._ballShadow.visible = high;
     if (high) {
