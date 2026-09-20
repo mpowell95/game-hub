@@ -21,6 +21,11 @@ import { CLIPS, buildClip } from './poses.js';
 import { onViewportResize } from '../../js/viewport.js';
 
 const CROSSFADE_S = 0.15;
+// STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 3): the SET RETURN's own cross-fade, named so
+// every caller of `toSet()` shares one number rather than each choosing its own. Distinct from
+// CROSSFADE_S (the general default `play()` falls back to) - the set return is deliberately a
+// touch slower, a settling motion rather than a snap.
+const SET_RETURN_FADE_MS = 0.4;
 const DPR_CAP = 2;
 // STAGE 4: `start()`'s own render-rate cap, applied ONLY under software GL - see `isSoftGL()` and
 // `start()`'s own header for the measured reason (R2 cadence) and why it must not reach real
@@ -247,6 +252,7 @@ export class Actors {
     this._offResize = null;
     this._w = 0; this._h = 0; this._cover = null;
     this._proto = null; this._fileClips = [];
+    this._lastBallPx = null;
     this._preserve = !!(globalThis.__bbTest);   // the test reads pixels back; nobody else pays for it
   }
 
@@ -445,8 +451,15 @@ export class Actors {
     return this._setSide('pitcher', { side, anchor, heightPx, facingRad, mirrored: throws != null ? throws === 'L' : undefined });
   }
 
-  /** Play `name` on `role` so that the clip's mark lands `markAtMs` from now (0 = seek straight to the mark). */
-  play(role, name, { markAtMs = null } = {}) {
+  /** Play `name` on `role` so that the clip's mark lands `markAtMs` from now (0 = seek straight to
+   *  the mark). `fade` (seconds) is the cross-fade duration FROM whatever is currently playing -
+   *  default `CROSSFADE_S`. STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 4): Swing/Miss are
+   *  played with `fade: 0` everywhere a real swing happens, so the contact pose is visible on the
+   *  very frame it starts rather than dissolving in over 150ms - a swing is a snap, never a blend.
+   *  `fade: 0` still goes through `crossFadeTo` (three.js resolves a zero-duration fade by setting
+   *  the target weight immediately, the same call shape as every other duration), so there is only
+   *  one code path here, not two. */
+  play(role, name, { markAtMs = null, fade } = {}) {
     const actor = this.actors[role]; const a = actor && actor.actions[name];
     if (!a) return;
     const def = CLIPS[name];
@@ -455,10 +468,17 @@ export class Actors {
       if (markAtMs <= 0) { a.time = def.mark; a.timeScale = 1; }
       else a.timeScale = def.mark / (markAtMs / 1000);
     } else a.timeScale = 1;
-    if (actor.current && actor.current !== a) actor.current.crossFadeTo(a, CROSSFADE_S, false);
+    const fadeS = fade != null ? fade : CROSSFADE_S;
+    if (actor.current && actor.current !== a) actor.current.crossFadeTo(a, fadeS, false);
     a.play(); actor.current = a;
   }
   idle(role) { this.play(role, role === 'pitcher' ? 'Set' : 'Idle'); }
+  /** STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 3): the pitcher's own return-to-set beat,
+   *  after a delivery's follow-through has been allowed to play out - never called at release, only
+   *  once the ball has actually left the scene. A named helper instead of a bare
+   *  `play('pitcher', 'Set', { fade: ... })` at every call site so the SET_RETURN_FADE_MS number
+   *  lives in exactly one place. */
+  toSet() { this.play('pitcher', 'Set', { fade: SET_RETURN_FADE_MS }); }
 
   /** The pitch, in the same canvas-px space every anchor here already uses (world (x, -y) is
    *  screen (x, y) - the ortho camera's own convention, section 3.5's header). `b` is `{x, y, r}` -
@@ -469,6 +489,10 @@ export class Actors {
    *  session (never a pitch) pays nothing for a sphere it never shows. */
   setBall(b) {
     if (!this.scene) return;
+    // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7): `_lastBallPx` is kept even while hidden (a
+    // `null` call below only sets `visible = false`, never clears it) - it is THE CONTACT HOLD's
+    // own starting point (ui.js's `_contactHold`), the ball's last real position (the pitch's
+    // crossing point) rather than a second, driftable guess at where contact happened.
     if (!b) { if (this._ball) this._ball.visible = false; return; }
     if (!this._ball) {
       const geo = new THREE.SphereGeometry(1, 12, 8);
@@ -482,7 +506,12 @@ export class Actors {
     // z=20: in front of the batter's own pivot (z=10, `_place`) and the pitcher's (z=0), so the
     // ball is never clipped behind either figure at any point of its flight between them.
     this._ball.position.set(b.x, -b.y, 20);
+    this._lastBallPx = { x: b.x, y: b.y, r: b.r };
   }
+  /** The ball's last SET position (screen px, `{x,y,r}`), whether or not it is currently visible -
+   *  see `setBall`'s own comment. `null` before anything has ever been set (a dev-screen session
+   *  that never pitches). */
+  lastBallPx() { return this._lastBallPx || null; }
 
   /** The pitcher's throwing hand (`handR`), in the same canvas-px space `setBall` uses - stage 4's
    *  pitch flight starts here instead of `field.js`'s fixed `PLATE_ANCHORS.release` (a flat point

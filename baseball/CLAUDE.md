@@ -4,6 +4,49 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Motion and flow: the figures move and the beats are alive (2026-09-20, `game-hub-v858` → `game-hub-v859`)
+
+Matt, on two recordings of v858: *"They look way too much like just flat images (because they
+are)... Timing is a huge issue as well, timing of everything. Nothing really makes sense."*
+Every frame of both clips was diffed and the live game probed for clip clocks and bone positions.
+The field band was pixel-still for seconds at a time: the batter's Idle moved no bone, the
+pitcher's whole delivery moved his hand about 20 px at his 47 px on-screen size and then held the
+follow-through for 5.5 s with no return to set, the swing was cut off by the overhead one or two
+frames after contact (and started under a 150 ms cross-fade), the overhead sat as a still picture
+for 5.5 s, a slider touch during the cutaway re-showed the batter over the diamond, and about 1.1 s
+of flat green followed Play with the first wind-up running under it. Full table and the fixes:
+`docs/BASEBALL-3D-BUILD.md` section 7.
+
+**Stage 6, motion (`poses.js`).** Clips authored to READ at the real sizes, with floors measured by
+a new chromium block in `test-baseball-actors.mjs` that plays each clip through the real
+`Actors` at 214 px (batter) and 47 px (pitcher) and samples bone world positions: batter Idle hand
+travel 0 → 20.7 px (floor 8), hips shift 12.2 px; pitcher Set hand travel 0.4 → 5.0 px (floor 2);
+Pitch hand path 20 → 93 px (floor 45), vertical 9 → 26 px (floor 20), leg kick 11 → 17 px (floor
+10), motion inside the first 20% of the clip. Swing and Miss open on Idle's rest pose so they
+start with no cross-fade. Facts learned: a wrist or head rotation moves the bat or the face but
+not that bone's own world position, so a motion floor on a bone has to be paid for by a parent;
+`hipsOffset` is relative to each actor's own bind pose and is not portable between the two.
+
+**Stage 7, flow (`ui.js`, `actors.js`, `field.js`).** One `_cutawayUp` flag: set when the
+cutaway starts, cleared only by `_returnToPlate()`, and `_drawStaticField()` is a no-op while it
+is set, so no input path can paint the plate view under the overhead again (the v858 fix covered
+one path). `play()` takes a `fade`; Swing and Miss use 0. A ball in play now holds the plate view
+400 ms after contact (the follow-through, the 3D ball leaving up and away), then the overhead
+flight is 1.0 s and the landing marker holds 1.0 s, then the plate view returns by itself and the
+rest of the beat runs there with the batter idling and the pitcher cross-fading to Set over 400 ms
+(`toSet()`); the pitcher also returns to Set 400 ms after every crossing. The 4.8 s of
+`resultMs + betweenMs` is re-partitioned from those constants, never changed: 0.4 + 1.0 + 1.0 +
+2.4, so verdict-to-next-release stays 6.2 s (r2-cadence 6201 / 6201 / 6201 ms). `plate.webp` is
+preloaded at Baseball's mount and the first wind-up waits on `plateReady()`; measured on the
+container the stadium paints 120 to 160 ms after Play, before the first Pitch call (was 1050 ms).
+Two implementation facts: an already-resolved `plateReady()` can continue before the first
+`requestAnimationFrame` sizes the canvas, so the wait calls `_sizeCanvas()` directly; and
+`decode()` can resolve before the loader's own `onload` fills the image cache, so the cache is
+stamped from the same Image before resolving.
+
+Measured on one live ball in play (press to cut 470 to 500 ms, cut to return 2.0 to 2.2 s, return
+to next release 3.8 s), all under the container's software renderer.
+
 ## The batter frozen over the overhead diamond (2026-09-19, `game-hub-v857` → `game-hub-v858`)
 
 Matt's first screen recording of the shipped 3D build, watched frame by frame: after every ball in

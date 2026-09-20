@@ -462,6 +462,110 @@ await ctx.close();
   }
 }
 
+// 8. STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 7): THE PRELOAD. Matt's report: "~1.1s of
+// flat green after Play, and the first wind-up starts under it." `preloadPlateImages()` moved to
+// Baseball's mount and `_stepWindup` now awaits `plateReady()` (capped 3s) before the FIRST
+// wind-up of a game, painting the stadium the instant it resolves. A FRESH mount (own context), not
+// the page already deep into r2-cadence's own drive above, so this actually catches the very first
+// Play tap of a game.
+//
+// Timed by wrapping `_drawStaticField`/`actors.play` themselves (each records its own
+// `performance.now()` INSIDE the call, synchronously) rather than by polling the canvas from
+// outside on a setTimeout loop: measured on this container, mounting Baseball's two skinned actors
+// under SwiftShader blocks the main thread for ~350ms right after Play (the same software-GL
+// contention `actors.js`'s own `isSoftGL()` render cap exists for - "GL Driver Message... GPU
+// stall due to ReadPixels" prints to the console during it), which starves an outside poller for
+// the whole block and makes it observe both signals only once the block ends, in whichever order
+// its next tick happens to land - telling nothing real about which one actually ran first. An
+// in-line timestamp taken at the moment each call actually executes has no such gap: it is exactly
+// as accurate whether the main thread was free or busy around it, since it runs synchronously,
+// inline, either way. A single canvas sky-pixel sample AFTER both signals is taken as corroboration
+// that a real picture (not the fallback fill) is what actually painted - measured directly against
+// the real shipped images beforehand (a one-off script, not part of this file): a cover-fit
+// `plate.webp` reads ~52% "sky" by this test in its top quarter, `overhead.webp` ~0.007%, the
+// loading-fallback flat fill (`#2f4a22`) 0% - so a `> 10%` frac cleanly tells "the stadium is
+// painted" apart from "still the fallback fill".
+{
+  const p8 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page8 = await p8.newPage();
+  await page8.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Preload Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr8 = await mountInHub(page8);
+  if (mountErr8) {
+    fail('preload-flat-green', `mount failed: ${mountErr8}`);
+  } else {
+    const result = await page8.evaluate(async () => {
+      const root = document.querySelector('.hub-game');
+      const inst = root._bbInstance;
+      const fieldMod = await import('/baseball/js/field.js');
+      const canvas = () => document.querySelector('.bb-field-canvas');
+      const skyFrac = () => {
+        const c = canvas();
+        if (!c || !c.width || !c.height) return 0;
+        const ctx2 = c.getContext('2d');
+        const w = c.width, bandH = Math.max(1, Math.round(c.height * 0.25));
+        const d = ctx2.getImageData(0, 0, w, bandH).data;
+        let sky = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          n++;
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          if (b > r + 15 && b > g + 5 && b > 120) sky++;
+        }
+        return n ? sky / n : 0;
+      };
+      const origDraw = inst._drawStaticField.bind(inst);
+      let firstPaintAt = null;
+      inst._drawStaticField = (...a) => {
+        // "Painted" means plateCover() actually resolves (the real picture, not the fallback fill)
+        // AND the canvas has real dimensions - the same two facts _drawStaticField's own body
+        // checks before it draws anything.
+        if (firstPaintAt == null && inst._fieldW && fieldMod.plateCover(inst._fieldW, inst._fieldH)) {
+          firstPaintAt = performance.now();
+        }
+        return origDraw(...a);
+      };
+      const origPlay = inst.actors.play.bind(inst.actors);
+      let firstPitchAt = null;
+      inst.actors.play = (role, name, opts) => {
+        if (firstPitchAt == null && role === 'pitcher' && name === 'Pitch') firstPitchAt = performance.now();
+        return origPlay(role, name, opts);
+      };
+      const btn = root.querySelector('.bb-play-btn');
+      const clickAt = performance.now();
+      if (btn) btn.click();
+      const deadline = clickAt + 3000;
+      while (performance.now() < deadline && (firstPaintAt == null || firstPitchAt == null)) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      // One settle beat past both signals, then a single real pixel sample as corroboration.
+      await new Promise((r) => setTimeout(r, 200));
+      return {
+        flatGreenMs: firstPaintAt != null ? firstPaintAt - clickAt : null,
+        firstPitchAtMs: firstPitchAt != null ? firstPitchAt - clickAt : null,
+        finalSkyFrac: skyFrac(),
+      };
+    });
+    if (result.flatGreenMs == null) {
+      fail('preload-flat-green', 'the stadium picture never actually painted (plateCover() never resolved) within 3s of Play');
+    } else if (result.firstPitchAtMs == null) {
+      fail('preload-flat-green', "the first actors.play('pitcher','Pitch') call was never observed within 3s of Play");
+    } else if (result.finalSkyFrac <= 0.10) {
+      fail('preload-flat-green', `sky frac ${result.finalSkyFrac.toFixed(3)} after both signals - the canvas does not actually show the painted stadium`);
+    } else if (result.flatGreenMs >= result.firstPitchAtMs) {
+      fail('preload-flat-green', `stadium painted at ${result.flatGreenMs.toFixed(0)}ms, AFTER the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms - the wind-up started under the flat fill`);
+    } else if (result.flatGreenMs >= 300) {
+      fail('preload-flat-green', `flat-green duration ${result.flatGreenMs.toFixed(0)}ms >= 300ms budget (was 1050ms before the fix)`);
+    } else {
+      ok(`stadium painted ${result.flatGreenMs.toFixed(0)}ms after Play, before the first Pitch call at ${result.firstPitchAtMs.toFixed(0)}ms (budget 300ms, was 1050ms; sky frac ${result.finalSkyFrac.toFixed(3)})`);
+    }
+  }
+  await p8.close();
+}
+
 await browser.close();
 
 console.log('');

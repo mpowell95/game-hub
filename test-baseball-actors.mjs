@@ -248,7 +248,7 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   const wantCalls = [
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *WINDUP_MS *\}\)/, '_stepWindup calls actors.play(\'pitcher\',\'Pitch\',{markAtMs:WINDUP_MS})'],
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *0 *\}\)/, "HumanAgent.decidePitch's release calls actors.play('pitcher','Pitch',{markAtMs:0})"],
-    [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80 *\}\)/, "the swing decision calls actors.play('batter','Swing',{markAtMs:80})"],
+    [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80, *fade: *0 *\}\)/, "the swing decision calls actors.play('batter','Swing',{markAtMs:80,fade:0})"],
     [/actors\.setBall\(/, 'the pitch flight calls actors.setBall(...)'],
     [/actors\.setBatter\(\{/, '_syncActors calls actors.setBatter({...})'],
     [/actors\.setPitcher\(\{/, '_syncActors calls actors.setPitcher({...})'],
@@ -271,6 +271,83 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
     ok('actors.js: start()\'s render-rate cap is gated on isSoftGL() (uncapped on real hardware)');
   } else {
     fail('actors.js render cap gating', 'start() does not gate RENDER_FRAME_MS on isSoftGL() - a real device would be capped unconditionally');
+  }
+
+  // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7): structural checks for the flow beats - each one
+  // a fact the dynamic checks elsewhere (the cutaway KNOWN-BUG PROBE, r2-cadence,
+  // test-baseball-device.mjs's preload check) can't see directly (a call site's own shape, not its
+  // runtime effect).
+  {
+    // Row 4: Swing is played with fade:0 at BOTH real-swing call sites (the CPU-batter 'swing'
+    // event and HumanAgent.decideSwing's settle()) - never a bare markAtMs with the default
+    // cross-fade back.
+    const swingFadeZero = uiSrc.match(/actors\.play\('batter', 'Swing', \{ *markAtMs: *80, *fade: *0 *\}\)/g) || [];
+    if (swingFadeZero.length === 2) ok('ui.js: both real-swing call sites play Swing with fade:0');
+    else fail('ui.js swing fade:0', `expected 2 call sites playing Swing with fade:0, found ${swingFadeZero.length}`);
+    if (/actors\.play\('batter', 'Swing', \{ *markAtMs: *80 *\}\)/.test(uiSrc)) {
+      fail('ui.js swing fade:0', 'a Swing call site with no fade:0 (a default cross-fade) is still present');
+    }
+
+    // play()'s own fade option and toSet() helper (actors.js).
+    const playMatch = actorsSrc.match(/\n {2}play\(role, name, \{[\s\S]*?\n {2}\}\n/);
+    if (playMatch && /fade *!= *null *\? *fade *: *CROSSFADE_S/.test(playMatch[0]) && /crossFadeTo\(a, fadeS,/.test(playMatch[0])) {
+      ok('actors.js: play() accepts a fade option, defaulting to CROSSFADE_S');
+    } else {
+      fail('actors.js play() fade option', 'play() does not accept/use a fade option with a CROSSFADE_S default');
+    }
+    if (/toSet\(\) *\{ *this\.play\('pitcher', 'Set', \{ *fade: *SET_RETURN_FADE_MS *\}\); *\}/.test(actorsSrc)) {
+      ok('actors.js: toSet() helper cross-fades the pitcher to Set');
+    } else {
+      fail('actors.js toSet()', 'no toSet() helper found playing \'Set\' on the pitcher');
+    }
+    if (/lastBallPx\(\)/.test(actorsSrc) && /this\._lastBallPx *= *\{/.test(actorsSrc)) {
+      ok('actors.js: setBall() tracks lastBallPx() for THE CONTACT HOLD');
+    } else {
+      fail('actors.js lastBallPx', 'setBall() does not track a lastBallPx() the contact hold can read');
+    }
+
+    // Row 3: the pitcher's return to Set fires from both flight-end paths.
+    const toSetCallers = (uiSrc.match(/actors\.toSet\(\)/g) || []).length;
+    if (toSetCallers >= 2) ok(`ui.js: actors.toSet() is called ${toSetCallers} times (both flight-end paths)`);
+    else fail('ui.js toSet() callers', `expected actors.toSet() called from at least 2 places, found ${toSetCallers}`);
+
+    // Row 6: THE CUTAWAY FLAG - set in _animateBattedBall, guarded in _drawStaticField, cleared
+    // only by _returnToPlate().
+    const returnMatch = uiSrc.match(/\n {2}_returnToPlate\(\) \{[\s\S]*?\n {2}\}\n/);
+    const drawMatch = uiSrc.match(/\n {2}_drawStaticField\(\) \{[\s\S]*?\n {2}\}\n/);
+    const animateMatch = uiSrc.match(/\n {2}_animateBattedBall\([\s\S]*?\n {2}\}\n/);
+    if (returnMatch && /this\._cutawayUp *= *false/.test(returnMatch[0])) ok('ui.js: _returnToPlate() clears _cutawayUp');
+    else fail('ui.js _returnToPlate', '_returnToPlate() does not clear _cutawayUp');
+    if (drawMatch && /if *\(this\._cutawayUp\) *return;/.test(drawMatch[0])) ok('ui.js: _drawStaticField() no-ops while _cutawayUp is set');
+    else fail('ui.js _drawStaticField cutaway guard', '_drawStaticField() does not check/return on _cutawayUp');
+    if (animateMatch && /this\._cutawayUp *= *true/.test(animateMatch[0])) ok('ui.js: _animateBattedBall() sets _cutawayUp');
+    else fail('ui.js _animateBattedBall cutaway flag', '_animateBattedBall() does not set _cutawayUp');
+    // Nowhere else in the file clears it - _returnToPlate() is the only exit.
+    // Two legitimate sites: the constructor's own initial declaration, and _returnToPlate()'s own
+    // clear (already checked above) - never a third, which would be a second exit from the flag.
+    const clearSites = (uiSrc.match(/_cutawayUp *= *false/g) || []).length;
+    if (clearSites === 2) ok('ui.js: _cutawayUp = false appears in exactly 2 places (constructor init, _returnToPlate)');
+    else fail('ui.js _cutawayUp single exit', `_cutawayUp = false appears in ${clearSites} places, expected 2`);
+
+    // Row 7: the preload moved to mount, and _stepWindup awaits plateReady() before the first
+    // wind-up of a game. Bounded to _startGame()'s own body (not a substring test on the whole
+    // file) so a comment mentioning the call by name elsewhere can't produce a false pass or fail.
+    const startGameMatch = uiSrc.match(/\n {2}_startGame\(\) \{[\s\S]*?\n {2}\}\n/);
+    const callsPreloadSomewhere = /(?<!\w)preloadPlateImages\(\);/.test(uiSrc);
+    const callsPreloadInStartGame = startGameMatch && /(?<!\w)preloadPlateImages\(\);/.test(startGameMatch[0]);
+    if (callsPreloadSomewhere && !callsPreloadInStartGame) {
+      ok('ui.js: preloadPlateImages() is called (and not from _startGame() any more)');
+    } else {
+      fail('ui.js preload placement', `preloadPlateImages() call ${callsPreloadSomewhere ? 'is' : 'is not'} present; ${callsPreloadInStartGame ? 'still' : 'not'} called from _startGame()`);
+    }
+    const windupMatch = uiSrc.match(/\n {2}async _stepWindup\(\) \{[\s\S]*?\n {2}\}\n/);
+    if (windupMatch && /plateReady\(\)/.test(windupMatch[0]) && /PLATE_READY_CAP_MS/.test(windupMatch[0])) {
+      ok('ui.js: _stepWindup() awaits plateReady() with a cap');
+    } else {
+      fail('ui.js _stepWindup preload await', '_stepWindup() does not await plateReady() with a cap');
+    }
+    if (/export function plateReady\(/.test(fieldSrc)) ok('field.js: plateReady() is exported');
+    else fail('field.js plateReady export', 'no "export function plateReady(" found');
   }
 }
 
@@ -383,6 +460,15 @@ async function runChromiumHalf() {
     // 2.2's colour-key remap). Re-place at BATTER_FACING_RAD (the real facing, not this file's
     // load/dispose check's facingRad=0) so the sample point is the same one every other batter
     // render in this stage used.
+    // STAGE 6, one line into a stage 3 check, because stage 6's own work broke it and the break is
+    // an artefact of this harness rather than of the game: this half stacks BOTH figures on the SAME
+    // anchor (the real play screen never does - the pitcher is 47 px tall out at the mound), and the
+    // re-authored release pose reaches the throwing arm toward the camera, past the batter's pivot
+    // z of 10 (actors.js `_place`). Measured, that put the pitcher's forearm over this exact pixel
+    // and the sample read his skin (129,78,53) for BOTH sides, so the check failed on an overlap and
+    // not on a colour. Hiding him restores what the check is actually about; nothing it asserts
+    // changed.
+    actors.actors.pitcher.pivot.visible = false;
     actors.place('batter', { anchor: { x: 150, y: 280 }, heightPx: 260, facingRad: BATTER_FACING_RAD });
     actors.idle('batter');
     actors.actors.batter.mixer.update(0);
@@ -585,34 +671,97 @@ async function runMountInHubHalf() {
   else fail('mount-in-hub Swing read-back', `identical checksum ${swingDiff.idleSum} - the swing did not visibly change the render`);
 
   // [KNOWN-BUG PROBE] The overhead cutaway must keep the 3D layer hidden for its WHOLE duration,
-  // not just the 700 ms ball flight. Matt's first recording of v857 (2026-09-19) showed the batter
-  // frozen over the overhead diamond for ~7 s after every ball in play: `_animateBattedBall` used
-  // to re-show the canvas the moment the landing marker was drawn, while the overhead picture
-  // stayed up through the result beat and the between-pitches beat. Now only `_drawStaticField()`
-  // (the plate view) brings it back. Drives the real cutaway and reads the canvas state after the
-  // flight has finished, then after the plate view is redrawn.
+  // not just the ball flight. Matt's first recording of v857 (2026-09-19) showed the batter frozen
+  // over the overhead diamond for ~7 s after every ball in play: `_animateBattedBall` used to
+  // re-show the canvas the moment the landing marker was drawn, while the overhead picture stayed
+  // up through the result beat and the between-pitches beat. v858 fixed that one call path
+  // (`_drawStaticField()`/`_showActors()` bringing it back); STAGE 7 (docs/BASEBALL-3D-BUILD.md
+  // section 7, row 6) found a second one - a slider touch mid-cutaway (`batterAimX`) redrawing the
+  // plate view underneath and re-showing the layer - and closes every path at once with a single
+  // flag (`_cutawayUp`) that makes `_drawStaticField()` a no-op for ANY caller while it is set.
+  // Drives the real cutaway (`_animateBattedBall`, unstubbed - the whole point is to prove the REAL
+  // `_drawStaticField()` no-ops on its own, not a stand-in for it), tries a pad move plus a direct
+  // manual call mid-cutaway and asserts it changed nothing, then makes NO further test calls and
+  // asserts the plate view returns BY ITSELF within 2.6s of the cut (CONTACT_HOLD_MS is spent
+  // before this function is even called, from `_settleAtBat`; FLIGHT_MS + MARKER_HOLD_MS = 2.0s is
+  // this function's own budget, so 2.6s is a real margin, not a tight one). The live game's own
+  // engine events are silenced for the probe's own window (`game.onEvent` -> a no-op) so nothing
+  // else calls `_animateBattedBall`/`_settleAtBat` concurrently and confuses the measurement - the
+  // function under test and the guard it exercises stay completely real either way.
   const cutaway = await page.evaluate(async () => {
     const inst = document.querySelector('.hub-game')._bbInstance;
     const cv = () => document.querySelector('canvas.bb-actor-canvas');
-    // The CPU's own pitch loop is running on this mounted screen and redraws the plate view every
-    // frame of a flight; in the real game the cutaway runs between at-bats when no such loop is
-    // live. Hold the plate redraw off for the probe's window so what is measured is
-    // `_animateBattedBall`'s own behaviour, then restore it and redraw the plate view for real.
-    const realDraw = inst._drawStaticField;
-    inst._drawStaticField = () => {};
-    await inst._animateBattedBall(40, 180, 'hit', '1B');
+    const fieldCv = () => document.querySelector('canvas.bb-field-canvas');
+    // Silence the LIVE game's own future engine events FIRST (game.js reads `this.onEvent` fresh on
+    // every call, so this takes effect for every event not already mid-dispatch) - `_settleAtBat`
+    // is only ever reached through this hook. An 'atBatEnd' dispatched a moment before this line
+    // could still be mid-flight through the OLD hook, so wait (bounded) for any such in-progress
+    // cutaway to finish on its own before starting the probe's own, rather than racing it.
+    if (inst.game) inst.game.onEvent = () => {};
+    {
+      const settleDeadline = performance.now() + 4000;
+      while (inst._cutawayUp && performance.now() < settleDeadline) await new Promise((r) => setTimeout(r, 50));
+    }
+    // "sky-blue" in the top 25% of the 2D FIELD canvas is what tells the plate view (plate.webp's
+    // own crop keeps a strip of sky above the stands) apart from the overhead cut (overhead.webp,
+    // a straight-down aerial with none) without reading any internal flag - measured directly
+    // against the real shipped images: plate.webp reads ~52% "sky" by this test in its top quarter,
+    // overhead.webp ~0.007%.
+    const skyFrac = () => {
+      const c = fieldCv();
+      if (!c || !c.width || !c.height) return 0;
+      const ctx2 = c.getContext('2d');
+      const w = c.width, bandH = Math.max(1, Math.round(c.height * 0.25));
+      const d = ctx2.getImageData(0, 0, w, bandH).data;
+      let sky = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        n++;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        if (b > r + 15 && b > g + 5 && b > 120) sky++;
+      }
+      return n ? sky / n : 0;
+    };
+    // Fire-and-forget, deliberately NOT awaited here - the whole point is to sample mid-flight
+    // state, and awaiting the promise would block until it has already resolved (~2s later).
+    inst._animateBattedBall(40, 180, 'hit', '1B');
+    const cutStart = performance.now();
     await new Promise((r) => setTimeout(r, 300));
-    const afterFlight = { display: cv().style.display, running: !!inst.actors._running };
-    inst._drawStaticField = realDraw;
+    const midFlight = { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac() };
+
+    // Mid-cutaway: a pad move plus a DIRECT call to the real (never stubbed) _drawStaticField() -
+    // both must be no-ops while `_cutawayUp` is set.
+    inst.state.batterAimX = 0.5;
     inst._drawStaticField();
-    await new Promise((r) => setTimeout(r, 100));
-    const afterPlate = { display: cv().style.display, running: !!inst.actors._running };
-    return { afterFlight, afterPlate };
+    await new Promise((r) => setTimeout(r, 50));
+    const afterManualDraw = { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac() };
+
+    // No further test calls from here - the plate view must return on its own.
+    const deadline = cutStart + 2600;
+    let returnedAtMs = null;
+    while (performance.now() < deadline) {
+      if (cv().style.display !== 'none' && !!inst.actors._running) { returnedAtMs = performance.now() - cutStart; break; }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const afterReturn = returnedAtMs != null ? { display: cv().style.display, running: !!inst.actors._running, skyFrac: skyFrac(), ms: returnedAtMs } : null;
+    return { midFlight, afterManualDraw, afterReturn };
   });
-  if (cutaway.afterFlight.display === 'none' && !cutaway.afterFlight.running) ok('overhead cutaway: actor canvas stays hidden and paused after the ball flight ends');
-  else fail('overhead cutaway hide', `after the flight: display="${cutaway.afterFlight.display}", running=${cutaway.afterFlight.running} (the frozen-batter-over-the-diamond bug)`);
-  if (cutaway.afterPlate.display !== 'none' && cutaway.afterPlate.running) ok('plate view redraw brings the actor canvas back and restarts the loop');
-  else fail('overhead cutaway show', `after _drawStaticField: display="${cutaway.afterPlate.display}", running=${cutaway.afterPlate.running}`);
+  if (cutaway.midFlight.display === 'none' && !cutaway.midFlight.running && cutaway.midFlight.skyFrac < 0.10) {
+    ok(`overhead cutaway: actor canvas hidden/paused and the 2D canvas shows the overhead (sky frac ${cutaway.midFlight.skyFrac.toFixed(3)}) mid-flight`);
+  } else {
+    fail('overhead cutaway hide', `mid-flight: display="${cutaway.midFlight.display}", running=${cutaway.midFlight.running}, skyFrac=${cutaway.midFlight.skyFrac.toFixed(3)} (the frozen-batter-over-the-diamond bug)`);
+  }
+  if (cutaway.afterManualDraw.display === 'none' && !cutaway.afterManualDraw.running && cutaway.afterManualDraw.skyFrac < 0.10) {
+    ok('a pad move + a direct _drawStaticField() call mid-cutaway changed nothing (the _cutawayUp no-op)');
+  } else {
+    fail('cutaway no-op', `after a manual _drawStaticField() mid-cutaway: display="${cutaway.afterManualDraw.display}", running=${cutaway.afterManualDraw.running}, skyFrac=${cutaway.afterManualDraw.skyFrac.toFixed(3)} - the cutaway was interrupted (slider-touch bug)`);
+  }
+  if (cutaway.afterReturn && cutaway.afterReturn.display !== 'none' && cutaway.afterReturn.running && cutaway.afterReturn.skyFrac > 0.10) {
+    ok(`the plate view returned by itself ${cutaway.afterReturn.ms.toFixed(0)}ms after the cut (sky frac ${cutaway.afterReturn.skyFrac.toFixed(3)}), no further test calls`);
+  } else if (!cutaway.afterReturn) {
+    fail('cutaway auto-return', 'the plate view never returned on its own within 2.6s of the cut');
+  } else {
+    fail('cutaway auto-return', `returned at ${cutaway.afterReturn.ms.toFixed(0)}ms but display="${cutaway.afterReturn.display}", running=${cutaway.afterReturn.running}, skyFrac=${cutaway.afterReturn.skyFrac.toFixed(3)}`);
+  }
 
   await page.evaluate(() => { document.querySelector('.hub-game')._bbInstance.destroy(); });
   const afterDestroy = await page.evaluate(() => {
@@ -638,6 +787,157 @@ async function runMountInHubHalf() {
 
 console.log('\n=== chromium half: mounted in the real hub ===');
 await runMountInHubHalf();
+
+// ========================================== STAGE 6: motion, measured at the REAL on-screen sizes ==
+// docs/BASEBALL-3D-BUILD.md section 7. Stages 2 and 3 graded every POSE against its sprite frame and
+// nothing ever measured what moved BETWEEN the poses, so the shipped build reached Matt's phone with
+// an Idle that moved no bone at all and a whole pitch delivery worth 20 px of hand travel: "They look
+// way too much like just flat images (because they are)."
+//
+// This block is the check that makes that failure loud. It plays each clip through its OWN duration
+// at timeScale 1 with the mixer stepped in fixed 1/60 s increments (mixer.update(1/60), never a wall
+// clock, so the numbers are identical on a fast machine and a loaded one), at the heights these
+// figures actually draw at on a 393x852 phone - the batter 214 px (field.js's NEAR_BATTER_HEIGHT_FRAC
+// 0.50 of the 429 px field band) and the pitcher 47 px (MOUND_PITCHER_HEIGHT_FRAC 0.11) - and samples
+// RIG bone WORLD positions every step. The ortho camera is in canvas pixels (actors.js's own
+// convention, world (x, -y) = screen (x, y)), so a world distance IS a screen distance in px.
+//
+// The floors below are the brief's, and they are floors, not targets: a clip may move as much more as
+// it likes. Every measured number prints on every run whether it passes or not, because the number is
+// the point - "the batter's idle moves 20.7 px" is a fact a future session can compare against, and
+// "the idle looks alive" is not.
+const MOTION_FLOORS = {
+  idleHandTravel: 8,      // batter Idle, handR, at 214 px
+  setHandTravel: 2,       // pitcher Set, handR, at 47 px
+  pitchHandPath: 45,      // pitcher Pitch, handR path length, at 47 px
+  pitchHandRise: 20,      // pitcher Pitch, handR max y minus min y
+  pitchFootLift: 10,      // pitcher Pitch, the foot that leaves the ground
+  pitchEarlyMove: 2,      // pitcher Pitch, handR movement inside the first 20% of the clip
+};
+
+console.log('\n=== chromium half: motion at the real on-screen sizes (stage 6) ===');
+async function runMotionHalf() {
+  if (!existsSync(MODEL_PATH)) { skipLine('motion half', `${MODEL_PATH} does not exist yet`); return; }
+  let chromium;
+  try { ({ chromium } = await import('playwright-core')); } catch { skipLine('motion half', "optional dependency 'playwright-core' not installed - run from the repo root"); return; }
+  try {
+    const r = await fetch('http://localhost:8123/', { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) throw new Error('bad status');
+  } catch { skipLine('motion half', 'dev server not reachable at http://localhost:8123 - run: node server.mjs'); return; }
+
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--use-gl=swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 500, height: 500 } });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await page.goto('http://localhost:8123/', { waitUntil: 'domcontentloaded' });
+
+  const measured = await page.evaluate(async () => {
+    const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } = await import('/baseball/js/actors.js');
+    const wrap = document.createElement('div');
+    const W = 400, H = 400;
+    wrap.style.cssText = `position:fixed; left:0; top:0; width:${W}px; height:${H}px;`;
+    document.body.appendChild(wrap);
+    const actors = new Actors(wrap);
+    if (!actors.initGL()) return { error: 'initGL() returned false' };
+    await actors.load(`${location.origin}/baseball/models/player.glb`);
+    actors.resize(W, H, null);
+
+    // World position of a bone in CANVAS PIXELS, straight off its world matrix (no THREE import
+    // needed, and no dependence on anything the renderer does): elements 12/13/14 are the
+    // translation, and screen y is world -y.
+    const at = (bone) => ({ x: bone.matrixWorld.elements[12], y: -bone.matrixWorld.elements[13] });
+    const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const run = (role, name, heightPx, facingRad) => {
+      const act = actors.actors[role];
+      actors.place(role, { anchor: { x: W / 2, y: H - 20 }, heightPx, facingRad });
+      act.mixer.stopAllAction();
+      act.current = null;                  // no cross-fade from whatever ran before this clip
+      actors.play(role, name);             // the real play(), with no markAtMs, so timeScale is 1
+      const a = act.actions[name];
+      if (!a) return { error: `no action "${name}" on ${role}` };
+      a.timeScale = 1;
+      const dur = a.getClip().duration;
+      const steps = Math.round(dur * 60);
+      const samples = [];
+      act.mixer.update(0);                 // settle the clip's own t=0 pose before the first sample
+      for (let i = 0; i <= steps; i++) {
+        if (i > 0) act.mixer.update(1 / 60);
+        act.pivot.updateMatrixWorld(true);
+        samples.push({ t: i / 60, handR: at(act.bones.handR), footL: at(act.bones.footL), footR: at(act.bones.footR), hips: at(act.bones.hips) });
+      }
+      act.mixer.stopAllAction();
+      const stat = (key) => {
+        const pts = samples.map((s) => s[key]);
+        let travel = 0, path = 0;
+        for (let i = 0; i < pts.length; i++) {
+          if (i) path += d2(pts[i], pts[i - 1]);
+          for (let j = i + 1; j < pts.length; j++) travel = Math.max(travel, d2(pts[i], pts[j]));
+        }
+        const ys = pts.map((p) => p.y);
+        return { travel, path, rise: Math.max(...ys) - Math.min(...ys) };
+      };
+      const n20 = Math.max(1, Math.round(samples.length * 0.2));
+      let early = 0;
+      for (let i = 1; i <= n20 && i < samples.length; i++) early = Math.max(early, d2(samples[i].handR, samples[0].handR));
+      return { role, name, heightPx, dur, frames: samples.length,
+        handR: stat('handR'), hips: stat('hips'), footL: stat('footL'), footR: stat('footR'), early };
+    };
+
+    const out = {
+      idle: run('batter', 'Idle', 214, BATTER_FACING_RAD),
+      swing: run('batter', 'Swing', 214, BATTER_FACING_RAD),
+      miss: run('batter', 'Miss', 214, BATTER_FACING_RAD),
+      set: run('pitcher', 'Set', 47, PITCHER_FACING_RAD),
+      pitch: run('pitcher', 'Pitch', 47, PITCHER_FACING_RAD),
+    };
+    actors.dispose();
+    wrap.remove();
+    return out;
+  });
+
+  await browser.close();
+  if (pageErrors.length) fail('motion: no console error', pageErrors.join(' | '));
+  if (measured.error) { fail('motion half', measured.error); return; }
+
+  const n = (v) => v.toFixed(1);
+  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch']) {
+    const m = measured[k];
+    if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue;
+    }
+    console.log(`      ${m.role}/${m.name} at ${m.heightPx}px, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
+    console.log(`         handR travel ${n(m.handR.travel)}px  path ${n(m.handR.path)}px  rise ${n(m.handR.rise)}px  first-20% ${n(m.early)}px`);
+    console.log(`         hips travel ${n(m.hips.travel)}px  footL lift ${n(m.footL.rise)}px  footR lift ${n(m.footR.rise)}px`);
+  }
+
+  const check = (label, got, floor) => {
+    if (got >= floor) ok(`${label}: ${n(got)}px (floor ${floor}px)`);
+    else fail(label, `${n(got)}px, below the ${floor}px floor - the clip reads as a still picture at the size it is drawn`);
+  };
+  check('Idle (batter, 214px): handR travel', measured.idle.handR.travel, MOTION_FLOORS.idleHandTravel);
+  // The hips must carry part of it: an idle whose hands move while the body stands still is the
+  // "flat image" defect wearing a wave.
+  if (measured.idle.hips.travel > 2) ok(`Idle (batter, 214px): hips shift ${n(measured.idle.hips.travel)}px`);
+  else fail('Idle hips shift', `${n(measured.idle.hips.travel)}px - the weight shift is not moving the body`);
+  check('Set (pitcher, 47px): handR travel', measured.set.handR.travel, MOTION_FLOORS.setHandTravel);
+  check('Pitch (pitcher, 47px): handR path length', measured.pitch.handR.path, MOTION_FLOORS.pitchHandPath);
+  check('Pitch (pitcher, 47px): handR vertical range', measured.pitch.handR.rise, MOTION_FLOORS.pitchHandRise);
+  check('Pitch (pitcher, 47px): front-foot lift', Math.max(measured.pitch.footL.rise, measured.pitch.footR.rise), MOTION_FLOORS.pitchFootLift);
+  check('Pitch (pitcher, 47px): handR moves inside the first 20% of the clip', measured.pitch.early, MOTION_FLOORS.pitchEarlyMove);
+
+}
+
+// Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
+// batter is already standing in. Checked as poses, not as pixels, so it runs with no browser: the
+// first key of each swing clip must equal Idle's own t=0 key, bone for bone.
+for (const name of ['Swing', 'Miss']) {
+  const rest = JSON.stringify(CLIPS.Idle.keys[0].pose), restHips = JSON.stringify(CLIPS.Idle.keys[0].hipsOffset || null);
+  const first = JSON.stringify(CLIPS[name].keys[0].pose), firstHips = JSON.stringify(CLIPS[name].keys[0].hipsOffset || null);
+  if (rest === first && restHips === firstHips) ok(`${name} opens on Idle's resting pose (no cross-fade needed to start it)`);
+  else fail(`${name} first keyframe`, `differs from Idle's t=0 pose, so starting it with no cross-fade would pop\n      Idle: ${rest}\n      ${name}: ${first}`);
+}
+
+await runMotionHalf();
 
 // r2-cadence (docs/BASEBALL-3D-BUILD.md section 3.9: "re-run that suite; do not reimplement it") -
 // test-baseball-device.mjs is the one place that measures it; this just proves it still passes with

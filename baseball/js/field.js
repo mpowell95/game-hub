@@ -674,6 +674,12 @@ export function planGeometry() {
 // awaiting anything mid-frame.
 const IMG_BASE = new URL('../img/', import.meta.url);
 const _plateImages = {};
+// STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 7): `_plateImages[name]` only ever holds an
+// Image once it has LOADED (it starts `null` and `_loadImg`'s own `onload` fills it in) - `plateReady()`
+// needs a handle to the in-flight Image itself, before that resolves, so it can call `decode()` on
+// the SAME element `_loadImg` created rather than starting a second, wasted fetch. Kept as its own
+// map (never exported) so nothing outside this file has to know the distinction.
+const _plateImgElements = {};
 function _loadImg(name) {
   if (name in _plateImages) return;
   // BB-3b commit 5: `project()` now reaches this function (via `projectOverhead`), and
@@ -684,6 +690,7 @@ function _loadImg(name) {
   if (typeof Image === 'undefined') return;
   _plateImages[name] = null;
   const image = new Image();
+  _plateImgElements[name] = image;
   image.onload = () => { _plateImages[name] = image; };
   image.onerror = () => { /* leaves it null; drawPlateView's fallback fill covers this */ };
   image.src = new URL(name, IMG_BASE).href;
@@ -705,6 +712,44 @@ const PLATE_IMAGE_NAMES = [
  *  frame or two, never throws. */
 export function preloadPlateImages() {
   for (const name of PLATE_IMAGE_NAMES) _loadImg(name);
+}
+// STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 7): "~1.1s of flat green after Play, and the
+// first wind-up starts under it." `preloadPlateImages()` only kicks the fetch off - a caller still
+// has no way to know when `plate.webp` has actually finished DECODING (bytes fetched is not pixels
+// ready to paint; `onload` fires before some engines have decoded anything to hand the compositor).
+// `plateReady()` is that promise: `ui.js` moves the preload call to Baseball's mount and awaits
+// this (capped at 3s) before the FIRST wind-up of a game, painting the static field the moment it
+// resolves rather than leaving the fallback fill up under the pitcher's first delivery.
+let _plateReadyPromise = null;
+export function plateReady() {
+  if (_plateReadyPromise) return _plateReadyPromise;
+  _plateReadyPromise = new Promise((resolve) => {
+    // No DOM (a node test importing this module) - nothing to decode, resolve immediately rather
+    // than hang a test that never runs a browser event loop.
+    if (typeof Image === 'undefined') { resolve(); return; }
+    _loadImg('plate.webp');
+    const im = _plateImgElements['plate.webp'];
+    if (!im || im.naturalWidth || im.width) { resolve(); return; } // already decoded (or no Image at all - resolve rather than hang)
+    // `_plateImages['plate.webp']` (what `plateCover()`/`plateImg()` actually read) is set by
+    // `_loadImg`'s own `onload` handler - a SEPARATE notification from `decode()` below, with no
+    // guaranteed ordering between the two. `decode()` resolving before `onload` has run left
+    // `plateCover()` still returning null (the fallback-fill branch) for a few more frames after
+    // this promise had already resolved - measured live via `test-baseball-device.mjs`'s own
+    // preload check (the wind-up's Pitch call landed before the picture the sky-pixel check could
+    // see). Stamping the cache here, from the same Image reference this function already holds,
+    // makes the two signals agree by construction instead of racing.
+    const settle = () => { _plateImages['plate.webp'] = im; resolve(); };
+    if (im.decode) {
+      // decode() is what actually proves pixels are ready to paint, not merely fetched - the
+      // reason this exists instead of a plain `onload` wait (see this block's own header).
+      im.decode().then(settle, settle);
+    } else {
+      const prevOnload = im.onload, prevOnerror = im.onerror;
+      im.onload = (e) => { if (prevOnload) prevOnload(e); settle(); };
+      im.onerror = (e) => { if (prevOnerror) prevOnerror(e); settle(); };
+    }
+  });
+  return _plateReadyPromise;
 }
 function plateImg(name) {
   if (!(name in _plateImages)) _loadImg(name);
@@ -915,6 +960,6 @@ export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
 
 export default {
   project, drawField, drawBall, drawLandingMarker, planGeometry,
-  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, zoneRect, plateBallPos,
+  preloadPlateImages, plateReady, PLATE_ANCHORS, drawPlateView, drawPlateBall, zoneRect, plateBallPos,
   plateCover, anchorPx, NEAR_BATTER_HEIGHT_FRAC, MOUND_PITCHER_HEIGHT_FRAC, BATTER_AIM_TRAVEL_FRAC,
 };
