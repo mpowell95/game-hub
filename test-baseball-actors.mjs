@@ -247,7 +247,16 @@ else fail('CLIPS.Set.keys', 'empty - stage 3 owes Set (docs/BASEBALL-3D-BUILD.md
   // The actor calls that carry each pitch/swing signal (section 3.6's own mapping table).
   const wantCalls = [
     [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *WINDUP_MS *\}\)/, '_stepWindup calls actors.play(\'pitcher\',\'Pitch\',{markAtMs:WINDUP_MS})'],
-    [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *0 *\}\)/, "HumanAgent.decidePitch's release calls actors.play('pitcher','Pitch',{markAtMs:0})"],
+    // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2) SUPERSEDES this row: Matt: "I should tap
+    // it to start it then tap again to stop it." The wind-up now starts on the FIRST tap
+    // (`play('pitcher','Pitch',{markAtMs:meterMs,holdAtMark:true})`, checked separately below) and
+    // HOLDS at its release keyframe until the second tap, which calls `actors.release('pitcher')`
+    // instead of seeking there directly - see actors.js's own `release()` header for why a single
+    // call covers both the ordinary (already paused at the hold) and early-release (still
+    // travelling toward it) cases. The literal markAtMs:0 seek this row used to assert is gone by
+    // design.
+    [/actors\.release\('pitcher'\)/, "HumanAgent.decidePitch's release calls actors.release('pitcher')"],
+    [/actors\.play\('pitcher', 'Pitch', \{ *markAtMs: *meterMs, *holdAtMark: *true *\}\)/, "HumanAgent.decidePitch's first tap calls actors.play('pitcher','Pitch',{markAtMs:meterMs,holdAtMark:true})"],
     [/actors\.play\('batter', 'Swing', \{ *markAtMs: *80, *fade: *0 *\}\)/, "the swing decision calls actors.play('batter','Swing',{markAtMs:80,fade:0})"],
     [/actors\.setBall\(/, 'the pitch flight calls actors.setBall(...)'],
     [/actors\.setBatter\(\{/, '_syncActors calls actors.setBatter({...})'],

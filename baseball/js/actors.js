@@ -458,21 +458,50 @@ export class Actors {
    *  very frame it starts rather than dissolving in over 150ms - a swing is a snap, never a blend.
    *  `fade: 0` still goes through `crossFadeTo` (three.js resolves a zero-duration fade by setting
    *  the target weight immediately, the same call shape as every other duration), so there is only
-   *  one code path here, not two. */
-  play(role, name, { markAtMs = null, fade } = {}) {
+   *  one code path here, not two.
+   *  STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2): `holdAtMark` - the delivery reaches its
+   *  `mark` keyframe and STOPS there instead of playing through, so the human pitcher's own
+   *  wind-up can be tied to their SECOND tap rather than a fixed lead-in. `actor.holdAt` (the
+   *  instant, in the clip's own timeline, to freeze at) is read every frame by `start()`'s own tick
+   *  loop, below - stored on the actor (not the action) because `release()` needs it back after the
+   *  hold and a THREE.AnimationAction carries no field of its own for it. Every `play()` call clears
+   *  it (to `null` when `holdAtMark` isn't asked for) and resets `a.paused`, so `idle()`/`toSet()`/
+   *  any other clip change always leaves a clean slate - a hold from a PREVIOUS turn can never leak
+   *  into a new one. */
+  play(role, name, { markAtMs = null, fade, holdAtMark = false } = {}) {
     const actor = this.actors[role]; const a = actor && actor.actions[name];
     if (!a) return;
     const def = CLIPS[name];
     a.reset(); a.enabled = true; a.setEffectiveWeight(1);
+    a.paused = false;
     if (def && def.mark != null && markAtMs != null) {
       if (markAtMs <= 0) { a.time = def.mark; a.timeScale = 1; }
       else a.timeScale = def.mark / (markAtMs / 1000);
     } else a.timeScale = 1;
+    actor.holdAt = (holdAtMark && def && def.mark != null) ? def.mark : null;
     const fadeS = fade != null ? fade : CROSSFADE_S;
     if (actor.current && actor.current !== a) actor.current.crossFadeTo(a, fadeS, false);
     a.play(); actor.current = a;
   }
   idle(role) { this.play(role, role === 'pitcher' ? 'Set' : 'Idle'); }
+  /** STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 2): the human's own tap-to-release, paired
+   *  with `play()`'s `holdAtMark`. Two cases, unified by one assignment: the wind-up may already be
+   *  PAUSED at `actor.holdAt` (the ordinary case - the meter's own top was reached and the clip
+   *  stopped there to wait for this tap), in which case setting `a.time` to the value it already
+   *  holds is a no-op; or it may still be TRAVELLING toward the mark (an early tap, well inside the
+   *  meter), in which case this jumps it there. Either way the ball has to leave the hand AT the
+   *  release pose (R1, `HANDOFF-BASEBALL-3B.md`), never wherever the clip happened to be - the same
+   *  jump `play(..., { markAtMs: 0 })` already makes for the CPU's own delivery. A no-op when this
+   *  role never had a hold to release (nothing to clear). */
+  release(role) {
+    const actor = this.actors[role];
+    const a = actor && actor.current;
+    if (!a || !actor || actor.holdAt == null) return;
+    a.time = actor.holdAt;
+    a.paused = false;
+    a.timeScale = 1;
+    actor.holdAt = null;
+  }
   /** STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 3): the pitcher's own return-to-set beat,
    *  after a delivery's follow-through has been allowed to play out - never called at release, only
    *  once the ball has actually left the scene. A named helper instead of a bare
@@ -561,7 +590,20 @@ export class Actors {
         const dt = Math.min(0.05, (now - this._last) / 1000);
         this._last = now;
         this._lastRender = now;
-        for (const a of Object.values(this.actors)) if (a) a.mixer.update(dt);
+        for (const actor of Object.values(this.actors)) {
+          if (!actor) continue;
+          actor.mixer.update(dt);
+          // STAGE 8 row 2's HOLD: checked every frame, after the mixer has already advanced this
+          // actor's clip - the instant `a.time` reaches `actor.holdAt` (set by `play(...,
+          // {holdAtMark:true})`), freeze it there rather than letting it play through. `release()`
+          // is the only way `actor.holdAt` clears once set, so this keeps re-clamping every frame
+          // for as long as the player keeps holding (arbitrarily long - nothing times it out).
+          const a = actor.current;
+          if (a && actor.holdAt != null && a.time >= actor.holdAt) {
+            a.paused = true;
+            a.time = actor.holdAt;
+          }
+        }
         this.renderer.render(this.scene, this.camera);
       }
       this._raf = requestAnimationFrame(tick);

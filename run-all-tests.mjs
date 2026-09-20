@@ -64,6 +64,12 @@ const SUITES = [
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
   { file: 'baseball/js/test.js' },
+  // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8): the pitch meter's own geometry against the real
+  // flyPitch - born red against the pre-stage-8 ring.js (see the file's own header). NOTE: this sits
+  // "beside test-baseball-actors.mjs" per the stage 8 instruction, but that file is not actually
+  // registered here despite root CLAUDE.md's tooling table saying its node half is - a pre-existing
+  // gap outside this stage's scope (reported, not fixed).
+  { file: 'test-baseball-ring.mjs' },
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'test-emoji.mjs' },

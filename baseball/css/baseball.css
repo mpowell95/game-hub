@@ -259,7 +259,10 @@
 }
 .bb-pop.is-on { animation: bb-pop-rise 1800ms ease-out forwards; }
 .bb-pop.is-perfect, .bb-pop.is-nice { color: #ffce3a; }
-.bb-pop.is-hung { color: #cfd6e2; }
+/* STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 6): .bb-pop.is-hung removed - a release past
+ * the meter now pops with kind 'late' (v_hung's own word became "Late"/"Tarde"), which reads in
+ * the same default white as every other non-gold word (the (right-arrow) chevron is the cue, not a
+ * colour); nothing sets kind 'hung' on this element any more. */
 @keyframes bb-pop-rise {
   0%   { opacity: 0; transform: translate(-50%, 8px) scale(0.85); }
   12%  { opacity: 1; transform: translate(-50%, 0) scale(1.06); }

@@ -64,7 +64,11 @@ export const STRINGS = {
     v_late: 'Late',
     v_perfect: 'Perfect',
     v_nice: 'Nice',
-    v_hung: 'Hung',
+    // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 6): Matt, on v859: "What does 'Hung' mean
+    // when I'm pitching?" - the same word batting already teaches for a late swing (see `v_late`
+    // above), so a release past the meter's own top reads with vocabulary the player already has.
+    // The key stays `v_hung` - only the word changes.
+    v_hung: 'Late',
     cancel: 'Cancel',
     leave: 'Leave',
     half_end: 'Side retired',
@@ -130,7 +134,7 @@ export const STRINGS = {
     v_late: 'Tarde',
     v_perfect: 'Perfecto',
     v_nice: 'Genial',
-    v_hung: 'Colgado',
+    v_hung: 'Tarde', // STAGE 8 row 6: same word as v_late above, same reasoning as the EN dict
     cancel: 'Cancelar',
     leave: 'Salir',
     half_end: 'Fin de la entrada',

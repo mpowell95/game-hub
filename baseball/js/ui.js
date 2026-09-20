@@ -20,7 +20,7 @@ import {
   PLATE_ANCHORS, plateCover, anchorPx, plateBallPos, zoneRect,
   NEAR_BATTER_HEIGHT_FRAC, MOUND_PITCHER_HEIGHT_FRAC, BATTER_AIM_TRAVEL_FRAC,
 } from './field.js';
-import { drawRingState, RING_D, BTN_D, NICE_CENTER, NICE_HALF } from './ring.js';
+import { drawRingState, RING_D, BTN_D, NICE_START, NICE_END } from './ring.js';
 // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer. Loaded eagerly, not lazily -
 // unlike Boggle's dictionary, this is the PRIMARY visual for the live play screen, not an optional
 // extra, so there is no "first play only" moment to defer it past; ui.js itself is only requested
@@ -76,6 +76,18 @@ const FLIGHT_MS = 1000;        // the overhead ball flight (was 700)
 const MARKER_HOLD_MS = 1000;   // the landing marker's own hold before the cut back to the plate
 const PITCHER_RETURN_MS = 400; // ball-crosses-plate -> actors.toSet() (both the CPU's pitch and the human's own)
 const PLATE_READY_CAP_MS = 3000; // the first wind-up's own cap on waiting for plate.webp to decode
+
+// STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 3): Matt, on v859: "you can't see where the
+// ball goes" applied to the PLATE view too - the 3D ball vanished the instant it crossed, so a
+// take (a called ball/strike) never showed WHERE it crossed relative to the zone, only the big word
+// after the fact. The ball now HOLDS at its crossing point for this long before hiding - long
+// enough to read against the zone rectangle, short enough to stay inside the beat's own budget
+// (`_contactHold` below still takes the ball over immediately on a ball IN PLAY, per its own
+// header). Orchestrator's review of the live probe: the verdict (and the big word) lands about
+// 250 ms AFTER the crossing (`decideSwing`'s own take timeout), so a 600 ms hold left the ball
+// and the word together for ~350 ms - the ball now stays exactly as long as the word does
+// (RESULT_MS), so what the word says and where the ball sits are readable in the same look.
+const CROSSING_HOLD_MS = RESULT_MS;
 
 // STAGE 4: field.js now exports NEAR_BATTER_HEIGHT_FRAC/MOUND_PITCHER_HEIGHT_FRAC (see the import
 // above) - the dev-only 3D preview (_open3DCheck) used to carry its own mirrored copy here
@@ -310,7 +322,10 @@ class BaseballPlayScreen {
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
     if (this._contactRaf) cancelAnimationFrame(this._contactRaf);
-    if (this._markerTimer) clearTimeout(this._markerTimer);
+    // STAGE 8 row 4: the marker hold is a rAF loop now (it redraws the pulse ring), not a bare
+    // setTimeout - `_markerTimer` is gone, `_markerRaf` is what a mid-hold destroy must cancel.
+    if (this._markerRaf) cancelAnimationFrame(this._markerRaf);
+    if (this._crossingHideTimer) clearTimeout(this._crossingHideTimer);
     if (this._pitcherReturnTimer) clearTimeout(this._pitcherReturnTimer);
     if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
@@ -444,10 +459,28 @@ class BaseballPlayScreen {
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
       pendingPitchType: null, // Line 2's readout - see _pitchReadout
+      pendingPitch: null, // STAGE 8 row 5: the strip's own tile, staged at decideSwing, pushed at crossing - see _flushPendingPitch
     };
     this.gameAbort = () => { if (this.game) this.game.abort(); };
     // STAGE 7: preloadPlateImages() moved to the constructor (Baseball's mount) - see its own
     // comment there.
+    // STAGE 8 test seam (docs/BASEBALL-3D-BUILD.md section 8): dev-profile only (`this.dev`, same
+    // gate `__bbDevForce` already uses), a no-op otherwise. `test-baseball-device.mjs`'s
+    // tap-tap-pitch probe needs the human's OWN pitching turn, which the top half of an inning
+    // never starts on - this reaches it without first playing through a whole half-inning of takes.
+    // `this.game.half` is read fresh at the top of every `playAtBat()` (`baseball/js/engine/
+    // game.js`), only TWO awaits after `playGame()` is called below (`emit('gameStart')` then
+    // `emit('halfInningStart')`) - both can resolve before a test's own separate `page.evaluate()`
+    // round-trip ever reaches the page, so `window.__bbForceHalfNext` (set by the test, in the SAME
+    // evaluate call that taps Play, before this method even runs) is applied here SYNCHRONOUSLY,
+    // in the same tick `this.game` is created - the only timing that is guaranteed safe.
+    // `window.__bbTest.forceHalf` is also exposed for a later, explicit call (defensive/idempotent
+    // - reapplying the same half is a no-op).
+    if (this.dev) {
+      const forceHalf = (h) => { if (this.game) this.game.half = h; };
+      if (window.__bbForceHalfNext) { forceHalf(window.__bbForceHalfNext); window.__bbForceHalfNext = null; }
+      window.__bbTest = { forceHalf };
+    }
 
     this.screen = 'play';
     this._renderPlay();
@@ -784,6 +817,23 @@ class BaseballPlayScreen {
     }
   }
 
+  /** STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 5): moves the strip's own push from the
+   *  pitch DECISION (`decideSwing`, before the wind-up even starts) to plate CROSSING - Matt's
+   *  report: the tile (type, mph AND the (bullet)/(square) result mark) was on screen before the
+   *  pitch was even thrown, reading as precognition. `decideSwing` now only stages the incoming
+   *  pitch in `state.pendingPitch`; this is the one place that actually pushes it into
+   *  `state.lastPitches` and repaints, called from BOTH 'count' and 'atBatEnd' (whichever one
+   *  resolves this exact pitch - see `_onEngineEvent`'s own header on why a strikeout/walk pitch
+   *  fires both). Clearing `pendingPitch` after the first push is what stops that same pitch being
+   *  pushed twice. A no-op outside batting mode (pitching mode never sets `pendingPitch` at all). */
+  _flushPendingPitch() {
+    if (this.state.mode === 'batting' && this.state.pendingPitch) {
+      this.state.lastPitches.push(this.state.pendingPitch);
+      this.state.pendingPitch = null;
+      this._paintStrip();
+    }
+  }
+
   // -------------------------------------------------------------------------------- control band
   _paintControl() {
     const control = this.rootEl.querySelector('[data-role="control"]');
@@ -948,7 +998,19 @@ class BaseballPlayScreen {
       this._paintHud();
       this._setLine1(this._verdictWord(payload.verdict, payload.timingWord));
       this._setLine2(this._pitchReadout());
-      if (payload.timingWord) this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+      // STAGE 8 row 5: the strip tile (type, mph AND the (bullet)/(square) result mark) is pushed
+      // and painted HERE, at plate crossing - the same moment Line 2 already paints - never at the
+      // pitch DECISION (`decideSwing`'s own header explains why that read as precognition).
+      this._flushPendingPitch();
+      if (payload.timingWord) {
+        this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+      } else if (payload.verdict === 'ball') {
+        this._showPop(t('v_ball'), 'ball');
+      } else if (payload.verdict === 'strike') {
+        this._showPop(t('v_strike'), 'strike');
+      } else if (payload.verdict === 'foul') {
+        this._showPop(t('v_foul'), 'foul');
+      }
       // R2 (handoff section 5): "the verdict holds for resultMs, then betweenMs passes, then the
       // wind-up runs for windupMs, then the flight." `_settleAtBat` already applies the same
       // result-hold + between-pitch gap when a pitch CONCLUDES the at-bat; this is the other
@@ -1019,7 +1081,12 @@ class BaseballPlayScreen {
   _showPop(word, kind) {
     const el = this.rootEl && this.rootEl.querySelector('[data-role="pop"]');
     if (!el) return;
-    const mark = kind === 'early' ? '\u25C0 ' : (kind === 'perfect' || kind === 'nice') ? '\u2605 ' : '';
+    // STAGE 8 row 3: Ball/Strike carry the SAME shape marks the strip already uses for them (\u25CF/\u25A0,
+    // baseball.css's `.bb-pitch-tile`) so the big word and the strip agree at a glance - color is
+    // never the only cue (root CLAUDE.md's colorblind-safe rule). Foul keeps its own word alone
+    // (it was never a shape in the strip either).
+    const mark = kind === 'early' ? '\u25C0 ' : (kind === 'perfect' || kind === 'nice') ? '\u2605 '
+      : kind === 'ball' ? '\u25CF ' : kind === 'strike' ? '\u25A0 ' : '';
     const tail = kind === 'late' ? ' \u25B6' : '';
     el.textContent = mark + word + tail;
     el.className = 'bb-pop is-' + kind;
@@ -1066,7 +1133,19 @@ class BaseballPlayScreen {
     let word = t('res_' + outcomeWord(outKind, payload.bases));
     this._setLine1(word);
     this._setLine2(this._pitchReadout());
-    if (payload.timingWord) this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+    // STAGE 8 row 5: same push point as the 'count' handler - this is the OTHER moment Line 2
+    // paints (a pitch that concludes the at-bat gets 'atBatEnd', not 'count'), so the strip tile
+    // still lands at crossing either way. `_flushPendingPitch` no-ops if 'count' already flushed it
+    // for this exact pitch (the strikeout/walk double-fire case, its own header).
+    this._flushPendingPitch();
+    // STAGE 8 row 3: only a ball IN PLAY pops from here. game.js emits 'count' BEFORE 'atBatEnd'
+    // on the exact same pitch for a strikeout or a walk (that handler's own header), and 'count'
+    // already popped that pitch's word (the timing word, or Strike/Ball for a take) - popping it
+    // again here restarted the same word's animation a few ms later, a visible flicker. A ball in
+    // play never gets a 'count' event, so its timing word is popped here and nowhere else.
+    if (inPlay && payload.timingWord) {
+      this._showPop(t('v_' + payload.timingWord), payload.timingWord);
+    }
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
     if (inPlay) {
       const isOut = /out$/.test(outKind) || outKind === 'strikeout';
@@ -1078,7 +1157,11 @@ class BaseballPlayScreen {
       await this._contactHold();
       // THE OVERHEAD, RE-PARTITIONED (row 5): flight, then the landing marker's own hold, then
       // `_returnToPlate()` (which clears the cutaway flag and repaints the plate view).
-      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases));
+      // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 4): `battedKind`/`distanceFt` ride along
+      // so the overhead flight can tell a grounder from a fly ball and size the lift by how far it
+      // actually carried - `game.js`'s own `_onEngineEvent`/`atBatEnd` payload already carries both
+      // (`swingResult.kind`, `outcome.distanceFt`).
+      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt);
       // Book-keeping (section 7's own paragraph): 0.4 hold + 1.0 flight + 1.0 marker + 2.4 on the
       // plate = 4.8s = RESULT_MS + BETWEEN_MS - computed FROM those two constants, never a literal
       // 4800, so a settings change still flows through. The between beat is skipped at the end of a
@@ -1108,6 +1191,13 @@ class BaseballPlayScreen {
    *  the zone's own center if nothing was ever set) up and away toward the mound, shrinking from
    *  its crossing size to about 3px, then hidden. */
   _contactHold() {
+    // STAGE 8 row 3: a ball in play still crosses first (it is, after all, a pitch) - the CROSSING
+    // HOLD's own hide timer (`_animatePitchFlight`'s resolve / `HumanAgent.decidePitch`'s own
+    // `finishFlight`) may already be counting down toward `_actorBallHide()` when contact takes the
+    // ball over. Cancel it here, before anything else, so that hide can never fire out from under
+    // this hold's own animation (`lastBallPx()` below would then read a ball that had already
+    // vanished mid-flight-to-the-mound).
+    if (this._crossingHideTimer) { clearTimeout(this._crossingHideTimer); this._crossingHideTimer = null; }
     return new Promise((resolve) => {
       if (this.destroyed || !this.actors) { resolve(); return; }
       const cover = plateCover(this._fieldW, this._fieldH);
@@ -1149,32 +1239,68 @@ class BaseballPlayScreen {
    *  guard); the 3D layer is out of place here entirely (its figures are anchored to the plate
    *  camera's picture, not this one), so it is paused and hidden for the cutaway's WHOLE duration -
    *  see THE CUTAWAY FLAG (`_cutawayUp`, set here, cleared only by `_returnToPlate()`). */
-  _animateBattedBall(xFt, yFt, kind, label) {
+  /** STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 4): Matt, on v859's recording: "After
+   *  contact, it goes to the Birds Eye view, but you can't see where the ball goes or lands or
+   *  anything at all." The flight itself now lifts off a parabola (`liftPx`) instead of sliding
+   *  along the ground, with a shadow at the true ground point and a fading trail behind it - see
+   *  `field.js`'s own `drawBall` header for the full picture. `battedKind`/`distanceFt` (from the
+   *  engine's own `swingResult.kind`/`outcome.distanceFt`, ridden in on `_settleAtBat`'s payload)
+   *  size the apex: a grounder barely lifts, a fly/line/popup lifts more the farther it carries,
+   *  capped so a mammoth homer never flies off the top of the band. `battedKind` unset or anything
+   *  other than the engine's own `'ground'` value is treated as a fly ball - never a throw over an
+   *  outcome this function doesn't recognize. */
+  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt) {
     this._cutawayUp = true;
     this._hideActors();
     return new Promise((resolve) => {
       const dur = FLIGHT_MS;
       const t0 = performance.now();
+      const apexPx = (battedKind === 'ground' ? 0.03 : Math.min(0.22, (distanceFt || 0) / 1800)) * this._fieldH;
+      const trail = [];
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
         this._drawOverheadField();
-        drawBall(this.ctx, this._fieldW, this._fieldH, xFt * frac, yFt * frac, { baseRadius: 7 });
+        const gx = xFt * frac, gy = yFt * frac;
+        const lift = apexPx * 4 * frac * (1 - frac);
+        drawBall(this.ctx, this._fieldW, this._fieldH, gx, gy, { baseRadius: 9, liftPx: lift, trail: trail.slice() });
+        const gp = project(gx, gy, this._fieldW, this._fieldH);
+        trail.push({ x: gp.x, y: gp.y });
+        if (trail.length > 6) trail.shift();
         if (frac < 1) {
           this._rafBall = requestAnimationFrame(step);
         } else {
-          drawLandingMarker(this.ctx, this._fieldW, this._fieldH, xFt, yFt, kind, label, document.documentElement.classList.contains('gh-dark'));
-          // THE MARKER HOLD (row 5): stays up MARKER_HOLD_MS before the cut back - `_returnToPlate()`
-          // is the only thing that clears `_cutawayUp`.
-          this._markerTimer = setTimeout(() => {
-            if (this.destroyed) return resolve();
-            this._returnToPlate();
-            resolve();
-          }, MARKER_HOLD_MS);
+          this._runMarkerHold(xFt, yFt, kind, label, resolve);
         }
       };
       this._rafBall = requestAnimationFrame(step);
     });
+  }
+
+  /** THE MARKER HOLD (row 5), redrawn every frame (STAGE 8 row 4) so `field.js`'s `drawLandingMarker`
+   *  can animate its own pulse ring (`opts.pulseT`, two pulses across `MARKER_HOLD_MS`) instead of
+   *  the pre-stage-8 shape (a single draw under a bare `setTimeout`, the marker frozen for the whole
+   *  hold). `_returnToPlate()` (the only thing that clears `_cutawayUp`) still runs once, at the end
+   *  of the hold, exactly as before. Reduced motion: `pulseT` is withheld, so `drawLandingMarker`
+   *  draws the static marker only - same total hold, no moving ring. */
+  _runMarkerHold(xFt, yFt, kind, label, resolve) {
+    const dur = MARKER_HOLD_MS;
+    const t0 = performance.now();
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const step = (now) => {
+      if (this.destroyed) return resolve();
+      const elapsed = now - t0;
+      const dark = document.documentElement.classList.contains('gh-dark');
+      this._drawOverheadField();
+      drawLandingMarker(this.ctx, this._fieldW, this._fieldH, xFt, yFt, kind, label, dark, reduced ? {} : { pulseT: Math.min(1, elapsed / dur) });
+      if (elapsed < dur) {
+        this._markerRaf = requestAnimationFrame(step);
+      } else {
+        this._returnToPlate();
+        resolve();
+      }
+    };
+    this._markerRaf = requestAnimationFrame(step);
   }
 
   /** The pitch, through the plate camera, while batting: the ball starts far (at the mound) and
@@ -1195,7 +1321,15 @@ class BaseballPlayScreen {
       const t0 = performance.now();
       this._flightActive = true;
       const resolve = () => {
-        this._actorBallHide();
+        // STAGE 8 row 3 (THE CROSSING HOLD): leave the ball exactly where it crossed
+        // (`setBall`/`plateBallPos` already left it there) instead of hiding it this same frame, so
+        // a take's big word (Ball/Strike/Foul) has something to point at. `_contactHold` cancels
+        // this if a ball IN PLAY takes the ball over first - see its own header.
+        if (this._crossingHideTimer) clearTimeout(this._crossingHideTimer);
+        this._crossingHideTimer = setTimeout(() => {
+          this._crossingHideTimer = null;
+          if (!this.destroyed) this._actorBallHide();
+        }, CROSSING_HOLD_MS);
         this._flightActive = false;
         // THE PITCHER RETURNS TO SET (stage 7, docs/BASEBALL-3D-BUILD.md section 7, row 3): the
         // CPU's own delivery cross-fades back to Set PITCHER_RETURN_MS after the ball crosses the
@@ -1557,33 +1691,35 @@ class HumanAgent {
     s._setLine1(''); s._setLine2('');
     s._drawStaticField(); // cut back to the plate camera - the last at-bat may have left the
                            // overhead cutaway up (_animateBattedBall)
+    // STAGE 8 row 2: Matt, on v859: "that pitch meter thing starts with no warning. I should tap
+    // it to start it then tap again to stop it." Nothing ticks and the pitcher stays on Set until
+    // the player's own first tap - the ring paints idle (with the Nice zone ticks/diamond already
+    // visible, ring.js's own row-2 change, so the target is known before the fill even starts).
+    s._paintRing('idle', 0);
 
     return new Promise((resolve) => {
       let steerSamples = [];
       const dtS = SETTINGS.FEEL.engine.dtS;
       const meterMs = SETTINGS.FEEL.engine.meterTime;
-      const hangGraceMs = meterMs * SETTINGS.HANG_GRACE_FRAC;
-      s._paintRing('filling', 0);
-      let raf;
+      let raf = null;
+      let started = false;
       let released = false;
-      const start = performance.now();
+      let start = 0;
+
       // The pitcher steps set -> wind-up -> release IN TIME WITH the ring's own fill (spec
       // section 8), not a separate fixed delay the way the CPU's own pitch-to-a-human-batter case
       // uses (`_stepWindup`) - a human throwing controls the pace themselves via when they release.
       const tick = (now) => {
-        if (s.destroyed) return;
+        if (s.destroyed || released) return;
         const elapsed = now - start;
         const frac = elapsed / meterMs;
-        if (elapsed > meterMs) {
-          s._paintRing('hung', Math.min(1, (elapsed - meterMs) / hangGraceMs));
-        } else if (frac >= NICE_CENTER - NICE_HALF) {
-          s._paintRing('nice', frac);
-        } else {
-          s._paintRing('filling', frac);
-        }
-        if (!released) raf = requestAnimationFrame(tick);
+        // STAGE 8 row 1: 'hung' now covers the WHOLE region past the top (frac > NICE_END) -
+        // ring.js's own geometry fix means a raw progress value (not a re-scaled grace fraction)
+        // is what draws correctly there, continuing the same clockwise fill past the top before it
+        // drains (ring.js's own header).
+        s._paintRing(frac > NICE_END ? 'hung' : (frac >= NICE_START ? 'nice' : 'filling'), frac);
+        raf = requestAnimationFrame(tick);
       };
-      raf = requestAnimationFrame(tick);
 
       s._onPadMove = () => { /* aim tracked via s.padX, sampled at release; also feeds steer once thrown */ };
 
@@ -1592,20 +1728,21 @@ class HumanAgent {
       // the air, so what the player watched during the throw is exactly what flyPitch scores once
       // this promise resolves (same hold, same steer array, same pre-rolled scatter draw).
       const finish = () => {
-        if (released) return;
+        if (released || !started) return;
         released = true;
-        cancelAnimationFrame(raf);
-        s._onMainUp = null;
+        if (raf) cancelAnimationFrame(raf);
+        s._onMainDown = null; s._onMainUp = null;
         const holdMs = performance.now() - start;
-        s._paintRing('released', Math.min(1.3, holdMs / meterMs));
-        // markAtMs:0 seeks straight to the release keyframe (poses.js's CLIPS.Pitch.mark) and
-        // plays forward from there at normal speed - the human controls WHEN this fires (their own
-        // release), unlike the CPU's fixed-lead-in _stepWindup, so there is no windup to time
-        // against; the clip's own follow-through tail (t=1.3) plays out over the flight that
-        // follows. This is also the release SIGNAL test-baseball-device.mjs's r2-cadence probe
-        // watches (call time + markAtMs) on the CPU-pitches-to-human path via `_stepWindup`'s own
-        // call - see its header.
-        s.actors.play('pitcher', 'Pitch', { markAtMs: 0 });
+        s._paintRing('released', Math.min(1 + SETTINGS.HANG_GRACE_FRAC + 0.3, holdMs / meterMs));
+        // STAGE 8 row 2: `actors.release('pitcher')` replaces the old release-by-seek call -
+        // the wind-up was told to HOLD at its release keyframe once it got there (`_onMainDown`'s
+        // first-tap branch, below), so this resumes it from wherever it actually is: paused at the
+        // hold (the ordinary case) or still travelling toward it (an early tap, well inside the
+        // meter - `release()`'s own header covers both). Either way the ball leaves exactly at the
+        // release pose (R1), and this is still the release SIGNAL test-baseball-device.mjs's
+        // r2-cadence probe watches on the CPU-pitches-to-human path (via `_stepWindup`'s own
+        // `markAtMs` call, unrelated to this one) - see that file's header.
+        s.actors.release('pitcher');
 
         const type = s.state.selectedPitch;
         const aimAtRelease = s.padX;
@@ -1623,7 +1760,12 @@ class HumanAgent {
         } else if (holdMs > hangThresholdMs) {
           wasHang = true; speedMul = SETTINGS.HANG_SPEED_MULT; breakMul = SETTINGS.HANG_BREAK_MULT;
         }
-        if (wasNice) s._showPop(t('v_nice'), 'nice'); else if (wasHang) s._showPop(t('v_hung'), 'hung');
+        // STAGE 8 row 6: Matt: "What does 'Hung' mean when I'm pitching?" - the word is now "Late"
+        // (EN)/"Tarde" (ES), the SAME word batting already teaches for a late swing, with the same
+        // (right-arrow) chevron ('late' kind) - nobody has to learn a second vocabulary for one
+        // meter running past its own top. The string key stays `v_hung` (rule 5 doesn't apply to
+        // strings, but there is no reason to churn it either).
+        if (wasNice) s._showPop(t('v_nice'), 'nice'); else if (wasHang) s._showPop(t('v_hung'), 'late');
         const pitcher = this._ownPitcher();
         const cap = SETTINGS.CAPS[this.league] != null ? SETTINGS.CAPS[this.league] : SETTINGS.CAPS.majors;
         const skill01 = Math.max(0, Math.min(1, ((pitcher && pitcher.skills.pitchAcc) || 0) / cap));
@@ -1669,7 +1811,15 @@ class HumanAgent {
         };
         const finishFlight = () => {
           s._paintSteerArrow(false, 0);
-          s._actorBallHide();
+          // STAGE 8 row 3 (THE CROSSING HOLD): same rule as `_animatePitchFlight`'s own resolve -
+          // hold the ball at its crossing point rather than hiding it this same frame, so a called
+          // ball/strike on the human's OWN pitch also shows where it crossed. `_contactHold` cancels
+          // this if the pitch turns out to be put in play (own header).
+          if (s._crossingHideTimer) clearTimeout(s._crossingHideTimer);
+          s._crossingHideTimer = setTimeout(() => {
+            s._crossingHideTimer = null;
+            if (!s.destroyed) s._actorBallHide();
+          }, CROSSING_HOLD_MS);
           // THE PITCHER RETURNS TO SET (stage 7, docs/BASEBALL-3D-BUILD.md section 7, row 3): the
           // human's own delivery cross-fades back to Set PITCHER_RETURN_MS after the ball crosses -
           // same rule as the CPU's pitch (`_animatePitchFlight`'s own resolve). Also, in this
@@ -1689,7 +1839,22 @@ class HumanAgent {
         };
         s._flightRaf = requestAnimationFrame(flightStep);
       };
-      s._onMainUp = finish;
+      // STAGE 8 row 2: TAP TO START, TAP TO RELEASE. `_onMainUp` is ignored for this whole turn
+      // (the old auto-fill-from-entry / release-on-up shape); `_onMainDown` is a toggle - the
+      // FIRST down starts the fill and the wind-up together (the delivery is told to hold at its
+      // release keyframe exactly at the top of the meter, `holdAtMark`), the SECOND releases.
+      s._onMainDown = () => {
+        if (s.destroyed || released) return;
+        if (!started) {
+          started = true;
+          start = performance.now();
+          s.actors.play('pitcher', 'Pitch', { markAtMs: meterMs, holdAtMark: true });
+          raf = requestAnimationFrame(tick);
+        } else {
+          finish();
+        }
+      };
+      s._onMainUp = null;
     });
   }
 
@@ -1700,8 +1865,9 @@ class HumanAgent {
     s.actors.idle('batter');
     s._paintModeLabels();
     const pitch = view.pitch;
-    s.state.lastPitches.push({ type: pitch.type, isStrike: pitch.isStrike, mph: Math.round(pitchMph(pitch, this.league)) });
-    s._paintStrip();
+    // STAGE 8 row 5: staged here, pushed at plate CROSSING (`_flushPendingPitch`, from 'count'/
+    // 'atBatEnd') - not here, and not painted here either. See `_flushPendingPitch`'s own header.
+    s.state.pendingPitch = { type: pitch.type, isStrike: pitch.isStrike, mph: Math.round(pitchMph(pitch, this.league)) };
 
     // The CPU's own wind-up (spec section 9, R1): a real 1400ms delivery, timed off
     // FEEL.ui.windupMs, THEN the ball actually leaves the hand - see _stepWindup's own header.

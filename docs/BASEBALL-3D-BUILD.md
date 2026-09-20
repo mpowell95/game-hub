@@ -680,7 +680,8 @@ In this order, and nothing before it:
 Fielders, runners, a catcher, a glove, a crowd, any camera motion, shadow maps, Draco, a swing
 cue, the Career/Quick Play setup screen (phase 4, held by Matt), any change under
 `baseball/js/engine/`, any change to `settings.js` timings, the ring, the strip, the HUD, the
-popup. If you think one is needed, say so in the report and build nothing for it.
+popup. If you think one is needed, say so in the report and build nothing for it. **Stage 8
+(section 8) is the one exception: it owns the ring, the strip and the popup by Matt's request.**
 
 ---
 
@@ -719,3 +720,38 @@ the layer; the plate view must return on its own before the next wind-up); the c
 re-partitioned overhead; the set return; the preload; r2-cadence unchanged at 6.2 s; ten stills
 100 ms apart through one ball in play on the real play screen showing swing, ball leaving, cut,
 flight, marker, return to plate, pitcher to set.
+
+## 8. Stage 8: the pitch meter, the verdict, and the overhead (2026-09-20, after Matt's recordings of v859)
+
+Matt, on two recordings of v859: *"It's better, but it still needs improvement. It's not obvious if
+something is a ball or a strike. After contact, it goes to the Birds Eye view, but you can't see
+where the ball goes or lands or anything at all. It tells me the type of pitch before it's even
+pitched. What does 'Hung' mean when I'm pitching? And that pitch meter thing starts with no
+warning. I should tap it to start it then tap again to stop it. And even if it's perfect, it
+doesn't show perfect. It's always like right past the perfect zone thing."* Every frame of both
+clips was read; the causes, each with its fix:
+
+| # | Measured | Fix |
+|---|---|---|
+| 1 | `ring.js` draws the Nice zone centred at 12 o'clock, which is 0.667 of the fill sweep (`START` = 4 o'clock, a full 360 deg lap = `meterTime`). `pitch.js` scores Nice at hold 0.88 to 1.00 of `meterTime` (`1 - niceWidth` to 1). So a release inside the drawn zone is an ordinary pitch, and a release the engine calls Nice draws its marker about 80 deg PAST the zone. Present since the ring shipped | The fill sweeps from `START` (4 o'clock) clockwise to 12 o'clock and THAT is 1.0 of `meterTime`; the Nice zone is the last `niceWidth` of that sweep, ending exactly at the top; `niceWidth` is read from `SETTINGS.FEEL.engine`, never a second literal. The hang grace (1.0 to `1 + HANG_GRACE_FRAC`) continues clockwise past the top in the hung colour, then drains. A node test asserts, for a sweep of hold times, that `ring.js`'s zone contains the marker angle exactly when `flyPitch` reports `wasNice` |
+| 2 | The meter starts filling by itself the instant the pitching turn begins; the player's one tap ENDS it | Tap to start, tap to release. Ring idle (with the Nice zone ticks and diamond visible so the target is known) until the first `touchstart`/`pointerdown` on the button; the fill starts on that event; the SECOND down event releases. The pitcher's wind-up plays during the fill: `play('pitcher','Pitch',{markAtMs: meterTime, holdAtMark: true})`, so the delivery reaches the release keyframe at the top of the meter and HOLDS there; the release tap resumes the clip from the mark (`actors.release('pitcher')`). A release before the mark seeks to the mark and plays on (the existing `markAtMs: 0` path). Nothing else in the beat changes: the ring returns to idle when the next pitching turn starts |
+| 3 | A take's Ball/Strike goes only to the 13 px `line1`; the big word is reserved for the timing words. The 3D ball is hidden the instant it crosses, so it is never seen inside or outside the box | Ball, Strike, Foul (a take, a swinging miss's strike, a foul) become big words through `_showPop`, with the SAME shapes the strip already uses (● ball, ■ strike; foul keeps the word alone), never colour alone. The crossing ball HOLDS at its crossing point (`setBall` left visible) for `CROSSING_HOLD_MS` = 600 ms after every crossing that is not a ball in play, then hides. A swing's timing word still wins on a swing (a miss reads Early/Late, as before) |
+| 4 | Overhead: the ball is `drawBall(..., baseRadius 7)` times the picture scale, about 2 px on a phone, straight line, no height, no trail; the landing marker is an 8 px disc with 10 px text | Overhead flight drawn to be SEEN: ground shadow on the straight path plus the ball lifted on a parabola whose apex is `min(0.22, distanceFt / 1800) * canvasH` for a fly ball or line drive and `0.03 * canvasH` for a grounder (`battedKind`), radius 9 px at canvas scale with a 2 px dark outline, a fading 6-sample trail; landing marker radius 14 px with 13 px bold text (1B/2B/3B, HR gold, OUT red X at 14 px arms), and a ring that pulses outward twice during `MARKER_HOLD_MS`. Both drawn through the existing `project()` |
+| 5 | While batting, `decideSwing` pushes the incoming pitch into `state.lastPitches` and repaints the strip BEFORE the wind-up, so the tile (type, mph AND the ●/■ result mark) is on screen before the pitch is thrown | The strip tile is pushed and painted at plate crossing, from the `count`/`atBatEnd` handlers (the same moment Line 2 already paints), never at the decision |
+| 6 | "Hung" is the word for a release past the meter's fill (slow, straight, drifts to the middle); nobody knows the word | The word is "Late" with the ▶ chevron, the same vocabulary batting already teaches (EN `v_hung: 'Late'`, ES `v_hung: 'Tarde'`; the key stays `v_hung`, rule 5 for strings is not needed but there is no reason to churn the key). Nice ★ stays for the power pitch; an ordinary release shows no word, as now |
+
+**Stage 8 (Sonnet).** Owns `ring.js`, `ui.js` (HumanAgent.decidePitch, the 'count'/'atBatEnd'
+handlers, `_animateBattedBall`, `_animatePitchFlight` and the human pitch's `finishFlight`,
+`decideSwing`'s strip push), `actors.js` (`holdAtMark` on `play()` and a `release(role)`),
+`field.js` (`drawBall` arc/trail, `drawLandingMarker`), `strings.js`, a new `test-baseball-ring.mjs`
+(node, in `run-all-tests.mjs`), and `test-baseball-device.mjs` (a tap-tap pitching probe). Nothing
+in `settings.js` changes. Deliverables: (a) the ring/engine agreement test, born red against the
+shipped `ring.js`; (b) a device probe that drives the human pitching turn with two taps and asserts
+the ring was idle before the first tap, filling after it, and that the release came on the second
+tap (the `actors.play('pitcher','Pitch')`/`release` call), with the pitcher's hand held at the
+release pose between the top of the meter and the second tap when the tap is late; (c) stills:
+the ring at 0.5, 0.88, 0.94, 1.0 and 1.15 of the fill with the release marker; ten stills 100 ms
+apart through one ball in play on the overhead showing ball, shadow, trail and marker; the plate
+view 300 ms after a called ball and a called strike with the ball held at its crossing point and
+the big word up; the batting strip before and after a crossing; (d) r2-cadence unchanged at 6.2 s;
+(e) every suite named in section 5 green.
