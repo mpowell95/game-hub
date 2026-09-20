@@ -383,6 +383,15 @@ async function runChromiumHalf() {
     // 2.2's colour-key remap). Re-place at BATTER_FACING_RAD (the real facing, not this file's
     // load/dispose check's facingRad=0) so the sample point is the same one every other batter
     // render in this stage used.
+    // STAGE 6, one line into a stage 3 check, because stage 6's own work broke it and the break is
+    // an artefact of this harness rather than of the game: this half stacks BOTH figures on the SAME
+    // anchor (the real play screen never does - the pitcher is 47 px tall out at the mound), and the
+    // re-authored release pose reaches the throwing arm toward the camera, past the batter's pivot
+    // z of 10 (actors.js `_place`). Measured, that put the pitcher's forearm over this exact pixel
+    // and the sample read his skin (129,78,53) for BOTH sides, so the check failed on an overlap and
+    // not on a colour. Hiding him restores what the check is actually about; nothing it asserts
+    // changed.
+    actors.actors.pitcher.pivot.visible = false;
     actors.place('batter', { anchor: { x: 150, y: 280 }, heightPx: 260, facingRad: BATTER_FACING_RAD });
     actors.idle('batter');
     actors.actors.batter.mixer.update(0);
@@ -638,6 +647,157 @@ async function runMountInHubHalf() {
 
 console.log('\n=== chromium half: mounted in the real hub ===');
 await runMountInHubHalf();
+
+// ========================================== STAGE 6: motion, measured at the REAL on-screen sizes ==
+// docs/BASEBALL-3D-BUILD.md section 7. Stages 2 and 3 graded every POSE against its sprite frame and
+// nothing ever measured what moved BETWEEN the poses, so the shipped build reached Matt's phone with
+// an Idle that moved no bone at all and a whole pitch delivery worth 20 px of hand travel: "They look
+// way too much like just flat images (because they are)."
+//
+// This block is the check that makes that failure loud. It plays each clip through its OWN duration
+// at timeScale 1 with the mixer stepped in fixed 1/60 s increments (mixer.update(1/60), never a wall
+// clock, so the numbers are identical on a fast machine and a loaded one), at the heights these
+// figures actually draw at on a 393x852 phone - the batter 214 px (field.js's NEAR_BATTER_HEIGHT_FRAC
+// 0.50 of the 429 px field band) and the pitcher 47 px (MOUND_PITCHER_HEIGHT_FRAC 0.11) - and samples
+// RIG bone WORLD positions every step. The ortho camera is in canvas pixels (actors.js's own
+// convention, world (x, -y) = screen (x, y)), so a world distance IS a screen distance in px.
+//
+// The floors below are the brief's, and they are floors, not targets: a clip may move as much more as
+// it likes. Every measured number prints on every run whether it passes or not, because the number is
+// the point - "the batter's idle moves 20.7 px" is a fact a future session can compare against, and
+// "the idle looks alive" is not.
+const MOTION_FLOORS = {
+  idleHandTravel: 8,      // batter Idle, handR, at 214 px
+  setHandTravel: 2,       // pitcher Set, handR, at 47 px
+  pitchHandPath: 45,      // pitcher Pitch, handR path length, at 47 px
+  pitchHandRise: 20,      // pitcher Pitch, handR max y minus min y
+  pitchFootLift: 10,      // pitcher Pitch, the foot that leaves the ground
+  pitchEarlyMove: 2,      // pitcher Pitch, handR movement inside the first 20% of the clip
+};
+
+console.log('\n=== chromium half: motion at the real on-screen sizes (stage 6) ===');
+async function runMotionHalf() {
+  if (!existsSync(MODEL_PATH)) { skipLine('motion half', `${MODEL_PATH} does not exist yet`); return; }
+  let chromium;
+  try { ({ chromium } = await import('playwright-core')); } catch { skipLine('motion half', "optional dependency 'playwright-core' not installed - run from the repo root"); return; }
+  try {
+    const r = await fetch('http://localhost:8123/', { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) throw new Error('bad status');
+  } catch { skipLine('motion half', 'dev server not reachable at http://localhost:8123 - run: node server.mjs'); return; }
+
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--use-gl=swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 500, height: 500 } });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await page.goto('http://localhost:8123/', { waitUntil: 'domcontentloaded' });
+
+  const measured = await page.evaluate(async () => {
+    const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } = await import('/baseball/js/actors.js');
+    const wrap = document.createElement('div');
+    const W = 400, H = 400;
+    wrap.style.cssText = `position:fixed; left:0; top:0; width:${W}px; height:${H}px;`;
+    document.body.appendChild(wrap);
+    const actors = new Actors(wrap);
+    if (!actors.initGL()) return { error: 'initGL() returned false' };
+    await actors.load(`${location.origin}/baseball/models/player.glb`);
+    actors.resize(W, H, null);
+
+    // World position of a bone in CANVAS PIXELS, straight off its world matrix (no THREE import
+    // needed, and no dependence on anything the renderer does): elements 12/13/14 are the
+    // translation, and screen y is world -y.
+    const at = (bone) => ({ x: bone.matrixWorld.elements[12], y: -bone.matrixWorld.elements[13] });
+    const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const run = (role, name, heightPx, facingRad) => {
+      const act = actors.actors[role];
+      actors.place(role, { anchor: { x: W / 2, y: H - 20 }, heightPx, facingRad });
+      act.mixer.stopAllAction();
+      act.current = null;                  // no cross-fade from whatever ran before this clip
+      actors.play(role, name);             // the real play(), with no markAtMs, so timeScale is 1
+      const a = act.actions[name];
+      if (!a) return { error: `no action "${name}" on ${role}` };
+      a.timeScale = 1;
+      const dur = a.getClip().duration;
+      const steps = Math.round(dur * 60);
+      const samples = [];
+      act.mixer.update(0);                 // settle the clip's own t=0 pose before the first sample
+      for (let i = 0; i <= steps; i++) {
+        if (i > 0) act.mixer.update(1 / 60);
+        act.pivot.updateMatrixWorld(true);
+        samples.push({ t: i / 60, handR: at(act.bones.handR), footL: at(act.bones.footL), footR: at(act.bones.footR), hips: at(act.bones.hips) });
+      }
+      act.mixer.stopAllAction();
+      const stat = (key) => {
+        const pts = samples.map((s) => s[key]);
+        let travel = 0, path = 0;
+        for (let i = 0; i < pts.length; i++) {
+          if (i) path += d2(pts[i], pts[i - 1]);
+          for (let j = i + 1; j < pts.length; j++) travel = Math.max(travel, d2(pts[i], pts[j]));
+        }
+        const ys = pts.map((p) => p.y);
+        return { travel, path, rise: Math.max(...ys) - Math.min(...ys) };
+      };
+      const n20 = Math.max(1, Math.round(samples.length * 0.2));
+      let early = 0;
+      for (let i = 1; i <= n20 && i < samples.length; i++) early = Math.max(early, d2(samples[i].handR, samples[0].handR));
+      return { role, name, heightPx, dur, frames: samples.length,
+        handR: stat('handR'), hips: stat('hips'), footL: stat('footL'), footR: stat('footR'), early };
+    };
+
+    const out = {
+      idle: run('batter', 'Idle', 214, BATTER_FACING_RAD),
+      swing: run('batter', 'Swing', 214, BATTER_FACING_RAD),
+      miss: run('batter', 'Miss', 214, BATTER_FACING_RAD),
+      set: run('pitcher', 'Set', 47, PITCHER_FACING_RAD),
+      pitch: run('pitcher', 'Pitch', 47, PITCHER_FACING_RAD),
+    };
+    actors.dispose();
+    wrap.remove();
+    return out;
+  });
+
+  await browser.close();
+  if (pageErrors.length) fail('motion: no console error', pageErrors.join(' | '));
+  if (measured.error) { fail('motion half', measured.error); return; }
+
+  const n = (v) => v.toFixed(1);
+  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch']) {
+    const m = measured[k];
+    if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue;
+    }
+    console.log(`      ${m.role}/${m.name} at ${m.heightPx}px, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
+    console.log(`         handR travel ${n(m.handR.travel)}px  path ${n(m.handR.path)}px  rise ${n(m.handR.rise)}px  first-20% ${n(m.early)}px`);
+    console.log(`         hips travel ${n(m.hips.travel)}px  footL lift ${n(m.footL.rise)}px  footR lift ${n(m.footR.rise)}px`);
+  }
+
+  const check = (label, got, floor) => {
+    if (got >= floor) ok(`${label}: ${n(got)}px (floor ${floor}px)`);
+    else fail(label, `${n(got)}px, below the ${floor}px floor - the clip reads as a still picture at the size it is drawn`);
+  };
+  check('Idle (batter, 214px): handR travel', measured.idle.handR.travel, MOTION_FLOORS.idleHandTravel);
+  // The hips must carry part of it: an idle whose hands move while the body stands still is the
+  // "flat image" defect wearing a wave.
+  if (measured.idle.hips.travel > 2) ok(`Idle (batter, 214px): hips shift ${n(measured.idle.hips.travel)}px`);
+  else fail('Idle hips shift', `${n(measured.idle.hips.travel)}px - the weight shift is not moving the body`);
+  check('Set (pitcher, 47px): handR travel', measured.set.handR.travel, MOTION_FLOORS.setHandTravel);
+  check('Pitch (pitcher, 47px): handR path length', measured.pitch.handR.path, MOTION_FLOORS.pitchHandPath);
+  check('Pitch (pitcher, 47px): handR vertical range', measured.pitch.handR.rise, MOTION_FLOORS.pitchHandRise);
+  check('Pitch (pitcher, 47px): front-foot lift', Math.max(measured.pitch.footL.rise, measured.pitch.footR.rise), MOTION_FLOORS.pitchFootLift);
+  check('Pitch (pitcher, 47px): handR moves inside the first 20% of the clip', measured.pitch.early, MOTION_FLOORS.pitchEarlyMove);
+
+}
+
+// Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
+// batter is already standing in. Checked as poses, not as pixels, so it runs with no browser: the
+// first key of each swing clip must equal Idle's own t=0 key, bone for bone.
+for (const name of ['Swing', 'Miss']) {
+  const rest = JSON.stringify(CLIPS.Idle.keys[0].pose), restHips = JSON.stringify(CLIPS.Idle.keys[0].hipsOffset || null);
+  const first = JSON.stringify(CLIPS[name].keys[0].pose), firstHips = JSON.stringify(CLIPS[name].keys[0].hipsOffset || null);
+  if (rest === first && restHips === firstHips) ok(`${name} opens on Idle's resting pose (no cross-fade needed to start it)`);
+  else fail(`${name} first keyframe`, `differs from Idle's t=0 pose, so starting it with no cross-fade would pop\n      Idle: ${rest}\n      ${name}: ${first}`);
+}
+
+await runMotionHalf();
 
 // r2-cadence (docs/BASEBALL-3D-BUILD.md section 3.9: "re-run that suite; do not reimplement it") -
 // test-baseball-device.mjs is the one place that measures it; this just proves it still passes with
