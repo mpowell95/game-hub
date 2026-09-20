@@ -784,6 +784,221 @@ await ctx.close();
   await p10.close();
 }
 
+// 11. R3 (docs/BASEBALL-3D-BUILD.md section 9): FIELDERS-PLACED. At Play, before any at-bat has
+// resolved (so the shift is guaranteed 0 - `_shiftDegFor` reads a batter's own spray HISTORY, and
+// nobody has hit yet), the nine fielders stand within 2 ft of their spec world positions after the
+// outfield depth scale, at zero shift.
+{
+  const p11 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page11 = await p11.newPage();
+  await page11.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Fielders Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr11 = await mountInHub(page11);
+  if (mountErr11) {
+    fail('fielders-placed', `mount failed: ${mountErr11}`);
+  } else {
+    await page11.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page11.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    // A settle beat: `_syncFielders()` runs from every `_drawStaticField()`, and the first one
+    // fires off `_sizeCanvas`'s own rAF - this just gives it a couple of frames to have happened.
+    await page11.waitForTimeout(400);
+    const res = await page11.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const F = await import('/baseball/js/field.js');
+      const A = await import('/baseball/js/actors.js');
+      const fenceFt = (await import('/baseball/js/engine/settings.js')).FIELD[inst.league].fenceFt;
+      return {
+        league: inst.league,
+        shiftDeg: inst._currentShiftDeg,
+        roles: A.FIELDER_ROLES.map((role) => {
+          const actor = inst.actors.actors[role];
+          const want = F.fielderWorld(role, fenceFt, 0);
+          const got = actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null;
+          const dist = got ? Math.hypot(got.x - want.x, got.z - want.z) : null;
+          return { role, visible: !!(actor && actor.pivot.visible), want, got, dist };
+        }),
+      };
+    });
+    const worst = res.roles.reduce((m, r) => Math.max(m, r.dist == null ? Infinity : r.dist), 0);
+    const bad = res.roles.filter((r) => !r.visible || r.dist == null || r.dist > 2);
+    if (bad.length) {
+      fail('fielders-placed', `${res.league} league, shiftDeg ${res.shiftDeg}: ${bad.map((r) => `${r.role} ${r.visible ? (r.dist == null ? 'no position' : r.dist.toFixed(2) + 'ft off') : 'hidden'}`).join(', ')}`);
+    } else {
+      ok(`fielders-placed: all 9 fielders visible and within ${worst.toFixed(2)} ft of spec (${res.league} league, shiftDeg ${res.shiftDeg}, budget 2 ft)`);
+    }
+  }
+  await p11.close();
+}
+
+// 12. R3: RUNNERS-MOVE. Drives the human's batting with an auto-swing (timed off the pitch's own
+// `timeToPlateS` and `FEEL.engine.swingDelay`, the pattern the R2 review stages used) through real
+// at-bats until an `atBatEnd` fires with a runner on base BEFORE the play who is STILL on a base
+// AFTER it - a genuine advance, not a strikeout or a clean sweep of the bases. Then asserts (a) the
+// runner figure's world position ends within 3 ft of the base `game.bases` says he is on now, (b)
+// the diamond widget showed a moving dot and the after-cell ended up filled, (c) the chase camera
+// was live at some point during the cut. Also drives the human's OWN pitching turns (tap PITCH,
+// once, R2 has no second tap) so a half-inning does not stall waiting on a human decision that
+// never comes.
+{
+  const p12 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page12 = await p12.newPage();
+  const pageErrors12 = [];
+  page12.on('pageerror', (e) => pageErrors12.push(String((e && e.message) || e)));
+  await page12.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Runners Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr12 = await mountInHub(page12);
+  if (mountErr12) {
+    fail('runners-move', `mount failed: ${mountErr12}`);
+  } else {
+    await page12.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page12.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    const res = await page12.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const S = await import('/baseball/js/engine/settings.js');
+      const F = await import('/baseball/js/field.js');
+      const swingDelayMs = S.FEEL.engine.swingDelay;
+
+      // Auto-play: fire the main button's own handler on every tap it offers - immediately for
+      // READY and PITCH, timed against the pitch's own flight for SWING (perfect timing, so
+      // contact - and so runners to actually watch - happen often).
+      let pendingTimeToPlateS = null;
+      const origFlight = inst._animatePitchFlight.bind(inst);
+      inst._animatePitchFlight = (p) => { pendingTimeToPlateS = p.timeToPlateS; return origFlight(p); };
+      let handler = inst._onMainDown || null;
+      const fire = (fn) => {
+        if (!fn) return;
+        const label = inst.state && inst.state.actionLabel;
+        if (label === 'act_swing') {
+          const delayMs = Math.max(0, (pendingTimeToPlateS || 0) * 1000 - swingDelayMs);
+          setTimeout(() => { if (handler === fn) fn(); }, delayMs);
+        } else {
+          setTimeout(() => { if (handler === fn) fn(); }, 0);
+        }
+      };
+      Object.defineProperty(inst, '_onMainDown', {
+        configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); },
+      });
+      fire(handler);
+
+      // The qualifying play: `_animateRunners` is where basesBefore/basesAfter/runnersOut are
+      // already assembled (game.js's own atBatEnd payload plus the live `this.game.bases`) - hook
+      // it directly rather than re-deriving the same filter a second way.
+      let captured = null;
+      const origAnimateRunners = inst._animateRunners.bind(inst);
+      inst._animateRunners = (payload) => {
+        if (!captured) {
+          const before = payload.basesBefore || [null, null, null];
+          const beforeIdx = before.findIndex((x) => x != null);
+          const after = inst.game.bases;
+          // A GENUINE advance: he is still on a base AFTER the play (not out, not scored) AND it
+          // is a DIFFERENT base than the one he started on - an ordinary out with an untouched
+          // runner (bases.js's own `noAdvance`: "nobody advances") leaves him at the SAME index,
+          // which satisfies "still on base" without him ever having run anywhere at all.
+          const afterIdx = beforeIdx >= 0 ? after.indexOf(before[beforeIdx]) : -1;
+          const advanced = afterIdx >= 0 && afterIdx !== beforeIdx;
+          if (beforeIdx >= 0 && advanced && payload.distanceFt != null) {
+            const role = ['r1', 'r2', 'r3'][beforeIdx];
+            const samples = [];
+            const iv = setInterval(() => {
+              const actor = inst.actors.actors[role];
+              const dot = document.querySelector('.bb-diamond-dot[data-dot="0"]');
+              samples.push({
+                visible: !!(actor && actor.pivot.visible),
+                pos: actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null,
+                chase: inst.actors.cameraName === 'chase',
+                dotShown: !!(dot && dot.style.opacity === '1'),
+              });
+            }, 30);
+            const p = origAnimateRunners(payload);
+            captured = { beforeIdx, trackedId: before[beforeIdx], p, samples };
+            p.then(() => clearInterval(iv));
+            return p;
+          }
+        }
+        return origAnimateRunners(payload);
+      };
+
+      // A 3-inning game (SEASON.inningsPerGame) does not always deal the qualifying play - it needs
+      // a runner on base AND a second play that genuinely advances him (an ordinary out that is not
+      // a double play leaves an existing runner exactly where he was - bases.js's own `noAdvance`,
+      // "nobody advances" - which this probe correctly refuses to count), and only the human's OWN
+      // half of each inning is forced to swing at everything; the other half is the real CpuBatter
+      // AI, which takes plenty of pitches. Measured live: about one atBatEnd every ~4s, and a single
+      // 3-inning game does not always finish inside 150s. So: play whole GAMES, one after another
+      // (auto-clicking "Play again" then "Play" the instant one ends), until the qualifying play
+      // turns up or the deadline is reached - generous on purpose, the same way yahtzee-ai's own
+      // suite budgets minutes rather than seconds for a similarly real, played-out outcome.
+      const deadline = Date.now() + 360000;
+      let gamesPlayed = 0;
+      while (Date.now() < deadline && !(captured && captured.p)) {
+        const again = document.querySelector('[data-act="again"]');
+        if (again) {
+          again.click();
+          gamesPlayed++;
+          await new Promise((r) => setTimeout(r, 200));
+          const btn = document.querySelector('.hub-game .bb-play-btn');
+          if (btn) btn.click();
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!captured) return { timedOut: true, gamesPlayed };
+      await captured.p;
+      await new Promise((r) => setTimeout(r, 50)); // one settle beat past the resync
+
+      const after = inst.game.bases;
+      const newIdx = after.indexOf(captured.trackedId);
+      const roleNow = ['r1', 'r2', 'r3'][newIdx];
+      const actorNow = inst.actors.actors[roleNow];
+      const wantPos = [F.basePositions().first, F.basePositions().second, F.basePositions().third][newIdx];
+      const gotPos = actorNow ? { x: actorNow.pivot.position.x, z: actorNow.pivot.position.z } : null;
+      const dist = gotPos ? Math.hypot(gotPos.x - wantPos.x, gotPos.z - wantPos.z) : null;
+      const cell = document.querySelector(`[data-cell="${['1b', '2b', '3b'][newIdx]}"]`);
+      return {
+        timedOut: false, fromIdx: captured.beforeIdx, toIdx: newIdx,
+        visible: !!(actorNow && actorNow.pivot.visible), dist,
+        chaseSeen: captured.samples.some((s) => s.chase),
+        dotSeen: captured.samples.some((s) => s.dotShown),
+        cellFilledAfter: !!(cell && cell.classList.contains('is-on')),
+        sampleCount: captured.samples.length,
+      };
+    });
+    if (res.timedOut) {
+      fail('runners-move', `no qualifying play (a runner on base before AND after) within 360s of auto-play (${res.gamesPlayed || 0} game(s) played)`);
+    } else if (!res.visible || res.dist == null) {
+      fail('runners-move', `the runner (base ${res.fromIdx} -> ${res.toIdx}) is not standing anywhere after the play`);
+    } else if (res.dist > 3) {
+      fail('runners-move', `the runner ended ${res.dist.toFixed(2)} ft from base index ${res.toIdx} (budget 3 ft)`);
+    } else if (!res.chaseSeen) {
+      fail('runners-move', 'the chase camera was never observed live during the play');
+    } else if (!res.dotSeen) {
+      fail('runners-move', 'the diamond widget never showed a moving dot during the run');
+    } else if (!res.cellFilledAfter) {
+      fail('runners-move', `the widget's after-cell (base index ${res.toIdx}) is not filled once the runner arrived`);
+    } else {
+      ok(`runners-move: a runner ran base ${res.fromIdx} -> ${res.toIdx}, landing ${res.dist.toFixed(2)} ft from the bag (budget 3), chase camera and the widget's moving dot both seen (${res.sampleCount} samples), after-cell filled`);
+    }
+  }
+  if (pageErrors12.length) fail('runners-move', `page errors during auto-play: ${pageErrors12.slice(0, 3).join(' | ')}`);
+  else ok('no page errors during the runners-move auto-play');
+  await p12.close();
+}
+
 await browser.close();
 
 console.log('');

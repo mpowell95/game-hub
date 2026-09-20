@@ -260,8 +260,15 @@ export const PITCHER_FACING_RAD = 0;
 // did, because the batting camera still stands behind the plate looking out.
 export const CATCHER_FACING_RAD = Math.PI;
 export const UMPIRE_FACING_RAD = Math.PI;
-/** Every role this class builds. Order matters only in that the batter is the one with a bat. */
-export const ROLES = ['batter', 'pitcher', 'catcher', 'umpire'];
+// R3 (docs/BASEBALL-3D-BUILD.md section 9): the nine fielders (P and C already exist above) and
+// the four runners (first/second/third plus the batter-runner), all from the same glb clone path
+// as every other role. 4 existing + 7 fielders + 4 runners = 15, the stage's own cap.
+export const FIELDER_ROLES = ['f1b', 'f2b', 'f3b', 'fss', 'flf', 'fcf', 'frf'];
+export const RUNNER_ROLES = ['r1', 'r2', 'r3', 'rb'];
+/** Every role this class builds. Order matters only in that the batter is the one with a bat -
+ *  `_attachBat` is keyed on the literal role name 'batter', so every R3 role is excluded from
+ *  carrying one by construction; nothing else needed a `noBat` flag on `place()`. */
+export const ROLES = ['batter', 'pitcher', 'catcher', 'umpire', ...FIELDER_ROLES, ...RUNNER_ROLES];
 
 export class Actors {
   constructor(wrapEl) {
@@ -272,7 +279,9 @@ export class Actors {
     wrapEl.appendChild(this.canvas);
     this.renderer = null; this.scene = null;
     this.cameras = null; this.camera = null; this.cameraName = 'batter';
-    this.actors = { batter: null, pitcher: null, catcher: null, umpire: null };
+    // R3: built from ROLES itself (was a hand-written 4-key object) - 15 roles now, and a role
+    // list that changes again should not need a second place edited to match it.
+    this.actors = Object.fromEntries(ROLES.map((r) => [r, null]));
     this.stadium = null;
     this.ready = false;
     this._raf = 0; this._last = 0; this._running = false;
@@ -341,10 +350,19 @@ export class Actors {
     // criminalMaleA, the umpire is criminalMaleA in near-black. A placeholder until ui.js calls
     // setBatter/setPitcher with the real per-half-inning side - it is what lets the dev screen and
     // render-actor.mjs show a sensible pair with no caller at all.
+    // R3: the fielders default to the defense's placeholder side (away) and the runners to the
+    // offense's (home) - both are recast every half-inning by `ui.js`'s own sync, same as the
+    // batter/pitcher above. All eleven start HIDDEN (`hide()`, below `_place`'s own umpire guard) -
+    // there is no bases-empty/nobody-at-play state for them the way Idle is for the batter, so a
+    // caller must place (or explicitly hide) one before it is ever shown, and load() has not been
+    // told any bases or fielding positions yet to place them at.
     await Promise.all([
       this.setBatter({ side: 'home' }), this.setPitcher({ side: 'away' }),
       this._setSide('catcher', { side: 'away' }), this._setSide('umpire', { side: 'umpire' }),
+      ...FIELDER_ROLES.map((r) => this._setSide(r, { side: 'away' })),
+      ...RUNNER_ROLES.map((r) => this._setSide(r, { side: 'home' })),
     ]);
+    for (const r of [...FIELDER_ROLES, ...RUNNER_ROLES]) this.hide(r);
     this.ready = true;
   }
 
@@ -381,7 +399,11 @@ export class Actors {
       if (!def.keys.length) continue;
       const clip = buildClip(name, def.keys, bones, restQ);
       const a = mixer.clipAction(clip);
-      a.setLoop(def.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+      // R3: `Run`'s own two-key stride is `loop: 'pingpong'` - the mixer sweeps key0 -> key1 ->
+      // key0 with no jump (a plain LoopRepeat would snap key1 straight back to key0's pose every
+      // cycle, which is a foot teleporting, not a stride). Every other loop is still `true`/`false`.
+      const loopMode = def.loop === 'pingpong' ? THREE.LoopPingPong : (def.loop ? THREE.LoopRepeat : THREE.LoopOnce);
+      a.setLoop(loopMode, Infinity);
       a.clampWhenFinished = !def.loop;
       actions[name] = a;
     }
@@ -436,6 +458,11 @@ export class Actors {
     actor.root.rotation.y = facingRad;
     actor.shadow.scale.set(actor.heightWorld * 0.22, actor.heightWorld * 0.10, 1);
     actor.shadow.position.y = actor.heightWorld * 0.004;   // a hair above the ground, never inside it
+    // R3: a placed actor is a SHOWN actor (`hide()` is the only other way to change this) - except
+    // the umpire, whose own visibility is a CAMERA fact (`_applyCameraVisibility`) that a place()
+    // call must never override; his own place() calls happen every frame `_syncActors` runs, which
+    // would otherwise re-show him from the batter camera the frame after every camera switch.
+    if (actor.role !== 'umpire') actor.pivot.visible = true;
   }
 
   /** Place one actor now and remember it, so a later resize can reflow without the caller having
@@ -486,6 +513,19 @@ export class Actors {
   }
   setUmpire({ pos, heightFt, facingRad } = {}) {
     return this._setSide('umpire', { pos, heightFt, facingRad });
+  }
+  /** R3: the nine fielders and four runners - each cast to a side and placed through the exact
+   *  same `_setSide` engine as every named role above (setBatter/setPitcher/setCatcher/setUmpire
+   *  are the same one line each with the role baked in). One generic wrapper covers all eleven
+   *  rather than eleven near-identical named ones. */
+  setActor(role, { side, pos, heightFt, facingRad, mirrored } = {}) {
+    return this._setSide(role, { side, pos, heightFt, facingRad, mirrored });
+  }
+  /** R3: a runner's on/off-base toggle (a fielder is placed every sync and never hidden once the
+   *  play screen is up). `place()`/`_setSide()` are the only way to show one again. */
+  hide(role) {
+    const actor = this.actors[role];
+    if (actor) actor.pivot.visible = false;
   }
 
   // ------------------------------------------------------------------ cameras ----

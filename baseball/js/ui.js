@@ -15,16 +15,22 @@ import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
 import { flyPitch, breakOffsetFor } from './engine/pitch.js';
+import { fenceFtAt } from './engine/outcomes.js';
 import {
   engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas,
   ZONE, BATTER_BOX, RUBBER, CATCHER, UMPIRE, FIGURE_HEIGHT_FT,
+  // R3 (docs/BASEBALL-3D-BUILD.md section 9): the fielders' own spots and the runners' base paths.
+  fielderWorld, FIELDER_FACING_RAD, basePositions, runnerPath,
 } from './field.js';
 import { drawRingState, RING_D } from './ring.js';
 // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer. Loaded eagerly, not lazily -
 // unlike Boggle's dictionary, this is the PRIMARY visual for the live play screen, not an optional
 // extra, so there is no "first play only" moment to defer it past; ui.js itself is only requested
 // when Baseball actually mounts, so this import costs nothing before that.
-import { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD, CATCHER_FACING_RAD, UMPIRE_FACING_RAD } from './actors.js';
+import {
+  Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD, CATCHER_FACING_RAD, UMPIRE_FACING_RAD,
+  FIELDER_ROLES, RUNNER_ROLES,
+} from './actors.js';
 
 const t = makeT(STRINGS);
 
@@ -120,6 +126,21 @@ const PITCHING_ZONE_MIN_W_FRAC = 0.13;
 // and the word together for ~350 ms - the ball now stays exactly as long as the word does
 // (RESULT_MS), so what the word says and where the ball sits are readable in the same look.
 const CROSSING_HOLD_MS = RESULT_MS;
+
+// R3 (docs/BASEBALL-3D-BUILD.md section 9): fielders, runners, the chase, and the diamond widget.
+// RUN_WINDOW_MS is the window every runner's own run must fit inside - "if the total run time of
+// the longest mover exceeds CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS (2000 ms), speed up ALL
+// movers uniformly" (the spec's own words); computed from those three constants, never a second
+// literal, so it can never drift from the beat it is actually sharing. A WALK has no chase or
+// marker at all, but its own beat (RESULT_MS + BETWEEN_MS) sums to the identical 2000 ms in R2's
+// current tuning, so one constant covers both - `_animateRunners` always runs CONCURRENTLY with
+// whatever beat it was called from (never awaited in the beat's own sequential chain), so a walk
+// that needed the speed-up never lengthens the beat either.
+const RUN_WINDOW_MS = CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS;
+const RUNNER_SPEED_FT_S = 27;             // the spec's own number: 90 ft in 3.33 s
+const WALK_RUNNER_SPEED_FT_S = RUNNER_SPEED_FT_S / 2; // "the forced runners walk... half speed"
+const FIELDER_SPEED_FT_S = 27;
+const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
 // ---------------------------------------------------------------------------------------------
 // R2 (docs/BASEBALL-3D-BUILD.md section 9): THE CONTROLS.
@@ -249,6 +270,15 @@ class BaseballPlayScreen {
     // (`chaseCam`), so what must not happen on an input redraw is the batter/pitcher camera coming
     // back over a ball still in flight.
     this._cutawayUp = false;
+
+    // R3: the defense's current shift (from the 'atBatStart' event, additive) - what `_syncFielders`
+    // rotates the outfielders by; the runner roles' own standing state, so `_syncBaseRunners` only
+    // ever calls `idle()`/`hide()` on a REAL change instead of restarting the loop every redraw; and
+    // the set of roles `_animateRunners` currently owns, so `_syncBaseRunners` never fights it mid-run.
+    this._currentShiftDeg = 0;
+    this._runnerStanding = { r1: null, r2: null, r3: null };
+    this._runnersInMotion = null;
+    this._chasingFielderRole = null;
 
     ensureCSS();
 
@@ -401,6 +431,10 @@ class BaseballPlayScreen {
     if (this._markerRaf) cancelAnimationFrame(this._markerRaf);
     if (this._crossingHideTimer) clearTimeout(this._crossingHideTimer);
     if (this._pitcherReturnTimer) clearTimeout(this._pitcherReturnTimer);
+    // R3: the runner and fielder-chase loops (docs/BASEBALL-3D-BUILD.md section 9) - both rAF
+    // loops that can be mid-flight exactly like the ball's own, and both need the same guard.
+    if (this._runnersRaf) cancelAnimationFrame(this._runnersRaf);
+    if (this._fielderRaf) cancelAnimationFrame(this._fielderRaf);
     if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
@@ -596,6 +630,7 @@ class BaseballPlayScreen {
             <div class="bb-line1" data-role="line1"></div>
             <div class="bb-line2" data-role="line2"></div>
           </div>
+          ${diamondWidgetHTML()}
         </div>
         <div class="bb-strip" data-role="strip"></div>
         <div class="bb-control" data-role="control"></div>
@@ -626,6 +661,10 @@ class BaseballPlayScreen {
     this.actors.idle('pitcher');
     this.actors.idle('catcher');
     this.actors.idle('umpire');
+    // R3: the nine fielders' own Idle loop starts once, here - same as the four figures above.
+    // `_syncFielders()` (every `_syncActors()` call) only ever repositions them after this; calling
+    // `idle()` again on every sync would restart the clip from its own t=0 every single frame.
+    for (const role of FIELDER_ROLES) this.actors.idle(role);
     this.actors.start();
     this._sizeCanvas = () => {
       const wrap = this.rootEl.querySelector('[data-role="fieldwrap"]');
@@ -844,6 +883,7 @@ class BaseballPlayScreen {
    *  `_animateBattedBall` since this is the one place that always runs once, on the way back. */
   _returnToPlate() {
     this._cutawayUp = false;
+    this._setDiamondVisible(false);
     if (this.actors) {
       this.actors.clearMarker();
       this.actors.setBall(null);
@@ -882,6 +922,61 @@ class BaseballPlayScreen {
     // still, so their positions are constants rather than anything this recomputes.
     this.actors.setCatcher({ side: pitcherSide, pos: { x: CATCHER.x, y: 0, z: CATCHER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: CATCHER_FACING_RAD });
     this.actors.setUmpire({ pos: { x: UMPIRE.x, y: 0, z: UMPIRE.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: UMPIRE_FACING_RAD });
+    // R3: the nine fielders and the standing base runners. Both no-op cleanly while `this.game`
+    // does not exist yet (the very first `_drawStaticField()`, before `_startGame` has run) and
+    // both skip whatever role `_animateRunners`/`_animateFielderChase` currently owns, so this
+    // (called every `_drawStaticField()`, several times a second) never fights either animation.
+    this._syncFielders();
+    this._syncBaseRunners();
+  }
+
+  /** R3: the nine fielders' own spots (docs/BASEBALL-3D-BUILD.md section 9) - the four infielders
+   *  and the pitcher/catcher never move; the three outfielders scale with the league's fence and
+   *  rotate with the defense's current shift (`field.js`'s `fielderWorld`, fed `_currentShiftDeg`
+   *  from the 'atBatStart' event). Skips whichever role `_animateFielderChase` currently owns - that
+   *  one fielder is mid-chase and this must not snap him back to his stand position under it. */
+  _syncFielders() {
+    if (!this.actors || !this.game) return;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const defenseSide = battingSide === 'away' ? 'home' : 'away';
+    const fenceFt = this._fenceFt();
+    for (const role of FIELDER_ROLES) {
+      if (role === this._chasingFielderRole) continue;
+      const pos = fielderWorld(role, fenceFt, this._currentShiftDeg || 0);
+      if (!pos) continue;
+      this.actors.setActor(role, { side: defenseSide, pos, heightFt: FIGURE_HEIGHT_FT, facingRad: FIELDER_FACING_RAD });
+    }
+  }
+
+  /** R3: the runners standing on their bags between pitches, driven ONLY by `this.game.bases` (the
+   *  engine's own state - this never decides who is on base, it just shows it). `_runnerStanding`
+   *  remembers each role's last-known occupant so a base that hasn't changed costs nothing (calling
+   *  `idle()` again every redraw would restart the Idle clip from t=0 on every single frame). Skips
+   *  entirely while `_animateRunners` owns any runner - `this.game.bases` is already the PLAY'S
+   *  after-state the instant it resolves (game.js mutates it synchronously before the event
+   *  fires), so syncing from it while a runner is still mid-run would snap him straight to where
+   *  he is headed instead of letting him run there. */
+  _syncBaseRunners() {
+    if (!this.actors || !this.game) return;
+    if (this._runnersInMotion && this._runnersInMotion.size) return;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const pos = basePositions();
+    const ROLE = ['r1', 'r2', 'r3'];
+    const AT = [pos.first, pos.second, pos.third];
+    const bases = this.game.bases;
+    for (let i = 0; i < 3; i++) {
+      const role = ROLE[i];
+      const occupant = bases[i];
+      if (occupant != null) {
+        if (this._runnerStanding[role] === occupant) continue;
+        this._runnerStanding[role] = occupant;
+        this.actors.setActor(role, { side: battingSide, pos: AT[i], heightFt: FIGURE_HEIGHT_FT, facingRad: RUNNER_STAND_FACING_RAD });
+        this.actors.idle(role);
+      } else if (this._runnerStanding[role] !== null) {
+        this._runnerStanding[role] = null;
+        this.actors.hide(role);
+      }
+    }
   }
 
   /** THE PITCH, in the world (R1). `xNorm` is the engine's own lateral aim (-1 at the zone's left
@@ -1320,6 +1415,10 @@ class BaseballPlayScreen {
         swap();
       }
     } else if (type === 'atBatStart') {
+      // R3: the defense's current shift for this at-bat (additive on the event, `game.js`'s own
+      // `_shiftDegFor`) - what `_syncFielders` rotates the outfielders by. It cannot change again
+      // until the NEXT at-bat (nothing in this engine re-shifts mid-at-bat).
+      this._currentShiftDeg = payload.shiftDeg || 0;
       this._paintHud();
     } else if (type === 'count') {
       this._paintHud();
@@ -1480,6 +1579,10 @@ class BaseballPlayScreen {
       const rad = (payload.sprayAngleDeg * Math.PI) / 180;
       const xFt = Math.sin(rad) * payload.distanceFt;
       const yFt = Math.cos(rad) * payload.distanceFt;
+      // R3: every runner this play moves starts running AT CONTACT, in parallel with the whole
+      // contact-hold/chase/marker sequence below (never awaited in this chain - see its own
+      // header for why it can never lengthen the beat).
+      this._animateRunners(payload);
       // THE CONTACT HOLD (row 4): CONTACT_HOLD_MS on the plate view before the cut.
       await this._contactHold(xFt, yFt, payload.battedKind, payload.distanceFt);
       // THE OVERHEAD, RE-PARTITIONED (row 5): flight, then the landing marker's own hold, then
@@ -1487,8 +1590,9 @@ class BaseballPlayScreen {
       // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 4): `battedKind`/`distanceFt` ride along
       // so the overhead flight can tell a grounder from a fly ball and size the lift by how far it
       // actually carried - `game.js`'s own `_onEngineEvent`/`atBatEnd` payload already carries both
-      // (`swingResult.kind`, `outcome.distanceFt`).
-      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt);
+      // (`swingResult.kind`, `outcome.distanceFt`). R3 adds `sprayAngleDeg`, for the chasing
+      // fielder to find the fence at the SAME angle on a home run.
+      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt, payload.sprayAngleDeg);
       // Book-keeping (section 7's own paragraph): 0.4 hold + 1.0 flight + 1.0 marker + 2.4 on the
       // plate = 4.8s = RESULT_MS + BETWEEN_MS - computed FROM those two constants, never a literal
       // 4800, so a settings change still flows through. The between beat is skipped at the end of a
@@ -1500,6 +1604,10 @@ class BaseballPlayScreen {
       const spent = CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS;
       await sleep(Math.max(0, budget - spent));
     } else {
+      // R3: a walk's forced runners (the batter included) - a strikeout moves nobody, and
+      // `_animateRunners` is a no-op the instant it sees that outcome (nothing to build a mover
+      // list from). Same non-blocking rule as the in-play branch above.
+      this._animateRunners(payload);
       await sleep(RESULT_MS);
       // R2's between-pitch gap - unless this at-bat ALSO just ended the half-inning, in which case
       // `_onEngineEvent`'s 'halfInningEnd' case supplies the one gap that transition already gets
@@ -1563,9 +1671,15 @@ class BaseballPlayScreen {
    *  MARKER_HOLD_MS holding the marker, then `_returnToPlate()`. See `_settleAtBat`'s own
    *  book-keeping comment for how that sums against RESULT_MS/BETWEEN_MS.
    *  STAGE 7 row 6: `_cutawayUp` is set here and cleared only by `_returnToPlate()`, so no input
-   *  path can switch the camera back over a ball still in the air. */
-  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt) {
+   *  path can switch the camera back over a ball still in the air.
+   *
+   *  R3: THE CUT is also when the diamond widget appears (`_setDiamondVisible(true)`, hidden again
+   *  only by `_returnToPlate()`) and when the nearest fielder starts his own run
+   *  (`_animateFielderChase`) - the spec's own words, "starting at the cut". `sprayAngleDeg` rides
+   *  along only for that: finding the fence at the SAME angle on a ball that clears it. */
+  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg) {
     this._cutawayUp = true;
+    this._setDiamondVisible(true);
     return new Promise((resolve) => {
       const from = this._battedFrom || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
       const to = engineToWorld(xFt, yFt, 0);
@@ -1576,6 +1690,7 @@ class BaseballPlayScreen {
       const first = this._battedBallAt(from, to, apexFt, preFrac);
       this.actors.setCamera('chase');
       this.actors.chaseAt(first, true);   // snap, so the chase does not fly in from the last ball
+      this._animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg);
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
@@ -1619,6 +1734,220 @@ class BaseballPlayScreen {
       }
     };
     this._markerRaf = requestAnimationFrame(step);
+  }
+
+  // -------------------------------------------------------------------------------- R3: runners
+  /** A jersey number for the widget's own filled cell - scanned off both rosters (bases only ever
+   *  hold the BATTING team's own players, but scanning both is one cheap `find` and never wrong). */
+  _jerseyFor(id) {
+    if (!this.game || id == null) return '';
+    for (const side of ['home', 'away']) {
+      const team = this.game[side];
+      const p = team && team.players.find((x) => x.id === id);
+      if (p) return p.jersey;
+    }
+    return '';
+  }
+
+  /** docs/BASEBALL-3D-BUILD.md section 9, "R3": opacity only, never layout - `.bb-diamond.is-visible`
+   *  is the one class this toggles. Shown from the cut (`_animateBattedBall`) until
+   *  `_returnToPlate()`; never shown for a walk or a strikeout (there is no cut for either). */
+  _setDiamondVisible(show) {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="diamond"]');
+    if (el) el.classList.toggle('is-visible', !!show);
+  }
+
+  /** Paints the widget's four cells (filled + jersey number, from `this.game.bases` - the engine's
+   *  own current state, MINUS whichever base index a mover is still travelling TO, so a runner in
+   *  transit is shown only as the moving dot, never as also already standing on the base he left or
+   *  the one he hasn't reached yet) and up to `DIAMOND_DOT_COUNT` moving dots, one per in-transit
+   *  mover. Called every frame from `_animateRunners`'s own loop; harmless while hidden (opacity 0,
+   *  the DOM still updates underneath). */
+  _paintDiamondWidget(movers) {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="diamond"]');
+    if (!el || !this.game) return;
+    const bases = this.game.bases;
+    const inTransitTo = new Set(movers.filter((m) => m.frac < 1 && m.to >= 0 && m.to <= 2).map((m) => m.to));
+    const CELL = ['1b', '2b', '3b'];
+    for (let i = 0; i < 3; i++) {
+      const cellEl = el.querySelector(`[data-cell="${CELL[i]}"]`);
+      if (!cellEl) continue;
+      const on = bases[i] != null && !inTransitTo.has(i);
+      cellEl.classList.toggle('is-on', on);
+      const numEl = cellEl.querySelector('[data-role="num"]');
+      if (numEl) numEl.textContent = on ? String(this._jerseyFor(bases[i])) : '';
+    }
+    const inTransit = movers.filter((m) => m.frac < 1);
+    for (let i = 0; i < DIAMOND_DOT_COUNT; i++) {
+      const dotEl = el.querySelector(`[data-dot="${i}"]`);
+      if (!dotEl) continue;
+      const m = inTransit[i];
+      if (!m) { dotEl.style.opacity = '0'; continue; }
+      const p = lerpDiamondPct(m.from, m.to, m.frac);
+      dotEl.style.left = p.x + '%';
+      dotEl.style.top = p.y + '%';
+      dotEl.style.opacity = '1';
+    }
+  }
+
+  /** A world point at `frac` of the way along a polyline `wp` (world x/z), by DISTANCE - the same
+   *  shape as `lerpDiamondPct` above, one dimension higher. Shared by every runner AND the chasing
+   *  fielder's own straight-line path (a 2-point `wp` there). */
+  _pointOnPath(wp, frac) {
+    if (wp.length < 2) return wp[0];
+    const lens = []; let total = 0;
+    for (let i = 1; i < wp.length; i++) { const d = Math.hypot(wp[i].x - wp[i - 1].x, wp[i].z - wp[i - 1].z); lens.push(d); total += d; }
+    let target = Math.max(0, Math.min(1, frac)) * total;
+    for (let i = 0; i < lens.length; i++) {
+      if (target <= lens[i] || i === lens.length - 1) {
+        const tt = lens[i] > 0 ? target / lens[i] : 1;
+        const a = wp[i], b = wp[i + 1];
+        return { x: a.x + (b.x - a.x) * tt, z: a.z + (b.z - a.z) * tt };
+      }
+      target -= lens[i];
+    }
+    return wp[wp.length - 1];
+  }
+
+  /** EVERY RUNNER THIS PLAY MOVES, driven ONLY by `payload.basesBefore` -> `this.game.bases` (the
+   *  engine's own before/after, R3, docs/BASEBALL-3D-BUILD.md section 9) plus `payload.runnersOut` -
+   *  this never decides an advancement itself, it reads one. Runs CONCURRENTLY with whatever beat
+   *  called it (never awaited in that beat's own sequential chain, see `RUN_WINDOW_MS`'s own
+   *  header) - a mover's natural 27 ft/s duration is used as-is unless the SLOWEST of this play's
+   *  movers would not otherwise finish inside `RUN_WINDOW_MS`, in which case every mover this play
+   *  has is sped up by the SAME factor (the spec's own "speed up ALL movers uniformly").
+   *
+   *  Deriving each mover from the before/after diff, rather than from `outcome` alone, is what lets
+   *  ONE small function cover a single, a double play, a sac fly and a bases-loaded walk: an
+   *  existing runner who is gone from `after` and not in `runnersOut` simply scored (nobody had to
+   *  say so); an existing runner in `runnersOut` was forced out exactly one base ahead of where he
+   *  stood (the only shape this engine's double play has); the batter-runner on ANY out (including
+   *  a productive one, e.g. a sac fly or the front end of a double play) jogs to first and vanishes
+   *  there, per the spec, whatever actually happened to him.
+   *
+   *  A role (r1/r2/r3) is a BASE SLOT, not a person - `_syncBaseRunners` already owns that
+   *  convention (whichever actor is currently shown standing on first is always 'r1'). A runner who
+   *  advances is animated by the SLOT ACTOR HE STARTED IN (there is no fourth actor to hand him off
+   *  to mid-run), so the instant every mover here is done, every one of them - reached a new base,
+   *  scored, or was put out, it makes no difference - is simply HIDDEN, and `_syncBaseRunners()` is
+   *  called once more to re-derive who is standing where, fresh, off `this.game.bases`, under the
+   *  slot roles that actually own those bases now. That one extra call is what stops, say, first's
+   *  own 'r1' actor being left standing at third after a triple while a freshly-placed 'r3' actor
+   *  also appears there. */
+  _animateRunners(payload) {
+    if (!this.actors || this.destroyed || !this.game) return;
+    if (this._runnersRaf) cancelAnimationFrame(this._runnersRaf);
+    const before = payload.basesBefore || [null, null, null];
+    const after = this.game.bases;
+    const outSet = new Set(payload.runnersOut || []);
+    const path = runnerPath();
+    const side = payload.side;
+    const RUNNER_ROLE = ['r1', 'r2', 'r3'];
+    const raw = [];
+    for (let i = 0; i < 3; i++) {
+      const id = before[i];
+      if (id == null) continue;
+      const afterAt = after.indexOf(id);
+      const toIdx = outSet.has(id) ? i + 1 : (afterAt >= 0 ? afterAt : 3);
+      if (toIdx === i) continue; // this engine never leaves a runner exactly where he was and still calls it a move
+      raw.push({ role: RUNNER_ROLE[i], from: i, to: toIdx, speedFt: RUNNER_SPEED_FT_S });
+    }
+    if (payload.outcome !== 'strikeout') {
+      const wasOut = /out$/.test(payload.outcome || '');
+      const toIdx = payload.outcome === 'walk' ? 0 : (wasOut ? 0 : (payload.bases || 1) - 1);
+      const speedFt = payload.outcome === 'walk' ? WALK_RUNNER_SPEED_FT_S : RUNNER_SPEED_FT_S;
+      raw.push({ role: 'rb', from: -1, to: toIdx, speedFt });
+    }
+    if (!raw.length) { this._runnersInMotion = null; return undefined; }
+    const movers = raw.map((m) => {
+      const wp = path.slice(m.from + 1, m.to + 2);
+      let lenFt = 0;
+      for (let i = 1; i < wp.length; i++) lenFt += Math.hypot(wp[i].x - wp[i - 1].x, wp[i].z - wp[i - 1].z);
+      const facingRad = Math.atan2(wp[1].x - wp[0].x, wp[1].z - wp[0].z);
+      return { ...m, wp, naturalS: lenFt / m.speedFt, facingRad, frac: 0, started: false, done: false };
+    });
+    const longestS = Math.max(...movers.map((m) => m.naturalS));
+    const availS = RUN_WINDOW_MS / 1000;
+    const scale = longestS > availS ? longestS / availS : 1;
+    for (const m of movers) m.durMs = (m.naturalS / scale) * 1000;
+    this._runnersInMotion = new Set(movers.map((m) => m.role));
+    const t0 = performance.now();
+    return new Promise((resolve) => {
+      const step = (now) => {
+        if (this.destroyed) { this._runnersInMotion = null; return resolve(); }
+        let allDone = true;
+        for (const m of movers) {
+          if (m.done) continue;
+          if (!m.started) { m.started = true; this.actors.play(m.role, 'Run'); }
+          m.frac = m.durMs > 0 ? Math.min(1, (now - t0) / m.durMs) : 1;
+          if (m.frac < 1) { allDone = false; }
+          else { m.done = true; this._runnersInMotion.delete(m.role); this.actors.hide(m.role); continue; }
+          const p = this._pointOnPath(m.wp, m.frac);
+          this.actors.setActor(m.role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad: m.facingRad });
+        }
+        this._paintDiamondWidget(movers);
+        if (!allDone) {
+          this._runnersRaf = requestAnimationFrame(step);
+        } else {
+          this._runnersRaf = 0;
+          this._runnersInMotion = null;
+          this._syncBaseRunners(); // hand every mover off to the slot role that actually owns its base now
+          resolve();
+        }
+      };
+      this._runnersRaf = requestAnimationFrame(step);
+    });
+  }
+
+  /** THE CHASE (R3): the fielder nearest the landing point - or, on a ball that clears the fence,
+   *  nearest the fence AT THAT SPRAY ANGLE (the spec's own "(or the fence, for a homer)") - jogs
+   *  there starting at the cut, arriving no earlier than the ball (`Math.max` against the chase's
+   *  own `FLIGHT_MS`), then `Idle`. No fielding AI: the ENGINE already decided the outcome: this is
+   *  presentation, run concurrently with the ball's own flight exactly like `_animateRunners`. */
+  _animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg) {
+    if (this._fielderRaf) cancelAnimationFrame(this._fielderRaf);
+    if (!this.actors || !this.game || sprayAngleDeg == null) { this._chasingFielderRole = null; return; }
+    const fenceFt = this._fenceFt();
+    const wallFt = fenceFtAt(sprayAngleDeg, fenceFt);
+    const overFence = (distanceFt || 0) >= wallFt;
+    let targetPlan = { x: xFt, y: yFt };
+    if (overFence) {
+      const rad = (sprayAngleDeg * Math.PI) / 180;
+      targetPlan = { x: Math.sin(rad) * wallFt, y: Math.cos(rad) * wallFt };
+    }
+    const targetWorld = engineToWorld(targetPlan.x, targetPlan.y, 0);
+    const shiftDeg = this._currentShiftDeg || 0;
+    let nearestRole = null, nearestDist = Infinity, nearestPos = null;
+    for (const role of FIELDER_ROLES) {
+      const pos = fielderWorld(role, fenceFt, shiftDeg);
+      if (!pos) continue;
+      const d = Math.hypot(pos.x - targetWorld.x, pos.z - targetWorld.z);
+      if (d < nearestDist) { nearestDist = d; nearestRole = role; nearestPos = pos; }
+    }
+    if (!nearestRole) { this._chasingFielderRole = null; return; }
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const defenseSide = battingSide === 'away' ? 'home' : 'away';
+    const naturalS = nearestDist / FIELDER_SPEED_FT_S;
+    const arriveMs = Math.max(naturalS, FLIGHT_MS / 1000) * 1000;
+    const facingRad = Math.atan2(targetWorld.x - nearestPos.x, targetWorld.z - nearestPos.z);
+    this._chasingFielderRole = nearestRole;
+    this.actors.play(nearestRole, 'Run');
+    const t0 = performance.now();
+    const wp = [nearestPos, targetWorld];
+    const step = (now) => {
+      if (this.destroyed) { this._chasingFielderRole = null; return; }
+      const frac = Math.min(1, (now - t0) / arriveMs);
+      const p = this._pointOnPath(wp, frac);
+      this.actors.setActor(nearestRole, { side: defenseSide, pos: { x: p.x, y: 0, z: p.z }, heightFt: FIGURE_HEIGHT_FT, facingRad });
+      if (frac < 1) {
+        this._fielderRaf = requestAnimationFrame(step);
+      } else {
+        this.actors.idle(nearestRole);
+        this._chasingFielderRole = null;
+        this._fielderRaf = 0;
+      }
+    };
+    this._fielderRaf = requestAnimationFrame(step);
   }
 
   /** The overlay while the chase camera is live: nothing at all during the flight (the ball is a
@@ -2249,6 +2578,55 @@ function basesSvg(bases) {
     <rect x="4" y="18" width="8" height="8" transform="rotate(45 8 22)" class="${on(0) ? 'is-on' : ''}"></rect>
     <rect x="28" y="18" width="8" height="8" transform="rotate(45 32 22)" class="${on(2) ? 'is-on' : ''}"></rect>
   </svg>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Four cells, the same left/right
+// assignment `basesSvg` above already drew (first on the left, third on the right, seen from
+// behind the plate) so the two never disagree about which corner is which. Percent positions
+// within the widget's own 84x84 box; `-1`/`3` (home, both ends) share one entry, same as
+// `field.js`'s `runnerPath()` shares its own `home` at both ends of the array this indexes into.
+const DIAMOND_PCT = [
+  { x: 50, y: 88 }, { x: 12, y: 50 }, { x: 50, y: 12 }, { x: 88, y: 50 }, { x: 50, y: 88 },
+];
+/** A point along the widget's own diamond edges between base index `from` and `to` (the same -1..3
+ *  domain `runnerPath()` uses), `frac` of the way there by DISTANCE (not by corner count), so a
+ *  two-base move (a runner on first taking a double to third) moves the dot at a constant rate
+ *  through second rather than snapping through it. */
+function lerpDiamondPct(from, to, frac) {
+  const wp = DIAMOND_PCT.slice(from + 1, to + 2);
+  if (wp.length < 2) return wp[0] || DIAMOND_PCT[0];
+  const lens = []; let total = 0;
+  for (let i = 1; i < wp.length; i++) { const d = Math.hypot(wp[i].x - wp[i - 1].x, wp[i].y - wp[i - 1].y); lens.push(d); total += d; }
+  let target = Math.max(0, Math.min(1, frac)) * total;
+  for (let i = 0; i < lens.length; i++) {
+    if (target <= lens[i] || i === lens.length - 1) {
+      const tt = lens[i] > 0 ? target / lens[i] : 1;
+      const a = wp[i], b = wp[i + 1];
+      return { x: a.x + (b.x - a.x) * tt, y: a.y + (b.y - a.y) * tt };
+    }
+    target -= lens[i];
+  }
+  return wp[wp.length - 1];
+}
+const DIAMOND_DOT_COUNT = 4; // batter + up to three existing runners, the most one play ever moves
+function diamondWidgetHTML() {
+  // The rotated diamond LOOK is its own inner `.bb-diamond-cell-shape` - the cell itself (and so
+  // its label/number children) stays UNROTATED, because a `position:absolute` child of a rotated
+  // ancestor is carried along that same rotation when painted (it does not just inherit the
+  // ancestor's coordinate SYSTEM, the whole painted box swings through the rotation), which is
+  // what put "3B" a few px past the viewport's own right edge - found by measuring its real
+  // getBoundingClientRect, not by eye.
+  const cell = (key, label) => `<div class="bb-diamond-cell" data-cell="${key}"><div class="bb-diamond-cell-shape"></div><span>${label}</span><b data-role="num"></b></div>`;
+  let dots = '';
+  for (let i = 0; i < DIAMOND_DOT_COUNT; i++) dots += `<div class="bb-diamond-dot" data-dot="${i}"></div>`;
+  return `<div class="bb-diamond" data-role="diamond" aria-hidden="true">
+    ${cell('home', t('widget_home'))}
+    ${cell('1b', t('widget_1b'))}
+    ${cell('2b', t('widget_2b'))}
+    ${cell('3b', t('widget_3b'))}
+    ${dots}
+  </div>`;
 }
 
 /** SPEC.md section 13's exact outcome vocabulary (Single/Double/Triple/Home run/Out/Walk/
