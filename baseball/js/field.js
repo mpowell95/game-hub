@@ -129,6 +129,14 @@ export function engineToWorld(xFt, yFt, heightFt = 0) {
 // and R3 (fielders and runners) both position off exactly these and must not re-derive them.
 export const FIGURE_HEIGHT_FT = 6.0;      // every figure, R1 spec. The model's own units are measured at load.
 export const BALL_RADIUS_FT = 0.36;       // ~5x a real baseball, on purpose: the reference draws the ball large
+// R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): a pixel-size floor for the ball on the PITCHER
+// camera only. Measured (node, `zoneRectFt`/`projectToCanvas` against `CAMERAS.pitcher`, the real
+// pitch path): the true sphere draws ~13 px at release (the camera sits close to the rubber) but
+// shrinks to ~2.3 px at the crossing, 72 ft away - the exact defect Matt's recording showed ("no
+// frame... shows it"). Floored to 8 px: comfortably legible on a 393 px phone, still well under
+// what the same ball draws on the BATTER camera at its own crossing (~12.8 px, measured the same
+// way) so the pitcher camera's ball never reads as bigger than the batter's own close-up view.
+export const BALL_MIN_PX = 8;
 // The strike zone, as a vertical rectangle. 17 inches wide (a real plate), the engine's own
 // x in [-1, 1] mapping to its two edges, 1.6 to 3.4 ft off the ground. `z` is where the ball is
 // judged: 0.7 ft on the CATCHER's side of the plate's rear point, which is where a batter standing
@@ -296,6 +304,29 @@ export const CAMERAS = {
   chase: { offset: [0, 10, 22] },
 };
 export const CHASE_LERP = 0.15;
+// R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the chase's own MINIMUM START, used only for the
+// very first snap of a play (`Actors.chaseAt(pos, immediate: true)`), never the steady per-frame
+// offset above. Matt's recording: "on a short ball the first chase frames are the catcher's head
+// filling the foreground."
+//
+// Measured (node, the real contact-hold-to-cut geometry: a grounder's ball position at
+// `preFrac = CONTACT_HOLD_MS / (CONTACT_HOLD_MS + FLIGHT_MS)` of its flight, swept over every
+// distanceFt from MIN_IN_PLAY_FT to 100 ft and every spray angle): at the STEADY offset, the
+// catcher's own projected head height already exceeds the frame at some distance in that range
+// (a near-lens pass, not a gentle close-up) - and it still does at every larger offset tried, since
+// the camera's world z is `ball.z + offset.z` and the ball's own z sweeps continuously through the
+// catcher's fixed z=7.8 for SOME distanceFt no matter what constant is added. No fixed offset can
+// avoid that pass; it only moves which distanceFt it happens at. So this floor is NOT a collision
+// guarantee by itself - what actually closes the defect is `Actors._applyCameraVisibility` hiding
+// the catcher and umpire from the chase camera entirely (the same mechanism the batter camera
+// already uses for the umpire, below). This floor is the second, modest half: a slightly wider
+// start than the steady (10, 22) so a short play's first frame reads a touch more pulled-back,
+// chosen small on purpose - measured worst-case ball size over the same 40-100 ft sweep drops from
+// 6.85 px (steady) to only 6.27 px here, nowhere near the ~5 px CAMERAS.chase's own comment already
+// rejected as illegible. `_stepChase`'s own per-frame CHASE_LERP eases the camera from this start
+// back toward the steady offset over the next several frames, same as any other cut.
+export const CHASE_MIN_HEIGHT_FT = 11;
+export const CHASE_MIN_BACK_FT = 24;
 
 /** The three cameras, already aimed. `setAspect(a)` re-applies the portrait aspect on every
  *  resize; the chase camera is positioned by `Actors` every frame and only needs its aspect here. */
@@ -480,6 +511,31 @@ function standsPoints(fenceFt, extraFt, stepDeg = 2.5) {
   }
   return pts;
 }
+/** R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the short backstop section BEHIND home plate.
+ *  `standsPoints` above runs -75 to +75 degrees and stops there (R1 spec), leaving the whole rear
+ *  180-ish degrees open - which is exactly what the PITCHER camera looks straight into (Matt's own
+ *  recording: "grass to the horizon behind the batter"; the R1 record already flagged this as
+ *  deferred). `deg` uses the same `polar()` convention as every other angle in this file (0 =
+ *  straight to centre field), so directly behind the plate is 180; sweeping 180 +/- halfSpanDeg
+ *  draws a short convex arc centred there, at a fixed radius from home (no fence to measure off,
+ *  unlike `standsPoints`). */
+function backstopPoints(distFt, halfSpanDeg, stepDeg = 3) {
+  const pts = [];
+  for (let deg = 180 - halfSpanDeg; deg <= 180 + halfSpanDeg + 1e-9; deg += stepDeg) {
+    const p = polar(deg, distFt);
+    pts.push({ x: p.x, z: -p.y });
+  }
+  return pts;
+}
+// R7: measured (node, ray-casting the PITCHER camera's own left/right frustum edges through the
+// z = 30 ft plane, `CAMERAS.pitcher`'s real position/lookAt) - the frame spans about -55 to +54
+// degrees from home at that depth, so 60 is that span plus a few degrees of margin either side.
+// 30 ft is "about 20 ft behind the umpire" (UMPIRE.z = 10.2), rounded. Two 12 ft tiers, the same
+// depth `buildStadium`'s own main bowl tiers use, rising to 24 ft (shorter than the 40 ft bowl - a
+// backdrop feature behind a wall that does not exist here, not a stand anyone is ever "in").
+const BACKSTOP_DIST_FT = 30;
+const BACKSTOP_HALF_SPAN_DEG = 60;
+const BACKSTOP_TIER_DEPTH_FT = 12;
 
 /** Build the whole stadium into `scene` for one league. Returns a handle with `dispose()` (every
  *  geometry, material and texture this made), `group`, and `fencePts` so a test can sample the wall
@@ -611,6 +667,19 @@ export function buildStadium(scene, { fenceFt }) {
     const outer = standsPoints(fenceFt, 14 + (k + 1) * 12);
     faceParts.push(ribbonGeometry(inner, tierBase[k], tierTop[k], 1));
     deckParts.push(deckGeometry(inner, outer, tierTop[k]));
+  }
+  // R7: the backstop, two more tiers, same crowd texture and the same face/deck merge (no extra
+  // draw calls) - `standsPoints`'s own gap behind the plate, closed with the arc the pitcher camera
+  // actually sees. The batter camera (z = 13.1, looking toward -z) never reaches z = 30: it is
+  // physically behind that camera's own lens, so nothing here needs a per-camera visibility toggle
+  // the way the umpire/catcher do (field.js's CAMERAS comment; `Actors._applyCameraVisibility`).
+  const backstopTierBase = [0, BACKSTOP_TIER_DEPTH_FT];
+  const backstopTierTop = [BACKSTOP_TIER_DEPTH_FT, BACKSTOP_TIER_DEPTH_FT * 2];
+  for (let k = 0; k < 2; k++) {
+    const inner = backstopPoints(BACKSTOP_DIST_FT + k * BACKSTOP_TIER_DEPTH_FT, BACKSTOP_HALF_SPAN_DEG);
+    const outer = backstopPoints(BACKSTOP_DIST_FT + (k + 1) * BACKSTOP_TIER_DEPTH_FT, BACKSTOP_HALF_SPAN_DEG);
+    faceParts.push(ribbonGeometry(inner, backstopTierBase[k], backstopTierTop[k], 1));
+    deckParts.push(deckGeometry(inner, outer, backstopTierTop[k]));
   }
   const faceGeo = mergeGeometries(faceParts, false);
   const faceMat = new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.DoubleSide });
