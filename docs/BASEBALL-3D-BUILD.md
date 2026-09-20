@@ -1065,3 +1065,67 @@ one pitch-to-world function the ball and the fire trail share. `timingWord` is s
 swing, so the `'foul'` pop branch was already dead; "Foul" and "Swing and a miss" are said by the
 swing line only. The reduced-motion check in `test-visual.mjs` is structural (source regex), not
 a call-count probe. r2-cadence watches `_showPop` now, not Line 1.
+
+### R5: contact and carry, so a Perfect swing is never an out at the plate
+
+Matt's recording of v865: five "★ Perfect" swings, five outs at the batter's feet, 0 ft. Measured
+through the real engine (`swing.js` + `outcomes.js`, Quick Play's preset roster, College park):
+perfect timing with the cursor dead centre carries 0 ft on 15% of swings; the cursor 0.2 zone
+units off centre (about two inches at the plate) carries 0 ft on 100%. Two causes, both numbers,
+not rules: `BASE_EXIT_VELO` (31.39) sits 1.4 mph above `CARRY_ZERO_MPH` (30), so every deduction
+between them (`placeFrac x placementPenaltyMph` 18, the ±4 mph noise, `placeQ` folded into `q`)
+drops the ball below the line where `carryFt` returns 0; and `carryFt`'s angle factor `sin(2a)` is
+near 0 for a grounder at 0 to 3 deg, so a topped ball stops at the plate. R5 owns
+`baseball/js/engine/` for this stage (section 6's blanket exclusion does not apply, exactly as R2's
+did not). It also owns item 11 of the same analysis: the season scoreboard drifted when RA gave the
+CPU its new plays and nothing was re-tuned.
+
+**Rules.**
+
+1. **Placement steers the ball, it never subtracts power.** `q` is timing quality alone
+   (`qualityFor`); `placeQ` stops multiplying it, and `placementPenaltyMph` is deleted. The vertical
+   offset still picks the kind (grounder / line / fly / pop-up) and the horizontal offset still
+   sprays, as R2 wrote them. A ball crossing outside the circle is still a miss. The one thing the
+   outer half of the circle may cost is launch-angle tightness (the spread widens from the inner
+   half to the rim), never mph. `centered` keeps its meaning for the sim's attribution.
+2. **Exit velocity is a real number.** The pop and the HOME RUN strip print it, so it has to read
+   like a broadcast: a barely-timed contact around 50 mph, a perfectly-timed swing with no power
+   points around 80, a perfectly-timed swing at cap power around 105 at College, POWER mode a few
+   mph over CONTACT, noise a few mph either way. `BASE_EXIT_VELO`, `MIN_EXIT_VELO_MPH`,
+   `SKILL_EFFECT.hitPow.exitVeloMphPerPt`, `modeExitMult` and `CARRY_SCALE` are all re-derived
+   together; `LEAGUE_POWER_SCALE` keeps scaling the excess above `CARRY_ZERO_MPH`. Write the
+   derivation in `settings.js` the way BB-2d's comment does, from named targets, so the next
+   fence change can redo it.
+3. **No ball in play ever carries 0 ft.** `carryFt` gets a grounder floor on its angle factor
+   (a ball hit at 2 deg rolls; its distance is where a fielder meets it, roughly 40 to 150 ft),
+   pop-ups land at least on the infield grass, and a new `MIN_IN_PLAY_FT` names the floor every
+   in-play result must clear. `resolveContact`'s geometry (sectors, bloop band, line-through,
+   double/triple fractions, the fence) stays; only what feeds it changes.
+4. **Perfect means something.** Measured at Quick Play's preset roster against Quick Play's CPU,
+   at the College park, 20,000 swings per cell (the `--contact-grid` harness, or a sibling
+   `--perfect` mode): a perfectly-timed swing (inside `perfectMs`) with the ball in the inner half
+   of the CONTACT circle is a hit at least 55% of the time and a home run at least 8%; the same
+   swing with the ball in the outer half is a hit at least 30%; a swing at the edge of the timing
+   window (q near 0) is still in play and a hit at most 25%. The existing contact-grid checks
+   (TIMING_OVER_POWER and the ceiling) must stay green: timing beats power is the doc's own lock.
+5. **The season scoreboard.** `node sim-baseball.mjs --quick --assert` before any change, pasted;
+   then the full `--assert` after. Every league's SEASON_WINRATE_BAND and SEASONS_TO_GOLD are the
+   targets. Knobs allowed: `CPU`, `CPU_LEVEL_SHORTFALL`, `SKILL_EFFECT`, the exit-velocity and
+   carry constants above, `LEAGUE_POWER_SCALE`, `zones.js`'s depths if the report says why. Not
+   allowed: any `FEEL.ui` beat, `cursorR`, `timingWindow`, `perfectMs`, `foulMult`, the steal /
+   bunt / pickoff constants, anything in `ui.js` beyond what the new numbers force (check
+   `_battedApexFt` and the chase against a 150 ft grounder and a 60 ft pop-up; they must still
+   look like a grounder and a pop-up).
+
+**Deliverables.** `baseball/js/test.js` section 32: (a) 20,000 random in-play swings per league
+and per mode, none under `MIN_IN_PLAY_FT`; (b) a perfectly-timed dead-centre swing is never 0 ft
+and its exit velocity is inside [70, 115] at every league; (c) with the same seed, cursor offset
+0 and cursor offset 0.3 produce the same exit velocity (placement does not subtract power);
+(d) q=1 beats q=0 in exit velocity on the same seed; (e) a grounder at 1 deg carries at least
+40 ft; (f) the eight existing contact-quality tests updated, none deleted. The sim scoreboard
+before and after, the contact-grid lines, and the rule-4 census, all pasted into
+`baseball/CLAUDE.md` exactly as run, passing or not. Every suite the stage touches green:
+`node baseball/js/test.js`, `node sim-baseball.mjs --contact-grid`, `node sim-baseball.mjs
+--assert`, `node test-baseball-device.mjs` (with `BB_DEVICE_QUICK=1`), `node test-visual.mjs
+baseball`. Stills: the pop and strip after a real homer showing a broadcast-looking mph, and a
+grounder chase ending in the infield, not at the plate.
