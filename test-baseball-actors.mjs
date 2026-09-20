@@ -1056,7 +1056,10 @@ console.log('\n=== r2-cadence (delegated to test-baseball-device.mjs) ===');
     skipLine('r2-cadence', 'player.glb missing - test-baseball-device.mjs would have nothing to measure');
   } else {
     const { spawnSync } = await import('node:child_process');
-    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 120000 });
+    // R3 (orchestrator's ship review): the device suite's runners-move probe plays real games until
+    // a runner advances, up to 360 s, so a 120 s spawn timeout killed it mid-run and this row read
+    // "exit 1" under a passing r2-cadence line. 480 s covers the probe's own budget with margin.
+    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 480000 });
     const out = (r.stdout || '') + (r.stderr || '');
     const cadenceLine = out.split('\n').find((l) => /r2-cadence/.test(l)) || '(no r2-cadence line in output)';
     if (r.status === 0) ok(`test-baseball-device.mjs passed - ${cadenceLine.trim()}`);
