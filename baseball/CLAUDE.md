@@ -4,6 +4,154 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R3: fielders, runners, the chase, and the diamond widget (2026-09-20)
+
+The third stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R3"). R1 built the stadium
+and the cameras; R2 re-timed the controls; this is the first stage where anyone OTHER than the
+batter, the pitcher, the catcher and the umpire stands on the field, and the first time a figure
+here has ever RUN.
+
+**Fifteen actors, not four.** `actors.js`'s `ROLES` grows from
+`[batter, pitcher, catcher, umpire]` to those four plus `FIELDER_ROLES`
+(`f1b, f2b, f3b, fss, flf, fcf, frf`) and `RUNNER_ROLES` (`r1, r2, r3, rb`) - 15, the stage's own
+cap, all from the same glb clone path `_makeActor` already used for the first four. Fielders cast
+to the defense's side, runners to the batting side, both through a new generic `setActor(role,
+{side, pos, heightFt, facingRad})` (the same `_setSide` engine `setBatter`/`setPitcher`/
+`setCatcher`/`setUmpire` already use, one line each) - a `hide(role)` toggles `pivot.visible` for
+runners between bases, and `_place()` sets `pivot.visible = true` on every OTHER placed role except
+the umpire (whose own visibility stays a CAMERA fact, `_applyCameraVisibility` - `_place()` would
+otherwise re-show him from the batter camera on the very next redraw). No `noBat` flag was needed:
+`_attachBat` was already keyed on the literal role name `'batter'`, so every R3 role was already
+bat-free by construction. `dispose()` needed no change at all - it already iterates
+`Object.values(this.actors)`, so 15 roles are torn down exactly like 4 were.
+
+**Fielder positions** (`field.js`'s `FIELDER_POS`/`fielderWorld`): the four infielders are fixed
+world spots (1B `(63,0,-63)`, 2B `(30,0,-100)`, SS `(-30,0,-100)`, 3B `(-63,0,-63)`); the three
+outfielders are further scaled by `fenceFt.center / 405` (405 = minors' own center fence, the
+spec's reference) and ROTATED about home by the defense's current shift - `game.js`'s
+`_shiftDegFor`, now exposed on the 'atBatStart' event as `shiftDeg` (additive), captured once per
+at-bat into `_currentShiftDeg` since nothing in this engine re-shifts mid-at-bat. `_syncFielders()`
+(called from `_syncActors()`, so every `_drawStaticField()`) places all nine every redraw except
+whichever one `_animateFielderChase` currently owns; `_syncBaseRunners()` (same call site) stands
+each runner on his bag from `this.game.bases` - memoized per role (`_runnerStanding`) so an
+unchanged base costs nothing, and skipped ENTIRELY while `_animateRunners` owns any runner (see
+below - `this.game.bases` is already the play's AFTER state by the time it fires, so syncing from
+it mid-run would snap a runner straight to where he's headed instead of letting him run there).
+
+**A role is a BASE SLOT, not a person.** `r1`/`r2`/`r3` mean "whoever is standing on first/second/
+third right now," not "the third batter who reached base tonight." A runner who advances is
+animated by the slot actor he STARTED in (there is no fourth actor to hand him to mid-run), so the
+instant `_animateRunners` finishes, EVERY mover - safely arrived, scored, or put out, it makes no
+difference - is simply hidden, and `_syncBaseRunners()` is called once more to re-derive who is
+standing where, fresh, off `this.game.bases`, under the slot that actually owns that base now. That
+one extra call is what stops, say, first's own `r1` actor being left standing at third after a
+triple while a freshly placed `r3` actor also appears there.
+
+**Baserunning is derived from the before/after diff, never decided here.** `game.js`'s `atBatEnd`
+payload grows `basesBefore` (the runner array exactly as it stood when the at-bat opened - captured
+ONCE, since nothing in this engine moves a runner between pitches within one at-bat) and
+`runnersOut` (this play's own removed-without-scoring runners - only the double play produces one,
+captured before `advanceDoublePlay` removes him). Both additive; every `atBatEnd` emit carries them,
+including strikeout and walk. `_animateRunners(payload)` in `ui.js` diffs `basesBefore` against the
+live `this.game.bases` (already the play's AFTER state - `game.js` mutates it synchronously before
+the event fires): an existing runner gone from `bases` and NOT in `runnersOut` simply scored (nobody
+had to say so); one IN `runnersOut` was forced out exactly one base ahead of where he stood (the
+only shape this engine's double play has); the batter-runner on ANY out - including a productive one
+(a sac fly, or the front end of a double play) - jogs to first and vanishes there, whatever actually
+happened to him, per the spec. One rule covers every case: `vanish = wasOut || arrivedAtIndex === 3`
+(3 being "past third," i.e. scored).
+
+**Runners RUN, never teleport.** `field.js`'s `runnerPath()` is the ordered waypoints a base index
+maps into (`-1` = home/the batter's own start, `0..2` = first/second/third, `3` = home again -
+scored), built off `basePositions()` (the same bag centers `buildStadium` draws the white squares
+at). A mover's own path is a SLICE of that array between his `from`/`to` indices, so a runner
+advancing two bases at once (a double) runs THROUGH second, not diagonally across the infield -
+`_pointOnPath` walks the polyline by DISTANCE, not by waypoint count, for constant speed.
+27 ft/s (the spec's own number, 90 ft in 3.33 s); a forced walk runner moves at half that. **The
+"speed up uniformly" rule**: if the slowest mover in a play would not finish inside `RUN_WINDOW_MS`
+(`CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS` = 2000 ms - which is also `RESULT_MS + BETWEEN_MS`
+in R2's current tuning, so one constant covers both the in-play and the walk case), EVERY mover that
+play has is sped up by the same factor, computed from the play's own longest natural duration - a
+runner who was always going to make it in time keeps his real pace. **`_animateRunners` is never
+awaited in its caller's own sequential chain** - it is kicked off at contact (or at the top of a
+walk's beat) and runs CONCURRENTLY with the ball's own contact-hold/chase/marker sequence (or the
+walk's plain sleeps), so it can never lengthen the beat: r2-cadence stayed at 3015-3161 ms across
+every run, matching R2's own measured range, with the runner/fielder layer fully live.
+
+**The chase camera now frames the PLAY, not just the ball.** `_animateFielderChase(xFt, yFt,
+distanceFt, sprayAngleDeg)`, called at the cut (the same instant `_animateBattedBall` switches to
+`chaseCam`): finds the fielder nearest the landing point - or, on a ball that clears the fence,
+nearest the FENCE at that same spray angle (`outcomes.js`'s own `fenceFtAt`, so the wall a fielder
+runs to and the wall a home run actually cleared can never disagree) - and runs him there at 27 ft/s,
+clamped to arrive no earlier than the ball itself (`Math.max(naturalS, FLIGHT_MS / 1000)`), then
+`Idle`. No fielding AI: the engine has already decided the out or the hit: this is presentation,
+exactly like every other R1/R2 camera move.
+
+**`Run`, poses.js's first clip with no sprite to grade against.** Two keyframes (the spec's own
+"a looping two-key leg cycle"), a NEW loop mode - `loop: 'pingpong'` - so the mixer sweeps
+key0 -> key1 -> key0 with no jump (a plain `LoopRepeat` would snap the trailing foot straight back
+to the leading foot's key0 pose every 0.3 s, a foot teleporting, not a stride); `actors.js`'s
+`_makeActor` gained the one line of loop-mode branching this needed. Thighs swing (Hip flexion is
++x on `upperLeg`), the leading leg staying straighter while the trailing one folds hard (a running
+leg bends AFTER toe-off, not before footstrike); the opposite arm swings with the opposite leg; a
+small hip drive (`hipsOffset` local z) rides the stride. Graded against the measured floor in
+`test-baseball-actors.mjs` instead of a sprite (fielders and runners are new to R3): "foot travel of
+at least 20 px per cycle at 100 px figure height through chaseCam," expressed as a ratio and scaled
+by the ACTUAL measured height. The spec's own starting amplitudes (thigh +/-35, arm +/-30) undershot
+that floor by about 11% (20.7 px measured against a 23.2 px floor at this rig's own proportions,
+115.9 px tall through chaseCam); the thigh swing is now +/-48, with the trailing knee folding
+further (78 deg) so the arc gets longer as well as wider - measured after: 27.6-33.9 px across
+repeated runs, comfortably clear.
+
+**The diamond widget**, `.bb-diamond` in `.bb-field-wrap`: four cells (HOME/1B/2B/3B, the same
+left/right convention `basesSvg` already draws for the HUD's own three-base version - first on the
+left, third on the right, seen from behind the plate), up to `DIAMOND_DOT_COUNT` (4) moving dots -
+one per in-transit mover, so a double play's two simultaneous runners each get their own. Opacity
+only (never layout): shown from the cut (`_animateBattedBall`) until `_returnToPlate()` clears it;
+hidden for a walk or a strikeout (neither has a cut). **A real CSS bug found only by measuring
+`getBoundingClientRect`, not by looking at a screenshot**: the cell shape is `rotate(45deg)`, and a
+`position:absolute` LABEL child of a rotated ancestor is carried along that same rotation when
+painted (it does not just inherit the ancestor's coordinate system - the whole painted box swings
+through the rotation about the ancestor's centre). The first draft's labels were flex-centred
+inside their own rotated cell and drifted off that centre once rotated; "3B," the rightmost cell,
+drifted far enough to clip a few px past the viewport's own right edge at 393px wide. Fixed by
+splitting the rotation OUT into its own `.bb-diamond-cell-shape` child - the cell itself (and so its
+label/number) stays unrotated and centres normally by flex, and only the decorative background/
+border square rotates.
+
+**Facts learned, for R4:**
+- The 15 role names: `batter, pitcher, catcher, umpire, f1b, f2b, f3b, fss, flf, fcf, frf, r1, r2,
+  r3, rb`. `actors.setActor(role, {side, pos, heightFt, facingRad})` places/casts any of the last
+  eleven; `actors.hide(role)` hides one; `actors.play(role, 'Run')` starts the stride, `actors.idle(
+  role)` returns to standing.
+- Widget DOM hooks: `[data-role="diamond"]` (the `.is-visible` toggle), `[data-cell="home"
+  |"1b"|"2b"|"3b"]` (each carries `.is-on` when filled and a `[data-role="num"]` child with the
+  jersey number), `[data-dot="0".."3"]` (style.left/top in %, opacity 0/1).
+- Chase phases and their timings: contact (`_contactHold`, `CONTACT_HOLD_MS` 400 ms, plate camera,
+  runners already moving) -> the cut (`_animateBattedBall`, `FLIGHT_MS` 900 ms, chase camera live,
+  widget visible, the nearest fielder starts running) -> the marker hold (`_runMarkerHold`,
+  `MARKER_HOLD_MS` 700 ms, chase camera holds on the landing point) -> `_returnToPlate()` (cutaway
+  and widget both clear, plate camera, runners standing at their new bases).
+- `renderStats()` / frame cost with all 15 actors + the stadium, container software renderer,
+  pixel ratio 1 (an idle scene: batter/pitcher/catcher/umpire plus the nine fielders placed, bases
+  empty so the four runner roles are hidden - a runner mid-play adds at most four more draw calls):
+  `batterCam` 18,249 triangles / 24 draw calls / 0.98 ms/frame; `pitcherCam` 19,829 / 24 / 0.80 ms;
+  `chaseCam` 19,685 / 19 / 0.67 ms. All three well under the 60-draw-call budget and the 3 ms/frame
+  threshold - no material sharing was needed.
+- The pitching camera (R1's own `CAMERAS.pitcher`, unchanged by R3) sits BEHIND 2B/SS's own spec
+  z (`camera z = -72` vs `2B`/`SS` at `z = -100`) and only 9 ft in front of 1B/3B's (`z = -63`) at
+  +/-63 ft of lateral offset - so from that camera, NONE of the four infielders are ever actually
+  visible (2B/SS are behind the lens entirely; 1B/3B are 60+ ft to the side at single-digit-foot
+  range, far outside the 50 deg fov). Confirmed by rendering the pitching-idle still: only the
+  pitcher, and the batter/catcher inside the small zone box, are on screen. This is an R1 camera
+  fact, not something R3 introduced or can fix without touching numbers other suites (`zone-world`,
+  `ball-grows`) are calibrated against - reported here rather than worked around.
+- The batter camera (also R1, also unchanged) is a 50 deg-fov shot centred on the ZONE, not a wide
+  establishing shot - at most two or three fielders (whichever stand nearest the mound's own
+  bearing) are ever in frame from it at once; the rest are off to the sides. "Nine fielders visible"
+  is true of the SCENE (all nine are placed and rendered, provably via `fielders-placed`), not of
+  any single frame either named camera draws.
+
 ## R2: the controls, re-timed to the reference (2026-09-20)
 
 The second stage of the clone (`docs/BASEBALL-3D-BUILD.md` section 9, "R2"), against Matt's

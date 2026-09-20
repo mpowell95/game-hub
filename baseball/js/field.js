@@ -160,6 +160,66 @@ export const FENCE = { height: 8, railHeight: 0.6 };
 // a hit, gold for a home run, red for an out) so nothing a player already reads changed meaning.
 export const MARKER = { radiusFt: 14 / 12, hit: 0x2e7d4f, hr: 0xffce3a, out: 0xc0392b };
 
+// ------------------------------------------------------------------ R3: fielders and runners ----
+// docs/BASEBALL-3D-BUILD.md section 9, "R3". The nine fielders' own spots, world feet (`y` is
+// always 0 here - `place()` takes `heightFt` separately, the same convention `CATCHER`/`UMPIRE`
+// already use). The four infielders and the pitcher/catcher never move; the three outfielders are
+// further scaled by the league's own fence distance and rotated about home by the defense's
+// current shift - `outfielderWorld` below does both, so a shifted fielder still stands the SAME
+// distance from home this spec position puts him.
+export const FIELDER_POS = {
+  f1b: { x: 63, z: -63 }, f2b: { x: 30, z: -100 }, fss: { x: -30, z: -100 }, f3b: { x: -63, z: -63 },
+  flf: { x: -150, z: -215 }, fcf: { x: 0, z: -265 }, frf: { x: 150, z: -215 },
+};
+const OUTFIELD_ROLES = ['flf', 'fcf', 'frf'];
+export const OUTFIELD_FENCE_REF_FT = 405; // section 9's own scale reference (minors' own center fence)
+// Every fielder stands facing the plate - the same 0 the pitcher's own facing already is (his own
+// comment: "facingRad=0 already does that", a bind-pose sweep confirmed the model's own front is
+// +z at facingRad 0, and every fielder stands at negative z, so facing the plate IS facing +z).
+export const FIELDER_FACING_RAD = 0;
+
+/** One fielder's real world spot, for this league's fence (`fenceFt`, the same shape `buildStadium`
+ *  draws the wall from) and this at-bat's shift (`game.js`'s own `_shiftDegFor`, carried on the
+ *  'atBatStart' event as `shiftDeg`). Infielders pass straight through unscaled and unrotated - only
+ *  `OUTFIELD_ROLES` are touched at all. The rotation reuses the exact angle convention `polar()`
+ *  above and `zones.js`'s own `shiftDeg` already share (the engine's plan angle: 0 = dead centre,
+ *  negative = left field), converting the fielder's fixed world spot to that plan angle/radius,
+ *  scaling the radius, rotating the angle, then converting back - so "rotate the outfielders' plan
+ *  positions about home by the shift angle" (section 9's own words) is exactly what happens. */
+export function fielderWorld(role, fenceFt, shiftDeg = 0) {
+  const p = FIELDER_POS[role];
+  if (!p) return null;
+  if (!OUTFIELD_ROLES.includes(role)) return { x: p.x, y: 0, z: p.z };
+  const scale = ((fenceFt && fenceFt.center) || OUTFIELD_FENCE_REF_FT) / OUTFIELD_FENCE_REF_FT;
+  const planX = p.x, planY = -p.z;                 // world (x, z) -> the engine's own plan (x, y)
+  const r = Math.hypot(planX, planY) * scale;
+  const deg = (Math.atan2(planX, planY) * 180) / Math.PI + shiftDeg;
+  const rotated = polar(deg, r);
+  return { x: rotated.x, y: 0, z: -rotated.y };
+}
+
+/** Where a RUNNER stands or runs to, world feet - the same bag centers `buildStadium` draws the
+ *  white squares at (`baseCenters()`), converted through `engineToWorld`; `home` is the batter's
+ *  own home plate rear point, the origin. */
+export function basePositions() {
+  const b = baseCenters();
+  return {
+    home: { x: 0, y: 0, z: 0 },
+    first: engineToWorld(b.first.x, b.first.y),
+    second: engineToWorld(b.second.x, b.second.y),
+    third: engineToWorld(b.third.x, b.third.y),
+  };
+}
+/** The ordered waypoints a runner's own BASE INDEX maps into, world feet: index -1 (not on base
+ *  yet - the batter's own start) is `home`, 0/1/2 are first/second/third, and 3 (one past third)
+ *  is `home` again - scored. `runnerPath()[i + 1]` is base index `i`'s own waypoint for `i` from
+ *  -1 to 3, so a runner's whole run is just a slice of this one array between his `from` and `to`
+ *  indices (`ui.js`'s `_animateRunners`). */
+export function runnerPath() {
+  const b = basePositions();
+  return [b.home, b.first, b.second, b.third, b.home];
+}
+
 /** The strike zone as a rectangle in world feet, in the plane `ZONE.z`. Shared by the overlay that
  *  strokes it and by the pitch flight that ENDS at its centre, so the two cannot disagree - the
  *  same single-source rule the old screen-space `zoneRect` held, now in the world. */
@@ -592,4 +652,5 @@ export default {
   engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas, makeCameras, buildStadium,
   fencePoints, planGeometry, CAMERAS, ZONE, BATTER_BOX, RUBBER, MOUND, CATCHER, UMPIRE, FENCE,
   MARKER, FIGURE_HEIGHT_FT, BALL_RADIUS_FT, BATTER_AIM_TRAVEL_FT, CHASE_LERP,
+  FIELDER_POS, FIELDER_FACING_RAD, OUTFIELD_FENCE_REF_FT, fielderWorld, basePositions, runnerPath,
 };

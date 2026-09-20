@@ -70,6 +70,11 @@ export const STRINGS = {
     v_perfect: 'Perfect',
     // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
     // meter - a release can no longer be early, Nice or hung, because there is no release to time.
+    // R3: the diamond widget's own four cell labels (docs/BASEBALL-3D-BUILD.md section 9, "R3").
+    widget_home: 'Home',
+    widget_1b: '1B',
+    widget_2b: '2B',
+    widget_3b: '3B',
     cancel: 'Cancel',
     leave: 'Leave',
     half_end: 'Side retired',
@@ -137,6 +142,10 @@ export const STRINGS = {
     v_early: 'Antes',
     v_late: 'Tarde',
     v_perfect: 'Perfecto',
+    widget_home: 'Casa',
+    widget_1b: '1B',
+    widget_2b: '2B',
+    widget_3b: '3B',
     cancel: 'Cancelar',
     leave: 'Salir',
     half_end: 'Fin de la entrada',

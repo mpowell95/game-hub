@@ -491,7 +491,15 @@ export class Game {
       this.strikes = 0;
     }
     this._atBatOpen = true;
-    await this.emit('atBatStart', { batterId, side: battingSide });
+    // R3 (docs/BASEBALL-3D-BUILD.md section 9): `basesBefore` is the runner array as it stood the
+    // instant this at-bat opened - captured ONCE, here, because nothing in this engine moves a
+    // runner between pitches within one at-bat (bases.js's own header: "no steals, no leads, no
+    // pickoffs"), so it is valid for every 'atBatEnd' this at-bat can emit below, additive on each.
+    const basesBeforeAtBat = this.bases.slice();
+    // R3: the current defensive shift, exposed additively so the fielders can be placed at their
+    // rotated positions before the play resolves (`_shiftDegFor` is otherwise only computed deep
+    // inside the batted-ball branch below, after the outcome is already decided).
+    await this.emit('atBatStart', { batterId, side: battingSide, shiftDeg: this._shiftDegFor(defenseTeam, batterId) });
     if (this.aborted) return;
 
     // A single pass through this loop (one pitch AND its swing decision) is the atomic unit of
@@ -573,7 +581,7 @@ export class Game {
         const zones = zonesFor(this.league, shiftDeg);
         const outcome = resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
-        const { bases, runsScored } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
+        const { bases, runsScored, runnersOut } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
         this._atBatOpen = false;
         // BB-2c commit 1: q/exitVeloMph/centered exposed for measurement
@@ -583,10 +591,13 @@ export class Game {
         // BB-2d commit 1: distanceFt/sprayAngleDeg/battedKind exposed for measurement
         // (`sim-baseball.mjs --range`'s batted-ball census) - purely additive, same discipline as
         // BB-2c commit 1's q/exitVeloMph/centered; no existing caller reads them.
+        // R3: `basesBefore` (captured above, at atBatStart) and `runnersOut` (this play's own
+        // removed-without-scoring runners, e.g. the double-play victim) - additive, so the UI can
+        // run baserunning off the engine's before/after state instead of inventing its own.
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
           q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
           distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind,
-          timingWord });
+          timingWord, basesBefore: basesBeforeAtBat, runnersOut });
         return;
       }
 
@@ -603,7 +614,8 @@ export class Game {
         this.totals[battingSide].strikeouts += 1;
         this._advanceLineup(battingSide);
         this._atBatOpen = false;
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout', bases: 0, runsScored: 0 });
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'strikeout', bases: 0, runsScored: 0,
+          basesBefore: basesBeforeAtBat, runnersOut: [] });
         return;
       }
       if (this.balls >= this.settings.MECHANICS.ballsForWalk) {
@@ -613,7 +625,8 @@ export class Game {
         this._addRuns(battingSide, runsScored);
         this._advanceLineup(battingSide);
         this._atBatOpen = false;
-        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', bases: 1, runsScored });
+        await this.emit('atBatEnd', { batterId, side: battingSide, outcome: 'walk', bases: 1, runsScored,
+          basesBefore: basesBeforeAtBat, runnersOut: [] });
         return;
       }
     }
@@ -636,7 +649,9 @@ export class Game {
         this.bases = bases;
         this.outs += 1; // no hit credited on a sac fly - the batter is out
         this._addRuns(battingSide, runsScored);
-        return { bases: 0, runsScored };
+        // R3: the runner from third SCORED, he was not put out and removed - `runnersOut` is
+        // reserved for a runner removed WITHOUT scoring (the double play below), so this is [].
+        return { bases: 0, runsScored, runnersOut: [] };
       }
       // doc §3, [Locked]: "Ground out with a runner on first and fewer than 2 outs CAN be a
       // double play" - the doc locks that it can happen, not how often (Draft, MECHANICS.
@@ -646,12 +661,16 @@ export class Game {
         && this.outs < this.settings.MECHANICS.outsPerInning - 1
         && this.settings.MECHANICS.doublePlayEnabled;
       if (canDoublePlay && rand01 && rand01() < this.settings.MECHANICS.doublePlayChance) {
+        // R3: captured BEFORE the removal - this is the id `atBatEnd`'s `runnersOut` carries, so
+        // the UI can run that one figure to second and remove him there rather than guessing which
+        // runner a double play forces out.
+        const forcedOutId = this.bases[0];
         this.bases = advanceDoublePlay(this.bases);
         this.outs += 2; // the batter, plus the runner forced at second
-        return { bases: 0, runsScored: 0 };
+        return { bases: 0, runsScored: 0, runnersOut: [forcedOutId] };
       }
       this.outs += 1;
-      return { bases: 0, runsScored: 0 };
+      return { bases: 0, runsScored: 0, runnersOut: [] };
     }
     // a hit - doc §10's outcome list is singles/doubles/triples/homers/outs; there is no "error"
     // outcome in the real design (phase 1's invented one is gone as of Step 1).
@@ -659,7 +678,7 @@ export class Game {
     this.bases = bases;
     this.totals[battingSide].hits += 1;
     this._addRuns(battingSide, runsScored);
-    return { bases: outcome.bases, runsScored };
+    return { bases: outcome.bases, runsScored, runnersOut: [] };
   }
 }
 

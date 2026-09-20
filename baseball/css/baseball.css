@@ -226,6 +226,78 @@
  * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
 .bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
 .bb-dev3d-err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; text-align: center; padding: 8px; }
+
+/* R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Fixed geometry, top-right of the
+ * field band, 8px inset - opacity ONLY toggles it (ui.js's `_setDiamondVisible`), never layout, so
+ * it never moves anything else. Four cells (HOME/1B/2B/3B, `basesSvg`'s own left/right convention
+ * carried over - first left, third right, seen from behind the plate) and up to
+ * `DIAMOND_DOT_COUNT` moving dots (a batter plus up to three existing runners, the most one play
+ * ever has in motion at once). */
+.bb-diamond {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 84px;
+  height: 84px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity var(--gh-dur-mid, 200ms) ease;
+}
+.bb-diamond.is-visible { opacity: 1; }
+/* The cell itself stays UNROTATED - only its own `-shape` child (the diamond look) rotates. A
+ * `position:absolute` child of a ROTATED ancestor is carried along that rotation when painted (it
+ * does not just inherit the ancestor's coordinate system, the whole painted box swings through the
+ * rotation about the ancestor's centre), so a label that rotated along with its cell drifted off
+ * centre - for the rightmost cell (3B) enough to clip a few px past the viewport's own right edge
+ * at this screen's narrowest width (393px). Found by measuring the real getBoundingClientRect, not
+ * by eye. Keeping the cell unrotated and centring the label/number with ordinary flex centring
+ * inside it is what a still screenshot cannot show is correct without that measurement. */
+.bb-diamond-cell {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bb-diamond-cell[data-cell="home"] { left: 50%; top: 88%; }
+.bb-diamond-cell[data-cell="1b"]   { left: 12%; top: 50%; }
+.bb-diamond-cell[data-cell="2b"]   { left: 50%; top: 12%; }
+.bb-diamond-cell[data-cell="3b"]   { left: 88%; top: 50%; }
+.bb-diamond-cell-shape {
+  position: absolute;
+  inset: 0;
+  transform: rotate(45deg);
+  background: rgba(10, 16, 10, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+.bb-diamond-cell.is-on .bb-diamond-cell-shape { background: #ffce3a; border-color: #12181f; }
+.bb-diamond-cell span, .bb-diamond-cell b {
+  position: relative;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  white-space: nowrap;
+}
+.bb-diamond-cell span { position: absolute; top: -14px; }
+.bb-diamond-cell b[data-role="num"]:empty { display: none; }
+.bb-diamond-cell.is-on span, .bb-diamond-cell.is-on b { color: #12181f; }
+.bb-diamond-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #E0532F;
+  border: 1.5px solid #12181f;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
 .bb-lines {
   position: absolute;
   left: 50%;

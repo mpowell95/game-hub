@@ -952,3 +952,86 @@ runs; outs shown as the HUD's dots. Fixed geometry, no reflow.
 Deliverables: stills of a single with a runner advancing, a double play, a sac fly, a home run
 with two on, the widget; a device probe that plays until a hit with a runner on and asserts the
 runner figure moved from one bag to the next and the widget cell followed; every suite green.
+
+### R3 record (shipped v863, 2026-09-20)
+
+From the stage's report: the pitcher camera at z = -72 never frames an infielder (2B/SS stand
+behind the lens, 1B/3B are 9 ft in front of it at 63 ft of offset) and the batter camera frames
+two or three at a time; `fielders-placed` proves the nine are placed, no single frame shows them.
+`_attachBat` was already keyed on the batter role, so no `noBat` flag was needed. The diamond
+widget's rotated cell rotated its label with it and pushed "3B" past the right edge at 393 px;
+the rotation lives on a shape child now. A role is a base SLOT (`r1` is whoever is on first),
+never a person. `RUN_WINDOW_MS` = 2000 ms is the shared budget every runner and fielder move
+fits inside. renderStats: 18 to 20k triangles, 19 to 24 draw calls, under 1 ms per frame on the
+software renderer.
+### RA: steal, bunt, pickoff, and every pitch type in Quick Play
+
+The design doc locks the three buttons, their slots and "tap, never hold", and leaves how each
+works open. These rules close it (Matt, 2026-09-20: *"We need the other buttons like bunt, steal,
+pick off to work. And we need the other pitch types."*). `RESERVED_PHASE_6` retires.
+
+**Steal (batting, enabled when a runner is on a base whose next base is empty, before READY).**
+Tap STEAL: the lead eligible runner goes on the next pitch. Resolved at the crossing, before the
+swing result: success probability `clamp(0.45 + 0.01 * runner.hitSpd - 0.005 * pitcher.pitchAcc,
+0.20, 0.90)` (`SKILL_EFFECT.hitSpd.stealSuccessPerPt` is the 0.01). Success: runner +1 base.
+Caught: runner out (an out is recorded, at-bat continues). If the batter puts the ball in play,
+the steal is moot and the play resolves as normal (the runner was already moving; `advanceAll`
+as now). The CPU batting side steals with probability `0.12 + 0.004 * hitSpd` per pitch when
+eligible, never with 2 outs and a 3-ball count. Emitted as `steal` `{runnerId, from, to, safe}`.
+
+**Bunt (batting, always enabled before READY).** Tap BUNT: bunt mode for this pitch (the mode
+bar highlights BUNT; the batter squares at the wind-up, a `Bunt` loop in poses.js: bat level,
+hands apart). On a swing tap in bunt mode: contact is timing-only with the window x1.6, always
+`kind: 'ground'`, distance 8 to 40 ft, spray within ±30 deg. With runners on and fewer than 2
+outs it is a sacrifice: runners +1, batter out unless the beat-out roll (`MECHANICS.beatOutPerPt`
+x hitSpd) succeeds (then a single). With nobody on: bunt for a hit, the same roll. A foul bunt
+with 2 strikes is a strikeout. A take in bunt mode is an ordinary take. Bunt mode clears after
+the pitch. Emitted as `atBatEnd` with `outcome: 'bunt-out' | 'bunt-single' | 'sacrifice'`.
+
+**Pickoff (pitching, enabled when a runner is on first).** Tap PICKOFF instead of PITCH: no
+pitch is thrown; the pitcher turns and throws to first (a `Pickoff` clip: quick turn, 0.5 s).
+Success `clamp(0.06 + 0.01 * pitcher.pitchAcc, 0.06, 0.35)` (`pickoffPerPt`): the runner is out.
+Otherwise nothing changes. Either way a CPU steal planned for that pitch is cancelled. The beat
+is 1.5 s and the count is untouched. Emitted as `pickoff` `{runnerId, out}`. The CPU pitcher
+throws over with probability 0.08 per pitch when the human has a runner on first.
+
+**Pitch types.** Quick Play unlocks all eight for both sides (`unlockedPitchesFor(league, 0,
+{quickPlay: true})` returns `PITCH_TYPES`); the CPU's `pitchMix` for Quick Play weights every
+type. Career keeps the ladder's unlocks.
+
+**Deliverables.** Engine tests for each rule (success bands at cap and at zero skill, the
+2-out/3-ball guard, the foul-bunt strikeout, sacrifice vs beat-out); a device probe that taps
+each button in the right state and asserts the event and the widget; stills of each action.
+
+
+### R4: presentation, the reference's feedback layer
+
+Everything here is DOM or 2-D overlay over the scene; no engine change, no timing change beyond
+what each element's own animation needs inside the existing beats.
+
+- **The verdict over the batter.** The big word (`.bb-pop`) moves from the band's fixed top to a
+  point projected from the world: 1.2 ft above the batter's head through the active camera
+  (batting: above the near batter; pitching: above the far batter, so it sits over the zone box).
+  Two lines under it: pitch name + mph (`Fastball 84 mph`), and the swing line (`Swing and a miss`,
+  `Late swing`, `Early swing`, `Foul`) when there was one. Ball / Strike keep their ● ■ shapes.
+  Italic 900 weight, white with the dark stroke; STRIKE on a swinging miss flashes once.
+- **Fire trail on a strike, burst on contact.** A short additive-blend trail (6 to 8 sprite quads
+  of an orange-white gradient, fading) follows the pitch ball over the last 40% of its flight
+  when the engine says strike; a radial burst (12 short lines flying out, 250 ms) at the bat at
+  contact. Both on the 2-D overlay canvas, projected; reduced motion draws neither.
+- **HOMERUN.** On a homer, after the chase reaches the wall: a full-band word `HOME RUN` in the
+  hub's gold, letter-spaced, scaling 0.6 to 1.0 over 300 ms with 40 confetti rectangles (six
+  colours) falling for 2 s; then a stats strip under it for the rest of the marker hold:
+  `421 ft  99 mph  38°` (distance from the engine, exit velocity from the payload, launch angle
+  from the engine's own `launchAngleDeg`; add it to the `atBatEnd` payload, additive). Reduced
+  motion: word and strip only.
+- **The pitch bar carries a number.** Each unlocked pitch tile shows its readout mph under the
+  code (`FB 92`), locked ones the padlock as now; the selected tile highlighted as now.
+- **The batting mode toggle** (R2's two-tile CONTACT/POWER) gets the strip's tile styling.
+- **The batting box reads bigger.** On `batterCam` the drawn zone box and both cursors (circle, target marker) are scaled about the box's centre by `BATTING_ZONE_SCALE` = 1.6 (51 px to ~82 px wide), the same rule `PITCHING_ZONE_MIN_W_FRAC` applies on the other camera; the ball is never scaled and the engine's units are untouched; `zone-world` keeps measuring the true box through a helper that reports the unscaled rectangle.
+- **Sound.** None this stage (Matt has not asked).
+
+Deliverables: stills of a called strike, a swinging miss, a contact burst frame, the fire trail
+mid-flight, HOME RUN with confetti, the stats strip, the pitch bar with numbers; `test-visual`
+motion probe for the pop; reduced-motion stills showing no trail, burst or confetti; every
+suite green.

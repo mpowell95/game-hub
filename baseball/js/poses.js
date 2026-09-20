@@ -546,4 +546,49 @@ export const CLIPS = {
       upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
     }, hipsOffset: [0, 0.78, 0] },
   ] },
+  // R3 (docs/BASEBALL-3D-BUILD.md section 9): the run cycle every fielder's chase and every
+  // runner's base path uses - the one thing this file had no clip for at all before R3, because
+  // nothing before it ever had to cover ground.
+  //
+  // TWO keyframes (the spec's own words: "a looping two-key leg cycle"), `loop: 'pingpong'`
+  // (actors.js's own new loop mode) so the mixer sweeps key0 -> key1 -> key0 -> ... with no jump:
+  // a plain LoopRepeat would snap the trailing foot straight back to the leading foot's key0 pose
+  // every 0.3 s, which reads as a foot teleporting, not a stride. 0.3 s a key is the spec's own
+  // "0.6 s per cycle" (one full stride: right-forward -> left-forward -> right-forward again is
+  // two ping-pong sweeps, 0.6 s).
+  //
+  // Thighs swing (Hip flexion is +x on upperLeg - Crouch's own fact above, established by
+  // rendering); the LEADING leg (swinging forward, about to plant) stays closer to straight while
+  // the TRAILING leg (just left the ground, heel kicking up behind) folds hard - a running leg
+  // bends AFTER toe-off, not before footstrike, which is what keeps this from reading as two legs
+  // kicking forward in unison. The opposite arm swings with the opposite leg (right leg forward,
+  // left arm forward), with a constant elbow bend that does not itself alternate - only the upper
+  // arm swings. `spine`'s 8 deg is the "slight forward lean," held flat through both keys (it is
+  // not part of the alternation either).
+  //
+  // MEASURED, not estimated, the same discipline stage 6 set for every clip's motion: no sprite
+  // exists for this clip to be graded against (fielders and runners are new to R3), so it is
+  // graded against test-baseball-actors.mjs's own floor instead - "foot travel of at least 20 px
+  // per cycle at 100 px figure height," through the chase camera a running figure is actually seen
+  // through. The spec's OWN starting numbers (thigh +/-35, arm +/-30) under-shot that floor by
+  // about 11% (20.7 px measured against a 23.2 px floor at this rig's own proportions) - the thigh
+  // swing is now +/-48 (with the trailing knee folding further, to 78 deg, so the arc gets LONGER
+  // as well as wider) and a small hip drive (`hipsOffset` local z, the stride's own forward/back
+  // reach) rides along with it. Measured after: footR travel 33.9 px against the 23.2 px floor.
+  Run: { loop: 'pingpong', mark: null, keys: [
+    { t: 0.00, pose: {
+      spine: [8, 0, 0],
+      upperArmR: [-34, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [34, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [48, 0, 0], lowerLegR: [0, 0, 12],
+      upperLegL: [-48, 0, 0], lowerLegL: [0, 0, 78],
+    }, hipsOffset: [0, 0, 0.14] },
+    { t: 0.30, pose: {
+      spine: [8, 0, 0],
+      upperArmR: [34, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [-34, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [-48, 0, 0], lowerLegR: [0, 0, 78],
+      upperLegL: [48, 0, 0], lowerLegL: [0, 0, 12],
+    }, hipsOffset: [0, 0, -0.14] },
+  ] },
 };

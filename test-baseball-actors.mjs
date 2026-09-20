@@ -979,12 +979,19 @@ async function runMotionHalf() {
 
     const batterPos = { x: -F.BATTER_BOX.x, y: 0, z: F.BATTER_BOX.z };
     const pitcherPos = { x: F.RUBBER.x, y: F.RUBBER.y, z: F.RUBBER.z };
+    // R3 (docs/BASEBALL-3D-BUILD.md section 9): the run cycle, through the chase camera - the one
+    // camera live while anyone (a fielder or a runner) is ever actually running. `chaseAt(pos, true)`
+    // puts the camera at its real in-game offset from this figure before measuring, the same call
+    // `_animateFielderChase`/`_runMarkerHold` make against the ball.
+    const runnerPos = { x: 30, y: 0, z: -100 };
+    actors.chaseAt(runnerPos, true);
     const out = {
       idle: run('batter', 'Idle', batterPos, BATTER_FACING_RAD, 'batter'),
       swing: run('batter', 'Swing', batterPos, BATTER_FACING_RAD, 'batter'),
       miss: run('batter', 'Miss', batterPos, BATTER_FACING_RAD, 'batter'),
       set: run('pitcher', 'Set', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
       pitch: run('pitcher', 'Pitch', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
+      run: run('r1', 'Run', runnerPos, 0, 'chase'),
     };
     actors.dispose();
     wrap.remove();
@@ -996,7 +1003,7 @@ async function runMotionHalf() {
   if (measured.error) { fail('motion half', measured.error); return; }
 
   const n = (v) => v.toFixed(1);
-  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch']) {
+  for (const k of ['idle', 'swing', 'miss', 'set', 'pitch', 'run']) {
     const m = measured[k];
     if (!m || m.error) { fail(`motion: ${k}`, (m && m.error) || 'no measurement'); continue; }
     console.log(`      ${m.role}/${m.name} through ${m.cam}Cam, ${n(m.heightPx)}px tall, ${m.dur.toFixed(2)}s, ${m.frames} frames at 1/60s:`);
@@ -1018,6 +1025,14 @@ async function runMotionHalf() {
   check('Pitch (pitcher, pitcherCam): handR vertical range', measured.pitch.handR.rise, MOTION_FLOORS.pitchHandRise);
   check('Pitch (pitcher, pitcherCam): front-foot lift', Math.max(measured.pitch.footL.rise, measured.pitch.footR.rise), MOTION_FLOORS.pitchFootLift);
   check('Pitch (pitcher, pitcherCam): handR moves inside the first 20% of the clip', measured.pitch.early, MOTION_FLOORS.pitchEarlyMove);
+  // R3: the run cycle's own floor is stated relative to a 100px-tall figure ("foot travel of at
+  // least 20 px per cycle at 100 px figure height") - a ratio, not a fixed pixel count, since the
+  // chase camera's own distance (and so the figure's on-screen size) is not the same as the
+  // pitcher's or the batter's. Scaled by the ACTUAL measured height so the floor stays honest at
+  // whatever size this container's chaseCam happens to draw a runner at.
+  const runFootTravel = Math.max(measured.run.footL.travel, measured.run.footR.travel);
+  const runFloor = 20 * (measured.run.heightPx / 100);
+  check(`Run (r1, chaseCam, ${n(measured.run.heightPx)}px tall): foot travel`, runFootTravel, runFloor);
 }
 
 // Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
@@ -1041,7 +1056,10 @@ console.log('\n=== r2-cadence (delegated to test-baseball-device.mjs) ===');
     skipLine('r2-cadence', 'player.glb missing - test-baseball-device.mjs would have nothing to measure');
   } else {
     const { spawnSync } = await import('node:child_process');
-    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 120000 });
+    // R3 (orchestrator's ship review): the device suite's runners-move probe plays real games until
+    // a runner advances, up to 360 s, so a 120 s spawn timeout killed it mid-run and this row read
+    // "exit 1" under a passing r2-cadence line. 480 s covers the probe's own budget with margin.
+    const r = spawnSync(process.execPath, ['test-baseball-device.mjs'], { encoding: 'utf8', timeout: 480000 });
     const out = (r.stdout || '') + (r.stderr || '');
     const cadenceLine = out.split('\n').find((l) => /r2-cadence/.test(l)) || '(no r2-cadence line in output)';
     if (r.status === 0) ok(`test-baseball-device.mjs passed - ${cadenceLine.trim()}`);

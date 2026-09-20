@@ -854,16 +854,22 @@ console.log('\n-- 10. rules correctness, played through the real engine --');
     g6.bases = ['runnerOnFirst', null, null];
     g6.outs = 0;
     const alwaysDp = () => 0; // rand01 returning 0 always beats doublePlayChance (> 0)
-    g6._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', alwaysDp);
+    const r6 = g6._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', alwaysDp);
     ok(g6.bases[0] === null && g6.outs === 2, 'a ground-out double play removes the lead runner and records 2 outs');
+    // R3 (docs/BASEBALL-3D-BUILD.md section 9): `runnersOut` is the id of the runner removed
+    // WITHOUT scoring - captured before the removal, so the UI knows exactly who to run to second
+    // and vanish there, rather than guessing from the before/after bases alone.
+    ok(Array.isArray(r6.runnersOut) && r6.runnersOut.length === 1 && r6.runnersOut[0] === 'runnerOnFirst',
+      `a double play's runnersOut names the forced-out runner (R3; got ${JSON.stringify(r6.runnersOut)})`);
   }
   {
     const g7 = playGameOnce('majors', hashSeed('double-play-probe-2'));
     g7.bases = ['runnerOnFirst', null, null];
     g7.outs = 0;
     const neverDp = () => 0.999999; // beats no chance under 1.0
-    g7._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', neverDp);
+    const r7 = g7._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', neverDp);
     ok(g7.bases[0] === 'runnerOnFirst' && g7.outs === 1, 'a ground out that does not roll the double play just makes the one out');
+    ok(Array.isArray(r7.runnersOut) && r7.runnersOut.length === 0, 'an ordinary ground out puts nobody else out (runnersOut empty, R3)');
   }
   {
     // 2 outs already: a double play may never be granted regardless of the roll.
@@ -2010,6 +2016,39 @@ await (async function section28() {
     ok(swingEvents.every((e) => e.side === 'away' && typeof e.action === 'string' && (e.mode === 'power' || e.mode === 'contact')),
       'every swing event carries {side, action, mode} - `charged` is gone with the charged swing');
   }
+})();
+
+// ---------------------------------------------------------------------------------------------
+// Section 29 (R3, docs/BASEBALL-3D-BUILD.md section 9): `atBatEnd` carries `basesBefore` (the
+// runner array exactly as it stood when the at-bat opened) and `runnersOut` (this play's own
+// removed-without-scoring runners), both additive - the UI runs baserunning off these, never off
+// its own guess.
+await (async function section29() {
+  // A forced walk with a runner already on first: `basesBefore` must be the array from BEFORE the
+  // walk's own `advanceWalk` mutated `this.bases`, and a walk removes nobody (`runnersOut` empty).
+  const seed = 777;
+  const homeTeam = makeTeam('college', 0, mulberry32(seed));
+  const awayTeam = makeTeam('college', 1, mulberry32(seed + 1));
+  const g = new Game({
+    home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+    agents: {
+      // home pitches (defense) to away (batting, top half): aim far outside the zone every pitch,
+      // well past aimScatter's own spread (0.12), so every pitch is a called ball.
+      home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 5, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+    },
+  });
+  g.bases = ['runnerOnFirst', null, null];
+  let payload = null;
+  g.onEvent = async (type, p) => { if (type === 'atBatEnd') payload = p; };
+  await g.playAtBat();
+  ok(!!payload, 'a forced 4-ball at-bat resolved with an atBatEnd event');
+  ok(payload && payload.outcome === 'walk', `the outcome was a walk (got ${payload && payload.outcome})`);
+  ok(payload && Array.isArray(payload.basesBefore) && payload.basesBefore[0] === 'runnerOnFirst'
+    && payload.basesBefore[1] == null && payload.basesBefore[2] == null,
+    'atBatEnd carries basesBefore, the runner array exactly as it stood at the pitch (R3)');
+  ok(payload && Array.isArray(payload.runnersOut) && payload.runnersOut.length === 0,
+    'a walk removes no runner (runnersOut empty, R3)');
 })();
 
 // ---------------------------------------------------------------------------------------------
