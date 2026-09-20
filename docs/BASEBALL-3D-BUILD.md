@@ -1235,3 +1235,17 @@ knobs were tried and reverted, all written up. The `CPU`, `CPU_SIGMA_MIN_MS` and
 `CPU_LEVEL_SHORTFALL` tables are byte-identical to v865. That re-tune is its own stage, after
 R7. Also found: `zonesFor` ignores its settings argument, so `--set FIELD.*.outZoneMult` never
 reached a full-game sim; `--set` for top-level keys and `--contact-grid`'s `--set` are fixed.
+
+### R6 record (shipped v867, 2026-09-20)
+
+From the stage's report: `_syncActors()` takes no argument now; every figure's side comes from
+`this.game.half` (batting side `top` = away), the umpire is his own. The double batter was a race:
+`RUN_WINDOW_MS` (2000) equals `CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS`, so the batter-runner's
+own run loop and the cutaway's return were independently clocked and the return could land first,
+leaving `rb` mid-run at the plate; it did not reproduce under auto-play in the container and was
+forced by calling `_returnToPlate()` early. `this._rbActive` is the one truth for "a batter-runner
+is running"; `_returnToPlate()` clears it and hides `rb`, and `_syncActors` hides `rb` whenever it
+is false. `DIAMOND_PCT` (ui.js), the `.bb-diamond-cell` CSS and `basesSvg()` (the HUD's
+mini-diamond, un-mirrored at ship review) are three copies of which side first base is on. The
+batter camera's frustum shows second base only at 393 px; first projects at x 577 and third at
+x -170. Probes `sides-match` and `one-batter` are synthetic and run under `BB_DEVICE_QUICK=1`.

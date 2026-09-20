@@ -264,10 +264,15 @@
   align-items: center;
   justify-content: center;
 }
+/* R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): seen from BEHIND HOME PLATE (looking out at the
+ * mound, the reference game's own view), first base is on the RIGHT and third on the LEFT - this
+ * widget had them swapped from R3 on (Matt's v865 recording, item 4). `DIAMOND_PCT` in ui.js is
+ * the SAME swap, one layer down (the moving dot's own coordinates, not derived from this CSS - see
+ * its own header) - both had to move together or the dot would slide to the wrong corner. */
 .bb-diamond-cell[data-cell="home"] { left: 50%; top: 88%; }
-.bb-diamond-cell[data-cell="1b"]   { left: 12%; top: 50%; }
+.bb-diamond-cell[data-cell="1b"]   { left: 88%; top: 50%; }
 .bb-diamond-cell[data-cell="2b"]   { left: 50%; top: 12%; }
-.bb-diamond-cell[data-cell="3b"]   { left: 88%; top: 50%; }
+.bb-diamond-cell[data-cell="3b"]   { left: 12%; top: 50%; }
 .bb-diamond-cell-shape {
   position: absolute;
   inset: 0;
