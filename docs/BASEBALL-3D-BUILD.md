@@ -1216,3 +1216,22 @@ inside the band), `chase-start` (the chase camera's first position at least the 
 and distance from the ball), `ball-visible-pitcher` (the ball's projected radius on the pitcher
 camera at 60 ft is at least `BALL_MIN_PX`). `node test-baseball-device.mjs` (with
 `BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+
+### R5 record (shipped v866, 2026-09-20)
+
+From the stage's report: on the shipped v865 engine 96.5% to 98.6% of all balls in play carried
+0 ft (median exit velocity 16 to 20 mph), so every hit was decided by spray angle alone. After
+R5 the zero-feet rate is 0.0% in every cell measured; exit velocity reads 77 to 103 mph. The
+rule-4 census passes all seven lines. Rule 4's home-run floor and the contact grid's three
+ratio lines cannot both hold: the grid was green on v865 only because home runs were 0.1% of
+balls in play, so the grid's `ratio`, `cross` and `ceiling` lines are red and the sweep that
+shows why is in `baseball/CLAUDE.md`. Two things the spec said would stay had to move once
+balls carried: `zones.js`'s depths (in feet, never reached before) and `LINE_THROUGH_MAX_FT`
+(220 to 280); a line drive over the wall is now a homer, not a triple. `carryFt`'s angle curve
+peaks at `CARRY_PEAK_DEG` 30 instead of the vacuum curve's 45. `_battedApexFt` draws a pop-up
+as a pop-up. **Item 11 (the season re-tune) was NOT delivered**: the player is about 0.09
+stronger at every league and Gold is slower everywhere but Little League and High School; four
+knobs were tried and reverted, all written up. The `CPU`, `CPU_SIGMA_MIN_MS` and
+`CPU_LEVEL_SHORTFALL` tables are byte-identical to v865. That re-tune is its own stage, after
+R7. Also found: `zonesFor` ignores its settings argument, so `--set FIELD.*.outZoneMult` never
+reached a full-game sim; `--set` for top-level keys and `--contact-grid`'s `--set` are fixed.

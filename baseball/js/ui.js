@@ -110,6 +110,13 @@ const PITCH_SAG_FT = 0.8;
 const BATTED_APEX_MAX_FT = 80;
 const BATTED_APEX_FRAC = 0.22;
 const BATTED_GROUNDER_APEX_FT = 4;
+// R5: a POP-UP is the one kind whose height is not a function of how far it went - it is the kind
+// where ALL of the swing went up. `distanceFt * 0.22` drew a 60 ft pop-up as a 13 ft liner, which
+// was invisible while `carryFt` returned 0 ft for it and is not once R5's `MIN_IN_PLAY_FT` puts it
+// on the infield grass (40 to 120 ft out). Height is taken from the distance too, but on its own
+// much steeper fraction and with a floor, so the shortest pop-up still goes up rather than across.
+const BATTED_POPUP_APEX_FRAC = 0.9;
+const BATTED_POPUP_APEX_MIN_FT = 55;
 // R1: the strike zone is drawn by projecting its real world rectangle. On the BATTING camera that
 // is about 50 px wide on a 393 px band, which is legible. On the PITCHING camera the same rectangle
 // is 72 ft away and projects to 9 px, which is not - so there, and only there, the drawn box is
@@ -1218,9 +1225,13 @@ class BaseballPlayScreen {
   }
   /** The apex stage 8 chose, in feet rather than in band-height fractions (section 9's own
    *  restatement): a grounder barely lifts, anything else arcs higher the farther it carried.
-   *  `battedKind` unset or anything other than the engine's own `'ground'` is treated as a fly. */
+   *  `battedKind` unset or anything other than the engine's own `'ground'`/`'popup'` is a fly. */
   _battedApexFt(battedKind, distanceFt) {
     if (battedKind === 'ground') return BATTED_GROUNDER_APEX_FT;
+    // R5: a pop-up goes UP. See BATTED_POPUP_APEX_FRAC.
+    if (battedKind === 'popup') {
+      return Math.min(BATTED_APEX_MAX_FT, Math.max(BATTED_POPUP_APEX_MIN_FT, (distanceFt || 0) * BATTED_POPUP_APEX_FRAC));
+    }
     return Math.min(BATTED_APEX_MAX_FT, (distanceFt || 0) * BATTED_APEX_FRAC);
   }
 

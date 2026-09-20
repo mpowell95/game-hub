@@ -13,6 +13,7 @@
 //   node sim-baseball.mjs --games 200 --seasons 100 # override the per-cell sample sizes
 //   node sim-baseball.mjs --set outZoneMult=0.9,1.0,1.1   # sweep a settings override
 //   node sim-baseball.mjs --json out.json           # write the full report under .sim-out/
+//   node sim-baseball.mjs --perfect                 # R5 rule 4: what a perfect swing buys
 //   node sim-baseball.mjs --assert                  # exit non-zero on any FAIL (the phase gate)
 //   node sim-baseball.mjs --assert --quick           # the fast phase-gate form
 //   node sim-baseball.mjs --ladder                   # BB-2e: which ladder SHAPE satisfies both
@@ -94,6 +95,7 @@ function arg(name, dflt) {
 const FLAG_QUICK = process.argv.includes('--quick');
 const FLAG_ASSERT = process.argv.includes('--assert');
 const FLAG_CONTACT_GRID = process.argv.includes('--contact-grid');
+const FLAG_PERFECT = process.argv.includes('--perfect');
 const FLAG_STYLES = process.argv.includes('--styles');
 const FLAG_STYLES_TUNE = process.argv.includes('--tune');
 const FLAG_STAGES = process.argv.includes('--stages');
@@ -335,7 +337,14 @@ async function tuneStyle(styleId, league, settings, games) {
 // "--set CPU.majors.timingSigmaMs=58") - see `withOverride`, defined further down this file.
 function settingsFor(overrideValue) {
   if (overrideValue == null) return SETTINGS;
-  if (SET_KEY && SET_KEY.includes('.')) return withOverride(SETTINGS, SET_KEY, overrideValue);
+  // R5: a bare key that IS a settings export (`--set CARRY_SCALE=6.5,7.5`) is that export, not
+  // `outZoneMult`. Before this the dot was what chose between the two paths, so every top-level
+  // scalar - CARRY_SCALE, BASE_EXIT_VELO, MIN_IN_PLAY_FT, the whole R5 block - was silently
+  // rewritten into FIELD[*].outZoneMult and the sweep reported the same numbers for every
+  // candidate. The legacy no-key form (`--set 0.9,1.0,1.1`) still means outZoneMult.
+  if (SET_KEY && (SET_KEY.includes('.') || Object.prototype.hasOwnProperty.call(SETTINGS, SET_KEY))) {
+    return withOverride(SETTINGS, SET_KEY, overrideValue);
+  }
   const FIELD = {};
   for (const lg of SETTINGS.LEAGUES) FIELD[lg] = { ...SETTINGS.FIELD[lg], outZoneMult: overrideValue };
   return { ...SETTINGS, FIELD };
@@ -922,6 +931,100 @@ function assertContactGrid(grid) {
     `powerGap=${powerGapAtLowSigma.toFixed(4)}, timingGap=${timingGapAtLowPower.toFixed(4)}`,
     '<= 0.5 x timingGap');
 
+  return { ok, lines };
+}
+
+// ---------------------------------------------------------------------------------------------
+// R5 (docs/BASEBALL-3D-BUILD.md section 9, rule 4): `--perfect` - WHAT DOES A PERFECT SWING BUY?
+// The sibling `--contact-grid` names, and the one the R5 rules are written against: Quick Play's
+// preset roster (`PRESETS`, cycled) against Quick Play's own CPU pitcher, at the College park,
+// `PERFECT_SWINGS` swings per cell. Three cells, each holding one thing fixed and asking for the
+// hit rate and the home-run rate:
+//
+//   inner half   perfectly timed (|timing| inside `perfectMs`), the pitch crossing inside the
+//                inner half of the CONTACT circle (d <= 0.5 * cursorR, `swing.js`'s own `centered`)
+//   outer half   the same timing, the pitch crossing between the inner half and the rim
+//   window edge  timing at the very edge of the timing window (q -> 0), dead centre
+//
+// The cursor is PLACED from the pitch, not aimed at it: the harness knows where the ball will
+// cross and puts the circle's centre a chosen distance away, which is the only way to measure a
+// placement band rather than an agent's aim. Timing is set directly for the same reason.
+const PERFECT_SWINGS = Number(arg('perfect-swings', 20000));
+const PERFECT_LEAGUE = 'college';
+const PERFECT_CELLS = [
+  { id: 'inner half, perfect timing', dLo: 0.0, dHi: 0.5, qEdge: false },
+  { id: 'outer half, perfect timing', dLo: 0.5, dHi: 1.0, qEdge: false },
+  { id: 'dead centre, window edge  ', dLo: 0.0, dHi: 0.0, qEdge: true },
+];
+
+async function measurePerfectCell(cell, settings) {
+  const league = PERFECT_LEAGUE;
+  const teams = makeLeague(league);
+  const oppTeam = teams[Math.floor(teams.length / 2)];
+  const pitcher = oppTeam.players.find((p) => p.id === oppTeam.pitcherId);
+  const cap = settings.CAPS[league] != null ? settings.CAPS[league] : settings.CAPS.majors;
+  const controlSkill = Math.max(0, Math.min(1, (pitcher.skills.pitchAcc || 0) / cap));
+  const cpuPitcher = new CpuPitcher({ league, settings });
+  const zones = zonesFor(league, 0);
+  const fenceFt = settings.FIELD[league].fenceFt;
+  const presets = Object.values(settings.PRESETS);
+  const F = settings.FEEL.engine;
+  const out = { swings: 0, inPlay: 0, hits: 0, homers: 0, minFt: Infinity, evs: [] };
+  for (let i = 0; i < PERFECT_SWINGS; i++) {
+    const rand01 = mulberry32(hashSeed('bb-perfect', cell.id, i) >>> 0);
+    const skills = presets[i % presets.length];
+    const pitchDecision = await cpuPitcher.decidePitch({ rand01, weakZone: null });
+    const pitchResult = flyPitch(pitchDecision.type, pitchDecision.aim, controlSkill, settings, rand01, pitcher.skills);
+    const hitAccPts = Math.max(0, skills.hitAcc || 0);
+    const cursorR = F.cursorR.contact * (1 + hitAccPts * (settings.SKILL_EFFECT.hitAcc.contactRadiusInPerPt || 0));
+    const windowMs = F.timingWindow * (1 + hitAccPts * (settings.SKILL_EFFECT.hitAcc.whiffReductionPerPt || 0) * 4);
+    // Place the circle's centre at a distance inside the chosen band, in a uniformly random
+    // direction, so every part of the band is measured rather than one axis of it.
+    const frac = cell.dLo + rand01() * (cell.dHi - cell.dLo);
+    const theta = rand01() * 2 * Math.PI;
+    const d = frac * cursorR * 0.999; // never exactly on the rim, which is a miss by definition
+    const cursor = { x: pitchResult.x - Math.cos(theta) * d, y: (pitchResult.y || 0) - Math.sin(theta) * d };
+    const timingErrorMs = cell.qEdge ? windowMs * 0.999 : (rand01() * 2 - 1) * F.perfectMs;
+    const sr = swing(pitchResult, skills, { action: 'swing', cursor, timingErrorMs, mode: 'contact' }, settings, rand01, league);
+    out.swings += 1;
+    if (!sr.contact || !sr.inPlay) continue;
+    out.inPlay += 1;
+    out.evs.push(sr.exitVeloMph);
+    const oc = resolveContact(sr, zones, settings, fenceFt, skills.hitSpd, rand01);
+    if (!oc.isFoul) out.minFt = Math.min(out.minFt, oc.distanceFt);
+    if (oc.result === 'hit') out.hits += 1;
+    if (oc.bases === 4) out.homers += 1;
+  }
+  return out;
+}
+
+/** R5 rule 4's thresholds, as stated in the doc. Reported, never weakened. */
+const PERFECT_MIN_HIT = [0.55, 0.30, null];
+const PERFECT_MAX_HIT = [null, null, 0.25];
+const PERFECT_MIN_HR = [0.08, null, null];
+
+async function runPerfect(settings) {
+  const lines = [];
+  let ok = true;
+  console.log(`  ${PERFECT_SWINGS} swings/cell, league=${PERFECT_LEAGUE}, Quick Play's preset roster vs its own CPU pitcher:`);
+  console.log('  cell                          inPlay%   hit%    HR%   shortest ft   exit velo mph (min/med/max)');
+  for (let i = 0; i < PERFECT_CELLS.length; i++) {
+    const cell = PERFECT_CELLS[i];
+    const r = await measurePerfectCell(cell, settings);
+    const hitRate = r.hits / r.swings;
+    const hrRate = r.homers / r.swings;
+    const evs = r.evs.slice().sort((a, b) => a - b);
+    const med = evs.length ? evs[Math.floor(evs.length / 2)] : 0;
+    console.log(`  ${cell.id}   ${(100 * r.inPlay / r.swings).toFixed(1).padStart(6)}  ${(100 * hitRate).toFixed(1).padStart(5)}  ${(100 * hrRate).toFixed(1).padStart(5)}   ${(r.minFt === Infinity ? 0 : r.minFt).toFixed(1).padStart(10)}   ${evs.length ? `${evs[0].toFixed(1)} / ${med.toFixed(1)} / ${evs[evs.length - 1].toFixed(1)}` : '-'}`);
+    const add = (label, pass, measured, threshold) => {
+      if (!pass) ok = false;
+      lines.push(`  [${pass ? 'PASS' : 'FAIL'}] ${label}: measured ${measured}, threshold ${threshold}`);
+    };
+    if (PERFECT_MIN_HIT[i] != null) add(`PERFECT_HIT_MIN (${cell.id.trim()})`, hitRate >= PERFECT_MIN_HIT[i], hitRate.toFixed(3), `>= ${PERFECT_MIN_HIT[i]}`);
+    if (PERFECT_MAX_HIT[i] != null) add(`PERFECT_HIT_MAX (${cell.id.trim()})`, hitRate <= PERFECT_MAX_HIT[i], hitRate.toFixed(3), `<= ${PERFECT_MAX_HIT[i]}`);
+    if (PERFECT_MIN_HR[i] != null) add(`PERFECT_HR_MIN (${cell.id.trim()})`, hrRate >= PERFECT_MIN_HR[i], hrRate.toFixed(3), `>= ${PERFECT_MIN_HR[i]}`);
+    add(`MIN_IN_PLAY_FT (${cell.id.trim()})`, r.inPlay === 0 || r.minFt >= settings.MIN_IN_PLAY_FT, `${(r.minFt === Infinity ? 0 : r.minFt).toFixed(1)} ft`, `>= ${settings.MIN_IN_PLAY_FT} ft`);
+  }
   return { ok, lines };
 }
 
@@ -1561,15 +1664,44 @@ async function main() {
     return;
   }
 
+  if (FLAG_PERFECT) {
+    console.log('sim-baseball.mjs --perfect - R5 rule 4: what a perfect swing buys');
+    let anyFail = false;
+    for (const setValue of SET_VALUES) {
+      const settings = settingsFor(setValue);
+      if (setValue != null) console.log(`\n--- ${SET_KEY} = ${setValue} ---`);
+      const { ok, lines } = await runPerfect(settings);
+      console.log('\n=== PERFECT SWING SCOREBOARD ===');
+      for (const l of lines) console.log(l);
+      if (!ok) anyFail = true;
+    }
+    console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    if (FLAG_ASSERT && anyFail) {
+      console.log('\nFAIL: one or more perfect-swing assertions did not meet their threshold (see above).');
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   if (FLAG_CONTACT_GRID) {
     console.log(`sim-baseball.mjs --contact-grid - ${CONTACT_GRID_SWINGS} swings/cell, league=${CONTACT_GRID_LEAGUE}`);
-    const grid = await measureContactGrid(SETTINGS);
-    printContactGrid(grid);
-    const { ok, lines } = assertContactGrid(grid);
-    console.log('\n=== CONTACT GRID SCOREBOARD ===');
-    for (const l of lines) console.log(l);
+    // R5: `--set` sweeps here too. It always could have (the grid threads a `settings` OBJECT the
+    // whole way down), it simply read the module's own SETTINGS and ignored the flag, so the one
+    // tool that measures "does timing still beat power" could not be asked about a candidate value
+    // without editing settings.js first. That is the loop R5's own exit-velocity retune needed.
+    let anyFail = false;
+    for (const setValue of SET_VALUES) {
+      const settings = settingsFor(setValue);
+      if (setValue != null) console.log(`\n--- ${SET_KEY} = ${setValue} ---`);
+      const grid = await measureContactGrid(settings);
+      printContactGrid(grid);
+      const { ok, lines } = assertContactGrid(grid);
+      console.log('\n=== CONTACT GRID SCOREBOARD ===');
+      for (const l of lines) console.log(l);
+      if (!ok) anyFail = true;
+    }
     console.log(`\nwall clock: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    if (FLAG_ASSERT && !ok) {
+    if (FLAG_ASSERT && anyFail) {
       console.log('\nFAIL: one or more contact-grid assertions did not meet their threshold (see above).');
       process.exitCode = 1;
     }
