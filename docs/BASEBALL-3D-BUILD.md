@@ -1129,3 +1129,37 @@ before and after, the contact-grid lines, and the rule-4 census, all pasted into
 --assert`, `node test-baseball-device.mjs` (with `BB_DEVICE_QUICK=1`), `node test-visual.mjs
 baseball`. Stills: the pop and strip after a real homer showing a broadcast-looking mph, and a
 grounder chase ending in the infield, not at the plate.
+
+### R6: figures and runners, the team a figure wears and who stands at the plate
+
+Matt's recording of v865, items 2 to 4 of the analysis. Presentation only: no engine change, no
+beat change, no camera change (R7 owns the cameras).
+
+- **Every figure wears the team the inning half says.** `_syncActors` picks the batter's and the
+  pitcher's side from `mode` (`'pitching'` = away batter), which is inverted for the human (the
+  human is `away`; in the pitching state the CPU, `home`, bats) and disagrees with the runners and
+  fielders, which already derive from `this.game.half`. One rule for all fifteen roles:
+  `battingSide = half === 'top' ? 'away' : 'home'`, the defense is the other one, the umpire is
+  his own; the batter, pitcher, catcher, fielders and runners all read it. Before `this.game`
+  exists (the first `_drawStaticField()`), the human bats, so the batter is `away`.
+- **One batter at the plate, always.** After a play ends at or near home (a 0 ft out today, any
+  short out after R5), the batter-runner figure (`rb`) is still standing on the plate when the
+  next batter is placed, so two figures share the box for a beat. Find the exact path (the
+  `_animateRunners` mover whose run was cut by `_returnToPlate()`, or an `rb` never hidden when
+  `raw` skipped him) and close it: `rb` is hidden the moment his play resolves as an out at home
+  or when the cutaway returns to the plate, whichever comes first, and `_syncActors` hides `rb`
+  whenever no runner animation owns him. A fresh at-bat never inherits a visible `rb`.
+- **The diamond widget reads from behind the plate.** `.bb-diamond-cell[data-cell="1b"]` is at
+  `left: 12%` and `3b` at `88%`; from behind home, and in the reference, first base is on the
+  RIGHT. Swap the two. Check `_paintDiamondWidget`'s moving dot follows (it positions by cell, so
+  it should for free) and that no test pins the old sides.
+
+**Deliverables.** Two probes in `test-baseball-device.mjs`: `sides-match` (mount, force each
+half through `__bbForceHalfNext`, read every visible actor's `side` from `inst.actors` and assert
+the batter, the runners and the fielders agree with the half, at both halves) and `one-batter`
+(force a short out at home through the dev seams, wait for the next at-bat's first pitch, assert
+exactly one visible figure inside 4 ft of the batter's box and that `rb` is hidden). Stills: the
+batting state and the pitching state with a runner on base, showing the colours agree; the
+widget with a runner on first, dot on the right. `node test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
+`node test-game-conventions.mjs` green.
