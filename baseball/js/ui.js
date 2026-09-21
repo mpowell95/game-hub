@@ -77,18 +77,28 @@ const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
 const FADE_MS = 150;
 
 // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7): the flow beats added around a ball in play and a
-// delivery's own end. All four are fixed presentation durations, not tuned engine feel - they sit
-// beside FEEL.ui's numbers rather than inside them because SETTINGS.js is out of scope for this
-// stage (see the doc's own "never touch baseball/js/engine/" rule); `_settleAtBat`'s own
-// book-keeping comment is what ties them back to RESULT_MS/BETWEEN_MS so the total is never a
-// literal 4800.
+// delivery's own end. Presentation durations, not tuned engine feel - they sit beside FEEL.ui's
+// numbers rather than inside them because SETTINGS.js is out of scope for this stage (see the
+// doc's own "never touch baseball/js/engine/" rule).
 const CONTACT_HOLD_MS = 400;   // the plate view holds after contact before the cut to the overhead
-// R2 (docs/BASEBALL-3D-BUILD.md section 9): 1000/1000 -> 900/700. The in-play beat has to FIT the
-// re-timed budget - `_settleAtBat`'s own book-keeping spends CONTACT_HOLD_MS + FLIGHT_MS +
-// MARKER_HOLD_MS out of RESULT_MS + BETWEEN_MS, which R2 cut from 4800 ms to 2000. 400 + 900 + 700
-// is exactly 2000, so the remainder on the plate is zero rather than negative.
-const FLIGHT_MS = 900;         // the chase-camera ball flight
-const MARKER_HOLD_MS = 700;    // the landing marker's own hold before the cut back to the plate
+// R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10"): FLIGHT_MS stopped being a constant. Matt, on
+// v871: "When I make contact, it immediately says 'out'... Hitting a homerun is like 0.25 seconds
+// from swinging to it landing. The ball should move at like a relatively realistic speed through
+// the air and on the ground" - the old 900ms was the SAME whether the ball travelled 40ft or
+// 420ft. `_flightMsFor(battedKind, distanceFt)` (below) replaces it: a fly/line/popup's own hang
+// time from its apex, a grounder's own roll time from a decelerating start, both measured against
+// the spec's own worked examples - see that function's own header and its record in
+// baseball/CLAUDE.md, "R10", for the derivation and the measured numbers.
+const FLIGHT_MS_MIN = 800;   // the spec's own clamp - nothing shorter, even a foot-long dribbler
+const FLIGHT_MS_MAX = 5500;  // nor longer, even a towering popup
+// R10 item 3: "the marker hold is the settle" - the FLOOR the landing marker stays up once the
+// outcome word appears, extended (never shortened) to cover the last runner's own real arrival if
+// he is still running when it would otherwise end - see `_settleAtBat`'s and
+// `_animateBattedBall`'s own headers (`holdMs`).
+const MARKER_HOLD_MS = 800;
+// R10 item 2: "for an out, after a throw beat of about a second to first" - a GROUND ball out
+// only, between the ball reaching the fielder and the Out word appearing. The spec's own number.
+const THROW_BEAT_MS = 1000;
 const PITCHER_RETURN_MS = 400; // ball-crosses-plate -> actors.toSet() (both the CPU's pitch and the human's own)
 // R1 (docs/BASEBALL-3D-BUILD.md section 9): the first wind-up used to wait for `plate.webp` to
 // DECODE. There is no picture any more, so it waits for the scene's own first rendered frame
@@ -119,6 +129,20 @@ const BATTED_GROUNDER_APEX_FT = 4;
 // much steeper fraction and with a floor, so the shortest pop-up still goes up rather than across.
 const BATTED_POPUP_APEX_FRAC = 0.9;
 const BATTED_POPUP_APEX_MIN_FT = 55;
+// R10: a LINE DRIVE gets its own, flatter apex - unlike a fly ball, a liner does not arc; sharing
+// BATTED_APEX_FRAC/BATTED_APEX_MAX_FT with 'fly' put a 200ft liner 44ft up (a 3.3s hang time)
+// where the spec's own worked example wants "about 2.5s" (~25ft). Solved from the same
+// `t = 2*sqrt(2*apex/32.2)` the flight-time formula uses: apex = (t/2)^2 * 32.2, so
+// apex(2.5s) = 25.16ft, frac = 25.16 / 200 = 0.126 - baseball/CLAUDE.md's R10 entry has the check.
+const BATTED_LINE_APEX_FRAC = 0.126;
+const BATTED_LINE_APEX_MAX_FT = 40; // a liner that arced as high as a fly ball's own 80ft cap would read as one
+// R10: the grounder's own roll, decelerating from a stopped-ball start speed - solved against the
+// spec's own two worked examples (a 40ft dribbler under a second, a 150ft grounder about 2.7s):
+// d = v0*t - 0.5*a*t^2. GROUND_ROLL_DECEL_FT_S2 = 3.3 gives 150ft -> 2.70s (the spec's own number,
+// to the hundredth) and 40ft -> 0.68s (comfortably under a second) - baseball/CLAUDE.md's R10
+// entry has the derivation in full.
+const GROUND_ROLL_V0_FT_S = 60;
+const GROUND_ROLL_DECEL_FT_S2 = 3.3;
 // R1: the strike zone is drawn by projecting its real world rectangle. On the BATTING camera that
 // is about 50 px wide on a 393 px band, which is legible.
 // R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2): on the PITCHING camera it used to project
@@ -169,19 +193,30 @@ const CONFETTI_COLORS = ['#ffce3a', '#E0532F', '#1F5FA8', '#178A7A', '#ffffff', 
 // (RESULT_MS), so what the word says and where the ball sits are readable in the same look.
 const CROSSING_HOLD_MS = RESULT_MS;
 
-// R3 (docs/BASEBALL-3D-BUILD.md section 9): fielders, runners, the chase, and the diamond widget.
-// RUN_WINDOW_MS is the window every runner's own run must fit inside - "if the total run time of
-// the longest mover exceeds CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS (2000 ms), speed up ALL
-// movers uniformly" (the spec's own words); computed from those three constants, never a second
-// literal, so it can never drift from the beat it is actually sharing. A WALK has no chase or
-// marker at all, but its own beat (RESULT_MS + BETWEEN_MS) sums to the identical 2000 ms in R2's
-// current tuning, so one constant covers both - `_animateRunners` always runs CONCURRENTLY with
-// whatever beat it was called from (never awaited in the beat's own sequential chain), so a walk
-// that needed the speed-up never lengthens the beat either.
-const RUN_WINDOW_MS = CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS;
+// R3/R10 (docs/BASEBALL-3D-BUILD.md section 9): fielders, runners, the chase, and the diamond
+// widget. R10 removed the fixed RUN_WINDOW_MS every runner used to be squeezed into ("speed up ALL
+// movers uniformly" if the play would not otherwise fit 2000ms) - Matt, v871: "The whole thing is
+// too fast too, it's like I'm speed playing." Every runner now runs at his own real speed
+// (`_animateRunners`'s own header), and `_settleAtBat` holds the play open (extends the landing
+// marker's own MARKER_HOLD_MS) until the slowest one finishes, rather than compressing him to fit
+// a fixed window. A WALK still runs concurrently with its own beat, unaffected - it was never
+// squeezed in the first place (a forced runner's own 45ft at half speed is 3.33s, comfortably
+// inside RESULT_MS + BETWEEN_MS already, and a walk has no cutaway to extend).
 const RUNNER_SPEED_FT_S = 27;             // the spec's own number: 90 ft in 3.33 s
 const WALK_RUNNER_SPEED_FT_S = RUNNER_SPEED_FT_S / 2; // "the forced runners walk... half speed"
 const FIELDER_SPEED_FT_S = 27;
+// R10 ship-review follow-up (2026-09-21): a 13.3s cutaway on every home run (the batter's own real
+// 360ft trot at RUNNER_SPEED_FT_S) was too long to sit through even once the ball itself flew at a
+// real, honest speed - the coordinator's own words, "the ball's 4.4s flight is right; the 360ft
+// trot at 27ft/s is what pads it." Rule: on a home run ONLY, once the ball has crossed the wall
+// (the same instant the HOME RUN word goes up - see `_homerCrossMs`, which both the ball's own
+// `_animateBattedBall` and this mover math read so the two can never disagree), every runner still
+// on the paths finishes the REST of his own run at HOMER_RUNNER_SPEEDUP x his real speed - a shown
+// trot, not a real one. Everything BEFORE the crossing still runs at real RUNNER_SPEED_FT_S/
+// WALK_RUNNER_SPEED_FT_S, identically to every other play; only the ground still left AFTER the
+// ball is already gone gets compressed. Every other outcome (single/double/triple/out/walk) is
+// untouched by this constant entirely.
+const HOMER_RUNNER_SPEEDUP = 3;
 const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
 // RA (docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF - presentation only. Every rule
@@ -1214,16 +1249,21 @@ class BaseballPlayScreen {
    *  unless something legitimate is currently running him.
    *
    *  What this closes (Matt's v865 recording, item 3 - "the batter-runner figure is still standing
-   *  on the plate when the next batter is placed"): `_animateRunners` is deliberately never awaited
-   *  by `_settleAtBat` (see `RUN_WINDOW_MS`'s own header - awaiting it would risk lengthening the
-   *  beat), so its own rAF-driven finish and `_returnToPlate()`'s cutaway-clearing redraw are two
-   *  independently-clocked things with no lock between them. Under real frame-time jitter (a
-   *  dropped frame, a slow paint) the loop's own `this.actors.setActor('rb', {...})` can land AFTER
+   *  on the plate when the next batter is placed"): `_animateRunners`'s own rAF-driven finish and
+   *  `_returnToPlate()`'s cutaway-clearing redraw are two independently-clocked things with no HARD
+   *  lock between them. R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 3) narrowed the gap -
+   *  `_settleAtBat` now reads `_animateRunners`'s own `longestMs` UP FRONT and hands it to
+   *  `_animateBattedBall`, whose marker hold (the "settle") is extended to try to cover it before
+   *  `_returnToPlate()` fires - but that is an ESTIMATE, computed before any of it has actually
+   *  played out under real frame timing, not a lock. Under real jitter (a dropped frame, a slow
+   *  paint) the loop's own `this.actors.setActor('rb', {...})` can still land AFTER
    *  `_returnToPlate()` has already put the NEXT batter's own figure up, which is what put two
-   *  figures in the box for a beat. `_returnToPlate()` also clears `_rbActive` unconditionally
-   *  (its own header), so the cutaway returning to the plate is the OTHER thing (besides the
-   *  mover's own natural finish) that closes this - "whichever comes first", the spec's own
-   *  words.
+   *  figures in the box for a beat before this guard existed. `_returnToPlate()` also clears
+   *  `_rbActive` unconditionally (its own header), so the cutaway returning to the plate is the
+   *  OTHER thing (besides the mover's own natural finish) that closes this - "whichever comes
+   *  first", the spec's own words. (`_settleAtBat` also awaits `_animateRunners`'s own promise
+   *  AFTER the cutaway, as a second, sequencing-only backstop - see its own header - but that runs
+   *  after `_returnToPlate()` has already fired, so it cannot substitute for this one.)
    *
    *  R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1) extends the same backstop to the OTHER
    *  half of the double-batter bug: R6 (above) closed the RETURN (a stale 'rb' outliving his play);
@@ -1346,14 +1386,61 @@ class BaseballPlayScreen {
   }
   /** The apex stage 8 chose, in feet rather than in band-height fractions (section 9's own
    *  restatement): a grounder barely lifts, anything else arcs higher the farther it carried.
-   *  `battedKind` unset or anything other than the engine's own `'ground'`/`'popup'` is a fly. */
+   *  `battedKind` unset or anything other than the engine's own `'ground'`/`'popup'`/`'line'` is a
+   *  fly. */
   _battedApexFt(battedKind, distanceFt) {
     if (battedKind === 'ground') return BATTED_GROUNDER_APEX_FT;
     // R5: a pop-up goes UP. See BATTED_POPUP_APEX_FRAC.
     if (battedKind === 'popup') {
       return Math.min(BATTED_APEX_MAX_FT, Math.max(BATTED_POPUP_APEX_MIN_FT, (distanceFt || 0) * BATTED_POPUP_APEX_FRAC));
     }
+    // R10: a LINE DRIVE arcs flatter than a fly ball - see BATTED_LINE_APEX_FRAC's own header.
+    if (battedKind === 'line') {
+      return Math.min(BATTED_LINE_APEX_MAX_FT, (distanceFt || 0) * BATTED_LINE_APEX_FRAC);
+    }
     return Math.min(BATTED_APEX_MAX_FT, (distanceFt || 0) * BATTED_APEX_FRAC);
+  }
+
+  /** R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 1): how long this play's own ball
+   *  actually takes, in ms, from contact to landing/rolling-to-the-fielder - INCLUDING
+   *  CONTACT_HOLD_MS (the first slice of the same one arc/roll, shown on the plate camera before
+   *  the cut - see `_contactHold`'s own header). Two physical models, chosen by `battedKind`:
+   *
+   *  Fly/line/popup: the hang time of a parabola through the apex `_battedApexFt` already computes,
+   *  `t = 2 * sqrt(2 * apex / 32.2)` (32.2 ft/s^2, g) - the spec's own formula.
+   *
+   *  Grounder: a roll decelerating from GROUND_ROLL_V0_FT_S at GROUND_ROLL_DECEL_FT_S2, solved for
+   *  time at `distanceFt`: `d = v0*t - 0.5*a*t^2` => `t = (v0 - sqrt(v0^2 - 2*a*d)) / a`. Both
+   *  constants are measured against the spec's own two worked examples - see their own header.
+   *
+   *  Clamped FLIGHT_MS_MIN to FLIGHT_MS_MAX either way - the spec's own numbers, so a token
+   *  dribbler and an absurd moonshot both still play out inside a beat a person can sit through. */
+  _flightMsFor(battedKind, distanceFt) {
+    const d = distanceFt || 0;
+    let rawMs;
+    if (battedKind === 'ground') {
+      const v0 = GROUND_ROLL_V0_FT_S, a = GROUND_ROLL_DECEL_FT_S2;
+      const disc = Math.max(0, v0 * v0 - 2 * a * d);
+      rawMs = ((v0 - Math.sqrt(disc)) / a) * 1000;
+    } else {
+      const apexFt = this._battedApexFt(battedKind, d);
+      rawMs = 2000 * Math.sqrt((2 * apexFt) / 32.2);
+    }
+    return Math.max(FLIGHT_MS_MIN, Math.min(FLIGHT_MS_MAX, rawMs));
+  }
+
+  /** R10 ship-review follow-up: the instant, in ms after contact, this play's own ball crosses the
+   *  fence - `null` for anything that isn't a real, positive-distance homer. Shared by
+   *  `_animateBattedBall` (which already computed this fraction inline for the HOME RUN word/
+   *  `_triggerHomerun` trigger) and `_animateRunners` (the new HOMER_RUNNER_SPEEDUP kink point), so
+   *  the ball's own visual crossing and every runner's own speed-change instant can never disagree
+   *  - both read the identical `fenceFtAt(sprayAngleDeg, this._fenceFt()) / distanceFt` fraction
+   *  against the identical `_flightMsFor` total. */
+  _homerCrossMs(battedKind, distanceFt, sprayAngleDeg) {
+    if (!(distanceFt > 0)) return null;
+    const totalMs = this._flightMsFor(battedKind, distanceFt);
+    const frac = Math.max(0, Math.min(1, fenceFtAt(sprayAngleDeg, this._fenceFt()) / distanceFt));
+    return totalMs * frac;
   }
 
   /** The model is built right-handed; a LEFT-handed batter is the mirror, standing in the other
@@ -2151,8 +2238,14 @@ class BaseballPlayScreen {
     // hold below and the whole overhead cutaway, and only drops to Idle once `_returnToPlate()`
     // brings the plate view back (paired there with the pitcher's own return to Set).
     if (!inPlay) this.actors.idle('batter');
-    let word = t('res_' + outcomeWord(outKind, payload.bases));
-    this._setLine1(word);
+    const word = t('res_' + outcomeWord(outKind, payload.bases));
+    // R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 2): a ball IN PLAY no longer announces
+    // its own outcome HERE, at contact - Matt, v871: "When I make contact, it immediately says
+    // 'out'... Wait for the ball to stop moving before announcing the result." Only a walk/
+    // strikeout (no flight to wait for, the play IS already over) still gets its word immediately.
+    // `_animateBattedBall` paints `word` itself, at the moment the play is actually over - see its
+    // own header.
+    if (!inPlay) this._setLine1(word);
     // R4: Line 2 goes empty here too - its old job (the pitch readout) now lives under the pop's
     // own word (`opts.pitchLine` below), same as 'count'. Line 1 keeps its at-bat outcome word,
     // unchanged (the spec's own words: "the result word Strikeout/Walk/Single etc. still shows on
@@ -2184,30 +2277,37 @@ class BaseballPlayScreen {
       const rad = (payload.sprayAngleDeg * Math.PI) / 180;
       const xFt = Math.sin(rad) * payload.distanceFt;
       const yFt = Math.cos(rad) * payload.distanceFt;
-      // R3: every runner this play moves starts running AT CONTACT, in parallel with the whole
-      // contact-hold/chase/marker sequence below (never awaited in this chain - see its own
-      // header for why it can never lengthen the beat).
-      this._animateRunners(payload);
+      // R3/R10: every runner this play moves starts running AT CONTACT, in parallel with the whole
+      // contact-hold/chase/marker sequence below. R10 item 3: `longestMs` (his own natural,
+      // uncompressed duration) is read NOW, before any of it plays out, and handed to
+      // `_animateBattedBall` so its own marker hold can be extended to cover him - see that call's
+      // own header. `runnersPromise` is awaited further down, AFTER the cutaway, as a backstop.
+      const { promise: runnersPromise, longestMs: runnersLongestMs } = this._animateRunners(payload);
       // THE CONTACT HOLD (row 4): CONTACT_HOLD_MS on the plate view before the cut.
       await this._contactHold(xFt, yFt, payload.battedKind, payload.distanceFt);
-      // THE OVERHEAD, RE-PARTITIONED (row 5): flight, then the landing marker's own hold, then
-      // `_returnToPlate()` (which clears the cutaway flag and repaints the plate view).
+      if (this.destroyed) return;
+      // THE OVERHEAD (R10 items 1-3): flight/roll time from the play's own physics, the outcome
+      // word only once the play is actually over, and a marker hold long enough for the slowest
+      // runner - see `_animateBattedBall`'s own header. `_returnToPlate()` (which clears the
+      // cutaway flag and repaints the plate view) fires from inside it, at the end of the hold.
       // STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 4): `battedKind`/`distanceFt` ride along
       // so the overhead flight can tell a grounder from a fly ball and size the lift by how far it
       // actually carried - `game.js`'s own `_onEngineEvent`/`atBatEnd` payload already carries both
       // (`swingResult.kind`, `outcome.distanceFt`). R3 adds `sprayAngleDeg`, for the chasing
       // fielder to find the fence at the SAME angle on a home run.
-      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt, payload.sprayAngleDeg, payload.exitVeloMph, payload.launchAngleDeg);
-      // Book-keeping (section 7's own paragraph): 0.4 hold + 1.0 flight + 1.0 marker + 2.4 on the
-      // plate = 4.8s = RESULT_MS + BETWEEN_MS - computed FROM those two constants, never a literal
-      // 4800, so a settings change still flows through. The between beat is skipped at the end of a
-      // half-inning (same rule the non-contact branch below applies), which shrinks the BUDGET, not
-      // the fixed hold/flight/marker beats already spent - so the plate remainder is correspondingly
-      // shorter, per the doc's own "the remaining time is just shorter."
+      await this._animateBattedBall(xFt, yFt, isOut ? 'out' : (isHr ? 'hr' : 'hit'), basesLabel(payload.bases), payload.battedKind, payload.distanceFt, payload.sprayAngleDeg, payload.exitVeloMph, payload.launchAngleDeg, word, runnersLongestMs);
+      // R10 item 3: "the play holds until the last runner arrives or is out" - the backstop for
+      // whatever the marker hold's own estimate above did not cover exactly (real frame timing,
+      // never awaited until now on purpose - see `_syncBatterRunner`'s own header on why the
+      // force-hide guard still matters even with this in place).
+      if (runnersPromise) await runnersPromise;
+      // R10 item 3: "the between beat is the same BETWEEN_MS as today... the in-play at-bat is
+      // simply longer, by however long the play took" - no more borrowing from a fixed
+      // RESULT_MS+BETWEEN_MS budget (the play can now run far longer than either on its own, e.g.
+      // a home-run trot), just the same flat pause every other at-bat end gets, skipped at the end
+      // of a half-inning exactly like the non-contact branch below.
       const skipBetween = this.game && this.game.outs >= outsPerInning;
-      const budget = RESULT_MS + (skipBetween ? 0 : BETWEEN_MS);
-      const spent = CONTACT_HOLD_MS + FLIGHT_MS + MARKER_HOLD_MS;
-      await sleep(Math.max(0, budget - spent));
+      if (!skipBetween) await sleep(BETWEEN_MS);
     } else {
       // R3: a walk's forced runners (the batter included) - a strikeout moves nobody, and
       // `_animateRunners` is a no-op the instant it sees that outcome (nothing to build a mover
@@ -2250,8 +2350,12 @@ class BaseballPlayScreen {
       // directly, with no hold in front of it, which is exactly where that would show up).
       this._battedFrom = start;
       // How much of the flight is spent on the pitch camera before the cut. The chase then covers
-      // the rest, so the two together are one continuous arc, not two.
-      const preFrac = CONTACT_HOLD_MS / (CONTACT_HOLD_MS + FLIGHT_MS);
+      // the rest, so the two together are one continuous arc, not two. R10: `totalMs` is this
+      // play's own real flight/roll time (`_flightMsFor`), not a constant - `_animateBattedBall`
+      // recomputes the SAME value from the SAME two arguments, so the two halves of the arc can
+      // never disagree about how long the whole thing takes.
+      const totalMs = this._flightMsFor(battedKind, distanceFt);
+      const preFrac = CONTACT_HOLD_MS / totalMs;
       // R4: the contact burst - 12 lines radiating from the CONTACT POINT, projected ONCE here
       // (the point itself does not move; only the ball leaving it does) and drawn every frame for
       // CONTACT_BURST_MS (< CONTACT_HOLD_MS, so it always finishes inside this hold). Skipped
@@ -2311,25 +2415,47 @@ class BaseballPlayScreen {
    *  recomputes from its OWN arguments every time - the chase camera eases along behind and above
    *  it, and the landing marker is a real disc on the ground where it comes down.
    *
-   *  STAGE 7 (section 7, row 5): the partitioning is unchanged - FLIGHT_MS of flight, then
-   *  MARKER_HOLD_MS holding the marker, then `_returnToPlate()`. See `_settleAtBat`'s own
-   *  book-keeping comment for how that sums against RESULT_MS/BETWEEN_MS.
-   *  STAGE 7 row 6: `_cutawayUp` is set here and cleared only by `_returnToPlate()`, so no input
-   *  path can switch the camera back over a ball still in the air.
+   *  R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10"): the partitioning changed shape, item by item:
    *
-   *  R3: THE CUT is also when the diamond widget appears (`_setDiamondVisible(true)`, hidden again
-   *  only by `_returnToPlate()`) and when the nearest fielder starts his own run
+   *  Item 1: `dur` (the chase-camera portion) is this play's own real flight/roll time
+   *  (`_flightMsFor`) minus CONTACT_HOLD_MS, not a constant 900ms - a 420ft homer's own ball is now
+   *  actually in the air for seconds, not a fixed fraction of one.
+   *
+   *  Item 2: `outWord` (the translated Line 1 outcome word, computed once by `_settleAtBat` before
+   *  this call) is painted here, not before it - "nothing is announced until the play is over." A
+   *  homer announces itself the moment it crosses the fence (`homerCrossFrac`, unchanged from R4)
+   *  since the chase already computes that instant and the spec names it explicitly. Everything
+   *  else announces once the flight loop below ends (the ball has reached the fielder or landed) -
+   *  except a GROUND ball OUT, which adds THROW_BEAT_MS first ("a throw beat of about a second to
+   *  first"). A caught fly/line/popup and a base hit are NOT distinguished further: both are
+   *  presented as "the ball reached the fielder", since the fielder's own chase (below) is already
+   *  built never to arrive earlier than the ball (`Math.max` in `_animateFielderChase`) - the one
+   *  simplification worth naming for whoever reads this next: on a very deep ball where the nearest
+   *  fielder's own run genuinely outlasts the flight, the word can appear a beat before his own
+   *  animation visually reaches the spot. Presentation only; the OUTCOME was never in question.
+   *
+   *  Item 3: `holdMs`, handed to `_runMarkerHold`, is MARKER_HOLD_MS (the "settle") extended to
+   *  cover whichever runner `_settleAtBat` found to be slowest (`longestRunnerMs`, this play's own
+   *  longest natural run, measured from CONTACT - the time already spent on the flight/throw-beat
+   *  above is subtracted out here) - never shortened below MARKER_HOLD_MS. On a home run this is
+   *  routinely many seconds (the batter's own trot around all four bases); `_settleAtBat`'s own
+   *  await of `_animateRunners`'s promise, AFTER this whole method resolves, is the backstop for
+   *  whatever this estimate does not cover exactly (see `_syncBatterRunner`'s own header on why
+   *  that backstop still matters).
+   *
+   *  R3 (unchanged): THE CUT is also when the diamond widget appears (`_setDiamondVisible(true)`,
+   *  hidden again only by `_returnToPlate()`) and when the nearest fielder starts his own run
    *  (`_animateFielderChase`) - the spec's own words, "starting at the cut". `sprayAngleDeg` rides
    *  along only for that: finding the fence at the SAME angle on a ball that clears it.
    *
-   *  R4: on a homer (`kind === 'hr'`), the HOME RUN word triggers HERE, mid-chase, the moment the
-   *  ball's own ground distance from home crosses `fenceFtAt(spray)` (the spec's own rule: "the
-   *  flight's frac where the ball's plan distance crosses the fence"). Ground distance is linear in
-   *  the flight's total completion fraction (`_battedBallAt`'s x/z are a straight lerp from contact
-   *  to the landing point, which sits exactly `distanceFt` from home along `spray` - only the
-   *  height arcs), so `homerCrossFrac = fenceFt / distanceFt` needs no per-frame trig, just a
-   *  threshold on the same `totalFrac` the ball's own position already uses. */
-  _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg, exitVeloMph, launchAngleDeg) {
+   *  R4/STAGE 7 (unchanged): `_cutawayUp` is set here and cleared only by `_returnToPlate()`, so no
+   *  input path can switch the camera back over a ball still in the air; on a homer the HOME RUN
+   *  word triggers mid-chase, the moment the ball's own ground distance from home crosses
+   *  `fenceFtAt(spray)` - ground distance is linear in the flight's total completion fraction
+   *  (`_battedBallAt`'s x/z are a straight lerp from contact to the landing point), so
+   *  `homerCrossFrac = fenceFt / distanceFt` needs no per-frame trig, just a threshold on the same
+   *  `totalFrac` the ball's own position already uses. */
+  async _animateBattedBall(xFt, yFt, kind, label, battedKind, distanceFt, sprayAngleDeg, exitVeloMph, launchAngleDeg, outWord, longestRunnerMs) {
     this._cutawayUp = true;
     this._setDiamondVisible(true);
     // R7 (item 1): the verdict pop is a plate-camera word, positioned once through whichever camera
@@ -2338,20 +2464,24 @@ class BaseballPlayScreen {
     // scene has already moved on (the reference shows no word over the chase at all).
     this._hidePop();
     const isHr = kind === 'hr';
+    const isOut = kind === 'out';
     const homerCrossFrac = (isHr && distanceFt > 0)
       ? Math.max(0, Math.min(1, fenceFtAt(sprayAngleDeg, this._fenceFt()) / distanceFt)) : null;
     let homerShown = false;
-    return new Promise((resolve) => {
-      const from = this._battedFrom || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
-      const to = engineToWorld(xFt, yFt, 0);
-      const apexFt = this._battedApexFt(battedKind, distanceFt);
-      const preFrac = CONTACT_HOLD_MS / (CONTACT_HOLD_MS + FLIGHT_MS);
-      const dur = FLIGHT_MS;
+    const from = this._battedFrom || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
+    const to = engineToWorld(xFt, yFt, 0);
+    const apexFt = this._battedApexFt(battedKind, distanceFt);
+    // R10 item 1: the SAME totalMs/preFrac `_contactHold` already computed from these same two
+    // arguments - never a second, independently-rounded number.
+    const totalMs = this._flightMsFor(battedKind, distanceFt);
+    const preFrac = CONTACT_HOLD_MS / totalMs;
+    const dur = Math.max(1, totalMs - CONTACT_HOLD_MS);
+    const first = this._battedBallAt(from, to, apexFt, preFrac);
+    this.actors.setCamera('chase');
+    this.actors.chaseAt(first, true);   // snap, so the chase does not fly in from the last ball
+    this._animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg, dur);
+    await new Promise((resolve) => {
       const t0 = performance.now();
-      const first = this._battedBallAt(from, to, apexFt, preFrac);
-      this.actors.setCamera('chase');
-      this.actors.chaseAt(first, true);   // snap, so the chase does not fly in from the last ball
-      this._animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg);
       const step = (now) => {
         if (this.destroyed) return resolve();
         const frac = Math.min(1, (now - t0) / dur);
@@ -2363,43 +2493,67 @@ class BaseballPlayScreen {
         if (!homerShown && homerCrossFrac != null && totalFrac >= homerCrossFrac) {
           homerShown = true;
           this._triggerHomerun({ distanceFt, exitVeloMph, launchAngleDeg });
+          // R10 item 2: HOME RUN announces itself the moment it crosses the wall - never held back
+          // to the flight's own end like every other outcome below.
+          this._setLine1(outWord);
         }
-        if (frac < 1) {
-          this._rafBall = requestAnimationFrame(step);
-        } else {
-          this._runMarkerHold(xFt, yFt, kind, label, resolve);
-        }
+        if (frac < 1) this._rafBall = requestAnimationFrame(step);
+        else resolve();
       };
       this._rafBall = requestAnimationFrame(step);
     });
+    if (this.destroyed) return;
+    // R10 item 2: the ball has reached the fielder (or landed) - announce now, unless this is a
+    // ground ball out, which gets one more beat first (the throw to first).
+    let throwBeatMs = 0;
+    if (!isHr) {
+      if (isOut && battedKind === 'ground') {
+        throwBeatMs = THROW_BEAT_MS;
+        await sleep(THROW_BEAT_MS);
+        if (this.destroyed) return;
+      }
+      this._setLine1(outWord);
+    }
+    // R10 item 3: the settle - MARKER_HOLD_MS at minimum, extended to cover the last runner's own
+    // real arrival if he needs longer. `elapsedMs` is how much of `longestRunnerMs` (measured from
+    // CONTACT) is already spent by the time we get here.
+    const elapsedMs = totalMs + throwBeatMs;
+    const holdMs = Math.max(MARKER_HOLD_MS, (longestRunnerMs || 0) - elapsedMs);
+    await this._runMarkerHold(xFt, yFt, kind, label, holdMs);
   }
 
   /** THE MARKER HOLD (row 5). R1: the marker is a disc in the WORLD at the landing point (actors.js
    *  `setMarker`, the stage 8 colours and the two-pulse ring kept), and its LABEL - 1B/2B/3B, HR,
    *  or an X for an out - is drawn on the 2-D overlay at the projected position of that same point,
    *  because text on a world quad would be a texture to build and throw away every ball in play.
-   *  Reduced motion withholds `pulseT`, so the ring never moves, same total hold. */
-  _runMarkerHold(xFt, yFt, kind, label, resolve) {
-    const dur = MARKER_HOLD_MS;
-    const t0 = performance.now();
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const land = engineToWorld(xFt, yFt, 0);
-    this.actors.setBall(null);
-    this.actors.setMarker({ x: land.x, z: land.z, kind });
-    this.actors.chaseAt({ x: land.x, y: 2, z: land.z });
-    const step = (now) => {
-      if (this.destroyed) return resolve();
-      const elapsed = now - t0;
-      this.actors.markerPulse(reduced ? null : Math.min(1, elapsed / dur));
-      this._drawOverlayChase({ land, kind, label });
-      if (elapsed < dur) {
-        this._markerRaf = requestAnimationFrame(step);
-      } else {
-        this._returnToPlate();
-        resolve();
-      }
-    };
-    this._markerRaf = requestAnimationFrame(step);
+   *  Reduced motion withholds `pulseT`, so the ring never moves, same total hold.
+   *
+   *  R10 item 3: `dur` is no longer the module constant `MARKER_HOLD_MS` directly -
+   *  `_animateBattedBall` passes its own computed `holdMs` (MARKER_HOLD_MS itself, or longer if a
+   *  runner is still running - see that call's own header). `_returnToPlate()` still fires at the
+   *  end, unchanged - this is still the ONE place it is called from on the in-play path. */
+  _runMarkerHold(xFt, yFt, kind, label, dur) {
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const land = engineToWorld(xFt, yFt, 0);
+      this.actors.setBall(null);
+      this.actors.setMarker({ x: land.x, z: land.z, kind });
+      this.actors.chaseAt({ x: land.x, y: 2, z: land.z });
+      const step = (now) => {
+        if (this.destroyed) return resolve();
+        const elapsed = now - t0;
+        this.actors.markerPulse(reduced ? null : Math.min(1, elapsed / dur));
+        this._drawOverlayChase({ land, kind, label });
+        if (elapsed < dur) {
+          this._markerRaf = requestAnimationFrame(step);
+        } else {
+          this._returnToPlate();
+          resolve();
+        }
+      };
+      this._markerRaf = requestAnimationFrame(step);
+    });
   }
 
   // -------------------------------------------------------------------------------- R3: runners
@@ -2477,11 +2631,25 @@ class BaseballPlayScreen {
 
   /** EVERY RUNNER THIS PLAY MOVES, driven ONLY by `payload.basesBefore` -> `this.game.bases` (the
    *  engine's own before/after, R3, docs/BASEBALL-3D-BUILD.md section 9) plus `payload.runnersOut` -
-   *  this never decides an advancement itself, it reads one. Runs CONCURRENTLY with whatever beat
-   *  called it (never awaited in that beat's own sequential chain, see `RUN_WINDOW_MS`'s own
-   *  header) - a mover's natural 27 ft/s duration is used as-is unless the SLOWEST of this play's
-   *  movers would not otherwise finish inside `RUN_WINDOW_MS`, in which case every mover this play
-   *  has is sped up by the SAME factor (the spec's own "speed up ALL movers uniformly").
+   *  this never decides an advancement itself, it reads one. Starts CONCURRENTLY with whatever beat
+   *  called it, at contact.
+   *
+   *  R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 3): every mover's own 27 ft/s (or half
+   *  that, forced on a walk) duration is used AS-IS now - the old "speed up ALL movers uniformly if
+   *  the slowest would not fit a fixed 2000ms `RUN_WINDOW_MS`" rule is gone (Matt, v871: "it's like
+   *  I'm speed playing"). `_settleAtBat` is what now waits for the slowest one: it reads this
+   *  return's own `longestMs` BEFORE the cutaway starts and hands it to `_animateBattedBall`, whose
+   *  own marker hold (the "settle") is extended to cover it, and `_settleAtBat` also awaits this
+   *  call's own `promise` after the cutaway, as a backstop - see both of their own headers.
+   *
+   *  R10 ship-review follow-up (2026-09-21): real speed for EVERY play except one - on a HOME RUN
+   *  only, once the ball has crossed the wall (`homerCrossMs`, the same instant `_animateBattedBall`
+   *  fires the HOME RUN word/`_triggerHomerun`), any runner still on the paths finishes the rest of
+   *  his own run at HOMER_RUNNER_SPEEDUP (3x) speed - a shown trot, not a real one. A solo homer's
+   *  cutaway (batter-runner only, 360ft) lands around 7.3s from contact instead of a real 13.3s; a
+   *  runner already standing on a closer base when the wall is crossed needs less post-crossing
+   *  ground and so finishes sooner still. Everything before the crossing, and every non-homer play
+   *  in its entirety, is untouched real speed.
    *
    *  Deriving each mover from the before/after diff, rather than from `outcome` alone, is what lets
    *  ONE small function cover a single, a double play, a sac fly and a bases-loaded walk: an
@@ -2499,9 +2667,13 @@ class BaseballPlayScreen {
    *  called once more to re-derive who is standing where, fresh, off `this.game.bases`, under the
    *  slot roles that actually own those bases now. That one extra call is what stops, say, first's
    *  own 'r1' actor being left standing at third after a triple while a freshly-placed 'r3' actor
-   *  also appears there. */
+   *  also appears there.
+   *
+   *  Returns `{ promise, longestMs }` - `promise` is `null` when this play moves nobody (a
+   *  strikeout, most walks with the bases empty), `longestMs` is the slowest mover's own natural
+   *  duration (0 when nobody moves), always a number so a caller never has to guard it. */
   _animateRunners(payload) {
-    if (!this.actors || this.destroyed || !this.game) return;
+    if (!this.actors || this.destroyed || !this.game) return { promise: null, longestMs: 0 };
     if (this._runnersRaf) cancelAnimationFrame(this._runnersRaf);
     const before = payload.basesBefore || [null, null, null];
     const after = this.game.bases;
@@ -2542,18 +2714,35 @@ class BaseballPlayScreen {
     // are shown. `_syncBatterRunner()` (below) is the ongoing per-redraw backstop, the same
     // belt-and-braces pattern this file already uses for 'rb' itself.
     if (this.actors) this.actors.setForceHidden('batter', this._rbActive);
-    if (!raw.length) { this._runnersInMotion = null; return undefined; }
+    if (!raw.length) { this._runnersInMotion = null; return { promise: null, longestMs: 0 }; }
+    // R10 ship-review follow-up: on a home run only, everything still on the paths once the ball
+    // has crossed the wall finishes at HOMER_RUNNER_SPEEDUP x real speed - see the constant's own
+    // header. `homerCrossMs` is computed once, up front, from the SAME formula `_animateBattedBall`
+    // uses for the HOME RUN word/`_triggerHomerun` trigger, so the ball's own visual crossing and
+    // every runner's own speed change land at the identical instant.
+    const homerCrossMs = payload.outcome === 'homer'
+      ? this._homerCrossMs(payload.battedKind, payload.distanceFt, payload.sprayAngleDeg) : null;
     const movers = raw.map((m) => {
       const wp = path.slice(m.from + 1, m.to + 2);
       let lenFt = 0;
       for (let i = 1; i < wp.length; i++) lenFt += Math.hypot(wp[i].x - wp[i - 1].x, wp[i].z - wp[i - 1].z);
       const facingRad = Math.atan2(wp[1].x - wp[0].x, wp[1].z - wp[0].z);
-      return { ...m, wp, naturalS: lenFt / m.speedFt, facingRad, frac: 0, started: false, done: false };
+      // R10 item 3: naturalMs is the mover's own REAL, uncompressed duration - no scaling to fit a
+      // fixed window. R10 ship-review follow-up: if this run would still be going once the ball has
+      // crossed the wall (naturalMs > homerCrossMs), it is split at that instant - crossMs (real
+      // speed, identical to every other play) then postMs, the remaining ground at 3x speed, a shown
+      // trot rather than a real one. Everything that finishes its own natural run BEFORE the
+      // crossing (homerCrossMs == null, or the runner is simply fast/short enough) is untouched -
+      // crossMs === naturalMs and postMs === 0, so this collapses to the old single-rate behavior.
+      const naturalMs = (lenFt / m.speedFt) * 1000;
+      let crossMs = naturalMs, postMs = 0;
+      if (homerCrossMs != null && naturalMs > homerCrossMs) {
+        crossMs = homerCrossMs;
+        postMs = (naturalMs - homerCrossMs) / HOMER_RUNNER_SPEEDUP;
+      }
+      return { ...m, wp, naturalS: lenFt / m.speedFt, naturalMs, crossMs, postMs, facingRad, frac: 0, started: false, done: false };
     });
-    const longestS = Math.max(...movers.map((m) => m.naturalS));
-    const availS = RUN_WINDOW_MS / 1000;
-    const scale = longestS > availS ? longestS / availS : 1;
-    for (const m of movers) m.durMs = (m.naturalS / scale) * 1000;
+    const longestMs = Math.max(...movers.map((m) => m.crossMs + m.postMs));
     // Orchestrator's RA ship review: this loop and `_animateSteal`'s used to share ONE
     // `this._runnersInMotion` Set and each nulled it on finishing - so when a steal's run and a
     // hit's run overlapped (a caught-stealing beat still animating when the next ball in play
@@ -2564,7 +2753,7 @@ class BaseballPlayScreen {
     const motion = new Set(movers.map((m) => m.role));
     this._runnersInMotion = motion;
     const t0 = performance.now();
-    return new Promise((resolve) => {
+    const promise = new Promise((resolve) => {
       const step = (now) => {
         if (this.destroyed) { if (this._runnersInMotion === motion) this._runnersInMotion = null; return resolve(); }
         let allDone = true;
@@ -2577,7 +2766,20 @@ class BaseballPlayScreen {
           // sets `pivot.visible = true` unconditionally (actors.js's own comment on that).
           if (m.role === 'rb' && !this._rbActive) { m.done = true; motion.delete(m.role); this.actors.hide(m.role); continue; }
           if (!m.started) { m.started = true; this.actors.play(m.role, 'Run'); }
-          m.frac = m.durMs > 0 ? Math.min(1, (now - t0) / m.durMs) : 1;
+          // R10 ship-review follow-up: piecewise - real speed up to crossMs, then (only on a home
+          // run, only for a runner who would still be going) HOMER_RUNNER_SPEEDUP x speed for the
+          // remaining postMs. A play with no speedup (postMs === 0) collapses back to the single
+          // linear rate this loop always used.
+          {
+            const elapsed = now - t0;
+            if (elapsed <= m.crossMs) {
+              m.frac = m.naturalMs > 0 ? Math.min(1, elapsed / m.naturalMs) : 1;
+            } else {
+              const frac0 = m.naturalMs > 0 ? m.crossMs / m.naturalMs : 1;
+              const t1 = elapsed - m.crossMs;
+              m.frac = m.postMs > 0 ? frac0 + (1 - frac0) * Math.min(1, t1 / m.postMs) : 1;
+            }
+          }
           if (m.frac < 1) { allDone = false; }
           else {
             m.done = true; motion.delete(m.role); this.actors.hide(m.role);
@@ -2599,6 +2801,7 @@ class BaseballPlayScreen {
       };
       this._runnersRaf = requestAnimationFrame(step);
     });
+    return { promise, longestMs };
   }
 
   /** RA (docs/BASEBALL-3D-BUILD.md section 9): THE PICKOFF, from the tap to the next pitch. The
@@ -2665,9 +2868,9 @@ class BaseballPlayScreen {
 
   /** RA: THE STEAL, as a picture. NOT awaited by its caller, on purpose: the engine emits 'steal'
    *  and then goes straight on to emit 'count', whose own handler already holds RESULT_MS +
-   *  BETWEEN_MS - so this run happens INSIDE a beat that exists rather than adding one, exactly
-   *  the rule `_animateRunners` follows for the same reason (see `RUN_WINDOW_MS`'s header). The
-   *  run is STEAL_RUN_MS, comfortably inside RESULT_MS, so the runner is standing on his new bag
+   *  BETWEEN_MS - so this run happens INSIDE a beat that exists rather than adding one. Untouched
+   *  by R10 - a steal is its own beat, not the ball-in-play cutaway `_animateRunners` now extends
+   *  for. The run is STEAL_RUN_MS, comfortably inside RESULT_MS, so the runner is standing on his new bag
    *  before the next wind-up begins.
    *
    *  `this.game.bases` is already the after-state when this fires (the engine mutates it
@@ -2719,10 +2922,11 @@ class BaseballPlayScreen {
 
   /** THE CHASE (R3): the fielder nearest the landing point - or, on a ball that clears the fence,
    *  nearest the fence AT THAT SPRAY ANGLE (the spec's own "(or the fence, for a homer)") - jogs
-   *  there starting at the cut, arriving no earlier than the ball (`Math.max` against the chase's
-   *  own `FLIGHT_MS`), then `Idle`. No fielding AI: the ENGINE already decided the outcome: this is
-   *  presentation, run concurrently with the ball's own flight exactly like `_animateRunners`. */
-  _animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg) {
+   *  there starting at the cut, arriving no earlier than the ball (`Math.max` against `flightDurMs`,
+   *  R10: this play's own real chase-portion duration, no longer the constant `FLIGHT_MS`), then
+   *  `Idle`. No fielding AI: the ENGINE already decided the outcome: this is presentation, run
+   *  concurrently with the ball's own flight exactly like `_animateRunners`. */
+  _animateFielderChase(xFt, yFt, distanceFt, sprayAngleDeg, flightDurMs) {
     if (this._fielderRaf) cancelAnimationFrame(this._fielderRaf);
     if (!this.actors || !this.game || sprayAngleDeg == null) { this._chasingFielderRole = null; return; }
     const fenceFt = this._fenceFt();
@@ -2746,7 +2950,7 @@ class BaseballPlayScreen {
     const battingSide = this.game.half === 'top' ? 'away' : 'home';
     const defenseSide = battingSide === 'away' ? 'home' : 'away';
     const naturalS = nearestDist / FIELDER_SPEED_FT_S;
-    const arriveMs = Math.max(naturalS, FLIGHT_MS / 1000) * 1000;
+    const arriveMs = Math.max(naturalS, (flightDurMs || 0) / 1000) * 1000;
     const facingRad = Math.atan2(targetWorld.x - nearestPos.x, targetWorld.z - nearestPos.z);
     this._chasingFielderRole = nearestRole;
     this.actors.play(nearestRole, 'Run');

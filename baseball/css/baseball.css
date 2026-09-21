@@ -161,16 +161,32 @@
  * longer a flex ROW that reserves its own 48px band - it is a small card, absolutely positioned
  * top-left INSIDE `.bb-field-wrap`, over the scene, the way the reference's own scoreboard sits.
  * `.bb-field-wrap` gets the 48px back for the stadium; nothing else in the band moves (the pop,
- * the diamond widget and HOME RUN all keep their own fixed positions/insets, untouched by this). */
+ * the diamond widget and HOME RUN all keep their own fixed positions/insets, untouched by this).
+ *
+ * R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 1): Matt, on v871: "the small diamond that shows if
+ * people are on base should be to the right of the count and a little bigger; it can be larger if
+ * it's to the right of the count and not change the size of that whole rectangle. Increase the
+ * font size a little bit." CSS only - the markup (`_paintHud` in ui.js) is unchanged, R10 owns
+ * `ui.js` this hour, and the three existing children (`.bb-sb-top`, `.bb-sb-count`,
+ * `.bb-sb-diamond`) are enough to build a two-column layout from with CSS grid: `.bb-hud` becomes
+ * a 2-column grid, `.bb-sb-top` spans both columns (row 1, unchanged from R8's flex row), and
+ * `.bb-sb-count`/`.bb-sb-diamond` sit side by side in row 2 - grid placement is independent of
+ * source order, so no markup edit was needed to put the diamond AFTER the count in the layout
+ * while it stays BEFORE it in the DOM. The card's own outer width is still bounded by `.bb-sb-top`
+ * (the runs/team/inning row, already the widest row before this change) and `max-width: 62%`
+ * below it, and the two-column row 2 is narrower than that combined - so "the card's outer size
+ * does not grow" holds; only its HEIGHT drops, since the diamond no longer stacks under the count
+ * as a third row. */
 .bb-hud {
   position: absolute;
   top: 8px;
   left: 8px;
   z-index: 4;
   max-width: 62%;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 4px 10px;
   padding: 6px 8px;
   border-radius: 8px;
   background: rgba(8, 13, 8, 0.68);
@@ -179,27 +195,38 @@
   pointer-events: none;
 }
 
-.bb-sb-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.bb-sb-top { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 5px; min-width: 0; }
 .bb-sb-team { font-size: 11px; font-weight: 800; opacity: 0.85; white-space: nowrap; }
 .bb-sb-team.is-you { color: #178A7A; }
-/* Runs: >= 18px, per the spec's own probed floor (`hud-legible`). */
-.bb-sb-runs { font-size: 19px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+/* Runs: >= 18px, per the spec's own probed floor (`hud-legible`). R12 item 1: "increase the font
+ * size a little bit" - runs, the B/S/O row labels and the inning each go up ~2px. */
+.bb-sb-runs { font-size: 21px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
 .bb-sb-dash { opacity: 0.45; font-weight: 400; font-size: 13px; }
-.bb-sb-inning { font-size: 12px; font-weight: 700; white-space: nowrap; margin-left: auto; padding-left: 6px; }
+.bb-sb-inning { font-size: 14px; font-weight: 700; white-space: nowrap; margin-left: auto; padding-left: 6px; }
 
-.bb-sb-count { display: flex; flex-direction: column; gap: 2px; }
+.bb-sb-count { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; gap: 2px; }
 .bb-sb-row { display: flex; align-items: center; gap: 5px; }
-.bb-sb-label { font-size: 11px; font-weight: 800; opacity: 0.8; width: 9px; text-align: center; }
+.bb-sb-label { font-size: 13px; font-weight: 800; opacity: 0.8; width: 10px; text-align: center; }
 .bb-dotrow { display: flex; gap: 3px; align-items: center; }
 /* Dots: >= 10px, per the spec's own probed floor (`hud-legible`); the label beside each row
- * carries the meaning too, never colour alone (root CLAUDE.md's colorblind rule). */
+ * carries the meaning too, never colour alone (root CLAUDE.md's colorblind rule). R12 item 1:
+ * Matt, on v871: "the outs should be red dots, that's important." Outs move to the palette's
+ * vermilion (`#E0532F`, root CLAUDE.md's colorblind palette) - the same hex strikes already used,
+ * which balls and strikes KEEP (the spec's own words: "balls and strikes keep their colours").
+ * Strikes and outs now share one hue; that is safe here specifically because each row ALREADY
+ * carries its own letter beside the dots (R8, the colorblind rule's non-colour half), so the two
+ * rows are told apart by their "S"/"O" label, never by which red they happen to share. */
 .bb-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
 .bb-dot.is-on.bb-dot-b { background: #1F5FA8; border-color: rgba(0,0,0,0.5); }
-.bb-dot.is-on.bb-dot-s { background: #E0532F; border-color: rgba(0,0,0,0.5); }
-.bb-dot.is-on.bb-dot-o { background: #e9eef6; border-color: rgba(0,0,0,0.5); }
+.bb-dot.is-on.bb-dot-s { background: #F2B705; border-color: rgba(0,0,0,0.5); }
+.bb-dot.is-on.bb-dot-o { background: #E0532F; border-color: rgba(0,0,0,0.5); }
 
-.bb-sb-diamond { width: 24px; height: 24px; align-self: flex-start; margin-top: 1px; }
-.bb-bases-svg { width: 24px; height: 24px; }
+/* R12 item 1: the diamond moves beside the count (grid column 2) and grows to ~1.6x (24px -> 38px,
+ * 1.583x - "about 1.6x", the spec's own word). `align-self: center` (was `flex-start`) centres it
+ * against the now-taller count column instead of pinning it to the top, which is what actually
+ * reads as "bigger and to the right" rather than "bigger and floating high". */
+.bb-sb-diamond { grid-column: 2; grid-row: 2; width: 38px; height: 38px; align-self: center; }
+.bb-bases-svg { width: 38px; height: 38px; }
 .bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.2; }
 .bb-bases-svg rect.is-on { fill: #178A7A; stroke: #12181f; }
 

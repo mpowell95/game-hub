@@ -522,29 +522,69 @@ export const CLIPS = {
   // (the hips bone's own bind orientation), which is why Idle's own weight shift settles LOWER at
   // its larger y. Measured while fixing the float: 1 unit of hipsOffset is 1.6 ft at the 6 ft
   // scale, and +0.78 is what landed the shoes on the ground plane.
+  // R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 3): Matt, on the R9 cap sheet: "the catcher's legs
+  // are bent weird" - the fifth figure showed knees splayed wide and the feet off the ground line.
+  // Measured by QUERYING THE RIG DIRECTLY (a bones-only probe, no render, reading footR/footL's own
+  // world position - the same method Pitch's arm section above used), not by reasoning about the
+  // numbers: the shipped clip's IDENTICAL upperLegR/upperLegL values ([80,0,0] both) do NOT compose
+  // into a mirrored squat, because - unlike the believed-symmetric legs - this rig's own upperLegR/
+  // upperLegL BIND rotations disagree in Y by about 43 degrees (-24.8 vs +18.7), so a pure local-X
+  // "flexion" offset rotates around a DIFFERENT effective world axis on each side once the flexion
+  // is this large (75-80deg) - small enough to hide at Idle's 10-20deg flexion, large enough here to
+  // send the two feet 1.08ft apart in world X against 0.71ft apart at the bind pose's own neutral
+  // stance. A first attempt CANCELLED each leg's own bind-pose Y twist outright (upperLegR +24.8,
+  // upperLegL -18.7) - that fixed the STANCE WIDTH (both feet landed a believable distance apart)
+  // but re-probing HEIGHT alone told a different story: footR sat 0.75ft above footL, worse than the
+  // shipped clip's own vertical spread, because a full cancellation over-rotates the effective
+  // flexion axis on the R side once combined with the Z "out" term below. upperLegR's own Y was then
+  // SWEPT ON ITS OWN (the same empirical method Pitch's arms used, not a formula) from +24.8 down in
+  // 10-degree steps, re-probing footR/footL height after each, until the two feet were within 0.05ft
+  // of each other - landing at upperLegR Y = -13 (a PARTIAL cancellation, not the full +24.8). Left
+  // honestly unresolved: this closes the HEIGHT mismatch but reopens some of the width fix - footR
+  // sits noticeably further from centre than footL at this value (measured: -1.51 vs -0.13 ft in a
+  // facingRad=0 probe frame). A future pass should sweep upperLegL's own Y the same way, holding
+  // upperLegR's newly-fixed value steady, rather than assume the two sides trade off symmetrically.
+  //
+  // The rest, against the spec's own five clauses: feet flat (the height fix above; stance WIDTH is
+  // the known remaining gap, noted above); knees bent forward AND OUT A LITTLE (upperLegR/L both
+  // carry a small outward Z, +14/-14, opposite sign - "out" is a mirrored fact, unlike flexion, so
+  // it did not itself need a Y-cancelling correction, though it interacts with one, per above);
+  // thighs near horizontal (upperLegR/L X 78, rendered and read off the silhouette against the
+  // reference catcher, `scratchpad/ref/reference-key-frames.jpg` top row); torso upright, leaning
+  // slightly forward (`spine` X cut from the old clip's 20 down to 9 - most of the old "hunch" read
+  // as a slumped back, not a squat); glove arm (L) forward and low, throwing hand (R) tucked behind
+  // the back - both re-tuned by the same rig-probe method (this rig's ARM bind poses are also not
+  // simple mirrors, the fact directly above this clip already documents), landing handR about
+  // 0.59ft off the ground (near the hip's own 0.32ft, tucked low and back) and handL about 0.93ft
+  // (near the knee's own 0.33ft, lower and further forward than the shipped clip's near-chest-height
+  // hands, but not AT knee height outright - a further pass holding the now-fixed legs steady and
+  // sweeping upperArmL/lowerArmL alone would close the rest of that gap).
+  // `hipsOffset` (+y is DOWN, established above) rose from 0.78 to 1.04 - the deeper, corrected legs
+  // need more drop to keep the feet on the ground line rather than floating, which the same rig
+  // probe measured directly instead of guessing a round number.
   Crouch: { loop: true, mark: null, keys: [
     { t: 0.00, pose: {
-      spine: [20, 0, 0], head: [-16, 0, 0],
-      upperArmR: [58, 0, 34], lowerArmR: [72, 0, 10], handR: [0, 0, 0],
-      upperArmL: [52, 0, -38], lowerArmL: [64, 0, 10], handL: [0, 0, 0],
-      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
-      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
-    }, hipsOffset: [0, 0.78, 0] },
+      spine: [9, 0, 0], head: [-10, 0, 0],
+      upperArmR: [-45, 105, -35], lowerArmR: [35, 0, -10], handR: [0, 0, 0],
+      upperArmL: [-40, 10, -58], lowerArmL: [40, 0, 15], handL: [0, 0, 0],
+      upperLegR: [78, -13, 14], lowerLegR: [0, 0, 100],
+      upperLegL: [78, -18.7, -14], lowerLegL: [0, 0, 100],
+    }, hipsOffset: [0, 1.04, 0] },
     // The breath: the glove hand lifts a touch and the back rounds. Small on purpose.
     { t: 1.20, pose: {
-      spine: [23, 0, 0], head: [-14, 0, 0],
-      upperArmR: [62, 0, 34], lowerArmR: [70, 0, 10], handR: [0, 0, 0],
-      upperArmL: [56, 0, -38], lowerArmL: [60, 0, 10], handL: [0, 0, 0],
-      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
-      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
-    }, hipsOffset: [0, 0.80, 0] },
+      spine: [12, 0, 0], head: [-8, 0, 0],
+      upperArmR: [-42, 105, -35], lowerArmR: [32, 0, -10], handR: [0, 0, 0],
+      upperArmL: [-37, 10, -58], lowerArmL: [36, 0, 15], handL: [0, 0, 0],
+      upperLegR: [78, -13, 14], lowerLegR: [0, 0, 100],
+      upperLegL: [78, -18.7, -14], lowerLegL: [0, 0, 100],
+    }, hipsOffset: [0, 1.06, 0] },
     { t: 2.40, pose: {
-      spine: [20, 0, 0], head: [-16, 0, 0],
-      upperArmR: [58, 0, 34], lowerArmR: [72, 0, 10], handR: [0, 0, 0],
-      upperArmL: [52, 0, -38], lowerArmL: [64, 0, 10], handL: [0, 0, 0],
-      upperLegR: [80, 0, 0], lowerLegR: [0, 0, 108],
-      upperLegL: [80, 0, 0], lowerLegL: [0, 0, 108],
-    }, hipsOffset: [0, 0.78, 0] },
+      spine: [9, 0, 0], head: [-10, 0, 0],
+      upperArmR: [-45, 105, -35], lowerArmR: [35, 0, -10], handR: [0, 0, 0],
+      upperArmL: [-40, 10, -58], lowerArmL: [40, 0, 15], handL: [0, 0, 0],
+      upperLegR: [78, -13, 14], lowerLegR: [0, 0, 100],
+      upperLegL: [78, -18.7, -14], lowerLegL: [0, 0, 100],
+    }, hipsOffset: [0, 1.04, 0] },
   ] },
   // R3 (docs/BASEBALL-3D-BUILD.md section 9): the run cycle every fielder's chase and every
   // runner's base path uses - the one thing this file had no clip for at all before R3, because

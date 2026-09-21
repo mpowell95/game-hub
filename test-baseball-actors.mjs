@@ -311,7 +311,10 @@ if (CLIPS.Bunt && CLIPS.Bunt.keys.length >= 2 && CLIPS.Bunt.loop === true && CLI
   // `_animateBattedBall` putting the pitch camera back. Only `_drawStaticField` (guarded by
   // `_cutawayUp`) and `_returnToPlate` (which clears it) may do that.
   {
-    const m = uiSrc.match(/\n {2}_animateBattedBall\([\s\S]*?\n {2}\}\n/);
+    // R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10"): the method became `async` (it now awaits
+    // the throw beat and the runner-extended marker hold inline) - `(?:async )?` is the one-word
+    // accommodation, the declaration and body this searches for are otherwise unchanged.
+    const m = uiSrc.match(/\n {2}(?:async )?_animateBattedBall\([\s\S]*?\n {2}\}\n/);
     const body = m ? m[0] : '';
     const setsChase = /setCamera\('chase'\)/.test(body);
     const setsPitchCam = /setCamera\('batter'\)|setCamera\('pitcher'\)/.test(body);
@@ -423,7 +426,8 @@ if (CLIPS.Bunt && CLIPS.Bunt.keys.length >= 2 && CLIPS.Bunt.loop === true && CLI
     // only by _returnToPlate().
     const returnMatch = uiSrc.match(/\n {2}_returnToPlate\(\) \{[\s\S]*?\n {2}\}\n/);
     const drawMatch = uiSrc.match(/\n {2}_drawStaticField\(\) \{[\s\S]*?\n {2}\}\n/);
-    const animateMatch = uiSrc.match(/\n {2}_animateBattedBall\([\s\S]*?\n {2}\}\n/);
+    // R10: `async` again - see the identical accommodation on the earlier match above.
+    const animateMatch = uiSrc.match(/\n {2}(?:async )?_animateBattedBall\([\s\S]*?\n {2}\}\n/);
     if (returnMatch && /this\._cutawayUp *= *false/.test(returnMatch[0])) ok('ui.js: _returnToPlate() clears _cutawayUp');
     else fail('ui.js _returnToPlate', '_returnToPlate() does not clear _cutawayUp');
     if (drawMatch && /if *\(this\._cutawayUp\) *return;/.test(drawMatch[0])) ok('ui.js: _drawStaticField() no-ops while _cutawayUp is set');
@@ -828,10 +832,17 @@ async function runMountInHubHalf() {
   // `display`. Drives the real `_animateBattedBall` (unstubbed - the whole point is to prove the
   // REAL `_drawStaticField()` no-ops on its own), tries a pad move plus a direct manual call
   // mid-cutaway and asserts neither changed the camera, then makes NO further test calls and
-  // asserts the pitch camera returns BY ITSELF within 2.6 s of the cut (CONTACT_HOLD_MS is spent
-  // before this function is even called; FLIGHT_MS + MARKER_HOLD_MS = 2.0 s is its own budget).
-  // The live game's own engine events are silenced for the probe's window so nothing else calls
-  // `_animateBattedBall`/`_settleAtBat` concurrently.
+  // asserts the pitch camera returns BY ITSELF - within a budget WIDENED by R10
+  // (docs/BASEBALL-3D-BUILD.md section 9, "R10"): FLIGHT_MS/MARKER_HOLD_MS stopped being constants
+  // (CONTACT_HOLD_MS is still spent before this function is even called, unchanged). This call's
+  // own `battedKind: 'fly'`, `distanceFt: 200` sets `_battedApexFt` = 44ft (200*0.22, uncapped),
+  // so `_flightMsFor` = 2000*sqrt(2*44/32.2) = 3306ms - the flight loop alone
+  // (`dur = totalMs - CONTACT_HOLD_MS`) is ~2906ms, then an 800ms MARKER_HOLD_MS floor settle (no
+  // `longestRunnerMs` is passed by this direct call, so there is no runner to wait for) - about
+  // 3.7s total from the call to `_returnToPlate()`. 4.6s gives real margin on the software
+  // renderer without waiting on a needlessly long budget. The live game's own engine events are
+  // silenced for the probe's window so nothing else calls `_animateBattedBall`/`_settleAtBat`
+  // concurrently.
   const cutaway = await page.evaluate(async () => {
     const inst = document.querySelector('.hub-game')._bbInstance;
     const cam = () => inst.actors.cameraName;
@@ -853,8 +864,9 @@ async function runMountInHubHalf() {
     await new Promise((r) => setTimeout(r, 50));
     const afterManualDraw = { cam: cam(), running: !!inst.actors._running, cutawayUp: !!inst._cutawayUp };
 
-    // No further test calls from here - the pitch camera must return on its own.
-    const deadline = cutStart + 2600;
+    // No further test calls from here - the pitch camera must return on its own. R10: 4600ms, not
+    // 2600ms - see this block's own header for the arithmetic.
+    const deadline = cutStart + 4600;
     let returnedAtMs = null;
     while (performance.now() < deadline) {
       if (cam() !== 'chase' && !inst._cutawayUp) { returnedAtMs = performance.now() - cutStart; break; }
@@ -876,7 +888,7 @@ async function runMountInHubHalf() {
   if (cutaway.afterReturn && cutaway.afterReturn.cam !== 'chase' && cutaway.afterReturn.running) {
     ok(`the pitch camera returned by itself ${cutaway.afterReturn.ms.toFixed(0)}ms after the cut (now "${cutaway.afterReturn.cam}"), no further test calls`);
   } else if (!cutaway.afterReturn) {
-    fail('cutaway auto-return', 'the pitch camera never came back on its own within 2.6s of the cut');
+    fail('cutaway auto-return', 'the pitch camera never came back on its own within 4.6s of the cut');
   } else {
     fail('cutaway auto-return', `returned at ${cutaway.afterReturn.ms.toFixed(0)}ms but camera="${cutaway.afterReturn.cam}", running=${cutaway.afterReturn.running}`);
   }

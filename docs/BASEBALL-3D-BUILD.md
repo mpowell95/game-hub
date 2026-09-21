@@ -1403,3 +1403,155 @@ camera. The backstop was rebuilt at ship review: the first version carried the o
 texture from the ground up and read as static at the pitcher camera's lens; it is now one wall in
 three bands (padded #24406a to 12 ft with a white rail, brick to 28 ft, crowd above at repeat
 4.5 on a darker ground). Two crowd textures are tuned independently now.
+
+### R10: the play unfolds in real time (2026-09-21)
+
+Matt, on v871: *"When I make contact, it immediately says 'out' or 'Homerun!' or whatever the
+result is. That's too fast. Wait for the ball to stop moving before announcing the result. The
+whole thing is too fast too, it's like I'm speed playing. Hitting a homerun is like 0.25 seconds
+from swinging to it landing. The ball should move at like a relatively realistic speed through
+the air and on the ground."* Measured in `ui.js`: `_settleAtBat` writes the outcome word to Line 1
+on its FIRST line, at contact, before the cutaway; the batted ball's flight is a fixed
+`FLIGHT_MS` 900 whatever the distance, the whole in-play cutaway is 0.4 + 0.9 + 0.7 = 2.0 s, and
+the runners are squeezed into that same window. Presentation only: no engine change, no change to
+the pitch beats (`fastballMs`, `windupMs`, `resultMs`, `betweenMs`; the r2-cadence probe measures
+those and must not move).
+
+1. **The batted ball takes as long as a ball takes.** Flight time from the ball's own arc, not a
+   constant: for a fly, line drive or pop-up the hang time of its apex (`t = 2 * sqrt(2 * apex /
+   32.2)` seconds, apex from `_battedApexFt`, with a line drive's apex capped so a 200 ft liner
+   is about 2.5 s and a 400 ft fly about 4.5 s); for a grounder, distance over a decelerating
+   roll starting at about 60 ft/s (a 40 ft dribbler under a second, a 150 ft grounder about
+   2.7 s). Clamp 0.8 to 5.5 s. `FLIGHT_MS` becomes a function of the play, not a constant.
+2. **Nothing is announced until the play is over.** At contact the pop shows the timing word and
+   the pitch line only. The outcome word (Line 1: Single, Out, and the rest) appears when the ball
+   is fielded or lands: a caught fly or line drive at the catch; a grounder when the fielder has
+   it and, for an out, after a throw beat of about a second to first; a hit when the ball lands and
+   the fielder reaches it; HOME RUN (word, confetti, strip) the moment the ball crosses the wall,
+   which the chase already computes (`homerCrossFrac`). Never before.
+3. **Runners and fielders move at their real speed for the whole play.** `RUN_WINDOW_MS` stops
+   being a constant: each runner's leg runs at `RUNNER_SPEED_FT_S` and the play holds until the
+   last runner arrives or is out, and the chasing fielder runs at a fielder's speed to where the
+   ball comes down. The cutaway's length is `max(flight + fielding + a 0.8 s settle, the last
+   runner's arrival)`; the marker hold is the settle. After the return to the plate, the between
+   beat is the same `BETWEEN_MS` as today (the pitch cadence is untouched); the in-play at-bat is
+   simply longer, by however long the play took.
+4. **The stats strip under HOME RUN stays for the trot.** Keep it up until the return to the plate.
+
+Deliverables. Probe `play-clock` in `test-baseball-device.mjs`, driving `_settleAtBat` with
+synthetic payloads the way `homerun-strip` does: a 420 ft homer shows no outcome word at contact +
+300 ms, shows HOME RUN no earlier than 3.0 s after contact, and returns to the plate no earlier
+than the last runner's real arrival; a 120 ft groundout shows no outcome word at contact + 300 ms
+and shows Out between 1.8 and 4.5 s after contact; a 250 ft fly out shows Out only at the catch.
+`r2-cadence`, `runners-move` (run it once without `BB_DEVICE_QUICK`, it is the real-play check),
+`one-batter`, `homerun-strip` and the PLAY probe stay green. Stills: contact + 300 ms with no word,
+the ball mid-flight on a homer with the runners underway, HOME RUN at the wall.
+`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
+`node check-no-scroll.mjs baseball` green.
+
+### R11: the league ladder is real in Quick Play (2026-09-21)
+
+Matt, same message: *"I also think you've forgotten to code the difficulties. Little league should
+be easy and the pitches slow and only 'fastballs' should be able to be thrown."* Measured:
+`unlockedPitchesFor(league, 0, {quickPlay: true})` returns all eight types for both sides (RA's
+own decision, now overruled); `pitch.js`'s time to the plate scales only by the pitcher's skill
+points off the MAJORS baseline, so a Little League 55 mph readout flies to the plate in the same
+650 ms as a 95 mph Majors fastball (`READOUT[league].scale` is never applied to travel); and the
+human's timing window is the same 100 ms at every league. The CPU ladder (`CPU[league]`) already
+exists and stays.
+
+1. **Pitch types follow the league in Quick Play too.** Drop the all-eight override; both sides
+   throw the league's own ladder (`PITCH_UNLOCKS[league]`, titles 0). Little League is FASTBALL
+   ONLY, career included (`LEAGUE_UNLOCK_ADDS.little = ['fastball']`, `CPU.little.pitchMix` fastball
+   only); the doc's section 11 ladder is updated to say so. Locked wells stay locked wells.
+2. **A slow pitch is slow.** Time to the plate is `fastballMs x PITCH_TRAVEL_MULT[type] x
+   (READOUT.majors.fastball / readout mph of this pitch at this league, with the pitcher's skill
+   points added as now)`, so Little League's 55 mph fastball takes about 1.1 s and a Majors 95 mph
+   fastball the 650 ms it takes today. The target marker, fire trail and timing window all key off
+   the real flight already; check the eephus at Little League does not exceed 2.5 s.
+3. **Little League is forgiving, Majors is tight.** `LEAGUE_TIMING_WINDOW_MULT` = { little 1.6,
+   highschool 1.3, college 1.0, minors 0.9, majors 0.8 } multiplies the human's timing window
+   (`swing.js`, both places `F.timingWindow` is read) and the CPU's `timingSigmaMs` is untouched.
+4. **Tests.** `baseball/js/test.js` section 33: Quick Play at Little League unlocks only the
+   fastball and Majors its six; travel time is monotone in readout mph and equals today's value
+   at Majors; the window multipliers apply. `node sim-baseball.mjs --quick --assert` before and
+   after, pasted (Little League will move; report it, do not tune). `test-baseball-device.mjs`:
+   `actions-live (d)` asserts the ladder instead of eight unlocked; any probe that throws a
+   curveball on the human's turn (`pitch-drag`, `target-marker`) picks a league where it is
+   unlocked or uses the dev seam, and says which.
+
+Deliverables: the tests above, the sim scoreboard, a still of Little League's strip (one unlocked
+well) and of a Little League fastball's marker mid-flight with the elapsed time.
+
+### R12: the scoreboard's count and the figures themselves (2026-09-21)
+
+Matt, on v871: *"For the scoreboard: the outs should be red dots, that's important. The small
+diamond that shows if people are on base should be to the right of the count and a little bigger;
+it can be larger if it's to the right of the count and not change the size of that whole
+rectangle. Increase the font size a little bit. For the 3D assets, the players: double check
+everything. I can't see the batter's feet; when you're pitching, the catcher's legs are bent weird;
+the hats do not look like hats; and the baseball bat should be improved."*
+
+1. **Scoreboard.** Filled OUT dots are the palette's vermilion (#E0532F) with the O label they
+   already carry; balls and strikes keep their colours. The mini-diamond moves to the RIGHT of the
+   three count rows (a two-column layout inside the card) and grows to about 1.6x, and the card's
+   outer size does not grow. Runs, labels and inning go up about 2 px each. CSS only (`.bb-sb-*`,
+   `.bb-hud`); the markup in `_paintHud` is not touched (R10 owns `ui.js` this hour). The
+   `hud-legible` floors still hold.
+2. **The batter's feet.** On the batting camera the batter is cut off at the shins by the band's
+   bottom edge. Re-aim `CAMERAS.batter` (look point, and position only if the look alone cannot
+   do it) so the whole batter, feet and bat, is inside the field band in both hosts at both phone
+   heights, while the pitcher, the zone box and the target marker stay where the reference has
+   them. Write the measured before and after beside the constant.
+3. **The catcher's crouch.** The `Crouch` clip in `poses.js` bends the legs wrong (the R9 cap
+   sheet's fifth figure shows it: knees splayed, feet off the ground line). A real squat: feet
+   flat and about shoulder width, knees bent forward and out a little, thighs near horizontal,
+   torso upright and leaning slightly forward, glove arm forward at knee height, throwing hand
+   behind the back. Tune it with `render-actor.mjs --sheet` against the reference frame's catcher
+   (`scratchpad/ref/reference-key-frames.jpg`, top row).
+4. **Caps that read as caps.** The R9 cap is a dome with a stub; it reads as a beanie. A cap: a
+   crown that sits down over the hair line (not floating on the crown of the head), slightly
+   flattened, with a top button, and a bill that projects forward about a third of the head's
+   width with a gentle downward curve and a visible underside, in a slightly darker shade of the
+   team colour. The catcher wears his backwards. Same attachment (head bone), same `cap` name.
+5. **The bat.** `_attachBat`'s cylinder becomes a lathe: a knob, a thin handle, a taper to the
+   barrel, a rounded end; wood colour with a darker grip band on the handle. Same `BAT.length`,
+   same hand attachment, same `swing.js` contact point.
+
+Deliverables: `render-actor.mjs --sheet` sheets of the batter (Idle, Swing), the catcher (Crouch)
+and the pitcher (Set, Pitch) with the new caps and bat beside the reference crops; a full-screen
+batting still showing the feet; the scoreboard still. `node test-baseball-actors.mjs`,
+`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green, and the device suite's
+`zone-world`, `zone-scale`, `pop-anchor`, `hud-legible`, `pitcher-frame` re-measured against the
+new batter camera.
+
+### R10 record (shipped v880, 2026-09-21)
+
+From the stage's report: `FLIGHT_MS` and `RUN_WINDOW_MS` are gone; `_flightMsFor(kind,
+distanceFt)` gives the flight from the arc (hang time of `_battedApexFt`, a line drive's apex
+capped by `BATTED_LINE_APEX_FRAC` 0.126 / `BATTED_LINE_APEX_MAX_FT` 40; a grounder as a
+decelerating roll), clamped 0.8 to 5.5 s. `_animateRunners` returns `{promise, longestMs}` and
+`_animateBattedBall` is async and takes the outcome word and the longest runner; the outcome
+word is written when the ball is fielded, lands, or is caught, and HOME RUN at the wall
+crossing (`_homerCrossMs`). Measured: a 420 ft homer's HOME RUN at 4.4 s; a 120 ft groundout's
+Out at 3.4 s; a 250 ft fly out's Out at the catch, 3.8 s. Ship review: the real trot made a solo
+homer's cutaway 13.3 s, so after the wall crossing every runner finishes at `HOMER_RUNNER_SPEEDUP`
+3x, landing the 420 ft solo homer at 7.5 s from contact; every other play keeps real speed.
+`MARKER_HOLD_MS` 800 is a floor now. Probe `play-clock` (three synthetic plays). The visual PLAY
+probe fails under container load (a 700 ms wind-up drag lands late) and passes on an idle
+machine; three failures in a row during R12's parallel suites were exactly that.
+
+### R12 record (shipped v880, 2026-09-21)
+
+From the stage's report: the scoreboard is a two-column grid (count rows left, the mini-diamond
+right at about 1.6x) inside the same card; outs are vermilion, strikes yellow (ship review: the
+stage had made both red), balls blue, each row keeping its letter; runs and labels +2 px.
+`CAMERAS.batter.look.y` is -1.0 (was 2.3) so the batter's feet are in frame; the position is
+unchanged and every device probe held its baseline. Crouch rebuilt (legs, glove low and forward,
+throwing hand behind the back), improved not finished: the glove hand is 0.93 ft against the
+knee's 0.33, and a stance-width asymmetry remains, both written up in `poses.js`. This rig's leg
+bind poses are not mirrors of each other past about 35 deg of flexion. Caps: a deeper dome past
+the equator, a wider tilted darker bill, a top button, the catcher's backwards. The bat is a
+`LatheGeometry` profile (knob, thin handle, taper, rounded barrel, grip band). Ship review: the
+catcher is drawn on the pitcher camera only, the same rule as the umpire, because his cap filled
+the bottom of the batting frame once caps arrived. `render-actor.mjs` honours `BB_BASE`.

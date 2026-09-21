@@ -1,8 +1,487 @@
-# Baseball — CLAUDE.md
+# Baseball, CLAUDE.md
 
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. The law
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
+
+## R12: the scoreboard's count and the figures (2026-09-21)
+
+Five fixes off Matt's own list on v871 (`docs/BASEBALL-3D-BUILD.md`, "R12"). No engine change, no
+beat change; the scoreboard is CSS-only, everything else is `actors.js`/`poses.js`/`field.js`.
+
+**Item 1, the scoreboard.** Matt: "the outs should be red dots, that's important... the small
+diamond... should be to the right of the count and a little bigger... Increase the font size a
+little bit." CSS only - `_paintHud`'s markup (`js/ui.js`) is untouched, R10 owns that file this
+hour, and its three existing children (`.bb-sb-top`, `.bb-sb-count`, `.bb-sb-diamond`) were enough
+to build from. `.bb-hud` moves from a flex column to a 2-column CSS GRID: `.bb-sb-top` spans both
+columns (row 1, byte-identical to R8), `.bb-sb-count` sits in column 1 row 2, `.bb-sb-diamond` in
+column 2 row 2 - grid placement is independent of DOM order, so the diamond renders AFTER the count
+while staying BEFORE it in the markup, no JS edit needed. `.bb-dot.is-on.bb-dot-o` moves to the
+palette's vermilion `#E0532F` - the SAME hex strikes already use (the spec's own "balls and strikes
+keep their colours"), so strikes and outs now share one hue. That is safe specifically because R8
+already put each row's own letter (B/S/O) beside its dots - the colorblind rule (root CLAUDE.md)
+needs a non-colour cue per fact, not a different hue per fact, and the letter already is one. The
+diamond grows 24px -> 38px (1.583x, "about 1.6x") and moves to `align-self: center` (was
+`flex-start`) so it centres against the now-taller count column. Runs (19px -> 21px), the B/S/O row
+labels (11px -> 13px) and the inning text (12px -> 14px) all go up ~2px, matching the spec's "a
+little bit"; team name/dash are untouched. The card's own OUTER WIDTH does not grow - it was always
+bounded by `.bb-sb-top` (the runs/team/inning row) and `max-width: 62%`, and the two-column row 2 is
+narrower than that row - only the card's HEIGHT drops, since the diamond no longer stacks under the
+count as a third row. Verified live (`gamehub.profile` seeded, forced counts):
+`.bb-dot.is-on.bb-dot-o`'s computed `background-color` reads `rgb(224, 83, 47)` (`#E0532F`) and
+`.bb-sb-runs`'s computed `font-size` reads `21px`, both exactly as written; `hud-legible` (the
+device suite's own probe) is unaffected in shape (still checks >=18px runs, >=10px dots, three
+labels, card inside the field band).
+
+**Item 2, the batter's feet.** Matt: "I can't see the batter's feet." Measured (node,
+`projectToCanvas` against the shipped `CAMERAS.batter`): the shoe sole (world y=0) projected to
+98.5% of the BATTING band's own height (544.8 of 553px) - a hair INSIDE the frame, but with only
+~1.5% (8px) of clearance, so a real device's own rounding, a taller phone's browser chrome, or a
+slightly different stance frame put it out more often than not; that is what a screen recording
+shows as "no feet" even though the math says they are barely, technically there. Re-aimed by LOOK
+ALONE, the spec's own preferred lever, nothing else: `CAMERAS.batter.look`'s `y` moved from `2.3` to
+`-1.0` (position, fov, and the pitcher/chase cameras are byte-identical to R1/R8). Since vertical FOV
+- not `look` - sets how much of the world's own vertical extent a perspective camera shows, this is
+a FRACTION of the frame, independent of the band's actual pixel height, so it holds at every phone
+size and in both hosts, not just the one measured. Measured after, same node method: feet 89.2% down
+(493.2 of 553px, 10.8%/60px of margin - about 8x the old clearance), cap 41.0% down (226.8px). The
+batter's own on-screen HEIGHT barely moved (48.0% of the band, was 49.5%) - this reads as the same
+shot translated up, not a re-zoom. A pure camera ROTATION should not change a fixed-distance
+object's PROJECTED SIZE in principle (only where it lands on screen), and it very nearly does not
+here: the live `zone-scale` probe (device suite, below) measures the true box at 64.4x76.2px now
+(was 65.2x79.0 - a difference this stage did not target and did not need to, since both numbers
+pass the probe's own 3px drift budget with room, 0.8/2.8px). `pop-anchor`'s projected-head-to-pop
+distance came back at 8.3px (budget 45px) - better than before, not worse; no probe baseline needed
+moving.
+Verified in the real, mounted game (not just node), 393x852: `scratchpad/r12/after-cam-wrap.png`
+against `scratchpad/r12/before-batting-wrap.png` - the shoe and a visible ground shadow are now
+inside the frame with real margin, the mound/pitcher moved up with the shot (background only, not
+tested by any probe - `pitcher-frame` reads `CAMERAS.pitcher`, untouched here), matching the
+reference's own composition (`scratchpad/ref/reference-key-frames.jpg` row 2: plenty of grass above
+a batter whose box lines and feet are fully in frame).
+
+**Item 3, the catcher's crouch.** Matt, quoting the R9 cap sheet: "the catcher's legs are bent
+weird." Measured by QUERYING THE RIG DIRECTLY (a bones-only probe reading `footR`/`footL`'s own
+world position, no render - the same method Pitch's own arm tuning used, `poses.js`'s header) rather
+than reasoning about the numbers: the shipped clip's IDENTICAL `upperLegR`/`upperLegL` values
+(`[80,0,0]` both) do NOT compose into a mirrored squat. This rig's `upperLegR`/`upperLegL` BIND
+rotations disagree in `Y` by about 43 degrees (-24.8 vs +18.7) - close enough to hide at Idle's
+10-20deg flexion, large enough at Crouch's 75-80deg that a pure local-X "flexion" offset rotates
+around a genuinely DIFFERENT effective world axis on each side, sending the two feet 1.08ft apart in
+world X against 0.71ft apart at the bind pose's own neutral stance (a real, measurable break, not a
+rendering illusion; the rendered figure showed one leg raised like a lunge,
+`scratchpad/r12/crouch-old-front.png` and `crouch-old-side.png`). A first fix CANCELLED each leg's
+own bind-pose `Y` twist outright (`upperLegR` +24.8, `upperLegL` -18.7, the same rig-specific
+correction Pitch's arms already needed) - that fixed the STANCE WIDTH but re-probing HEIGHT alone
+told a different story: `footR` sat 0.75ft above `footL`, WORSE than the shipped clip's own vertical
+spread, because a full cancellation over-rotates the effective flexion axis once combined with the
+outward `Z` term below. `upperLegR`'s own `Y` was then SWEPT ON ITS OWN (the same empirical method,
+not a formula) in 10-degree steps, re-probing foot height after each, landing at `Y = -13` (a
+PARTIAL cancellation): the two feet came within 0.04ft of each other in height. Left honestly open:
+this closes the height mismatch but reopens some of the width fix (`footR` sits noticeably further
+from centre than `footL` at this value, a facingRad=0 probe measuring -1.51 vs -0.13ft) - a future
+pass should sweep `upperLegL`'s own `Y` the same way, holding `upperLegR`'s now-fixed value steady,
+rather than assume the two sides trade off symmetrically. The rest, against the spec's own five
+clauses: feet flat (the height fix above; stance WIDTH is the known remaining gap); knees bent
+forward AND OUT a little (`upperLegR`/`L` both carry a small outward `Z`, +14/-14, opposite sign -
+"out" is a mirrored fact, unlike flexion); thighs near horizontal (`upperLegR`/`L` X 78, read off
+the rendered silhouette against the reference catcher, `scratchpad/ref/reference-key-frames.jpg` top
+row); torso upright, leaning slightly forward (`spine` X cut from the old clip's 20 down to 9 - most
+of the old "hunch" read as a slumped back, not an athletic squat); glove arm (L) forward and low,
+throwing hand (R) tucked behind the back - both arms re-tuned by the same rig-probe method (this
+rig's ARM bind poses are also not simple mirrors of each other, the fact Pitch's own header already
+carries). Measured after (a facingRad=0 rig probe, not the in-game facingRad=pi orientation, so
+signs read internally-consistent rather than matching the in-game backward-facing catcher): `handR`
+(throwing) landed at about 0.59ft off the ground versus the hip's own 0.32ft - tucked low and to the
+back, not out in front; `handL` (glove) landed at about 0.93ft versus the knee's own 0.33ft - lower
+and further forward than the shipped clip's near-chest-height hands, but not as low as "at knee
+height" asks for outright. Said plainly, because it is not fully solved: the glove hand is CLOSER to
+the knee than it was, not AT it - a further tuning pass on `upperArmL`/`lowerArmL` alone (holding the
+legs and the throwing arm steady) would close the rest of that gap. `hipsOffset` (+y is DOWN,
+established by Crouch's own long-standing comment) rose from 0.78 to 1.04 - the deeper, corrected
+legs need more drop to keep the feet on the ground line rather than floating, measured the same way
+rather than guessed. The catcher's own HEAD height in the new pose (bone world y about 2.63ft, cap
+top about 4.31ft by the same 0.28-of-heightWorld crown estimate R9 used) lands within 0.04ft of the
+OLD clip's own measured 4.35ft - the `CATCHER.z = 7.8` gap this file already documents (tuned so the
+crouched head stays below the batting camera's zone box) needed no re-tuning, and the real mounted
+batting screen confirms it (`scratchpad/r12/final-check2-batting-wrap.png`: the catcher's cap sits
+well clear of the zone box). Stills: `scratchpad/r12/crouch-v3-front.png`,
+`crouch-v3-side.png`, and the five-frame loop sheet `scratchpad/r12/sheet-catcher-crouch.png`
+(stable across the loop - no float, no sink, no seam pop).
+
+**Item 4, caps that read as caps.** Matt: "the hats do not look like hats." Measured against the R9
+cap sheet (`scratchpad/r9/cap-sheet.png`) and a close render of the shipped geometry
+(`scratchpad/r12/cap-current-{batter,pitcher}.png`): the dome sat almost entirely ABOVE the sphere's
+own equator (`CAP_DOME_CUT_FRAC` 0.45 keeps only the top 45%, stopping well short of the hairline,
+with hair visible below it all the way round) and the brim was fixed at the dome's OWN OLD equator
+(`y=0` in the geometry), a full unit-sphere-radius above where the deeper dome now actually ends -
+invisible from most angles, buried behind the hair. Four changes, all re-tuned by rendering
+(`render-actor.mjs --sheet`), never guessed:
+1. The dome now keeps the sphere's own top 60% (`CAP_DOME_CUT_FRAC` 0.45 -> 0.6, PAST the equator),
+   so its rim sits BELOW the sphere's widest point and reads as "sits down over the hairline"
+   instead of floating on the crown.
+2. The brim's own vertical anchor (`CAP_RIM_Y`) is now DERIVED from the same `CAP_DOME_CUT_FRAC` the
+   dome uses (`1 - 2*frac`), so the two geometries can never drift apart again if the cut is
+   retuned; it is also wider (`CAP_BRIM_OUTER_R` 1.32 -> 1.55) and thicker (0.10 -> 0.16), reading as
+   a real bill instead of a thin wedge.
+3. The brim MESH (not a second cached geometry - the tilt has to stay tunable per render) is rotated
+   -0.30 rad about local X, the axis that dips the bill's forward edge down once the dome's own rim
+   sits below the sphere's equator - "a gentle downward curve... a visible underside," from a flat
+   wedge, which is enough at the sizes these figures draw at (the batter's own cap reads under
+   20px tall on a phone).
+4. A small top button (`CAP_BUTTON_R`, a tiny sphere at the dome's own north pole) is MERGED into
+   the dome's geometry with `mergeGeometries` (the same helper `field.js`'s stadium already uses),
+   so it costs no extra draw call - the cap stays a two-mesh (dome+button, brim), two-material
+   budget no matter how many of the fifteen roles carry one, exactly as R9 shipped it.
+`CAP_SCALE`/`CAP_OFFSET` were re-measured for the deeper dome: `CAP_SCALE` 0.115 -> 0.135 (bigger,
+to still clear the head's own width at the lower cut), `CAP_OFFSET`'s `y` 0.205 -> 0.175 (lower, so
+the bigger dome's own top does not overshoot the measured crown height). The brim goes to a
+DARKER shade of the SAME team colour (`darken()`, a flat 0.68 per-channel multiply, cached beside
+the base colour) - never a colour the dome does not itself wear. **The catcher wears his cap
+backwards**, the spec's own new requirement (R9 had made it optional and left it forward): the whole
+cap GROUP is turned 180deg about local Y for the catcher role only, in `attachCapGeometry` - the
+brim's own forward geometry needs no second, mirrored copy, since turning the group around turns the
+bill with it. Verified rendering all five clips through the real head bone
+(`scratchpad/r12/sheet-batter-idle.png`, `sheet-batter-swing.png`, `sheet-pitcher-set.png`,
+`sheet-pitcher-pitch.png`, `sheet-catcher-crouch.png`): the cap sits on the head in all five, follows
+every head turn (a child of the bone, for free), and the catcher's own bill is visible poking out
+from the BACK of his head rather than hanging over his forehead
+(`scratchpad/r12/catcher-zoom.png`). `test-baseball-actors.mjs`'s structural check ("every placed
+actor has a child named 'cap' under its head bone", 15 roles) and its colour-key skin-tone guard
+both stayed green with no changes needed - neither reads cap geometry or the new `darken()` helper.
+
+**Item 5, the bat.** Matt: "the baseball bat should be improved." `_attachBat`'s single tapered
+`CylinderGeometry` (knob-radius straight to barrel-radius over the whole length - a carrot, not a
+bat) is now a `LatheGeometry`: a 10-point (radius, y) profile revolved about the bat's own long
+axis - a rounded knob bulge, a sharp step down to a THIN handle (`BAT_HANDLE_R_FRAC` 0.62 of
+`BAT.knobR`, notably thinner than the knob's own `BAT_KNOB_BULGE_R_FRAC` 1.4x bulge), a flat run
+down the handle, a taper up to the barrel, and a rounded barrel end (closing to a point at both
+ends, which is what makes them read as rounded rather than flat-capped at this poly count). A
+second, darker mesh (`BAT_GRIP_COLOR`, near-black brown) wraps the middle third of the handle's own
+flat span as the "darker grip band" - a CHILD of the bat mesh, not the hand bone, so it inherits the
+bat's own position/rotation for free and can never drift off it. `BAT.length`, `BAT.pos` and
+`BAT.rot` are BYTE-UNCHANGED (same hand attachment - the profile is built in the SAME centred local
+frame, `y` from `-len/2` at the knob to `+len/2` at the barrel, the old `CylinderGeometry` used, so
+nothing about where the mesh sits on the hand needed to move) and `swing.js`'s contact point is
+untouched (that math never reads the bat mesh at all - it is a pure cosmetic change). Verified
+rendering the full `Swing` clip (`scratchpad/r12/bat-swing-sheet.png`, seven frames against the
+sprite reference): a real knob-handle-taper-barrel silhouette is visible at every frame the bat
+clears the body, including a visible grip-band segment near the hands at contact
+(`scratchpad/r12/bat-contact-zoom.png`), and the Idle waggle's close-up
+(`scratchpad/r12/bat-v1-zoom.png`) shows a rounded barrel tip rather than a flat cylinder end.
+
+**Facts for whoever reads this next:**
+- `CAP_RIM_Y`, `CAP_BRIM_OUTER_R`, `CAP_BRIM_THICK`, `CAP_BRIM_TILT`, `CAP_BUTTON_R`, `BRIM_DARKEN`
+  and `darken()` are all new in `actors.js`, beside the R9 cap constants they extend.
+  `CAP_DOME_CUT_FRAC` moved 0.45 -> 0.6 and is now PAST the sphere's equator - a future retune must
+  keep `CAP_RIM_Y = 1 - 2 * CAP_DOME_CUT_FRAC` in sync with it (it already is, by formula, not by a
+  second hand-copied number).
+- `BAT_HANDLE_R_FRAC`, `BAT_KNOB_BULGE_R_FRAC`, `BAT_GRIP_COLOR`, `BAT_GRIP_R_FRAC`,
+  `BAT_GRIP_LEN_FRAC` are new in `actors.js`. `actor.batGrip` is exported the same visibility
+  `actor.bat`/`actor.cap` already have.
+- This rig's LEG bind poses are not simple mirrors of each other either - the same fact Pitch's own
+  header already documented for the ARMS. A future clip that flexes the legs past about 30-40
+  degrees should re-probe `footR`/`footL` world position rather than trust identical L/R numbers;
+  Idle/Run/Bunt/Swing/Pitch/Pickoff all stay under that rough threshold today and were left
+  untouched.
+- `CAMERAS.batter.look`'s `y` is `-1.0` now (was `2.3`); `CAMERAS.batter.pos`, every other camera,
+  and every zone/ball/marker constant in `field.js` are unchanged. A future re-aim of this camera
+  should re-measure `pop-anchor`'s own distance (8.3px today, budget 45px - real headroom either
+  way) rather than assume it stays put.
+- The catcher's crouch is IMPROVED, not fully solved, in TWO separate ways: the glove hand
+  (`handL`) sits closer to knee height than the shipped clip did but is not AT it (about 0.93ft
+  against the knee's own 0.33ft); and `upperLegR`'s own `Y` (-13, a partial cancellation of its
+  bind-pose twist) fixes the LEGS' height match but leaves the STANCE WIDTH asymmetric (`footR`
+  measured well outside `footL` in a facingRad=0 probe). A future pass should hold `upperLegR` and
+  the arms steady and sweep `upperLegL`'s own `Y` and `upperArmL`/`lowerArmL` in turn - see item 3.
+- `node test-baseball-actors.mjs`, run twice (before and after the crouch leg re-tune): every
+  check green both times (node half; load/dispose; mounted-in-hub; and every motion floor, all
+  measured through the real, re-aimed batter camera - Idle handR travel 16.9px against a 10px
+  floor, Bunt 9.5px against 5px, Pitch/Pickoff/Run unaffected since neither camera nor those clips
+  moved) EXCEPT its own delegated `r2-cadence` call, which spawns `test-baseball-device.mjs` as a
+  bare subprocess with no way to redirect its hardcoded `localhost:8123` - that port is the MAIN
+  CHECKOUT, where a sibling agent's R10 stage was concurrently changing `ui.js`'s own timing beats,
+  so the delegated call's two DIFFERENT failures ("measured Strike 3501/3483/3508ms" the first
+  time, "3352/3399/3236ms" the second, against a 3000ms target) reflect THAT tree's own moving
+  state across the two runs, not this one - the numbers changing between two runs of unchanged code
+  on this side is itself the evidence. The identical measurement, run directly against this worktree
+  (`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, temporarily sed'd to 8124 and restored after,
+  run twice - once before and once after the crouch leg re-tune above): the five probes this
+  stage's own report is graded on passed BOTH times, with identical numbers - `zone-world` (box
+  64.4x76.2px, edges within 0.70px of budget 2), `zone-scale` (true box 64.4x76.2px, still within
+  its own 3px drift budget against the old 65.2x79.0 baseline - close, 2.8 of 3px on the height
+  axis, but green, so no baseline edit was requested), `pop-anchor` (8.3px from the projected head,
+  budget 45 - better margin than before, not worse), `hud-legible` (runs 21px, dots 10px, labels
+  [B,S,O] - the new numbers, read back live) and `pitcher-frame` (untouched: box 8.50% of the band,
+  batter 47.8% of the pitcher, both still inside their own ranges, since `CAMERAS.pitcher` was never
+  touched). `r2-cadence` itself, UNOWNED by this stage and untouched by anything in it, was FLAKY
+  across the two runs rather than genuinely regressed: 3226/3310/3158ms (clean, first run) against
+  3344/3313/3363ms (the third sample 3ms over the 360ms tolerance, second run) - measured with
+  nothing in `settings.js`, `ui.js` or any `FEEL` beat touched between the two runs, only this
+  stage's own cosmetic `poses.js`/`actors.js` edits, which this probe's own 6.2s chain (windup +
+  result + between) does not read. Reported plainly rather than re-run a third time to get a
+  passing number: this reads as software-renderer timing jitter (the same class of noise
+  `actors.js`'s own `isSoftGL()` render-rate cap exists to bound, not eliminate), not a defect this
+  stage introduced.
+- `node test-visual.mjs baseball`: 20 passed, 0 failed, run twice (before and after the crouch
+  leg re-tune), identical both times (light/dark/reduced-motion all painted 24 elements with no JS
+  error; standalone and hub fit at both phone heights; the PLAY probe reached a real Strike with
+  the new cap/scoreboard on screen, `.visual-out/baseball--played.png`).
+- `node check-no-scroll.mjs baseball`: 4 screens checked, 0 scroll, also run twice, identical both
+  times.
+- This stage never touched `baseball/js/engine/`, `baseball/js/ui.js`, or any `FEEL` beat.
+
+## R10: the play unfolds in real time (2026-09-21)
+
+Matt, on v871: *"When I make contact, it immediately says 'out' or 'Homerun!' or whatever the
+result is. That's too fast. Wait for the ball to stop moving before announcing the result. The
+whole thing is too fast too, it's like I'm speed playing. Hitting a homerun is like 0.25 seconds
+from swinging to it landing. The ball should move at like a relatively realistic speed through the
+air and on the ground."* Measured cause, exactly as `docs/BASEBALL-3D-BUILD.md` section 9 ("R10")
+named it: `_settleAtBat` wrote the outcome word to Line 1 on its first line, at contact, before the
+cutaway even started; `FLIGHT_MS` was a flat 900ms whatever the distance; the whole in-play cutaway
+was a fixed 0.4 + 0.9 + 0.7 = 2.0s and `RUN_WINDOW_MS` squeezed every runner into it regardless of
+how far he actually had to run. Presentation only - no engine change, and the pitch beats
+(`fastballMs`, `windupMs`, `resultMs`, `betweenMs`) are untouched (`r2-cadence` still measures
+3000ms = 1200 result + 800 between + 1000 windup, confirmed below).
+
+**Item 1: the batted ball takes as long as a ball takes.** `FLIGHT_MS` is gone; `_flightMsFor
+(battedKind, distanceFt)` computes this PLAY's own real time, in ms, INCLUDING `CONTACT_HOLD_MS`
+(still 400ms, unchanged - the first slice of the same one arc/roll shown on the plate camera
+before the cut, not extra time tacked on):
+
+- **Fly, line drive, popup**: the hang time of a parabola through the apex `_battedApexFt` already
+  computes, the spec's own formula - `t = 2 * sqrt(2 * apex / 32.2)` seconds (32.2 ft/s², g).
+- **A LINE DRIVE now gets its own, flatter apex** (`_battedApexFt`'s new branch): sharing the fly
+  ball's own `BATTED_APEX_FRAC`/`BATTED_APEX_MAX_FT` put a 200ft liner 44ft up (a 3.3s hang time)
+  where the spec's own worked example wants "about 2.5s" (~25ft) - a line drive that arced as high
+  as a fly ball would not read as one. Solved from the same hang-time formula:
+  `apex = (t/2)² × 32.2`, so `apex(2.5s) = 25.16ft`, `frac = 25.16 / 200 = 0.126`
+  (`BATTED_LINE_APEX_FRAC`), capped at `BATTED_LINE_APEX_MAX_FT` (40ft - a liner that arced as high
+  as a fly ball's own 80ft cap would stop reading as a liner).
+- **Grounder**: a roll decelerating from a stopped-ball start speed, `GROUND_ROLL_V0_FT_S` (60
+  ft/s) at `GROUND_ROLL_DECEL_FT_S2` (3.3 ft/s²) - `d = v0·t - 0.5·a·t²`, solved for time:
+  `t = (v0 - sqrt(v0² - 2·a·d)) / a`. The deceleration constant is SOLVED, not guessed, against the
+  spec's own 150ft worked example (t = 2.70s to the hundredth); the same constant then gives a 40ft
+  dribbler 0.68s, comfortably "under a second" - both the spec's own numbers, confirmed by the same
+  one constant rather than tuned to each separately.
+- **Clamped `FLIGHT_MS_MIN` (800ms) to `FLIGHT_MS_MAX` (5500ms)** either way, the spec's own
+  numbers - a token dribbler and an absurd moonshot both still play out inside a beat a person can
+  sit through.
+
+`_contactHold` and `_animateBattedBall` each call `_flightMsFor(battedKind, distanceFt)` from their
+own two arguments independently (never a value passed between them), the same discipline
+`_battedApexFt` already followed - a stale number from the last ball in play can never leak into
+the next one.
+
+**Item 2: nothing is announced until the play is over.** The `_setLine1(word)` call that used to
+sit on `_settleAtBat`'s first line, before the cutaway, now only fires immediately for a
+walk/strikeout (no flight to wait for - the play is already over). For a ball in play, `word` is
+computed once and threaded through as `outWord` into `_animateBattedBall`, which paints it:
+
+- **HOME RUN**: at the wall crossing, unchanged from R4 - `homerCrossFrac`, the chase's own
+  threshold on `totalFrac`, already computed the instant the ball's ground distance passes the
+  fence; `_setLine1(outWord)` now fires in the SAME branch, right beside `_triggerHomerun`.
+- **Everything else**: once the flight loop itself ends (the ball has reached the fielder or
+  landed) - EXCEPT a **ground ball out**, which adds `THROW_BEAT_MS` (1000ms, "about a second," the
+  spec's own words) first, for the throw to first, before the word appears.
+- **A caught fly/line/popup and a base hit are not distinguished further** - both are presented as
+  "the ball reached the fielder," at the flight loop's own end. **The one simplification worth
+  naming for whoever reads this next**: `_animateFielderChase`'s own fielder never arrives EARLIER
+  than the ball (`Math.max(naturalS, flightDurMs / 1000)`, now fed this play's own real chase-portion
+  duration instead of the old constant `FLIGHT_MS`), but he CAN arrive later, if his own 27ft/s run
+  genuinely outlasts a short flight to a distant fielder - on that (rare) shape of play the word can
+  land a beat before his own animation visually reaches the spot. Presentation only; the OUTCOME was
+  never in question, only when it is said.
+
+**Item 3: runners and fielders move at their real speed for the whole play.** `RUN_WINDOW_MS` (the
+old fixed 2000ms every runner was squeezed into, "speed up ALL movers uniformly" if the slowest
+wouldn't fit) is gone entirely. `_animateRunners` no longer scales anyone's `durMs` - every mover
+just runs at his own real `naturalS` (27ft/s, or half that on a forced walk). It now returns
+`{ promise, longestMs }` instead of a bare promise (or `undefined`): `longestMs` is the slowest
+mover's own real, uncompressed duration, read by `_settleAtBat` BEFORE any of the cutaway plays out
+and handed into `_animateBattedBall` as `longestRunnerMs`, whose own marker hold is computed as:
+
+```
+elapsedMs = totalMs + (ground-out throw beat, if any)
+holdMs    = max(MARKER_HOLD_MS, longestRunnerMs - elapsedMs)
+```
+
+`MARKER_HOLD_MS` is now a FLOOR (800ms, "the settle" - the spec's own words, raised from the old
+fixed 700ms), not a fixed total - it only ever gets LONGER, to cover whichever runner is still on
+the bases when the ball itself is done. On a home run this is routinely many seconds: the
+batter's own trot around all four bases is 360ft at 27ft/s = 13,333ms, which usually dominates the
+whole play (a 420ft homer's own ball is done - `_triggerHomerun` fires, flight completes - well
+before the runner crosses the plate). `_settleAtBat` also `await`s `_animateRunners`'s own
+`promise` AFTER the whole cutaway resolves, as a BACKSTOP for whatever the `holdMs` estimate (made
+before any of it has actually played out under real frame timing) does not cover exactly - real
+rAF jitter can still, in principle, leave `_returnToPlate()` firing a frame or two before the
+runner's own loop calls `hide()`. **This is why the `_rbActive`/`setForceHidden` force-hide guard
+(R6/R9) still matters just as much as before** - the estimate narrows the race, it does not close
+it structurally the way the force-hide flag does; see `_syncBatterRunner`'s own header, updated
+this stage.
+
+`_animateFielderChase` is the other consumer that used to read the module constant `FLIGHT_MS` -
+it now takes `flightDurMs` as an explicit 5th argument (this play's own chase-portion duration,
+the same `dur` `_animateBattedBall` computes for the ball itself), so a fielder chasing down a
+420ft blast is never held to a fielder chasing down a 40ft dribbler's own budget.
+
+**Item 4: the stats strip under HOME RUN stays for the trot.** This needed NO new code - `_hideHomerun()`
+was already, and still is, called only from `_returnToPlate()`, so extending the marker hold to
+cover the batter's own trot (item 3) is what already keeps the word/strip up for the whole thing;
+they were only ever getting cut short before because the OLD, fixed marker hold ended in 700ms
+regardless of the runner.
+
+**Measured** (`test-baseball-device.mjs`'s `play-clock` probe, driving `_settleAtBat` directly with
+synthetic payloads, `homerun-strip`'s own pattern - real numbers from a real run, not predictions):
+
+| Play | Formula | Predicted | Measured |
+|---|---|---|---|
+| 40ft dribbler (ground) | `t = (60 - sqrt(60² - 2·3.3·40)) / 3.3` | 679ms, clamped to 800ms | (clamp floor, not separately probed) |
+| 150ft grounder (ground) | same formula, d=150 | 2700ms | (the spec's own worked example, exact) |
+| 200ft liner (line) | `apex = 200 × 0.126 = 25.2ft`; `t = 2·sqrt(2·25.2/32.2)` | 2502ms | (the spec's own worked example, exact) |
+| 120ft groundout (ground, out) | roll 2124ms + `THROW_BEAT_MS` 1000ms | 3124ms | **3199-3233ms** (Out shown) |
+| 250ft fly out (fly, out) | `apex = min(80, 250×0.22) = 55ft`; `t = 2·sqrt(2·55/32.2)` | 3696ms | **3801-3822ms** (Out shown, "only at the catch") |
+| 420ft homer (fly, majors fence 408ft) | `apex = min(80, 420×0.22) = 80ft` (capped); `t = 2·sqrt(2·80/32.2)` = 4458ms; crosses at frac 408/420 = 0.971 | 4331ms | **4396-4430ms** (HOME RUN triggers) |
+| same 420ft homer, return to plate | batter's own 360ft trot / 27ft/s | 13333ms | **13381-13384ms** (`_returnToPlate()` fires) |
+
+The small, consistent overage (60-125ms on every number) is real rAF/setTimeout scheduling
+overhead on the container's software renderer, not a formula error - every measured value lands
+comfortably inside its own deliverable window (groundout 1800-4500ms; homer HOME RUN >= 3000ms,
+return >= runner arrival; fly out "only at the catch").
+
+**A resource-contention false failure, chased down and ruled out, not fixed in code**: the FIRST
+full (non-`BB_DEVICE_QUICK`) run of `test-baseball-device.mjs`, by mistake run CONCURRENTLY with a
+second Chromium instance (`test-visual.mjs baseball`), measured `r2-cadence`'s gaps at 3395-3604ms
+against its own 360ms tolerance around 3000ms - a real-looking failure, and `test-visual.mjs
+baseball`'s own `[play]` probe failed the same shape ("the drag never moved the pitch's aim off
+dead centre") in the same run. Re-run in isolation, both suites went green (`r2-cadence` measured
+3174-3273ms and, separately, 3271-3316ms; `runners-move` passed). **But this container carries
+its OWN ambient load, independent of anything this session started** - `ps` during this stage
+showed a second, unrelated `node test-baseball-device.mjs`/`test-baseball-actors.mjs` pair already
+running against a second dev server on port 8124, present before this session touched anything -
+and later full runs, run deliberately idle, still measured `r2-cadence` failing (3616/3311/3210ms)
+and `test-visual.mjs baseball`'s `[play]` probe failing again. **The decisive check: `git stash`
+of every file this stage touched, then `test-visual.mjs baseball` run again against the UNMODIFIED
+(pre-R10) code** - `[play]` failed IDENTICALLY ("the drag never moved the pitch's aim off dead
+centre"), proving this is a PRE-EXISTING flake in this container/harness, not something R10
+introduced; `git stash pop` restored this stage's changes byte-for-byte (`git diff --stat`
+unchanged before and after). `test-baseball-device.mjs`'s own `pitch-drag` probe - driving the
+identical CDP touch-drag gesture - passed cleanly in every run, contended or not, which is the
+other half of the same conclusion: the pad/drag mechanism itself is sound; the CDP round-trip
+dispatch that both probes drive through is what the container's own scheduling noise can occasionally
+delay past its narrow window. **Lesson for the next session: this container cannot be assumed
+idle even when this session has started nothing** - treat any single failing run of a
+timing-budget probe (`r2-cadence`, `pitch-drag`'s own 400ms drag-duration check, `target-marker`'s
+6px start-position budget, `test-visual.mjs`'s `[play]` probe) as inconclusive on its own and
+re-run it; a `git stash` comparison against the same failure is the fastest way to tell "this
+container is noisy right now" from "this stage broke something."
+
+**A real bug, found by the full (non-`BB_DEVICE_QUICK`) run and fixed**: `runners-move`'s own probe
+(`test-baseball-device.mjs`) wraps `inst._animateRunners` to sample a real runner's advance during
+real auto-play, and its wrapper still assumed the OLD return shape (`const p = origAnimateRunners
+(payload); p.then(...)`) - `_animateRunners` now returns `{ promise, longestMs }`, a plain object,
+so `p.then` was not a function, and the wrapped call crashed with a page error the instant a
+qualifying play came up. Fixed by unwrapping `.promise` for the probe's own bookkeeping while
+returning the REAL `{ promise, longestMs }` object back to its caller unchanged (`_settleAtBat`
+itself needs `longestMs` to be real, or the genuine, real-gameplay marker hold would never extend
+for a genuine runner either). Verified by a second, isolated full run: `runners-move` passed
+(see the checks list in the R10 stage report).
+
+**Facts for whoever reads this next - which constants stopped being constants:**
+- `FLIGHT_MS` and `RUN_WINDOW_MS` are GONE from `ui.js` entirely - `_flightMsFor(battedKind,
+  distanceFt)` and each play's own `longestMs` (from `_animateRunners`) replace them. A future
+  stage grepping for either name will find nothing; that is correct, not a regression.
+- `MARKER_HOLD_MS` (800ms now, was 700ms) is a FLOOR, not the marker hold's fixed duration -
+  `_animateBattedBall`'s own `holdMs` is what actually gets passed to `_runMarkerHold`.
+- `_animateRunners(payload)` returns `{ promise, longestMs }`. Any future caller (there are
+  currently two, both in `_settleAtBat`) must destructure it, not treat the return as a bare
+  promise - `runners-move`'s own wrapper is the cautionary example, above.
+- `_animateBattedBall` is now `async` (it awaits the throw beat and the runner-extended marker hold
+  inline, rather than chaining `.then()`s through a bare executor). Any source-text regex hunting
+  for its declaration (`test-baseball-actors.mjs` had two) needs `(?:async )?` in front of the
+  method name now.
+- `_animateFielderChase` takes a 5th argument, `flightDurMs` (this play's own chase-portion
+  duration), where it used to read the module constant `FLIGHT_MS` directly.
+- `_battedApexFt` has a THIRD kind branch now (`'line'`, alongside `'ground'` and `'popup'`) -
+  `battedKind === 'line'` no longer falls through to the fly ball's own fraction/cap.
+- `THROW_BEAT_MS` (1000ms) and `GROUND_ROLL_V0_FT_S`/`GROUND_ROLL_DECEL_FT_S2` (60, 3.3) are new
+  constants, all in `ui.js` beside the other R-stage presentation timings, none of them in
+  `settings.js` (this stage never touched `baseball/js/engine/`).
+- `test-baseball-actors.mjs`'s own `[KNOWN-BUG PROBE]` cutaway-return budget moved from 2.6s to
+  4.6s (its own direct `_animateBattedBall(40, 180, 'hit', '1B', 'fly', 200)` call now takes about
+  3.7s end to end, not ~2.0s - the comment beside the new deadline has the arithmetic).
+- `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
+  test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` all green; the full (non-quick)
+  `test-baseball-device.mjs`, run in isolation, green including `runners-move` after the fix above.
+
+**Ship-review follow-up, same day: a home run's cutaway is capped at a shown trot, not a real
+one.** Matt/the coordinator, minutes after R10 first shipped: a 13.3s cutaway on every homer (the
+ball's own 4.4s flight is right - item 1 above; the 360ft trot at 27ft/s is what pads it) is too
+long to sit through. **Rule: on a HOME RUN only, once the ball has crossed the wall (the same
+instant the HOME RUN word goes up - `_homerCrossMs`, a new shared method both `_animateBattedBall`
+and `_animateRunners` read so the ball's own visual crossing and every runner's speed change can
+never disagree), every runner still on the paths finishes the REST of his own run at
+`HOMER_RUNNER_SPEEDUP` (3x) speed** - a shown trot, not a real one. Everything BEFORE the crossing
+still runs at real `RUNNER_SPEED_FT_S`/`WALK_RUNNER_SPEED_FT_S`, identical to every other play, and
+every non-homer outcome (single/double/triple/out/walk) is entirely untouched by this constant.
+
+`_animateRunners` now computes `homerCrossMs` once per play (`payload.outcome === 'homer'` only)
+and gives each mover a piecewise duration instead of one flat rate: `naturalMs` (his own real,
+uncompressed time) splits into `crossMs` (real speed, unchanged, up to the crossing) and `postMs`
+(`(naturalMs - homerCrossMs) / HOMER_RUNNER_SPEEDUP`, the ground left AFTER the crossing) whenever
+`naturalMs > homerCrossMs` - a runner who finishes his own run before the ball even clears the
+fence is untouched, `postMs` is simply 0. The step loop's own `frac` calculation is piecewise to
+match: linear in real time up to `crossMs`, then linear in the sped-up remainder past it - a single
+continuous curve, no visual jump at the kink. `longestMs` (what `_settleAtBat` reads to extend the
+marker hold - item 3, unchanged) is now `Math.max(...movers.map(m => m.crossMs + m.postMs))`, so it
+already reflects the speedup with no further change needed anywhere else.
+
+**Measured, the required case (420ft solo homer, majors, fence 408ft, `test-baseball-device.mjs`'s
+`play-clock` probe):** `totalMs` (the ball's own flight) 4458ms, unchanged from item 1; crossing at
+frac 408/420 = 0.9714 lands `homerCrossMs` at ~4331ms, also unchanged (still >= 3000ms, still
+triggers HOME RUN mid-chase). The batter-runner's own real, uncompressed trot (`naturalMs`) is
+still 13333ms (360ft / 27ft/s) - but since that exceeds `homerCrossMs`, his run now splits into
+`crossMs` ~4331ms (real speed, unchanged) plus `postMs` = (13333 - 4331) / 3 = ~3001ms (the
+post-crossing ground at 3x), for a sped-up total (`longestMs`) of **~7332ms (7.33s)** - inside the
+coordinator's own required [5.5s, 8.5s] band for this exact payload, down from the old real 13.3s.
+A bases-loaded homer costs little more: every OTHER runner's own remaining ground after the
+crossing is shorter than the batter-runner's (they started further along the bases), so they always
+finish first; the batter-runner is the longest mover on every home run by construction, the same
+fact that was already true before this fix.
+
+`test-baseball-device.mjs`'s `play-clock (homer)` assertion is rewritten to match: it now computes
+the same `crossMs`/`postMs`/sped-up-arrival formula from the payload's own numbers (rather than the
+old flat `360/27*1000`), and checks `_returnToPlate()` fires inside **[5500ms, 8500ms]** after
+contact AND no earlier than that sped-up arrival (minus a small rAF-granularity allowance) - the
+same two-sided check the old version made against the real, unsped arrival, just against the new
+number. Measured (`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`): **`_returnToPlate()` fired at
+7515ms** - comfortably inside the band, and just past the ~7332ms predicted sped-up arrival, the
+same rAF/setTimeout overhead every other `play-clock` number in this file already carries (HOME RUN
+itself still triggered at 4441ms, inside the unchanged item-1/item-2 timing).
+
+**Facts for whoever reads this next:**
+- `HOMER_RUNNER_SPEEDUP` (3) is a new constant, beside `RUNNER_SPEED_FT_S`/
+  `WALK_RUNNER_SPEED_FT_S` in `ui.js`. It multiplies SPEED for the post-crossing ground only, on a
+  home run only - it is not a second flat window like the old `RUN_WINDOW_MS` R10 removed, and it
+  never touches anything about how the play is SCORED, only how the trot is SHOWN.
+- `_homerCrossMs(battedKind, distanceFt, sprayAngleDeg)` is a new shared method: the one place the
+  "how far into the flight does this ball cross the fence" fraction is computed, reused by both the
+  ball's own HOME RUN trigger (`_animateBattedBall`, still computing its own equivalent fraction
+  inline, unchanged and numerically identical) and the runner speedup (`_animateRunners`, new).
+- A mover object built by `_animateRunners` now carries `naturalMs`/`crossMs`/`postMs` instead of a
+  single flat `durMs` (removed this same stage, so it never existed as a separate name to confuse
+  with the new fields) - any future reader of a mover object needs to know which of the three it
+  wants; `crossMs + postMs` is always the mover's own total duration.
+- `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: green on `play-clock (homer)` (4441ms HOME
+  RUN, 7515ms return) and every other check EXCEPT one unrelated flake, `pitch-drag` (406ms vs a
+  400ms drive budget) - pure CDP-touch scheduling jitter in this container, not this stage's code
+  (it never touches drag/pad mechanics). `node test-visual.mjs baseball`: 19/20 green both times it
+  was run; the `[play]` probe failed identically both runs on the exact same pre-existing message
+  this session already root-caused via `git stash` earlier in R10 ("the drag never moved the
+  pitch's aim off dead centre") - a known container flake, not a regression, and unrelated to this
+  follow-up's own change (`_animateRunners` only). No engine file, no `poses.js` clip, no `FEEL`
+  beat, no `sw.js`/`version.json` touched.
 
 ## R9: figures and stadium (2026-09-21)
 
