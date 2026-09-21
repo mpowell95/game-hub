@@ -13,7 +13,7 @@ import { GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku', 'minesweeper']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -197,6 +197,22 @@ export function aggregatePlayers(all, corrections) {
           const cur = dst.sd.bestTimeMs[k] | 0;
           const val = sbt[k] | 0;
           if (val > 0) dst.sd.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
+        }
+      } else if (g === 'minesweeper' && src.ms) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without this branch every
+        // Minesweeper counter reads ZERO the moment a person's second device syncs, while each
+        // device's own local store stays intact - THE LAW rule 1. Counters add; bestTimeMs is
+        // LOWER-is-better and merges per level with the same zero-sentinel Math.min guard as the
+        // writer (js/game-stats.js's recordMinesweeper) - 0 never wins a merge.
+        if (!dst.ms) dst.ms = { cleared: 0, flagsRight: 0, bestTimeMs: {} };
+        dst.ms.cleared += src.ms.cleared | 0;
+        dst.ms.flagsRight += src.ms.flagsRight | 0;
+        const mbt = src.ms.bestTimeMs || {};
+        if (!dst.ms.bestTimeMs) dst.ms.bestTimeMs = {};
+        for (const k of Object.keys(mbt)) {
+          const cur = dst.ms.bestTimeMs[k] | 0;
+          const val = mbt[k] | 0;
+          if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /

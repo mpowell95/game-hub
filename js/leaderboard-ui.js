@@ -160,6 +160,7 @@ const GAME_META = [
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
   { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
+  { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
@@ -702,6 +703,7 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_obstacles: 'lb_sort_obstacles',
   lb_unit_longest: 'lb_sort_longest',
   lb_unit_solved: 'lb_sort_solved',
+  lb_unit_cleared: 'lb_sort_cleared',
   lb_unit_meters: 'lb_sort_meters',
   // Skeeball and Pinball both rank on points; without this row both sort menus said "Wins".
   lb_unit_points: 'lb_sort_points',
@@ -1304,6 +1306,10 @@ const TEXTURE = {
   sudoku: [
     { labelKey: 'lb_tex_sd_solved', get: (g) => ((g.games.sudoku || {}).sd || {}).solved | 0 },
     { labelKey: 'lb_tex_sd_perfect', get: (g) => ((g.games.sudoku || {}).sd || {}).perfect | 0 },
+  ],
+  minesweeper: [
+    { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
+    { labelKey: 'lb_tex_ms_flags', get: (g) => ((g.games.minesweeper || {}).ms || {}).flagsRight | 0 },
   ],
   dotsboxes: [
     { labelKey: 'lb_tex_boxes_claimed', get: (g) => ((g.games.dotsboxes.db || {}).boxes) | 0 },

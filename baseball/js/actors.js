@@ -91,8 +91,18 @@ const COLOR_TOL = 6;   // default, per channel - "a few units" (section 2.2)
 // review, round 2: the round-1 palette (dull cream everywhere, navy-on-navy away) read as one flat
 // team, not two, at the size these figures actually draw on screen (the pitcher is 11% of the
 // field height - checked at height 90px, not only 400, this round).
-const HOME_CREAM = 0xf2ead2;   // off-white shirt + pants, home
-const NAVY = 0x25395c;         // trim, home; shirt, away
+// R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 2): Matt, on the shipped cream-vs-navy build:
+// "The opposing team should be red." The CPU is always `home` (`_syncActors`'s own `battingSide`
+// rule, R6), so `home`'s three colours move from off-white/navy-trim to Matt's own number
+// (#c62828) for the shirt, a darker red for the trim, and WHITE for the pants - `away` (the human)
+// is UNCHANGED, still navy shirt/grey pants/white trim. Colorblind rule (root CLAUDE.md, Matt is
+// red/green colorblind): red vs navy is already a big luminance gap, and home's pants stay WHITE
+// against away's own GREY (unchanged) so the two silhouettes differ by more than hue alone even
+// before the shirt colour is read.
+const HOME_RED = 0xc62828;      // shirt, home - Matt's own number
+const HOME_RED_TRIM = 0x7c1a1a; // trim, home - a darker red than the shirt, same relationship NAVY/AWAY_TRIM already have
+const HOME_PANTS = 0xf2f2f2;    // pants, home - white (was HOME_CREAM's off-white on both halves)
+const NAVY = 0x25395c;          // shirt, away (unchanged)
 const AWAY_GREY = 0xc9c9c9;    // pants, away (sampled from batter-away-1.png's own pants fill)
 const AWAY_TRIM = 0xf2f2f2;    // trim, away ("white trim" per the brief; a hair off pure white so it
                                 // never exact-matches a key meant for something else)
@@ -127,11 +137,15 @@ const UMP_DARK = 0x23262b;     // R1: the umpire's suit, dark enough to read as 
 
 export const KEYS = {
   skaterMaleA: {
+    // R9 item 2: home's pants key now sends to HOME_PANTS (white, was HOME_CREAM's off-white) and
+    // the shirt key to HOME_RED (was HOME_CREAM too - the whole shirt used to be the same off-white
+    // as the pants, which is why one constant covered both; red/white are two different colours
+    // now, so this skin needed no OTHER change - it already had separate pants/shirt key entries).
     home: [
-      { from: [0x12, 0x41, 0x63], to: HOME_CREAM, tol: PANTS_TOL, part: 'pants' },
-      { from: [0x18, 0x5a, 0x84], to: HOME_CREAM, tol: PANTS_TOL, part: 'pants' },
-      { from: [0xea, 0x30, 0x31], to: HOME_CREAM, tol: SHIRT_TOL, part: 'shirt' },
-      { from: [0xf2, 0x65, 0x4c], to: HOME_CREAM, tol: SHIRT_TOL, part: 'shirt' },
+      { from: [0x12, 0x41, 0x63], to: HOME_PANTS, tol: PANTS_TOL, part: 'pants' },
+      { from: [0x18, 0x5a, 0x84], to: HOME_PANTS, tol: PANTS_TOL, part: 'pants' },
+      { from: [0xea, 0x30, 0x31], to: HOME_RED, tol: SHIRT_TOL, part: 'shirt' },
+      { from: [0xf2, 0x65, 0x4c], to: HOME_RED, tol: SHIRT_TOL, part: 'shirt' },
     ],
     away: [
       { from: [0x12, 0x41, 0x63], to: AWAY_GREY, tol: PANTS_TOL, part: 'pants' },
@@ -141,16 +155,19 @@ export const KEYS = {
     ],
   },
   criminalMaleA: {
-    // Trim (collar/cuff, its main fill #009f78 and its own fold-shadow #037e60) keys to the navy
-    // accent on both sides, same as round 1. The suit's white (#ffffff) is split by PANTS_RECT:
-    // home sends BOTH halves to the same off-white (so shirt and pants still read as one uniform,
-    // matching skaterMaleA's own home treatment); away sends the boxed pants pixels to light grey
-    // and every other white pixel (the shirt) to navy - two different colours from one source
-    // shade, which is the whole reason PANTS_RECT exists for this skin.
+    // Trim (collar/cuff, its main fill #009f78 and its own fold-shadow #037e60) keyed to the navy
+    // accent on both sides until R9; the suit's white (#ffffff) is split by PANTS_RECT:
+    // home sends the boxed pixels to HOME_PANTS (white - the same shade the shirt now DOESN'T use,
+    // unlike round 1 where both halves went to the one off-white) and every other white pixel (the
+    // shirt) to HOME_RED; away is unchanged, sending the boxed pants pixels to light grey and every
+    // other white pixel (the shirt) to navy - two different colours from one source shade on both
+    // sides, which is the whole reason PANTS_RECT exists for this skin. The trim key moves to
+    // HOME_RED_TRIM (was NAVY) so home's collar/cuff reads as its own team's colour, not the away
+    // team's.
     home: [
-      { from: [0xff, 0xff, 0xff], to: HOME_CREAM, rect: PANTS_RECT, part: 'pants' },
-      { from: [0x00, 0x9f, 0x78], to: NAVY, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: NAVY, part: 'trim' },
-      { from: [0xff, 0xff, 0xff], to: HOME_CREAM, part: 'shirt' },
+      { from: [0xff, 0xff, 0xff], to: HOME_PANTS, rect: PANTS_RECT, part: 'pants' },
+      { from: [0x00, 0x9f, 0x78], to: HOME_RED_TRIM, part: 'trim' }, { from: [0x03, 0x7e, 0x60], to: HOME_RED_TRIM, part: 'trim' },
+      { from: [0xff, 0xff, 0xff], to: HOME_RED, part: 'shirt' },
     ],
     away: [
       { from: [0xff, 0xff, 0xff], to: AWAY_GREY, rect: PANTS_RECT, part: 'pants' },
@@ -234,6 +251,115 @@ async function skinTexture(skinName, side) {
  *  today - the human's team is always home, the CPU's is always away, so the skin follows the
  *  side. A later phase that lets a person pick a skin independent of side would take this over. */
 function skinForSide(side) { return (side === 'away' || side === 'umpire') ? 'criminalMaleA' : 'skaterMaleA'; }
+
+// R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 3): every figure's CAP. Matt: "can you add
+// baseball hats?" A dome (a sphere cut at ~45% of its own height) plus a brim (a flattened wedge of
+// a cylinder, forward of the face), parented to the HEAD bone (rig.js's RIG.head) so it rides every
+// clip for free - a child of a bone travels with that bone through every keyframe the mixer plays,
+// no per-clip work needed. Geometry is built ONCE and shared by every actor (module scope, same
+// pattern `_skinTexCache` already uses for the skin textures); one MeshStandardMaterial per team
+// colour, also built once and cached - `recolorCap` (below) is what swaps an actor's cap between
+// them when its SIDE changes, the same moment `_setSide` swaps the jersey texture.
+//
+// CAP_SCALE/CAP_OFFSET are measured against the shipped rig's own head bone, the same way BAT's own
+// numbers were measured against the hand bone: rendered with render-actor.mjs --sheet across
+// Idle/Swing/Pitch/Run/Crouch (every clip that moves the head or the spine under it) and read off
+// the picture until the cap sat on the head in all five - never floating above it, never sunk into
+// it. Measured (node, `Box3().setFromObject(root)` against `bones.head`'s own world position,
+// PRE-placement so the numbers are in the same raw units `heightWorld` (376.47) already is): the
+// crown (the topmost point of the head/hair) sits 106.69 units above the head bone's own origin -
+// about 28% of the whole body's height - which is what told the first two tuning passes apart from
+// guessing a third time: a dome sized/offset from that measured number, not eyeballed further, is
+// what converged in one more render. Final numbers (baseball/CLAUDE.md's R9 entry has the log):
+// CAP_SCALE 0.115, CAP_OFFSET [0, 0.205, 0.01].
+const CAP_DOME_CUT_FRAC = 0.45;     // the dome is the TOP 45% of a full sphere (spec's own number)
+const CAP_BRIM_HALF_SPAN = Math.PI * 0.19; // the brim's own angular half-span - a forward-projecting bill, not a half-disc
+// CAP_SCALE (the dome's own unit-sphere radius) and CAP_OFFSET (the cap group's own centre, from the
+// head bone's own origin) are BOTH fractions of actor.heightWorld - the same unit BAT.length uses -
+// and deliberately INDEPENDENT of each other (offset is not "a fraction of the cap's own size"),
+// since the head bone's own origin does not move when the cap's size is retuned.
+export const CAP_SCALE = 0.115;
+export const CAP_OFFSET = [0, 0.205, 0.01];
+const CAP_COLOR = { home: HOME_RED, away: NAVY, umpire: UMP_DARK };
+
+let _capGeoCache = null;
+/** The dome + brim geometry, built once and reused by EVERY actor's cap (module scope - the spec's
+ *  own "shared geometry"). Unit-sized (radius 1); `_attachCap` scales the whole cap group instead
+ *  of building a new geometry per actor's own heightWorld, which is what keeps this a two-geometry
+ *  budget no matter how many of the fifteen roles carry a cap. */
+function capGeometry() {
+  if (_capGeoCache) return _capGeoCache;
+  // The dome: a sphere, cut with thetaLength so only the crown (the top CAP_DOME_CUT_FRAC of the
+  // sphere's own height) remains - thetaLength is measured from the NORTH POLE (theta=0), so a
+  // smaller thetaLength keeps less of the sphere; Math.acos(1 - 2*frac) is the standard spherical-
+  // cap-height-to-angle conversion (frac of the sphere's DIAMETER, not its radius, hence the *2).
+  const domeGeo = new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.acos(1 - 2 * CAP_DOME_CUT_FRAC));
+  // The brim: a short, flattened wedge of a cylinder (its own angular span, not a full disc), lying
+  // flat and sitting forward of the dome's own front. CylinderGeometry's default axis is Y and its
+  // own theta=0 is +X; rotateY(-HALF_PI) turns that so theta=0 points to +Z (the model's own front
+  // axis, section 2.1), and the wedge is centred on that by starting the span a half-span EARLIER.
+  const brimGeo = new THREE.CylinderGeometry(1.32, 1.32, 0.10, 16, 1, false, -CAP_BRIM_HALF_SPAN, CAP_BRIM_HALF_SPAN * 2);
+  brimGeo.rotateY(-Math.PI / 2);
+  _capGeoCache = { dome: domeGeo, brim: brimGeo };
+  return _capGeoCache;
+}
+const _capMatCache = new Map();
+function capMaterial(colorHex) {
+  let m = _capMatCache.get(colorHex);
+  if (!m) { m = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 }); _capMatCache.set(colorHex, m); }
+  return m;
+}
+/** Every actor gets a cap, at load (`_makeActor`), coloured for its PLACEHOLDER side (home) until
+ *  `_setSide` recasts it - the same "no figure is ever untextured for a frame" rule the skin
+ *  placeholder already follows. `cap` is a `THREE.Group` (dome + brim as its two children) parented
+ *  to the head bone, NAMED 'cap' - the structural check in test-baseball-actors.mjs looks for
+ *  exactly that name as a direct child of the resolved head bone.
+ *
+ *  CAP_SCALE/CAP_OFFSET are fractions of `actor.heightWorld` (the same unit `BAT.length` uses), but
+ *  a plain rigid mesh parented to a bone is NOT run through the skinning matrices that keep the
+ *  skinned BODY's own world size independent of any one bone's scale - `Actors._attachBat`'s own
+ *  comment on this for the hand bone applies identically here. Measured: the head bone's own world scale is
+ *  ~100x (baked in by the FBX->glTF conversion, section 2.1), so the first render of this cap with
+ *  no correction flew off far above the model (the cap's own world Y landed at 3646 units against
+ *  the head's own 270 - invisible, off screen). `headScale` divides it out, the same handScale
+ *  correction `_attachBat` needs for the bat. */
+function attachCapGeometry(actor) {
+  const geo = capGeometry();
+  const dome = new THREE.Mesh(geo.dome, capMaterial(CAP_COLOR.home));
+  const brim = new THREE.Mesh(geo.brim, capMaterial(CAP_COLOR.home));
+  // Flagged, not merely a naming convention: `_setSide`'s own `root.traverse` recolours every MESH
+  // it finds to the jersey's skin texture - which would run over these two as well (they are
+  // descendants of `root` through the head bone) and overwrite their flat team-colour material with
+  // the skin texture. `isCapPart` is what that traverse skips.
+  dome.isCapPart = true; brim.isCapPart = true;
+  const cap = new THREE.Group();
+  cap.name = 'cap';
+  cap.add(dome, brim);
+  const headScale = new THREE.Vector3(); actor.bones.head.getWorldScale(headScale);
+  const hs = headScale.x || 1;
+  const s = (CAP_SCALE * actor.heightWorld) / hs;
+  cap.scale.setScalar(s);
+  cap.position.set(
+    (CAP_OFFSET[0] * actor.heightWorld) / hs,
+    (CAP_OFFSET[1] * actor.heightWorld) / hs,
+    (CAP_OFFSET[2] * actor.heightWorld) / hs,
+  );
+  actor.bones.head.add(cap);
+  actor.cap = cap;
+  actor.capDome = dome;
+  actor.capBrim = brim;
+  actor.capColor = 'home';
+}
+/** Swap an actor's cap to `side`'s team colour (or 'umpire') - called from `_setSide` alongside the
+ *  jersey texture swap, on the same "only on an actual change" guard, so a caller passing `side` on
+ *  every frame costs nothing once the cap already matches. */
+function recolorCap(actor, side) {
+  if (!actor.cap || side === actor.capColor) return;
+  const mat = capMaterial(CAP_COLOR[side] != null ? CAP_COLOR[side] : CAP_COLOR.away);
+  actor.capDome.material = mat;
+  actor.capBrim.material = mat;
+  actor.capColor = side;
+}
 
 // STAGE 2: the batter's facing (docs/BASEBALL-3D-BUILD.md section 3.5's `_place` facingRad). The
 // sprite frames (reference/baseball/batter-home-1..8.png) show a right-handed batter seen from
@@ -413,9 +539,10 @@ export class Actors {
     const pivot = new THREE.Group();       // pivot carries position/scale/mirror; root carries facing
     pivot.add(root);
     this.scene.add(pivot);
-    const actor = { role, pivot, root, bones, restQ, mixer, actions, current: null, heightWorld, footY, side: 'home', mirrored: false, shadow: null, _last: null };
+    const actor = { role, pivot, root, bones, restQ, mixer, actions, current: null, heightWorld, footY, side: 'home', mirrored: false, shadow: null, _last: null, forceHidden: false };
     actor.shadow = this._makeShadow(); pivot.add(actor.shadow);
     if (role === 'batter') this._attachBat(actor);
+    attachCapGeometry(actor);
     return actor;
   }
 
@@ -468,7 +595,24 @@ export class Actors {
     // R7 (item 2): the catcher joins him - he is now ALSO hidden from the chase camera
     // (`_applyCameraVisibility`), and `setCatcher` is called from the same every-`_syncActors()`
     // path that would otherwise re-show him mid-chase, exactly the umpire's own problem.
-    if (actor.role !== 'umpire' && actor.role !== 'catcher') actor.pivot.visible = true;
+    // R9 (item 1): `actor.forceHidden` joins the same exclusion - a role a caller has explicitly
+    // force-hidden (`setForceHidden`, below) stays hidden through this auto-show, the umpire/
+    // catcher's own CAMERA-gated hide generalised to a ROLE fact the caller decides. Used for the
+    // batter while a real batter-runner ('rb') is running (ui.js's `_animateRunners`/
+    // `_syncBatterRunner`), so the two can never both be shown at once.
+    if (actor.role !== 'umpire' && actor.role !== 'catcher' && !actor.forceHidden) actor.pivot.visible = true;
+  }
+
+  /** R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1): force one role invisible regardless of
+   *  `place()`'s own auto-show, until cleared. `hidden: false` does NOT itself show the role again
+   *  (a caller may still want it hidden for another reason, e.g. a runner off base) - it only lets
+   *  the NEXT `place()`/`_setSide()` call show it, the same "clears the guard, doesn't undo it"
+   *  contract `_applyCameraVisibility` already has for the umpire/catcher. */
+  setForceHidden(role, hidden) {
+    const actor = this.actors[role];
+    if (!actor) return;
+    actor.forceHidden = !!hidden;
+    if (hidden) actor.pivot.visible = false;
   }
 
   /** Place one actor now and remember it, so a later resize can reflow without the caller having
@@ -492,11 +636,15 @@ export class Actors {
       actor.side = side;
       const tex = await skinTexture(skinForSide(side), side);
       actor.root.traverse((o) => {
-        if (!o.isMesh) return;
+        if (!o.isMesh || o.isCapPart) return;   // R9: the cap's own flat colour, never the jersey texture
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) { m.map = tex; m.color.set(0xffffff); m.needsUpdate = true; }
       });
       actor._skinApplied = true;
+      // R9 (item 3): the cap follows the same side the jersey just did - same guard (only on an
+      // actual change, `recolorCap`'s own early return), so a caller passing `side` every frame
+      // costs nothing once the cap already matches.
+      recolorCap(actor, side);
     }
     if (pos && heightFt != null) {
       this.place(role, {

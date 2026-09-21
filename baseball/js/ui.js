@@ -120,21 +120,20 @@ const BATTED_GROUNDER_APEX_FT = 4;
 const BATTED_POPUP_APEX_FRAC = 0.9;
 const BATTED_POPUP_APEX_MIN_FT = 55;
 // R1: the strike zone is drawn by projecting its real world rectangle. On the BATTING camera that
-// is about 50 px wide on a 393 px band, which is legible. On the PITCHING camera the same rectangle
-// is 72 ft away and projects to 9 px, which is not - so there, and only there, the drawn box is
-// scaled about its own centre up to this fraction of the canvas width. It is the same idea as the
-// 0.30W floor the painted camera used to apply to its own zone, kept at the batting camera's own
-// measured size so the target reads the same in both states. The ball is NOT scaled with it: what
-// is drawn large is the aiming frame, never the thing being judged.
-const PITCHING_ZONE_MIN_W_FRAC = 0.13;
+// is about 50 px wide on a 393 px band, which is legible.
+// R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2): on the PITCHING camera it used to project
+// to 9 px (a 72 ft-away rectangle seen through the old fov-50 lens), which is not legible - so the
+// drawn box there was scaled up to a fraction of the canvas width, `PITCHING_ZONE_MIN_W_FRAC`
+// (deleted with this stage). The real fix was the CAMERA, not the drawing: `CAMERAS.pitcher`
+// (field.js) is now a long lens that reads the true box at 8-13% of the band's own height without
+// any scaling at all - see that constant's own header for the measured numbers and why the box
+// and the batter/pitcher figure ratio cannot both be pushed further toward the spec's "about
+// half"/"about 30-50%" prose at once. `_zoneMap('pitching')` now returns `k = 1`.
 // R4 (docs/BASEBALL-3D-BUILD.md section 9): "the batting box reads bigger" - the drawn zone box
 // and both cursors on the BATTING camera, scaled about the box's own centre by this factor
-// (51px -> ~82px wide, the spec's own numbers). The same `k`-about-centre code `_zoneMap` already
-// runs for `PITCHING_ZONE_MIN_W_FRAC` on the other camera; this is that same rule, applied as a
-// flat multiplier instead of a "at least this wide" floor because batting's true box is already
-// legible - it just reads small next to the batter figure filling the frame. The ball is NEVER
-// scaled: it is a real sphere positioned in world feet by `_actorBallAt`/`_pitchWorldPoint`, never
-// routed through this zone-unit map at all, so there is nothing here that could scale it.
+// (51px -> ~82px wide, the spec's own numbers). The ball is NEVER scaled: it is a real sphere
+// positioned in world feet by `_actorBallAt`/`_pitchWorldPoint`, never routed through this
+// zone-unit map at all, so there is nothing here that could scale it.
 const BATTING_ZONE_SCALE = 1.6;
 
 // R4 (docs/BASEBALL-3D-BUILD.md section 9): the fire trail. Presentation only, 2-D overlay,
@@ -218,17 +217,34 @@ const PAD_TRAVEL = {
   pitching: { x: 1.6, y: 1.4 },
   batting: { x: 1.5, y: 1.5 },
 };
+// R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 1): Matt, on the recording: "When I move
+// left, it goes right" - while PITCHING only. `this.cursor` IS the engine's own aim (`aim: {x: s.
+// cursor.x, y: s.cursor.y}`, unchanged - the engine's +x is still the first-base side, always),
+// and the zone box/cursors draw correctly on BOTH cameras because they are real world points
+// projected through whichever camera is live (world +x draws screen-RIGHT on the batter camera,
+// which looks toward -z, and screen-LEFT on the pitcher camera, which looks toward +z - that
+// flip is physics, not a bug, and nothing here may "fix" it). The bug was one layer up: the PAD
+// itself is a flat screen-space square with no camera of its own, and it mapped a rightward drag
+// straight to +cursor.x regardless of state - correct for batting (screen-right IS world +x
+// there), backwards for pitching (screen-right has to BECOME world -x, so the pitcher camera
+// still draws it on the right). One sign, applied only to x (the pad's y axis never crossed a
+// camera flip - both cameras have +y up on screen), applied identically in both directions
+// (finger -> cursor here, cursor -> marker in `_paintPadMarker`) so the marker always shows where
+// the finger actually is.
+const PAD_X_SIGN = { pitching: -1, batting: 1 };
 // A press that moves less than this many CSS px is a TAP, not a drag - and a tap on the pad
 // cycles (the pitch type while pitching, the batting mode while batting) instead of flinging the
 // cursor to wherever the thumb landed. The reference game's left button does exactly this.
 const PAD_TAP_SLOP_PX = 8;
-// R7 (item 4, docs/BASEBALL-3D-BUILD.md section 9): the batting target marker's own SQUARE, in zone
-// units - HALF a side, the same "radius" shape every other size constant in this file uses. The
-// spec named 0.3 zone units a side, which on the 1.6x batting box is 12 px: still a marker you
-// hunt for. The orchestrator's ship review set the side to 0.64 units (26 px on a 393 px phone,
-// the reference's own "about 30 px" square) - it sits under the CONTACT circle (0.55 radius) and
-// the POWER circle (0.35) alike, drawn first so both cursors stay legible over it.
-const TARGET_MARKER_R = 0.32;
+// R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 3): Matt, on the R7 square: "26 px of thin
+// red line on brown dirt... Matt could not see it." Replaced with a FILLED disc, in zone units -
+// the radius, the same "half a size" shape every other size constant in this file uses. Measured
+// (node, the real batting camera against the batting-state field band AFTER R8 shrinks the strip
+// - 393x553, not the old 393x429): 0.4 gives a measured 41.7 px diameter on the narrower (x) axis
+// and 50.6 px on the taller (y) axis - clear of the probe's own 36 px floor with real margin, close
+// to the spec's own "about 40 px" without being so large it fights the CONTACT circle (0.55 radius)
+// drawn over it.
+const TARGET_MARKER_R = 0.4;
 // An eephus is lobbed: `BREAK_OFFSET.eephus.hump` arcs the drawn ball this far ABOVE the straight
 // line at mid-flight before it drops to its own (low) crossing point. Presentation only - the
 // engine never sees it, exactly like `pitchBendFrac`.
@@ -726,8 +742,8 @@ class BaseballPlayScreen {
     this.rootEl.innerHTML = `
       <div class="bb-play">
         <div class="bb-top-spacer" data-role="topspacer"></div>
-        <div class="bb-hud" data-role="hud"></div>
         <div class="bb-field-wrap" data-role="fieldwrap">
+          <div class="bb-hud" data-role="hud"></div>
           <div class="bb-pop" data-role="pop" aria-live="polite">
             <div class="bb-pop-word" data-role="popword"></div>
             <div class="bb-pop-line" data-role="popline1"></div>
@@ -834,10 +850,10 @@ class BaseballPlayScreen {
    *  drawn is where the ball will actually cross and cannot drift from it (the v843 rule, in
    *  world units).
    *
-   *  `PITCHING_ZONE_MIN_W_FRAC` is the one deliberate departure from true size, and only on the
-   *  pitching camera - see its own constant for why 9 px of true projection is not a target. R2
-   *  scales the CURSORS by the same factor about the same centre (`_zoneMap`), so the aiming
-   *  picture is one coherent drawing rather than a big box with a 2 px dot in it.
+   *  R8: the pitching camera draws the zone box at TRUE scale now (`CAMERAS.pitcher`'s own long
+   *  lens makes that legible - see its header); only the BATTING camera still scales at all
+   *  (`BATTING_ZONE_SCALE`), and `_zoneMap` scales its cursors by the same factor about the same
+   *  centre so the aiming picture stays one coherent drawing.
    */
   _drawOverlay(mode) {
     const ctx = this.ctx, w = this._fieldW, h = this._fieldH;
@@ -879,9 +895,15 @@ class BaseballPlayScreen {
    *  one zone unit spans in each axis, for radii.
    *
    *  R4: the batting camera now scales too (`BATTING_ZONE_SCALE`, "the batting box reads bigger"),
-   *  the same about-centre rule `PITCHING_ZONE_MIN_W_FRAC` already applied on the other camera -
+   *  the same about-centre rule `PITCHING_ZONE_MIN_W_FRAC` used to apply on the other camera -
    *  both read the SAME true box from `_zoneBoxPx()`, so neither can drift from what
-   *  `test-baseball-device.mjs`'s `zone-world`/`zone-scale` probes measure independently. */
+   *  `test-baseball-device.mjs`'s `zone-world`/`zone-scale` probes measure independently.
+   *
+   *  R8 (item 2): `PITCHING_ZONE_MIN_W_FRAC`'s floor is deleted. `CAMERAS.pitcher` (field.js) is
+   *  now a long lens chosen so the TRUE box already reads at 8-13% of the band's height ("the box
+   *  is drawn at true scale on both cameras" - the spec's own words) - scaling it up on top of
+   *  that would just reintroduce "a huge box over tiny men" one number smaller. Pitching mode now
+   *  takes `k = 1` unconditionally, same as no scaling ever ran. */
   _zoneMap(mode) {
     const w = this._fieldW, h = this._fieldH;
     const cam = this.actors && this.actors.camera;
@@ -893,10 +915,7 @@ class BaseballPlayScreen {
     let { x0, y0, x1, y1 } = box;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     let k = 1;
-    if (mode === 'pitching') {
-      const want = w * PITCHING_ZONE_MIN_W_FRAC;
-      k = Math.max(1, want / Math.max(1e-6, x1 - x0));
-    } else if (mode === 'batting') {
+    if (mode === 'batting') {
       k = BATTING_ZONE_SCALE;
     }
     if (k !== 1) {
@@ -960,13 +979,14 @@ class BaseballPlayScreen {
    *  circle where the batter is holding it. The circle is drawn as an ellipse because one zone unit
    *  is a different number of pixels across than it is up.
    *
-   *  R7 (item 4, docs/BASEBALL-3D-BUILD.md section 9): the target is now a SQUARE, about
-   *  `TARGET_MARKER_R * 2` zone units on a side (the reference's own picture - "a clear square about
-   *  30 px across on a 393 px phone"; the old ring drew 5 px), and drawn FIRST so the cursor circle
-   *  you are steering ends up on TOP of it, the way docs/BASEBALL-REFERENCE-B9.md describes steering
-   *  ("you drag the cursor circle onto it"). Both axes go through `map.unitX`/`unitY` separately
-   *  (never forced square in px), the same rule the mode circle already follows below, so it scales
-   *  with `BATTING_ZONE_SCALE` exactly like everything else `_zoneMap` draws. */
+   *  R8 (item 3, docs/BASEBALL-3D-BUILD.md section 9): Matt, on the R7 square: "26 px of thin red
+   *  line on brown dirt... Matt could not see it." Now a FILLED marker - a white disc, a dark
+   *  outline, a red centre dot - `TARGET_MARKER_R` zone units in radius on each axis separately
+   *  (never forced circular in px, the same rule the mode circle below already follows), drawn
+   *  FIRST so the cursor circle you are steering ends up on TOP of it (docs/BASEBALL-REFERENCE-
+   *  B9.md: "you drag the cursor circle onto it"), and NEVER clipped: it is drawn at whatever
+   *  pixel `map.toPx` returns, on or off the zone box, exactly like the cursor circle itself - a
+   *  pitch aimed for a ball outside the box still shows where it is really going. */
   _drawBatCursor(map) {
     const ctx = this.ctx;
     const tgt = this._target;
@@ -976,16 +996,13 @@ class BaseballPlayScreen {
       const hx = Math.max(4, Math.abs(map.unitX * TARGET_MARKER_R));
       const hy = Math.max(4, Math.abs(map.unitY * TARGET_MARKER_R));
       ctx.save();
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = 5;
-      ctx.strokeRect(p.x - hx, p.y - hy, hx * 2, hy * 2);
-      ctx.strokeStyle = '#E0532F';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(p.x - hx, p.y - hy, hx * 2, hy * 2);
-      ctx.beginPath();
-      ctx.moveTo(p.x - hx * 1.4, p.y); ctx.lineTo(p.x + hx * 1.4, p.y);
-      ctx.moveTo(p.x, p.y - hy * 1.4); ctx.lineTo(p.x, p.y + hy * 1.4);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, hx, hy, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.fillStyle = '#E0532F';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, hx * 0.38, hy * 0.38, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     } else {
       this._targetMarkerPx = null;
@@ -1052,6 +1069,11 @@ class BaseballPlayScreen {
     if (this.actors) {
       this.actors.clearMarker();
       this.actors.setBall(null);
+      // R9 (item 1): clear the batter's own force-hide here too, not only via `_syncBatterRunner`'s
+      // next call - `_returnToPlate()` is the "whichever comes first" half of THE ONE-BATTER RULE,
+      // and the batter must be showable again the instant it runs, same as 'rb' below is hidden here
+      // rather than left to the next redraw.
+      this.actors.setForceHidden('batter', false);
       this.actors.idle('batter');
       this.actors.toSet();
       this.actors.hide('rb');
@@ -1201,9 +1223,21 @@ class BaseballPlayScreen {
    *  figures in the box for a beat. `_returnToPlate()` also clears `_rbActive` unconditionally
    *  (its own header), so the cutaway returning to the plate is the OTHER thing (besides the
    *  mover's own natural finish) that closes this - "whichever comes first", the spec's own
-   *  words. */
+   *  words.
+   *
+   *  R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1) extends the same backstop to the OTHER
+   *  half of the double-batter bug: R6 (above) closed the RETURN (a stale 'rb' outliving his play);
+   *  this closes the START ('rb' placed while the batter actor is still standing in the box, at
+   *  contact - Matt's own recording, glitch-sheet.jpg 28.6s/46.4s). `actors.setForceHidden('batter',
+   *  this._rbActive)` is the same one-flag-drives-both-figures rule: whenever a real batter-runner
+   *  is running, the batter is force-hidden; the instant he is not, the batter is showable again AND
+   *  'rb' is hidden - the two figures can never both be visible on the same redraw. */
   _syncBatterRunner() {
-    if (!this.actors || this._rbActive) return;
+    if (!this.actors) return;
+    // R9 (item 1): the batter's own force-hide follows `_rbActive` exactly the way 'rb' itself does
+    // below - the same flag, the same backstop, generalised to the second figure it now also gates.
+    this.actors.setForceHidden('batter', this._rbActive);
+    if (this._rbActive) return;
     this.actors.hide('rb');
   }
 
@@ -1385,48 +1419,65 @@ class BaseballPlayScreen {
   }
 
   // -------------------------------------------------------------------------------- HUD
+  /** R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4). Matt, on the recording: "the current
+   *  count and the overall score is difficult to find or see." The 48 px full-width bar (12 px
+   *  text, its own flex ROW pushing the field band down by a fixed height) becomes a scoreboard
+   *  BLOCK, absolutely positioned top-left INSIDE `.bb-field-wrap` (over the scene, like the
+   *  reference's own corner scoreboard) - `.bb-hud` keeps its class name (`test-baseball-device.
+   *  mjs`'s `hud-vs-back` probe reads it) but is no longer a flex sibling of the field band; it now
+   *  SITS inside it, which is also what gives the field band its 48 px back (`.bb-field-wrap` no
+   *  longer shares the column with a fixed-height HUD row). Runs are >= 18 px, the B/S/O dots are
+   *  >= 10 px with their own letters (never colour alone - root CLAUDE.md's colorblind rule), the
+   *  mini-diamond is unchanged (`basesSvg`). The batter's own jersey/position line is dropped -
+   *  the spec names exactly four things (runs, inning, the three count rows, the diamond) and
+   *  "the most legible thing over the field" is not served by a fifth. */
   _paintHud() {
     const hud = this.rootEl.querySelector('[data-role="hud"]');
     if (!hud || !this.game) return;
     const g = this.game;
-    const battingSide = g.half === 'top' ? 'away' : 'home';
     const you = 'away';
     const arrow = g.half === 'top' ? '▲' : '▼';
-    const battingId = g._currentBatterId ? g._currentBatterId(battingSide) : null;
-    const battingTeam = g[battingSide];
-    const batter = battingTeam && battingId ? battingTeam.players.find((p) => p.id === battingId) : null;
     hud.innerHTML = `
-      <div class="bb-hud-score">
-        <span class="bb-hud-team${you === 'away' ? ' is-you' : ''}">${t('you')}</span>
-        <span class="bb-hud-runs">${g.score.away}</span>
-        <span class="bb-hud-dash">-</span>
-        <span class="bb-hud-runs">${g.score.home}</span>
-        <span class="bb-hud-team">${t('cpu')}</span>
+      <div class="bb-sb-top">
+        <span class="bb-sb-team${you === 'away' ? ' is-you' : ''}">${t('you')}</span>
+        <span class="bb-sb-runs">${g.score.away}</span>
+        <span class="bb-sb-dash">-</span>
+        <span class="bb-sb-runs">${g.score.home}</span>
+        <span class="bb-sb-team">${t('cpu')}</span>
+        <span class="bb-sb-inning">${arrow} ${g.inning}</span>
       </div>
-      <div class="bb-hud-inning">${arrow} ${g.inning}</div>
-      <div class="bb-hud-count">
-        <span class="bb-dotrow" aria-label="balls">${dots(g.balls, 3, 'b')}</span>
-        <span class="bb-dotrow" aria-label="strikes">${dots(g.strikes, 2, 's')}</span>
-        <span class="bb-dotrow" aria-label="outs">${dots(g.outs, 2, 'o')}</span>
+      <div class="bb-sb-count">
+        <div class="bb-sb-row"><span class="bb-sb-label">${t('sb_b')}</span><span class="bb-dotrow" aria-label="balls">${dots(g.balls, 3, 'b')}</span></div>
+        <div class="bb-sb-row"><span class="bb-sb-label">${t('sb_s')}</span><span class="bb-dotrow" aria-label="strikes">${dots(g.strikes, 2, 's')}</span></div>
+        <div class="bb-sb-row"><span class="bb-sb-label">${t('sb_o')}</span><span class="bb-dotrow" aria-label="outs">${dots(g.outs, 2, 'o')}</span></div>
       </div>
-      <div class="bb-hud-bases">${basesSvg(g.bases)}</div>
-      <div class="bb-hud-batter">${batter ? '#' + batter.jersey + ' ' + batter.pos : ''}</div>
+      <div class="bb-sb-diamond">${basesSvg(g.bases)}</div>
     `;
   }
 
   // -------------------------------------------------------------------------------- strip
-  /** BB-3b commit 6: the strip is eight fixed tiles in ONE ROW, in both states (the handoff's own
-   *  numbers section: "44 wide, 92 tall, 1px gaps" - `.bb-strip-tiles` in baseball.css). Pitching
-   *  shows one well per `SETTINGS.PITCH_TYPES` entry (always 8, in that fixed order) - a locked
-   *  one is an empty well with a lock glyph, per SPEC.md section 5, never simply omitted (omitting
-   *  it would silently reflow every tile after it, which is exactly the "nothing moves between
-   *  states" rule this band exists to hold). Batting shows the last 8 pitches of THIS at-bat,
-   *  filling left to right as each one resolves, blank wells for what hasn't been thrown yet -
-   *  replaces the prior round's flex-wrap compact chips (a deliberate space simplification,
-   *  phase 3's own CLAUDE.md note), now that the fixed-tile geometry has a real home. */
+  /** BB-3b commit 6: the strip is eight fixed tiles in ONE ROW while PITCHING (the handoff's own
+   *  numbers section: "44 wide, 92 tall, 1px gaps" - `.bb-strip-tiles` in baseball.css) - the
+   *  pitch SELECTOR, one well per `SETTINGS.PITCH_TYPES` entry (always 8, in that fixed order). A
+   *  locked one is an empty well with a lock glyph, per SPEC.md section 5, never simply omitted
+   *  (omitting it would silently reflow every tile after it).
+   *
+   *  R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 5): Matt, on the recording: "the type of
+   *  pitch is way too prominent, it takes up a ton of space" - while BATTING. The 108px/92px-tile
+   *  band made sense as a selector; a batter never picks from it, it just shows the last 8 pitches
+   *  of the at-bat as they resolve, so the same footprint read as a wall of empty wells for most
+   *  of an at-bat. Batting now paints `.bb-strip-chips`, one 32px row of small chips (code + mph,
+   *  11px text, the same `pitch_*` two-letter codes the selector already uses) - `.bb-strip`
+   *  itself carries `bb-strip--compact` in this mode, which is what actually shrinks the band
+   *  (baseball.css); `_onEngineEvent`'s halfInningStart swap re-sizes the canvas to match (see its
+   *  own comment). **This deliberately breaks BB-3b's "nothing moves between states" rule for the
+   *  strip** - the two states are separated by a cross-fade (nothing is ever seen mid-change) and
+   *  batting has no use for a selector-sized band, so the freed 76px goes to the field. Pitching
+   *  is UNCHANGED: it is still the pitch selector, still 108px, still 92px tiles. */
   _paintStrip() {
     const strip = this.rootEl.querySelector('[data-role="strip"]');
     if (!strip) return;
+    strip.classList.toggle('bb-strip--compact', this.state.mode !== 'pitching');
     if (this.state.mode === 'pitching') {
       strip.innerHTML = `<div class="bb-strip-tiles">${
         SETTINGS.PITCH_TYPES.map((p) => {
@@ -1456,14 +1507,14 @@ class BaseballPlayScreen {
     } else {
       const recent = this.state.lastPitches.slice(-8);
       const slots = Array.from({ length: 8 }, (_, i) => recent[i] || null);
-      strip.innerHTML = `<div class="bb-strip-tiles">${
+      strip.innerHTML = `<div class="bb-strip-chips">${
         slots.map((p) => (p
-          ? `<div class="bb-pitch-tile ${p.isStrike ? 'is-strike' : 'is-ball'}">
-              <span class="bb-pitch-name">${t('pitch_' + p.type)}</span>
-              <span class="bb-pitch-mph">${p.mph}</span>
-              <span class="bb-pitch-mark" aria-hidden="true">${p.isStrike ? '■' : '●'}</span>
+          ? `<div class="bb-pitch-chip ${p.isStrike ? 'is-strike' : 'is-ball'}">
+              <span class="bb-chip-code">${t('pitch_' + p.type)}</span>
+              <span class="bb-chip-mph">${p.mph}</span>
+              <span class="bb-chip-mark" aria-hidden="true">${p.isStrike ? '■' : '●'}</span>
             </div>`
-          : `<div class="bb-pitch-tile is-empty"></div>`)).join('')
+          : `<div class="bb-pitch-chip is-empty"></div>`)).join('')
       }</div>`;
     }
   }
@@ -1638,12 +1689,16 @@ class BaseballPlayScreen {
     drawRingState(cv, state);
   }
 
-  /** The pad's own marker, from `this.cursor` (zone units) through this state's travel. */
+  /** The pad's own marker, from `this.cursor` (zone units) through this state's travel. R8: the
+   *  exact inverse of `_setCursorFromPad`'s own sign, so the marker always sits under the finger
+   *  that put it there - see `PAD_X_SIGN`'s own header. */
   _paintPadMarker() {
     const marker = this.rootEl && this.rootEl.querySelector('[data-role="padmarker"]');
     if (!marker) return;
-    const travel = PAD_TRAVEL[this.state.mode === 'pitching' ? 'pitching' : 'batting'];
-    const fx = Math.max(-1, Math.min(1, this.cursor.x / travel.x));
+    const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
+    const travel = PAD_TRAVEL[mode];
+    const sign = PAD_X_SIGN[mode];
+    const fx = Math.max(-1, Math.min(1, (sign * this.cursor.x) / travel.x));
     const fy = Math.max(-1, Math.min(1, this.cursor.y / travel.y));
     marker.style.left = (50 + fx * 45) + '%';
     marker.style.top = (50 - fy * 45) + '%';
@@ -1651,12 +1706,21 @@ class BaseballPlayScreen {
 
   /** THE CURSOR, in zone units, from a point inside the pad. The pad's full half-width is that
    *  state's own travel (`PAD_TRAVEL`), so the finger and the cursor move together 1:1 in pad
-   *  units and the zone box sits in the middle of the square at |u| <= 1. */
+   *  units and the zone box sits in the middle of the square at |u| <= 1.
+   *
+   *  R8 (item 1): `PAD_X_SIGN` flips x for PITCHING only - the pad is flat screen space with no
+   *  camera, so "finger right" has to become the engine x that the LIVE camera actually draws on
+   *  the right, and that is +x for the batter camera but -x for the pitcher camera (world +x is
+   *  screen-left there - see `PAD_X_SIGN`'s own header). The engine's own aim is untouched: `this.
+   *  cursor` is what `_throw`/`decideSwing` read verbatim as `{x, y}`, and its +x still means
+   *  "toward first base" exactly as it always has. */
   _setCursorFromPad(clientX, clientY, padRect) {
-    const travel = PAD_TRAVEL[this.state.mode === 'pitching' ? 'pitching' : 'batting'];
+    const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
+    const travel = PAD_TRAVEL[mode];
+    const sign = PAD_X_SIGN[mode];
     const fx = Math.max(-1, Math.min(1, ((clientX - padRect.left) / padRect.width) * 2 - 1));
     const fy = Math.max(-1, Math.min(1, ((clientY - padRect.top) / padRect.height) * 2 - 1));
-    this.cursor = { x: fx * travel.x, y: -fy * travel.y };   // screen down is zone DOWN
+    this.cursor = { x: sign * fx * travel.x, y: -fy * travel.y };   // screen down is zone DOWN
     this._paintPadMarker();
     if (!this._flightActive) this._drawStaticField();
     else this._drawOverlay(this.state.mode === 'pitching' ? 'pitching' : 'batting');
@@ -1812,6 +1876,14 @@ class BaseballPlayScreen {
         this.state.actionLabel = null;
         this.actors.idle('batter'); this.actors.idle('pitcher');
         this._paintHud(); this._paintStrip(); this._paintActionSlots(); this._paintModeLabels();
+        // R8 (item 5): the strip's own height now DEPENDS on `state.mode` (32px batting, 108px
+        // pitching - `_paintStrip`'s own header), so `.bb-field-wrap` changes size on every
+        // half-inning swap where the strip does. The `ResizeObserver` above only watches the
+        // OUTER mount host (`.bb-root` is always viewport-sized, so an internal flex reflow never
+        // fires it) - `_sizeCanvas`, when it exists, re-measures the field band and resizes both
+        // canvases; this runs while everything is still hidden behind `.bb-fading`/the crossfade
+        // snapshot, so the resize itself is never seen, only its result.
+        if (this._sizeCanvas) this._sizeCanvas();
         this._drawStaticField();
       };
       if (this._pendingHalfSwap) {
@@ -2460,6 +2532,16 @@ class BaseballPlayScreen {
     // immediately retires whatever 'rb' a PREVIOUS play left active - "a fresh at-bat never
     // inherits a visible rb," the spec's own words.
     this._rbActive = raw.some((m) => m.role === 'rb');
+    // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1): the OTHER half of the double-batter
+    // bug - R6 closed the RETURN (a stale 'rb' outliving his play); this closes the START. Matt's
+    // recording (glitch-sheet.jpg, 28.6s/46.4s): 'rb' is placed at the plate and starts running
+    // WHILE the batter actor is still standing in the box, so two navy figures share the plate for
+    // the first ~half second of every ball in play. Set here, synchronously, the instant this play
+    // is known to have a real batter-runner - before this method's own step loop or
+    // `_contactHold`'s first `_drawStaticField()` call ever runs, so there is no frame where both
+    // are shown. `_syncBatterRunner()` (below) is the ongoing per-redraw backstop, the same
+    // belt-and-braces pattern this file already uses for 'rb' itself.
+    if (this.actors) this.actors.setForceHidden('batter', this._rbActive);
     if (!raw.length) { this._runnersInMotion = null; return undefined; }
     const movers = raw.map((m) => {
       const wp = path.slice(m.from + 1, m.to + 2);

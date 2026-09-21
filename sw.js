@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v868';
+const CACHE = 'game-hub-v875';
 
 const ASSETS = [
   './',
@@ -22,6 +22,7 @@ const ASSETS = [
   './js/name-gate-auto.js',
   './js/a2hs.js',
   './js/favorites.js',
+  './js/launcher-sort.js',
   './js/new-badge.js',
   './js/i18n.js',
   './js/theme.js',
@@ -181,6 +182,12 @@ const ASSETS = [
   './pipes/js/game.js',
   './pipes/js/generator.js',
   './pipes/js/strings.js',
+  './minesweeper/',
+  './minesweeper/index.html',
+  './minesweeper/css/minesweeper.css',
+  './minesweeper/js/ui.js',
+  './minesweeper/js/engine.js',
+  './minesweeper/js/strings.js',
   './sudoku/',
   './sudoku/index.html',
   './sudoku/css/sudoku.css',
@@ -678,6 +685,12 @@ const REST_MANIFEST = {
   './pipes/js/game.js': '1bccf9787e',
   './pipes/js/generator.js': '6a9107ccb3',
   './pipes/js/strings.js': '22f714a5c0',
+  './minesweeper/': 'ce2b09384a',
+  './minesweeper/index.html': 'ce2b09384a',
+  './minesweeper/css/minesweeper.css': 'a7a21b3ec6',
+  './minesweeper/js/ui.js': '962fdf8830',
+  './minesweeper/js/engine.js': '4f9e1b50d4',
+  './minesweeper/js/strings.js': '15acbcb6e2',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': 'd27cef9c33',
@@ -838,13 +851,13 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '9835c39254',
-  './baseball/js/ui.js': '4071f4e447',
-  './baseball/js/field.js': 'c70de41c20',
+  './baseball/css/baseball.css': 'd59c4b29b4',
+  './baseball/js/ui.js': '9250c9807e',
+  './baseball/js/field.js': '448f674857',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': '3608f00b68',
+  './baseball/js/strings.js': '34bd750a14',
   './baseball/js/rig.js': '15167015a3',
-  './baseball/js/actors.js': 'dc1b795fed',
+  './baseball/js/actors.js': '929d263e06',
   './baseball/js/poses.js': '4f033c2221',
   './baseball/js/vendor/three.core.min.js': '05b2609338',
   './baseball/js/vendor/three.module.min.js': '86bcee248b',

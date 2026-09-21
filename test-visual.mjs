@@ -262,6 +262,31 @@ const MOTION = {
       await page.click('[data-action="fire-confirm"]');
     },
   },
+  minesweeper: {
+    // The blast is the whole reward for losing, and it is the class of thing a static check cannot
+    // see at all: the board screenshots identically a second later. A fragment is sampled rather
+    // than the fireball, because the fireball scales in place while the debris is the part that has
+    // to actually TRAVEL - the same distinction the cannonball probe above was written for.
+    what: 'debris flying outward when a mine goes off',
+    selector: '.ms-frag',
+    minMs: 500,
+    minTravelPx: 60,
+    async drive(page) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 });
+      await play.click();
+      await page.waitForSelector('.ms-board .ms-c', { timeout: 8000 });
+      // The first tap is safe by design, and it also GENERATES the board - so the mine map only
+      // exists after it. Then hit a mine on purpose, which is the one input this probe is about.
+      await page.click('.ms-c[data-i="0"]');
+      await page.waitForTimeout(220);
+      const mine = await page.evaluate(() => {
+        const s = window.__msTest && window.__msTest.state();
+        return s ? s.mine.findIndex((m, i) => m && s.cell[i] === 0) : -1;
+      });
+      if (mine < 0) throw new Error('no hidden mine to detonate');
+      await page.click(`.ms-c[data-i="${mine}"]`);
+    },
+  },
   mancala: {
     // The sow IS the rule this page teaches - stones travelling one per pit around the board.
     // A still diagram of it is what the sheet this replaced already had, and nobody learned the
@@ -1041,6 +1066,111 @@ const PLAY = {
       try { await page.waitForSelector('.bs-peg-miss, .bs-peg-hit', { timeout: 15000 }); }
       catch { return { ok: false, why: 'fired at a cell and no hit/miss marker ever appeared' }; }
       return { ok: true, why: 'aimed, confirmed with FIRE, and the shot announced its result' };
+    },
+  },
+  minesweeper: {
+    what: 'play a whole board to a win: tap to dig, switch to Flag and flag a mine, then clear every safe cell',
+    async run(page, cdp, tap) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 }).catch(() => null);
+      if (!play) return { ok: false, why: 'no Play button on the setup screen' };
+      await tap(play);
+      await page.waitForSelector('.ms-board .ms-c', { timeout: 8000 }).catch(() => null);
+
+      const read = () => page.evaluate(() => (window.__msTest ? window.__msTest.state() : null));
+      const tapCell = async (i) => {
+        const el = await page.$(`.ms-c[data-i="${i}"]`);
+        if (!el) return false;
+        await tap(el);
+        return true;
+      };
+
+      let st = await read();
+      if (!st) return { ok: false, why: 'the game exposed no state to drive (window.__msTest)' };
+      if (st.generated) return { ok: false, why: 'the board was generated before the first tap' };
+
+      // ---- EVERY CELL'S HIT TEST, the dots-boxes proof. This game's cells are under the 44px tap
+      // floor by design (the loupe is the mitigation), so the one thing that must be exactly right
+      // is WHICH cell a touch resolves to. `_cellAt` does the maths from the board rect and a
+      // pitch; `elementFromPoint` is the browser's own answer. They disagreed for real: the cells
+      // were content-box, so rows (implicit, content-sized) had a 2px larger pitch than the
+      // explicit column tracks, and a tap on the bottom third of a Hard board landed a whole row
+      // off - onto mines. Nothing static caught it.
+      const hit = await page.evaluate(() => {
+        const ui = window.__msTest.ui, s = window.__msTest.state();
+        const rect = (i) => {
+          const el = document.querySelector(`.ms-c[data-i="${i}"]`);
+          return el ? el.getBoundingClientRect() : null;
+        };
+        const c0 = rect(0), cRight = rect(1), cDown = rect(s.w);
+        let bad = 0, first = null;
+        for (let i = 0; i < s.w * s.h; i++) {
+          const r = rect(i);
+          if (!r) { bad++; continue; }
+          const got = ui._cellAt(r.left + r.width / 2, r.top + r.height / 2);
+          if (got !== i) { bad++; if (first === null) first = { i, got }; }
+        }
+        return {
+          cells: s.w * s.h, bad, first,
+          assumed: ui.cellSize + 2,
+          colPitch: c0 && cRight ? Math.round(cRight.left - c0.left) : null,
+          rowPitch: c0 && cDown ? Math.round(cDown.top - c0.top) : null,
+        };
+      });
+      // The PITCH check is the exact one and it fails on ANY board size. The centre sweep below it
+      // only catches a drift once it exceeds half a cell, which on the small Easy board it never
+      // does - so the sweep alone passed against the very bug this exists for.
+      if (hit.colPitch !== hit.assumed || hit.rowPitch !== hit.assumed) {
+        return { ok: false, why: `the board's real pitch is ${hit.colPitch}x${hit.rowPitch}px but _cellAt assumes ${hit.assumed}px, so taps resolve to the wrong cell further down the board` };
+      }
+      if (hit.bad) {
+        return { ok: false, why: `${hit.bad}/${hit.cells} cell centres resolve to the wrong cell (first: tapping ${hit.first.i} would hit ${hit.first.got})` };
+      }
+
+      // ---- DIG. The first tap generates the board around itself and must open an AREA.
+      const openedBefore = st.cell.filter((c) => c === 1).length;
+      if (!(await tapCell(0))) return { ok: false, why: 'no cell 0 in the DOM' };
+      await page.waitForTimeout(200);
+      st = await read();
+      const openedAfter = st.cell.filter((c) => c === 1).length;
+      if (st.dead) return { ok: false, why: 'the FIRST tap hit a mine, which safe-first-tap must make impossible' };
+      if (openedAfter <= openedBefore) return { ok: false, why: 'tapped a cell and nothing opened' };
+      if (openedAfter < 2) return { ok: false, why: `first tap opened only ${openedAfter} cell, so it was not a zero` };
+
+      // ---- FLAG. Switch mode and flag a cell that really holds a mine.
+      const flagBtn = await page.$('[data-mode="flag"]');
+      if (!flagBtn) return { ok: false, why: 'no Flag button in the bottom bar' };
+      await tap(flagBtn);
+      await page.waitForTimeout(80);
+      const mineIdx = st.mine.findIndex((m, i) => m && st.cell[i] === 0);
+      if (mineIdx < 0) return { ok: false, why: 'no hidden mine to flag' };
+      if (!(await tapCell(mineIdx))) return { ok: false, why: 'could not find the mine cell in the DOM' };
+      await page.waitForTimeout(120);
+      st = await read();
+      if (st.cell[mineIdx] !== 2) return { ok: false, why: 'tapped a cell in Flag mode and it did not flag' };
+
+      // ---- WIN. Back to Dig and clear every remaining safe cell, one real tap at a time.
+      const digBtn = await page.$('[data-mode="dig"]');
+      if (!digBtn) return { ok: false, why: 'no Dig button in the bottom bar' };
+      await tap(digBtn);
+      await page.waitForTimeout(80);
+      for (let guard = 0; guard < 200; guard++) {
+        st = await read();
+        if (st.won || st.dead) break;
+        const next = st.cell.findIndex((c, i) => c === 0 && !st.mine[i]);
+        if (next < 0) break;
+        if (!(await tapCell(next))) return { ok: false, why: `cell ${next} vanished from the DOM mid-game` };
+      }
+      st = await read();
+      if (st.dead) return { ok: false, why: 'died while only ever tapping cells with no mine in them' };
+      if (!st.won) return { ok: false, why: 'cleared every safe cell and the game never declared a win' };
+
+      // ---- The result modal is what a player actually sees, so prove it arrived.
+      const modal = await page.waitForSelector('.ms-ov .ms-modal', { timeout: 4000 }).catch(() => null);
+      if (!modal) return { ok: false, why: 'won the board and no result modal appeared' };
+      const closeBtn = await page.$('.ms-ov [data-act="close"]');
+      if (!closeBtn) return { ok: false, why: 'the win modal has no close (X), which every win/lose popup here needs' };
+
+      return { ok: true, why: `cleared an ${st.w}x${st.h} board in ${Math.round(st.elapsedMs / 1000)}s, 1 flag placed, pitch ${hit.colPitch}x${hit.rowPitch}px as assumed, ${hit.cells}/${hit.cells} cell centres hit their own cell` };
     },
   },
   sudoku: {

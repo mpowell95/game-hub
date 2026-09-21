@@ -101,6 +101,12 @@ export const STRINGS = {
     widget_1b: '1B',
     widget_2b: '2B',
     widget_3b: '3B',
+    // R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): the scoreboard's own row letters -
+    // "root CLAUDE.md's colorblind-safe rule: the B/S/O rows carry their letters" alongside the
+    // dots, never colour alone.
+    sb_b: 'B',
+    sb_s: 'S',
+    sb_o: 'O',
     cancel: 'Cancel',
     leave: 'Leave',
     half_end: 'Side retired',
@@ -185,6 +191,9 @@ export const STRINGS = {
     widget_1b: '1B',
     widget_2b: '2B',
     widget_3b: '3B',
+    sb_b: 'B',
+    sb_s: 'S',
+    sb_o: 'O',
     cancel: 'Cancelar',
     leave: 'Salir',
     half_end: 'Fin de la entrada',

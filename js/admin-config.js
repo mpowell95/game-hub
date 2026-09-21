@@ -472,6 +472,25 @@ async function writeNode(path, fields, verify) {
  * @param {string} id     hub registry id
  * @param {boolean|null} live  true = live for everyone, false = admin only (testing), null = code default
  */
+/** WHEN this game was last set live for everyone, in epoch ms, or 0 when no override says so.
+ *
+ *  `writeNode` stamps `at` on every override write, so this is simply that stamp, read back. It is
+ *  gated on `live === true` because the same field is stamped when a game is pulled BACK, and
+ *  "when was it hidden" is not a release date. A game that is live by the registry's own default
+ *  (no override at all) has no stamp here and returns 0 - its `released` field is the answer for
+ *  those, and js/new-badge.js prefers it anyway.
+ *
+ *  Read by the launcher's New pill and by its Newest sort, so a game released from THIS PAGE
+ *  announces itself with no commit and no deploy. Synchronous cache read, like every other
+ *  resolver in this file. */
+export function gameLiveAt(id) {
+  const cfg = readCachedConfig();
+  const row = cfg && cfg.games && cfg.games[id];
+  if (!row || typeof row !== 'object' || row.live !== true) return 0;
+  const at = Number(row.at);
+  return Number.isFinite(at) && at > 0 ? at : 0;
+}
+
 export function setGameLive(id, live) {
   const want = live === null ? null : !!live;
   return writeNode(`games/${id}`, { live: want }, (cfg) => gameOverride(cfg, id) === want);
@@ -562,7 +581,7 @@ export default {
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
-  setGameLive, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
+  setGameLive, gameLiveAt, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
   resolveDeviceReset, deviceResetAt, setDeviceReset,
   myBoardCorrections, setSkeeballCorrection,
   resolveCourseReleased, courseOverride, resolveCourseTesting, courseTestingOverride,
