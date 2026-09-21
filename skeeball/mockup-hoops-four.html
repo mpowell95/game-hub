@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hoops Four</title>
+<style>
+  :root{ --bg:#14100c; --ink:#f3ece1; --dim:#9b8f7e; --panel:#1d170f; --edge:#33271a;
+         --cab:#2a2a2d; --cabEdge:#141416; --orange:#e8541f; --ball:#d9762e; --dark:#26262c;
+         --gold:#ffd977; --win:#2e9d4a; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px 16px 40px}
+  h1{font:700 20px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.14em;margin:0 0 4px;color:var(--gold)}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 22px}
+  .grid{display:grid;gap:22px;grid-template-columns:repeat(2,minmax(0,1fr));max-width:940px}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:16px}
+  .nm{font:700 15px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.09em;margin:0 0 3px}
+  .hook{color:var(--dim);font-size:12.5px;margin:0 0 12px}
+  svg{display:block;margin:0 auto}
+  table{border-collapse:collapse;font-size:13px;width:100%;margin-top:4px}
+  td{padding:3px 0;color:var(--dim);vertical-align:top}
+  td.k{color:var(--ink);font-weight:700;padding-right:10px;white-space:nowrap;width:1%}
+  .note{color:var(--dim);font-size:12px;margin:10px 0 0;border-top:1px solid var(--edge);padding-top:8px}
+  .wide{grid-column:1/-1}
+</style></head><body>
+<h1>HOOPS FOUR</h1>
+<p class="sub">5 hoops, 5 columns, connect 4. The shot picks the column.</p>
+<div class="grid" id="g"></div>
+<script>
+const C=5, R=5, CELL=44, GAP=6, HOOP=62;
+const GW=C*CELL+(C-1)*GAP, PADX=18;
+const SW=GW+PADX*2, GRIDTOP=HOOP+46;
+const SH=GRIDTOP+R*CELL+(R-1)*GAP+46;
+const cx=c=>PADX+c*(CELL+GAP)+CELL/2;
+const cy=r=>GRIDTOP+(R-1-r)*(CELL+GAP)+CELL/2;   // r=0 is the BOTTOM row
+
+function hoop(c,lit){
+  const x=cx(c), y=30;
+  return `<g>
+    <rect x="${x-24}" y="${y-22}" width="48" height="30" rx="2" fill="#e9e6e0" stroke="#b9b3a8"/>
+    <rect x="${x-10}" y="${y-15}" width="20" height="15" fill="none" stroke="#8d867a" stroke-width="1.5"/>
+    <ellipse cx="${x}" cy="${y+10}" rx="17" ry="4.5" fill="none" stroke="${lit?'var(--gold)':'var(--orange)'}" stroke-width="3"/>
+    <path d="M${x-15} ${y+12} L${x-9} ${y+27} M${x} ${y+14} L${x} ${y+28} M${x+15} ${y+12} L${x+9} ${y+27}
+             M${x-13} ${y+20} L${x+13} ${y+20}" stroke="#cfcabf" stroke-width="1.2" fill="none" opacity=".85"/>
+    <text x="${x}" y="${y+44}" text-anchor="middle" font-size="11" font-weight="700"
+          fill="${lit?'var(--gold)':'#6d6152'}">${c+1}</text></g>`;
+}
+function ball(x,y,who,win){
+  const rr=CELL/2-4;
+  const f=who==='O'?'var(--ball)':'var(--dark)';
+  const s=win?'var(--win)':(who==='O'?'#ffbb8a':'#a9a9b4');   // every ball gets a LIGHT rim so it reads as a ball, not a hole
+  return `<g><circle cx="${x}" cy="${y}" r="${rr}" fill="${f}" stroke="${s}" stroke-width="${win?3:1.8}"/>
+    <path d="M${x-rr} ${y} h${rr*2} M${x} ${y-rr} v${rr*2}"
+          stroke="${who==='O'?'#8f3d12':'#7c7c88'}" stroke-width="1.2" fill="none"/></g>`;
+}
+function face(cols,winCells,litHoop){
+  let s=`<svg width="${SW}" height="${SH}" viewBox="0 0 ${SW} ${SH}">
+    <rect x="2" y="2" width="${SW-4}" height="${SH-30}" rx="10" fill="var(--cab)" stroke="var(--cabEdge)"/>`;
+  for(let c=0;c<C;c++) s+=hoop(c, litHoop===c);
+  for(let c=0;c<C;c++) for(let r=0;r<R;r++){
+    const who=(cols[c]||[])[r];
+    const win=winCells.some(w=>w[0]===c&&w[1]===r);
+    s+=`<circle cx="${cx(c)}" cy="${cy(r)}" r="${CELL/2-2}" fill="#070708" stroke="#3a3a40" stroke-dasharray="2 3"/>`;
+    if(who) s+=ball(cx(c),cy(r),who,win);
+  }
+  // catch net
+  const ny=GRIDTOP+R*CELL+(R-1)*GAP+8;
+  s+=`<path d="M${PADX-6} ${ny} Q${SW/2} ${ny+34} ${SW-PADX+6} ${ny}" fill="none" stroke="#6d6152" stroke-width="2"/>`;
+  for(let i=1;i<9;i++){const t=i/9,x=PADX-6+t*(GW+12);
+    s+=`<path d="M${x} ${ny} Q${x} ${ny+22*Math.sin(Math.PI*t)+6} ${x} ${ny+30*Math.sin(Math.PI*t)}" stroke="#4e463b" stroke-width="1" fill="none"/>`;}
+  s+=`<text x="${SW/2}" y="${SH-4}" text-anchor="middle" font-size="9" fill="#6d6152">misses land here</text>`;
+  return s+'</svg>';
+}
+function tbl(rows){return '<table>'+rows.map(([k,v])=>`<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')+'</table>';}
+
+// a real position: orange has a diagonal on col1r0 / col2r1 / col3r2 / col4r3
+const POS=[['O','B'],['B','O','B'],['O','B','O'],['B','O','B','O'],['O']];
+const WIN=[[0,0],[1,1],[2,2],[3,3]];
+
+document.getElementById('g').innerHTML=`
+ <div class="card"><p class="nm">THE MACHINE</p><p class="hook">Sink hoop 3, your ball drops down column 3.</p>
+   ${face([[],[],[],[],[]],[],2)}
+   ${tbl([['Hoops','5, one per column'],['Grid','5 wide x 5 tall'],['Win','4 in a row, any direction']])}
+   <p class="note">Gravity is already both rules: the ball falls through the hoop, then falls down the column.</p></div>
+ <div class="card"><p class="nm">A POSITION</p><p class="hook">Orange shot hoop 1 and won on the diagonal.</p>
+   ${face(POS,WIN,0)}
+   ${tbl([['Orange','you'],['Black','opponent'],['Green ring','the four that won it']])}
+   <p class="note">Perfect play on this grid is a draw, so the game is decided by who can hit the column they meant to.</p></div>
+ <div class="card wide"><p class="nm">GRID HEIGHT, SOLVED</p>
+   <p class="hook">5 columns is fixed by the hoops. Height is a free choice, so every candidate was solved exactly.</p>
+   <table><tr><td class="k">5 x 4</td><td>20 cells &mdash; draw with perfect play</td></tr>
+   <tr><td class="k">5 x 5</td><td>25 cells &mdash; draw with perfect play</td></tr>
+   <tr><td class="k">5 x 6</td><td>30 cells &mdash; draw with perfect play</td></tr></table>
+   <p class="note">No height hands the first player a won game, so the grid can be chosen on how it looks and how long a round lasts.</p></div>`;
+</script></body></html>
