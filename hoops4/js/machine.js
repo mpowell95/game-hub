@@ -428,7 +428,17 @@ export function buildMachine(G) {
     // floor. Matt asked for the opposite here ("once it goes into a basket, it goes down that
     // column 100% of the time"), so the ball has to be CONTAINED instead of released - which is
     // also what a real basket with a deep net does to a ball rattling inside it.
-    const top = H.collarH + G.ballR * 2.4;
+    // THE HEIGHT IS SET BY HOW HIGH A CAPTURED BALL BOUNCES, and this machine's rims are the
+    // bounciest in the repo (ringRest 0.46) precisely because Matt asked for them to be. At
+    // 2.4 ball-radii two captured balls in a 231-throw sweep climbed to h 2.19-2.21X against a
+    // throat topping out at 1.78X, cleared it sideways and resolved as a 0 - which is the
+    // "100% of the time" promise broken by a number that was sized before the rims were made
+    // bouncy. 4.0 clears the measured peak with room to spare.
+    //
+    // Making it taller is close to free: a throat is on its OWN collision bit, so nothing that
+    // has not been captured by THAT basket can touch it - not another ball, not a neighbouring
+    // throat (they overlap at this pitch and always have), not the fins.
+    const top = H.collarH + G.ballR * 4.0;
     const bot = -G.ballR * 2.6;
     const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {

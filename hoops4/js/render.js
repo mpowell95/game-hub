@@ -13,6 +13,9 @@
 //   - shadowMap.autoUpdate is off; the pass fires only on frames a caster moved.
 //   - every material's .map is disposed with it (Material.dispose() does NOT free textures).
 import * as THREE from '../../skeeball/js/vendor/three.module.min.js';
+// The screen's face on the cabinet. Imported rather than re-derived so render.js and the
+// geometry can never disagree about where the display hangs.
+import { SCREEN_V } from './boarddef.js';
 
 // One probe per PAGE, and it hands its context back. A per-Renderer probe leaked one WebGL
 // context per construction and is half of what throttled the whole hub on 2026-08-26.
@@ -143,7 +146,14 @@ export class Renderer {
       const p = M.faceToWorld(H.u, H.v, H.collarH);
       const g = new THREE.Group();
       g.position.set(p[0], p[1], p[2]);
-      g.rotation.x = fr.tilt - Math.PI / 2;      // the mouth lies in the tread's plane
+      // THE MOUTH LIES IN THE SHELF'S PLANE, so the group's local +Y must be the face NORMAL.
+      // faceToWorld's h direction is (0, cos tilt, sin tilt), and rotating (0,1,0) about X by
+      // `tilt` gives exactly that - so the rotation IS the tilt.
+      //
+      // It was `fr.tilt - Math.PI/2`, which is 90 degrees too far: that maps local +Y to nearly
+      // -Z, so every rim stood UP as a vertical ring facing the player with its net trailing
+      // backwards into the cabinet. Matt: "You put the baskets backwards".
+      g.rotation.x = fr.tilt;
 
       const rimGeo = new THREE.TorusGeometry(H.r, 0.008, 8, 28);
       const rimMat = new THREE.MeshStandardMaterial({
@@ -181,18 +191,25 @@ export class Renderer {
     // The real cabinet shows the grid on an LCD above the hoops, which is also what makes this
     // buildable: 42 discs are PAINT, not 42 rigid bodies, and the physics only ever has to answer
     // "which hoop did it go through".
+    // IT HANGS ON THE RISER DIRECTLY BELOW THE HOOPS, face-on to the player - which is where the
+    // real cabinet's display is, and where this game's own mockup put it. The first build hung it
+    // on the back wall ABOVE a three-tread staircase, two steps higher than the hoops.
     this.gridCanvas = document.createElement('canvas');
-    this.gridCanvas.width = 700;
-    this.gridCanvas.height = 620;
+    this.gridCanvas.width = 1100;
+    this.gridCanvas.height = 460;
     this.gridTex = new THREE.CanvasTexture(this.gridCanvas);
     this.gridTex.colorSpace = THREE.SRGBColorSpace;
-    const topFrame = M.frames[M.frames.length - 1];
-    const back = M.faceToWorld(0, topFrame.v1, 0);
-    const sw = G.boardW * 0.82, sh = sw * (620 / 700);
+    const [v0, v1] = SCREEN_V;
+    const lo = M.faceToWorld(0, v0, 0.012);
+    const hi = M.faceToWorld(0, v1, 0.012);
+    const sh = Math.abs(hi[1] - lo[1]);
+    const sw = sh * (1100 / 460);
     const scrGeo = new THREE.PlaneGeometry(sw, sh);
     const scrMat = new THREE.MeshBasicMaterial({ map: this.gridTex });
     this.screen = new THREE.Mesh(scrGeo, scrMat);
-    this.screen.position.set(0, back[1] + sh / 2 + 0.05, back[2] + 0.012);
+    // The riser's own outward normal is +Z (its tilt is PI/2), and a PlaneGeometry already faces
+    // +Z, so it needs no rotation - it sits flat on the riser looking at the player.
+    this.screen.position.set(0, (lo[1] + hi[1]) / 2, Math.max(lo[2], hi[2]) + 0.012);
     this.scene.add(this.screen);
     this._trash.push(scrGeo, scrMat);
     this.setGrid(null, null);
@@ -215,8 +232,11 @@ export class Renderer {
     // Aimed nearer the HOOPS than the screen: aiming at the midpoint tilted the camera up and
     // left a third of the frame as dead ceiling while the lane the player swipes on fell off the
     // bottom edge. The lane has to stay in shot - it is the control surface.
-    this._aimAt = new THREE.Vector3(0, hoopW[1] + 0.16, hoopW[2] + 0.10);
-    this.camera.position.set(0, hoopW[1] + 0.30, 0.58);
+    // Framed on the two things that must always be visible TOGETHER: the hoop row and the screen
+    // below it. They are the machine. Aiming at the hoops alone put the screen off the bottom.
+    const mid = (this.screen.position.y + hoopW[1]) / 2;
+    this._aimAt = new THREE.Vector3(0, mid, hoopW[2] + 0.12);
+    this.camera.position.set(0, hoopW[1] + 0.22, 0.62);
     this.camera.lookAt(this._aimAt);
   }
 
@@ -224,13 +244,21 @@ export class Renderer {
   setGrid(cells, win) {
     const cv = this.gridCanvas, x = cv.getContext('2d');
     const L = this.look, C = 7, R = 6;
-    x.fillStyle = L.face; x.fillRect(0, 0, cv.width, cv.height);
-    const pad = 22, cw = (cv.width - pad * 2) / C, ch = (cv.height - pad * 2) / R;
+    x.fillStyle = '#0a0c10'; x.fillRect(0, 0, cv.width, cv.height);     // the bezel
+    // The grid keeps its own 7:6 aspect and is centred in a wider panel, the way a real cabinet's
+    // display sits inside its surround - rather than being stretched to the panel.
+    const pad = 16;
+    const ch = (cv.height - pad * 2) / R;
+    const cw = ch;
+    const gw = cw * C, gh = ch * R;
+    const ox = (cv.width - gw) / 2, oy = (cv.height - gh) / 2;
+    x.fillStyle = L.face;
+    x.fillRect(ox - 10, oy - 10, gw + 20, gh + 20);
     const rad = Math.min(cw, ch) * 0.40;
     for (let c = 0; c < C; c++) {
       for (let r = 0; r < R; r++) {
-        const cxp = pad + cw * (c + 0.5);
-        const cyp = pad + ch * (R - 1 - r + 0.5);
+        const cxp = ox + cw * (c + 0.5);
+        const cyp = oy + ch * (R - 1 - r + 0.5);
         const who = cells && cells[c] ? cells[c][r] : null;
         x.beginPath(); x.arc(cxp, cyp, rad, 0, Math.PI * 2);
         x.fillStyle = who === 0 ? L.red : who === 1 ? L.yellow : '#0d2c52';
