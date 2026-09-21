@@ -1069,6 +1069,11 @@ class BaseballPlayScreen {
     if (this.actors) {
       this.actors.clearMarker();
       this.actors.setBall(null);
+      // R9 (item 1): clear the batter's own force-hide here too, not only via `_syncBatterRunner`'s
+      // next call - `_returnToPlate()` is the "whichever comes first" half of THE ONE-BATTER RULE,
+      // and the batter must be showable again the instant it runs, same as 'rb' below is hidden here
+      // rather than left to the next redraw.
+      this.actors.setForceHidden('batter', false);
       this.actors.idle('batter');
       this.actors.toSet();
       this.actors.hide('rb');
@@ -1218,9 +1223,21 @@ class BaseballPlayScreen {
    *  figures in the box for a beat. `_returnToPlate()` also clears `_rbActive` unconditionally
    *  (its own header), so the cutaway returning to the plate is the OTHER thing (besides the
    *  mover's own natural finish) that closes this - "whichever comes first", the spec's own
-   *  words. */
+   *  words.
+   *
+   *  R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1) extends the same backstop to the OTHER
+   *  half of the double-batter bug: R6 (above) closed the RETURN (a stale 'rb' outliving his play);
+   *  this closes the START ('rb' placed while the batter actor is still standing in the box, at
+   *  contact - Matt's own recording, glitch-sheet.jpg 28.6s/46.4s). `actors.setForceHidden('batter',
+   *  this._rbActive)` is the same one-flag-drives-both-figures rule: whenever a real batter-runner
+   *  is running, the batter is force-hidden; the instant he is not, the batter is showable again AND
+   *  'rb' is hidden - the two figures can never both be visible on the same redraw. */
   _syncBatterRunner() {
-    if (!this.actors || this._rbActive) return;
+    if (!this.actors) return;
+    // R9 (item 1): the batter's own force-hide follows `_rbActive` exactly the way 'rb' itself does
+    // below - the same flag, the same backstop, generalised to the second figure it now also gates.
+    this.actors.setForceHidden('batter', this._rbActive);
+    if (this._rbActive) return;
     this.actors.hide('rb');
   }
 
@@ -2515,6 +2532,16 @@ class BaseballPlayScreen {
     // immediately retires whatever 'rb' a PREVIOUS play left active - "a fresh at-bat never
     // inherits a visible rb," the spec's own words.
     this._rbActive = raw.some((m) => m.role === 'rb');
+    // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1): the OTHER half of the double-batter
+    // bug - R6 closed the RETURN (a stale 'rb' outliving his play); this closes the START. Matt's
+    // recording (glitch-sheet.jpg, 28.6s/46.4s): 'rb' is placed at the plate and starts running
+    // WHILE the batter actor is still standing in the box, so two navy figures share the plate for
+    // the first ~half second of every ball in play. Set here, synchronously, the instant this play
+    // is known to have a real batter-runner - before this method's own step loop or
+    // `_contactHold`'s first `_drawStaticField()` call ever runs, so there is no frame where both
+    // are shown. `_syncBatterRunner()` (below) is the ongoing per-redraw backstop, the same
+    // belt-and-braces pattern this file already uses for 'rb' itself.
+    if (this.actors) this.actors.setForceHidden('batter', this._rbActive);
     if (!raw.length) { this._runnersInMotion = null; return undefined; }
     const movers = raw.map((m) => {
       const wp = path.slice(m.from + 1, m.to + 2);

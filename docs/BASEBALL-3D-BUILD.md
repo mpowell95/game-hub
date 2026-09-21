@@ -1383,3 +1383,23 @@ and the PITCHING band 477 px (both were 429): BB-3b's "nothing moves between sta
 for the strip on purpose. Probes `pitch-drag` (screen direction on both cameras), `pitcher-frame`,
 `hud-legible`, and `target-marker` (size, outside the box; end budget widened to 4 px at ship
 review after a 2.28 px sample). `pop-anchor`'s budget is 45 px.
+
+### R9 record (shipped v871, 2026-09-21)
+
+From the stage's report: the double batter's start half was `_animateRunners` placing `rb` and
+starting his Run while the batter still stood in the box (`_settleAtBat`'s `idle('batter')` only
+ran for a walk or strikeout). `Actors.setForceHidden(role, hidden)` is a new general primitive;
+`_animateRunners` hides the batter the instant `_rbActive` is set, `_syncBatterRunner()` backstops
+it, `_returnToPlate()` clears it; the `one-batter` probe samples every frame for 800 ms after
+`atBatEnd` (red against the unfixed code on 6 of 39 frames). Home wears `HOME_RED` #c62828 with
+`HOME_RED_TRIM` and white pants; away is byte-unchanged (navy, grey pants). Caps are a dome plus
+brim group named `cap` under the head bone, `CAP_SCALE` 0.115, `CAP_OFFSET` [0, 0.205, 0.01],
+divided by the head bone's ~100x world scale (the same correction `_attachBat` makes); cap parts
+carry `isCapPart` so the jersey recolour traverse skips them; every one of 15 roles has one
+(actors suite). Stadium: a 256 x 128 sky with clouds, an unlit crowd material on a light ground
+(the old one was Lambert on a vertical face the overhead sun barely lit), a padded wall texture
+with four ad panels tiled x7, four light towers, a centre-field scoreboard; +4 draw calls per
+camera. The backstop was rebuilt at ship review: the first version carried the outfield crowd
+texture from the ground up and read as static at the pitcher camera's lens; it is now one wall in
+three bands (padded #24406a to 12 ft with a white rail, brick to 28 ft, crowd above at repeat
+4.5 on a darker ground). Two crowd textures are tuned independently now.

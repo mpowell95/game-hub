@@ -1784,7 +1784,7 @@ if (!process.env.BB_DEVICE_QUICK) {
   await p17.close();
 }
 
-// 18. R6: ONE-BATTER. After a play resolves as an out, exactly one figure stands in the batter's
+// 18. R6/R9: ONE-BATTER. After a play resolves as an out, exactly one figure stands in the batter's
 // box once the plate view returns and the next batter is placed - `rb` (the batter-runner) must
 // never still be visible from a play that has already ended. Drives `_settleAtBat` directly with a
 // synthetic short-out payload (`homerun-strip`'s own pattern, above - no engine, no real at-bat
@@ -1792,6 +1792,14 @@ if (!process.env.BB_DEVICE_QUICK) {
 // `rb` is still mid-run (well before his own ~2000ms natural finish), the same shape as a cutaway
 // landing early. Born red against the unfixed `_animateRunners`/`_returnToPlate` (verified by
 // stashing the fix and re-running this exact scenario by hand - see the stage report).
+//
+// R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1) extends this same probe with the OTHER
+// half: a fresh ball-in-play payload, sampled every rendered frame for the first 800ms after
+// `_settleAtBat` starts (this scenario's own stand-in for `atBatEnd`), asserting at most one
+// visible figure within 6ft of the batter's box on EVERY sampled frame - not just after the fact,
+// the way the after-return check below already does. Born red against the unfixed
+// `_animateRunners`/`_syncBatterRunner` (verified the same way, by stash-and-rerun - see the stage
+// report).
 {
   const p18 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page18 = await p18.newPage();
@@ -1815,6 +1823,58 @@ if (!process.env.BB_DEVICE_QUICK) {
     });
     await page18.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
     await page18.waitForTimeout(500);
+    // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 1): THE START HALF. R6 (above, this same
+    // probe) already covers the RETURN half (a stale 'rb' outliving his play); this covers the
+    // OTHER side of the same double-batter bug - 'rb' placed at the plate and running WHILE the
+    // batter actor is still standing in the box, for the first half second of every ball in play
+    // (Matt's own recording, glitch-sheet.jpg 28.6s/46.4s). Fires a real ball-in-play payload
+    // through the real `_settleAtBat` (no forced early return this time - the natural sequence:
+    // contact hold, the cut, the chase) and samples EVERY RENDERED FRAME for the first 800ms,
+    // reading `pivot.visible`/`pivot.position` directly off `inst.actors.actors` the same way the
+    // existing after-return check below does. Then ends the play cleanly (`_returnToPlate()`) so it
+    // cannot bleed into the next scenario.
+    const startRes = await page18.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const side = inst.game.half === 'top' ? 'away' : 'home';
+      const payload = {
+        batterId: 'test-batter-onebatter-start', side, outcome: 'single', bases: 1, runsScored: 0,
+        q: 0.6, exitVeloMph: 92, centered: true, distanceFt: 210, sprayAngleDeg: 8,
+        battedKind: 'line', launchAngleDeg: 14, timingWord: null,
+        basesBefore: [null, null, null], runnersOut: [],
+      };
+      const box = inst.actors.actors.batter.pivot.position;
+      const samples = [];
+      const t0 = performance.now();
+      const p = inst._settleAtBat(payload);
+      await new Promise((resolve) => {
+        const loop = () => {
+          const within = [];
+          for (const role of Object.keys(inst.actors.actors)) {
+            const a = inst.actors.actors[role];
+            if (!a || !a.pivot.visible) continue;
+            const d = Math.hypot(a.pivot.position.x - box.x, a.pivot.position.z - box.z);
+            if (d <= 6) within.push(role);
+          }
+          samples.push(within);
+          if (performance.now() - t0 < 800) requestAnimationFrame(loop);
+          else resolve();
+        };
+        requestAnimationFrame(loop);
+      });
+      // End this synthetic play cleanly before the next scenario starts - `_returnToPlate()` is the
+      // same "whichever comes first" close the existing scenario below already uses.
+      inst._returnToPlate();
+      await p.catch(() => {});
+      const bad = samples.filter((s) => s.length > 1);
+      return { totalSamples: samples.length, badCount: bad.length, firstBad: bad[0] || null };
+    });
+    if (!startRes.totalSamples) {
+      fail('one-batter (start half)', 'no frames sampled - the rAF sampling loop never ran');
+    } else if (startRes.badCount) {
+      fail('one-batter (start half)', `${startRes.badCount}/${startRes.totalSamples} sampled frames in the first 800ms after atBatEnd showed more than one figure within 6ft of the batter's box: ${JSON.stringify(startRes.firstBad)}`);
+    } else {
+      ok(`one-batter (start half): all ${startRes.totalSamples} sampled frames in the first 800ms after atBatEnd showed at most one figure within 6ft of the batter's box`);
+    }
     const res = await page18.evaluate(async () => {
       const inst = document.querySelector('.hub-game')._bbInstance;
       const side = inst.game.half === 'top' ? 'away' : 'home';

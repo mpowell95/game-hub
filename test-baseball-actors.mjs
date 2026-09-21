@@ -605,6 +605,14 @@ async function runChromiumHalf() {
     actors.renderer.render(actors.scene, actors.camera);
     const shirtPxAway = readAt();
 
+    // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 3): every actor `load()` built (all 15
+    // roles - a cap is attached unconditionally in `_makeActor`, before this page ever places or
+    // hides any of them) has a child named 'cap' directly under its resolved head bone.
+    const capMissing = Object.keys(actors.actors).filter((r) => {
+      const a = actors.actors[r];
+      return !(a && a.bones && a.bones.head && a.bones.head.children.some((c) => c.name === 'cap'));
+    });
+
     actors.dispose();
     const canvasGoneAfterDispose = !document.querySelector('canvas.bb-actor-canvas');
     const rendererGone = actors.renderer === null;
@@ -613,6 +621,7 @@ async function runChromiumHalf() {
       hasCanvas, withBatter, withoutBatter, canvasGoneAfterDispose, rendererGone,
       setChecksum, pitchChecksum,
       shirtPxHome: Array.from(shirtPxHome), shirtPxAway: Array.from(shirtPxAway),
+      capMissing, actorRoleCount: Object.keys(actors.actors).length,
     };
   }, { modelUrl });
 
@@ -643,6 +652,14 @@ async function runChromiumHalf() {
     : 0;
   if (shirtDiff > 20) ok(`batter shirt pixel differs, home vs away (home ${JSON.stringify(result.shirtPxHome)}, away ${JSON.stringify(result.shirtPxAway)})`);
   else fail('batter shirt pixel home vs away', `too close (home ${JSON.stringify(result.shirtPxHome)}, away ${JSON.stringify(result.shirtPxAway)})`);
+
+  // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 3): every actor has a child named 'cap'
+  // directly under its own resolved head bone.
+  if (result.capMissing && !result.capMissing.length) {
+    ok(`every placed actor (${result.actorRoleCount} roles) has a child named 'cap' under its head bone`);
+  } else {
+    fail('cap under head bone', `missing on: ${(result.capMissing || []).join(', ') || '(no capMissing field - old test run?)'}`);
+  }
 }
 
 await runChromiumHalf();
