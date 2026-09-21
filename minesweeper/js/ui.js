@@ -29,6 +29,15 @@ const LONG_PRESS_MS = 450;
 // long-press timer is cancelled. In CSS pixels, generous because a thumb rolls.
 const DRAG_SLOP = 14;
 
+// How long the blast owns the screen before the result modal arrives. Long enough to actually
+// WATCH: VISUAL-PROCESS.md's motion rule exists because a cannonball that was on screen for 340ms
+// passed every static check and could not be seen. The reveal cascade runs inside this window.
+const BLAST_MS = 1150;
+// Delay per ring of cells as the other mines reveal outward from the one that was hit, capped so a
+// far corner of an Expert board never waits longer than the blast itself.
+const CASCADE_STEP_MS = 46;
+const CASCADE_MAX_MS = 620;
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtTime = (ms) => {
   const total = Math.max(0, Math.floor((ms | 0) / 1000));
@@ -129,6 +138,10 @@ class MinesweeperUI {
     this._press = null;
     this._longPressTimer = 0;
     this._result = null;
+    // Every timer this screen starts is tracked, because destroy() must be leak-free: the hub
+    // reuses the same container for the next game, and a blast timer firing into a torn-down
+    // screen would paint into nothing.
+    this._timers = [];
 
     this.root = document.createElement('div');
     this.root.className = 'ms-root';
@@ -193,6 +206,7 @@ class MinesweeperUI {
   renderMenu() {
     this.screen = 'menu';
     this._stopTimer();
+    this._clearTimers();
     const s = this.settings;
     const bests = bestTimes();
     const saved = loadSave();
@@ -210,6 +224,11 @@ class MinesweeperUI {
       const v = bests[id] | 0;
       return `<div><b>${v > 0 ? fmtTime(v) : esc(t('no_time'))}</b><span>${esc(t(id))}</span></div>`;
     }).join('');
+    // A SETTING THAT CANNOT WORK IS NOT OFFERED. iOS Safari has no navigator.vibrate at all, so on
+    // every iPhone here this row was a switch that flipped and then did nothing for ever, which is
+    // worse than its absence. The STORED value is left exactly as it is (rule 5 - keys are never
+    // deleted or repurposed), so a device that supports it keeps whatever the player chose.
+    const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
     const opt = (key, labelKey, subKey) => `<button type="button" class="ms-opt" data-opt="${key}" aria-pressed="${!!s[key]}">
       <span><span class="ms-olab">${esc(t(labelKey))}</span>${subKey ? `<span class="ms-osub">${esc(t(subKey))}</span>` : ''}</span>
       <span class="ms-sw"><i></i></span>
@@ -220,9 +239,9 @@ class MinesweeperUI {
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
       <div class="ms-card"><h3>${esc(t('your_best'))}</h3><div class="ms-bests">${bestCells}</div></div>
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
-        ${opt('safeFirst', 'safe_first', 'safe_first_sub')}
-        ${opt('longPress', 'long_press', 'long_press_sub')}
-        ${opt('vibrate', 'vibrate', '')}
+        ${opt('safeFirst', 'safe_first', '')}
+        ${opt('longPress', 'long_press', '')}
+        ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
       </div></div>
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>
       <div class="ms-linkrow">
@@ -244,6 +263,9 @@ class MinesweeperUI {
       if (op) {
         const k = op.dataset.opt;
         this.settings = saveSettings({ [k]: !this.settings[k] });
+        // Switching vibration ON buzzes once, so the control proves itself instead of being a
+        // promise you only find out about mid-game.
+        if (k === 'vibrate' && this.settings.vibrate) this._buzz();
         this.renderMenu();
         return;
       }
@@ -272,42 +294,45 @@ class MinesweeperUI {
   renderHowTo() {
     this.screen = 'howto';
     this._stopTimer();
+    this._clearTimers();
     const mini = (cls, inner) => `<div class="ms-c ms-minic ${cls}">${inner}</div>`;
-    const grid3 = (cells) => `<div class="ms-board" style="grid-template-columns:repeat(3,34px);--ms-cell-size:34px">${cells}</div>`;
+    const grid3 = (cells, px) => `<div class="ms-board" style="grid-template-columns:repeat(3,${px}px);--ms-cell-size:${px}px">${cells}</div>`;
     const before = grid3([
       mini('is-open n1', '1'), mini('', ''), mini('', ''),
       mini('is-open n2', '2'), mini('is-open n3 is-target', '3'), mini('', FLAG_SVG('#e0532f')),
       mini('', FLAG_SVG('#e0532f')), mini('', FLAG_SVG('#e0532f')), mini('', ''),
-    ].join(''));
+    ].join(''), 30);
     const after = grid3([
       mini('is-open n1', '1'), mini('is-open', ''), mini('is-open n1', '1'),
       mini('is-open n2', '2'), mini('is-open n3', '3'), mini('', FLAG_SVG('#e0532f')),
       mini('', FLAG_SVG('#e0532f')), mini('', FLAG_SVG('#e0532f')), mini('is-open n2', '2'),
-    ].join(''));
+    ].join(''), 30);
 
+    // THE BACK BUTTON IS AT THE TOP, and that is the fix, not a preference. It used to sit under
+    // the content, so the moment the content was a line too tall the button was the thing clipped
+    // off the bottom - and the only way out of this screen was to leave the game entirely.
+    // Anchored in a fixed-height header it cannot be pushed anywhere by anything below it.
     this.root.innerHTML = `<div class="ms-screen ms-help">
+      <div class="ms-hhead">
+        <button type="button" class="gh-btn gh-btn--sm ms-hback" data-act="back">${esc(t('back'))}</button>
+        <h2 class="ms-htitle">${esc(t('how_to_play'))}</h2>
+      </div>
       <p class="ms-lead">${esc(t('help_lead'))}</p>
       <div class="ms-dia">
         <div class="ms-diarow">${before}${ARROW_SVG}${after}</div>
         <p class="ms-cap">${esc(t('help_chord_cap'))}</p>
-        <div class="ms-eg">${esc(t('help_chord_eg'))}</div>
       </div>
       <div class="ms-dia">
         <div class="ms-diarow">
-          <div style="position:relative;width:118px;height:136px;flex:0 0 auto">
-            <div class="ms-board" style="grid-template-columns:repeat(3,28px);--ms-cell-size:28px;position:absolute;left:16px;top:70px">
-              ${mini('', '')}${mini('', '')}${mini('', '')}${mini('is-target', '')}
+          <div class="ms-loupedemo">
+            <div class="ms-board" style="grid-template-columns:repeat(3,26px);--ms-cell-size:26px">
+              ${mini('', '')}${mini('is-target', '')}${mini('', '')}
             </div>
-            <div class="ms-loupe" style="width:60px;height:60px;left:29px;top:0"><div class="ms-zc" style="width:40px;height:40px;font-size:20px"></div></div>
+            <div class="ms-loupe ms-loupe--demo"><div class="ms-zc"></div></div>
           </div>
-          <p class="ms-cap" style="margin:0;flex:1">${esc(t('help_loupe_cap'))}</p>
+          <p class="ms-cap">${esc(t('help_loupe_cap'))}</p>
         </div>
-        <div class="ms-eg">${esc(t('help_loupe_eg'))}</div>
       </div>
-      <p class="ms-edge">${esc(t('help_edge_flag'))}</p>
-      <p class="ms-edge">${esc(t('help_edge_safe'))}</p>
-      <p class="ms-edge">${esc(t('help_edge_clock'))}</p>
-      <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="back">${esc(t('back'))}</button>
     </div>`;
     this.root.onclick = (ev) => { if (ev.target.closest('[data-act="back"]')) this.renderMenu(); };
   }
@@ -323,6 +348,7 @@ class MinesweeperUI {
   }
 
   newGame(level) {
+    this._clearTimers();
     clearSave();
     this.game = E.createGame(level || this.settings.level);
     this.mode = 'dig';
@@ -615,6 +641,118 @@ class MinesweeperUI {
     try { if (navigator.vibrate) navigator.vibrate(12); } catch { /* unsupported is fine */ }
   }
 
+  /** Start a timer that destroy() is guaranteed to clear. */
+  _later(fn, ms) {
+    const id = setTimeout(() => {
+      this._timers = this._timers.filter((t) => t !== id);
+      fn();
+    }, ms);
+    this._timers.push(id);
+    return id;
+  }
+
+  _clearTimers() {
+    for (const id of this._timers) clearTimeout(id);
+    this._timers = [];
+  }
+
+  /** Does this device ask for less motion? Read at the moment it matters, never cached: a player
+   *  can change it in the OS while the tab is open. */
+  _reducedMotion() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    catch { return false; }
+  }
+
+  /**
+   * THE EXPLOSION. Pure decoration, built at the moment of the hit and torn out again when it is
+   * done - it is aria-hidden and carries nothing the revealed board does not already say, which is
+   * what makes it safe to skip entirely under reduced motion.
+   *
+   * Everything it animates is transform/opacity/filter (Part 0). The fragments' vectors live in
+   * custom properties so one keyframe drives all of them rather than generating a keyframe per
+   * particle, and the layer sits inside the board wrap so it is clipped to the play area instead
+   * of painting over the HUD.
+   */
+  _explode(index) {
+    if (!this.boardEl || index < 0) return;
+    const g = this.game;
+    const wrap = this.boardEl.parentElement;
+    if (!wrap) return;
+
+    const pitch = this.cellSize + 2;
+    const bx = this.boardEl.offsetLeft + (index % g.w) * pitch + this.cellSize / 2;
+    const by = this.boardEl.offsetTop + ((index / g.w) | 0) * pitch + this.cellSize / 2;
+
+    const layer = document.createElement('div');
+    layer.className = 'ms-blast';
+    layer.setAttribute('aria-hidden', 'true');
+
+    const at = (el) => { el.style.left = bx + 'px'; el.style.top = by + 'px'; return el; };
+    const core = document.createElement('div');
+    core.className = 'ms-core';
+    layer.appendChild(at(core));
+    for (const extra of ['', ' ms-shock--2']) {
+      const ring = document.createElement('div');
+      ring.className = 'ms-shock' + extra;
+      layer.appendChild(at(ring));
+    }
+
+    // Debris. Scaled to the board so a small Easy board is not buried and an Expert one still
+    // reaches its edges.
+    const reach = Math.max(120, Math.min(wrap.clientWidth, wrap.clientHeight) * 0.62);
+    const COLORS = ['#f2b705', '#e0532f', '#ffe9a8', '#16243a', '#ff8a63'];
+    const COUNT = 26;
+    for (let i = 0; i < COUNT; i++) {
+      const frag = document.createElement('div');
+      frag.className = 'ms-frag';
+      // Evenly spread around the circle, then jittered, so there are no bald patches and no grid.
+      const ang = (i / COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      const dist = reach * (0.35 + Math.random() * 0.65);
+      const size = 5 + Math.random() * 9;
+      frag.style.setProperty('--ms-dx', Math.round(Math.cos(ang) * dist) + 'px');
+      frag.style.setProperty('--ms-dy', Math.round(Math.sin(ang) * dist) + 'px');
+      frag.style.setProperty('--ms-rot', Math.round((Math.random() - 0.5) * 900) + 'deg');
+      frag.style.setProperty('--ms-fs', size.toFixed(1) + 'px');
+      frag.style.setProperty('--ms-fr', (Math.random() < 0.45 ? '50%' : '2px'));
+      frag.style.setProperty('--ms-fc', COLORS[i % COLORS.length]);
+      frag.style.setProperty('--ms-fd', Math.round(760 + Math.random() * 420) + 'ms');
+      frag.style.setProperty('--ms-fdelay', Math.round(Math.random() * 90) + 'ms');
+      layer.appendChild(at(frag));
+    }
+
+    wrap.appendChild(layer);
+    this.boardEl.classList.add('is-blasting');
+    this._buzz();
+    this._later(() => {
+      if (layer.parentElement) layer.remove();
+      if (this.boardEl) this.boardEl.classList.remove('is-blasting');
+    }, BLAST_MS);
+  }
+
+  /** Reveal the remaining mines outward from the one that was hit, a ring at a time, so the board
+   *  tells the story of the blast rather than flipping over all at once. */
+  _cascadeReveal(boom) {
+    const g = this.game;
+    const bx = boom % g.w, by = (boom / g.w) | 0;
+    for (let i = 0; i < g.cell.length; i++) {
+      if (i === boom) { this._paintCell(i); continue; }
+      const dx = (i % g.w) - bx, dy = ((i / g.w) | 0) - by;
+      const ring = Math.round(Math.hypot(dx, dy));
+      const delay = Math.min(ring * CASCADE_STEP_MS, CASCADE_MAX_MS);
+      const shows = g.mine[i] || (g.cell[i] === FLAGGED && !g.mine[i]);
+      if (!shows) { this._paintCell(i); continue; }
+      this._later(() => {
+        if (!this.cellEls) return;
+        this._paintCell(i);
+        const el = this.cellEls[i];
+        if (!el) return;
+        el.classList.add('is-revealing');
+        this._later(() => el.classList.remove('is-revealing'), 300);
+      }, delay);
+    }
+    this._syncHud();
+  }
+
   _doFlag(i) {
     const res = E.toggleFlag(this.game, i % this.game.w, (i / this.game.w) | 0);
     for (const k of res.changed) this._paintCell(k);
@@ -630,7 +768,7 @@ class MinesweeperUI {
     const res = (g.cell[i] === OPEN && g.num[i] > 0) ? E.chord(g, x, y) : E.openCell(g, x, y);
     if (!wasGenerated && g.generated) this._startTimer();   // the clock starts on the first dig
     if (res.changed.length) for (const k of res.changed) this._paintCell(k);
-    if (g.dead) { E.revealAll(g); this._paintAll(); this._finish(false); return; }
+    if (g.dead) { E.revealAll(g); this._finish(false); return; }
     if (g.won) { this._paintAll(); this._finish(true); return; }
     this._syncHud();
     this._persist();
@@ -689,7 +827,17 @@ class MinesweeperUI {
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
     this._result = { won, timeMs, cleared, flagsRight, level, prevBest, isBest, wins: winsSoFar() };
-    this._syncHud();
+
+    // A LOSS EARNS THE BLAST. Note the ordering: the result is RECORDED above, synchronously, before
+    // a single pixel moves. Nothing about the animation can cost a player their play, even if they
+    // leave mid-explosion (the same reasoning as js/CLAUDE.md's "record at the moment of DECISION").
+    if (!won && !this._reducedMotion()) {
+      this._explode(g.boom);
+      this._cascadeReveal(g.boom);
+      this._later(() => this._showResult(true), BLAST_MS);
+      return;
+    }
+    this._paintAll();
     this._showResult(true);
   }
 
@@ -746,6 +894,7 @@ class MinesweeperUI {
 
   destroy() {
     this._stopTimer();
+    this._clearTimers();
     if (this._longPressTimer) { clearTimeout(this._longPressTimer); this._longPressTimer = 0; }
     this._persist();
     this._unbindBoard();

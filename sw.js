@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v872';
+const CACHE = 'game-hub-v880';
 
 const ASSETS = [
   './',
@@ -22,6 +22,7 @@ const ASSETS = [
   './js/name-gate-auto.js',
   './js/a2hs.js',
   './js/favorites.js',
+  './js/launcher-sort.js',
   './js/new-badge.js',
   './js/i18n.js',
   './js/theme.js',
@@ -315,6 +316,19 @@ const ASSETS = [
   './skeeball/css/skeeball.css',
   './skeeball/js/ui.js',
   './skeeball/js/swipe.js',
+
+  // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
+  // carrying a second copy, so nothing new is added for those.
+  './hoops4/index.html',
+  './hoops4/css/hoops4.css',
+  './hoops4/js/ui.js',
+  './hoops4/js/boarddef.js',
+  './hoops4/js/machine.js',
+  './hoops4/js/physics.js',
+  './hoops4/js/render.js',
+  './hoops4/js/game.js',
+  './hoops4/js/cpu.js',
+  './hoops4/js/strings.js',
   './skeeball/js/game.js',
   './skeeball/js/goals.js',
   './skeeball/js/boards.js',
@@ -590,6 +604,15 @@ const NETWORK_FIRST = [
   // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
   // of the family can see, which is THE LAW rule 1 whether or not a byte was lost.
   './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
+  // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
+  // headlessly. Leaving it cache-first while its only caller is network-first means a device can
+  // run NEW ranking code against an OLD formatter for one launch - which is what happened on
+  // 2026-09-21: Minesweeper's new best-time metric printed as a raw "34874", because the shipped
+  // formatBoardMetric on that device predated the TIME_METRIC branch. A wrong NUMBER looks
+  // plausible, which makes it worse than a missing label. This is a per-file decision, not the
+  // transitive import-closure the guard forbids: the two are one unit that must not disagree, and
+  // it costs nothing at launch (the leaderboard is lazily imported).
+  './js/leaderboard-rank.js',
   './js/admin-ui.js',
   // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
   // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural
@@ -686,10 +709,10 @@ const REST_MANIFEST = {
   './pipes/js/strings.js': '22f714a5c0',
   './minesweeper/': 'ce2b09384a',
   './minesweeper/index.html': 'ce2b09384a',
-  './minesweeper/css/minesweeper.css': '46996ff926',
-  './minesweeper/js/ui.js': '24e9e1b8a6',
+  './minesweeper/css/minesweeper.css': '1641dde76c',
+  './minesweeper/js/ui.js': '2462904834',
   './minesweeper/js/engine.js': '4f9e1b50d4',
-  './minesweeper/js/strings.js': '15acbcb6e2',
+  './minesweeper/js/strings.js': '59423addbe',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': 'd27cef9c33',
@@ -803,6 +826,16 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': '927126d1ed',
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
+  './hoops4/index.html': 'dce91b13bd',
+  './hoops4/css/hoops4.css': '1afd75dc59',
+  './hoops4/js/ui.js': '42cd186176',
+  './hoops4/js/boarddef.js': '2d378f8b07',
+  './hoops4/js/machine.js': '96a796b2f9',
+  './hoops4/js/physics.js': 'e50d34068a',
+  './hoops4/js/render.js': 'b488beff74',
+  './hoops4/js/game.js': '15e52e750b',
+  './hoops4/js/cpu.js': '34f9e8ebf9',
+  './hoops4/js/strings.js': '8c13b78104',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',

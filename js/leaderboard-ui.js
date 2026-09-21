@@ -151,6 +151,7 @@ const GAME_META = [
   { id: 'battleship', labelKey: 'game_title_battleship' },
   { id: 'boggle', labelKey: 'game_title_boggle' },
   { id: 'chinchon', labelKey: 'game_title_chinchon' },
+  { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'connect4', labelKey: 'game_title_connect4' },
   { id: 'dotsboxes', labelKey: 'game_title_dotsboxes' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
@@ -398,6 +399,35 @@ function brBestAt(g, tier) {
   if (!key) return 0;
   return Math.max((br && (br.bestObstaclesByDiff || {})[key]) | 0, (brOrbital && (brOrbital.bestObstaclesByDiff || {})[key]) | 0);
 }
+const MS_TIER_KEYS = ['easy', 'medium', 'hard', 'expert'];
+/** Minesweeper: the BEST TIME at this tier, in ms, or null when there is none.
+ *
+ *  NULL, NEVER 0, and that is the whole care needed here. `ms.bestTimeMs` uses 0 as its "never
+ *  set" sentinel, and `hasBoardMetric` treats a lower-is-better metric as present whenever it has
+ *  a VALUE (golf's to-par can legitimately BE 0, which is level par). So returning the raw 0 would
+ *  rank a player who has never cleared that level as having done it instantaneously - first place,
+ *  for ever. Returning null sinks them the way every other absent score sinks.
+ *
+ *  With no tier (a row the board could not place on the 1-4 scale) the answer is the best time at
+ *  ANY level, which is the same "their all-tier number" fallback every other board uses. */
+function msBestAt(g, tier) {
+  const ms = (g.games.minesweeper || {}).ms;
+  const best = ms && ms.bestTimeMs;
+  if (!best || typeof best !== 'object') return null;
+  if (tier == null) {
+    let low = null;
+    for (const k of MS_TIER_KEYS) {
+      const v = best[k] | 0;
+      if (v > 0 && (low === null || v < low)) low = v;
+    }
+    return low;
+  }
+  const key = MS_TIER_KEYS[tier - 1];
+  if (!key) return null;
+  const v = best[key] | 0;
+  return v > 0 ? v : null;
+}
+
 function snBestAt(g, tier) {
   const sn = (g.games.snake || {}).sn;
   if (!sn) return 0;
@@ -530,6 +560,11 @@ function gameMetricAt(g, id, tier) {
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'pinball') return pbPointsAt(g);
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
+  // Best time at this difficulty, LOWER WINS, null when that level was never cleared. The tier
+  // machinery does the rest: a row ranks at the HIGHEST level it has both played and cleared,
+  // so a fast Expert clear outranks a faster Easy one (Matt, 2026-09-21: "the fastest time to
+  // clear the highest level of difficulty").
+  if (id === 'minesweeper') return msBestAt(g, tier);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -546,7 +581,11 @@ function metricText(value, id) {
  *  still the right word. This board's golf number is a best round, so it needs its own label and
  *  My Stats must not inherit it. */
 function lbUnitKeyOf(id) {
-  return id === 'golf' ? 'lb_unit_golf_best' : unitKeyOf(id);
+  if (id === 'golf') return 'lb_unit_golf_best';
+  // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
+  // with boards cleared, which is the right headline for a list of every game you have played.
+  if (id === 'minesweeper') return 'lb_unit_ms_best';
+  return unitKeyOf(id);
 }
 
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
@@ -709,6 +748,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_points: 'lb_sort_points',
   // Golf ranks on a best round, not on wins or points.
   lb_unit_golf_best: 'lb_sort_golf_best',
+  // Minesweeper ranks on a best time, not on how many boards were cleared.
+  lb_unit_ms_best: 'lb_sort_ms_best',
 };
 function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[lbUnitKeyOf(id)] || 'lb_sort_wins';

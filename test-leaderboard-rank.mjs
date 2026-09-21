@@ -13,7 +13,7 @@ import {
   record, bucketsOf, tierRows, wilsonLower, competitiveRating,
   soloRating, fieldMaxOf, ratePlayer, rankPlayers,
   golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, boardRankTier, formatBoardMetric,
-  GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
+  GOLF_BOARD_COURSE, GOLF_COURSE_PAR, LOWER_IS_BETTER,
 } from './js/leaderboard-rank.js';
 import { tierOf, TIER_WEIGHT } from './js/difficulty-tiers.js';
 
@@ -644,7 +644,68 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src)
     && /const metricStr = metricText\(metric, id\);/.test(src));
   ok('golf gets its own unit label, so My Stats keeps saying "points"',
-    /id === 'golf' \? 'lb_unit_golf_best' : unitKeyOf\(id\)/.test(src));
+    /if \(id === 'golf'\) return 'lb_unit_golf_best';/.test(src));
+  // Minesweeper took the same split the day its board started ranking on a best TIME: the board
+  // says "best time", My Stats' game list still leads with boards cleared.
+  ok('minesweeper gets its own board unit label too',
+    /if \(id === 'minesweeper'\) return 'lb_unit_ms_best';/.test(src));
+  ok('minesweeper ranks on its per-tier best time, not on boards cleared',
+    /if \(id === 'minesweeper'\) return msBestAt\(g, tier\);/.test(src));
+  // THE SENTINEL. ms.bestTimeMs stores 0 for "never cleared this level", and hasBoardMetric treats
+  // a lower-is-better value as present whenever it HAS one (golf's to-par is legitimately 0). A raw
+  // 0 would therefore read as an instant clear and top the board for ever.
+  ok('[KNOWN-BUG PROBE] msBestAt returns null for the 0 sentinel, never 0',
+    /const v = best\[key\] \| 0;\s*\n\s*return v > 0 \? v : null;/.test(src));
+}
+
+
+// --- Minesweeper: the fastest time at the highest difficulty CLEARED (Matt, 2026-09-21) ---------
+{
+  console.log('\n--- minesweeper: best time, difficulty first ---');
+  const MS_KEYS = ['easy', 'medium', 'hard', 'expert'];
+  const bestAt = (b, tier) => {
+    if (tier == null) {
+      let lo = null;
+      for (const k of MS_KEYS) { const v = b[k] | 0; if (v > 0 && (lo === null || v < lo)) lo = v; }
+      return lo;
+    }
+    const v = b[MS_KEYS[tier - 1]] | 0;
+    return v > 0 ? v : null;
+  };
+  const row = (byDiff, best) => ({ byDiff, best });
+  const tierOfRow = (r) => boardRankTier((t) => bestAt(r.best, t), 'minesweeper',
+    (t) => (r.byDiff[MS_KEYS[t - 1]] || {}).played | 0);
+
+  const easySprinter = row({ easy: { played: 20 } }, { easy: 8000 });
+  const slowExpert = row({ expert: { played: 3 } }, { expert: 540000 });
+  const fastExpert = row({ expert: { played: 9 } }, { expert: 300000 });
+  const expertNeverCleared = row({ expert: { played: 40 }, hard: { played: 5 } }, { hard: 120000 });
+  const nothing = row({ easy: { played: 6 } }, {});
+
+  ok('a time is printed as a clock, not as milliseconds',
+    formatBoardMetric(300000, 'minesweeper') === '5:00' && formatBoardMetric(9400, 'minesweeper') === '0:09');
+  ok('golf still prints to par, so the new branch did not swallow it',
+    formatBoardMetric(-3, 'golf') === '-3' && formatBoardMetric(0, 'golf', 'E') === 'E');
+  ok('a smaller time is the better one', LOWER_IS_BETTER.has('minesweeper'));
+
+  ok('an 8-second EASY clear does not outrank a 9-minute EXPERT clear',
+    compareTierFirst(tierOfRow(easySprinter), tierOfRow(slowExpert),
+      bestAt(easySprinter.best, tierOfRow(easySprinter)), bestAt(slowExpert.best, tierOfRow(slowExpert)),
+      'minesweeper') > 0);
+  ok('inside a tier, the faster clear wins',
+    compareTierFirst(4, 4, 300000, 540000, 'minesweeper') < 0);
+  ok('playing Expert without ever clearing it ranks you at the level you DID clear',
+    tierOfRow(expertNeverCleared) === 3);
+  ok('...and prints that level\'s time, not a blank',
+    formatBoardMetric(bestAt(expertNeverCleared.best, 3), 'minesweeper') === '2:00');
+  ok('[KNOWN-BUG PROBE] a player who has never cleared anything has no metric, not a 0:00 record',
+    bestAt(nothing.best, 1) === null && bestAt(nothing.best, null) === null
+    && hasBoardMetric(bestAt(nothing.best, 1), 'minesweeper') === false
+    && tierOfRow(nothing) === null);
+  ok('...and sorts BELOW everyone who has a time, never above them',
+    compareTierFirst(null, 1, null, 8000, 'minesweeper') > 0);
+  ok('with no tier at all the fallback is the best time at any level',
+    bestAt({ easy: 8000, hard: 120000 }, null) === 8000);
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);

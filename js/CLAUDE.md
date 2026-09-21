@@ -1018,6 +1018,47 @@ details go along, and that is where the telling happens. Nothing about what is C
 any point. **A future session re-adding a disclosure to the form is reversing a decision, not
 filling a gap** — take it to Matt first.
 
+### A new report has to be VISIBLE from the launcher (2026-09-21)
+
+Matt, on a report filed 2026-09-09 and read on the 21st: *"There was no notification/icon badge
+telling me there was a new bug report. THAT's a bug."*
+
+He was right, and it had been true for three weeks. The count itself was never missing - what went
+missing was anywhere to see it. The launcher used to carry Matt's two admin buttons under the game
+grid, and the "Bug reports" one wore its own unread count (`_paintInboxCount` in `js/hub.js`). On
+2026-09-01 both buttons moved - Admin to the profile page, Bug reports INSIDE the Messages screen -
+because Matt did not want them sitting past every tile. **The count moved with the button**, so from
+that day the only way to learn a report had arrived was to open Messages and read the label on a
+button that was already two taps in. `_paintInboxCount` and its `[data-role="buginbox"]` lookup were
+left behind and have painted nothing since; reading the code shows a count being maintained, which
+is exactly why nobody noticed.
+
+**The fix is the rule the badge code already states, applied to the moved button: a badge goes where
+the thing it counts is REACHED.** The inbox is reached through Messages, so `_paintReplyBadge` now
+sums the admin inbox count into the Messages button's badge, beside the player's own unread
+messages - the same summing the profile pill did for messages and replies before Messages had a
+button of its own. Matt taps through to a "Bug inbox (n)" button that says which of the two it was.
+
+- **Gated on the ALLOWLIST** (`isAdminDevice()` from `js/admin-config.js`), never on the profile
+  name, so no other device reads `bugReports/` at all. The cached answer is what the badge reads, and
+  the one load where that cache is still cold is covered by repainting when `refreshAdminDevice()`
+  resolves.
+- **Opening the inbox clears it without a reload.** `openBugInbox` already stamped `seenAt`; it now
+  also dispatches `gamehub:messages`, the event `js/messages.js` introduced for the identical bug on
+  the other badge (*"The new message badge doesn't go away after I've already read a message"*).
+  `js/hub.js` repaints both counts from it. The string is dispatched by hand rather than imported,
+  because importing `js/messages-ui.js` into `js/bug-report-ui.js` would pull the whole Messages
+  screen in behind a one-word constant.
+- **Still no push notification.** The badge appears when Matt opens the app, the same platform limit
+  Messages documents below. A report filed overnight is seen the next time he opens the hub, not
+  when it lands.
+
+`test-bug-report.mjs` carries a `[KNOWN-BUG PROBE]` for it, born red on all four assertions: the
+launcher's own badge painter asks for `adminUnreadCount`, sums it onto the Messages button, gates it
+on `isAdminDevice`, and `openBugInbox` announces the read. It is a TEXT check and says so - the DOM
+half needs a browser - but the defect here was never in the logic, it was a wire that was never
+reconnected, and a text check is exactly the shape that catches that.
+
 ### What is NOT covered by a test
 
 `test-bug-report.mjs` covers the pure logic. The DOM halves and the Firebase write path are covered

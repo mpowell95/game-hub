@@ -664,6 +664,10 @@ profile pill carries the unread badge, which is why the button is there and not 
   itself is wins-only by design). Nothing was removed.
 - **Two badges, one per button.** Unread messages badge the Messages button; a reply to a bug report
   badges the profile pill. They were summed onto the pill while it was the only route to either.
+  **On Matt's own devices the Messages badge also counts new BUG REPORTS** (2026-09-21, after one
+  sat unseen for twelve days): the inbox moved inside the Messages screen on 2026-09-01 and its
+  count went with it, so nothing on the launcher said a report had arrived. A badge goes where the
+  thing it counts is reached - `js/CLAUDE.md`, "A new report has to be VISIBLE from the launcher".
 - **A "Send message" button sits on a player's leaderboard detail screen.** Hidden on your own row,
   and on a legacy record with no player code (a message is addressed to a code, so a dead button
   would be worse than none). Full contract and the node shape: `js/CLAUDE.md`, "Messages".

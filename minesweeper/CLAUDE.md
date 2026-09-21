@@ -106,6 +106,39 @@ comment says so rather than leaving a future reader to assume it is load-bearing
 **No-guess boards are explicitly out of scope.** A classic Minesweeper position can require a coin
 flip. Generating only logically-solvable boards is a much larger job and nothing here assumes it.
 
+## The explosion
+
+Matt, 2026-09-21: *"add a huge explosion animation for if someone hits a mine"*.
+
+A white-hot core, two shockwave rings, 26 fragments thrown on their own vectors with their own
+spin, a 420ms board shake, and the remaining mines revealing OUTWARD from the cell that was hit,
+a ring at a time. About 1.15s before the result screen arrives.
+
+- **Everything animates `transform`, `opacity` or `filter` only** (Part 0). Nothing touches
+  `width`/`height`/`inset`, which are not compositor-only and jank on a weak phone.
+- **One keyframe drives all 26 fragments.** Each carries its vector, spin, size, colour and
+  duration as custom properties set in `_explode()`, so nothing generates a keyframe per particle.
+- **The layer is built at the moment of the hit and REMOVED when it finishes**, not left at
+  `opacity: 0`. It is `aria-hidden` and says nothing the revealed board does not already say, so
+  there is nothing lingering in the accessibility tree.
+- **The result is RECORDED before a single pixel moves.** `_finish()` calls `recordMinesweeper`
+  synchronously and only then stages the animation, so leaving mid-explosion cannot cost a player
+  their play (the same reasoning as `js/CLAUDE.md`'s "record at the moment of DECISION").
+- **Every timer is tracked in `this._timers`** and cleared by `destroy()`, `newGame()`,
+  `renderMenu()` and `renderHowTo()`. A blast timer firing into a torn-down screen would paint
+  into nothing, and the hub reuses the same container for the next game.
+- **Reduced motion cuts it entirely rather than slowing it**: this is garnish, not gameplay (the
+  board already says you lost, in text and in shape), so `_reducedMotion()` skips building the
+  layer, reveals every mine in one pass, and the result screen arrives promptly. Measured: 53ms
+  instead of ~1.6s, no layer, no fragments, all mines shown. Nothing structural is `display:
+  none`d; the elements that remain settle at their final pose.
+
+**`test-visual.mjs`'s `MOTION` probe is what keeps it honest.** It samples a fragment's real
+on-screen position frame by frame and fails if the debris is too brief to follow or barely travels
+(measured: 113px over 1135ms, 70 frames). Verified born red by making `_explode` a no-op. A static
+check cannot see any of this - the board screenshots identically a second later, which is exactly
+the failure the probe system exists for.
+
 ## Stats
 
 `recordMinesweeper(level, won, extras)` in `js/game-stats.js`. Sub-counter `ms`:
@@ -134,11 +167,34 @@ over a person, so it does not inflate the cross-game wins number (HANDOFF-LB-SOL
 force). It is the first SOLO game with a real loss axis, which is why its My Stats screen shows a
 win/loss record where Sudoku's shows none.
 
-**No best-time chip on the leaderboard, deliberately.** A `TEXTURE` `get` ranks higher-is-better
-everywhere, and a best time is lower-is-better — the exact reason the Sudoku block one line above
-it gives for the same omission. Best times live on My Stats and on this game's own setup screen.
-Wiring a time into `js/leaderboard-rank.js`'s `LOWER_IS_BETTER` would also need a format branch
-beside golf's to-par `+3`/`E`, which is a shared-file change nobody has asked for.
+**THE BOARD RANKS ON THE FASTEST TIME AT THE HIGHEST DIFFICULTY CLEARED** (Matt, 2026-09-21:
+*"it only shows how many fields I've completed... shouldn't that be displayed? the fastest time to
+clear the highest level of difficulty"*).
+
+This game shipped following Sudoku's precedent, which leaves best times off the board entirely
+because a `TEXTURE` chip ranks higher-is-better and a time does not. That was the wrong call here
+and Matt caught it: a time is the entire point of Minesweeper, and the game shows you one the
+moment you clear a board. It now rides the repo's existing DIFFICULTY-OUTRANKS-SCORE machinery
+(`js/CLAUDE.md`, 2026-09-08) rather than a new mechanism:
+
+- `msBestAt(g, tier)` in `js/leaderboard-ui.js` is the metric: `ms.bestTimeMs` at that level.
+- `'minesweeper'` is in `LOWER_IS_BETTER`, and a new `TIME_METRIC` set makes `formatBoardMetric`
+  print `5:00` instead of `300000`. `TIME_METRIC` is separate from `LOWER_IS_BETTER` on purpose:
+  golf's to-par is also lower-is-better and is emphatically not a time.
+- `lbUnitKeyOf` gives the BOARD its own label ("best time") while My Stats' game list still leads
+  with boards cleared - the same split golf already had, for the same reason.
+- `boardRankTier` does the ranking: a row sits at the highest level it has BOTH played at AND
+  cleared, so a 5-minute Expert clear beats an 8-second Easy one, and somebody who grinds Expert
+  without ever clearing it ranks at the level they did clear.
+
+**`msBestAt` MUST RETURN NULL FOR THE 0 SENTINEL, NEVER 0.** `bestTimeMs` stores 0 for "never
+cleared this level", and `hasBoardMetric` treats a lower-is-better value as present whenever it has
+one (golf's to-par is legitimately 0). A raw 0 would read as an instant clear and top the board for
+ever. `test-leaderboard-rank.mjs` carries this as a `[KNOWN-BUG PROBE]` plus the behavioural cases
+around it.
+
+Boards cleared and correct flags stay as the Standing-records chips, which is what they always
+should have been: texture, not the headline.
 
 ## Storage
 

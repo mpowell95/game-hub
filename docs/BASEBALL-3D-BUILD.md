@@ -1525,7 +1525,7 @@ batting still showing the feet; the scoreboard still. `node test-baseball-actors
 `zone-world`, `zone-scale`, `pop-anchor`, `hud-legible`, `pitcher-frame` re-measured against the
 new batter camera.
 
-### R10 record (shipped v872, 2026-09-21)
+### R10 record (shipped v880, 2026-09-21)
 
 From the stage's report: `FLIGHT_MS` and `RUN_WINDOW_MS` are gone; `_flightMsFor(kind,
 distanceFt)` gives the flight from the arc (hang time of `_battedApexFt`, a line drive's apex
@@ -1541,7 +1541,7 @@ homer's cutaway 13.3 s, so after the wall crossing every runner finishes at `HOM
 probe fails under container load (a 700 ms wind-up drag lands late) and passes on an idle
 machine; three failures in a row during R12's parallel suites were exactly that.
 
-### R12 record (shipped v872, 2026-09-21)
+### R12 record (shipped v880, 2026-09-21)
 
 From the stage's report: the scoreboard is a two-column grid (count rows left, the mini-diamond
 right at about 1.6x) inside the same card; outs are vermilion, strikes yellow (ship review: the

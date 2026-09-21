@@ -97,6 +97,18 @@
 .gh-dark .ms-root .lb-dshape-t3,
 .gh-dark .ms-root .lb-dshape-t4 { fill: #e6e9f0; }
 
+/* A TAPPABLE CONTROL GETS touch-action: manipulation (root CLAUDE.md, scroll and touch rules).
+ * Without it iOS Safari keeps the double-tap-to-zoom gesture alive on these buttons, which costs a
+ * ~300ms delay on every tap and turns a quick second tap into a page zoom instead of a press - so
+ * a control reads as not responding at all. The board is the one surface that gets `none` instead,
+ * because it is a swipe surface. Shipped without this and Matt hit it on the options rows. */
+.ms-root .ms-diff,
+.ms-root .ms-opt,
+.ms-root .ms-face,
+.ms-root .ms-x,
+.ms-root .gh-btn,
+.ms-root .gh-seg__item { touch-action: manipulation; }
+
 /* Every screen lives inside this one scroller-free column. There is no overflow: auto anywhere
  * in this file on purpose: a screen that does not fit is a layout bug to fix, and `auto` is the
  * most common way of pretending otherwise (docs/BUILDING-A-GAME.md Part 0). */
@@ -397,6 +409,41 @@
 
 /* ---------------- how to play ---------------- */
 .ms-root .ms-help { gap: 12px; }
+/* The header is a FIXED-HEIGHT flex-none row, so the Back button cannot be pushed off the bottom
+   by content below it. That is exactly how the first version shipped without a reachable way out:
+   the button sat under the diagrams, the diagrams were a little too tall, and it was clipped. */
+.ms-root .ms-hhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.ms-root .ms-hback { flex: 0 0 auto; min-height: 44px; touch-action: manipulation; }
+.ms-root .ms-htitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+/* The loupe demo needs room for the bubble ABOVE the little board, and the bubble is absolutely
+   positioned, so the box reserves that height itself rather than letting it overlap the caption. */
+.ms-root .ms-loupedemo {
+  position: relative;
+  width: 96px;
+  height: 104px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ms-root .ms-loupe--demo {
+  width: 54px;
+  height: 54px;
+  left: 21px;
+  top: 0;
+}
+.ms-root .ms-loupe--demo .ms-zc { width: 34px; height: 34px; font-size: 17px; }
 .ms-root .ms-lead { font-size: 16px; font-weight: 800; line-height: 1.35; }
 .ms-root .ms-dia {
   background: var(--ms-surface);
@@ -407,18 +454,8 @@
 }
 .ms-root .ms-diarow { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .ms-root .ms-cap { font-size: 13px; color: var(--ms-muted); line-height: 1.45; margin-top: 9px; }
-.ms-root .ms-eg {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 12.5px; font-weight: 700;
-  background: var(--ms-surface-2);
-  border: 1px solid var(--ms-border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-top: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* .ms-eg is gone with the two example strips it styled: they were `white-space: nowrap`
+   one-liners that ran off the side of the screen (Matt, 2026-09-21). */
 .ms-root .ms-edge { font-size: 13px; line-height: 1.5; }
 .ms-root .ms-minic { width: 34px; height: 34px; font-size: 20px; }
 
@@ -448,4 +485,128 @@
 .ms-root .ms-bar .gh-seg__item[aria-pressed="true"] {
   background: var(--ms-accent);
   color: #ffffff;
+}
+
+/* =================================================================================================
+ * THE EXPLOSION (2026-09-21, Matt: "add a huge explosion animation for if someone hits a mine")
+ *
+ * Everything here animates ONLY transform, opacity and filter - never width/height/inset, which
+ * are not compositor-only and jank on a weak phone (docs/BUILDING-A-GAME.md Part 0). The whole
+ * layer is decoration: it is aria-hidden, it carries no information the board does not already
+ * show, and it is REMOVED from the DOM when it finishes rather than left at opacity 0, so nothing
+ * lingers invisible in the accessibility tree.
+ * ============================================================================================== */
+
+.ms-root .ms-blast {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* The white-hot core, at the cell that was hit. Scales up and fades; `filter: blur()` is on the
+   allowed list and is what stops it reading as a hard-edged circle. */
+.ms-root .ms-core {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, #ffe9a8 22%, #f2b705 45%, #e0532f 68%, rgba(224, 83, 47, 0) 78%);
+  filter: blur(2px);
+  opacity: 0;
+  transform: scale(0.2);
+  animation: ms-core 620ms cubic-bezier(.15, .8, .3, 1) forwards;
+}
+@keyframes ms-core {
+  0%   { opacity: 0;   transform: scale(0.15); }
+  12%  { opacity: 1;   transform: scale(1.15); }
+  38%  { opacity: .92; transform: scale(1.6); }
+  100% { opacity: 0;   transform: scale(2.6); }
+}
+
+/* Two shockwave rings, the second offset so the blast reads as a pulse rather than one balloon. */
+.ms-root .ms-shock {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-radius: 50%;
+  border: 3px solid rgba(242, 183, 5, .85);
+  opacity: 0;
+  transform: scale(0.2);
+  animation: ms-shock 760ms cubic-bezier(.1, .7, .2, 1) forwards;
+}
+.ms-root .ms-shock--2 {
+  border-color: rgba(224, 83, 47, .7);
+  border-width: 2px;
+  animation-delay: 130ms;
+  animation-duration: 820ms;
+}
+@keyframes ms-shock {
+  0%   { opacity: 0;   transform: scale(0.2); }
+  10%  { opacity: 1;   transform: scale(0.9); }
+  100% { opacity: 0;   transform: scale(7); }
+}
+
+/* Debris. Each fragment carries its own vector and spin as custom properties, set in ui.js, so one
+   keyframe serves all of them and nothing is generated per-particle at runtime. */
+.ms-root .ms-frag {
+  position: absolute;
+  width: var(--ms-fs, 9px);
+  height: var(--ms-fs, 9px);
+  margin: calc(var(--ms-fs, 9px) / -2) 0 0 calc(var(--ms-fs, 9px) / -2);
+  border-radius: var(--ms-fr, 2px);
+  background: var(--ms-fc, #f2b705);
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  animation: ms-frag var(--ms-fd, 900ms) cubic-bezier(.18, .7, .35, 1) var(--ms-fdelay, 0ms) forwards;
+}
+@keyframes ms-frag {
+  0%   { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  /* The 65% stop is the arc: full travel outward, then the last third falls and shrinks, so the
+     debris drops instead of drifting to a halt in mid-air. */
+  65%  { opacity: 1; transform: translate3d(var(--ms-dx), var(--ms-dy), 0) rotate(var(--ms-rot)) scale(.9); }
+  100% { opacity: 0; transform: translate3d(var(--ms-dx), calc(var(--ms-dy) + 46px), 0) rotate(var(--ms-rot)) scale(.5); }
+}
+
+/* The board itself kicks. Small, brief, and on transform only. */
+.ms-root .ms-board.is-blasting { animation: ms-shake 420ms cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes ms-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-6px, 3px, 0); }
+  22% { transform: translate3d(5px, -4px, 0); }
+  36% { transform: translate3d(-5px, -2px, 0); }
+  50% { transform: translate3d(4px, 3px, 0); }
+  64% { transform: translate3d(-3px, 1px, 0); }
+  78% { transform: translate3d(2px, -2px, 0); }
+  90% { transform: translate3d(-1px, 1px, 0); }
+}
+
+/* A mine arriving during the outward cascade pops rather than simply appearing. */
+.ms-root .ms-c.is-revealing { animation: ms-pop 260ms cubic-bezier(.2, .9, .3, 1) both; }
+@keyframes ms-pop {
+  0%   { transform: scale(.55); opacity: .25; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* The cell that was hit keeps burning under the debris. box-shadow is on the allowed list. */
+.ms-root .ms-c.is-boom { animation: ms-boomcell 620ms ease-out both; }
+@keyframes ms-boomcell {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 233, 168, .95); }
+  40%  { box-shadow: 0 0 22px 10px rgba(242, 183, 5, .8); }
+  100% { box-shadow: 0 0 10px 2px rgba(224, 83, 47, .45); }
+}
+
+/* REDUCED MOTION. This whole layer is garnish, not gameplay - the board already says you lost, in
+   text and in shape - so here it is cut rather than merely slowed, and every element settles at
+   its FINAL pose instead of being display:none'd (battleship/CLAUDE.md). ui.js also skips building
+   the layer at all and reveals the mines in one pass, so the result screen arrives promptly. */
+@media (prefers-reduced-motion: reduce) {
+  .ms-root .ms-blast { display: none; }
+  .ms-root .ms-board.is-blasting { animation: none; transform: none; }
+  .ms-root .ms-c.is-revealing { animation: none; transform: none; opacity: 1; }
+  .ms-root .ms-c.is-boom { animation: none; box-shadow: 0 0 10px 2px rgba(224, 83, 47, .45); }
 }
