@@ -58,6 +58,7 @@ const SUITES = [
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },
   { file: 'favorites.test.mjs' },
+  { file: 'test-launcher-sort.mjs' },
   { file: 'test-new-badge.mjs' },
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
