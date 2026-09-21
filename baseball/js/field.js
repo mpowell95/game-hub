@@ -308,7 +308,27 @@ export const CAMERAS = {
   fov: 50, // batter and chase share this; pitcher carries its own fov (below), a long lens.
   near: 0.5,
   far: 4000,
-  batter: { pos: [0.6, 7.8, 13.1], look: [0, 2.3, -30] },
+  // R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 2): Matt, on v871: "I can't see the batter's feet."
+  // Measured (node, `projectToCanvas` against this same camera): the true reason was margin, not a
+  // gross miss - the shoe sole (world y=0) projected to 98.5% of the BATTING band's own height
+  // (544.8 of 553px), a hair inside the frame but with only ~1.5% (8px) of clearance, so a real
+  // device's own rounding, a taller phone's chrome, or a slightly different stance frame put it out
+  // more often than not. Re-aimed by LOOK ALONE (the spec's own preferred lever): `look.y` moved
+  // from 2.3 to -1.0, nothing else. Since vertical FOV (not `look`) sets how much of the world's own
+  // vertical extent a camera shows, this fraction holds at every phone height and in both hosts, not
+  // just the one measured. Measured after: feet 89.2% down (493.2 of 553px, 10.8%/60px of margin),
+  // cap 41.0% down (226.8px) - the batter's own on-screen HEIGHT barely moved (48.0% of the band,
+  // was 49.5%), so this reads as the same shot shifted up, not a re-zoom. The true zone box shifted
+  // up with it (was 405.1-484.1px, now 359.6-435.7px) and moved a hair in size too (64.4x76.2px, was
+  // 65.2x79.0) - the live `zone-scale` probe (device suite) still passes with real margin against
+  // its own 3px drift budget (0.8/2.8px), so no probe baseline needed changing. The mound/pitcher
+  // (background figures only on this camera, not tested by any probe - `pitcher-frame` reads
+  // `CAMERAS.pitcher`, untouched here) moved up too, matching the reference's own composition
+  // (`scratchpad/ref/reference-key-frames.jpg` row 2: plenty of grass/mound above a batter whose own
+  // feet and box lines are fully in frame). Re-verified in the real, mounted game (not just this
+  // node projection) at 393x852: `scratchpad/r12/after-cam-wrap.png` against
+  // `scratchpad/r12/before-batting-wrap.png`.
+  batter: { pos: [0.6, 7.8, 13.1], look: [0, -1.0, -30] },
   pitcher: { pos: [-2.4, 7.0, -116.0], look: [0, 3.0, ZONE.z], fov: 10.35 },
   // The chase offset was measured against what it has to SHOW, not chosen: at section 9's own
   // (0, 12, 28) the ball is 30 ft from the lens and draws 5 px across, which is the same "you
