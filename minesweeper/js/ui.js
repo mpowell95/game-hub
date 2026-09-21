@@ -239,8 +239,8 @@ class MinesweeperUI {
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
       <div class="ms-card"><h3>${esc(t('your_best'))}</h3><div class="ms-bests">${bestCells}</div></div>
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
-        ${opt('safeFirst', 'safe_first', 'safe_first_sub')}
-        ${opt('longPress', 'long_press', 'long_press_sub')}
+        ${opt('safeFirst', 'safe_first', '')}
+        ${opt('longPress', 'long_press', '')}
         ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
       </div></div>
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>
@@ -296,41 +296,43 @@ class MinesweeperUI {
     this._stopTimer();
     this._clearTimers();
     const mini = (cls, inner) => `<div class="ms-c ms-minic ${cls}">${inner}</div>`;
-    const grid3 = (cells) => `<div class="ms-board" style="grid-template-columns:repeat(3,34px);--ms-cell-size:34px">${cells}</div>`;
+    const grid3 = (cells, px) => `<div class="ms-board" style="grid-template-columns:repeat(3,${px}px);--ms-cell-size:${px}px">${cells}</div>`;
     const before = grid3([
       mini('is-open n1', '1'), mini('', ''), mini('', ''),
       mini('is-open n2', '2'), mini('is-open n3 is-target', '3'), mini('', FLAG_SVG('#e0532f')),
       mini('', FLAG_SVG('#e0532f')), mini('', FLAG_SVG('#e0532f')), mini('', ''),
-    ].join(''));
+    ].join(''), 30);
     const after = grid3([
       mini('is-open n1', '1'), mini('is-open', ''), mini('is-open n1', '1'),
       mini('is-open n2', '2'), mini('is-open n3', '3'), mini('', FLAG_SVG('#e0532f')),
       mini('', FLAG_SVG('#e0532f')), mini('', FLAG_SVG('#e0532f')), mini('is-open n2', '2'),
-    ].join(''));
+    ].join(''), 30);
 
+    // THE BACK BUTTON IS AT THE TOP, and that is the fix, not a preference. It used to sit under
+    // the content, so the moment the content was a line too tall the button was the thing clipped
+    // off the bottom - and the only way out of this screen was to leave the game entirely.
+    // Anchored in a fixed-height header it cannot be pushed anywhere by anything below it.
     this.root.innerHTML = `<div class="ms-screen ms-help">
+      <div class="ms-hhead">
+        <button type="button" class="gh-btn gh-btn--sm ms-hback" data-act="back">${esc(t('back'))}</button>
+        <h2 class="ms-htitle">${esc(t('how_to_play'))}</h2>
+      </div>
       <p class="ms-lead">${esc(t('help_lead'))}</p>
       <div class="ms-dia">
         <div class="ms-diarow">${before}${ARROW_SVG}${after}</div>
         <p class="ms-cap">${esc(t('help_chord_cap'))}</p>
-        <div class="ms-eg">${esc(t('help_chord_eg'))}</div>
       </div>
       <div class="ms-dia">
         <div class="ms-diarow">
-          <div style="position:relative;width:118px;height:136px;flex:0 0 auto">
-            <div class="ms-board" style="grid-template-columns:repeat(3,28px);--ms-cell-size:28px;position:absolute;left:16px;top:70px">
-              ${mini('', '')}${mini('', '')}${mini('', '')}${mini('is-target', '')}
+          <div class="ms-loupedemo">
+            <div class="ms-board" style="grid-template-columns:repeat(3,26px);--ms-cell-size:26px">
+              ${mini('', '')}${mini('is-target', '')}${mini('', '')}
             </div>
-            <div class="ms-loupe" style="width:60px;height:60px;left:29px;top:0"><div class="ms-zc" style="width:40px;height:40px;font-size:20px"></div></div>
+            <div class="ms-loupe ms-loupe--demo"><div class="ms-zc"></div></div>
           </div>
-          <p class="ms-cap" style="margin:0;flex:1">${esc(t('help_loupe_cap'))}</p>
+          <p class="ms-cap">${esc(t('help_loupe_cap'))}</p>
         </div>
-        <div class="ms-eg">${esc(t('help_loupe_eg'))}</div>
       </div>
-      <p class="ms-edge">${esc(t('help_edge_flag'))}</p>
-      <p class="ms-edge">${esc(t('help_edge_safe'))}</p>
-      <p class="ms-edge">${esc(t('help_edge_clock'))}</p>
-      <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="back">${esc(t('back'))}</button>
     </div>`;
     this.root.onclick = (ev) => { if (ev.target.closest('[data-act="back"]')) this.renderMenu(); };
   }

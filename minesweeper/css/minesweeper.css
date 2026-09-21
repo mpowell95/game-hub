@@ -409,6 +409,41 @@
 
 /* ---------------- how to play ---------------- */
 .ms-root .ms-help { gap: 12px; }
+/* The header is a FIXED-HEIGHT flex-none row, so the Back button cannot be pushed off the bottom
+   by content below it. That is exactly how the first version shipped without a reachable way out:
+   the button sat under the diagrams, the diagrams were a little too tall, and it was clipped. */
+.ms-root .ms-hhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.ms-root .ms-hback { flex: 0 0 auto; min-height: 44px; touch-action: manipulation; }
+.ms-root .ms-htitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+/* The loupe demo needs room for the bubble ABOVE the little board, and the bubble is absolutely
+   positioned, so the box reserves that height itself rather than letting it overlap the caption. */
+.ms-root .ms-loupedemo {
+  position: relative;
+  width: 96px;
+  height: 104px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ms-root .ms-loupe--demo {
+  width: 54px;
+  height: 54px;
+  left: 21px;
+  top: 0;
+}
+.ms-root .ms-loupe--demo .ms-zc { width: 34px; height: 34px; font-size: 17px; }
 .ms-root .ms-lead { font-size: 16px; font-weight: 800; line-height: 1.35; }
 .ms-root .ms-dia {
   background: var(--ms-surface);
@@ -419,18 +454,8 @@
 }
 .ms-root .ms-diarow { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .ms-root .ms-cap { font-size: 13px; color: var(--ms-muted); line-height: 1.45; margin-top: 9px; }
-.ms-root .ms-eg {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 12.5px; font-weight: 700;
-  background: var(--ms-surface-2);
-  border: 1px solid var(--ms-border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-top: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* .ms-eg is gone with the two example strips it styled: they were `white-space: nowrap`
+   one-liners that ran off the side of the screen (Matt, 2026-09-21). */
 .ms-root .ms-edge { font-size: 13px; line-height: 1.5; }
 .ms-root .ms-minic { width: 34px; height: 34px; font-size: 20px; }
 
