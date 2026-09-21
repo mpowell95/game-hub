@@ -28,7 +28,7 @@ import { isNewGame, releaseMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
-import { isGameLive, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice } from './admin-config.js';
+import { isGameLive, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -542,7 +542,14 @@ class Hub {
     refreshAdminConfig();
     // Is THIS device on the admins allowlist? One read per load, cached, so the profile page and
     // the Messages screen can both gate synchronously. A console change lands on the next load.
-    refreshAdminDevice();
+    //
+    // THE BADGE IS REPAINTED WHEN THAT ANSWER LANDS. `_paintReplyBadge` gates the bug-report half
+    // of the count on the CACHED answer, which is right on every load after the first - but a
+    // device that has just been added to the allowlist has no cached yes yet, and without this it
+    // would show no inbox badge until the load after next.
+    Promise.resolve(refreshAdminDevice())
+      .then(() => { if (!this._destroyed) this._paintReplyBadge(); })
+      .catch(() => { /* offline: the cached answer already painted whatever it knew */ });
   }
 
   /** Send anything in this device's bug-report outbox. Lazy import: only worth loading at all on
@@ -670,7 +677,26 @@ class Hub {
     // pill while that pill was the only route to either; Messages has its own button in the bar
     // since 2026-08-31, and a count on the pill that turned out to be about messages would send
     // people to the wrong place.
-    badge(this.el && this.el.messages, await count('./messages-ui.js', 'myUnreadMessages'));
+    //
+    // AND A NEW BUG REPORT BADGES MESSAGES TOO, ON AN ADMIN DEVICE (2026-09-21). Matt, on a report
+    // filed 9 September and read on the 21st: *"There was no notification/icon badge telling me
+    // there was a new bug report. THAT's a bug."* He was right, and it had been true for three
+    // weeks: the launcher used to carry a "Bug reports" button that wore its own count
+    // (`_paintInboxCount`), and on 2026-09-01 that button moved INSIDE the Messages screen - the
+    // count went with it, so the only way to find out a report had arrived was to open Messages
+    // and look. A count nobody can see from the launcher is the same as no count.
+    //
+    // It belongs on THIS button by the same rule the paragraph above states: the badge goes where
+    // the thing it is counting is reached, and the inbox is now reached through Messages. So the
+    // two are SUMMED here, exactly as messages and replies once were on the pill, and Matt taps
+    // through to a "Bug inbox (n)" button that says which of the two it was.
+    //
+    // Gated on the CACHED allowlist answer (`isAdminDevice`, never the profile name - see
+    // js/admin-config.js), so no other device reads `bugReports/` at all, and the repaint above
+    // covers the one load where that cache is still cold.
+    const mine = await count('./messages-ui.js', 'myUnreadMessages');
+    const inbox = isAdminDevice() ? await count('./bug-report-ui.js', 'adminUnreadCount') : 0;
+    badge(this.el && this.el.messages, mine + inbox);
     badge(this.el && this.el.profile, await count('./bug-report-ui.js', 'myUnreadReplies'));
   }
 
