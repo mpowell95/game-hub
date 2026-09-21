@@ -24,10 +24,11 @@ import { getLang, setLang, makeT } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
-import { isNewGame } from './new-badge.js';
+import { isNewGame, releaseMsOf } from './new-badge.js';
+import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
-import { isGameLive, refreshAdminConfig, onAdminConfig, refreshAdminDevice } from './admin-config.js';
+import { isGameLive, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -724,9 +725,17 @@ class Hub {
     const visible = GAMES.filter((g) => isGameLive(g.id, !g.devOnly) || dev);
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
-    const byTitle = (a, b) => titleText(a).localeCompare(titleText(b));
+    // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
+    // (the stored `ids` array IS that order); the control below orders the "All games" group only.
     const favGames = storedFavIds.map((id) => visible.find((g) => g.id === id)).filter(Boolean);
-    const restGames = visible.filter((g) => !favIdSet.has(g.id)).sort(byTitle);
+    const sort = loadSort();
+    const restGames = sortGames(
+      visible.filter((g) => !favIdSet.has(g.id)),
+      sort,
+      (g) => releaseMsOf(g, gameLiveAt(g.id)),
+      (g) => titleText(g),
+    );
+    this._sort = sort;
     this.games = [...favGames, ...restGames];
     this._favIds = favIdSet;
     this._favOrder = favGames.map((g) => g.id);
@@ -736,14 +745,21 @@ class Hub {
     // The divider only earns its place between two non-empty groups; with zero favorites
     // (the common first-run case) or with every visible game favorited, the grid is a plain
     // single list (custom-ordered) and no divider renders.
-    const showDivider = favGames.length > 0 && restGames.length > 0;
+    const showDividerLabel = favGames.length > 0 && restGames.length > 0;
     const showReorder = favGames.length >= 2;
     const favHeaderHTML = showReorder
       ? `<div class="hub-fav-header"><button type="button" class="hub-fav-reorder" data-role="fav-reorder">${t(this._favEdit ? 'hub_fav_done' : 'hub_fav_reorder')}</button></div>`
       : '';
     const gridHTML = favHeaderHTML
       + favGames.map((g) => this.cardHTML(g, true)).join('')
-      + (showDivider ? `<div class="hub-divider">${t('hub_all_games')}</div>` : '')
+      + (restGames.length
+        ? `<div class="hub-listhead">`
+          + (showDividerLabel ? `<span class="hub-listhead-label">${t('hub_all_games')}</span>` : '')
+          + `<div class="hub-sort" role="group" aria-label="${t('hub_sort_aria')}">`
+          + `<button type="button" class="hub-sortbtn" data-sort="alpha" aria-pressed="${sort === 'alpha'}">${t('hub_sort_alpha')}</button>`
+          + `<button type="button" class="hub-sortbtn" data-sort="new" aria-pressed="${sort === 'new'}">${t('hub_sort_new')}</button>`
+          + `</div></div>`
+        : '')
       + restGames.map((g) => this.cardHTML(g, false)).join('');
     this.root.innerHTML = `
       <div class="hub">
@@ -830,6 +846,14 @@ class Hub {
     });
     // Delegate from .hub-main so it catches the grid cards.
     this.el.grid.parentElement.addEventListener('click', (e) => {
+      // The sort control. Persisted on selection (the same rule every game's setup screen follows),
+      // so the launcher opens the way it was left.
+      const sortBtn = e.target.closest('.hub-sortbtn');
+      if (sortBtn) {
+        saveSort(sortBtn.dataset.sort);
+        this.render();
+        return;
+      }
       const reorderBtn = e.target.closest('[data-role="fav-reorder"]');
       if (reorderBtn) {
         this._favEdit = !this._favEdit;
@@ -1291,7 +1315,10 @@ class Hub {
     // The blurb moves to the accessible label (it is no longer shown on the tile face).
     // Tags sit top-left in one flex row (.hub-tags) so a devOnly game that is ALSO inside its
     // New window shows both pills side by side instead of one landing on top of the other.
-    const isNew = isNewGame(g);
+    // The second argument is what lets a game released from the ADMIN PAGE wear the pill: it has
+    // no `released` date in the registry (there was no commit), so the config's own stamp stands
+    // in for one. See releaseMsOf() in js/new-badge.js.
+    const isNew = isNewGame(g, Date.now(), gameLiveAt(g.id));
     const tags = [];
     if (g.comingSoon) tags.push(`<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`);
     // The Test pill follows the RESOLVED state, not the registry line: a game Matt has pulled back

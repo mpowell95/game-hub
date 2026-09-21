@@ -445,24 +445,76 @@ body {
 .hub-fav-up { right: 50px; }
 .hub-fav-down { right: 4px; }
 
-.hub-divider {
+/* The "All games" header row: the group's label (only when a favorites group sits above it) plus
+   the sort control, right-aligned. It REPLACED the old .hub-divider, which only rendered BETWEEN
+   two non-empty groups - fine for a separator, wrong for a control, which has to be reachable on a
+   launcher with no favorites at all. The rules below keep the divider's own look for the label. */
+.hub-listhead {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 2px 0;
+  min-height: 50px;
+}
+.hub-listhead-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
   color: var(--hub-muted);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.hub-divider::before, .hub-divider::after {
+.hub-listhead-label::after {
   content: '';
   flex: 1;
   height: 1px;
   background: var(--hub-surface-2);
 }
+/* With no favorites there is no label, so the control still needs pushing to the right. */
+.hub-listhead > .hub-sort:only-child { margin-left: auto; }
+.hub-sort {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--hub-surface-2);
+  flex: 0 0 auto;
+}
+.hub-sortbtn {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--hub-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  /* 44px is the tap floor (docs/BUILDING-A-GAME.md Part 0). The first draft of this control was
+     29px tall, which is the exact defect a Skeeball playtest found in already-shipped code. The
+     neighbouring Reorder button is smaller and predates this; that is not a licence to match it. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  /* A tappable control, so it must not keep iOS Safari's double-tap-to-zoom alive (root
+     CLAUDE.md, scroll and touch rules). */
+  touch-action: manipulation;
+}
+/* The active order is marked by a raised SURFACE and full-strength ink, not by hue alone. */
+.hub-sortbtn[aria-pressed="true"] {
+  background: var(--hub-surface);
+  color: var(--hub-ink);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .12);
+}
+
+/* .hub-divider is gone: .hub-listhead above replaced it (2026-09-21). The separator was only
+   ever a divider BETWEEN two groups, and a control cannot live in something that does not
+   render when there are no favorites. The label keeps the same look via its ::after rule. */
 /* Challenge mode: a task marker on each of the four game cards (star = to win, check = won). */
 .hub-card-badge {
   position: absolute; top: 10px; right: 10px; z-index: 2;
