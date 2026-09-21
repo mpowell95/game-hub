@@ -1,4 +1,4 @@
-# Baseball — CLAUDE.md
+# Baseball, CLAUDE.md
 
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. The law
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
