@@ -1365,3 +1365,21 @@ start.
 Deliverables: stills of each camera before and after, a cap sheet from `render-actor.mjs`,
 the probes above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
 `node test-baseball-actors.mjs`, `node check-no-scroll.mjs baseball` green.
+
+### R8 record (shipped v869, 2026-09-21)
+
+From the stage's report: `PAD_X_SIGN = { pitching: -1, batting: 1 }` (ui.js) is the one place the
+pad's screen-to-engine sign lives; the engine's +x is still first base. The pitcher camera is at
+(-2.4, 7.0, -116), 55.6 ft behind the rubber, with its own `fov` 10.35 (`makeCameras` now honours
+a per-camera fov; batter and chase still share 50); measured: pitcher 59.5% of the band, batter
+47.8% of the pitcher, the true box 8.5% of the band. The three prose targets could not all hold
+at once because the box is a fixed fraction of the batter's height at this depth (box ≈ 0.3 x
+ratio x pitcher), so "about half" for the pitcher became 59.5%. `PITCHING_ZONE_MIN_W_FRAC` is
+gone. The marker is `TARGET_MARKER_R` 0.4 (radius), 41.7 x 50.6 px, filled white with a red
+centre, drawn over the box and under the cursor, outside the box for a ball. The HUD bar is gone;
+the scoreboard is an absolute card at the band's top-left (`.bb-sb-*`, strings `sb_b/sb_s/sb_o`).
+The batting strip is a 32 px chip row (`.bb-strip--compact`), so the BATTING band is 553 px tall
+and the PITCHING band 477 px (both were 429): BB-3b's "nothing moves between states" is broken
+for the strip on purpose. Probes `pitch-drag` (screen direction on both cameras), `pitcher-frame`,
+`hud-legible`, and `target-marker` (size, outside the box; end budget widened to 4 px at ship
+review after a 2.28 px sample). `pop-anchor`'s budget is 45 px.

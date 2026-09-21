@@ -146,65 +146,62 @@
 
 /* Reserves clearance for the hub's own floating immersive back pill (measured in JS, since
  * `.bb-root` is `position: fixed` and so never receives `.hub-main-immersive`'s own top padding -
- * see `_fitInsets()`). Standalone this is 0 and `.bb-hud`'s own safe-area padding below does the
- * whole job. Deliberately OUTSIDE the HUD's own 48px band, which stays a clean fixed height. */
+ * see `_fitInsets()`). Standalone this is 0 and `_fitInsets()`'s own safe-area probe covers a
+ * device's notch/status bar either way. R8: the scoreboard (`.bb-hud`) moved OFF this flex column
+ * entirely (it is an absolutely-positioned card inside `.bb-field-wrap` now, top-left, over the
+ * scene) - this spacer is what still clears the pill, unchanged. */
 .bb-top-spacer {
   flex: 0 0 var(--bb-top-pad, 0px);
   height: var(--bb-top-pad, 0px);
   background: #16240f;
 }
 
+/* R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): the scoreboard. Class name kept as
+ * `.bb-hud` (test-baseball-device.mjs's `hud-vs-back` probe reads it by that name), but it is no
+ * longer a flex ROW that reserves its own 48px band - it is a small card, absolutely positioned
+ * top-left INSIDE `.bb-field-wrap`, over the scene, the way the reference's own scoreboard sits.
+ * `.bb-field-wrap` gets the 48px back for the stadium; nothing else in the band moves (the pop,
+ * the diamond widget and HOME RUN all keep their own fixed positions/insets, untouched by this). */
 .bb-hud {
-  height: 48px;
-  min-height: 48px;
-  flex: 0 0 48px;
-  position: relative;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  max-width: 62%;
   display: flex;
-  align-items: stretch;
-  min-width: 0;
-  padding: 0;
-  background: repeating-linear-gradient(135deg,
-      rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
-    rgba(10, 16, 10, 0.62);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.65);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(8, 13, 8, 0.68);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  pointer-events: none;
 }
 
-.bb-hud-score, .bb-hud-inning, .bb-hud-count, .bb-hud-bases, .bb-hud-batter {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 0 4px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  border-right: 1px solid rgba(255,255,255,0.10);
-}
-.bb-hud-batter { border-right: 0; }
-.bb-hud-score { flex: 0 0 36%; gap: 4px; padding: 0 6px; }
-.bb-hud-inning { flex: 0 0 11%; justify-content: center; }
-.bb-hud-count { flex: 0 0 29%; justify-content: center; gap: 5px; }
-.bb-hud-bases { flex: 0 0 12%; justify-content: center; }
-.bb-hud-batter { flex: 0 0 12%; justify-content: flex-end; font-size: 11px; letter-spacing: -0.03em; margin-left: auto; }
+.bb-sb-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.bb-sb-team { font-size: 11px; font-weight: 800; opacity: 0.85; white-space: nowrap; }
+.bb-sb-team.is-you { color: #178A7A; }
+/* Runs: >= 18px, per the spec's own probed floor (`hud-legible`). */
+.bb-sb-runs { font-size: 19px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.bb-sb-dash { opacity: 0.45; font-weight: 400; font-size: 13px; }
+.bb-sb-inning { font-size: 12px; font-weight: 700; white-space: nowrap; margin-left: auto; padding-left: 6px; }
 
-.bb-hud-team { font-size: 11px; font-weight: 800; opacity: 0.85; }
-.bb-hud-team.is-you { color: #178A7A; }
-.bb-hud-runs { font-size: 13px; font-weight: 900; }
-.bb-hud-dash { opacity: 0.45; font-weight: 400; font-size: 11px; }
-.bb-hud-inning { font-size: 12px; white-space: nowrap; }
-.bb-hud-count { display: flex; gap: 6px; align-items: center; }
-.bb-dotrow { display: flex; gap: 2px; align-items: center; }
-.bb-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
+.bb-sb-count { display: flex; flex-direction: column; gap: 2px; }
+.bb-sb-row { display: flex; align-items: center; gap: 5px; }
+.bb-sb-label { font-size: 11px; font-weight: 800; opacity: 0.8; width: 9px; text-align: center; }
+.bb-dotrow { display: flex; gap: 3px; align-items: center; }
+/* Dots: >= 10px, per the spec's own probed floor (`hud-legible`); the label beside each row
+ * carries the meaning too, never colour alone (root CLAUDE.md's colorblind rule). */
+.bb-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
 .bb-dot.is-on.bb-dot-b { background: #1F5FA8; border-color: rgba(0,0,0,0.5); }
 .bb-dot.is-on.bb-dot-s { background: #E0532F; border-color: rgba(0,0,0,0.5); }
 .bb-dot.is-on.bb-dot-o { background: #e9eef6; border-color: rgba(0,0,0,0.5); }
-.bb-hud-bases { width: 26px; height: 26px; flex: 0 0 26px; }
-.bb-bases-svg { width: 18px; height: 18px; }
+
+.bb-sb-diamond { width: 24px; height: 24px; align-self: flex-start; margin-top: 1px; }
+.bb-bases-svg { width: 24px; height: 24px; }
 .bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.2; }
 .bb-bases-svg rect.is-on { fill: #178A7A; stroke: #12181f; }
-.bb-hud-batter { margin-left: auto; font-size: 11px; opacity: 0.85; white-space: nowrap; }
 
 .bb-field-wrap {
   flex: 1 1 auto;
@@ -472,6 +469,25 @@
       rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
     rgba(6,10,6,0.5);
   border-top: 1px solid rgba(0, 0, 0, 0.65);
+  /* Carries the opacity transition the top-of-file `.bb-hud, .bb-strip, ...` rule already set
+     (a later same-specificity rule replaces the whole `transition` shorthand, not just the
+     properties it names, so opacity has to be repeated here or the cross-fade loses it) plus the
+     compact-mode height/flex-basis change, inert during the real swap - see the comment below. */
+  transition: opacity var(--gh-dur-mid, 200ms) ease, flex-basis var(--gh-dur-mid, 200ms) ease, height var(--gh-dur-mid, 200ms) ease;
+}
+/* R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 5): the BATTING strip - Matt's "the type of
+ * pitch is way too prominent" - shrinks from the 108px selector to a 32px row of small chips; the
+ * freed 76px goes to `.bb-field-wrap` (flex:1 auto). This is a DELIBERATE break of BB-3b's "nothing
+ * moves between states" rule for this one band - see `_paintStrip`'s own header for why. Pitching
+ * is untouched (`.bb-strip` alone, no modifier, stays 108px/92px tiles). The `transition` above is
+ * inert during the actual swap (the class flips while the band sits at opacity 0 behind the
+ * crossfade snapshot - `_sizeCanvas` is called synchronously in that same window, never mid-fade
+ * visibly) - it exists only so a stray external re-render cannot make this band SNAP. */
+.bb-strip.bb-strip--compact {
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  padding: 4px 6px;
 }
 /* BB-3b commit 6: one row of 8 fixed tiles, both states (handoff "Numbers to carry": 44 wide, 92
  * tall, 1px gaps) - `flex:1` rather than a literal 44px so the row always fills the strip's own
@@ -521,6 +537,40 @@
 .bb-pitch-tile.is-strike .bb-pitch-mark { color: #E0532F; }
 .bb-pitch-tile.is-ball { border-bottom: 2px solid #1F5FA8; }
 .bb-pitch-tile.is-ball .bb-pitch-mark { color: #1F5FA8; }
+
+/* R8 (item 5): the BATTING strip's own compact chips - one row, code + mph, 11px text (the docs/
+ * BUILDING-A-GAME.md Part 0 floor, not shrunk further). Same 8-across, gap-1px, flex:1 rule as
+ * `.bb-strip-tiles` so a narrower/wider phone still gets 8 equal chips. */
+.bb-strip-chips {
+  display: flex;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+.bb-pitch-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+.bb-pitch-chip.is-empty { background: rgba(255,255,255,0.03); border-style: dashed; }
+.bb-chip-code { font-size: 11px; font-weight: 900; white-space: nowrap; }
+.bb-chip-mph { font-size: 11px; opacity: 0.8; white-space: nowrap; }
+.bb-chip-mark { font-size: 11px; line-height: 1; }
+/* Colorblind-safe (root CLAUDE.md): hue AND shape both mark ball vs strike - never hue alone. */
+.bb-pitch-chip.is-strike { border-bottom: 2px solid #E0532F; }
+.bb-pitch-chip.is-strike .bb-chip-mark { color: #E0532F; }
+.bb-pitch-chip.is-ball { border-bottom: 2px solid #1F5FA8; }
+.bb-pitch-chip.is-ball .bb-chip-mark { color: #1F5FA8; }
 
 .bb-control {
   height: 172px;
