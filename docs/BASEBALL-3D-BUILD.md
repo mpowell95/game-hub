@@ -1556,7 +1556,7 @@ the equator, a wider tilted darker bill, a top button, the catcher's backwards. 
 catcher is drawn on the pitcher camera only, the same rule as the umpire, because his cap filled
 the bottom of the batting frame once caps arrived. `render-actor.mjs` honours `BB_BASE`.
 
-### R11 record (shipped v881, 2026-09-21)
+### R11 record (shipped v882, 2026-09-21)
 
 From the stage's report: `unlockedPitchesFor`'s `quickPlay` option is a no-op kept for call-site
 compatibility, `QUICK_PLAY_PITCH_MIX` is deleted (the second time that mechanism was built and
