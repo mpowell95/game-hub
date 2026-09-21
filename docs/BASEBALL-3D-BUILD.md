@@ -1482,3 +1482,45 @@ exists and stays.
 
 Deliverables: the tests above, the sim scoreboard, a still of Little League's strip (one unlocked
 well) and of a Little League fastball's marker mid-flight with the elapsed time.
+
+### R12: the scoreboard's count and the figures themselves (2026-09-21)
+
+Matt, on v871: *"For the scoreboard: the outs should be red dots, that's important. The small
+diamond that shows if people are on base should be to the right of the count and a little bigger;
+it can be larger if it's to the right of the count and not change the size of that whole
+rectangle. Increase the font size a little bit. For the 3D assets, the players: double check
+everything. I can't see the batter's feet; when you're pitching, the catcher's legs are bent weird;
+the hats do not look like hats; and the baseball bat should be improved."*
+
+1. **Scoreboard.** Filled OUT dots are the palette's vermilion (#E0532F) with the O label they
+   already carry; balls and strikes keep their colours. The mini-diamond moves to the RIGHT of the
+   three count rows (a two-column layout inside the card) and grows to about 1.6x, and the card's
+   outer size does not grow. Runs, labels and inning go up about 2 px each. CSS only (`.bb-sb-*`,
+   `.bb-hud`); the markup in `_paintHud` is not touched (R10 owns `ui.js` this hour). The
+   `hud-legible` floors still hold.
+2. **The batter's feet.** On the batting camera the batter is cut off at the shins by the band's
+   bottom edge. Re-aim `CAMERAS.batter` (look point, and position only if the look alone cannot
+   do it) so the whole batter, feet and bat, is inside the field band in both hosts at both phone
+   heights, while the pitcher, the zone box and the target marker stay where the reference has
+   them. Write the measured before and after beside the constant.
+3. **The catcher's crouch.** The `Crouch` clip in `poses.js` bends the legs wrong (the R9 cap
+   sheet's fifth figure shows it: knees splayed, feet off the ground line). A real squat: feet
+   flat and about shoulder width, knees bent forward and out a little, thighs near horizontal,
+   torso upright and leaning slightly forward, glove arm forward at knee height, throwing hand
+   behind the back. Tune it with `render-actor.mjs --sheet` against the reference frame's catcher
+   (`scratchpad/ref/reference-key-frames.jpg`, top row).
+4. **Caps that read as caps.** The R9 cap is a dome with a stub; it reads as a beanie. A cap: a
+   crown that sits down over the hair line (not floating on the crown of the head), slightly
+   flattened, with a top button, and a bill that projects forward about a third of the head's
+   width with a gentle downward curve and a visible underside, in a slightly darker shade of the
+   team colour. The catcher wears his backwards. Same attachment (head bone), same `cap` name.
+5. **The bat.** `_attachBat`'s cylinder becomes a lathe: a knob, a thin handle, a taper to the
+   barrel, a rounded end; wood colour with a darker grip band on the handle. Same `BAT.length`,
+   same hand attachment, same `swing.js` contact point.
+
+Deliverables: `render-actor.mjs --sheet` sheets of the batter (Idle, Swing), the catcher (Crouch)
+and the pitcher (Set, Pitch) with the new caps and bat beside the reference crops; a full-screen
+batting still showing the feet; the scoreboard still. `node test-baseball-actors.mjs`,
+`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green, and the device suite's
+`zone-world`, `zone-scale`, `pop-anchor`, `hud-legible`, `pitcher-frame` re-measured against the
+new batter camera.
