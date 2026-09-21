@@ -117,6 +117,22 @@ export const BOARD = {
     maxSpeed: 5.60,
     aimMax: 0.45,
 
+    // THE SWIPE MAPS STRAIGHT ONTO AIM HERE (skeeball's default is the SQUARE of it).
+    // `aimCurve: 2` is forgiving near straight and steep at the edges, which is right for a
+    // machine whose hard shots ARE the corners. It is wrong for this one: the seven columns sit
+    // at measured aims of -0.42 .. +0.42 with gaps of 0.08 to 0.20, and squaring compresses the
+    // OUTER columns into the narrowest slivers of thumb arc - so the columns would get harder to
+    // pick the further out they are, on top of already being a smaller target. BRICK CITY set
+    // this to 1 for the same reason (its own file: "a corner-basket shot is as forgiving as a
+    // straight one"). Straight proportion spreads the seven evenly across the swipe.
+    aimCurve: 1,
+    // And the arc that spans them. skeeball divides the swipe angle by 0.38 so a full diagonal
+    // reaches aim 1.0; nothing here needs past 0.42, so a bigger divisor spends the whole thumb
+    // arc on the range that exists - +/-0.42 of aim over +/-26 degrees of swipe rather than
+    // +/-9. THIS IS THE NUMBER TO TUNE FIRST if Matt finds the columns fiddly: it is pure input
+    // shaping and touches no physics.
+    aimDiv: 1.10,
+
     // A SEEDED PER-THROW SCATTER, which is the ONLY randomness in this engine and the only one
     // in any engine in this repo. MACHINE-SPEC.md section 9 bans steering a ball toward a hole;
     // it does not ban an imperfect release, and Matt asked for one. physics.js threads a seeded

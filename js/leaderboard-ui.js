@@ -151,6 +151,7 @@ const GAME_META = [
   { id: 'battleship', labelKey: 'game_title_battleship' },
   { id: 'boggle', labelKey: 'game_title_boggle' },
   { id: 'chinchon', labelKey: 'game_title_chinchon' },
+  { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'connect4', labelKey: 'game_title_connect4' },
   { id: 'dotsboxes', labelKey: 'game_title_dotsboxes' },
   { id: 'escoba', labelKey: 'game_title_escoba' },

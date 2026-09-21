@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v875';
+const CACHE = 'game-hub-v876';
 
 const ASSETS = [
   './',
@@ -316,6 +316,19 @@ const ASSETS = [
   './skeeball/css/skeeball.css',
   './skeeball/js/ui.js',
   './skeeball/js/swipe.js',
+
+  // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
+  // carrying a second copy, so nothing new is added for those.
+  './hoops4/index.html',
+  './hoops4/css/hoops4.css',
+  './hoops4/js/ui.js',
+  './hoops4/js/boarddef.js',
+  './hoops4/js/machine.js',
+  './hoops4/js/physics.js',
+  './hoops4/js/render.js',
+  './hoops4/js/game.js',
+  './hoops4/js/cpu.js',
+  './hoops4/js/strings.js',
   './skeeball/js/game.js',
   './skeeball/js/goals.js',
   './skeeball/js/boards.js',
@@ -804,6 +817,16 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': '927126d1ed',
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
+  './hoops4/index.html': 'dce91b13bd',
+  './hoops4/css/hoops4.css': '1afd75dc59',
+  './hoops4/js/ui.js': '42cd186176',
+  './hoops4/js/boarddef.js': '2d378f8b07',
+  './hoops4/js/machine.js': '96a796b2f9',
+  './hoops4/js/physics.js': 'e50d34068a',
+  './hoops4/js/render.js': '1c0a7778fc',
+  './hoops4/js/game.js': '15e52e750b',
+  './hoops4/js/cpu.js': '34f9e8ebf9',
+  './hoops4/js/strings.js': '8c13b78104',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
