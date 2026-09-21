@@ -136,6 +136,29 @@ function flow(){
   </svg>`;
 }
 
+// where each column's baskets actually came from, on the aim dial
+function aimBands(){
+  const W=900,H=190,L=60,Rt=W-40,mid=x=>L+((x+1)/2)*(Rt-L);
+  const D=[[1,-0.42,0.16],[2,-0.34,0.20],[3,-0.20,0.22],[4,-0.02,0.22],[5,0.18,0.22],[6,0.34,0.19],[7,0.42,0.16]];
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="8" fill="#191519"/>`;
+  s+=`<line x1="${L}" y1="150" x2="${Rt}" y2="150" stroke="#4e463b" stroke-width="1.4"/>`;
+  for(const t of [-1,-0.5,0,0.5,1]){
+    s+=`<line x1="${mid(t)}" y1="146" x2="${mid(t)}" y2="154" stroke="#4e463b"/>`;
+    s+=`<text x="${mid(t)}" y="170" text-anchor="middle" font-size="10" fill="#77695a">${t>0?'+':''}${t}</text>`;
+  }
+  s+=`<text x="${L-8}" y="154" text-anchor="end" font-size="10" fill="#77695a">aim</text>`;
+  s+=`<text x="${mid(-1)}" y="184" text-anchor="start" font-size="10" fill="#77695a">swipe left</text>`;
+  s+=`<text x="${mid(1)}" y="184" text-anchor="end" font-size="10" fill="#77695a">swipe right</text>`;
+  D.forEach(([n,m,sd],i)=>{
+    const y=28+i*16, x0=mid(m-sd), x1=mid(m+sd);
+    const col=i<3?'var(--red)':i>3?'var(--yellow)':'var(--gold)';
+    s+=`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${col}" stroke-width="7" stroke-linecap="round" opacity=".75"/>`;
+    s+=`<circle cx="${mid(m)}" cy="${y}" r="3.4" fill="#14100c" stroke="${col}" stroke-width="2"/>`;
+    s+=`<text x="${mid(m)}" y="${y-8}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${col}">${n}</text>`;
+    s+=`<line x1="${mid(m)}" y1="${y+5}" x2="${mid(m)}" y2="148" stroke="${col}" stroke-width=".8" stroke-dasharray="2 3" opacity=".45"/>`;
+  });
+  return s+'</svg>';
+}
 // width comparison: 7 rims on the old cabinet vs the wider one
 function widths(){
   const W=900,H=150, U=36;            // U = pixels per X
@@ -175,7 +198,18 @@ document.getElementById('g').innerHTML=`
           ['Have','6.875X, so the pitch falls to 0.979X'],
           ['Result','rims 1.0X across at 0.979X pitch overlap by 0.021X'],
           ['Fix','widen the cabinet 28%, keeping every rim at the standard 0.5X']])}
-   <p class="note">Widening is the option that does not touch a rim, and a rim is never mine to change. It also makes each column a bigger target, which is the other open question.</p></div>
+   <p class="note">Settled: the cabinet is 8.800X. Widening is the option that touches no rim, and a rim is never mine to change.</p></div>
+
+ <div class="card"><p class="nm">MEASURED: AIM PICKS THE COLUMN</p>
+   <p class="hook">861 throws through skeeball's real engine at the widened cabinet. Where each column's shots actually came from.</p>
+   ${aimBands()}
+   <div class="grid" style="margin-top:12px">
+     <div>${tbl([['Every column','reachable, all 7'],['Dead dial','none - 21 of 21 powers score'],
+                 ['Ordering','mean aim rises 1 to 7, no inversion']])}</div>
+     <div>${tbl([['boardW','6.875X &rarr; <b>8.800X</b>'],['minSpeed / maxSpeed','2.60/6.60 &rarr; <b>4.70/5.60</b>'],
+                 ['wallRest','0.15 &rarr; <b>0.03</b>'],['aimMax','0.45, unchanged']])}</div>
+   </div>
+   <p class="note">The outer columns are the easiest and the middle the hardest, which is the right way round: Connect 4's centre columns carry the most winning lines, so the valuable shot is the hard one.</p></div>
 
  <div class="grid">
   <div class="card"><p class="nm">THE THROW</p><p class="hook">Skeeball's lane, ramp and arc. The hoop picks the column.</p>
