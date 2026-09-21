@@ -1,0 +1,588 @@
+// skeeball/js/machines/brickcity/machine.js - HOT SHOT: BRICK CITY's OWN geometry. This file
+// serves ONE machine (board id `brickcity`) and nothing else loads it - see skeeball/js/engines.js.
+// It began as a verbatim copy of machines/basketball/ on 2026-08-24 and diverges freely from here;
+// an edit made for BRICK CITY must never be carried back into HOT SHOT's copy "to keep them in
+// sync." The drift is the point. Full spec: skeeball/MACHINE-BRICKCITY.md.
+//
+// skeeball/js/machine.js - the machine's GEOMETRY, once, in metres. GUARD: both physics.js and
+// render.js build from this one description, so the wall you see IS the wall the ball hits and
+// the two can never drift apart.
+//
+// Coordinates: world x = lateral (right +), y = up, z = toward the player (the machine extends
+// into -z). The lane's top surface is y = 0. Face coordinates (u lateral, v metres up the slope
+// from the board's bottom edge, h height off the face plane) are mapped through faceToWorld().
+//
+// Every solid is a BOX: { pos: [x,y,z], half: [hx,hy,hz], rot: {axis, angle} | null, part }.
+// Curved furniture is approximated with short box segments; the renderer draws the smooth
+// cylinder at the same radius, a sub-centimetre difference that keeps contacts exact.
+
+/** Build the whole machine description for one board's `geom` block. */
+export function buildMachine(G) {
+  const t = G.boardTilt;
+  const sin = Math.sin(t);
+  const cos = Math.cos(t);
+
+  // The board's bottom edge (face origin): past the lane, the hump and the trough gap.
+  const lipZ = -(G.laneLen + G.humpLen + G.troughLen);
+  const lipY = G.boardLipY;
+
+  // THE PLAYING SURFACE AS SEGMENTS. One tilted segment (every board until HOT SHOT's
+  // stepped rebuild, 2026-08-22), or `G.steps` - an ordered list of { len, tilt } segments
+  // forming a STAIRCASE (near-flat treads alternating with vertical risers, Matt's real-machine
+  // footage). Face coordinates are UNROLLED along the whole surface: v runs up tread 1, up
+  // riser 1, along tread 2, and so on - so holes, collars, paint and capture all keep their one
+  // (u, v) address system and nothing downstream has to know how many segments exist. The
+  // single-segment case reduces to exactly the old fixed-tilt mapping.
+  const segs = Array.isArray(G.steps) && G.steps.length
+    ? G.steps
+    : [{ len: G.boardLen, tilt: t }];
+  const frames = [];
+  {
+    let y = lipY;
+    let z = lipZ;
+    let v0 = 0;
+    for (const s of segs) {
+      const fsin = Math.sin(s.tilt);
+      const fcos = Math.cos(s.tilt);
+      frames.push({ v0, v1: v0 + s.len, y0: y, z0: z, tilt: s.tilt, sin: fsin, cos: fcos });
+      y += s.len * fsin;
+      z -= s.len * fcos;
+      v0 += s.len;
+    }
+  }
+  const frameAt = (v) => frames.find((fr) => v <= fr.v1) || frames[frames.length - 1];
+  /** The local surface tilt at unrolled v. */
+  const tiltAt = (v) => frameAt(v).tilt;
+
+  /** Face (u, v, h) -> world [x, y, z] IN ONE NAMED SEGMENT, with v extrapolated past that
+   *  segment's own ends instead of being handed to the next one. This is what a piece of
+   *  furniture BOLTED TO ONE TREAD needs: a basket's collar is a circle around (H.u, H.v), and
+   *  points on that circle can have a v past the tread's back edge without the basket having
+   *  climbed onto the riser. See the collar loop below for the bug this exists to prevent. */
+  const faceToWorldIn = (fr, u, v, h = 0) => {
+    const dv = v - fr.v0;
+    return [u, fr.y0 + dv * fr.sin + h * fr.cos, fr.z0 - dv * fr.cos + h * fr.sin];
+  };
+
+  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
+  const faceToWorld = (u, v, h = 0) => faceToWorldIn(frameAt(v), u, v, h);
+
+  /** World -> face {u, v, h, tilt} IN ONE NAMED SEGMENT. A hole belongs to exactly one tread,
+   *  so "how far is the ball from this hole" must be asked in THAT tread's frame - never in
+   *  whichever frame the ball happens to be nearest. A ball high in a bottom-row basket is
+   *  nearer the RISER plane than the tread it is sunk into (the cup is 0.1455 deep, the riser
+   *  stands 0.1085 behind the mouth), so the free worldToFace below hands back riser
+   *  coordinates and the hole's own distance comes out 0.22 against a 0.09 mouth. */
+  const worldToFaceIn = (fr, p) => {
+    const dy = p.y - fr.y0;
+    const dz = p.z - fr.z0;
+    return { u: p.x, v: fr.v0 + dy * fr.sin - dz * fr.cos, h: dy * fr.cos + dz * fr.sin, tilt: fr.tilt };
+  };
+
+  /** World -> face {u, v, h, tilt}: the nearest segment's local coordinates. Physics reads this
+   *  for capture; with one segment it is the exact inverse of faceToWorld. */
+  const worldToFace = (p) => {
+    let best = null;
+    for (const fr of frames) {
+      const dy = p.y - fr.y0;
+      const dz = p.z - fr.z0;
+      const lv = dy * fr.sin - dz * fr.cos;
+      const lh = dy * fr.cos + dz * fr.sin;
+      const len = fr.v1 - fr.v0;
+      const inSeg = lv >= -0.02 && lv <= len + 0.02;
+      const score = (inSeg ? 0 : 1000) + Math.abs(lh);
+      if (!best || score < best.score) {
+        best = { u: p.x, v: fr.v0 + Math.max(0, Math.min(len, lv)), h: lh, tilt: fr.tilt, score };
+      }
+    }
+    return best;
+  };
+
+  /** The playing surface's y at world z (the staircase silhouette; risers are z-constant). */
+  const surfYAt = (z) => {
+    let yTop = lipY;
+    for (const fr of frames) {
+      const len = fr.v1 - fr.v0;
+      const z1 = fr.z0 - len * fr.cos;
+      if (fr.cos > 1e-6 && z <= fr.z0 + 1e-9 && z >= z1 - 1e-9) {
+        return fr.y0 + ((fr.z0 - z) / fr.cos) * fr.sin;
+      }
+      yTop = fr.y0 + len * fr.sin;
+    }
+    return yTop;
+  };
+
+  const solids = [];
+  const rotX = (angle) => ({ axis: [1, 0, 0], angle });
+
+  // --- the lane bed -----------------------------------------------------------------------------
+  solids.push({
+    part: 'lane',
+    pos: [0, -G.bedThick / 2, -G.laneLen / 2],
+    half: [G.laneW / 2, G.bedThick / 2, G.laneLen / 2],
+    rot: null,
+  });
+
+  // --- the hump: a rising quarter-pipe out of angled segments -----------------------------------
+  // Segment angles step up to the launch angle; the ball tracks the surface and leaves the lip
+  // at (roughly) the last segment's angle - the launch is geometry, not a formula.
+  {
+    const segs = G.humpAngles.length;
+    const segLen = G.humpLen / segs;
+    let y = 0;
+    let z = -G.laneLen;
+    for (let i = 0; i < segs; i++) {
+      const a = G.humpAngles[i];
+      const dy = segLen * Math.tan(a);
+      // A box whose top surface runs from (z, y) to (z - segLen, y + dy).
+      const cx = [0, y + dy / 2 - G.bedThick / 2 * Math.cos(a), z - segLen / 2];
+      solids.push({
+        part: 'hump',
+        pos: [cx[0], cx[1], cx[2]],
+        half: [G.laneW / 2, G.bedThick / 2, (segLen / Math.cos(a)) / 2 + 0.004],
+        rot: rotX(a),
+      });
+      y += dy;
+      z -= segLen;
+    }
+  }
+
+  // --- the trough: the catch pit between the hump's crest and the board's bottom edge -----------
+  // A weak lob dies here; a ball that rolls back off the board's bottom edge lands here too.
+  // GUARD: the floor runs from the hump's base all the way UNDER the board's bottom edge - no
+  // seam a ball can slip through.
+  const troughFar = lipZ - 0.18;
+  const troughNear = -G.laneLen - G.humpLen + 0.02;
+  solids.push({
+    part: 'trough',
+    pos: [0, -G.troughDepth - G.bedThick / 2, (troughNear + troughFar) / 2],
+    half: [G.laneW / 2 + 0.06, G.bedThick / 2, (troughNear - troughFar) / 2],
+    rot: null,
+  });
+  // The kick panel under the board's lip: a trough ball bounces off it and stays in the trough.
+  // Its top stops 3cm short of the lip so there is no ledge a ball could park on (the gap is
+  // half a ball wide - nothing fits in it).
+  solids.push({
+    part: 'kick',
+    pos: [0, (lipY - 0.03 - G.troughDepth - 0.02) / 2, lipZ - 0.03],
+    half: [G.boardW / 2 + 0.05, (lipY - 0.03 + G.troughDepth + 0.02) / 2, 0.02],
+    rot: null,
+  });
+
+  // --- the flare: the taper from the lane out to the board -------------------------------------
+  // The board is 1.00m wide against a 0.53m lane (see boards.js on why the board is deliberately
+  // wider than a real machine). Without this the two just butt together at different widths and
+  // read as a mistake. A straight taper across the trough gap makes it read as a flared cabinet,
+  // which is what a real one has - just less of it.
+  {
+    const crestY = G.humpAngles.reduce((a, ang) => a + (G.humpLen / G.humpAngles.length) * Math.tan(ang), 0);
+    const crestZ = -(G.laneLen + G.humpLen);
+    const dx = G.boardW / 2 - G.laneW / 2;
+    const len = Math.hypot(dx, G.troughLen);
+    for (const side of [-1, 1]) {
+      solids.push({
+        part: 'flare',
+        pos: [side * (G.laneW / 2 + G.boardW / 2) / 2, (crestY + lipY) / 2, (crestZ + lipZ) / 2],
+        half: [0.015, G.railH / 2 + 0.02, len / 2],
+        rot: { axis: [0, 1, 0], angle: Math.atan2(side * dx, -G.troughLen) },
+      });
+    }
+  }
+  // --- the board: the playing surface, one slab PER SEGMENT -------------------------------------
+  // Near-flat segments (treads, and the classic's single face) are part 'board' - the floor that
+  // capture removes from under the ball. Steep segments (a staircase's risers) are part 'riser':
+  // solid walls the ball bounces off toward the player, NEVER intangible - a captured ball must
+  // fall through a tread, not through a wall.
+  for (const fr of frames) {
+    const len = fr.v1 - fr.v0;
+    const mid = (fr.v0 + fr.v1) / 2;
+    solids.push({
+      part: fr.tilt < 1.0 ? 'board' : 'riser',
+      pos: faceToWorld(0, mid, -G.bedThick / 2),
+      half: [G.boardW / 2, G.bedThick / 2, len / 2],
+      rot: rotX(fr.tilt),
+      segV0: fr.v0,
+      segV1: fr.v1,
+    });
+  }
+
+  // --- the rings: ONE PER HOLE ------------------------------------------------------------------
+  // GUARD: every ring is DERIVED from the hole it belongs to (rule 1 - tangent at the hole's
+  // bottom, centre sits (R - r) up-slope of the hole's centre), not hand-placed. A ring is never
+  // concentric with its hole. See DECISIONS.md#ring-geometry.
+  const ringSegs = [];
+  for (const id of Object.keys(G.holes)) {
+    const H = G.holes[id];
+    if (!H.ringD) continue;
+    // GUARD: `ringD` is the INSIDE of the ring (the clear opening), not the wall's centreline.
+    // R is the inner radius; the boxes sit half a wall-thickness OUTSIDE it, and `cv` (rule 1's
+    // placement) uses R, the inner edge. See DECISIONS.md#ring-geometry.
+    const R = H.ringD / 2;
+    const Rwall = R + G.ringThick / 2;           // centreline the boxes sit on
+    const cu = H.u;
+    const cv = H.v - H.r + R;                    // rule 1, the only placement rule there is
+    // Segment count scales with RADIUS, not a fixed constant, since these rings range from a
+    // 100's small ring to the 10's much larger arc.
+    const N = Math.max(20, Math.ceil((2 * Math.PI * Rwall) / 0.04));
+    const halfChord = Rwall * Math.tan(Math.PI / N);
+    for (let i = 0; i < N; i++) {
+      const phi = (i / N) * Math.PI * 2;
+      const pu = cu + Rwall * Math.cos(phi);
+      const pv = cv + Rwall * Math.sin(phi);
+      // GUARD: the 10's ring is an ARC, not a circle - only its lower half exists, because a full
+      // circle at that diameter crosses the 50's mouth.
+      if (H.ringOpen && pv > cv) continue;
+      if (Math.abs(pu) > G.boardW / 2) continue;           // clipped at the side rails
+      if (pv < 0 || pv > G.boardLen) continue;             // and at the face's own ends
+      // GUARD: EXACT circumscribed-polygon chord so adjacent faces meet flush at the corners - a
+      // padded chord leaves a ledge a slow ball can rest against.
+      ringSegs.push({
+        part: 'ringSeg',
+        ring: id,
+        pos: faceToWorld(pu, pv, G.ringH / 2),
+        half: [halfChord, G.ringH / 2, G.ringThick / 2],
+        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+      });
+    }
+  }
+  solids.push(...ringSegs);
+
+  // --- the cup collars --------------------------------------------------------------------------
+  for (const id of Object.keys(G.holes)) {
+    const H = G.holes[id];
+    if (!H.collarH) continue;                   // the 20 is a flush hole, no collar
+    const N = G.cupSegments;
+    const rr = H.r + G.collarThick / 2;
+    // GUARD: EVERY SEGMENT OF ONE COLLAR IS PLACED IN THAT HOLE'S OWN SEGMENT OF THE STAIRCASE.
+    // A collar is a circle of radius rr around (H.u, H.v), so its rear segments carry a v up to
+    // rr past the hole's own - and on the bottom row (v 0.1909, rr 0.1151) that reaches 0.3031,
+    // past the first tread's back edge at 0.3000. Placed by frameAt(pv) those two segments were
+    // built in the RISER's frame and landed 7 cm low and 7 cm forward of where the basket is
+    // drawn: an invisible bar across the throat of every -20 / -10 / -20 basket, 60% of the way
+    // down, that a ball dropping in came to rest ON. faceRot already used tiltAt(H.v), so the
+    // boxes were mis-oriented for a tread they were no longer standing on, too. (Matt,
+    // 2026-08-26: "the ball sometimes gets stuck IN the negative baskets... There's nothing for
+    // them to get stuck on." There was, and only render.js's smooth basket hid it.)
+    const cupFrame = frameAt(H.v);
+    for (let i = 0; i < N; i++) {
+      const phi = (i / N) * Math.PI * 2;
+      const pu = H.u + rr * Math.cos(phi);
+      const pv = H.v + rr * Math.sin(phi);
+      // A lipLow cup is a tilted tube: the down-slope lip is LOW (a rolling ball rides over it)
+      // and the up-slope lip is tall (an overshoot is caught). Height blends around the circle;
+      // render.js draws this same profile, vertex for vertex, so the cup you see is the cup the
+      // ball hits.
+      const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
+      let h = H.collarH;
+      if (H.lipLow) h = H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
+      solids.push({
+        part: 'cupSeg',
+        cup: id,
+        pos: faceToWorldIn(cupFrame, pu, pv, h / 2),
+        half: [rr * Math.tan(Math.PI / N), h / 2, G.collarThick / 2],
+        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+        segH: h,
+      });
+    }
+  }
+
+  // --- THE RAIL CHAMFERS: why a ball does not die in the corner ---------------------------------
+  // MACHINE-SPEC.md section 12: "Three flat surfaces meeting at right angles, anywhere a ball can
+  // reach, will trap it... Angle one of the three." A near-flat tread (0.10 rad) meeting a
+  // vertical rail is that corner, and on THIS machine it is reachable in a way it is not on any
+  // other, because the cabinet is 10.44X wide to clear the outer collars while the hoops only
+  // span +/-3.90X - so there is 1.3X of bare shelf outside the last hoop on each side for a ball
+  // to run out onto.
+  //
+  // MEASURED, and this is the whole reason the part exists: at 10.44X with square corners the
+  // watchdog fired on 67 of 231 throws (29%), and EVERY SINGLE ONE was resting at u = +/-5X,
+  // hard against a rail - 41 on the hoop tread and 26 in the riser corner behind it. Under
+  // shoot-until-you-make-it a parked ball is not a wrong score, it is DEAD TIME: the player waits
+  // out the watchdog before they can shoot again.
+  //
+  // The chamfer is a square section stood on its corner and buried in the joint, so what a ball
+  // can actually touch is a 45-degree ramp leading back out of the corner. It is applied to every
+  // near-flat segment, both sides, and it moves nothing a shot can reach: the nearest hoop's
+  // collar is 0.78X away from it by construction (that is what set the cabinet's width).
+  {
+    const cw = G.railChamfer || 0;
+    if (cw > 0) {
+      for (const fr of frames) {
+        if (fr.tilt > 0.5) continue;                 // treads only; a riser has no such corner
+        const len = fr.v1 - fr.v0;
+        for (const sx of [-1, 1]) {
+          solids.push({
+            part: 'chamfer',
+            pos: faceToWorldIn(fr, sx * (G.boardW / 2), fr.v0 + len / 2, 0),
+            half: [cw, cw, len / 2],
+            faceRot: { phi: 0, tilt: fr.tilt },
+            spin45: true,
+          });
+        }
+      }
+    }
+  }
+
+  // --- THE FINS: why a ball cannot balance between two rims -------------------------------------
+  // Matt, 2026-09-21: "Make sure a ball can't get stuck balancing between two rims."
+  //
+  // IT GENUINELY COULD, and the arithmetic says so before any sweep does. Rims sit 1.30X apart
+  // and are 1.0X across, so the clear gap between two rim WALLS is 3.2 cm against a 10.9 cm
+  // ball. The ball cannot fall into the gap - it comes to rest ON both rim tops, centred over
+  // the gap, in a stable saddle with a contact either side. That is a real resting place and
+  // the ball has no reason to leave it.
+  //
+  // A fin stands in each gap and rises ABOVE the rim line, capped by a ridge - a box rotated 45
+  // degrees about that tread's own v axis, so the top of the fin is an EDGE and not a face.
+  // Together they delete the saddle: there are no longer two rim tops a ball can sit across, and
+  // a ball arriving between two hoops is on a ridge with nothing level under it, so it sheds to
+  // one side. Where it sheds is usually into one of the two hoops, which is also where a good
+  // part of Matt's "little bit of unpredictability" comes from.
+  //
+  // GUARD: A FIN IS NARROWER THAN THE GAP AND NEVER OVERHANGS A RIM. `inset` holds it clear of
+  // both rim walls. A mouth's width is Matt's number on every machine and nothing here may
+  // narrow one (skeeball/CLAUDE.md's hard rule) - a fin that touched a rim would do exactly that.
+  if (G.fins) {
+    const row = Object.entries(G.holes)
+      .map(([id, H]) => ({ id, H }))
+      .sort((a, b) => a.H.u - b.H.u);
+    for (let i = 0; i + 1 < row.length; i++) {
+      const A = row[i].H, B = row[i + 1].H;
+      if (Math.abs(A.v - B.v) > 1e-6) continue;          // only fins BETWEEN NEIGHBOURS IN A ROW
+      const rrA = A.r + G.collarThick / 2;
+      const rrB = B.r + G.collarThick / 2;
+      const gapL = A.u + rrA + G.fins.inset;
+      const gapR = B.u - rrB - G.fins.inset;
+      const halfW = (gapR - gapL) / 2;
+      if (halfW <= 0.002) continue;                       // no room; leave the gap alone
+      const mu = (gapL + gapR) / 2;
+      const fr = frameAt(A.v);
+      const depth = G.fins.depth;
+      // The pillar: gap-width, from the tread up to the rim line.
+      const pillarH = A.collarH;
+      solids.push({
+        part: 'fin',
+        pos: faceToWorldIn(fr, mu, A.v, pillarH / 2),
+        half: [halfW, pillarH / 2, depth / 2],
+        faceRot: { phi: 0, tilt: fr.tilt },
+      });
+      // The ridge cap: a square section rotated 45 degrees about the v axis, so its silhouette
+      // is a diamond and its top is a line. Sized so the peak clears the rim by `rise` and the
+      // diamond's own half-width still fits the gap.
+      const c = Math.min(halfW, G.fins.rise) / Math.SQRT2;
+      const capBase = pillarH;
+      solids.push({
+        part: 'finCap',
+        pos: faceToWorldIn(fr, mu, A.v, capBase + c * Math.SQRT2),
+        half: [c, c, depth / 2],
+        faceRot: { phi: 0, tilt: fr.tilt },
+        spin45: true,
+      });
+    }
+  }
+
+  // --- the throats: what holds a captured ball inside the basket it fell into --------------------
+  // (2026-09-04) A THROAT IS THE INSIDE OF THE BASKET, CONTINUED DOWN THROUGH THE TREAD. Capture
+  // takes the floor out from under the ball AND - since "THE NET", physics.js section 2 - that
+  // basket's own collar with it, so between the rim and the score there was NOTHING left holding
+  // the ball in and it simply carried its arrival speed sideways out of the basket. Measured on
+  // the build before this, over a 41x41 power/aim grid: 284 of 793 captured balls did not pay the
+  // hole that captured them (the corner 100s 25% and 27%, the -20s about half), and a captured
+  // ball wandered up to 48 cm from its own mouth. Matt, 2026-09-04, with a clip and 25 frames of
+  // the top-right 100: made 100s "glitch and move through the basket."
+  //
+  // GUARD: THE RADIUS IS r + ballR, NOT r. A wall at the mouth radius would be violently wrong -
+  // this machine's 100 is a 5.82 cm mouth against a 5.45 cm ball, 3.7 mm of clearance, while
+  // capture fires with the ball's CENTRE up to rRest (5.28 cm) off the axis. r + ballR is the
+  // wall a ball whose centre is over the mouth can never pass, which is the same thing capture's
+  // own rEff/rRest measure. It confines a captured ball to d <= r, so the pass-through commit at
+  // the top of physics.js's substep (d < r + ballR) can no longer fail: a ball that fell in gets
+  // paid for the hole it fell into.
+  //
+  // GUARD: NOTHING COLLIDES WITH A THROAT UNLESS IT HAS BEEN CAPTURED BY THAT HOLE. Each throat
+  // is on its own collision bit (physics.js `throatBit`), added to the ball's mask by capture and
+  // dropped again by a rimout, so no throw that is not already captured can be changed by one -
+  // including a throw over the low row, where a neighbour's throat would otherwise be in reach.
+  // render.js skips the part for the same reason it skips 'cupSeg': the basket you see is drawn,
+  // and this is underneath the tread inside the cabinet.
+  //
+  // It runs from the rim top down, not from the tread down, because a ball is captured while it
+  // is still ABOVE the face (the lip-rest branch allows collarH + 1.15 ballR) and everything
+  // between there and the tread is exactly where it used to escape.
+  for (const id of Object.keys(G.holes)) {
+    const H = G.holes[id];
+    if (!H.collarH) continue;
+    const N = G.cupSegments;
+    const rr = H.r + G.ballR + G.collarThick / 2;
+    // Deep enough that the commit test (ballR * 1.2 below the face) fires while the ball is still
+    // inside the tube; open at the bottom, so nothing can come to rest in it.
+    // THE THROAT RUNS ABOVE THE RIM ON THIS MACHINE, WHICH IT DOES NOT ON BRICK CITY.
+    // Measured, 231-shot sweep: with the throat topping out at the rim, 8 of 135 captured balls
+    // (6%) did NOT pay the column that captured them. The reason is the pair of changes above -
+    // capture removes the tread from under the ball AND there is no rimout here to give it back,
+    // so a captured ball that bounced up OVER the rim was, for those few frames, above the top of
+    // the throat with nothing beside it and an intangible floor beneath it: it drifted off the
+    // mouth's axis, sank through the tread somewhere else and resolved as a miss.
+    //
+    // BRICK CITY does not need this because its rimout catches exactly that case and restores the
+    // floor. Matt asked for the opposite here ("once it goes into a basket, it goes down that
+    // column 100% of the time"), so the ball has to be CONTAINED instead of released - which is
+    // also what a real basket with a deep net does to a ball rattling inside it.
+    const top = H.collarH + G.ballR * 2.4;
+    const bot = -G.ballR * 2.6;
+    const cupFrame = frameAt(H.v);
+    for (let i = 0; i < N; i++) {
+      const phi = (i / N) * Math.PI * 2;
+      const pu = H.u + rr * Math.cos(phi);
+      const pv = H.v + rr * Math.sin(phi);
+      solids.push({
+        part: 'throat',
+        cup: id,
+        pos: faceToWorldIn(cupFrame, pu, pv, (top + bot) / 2),
+        half: [rr * Math.tan(Math.PI / N), (top - bot) / 2, G.collarThick / 2],
+        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+      });
+    }
+  }
+
+  // --- rails and the backboard ------------------------------------------------------------------
+  const railT = 0.03;
+  const topPt = faceToWorld(0, G.boardLen, 0);
+
+  // GUARD: the side walls must be bankable - a hard, wide throw needs a wall it can actually
+  // carom off into a corner 100, not just a rail that stops a ball leaving. And the front must
+  // NOT taper to zero height: a true triangle leaves the player end of the wall too short to
+  // meet a low, wide fling, which sails off the side untouched instead of banking. See
+  // DECISIONS.md#side-walls.
+  //
+  // Each wall in WORLD vertical, not perpendicular to the face - what a real cabinet's side panel
+  // is, and what makes it read as a wall:
+  //     A  the board's bottom corner (player end)
+  //     B  the board's top corner
+  //     C  the top of the backboard, directly above B
+  // AB runs up the board's own slope, BC is the vertical back edge, and the top edge is the
+  // diagonal. Sliced into vertical boxes along z; each stands ON the board surface and reaches up
+  // to that diagonal, so the ball meets a continuous sloping wall. `railFrontH` gives the player
+  // end a real bankable height instead of tapering to zero.
+  const railFrontH = 0.34;
+  const zA = lipZ;
+  const yA = lipY;
+  const zB = lipZ - G.boardLen * cos;
+  const yB = lipY + G.boardLen * sin;
+  // GUARD: THE WALL STARTS OVER THE TROUGH, NOT AT THE BOARD'S LIP. It used to begin exactly at
+  // zA, which left the narrow END of it - the edge facing the player - standing in the air the
+  // ball flies through on its way to a corner 100. Measured over 210 hard-angled throws: 9% hit
+  // that end face, and every single one of them came back a 0, a 10 or a 20. Never anything
+  // else, because a flat edge-on hit kills the ball's angle instead of turning it. Carried
+  // forward over the trough, an angled ball meets the wall's INNER FACE and banks, which is the
+  // shot the corner cups exist for. (Matt, 2026-08-20.)
+  const zFront = lipZ + G.troughLen;
+  const yTrough = -G.troughDepth;
+  // The top edge runs from the front-top corner (yA + railFrontH) up to C.
+  const topSlope = ((yB + G.backboardH) - (yA + railFrontH)) / (zB - zFront);
+  const WALL_SEGS = 24;
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < WALL_SEGS; i++) {
+      const z0 = zFront + ((zB - zFront) * i) / WALL_SEGS;
+      const z1 = zFront + ((zB - zFront) * (i + 1)) / WALL_SEGS;
+      const zm = (z0 + z1) / 2;
+      // Over the trough there is no board under the wall, so it reaches down to the trough floor
+      // - otherwise the extension would hang in the air with a gap beneath it. Over the board it
+      // reaches down to the playing surface (the staircase silhouette on a stepped machine).
+      const yBoard = zm > zA ? yTrough : surfYAt(zm);
+      const yTop = (yA + railFrontH) + topSlope * (zm - zFront);   // the raked top, front -> C
+      const h = yTop - yBoard;
+      if (h <= 0.004) continue;
+      solids.push({
+        part: 'rail',
+        pos: [s * (G.boardW / 2 + railT / 2), yBoard + h / 2, zm],
+        half: [railT / 2, h / 2, Math.abs(z1 - z0) / 2],
+        rot: null,
+        railSide: s,
+      });
+    }
+    // Lane rails keep the roll on the wood.
+    solids.push({
+      part: 'laneRail',
+      pos: [s * (G.laneW / 2 + railT / 2), G.laneRailH / 2, -(G.laneLen + G.humpLen) / 2],
+      half: [railT / 2, G.laneRailH / 2, (G.laneLen + G.humpLen) / 2],
+      rot: null,
+      railSide: s,
+    });
+    // Trough side cheeks so a corner ball stays in its corner.
+    solids.push({
+      part: 'troughWall',
+      pos: [s * (G.laneW / 2 + 0.03 + railT / 2), -G.troughDepth / 2, -G.laneLen - G.humpLen - G.troughLen / 2],
+      half: [railT / 2, G.troughDepth / 2 + 0.02, G.troughLen / 2 + 0.05],
+      rot: null,
+    });
+  }
+  // The backboard: the vertical wall rising from the board's top edge. A real wall the engine
+  // bounces the ball off - the reaction IS the contact solve, nothing is scripted.
+  const top = faceToWorld(0, G.boardLen, 0);
+  // GUARD: THE WALL REACHES PAST THE MARQUEE. render.js draws the marquee as a box 0.3 tall
+  // centred 0.02 above backboardH, so its top sits 0.17 higher than the wall used to. That left
+  // an 18cm slot between wall-top and sign-top, and a hard throw threaded it and finished BEHIND
+  // the header board (Matt, 2026-08-22: "it goes over the wall but under/behind the THE CLASSIC
+  // header board thing. that's wrong"). A real cabinet has no such slot - the sign is mounted on
+  // a solid back, not hung in front of a gap.
+  //
+  // NOT the banned ceiling (MACHINE-SPEC section 9): nothing spans the top, and a ball thrown
+  // hard enough still clears the machine and leaves. This closes the slot BEHIND the sign, which
+  // is cabinet, not sky. 0.18 not 0.17 because the box is seated 0.01 low (the -0.01 below).
+  // If render.js's marquee size or offset moves, move this with it.
+  const MARQUEE_RISE = 0.18;
+  const bbH = G.backboardH + MARQUEE_RISE;
+  solids.push({
+    part: 'backboard',
+    pos: [0, top[1] + bbH / 2 - 0.01, top[2] - 0.02],
+    half: [G.boardW / 2 + railT, bbH / 2, 0.02],
+    rot: null,
+  });
+
+  // --- the cage: REMOVED, do not reintroduce -----------------------------------------------------
+  // GUARD: there is no wire canopy over the board. There used to be, to catch overly high
+  // "rainbow" throws before they left the machine, but it contradicts the rule that there is no
+  // upper limit on throw power - a ball thrown hard enough to leave the machine is SUPPOSED to
+  // leave, and it still resolves (arcs out, comes down, scores what it earned). Do not put a
+  // canopy back to "fix" a ball leaving the machine. See DECISIONS.md#removed-features-and-why-they-stay-removed.
+
+
+  // --- invisible containment: FOUR WALLS, NO LID (physics only; render skips part 'keep') -------
+  // GUARD: nothing spans the top of the machine. A ball thrown hard enough leaves, and resolves
+  // on the way down - physics.js catches anything below y -0.3 and the stall watchdog covers the
+  // rest. Do not add a ceiling, a canopy or a pane over the crest.
+  const keepH = 1.6;
+  const zMin = top[2] - 0.3;
+  solids.push(
+    { part: 'keep', pos: [0, keepH / 2, 0.45], half: [1.2, keepH / 2, 0.02], rot: null },                        // behind the player
+    { part: 'keep', pos: [0, keepH / 2, zMin], half: [1.2, keepH / 2, 0.02], rot: null },                        // behind the backboard
+    { part: 'keep', pos: [-(G.boardW / 2 + railT + 0.04), keepH / 2, (zMin + 0.4) / 2], half: [0.02, keepH / 2, (0.4 - zMin) / 2], rot: null },
+    { part: 'keep', pos: [G.boardW / 2 + railT + 0.04, keepH / 2, (zMin + 0.4) / 2], half: [0.02, keepH / 2, (0.4 - zMin) / 2], rot: null },
+  );
+
+  return {
+    solids,
+    faceToWorld,
+    worldToFace,
+    worldToFaceIn,
+    frameAt,
+    tiltAt,
+    frames,
+    lipY,
+    lipZ,
+    tilt: t,
+    troughZ: [-(G.laneLen + G.humpLen + G.troughLen) + 0.01, -(G.laneLen + G.humpLen) + 0.01],
+    troughY: -G.troughDepth,
+    // The side wall's outline in the (z, y) plane, so render.js can draw ONE smooth wall per
+    // side instead of the WALL_SEGS boxes above (same pattern as the ramp's _rampSkin - the
+    // smooth wall drawn is built from the same points the physics boxes use). Order:
+    // front-bottom, back-bottom, back-top, front-top. railInnerX is the inner face; the wall is
+    // railT thick.
+    railProfile: [[zFront, yTrough], [zB, yB], [zB, yB + G.backboardH], [zFront, yA + railFrontH]],
+    railInnerX: G.boardW / 2,
+    railT,
+  };
+}
+
+export default { buildMachine };
