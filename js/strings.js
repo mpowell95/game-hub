@@ -500,6 +500,7 @@ export const STRINGS = {
     lb_sort_wins: 'Wins',
     lb_sort_points: 'Points',
     lb_sort_golf_best: 'Best round',
+    lb_sort_ms_best: 'Best time',
     lb_sort_high: 'High score',
     lb_sort_obstacles: 'Obstacles',
     lb_sort_longest: 'Longest',
@@ -523,6 +524,7 @@ export const STRINGS = {
     // Golf's board number is a best round as a score to par, lowest wins - not points, and
     // not a count. "E" is level par, the notation every scorecard uses in both languages.
     lb_unit_golf_best: 'best round',
+    lb_unit_ms_best: 'best time',
     lb_golf_even: 'E',
     lb_unit_high: 'high score',
     lb_runs_count: '{n} runs',
@@ -1119,6 +1121,7 @@ export const STRINGS = {
     lb_sort_wins: 'Victorias',
     lb_sort_points: 'Puntos',
     lb_sort_golf_best: 'Mejor vuelta',
+    lb_sort_ms_best: 'Mejor tiempo',
     lb_sort_high: 'Récord',
     lb_sort_obstacles: 'Obstáculos',
     lb_sort_longest: 'Más larga',
@@ -1138,6 +1141,7 @@ export const STRINGS = {
     lb_unit_meters: 'metros',
     lb_unit_points: 'puntos',
     lb_unit_golf_best: 'mejor vuelta',
+    lb_unit_ms_best: 'mejor tiempo',
     lb_golf_even: 'E',
     lb_unit_high: 'récord',
     lb_runs_count: '{n} carreras',
