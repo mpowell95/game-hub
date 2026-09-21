@@ -1524,3 +1524,34 @@ batting still showing the feet; the scoreboard still. `node test-baseball-actors
 `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green, and the device suite's
 `zone-world`, `zone-scale`, `pop-anchor`, `hud-legible`, `pitcher-frame` re-measured against the
 new batter camera.
+
+### R10 record (shipped v872, 2026-09-21)
+
+From the stage's report: `FLIGHT_MS` and `RUN_WINDOW_MS` are gone; `_flightMsFor(kind,
+distanceFt)` gives the flight from the arc (hang time of `_battedApexFt`, a line drive's apex
+capped by `BATTED_LINE_APEX_FRAC` 0.126 / `BATTED_LINE_APEX_MAX_FT` 40; a grounder as a
+decelerating roll), clamped 0.8 to 5.5 s. `_animateRunners` returns `{promise, longestMs}` and
+`_animateBattedBall` is async and takes the outcome word and the longest runner; the outcome
+word is written when the ball is fielded, lands, or is caught, and HOME RUN at the wall
+crossing (`_homerCrossMs`). Measured: a 420 ft homer's HOME RUN at 4.4 s; a 120 ft groundout's
+Out at 3.4 s; a 250 ft fly out's Out at the catch, 3.8 s. Ship review: the real trot made a solo
+homer's cutaway 13.3 s, so after the wall crossing every runner finishes at `HOMER_RUNNER_SPEEDUP`
+3x, landing the 420 ft solo homer at 7.5 s from contact; every other play keeps real speed.
+`MARKER_HOLD_MS` 800 is a floor now. Probe `play-clock` (three synthetic plays). The visual PLAY
+probe fails under container load (a 700 ms wind-up drag lands late) and passes on an idle
+machine; three failures in a row during R12's parallel suites were exactly that.
+
+### R12 record (shipped v872, 2026-09-21)
+
+From the stage's report: the scoreboard is a two-column grid (count rows left, the mini-diamond
+right at about 1.6x) inside the same card; outs are vermilion, strikes yellow (ship review: the
+stage had made both red), balls blue, each row keeping its letter; runs and labels +2 px.
+`CAMERAS.batter.look.y` is -1.0 (was 2.3) so the batter's feet are in frame; the position is
+unchanged and every device probe held its baseline. Crouch rebuilt (legs, glove low and forward,
+throwing hand behind the back), improved not finished: the glove hand is 0.93 ft against the
+knee's 0.33, and a stance-width asymmetry remains, both written up in `poses.js`. This rig's leg
+bind poses are not mirrors of each other past about 35 deg of flexion. Caps: a deeper dome past
+the equator, a wider tilted darker bill, a top button, the catcher's backwards. The bat is a
+`LatheGeometry` profile (knob, thin handle, taper, rounded barrel, grip band). Ship review: the
+catcher is drawn on the pitcher camera only, the same rule as the umpire, because his cap filled
+the bottom of the batting frame once caps arrived. `render-actor.mjs` honours `BB_BASE`.
