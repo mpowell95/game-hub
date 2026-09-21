@@ -4,6 +4,223 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R9: figures and stadium (2026-09-21)
+
+Four fixes off Matt's recording of v868 (`docs/BASEBALL-3D-BUILD.md` section 9, "R9"). No engine
+change, no beat change, no camera position change (the batter camera's own position/look is
+untouched; item 4's stadium only changes what it looks AT).
+
+**Item 1, the double batter: hidden the instant `rb` is placed, not just once he outlives his own
+play.** Matt: "there's still the problem of multiple batters appearing." R6 already closed the
+RETURN half of this (a stale `rb` still running when `_returnToPlate()` puts the next batter up);
+measured against the recording (`scratchpad/rec5/glitch-sheet.jpg`, 28.6s and 46.4s), the OTHER half
+was still open: at contact, `_animateRunners(payload)` is called (and starts `rb`'s own `Run` clip)
+BEFORE `_settleAtBat`'s `if (!inPlay) this.actors.idle('batter')` line - which only ever fires for a
+walk or a strikeout, never a ball in play - so the `batter` actor is never told to get out of the
+box, and two navy figures (now one red, one navy) share the plate for the whole `CONTACT_HOLD_MS`
+(400ms) before the cut, and however much of the chase the clocks happen to overlap into.
+
+The fix is one new primitive, not a `batter`-specific hack: `Actors.setForceHidden(role, hidden)`
+generalises the umpire/catcher's own CAMERA-gated hide (`_applyCameraVisibility`) to a ROLE fact any
+caller can set - `_place()`'s auto-show (`pivot.visible = true` on every placement) now also checks
+`actor.forceHidden`, alongside the existing umpire/catcher exclusion. `ui.js`'s `_animateRunners`
+sets `actors.setForceHidden('batter', this._rbActive)` the INSTANT `_rbActive` is computed
+(synchronously, before its own step loop or `_contactHold`'s first `_drawStaticField()` call ever
+runs - no frame can show both), and `_syncBatterRunner()` (already the ongoing per-redraw backstop
+for `rb` itself) now applies the same rule every `_syncActors()` call: force-hidden while
+`_rbActive`, cleared and `rb` hidden the instant it is not. `_returnToPlate()` also clears it
+explicitly, the same "whichever comes first" close R6 already uses for `rb`.
+
+Verified both ways, `git stash`-and-rerun (once, `baseball/js/actors.js` + `baseball/js/ui.js`):
+against the unfixed tree, a real ball-in-play `_settleAtBat` call sampled every rendered frame for
+800ms after firing showed `["batter","rb"]` both visible within 6ft of the batter's box on 6 of 39
+sampled frames; with the fix restored, 0 of 42 (`test-baseball-device.mjs`'s `one-batter` probe, now
+two checks - the pre-existing after-return check plus this new every-frame START check).
+
+**Item 2, the CPU wears red.** Matt: "the opposing team should be red." `actors.js`'s `KEYS` table
+(section 2.2's colour-key remap - there is no Jersey material, the uniform is painted into the skin
+texture) sends `home`'s shirt key to `HOME_RED` (`#c62828`, Matt's own number) and its trim key
+(`criminalMaleA` only - `skaterMaleA` never had a separate trim key) to `HOME_RED_TRIM` (`#7c1a1a`,
+a darker red, the same relationship `NAVY`/`AWAY_TRIM` already have on the away side); the pants key
+moves to `HOME_PANTS` (`#f2f2f2`, white) on BOTH skins - previously `HOME_CREAM` sent shirt AND
+pants to the same off-white, so this is also what makes red and white two different colours instead
+of one flat cream. `away` (the human) is byte-for-byte unchanged: navy shirt, grey pants, white
+trim. Since every figure's side already comes from `this.game.half` (R6's own "one rule for all
+fifteen roles"), red reaches the batter, pitcher, catcher, every fielder and every runner on the
+CPU's half-innings for free - no second casting rule needed. Colorblind rule (root `CLAUDE.md`, Matt
+is red/green colorblind): red vs navy is already a big luminance gap, and home's pants stay WHITE
+against away's own GREY (unchanged) so the two silhouettes differ by more than hue before the shirt
+colour is even read. `test-baseball-actors.mjs`'s "never key a skin tone" node check only reads the
+`from` side of each key entry (unchanged), so it stayed green with no edits.
+
+**Item 3, every figure gets a cap.** Matt: "can you add baseball hats?" A dome (`SphereGeometry`
+cut with `thetaLength = Math.acos(1 - 2*0.45)` so the retained cap is the TOP 45% of the sphere's own
+diameter - the spec's own number) plus a brim (a flattened `CylinderGeometry` wedge, `±0.19π` half-
+span so it reads as a forward bill rather than a half-disc; a first pass at `±0.62π` wrapped nearly
+two-thirds of the way around the head, covering the ears). Built ONCE (module scope, shared by every
+actor - `capGeometry()`/`capMaterial()`, the same cache pattern `_skinTexCache` already uses) and
+parented to the HEAD bone (`rig.js`'s `RIG.head`, resolved per actor) as a `THREE.Group` NAMED
+`'cap'`, so it rides every clip for free (a child of a bone travels with the bone through every
+keyframe the mixer plays - no per-clip authoring needed) and the structural check
+(`test-baseball-actors.mjs`) can find it by name.
+
+A plain rigid mesh parented to a bone is NOT run through the skinning matrices that keep the skinned
+BODY's own world size independent of any individual bone's scale - `_attachBat`'s own comment on
+this for the hand bone applies identically here, and the first render found it the hard way: the
+head bone's own world scale measured **~100x** (baked in by the FBX->glTF conversion), so a cap sized
+with no correction flew to world Y=3646 against the head's own Y=270 - invisible, off in the sky.
+`attachCapGeometry` divides both the scale and the offset by the head bone's own `getWorldScale()`,
+the same `handScale` correction `_attachBat` needs for the bat. Scale and offset were then tuned by
+MEASURING, not guessing further: `Box3().setFromObject(root)` against the head bone's own world
+position (pre-placement, so in the same raw units `heightWorld` (376.47) already is) put the crown
+(the topmost point of the head/hair) **106.69 units above the head bone's own origin** - about 28%
+of the whole body's height - and a dome sized/offset from that number converged in one more render
+instead of three more guesses. Final numbers, both fractions of `actor.heightWorld` (the same unit
+`BAT.length` uses): `CAP_SCALE` 0.115 (the dome's own unit-sphere radius), `CAP_OFFSET`
+`[0, 0.205, 0.01]` (the group's own centre from the head bone's origin). Colour: `CAP_COLOR = {
+home: HOME_RED, away: NAVY, umpire: UMP_DARK }`, recoloured by `recolorCap(actor, side)` at the same
+moment `_setSide` swaps the jersey texture - and the cap's two meshes are flagged `isCapPart = true`
+so `_setSide`'s own `root.traverse` (which recolours every mesh it finds to the jersey's skin
+texture) skips them, or the cap would have been overwritten with the jersey texture on the very
+first side cast. The catcher keeps his cap forward, not backwards (the spec's own "a bonus, not
+required" - inventing a reversed-cap pose is a feature not discussed).
+
+Verified by rendering (`render-actor.mjs --sheet`, a cap sheet across Idle/Swing/Pitch/Run/Crouch,
+different roles/facings): the cap sits on the head in all five, never floats, never sinks, and
+follows every head turn (the pitcher's own delivery turns his head/body through about 90 degrees;
+the cap turns with it, being a literal child of the bone). New structural check in
+`test-baseball-actors.mjs`'s Chromium half: every one of the 15 roles `load()` builds has a child
+named `'cap'` directly under its own resolved head bone (checked before any placement/hiding, since
+`_makeActor` attaches a cap to every role unconditionally).
+
+**Item 4, the stadium stops being bland.** Matt: "the stadium backdrop should be changed. It's
+bland right now." Five pieces, all in `field.js`, all procedural (no new image files, the R1 hard
+rule):
+
+- **Sky, real clouds.** R1's `skyTexture()` was a 2px-wide gradient COLUMN stretched around the
+  whole sky sphere - uniform at every longitude by construction, so "no clouds" wasn't a choice so
+  much as a shape that could not have held any. Now a real 256x128 canvas: the same vertical
+  gradient, plus five soft-edged cloud blobs (radial gradients fading to transparent, alpha 0.68 to
+  0.90, a fixed seed so the sky is reproducible - the same "today's screenshot matches next week's"
+  rule `crowdTexture` already follows).
+- **The crowd stopped rendering near-black.** Measured cause, not guessed: a vertical stand face's
+  own normal points HORIZONTALLY (`ribbonGeometry`'s own comment - toward home), and the scene's one
+  directional light comes from mostly OVERHEAD (`sun.position.set(-300, 500, 400)`) - so a lit
+  material on that face gets almost no light regardless of its texture's own colours. Two
+  independent fixes, both needed (checked separately): the face material moves from
+  `MeshLambertMaterial` to `MeshBasicMaterial` (unlit - the same treatment the sky already gets, for
+  the same reason: background scenery that has to read correctly no matter which way the light
+  happens to be facing), AND `PALETTE.standsFace` moves from a dark `#2b3038` to a light `#c7c2b6`
+  (the spec's own "dense multicolour specks on a light ground"). Six vertical AISLE GAPS (a slightly
+  darker strip, dots skipped so the gap stays visibly clear rather than merely darker) break the
+  crowd into sections rather than one continuous field of dots. A SEPARATE problem, found only by
+  rendering the backstop up close (the pitcher camera sits ~30ft from it): the R1 `repeat.set(60,
+  1.4)` aliased into flat grey-brown static at that distance and viewing angle - `repeat` lowered to
+  `(22, 1.1)` plus `anisotropy = 8` (the standard fix for a texture viewed at a shallow angle) is
+  what actually made the dots resolve up close, not just far away. Stills:
+  `/tmp/.../scratchpad/r9/before-pitcher-cam.png` vs `after-pitcher-cam.png` are the clearest single
+  before/after for this half of item 4 - the backstop goes from visible static to visible people.
+  **Ship-review correction, same day**: at the pitcher camera's own long lens (R8's own 55.6ft-
+  back, fov-10.35 camera) even the fixed, resolved crowd texture filled the WHOLE frame behind the
+  plate with fine multicolour speckle on light grey and read as TV static, not a crowd - a real
+  defect the `before`/`after` stills above never caught, since neither one is the actual pitcher-
+  camera framing. The BACKSTOP (only - the outfield stands and wall are untouched) is rebuilt to
+  match the reference (`scratchpad/ref/reference-key-frames.jpg`, top row) instead of carrying the
+  outfield bowl's own crowd tier straight up from the ground: one flat wall at `BACKSTOP_DIST_FT`
+  (R7's own 30ft, unchanged), THREE VERTICAL BANDS instead of R7's two radial tiers (the reference
+  reads as a near-flat wall behind the plate, not a stepped bowl). Ground to `BACKSTOP_PAD_H` (12ft)
+  is a solid padded wall, `PALETTE.backstopPad` (`#24406a`, a muted dark blue, no texture) with a
+  thin white rail on top (`BACKSTOP_RAIL_H` 0.4ft, `PALETTE.backstopRail`, the same ribbon-on-a-wall
+  convention the outfield fence's own rail already uses). 12 to 28ft (`BACKSTOP_BRICK_H` 16ft) is a
+  new `brickTexture()` (128x128, a running-bond pattern, warm red-brown `PALETTE.brickBase` on a
+  `PALETTE.brickMortar` ground, per-brick shade variation from a fixed seed). 28 to 40ft
+  (`BACKSTOP_CROWD_H` 12ft, matching the outfield bowl's own 40ft top) is `crowdTexture()` again -
+  now parameterised (`crowdTexture(ground = PALETTE.standsFace)`) so the backstop can pass its own
+  slightly darker `PALETTE.backstopCrowdGround` (`#a9a49a`) and read as a related but distinct tier.
+  Both new textures' repeats are MEASURED, not eyeballed: a node script projected two world points
+  through `CAMERAS.pitcher` at the backstop's own distance and found ~18.0px per world foot (both
+  axes); a brick at close to its real size (0.2ft tall, 0.6ft long) draws 3.6 x 10.8px, inside the
+  spec's own "3 to 6px" for the tall axis, giving `BACKSTOP_BRICK_REPEAT_X/Y` = 26/10 (the brick
+  canvas's own 4 cols x 8 rows per tile, solved against the wall's ~62.8ft arc length and the
+  band's 16ft height); the crowd tier solves the same way for a ~3px speck at
+  `BACKSTOP_CROWD_REPEAT_X/Y` = 4.5/1 - MUCH LOWER than the outfield bowl's own (22, 1.1), since the
+  backstop sits 30ft from the pitcher camera against the bowl's 200ft+. Verified two ways: a wide
+  custom-camera render (`scratchpad/r9/fix-backstop-full.png`) shows all three bands legible up
+  close (a real brick pattern, real coloured specks with visible aisle gaps on a light-but-darker
+  ground); the REAL mounted game in the pitching state (`scratchpad/r9/fix-pitcher-real.png`, not a
+  T-pose render) shows mostly padding and brick behind the plate, matching the reference's own
+  composition, with `scratchpad/r9/compare-pitcher-cam-FIXED.png` laying reference / R8-before /
+  R9-shipped-static / R9-fixed side by side.
+- **The outfield wall is padded, with a yellow line and ad panels.** `wallTexture()` (new, 256x96):
+  a padded-green base (`PALETTE.wallPad`, `#1d6b3a`) with vertical pad seams every panel-width, and a
+  band of four AD PANELS (`AD_PANELS`, plain colour blocks - red/circle, blue/triangle, gold/diamond,
+  green/square, no text, the spec's own words) repeated `(7, 1)` around the wall's own length via
+  `tex.repeat` (the same convention `grassTexture`/`crowdTexture` already use, not the geometry's own
+  `uRepeat`). The yellow top-of-wall LINE is unchanged - R1's own rail mesh (`railGeo`/`railMat`,
+  `PALETTE.rail`) already was one, and the spec's "with a yellow line" is satisfied by it, not by
+  anything new.
+- **Four light towers.** `TOWER_DEG = [-38, -13, 13, 38]`, each pole planted `fenceFtAt(deg,
+  fenceFt) + 18ft` past the wall at that angle (the same `polar()`/`fenceFtAt` convention every other
+  angle in this file already uses, so a tower's distance is never independent of the league's own
+  fence shape). Two merged meshes total for all four towers (every pole in one `mergeGeometries`
+  call, every light bank in another) - four towers, two draw calls, the same merge-by-material
+  discipline the stands already follow. The light banks are `MeshBasicMaterial` (unlit, a pale
+  `#f2e6a8`) on purpose: a panel that reads as LIT is what makes it recognisable as a light fixture
+  from a distance, not a grey box.
+- **A centre-field scoreboard block.** Two meshes (a dark body, `PALETTE.scoreboardBody` `#20242c`;
+  an inset "screen" panel, unlit `PALETTE.scoreboardScreen` `#1f8f5c`) standing at `deg=0`, 22ft past
+  the centre-field fence.
+
+Draw calls and triangles, measured (a scratch Chromium script, `Actors.renderStats()`, only the
+batter and pitcher placed, college fence shape - not a permanent script, the numbers below are the
+record): batter camera 18 draw calls / 7793 triangles before, 22 / 7993 after; pitcher camera 21/9469
+before, 25/9669 after; chase camera 10/5569 before, 14/5769 after. **+4 draw calls on every camera,
+unaffected by league** - none of item 4's additions scale with `fenceFt` (the wall/ad-panel texture
+repeats regardless of the wall's own length; the towers and the scoreboard are fixed counts). Every
+new texture is 256px or smaller on its long side (sky 256x128, wall 256x96, crowd unchanged at
+256x256) - the spec's own "no new textures over 256px" line. **Re-measured after the ship-review
+backstop rebuild** (below - four separate meshes now, not free inside the outfield stands' own
+merge): batter camera 25 calls / 7913 triangles, pitcher camera 27/9645, chase camera 14/5449 -
+still comfortably inside budget.
+
+**What did NOT change**: the batter camera's own position and look-at (item 4's own words - "only
+what it looks at changes"); the pitcher camera still shows stands behind the plate (R7's own
+backstop, now rebuilt per the ship-review fix above rather than sharing the outfield bowl's merged
+`faceGeo`/`faceMat` mesh); no engine file, no `poses.js` clip, no `FEEL` beat, no `settings.js`
+timing.
+
+**Facts for whoever reads this next:**
+- `Actors.setForceHidden(role, hidden)` is a NEW primitive, not batter-specific - a future role that
+  needs "hidden regardless of `place()`'s own auto-show, until a caller says otherwise" (the umpire/
+  catcher's own camera-gated hide is the OTHER mechanism for the same kind of problem) can use it the
+  same way.
+- `HOME_CREAM` is gone from `actors.js`; `HOME_RED`, `HOME_RED_TRIM`, `HOME_PANTS` are the three new
+  home-side constants, all still living beside `NAVY`/`AWAY_GREY`/`AWAY_TRIM` in the KEYS section.
+- `CAP_SCALE`/`CAP_OFFSET`/`CAP_COLOR` are exported from `actors.js`, the same visibility `BAT` and
+  `KEYS` already have, in case a later dev screen wants to expose cap nudging the way stage 3's own
+  dev screen exposed bat nudging.
+- `wallTexture()`, the tower constants (`TOWER_DEG`/`TOWER_EXTRA_FT`/`TOWER_POLE_H`/
+  `TOWER_HEAD_H`/`TOWER_HEAD_W`) and the scoreboard's own inline block all live in `field.js`,
+  beside `buildStadium` - not exported, since nothing outside that function has needed to read a
+  stadium-decoration constant yet.
+- **Ship-review fix (2026-09-21, ONE DAY after this stage first shipped)**: the backstop is a
+  SEPARATE mechanism from the outfield stands now, not a shared merge. `brickTexture()` (new) and
+  `crowdTexture(ground)` (now takes an optional ground colour, default `PALETTE.standsFace`) both
+  live beside `wallTexture()`/`crowdTexture()`'s own call site. `BACKSTOP_PAD_H`/`BACKSTOP_RAIL_H`/
+  `BACKSTOP_BRICK_H`/`BACKSTOP_CROWD_H`/`BACKSTOP_BRICK_REPEAT_X`/`BACKSTOP_BRICK_REPEAT_Y`/
+  `BACKSTOP_CROWD_REPEAT_X`/`BACKSTOP_CROWD_REPEAT_Y` are the new backstop-only constants,
+  `BACKSTOP_DIST_FT`/`BACKSTOP_HALF_SPAN_DEG` unchanged from R7. `BACKSTOP_TIER_DEPTH_FT` (R7's own
+  two-radial-tier constant) is GONE - the backstop is one flat wall now, never two tiers. A future
+  session touching crowd colour/density should remember there are now TWO crowd textures
+  (`crowdTexture()` for the outfield bowl, `crowdTexture(PALETTE.backstopCrowdGround)` for the
+  backstop) with independent repeats, tuned for two very different camera distances - changing one
+  does not change the other.
+- `node baseball/js/test.js`, `node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node
+  test-baseball-device.mjs`, `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
+  `node test-game-conventions.mjs` all green (the last two unaffected by the ship-review fix, not
+  re-run for it per the coordinator's own named suites) - this stage never touched
+  `baseball/js/engine/`, `poses.js`, or any `FEEL` beat, and no camera position moved.
+
 ## R8: controls and HUD (2026-09-21)
 
 Five fixes off Matt's recording of v868 (`docs/BASEBALL-3D-BUILD.md` section 9, "R8"). No engine
