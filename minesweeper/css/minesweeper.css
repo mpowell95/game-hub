@@ -97,6 +97,18 @@
 .gh-dark .ms-root .lb-dshape-t3,
 .gh-dark .ms-root .lb-dshape-t4 { fill: #e6e9f0; }
 
+/* A TAPPABLE CONTROL GETS touch-action: manipulation (root CLAUDE.md, scroll and touch rules).
+ * Without it iOS Safari keeps the double-tap-to-zoom gesture alive on these buttons, which costs a
+ * ~300ms delay on every tap and turns a quick second tap into a page zoom instead of a press - so
+ * a control reads as not responding at all. The board is the one surface that gets `none` instead,
+ * because it is a swipe surface. Shipped without this and Matt hit it on the options rows. */
+.ms-root .ms-diff,
+.ms-root .ms-opt,
+.ms-root .ms-face,
+.ms-root .ms-x,
+.ms-root .gh-btn,
+.ms-root .gh-seg__item { touch-action: manipulation; }
+
 /* Every screen lives inside this one scroller-free column. There is no overflow: auto anywhere
  * in this file on purpose: a screen that does not fit is a layout bug to fix, and `auto` is the
  * most common way of pretending otherwise (docs/BUILDING-A-GAME.md Part 0). */
