@@ -18,6 +18,10 @@
 import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import { clone as cloneSkinned } from './vendor/SkeletonUtils.js';
+// R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 4): the cap's own top button is merged into the
+// dome's geometry with the same helper field.js's stadium already uses, so the button costs no
+// extra draw call.
+import { mergeGeometries } from './vendor/BufferGeometryUtils.js';
 import { RIG, resolveRig } from './rig.js';
 import { CLIPS, buildClip } from './poses.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -75,6 +79,22 @@ function isSoftGL() {
 // drifts off the hand again. Stage 3 owns the fine tuning; this one number is fixed now because
 // the sheet was unreadable without it.
 export const BAT = { length: 0.48, knobR: 0.012, barrelR: 0.028, pos: [0, 0.24, 0], rot: [0, 0, 0], color: 0xc9a06a };
+// R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 5): Matt, on v871: "the baseball bat should be
+// improved." The shipped bat was one straight taper, knob-radius to barrel-radius over its whole
+// length - a carrot, not a bat. `_attachBat` below turns it into a real profile (a `LatheGeometry`,
+// a knob, a thin handle, a taper, a rounded barrel end) plus a second, darker grip-band mesh over
+// part of the handle. `BAT.length`, `BAT.pos` and `BAT.rot` are UNCHANGED (same hand attachment,
+// same `swing.js` contact point - that math never reads the bat mesh at all) and `BAT.knobR`/
+// `BAT.barrelR` stay the two governing radii the new profile is built from, so a future retune of
+// either still reaches every part of the bat. `BAT_HANDLE_R`/`BAT_KNOB_BULGE_R` are the two NEW
+// radii the profile needed and did not have a home in the old single-taper shape: a real bat's
+// handle is markedly thinner than its knob (grip-and-swing, not "increasing radius from the
+// knob"), so `BAT_HANDLE_R` is well under `BAT.knobR` while `BAT_KNOB_BULGE_R` is a little over it.
+const BAT_HANDLE_R_FRAC = 0.62;   // the handle's radius, as a fraction of BAT.knobR
+const BAT_KNOB_BULGE_R_FRAC = 1.4; // the knob's own outer bulge, as a fraction of BAT.knobR
+const BAT_GRIP_COLOR = 0x2b2019;  // the grip band: dark, near-black brown - a wrapped grip, not wood
+const BAT_GRIP_R_FRAC = 1.08;     // the grip band's own radius, a fraction of the handle radius (a wrap, not a bulge)
+const BAT_GRIP_LEN_FRAC = 0.24;   // the grip band's length, a fraction of BAT.length
 
 // STAGE 3 (section 2.2): team colours are a colour-key remap of the painted skin PNG - there is no
 // "Jersey" material to recolour, the uniform is painted into the texture. KEYS lists, per skin per
@@ -253,54 +273,100 @@ async function skinTexture(skinName, side) {
 function skinForSide(side) { return (side === 'away' || side === 'umpire') ? 'criminalMaleA' : 'skaterMaleA'; }
 
 // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 3): every figure's CAP. Matt: "can you add
-// baseball hats?" A dome (a sphere cut at ~45% of its own height) plus a brim (a flattened wedge of
-// a cylinder, forward of the face), parented to the HEAD bone (rig.js's RIG.head) so it rides every
-// clip for free - a child of a bone travels with that bone through every keyframe the mixer plays,
-// no per-clip work needed. Geometry is built ONCE and shared by every actor (module scope, same
-// pattern `_skinTexCache` already uses for the skin textures); one MeshStandardMaterial per team
-// colour, also built once and cached - `recolorCap` (below) is what swaps an actor's cap between
-// them when its SIDE changes, the same moment `_setSide` swaps the jersey texture.
+// baseball hats?" A dome plus a brim, parented to the HEAD bone (rig.js's RIG.head) so it rides
+// every clip for free - a child of a bone travels with that bone through every keyframe the mixer
+// plays, no per-clip work needed. Geometry is built ONCE and shared by every actor (module scope,
+// same pattern `_skinTexCache` already uses for the skin textures); materials are cached per hex -
+// `recolorCap` (below) is what swaps an actor's cap between them when its SIDE changes, the same
+// moment `_setSide` swaps the jersey texture.
 //
-// CAP_SCALE/CAP_OFFSET are measured against the shipped rig's own head bone, the same way BAT's own
-// numbers were measured against the hand bone: rendered with render-actor.mjs --sheet across
-// Idle/Swing/Pitch/Run/Crouch (every clip that moves the head or the spine under it) and read off
-// the picture until the cap sat on the head in all five - never floating above it, never sunk into
-// it. Measured (node, `Box3().setFromObject(root)` against `bones.head`'s own world position,
-// PRE-placement so the numbers are in the same raw units `heightWorld` (376.47) already is): the
-// crown (the topmost point of the head/hair) sits 106.69 units above the head bone's own origin -
-// about 28% of the whole body's height - which is what told the first two tuning passes apart from
-// guessing a third time: a dome sized/offset from that measured number, not eyeballed further, is
-// what converged in one more render. Final numbers (baseball/CLAUDE.md's R9 entry has the log):
-// CAP_SCALE 0.115, CAP_OFFSET [0, 0.205, 0.01].
-const CAP_DOME_CUT_FRAC = 0.45;     // the dome is the TOP 45% of a full sphere (spec's own number)
-const CAP_BRIM_HALF_SPAN = Math.PI * 0.19; // the brim's own angular half-span - a forward-projecting bill, not a half-disc
+// R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 4): Matt, on the R9 cap sheet: "the hats do not look
+// like hats" - measured against it (`scratchpad/r9/cap-sheet.png`) and against a close render of
+// the shipped geometry (`scratchpad/r12/cap-current-{batter,pitcher}.png`), the dome sat almost
+// entirely ABOVE the equator (CAP_DOME_CUT_FRAC 0.45 keeps only the sphere's own top 45%, which
+// stops well short of the hairline) with hair visible below it all the way round, and the brim sat
+// at the dome's OWN EQUATOR (the old brim geometry's fixed y=0), a full unit-sphere-radius above
+// where the new, deeper dome actually ends - invisible from the front, behind the hair. Four
+// changes, all re-tuned by rendering (`render-actor.mjs --sheet`), never guessed:
+//   1. The dome now keeps the sphere's own top 60% (`CAP_DOME_CUT_FRAC` 0.45 -> 0.6, past the
+//      equator - `Math.acos(1 - 2*0.6)` is > 90deg), so its own rim sits BELOW the sphere's widest
+//      point and reads as "sits down over the hairline" instead of floating on the crown.
+//   2. The brim is no longer fixed at the unit sphere's equator (y=0) - `CAP_RIM_Y` (derived from
+//      the SAME `CAP_DOME_CUT_FRAC` the dome uses, `1 - 2*frac`, so the two can never drift apart)
+//      places it at the dome's own new, lower rim, and it is wider (`CAP_BRIM_OUTER_R` 1.32 -> 1.55)
+//      and thicker (0.10 -> 0.16) so it reads as a distinct bill rather than a thin wedge.
+//   3. The brim MESH (not its geometry - the tilt has to stay tunable per render, not baked into a
+//      shared cache) is rotated -0.30 rad about local X, which is the axis a bill's own forward
+//      (+Z, after the geometry's own rotateY) edge dips DOWN around once the dome's rim sits at a
+//      NEGATIVE local y (this rig's front axis convention, poses.js's own header) - "a gentle
+//      downward curve... a visible underside," the spec's own words, from a flat wedge rather than
+//      a curved one, which is enough at the sizes these figures actually draw at (Idle's own cap
+//      reads under 20px tall on a phone).
+//   4. A small button sits at the dome's own north pole (`CAP_BUTTON_R`), MERGED into the dome's
+//      own geometry (`mergeGeometries`, the same helper field.js's stadium already uses) so it costs
+//      no extra draw call - the cap stays a two-mesh (dome+button, brim), two-material budget no
+//      matter how many of the fifteen roles carry one, exactly as R9 shipped it.
+// CAP_SCALE/CAP_OFFSET stay fractions of `actor.heightWorld` (the same unit `BAT.length` uses), and
+// were re-measured for the deeper dome: CAP_SCALE 0.115 -> 0.135 (bigger, to still clear the head's
+// own width at the lower cut), CAP_OFFSET's y 0.205 -> 0.175 (lower, so the BIGGER dome's own top
+// does not overshoot the measured crown height - baseball/CLAUDE.md's R12 entry has the full log
+// and the crown-vs-cap-top numbers, before and after).
+const CAP_DOME_CUT_FRAC = 0.6;      // the dome is the TOP 60% of a full sphere - past the equator
+const CAP_RIM_Y = 1 - 2 * CAP_DOME_CUT_FRAC;   // the dome's own rim height, unit-sphere Y (same formula, inverted)
+const CAP_BRIM_HALF_SPAN = Math.PI * 0.22;     // the brim's own angular half-span - a forward-projecting bill, not a half-disc
+const CAP_BRIM_OUTER_R = 1.55;      // the brim's own outer radius, unit-sphere units - clear of the (bigger) dome
+const CAP_BRIM_THICK = 0.16;
+const CAP_BRIM_TILT = -0.30;
+const CAP_BUTTON_R = 0.13;          // the top button, unit-sphere units
 // CAP_SCALE (the dome's own unit-sphere radius) and CAP_OFFSET (the cap group's own centre, from the
 // head bone's own origin) are BOTH fractions of actor.heightWorld - the same unit BAT.length uses -
 // and deliberately INDEPENDENT of each other (offset is not "a fraction of the cap's own size"),
 // since the head bone's own origin does not move when the cap's size is retuned.
-export const CAP_SCALE = 0.115;
-export const CAP_OFFSET = [0, 0.205, 0.01];
+export const CAP_SCALE = 0.135;
+export const CAP_OFFSET = [0, 0.175, 0.02];
 const CAP_COLOR = { home: HOME_RED, away: NAVY, umpire: UMP_DARK };
+/** R12 item 4: "a bill... in a slightly darker shade of the team colour." Per-channel multiply,
+ *  cached beside the base colour so a (dome, brim) pair for one side costs two cache entries, not a
+ *  fresh material every render. */
+const BRIM_DARKEN = 0.68;
+function darken(hex, f = BRIM_DARKEN) {
+  const r = Math.round(((hex >> 16) & 255) * f), g = Math.round(((hex >> 8) & 255) * f), b = Math.round((hex & 255) * f);
+  return (r << 16) | (g << 8) | b;
+}
 
 let _capGeoCache = null;
-/** The dome + brim geometry, built once and reused by EVERY actor's cap (module scope - the spec's
- *  own "shared geometry"). Unit-sized (radius 1); `_attachCap` scales the whole cap group instead
- *  of building a new geometry per actor's own heightWorld, which is what keeps this a two-geometry
- *  budget no matter how many of the fifteen roles carry a cap. */
+/** The dome (+ its top button, merged into one geometry) and the brim, built once and reused by
+ *  EVERY actor's cap (module scope - the spec's own "shared geometry"). Unit-sized (radius 1);
+ *  `attachCapGeometry` scales the whole cap group instead of building a new geometry per actor's
+ *  own heightWorld, which is what keeps this a two-mesh budget no matter how many of the fifteen
+ *  roles carry a cap. */
 function capGeometry() {
   if (_capGeoCache) return _capGeoCache;
-  // The dome: a sphere, cut with thetaLength so only the crown (the top CAP_DOME_CUT_FRAC of the
-  // sphere's own height) remains - thetaLength is measured from the NORTH POLE (theta=0), so a
-  // smaller thetaLength keeps less of the sphere; Math.acos(1 - 2*frac) is the standard spherical-
-  // cap-height-to-angle conversion (frac of the sphere's DIAMETER, not its radius, hence the *2).
+  // The dome: a sphere, cut with thetaLength so only the crown down to CAP_RIM_Y remains - theta is
+  // measured from the NORTH POLE (theta=0), so a bigger thetaLength keeps MORE of the sphere (past
+  // the equator, at CAP_DOME_CUT_FRAC > 0.5); Math.acos(1 - 2*frac) is the standard spherical-cap-
+  // height-to-angle conversion (frac of the sphere's DIAMETER, not its radius, hence the *2). The
+  // button: a small sphere at the pole (local (0,1,0), where the dome's own thetaLength=0 point
+  // already sits), MERGED into the dome geometry so the two share one draw call.
   const domeGeo = new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.acos(1 - 2 * CAP_DOME_CUT_FRAC));
+  const buttonGeo = new THREE.SphereGeometry(CAP_BUTTON_R, 8, 6);
+  buttonGeo.translate(0, 1, 0);
+  const domeAndButton = mergeGeometries([domeGeo, buttonGeo]);
+  domeGeo.dispose(); buttonGeo.dispose();
   // The brim: a short, flattened wedge of a cylinder (its own angular span, not a full disc), lying
-  // flat and sitting forward of the dome's own front. CylinderGeometry's default axis is Y and its
-  // own theta=0 is +X; rotateY(-HALF_PI) turns that so theta=0 points to +Z (the model's own front
-  // axis, section 2.1), and the wedge is centred on that by starting the span a half-span EARLIER.
-  const brimGeo = new THREE.CylinderGeometry(1.32, 1.32, 0.10, 16, 1, false, -CAP_BRIM_HALF_SPAN, CAP_BRIM_HALF_SPAN * 2);
+  // flat and sitting forward of the dome's own front, at the dome's own rim (CAP_RIM_Y - the SAME
+  // formula the dome's own thetaLength uses, so the two can never drift apart when CAP_DOME_CUT_FRAC
+  // is retuned). CylinderGeometry's default axis is Y and its own theta=0 is +X; rotateY(-HALF_PI)
+  // turns that so theta=0 points to +Z (the model's own front axis, section 2.1), and the wedge is
+  // centred on that by starting the span a half-span EARLIER. The tilt (a downward curve) is left to
+  // the MESH's own rotation (attachCapGeometry), not baked in here, so it stays tunable without a
+  // second cached geometry.
+  const brimGeo = new THREE.CylinderGeometry(
+    CAP_BRIM_OUTER_R, CAP_BRIM_OUTER_R, CAP_BRIM_THICK, 16, 1, false, -CAP_BRIM_HALF_SPAN, CAP_BRIM_HALF_SPAN * 2,
+  );
   brimGeo.rotateY(-Math.PI / 2);
-  _capGeoCache = { dome: domeGeo, brim: brimGeo };
+  brimGeo.translate(0, CAP_RIM_Y, 0);
+  _capGeoCache = { dome: domeAndButton, brim: brimGeo };
   return _capGeoCache;
 }
 const _capMatCache = new Map();
@@ -311,9 +377,9 @@ function capMaterial(colorHex) {
 }
 /** Every actor gets a cap, at load (`_makeActor`), coloured for its PLACEHOLDER side (home) until
  *  `_setSide` recasts it - the same "no figure is ever untextured for a frame" rule the skin
- *  placeholder already follows. `cap` is a `THREE.Group` (dome + brim as its two children) parented
- *  to the head bone, NAMED 'cap' - the structural check in test-baseball-actors.mjs looks for
- *  exactly that name as a direct child of the resolved head bone.
+ *  placeholder already follows. `cap` is a `THREE.Group` (dome+button, brim, as its two children)
+ *  parented to the head bone, NAMED 'cap' - the structural check in test-baseball-actors.mjs looks
+ *  for exactly that name as a direct child of the resolved head bone.
  *
  *  CAP_SCALE/CAP_OFFSET are fractions of `actor.heightWorld` (the same unit `BAT.length` uses), but
  *  a plain rigid mesh parented to a bone is NOT run through the skinning matrices that keep the
@@ -322,11 +388,16 @@ function capMaterial(colorHex) {
  *  ~100x (baked in by the FBX->glTF conversion, section 2.1), so the first render of this cap with
  *  no correction flew off far above the model (the cap's own world Y landed at 3646 units against
  *  the head's own 270 - invisible, off screen). `headScale` divides it out, the same handScale
- *  correction `_attachBat` needs for the bat. */
+ *  correction `_attachBat` needs for the bat.
+ *
+ *  R12 item 4: "the catcher wears his backwards." A whole-group 180deg turn about local Y (after the
+ *  same offset/scale every role gets) - the brim's own forward geometry does not need a second,
+ *  mirrored copy, since turning the group around turns the bill with it. */
 function attachCapGeometry(actor) {
   const geo = capGeometry();
   const dome = new THREE.Mesh(geo.dome, capMaterial(CAP_COLOR.home));
-  const brim = new THREE.Mesh(geo.brim, capMaterial(CAP_COLOR.home));
+  const brim = new THREE.Mesh(geo.brim, capMaterial(darken(CAP_COLOR.home)));
+  brim.rotation.x = CAP_BRIM_TILT;
   // Flagged, not merely a naming convention: `_setSide`'s own `root.traverse` recolours every MESH
   // it finds to the jersey's skin texture - which would run over these two as well (they are
   // descendants of `root` through the head bone) and overwrite their flat team-colour material with
@@ -335,6 +406,7 @@ function attachCapGeometry(actor) {
   const cap = new THREE.Group();
   cap.name = 'cap';
   cap.add(dome, brim);
+  if (actor.role === 'catcher') cap.rotation.y = Math.PI;
   const headScale = new THREE.Vector3(); actor.bones.head.getWorldScale(headScale);
   const hs = headScale.x || 1;
   const s = (CAP_SCALE * actor.heightWorld) / hs;
@@ -352,12 +424,13 @@ function attachCapGeometry(actor) {
 }
 /** Swap an actor's cap to `side`'s team colour (or 'umpire') - called from `_setSide` alongside the
  *  jersey texture swap, on the same "only on an actual change" guard, so a caller passing `side` on
- *  every frame costs nothing once the cap already matches. */
+ *  every frame costs nothing once the cap already matches. The brim goes to a darker shade of the
+ *  SAME colour (R12 item 4), never a colour the dome does not itself wear. */
 function recolorCap(actor, side) {
   if (!actor.cap || side === actor.capColor) return;
-  const mat = capMaterial(CAP_COLOR[side] != null ? CAP_COLOR[side] : CAP_COLOR.away);
-  actor.capDome.material = mat;
-  actor.capBrim.material = mat;
+  const base = CAP_COLOR[side] != null ? CAP_COLOR[side] : CAP_COLOR.away;
+  actor.capDome.material = capMaterial(base);
+  actor.capBrim.material = capMaterial(darken(base));
   actor.capColor = side;
 }
 
@@ -551,19 +624,52 @@ export class Actors {
     m.rotation.x = -Math.PI / 2; return m;   // scaled per actor in _place
   }
 
+  /** R12 item 5: a real bat profile, not a single taper. The bat is a plain rigid Mesh, not a
+   *  skinned one, so unlike the body it does NOT travel through the skinning matrices that keep the
+   *  mesh's WORLD size independent of any individual bone's own scale. It is a real child of the
+   *  hand bone, so its geometry must be authored in that bone's LOCAL space: divide the intended
+   *  size by the hand bone's own world scale - the same `handScale` correction `attachCapGeometry`
+   *  needs for the head bone. */
   _attachBat(actor) {
     const h = actor.heightWorld;
-    // The bat is a plain rigid Mesh, not a skinned one, so unlike the body it does NOT travel
-    // through the skinning matrices that keep the mesh's WORLD size independent of any individual
-    // bone's own scale. It is a real child of the hand bone, so its geometry must be authored in
-    // that bone's LOCAL space: divide the intended size by the hand bone's own world scale.
     const handScale = new THREE.Vector3(); actor.bones.handR.getWorldScale(handScale);
     const sx = handScale.x || 1, sy = handScale.y || 1;
-    const g = new THREE.CylinderGeometry((BAT.barrelR * h) / sx, (BAT.knobR * h) / sx, (BAT.length * h) / sy, 12);
+    const len = (BAT.length * h) / sy;
+    const knobR = (BAT.knobR * h) / sx, barrelR = (BAT.barrelR * h) / sx;
+    const handleR = knobR * BAT_HANDLE_R_FRAC, knobBulgeR = knobR * BAT_KNOB_BULGE_R_FRAC;
+    // The profile, a knob then a thin handle then a taper to a rounded barrel end, in the SAME
+    // centred local frame the old CylinderGeometry used (y from -len/2, the knob, to +len/2, the
+    // barrel tip) - so `BAT.pos`/`BAT.rot` (the hand attachment) needed no change at all. `t` is the
+    // profile's own fraction along that span; `LatheGeometry` revolves the (radius, y) points about
+    // local Y, which is the bat's own long axis after `BAT.rot`.
+    const V2 = (t, r) => new THREE.Vector2(r, -len / 2 + t * len);
+    const pts = [
+      V2(0.00, 0),                        // the knob's own rounded bottom, closed to a point
+      V2(0.02, knobBulgeR),                // the knob's outer bulge
+      V2(0.05, knobBulgeR * 0.85),         // the knob's shoulder, narrowing back in
+      V2(0.08, handleR),                   // the neck: a sharp step down to the thin handle
+      V2(0.55, handleR),                   // the handle itself - thin, and flat for its own length
+      V2(0.74, handleR * 1.7),             // the taper begins
+      V2(0.88, barrelR * 0.92),
+      V2(0.96, barrelR),                   // the barrel's own widest point
+      V2(0.99, barrelR * 0.5),             // rounding toward the tip
+      V2(1.00, 0),                         // the barrel's own rounded end, closed to a point
+    ];
+    const g = new THREE.LatheGeometry(pts, 10);
     const bat = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: BAT.color, roughness: 0.6 }));
     bat.position.set((BAT.pos[0] * h) / sx, (BAT.pos[1] * h) / sy, (BAT.pos[2] * h) / sx);
     bat.rotation.set(BAT.rot[0] * Math.PI / 180, BAT.rot[1] * Math.PI / 180, BAT.rot[2] * Math.PI / 180);
     actor.bones.handR.add(bat); actor.bat = bat;
+    // The grip band: a second, darker mesh wrapped over the middle of the (flat, t 0.08-0.55)
+    // handle segment above - a slightly larger radius than the handle so it reads as a wrap, never
+    // so large it pokes past the taper on either side. A CHILD OF THE BAT MESH, not the hand bone
+    // directly, so it inherits the bat's own position/rotation for free and can never drift off it.
+    const gripR = handleR * BAT_GRIP_R_FRAC, gripLen = len * BAT_GRIP_LEN_FRAC;
+    const gripGeo = new THREE.CylinderGeometry(gripR, gripR, gripLen, 10);
+    const grip = new THREE.Mesh(gripGeo, new THREE.MeshStandardMaterial({ color: BAT_GRIP_COLOR, roughness: 0.85 }));
+    grip.position.y = -len / 2 + 0.30 * len;   // centred in the handle's own flat span (t 0.08-0.55)
+    bat.add(grip);
+    actor.batGrip = grip;
   }
 
   /** Called by ui.js from _sizeCanvas with the field canvas's own CSS size. R1: there is no
@@ -710,8 +816,11 @@ export class Actors {
   _applyCameraVisibility() {
     const ump = this.actors.umpire;
     if (ump) ump.pivot.visible = this.cameraName === 'pitcher';
+    // R12 ship review: the batter camera sits where the umpire's head is, so the catcher's cap
+    // filled the bottom of the frame and hid the plate once caps arrived. He is drawn on the
+    // pitcher camera only, the same rule the umpire already follows.
     const catcher = this.actors.catcher;
-    if (catcher) catcher.pivot.visible = this.cameraName !== 'chase';
+    if (catcher) catcher.pivot.visible = this.cameraName === 'pitcher';
   }
   /** Aim the chase camera at a world point (the ball). `immediate` snaps it there instead of
    *  easing, which is what the first frame of a cutaway wants so the chase does not fly in from

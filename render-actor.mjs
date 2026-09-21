@@ -27,7 +27,10 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { extname, basename, dirname, resolve } from 'node:path';
 
-const BASE = 'http://localhost:8123';
+// R12 (docs/BASEBALL-3D-BUILD.md, "R12"): a `BB_BASE` env override, so a worktree running its own
+// dev server on a port other than 8123 (the main checkout's port) can use this script without
+// colliding with a concurrent session's server.
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 const args = process.argv.slice(2);
 function opt(name, fallback) {
   const i = args.indexOf(`--${name}`);
