@@ -210,6 +210,11 @@ class MinesweeperUI {
       const v = bests[id] | 0;
       return `<div><b>${v > 0 ? fmtTime(v) : esc(t('no_time'))}</b><span>${esc(t(id))}</span></div>`;
     }).join('');
+    // A SETTING THAT CANNOT WORK IS NOT OFFERED. iOS Safari has no navigator.vibrate at all, so on
+    // every iPhone here this row was a switch that flipped and then did nothing for ever, which is
+    // worse than its absence. The STORED value is left exactly as it is (rule 5 - keys are never
+    // deleted or repurposed), so a device that supports it keeps whatever the player chose.
+    const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
     const opt = (key, labelKey, subKey) => `<button type="button" class="ms-opt" data-opt="${key}" aria-pressed="${!!s[key]}">
       <span><span class="ms-olab">${esc(t(labelKey))}</span>${subKey ? `<span class="ms-osub">${esc(t(subKey))}</span>` : ''}</span>
       <span class="ms-sw"><i></i></span>
@@ -222,7 +227,7 @@ class MinesweeperUI {
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
         ${opt('safeFirst', 'safe_first', 'safe_first_sub')}
         ${opt('longPress', 'long_press', 'long_press_sub')}
-        ${opt('vibrate', 'vibrate', '')}
+        ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
       </div></div>
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>
       <div class="ms-linkrow">
@@ -244,6 +249,9 @@ class MinesweeperUI {
       if (op) {
         const k = op.dataset.opt;
         this.settings = saveSettings({ [k]: !this.settings[k] });
+        // Switching vibration ON buzzes once, so the control proves itself instead of being a
+        // promise you only find out about mid-game.
+        if (k === 'vibrate' && this.settings.vibrate) this._buzz();
         this.renderMenu();
         return;
       }
