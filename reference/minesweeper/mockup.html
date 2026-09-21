@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Minesweeper mockup</title>
+<style>
+:root{
+  --gh-bg:#f4f6fb; --gh-surface:#fff; --gh-surface-2:#eef2f8;
+  --gh-ink:#16243a; --gh-muted:#5b6b82; --gh-accent:#1769d4; --gh-accent-ink:#fff;
+  --gh-border:rgba(16,36,58,.14); --gh-border-strong:rgba(16,36,58,.28);
+  --gh-r-sm:8px; --gh-r-md:12px; --gh-r-lg:16px; --gh-r-pill:999px;
+  --gh-sh-1:0 1px 2px rgba(16,30,54,.08); --gh-sh-2:0 2px 8px rgba(16,30,54,.10);
+  --gh-sh-3:0 6px 20px rgba(16,30,54,.14); --gh-sh-4:0 16px 44px rgba(16,30,54,.22);
+  --gh-font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --gh-font-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --ms-cell:#e9eef6; --ms-cell-top:#ffffff; --ms-open:#dfe6f0; --ms-grid:rgba(16,36,58,.10);
+  --ms-n1:#1F5FA8; --ms-n2:#178A7A; --ms-n3:#E0532F; --ms-n4:#6B4FBB;
+  --ms-n5:#A8720A; --ms-n6:#0E7490; --ms-n7:#16243A; --ms-n8:#5B6B82;
+  --ms-boom:#E0532F; --ms-safe:#178A7A;
+}
+.gh-dark{
+  --gh-bg:#0f1622; --gh-surface:#18202e; --gh-surface-2:#212b3c;
+  --gh-ink:#e6edf7; --gh-muted:#9fb0c6;
+  --gh-border:rgba(190,214,244,.18); --gh-border-strong:rgba(190,214,244,.34);
+  --ms-cell:#2a3446; --ms-cell-top:#36425a; --ms-open:#1b2431; --ms-grid:rgba(190,214,244,.10);
+  --ms-n1:#6FA8E8; --ms-n2:#3FBFA8; --ms-n3:#FF8A63; --ms-n4:#A98BF0;
+  --ms-n5:#E0A93A; --ms-n6:#46B5CE; --ms-n7:#E6EDF7; --ms-n8:#9FB0C6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#20283a;font-family:var(--gh-font);color:#e6edf7;padding:28px}
+h1{font-size:20px;margin:0 0 20px;font-weight:700;letter-spacing:.01em}
+.grid{display:grid;grid-template-columns:repeat(4,393px);gap:22px 20px;width:max-content}
+figure{margin:0}
+figcaption{font-size:13px;font-weight:700;color:#a9b7cc;margin:0 0 7px;letter-spacing:.02em}
+
+/* ---- phone frame: 393x852, with the hub's own chrome budget drawn in grey ---- */
+.phone{width:393px;height:852px;border-radius:22px;overflow:hidden;position:relative;
+  background:var(--gh-bg);box-shadow:0 10px 34px rgba(0,0,0,.45);color:var(--gh-ink)}
+.chrome{background:repeating-linear-gradient(135deg,rgba(128,145,170,.16) 0 7px,rgba(128,145,170,.06) 7px 14px);
+  display:flex;align-items:center;justify-content:center;font-size:10px;letter-spacing:.09em;
+  color:rgba(120,138,164,.95);font-weight:700;text-transform:uppercase}
+.chrome.top{height:98px} .chrome.bot{height:40px}
+.screen{height:714px;display:flex;flex-direction:column;padding:12px;gap:10px}
+
+/* ---- game header ---- */
+.hdr{height:52px;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.readout{flex:1 1 0;height:44px;border-radius:var(--gh-r-md);background:var(--gh-surface);
+  border:1px solid var(--gh-border);box-shadow:var(--gh-sh-1);display:flex;align-items:center;
+  justify-content:center;gap:7px;font-family:var(--gh-font-mono);font-size:19px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+.readout svg{width:17px;height:17px;flex:0 0 auto}
+.face{width:52px;height:44px;border-radius:var(--gh-r-md);background:var(--gh-surface);
+  border:1px solid var(--gh-border);box-shadow:var(--gh-sh-1);display:flex;align-items:center;justify-content:center}
+.face svg{width:28px;height:28px}
+
+/* ---- board ---- */
+.boardwrap{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0}
+.board{display:grid;gap:2px;position:relative}
+.c{border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--gh-font-mono);font-weight:800;line-height:1;position:relative}
+.c.hid{background:linear-gradient(180deg,var(--ms-cell-top),var(--ms-cell));
+  border:1px solid var(--gh-border);box-shadow:0 1px 0 rgba(255,255,255,.55) inset,var(--gh-sh-1)}
+.c.op{background:var(--ms-open);border:1px solid var(--ms-grid)}
+.c.boom{background:var(--ms-boom);border-color:var(--ms-boom)}
+.c.n1{color:var(--ms-n1)}.c.n2{color:var(--ms-n2)}.c.n3{color:var(--ms-n3)}.c.n4{color:var(--ms-n4)}
+.c.n5{color:var(--ms-n5)}.c.n6{color:var(--ms-n6)}.c.n7{color:var(--ms-n7)}.c.n8{color:var(--ms-n8)}
+.c svg{width:68%;height:68%}
+.c.target{outline:3px solid var(--gh-accent);outline-offset:1px;z-index:3}
+
+/* ---- bottom bar ---- */
+.bar{height:64px;flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding-bottom:env(safe-area-inset-bottom,0)}
+.seg{flex:1 1 0;height:48px;display:flex;background:var(--gh-surface-2);border:1px solid var(--gh-border);
+  border-radius:var(--gh-r-pill);padding:4px;gap:4px}
+.seg>div{flex:1;border-radius:var(--gh-r-pill);display:flex;align-items:center;justify-content:center;
+  gap:7px;font-size:15px;font-weight:700;color:var(--gh-muted)}
+.seg>div.on{background:var(--gh-accent);color:var(--gh-accent-ink);box-shadow:var(--gh-sh-2)}
+.seg svg{width:18px;height:18px}
+.iconbtn{width:48px;height:48px;flex:0 0 auto;border-radius:var(--gh-r-pill);background:var(--gh-surface);
+  border:1px solid var(--gh-border);box-shadow:var(--gh-sh-1);display:flex;align-items:center;
+  justify-content:center;font-size:19px;font-weight:800;color:var(--gh-muted)}
+
+/* ---- setup screen ---- */
+.setup{display:flex;flex-direction:column;gap:8px;height:100%}
+.title{font-size:23px;font-weight:800;letter-spacing:-.01em;margin:0 0 1px}
+.card{background:var(--gh-surface);border:1px solid var(--gh-border);border-radius:var(--gh-r-lg);
+  box-shadow:var(--gh-sh-1);padding:12px}
+.card h3{margin:0 0 8px;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gh-muted)}
+.diffs{display:flex;flex-direction:column;gap:6px}
+.diff{height:52px;border-radius:var(--gh-r-md);border:1px solid var(--gh-border);background:var(--gh-surface-2);
+  display:flex;align-items:center;gap:11px;padding:0 13px}
+.diff.on{border-color:var(--gh-accent);border-width:2px;background:rgba(23,105,212,.09);box-shadow:var(--gh-sh-2)}
+.diff .nm{font-size:17px;font-weight:700;flex:1}
+.diff .mt{font-size:13px;color:var(--gh-muted);font-family:var(--gh-font-mono);font-variant-numeric:tabular-nums}
+.diff .tick{width:22px;height:22px;flex:0 0 auto;color:var(--gh-accent);opacity:0}
+.diff.on .tick{opacity:1}
+.diff .shape{width:26px;height:20px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.rows{display:flex;flex-direction:column;gap:6px}
+.row1{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px}
+.row1 .lab{font-size:15px;font-weight:600}
+.row1 .sub{font-size:12px;color:var(--gh-muted);margin-top:2px}
+.sw{width:54px;height:32px;border-radius:var(--gh-r-pill);background:var(--gh-accent);position:relative;flex:0 0 auto}
+.sw.off{background:var(--gh-surface-2);border:1px solid var(--gh-border-strong)}
+.sw i{position:absolute;top:3px;left:25px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:var(--gh-sh-2)}
+.sw.off i{left:3px;background:var(--gh-muted)}
+.best{display:flex;gap:8px}
+.best>div{flex:1;background:var(--gh-surface-2);border:1px solid var(--gh-border);border-radius:var(--gh-r-md);
+  padding:7px 5px;text-align:center}
+.best b{display:block;font-family:var(--gh-font-mono);font-size:17px;font-variant-numeric:tabular-nums}
+.best span{display:block;font-size:11px;color:var(--gh-muted);margin-top:3px;font-weight:600}
+.cta{height:54px;border-radius:var(--gh-r-pill);background:var(--gh-accent);color:#fff;display:flex;
+  align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:var(--gh-sh-3);margin-top:auto}
+.linkrow{display:flex;gap:9px}
+.linkrow>div{flex:1 0 44px;height:44px;border-radius:var(--gh-r-pill);background:var(--gh-surface);
+  border:1px solid var(--gh-border);display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;color:var(--gh-muted);gap:7px}
+
+/* ---- overlay ---- */
+.ov{position:absolute;inset:0;background:rgba(9,15,26,.55);display:flex;align-items:center;justify-content:center;padding:22px}
+.modal{width:100%;background:var(--gh-surface);border-radius:var(--gh-r-lg);box-shadow:var(--gh-sh-4);
+  padding:22px 18px 18px;position:relative;text-align:center;border:1px solid var(--gh-border)}
+.x{position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;background:var(--gh-surface-2);
+  border:1px solid var(--gh-border);display:flex;align-items:center;justify-content:center;color:var(--gh-muted)}
+.x svg{width:15px;height:15px}
+.modal .big{font-size:26px;font-weight:800;margin:4px 0 3px}
+.modal .sm{font-size:14px;color:var(--gh-muted);margin-bottom:14px}
+.stat2{display:flex;gap:9px;margin-bottom:14px}
+.stat2>div{flex:1;background:var(--gh-surface-2);border-radius:var(--gh-r-md);padding:11px 6px;border:1px solid var(--gh-border)}
+.stat2 b{display:block;font-family:var(--gh-font-mono);font-size:21px;font-variant-numeric:tabular-nums}
+.stat2 span{display:block;font-size:11px;color:var(--gh-muted);margin-top:3px;font-weight:600}
+.pb{display:inline-flex;align-items:center;gap:6px;background:rgba(242,183,5,.16);border:1px solid #F2B705;
+  color:var(--gh-ink);border-radius:var(--gh-r-pill);padding:5px 12px;font-size:12px;font-weight:800;margin-bottom:13px}
+.pb svg{width:15px;height:15px;flex:0 0 auto}
+.phone.overflows{outline:4px solid #E0532F;outline-offset:3px}
+.fitbad{color:#FF8A63;font-weight:800}
+.mbtns{display:flex;flex-direction:column;gap:8px}
+.mbtn{height:50px;border-radius:var(--gh-r-pill);display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:800;background:var(--gh-accent);color:#fff;box-shadow:var(--gh-sh-2)}
+.mbtn.ghost{background:transparent;color:var(--gh-muted);box-shadow:none;border:1px solid var(--gh-border)}
+
+/* ---- how to play ---- */
+.help{display:flex;flex-direction:column;gap:12px;height:100%}
+.lead{font-size:16px;font-weight:800;line-height:1.35}
+.dia{background:var(--gh-surface);border:1px solid var(--gh-border);border-radius:var(--gh-r-lg);
+  padding:12px;box-shadow:var(--gh-sh-1)}
+.cap{font-size:13px;color:var(--gh-muted);line-height:1.45;margin-top:9px}
+.eg{font-family:var(--gh-font-mono);font-size:12.5px;font-weight:700;background:var(--gh-surface-2);
+  border:1px solid var(--gh-border);border-radius:var(--gh-r-sm);padding:8px 10px;margin-top:8px;white-space:nowrap}
+.edge{font-size:13px;line-height:1.5}
+
+/* ---- loupe detail ---- */
+.loupe{position:absolute;width:96px;height:96px;border-radius:var(--gh-r-lg);background:var(--gh-surface);
+  border:2px solid var(--gh-accent);box-shadow:var(--gh-sh-4);display:flex;align-items:center;justify-content:center;z-index:5}
+.loupe .zc{width:64px;height:64px;border-radius:8px;background:linear-gradient(180deg,var(--ms-cell-top),var(--ms-cell));
+  border:1px solid var(--gh-border);display:flex;align-items:center;justify-content:center;
+  font-family:var(--gh-font-mono);font-weight:800;font-size:32px}
+.loupe:after{content:"";position:absolute;bottom:-9px;left:50%;transform:translateX(-50%) rotate(45deg);
+  width:16px;height:16px;background:var(--gh-surface);border-right:2px solid var(--gh-accent);border-bottom:2px solid var(--gh-accent)}
+.finger{position:absolute;width:78px;height:78px;border-radius:50%;background:rgba(23,105,212,.20);
+  border:2px solid rgba(23,105,212,.55);z-index:4}
+
+/* ---- tables ---- */
+.tables{margin-top:30px;display:grid;grid-template-columns:repeat(2,1fr);gap:18px;max-width:1642px}
+table{border-collapse:collapse;width:100%;background:#1a2231;border-radius:10px;overflow:hidden;font-size:12.5px}
+caption{text-align:left;font-size:13px;font-weight:800;color:#a9b7cc;padding:0 0 7px;letter-spacing:.03em}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid rgba(190,214,244,.10)}
+th{background:#232d40;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#9fb0c6}
+td{font-variant-numeric:tabular-nums}
+td.m{font-family:var(--gh-font-mono);font-size:11.5px}
+tr:last-child td{border-bottom:0}
+.sw16{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(255,255,255,.2)}
+.full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<h1>Minesweeper &middot; screen mockups &middot; 393 x 852, mounted in hub</h1>
+<div class="grid" id="grid"></div>
+<div class="tables" id="tables"></div>
+
+<script>
+/* ---------- glyphs ---------- */
+const FLAG = c => `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+ <path d="M6 22V3" stroke="${c||'currentColor'}" stroke-width="2.6" stroke-linecap="round"/>
+ <path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="${c||'currentColor'}"/></svg>`;
+const MINE = c => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${c||'currentColor'}">
+ <rect x="11" y="1.5" width="2" height="21" rx="1"/><rect x="1.5" y="11" width="21" height="2" rx="1"/>
+ <rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)"/>
+ <rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)"/>
+ <circle cx="12" cy="12" r="6.2"/><circle cx="9.7" cy="9.7" r="1.5" fill="rgba(255,255,255,.85)"/></svg>`;
+const WRONG = `<svg viewBox="0 0 24 24" aria-hidden="true">
+ <path d="M6 22V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+ <path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="currentColor" opacity=".35"/>
+ <path d="M3 3 21 21M21 3 3 21" stroke="#E0532F" stroke-width="2.8" stroke-linecap="round"/></svg>`;
+const CLOCK = `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="2"/>
+ <path d="M12 6.8V12l3.6 2.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+const XI = `<svg viewBox="0 0 24 24" fill="none"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
+const TICK = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 12.6 9.6 18 20 6.4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const SHOVEL = `<svg viewBox="0 0 24 24" fill="none"><path d="M13.5 3.2 20.8 10.5M17.2 6.9 8.4 15.7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+ <path d="M8.4 15.7 5.6 12.9 2.6 19.2c-.3.7.4 1.4 1.1 1.1Z" fill="currentColor"/></svg>`;
+const FACE = k => {
+  const eyes = k==='dead'
+    ? `<path d="M8 8.6 11 11.6M11 8.6 8 11.6M16 8.6 13 11.6M13 8.6 16 11.6" stroke="#16243a" stroke-width="1.7" stroke-linecap="round"/>`
+    : k==='win'
+    ? `<path d="M6.4 9.2h4.4v2.6a2.2 2.2 0 0 1-4.4 0Zm6.8 0h4.4v2.6a2.2 2.2 0 0 1-4.4 0Zm-2.4.9h2.4" stroke="#16243a" stroke-width="1.5" fill="#16243a"/>`
+    : `<circle cx="9" cy="10" r="1.5" fill="#16243a"/><circle cx="15" cy="10" r="1.5" fill="#16243a"/>`;
+  const mouth = k==='dead' ? `<path d="M8.6 17.2a3.6 3.6 0 0 1 6.8 0" stroke="#16243a" stroke-width="1.8" fill="none" stroke-linecap="round"/>`
+    : k==='win' ? `<path d="M8.2 15.4a4.2 4.2 0 0 0 7.6 0" stroke="#16243a" stroke-width="1.8" fill="none" stroke-linecap="round"/>`
+    : `<path d="M9 16.4h6" stroke="#16243a" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+  return `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.4" fill="#F2B705" stroke="#c8960a" stroke-width="1.2"/>${eyes}${mouth}</svg>`;
+};
+const SHAPE = t => {
+  const col = {1:'#2e9e44',2:'#1F5FA8',3:'#1c2430',4:'#1c2430'}[t];
+  if(t===1) return `<svg viewBox="0 0 20 20" width="18" height="18" fill="${col}"><circle cx="10" cy="10" r="8"/></svg>`;
+  if(t===2) return `<svg viewBox="0 0 20 20" width="18" height="18" fill="${col}"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>`;
+  if(t===3) return `<svg viewBox="0 0 20 20" width="18" height="18" fill="${col}"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>`;
+  return `<svg viewBox="0 0 34 20" width="26" height="16" fill="${col}"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>`;
+};
+
+/* ---------- board maths ---------- */
+const LADDER = [
+  {id:'easy',   label:'Easy',   tier:1, w:8,  h:10, mines:10},
+  {id:'medium', label:'Medium', tier:2, w:10, h:13, mines:20},
+  {id:'hard',   label:'Hard',   tier:3, w:12, h:16, mines:38},
+  {id:'expert', label:'Expert', tier:4, w:14, h:18, mines:55},
+];
+const AVAIL_W = 393 - 24;          // frame minus screen padding
+const AVAIL_H = 714 - 12*2 - 52 - 64 - 20;  // minus padding, header, bar, gaps
+const GAP = 2;
+function cellPx(w,h){
+  const byW = Math.floor((AVAIL_W - (w-1)*GAP) / w);
+  const byH = Math.floor((AVAIL_H - (h-1)*GAP) / h);
+  return Math.min(byW, byH);
+}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gen(w,h,mines,seed,sx,sy){
+  const rnd=mulberry(seed), mine=Array.from({length:h},()=>Array(w).fill(false));
+  let p=0;
+  while(p<mines){
+    const x=Math.floor(rnd()*w), y=Math.floor(rnd()*h);
+    if(mine[y][x] || (Math.abs(x-sx)<=1 && Math.abs(y-sy)<=1)) continue;
+    mine[y][x]=true; p++;
+  }
+  const num=Array.from({length:h},()=>Array(w).fill(0));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(mine[y][x]){num[y][x]=-1;continue;}
+    let n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const nx=x+dx,ny=y+dy;
+      if(nx>=0&&ny>=0&&nx<w&&ny<h&&mine[ny][nx])n++;
+    }
+    num[y][x]=n;
+  }
+  return {mine,num,w,h};
+}
+function flood(b,sx,sy,open){
+  open = open || Array.from({length:b.h},()=>Array(b.w).fill(false));
+  const st=[[sx,sy]];
+  while(st.length){
+    const [x,y]=st.pop();
+    if(x<0||y<0||x>=b.w||y>=b.h||open[y][x]||b.mine[y][x])continue;
+    open[y][x]=true;
+    if(b.num[y][x]===0) for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++) st.push([x+dx,y+dy]);
+  }
+  return open;
+}
+function renderBoard(b, open, flags, cs, opts){
+  opts = opts || {};
+  const cells=[];
+  for(let y=0;y<b.h;y++)for(let x=0;x<b.w;x++){
+    const k=y*b.w+x, isOpen=open[y][x], isFlag=flags.has(k);
+    let cls='c', inner='';
+    if(opts.boom && opts.boom[0]===x && opts.boom[1]===y){ cls+=' op boom'; inner=MINE('#fff'); }
+    else if(isOpen){
+      cls+=' op';
+      const n=b.num[y][x];
+      if(n>0){ cls+=' n'+n; inner=String(n); }
+    } else if(isFlag){
+      cls+=' hid';
+      if(opts.reveal && !b.mine[y][x]) inner=WRONG;
+      else inner=FLAG('#E0532F');
+    } else if(opts.reveal && b.mine[y][x]){
+      cls+=' op'; inner=MINE(opts.dark?'#c8d4e6':'#16243a');
+    } else if(opts.solved && b.mine[y][x]){
+      cls+=' hid'; inner=FLAG('#178A7A');
+    } else cls+=' hid';
+    if(opts.target && opts.target[0]===x && opts.target[1]===y) cls+=' target';
+    cells.push(`<div class="${cls}" style="width:${cs}px;height:${cs}px;font-size:${Math.round(cs*0.62)}px">${inner}</div>`);
+  }
+  return `<div class="board" style="grid-template-columns:repeat(${b.w},${cs}px)">${cells.join('')}${opts.overlay||''}</div>`;
+}
+function hdr(mines, time, face){
+  return `<div class="hdr">
+    <div class="readout">${FLAG('#E0532F')}<span>${String(mines).padStart(3,'0')}</span></div>
+    <div class="face">${FACE(face)}</div>
+    <div class="readout">${CLOCK}<span>${time}</span></div>
+  </div>`;
+}
+function bar(mode){
+  return `<div class="bar">
+    <div class="seg">
+      <div class="${mode==='dig'?'on':''}">${SHOVEL}<span>Dig</span></div>
+      <div class="${mode==='flag'?'on':''}">${FLAG()}<span>Flag</span></div>
+    </div>
+    <div class="iconbtn">?</div>
+  </div>`;
+}
+function frame(caption, inner, dark){
+  return `<figure><figcaption>${caption}</figcaption>
+    <div class="phone${dark?' gh-dark':''}">
+      <div class="chrome top">hub chrome 98px</div>
+      ${inner}
+      <div class="chrome bot">40px</div>
+    </div></figure>`;
+}
+
+/* ---------- screens ---------- */
+const out=[];
+
+/* 1. setup */
+const bestRow = [['02:14','Easy'],['05:41','Medium'],['--:--','Hard'],['--:--','Expert']];
+out.push(frame('1. Setup', `<div class="screen"><div class="setup">
+  <div class="title">Minesweeper</div>
+  <div class="card"><h3>Difficulty</h3><div class="diffs">
+    ${LADDER.map(d=>`<div class="diff${d.id==='medium'?' on':''}">
+      <div class="shape">${SHAPE(d.tier)}</div>
+      <div class="nm">${d.label}</div>
+      <div class="mt">${d.w} x ${d.h} &middot; ${d.mines} mines</div>
+      <div class="tick">${TICK}</div></div>`).join('')}
+  </div></div>
+  <div class="card"><h3>Your best time</h3><div class="best">
+    ${bestRow.map(([t,l])=>`<div><b>${t}</b><span>${l}</span></div>`).join('')}
+  </div></div>
+  <div class="card"><h3>Options</h3><div class="rows">
+    <div class="row1"><div><div class="lab">Safe first tap</div><div class="sub">Opens an area, never a mine</div></div><div class="sw"><i></i></div></div>
+    <div class="row1"><div><div class="lab">Long press to flag</div><div class="sub">As well as the Flag button</div></div><div class="sw"><i></i></div></div>
+    <div class="row1"><div><div class="lab">Vibrate on flag</div><div class="sub"></div></div><div class="sw off"><i></i></div></div>
+  </div></div>
+  <div class="cta">Play</div>
+  <div class="linkrow"><div>How to play</div><div>My stats</div></div>
+</div></div>`));
+
+/* 2 + 3. medium mid-game, light and dark */
+const M = LADDER[1], mcs = cellPx(M.w,M.h);
+const mb = gen(M.w,M.h,M.mines,20260921,4,9);
+let mopen = flood(mb,4,9); mopen = flood(mb,1,2,mopen); mopen = flood(mb,8,11,mopen);
+const mflags = new Set();
+let fcount=0;
+for(let y=0;y<mb.h && fcount<7;y++)for(let x=0;x<mb.w && fcount<7;x++){
+  if(mb.mine[y][x]){
+    let touching=false;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const nx=x+dx,ny=y+dy;
+      if(nx>=0&&ny>=0&&nx<mb.w&&ny<mb.h&&mopen[ny][nx])touching=true;
+    }
+    if(touching){ mflags.add(y*mb.w+x); fcount++; }
+  }
+}
+const midInner = m => `<div class="screen">
+  ${hdr(M.mines-mflags.size,'03:12','ok')}
+  <div class="boardwrap">${renderBoard(mb,mopen,mflags,mcs,{dark:m})}</div>
+  ${bar('dig')}</div>`;
+out.push(frame(`2. Playing &middot; Medium 10 x 13 &middot; ${mcs}px cells`, midInner(false)));
+out.push(frame('3. Same screen, dark theme', midInner(true), true));
+
+/* 4. expert density */
+const E = LADDER[3], ecs = cellPx(E.w,E.h);
+const eb = gen(E.w,E.h,E.mines,777,6,12);
+let eopen = flood(eb,6,12); eopen = flood(eb,1,1,eopen); eopen = flood(eb,12,16,eopen);
+eopen = flood(eb,13,3,eopen); eopen = flood(eb,0,9,eopen); eopen = flood(eb,7,17,eopen);
+const eflags = new Set();
+let ec=0;
+for(let y=0;y<eb.h&&ec<9;y++)for(let x=0;x<eb.w&&ec<9;x++){
+  if(eb.mine[y][x]){
+    let t=false;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<eb.w&&ny<eb.h&&eopen[ny][nx])t=true;}
+    if(t){eflags.add(y*eb.w+x);ec++;}
+  }
+}
+out.push(frame(`4. Playing &middot; Expert 14 x 18 &middot; ${ecs}px cells`, `<div class="screen">
+  ${hdr(E.mines-eflags.size,'07:48','ok')}
+  <div class="boardwrap">${renderBoard(eb,eopen,eflags,ecs,{})}</div>
+  ${bar('flag')}</div>`));
+
+/* 5. targeting loupe on the expert board */
+const tX=8,tY=7;
+const loupeVal = eb.num[tY][tX];
+const NUMHEX = ['','#1F5FA8','#178A7A','#E0532F','#6B4FBB','#A8720A','#0E7490','#16243A','#5B6B82'];
+const cX = tX*(ecs+GAP)+ecs/2, cY = tY*(ecs+GAP)+ecs/2;
+const overlay5 = `<div class="finger" style="left:${cX-39}px;top:${cY-39}px"></div>
+  <div class="loupe" style="left:${cX-48}px;top:${cY-39-96-14}px">
+    <div class="zc" style="color:${NUMHEX[Math.max(loupeVal,0)]}">${loupeVal>0?loupeVal:''}</div>
+  </div>`;
+out.push(frame('5. Targeting &middot; loupe follows the thumb, commits on release', `<div class="screen">
+  ${hdr(E.mines-eflags.size,'07:48','ok')}
+  <div class="boardwrap">${renderBoard(eb,eopen,eflags,ecs,{target:[tX,tY],overlay:overlay5})}</div>
+  ${bar('dig')}</div>`));
+
+/* 6. lose */
+const lb = gen(M.w,M.h,M.mines,424242,5,4);
+let lopen = flood(lb,5,4); lopen = flood(lb,0,11,lopen);
+const lflags = new Set();
+let lc=0, wrongPlaced=false;
+for(let y=0;y<lb.h&&lc<5;y++)for(let x=0;x<lb.w&&lc<5;x++){
+  if(lb.mine[y][x]){
+    let t=false;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<lb.w&&ny<lb.h&&lopen[ny][nx])t=true;}
+    if(t){lflags.add(y*lb.w+x);lc++;}
+  }
+}
+for(let y=0;y<lb.h&&!wrongPlaced;y++)for(let x=0;x<lb.w&&!wrongPlaced;x++){
+  if(!lb.mine[y][x] && !lopen[y][x]){
+    let t=false;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<lb.w&&ny<lb.h&&lopen[ny][nx])t=true;}
+    if(t){lflags.add(y*lb.w+x);wrongPlaced=true;}
+  }
+}
+let boom=null;
+for(let y=0;y<lb.h&&!boom;y++)for(let x=0;x<lb.w&&!boom;x++){
+  if(lb.mine[y][x] && !lflags.has(y*lb.w+x)){
+    let t=false;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<lb.w&&ny<lb.h&&lopen[ny][nx])t=true;}
+    if(t) boom=[x,y];
+  }
+}
+out.push(frame('6. Lost', `<div class="screen" style="position:relative">
+  ${hdr(M.mines-lflags.size,'02:05','dead')}
+  <div class="boardwrap">${renderBoard(lb,lopen,lflags,mcs,{reveal:true,boom:boom})}</div>
+  ${bar('dig')}
+  <div class="ov"><div class="modal">
+    <div class="x">${XI}</div>
+    <div class="big">Boom</div>
+    <div class="sm">Medium, 20 mines</div>
+    <div class="stat2"><div><b>02:05</b><span>Time</span></div><div><b>62%</b><span>Cleared</span></div><div><b>5</b><span>Flags right</span></div></div>
+    <div class="mbtns"><div class="mbtn">Play again</div><div class="mbtn ghost">Change difficulty</div></div>
+  </div></div></div>`));
+
+/* 7. win */
+const wflags = new Set();
+for(let y=0;y<mb.h;y++)for(let x=0;x<mb.w;x++) if(mb.mine[y][x]) wflags.add(y*mb.w+x);
+const wopen = Array.from({length:mb.h},(_,y)=>Array.from({length:mb.w},(_,x)=>!mb.mine[y][x]));
+out.push(frame('7. Won', `<div class="screen" style="position:relative">
+  ${hdr(0,'04:37','win')}
+  <div class="boardwrap">${renderBoard(mb,wopen,new Set(),mcs,{solved:true})}</div>
+  ${bar('dig')}
+  <div class="ov"><div class="modal">
+    <div class="x">${XI}</div>
+    <div class="big">Cleared</div>
+    <div class="sm">Medium, 20 mines</div>
+    <div class="pb">${TICK.replace('24 24','24 24')} New best time</div>
+    <div class="stat2"><div><b>04:37</b><span>Time</span></div><div><b>05:41</b><span>Old best</span></div><div><b>9</b><span>Wins</span></div></div>
+    <div class="mbtns"><div class="mbtn">Play again</div><div class="mbtn ghost">Leaderboard</div></div>
+  </div></div></div>`));
+
+/* 8. how to play */
+const hcell = (cls,inner,sz)=>`<div class="c ${cls}" style="width:${sz}px;height:${sz}px;font-size:${Math.round(sz*.6)}px">${inner}</div>`;
+const chordBefore = `<div class="board" style="grid-template-columns:repeat(3,38px)">
+ ${hcell('op n1','1',38)}${hcell('hid','',38)}${hcell('hid','',38)}
+ ${hcell('op n2','2',38)}${hcell('op n3 target','3',38)}${hcell('hid',FLAG('#E0532F'),38)}
+ ${hcell('hid',FLAG('#E0532F'),38)}${hcell('hid',FLAG('#E0532F'),38)}${hcell('hid','',38)}</div>`;
+const chordAfter = `<div class="board" style="grid-template-columns:repeat(3,38px)">
+ ${hcell('op n1','1',38)}${hcell('op','',38)}${hcell('op n1','1',38)}
+ ${hcell('op n2','2',38)}${hcell('op n3','3',38)}${hcell('hid',FLAG('#E0532F'),38)}
+ ${hcell('hid',FLAG('#E0532F'),38)}${hcell('hid',FLAG('#E0532F'),38)}${hcell('op n2','2',38)}</div>`;
+const ARROW = `<svg viewBox="0 0 40 24" width="40" height="24" fill="none"><path d="M4 12h30M27 5l7 7-7 7" stroke="#1769d4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+out.push(frame('8. How to play', `<div class="screen"><div class="help">
+  <div class="lead">Open every square that is not a mine. A number says how many mines touch it.</div>
+  <div class="dia">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px">
+      ${chordBefore}${ARROW}${chordAfter}
+    </div>
+    <div class="cap">Tap a number that already has all its flags beside it, and every other square around it opens at once.</div>
+    <div class="eg">3 with 3 flags beside it = the rest opens</div>
+  </div>
+  <div class="dia">
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;padding:4px 0">
+      <div style="position:relative;width:118px;height:136px;flex:0 0 auto">
+        <div class="board" style="grid-template-columns:repeat(3,28px);position:absolute;left:16px;top:70px">
+          ${hcell('hid','',28)}${hcell('hid','',28)}${hcell('hid','',28)}
+          ${hcell('hid','',28)}${hcell('hid target','',28)}${hcell('hid','',28)}</div>
+        <div class="loupe" style="width:60px;height:60px;left:29px;top:0">
+          <div class="zc" style="width:40px;height:40px;font-size:20px"></div></div>
+        <div class="finger" style="width:52px;height:52px;left:33px;top:86px"></div>
+      </div>
+      <div class="cap" style="margin:0;flex:1">Your thumb covers the square. The bubble above it shows the square you are actually on, and it only commits when you lift off.</div>
+    </div>
+    <div class="eg">Slide to correct = lift to open</div>
+  </div>
+  <div class="edge">Long press a square to flag it without leaving Dig.</div>
+  <div class="edge">Your first tap is always safe.</div>
+  <div class="edge">The clock stops when you leave and picks up where it was.</div>
+</div></div>`));
+
+document.getElementById('grid').innerHTML = out.join('');
+
+/* ---------- tables ---------- */
+const NUMS = [[1,'#1F5FA8','#6FA8E8'],[2,'#178A7A','#3FBFA8'],[3,'#E0532F','#FF8A63'],[4,'#6B4FBB','#A98BF0'],
+  [5,'#A8720A','#E0A93A'],[6,'#0E7490','#46B5CE'],[7,'#16243A','#E6EDF7'],[8,'#5B6B82','#9FB0C6']];
+const t1 = `<table><caption>Board ladder</caption><tr><th>Tier</th><th>Difficulty</th><th>Grid</th><th>Cells</th><th>Mines</th><th>Density</th><th>Cell px</th><th>Board px</th></tr>
+${LADDER.map(d=>{const cs=cellPx(d.w,d.h);return `<tr><td>${d.tier}</td><td>${d.label}</td><td class="m">${d.w} x ${d.h}</td><td>${d.w*d.h}</td><td>${d.mines}</td><td>${(d.mines/(d.w*d.h)*100).toFixed(1)}%</td><td>${cs}${cs>=44?' &check;':''}</td><td class="m">${d.w*cs+(d.w-1)*GAP} x ${d.h*cs+(d.h-1)*GAP}</td></tr>`;}).join('')}</table>`;
+const t2 = `<table><caption>Number palette (the digit is the shape; hue is redundant)</caption><tr><th>n</th><th>Light</th><th>Dark</th></tr>
+${NUMS.map(([n,l,d])=>`<tr><td style="font-weight:800">${n}</td><td class="m"><span class="sw16" style="background:${l}"></span>${l}</td><td class="m"><span class="sw16" style="background:${d}"></span>${d}</td></tr>`).join('')}</table>`;
+const t3 = `<table><caption>Vertical budget, mounted in hub at 852px</caption><tr><th>Band</th><th>px</th></tr>
+<tr><td>Hub chrome, top</td><td>98</td></tr><tr><td>Screen padding</td><td>24</td></tr>
+<tr><td>Header (mines / face / clock)</td><td>52</td></tr><tr><td>Gaps</td><td>20</td></tr>
+<tr><td>Bottom bar (Dig / Flag / help) + safe area</td><td>64</td></tr><tr><td>Hub chrome, bottom</td><td>40</td></tr>
+<tr><td><b>Left for the board</b></td><td><b>${AVAIL_H}</b></td></tr>
+<tr><td>Tallest board above (Hard)</td><td>${16*cellPx(12,16)+15*GAP}</td></tr></table>`;
+const t4 = `<table><caption>Values to wire up</caption><tr><th>Thing</th><th>Value</th></tr>
+<tr><td>Hub id / stats id</td><td class="m">minesweeper</td></tr>
+<tr><td>CSS root / prefix</td><td class="m">.ms-root / .ms-</td></tr>
+<tr><td>Settings key</td><td class="m">gamehub.minesweeper.v1</td></tr>
+<tr><td>Save key (resume)</td><td class="m">gamehub.minesweeper.save.v1</td></tr>
+<tr><td>Recorder</td><td class="m">recordMinesweeper(difficulty, won, extras)</td></tr>
+<tr><td>Sub-counter</td><td class="m">ms { cleared, flagsRight, bestTimeByDiff }</td></tr>
+<tr><td>Difficulty ids</td><td class="m">easy / medium / hard / expert (tiers 1-4, already mapped)</td></tr>
+<tr><td>isInProgress()</td><td class="m">false (autosaves, clock pauses)</td></tr>
+<tr><td>immersive</td><td class="m">no (keeps hub header)</td></tr>
+<tr><td>Leaderboard metric</td><td class="m">best time, lower is better</td></tr></table>`;
+const t5 = `<table class="full"><caption>Input model</caption><tr><th>Action</th><th>Result</th></tr>
+<tr><td>Tap in Dig mode</td><td>Opens the square. Commits on lift, not on touch.</td></tr>
+<tr><td>Tap in Flag mode</td><td>Places or removes a flag.</td></tr>
+<tr><td>Long press, either mode</td><td>Flags. Optional, on by default.</td></tr>
+<tr><td>Tap a satisfied number</td><td>Chord: opens every remaining square around it.</td></tr>
+<tr><td>Drag before lifting</td><td>Retargets. The loupe shows which square is live.</td></tr>
+<tr><td>First tap of a game</td><td>Never a mine. Board is generated after it lands, around a zero.</td></tr></table>`;
+document.getElementById('tables').innerHTML = t1+t2+t3+t4+t5;
+
+/* FIT CHECK. A game screen that does not fit its band is the bug this repo bans, so the
+   mockup measures itself rather than claiming it fits. */
+const fitRows=[];
+document.querySelectorAll('.phone').forEach(ph=>{
+  const sc = ph.querySelector('.screen'); if(!sc) return;
+  const over = sc.scrollHeight - sc.clientHeight;
+  const cap = ph.parentElement.querySelector('figcaption').textContent;
+  if(over > 0) ph.classList.add('overflows');
+  fitRows.push(`<tr><td>${cap}</td><td>${sc.scrollHeight}</td><td>${sc.clientHeight}</td><td class="${over>0?'fitbad':''}">${over>0?('+'+over+' OVERFLOW'):'fits'}</td></tr>`);
+});
+document.getElementById('tables').insertAdjacentHTML('beforeend',
+  `<table class="full"><caption>Fit check &middot; measured, not claimed</caption>
+   <tr><th>Screen</th><th>Content px</th><th>Band px</th><th>Result</th></tr>${fitRows.join('')}</table>`);
+</script>
+</body>
+</html>
