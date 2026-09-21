@@ -262,6 +262,31 @@ const MOTION = {
       await page.click('[data-action="fire-confirm"]');
     },
   },
+  minesweeper: {
+    // The blast is the whole reward for losing, and it is the class of thing a static check cannot
+    // see at all: the board screenshots identically a second later. A fragment is sampled rather
+    // than the fireball, because the fireball scales in place while the debris is the part that has
+    // to actually TRAVEL - the same distinction the cannonball probe above was written for.
+    what: 'debris flying outward when a mine goes off',
+    selector: '.ms-frag',
+    minMs: 500,
+    minTravelPx: 60,
+    async drive(page) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 });
+      await play.click();
+      await page.waitForSelector('.ms-board .ms-c', { timeout: 8000 });
+      // The first tap is safe by design, and it also GENERATES the board - so the mine map only
+      // exists after it. Then hit a mine on purpose, which is the one input this probe is about.
+      await page.click('.ms-c[data-i="0"]');
+      await page.waitForTimeout(220);
+      const mine = await page.evaluate(() => {
+        const s = window.__msTest && window.__msTest.state();
+        return s ? s.mine.findIndex((m, i) => m && s.cell[i] === 0) : -1;
+      });
+      if (mine < 0) throw new Error('no hidden mine to detonate');
+      await page.click(`.ms-c[data-i="${mine}"]`);
+    },
+  },
   mancala: {
     // The sow IS the rule this page teaches - stones travelling one per pit around the board.
     // A still diagram of it is what the sheet this replaced already had, and nobody learned the

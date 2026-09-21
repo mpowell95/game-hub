@@ -106,6 +106,39 @@ comment says so rather than leaving a future reader to assume it is load-bearing
 **No-guess boards are explicitly out of scope.** A classic Minesweeper position can require a coin
 flip. Generating only logically-solvable boards is a much larger job and nothing here assumes it.
 
+## The explosion
+
+Matt, 2026-09-21: *"add a huge explosion animation for if someone hits a mine"*.
+
+A white-hot core, two shockwave rings, 26 fragments thrown on their own vectors with their own
+spin, a 420ms board shake, and the remaining mines revealing OUTWARD from the cell that was hit,
+a ring at a time. About 1.15s before the result screen arrives.
+
+- **Everything animates `transform`, `opacity` or `filter` only** (Part 0). Nothing touches
+  `width`/`height`/`inset`, which are not compositor-only and jank on a weak phone.
+- **One keyframe drives all 26 fragments.** Each carries its vector, spin, size, colour and
+  duration as custom properties set in `_explode()`, so nothing generates a keyframe per particle.
+- **The layer is built at the moment of the hit and REMOVED when it finishes**, not left at
+  `opacity: 0`. It is `aria-hidden` and says nothing the revealed board does not already say, so
+  there is nothing lingering in the accessibility tree.
+- **The result is RECORDED before a single pixel moves.** `_finish()` calls `recordMinesweeper`
+  synchronously and only then stages the animation, so leaving mid-explosion cannot cost a player
+  their play (the same reasoning as `js/CLAUDE.md`'s "record at the moment of DECISION").
+- **Every timer is tracked in `this._timers`** and cleared by `destroy()`, `newGame()`,
+  `renderMenu()` and `renderHowTo()`. A blast timer firing into a torn-down screen would paint
+  into nothing, and the hub reuses the same container for the next game.
+- **Reduced motion cuts it entirely rather than slowing it**: this is garnish, not gameplay (the
+  board already says you lost, in text and in shape), so `_reducedMotion()` skips building the
+  layer, reveals every mine in one pass, and the result screen arrives promptly. Measured: 53ms
+  instead of ~1.6s, no layer, no fragments, all mines shown. Nothing structural is `display:
+  none`d; the elements that remain settle at their final pose.
+
+**`test-visual.mjs`'s `MOTION` probe is what keeps it honest.** It samples a fragment's real
+on-screen position frame by frame and fails if the debris is too brief to follow or barely travels
+(measured: 113px over 1135ms, 70 frames). Verified born red by making `_explode` a no-op. A static
+check cannot see any of this - the board screenshots identically a second later, which is exactly
+the failure the probe system exists for.
+
 ## Stats
 
 `recordMinesweeper(level, won, extras)` in `js/game-stats.js`. Sub-counter `ms`:
