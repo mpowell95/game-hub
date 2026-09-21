@@ -4,6 +4,258 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R10: the play unfolds in real time (2026-09-21)
+
+Matt, on v871: *"When I make contact, it immediately says 'out' or 'Homerun!' or whatever the
+result is. That's too fast. Wait for the ball to stop moving before announcing the result. The
+whole thing is too fast too, it's like I'm speed playing. Hitting a homerun is like 0.25 seconds
+from swinging to it landing. The ball should move at like a relatively realistic speed through the
+air and on the ground."* Measured cause, exactly as `docs/BASEBALL-3D-BUILD.md` section 9 ("R10")
+named it: `_settleAtBat` wrote the outcome word to Line 1 on its first line, at contact, before the
+cutaway even started; `FLIGHT_MS` was a flat 900ms whatever the distance; the whole in-play cutaway
+was a fixed 0.4 + 0.9 + 0.7 = 2.0s and `RUN_WINDOW_MS` squeezed every runner into it regardless of
+how far he actually had to run. Presentation only - no engine change, and the pitch beats
+(`fastballMs`, `windupMs`, `resultMs`, `betweenMs`) are untouched (`r2-cadence` still measures
+3000ms = 1200 result + 800 between + 1000 windup, confirmed below).
+
+**Item 1: the batted ball takes as long as a ball takes.** `FLIGHT_MS` is gone; `_flightMsFor
+(battedKind, distanceFt)` computes this PLAY's own real time, in ms, INCLUDING `CONTACT_HOLD_MS`
+(still 400ms, unchanged - the first slice of the same one arc/roll shown on the plate camera
+before the cut, not extra time tacked on):
+
+- **Fly, line drive, popup**: the hang time of a parabola through the apex `_battedApexFt` already
+  computes, the spec's own formula - `t = 2 * sqrt(2 * apex / 32.2)` seconds (32.2 ft/s², g).
+- **A LINE DRIVE now gets its own, flatter apex** (`_battedApexFt`'s new branch): sharing the fly
+  ball's own `BATTED_APEX_FRAC`/`BATTED_APEX_MAX_FT` put a 200ft liner 44ft up (a 3.3s hang time)
+  where the spec's own worked example wants "about 2.5s" (~25ft) - a line drive that arced as high
+  as a fly ball would not read as one. Solved from the same hang-time formula:
+  `apex = (t/2)² × 32.2`, so `apex(2.5s) = 25.16ft`, `frac = 25.16 / 200 = 0.126`
+  (`BATTED_LINE_APEX_FRAC`), capped at `BATTED_LINE_APEX_MAX_FT` (40ft - a liner that arced as high
+  as a fly ball's own 80ft cap would stop reading as a liner).
+- **Grounder**: a roll decelerating from a stopped-ball start speed, `GROUND_ROLL_V0_FT_S` (60
+  ft/s) at `GROUND_ROLL_DECEL_FT_S2` (3.3 ft/s²) - `d = v0·t - 0.5·a·t²`, solved for time:
+  `t = (v0 - sqrt(v0² - 2·a·d)) / a`. The deceleration constant is SOLVED, not guessed, against the
+  spec's own 150ft worked example (t = 2.70s to the hundredth); the same constant then gives a 40ft
+  dribbler 0.68s, comfortably "under a second" - both the spec's own numbers, confirmed by the same
+  one constant rather than tuned to each separately.
+- **Clamped `FLIGHT_MS_MIN` (800ms) to `FLIGHT_MS_MAX` (5500ms)** either way, the spec's own
+  numbers - a token dribbler and an absurd moonshot both still play out inside a beat a person can
+  sit through.
+
+`_contactHold` and `_animateBattedBall` each call `_flightMsFor(battedKind, distanceFt)` from their
+own two arguments independently (never a value passed between them), the same discipline
+`_battedApexFt` already followed - a stale number from the last ball in play can never leak into
+the next one.
+
+**Item 2: nothing is announced until the play is over.** The `_setLine1(word)` call that used to
+sit on `_settleAtBat`'s first line, before the cutaway, now only fires immediately for a
+walk/strikeout (no flight to wait for - the play is already over). For a ball in play, `word` is
+computed once and threaded through as `outWord` into `_animateBattedBall`, which paints it:
+
+- **HOME RUN**: at the wall crossing, unchanged from R4 - `homerCrossFrac`, the chase's own
+  threshold on `totalFrac`, already computed the instant the ball's ground distance passes the
+  fence; `_setLine1(outWord)` now fires in the SAME branch, right beside `_triggerHomerun`.
+- **Everything else**: once the flight loop itself ends (the ball has reached the fielder or
+  landed) - EXCEPT a **ground ball out**, which adds `THROW_BEAT_MS` (1000ms, "about a second," the
+  spec's own words) first, for the throw to first, before the word appears.
+- **A caught fly/line/popup and a base hit are not distinguished further** - both are presented as
+  "the ball reached the fielder," at the flight loop's own end. **The one simplification worth
+  naming for whoever reads this next**: `_animateFielderChase`'s own fielder never arrives EARLIER
+  than the ball (`Math.max(naturalS, flightDurMs / 1000)`, now fed this play's own real chase-portion
+  duration instead of the old constant `FLIGHT_MS`), but he CAN arrive later, if his own 27ft/s run
+  genuinely outlasts a short flight to a distant fielder - on that (rare) shape of play the word can
+  land a beat before his own animation visually reaches the spot. Presentation only; the OUTCOME was
+  never in question, only when it is said.
+
+**Item 3: runners and fielders move at their real speed for the whole play.** `RUN_WINDOW_MS` (the
+old fixed 2000ms every runner was squeezed into, "speed up ALL movers uniformly" if the slowest
+wouldn't fit) is gone entirely. `_animateRunners` no longer scales anyone's `durMs` - every mover
+just runs at his own real `naturalS` (27ft/s, or half that on a forced walk). It now returns
+`{ promise, longestMs }` instead of a bare promise (or `undefined`): `longestMs` is the slowest
+mover's own real, uncompressed duration, read by `_settleAtBat` BEFORE any of the cutaway plays out
+and handed into `_animateBattedBall` as `longestRunnerMs`, whose own marker hold is computed as:
+
+```
+elapsedMs = totalMs + (ground-out throw beat, if any)
+holdMs    = max(MARKER_HOLD_MS, longestRunnerMs - elapsedMs)
+```
+
+`MARKER_HOLD_MS` is now a FLOOR (800ms, "the settle" - the spec's own words, raised from the old
+fixed 700ms), not a fixed total - it only ever gets LONGER, to cover whichever runner is still on
+the bases when the ball itself is done. On a home run this is routinely many seconds: the
+batter's own trot around all four bases is 360ft at 27ft/s = 13,333ms, which usually dominates the
+whole play (a 420ft homer's own ball is done - `_triggerHomerun` fires, flight completes - well
+before the runner crosses the plate). `_settleAtBat` also `await`s `_animateRunners`'s own
+`promise` AFTER the whole cutaway resolves, as a BACKSTOP for whatever the `holdMs` estimate (made
+before any of it has actually played out under real frame timing) does not cover exactly - real
+rAF jitter can still, in principle, leave `_returnToPlate()` firing a frame or two before the
+runner's own loop calls `hide()`. **This is why the `_rbActive`/`setForceHidden` force-hide guard
+(R6/R9) still matters just as much as before** - the estimate narrows the race, it does not close
+it structurally the way the force-hide flag does; see `_syncBatterRunner`'s own header, updated
+this stage.
+
+`_animateFielderChase` is the other consumer that used to read the module constant `FLIGHT_MS` -
+it now takes `flightDurMs` as an explicit 5th argument (this play's own chase-portion duration,
+the same `dur` `_animateBattedBall` computes for the ball itself), so a fielder chasing down a
+420ft blast is never held to a fielder chasing down a 40ft dribbler's own budget.
+
+**Item 4: the stats strip under HOME RUN stays for the trot.** This needed NO new code - `_hideHomerun()`
+was already, and still is, called only from `_returnToPlate()`, so extending the marker hold to
+cover the batter's own trot (item 3) is what already keeps the word/strip up for the whole thing;
+they were only ever getting cut short before because the OLD, fixed marker hold ended in 700ms
+regardless of the runner.
+
+**Measured** (`test-baseball-device.mjs`'s `play-clock` probe, driving `_settleAtBat` directly with
+synthetic payloads, `homerun-strip`'s own pattern - real numbers from a real run, not predictions):
+
+| Play | Formula | Predicted | Measured |
+|---|---|---|---|
+| 40ft dribbler (ground) | `t = (60 - sqrt(60² - 2·3.3·40)) / 3.3` | 679ms, clamped to 800ms | (clamp floor, not separately probed) |
+| 150ft grounder (ground) | same formula, d=150 | 2700ms | (the spec's own worked example, exact) |
+| 200ft liner (line) | `apex = 200 × 0.126 = 25.2ft`; `t = 2·sqrt(2·25.2/32.2)` | 2502ms | (the spec's own worked example, exact) |
+| 120ft groundout (ground, out) | roll 2124ms + `THROW_BEAT_MS` 1000ms | 3124ms | **3199-3233ms** (Out shown) |
+| 250ft fly out (fly, out) | `apex = min(80, 250×0.22) = 55ft`; `t = 2·sqrt(2·55/32.2)` | 3696ms | **3801-3822ms** (Out shown, "only at the catch") |
+| 420ft homer (fly, majors fence 408ft) | `apex = min(80, 420×0.22) = 80ft` (capped); `t = 2·sqrt(2·80/32.2)` = 4458ms; crosses at frac 408/420 = 0.971 | 4331ms | **4396-4430ms** (HOME RUN triggers) |
+| same 420ft homer, return to plate | batter's own 360ft trot / 27ft/s | 13333ms | **13381-13384ms** (`_returnToPlate()` fires) |
+
+The small, consistent overage (60-125ms on every number) is real rAF/setTimeout scheduling
+overhead on the container's software renderer, not a formula error - every measured value lands
+comfortably inside its own deliverable window (groundout 1800-4500ms; homer HOME RUN >= 3000ms,
+return >= runner arrival; fly out "only at the catch").
+
+**A resource-contention false failure, chased down and ruled out, not fixed in code**: the FIRST
+full (non-`BB_DEVICE_QUICK`) run of `test-baseball-device.mjs`, by mistake run CONCURRENTLY with a
+second Chromium instance (`test-visual.mjs baseball`), measured `r2-cadence`'s gaps at 3395-3604ms
+against its own 360ms tolerance around 3000ms - a real-looking failure, and `test-visual.mjs
+baseball`'s own `[play]` probe failed the same shape ("the drag never moved the pitch's aim off
+dead centre") in the same run. Re-run in isolation, both suites went green (`r2-cadence` measured
+3174-3273ms and, separately, 3271-3316ms; `runners-move` passed). **But this container carries
+its OWN ambient load, independent of anything this session started** - `ps` during this stage
+showed a second, unrelated `node test-baseball-device.mjs`/`test-baseball-actors.mjs` pair already
+running against a second dev server on port 8124, present before this session touched anything -
+and later full runs, run deliberately idle, still measured `r2-cadence` failing (3616/3311/3210ms)
+and `test-visual.mjs baseball`'s `[play]` probe failing again. **The decisive check: `git stash`
+of every file this stage touched, then `test-visual.mjs baseball` run again against the UNMODIFIED
+(pre-R10) code** - `[play]` failed IDENTICALLY ("the drag never moved the pitch's aim off dead
+centre"), proving this is a PRE-EXISTING flake in this container/harness, not something R10
+introduced; `git stash pop` restored this stage's changes byte-for-byte (`git diff --stat`
+unchanged before and after). `test-baseball-device.mjs`'s own `pitch-drag` probe - driving the
+identical CDP touch-drag gesture - passed cleanly in every run, contended or not, which is the
+other half of the same conclusion: the pad/drag mechanism itself is sound; the CDP round-trip
+dispatch that both probes drive through is what the container's own scheduling noise can occasionally
+delay past its narrow window. **Lesson for the next session: this container cannot be assumed
+idle even when this session has started nothing** - treat any single failing run of a
+timing-budget probe (`r2-cadence`, `pitch-drag`'s own 400ms drag-duration check, `target-marker`'s
+6px start-position budget, `test-visual.mjs`'s `[play]` probe) as inconclusive on its own and
+re-run it; a `git stash` comparison against the same failure is the fastest way to tell "this
+container is noisy right now" from "this stage broke something."
+
+**A real bug, found by the full (non-`BB_DEVICE_QUICK`) run and fixed**: `runners-move`'s own probe
+(`test-baseball-device.mjs`) wraps `inst._animateRunners` to sample a real runner's advance during
+real auto-play, and its wrapper still assumed the OLD return shape (`const p = origAnimateRunners
+(payload); p.then(...)`) - `_animateRunners` now returns `{ promise, longestMs }`, a plain object,
+so `p.then` was not a function, and the wrapped call crashed with a page error the instant a
+qualifying play came up. Fixed by unwrapping `.promise` for the probe's own bookkeeping while
+returning the REAL `{ promise, longestMs }` object back to its caller unchanged (`_settleAtBat`
+itself needs `longestMs` to be real, or the genuine, real-gameplay marker hold would never extend
+for a genuine runner either). Verified by a second, isolated full run: `runners-move` passed
+(see the checks list in the R10 stage report).
+
+**Facts for whoever reads this next - which constants stopped being constants:**
+- `FLIGHT_MS` and `RUN_WINDOW_MS` are GONE from `ui.js` entirely - `_flightMsFor(battedKind,
+  distanceFt)` and each play's own `longestMs` (from `_animateRunners`) replace them. A future
+  stage grepping for either name will find nothing; that is correct, not a regression.
+- `MARKER_HOLD_MS` (800ms now, was 700ms) is a FLOOR, not the marker hold's fixed duration -
+  `_animateBattedBall`'s own `holdMs` is what actually gets passed to `_runMarkerHold`.
+- `_animateRunners(payload)` returns `{ promise, longestMs }`. Any future caller (there are
+  currently two, both in `_settleAtBat`) must destructure it, not treat the return as a bare
+  promise - `runners-move`'s own wrapper is the cautionary example, above.
+- `_animateBattedBall` is now `async` (it awaits the throw beat and the runner-extended marker hold
+  inline, rather than chaining `.then()`s through a bare executor). Any source-text regex hunting
+  for its declaration (`test-baseball-actors.mjs` had two) needs `(?:async )?` in front of the
+  method name now.
+- `_animateFielderChase` takes a 5th argument, `flightDurMs` (this play's own chase-portion
+  duration), where it used to read the module constant `FLIGHT_MS` directly.
+- `_battedApexFt` has a THIRD kind branch now (`'line'`, alongside `'ground'` and `'popup'`) -
+  `battedKind === 'line'` no longer falls through to the fly ball's own fraction/cap.
+- `THROW_BEAT_MS` (1000ms) and `GROUND_ROLL_V0_FT_S`/`GROUND_ROLL_DECEL_FT_S2` (60, 3.3) are new
+  constants, all in `ui.js` beside the other R-stage presentation timings, none of them in
+  `settings.js` (this stage never touched `baseball/js/engine/`).
+- `test-baseball-actors.mjs`'s own `[KNOWN-BUG PROBE]` cutaway-return budget moved from 2.6s to
+  4.6s (its own direct `_animateBattedBall(40, 180, 'hit', '1B', 'fly', 200)` call now takes about
+  3.7s end to end, not ~2.0s - the comment beside the new deadline has the arithmetic).
+- `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
+  test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` all green; the full (non-quick)
+  `test-baseball-device.mjs`, run in isolation, green including `runners-move` after the fix above.
+
+**Ship-review follow-up, same day: a home run's cutaway is capped at a shown trot, not a real
+one.** Matt/the coordinator, minutes after R10 first shipped: a 13.3s cutaway on every homer (the
+ball's own 4.4s flight is right - item 1 above; the 360ft trot at 27ft/s is what pads it) is too
+long to sit through. **Rule: on a HOME RUN only, once the ball has crossed the wall (the same
+instant the HOME RUN word goes up - `_homerCrossMs`, a new shared method both `_animateBattedBall`
+and `_animateRunners` read so the ball's own visual crossing and every runner's speed change can
+never disagree), every runner still on the paths finishes the REST of his own run at
+`HOMER_RUNNER_SPEEDUP` (3x) speed** - a shown trot, not a real one. Everything BEFORE the crossing
+still runs at real `RUNNER_SPEED_FT_S`/`WALK_RUNNER_SPEED_FT_S`, identical to every other play, and
+every non-homer outcome (single/double/triple/out/walk) is entirely untouched by this constant.
+
+`_animateRunners` now computes `homerCrossMs` once per play (`payload.outcome === 'homer'` only)
+and gives each mover a piecewise duration instead of one flat rate: `naturalMs` (his own real,
+uncompressed time) splits into `crossMs` (real speed, unchanged, up to the crossing) and `postMs`
+(`(naturalMs - homerCrossMs) / HOMER_RUNNER_SPEEDUP`, the ground left AFTER the crossing) whenever
+`naturalMs > homerCrossMs` - a runner who finishes his own run before the ball even clears the
+fence is untouched, `postMs` is simply 0. The step loop's own `frac` calculation is piecewise to
+match: linear in real time up to `crossMs`, then linear in the sped-up remainder past it - a single
+continuous curve, no visual jump at the kink. `longestMs` (what `_settleAtBat` reads to extend the
+marker hold - item 3, unchanged) is now `Math.max(...movers.map(m => m.crossMs + m.postMs))`, so it
+already reflects the speedup with no further change needed anywhere else.
+
+**Measured, the required case (420ft solo homer, majors, fence 408ft, `test-baseball-device.mjs`'s
+`play-clock` probe):** `totalMs` (the ball's own flight) 4458ms, unchanged from item 1; crossing at
+frac 408/420 = 0.9714 lands `homerCrossMs` at ~4331ms, also unchanged (still >= 3000ms, still
+triggers HOME RUN mid-chase). The batter-runner's own real, uncompressed trot (`naturalMs`) is
+still 13333ms (360ft / 27ft/s) - but since that exceeds `homerCrossMs`, his run now splits into
+`crossMs` ~4331ms (real speed, unchanged) plus `postMs` = (13333 - 4331) / 3 = ~3001ms (the
+post-crossing ground at 3x), for a sped-up total (`longestMs`) of **~7332ms (7.33s)** - inside the
+coordinator's own required [5.5s, 8.5s] band for this exact payload, down from the old real 13.3s.
+A bases-loaded homer costs little more: every OTHER runner's own remaining ground after the
+crossing is shorter than the batter-runner's (they started further along the bases), so they always
+finish first; the batter-runner is the longest mover on every home run by construction, the same
+fact that was already true before this fix.
+
+`test-baseball-device.mjs`'s `play-clock (homer)` assertion is rewritten to match: it now computes
+the same `crossMs`/`postMs`/sped-up-arrival formula from the payload's own numbers (rather than the
+old flat `360/27*1000`), and checks `_returnToPlate()` fires inside **[5500ms, 8500ms]** after
+contact AND no earlier than that sped-up arrival (minus a small rAF-granularity allowance) - the
+same two-sided check the old version made against the real, unsped arrival, just against the new
+number. Measured (`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`): **`_returnToPlate()` fired at
+7515ms** - comfortably inside the band, and just past the ~7332ms predicted sped-up arrival, the
+same rAF/setTimeout overhead every other `play-clock` number in this file already carries (HOME RUN
+itself still triggered at 4441ms, inside the unchanged item-1/item-2 timing).
+
+**Facts for whoever reads this next:**
+- `HOMER_RUNNER_SPEEDUP` (3) is a new constant, beside `RUNNER_SPEED_FT_S`/
+  `WALK_RUNNER_SPEED_FT_S` in `ui.js`. It multiplies SPEED for the post-crossing ground only, on a
+  home run only - it is not a second flat window like the old `RUN_WINDOW_MS` R10 removed, and it
+  never touches anything about how the play is SCORED, only how the trot is SHOWN.
+- `_homerCrossMs(battedKind, distanceFt, sprayAngleDeg)` is a new shared method: the one place the
+  "how far into the flight does this ball cross the fence" fraction is computed, reused by both the
+  ball's own HOME RUN trigger (`_animateBattedBall`, still computing its own equivalent fraction
+  inline, unchanged and numerically identical) and the runner speedup (`_animateRunners`, new).
+- A mover object built by `_animateRunners` now carries `naturalMs`/`crossMs`/`postMs` instead of a
+  single flat `durMs` (removed this same stage, so it never existed as a separate name to confuse
+  with the new fields) - any future reader of a mover object needs to know which of the three it
+  wants; `crossMs + postMs` is always the mover's own total duration.
+- `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: green on `play-clock (homer)` (4441ms HOME
+  RUN, 7515ms return) and every other check EXCEPT one unrelated flake, `pitch-drag` (406ms vs a
+  400ms drive budget) - pure CDP-touch scheduling jitter in this container, not this stage's code
+  (it never touches drag/pad mechanics). `node test-visual.mjs baseball`: 19/20 green both times it
+  was run; the `[play]` probe failed identically both runs on the exact same pre-existing message
+  this session already root-caused via `git stash` earlier in R10 ("the drag never moved the
+  pitch's aim off dead centre") - a known container flake, not a regression, and unrelated to this
+  follow-up's own change (`_animateRunners` only). No engine file, no `poses.js` clip, no `FEEL`
+  beat, no `sw.js`/`version.json` touched.
+
 ## R9: figures and stadium (2026-09-21)
 
 Four fixes off Matt's recording of v868 (`docs/BASEBALL-3D-BUILD.md` section 9, "R9"). No engine

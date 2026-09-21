@@ -1132,10 +1132,15 @@ if (!process.env.BB_DEVICE_QUICK) {
                 dotShown: !!(dot && dot.style.opacity === '1'),
               });
             }, 30);
-            const p = origAnimateRunners(payload);
-            captured = { beforeIdx, trackedId: before[beforeIdx], p, samples };
-            p.then(() => clearInterval(iv));
-            return p;
+            // R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 3): `_animateRunners` now
+            // returns `{ promise, longestMs }`, not a bare promise - `_settleAtBat` needs
+            // `longestMs` to extend the marker hold, so this wrapper forwards the REAL object
+            // back to its own caller unchanged and only unwraps `.promise` for its own bookkeeping.
+            const result = origAnimateRunners(payload);
+            captured = { beforeIdx, trackedId: before[beforeIdx], p: result.promise, samples };
+            if (result.promise) result.promise.then(() => clearInterval(iv));
+            else clearInterval(iv);
+            return result;
           }
         }
         return origAnimateRunners(payload);
@@ -1704,6 +1709,161 @@ if (!process.env.BB_DEVICE_QUICK) {
   await p16.close();
 }
 
+{
+  // play-clock: R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10"). Drives `_settleAtBat` directly
+  // with three synthetic payloads (`homerun-strip`'s own pattern above - no engine, no real
+  // at-bat) and measures, from CONTACT (the instant `_settleAtBat` is called), when the outcome
+  // word actually reaches Line 1, when a homer's own HOME RUN trigger fires, and when
+  // `_returnToPlate()` fires - never before the play is actually over (item 2), and never before
+  // the slowest runner's own real, uncompressed arrival (item 3). `inst.league = 'majors'` pins a
+  // full-size fence (408ft centre) so the homer payload's own crossing time does not depend on
+  // which league Quick Play happens to default to (Little League, 210ft centre - a 420ft shot
+  // over THAT fence would cross at just over half its own flight, not near the end of it).
+  const p16b = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page16b = await p16b.newPage();
+  await page16b.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Clock Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr16b = await mountInHub(page16b);
+  if (mountErr16b) {
+    fail('play-clock', `mount failed: ${mountErr16b}`);
+  } else {
+    await page16b.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page16b.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page16b.waitForTimeout(500);
+
+    // Drives one synthetic `_settleAtBat(payload)` to completion and returns { line1At: [{t,text}],
+    // homerAt, returnAt, resolvedAt } - every timestamp a `performance.now()` DELTA from the call,
+    // never a frame count (the container's own ~20fps SwiftShader rate makes frame counts
+    // meaningless as a clock).
+    async function runPlay(page, payload, capMs) {
+      await page.evaluate((p) => {
+        const inst = document.querySelector('.hub-game')._bbInstance;
+        inst.league = 'majors';
+        const rec = { line1At: [], homerAt: null, returnAt: null, resolvedAt: null };
+        window.__bbClockRec = rec;
+        const t0 = performance.now();
+        const origSetLine1 = inst._setLine1.bind(inst);
+        inst._setLine1 = (text) => { if (text) rec.line1At.push({ t: performance.now() - t0, text: String(text) }); return origSetLine1(text); };
+        const origTrigger = inst._triggerHomerun.bind(inst);
+        inst._triggerHomerun = (stats) => { rec.homerAt = performance.now() - t0; return origTrigger(stats); };
+        const origReturn = inst._returnToPlate.bind(inst);
+        inst._returnToPlate = (...args) => { rec.returnAt = performance.now() - t0; return origReturn(...args); };
+        window.__bbClockPromise = inst._settleAtBat(p).then(() => { rec.resolvedAt = performance.now() - t0; });
+      }, payload);
+      const deadline = Date.now() + capMs;
+      let rec = null;
+      while (Date.now() < deadline) {
+        rec = await page.evaluate(() => window.__bbClockRec);
+        if (rec && rec.resolvedAt != null) break;
+        await page.waitForTimeout(200);
+      }
+      return rec;
+    }
+
+    // A 420ft homer: apex caps at BATTED_APEX_MAX_FT (80ft, since 420*0.22=92.4 > 80), so
+    // totalMs = 2000*sqrt(2*80/32.2) = 4458ms; crossing the 408ft majors fence at frac
+    // 408/420 = 0.9714 lands HOME RUN at ~4331ms (crossMs) - comfortably clear of the spec's own
+    // 3.0s floor. R10 ship-review follow-up: the batter-runner's own 360ft trot would naturally
+    // take 13333ms (360/27*1000) - too long to sit through - so once the ball has crossed the wall
+    // (crossMs) he finishes the remaining ground at HOMER_RUNNER_SPEEDUP (3x) speed:
+    // postMs = (13333 - 4331) / 3 = ~3001ms, so his own sped-up total is
+    // speedUpArriveMs = crossMs + postMs = ~7332ms - the longest thing in this play, so the marker
+    // hold extends to cover exactly that (not the old real 13333ms) and `_returnToPlate()` should
+    // land inside [5500, 8500]ms (the coordinator's own band for this exact payload) and no earlier
+    // than the sped-up runner's own arrival (minus a small rAF-granularity allowance).
+    const homerRec = await runPlay(page16b, {
+      batterId: 'test-batter', side: 'away', outcome: 'homer', bases: 4, runsScored: 1,
+      q: 1, exitVeloMph: 101.7, centered: true, distanceFt: 420, sprayAngleDeg: 0,
+      battedKind: 'fly', launchAngleDeg: 31.4, timingWord: 'perfect',
+      basesBefore: [null, null, null], runnersOut: [],
+    }, 20000);
+    if (!homerRec) {
+      fail('play-clock (homer)', 'the homer payload never resolved within 20s');
+    } else {
+      const early = homerRec.line1At.filter((e) => e.t < 300);
+      const apexFt = 80; // BATTED_APEX_MAX_FT clamp for this payload's 420ft*0.22=92.4
+      const totalMs = 2000 * Math.sqrt((2 * apexFt) / 32.2);
+      const crossMs = totalMs * (408 / 420); // majors fence at sprayAngleDeg 0
+      const naturalMs = (360 / 27) * 1000; // the batter's own real, uncompressed trot
+      const postMs = (naturalMs - crossMs) / 3; // HOMER_RUNNER_SPEEDUP, the ground left after crossing
+      const speedUpArriveMs = crossMs + postMs; // ~7332ms
+      const HOMER_RETURN_MIN_MS = 5500, HOMER_RETURN_MAX_MS = 8500; // the coordinator's own band
+      if (early.length) {
+        fail('play-clock (homer)', `Line 1 carried an outcome word ${early[0].t.toFixed(0)}ms after contact (want none before 300ms): "${early[0].text}"`);
+      } else if (homerRec.homerAt == null || homerRec.homerAt < 3000) {
+        fail('play-clock (homer)', `HOME RUN triggered at ${homerRec.homerAt == null ? 'never' : homerRec.homerAt.toFixed(0) + 'ms'} (want >= 3000ms)`);
+      } else if (homerRec.returnAt == null || homerRec.returnAt < speedUpArriveMs - 250) {
+        fail('play-clock (homer)', `_returnToPlate() fired at ${homerRec.returnAt == null ? 'never' : homerRec.returnAt.toFixed(0) + 'ms'} (want >= ${(speedUpArriveMs - 250).toFixed(0)}ms, the sped-up trotting runner's own arrival)`);
+      } else if (homerRec.returnAt < HOMER_RETURN_MIN_MS || homerRec.returnAt > HOMER_RETURN_MAX_MS) {
+        fail('play-clock (homer)', `_returnToPlate() fired at ${homerRec.returnAt.toFixed(0)}ms (want ${HOMER_RETURN_MIN_MS}-${HOMER_RETURN_MAX_MS}ms - the sped-up cutaway band)`);
+      } else {
+        ok(`play-clock (homer): no word before 300ms, HOME RUN at ${homerRec.homerAt.toFixed(0)}ms (>= 3000ms), return at ${homerRec.returnAt.toFixed(0)}ms (in ${HOMER_RETURN_MIN_MS}-${HOMER_RETURN_MAX_MS}ms, >= sped-up runner arrival ${speedUpArriveMs.toFixed(0)}ms)`);
+      }
+    }
+    await page16b.waitForTimeout(300);
+
+    // A 120ft groundout: roll time (GROUND_ROLL_V0_FT_S 60, GROUND_ROLL_DECEL_FT_S2 3.3) solves to
+    // 2124ms, plus the spec's own THROW_BEAT_MS (1000ms) before Out appears - 3124ms, inside the
+    // deliverable's own 1.8 to 4.5s window.
+    const groundRec = await runPlay(page16b, {
+      batterId: 'test-batter-2', side: 'away', outcome: 'groundout', bases: 0, runsScored: 0,
+      q: 1, exitVeloMph: 76, centered: true, distanceFt: 120, sprayAngleDeg: -8,
+      battedKind: 'ground', launchAngleDeg: -6, timingWord: 'perfect',
+      basesBefore: [null, null, null], runnersOut: [],
+    }, 12000);
+    if (!groundRec) {
+      fail('play-clock (groundout)', 'the groundout payload never resolved within 12s');
+    } else {
+      const early = groundRec.line1At.filter((e) => e.t < 300);
+      const outAt = groundRec.line1At.find((e) => /out/i.test(e.text));
+      if (early.length) {
+        fail('play-clock (groundout)', `Line 1 carried an outcome word ${early[0].t.toFixed(0)}ms after contact (want none before 300ms): "${early[0].text}"`);
+      } else if (!outAt) {
+        fail('play-clock (groundout)', `no "Out" ever reached Line 1 (saw: ${groundRec.line1At.map((e) => `${e.text}@${e.t.toFixed(0)}`).join(', ') || 'nothing'})`);
+      } else if (outAt.t < 1800 || outAt.t > 4500) {
+        fail('play-clock (groundout)', `Out shown at ${outAt.t.toFixed(0)}ms after contact (want 1800 to 4500ms - roll ~2124ms + THROW_BEAT_MS 1000ms)`);
+      } else {
+        ok(`play-clock (groundout): no word before 300ms, Out at ${outAt.t.toFixed(0)}ms after contact (want 1800-4500ms)`);
+      }
+    }
+    await page16b.waitForTimeout(300);
+
+    // A 250ft fly out: apex = min(80, 250*0.22) = 55ft, totalMs = 2000*sqrt(2*55/32.2) = 3696ms -
+    // Out shows exactly there (no throw beat on a non-ground out), "at the catch," never earlier.
+    const flyRec = await runPlay(page16b, {
+      batterId: 'test-batter-3', side: 'away', outcome: 'flyout', bases: 0, runsScored: 0,
+      q: 1, exitVeloMph: 88, centered: true, distanceFt: 250, sprayAngleDeg: 12,
+      battedKind: 'fly', launchAngleDeg: 34, timingWord: 'perfect',
+      basesBefore: [null, null, null], runnersOut: [],
+    }, 12000);
+    if (!flyRec) {
+      fail('play-clock (flyout)', 'the fly-out payload never resolved within 12s');
+    } else {
+      const early = flyRec.line1At.filter((e) => e.t < 300);
+      const catchMs = 2000 * Math.sqrt((2 * 55) / 32.2); // 3696ms
+      const tooEarly = flyRec.line1At.filter((e) => e.t < catchMs - 250);
+      if (early.length) {
+        fail('play-clock (flyout)', `Line 1 carried an outcome word ${early[0].t.toFixed(0)}ms after contact (want none before 300ms): "${early[0].text}"`);
+      } else if (tooEarly.length) {
+        fail('play-clock (flyout)', `Out shown at ${tooEarly[0].t.toFixed(0)}ms, before the catch (~${catchMs.toFixed(0)}ms)`);
+      } else if (!flyRec.line1At.length) {
+        fail('play-clock (flyout)', 'no outcome word ever reached Line 1');
+      } else {
+        ok(`play-clock (flyout): no word before 300ms, Out shown at ${flyRec.line1At[0].t.toFixed(0)}ms (>= catch ~${catchMs.toFixed(0)}ms), only at the catch`);
+      }
+    }
+  }
+  await p16b.close();
+}
+
 // 17. R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): SIDES-MATCH. Every one of the fifteen roles
 // wears the team the CURRENT HALF says, never `mode` (which control the human happens to be
 // holding this turn) - the old `_syncActors` picked the batter's/pitcher's side off `mode` and
@@ -1886,11 +2046,15 @@ if (!process.env.BB_DEVICE_QUICK) {
         battedKind: 'ground', launchAngleDeg: 1, timingWord: null,
         basesBefore: [null, null, null], runnersOut: [],
       };
-      // Fire-and-forget, same as `homerun-strip` - `_settleAtBat` runs its own ~2s sequence.
+      // Fire-and-forget, same as `homerun-strip` - `_settleAtBat` runs its own multi-second
+      // sequence (R10: no longer a fixed ~2s - a 45ft ground out's own flight/throw-beat/hold runs
+      // a few seconds; awaited fully at the bottom of this block).
       window.__bbOneBatterP = inst._settleAtBat(payload);
-      // FORCE THE RACE: cut back to the plate at 300ms, well before rb's own natural finish
-      // (his 90ft run is sped up to land at RUN_WINDOW_MS = 2000ms) - the exact shape of a cutaway
-      // landing early relative to `_animateRunners`'s own independently-clocked rAF loop.
+      // FORCE THE RACE: cut back to the plate at 300ms, well before rb's own natural finish (his
+      // 90ft run at RUNNER_SPEED_FT_S is ~3333ms - R10 removed the old speed-up-to-fit-a-window
+      // rule, but this probe forces the SAME race regardless of how long his run naturally takes)
+      // - the exact shape of a cutaway landing early relative to `_animateRunners`'s own
+      // independently-clocked rAF loop.
       await new Promise((r) => setTimeout(r, 300));
       inst._returnToPlate();
       // THE NEXT AT-BAT'S FIRST PITCH: the real `HumanAgent.decidePitch`/`decideSwing` both call
@@ -1899,7 +2063,7 @@ if (!process.env.BB_DEVICE_QUICK) {
       // at-bat behind to drive.
       inst._drawStaticField();
       // Sample well past where the OLD code would still show rb mid-run (1500ms after contact,
-      // comfortably inside his old ~2000ms natural window).
+      // comfortably inside his own real ~3333ms natural window).
       await new Promise((r) => setTimeout(r, 1200));
       const box = inst.actors.actors.batter.pivot.position;
       const within = [];
