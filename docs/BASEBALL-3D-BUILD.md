@@ -1366,7 +1366,7 @@ Deliverables: stills of each camera before and after, a cap sheet from `render-a
 the probes above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
 `node test-baseball-actors.mjs`, `node check-no-scroll.mjs baseball` green.
 
-### R8 record (shipped v869, 2026-09-21)
+### R8 record (shipped v870, 2026-09-21)
 
 From the stage's report: `PAD_X_SIGN = { pitching: -1, batting: 1 }` (ui.js) is the one place the
 pad's screen-to-engine sign lives; the engine's +x is still first base. The pitcher camera is at
