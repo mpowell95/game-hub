@@ -182,7 +182,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -225,6 +225,11 @@ export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
 export const PI_TIERS = NB_TIERS;
 /** Sudoku's four tiers already sit lowercase, matching js/difficulty-tiers.js's MAP 1:1. */
 export const SD_TIERS = ['easy', 'medium', 'hard', 'expert'];
+
+/** Minesweeper's four boards. Same words as SD_TIERS and deliberately its own constant: they are
+ *  two different games' vocabularies that happen to coincide, and coupling them would make a
+ *  change to one silently change the other. */
+export const MS_LEVELS = ['easy', 'medium', 'hard', 'expert'];
 // Ball Run difficulties (easy|medium|hard, no expert tier).
 export const BR_DIFFS = ['easy', 'medium', 'hard'];
 // Snake difficulties (easy|medium|hard — speed tiers; same axis shape as Ball Run, own constant
@@ -395,6 +400,25 @@ function ensureSd(g) {
   if (!Number.isFinite(g.sd.mistakes)) g.sd.mistakes = 0;
   if (!g.sd.bestTimeMs || typeof g.sd.bestTimeMs !== 'object') g.sd.bestTimeMs = {};
   for (const tier of SD_TIERS) if (!Number.isFinite(g.sd.bestTimeMs[tier])) g.sd.bestTimeMs[tier] = 0;
+}
+
+/** Minesweeper: boards cleared, lifetime correct flags, and the best time per level.
+ *
+ *  `bestTimeMs` is LOWER-is-better, so it merges and improves with Math.min, not Math.max. That is
+ *  not an exception to THE LAW rule 2 ("bests only improve"), it is what improving means for a
+ *  time - golf's `bestRoundByCourse` is the existing precedent in this file. 0 is the "never set"
+ *  sentinel and never wins a comparison, so a real time always beats an absent one.
+ *
+ *  Losses are NOT stored here: `total.played - total.won` already is the loss count, and a second
+ *  copy of a number is a second thing that can disagree with the first (rule 4's cousin). */
+function ensureMs(g) {
+  if (!g.ms || typeof g.ms !== 'object') {
+    g.ms = { cleared: 0, flagsRight: 0, bestTimeMs: {} };
+  }
+  if (!Number.isFinite(g.ms.cleared)) g.ms.cleared = 0;
+  if (!Number.isFinite(g.ms.flagsRight)) g.ms.flagsRight = 0;
+  if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
+  for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -820,6 +844,7 @@ function normalize(raw) {
   ensureSk(st.games.skeeball);
   ensureGf(st.games.golf);
   ensureBb(st.games.baseball);
+  ensureMs(st.games.minesweeper);
   return st;
 }
 
@@ -1382,6 +1407,48 @@ export function recordSudoku(tier, extras = {}) {
     if (timeMs > 0) {
       const cur = g.sd.bestTimeMs[t] | 0;
       g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
+    }
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Minesweeper: one finished board, won or lost.
+ *
+ *  Unlike Sudoku (which only ever records a solve) this game has a real loss state, so `played`
+ *  counts every finished board and `won` only a cleared one - the ordinary competitive shape, even
+ *  though the opponent is the board. `js/players-agg.js`'s SOLO set still holds it, following
+ *  Sudoku: a cleared board is a run, not a win over a person.
+ *
+ *  A LOSS STILL WRITES. It counts the play, the tier bucket and the correct flags, and it leaves
+ *  `bestTimeMs` alone (there is no time to record for a board you did not finish). Dropping the
+ *  losing plays would make the win rate a lie and lose real history (rule 1).
+ *
+ *  `extras` = { timeMs, cleared, flagsRight, mines }. `cleared` is a PERCENTAGE of this one board
+ *  and is deliberately not accumulated: a lifetime sum of percentages is not a number that means
+ *  anything (rule 4, never fabricate a metric).
+ */
+export function recordMinesweeper(level, won, extras = {}) {
+  if (tooFast('minesweeper')) return null;
+  const st = loadStats();
+  const g = st.games.minesweeper;
+  ensureMs(g);
+  const timeMs = Math.max(0, extras.timeMs | 0);
+  const flagsRight = Math.max(0, extras.flagsRight | 0);
+  const lv = MS_LEVELS.indexOf(normDiff(level)) >= 0 ? normDiff(level) : null;
+  g.total.played += 1;
+  if (won) g.total.won += 1; else g.total.lost += 1;
+  g.ms.flagsRight += flagsRight;
+  if (won) g.ms.cleared += 1;
+  if (lv) {
+    if (!g.byDiff[lv]) g.byDiff[lv] = bucket();
+    g.byDiff[lv].played += 1;
+    if (won) g.byDiff[lv].won += 1; else g.byDiff[lv].lost += 1;
+    if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
+    if (won && timeMs > 0) {
+      const cur = g.ms.bestTimeMs[lv] | 0;
+      g.ms.bestTimeMs[lv] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
   }
   st.updatedAt = new Date().toISOString();

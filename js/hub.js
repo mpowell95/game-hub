@@ -180,6 +180,24 @@ export const GAMES = [
     art: GAME_ART['pipes'],
   },
   {
+    // ADMIN ONLY while it is tested (Matt, 2026-09-21). `devOnly` is only a DEFAULT since the
+    // admin control page shipped - it can be released to everyone from inside the app with no
+    // commit and no deploy, which is exactly why it still has a GAME_META row in
+    // js/leaderboard-ui.js: a game released that way gets no release commit to add one, and a
+    // missing row counts every play on it as zero (THE LAW rule 1, and how Yahtzee shipped).
+    //
+    // NOT immersive: this is a grid puzzle like Sudoku, and the vertical budget its cell sizes
+    // are derived from assumes the hub's ordinary header is there (reference/minesweeper/SPEC.md).
+    id: 'minesweeper',
+    title: { en: 'Minesweeper', es: 'Buscaminas' },
+    blurb: { en: 'Open every square that is not a mine. Four sizes, best times, flags.',
+      es: 'Abre cada casilla que no sea una mina. Cuatro tamanos, mejores tiempos, marcas.' },
+    module: '../minesweeper/js/ui.js',
+    accent: '#1f5fa8',
+    art: GAME_ART['minesweeper'],
+    devOnly: true,
+  },
+  {
     id: 'sudoku',
     title: { en: 'Sudoku', es: 'Sudoku' },
     blurb: { en: 'Classic 9x9. Four difficulties, notes, hints, and a timer.',
