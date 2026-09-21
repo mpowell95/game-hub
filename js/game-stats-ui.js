@@ -36,6 +36,7 @@ const TABS = [
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
   { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
+  { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },

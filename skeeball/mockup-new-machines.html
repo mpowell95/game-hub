@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skeeball Faces</title>
+<style>
+  :root{ --bg:#14100c; --ink:#f3ece1; --dim:#9b8f7e; --face:#c96f2e; --faceEdge:#8f4c1d;
+         --rail:#54301a; --gold:#ffd977; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       padding:24px 16px 40px}
+  h1{font:700 20px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.14em;margin:0 0 20px;color:var(--gold)}
+  .grid{display:grid;gap:22px;grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}
+  .card{background:#1d170f;border:1px solid #33271a;border-radius:12px;padding:16px}
+  .nm{font:700 17px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.1em;margin:0 0 2px}
+  .hook{color:var(--dim);font-size:13px;margin:0 0 12px}
+  .row{display:flex;gap:18px;align-items:flex-start}
+  .side{flex:1 1 0;min-width:0}
+  svg{display:block;flex:0 0 auto}
+  table{border-collapse:collapse;font-size:13px;width:100%}
+  td{padding:2px 0;color:var(--dim)}
+  td.v{color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;font-weight:700;padding-right:8px;width:58px}
+  .neg{color:#ff9a7a}
+  .note{color:var(--dim);font-size:12px;margin:10px 0 0;border-top:1px solid #33271a;padding-top:8px}
+</style></head><body>
+<h1>SKEEBALL — FOUR NEW FACES</h1>
+<div class="grid" id="g"></div>
+<script>
+const X=34, W=6.875, L=9.5, R=0.5, PAD=10;
+const SW=W*X+PAD*2, SH=L*X+PAD*2;
+const px=u=>PAD+(u+W/2)*X, py=v=>PAD+(L-v)*X;
+
+// lightness ramp, hue-free ordering (colorblind safe); value printed in every hole
+function fill(val,max){
+  if(val<0) return '#14161b';
+  const t=Math.pow(val/max,0.42);
+  const a=[0x7d,0x3b,0x22], b=[0xff,0xd2,0x3f];
+  return '#'+a.map((c,i)=>Math.round(c+(b[i]-c)*t).toString(16).padStart(2,'0')).join('');
+}
+function ink(val,max){ return (val<0||Math.pow(val/max,0.42)<0.55)?'#fff8ec':'#241610'; }
+
+function face(holes){
+  const max=Math.max(...holes.map(h=>h.val));
+  let s=`<svg width="${SW}" height="${SH}" viewBox="0 0 ${SW} ${SH}">
+  <defs><pattern id="hz" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+  <line x1="0" y1="0" x2="0" y2="6" stroke="#ff9a7a" stroke-width="2"/></pattern></defs>
+  <rect x="${PAD-6}" y="${PAD-6}" width="${W*X+12}" height="${L*X+12}" rx="10" fill="var(--rail)"/>
+  <rect x="${PAD}" y="${PAD}" width="${W*X}" height="${L*X}" rx="6" fill="var(--face)" stroke="var(--faceEdge)"/>`;
+  for(const h of holes){
+    const cx=px(h.u), cy=py(h.v), r=R*X;
+    s+=`<circle cx="${cx}" cy="${cy}" r="${r+3}" fill="#00000055"/>`;
+    s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill(h.val,max)}" stroke="#1a120a" stroke-width="1.5"/>`;
+    if(h.val<0) s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#hz)" opacity=".55"/>`;
+    s+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="${h.val>=100?10:11}"
+        font-weight="700" fill="${ink(h.val,max)}" font-family="ui-sans-serif,system-ui">${h.val}</text>`;
+  }
+  s+=`<text x="${SW/2}" y="${SH-1}" text-anchor="middle" font-size="9" fill="#6d6152">player</text></svg>`;
+  return s;
+}
+function tbl(rows){
+  return '<table>'+rows.map(([v,d])=>
+    `<tr><td class="v ${String(v).startsWith('-')?'neg':''}">${v}</td><td>${d}</td></tr>`).join('')+'</table>';
+}
+
+const B=[];
+
+// 1 — THE LADDER
+B.push({nm:'THE LADDER', hook:'One column. Seven rungs. Power only.',
+  holes:[5,10,20,40,80,160,320].map((val,i)=>({u:0,v:0.8+i*1.35,val})),
+  tbl:[['320','top rung'],['160',''],['80',''],['40',''],['20',''],['10',''],['5','bottom rung']],
+  note:'Aim is worth nothing. Every rung doubles, and a short ball falls back through the cheap ones.'});
+
+// 2 — BULLSEYE
+const bull=[{u:0,v:5.6,val:100}];
+for(let i=0;i<6;i++){const a=i*Math.PI/3;bull.push({u:1.45*Math.sin(a),v:5.6+1.45*Math.cos(a),val:25});}
+for(let i=0;i<6;i++){const a=Math.PI/6+i*Math.PI/3;bull.push({u:2.90*Math.sin(a),v:5.6+2.90*Math.cos(a),val:5});}
+B.push({nm:'BULLSEYE', hook:'Dartboard. Three rings, 13 holes.',
+  holes:bull, tbl:[['100','centre, x1'],['25','inner ring, x6'],['5','outer ring, x6']],
+  note:'Rings are concentric, not stacked up the slope, so the 100 is a landing spot rather than a distance.'});
+
+// 3 — SPLIT DECISION
+const sp=[];
+[20,30,40,50].forEach((val,i)=>sp.push({u:-1.7,v:1.6+i*2.2,val}));
+[-25,75,-50,200].forEach((val,i)=>sp.push({u:1.7,v:1.6+i*2.2,val}));
+B.push({nm:'SPLIT DECISION', hook:'Two lanes. Pick one per ball.',
+  holes:sp, tbl:[['50 / 40','safe lane, top'],['30 / 20','safe lane, bottom'],['200','risk lane, top'],
+    ['-50','risk lane'],['75','risk lane'],['-25','risk lane, bottom']],
+  note:'Left lane always pays. Right lane alternates jackpot and penalty up the slope, so a miss by one rung costs points.'});
+
+// 4 — THE ARCH
+const arch=[{u:0,v:8.8,val:100},{u:0,v:1.2,val:5}];
+[[40,50],[70,25],[95,10]].forEach(([d,val])=>{const t=d*Math.PI/180;
+  const u=2.85*Math.sin(t), v=5.2+3.6*Math.cos(t);
+  arch.push({u:-u,v,val});arch.push({u,v,val});});
+B.push({nm:'THE ARCH', hook:'A rainbow. The 100 is the keystone.',
+  holes:arch, tbl:[['100','keystone'],['50','x2'],['25','x2'],['10','x2, corners'],['5','cellar']],
+  note:'Every hole sits on one curve, so power and aim trade off against each other all the way round.'});
+
+document.getElementById('g').innerHTML=B.map(b=>
+ `<div class="card"><p class="nm">${b.nm}</p><p class="hook">${b.hook}</p>
+  <div class="row">${face(b.holes)}<div class="side">${tbl(b.tbl)}<p class="note">${b.note}</p></div></div></div>`).join('');
+</script></body></html>

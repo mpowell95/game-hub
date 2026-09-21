@@ -300,6 +300,26 @@ export const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    id: 'hoops4',
+    title: 'Connect 4 Hoops',
+    blurb: {
+      en: 'Shoot a basketball at seven hoops. Sink one and your disc drops down that column. Four in a row wins.',
+      es: 'Encesta en una de las siete canastas y tu ficha cae por esa columna. Cuatro en raya gana.',
+    },
+    module: '../hoops4/js/ui.js',
+    // Owns the whole viewport (a fixed edge-to-edge canvas under a thin HUD), so the hub's header
+    // collapses to the floating back button - the same call as Skeeball and Pinball.
+    immersive: true,
+    accent: '#1f5fa8',
+    art: GAME_ART['hoops4'],
+    // ADMIN ONLY while Matt plays it in ("build and deploy for testing", 2026-09-21). No
+    // `released` date on purpose: that field is the only input to the launcher's New pill and it
+    // must announce the day the game ACTUALLY goes live, not the day it went up for testing.
+    // Releasing it needs no commit - the admin page's live switch overrides this (root
+    // CLAUDE.md, "The admin control page").
+    devOnly: true,
+  },
+  {
     // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Pinball below. It was released
     // 2026-08-22 and pulled back the next day: work done for POPONGO and HOT SHOT had been
     // landing in the shared engine and changing how THE CLASSIC plays (see skeeball/CLAUDE.md,

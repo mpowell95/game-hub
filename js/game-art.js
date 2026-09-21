@@ -9,6 +9,27 @@
 // stats-id -> hub-id map used to look these up from aggregated player data.
 
 export const GAME_ART = {
+  // Landscape, composed for the 160x90 frame it is given - never a square cropped with
+  // preserveAspectRatio, which bisects shapes at the edge (it cut Connect Four's discs).
+  // A row of hoops over the grid, which is the machine.
+  hoops4: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#15171c"/>
+            <rect x="8" y="30" width="144" height="56" rx="4" fill="#1f5fa8"/>
+            <g fill="#0d2c52">
+              ${[0,1,2,3,4,5,6].map(c=>[0,1,2].map(r=>`<circle cx="${18+c*20.7}" cy="${41+r*17}" r="6.6"/>`).join('')).join('')}
+            </g>
+            <circle cx="18" cy="75" r="6.6" fill="#e8463f"/><circle cx="38.7" cy="75" r="6.6" fill="#ffce3a"/>
+            <circle cx="59.4" cy="75" r="6.6" fill="#e8463f"/><circle cx="80.1" cy="75" r="6.6" fill="#ffce3a"/>
+            <circle cx="100.8" cy="75" r="6.6" fill="#e8463f"/>
+            <circle cx="59.4" cy="58" r="6.6" fill="#e8463f"/><circle cx="80.1" cy="58" r="6.6" fill="#ffce3a"/>
+            <g stroke="#e8541f" stroke-width="3" fill="none">
+              ${[0,1,2,3,4,5,6].map(c=>`<ellipse cx="${18+c*20.7}" cy="20" rx="7.5" ry="2.6"/>`).join('')}
+            </g>
+            <g stroke="#e6e2d8" stroke-width="1" fill="none" opacity=".75">
+              ${[0,1,2,3,4,5,6].map(c=>{const x=18+c*20.7;return `<path d="M${x-6} 21 L${x-3.4} 28 L${x+3.4} 28 L${x+6} 21"/>`;}).join('')}
+            </g>
+            <circle cx="80.1" cy="9" r="4.4" fill="#e8463f"/>
+          </svg>`,
   'connect-four': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#1769d4"/>
             <g fill="#dbe8f8">
