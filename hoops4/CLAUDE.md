@@ -63,6 +63,58 @@ which you deliberately did not.
 `reference/hoops/sweep-hoops-columns.mjs`, the write-up is `reference/hoops/FINDINGS.md`, and the
 probe that holds it all is `hoops4/js/test.js`.
 
+### The cabinet is ONE STEP, and the screen is BELOW the hoops
+
+**The first build got this badly wrong and it shipped.** It reused HOT SHOT's three-tread
+staircase verbatim (the geometry already measured) and hung the Connect 4 screen on the back wall
+above it. Matt: *"WHY did you put the connect 4 board way up on top of stairs? that is a bizarre
+choice. I can't even reach the top of the board by throwing the ball."* Measured, he was describing
+it exactly — the hoops sat at 0.53 m and the screen at **1.13 m, two full steps above them**, on a
+machine whose own mockup and whose real Bay Tek cabinet both put the hoops UP and the grid BELOW.
+
+What it is now: **a screen riser, a hoop shelf, a back wall.** The player throws up and over the
+display into the hoops above it.
+
+| | |
+|---|---|
+| screen riser | 4.2X, vertical. The Connect 4 display is on this face |
+| hoop shelf | 4.0X, tilt 0.10, hoops **0.75X from its BACK edge** |
+| back wall | 1.8X + `backboardH` 0.42 |
+| hoops | 0.858 m · screen 0.420–0.805 m |
+
+**Three things about that shape are load-bearing, and each was arrived at by getting it wrong
+first:**
+
+- **There is no apron in front of the screen riser.** A 1.0X near-flat tread at the board's
+  bottom edge is a *parking spot* — a throw that fails to clear the riser lands on it and waits
+  out the watchdog. **49% of throws parked.** The riser now rises straight off the bottom edge and
+  a short throw hits it, drops to the trough and is a clean fast miss.
+- **The hoops sit at the BACK of the shelf, not the front.** This is HOT SHOT's layout and Matt's
+  explicit call on that machine. With them 1.2X from the *front*, 2.0X of bare shelf sat behind
+  the row and **119 of 325 throws flew over the hoops and parked on it**. Shortening the shelf
+  instead put the back wall so close that shots caromed across columns and the middle three
+  columns' mean aims collapsed to −0.03 / 0.00 / +0.06 — aim stopped choosing anything. The shelf
+  must be DEEP (the ball lands in front of the row, and the landing point is what picks the
+  column) *and* the row must be at the BACK (nowhere to park). Both at once is the only thing
+  that satisfies both.
+- **A TALLER machine plays better, which is the opposite of what an earlier pass concluded.** That
+  pass measured a 0.697 m shelf as unreachable (6–10% scoring, up to 73% parked) and blamed the
+  height. It was wrong — the fault was the shelf layout of the time. Re-swept against the
+  corrected layout, height is a straight win, and it also lifts the display clear of the ramp
+  crest:
+
+  | riser | shelf | screen clear of crest | scored | parked | separation |
+  |---|---|---|---|---|---|
+  | 2.3X | 0.535 m | 0.147 m | 36.3% | 7.4% | 0.92 |
+  | 3.0X | 0.636 m | 0.248 m | 35.2% | 9.7% | 1.87 |
+  | **4.2X** | **0.858 m** | **0.423 m** | **33.3%** | **6.7%** | **2.11** |
+
+**THE RAMP CREST IS WHY THE DISPLAY STARTS AT 0.42 m.** The camera stands behind the ball, so the
+crest (top y 0.388) cuts a sight line straight across the bottom of the board — the occlusion
+`sight.mjs` exists to catch. A panel starting at the board's bottom edge had **43% of itself
+hidden**. `SCREEN_V` starts above that line, which is what lets the display be large *and* wholly
+on screen (0.92 m wide, 61% of the cabinet).
+
 ### The width is set by the COLLARS, not by the holes
 
 Two rules, and the first alone is not enough:
@@ -72,11 +124,23 @@ holes.spacing    6 gaps x 1.30X + 0.5X margin each side        =  8.800X
 MACHINE-SPEC 12  |u| + collar radius + a 0.78X wall gap        = 10.443X   <- this wins
 ```
 
-At 8.800X the outer collars stood **0.041X through the side rails**, because the spacing rule
-only constrains hole CENTRES while a collar is 0.541X in radius and a throat 0.916X. Measured
+At 8.800X the outer collars stood **0.041X through the side rails**, because the spacing rule only
+constrains hole CENTRES while a collar is 0.541X in radius and a throat 0.916X. Measured
 consequence: 4 captured balls escaped past the rail where their own throat was cut open by it.
 **The holes did not move** when the cabinet widened — the pitch is still 1.30X and the outer pair
-still at ±3.90X — which is why the aim mapping in `FINDINGS.md` still stands.
+still at ±3.90X.
+
+### The hoops were drawn 90 degrees wrong, and it shipped
+
+`render.js` rotated each hoop group by `fr.tilt - Math.PI/2`, which maps its local +Y to nearly
+−Z. Every rim therefore stood UP as a vertical ring facing the player with its net trailing
+backwards into the cabinet. Matt: *"You put the baskets backwards."* The group's +Y must be the
+face NORMAL, and `faceToWorld`'s h direction is `(0, cos tilt, sin tilt)` — which is exactly what
+rotating `(0,1,0)` about X by `tilt` gives. **The rotation IS the tilt**, with no offset.
+
+Nothing headless caught this: the physics never knew, because a collar's collision boxes are
+placed by `machine.js` and were always right. Only looking at it catches a render-only bug, which
+is what `VISUAL-PROCESS.md` is for.
 
 ### Matt's four requirements, and the number that proves each
 
