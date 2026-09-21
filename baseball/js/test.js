@@ -2424,40 +2424,57 @@ await (async function section30() {
     ok(ended2 && ended2.runsScored === 1 && g2.score.away === 1, 'a squeeze scores the runner from third');
   }
 
-  // --- Quick Play unlocks all eight, and the CPU's Quick Play mix names all eight -------------------
+  // --- R11 (docs/BASEBALL-3D-BUILD.md section 9): the all-eight override is GONE - Quick Play and
+  // career throw the SAME ladder, and the CPU throws it from the SAME `pitchMix` career uses.
+  // This block used to prove the opposite (RA's own, now-overruled decision); it proves the new
+  // rule instead. -------------------------------------------------------------------------------
   {
     for (const lg of SETTINGS.LEAGUES) {
-      const all = SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true });
-      ok(all.length === SETTINGS.PITCH_TYPES.length && SETTINGS.PITCH_TYPES.every((t) => all.includes(t)),
-        `unlockedPitchesFor('${lg}', 0, {quickPlay:true}) returns all eight pitch types`);
+      const quickPlay = SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true });
       const career = SETTINGS.unlockedPitchesFor(lg, 0);
+      ok(JSON.stringify(quickPlay) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `unlockedPitchesFor('${lg}', 0, {quickPlay:true}) returns the league's own career ladder, not all eight`);
       ok(JSON.stringify(career) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
-        `career's own ladder for '${lg}' is untouched by the quickPlay option`);
+        `unlockedPitchesFor('${lg}', 0) with no quickPlay option returns the identical ladder - the option is a no-op now`);
     }
-    const mix = SETTINGS.QUICK_PLAY_PITCH_MIX;
-    const sum = Object.values(mix).reduce((a, b) => a + b, 0);
-    ok(Math.abs(sum - 1) < 1e-9, `QUICK_PLAY_PITCH_MIX sums to 1 (${sum})`);
-    ok(SETTINGS.PITCH_TYPES.every((t) => mix[t] > 0),
-      'QUICK_PLAY_PITCH_MIX names every one of the eight pitch types with a real weight');
-    // The CPU actually throws them: every type turns up over a long Quick Play sweep.
+    // Little League is FASTBALL ONLY (Matt, 2026-09-21: "only 'fastballs' should be able to be
+    // thrown"); changeup moved to High School, alongside curveball.
+    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.little) === JSON.stringify(['fastball']),
+      `Little League's own ladder is fastball only (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.little)})`);
+    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool) === JSON.stringify(['fastball', 'changeup', 'curveball']),
+      `High School's own ladder picks up changeup and curveball together (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool)})`);
+    ok(SETTINGS.QUICK_PLAY_PITCH_MIX === undefined, 'QUICK_PLAY_PITCH_MIX is deleted with the override it existed only to serve');
+    // The CPU actually respects the ladder now: a Little League CPU in Quick Play throws fastball
+    // only, exactly as it does in a career game - there is no longer a second distribution to
+    // diverge from it.
     const seen = new Set();
     const pitcher = new CpuPitcher({ league: 'little', settings: SETTINGS });
     let seed = 5150;
     const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
-    for (let i = 0; i < 4000; i++) {
+    for (let i = 0; i < 2000; i++) {
       const d = await pitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: rnd });
       seen.add(d.type);
     }
-    ok(seen.size === SETTINGS.PITCH_TYPES.length,
-      `a Little League CPU in Quick Play throws all eight types (${seen.size}/8) - the career ladder would have given it two`);
-    // ... and career is unchanged: the same pitcher with no quickPlay flag throws Little League's two.
+    ok(seen.size === 1 && seen.has('fastball'),
+      `a Little League CPU in Quick Play throws fastball only now (saw ${JSON.stringify([...seen])}) - the career ladder gives it the identical one type`);
     const careerSeen = new Set();
     for (let i = 0; i < 2000; i++) {
       const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
       careerSeen.add(d.type);
     }
-    ok(careerSeen.size === 2 && careerSeen.has('fastball') && careerSeen.has('changeup'),
-      'the same CPU pitcher in a CAREER game still throws only what Little League has unlocked');
+    ok(careerSeen.size === 1 && careerSeen.has('fastball'),
+      'and the same CPU pitcher in a CAREER game (no quickPlay flag) throws the identical one type');
+    // A High School CPU (changeup AND curveball unlocked, doc §11) still throws both in Quick Play.
+    const hsPitcher = new CpuPitcher({ league: 'highschool', settings: SETTINGS });
+    const hsSeen = new Set();
+    let hsSeed = 24601;
+    const hsRnd = () => { const r = stepRng(hsSeed); hsSeed = r.next; return r.value; };
+    for (let i = 0; i < 2000; i++) {
+      const d = await hsPitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: hsRnd });
+      hsSeen.add(d.type);
+    }
+    ok(hsSeen.size === 3 && hsSeen.has('fastball') && hsSeen.has('changeup') && hsSeen.has('curveball'),
+      `a High School CPU in Quick Play throws its own three-pitch ladder (saw ${JSON.stringify([...hsSeen])})`);
   }
 
   // --- the CPU pitcher's own pickoff rate ------------------------------------------------------------
@@ -2668,6 +2685,136 @@ await (async function section32() {
       ok(z.outfield[0].fromFt > SETTINGS.MIN_IN_PLAY_FT,
         `${league}: the outfield's near edge is past the in-play floor, so the bloop band is reachable (${z.outfield[0].fromFt.toFixed(0)} ft)`);
     }
+  }
+})();
+
+// ---------------------------------------------------------------------------------------------
+// Section 33 (R11, docs/BASEBALL-3D-BUILD.md section 9): THE LEAGUE LADDER IS REAL IN QUICK PLAY.
+// Matt, 2026-09-21, on the same recording R10 came from: "you've forgotten to code the
+// difficulties. Little league should be easy and the pitches slow and only 'fastballs' should be
+// able to be thrown." Measured before this stage: `unlockedPitchesFor(league, 0, {quickPlay:true})`
+// returned all eight types at every league; `pitch.js`'s `timeToPlateS` scaled ONLY by the
+// pitcher's skill points off a flat Majors-fastball baseline, so a Little League 55 mph readout
+// flew in the same 650 ms as a Majors 95 mph one; the human's timing window was a flat 100 ms at
+// every league. The four items below are the spec's own four.
+console.log('\n-- 33. R11: the league ladder is real in Quick Play --');
+await (async function section33() {
+  const F = SETTINGS.FEEL.engine;
+
+  // (1) Pitch types follow the league in Quick Play too: Little League unlocks only the fastball,
+  //     Majors its six (fastball/changeup/curveball/slider/knuckleball/screwball - eephus/cutter
+  //     are title-gated, doc §11, and no CPU roster or fresh Quick Play career ever carries a
+  //     title). `unlockedPitchesFor(..., {quickPlay:true})` is now byte-identical to the career
+  //     ladder at every league - the RA override is gone.
+  {
+    ok(JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true })) === JSON.stringify(['fastball']),
+      `(1) Quick Play at Little League unlocks only the fastball (got ${JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true }))})`);
+    const majorsQP = SETTINGS.unlockedPitchesFor('majors', 0, { quickPlay: true });
+    const wantMajors = ['fastball', 'changeup', 'curveball', 'slider', 'knuckleball', 'screwball'];
+    ok(majorsQP.length === 6 && wantMajors.every((t) => majorsQP.includes(t)),
+      `(1) Quick Play at Majors unlocks its six career-ladder types, not all eight (got ${JSON.stringify(majorsQP)})`);
+    ok(!majorsQP.includes('eephus') && !majorsQP.includes('cutter'),
+      '(1) eephus/cutter stay title-gated in Quick Play too - a fresh career/CPU roster never carries a title');
+    for (const lg of SETTINGS.LEAGUES) {
+      ok(JSON.stringify(SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true })) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `(1) ${lg}: Quick Play's ladder is byte-identical to the career ladder`);
+    }
+    ok(SETTINGS.QUICK_PLAY_PITCH_MIX === undefined,
+      '(1) QUICK_PLAY_PITCH_MIX is deleted - there is no second distribution left to name');
+  }
+
+  // (2) A slow pitch is slow: timeToPlateS now divides by this league's own READOUT mph for the
+  //     type being thrown (alongside PITCH_TRAVEL_MULT and the pitcher's skill points, as
+  //     before). Majors is the fixed reference (95 mph both sides of the ratio at zero skill
+  //     points), so a Majors fastball is untouched; every league below it is proportionally
+  //     slower.
+  {
+    const noSkillFastball = (lg) => flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, {}, null, lg).timeToPlateS;
+    const majorsS = noSkillFastball('majors');
+    ok(Math.abs(majorsS - F.fastballMs / 1000) < 1e-9,
+      `(2) a Majors 95 mph fastball still takes exactly the ${F.fastballMs} ms it took before R11 (measured ${(majorsS * 1000).toFixed(1)} ms)`);
+    const littleS = noSkillFastball('little');
+    ok(littleS > 1.0 && littleS < 1.2,
+      `(2) a Little League 55 mph fastball takes about 1.1 s (measured ${(littleS * 1000).toFixed(1)} ms)`);
+    // Exact derivation, not just "about": fastballMs x travelMult(1.0) x (majorsFastballMph / thisLeagueFastballMph).
+    for (const lg of SETTINGS.LEAGUES) {
+      const want = (F.fastballMs / 1000) * (SETTINGS.READOUT.majors.fastball / SETTINGS.READOUT[lg].fastball);
+      const got = noSkillFastball(lg);
+      ok(Math.abs(got - want) < 1e-9,
+        `(2) ${lg}: fastball travel time matches the derivation exactly (${(got * 1000).toFixed(1)} ms vs ${(want * 1000).toFixed(1)} ms)`);
+    }
+    // Monotone in readout mph: sorted by this league's own fastball readout (ascending mph), the
+    // travel time strictly falls.
+    const byMph = [...SETTINGS.LEAGUES].sort((a, b) => SETTINGS.READOUT[a].fastball - SETTINGS.READOUT[b].fastball);
+    let lastS = Infinity, monotone = true;
+    for (const lg of byMph) {
+      const s = noSkillFastball(lg);
+      if (s >= lastS) monotone = false;
+      lastS = s;
+    }
+    ok(monotone, `(2) travel time is strictly monotone (falling) in readout mph across the ladder (${byMph.map((lg) => `${lg}=${SETTINGS.READOUT[lg].fastball}mph`).join(', ')})`);
+    // The pitcher's own skill points still shorten it, exactly as before R11 (unchanged mechanism,
+    // now layered on top of the league ratio rather than a flat 95 mph baseline).
+    const slow = flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, { pitchSpd: 0 }, null, 'college').timeToPlateS;
+    const fast = flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, { pitchSpd: 10 }, null, 'college').timeToPlateS;
+    ok(fast < slow, `(2) pitchSpd skill points still shorten travel time at a fixed league (${(fast * 1000).toFixed(1)} < ${(slow * 1000).toFixed(1)} ms)`);
+    // A type with no READOUT row of its own (screwball/eephus/cutter, doc §11 Open item 9) falls
+    // back to this SAME league's own fastball readout rather than inventing a per-type mph - the
+    // league still slows it down. The eephus (travelMult 1.9, already the slowest type) at Little
+    // League must not exceed 2.5 s (the spec's own budget).
+    const eephusLittle = flyPitch('eephus', 0, 1, SETTINGS, () => 0.5, {}, null, 'little').timeToPlateS;
+    ok(eephusLittle <= 2.5, `(2) the eephus at Little League does not exceed 2.5 s (measured ${eephusLittle.toFixed(3)} s)`);
+    ok(eephusLittle > flyPitch('eephus', 0, 1, SETTINGS, () => 0.5, {}, null, 'majors').timeToPlateS,
+      '(2) and it is still slower at Little League than at Majors, same as every other type');
+    for (const type of ['screwball', 'eephus', 'cutter']) {
+      const want = (F.fastballMs / 1000) * SETTINGS.PITCH_TRAVEL_MULT[type] * (SETTINGS.READOUT.majors.fastball / SETTINGS.READOUT.little.fastball);
+      const got = flyPitch(type, 0, 1, SETTINGS, () => 0.5, {}, null, 'little').timeToPlateS;
+      ok(Math.abs(got - want) < 1e-9,
+        `(2) ${type} (no READOUT row of its own) falls back to Little League's own fastball readout (${(got * 1000).toFixed(1)} vs ${(want * 1000).toFixed(1)} ms)`);
+    }
+  }
+
+  // (3) Little League is forgiving, Majors is tight: LEAGUE_TIMING_WINDOW_MULT.
+  {
+    const want = { little: 1.6, highschool: 1.3, college: 1.0, minors: 0.9, majors: 0.8 };
+    ok(JSON.stringify(SETTINGS.LEAGUE_TIMING_WINDOW_MULT) === JSON.stringify(want),
+      `(3) LEAGUE_TIMING_WINDOW_MULT matches the spec exactly (got ${JSON.stringify(SETTINGS.LEAGUE_TIMING_WINDOW_MULT)})`);
+    ok(SETTINGS.LEAGUE_TIMING_WINDOW_MULT.college === 1.0,
+      "(3) college is a true no-op - every number this engine's own contact/carry model was derived against stays put");
+    // The multiplier actually reaches the window swing.js scores against: a swing timed 90ms off,
+    // dead-centred on the pitch, is a FOUL at Majors (window 80ms, 90 > 80) but genuine, in-play
+    // contact at Little League (window 160ms, 90 <= 160) - the identical decision, two leagues.
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const pitch = { x: 0, y: 0, isStrike: true };
+    const decisionAt = (absMs) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: absMs, mode: 'contact' });
+    const majorsSwing = swing(pitch, skills, decisionAt(90), SETTINGS, mulberry32(1), 'majors');
+    const littleSwing = swing(pitch, skills, decisionAt(90), SETTINGS, mulberry32(1), 'little');
+    ok(majorsSwing.contact === true && majorsSwing.foul === true && majorsSwing.inPlay === false,
+      `(3) a 90ms-off, dead-centred swing at MAJORS (window 80ms) is a foul, not real contact (got ${JSON.stringify(majorsSwing)})`);
+    ok(littleSwing.contact === true && littleSwing.foul === false,
+      `(3) the IDENTICAL swing at LITTLE LEAGUE (window 160ms) is genuine contact, not a foul (got ${JSON.stringify(littleSwing)})`);
+    // The bunt reads the same multiplier (swing.js's OTHER F.timingWindow read, buntSwing).
+    const bunt = (absMs, league) => swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: absMs }, SETTINGS, mulberry32(1), league);
+    // Base bunt window at college (mult 1.0): 100 x BUNT_WINDOW_MULT(1.6) = 160ms.
+    const collegeBunt = bunt(150, 'college');
+    const majorsBunt = bunt(150, 'majors'); // 100 x 0.8 x 1.6 = 128ms - 150 is a miss-turned-foul past it
+    ok(collegeBunt.inPlay === true, `(3) a 150ms-off bunt at COLLEGE (window 160ms) is still in play (got ${JSON.stringify(collegeBunt)})`);
+    ok(majorsBunt.inPlay === false && majorsBunt.foul === true,
+      `(3) the IDENTICAL bunt at MAJORS (window 128ms) is a foul (got ${JSON.stringify(majorsBunt)})`);
+    // The CPU's own timing SIGMA (how far off-centre its swings tend to land) is untouched - a
+    // structural check that R11 never touched the CPU table at all.
+    ok(SETTINGS.CPU.little.timingSigmaMs === 115 && SETTINGS.CPU.majors.timingSigmaMs === 58,
+      '(3) CPU_LEVEL timingSigmaMs is byte-identical to before R11 - only how forgivingly a given error is SCORED changed, never how large a CPU error tends to be');
+  }
+
+  // (4) Structural: LEAGUE_UNLOCK_ADDS moved changeup off Little League without losing it anywhere
+  //     - every one of the eight PITCH_TYPES is reachable by the ladder plus the two title unlocks,
+  //     with no duplicates and nothing dropped.
+  {
+    const allLadder = new Set(SETTINGS.PITCH_UNLOCKS.majors);
+    for (const t of SETTINGS.TITLE_PITCH_UNLOCKS) allLadder.add(t.pitch);
+    ok(SETTINGS.PITCH_TYPES.every((t) => allLadder.has(t)) && allLadder.size === SETTINGS.PITCH_TYPES.length,
+      `(4) every one of the eight PITCH_TYPES is still reachable by the ladder + title unlocks, exactly once (${JSON.stringify([...allLadder])})`);
   }
 })();
 

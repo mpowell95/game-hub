@@ -97,9 +97,15 @@ export const PITCH_TYPES = ['fastball', 'changeup', 'curveball', 'slider', 'knuc
 
 // Cumulative per-league unlock (doc §11, [Locked]). `unlockedPitchesFor` below folds in the two
 // title-gated pitches, which are NOT a function of league at all.
+//
+// R11 (docs/BASEBALL-3D-BUILD.md section 9): LITTLE LEAGUE IS FASTBALL ONLY, career included.
+// Matt, 2026-09-21: "Little league should be easy and the pitches slow and only 'fastballs'
+// should be able to be thrown." Changeup moves down to High School, alongside curveball - it does
+// not vanish, it is simply no longer the very first thing a brand-new career unlocks alongside
+// the fastball.
 const LEAGUE_UNLOCK_ADDS = {
-  little: ['fastball', 'changeup'],
-  highschool: ['curveball'],
+  little: ['fastball'],
+  highschool: ['changeup', 'curveball'],
   college: ['slider'],
   minors: ['knuckleball'],
   majors: ['screwball'],
@@ -122,13 +128,17 @@ export const TITLE_PITCH_UNLOCKS = [
 
 /** Every pitch type unlocked for a league, plus whatever `wsTitles` titles have unlocked. Titles
  *  are a career-progress fact no CPU team ever carries (CPU rosters are fixed, doc §8), so CPU
- *  agents always call this with `wsTitles` omitted/0. */
+ *  agents always call this with `wsTitles` omitted/0.
+ *
+ *  R11 (docs/BASEBALL-3D-BUILD.md section 9): THE ALL-EIGHT QUICK PLAY OVERRIDE IS GONE. RA's own
+ *  reasoning ("a Quick Play game is not career progress, so gating an exhibition behind titles
+ *  nobody in it has earned only ever hid six pitches") is overruled by Matt, 2026-09-21: "only
+ *  'fastballs' should be able to be thrown" at Little League, which all-eight directly
+ *  contradicted - a Little League Quick Play game handed the human a curveball no Little League
+ *  pitcher has ever thrown. Quick Play now plays the SAME ladder career does. `opts` is kept, not
+ *  removed, purely for call-site compatibility: every existing `{ quickPlay: true }` caller
+ *  (`ui.js`, `agents.js`, test fixtures) still runs unmodified, it is simply a no-op now. */
 export function unlockedPitchesFor(league, wsTitles = 0, opts = null) {
-  // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY UNLOCKS ALL EIGHT, for both sides. The
-  // ladder above is CAREER's own progression (doc §11, [Locked]) and is untouched by this: a Quick
-  // Play game is not career progress, so gating a one-off exhibition behind titles nobody in it
-  // has earned only ever hid six pitches from every player who never plays a career.
-  if (opts && opts.quickPlay) return PITCH_TYPES.slice();
   const list = (PITCH_UNLOCKS[league] || PITCH_UNLOCKS.majors).slice();
   for (const t of TITLE_PITCH_UNLOCKS) if (wsTitles >= t.titles) list.push(t.pitch);
   return list;
@@ -148,10 +158,15 @@ export const PITCH_TRAVEL_MULT = {
   cutter: 1.05,          // Draft [Open item 9] - a fast pitch by name; invented
 };
 
-// The mph readout by league (doc §11/§14) - DISPLAY ONLY. "How fast the ball actually travels is
-// a separate tuned value" (PITCH_TRAVEL_MULT x FEEL.engine.fastballMs); nothing in the engine
-// reads READOUT for physics. [Draft] doc §11 (fastball values based on published averages; "off-
-// speed values are estimates"). Screwball/eephus/cutter have no readout row - doc Open item 9.
+// The mph readout by league (doc §11/§14). Was DISPLAY ONLY until R11 (docs/BASEBALL-3D-BUILD.md
+// section 9): "How fast the ball actually travels is a separate tuned value" was Matt's own
+// measured bug, not a rule to keep - `pitch.js`'s `timeToPlateS` scaled ONLY by the pitcher's
+// skill points off a flat Majors-fastball baseline, so a Little League 55 mph readout flew to the
+// plate in the same time as a Majors 95 mph one. `pitch.js` now reads READOUT[league][type] (or
+// this league's own fastball row, for a type with none - see the comment there) as the real
+// travel-time divisor, alongside PITCH_TRAVEL_MULT. [Draft] doc §11 (fastball values based on
+// published averages; "off-speed values are estimates"). Screwball/eephus/cutter have no readout
+// row - doc Open item 9.
 export const READOUT = {
   little:     { scale: 0.58, fastball: 55, changeup: 50, curveball: 46, slider: 50, knuckleball: 44 },
   highschool: { scale: 0.84, fastball: 80, changeup: 72, curveball: 67, slider: 73, knuckleball: 64 },
@@ -175,7 +190,16 @@ export const FEEL = {
     // faster pitches inside the reference's window once PITCH_TRAVEL_MULT and the pitcher's own
     // speed skill are applied. The timing window (below) is unchanged, so a shorter flight does
     // NOT make contact harder - it only shortens the wait.
+    //
+    // R11 (docs/BASEBALL-3D-BUILD.md section 9): fastballMs itself DOES NOT MOVE - it stays the
+    // Majors reference (a Majors 95 mph fastball still flies in exactly 650 ms). What changes is
+    // `pitch.js`'s `timeToPlateS`, which now also divides by this league's own READOUT mph for
+    // the type being thrown (see READOUT's own header): a Little League 55 mph fastball takes
+    // about 1.1 s, not 650 ms - "a slow pitch is slow" (Matt, 2026-09-21).
     fastballMs: 650,        // R2 - fastball travel time; every other pitch is this x PITCH_TRAVEL_MULT
+    // R11: LEAGUE_TIMING_WINDOW_MULT (below) multiplies this at both places swing.js reads it, so
+    // "100 ms" is the MAJORS number now, not a flat constant - "Little League is forgiving,
+    // Majors is tight" (Matt, 2026-09-21).
     timingWindow: 100,      // [Tested] doc §14 - good-contact timing window, ms
     foulMult: 1.7,          // [Tested] doc §14 - foul margin, x timingWindow
     swingDelay: 60,         // [Tested] doc §14 - swing start delay, ms
@@ -265,6 +289,17 @@ export const FEEL = {
   },
 };
 
+// R11 (docs/BASEBALL-3D-BUILD.md section 9): THE LEAGUE LADDER'S OWN FORGIVENESS. Matt, 2026-09-21:
+// "Little league should be easy." Multiplies `FEEL.engine.timingWindow` at both places swing.js
+// reads it (the ordinary swing and the bunt), so the good-contact window is wider at a low league
+// and narrower at a high one - Majors (0.8) is TIGHTER than the flat 100 ms every league used to
+// share, and Little League (1.6) is nearly double it. `college`'s own 1.0 is a true no-op: this
+// table changes nothing at the league the rest of the engine's own numbers were derived against.
+// The CPU's own `timingSigmaMs` (how far off-centre a CPU batter's swing tends to land) is a
+// SEPARATE mechanism and is untouched by this - this multiplies how forgivingly THAT error (or a
+// human's) is SCORED, not how large it tends to be.
+export const LEAGUE_TIMING_WINDOW_MULT = { little: 1.6, highschool: 1.3, college: 1.0, minors: 0.9, majors: 0.8 };
+
 // Out-zone/field size multipliers (doc §14's outZoneMult/fieldScale). [Tested] as a flat baseline;
 // the actual PER-LEAGUE escalation ("fields get bigger each league... out zones also grow", doc
 // §10) is Open item 7 - see FIELD/PARKS below, which still carry phase 1's invented per-park
@@ -313,8 +348,11 @@ export const FIELD_SCALE = { outZoneMult: 1.0, fieldScale: 1.0 }; // [Tested] do
 // patternWeight 0.42 -> 0.47; majors cornerBias 0.68 -> 0.72, patternWeight 0.65 -> 0.70 (more of
 // both, since the upper three leagues were all measuring an easier season than the band allows).
 export const CPU = {
+  // R11: pitchMix fastball only - LEAGUE_UNLOCK_ADDS.little dropped changeup (moved to
+  // highschool), and `unlockedPitchesFor` no longer lets Quick Play draw a type the league has
+  // not unlocked, so this row can only ever be asked for the one type it names.
   little:     { timingSigmaMs: 115, placementNoise: 0.27, swingIn: 0.30, chase: 0.55, fool: 0.45, guess: 0.10,
-    pitchMix: { fastball: 6, changeup: 1 }, cornerBias: 0.05, patternWeight: 0.02, weakSpotWeight: 0 },
+    pitchMix: { fastball: 1 }, cornerBias: 0.05, patternWeight: 0.02, weakSpotWeight: 0 },
   highschool: { timingSigmaMs: 95, placementNoise: 0.24, swingIn: 0.50, chase: 0.40, fool: 0.35, guess: 0.20,
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
   college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
@@ -901,26 +939,13 @@ export const CPU_PICKOFF_RATE = 0.08;
 export const CPU_BUNT_RATE = 0.06;
 export const CPU_BUNT_POW_FRAC = 1 / 3;
 
-// QUICK PLAY'S OWN PITCH MIX. Quick Play unlocks all eight pitches for both sides (section 9's own
-// rule, `unlockedPitchesFor(league, 0, { quickPlay: true })`), so the CPU needs a mix that names
-// all eight - and the per-league `CPU[league].pitchMix` rows cannot supply one, because they are
-// CAREER's ladder (Little League throws fastballs; Majors has never held a cutter) and this stage
-// does not touch that table. So this is ONE distribution, not five.
-//
-// The base is College's own four-pitch row - the prototype's single [Tested] tier, equal weights -
-// and the four types the career ladder gates behind Minors and World Series titles ride on top at
-// the spec's own modest weights. Normalised, so it sums to exactly 1 and every entry is a real
-// probability rather than a weight that means nothing without its neighbours.
-export const QUICK_PLAY_PITCH_MIX = (() => {
-  const adds = { knuckleball: 0.05, screwball: 0.06, eephus: 0.03, cutter: 0.10 };
-  const base = { fastball: 1, changeup: 1, curveball: 1, slider: 1 };
-  const addSum = Object.values(adds).reduce((a, b) => a + b, 0);
-  const baseSum = Object.values(base).reduce((a, b) => a + b, 0);
-  const out = {};
-  for (const [k, v] of Object.entries(base)) out[k] = (v / baseSum) * (1 - addSum);
-  for (const [k, v] of Object.entries(adds)) out[k] = v;
-  return out;
-})();
+// R11 (docs/BASEBALL-3D-BUILD.md section 9): QUICK_PLAY_PITCH_MIX IS DELETED. It existed only to
+// give the CPU a distribution over all eight types for RA's now-overruled all-eight override
+// (Matt, 2026-09-21: "only 'fastballs' should be able to be thrown" at Little League - the exact
+// thing this constant let the Little League CPU do). Quick Play and career now share one ladder
+// AND one pitch mix - `CPU[league].pitchMix` - so there is nothing left for a second distribution
+// to supply. `agents.js`'s `CpuPitcher.decidePitch` no longer branches on `quickPlay` for either
+// the unlock list or the mix.
 
 // ---------------------------------------------------------------------------------------------
 // BB-2b commit 2: doc §4/§13's own "Open item 13" (schedule shape and standings tie-breakers) -
@@ -1263,7 +1288,7 @@ export default {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
-  FEEL, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
+  FEEL, LEAGUE_TIMING_WINDOW_MULT, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, SHIFT_MIN_SAMPLES, PARKS,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
   TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
@@ -1277,7 +1302,6 @@ export default {
   STEAL_BASE, STEAL_PER_ACC, STEAL_MIN, STEAL_MAX, PICKOFF_BASE, PICKOFF_MAX, PICKOFF_MAX_PER_AT_BAT,
   BUNT_WINDOW_MULT, BUNT_DIST_FT, BUNT_SPRAY_DEG,
   CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
-  QUICK_PLAY_PITCH_MIX,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,

@@ -290,18 +290,20 @@ Major League	62%	40 to 52%
 ## 11. Pitches
 
 ### Unlocks
-- **[Locked, RA]** The ladder below is CAREER's. **Quick Play unlocks all eight for both sides**
-  (`unlockedPitchesFor(league, wsTitles, { quickPlay: true })`), and the CPU throws them from
-  `QUICK_PLAY_PITCH_MIX` - one distribution over all eight rather than the per-league career rows,
-  which name only what the ladder has reached. A Quick Play game is not career progress, so gating
-  an exhibition behind titles nobody in it has earned only ever hid six pitches from every player
-  who never starts a career.
-- **[Locked]**
+- **[Locked, R11]** Quick Play now throws the SAME ladder career does, at every league - RA's own
+  "Quick Play unlocks all eight for both sides" is overruled by Matt, 2026-09-21: "only 'fastballs'
+  should be able to be thrown" at Little League, which the all-eight override directly
+  contradicted. `unlockedPitchesFor(league, wsTitles, { quickPlay: true })` returns the identical
+  list `unlockedPitchesFor(league, wsTitles)` does; the CPU throws from the SAME per-league
+  `pitchMix` career uses. `QUICK_PLAY_PITCH_MIX` is deleted with the override it existed only to
+  serve.
+- **[Locked, R11]** Little League is fastball only. Changeup moves to High School, alongside
+  curveball - it does not vanish, it is simply not the very first thing a brand-new career unlocks.
 
 ```
 When unlocked	Pitch
-Little League	Fastball, Changeup
-High School	Curveball
+Little League	Fastball
+High School	Changeup, Curveball
 College	Slider
 Minor League	Knuckleball
 Major League	Screwball
@@ -320,7 +322,12 @@ World Series Champ x2	Cutter
 
 ### Speed readout
 - **[Locked]** Pitch type and speed are hidden until the ball crosses the plate. This applies when you bat and when you pitch.
-- **[Locked]** The mph shown depends on the league. It is display only; how fast the ball actually travels is a separate tuned value.
+- **[Locked, amended R11]** The mph shown depends on the league. Until R11 it was display only,
+  with travel time a separate tuned value - that was the bug: a Little League 55 mph fastball flew
+  in the same 650 ms as a Majors 95 mph one. `pitch.js`'s `timeToPlateS` now divides by this same
+  readout mph (alongside `PITCH_TRAVEL_MULT` and the pitcher's own skill points, as before), so the
+  number shown and the time the ball actually takes agree with each other - "a slow pitch is slow"
+  (Matt, 2026-09-21).
 - **[Draft]** Readout by league (mph):
 
 ```

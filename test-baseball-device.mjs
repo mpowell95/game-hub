@@ -708,9 +708,15 @@ await ctx.close();
         for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
       });
       const mountErr9b = await mountInHub(page9b);
+      // R11 (docs/BASEBALL-3D-BUILD.md section 9): Quick Play throws the LEAGUE'S own ladder now
+      // (Little League, the default, is fastball only) - this probe forces a curveball, so it
+      // picks HIGH SCHOOL on the setup screen first, the lowest league that has curveball
+      // unlocked (doc §11: 'fastball', 'changeup', 'curveball').
       const clicked2 = mountErr9b ? false : await page9b.evaluate(() => {
         window.__bbForceHalfNext = 'bottom';
         const root = document.querySelector('.hub-game');
+        const hsBtn = root && root.querySelector('[data-league="highschool"]');
+        if (hsBtn) hsBtn.click();
         const btn = root && root.querySelector('.bb-play-btn');
         if (btn) btn.click();
         return !!btn;
@@ -800,7 +806,7 @@ await ctx.close();
               } else if (got.pxX == null || got.zoneCx == null || got.pxX <= got.zoneCx) {
                 fail('pitch-drag', `the pitcher camera's projected pixel (${got.pxX}) for the dragged aim is not right of the zone centre (${got.zoneCx}) - a screen-right drag must draw right`);
               } else {
-                ok(`pitch-drag: a screen-right drag on the PITCHER camera samples the MIRRORED engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) within (${dx.toFixed(4)}, ${dy.toFixed(4)}) of (${WANT.x}, ${WANT.y}), and draws right of the zone centre (px ${got.pxX.toFixed(1)} > ${got.zoneCx.toFixed(1)}), sampled ${got.dragDoneMs.toFixed(0)}ms after the tap`);
+                ok(`pitch-drag: a screen-right drag on the PITCHER camera (High School - R11's default Little League only unlocks fastball) samples the MIRRORED engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) within (${dx.toFixed(4)}, ${dy.toFixed(4)}) of (${WANT.x}, ${WANT.y}), and draws right of the zone centre (px ${got.pxX.toFixed(1)} > ${got.zoneCx.toFixed(1)}), sampled ${got.dragDoneMs.toFixed(0)}ms after the tap`);
               }
               // With the draws pinned mid-range there is no scatter at all, so the STRAIGHT point is
               // the aim exactly and the difference between it and the crossing is the type's own
@@ -852,8 +858,13 @@ await ctx.close();
   if (mountErr10) {
     fail('target-marker', `mount failed: ${mountErr10}`);
   } else {
+    // R11 (docs/BASEBALL-3D-BUILD.md section 9): Quick Play's default league (Little League)
+    // unlocks fastball only now - this probe forces the CPU to throw a curveball, so it picks
+    // HIGH SCHOOL on the setup screen first, the lowest league with curveball unlocked.
     await page10.evaluate(() => {
       const root = document.querySelector('.hub-game');
+      const hsBtn = root && root.querySelector('[data-league="highschool"]');
+      if (hsBtn) hsBtn.click();
       const btn = root && root.querySelector('.bb-play-btn');
       if (btn) btn.click();
     });
@@ -937,7 +948,7 @@ await ctx.close();
       } else if (res.moved < 3) {
         fail('target-marker', `the marker only travelled ${res.moved.toFixed(2)} px over a ${res.type}'s flight - a breaking pitch's marker has to MOVE (docs/BASEBALL-REFERENCE-B9.md, batting step 3)`);
       } else {
-        ok(`target-marker: over a ${res.type}'s flight the marker starts on the straight-line spot (${dFirst.toFixed(2)} px) and ends on the real crossing point (${dLast.toFixed(2)} px), travelling ${res.moved.toFixed(1)} px between them`);
+        ok(`target-marker: over a ${res.type}'s flight (High School - R11's default Little League only unlocks fastball) the marker starts on the straight-line spot (${dFirst.toFixed(2)} px) and ends on the real crossing point (${dLast.toFixed(2)} px), travelling ${res.moved.toFixed(1)} px between them`);
       }
       // R8 (item 3): the marker's own size, at least 36px across on either axis - the spec's own
       // floor ("at least 36 px across"), measured the same way the mode circle already is
@@ -1220,7 +1231,8 @@ if (!process.env.BB_DEVICE_QUICK) {
 //   (b) BUNT armed, then a swing tap, yields an `atBatEnd` carrying one of the three bunt kinds;
 //   (c) pitching with a runner on first - PICKOFF is enabled, tapping it fires a `pickoff` event
 //       with NO pitch event, and the RIGHT button is back to PITCH within 2 s;
-//   (d) Quick Play's strip shows all eight pitch tiles unlocked.
+//   (d) R11: Quick Play's strip shows the LEAGUE's own ladder now, not all eight - at this mount's
+//       league (Little League, Quick Play's own default), that is fastball only.
 // Both halves use the dev-only `window.__bbTest.putOnFirst()` seam (ui.js) to put a real roster
 // player on first rather than playing until somebody happens to reach base - the alternative is
 // the runners-move probe's own six-minute auto-play budget, three more times over.
@@ -1462,10 +1474,16 @@ if (!process.env.BB_DEVICE_QUICK) {
       };
     });
     if (res.strip) {
-      if (res.strip.tiles !== 8 || res.strip.unlocked !== 8 || res.strip.locked !== 0) {
-        fail('actions-live (d) strip', `Quick Play's strip shows ${res.strip.tiles} tiles, ${res.strip.unlocked} unlocked, ${res.strip.locked} locked - expected 8/8/0`);
+      // R11 (docs/BASEBALL-3D-BUILD.md section 9): Quick Play throws the LEAGUE'S ladder now, not
+      // all eight - this mount is at Little League (Quick Play's own default league,
+      // `LEAGUE_ORDER[0]`), which unlocks fastball only. Eight tiles still draw (the strip always
+      // shows all eight, locked or not); one is unlocked.
+      if (res.strip.tiles !== 8 || res.strip.unlocked !== 1 || res.strip.locked !== 7) {
+        fail('actions-live (d) strip', `Little League Quick Play's strip shows ${res.strip.tiles} tiles, ${res.strip.unlocked} unlocked, ${res.strip.locked} locked - expected 8/1/7 (fastball only)`);
+      } else if (res.strip.pitches.length !== 1 || res.strip.pitches[0] !== 'fastball') {
+        fail('actions-live (d) strip', `the one unlocked tile is "${res.strip.pitches.join(', ')}", not fastball`);
       } else {
-        ok(`actions-live (d): Quick Play's strip shows all eight pitches unlocked (${res.strip.pitches.join(', ')})`);
+        ok(`actions-live (d): Little League Quick Play's strip unlocks only fastball, the other seven locked (${res.strip.pitches.join(', ')})`);
       }
     }
     if (res.error) fail('actions-live (c) pickoff', res.error);

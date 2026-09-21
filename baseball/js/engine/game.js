@@ -76,11 +76,14 @@ export class Game {
    * @param {object} [opts.settings] - override settings (tests only); merged over the real module
    */
   constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false }) {
-    // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. The one thing it changes inside the
-    // engine is which pitches exist: all eight, for both sides (`unlockedPitchesFor`'s own
-    // `quickPlay` option, and the CPU's `QUICK_PLAY_PITCH_MIX`). It rides on the pitch view rather
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. It rides on the pitch view rather
     // than being read from a module global, so a CAREER game constructed in the same page is
-    // unaffected - career passes nothing and keeps the ladder's unlocks.
+    // unaffected either way.
+    // R11 (same doc, section 9): the flag no longer changes which pitches exist - `unlockedPitchesFor`
+    // and the CPU's own `pitchMix` no longer branch on it at all (Quick Play plays the league's
+    // own ladder, same as career; see settings.js). `quickPlay` is kept on the view/snapshot
+    // additively in case a future stage needs to tell a Quick Play game apart from a career one
+    // for some other reason.
     this.quickPlay = !!quickPlay;
     this.home = home;
     this.away = away;
@@ -626,7 +629,7 @@ export class Game {
       // `scatter` is the pre-rolled draw set above, present only when it was actually drawn.
       // R2 deleted the `hold`/`steer` fields the meter and the steer pad used to put here.
       const pitchExtras = { scatter: pitchView.scatterDraw || null, pitcherHand: pitcher.throws };
-      const pitchResult = flyPitch(type, aim, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras);
+      const pitchResult = flyPitch(type, aim, this._controlSkillFor(pitcher), this.settings, () => this._rand(), pitcher.skills, pitchExtras, this.league);
       this._recordPitch(batterId, pitchResult.type, pitchResult.x);
       await this.emit('pitch', { type: pitchResult.type, isStrike: pitchResult.isStrike });
 

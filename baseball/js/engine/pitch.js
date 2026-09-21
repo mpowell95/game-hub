@@ -66,12 +66,16 @@ export function breakOffsetFor(type, hand, drawX = 0.5, drawY = 0.5, settings = 
  *   `{x, y, bx, by}`: the two aim-scatter draws and the knuckleball's two break draws. A plain
  *   number is read as the x draw alone (the BB-3b shape), the rest coming from `rand01`.
  *   `pitcherHand` ('L'/'R', default 'R') - which way a handed break goes (`breakOffsetFor`).
+ * @param {string} [league] - R11 (docs/BASEBALL-3D-BUILD.md section 9): which READOUT row this
+ *   pitch's travel time is measured against - see `timeToPlateS`'s own comment below. Defaults to
+ *   'majors', the fastest league, so every existing caller that does not pass one (a CPU/model
+ *   fixture with no league of its own) keeps its exact old fastball travel time unchanged.
  * @returns {{type, x, y, isStrike, timeToPlateS, straightX, straightY, path}} - `straightX`/
  *   `straightY` are where the pitch WOULD have crossed with no break at all: the batting-side
  *   target marker starts there at release and slides to `(x, y)` over the flight, which is what
  *   makes an off-speed pitch readable (docs/BASEBALL-REFERENCE-B9.md, batting step 3).
  */
-export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSkills = {}, pitchExtras = null) {
+export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSkills = {}, pitchExtras = null, league = 'majors') {
   const skillEffect = settings.SKILL_EFFECT || SKILL_EFFECT;
   let travelMult = (settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT)[type]
     ?? (settings.PITCH_TRAVEL_MULT || PITCH_TRAVEL_MULT).fastball;
@@ -118,10 +122,26 @@ export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSk
 
   const zone = settings.ZONE || ZONE;
 
+  // R11 (docs/BASEBALL-3D-BUILD.md section 9): A SLOW PITCH IS SLOW. Until this stage
+  // `timeToPlateS` scaled ONLY by the pitcher's own skill points off a flat Majors-fastball
+  // baseline (95 mph, on both sides of the ratio, for every type at every league) - so a Little
+  // League 55 mph readout flew to the plate in the same 650 ms as a Majors 95 mph one.
+  // `readoutMph` is this league's own READOUT row for the type actually being thrown; three types
+  // (screwball, eephus, cutter) have no readout row of their own (doc §11, Open item 9 - "movement
+  // and speed" left open), so they fall back to this SAME league's own fastball row - the league
+  // still slows them down, they just do not get a second, invented per-type mph.
   const pitchSpdPts = Math.max(0, (pitcherSkills && pitcherSkills.pitchSpd) || 0);
-  const baselineMph = (settings.READOUT || READOUT).majors.fastball;
+  const readoutTable = settings.READOUT || READOUT;
+  const referenceMph = readoutTable.majors.fastball; // the one fixed anchor, unchanged by league or type
+  const readoutRow = readoutTable[league] || readoutTable.majors;
+  // Ship review (R11): the LEAGUE's fastball readout is the denominator for every type. The type's
+  // own slowness is already `travelMult` (PITCH_TRAVEL_MULT, the doc's own table); dividing by the
+  // type's readout as well counted it twice and moved a Majors changeup from 910 to 1006 ms. With
+  // the league fastball alone, every Majors pitch keeps the travel time it had before R11, and a
+  // lower league scales all of its pitches by one factor (Little League: 95 / 55 = 1.73).
+  const readoutMph = readoutRow.fastball;
   const extraMph = pitchSpdPts * (skillEffect.pitchSpd.throwMphPerPt || 0);
-  const speedFromSkillMul = baselineMph / (baselineMph + extraMph);
+  const speedFromSkillMul = referenceMph / (readoutMph + extraMph);
   const timeToPlateS = (F.fastballMs / 1000) * travelMult * speedFromSkillMul;
 
   const isStrike = x >= zone.xMin && x <= zone.xMax && y >= (zone.yMin != null ? zone.yMin : -1) && y <= (zone.yMax != null ? zone.yMax : 1);

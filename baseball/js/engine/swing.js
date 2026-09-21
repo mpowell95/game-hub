@@ -93,11 +93,15 @@ export function modeOf(decision) {
  *  `distanceFt`/`sprayAngleDeg` are returned here rather than derived by `outcomes.js`'s `carryFt`
  *  because a bunt has no carry: 8 to 40 ft is the fact, and an exit-velocity-and-launch-angle model
  *  asked to produce it would be arithmetic invented to justify a number already known. */
-function buntSwing(batterSkills, decision, settings, rand01) {
+function buntSwing(batterSkills, decision, settings, rand01, league) {
   const F = settings.FEEL.engine;
   const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);
   const effect = settings.SKILL_EFFECT;
-  const baseWindowMs = F.timingWindow * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  // R11 (docs/BASEBALL-3D-BUILD.md section 9): the league ladder widens/narrows the timing window
+  // here too - a bunt is still timing-only, so it is still "forgiving at Little League, tight at
+  // Majors" exactly the same way an ordinary swing is, below.
+  const windowMult = (settings.LEAGUE_TIMING_WINDOW_MULT && settings.LEAGUE_TIMING_WINDOW_MULT[league]) || 1;
+  const baseWindowMs = F.timingWindow * windowMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
   const windowMs = baseWindowMs * (settings.BUNT_WINDOW_MULT != null ? settings.BUNT_WINDOW_MULT : 1.6);
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);
@@ -119,7 +123,7 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: false, contact: false, foul: false, inPlay: false };
   }
   // RA: a bunt is decided before the pitch and resolved on its own terms (see `buntSwing` above).
-  if (decision.bunt) return buntSwing(batterSkills, decision, settings, rand01);
+  if (decision.bunt) return buntSwing(batterSkills, decision, settings, rand01, league);
 
   const F = settings.FEEL.engine;
   const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);
@@ -127,7 +131,13 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   const effect = settings.SKILL_EFFECT;
 
   const mode = modeOf(decision);
-  const timingWindowMs = F.timingWindow * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  // R11 (docs/BASEBALL-3D-BUILD.md section 9): "Little League is forgiving, Majors is tight"
+  // (Matt, 2026-09-21) - LEAGUE_TIMING_WINDOW_MULT widens or narrows the good-contact window
+  // itself, on top of hitAcc's own per-point widening. `college`'s 1.0 is a true no-op: every
+  // number this engine was derived against (R5's exit-velocity/carry targets included) stays
+  // exactly where it was measured.
+  const windowMult = (settings.LEAGUE_TIMING_WINDOW_MULT && settings.LEAGUE_TIMING_WINDOW_MULT[league]) || 1;
+  const timingWindowMs = F.timingWindow * windowMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
   const foulBoundaryMs = timingWindowMs * F.foulMult;
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);

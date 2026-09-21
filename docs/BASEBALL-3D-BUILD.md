@@ -1555,3 +1555,20 @@ the equator, a wider tilted darker bill, a top button, the catcher's backwards. 
 `LatheGeometry` profile (knob, thin handle, taper, rounded barrel, grip band). Ship review: the
 catcher is drawn on the pitcher camera only, the same rule as the umpire, because his cap filled
 the bottom of the batting frame once caps arrived. `render-actor.mjs` honours `BB_BASE`.
+
+### R11 record (shipped v881, 2026-09-21)
+
+From the stage's report: `unlockedPitchesFor`'s `quickPlay` option is a no-op kept for call-site
+compatibility, `QUICK_PLAY_PITCH_MIX` is deleted (the second time that mechanism was built and
+removed), `LEAGUE_UNLOCK_ADDS.little` is `['fastball']` and the changeup moved to High School,
+career included; `CPU.little.pitchMix` is fastball only. `flyPitch` takes `league` as its eighth
+argument (game.js and the human's preview pass it; the sim's contact harnesses do not, and never
+read travel time). Ship review: the stage divided travel time by the type's own readout, which
+counted a changeup's slowness twice with `PITCH_TRAVEL_MULT` (a Majors changeup went 910 to 1006
+ms); the denominator is the league's fastball readout, so Majors is unchanged for every type and
+Little League scales by 1.73 (fastball 1123 ms, eephus 2134 ms). `LEAGUE_TIMING_WINDOW_MULT`
+{1.6, 1.3, 1.0, 0.9, 0.8} multiplies the human's window in both `swing.js` reads; `buntSwing`
+takes `league`. Sim drift, not tuned: Minors and Majors Gold went from 4.29 / 7.50 seasons to
+15 / 15 (the narrower window), College unchanged, Little League and High School inside their Gold
+targets. Probes `pitch-drag` and `target-marker` pick High School (the curveball's lowest league)
+and say so; `actions-live (d)` asserts one unlocked well at Little League.

@@ -682,17 +682,18 @@ class BaseballPlayScreen {
       },
     };
 
-    // RA (docs/BASEBALL-3D-BUILD.md section 9): this screen is QUICK PLAY and nothing else, so all
-    // eight pitch types are unlocked for both sides - the human's strip shows eight live tiles and
-    // the CPU throws from `QUICK_PLAY_PITCH_MIX`. Career, when it exists, constructs its own Game
-    // without this flag and keeps the ladder's unlocks.
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): this screen is QUICK PLAY and nothing else.
+    // R11 (same doc, section 9): Quick Play no longer unlocks all eight - both sides throw the
+    // league's own ladder now (Little League fastball only), the same `unlockedPitchesFor` career
+    // reads. `quickPlay: true` still rides on the Game/view (additive, other code may read it
+    // later) but no longer changes which pitches are unlocked or how the CPU picks one.
     this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = {
       mode: 'batting', // 'batting' | 'pitching'
       selectedPitch: 'fastball',
-      unlockedPitches: SETTINGS.unlockedPitchesFor(league, 0, { quickPlay: true }),
+      unlockedPitches: SETTINGS.unlockedPitchesFor(league, 0),
       line1: '', line2: '',
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
@@ -3519,7 +3520,7 @@ class HumanAgent {
     const cap = SETTINGS.CAPS[this.league] != null ? SETTINGS.CAPS[this.league] : SETTINGS.CAPS.majors;
     const skill01 = Math.max(0, Math.min(1, ((pitcher && pitcher.skills.pitchAcc) || 0) / cap));
     const preview = flyPitch(type, aim, skill01, SETTINGS, () => 0.5, (pitcher && pitcher.skills) || {},
-      { scatter: draws, pitcherHand: hand });
+      { scatter: draws, pitcherHand: hand }, this.league);
 
     // What this delivery actually asked for and where it is actually going - the pitch-drag
     // probe's own read, and the honest answer to "did the drag reach the engine".
