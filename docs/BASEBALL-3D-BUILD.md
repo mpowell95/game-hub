@@ -1403,3 +1403,82 @@ camera. The backstop was rebuilt at ship review: the first version carried the o
 texture from the ground up and read as static at the pitcher camera's lens; it is now one wall in
 three bands (padded #24406a to 12 ft with a white rail, brick to 28 ft, crowd above at repeat
 4.5 on a darker ground). Two crowd textures are tuned independently now.
+
+### R10: the play unfolds in real time (2026-09-21)
+
+Matt, on v871: *"When I make contact, it immediately says 'out' or 'Homerun!' or whatever the
+result is. That's too fast. Wait for the ball to stop moving before announcing the result. The
+whole thing is too fast too, it's like I'm speed playing. Hitting a homerun is like 0.25 seconds
+from swinging to it landing. The ball should move at like a relatively realistic speed through
+the air and on the ground."* Measured in `ui.js`: `_settleAtBat` writes the outcome word to Line 1
+on its FIRST line, at contact, before the cutaway; the batted ball's flight is a fixed
+`FLIGHT_MS` 900 whatever the distance, the whole in-play cutaway is 0.4 + 0.9 + 0.7 = 2.0 s, and
+the runners are squeezed into that same window. Presentation only: no engine change, no change to
+the pitch beats (`fastballMs`, `windupMs`, `resultMs`, `betweenMs`; the r2-cadence probe measures
+those and must not move).
+
+1. **The batted ball takes as long as a ball takes.** Flight time from the ball's own arc, not a
+   constant: for a fly, line drive or pop-up the hang time of its apex (`t = 2 * sqrt(2 * apex /
+   32.2)` seconds, apex from `_battedApexFt`, with a line drive's apex capped so a 200 ft liner
+   is about 2.5 s and a 400 ft fly about 4.5 s); for a grounder, distance over a decelerating
+   roll starting at about 60 ft/s (a 40 ft dribbler under a second, a 150 ft grounder about
+   2.7 s). Clamp 0.8 to 5.5 s. `FLIGHT_MS` becomes a function of the play, not a constant.
+2. **Nothing is announced until the play is over.** At contact the pop shows the timing word and
+   the pitch line only. The outcome word (Line 1: Single, Out, and the rest) appears when the ball
+   is fielded or lands: a caught fly or line drive at the catch; a grounder when the fielder has
+   it and, for an out, after a throw beat of about a second to first; a hit when the ball lands and
+   the fielder reaches it; HOME RUN (word, confetti, strip) the moment the ball crosses the wall,
+   which the chase already computes (`homerCrossFrac`). Never before.
+3. **Runners and fielders move at their real speed for the whole play.** `RUN_WINDOW_MS` stops
+   being a constant: each runner's leg runs at `RUNNER_SPEED_FT_S` and the play holds until the
+   last runner arrives or is out, and the chasing fielder runs at a fielder's speed to where the
+   ball comes down. The cutaway's length is `max(flight + fielding + a 0.8 s settle, the last
+   runner's arrival)`; the marker hold is the settle. After the return to the plate, the between
+   beat is the same `BETWEEN_MS` as today (the pitch cadence is untouched); the in-play at-bat is
+   simply longer, by however long the play took.
+4. **The stats strip under HOME RUN stays for the trot.** Keep it up until the return to the plate.
+
+Deliverables. Probe `play-clock` in `test-baseball-device.mjs`, driving `_settleAtBat` with
+synthetic payloads the way `homerun-strip` does: a 420 ft homer shows no outcome word at contact +
+300 ms, shows HOME RUN no earlier than 3.0 s after contact, and returns to the plate no earlier
+than the last runner's real arrival; a 120 ft groundout shows no outcome word at contact + 300 ms
+and shows Out between 1.8 and 4.5 s after contact; a 250 ft fly out shows Out only at the catch.
+`r2-cadence`, `runners-move` (run it once without `BB_DEVICE_QUICK`, it is the real-play check),
+`one-batter`, `homerun-strip` and the PLAY probe stay green. Stills: contact + 300 ms with no word,
+the ball mid-flight on a homer with the runners underway, HOME RUN at the wall.
+`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
+`node check-no-scroll.mjs baseball` green.
+
+### R11: the league ladder is real in Quick Play (2026-09-21)
+
+Matt, same message: *"I also think you've forgotten to code the difficulties. Little league should
+be easy and the pitches slow and only 'fastballs' should be able to be thrown."* Measured:
+`unlockedPitchesFor(league, 0, {quickPlay: true})` returns all eight types for both sides (RA's
+own decision, now overruled); `pitch.js`'s time to the plate scales only by the pitcher's skill
+points off the MAJORS baseline, so a Little League 55 mph readout flies to the plate in the same
+650 ms as a 95 mph Majors fastball (`READOUT[league].scale` is never applied to travel); and the
+human's timing window is the same 100 ms at every league. The CPU ladder (`CPU[league]`) already
+exists and stays.
+
+1. **Pitch types follow the league in Quick Play too.** Drop the all-eight override; both sides
+   throw the league's own ladder (`PITCH_UNLOCKS[league]`, titles 0). Little League is FASTBALL
+   ONLY, career included (`LEAGUE_UNLOCK_ADDS.little = ['fastball']`, `CPU.little.pitchMix` fastball
+   only); the doc's section 11 ladder is updated to say so. Locked wells stay locked wells.
+2. **A slow pitch is slow.** Time to the plate is `fastballMs x PITCH_TRAVEL_MULT[type] x
+   (READOUT.majors.fastball / readout mph of this pitch at this league, with the pitcher's skill
+   points added as now)`, so Little League's 55 mph fastball takes about 1.1 s and a Majors 95 mph
+   fastball the 650 ms it takes today. The target marker, fire trail and timing window all key off
+   the real flight already; check the eephus at Little League does not exceed 2.5 s.
+3. **Little League is forgiving, Majors is tight.** `LEAGUE_TIMING_WINDOW_MULT` = { little 1.6,
+   highschool 1.3, college 1.0, minors 0.9, majors 0.8 } multiplies the human's timing window
+   (`swing.js`, both places `F.timingWindow` is read) and the CPU's `timingSigmaMs` is untouched.
+4. **Tests.** `baseball/js/test.js` section 33: Quick Play at Little League unlocks only the
+   fastball and Majors its six; travel time is monotone in readout mph and equals today's value
+   at Majors; the window multipliers apply. `node sim-baseball.mjs --quick --assert` before and
+   after, pasted (Little League will move; report it, do not tune). `test-baseball-device.mjs`:
+   `actions-live (d)` asserts the ladder instead of eight unlocked; any probe that throws a
+   curveball on the human's turn (`pitch-drag`, `target-marker`) picks a league where it is
+   unlocked or uses the dev seam, and says which.
+
+Deliverables: the tests above, the sim scoreboard, a still of Little League's strip (one unlocked
+well) and of a Little League fastball's marker mid-flight with the elapsed time.
