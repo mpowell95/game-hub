@@ -21,7 +21,6 @@ import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitche
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, LEAGUES, CAPS,
   CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
-  QUICK_PLAY_PITCH_MIX,
   SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
 import { pickWeighted } from './rng.js';
@@ -129,14 +128,12 @@ export class CpuPitcher {
       if (view.rand01() < rate) return { pickoff: true };
     }
 
-    // RA: in QUICK PLAY both sides hold all eight pitches, so the CPU throws from
-    // `QUICK_PLAY_PITCH_MIX` (settings.js's own one-distribution-for-eight-types block) rather than
-    // this league's career `pitchMix`, which names only what the ladder has unlocked by here.
-    const quickPlay = !!view.quickPlay;
-    const unlocked = unlockedPitchesFor(this.league, 0, { quickPlay });
-    const mix = quickPlay
-      ? { ...(this.settings.QUICK_PLAY_PITCH_MIX || QUICK_PLAY_PITCH_MIX) }
-      : { ...(cpu.pitchMix || {}) };
+    // R11 (docs/BASEBALL-3D-BUILD.md section 9): DROP THE ALL-EIGHT OVERRIDE. Quick Play and
+    // career now throw the SAME ladder (`unlockedPitchesFor` no longer branches on `quickPlay` at
+    // all - see its own header in settings.js) and the SAME per-league `pitchMix` - there is no
+    // longer a second, Quick-Play-only distribution to choose between.
+    const unlocked = unlockedPitchesFor(this.league, 0);
+    const mix = { ...(cpu.pitchMix || {}) };
     if (unlocked.includes('changeup')) mix.changeup = (mix.changeup || 1) + changeupShare;
     const weights = unlocked.map((t) => (mix && mix[t]) || 1);
     const type = pickWeighted(view.rand01, unlocked, weights);

@@ -4,6 +4,163 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R11: the league ladder in Quick Play (2026-09-21)
+
+Matt, on the same message R10 came from: *"I also think you've forgotten to code the difficulties.
+Little league should be easy and the pitches slow and only 'fastballs' should be able to be
+thrown."* Measured, exactly as `docs/BASEBALL-3D-BUILD.md` section 9 ("R11") named it:
+`unlockedPitchesFor(league, 0, {quickPlay:true})` returned all eight pitch types for both sides at
+every league (RA's own decision, now overruled); `pitch.js`'s `timeToPlateS` scaled ONLY by the
+pitcher's skill points off a flat Majors-fastball baseline (95 mph, both sides of the ratio, every
+type, every league), so a Little League 55 mph readout flew in the same 650 ms as a Majors 95 mph
+one; the human's timing window was a flat 100 ms at every league. The CPU ladder (`CPU[league]`)
+already existed and stays - this stage never touched it.
+
+**Item 1: pitch types follow the league in Quick Play too.** The all-eight override is deleted from
+`unlockedPitchesFor` (settings.js) - `opts.quickPlay` is now a no-op, kept only so every existing
+`{quickPlay:true}` call site still runs unmodified. Quick Play and career now share ONE ladder and
+ONE CPU `pitchMix`, so `QUICK_PLAY_PITCH_MIX` (the one-distribution-over-eight-types block RA built
+specifically to feed the override) is deleted with it - there is nothing left for it to supply.
+`agents.js`'s `CpuPitcher.decidePitch` no longer branches on `quickPlay` at all. **Little League is
+fastball only, career included**: `LEAGUE_UNLOCK_ADDS.little` drops to `['fastball']` and
+`CPU.little.pitchMix` to `{fastball: 1}`. Changeup does not vanish - it moves to High School,
+alongside curveball (`LEAGUE_UNLOCK_ADDS.highschool = ['changeup', 'curveball']`), so a brand-new
+career still reaches every one of the eight `PITCH_TYPES` through the ladder plus the two
+title-gated pitches, exactly once each (section 33's structural check). `docs/BASEBALL-DESIGN-DOC.md`
+section 11's own ladder table is updated to match.
+
+**Item 2: a slow pitch is slow.** `pitch.js`'s `timeToPlateS` now divides by the LEAGUE's fastball readout
+(`READOUT[league].fastball`; ship review changed this from the stage's per-type readout, see below)
+instead of a flat `READOUT.majors.fastball`, while
+`READOUT.majors.fastball` (95) stays the one fixed number on the OTHER side of the ratio:
+`speedFromSkillMul = READOUT.majors.fastball / (readoutMph + extraMph)`, `extraMph` computed from
+the pitcher's own `pitchSpd` skill points exactly as before. `league` is a new parameter threaded
+through `flyPitch` (defaulting to `'majors'`, so every existing call site that never passed a
+league - test fixtures, `sim-baseball.mjs`'s `--contact-grid`/`--perfect` harnesses, which measure
+contact and carry, not travel time, and are unaffected by it either way - keeps its exact old
+value); `game.js`'s real pitch call and `ui.js`'s `HumanAgent._throw` preview (the SAME `flyPitch`
+call the UI actually animates the ball against, R2's own "the drawn ball and the scored pitch are
+the same object by construction") both now pass `this.league`. **Measured, at zero skill points**
+(`node`, direct `flyPitch` calls, fastball and the slowest pitch, eephus, `PITCH_TRAVEL_MULT` 1.9):
+
+| League | Readout (FB) | Fastball travel | Eephus travel |
+|---|---|---|---|
+| Little League | 55 mph | **1122.7 ms** | 2133.2 ms |
+| High School | 80 mph | 771.9 ms | 1466.6 ms |
+| College | 88 mph | 701.7 ms | 1333.2 ms |
+| Minor League | 93 mph | 664.0 ms | 1261.6 ms |
+| Major League | 95 mph | **650.0 ms** (byte-identical to before R11) | 1235.0 ms |
+
+A Majors fastball is untouched (95/95 = 1, the ratio's own no-op); a Little League fastball takes
+about 1.1 s, exactly the spec's own "about 1.1 s"; the eephus at Little League (the slowest type at
+the most-slowed league) is 2.13 s, comfortably inside the spec's 2.5 s budget. Travel time is
+strictly monotone in readout mph across every league (section 33(2)'s own sweep). **Ship review, same day: the denominator is the league's FASTBALL readout for every type.** The
+stage divided by `READOUT[league][type]`, which counted a pitch type's slowness twice (once in
+`PITCH_TRAVEL_MULT`, once in the readout) and moved a Majors changeup from 910 ms to 1006 ms. With
+the league fastball alone, every Majors pitch keeps the travel time it had before R11, and a
+lower league scales all of its pitches by one factor (Little League 95 / 55 = 1.73: fastball
+1123 ms, eephus 2134 ms). Section 33's checks pass unchanged.
+
+**Item 3: Little League is forgiving, Majors is tight.** New `LEAGUE_TIMING_WINDOW_MULT` (settings.js)
+= `{ little: 1.6, highschool: 1.3, college: 1.0, minors: 0.9, majors: 0.8 }`, multiplying
+`FEEL.engine.timingWindow` at BOTH places `swing.js` reads it - the ordinary swing (`swing()`) and
+the bunt (`buntSwing()`, which did not carry a `league` parameter before this stage and now does).
+`college`'s 1.0 is a true no-op: every number this engine's contact/carry model was derived against
+(R5's exit-velocity/carry targets) stays exactly where it was measured. Demonstrated end to end
+(section 33(3)): a swing timed 90 ms off, cursor dead-centred on the pitch, is a FOUL at Majors
+(window 100 x 0.8 = 80 ms, 90 > 80) but genuine, in-play CONTACT at Little League (window 100 x 1.6
+= 160 ms, 90 <= 160) - the identical decision, two leagues. The CPU's own `timingSigmaMs` (how far
+off-centre a CPU batter's swing tends to land) is a separate mechanism and is untouched - this
+multiplies how forgivingly a given timing error is SCORED, never how large a CPU's error tends to
+be.
+
+**Item 4: tests.** `baseball/js/test.js` section 33, 31 new checks, all green: (1) Quick Play's
+ladder is byte-identical to career's at every league, Little League unlocks fastball only, Majors
+its six (fastball/changeup/curveball/slider/knuckleball/screwball - eephus/cutter stay title-gated),
+`QUICK_PLAY_PITCH_MIX` is gone; (2) the travel-time derivation above, exactly, plus the
+screwball/eephus/cutter fastball-row fallback; (3) `LEAGUE_TIMING_WINDOW_MULT`'s own values, the
+foul-vs-contact demonstration, and a structural check that `CPU.little.timingSigmaMs`/
+`CPU.majors.timingSigmaMs` are byte-identical to before R11; (4) every one of the eight
+`PITCH_TYPES` still reachable, exactly once, by the ladder plus the two title unlocks. Section 30
+(RA's own block, "Quick Play unlocks all eight...") is rewritten to prove the opposite - the new
+rule - rather than deleted, since it is the same seam (`unlockedPitchesFor`, `CpuPitcher`) RA
+already exercised.
+
+**The sim scoreboard, before and after (`node sim-baseball.mjs --quick --assert`), pasted as run,
+passing or not - nothing tuned, the CPU tables are byte-identical (`CPU_LEVEL_SHORTFALL` measured
+`[3,1,3,4,4]` both runs, both `DOC_*_TABLE_MATCHES` checks pass both runs):**
+
+```
+                          BEFORE R11                    AFTER R11
+SEASON_WINRATE_BAND
+  little    [0.92,0.98]   0.983 FAIL                    0.997 FAIL   (further above the band)
+  highschool[0.70,0.80]   0.869 FAIL                     0.878 FAIL   (~unchanged)
+  college   [0.57,0.67]   0.636 PASS                     0.636 PASS   (BYTE-IDENTICAL - windowMult 1.0's own no-op)
+  minors    [0.49,0.59]   0.642 FAIL                     0.656 FAIL   (slightly harder for the player)
+  majors    [0.41,0.51]   0.578 FAIL                     0.578 FAIL   (unchanged at this sample's rounding)
+SEASONS_TO_GOLD_TARGET
+  little    <=1.75        1.07 PASS                      1.03 PASS
+  highschool<=2.25         1.30 PASS                      1.36 PASS
+  college   <=2.75         3.75 FAIL                      3.75 FAIL   (BYTE-IDENTICAL)
+  minors    <=3.75         4.29 FAIL                      15.00 FAIL  (much harder - windowMult 0.9)
+  majors    <=5.25         7.50 FAIL                      15.00 FAIL  (much harder - windowMult 0.8)
+CHAMPION_GAME_WIN_MIN_MEDIAN >=0.4    0.533 PASS                      0.400 PASS   (right at the floor now)
+PERFECT_SEASON_REACHABLE >=0.02       0.9667 PASS                     0.7333 PASS  (still comfortably clears it)
+LADDER_MONOTONE (across-league)       [.981,.837,.659,.631,.566] PASS [.984,.859,.659,.619,.569] PASS
+NUDGE_A_B >=0.10 every league         [.075,-.05,-.15,-.2,-.275] FAIL [.025,.1,-.15,-.4,-.225] FAIL (same
+                                                                       pre-existing R5-documented shape)
+```
+
+**Read plainly: Minor and Major League got measurably harder to reach Gold in, and that is the
+honest, intended direction of "Majors is tight."** College is a true no-op end to end (byte-identical
+win rate AND seasons-to-Gold), which is the `windowMult: 1.0` promise kept exactly. Little League and
+High School moved a little further from their own bands in the win-rate column, but both were
+already failing (too easy) before R11 and both stay comfortably inside their own `SEASONS_TO_GOLD`
+targets - a ceiling effect (a player already winning 98%+ of games cannot show much more forgiveness
+in a win-rate number). Majors' own `SEASON_WINRATE_BAND` reading 0.578 in BOTH runs, to the exact
+thousandth, is very likely `--quick`'s small sample rounding two genuinely different underlying
+win counts to the same three-decimal display value rather than the timing window doing nothing at
+Majors (`CHAMPION_GAME_WIN_MIN_MEDIAN` and `SEASONS_TO_GOLD.majors` both moved sharply in the same
+run, and both are driven by the same batting code path) - worth a full (non-`--quick`) run before
+trusting that one number specifically. **Nothing here was tuned**: this is the honest cost of
+making the ladder real, reported per the stage's own instruction, not chased with a CPU-table edit.
+
+**Facts for whoever reads this next:**
+- `unlockedPitchesFor`'s `opts` parameter still exists and still accepts `{quickPlay: true}` -
+  every call site keeps working - it is simply inert now. A future session grepping for
+  `quickPlay` inside `unlockedPitchesFor` will find nothing branching on it, which is correct, not
+  a regression.
+- `QUICK_PLAY_PITCH_MIX` is gone from `settings.js`'s exports entirely (not just unused) - a future
+  session that needs a Quick-Play-specific distribution again should ask why career's own
+  `pitchMix` is not enough before rebuilding it, since this is the second time that exact
+  distribution has been built and deleted.
+- `flyPitch`'s new 8th parameter is `league`, defaulting to `'majors'` - a caller that constructs a
+  `Game` (game.js) or the human's own pitch preview (`ui.js`'s `_throw`) passes `this.league`;
+  anything else (a bare unit test, a sweep tool measuring contact/carry rather than travel time)
+  keeps its old, unscaled-by-league value unless it opts in.
+- `buntSwing` (swing.js) now takes `league` as a 5th argument; its own caller (`swing()`) already
+  had it in scope and passes it through.
+- **Which league each device probe uses, and why**: `actions-live (d)` mounts Quick Play's own
+  default league (Little League, `LEAGUE_ORDER[0]`) and now asserts 1 of 8 tiles unlocked
+  (fastball), not 8 of 8. `pitch-drag`'s pitcher-camera half and `target-marker` both force a
+  curveball on the human's turn - curveball is locked at Little League after this stage, so both
+  now click the setup screen's `[data-league="highschool"]` radio before tapping Play (the lowest
+  league where curveball is genuinely unlocked, doc §11), and both probes' own `ok()` lines say so.
+  Neither probe's PITCH SELECTION mechanism actually reads `unlockedPitches` at the moment it forces
+  the type (`pitch-drag` sets `inst.state.selectedPitch` directly; `target-marker` monkey-patches
+  the CPU agent's own return value), so the league choice is about testing an honest, reachable
+  state rather than a strict mechanical necessity - worth keeping anyway, since a probe that forces
+  a pitch no real player at that league could ever throw is a probe of nothing.
+- `test-visual.mjs`'s `PLAY.baseball` probe starts wherever Quick Play's own setup screen defaults
+  to (Little League) and never changes league - unaffected by this stage beyond a Little League
+  game now genuinely playing slower fastballs and a wider timing window, neither of which the probe
+  measures.
+
+Stills: `/tmp/claude-0/-home-user-game-hub/095ae74e-dae2-559f-bba8-3be6914d286b/scratchpad/r11/little-league-strip.png`
+(Little League's pitching strip, FB 55 unlocked, the other seven wells padlocked) and
+`/tmp/claude-0/-home-user-game-hub/095ae74e-dae2-559f-bba8-3be6914d286b/scratchpad/r11/little-league-fastball-midflight.png`
+(a Little League fastball 724 ms into its own 1093 ms flight, caption printed on the still).
+
 ## R12: the scoreboard's count and the figures (2026-09-21)
 
 Five fixes off Matt's own list on v871 (`docs/BASEBALL-3D-BUILD.md`, "R12"). No engine change, no
