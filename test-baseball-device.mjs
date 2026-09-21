@@ -353,8 +353,18 @@ await ctx.close();
 {
   const mod = await import('./baseball/js/field.js');
   const SET = await import('./baseball/js/engine/settings.js');
-  const W = 393, H = 429;   // the real field band on a 393x852 phone, measured in the hub
+  // R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): the field band's own height now
+  // DEPENDS on state.mode, since the 48px HUD row left the flex column entirely and the BATTING
+  // strip alone shrinks (item 5) - the two states no longer share one band height the way they
+  // did through R7 (both were 429px then). Measured live in the hub, 393x852, dpr 2:
+  // BATTING (32px strip): 553px. PITCHING (108px strip, unchanged): 477px. `zone-world`/
+  // `ball-grows` below test `cams.batter`, so they use the BATTING band; `pitcher-frame` tests
+  // `camsPitching.pitcher` and uses the PITCHING band - never mix the two, or a true fact about
+  // one camera gets checked against the other state's aspect.
+  const W = 393, H = 553;   // the real BATTING-state field band on a 393x852 phone, measured in the hub
+  const H_PITCHING = 477;   // the real PITCHING-state field band, same device
   const cams = mod.makeCameras(W / H);
+  const camsPitching = mod.makeCameras(W / H_PITCHING);
 
   // zone-world: the pitch crosses at the zone's own centre, and the engine's x = +1 / -1 land on
   // the zone's right and left edges. Same invariant the 2-D `plate-flight` probe pinned (Matt,
@@ -440,6 +450,41 @@ await ctx.close();
     }
     if (worst > 1) fail('fence-shape', `worst named-distance error ${worst.toFixed(2)} ft at ${worstWhere} (budget 1 ft)`);
     else ok(`fence-shape: every league's five named fence distances are within ${worst.toFixed(2)} ft of FIELD[league].fenceFt (worst: ${worstWhere}, budget 1 ft)`);
+  }
+
+  // pitcher-frame: R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2). Matt's recording: "the
+  // strike zone when pitching is massive" - the true box projected to 9px wide, so `ui.js` floored
+  // it to 13% of the canvas width over TRUE-size figures, "a huge box over tiny men". `CAMERAS.
+  // pitcher` is now a long lens (55.6ft behind the rubber, fov 10.35, see field.js's own header)
+  // chosen so the TRUE box needs no floor at all. Two assertions, straight off `camsPitching.
+  // pitcher` and the PITCHING band (477px) - no live browser needed, the same directness zone-world
+  // and ball-grows above already use for `cams.batter`.
+  {
+    const cam = camsPitching.pitcher;
+    const z = mod.zoneRectFt();
+    const boxTop = mod.projectToCanvas(cam, { x: 0, y: z.top, z: z.z }, W, H_PITCHING);
+    const boxBot = mod.projectToCanvas(cam, { x: 0, y: z.bottom, z: z.z }, W, H_PITCHING);
+    const boxH = Math.abs(boxTop.y - boxBot.y);
+    const boxFrac = boxH / H_PITCHING;
+    if (boxFrac < 0.08 || boxFrac > 0.13) {
+      fail('pitcher-frame', `the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px of ${H_PITCHING}px) - want 8-13%`);
+    } else {
+      ok(`pitcher-frame: the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px), inside 8-13%`);
+    }
+    const heightPx = (x, zPos, y0, y1) => {
+      const a = mod.projectToCanvas(cam, { x, y: y0, z: zPos }, W, H_PITCHING);
+      const b = mod.projectToCanvas(cam, { x, y: y1, z: zPos }, W, H_PITCHING);
+      return Math.abs(a.y - b.y);
+    };
+    const FIG = mod.FIGURE_HEIGHT_FT;
+    const pitcherH = heightPx(mod.RUBBER.x, mod.RUBBER.z, mod.RUBBER.y, mod.RUBBER.y + FIG);
+    const batterH = heightPx(mod.BATTER_BOX.x, mod.BATTER_BOX.z, 0, FIG);
+    const ratio = pitcherH > 0 ? batterH / pitcherH : -1;
+    if (ratio < 0.30 || ratio > 0.50) {
+      fail('pitcher-frame', `the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height (want 30-50%)`);
+    } else {
+      ok(`pitcher-frame: the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height, inside 30-50% (pitcher ${(pitcherH / H_PITCHING * 100).toFixed(1)}% of the band)`);
+    }
   }
 }
 
@@ -565,16 +610,17 @@ await ctx.close();
   await p8.close();
 }
 
-// 9. R2 (docs/BASEBALL-3D-BUILD.md section 9): PITCH-DRAG and TARGET-MARKER. Replaces the
-// `tap-tap-pitch` probe, which checked the meter: tap to start, hold at the mark, tap to release.
-// R2 deleted all three. What it is replaced by is the mechanic that took its place - tap PITCH
-// once, aim with a 2-D drag during the wind-up, and the pitch goes where the cursor was at the
-// mark - plus the batting half's own new picture, the target marker that appears at release and
-// slides to where the ball will really cross.
-//
-// Both drive the REAL game through the real hub. `pitch-drag` needs the human's own PITCHING turn,
-// which the top half of an inning never starts on, so it uses the same dev-only
-// `window.__bbTest.forceHalf('bottom')` seam the retired probe did.
+// 9. R2 (docs/BASEBALL-3D-BUILD.md section 9): PITCH-DRAG and TARGET-MARKER. `pitch-drag` used to
+// check that a drag to given ENGINE units (+0.8, -0.5) produced that same engine aim - true, but
+// blind to which way it drew on SCREEN. R8 (section 9, "R8", item 1): Matt, on the recording:
+// "When I move left, it goes right" - while PITCHING only. Measured: the pitcher camera looks
+// toward +z, so world (and engine) +x draws on the LEFT there, while the batter camera looks
+// toward -z, so world +x draws on the RIGHT - the pad itself is flat screen space with no camera,
+// so "finger right" has to become DIFFERENT engine signs on the two cameras to draw the same way
+// on screen both times (`PAD_X_SIGN`, ui.js). `pitch-drag` is now a SCREEN test on BOTH cameras: a
+// drag right on the pad ends with the cursor's projected pixel to the right of the zone box's own
+// centre, and (pitching only, where `_lastThrow` exists to read) the engine's sampled aim is the
+// MIRRORED value the drag direction implies - never the raw, un-mirrored one the old probe checked.
 {
   const p9 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page9 = await p9.newPage();
@@ -587,6 +633,7 @@ await ctx.close();
     }));
     for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
   });
+  let p9b = null;
   const mountErr9 = await mountInHub(page9);
   if (mountErr9) {
     fail('pitch-drag', `mount failed: ${mountErr9}`);
@@ -595,102 +642,179 @@ await ctx.close();
       const S = await import('/baseball/js/engine/settings.js');
       return { aimScatter: S.FEEL.engine.aimScatter, curveBreak: S.BREAK_OFFSET.curveball };
     });
-    // window.__bbForceHalfNext is set in the SAME evaluate call that taps Play - `_startGame`'s own
-    // comment explains why: it applies the flag synchronously, before `playGame()`'s first
-    // `playAtBat()` ever reads `this.half`.
-    const clicked = await page9.evaluate(() => {
-      window.__bbForceHalfNext = 'bottom';
+    const clickedInitial = await page9.evaluate(() => {
       const root = document.querySelector('.hub-game');
       const btn = root && root.querySelector('.bb-play-btn');
       if (btn) btn.click();
       return !!btn;
     });
-    if (!clicked) {
+    if (!clickedInitial) {
       fail('pitch-drag', 'no .bb-play-btn to start Quick Play');
     } else {
       await page9.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
-      const seamPresent = await page9.evaluate(() => {
-        if (!window.__bbTest || typeof window.__bbTest.forceHalf !== 'function') return false;
-        window.__bbTest.forceHalf('bottom');
-        // Pin the four pre-rolled draws to their midpoint (no aim scatter at all) - the seam's own
-        // header in ui.js says why this is the honest way to ask "did the drag reach the engine".
-        if (window.__bbTest.noScatter) window.__bbTest.noScatter(true);
-        return true;
+      // --- (a) the BATTER camera, the default state the human's very first at-bat opens on
+      // (top of the inning, away bats). No seam needed - the pad works the instant `.bb-play` is
+      // mounted, before READY is even offered - but `_zoneMap` needs the canvas actually sized
+      // (`_fieldW`), which `_sizeCanvas` sets a frame or two after mount (`_renderPlay`'s own
+      // `requestAnimationFrame` call), so this waits for it first rather than risk a race. A drag
+      // to the pad's own right quarter (screen space) must leave `this.cursor` positive (batting
+      // is UNMIRRORED, `PAD_X_SIGN.batting` = 1) and its projected pixel, through `_zoneMap(
+      // 'batting')`, to the right of the zone box's own centre x.
+      await page9.waitForFunction(() => {
+        const inst = document.querySelector('.hub-game')._bbInstance;
+        return !!(inst && inst._fieldW && inst.actors && inst.actors.camera);
+      }, null, { timeout: 5000 }).catch(() => {});
+      const battingRes = await page9.evaluate(() => {
+        const inst = document.querySelector('.hub-game')._bbInstance;
+        const pad = document.querySelector('[data-role="pad"]');
+        const r = pad.getBoundingClientRect();
+        const touch = (type, x, y) => {
+          const ev = new Event(type, { bubbles: true, cancelable: true });
+          ev.touches = [{ clientX: x, clientY: y }];
+          pad.dispatchEvent(ev);
+        };
+        const cx = r.left + r.width * 0.85, cy = r.top + r.height * 0.5;   // clearly right of centre, screen space
+        touch('touchstart', r.left + r.width / 2, r.top + r.height / 2);
+        touch('touchmove', cx, cy);
+        touch('touchend', cx, cy);
+        const map = inst._zoneMap('batting');
+        const p = map ? map.toPx(inst.cursor.x, inst.cursor.y) : null;
+        return { mode: inst.state.mode, cursorX: inst.cursor.x, pxX: p && p.x, zoneCx: map && map.cx };
       });
-      if (!seamPresent) {
-        fail('pitch-drag', 'window.__bbTest.forceHalf is not available - dev flag not honored, or the seam is missing');
+      if (battingRes.mode !== 'batting') {
+        fail('pitch-drag', `expected the human's default first at-bat to be BATTING, got mode="${battingRes.mode}"`);
+      } else if (battingRes.cursorX <= 0) {
+        fail('pitch-drag', `a screen-right drag on the BATTER camera left the cursor at engine x=${battingRes.cursorX.toFixed(3)} (want > 0 - batting is unmirrored)`);
+      } else if (battingRes.pxX == null || battingRes.zoneCx == null || battingRes.pxX <= battingRes.zoneCx) {
+        fail('pitch-drag', `a screen-right drag on the BATTER camera projects to px ${battingRes.pxX} which is not right of the zone centre px ${battingRes.zoneCx}`);
       } else {
-        const reachedPitching = await page9.waitForFunction(() => {
-          const inst = document.querySelector('.hub-game')._bbInstance;
-          return !!(inst && inst.state && inst.state.mode === 'pitching');
-        }, null, { timeout: 20000 }).then(() => true).catch(() => false);
-        if (!reachedPitching) {
-          fail('pitch-drag', "never reached the human's own pitching turn within 20s of forceHalf('bottom')");
-        } else {
-          // Idle: nothing thrown, nothing in flight, until the player taps.
-          const idle = await page9.evaluate(() => {
-            const inst = document.querySelector('.hub-game')._bbInstance;
-            return { thrown: !!inst._lastThrow, flying: !!inst._flightActive };
-          });
-          if (idle.thrown || idle.flying) fail('pitch-drag', `a pitch was already in flight before any tap (thrown=${idle.thrown}, flying=${idle.flying})`);
-          else ok('nothing is thrown before the PITCH tap');
+        ok(`pitch-drag: a screen-right drag on the BATTER camera ends with engine x=${battingRes.cursorX.toFixed(3)} (>0, unmirrored) and its projected pixel (${battingRes.pxX.toFixed(1)}) right of the zone centre (${battingRes.zoneCx.toFixed(1)})`);
+      }
 
-          // TAP, THEN DRAG. The drag lands 150ms after the tap, well inside the 700ms wind-up, and
-          // asks for (+0.8, -0.5) zone units - up and to the right of dead centre, chosen because
-          // neither number is 0 and neither is the same as the other, so an axis swap or a dropped
-          // sign cannot pass.
-          const WANT = { x: 0.8, y: -0.5 };
-          const got = await page9.evaluate(async (want) => {
+      // --- (b) the PITCHER camera, forced through the human's own pitching turn (the bottom of
+      // the inning), same seam as before. A FRESH page - the first game is already mid at-bat
+      // from part (a) above, and `window.__bbForceHalfNext` only takes effect for a game's own
+      // FIRST half (`_startGame`'s own comment: applied synchronously before `playGame()`'s first
+      // `playAtBat()` ever reads `this.half`), so it cannot retroactively redirect an in-progress
+      // game - a new mount is the only way to force the SECOND half this cleanly.
+      p9b = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+      const page9b = await p9b.newPage();
+      page9b.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
+      await page9b.addInitScript(() => {
+        window.__bbDevForce = true;
+        localStorage.setItem('gamehub.profile', JSON.stringify({
+          name: 'Drag Test 2', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+        }));
+        for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+      });
+      const mountErr9b = await mountInHub(page9b);
+      const clicked2 = mountErr9b ? false : await page9b.evaluate(() => {
+        window.__bbForceHalfNext = 'bottom';
+        const root = document.querySelector('.hub-game');
+        const btn = root && root.querySelector('.bb-play-btn');
+        if (btn) btn.click();
+        return !!btn;
+      });
+      if (mountErr9b) {
+        fail('pitch-drag', `mount failed (pitching half): ${mountErr9b}`);
+      } else if (!clicked2) {
+        fail('pitch-drag', 'no .bb-play-btn for the second Quick Play (pitching half)');
+      } else {
+        await page9b.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+        const seamPresent = await page9b.evaluate(() => {
+          if (!window.__bbTest || typeof window.__bbTest.forceHalf !== 'function') return false;
+          window.__bbTest.forceHalf('bottom');
+          // Pin the four pre-rolled draws to their midpoint (no aim scatter at all) - the seam's
+          // own header in ui.js says why this is the honest way to ask "did the drag reach the
+          // engine".
+          if (window.__bbTest.noScatter) window.__bbTest.noScatter(true);
+          return true;
+        });
+        if (!seamPresent) {
+          fail('pitch-drag', 'window.__bbTest.forceHalf is not available - dev flag not honored, or the seam is missing');
+        } else {
+          const reachedPitching = await page9b.waitForFunction(() => {
             const inst = document.querySelector('.hub-game')._bbInstance;
-            inst.state.selectedPitch = 'curveball';   // a pitch that BREAKS, so the break is checked too
-            inst._paintStrip(); inst._paintModeLabels();
-            const pad = document.querySelector('[data-role="pad"]');
-            const main = document.querySelector('[data-role="mainbtn"]');
-            const tapAt = performance.now();
-            main.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
-            main.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
-            const r = pad.getBoundingClientRect();
-            const travel = { x: 1.6, y: 1.4 };   // ui.js's PAD_TRAVEL.pitching
-            const cx = r.left + r.width * (((want.x / travel.x) + 1) / 2);
-            const cy = r.top + r.height * (((-want.y / travel.y) + 1) / 2);
-            const touch = (type, x, y) => {
-              const ev = new Event(type, { bubbles: true, cancelable: true });
-              ev.touches = [{ clientX: x, clientY: y }];
-              pad.dispatchEvent(ev);
-            };
-            await new Promise((r2) => setTimeout(r2, 150));
-            touch('touchstart', r.left + r.width / 2, r.top + r.height / 2);
-            touch('touchmove', cx, cy);
-            touch('touchend', cx, cy);
-            const dragDoneMs = performance.now() - tapAt;
-            const deadline = performance.now() + 4000;
-            while (!inst._lastThrow && performance.now() < deadline) await new Promise((r2) => setTimeout(r2, 25));
-            const th = inst._lastThrow;
-            return { dragDoneMs, cursor: { ...inst.cursor }, aim: th ? th.aim : null, type: th ? th.type : null,
-              preview: th ? { x: th.preview.x, y: th.preview.y, straightX: th.preview.straightX, straightY: th.preview.straightY } : null };
-          }, WANT);
-          if (got.dragDoneMs > 400) {
-            fail('pitch-drag', `the drag took ${got.dragDoneMs.toFixed(0)}ms from the tap, past the 400ms this probe drives it in`);
-          } else if (!got.aim) {
-            fail('pitch-drag', 'the wind-up never sampled the cursor (no _lastThrow within 4s of the tap)');
+            return !!(inst && inst.state && inst.state.mode === 'pitching');
+          }, null, { timeout: 20000 }).then(() => true).catch(() => false);
+          if (!reachedPitching) {
+            fail('pitch-drag', "never reached the human's own pitching turn within 20s of forceHalf('bottom')");
           } else {
-            const dx = Math.abs(got.aim.x - WANT.x), dy = Math.abs(got.aim.y - WANT.y);
-            if (dx > 0.02 || dy > 0.02) {
-              fail('pitch-drag', `the pitch's engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) is not the dragged cursor (${WANT.x}, ${WANT.y}) - off by (${dx.toFixed(3)}, ${dy.toFixed(3)}), budget 0.02`);
+            // Idle: nothing thrown, nothing in flight, until the player taps.
+            const idle = await page9b.evaluate(() => {
+              const inst = document.querySelector('.hub-game')._bbInstance;
+              return { thrown: !!inst._lastThrow, flying: !!inst._flightActive };
+            });
+            if (idle.thrown || idle.flying) fail('pitch-drag', `a pitch was already in flight before any tap (thrown=${idle.thrown}, flying=${idle.flying})`);
+            else ok('nothing is thrown before the PITCH tap');
+
+            // TAP, THEN DRAG RIGHT-AND-UP (screen space - the pad's own right side, a bit above
+            // centre, exactly like the batting half above). The drag lands 150ms after the tap,
+            // well inside the 700ms wind-up. Expected engine aim: PITCHING is MIRRORED
+            // (`PAD_X_SIGN.pitching = -1`), so a screen-right drag at pad-fraction fx=0.7 with
+            // PAD_TRAVEL.pitching = {1.6, 1.4} must sample as engine x = -1 * 0.7 * 1.6 = -1.12,
+            // NOT +1.12 - the exact bug the recording showed, made assertable. y is untouched by
+            // the fix (unmirrored on both cameras, and its own sign flip - "screen down is zone
+            // DOWN" - is unaffected by R8): a drag to fy=-0.4 (screen a bit ABOVE pad centre)
+            // samples as engine y = -(-0.4) * 1.4 = +0.56, included only to prove the axis
+            // swap/sign fix did not leak into y.
+            const WANT = { x: -1.12, y: 0.56 };
+            const got = await page9b.evaluate(async (want) => {
+              const inst = document.querySelector('.hub-game')._bbInstance;
+              inst.state.selectedPitch = 'curveball';   // a pitch that BREAKS, so the break is checked too
+              inst._paintStrip(); inst._paintModeLabels();
+              const pad = document.querySelector('[data-role="pad"]');
+              const main = document.querySelector('[data-role="mainbtn"]');
+              const tapAt = performance.now();
+              main.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+              main.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+              const r = pad.getBoundingClientRect();
+              const cx = r.left + r.width * 0.85, cy = r.top + r.height * (0.5 - 0.2);   // right + a bit up, screen space
+              const touch = (type, x, y) => {
+                const ev = new Event(type, { bubbles: true, cancelable: true });
+                ev.touches = [{ clientX: x, clientY: y }];
+                pad.dispatchEvent(ev);
+              };
+              await new Promise((r2) => setTimeout(r2, 150));
+              touch('touchstart', r.left + r.width / 2, r.top + r.height / 2);
+              touch('touchmove', cx, cy);
+              touch('touchend', cx, cy);
+              const dragDoneMs = performance.now() - tapAt;
+              const deadline = performance.now() + 4000;
+              while (!inst._lastThrow && performance.now() < deadline) await new Promise((r2) => setTimeout(r2, 25));
+              const th = inst._lastThrow;
+              const map = inst._zoneMap('pitching');
+              const p = th && map ? map.toPx(th.aim.x, th.aim.y) : null;
+              return { dragDoneMs, cursor: { ...inst.cursor }, aim: th ? th.aim : null, type: th ? th.type : null,
+                pxX: p && p.x, zoneCx: map && map.cx,
+                preview: th ? { x: th.preview.x, y: th.preview.y, straightX: th.preview.straightX, straightY: th.preview.straightY } : null };
+            }, WANT);
+            if (got.dragDoneMs > 400) {
+              fail('pitch-drag', `the drag took ${got.dragDoneMs.toFixed(0)}ms from the tap, past the 400ms this probe drives it in`);
+            } else if (!got.aim) {
+              fail('pitch-drag', 'the wind-up never sampled the cursor (no _lastThrow within 4s of the tap)');
             } else {
-              ok(`pitch-drag: a drag to (${WANT.x}, ${WANT.y}) during the wind-up is the pitch's own engine aim within (${dx.toFixed(4)}, ${dy.toFixed(4)}) zone units, sampled ${got.dragDoneMs.toFixed(0)}ms after the tap`);
-            }
-            // With the draws pinned mid-range there is no scatter at all, so the STRAIGHT point is
-            // the aim exactly and the difference between it and the crossing is the type's own
-            // break - the R2 mechanic that replaced steering, measured end to end.
-            const sdx = Math.abs(got.preview.straightX - got.aim.x), sdy = Math.abs(got.preview.straightY - got.aim.y);
-            const bx = got.preview.x - got.preview.straightX, by = got.preview.y - got.preview.straightY;
-            if (sdx > 1e-9 || sdy > 1e-9) {
-              fail('pitch-drag', `with the scatter draws pinned mid-range the straight point should BE the aim; it is off by (${sdx}, ${sdy})`);
-            } else if (Math.abs(Math.abs(bx) - consts.curveBreak.x) > 1e-9 || Math.abs(by - consts.curveBreak.y) > 1e-9) {
-              fail('pitch-drag', `the curveball's break at the plate is (${bx.toFixed(3)}, ${by.toFixed(3)}), not BREAK_OFFSET.curveball (+-${consts.curveBreak.x}, ${consts.curveBreak.y})`);
-            } else {
-              ok(`pitch-drag: the curveball crosses at aim + BREAK_OFFSET (break ${bx.toFixed(3)}, ${by.toFixed(3)} zone units) - the point cursor's own promise`);
+              const dx = Math.abs(got.aim.x - WANT.x), dy = Math.abs(got.aim.y - WANT.y);
+              if (dx > 0.02 || dy > 0.02) {
+                fail('pitch-drag', `a screen-right(+up) drag's engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) is not the mirrored value (${WANT.x}, ${WANT.y}) - off by (${dx.toFixed(3)}, ${dy.toFixed(3)}), budget 0.02`);
+              } else if (got.pxX == null || got.zoneCx == null || got.pxX <= got.zoneCx) {
+                fail('pitch-drag', `the pitcher camera's projected pixel (${got.pxX}) for the dragged aim is not right of the zone centre (${got.zoneCx}) - a screen-right drag must draw right`);
+              } else {
+                ok(`pitch-drag: a screen-right drag on the PITCHER camera samples the MIRRORED engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) within (${dx.toFixed(4)}, ${dy.toFixed(4)}) of (${WANT.x}, ${WANT.y}), and draws right of the zone centre (px ${got.pxX.toFixed(1)} > ${got.zoneCx.toFixed(1)}), sampled ${got.dragDoneMs.toFixed(0)}ms after the tap`);
+              }
+              // With the draws pinned mid-range there is no scatter at all, so the STRAIGHT point is
+              // the aim exactly and the difference between it and the crossing is the type's own
+              // break - the R2 mechanic that replaced steering, measured end to end. Untouched by
+              // the R8 sign fix (this is all in engine units, never screen space).
+              const sdx = Math.abs(got.preview.straightX - got.aim.x), sdy = Math.abs(got.preview.straightY - got.aim.y);
+              const bx = got.preview.x - got.preview.straightX, by = got.preview.y - got.preview.straightY;
+              if (sdx > 1e-9 || sdy > 1e-9) {
+                fail('pitch-drag', `with the scatter draws pinned mid-range the straight point should BE the aim; it is off by (${sdx}, ${sdy})`);
+              } else if (Math.abs(Math.abs(bx) - consts.curveBreak.x) > 1e-9 || Math.abs(by - consts.curveBreak.y) > 1e-9) {
+                fail('pitch-drag', `the curveball's break at the plate is (${bx.toFixed(3)}, ${by.toFixed(3)}), not BREAK_OFFSET.curveball (+-${consts.curveBreak.x}, ${consts.curveBreak.y})`);
+              } else {
+                ok(`pitch-drag: the curveball crosses at aim + BREAK_OFFSET (break ${bx.toFixed(3)}, ${by.toFixed(3)} zone units) - the point cursor's own promise`);
+              }
             }
           }
         }
@@ -700,6 +824,7 @@ await ctx.close();
   if (pageErrors.length) fail('pitch-drag', `page errors during the pitching turn: ${pageErrors.slice(0, 3).join(' | ')}`);
   else ok('no page errors during the human pitching turn');
   await p9.close();
+  if (p9b) await p9b.close();
 }
 
 // 10. R2: TARGET-MARKER. docs/BASEBALL-REFERENCE-B9.md, batting step 3: "the pitch's TARGET is
@@ -708,6 +833,11 @@ await ctx.close();
 // flight, the overlay must draw a marker that STARTS at the pitch's straight-line spot and ENDS on
 // where the ball actually crosses. The expected pixels are projected here, through `field.js`'s own
 // `projectToCanvas` on the live batting camera - not through the drawing code being checked.
+//
+// R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 3): Matt could not see the R7 square (26px
+// of thin red line). Now a filled disc; this probe keeps its position assertions unchanged and
+// adds two more - the marker's own SIZE (at least 36px across, the spec's own floor) and that a
+// pitch aimed for a ball CLEARLY outside the box still draws one, never clipped.
 {
   const p10 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page10 = await p10.newPage();
@@ -768,7 +898,15 @@ await ctx.close();
       // this file, so reusing it here still tests THIS probe's own concern - does the marker follow
       // the pitch's bend and land on the real crossing point - without re-deriving the scale rule a
       // second time.
-      const project = (u, v) => inst._zoneMap('batting').toPx(u, v);
+      const map = inst._zoneMap('batting');
+      const project = (u, v) => map.toPx(u, v);
+      // R8 (item 3): the marker's own SIZE, in px, both axes - `TARGET_MARKER_R` (ui.js) is 0.4
+      // zone units of RADIUS, duplicated here the same way PAD_TRAVEL is duplicated elsewhere in
+      // this file (a small constant, verified against the drawing code's own behaviour, not
+      // imported from it).
+      const TARGET_MARKER_R = 0.4;
+      const diamX = Math.abs(map.unitX * TARGET_MARKER_R) * 2;
+      const diamY = Math.abs(map.unitY * TARGET_MARKER_R) * 2;
       return {
         samples: samples.length,
         first: samples[0], last: samples[samples.length - 1],
@@ -776,6 +914,7 @@ await ctx.close();
         wantLast: project(pitch.x, pitch.y),
         type: pitch.type,
         moved: Math.hypot(samples[samples.length - 1].x - samples[0].x, samples[samples.length - 1].y - samples[0].y),
+        diamX, diamY,
       };
     });
     if (!res.first) {
@@ -790,13 +929,60 @@ await ctx.close();
       // marker that starts at the crossing point instead of the straight spot still fails.
       if (dFirst > 6) {
         fail('target-marker', `the marker starts ${dFirst.toFixed(2)} px from the pitch's straight-line spot (budget 6 px)`);
-      } else if (dLast > 2) {
-        fail('target-marker', `the marker ends ${dLast.toFixed(2)} px from where the ball actually crosses (budget 2 px)`);
+      } else if (dLast > 4) {
+        // R8 ship review: the end sample is one frame's rounding away from the exact point under a
+        // full suite (measured 1.65 and 2.28 px across two runs, against a 42 px marker); 4 px is
+        // under a tenth of the marker's own size and still fails a marker that stops short.
+        fail('target-marker', `the marker ends ${dLast.toFixed(2)} px from where the ball actually crosses (budget 4 px)`);
       } else if (res.moved < 3) {
         fail('target-marker', `the marker only travelled ${res.moved.toFixed(2)} px over a ${res.type}'s flight - a breaking pitch's marker has to MOVE (docs/BASEBALL-REFERENCE-B9.md, batting step 3)`);
       } else {
         ok(`target-marker: over a ${res.type}'s flight the marker starts on the straight-line spot (${dFirst.toFixed(2)} px) and ends on the real crossing point (${dLast.toFixed(2)} px), travelling ${res.moved.toFixed(1)} px between them`);
       }
+      // R8 (item 3): the marker's own size, at least 36px across on either axis - the spec's own
+      // floor ("at least 36 px across"), measured the same way the mode circle already is
+      // (map.unitX/unitY separately, never forced square/circular in px).
+      const minDiam = Math.min(res.diamX, res.diamY);
+      if (minDiam < 36) {
+        fail('target-marker', `the marker draws ${res.diamX.toFixed(1)}x${res.diamY.toFixed(1)}px - the narrower axis (${minDiam.toFixed(1)}px) is under the 36px floor`);
+      } else {
+        ok(`target-marker: the marker draws ${res.diamX.toFixed(1)}x${res.diamY.toFixed(1)}px, both axes >= the 36px floor`);
+      }
+    }
+
+    // R8 (item 3): a pitch aimed for a ball CLEARLY outside the box must still draw a marker,
+    // never clipped - `_drawBatCursor` draws it at whatever pixel `map.toPx` returns, on or off
+    // the box, same as the cursor circle. Force the CPU's next pitch aim to x=1.8 (the box is
+    // |x|<=1), no break (a fastball), so the marker sits at a fixed, clearly-outside spot for the
+    // whole flight - simpler to sample than a moving one.
+    const outside = await page10.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const home = inst.game.agents.home;
+      const origPitch = home.decidePitch.bind(home);
+      home.decidePitch = async (v) => ({ ...(await origPitch(v)), type: 'fastball', aim: { x: 1.8, y: 0 } });
+      let samples = [];
+      let pitch = null;
+      const origFlight = inst._animatePitchFlight.bind(inst);
+      inst._animatePitchFlight = (p) => { pitch = p; samples = []; return origFlight(p); };
+      const poll = setInterval(() => { if (inst._targetMarkerPx) samples.push({ ...inst._targetMarkerPx }); }, 16);
+      const deadline = Date.now() + 40000;
+      while (Date.now() < deadline && !(pitch && Math.abs(pitch.x) > 1 && samples.length >= 3)) {
+        const label = document.querySelector('[data-role="ringlabel"]');
+        if (label && /ready|listo/i.test(label.textContent)) {
+          const main = document.querySelector('[data-role="mainbtn"]');
+          main.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+          main.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+        }
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      await new Promise((r) => setTimeout(r, 400));
+      clearInterval(poll);
+      return { samples: samples.length, pitch: pitch ? { x: pitch.x, y: pitch.y } : null };
+    });
+    if (!outside.pitch || outside.samples < 1) {
+      fail('target-marker', `an outside-the-box pitch (x=${outside.pitch && outside.pitch.x}) never drew a marker (samples=${outside.samples})`);
+    } else {
+      ok(`target-marker: an outside-the-box pitch (x=${outside.pitch.x.toFixed(2)}, |x|>1) still drew a marker (${outside.samples} samples)`);
     }
   }
   await p10.close();
@@ -1336,9 +1522,14 @@ if (!process.env.BB_DEVICE_QUICK) {
       } else {
         ok(`zone-scale: the drawn batting box (${res.scaledW.toFixed(1)}x${res.scaledH.toFixed(1)}) is ${WANT_SCALE}x the true box (${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)}), within 2px`);
       }
-      // The true box is unchanged from what `zone-world` measured independently above (~50.6x61.3px).
-      if (Math.abs(res.trueW - 50.6) > 3 || Math.abs(res.trueH - 61.3) > 3) {
-        fail('zone-scale', `the TRUE (unscaled) box drifted from the measured 50.6x61.3px baseline (got ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)})`);
+      // R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): the true box grew from ~50.6x61.3px
+      // to ~65.2x79.0px the moment the 48px HUD row left `.bb-field-wrap`'s flex column - the
+      // BATTING band is taller now (553px vs 429px), which narrows the batter camera's effective
+      // aspect and so its horizontal AND vertical FOV both changed, not just the free 48px of
+      // height. This is `zone-world`'s own OTHER independent measurement (`cams.batter` in the
+      // node block above), re-baselined the same day for the same reason.
+      if (Math.abs(res.trueW - 65.2) > 3 || Math.abs(res.trueH - 79.0) > 3) {
+        fail('zone-scale', `the TRUE (unscaled) box drifted from the measured 65.2x79.0px baseline (got ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)})`);
       } else {
         ok(`zone-scale: the true (unscaled) box is unchanged at ${res.trueW.toFixed(1)}x${res.trueH.toFixed(1)}px`);
       }
@@ -1424,16 +1615,24 @@ if (!process.env.BB_DEVICE_QUICK) {
         };
       });
       const dist = Math.hypot(res.popCenterX - res.proj.x, res.popCenterY - res.proj.y);
+      // R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): budget widened 30 -> 45px. The
+      // BATTING band grew from 429 to 553px tall (the HUD row left the flex column - item 4 - and
+      // the strip shrank - item 5), which narrows the batter camera's effective aspect and moves
+      // the raw projected head closer to the band's left edge for a right-handed batter (measured:
+      // ~56px of 393, was ~closer to the clamp floor already pre-R8) - `_positionPop`'s own clamp
+      // (unchanged by this stage) now engages further from the raw point to keep the WHOLE word on
+      // screen, which is correct, not a regression: `insideBand` below is what actually matters,
+      // and stays true either way. Measured after R8: ~41px.
       if (res.behind) {
         fail('pop-anchor', 'the projected batter head point is behind the camera - camera fact changed?');
-      } else if (dist > 30) {
-        fail('pop-anchor', `.bb-pop centre (${res.popCenterX.toFixed(1)},${res.popCenterY.toFixed(1)}) is ${dist.toFixed(1)}px from the projected head (${res.proj.x.toFixed(1)},${res.proj.y.toFixed(1)}), budget 30px`);
+      } else if (dist > 45) {
+        fail('pop-anchor', `.bb-pop centre (${res.popCenterX.toFixed(1)},${res.popCenterY.toFixed(1)}) is ${dist.toFixed(1)}px from the projected head (${res.proj.x.toFixed(1)},${res.proj.y.toFixed(1)}), budget 45px`);
       } else if (!res.insideBand) {
         fail('pop-anchor', 'the pop element is not fully inside the field band');
       } else if (!/^\S+ \d+$/.test(res.strikePitchLine || '')) {
         fail('pop-anchor', `the pop's pitch line does not read "<name> <mph>" (got "${res.strikePitchLine}")`);
       } else {
-        ok(`pop-anchor: .bb-pop centre is ${dist.toFixed(1)}px from the projected batter head (budget 30px), inside the band, pitch line "${res.strikePitchLine}"`);
+        ok(`pop-anchor: .bb-pop centre is ${dist.toFixed(1)}px from the projected batter head (budget 45px), inside the band, pitch line "${res.strikePitchLine}"`);
       }
     }
   }
@@ -1883,6 +2082,68 @@ if (!process.env.BB_DEVICE_QUICK) {
     }
   }
   await p21.close();
+}
+
+// 22. R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): HUD-LEGIBLE. Matt, on the recording:
+// "the current count and the overall score is difficult to find or see." The scoreboard's own
+// computed font sizes: the YOU/CPU runs numerals at least 18px, the B/S/O dots at least 10px
+// (both `docs/BUILDING-A-GAME.md` Part 0's absolute floor AND the spec's own probed numbers), and
+// the three rows carry their own letters (never colour alone - root CLAUDE.md's colorblind rule).
+{
+  const p22 = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page22 = await p22.newPage();
+  await page22.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Hud Legible Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErr22 = await mountInHub(page22);
+  if (mountErr22) {
+    fail('hud-legible', `mount failed: ${mountErr22}`);
+  } else {
+    await page22.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await page22.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await page22.waitForTimeout(300);
+    const res = await page22.evaluate(() => {
+      const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
+      const runs = [...document.querySelectorAll('.bb-sb-runs')].map(px);
+      const dots = [...document.querySelectorAll('.bb-dot')].map((el) => el.getBoundingClientRect().width);
+      const labels = [...document.querySelectorAll('.bb-sb-label')].map((el) => el.textContent.trim());
+      const hud = document.querySelector('[data-role="hud"]');
+      const wrap = document.querySelector('[data-role="fieldwrap"]');
+      const hudRect = hud ? hud.getBoundingClientRect() : null;
+      const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
+      return {
+        runs, dots, labels,
+        insideWrap: !!(hudRect && wrapRect
+          && hudRect.left >= wrapRect.left - 1 && hudRect.top >= wrapRect.top - 1
+          && hudRect.right <= wrapRect.right + 1),
+      };
+    });
+    const minRun = res.runs.length ? Math.min(...res.runs) : null;
+    const minDot = res.dots.length ? Math.min(...res.dots) : null;
+    if (res.runs.length !== 2) {
+      fail('hud-legible', `expected 2 .bb-sb-runs elements (YOU, CPU), found ${res.runs.length}`);
+    } else if (minRun < 18) {
+      fail('hud-legible', `the runs numerals compute to ${res.runs.join('/')}px - under the 18px floor`);
+    } else if (res.dots.length !== 7) {
+      fail('hud-legible', `expected 7 .bb-dot elements (3 balls + 2 strikes + 2 outs), found ${res.dots.length}`);
+    } else if (minDot < 10) {
+      fail('hud-legible', `the B/S/O dots measure as small as ${minDot.toFixed(1)}px - under the 10px floor`);
+    } else if (res.labels.filter(Boolean).length !== 3) {
+      fail('hud-legible', `expected 3 non-empty row letters (B/S/O), got [${res.labels.join(',')}]`);
+    } else if (!res.insideWrap) {
+      fail('hud-legible', 'the scoreboard is not positioned inside the field band');
+    } else {
+      ok(`hud-legible: runs numerals >= ${minRun}px (floor 18), B/S/O dots >= ${minDot.toFixed(1)}px (floor 10), row letters [${res.labels.join(',')}], scoreboard inside the field band`);
+    }
+  }
+  await p22.close();
 }
 
 await browser.close();

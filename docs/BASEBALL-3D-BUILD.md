@@ -1267,3 +1267,119 @@ mesh; the batter camera sits inside it and never sees it. The half-inning swap f
 snapshot canvas (`.bb-crossfade-snap`, z 6) of both game canvases; `.bb-lines` needed an explicit
 z 7 or "Side retired" vanished under it, caught by a still, not a probe. Probes `pop-onscreen`,
 `chase-start`, `ball-visible-pitcher`.
+
+### R8: controls and HUD, from Matt's recording of v868 (2026-09-21)
+
+Matt, on the recording: *"The pitching movement is inverted. When I move left, it goes right. The
+strike zone when pitching is massive. When batting, the type of pitch is way too prominent, it
+takes up a ton of space, meanwhile the current count and the overall score is difficult to find
+or see. When batting, there's no indication of where the pitch is going other than the actual
+ball; a spot should appear in the strike zone (or outside of it) indicating where it's going."*
+All four are measured in the frames (`scratchpad/rec5/pad-vs-zone.png`: at 59.5 s the pad dot is
+top-LEFT and the cursor is top-RIGHT of the zone). No engine change, no beat change.
+
+1. **The pad follows the finger on screen, on both cameras.** The batter camera looks toward
+   -z, so world +x (first base) is screen RIGHT; the pitcher camera looks toward +z, so world +x
+   is screen LEFT. `_setCursorFromPad` maps pad x straight to engine x for both, so in the
+   pitching state a drag right moves the cursor left. One per-state sign (pitching -1) in the
+   pad-to-cursor and cursor-to-pad-marker mapping; the engine's units are untouched (its +x is
+   still first base). The `pitch-drag` probe becomes a screen test: a drag RIGHT on the pad ends
+   with the cursor's projected pixel RIGHT of the zone box's centre, on the pitcher camera, and
+   the engine's sampled aim is the mirrored value; add the same drag on the batter camera.
+2. **The pitcher camera frames the plate like the reference.** Today the box at 72 ft is 15 px
+   tall so `PITCHING_ZONE_MIN_W_FRAC` floors it to 13% of the width while the figures stay true
+   size: a huge box over tiny men. The reference (`scratchpad/ref/reference-key-frames.jpg`, top
+   row) is a long lens from well behind the mound: the pitcher's back fills about half the band's
+   height, the batter and catcher are about 40% of his height, and the zone box at TRUE scale is
+   about 10% of the band's height. Move the camera back along the mound-to-plate line and narrow
+   its fov until those three proportions hold (measure them in a still, write the numbers beside
+   `CAMERAS.pitcher`), then delete the min-width floor; the box is drawn at true scale on both
+   cameras. `BALL_MIN_PX` may become unnecessary; keep it if the ball still draws under 8 px.
+   Probe `pitcher-frame`: the true box's projected height is between 8% and 13% of the band and
+   the batter figure's projected height is between 30% and 50% of the pitcher's.
+3. **The pitch's target is unmistakable.** The square marker from R7 is 26 px of thin red line
+   on brown dirt, drawn under the cursor circle; Matt could not see it. Replace it with a filled
+   marker: a white disc with a dark outline and a red centre, about 0.5 zone units across on the
+   1.6x batting box (about 40 px), drawn OVER the zone box and UNDER the cursor circle, at the
+   pitch's crossing point the moment the pitcher releases (sliding for a breaking pitch as now),
+   and never clipped when the pitch is a ball outside the box. Probe `target-marker` keeps its
+   position assertions; add a size assertion (at least 36 px across) and one ball outside the
+   box whose marker is still drawn.
+4. **The scoreboard is the most legible thing over the field.** The 48 px HUD bar (12 px text)
+   becomes a scoreboard block at the top-left of the field band, over the scene, like the
+   reference's: YOU and CPU runs in numerals at least 18 px, the inning arrow and number, and
+   three rows B / S / O of filled dots at least 10 px with their letters, plus the mini-diamond.
+   Nothing else in the band moves (pop, widget, HOME RUN). Probe `hud-legible`: the runs and
+   count numerals' computed font size, and the dots' size, at or above those floors.
+5. **The pitch history stops shouting.** In the BATTING state the 108 px strip of 92 px tiles
+   (one per pitch of the at-bat) becomes one 32 px row of small chips (code and mph, 11 px
+   text), and the field band takes the freed 76 px. The PITCHING state keeps its 108 px strip
+   (it is the pitch selector). This deliberately breaks BB-3b's "nothing moves between states"
+   rule for the strip, because the two states are separated by a cross-fade and the batting
+   state has no use for a selector-sized band; write that down in the CLAUDE.md entry. Every
+   fit check and `check-no-scroll` must stay green at both phone heights in both hosts.
+
+Deliverables: stills beside the reference frames: pitching idle (framing), a drag right on the
+pad with the cursor right of centre, the batting view with the marker at release, the scoreboard,
+the batting strip as chips. Probes as above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
+`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`, `node test-game-conventions.mjs`,
+`node baseball/js/test.js` green.
+
+### R9: figures and stadium, from the same recording
+
+Matt: *"There's still the problem of multiple batters appearing and glitches like that. The
+opposing team should be red. And can you add baseball hats? The stadium backdrop should be
+changed. It's bland right now."* Measured (`scratchpad/rec5/glitch-sheet.jpg`, 28.6 s and 46.4 s):
+at contact the batter-runner figure `rb` is placed at the plate and starts running while the
+BATTER figure is still standing in the box, so two navy figures share the plate for the first
+half second of every ball in play. R6 closed the other half of this (the return); this is the
+start.
+
+1. **The batter becomes the runner.** The instant `rb` is placed for a ball in play, the
+   `batter` actor is hidden; he reappears at `_returnToPlate()` for the next at-bat. Never two
+   figures in the box. The `one-batter` probe samples every frame for the first 800 ms after
+   `atBatEnd` and asserts at most one visible figure within 6 ft of the batter's box, as well
+   as its existing after-return check.
+2. **The CPU team is red.** The `home` colour keys in `actors.js` (both skins) send the shirt to
+   a red (about #c62828), pants to white, trim to a darker red; the human stays navy. Runners,
+   fielders, batter, pitcher and catcher all follow, since every figure reads its side from the
+   half (R6). `test-baseball-actors.mjs`'s colour-key check (never a skin tone) must stay green.
+3. **Baseball caps.** A low-poly cap per figure, parented to the head bone from `rig.js` so it
+   rides every clip: a dome (a sphere cut at about 45% height) plus a brim (a flattened short
+   cylinder segment forward of the face), in the figure's team colour, black for the umpire,
+   scaled and offset by measuring the head bone once (`render-actor.mjs --sheet` against
+   Idle, Swing, Pitch, Run, Crouch: the cap sits on the head in all five, never floats, never
+   sinks). Shared geometry, one material per colour. The catcher keeps his cap (backwards is a
+   bonus, not required). Structural check in `test-baseball-actors.mjs`: every placed actor has
+   a child named `cap` under its head bone.
+4. **The stadium reads like a ballpark, not a diagram.** Today: flat green, a grey ribbon of
+   stands whose crowd texture renders near-black, a bare sky. Build, with merged geometry and
+   no new textures over 256 px: a sky gradient with a few soft clouds; the outfield wall as a
+   padded green wall with a yellow line and a row of coloured ad panels (plain colour blocks
+   with simple shapes, no text); a crowd texture that reads as a crowd (dense multicolour
+   specks on a light ground, with aisle gaps); four light towers; a centre-field scoreboard
+   block; the backstop from R7 with the same treatment. The batter camera's framing is
+   unchanged in position; only what it looks at changes. Take stills from all three cameras
+   beside the reference's; the pitcher camera still shows stands behind the plate.
+
+Deliverables: stills of each camera before and after, a cap sheet from `render-actor.mjs`,
+the probes above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
+`node test-baseball-actors.mjs`, `node check-no-scroll.mjs baseball` green.
+
+### R8 record (shipped v870, 2026-09-21)
+
+From the stage's report: `PAD_X_SIGN = { pitching: -1, batting: 1 }` (ui.js) is the one place the
+pad's screen-to-engine sign lives; the engine's +x is still first base. The pitcher camera is at
+(-2.4, 7.0, -116), 55.6 ft behind the rubber, with its own `fov` 10.35 (`makeCameras` now honours
+a per-camera fov; batter and chase still share 50); measured: pitcher 59.5% of the band, batter
+47.8% of the pitcher, the true box 8.5% of the band. The three prose targets could not all hold
+at once because the box is a fixed fraction of the batter's height at this depth (box ≈ 0.3 x
+ratio x pitcher), so "about half" for the pitcher became 59.5%. `PITCHING_ZONE_MIN_W_FRAC` is
+gone. The marker is `TARGET_MARKER_R` 0.4 (radius), 41.7 x 50.6 px, filled white with a red
+centre, drawn over the box and under the cursor, outside the box for a ball. The HUD bar is gone;
+the scoreboard is an absolute card at the band's top-left (`.bb-sb-*`, strings `sb_b/sb_s/sb_o`).
+The batting strip is a 32 px chip row (`.bb-strip--compact`), so the BATTING band is 553 px tall
+and the PITCHING band 477 px (both were 429): BB-3b's "nothing moves between states" is broken
+for the strip on purpose. Probes `pitch-drag` (screen direction on both cameras), `pitcher-frame`,
+`hud-legible`, and `target-marker` (size, outside the box; end budget widened to 4 px at ship
+review after a 2.28 px sample). `pop-anchor`'s budget is 45 px.

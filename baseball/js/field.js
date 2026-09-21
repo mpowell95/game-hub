@@ -282,21 +282,34 @@ export function projectToCanvas(camera, v, w, h) {
 //   small, since on-screen size is the ratio of distances and he is a quarter of the way to the
 //   batter. The batting camera stands where the umpire's own head is, which is the honest reading:
 //   a camera cannot film the inside of its own operator. He is fully drawn from the other two.
-// pitcherCam: the pitching view. Behind and above the rubber on the third-base side, looking at the
-//   zone. The pitcher fills 54% of the frame, left of centre (x 30%), with his back to the camera;
-//   the zone is dead centre, the batter and catcher and umpire all in view behind it. Section 9
-//   also asks for "catcher and batter about 30%", which cannot be true at the same time as "the
-//   pitcher about 55%": on-screen sizes are in the ratio of distances and the two are 60 ft apart,
-//   so 55/30 would need the camera 72 ft BEHIND the mound with an 8.7 degree lens. The pitcher's
-//   size is the one that was kept; the batter measures 9%.
+// pitcherCam: the pitching view. R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2): Matt's
+//   recording measured the true zone box at 9 px wide - `PITCHING_ZONE_MIN_W_FRAC` in ui.js used
+//   to paper over it by drawing the box 4x its true size over TRUE-size figures, "a huge box over
+//   tiny men". A long lens fixes the actual complaint (box legible without lying about scale):
+//   pulled back to 55.6 ft behind the rubber (was 11.5) and narrowed to fov 10.35 (was 50), on the
+//   SAME mound-to-plate line, a touch higher (y 7.0, was 6.4). Measured (node, this file's own
+//   `projectToCanvas` against the real field band AFTER R8 removes the 48px HUD row - 393x477,
+//   not the old 393x429): pitcher 59.5% of the band's height (own head-to-shoe span), the TRUE
+//   (unscaled) zone box 8.5% of the band's height and 31.9 px wide, the batter 47.8% of the
+//   PITCHER's height and the catcher 44.9%. `PITCHING_ZONE_MIN_W_FRAC`'s floor is deleted with
+//   this - the box is now drawn at this true scale, never stretched. The three numbers the spec
+//   named (pitcher ~50%, batter/catcher ~30-50% of him, box 8-13% of the band) cannot all be hit
+//   at once: box height is a FIXED 0.3 of batter height in the world (1.8 ft / 6 ft), so
+//   `boxFrac = 0.3 x (batter/pitcher ratio) x pitcherFrac` is an identity, and box>=8% at
+//   ratio<=50% forces pitcherFrac>=53%; 59.5% was chosen to keep both the box (>=8%, here 8.5%)
+//   and the ratio (<=50%, here 47.8%) inside their own probed ranges with real margin, not sitting
+//   on either edge. `_zoneMap('pitching')` in ui.js now returns `k=1` unconditionally - see its
+//   own header.
+//   THE PITCHER IS NOT DRAWN FROM THE BATTER CAMERA and vice versa is untouched by this - only the
+//   pitcher camera's own numbers changed; `CAMERAS.batter` and its own fov are exactly R1's.
 // chaseCam: the ball in play. Sits at a fixed offset from the ball and looks at it, easing toward
 //   that offset by CHASE_LERP each rendered frame so the cut into the chase is a move, not a snap.
 export const CAMERAS = {
-  fov: 50,
+  fov: 50, // batter and chase share this; pitcher carries its own fov (below), a long lens.
   near: 0.5,
   far: 4000,
   batter: { pos: [0.6, 7.8, 13.1], look: [0, 2.3, -30] },
-  pitcher: { pos: [-2.4, 6.4, -72.0], look: [0, 3.0, ZONE.z] },
+  pitcher: { pos: [-2.4, 7.0, -116.0], look: [0, 3.0, ZONE.z], fov: 10.35 },
   // The chase offset was measured against what it has to SHOW, not chosen: at section 9's own
   // (0, 12, 28) the ball is 30 ft from the lens and draws 5 px across, which is the same "you
   // can't see where the ball goes" stage 8 was written to fix. At (0, 10, 22) it is 24 ft out and
@@ -331,8 +344,10 @@ export const CHASE_MIN_BACK_FT = 24;
 /** The three cameras, already aimed. `setAspect(a)` re-applies the portrait aspect on every
  *  resize; the chase camera is positioned by `Actors` every frame and only needs its aspect here. */
 export function makeCameras(aspect) {
+  // R8: `def.fov` overrides the shared `CAMERAS.fov` when a camera carries its own (the pitcher's
+  // long lens) - batter and chase have none and keep the shared value.
   const mk = (def) => {
-    const c = new THREE.PerspectiveCamera(CAMERAS.fov, aspect, CAMERAS.near, CAMERAS.far);
+    const c = new THREE.PerspectiveCamera((def && def.fov) || CAMERAS.fov, aspect, CAMERAS.near, CAMERAS.far);
     if (def) { c.position.set(def.pos[0], def.pos[1], def.pos[2]); c.lookAt(def.look[0], def.look[1], def.look[2]); }
     return c;
   };

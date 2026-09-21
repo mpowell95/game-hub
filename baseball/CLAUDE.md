@@ -4,6 +4,149 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R8: controls and HUD (2026-09-21)
+
+Five fixes off Matt's recording of v868 (`docs/BASEBALL-3D-BUILD.md` section 9, "R8"). No engine
+change, no beat change; presentation and one camera.
+
+**Item 1, the pad inversion: one sign, applied where the finger meets the pad.** Matt: "when I move
+left, it goes right" - pitching only. `this.cursor` IS the engine's own aim (`{x, y}` handed to
+`flyPitch`/`decideSwing` verbatim) and world +x still means "toward first base" everywhere; the bug
+was one layer up, in the flat screen-space PAD, which has no camera of its own. `_setCursorFromPad`
+mapped a rightward drag straight to `+cursor.x` regardless of state - correct for batting (the
+batter camera looks toward -z, so world +x draws screen-RIGHT there), backwards for pitching (the
+pitcher camera looks toward +z, so world +x draws screen-LEFT, and a screen-right drag has to
+become NEGATIVE engine x to still draw right). `PAD_X_SIGN = { pitching: -1, batting: 1 }` (ui.js)
+is the one new fact, applied identically in `_setCursorFromPad` (finger to cursor) and
+`_paintPadMarker` (cursor to the pad's own dot), so the pad's dot always sits where the finger
+actually is. The `pitch-drag` probe is rewritten as the spec asked: a SCREEN test on both cameras
+now (drag right on the pad, assert the projected pixel lands right of the zone box's own centre),
+plus, on the pitcher camera only, that the sampled engine aim is the MIRRORED value the drag
+implies - not the raw one the old probe checked (which is exactly why it read as passing on the
+shipped, inverted build).
+
+**Item 2, the pitcher camera: a long lens, chosen by measurement, not by eye.** Matt: "the strike
+zone when pitching is massive." The true zone box used to project 9px wide at the old camera
+(`CAMERAS.pitcher`: 11.5ft behind the rubber, fov 50), so `PITCHING_ZONE_MIN_W_FRAC` scaled the
+DRAWN box up to 13% of the canvas width over TRUE-size figures - "a huge box over tiny men," Matt's
+own words landing exactly. Measured (node, `field.js`'s own `projectToCanvas` against the real
+PITCHING-state field band - 393x477, not the pre-R8 393x429, since item 4 below frees the 48px the
+HUD used to reserve): the three numbers the spec named (pitcher ~50% of the band, batter/catcher
+30-50% of the pitcher, box 8-13% of the band) cannot all be hit at once. Box height is a FIXED
+fraction of batter height in the world (1.8ft / 6ft = 0.3, and the two are at nearly the same depth
+from a camera this far away), so `boxFrac = 0.3 x (batter/pitcher ratio) x pitcherFrac` is very
+nearly an identity - confirmed against the measured numbers to four significant figures. Hitting
+`boxFrac >= 0.08` at `ratio <= 0.50` (both ceilings the probe actually checks) forces
+`pitcherFrac >= 0.53`, already past "about half." `CAMERAS.pitcher` moved to `pos: [-2.4, 7.0,
+-116.0]` (was `[-2.4, 6.4, -72.0]`, so 55.6ft behind the rubber, was 11.5) with its own `fov: 10.35`
+(was the shared 50) - `makeCameras` now takes a per-camera `fov` override, batter and chase
+untouched. Measured after: pitcher 59.5% of the band's height, the batter figure 47.8% of the
+pitcher's (inside 30-50%, real margin from both edges), the TRUE box 8.50% of the band's height
+(31.9px wide) and 8.50% tall (40.5px) - both inside 8-13% with margin. `PITCHING_ZONE_MIN_W_FRAC`
+is deleted; `_zoneMap('pitching')` now returns `k = 1` unconditionally, the box drawn at true scale
+on both cameras, matching the spec's own instruction. `BALL_MIN_PX` (8) stays: the ball at the
+crossing, 72ft from this much-further-back camera, measures 9.41px, comfortably needing the floor
+less than before but still close enough to keep it live rather than gamble on removing it. New node
+probe `pitcher-frame` (in `test-baseball-device.mjs`, alongside `zone-world`/`ball-grows`, no
+browser needed) pins both ratios against their own bands; it needed its own `camsPitching` built at
+the PITCHING band's aspect, kept separate from the existing `cams` (now explicitly the BATTING
+band, 553px, renamed from the pre-R8 shared 429px) - the two states no longer share one field-band
+height (see item 5), so a probe testing one camera has to use THAT state's own aspect or it is
+measuring a camera that was never actually that shape.
+
+**Item 3, the batting target: a filled disc, not a thin square.** Matt, on the R7 square: "26px of
+thin red line on brown dirt... Matt could not see it." Replaced with a white disc, a dark outline,
+a red centre dot - `TARGET_MARKER_R` (ui.js) is now the disc's own RADIUS in zone units, 0.4 (was
+0.32, half of the square's side). Measured against the real batting camera at the NEW (taller,
+553px) batting band: 41.7px across on the narrower axis, 50.6px on the taller - comfortably past
+the spec's own 36px floor, close to its "about 40px." Drawn in the same order as the square it
+replaces (first, under the mode's CONTACT/POWER circle) and never clipped: it is drawn at whatever
+pixel `map.toPx` returns, on or off the true box, exactly like the cursor circle beside it - a
+pitch aimed for a ball outside the zone still shows a marker where it is really going, verified
+with a forced pitch at engine x=1.8 (|x|>1, clearly a ball). The `target-marker` probe keeps its
+position assertions (marker starts at the straight-line spot, ends at the true crossing, moves for
+a breaking pitch) unchanged, and gains two: the marker's own size (>= 36px on the narrower axis)
+and the outside-the-box case (a forced `aim: {x: 1.8, y: 0}` pitch, asserting the marker still
+draws).
+
+**Item 4, the scoreboard: a card, not a bar.** Matt: "the current count and the overall score is
+difficult to find or see." The old `.bb-hud` was a 48px-tall flex ROW across the whole width, 11px
+text, permanently reserving that height whether or not anyone could read it. It is now a small
+card, absolutely positioned top-left INSIDE `.bb-field-wrap` - over the scene, the reference's own
+layout - and `.bb-hud` keeps its CLASS NAME (`test-baseball-device.mjs`'s `hud-vs-back` probe reads
+it by that name; moving it inside the field-wrap, which itself starts below the topspacer that
+already clears the hub's back pill, keeps that probe green with no changes needed) while its CSS is
+rewritten entirely. YOU/CPU runs at 19px (floor 18, per the spec's own `hud-legible` probe), the
+inning arrow and number, three rows of B/S/O - each row now carries its OWN LETTER beside the dots
+(colorblind rule: never colour alone), dots themselves grown 5px to 10px (floor 10) - and the
+mini-diamond, unchanged (`basesSvg`). The batter's jersey/position line (`.bb-hud-batter`) is
+dropped: the spec names four things and a fifth is not "the most legible thing," it is clutter
+again. Because `.bb-hud` LEFT the flex column entirely, `.bb-field-wrap` gets its 48px back for
+free - this is what makes the pitcher camera's own band 477px instead of 429, which item 2's whole
+tuning is measured against. New probe `hud-legible` (browser): computed font sizes for the runs and
+dots, the three row letters present, the card positioned inside the field band. One side effect,
+not a regression: `pop-anchor`'s budget widened 30px to 45px, because the BATTING band's own growth
+(429px to 553px, items 4 and 5 together) narrows the batter camera's effective aspect and moves the
+raw projected batter-head point closer to the band's left edge for a right-handed batter than it
+used to sit - `_positionPop`'s own clamp (unchanged) now engages a little further from that raw
+point to keep the whole word on screen, which is correct behaviour, and `insideBand` (the thing
+that actually matters) stays true either way. Written down plainly: a future session reading a
+`pop-anchor` distance near 40px should not read it as drift, this is where it lives now.
+
+**Item 5, the batting strip: a whisper, not a shout - and a deliberate break of BB-3b.** Matt: "the
+type of pitch is way too prominent, it takes up a ton of space." The 108px/92px-tile strip made
+sense as a PITCH SELECTOR (pitching mode's own job, unchanged); a batter never picks from it, it
+just shows the last 8 pitches of the at-bat resolving one by one, so the same footprint read as a
+wall of mostly-empty wells for most of an at-bat. Batting now paints `.bb-strip-chips`: one 32px
+row of small chips, each a two-letter pitch code + mph + the same shape mark (■/●) the tiles
+already carried, 11px text (the UX floor, not shrunk past it). `.bb-strip` itself carries
+`bb-strip--compact` in batting mode (toggled in `_paintStrip`, which now sets the class on every
+call regardless of mode, so a stale class can never survive a mode flip) - that class is what
+actually shrinks the band; pitching is byte-for-byte unchanged, still 108px, still the eight-tile
+selector. **This deliberately breaks BB-3b's "nothing moves between states" rule for the strip
+band, and only for it.** It is safe here in a way it would not be elsewhere: the two states are
+separated by a cross-fade (`_crossFadeSwap`), so the size change happens while the band sits at
+opacity 0 behind the crossfade snapshot - nothing is ever seen mid-resize - and batting has no use
+for a selector-sized band to begin with, so there is no "in-between" state the rule was protecting.
+The freed 76px goes to `.bb-field-wrap`, same as item 4's 48px, so the BATTING band's total height
+is 429 (pre-R8) + 48 (item 4) + 76 (item 5) = 553px - the number item 3's marker size and item 2's
+own `camsPitching`-vs-`cams` split are both measured against. **The one real mechanical risk this
+introduces**: the field-wrap's SIZE now depends on `state.mode`, and nothing was watching for that
+before - the existing `ResizeObserver` only observes the OUTER mount host (`.bb-root` is always
+viewport-sized; an internal flex reflow never fires it). `_onEngineEvent`'s `halfInningStart` swap
+handler now calls `this._sizeCanvas()` (when it exists) right after `_paintHud()`/`_paintStrip()`,
+before the trailing `_drawStaticField()` - all while still behind the fade, so the resize and its
+result are both invisible until the swap completes. Skipping this would have left the canvas the
+WRONG SIZE for whichever state just started, every single half-inning, forever.
+
+**Facts for whoever reads this next:**
+- `zone-world`'s own node-only `cams.batter` measurement (no browser) is now built at H=553 (was
+  429), so its true-box reading moved to 65.2x79.0px (was 50.6x61.3) - a band-size fact, not a
+  regression. `ball-grows` shares that same `cams.batter`/H=553 but has no fixed-number baseline
+  (only monotonicity), so it needed no change beyond sharing the corrected H. `zone-scale`'s own
+  hardcoded comparison baseline in `test-baseball-device.mjs` (a SEPARATE, browser-live measurement
+  of the same true box) was updated to match 65.2x79.0px, with the reasoning written in place so the
+  next band-size change updates the right number instead of chasing a stale one.
+- `CAMERAS.pitcher` now carries its own `fov` (`makeCameras`'s `mk()` reads `def.fov ||
+  CAMERAS.fov`); `CAMERAS.batter` and `CAMERAS.chase` still share the top-level `fov: 50`. A THIRD
+  camera-specific fov, if one is ever needed, follows the same pattern.
+- The batting and pitching field bands are DIFFERENT SIZES now (553 vs 477px), a fact that did not
+  exist before this stage. Any future probe or tuning pass that measures "the field band" has to
+  say which state it means, or it is silently measuring the wrong one - `pitcher-frame` and
+  `zone-world`/`ball-grows` are the two places this already mattered and both now say so in their
+  own comments.
+- `PAD_X_SIGN`, `PITCHING_ZONE_MIN_W_FRAC` (deleted), `TARGET_MARKER_R` (redefined from a square's
+  half-side to a disc's radius, 0.32 -> 0.4) and `BATTING_ZONE_SCALE` (untouched) are all in
+  `baseball/js/ui.js`; `CAMERAS`, `CHASE_MIN_HEIGHT_FT`/`CHASE_MIN_BACK_FT`, `BALL_MIN_PX` and the
+  rest of the world/camera constants stay in `baseball/js/field.js` - the same split R7 already
+  documented, unchanged by this stage.
+- `node baseball/js/test.js` (2712 checks, unaffected), `node test-i18n-strings.mjs` (baseball: 85
+  en keys, 0 missing from es - `sb_b`/`sb_s`/`sb_o`, the scoreboard's row letters, are the only new
+  strings this stage added), `node test-game-conventions.mjs` (11 passed, no new font-size gap -
+  every new rule in `baseball.css` is 11px or larger) and `node check-no-scroll.mjs baseball` (4
+  screens, 0 scroll) all green, unaffected in the ways that matter - this stage never touched
+  `baseball/js/engine/`, `poses.js`, or any `FEEL` beat.
+
 ## The PLAY probe (2026-09-20)
 
 Baseball was the one game `test-visual.mjs`'s own "NEVER PLAYED BY ANYTHING" list still named -
