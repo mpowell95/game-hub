@@ -540,7 +540,7 @@ class Hoops4 {
     this.recorded = false;
     // A new match cannot inherit the last one's falling disc, or _whenLanded would hold its first
     // move for a drop that will never land.
-    this._dropping = false; this._afterDrop = null;
+    this._dropping = false; this._afterDrop = null; this._predicted = null;
     this.renderPlay();
     try {
       const [phys, mach, rend] = await Promise.all([
@@ -853,7 +853,11 @@ class Hoops4 {
     if (st && !st.done) {
       this.engine.phys.step(BOARD, st, dt);
       for (const ev of this.engine.phys.takeEvents(st)) {
-        if (ev.type === 'capture') { this.captured = ev.hole; this.rend && this.rend.flashRim(ev.hole); }
+        if (ev.type === 'capture') {
+          this.captured = ev.hole;
+          this.rend && this.rend.flashRim(ev.hole);
+          this._dropOnCapture(ev.hole);
+        }
       }
     } else if (st && st.done) {
       this.throwState = null;
@@ -894,7 +898,22 @@ class Hoops4 {
       // A miss or a full column changes no cell, so there is nothing to drop and it paints at
       // once. `onDone` is what makes the game-over card wait: a winning disc's card would
       // otherwise cover the drop that won.
-      if (Number.isInteger(res.row) && Number.isInteger(res.col)) {
+      // `_predicted` is the cell _dropOnCapture already started falling into, and it is matched
+      // on the PREDICTION rather than on whether a disc is still in the air: a short fall
+      // (0.22 s at the top row) can finish before the throw resolves (0.35 s median), and
+      // restarting on that would replay the whole drop a second time.
+      const pre = this._predicted; this._predicted = null;
+      const landed = Number.isInteger(res.row) && Number.isInteger(res.col);
+      if (pre && landed && pre.c === res.col && pre.r === res.row && pre.who === res.by) {
+        // The disc the player is already watching IS this move. Hand it the real grid rather
+        // than restarting it, or the fall would visibly jump back to the top. Once it has
+        // already landed this is just the authoritative repaint of the same picture.
+        this.rend.commitDrop(m.cells(), win);
+      } else if (pre) {
+        // The prediction did not survive the rules (a full column). Drop it and paint honestly.
+        this._dropping = false; this._afterDrop = null;
+        this.rend.cancelDrop(m.cells(), win);
+      } else if (landed) {
         this._dropping = true;
         this.rend.startDrop(m.cells(), win, res.col, res.row, res.by, () => {
           this._dropping = false;
@@ -907,6 +926,38 @@ class Hoops4 {
       this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
     this.paintHud();
+  }
+
+  /**
+   * THE DISC STARTS FALLING THE MOMENT THE BALL IS IN THE BASKET, not when the throw resolves.
+   * Matt: "There's a tiny lag between when the ball goes into the basket and when it's shown
+   * falling... It should look like it's the same ball that goes in the basket falling down the
+   * column." Measured over the 231-throw grid, resolving takes a further 0.35 s on average and
+   * 0.92 s at worst, because capture COMMITS the score and the ball then falls 0.26 m through the
+   * throat before `finishAt` fires. That whole window was dead time on screen.
+   *
+   * The cell is a PREDICTION and it is safe to make here for one reason only: this machine has no
+   * rimout, so a captured ball scores in that column 100% of the time (hoops4/CLAUDE.md, "There is
+   * NO rimout on this machine"). The prediction is never authoritative - `_paintShot` hands the
+   * real grid to `commitDrop`, or cancels the drop outright if the rules refused the move.
+   */
+  _dropOnCapture(hole) {
+    const m = this.match;
+    const H = hole && BOARD.geom.holes[hole];
+    if (!H || !m || m.over || !this.rend || this._predicted) return;
+    const col = H.value - 1;
+    if (!m.board.canPlay(col)) return;   // a full column is a miss, and no disc falls
+    const row = m.board.heights[col];
+    const who = m.turn;
+    const cells = m.cells();
+    cells[col][row] = who;               // the predicted grid, replaced by commitDrop
+    this._predicted = { c: col, r: row, who };
+    this._dropping = true;
+    this.rend.startDrop(cells, null, col, row, who, () => {
+      this._dropping = false;
+      if (this.disposed) return;
+      if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+    });
   }
 
   /** Run `fn` once the falling disc has landed, or immediately if nothing is falling. */

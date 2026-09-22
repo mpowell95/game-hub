@@ -628,6 +628,14 @@ export class Renderer {
    * bounces once. Driven by the game's own loop (`stepDrop` from ui.js's tick) rather than its own
    * rAF, so it cannot outlive the screen or run twice.
    *
+   * **It starts on the CAPTURE event, not when the throw resolves.** Resolving is a further 0.35 s
+   * on average (0.92 s at worst) while the ball falls the 0.26 m through the throat that commits
+   * the score - and Matt saw exactly that as a gap: "There's a tiny lag between when the ball goes
+   * into the basket and when it's shown falling. There shouldn't be. It should look like it's the
+   * same ball that goes in the basket falling down the column." So the cell is PREDICTED at
+   * capture (safe: this machine has no rimout, and a capture is a move 100% of the time) and
+   * `commitDrop` hands over the authoritative grid when the move lands, without restarting.
+   *
    * `onDone` is how the game-over card waits for it: without that, a winning disc's card covers
    * the very drop that won.
    */
@@ -640,6 +648,26 @@ export class Renderer {
       onDone: typeof onDone === 'function' ? onDone : null,
     };
     this.setGrid(cells, win, this._drop);
+  }
+
+  /**
+   * The move is now real. The drop was STARTED on the capture event, from a predicted cell, so
+   * this hands it the authoritative grid without restarting the animation - the disc the player
+   * is watching fall is the one that lands.
+   */
+  commitDrop(cells, win) {
+    if (!this._drop) { this.setGrid(cells, win); return; }
+    this._drop.cells = cells;
+    this._drop.win = win;
+  }
+
+  /** The prediction was wrong (a full column, a rules refusal). Drop the disc and repaint. */
+  cancelDrop(cells, win) { this._drop = null; this.setGrid(cells, win); }
+
+  /** What cell the in-flight drop is for, or null. ui.js checks it against the real move. */
+  dropTarget() {
+    const d = this._drop;
+    return d ? { c: d.c, r: d.r, who: d.who } : null;
   }
 
   /** Advance the fall. Called every frame by ui.js's tick; a no-op when nothing is falling. */
