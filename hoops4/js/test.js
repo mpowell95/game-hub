@@ -12,6 +12,7 @@
 import { BOARD, COLS } from './boarddef.js';
 import { buildMachine } from './machine.js';
 import { simulateThrow, startThrow, substep } from './physics.js';
+import { readFileSync } from 'node:fs';
 
 const G = BOARD.geom;
 const M = buildMachine(G);
@@ -35,6 +36,7 @@ const settleTimes = [];
 const parkedAt = [];
 let capturedCount = 0, paidCount = 0;
 let missCount = 0, bouncedMisses = 0, bounceTotal = 0, bounceBest = 0;
+let lateralSum = 0, forwardSum = 0, bounceN = 0;
 
 for (let p = 0; p < POWERS; p++) {
   for (let a = 0; a < AIMS; a++) {
@@ -98,9 +100,17 @@ for (let p = 0; p < POWERS; p++) {
       if (!capturedBy && st.captured) capturedBy = st.captured;
       // A BOUNCE, measured rather than inferred from an event name: the ball was falling and is
       // now rising fast enough to see. This is the same definition `probe-bounce.mjs` uses.
-      const vy = st.ball.velocity.y;
-      if (prevVy < -0.25 && vy > 0.45) { bounces++; best = Math.max(best, vy); }
-      prevVy = vy;
+      const v = st.ball.velocity;
+      if (prevVy < -0.25 && v.y > 0.45) {
+        bounces++; best = Math.max(best, v.y);
+        // AND WHICH WAY IT WENT. world x is the face's u axis (across the hoop row); +z is toward
+        // the player. Matt: "I want it to bounce only horizontally." Counting bounces cannot see
+        // the difference between a bounce that moves a shot to the next column and one that walks
+        // it off the front edge, and the build that shipped without this measurement traded the
+        // first for the second.
+        lateralSum += Math.abs(v.x); forwardSum += Math.max(v.z, 0); bounceN++;
+      }
+      prevVy = v.y;
     }
     if (capturedBy) {
       capturedCount++;
@@ -212,6 +222,37 @@ check('the surfaces a miss lands on are live too, not just the rim',
   `board ${G.mat.boardRest}, riser ${G.mat.riserRest}`);
 check('capture is harder than HOT SHOT, so a shot that is not a swish can bounce out',
   G.captureDrop > 0.35, 'captureDrop ' + G.captureDrop);
+
+// ---------------------------------------------------------------------------------------------
+// 1b. AND THE BOUNCE GOES SIDEWAYS, NOT FORWARDS
+// ---------------------------------------------------------------------------------------------
+// Matt, on the build that satisfied section 1: "can we make it so it only bounces sideways? Like
+// right now it bounces forward and rolls off the front of the machine a lot... I want the bounce
+// to add some randomness, not make the game measurably more difficult." Section 1's numbers
+// cannot tell those apart - they were all 'how big', none of them 'which way' - so a build can
+// pass every one of them and still be the build he was complaining about. This is the bar that
+// goes red if the bounce turns forward again.
+const latRatio = lateralSum / Math.max(1e-9, forwardSum);
+console.log(`per bounce: lateral ${(lateralSum / Math.max(1, bounceN)).toFixed(2)} m/s, `
+  + `forward ${(forwardSum / Math.max(1, bounceN)).toFixed(2)} m/s   ratio ${latRatio.toFixed(2)}:1\n`);
+check('a bounce goes SIDEWAYS more than it goes forward (Matt: "only bounces sideways")',
+  latRatio >= 2.0, `${latRatio.toFixed(2)}:1 lateral:forward`);
+check('the sideways redirect is switched on', (G.bounceSideways || 0) > 0,
+  'bounceSideways ' + G.bounceSideways);
+// NO MAGNETISM (MACHINE-SPEC section 9). The redirect turns the horizontal velocity toward the u
+// axis and takes its DIRECTION from the drift the ball already had. It must never consult a hole.
+// A structural check, because this is exactly the rule a future session would "improve" by
+// nudging the ball toward the nearest hoop, and no sweep would fail if it did.
+const src = readFileSync(new URL('./physics.js', import.meta.url), 'utf8');
+// GUARD: search for the END marker FROM the start marker. `const p = ball.position;` also appears
+// in startThrow's collide listener, 60 lines EARLIER - a bare indexOf found that one, sliced
+// backwards, and this went red on a rule that was perfectly clean.
+const ruleAt = src.indexOf('0a. THE BOUNCE GOES SIDEWAYS');
+const rule = ruleAt < 0 ? '' : src.slice(ruleAt, src.indexOf('const p = ball.position;', ruleAt));
+const ruleBody = rule.split('const K =')[1] || '';
+check('the sideways redirect never reads a hole position (no magnetism)',
+  ruleBody.length > 100 && !/G\.holes|holes\[|nearestHole/.test(ruleBody),
+  'physics.js section 0a, ' + ruleBody.length + ' chars of code');
 check('a rim is never touched by a fin', true);   // enforced geometrically by `inset`; see below
 
 // A fin must not narrow a mouth: every fin box must clear both neighbouring collars.

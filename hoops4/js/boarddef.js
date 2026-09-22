@@ -246,6 +246,22 @@ export const BOARD = {
     jitterAim: 0.013,
     jitterSpeed: 0.012,
 
+    // HOW MUCH OF A FORWARD BOUNCE IS TURNED SIDEWAYS, 0..1. The rule and the reasoning are in
+    // physics.js section 0a; this is the dial, and 1.0 means Matt's words literally: a bounce
+    // comes off SIDEWAYS, never toward the player. Measured over the 11x21 grid
+    // (`reference/hoops/probe-bounce.mjs`), against the two builds before it:
+    //
+    //                                    scored   parked   lat:fwd   misses bouncing / rebound
+    //   v889, before any bounce work      30.7%     5.2%    1.54:1        48%  /  0.43 m/s
+    //   v890, the build Matt played       22.9%     6.1%    1.43:1        59%  /  0.71 m/s
+    //   this: K 1.0, ringRest 0.55        29.4%     7.8%    4.37:1        56%  /  0.61 m/s
+    //
+    // The pair matters, not either number: K alone is worth about two points of scoring, and the
+    // rest of the way back to v889 is `ringRest` coming down from 0.72. The sweep behind both
+    // (every combination of K in 0..1 and ringRest in 0.42..0.72) is in hoops4/CLAUDE.md,
+    // "The bounce goes SIDEWAYS". Re-run the probe after changing either.
+    bounceSideways: 1.0,
+
     // --- bounce and grip ------------------------------------------------------------------------
     mat: {
       // THE SHELF BOUNCES, AND THIS IS THE HALF OF "BOUNCIER" THAT WAS MISSING. Matt, twice:
@@ -284,14 +300,24 @@ export const BOARD = {
       // rattle that can still drop, or can still bounce out.
       ringFric: 0.06,
       // BOUNCIER AGAIN, 2026-09-22. Matt, having played it: "i'd like for them to be bouncier."
-      // 0.46 -> 0.62, which is 3.4x THE CLASSIC (0.18) and more than twice HOT SHOT (0.30). What
-      // makes that safe is the THROAT: a captured ball is contained by a wall 8 ball-radii tall,
-      // so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4 and
-      // 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce number
-      // that broke it would go red rather than quietly leak balls into the wrong column.
-      ringRest: 0.72,
+      // 0.46 -> 0.62 -> 0.72, which is 4x THE CLASSIC (0.18) and more than twice HOT SHOT (0.30).
+      // What makes that safe is the THROAT: a captured ball is contained by a wall 8 ball-radii
+      // tall, so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4
+      // and 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce
+      // number that broke it would go red rather than quietly leak balls into the wrong column.
+      //
+      // AND BACK TO 0.55 THE SAME DAY, which is not a reversal of that - it is the price of the
+      // other half of what he asked for. Matt, on the 0.72 build: "the bounce is good... I want
+      // the bounce to add some randomness, not make the game measurably more difficult/players
+      // measurably less accurate." Measured, 0.72 WAS measurably harder: 22.9% of the test grid
+      // scored against 30.7% before the bounce work, and of every knob on this machine the rim is
+      // the one that moves that number - a rim that lively fires a shot that is not a swish
+      // clean off the row. 0.55 is still 1.8x HOT SHOT and 3x THE CLASSIC, the rest of the
+      // machine (shelf 0.58, display panel 0.70) carries the bounce he can SEE, and the grid
+      // comes back to 29.4%. The whole sweep is in hoops4/CLAUDE.md, "The bounce goes SIDEWAYS".
+      ringRest: 0.55,
       ring100Fric: 0.06,
-      ring100Rest: 0.72,
+      ring100Rest: 0.55,
       deadFric: 0.06,
       deadRest: 0.32,
       backFric: 0,
