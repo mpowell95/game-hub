@@ -1805,3 +1805,46 @@ test-baseball-device.mjs`, `node test-visual.mjs baseball`, `node check-no-scrol
 `node players-agg.test.mjs`, `node test-game-conventions.mjs` green. `database.rules.json`'s
 `careers` branch must be published by Matt before a push can land; until then every push records
 `HEALTH_DENIED` and the career plays locally, which is the designed state.
+
+### R14 record (shipped v887, 2026-09-22)
+
+From the stage's report and the ship review: `baseball/js/build.js` derives the Quick Play budget
+and cap from `CAPS` (per side, budget/cap: Little League 15/10, High School 30/14, College 42/18,
+Minors 54/22, Majors 66/26); `scalePreset` repairs rounding by largest remainder so every preset
+sums to the budget at every league and never exceeds the cap (Slugger at Majors: Power at 26, the
+rest carried over). The setup screen's player chip opens the player screen: hand toggle (locked to
+the stored hand once a career records it), the 4x2 preset grid, two columns of three segmented
+bars with a points-left pill each, Randomize and Done; measured to fit at 393x852 and 390x664 in
+both hosts with margin below Done. The build is stored as `gamehub.baseball.v1.quickPlay`
+(read-modify-write beside the store's `career` field). `_startGame` plays the stored build and
+hand instead of a random preset and a coin flip. `breakOffsetFor` takes the pitcher's Spin points
+and multiplies the handed break (curveball, slider, screwball, cutter) by `1 + pts * breakPerPt`;
+Spin 0 is the old table, and the `pitch-drag` probe now pins Spin to 0 through `setBuild` so it
+still reads `BREAK_OFFSET` raw. A dark-mode bug found by reading pixels off the still, not by
+eye: the dark rule for bar cells outranked the filled rule on specificity, so filled and empty
+cells were the same grey; `:not(.is-filled)` closes it. Ship review renamed the skill labels to
+the design doc's own (Accuracy, Power, Speed / Speed, Accuracy, Spin; Contact is rejected by name
+in section 6). Sim after the Spin wiring, reported not tuned: Gold at Minors/Majors 15.0/15.0 to
+7.5/7.5 seasons (targets 3.75/5.25 still failing), College season band 0.636 to 0.675 (band
+0.57 to 0.67, a new narrow fail), champion-game win 0.400 to 0.444, perfect-season reachability
+0.733 to 0.833. Suites: `baseball/js/test.js` 2799, device 44 of 44, visual 20 of 20,
+`check-no-scroll` 8 of 8.
+
+### R15-A record (shipped v887, 2026-09-22)
+
+`baseball/js/engine/career.js` (pure: `newCareer`, `startSeason`, `nextGame`, `startGame`,
+`checkpoint`, `finishGame`, `resolveSeason`, `earn`, `spend`, `capRoom`, `validateState`,
+`historyRow`, `gameStatsFromEvents`, plus the builders R15-B uses) and `baseball/js/career-io.js`
+(the one file that touches `js/career-store.js` and `js/game-stats.js`: `loadCareer`,
+`startCareer`, `saveCheckpoint`, `saveAtBat`, `saveGameEnd`, `recordGameResult`, `retire`,
+`installLifecycle`/`uninstallLifecycle`). The state adds `cap` (the live per-skill cap, Math.max
+only), `pointsEarned` and `pointsLost` to the spec's block. Measured by `test-baseball-career.mjs`
+(293 assertions): gross yield for a 9-3 season with a Gold is 38 / 27 / 15 / 13 / 12 by league,
+Little League's 38 against a room of 30 loses 8, exactly the design doc's worked example, because
+the trophy bonus is paid against the old league's cap and the cap rises afterwards. The playoff
+cut sits at more than 4 wins because `scriptedStandings` breaks every tie against the player.
+Playoff wins pay nothing; Majors Gold counts a title and stays in Majors; a perfect season needs
+every regular and playoff game won in a Majors season. `js/career-store.js` gained
+`newCareerDoc`; `js/game-stats.js` gained `recordBaseballCareerStarted` (additive, exempt from the
+rate gate as a lifecycle event). `sim-baseball.mjs` was left on its own loop: re-seeding it from
+the careerId would invalidate every recorded scoreboard while measuring nothing new.
