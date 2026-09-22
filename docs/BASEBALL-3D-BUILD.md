@@ -1878,3 +1878,72 @@ team names (design doc open item 12) is decided. Standings still use the `rawWin
 CPU record tops out at 7-0 beside the player's 12-game record. Suites: device 48 of 48, visual
 20 of 20, `check-no-scroll` 16 of 16, `baseball/js/test.js` 2799, `test-baseball-career.mjs`
 293.
+
+### R16: the career economy, rebuilt from measurement (2026-09-22)
+
+Matt: *"Rework the baseball career economy from scratch... Little League is basically a tutorial...
+each league after that should feel like a real step up... Winning the World Series in the majors
+should take at least 2 seasons... Measure the difficulty with the simulator rather than
+estimating."* Then: *"Little league should have a shorter season. And all teams should make the
+playoffs... just little league."* Then: *"let's go with your recommendation."* The full study, with
+every measured number, is the proposal file sent on 2026-09-22 (revision 3); its driver is
+`scratchpad/econ/career-sim.mjs` in the session scratchpad and becomes a repo tool in this stage.
+
+What the study found: played as a real career, the shipped economy is trivially easy (median
+player, first-attempt Gold 99 / 97 / 79 / 68 / 51 percent, a World Series in six seasons, every
+time), because `sim-baseball.mjs` always tested a player 2 to 11 points per skill weaker than a
+real career player, `teams.js` generates CPU rosters at half their stated level (a literal 0.5 in
+`allocateSkills`), the contact circle at high skill is wider than the strike zone, and four of six
+skills do nothing.
+
+1. **Seasons, playoffs, points.** Per league: Little League is a 4-team league (the player plus
+   makeLeague slots 1, 4 and 7), 3 regular games (one against each), every team in the playoffs
+   (semifinal by seed, final), points win 6 / loss 2 / Bronze 4 / Silver 8 / Gold 12. High School
+   9 teams, 8 games, 3 / 1 / 3 / 5 / 8. College 10 games, 2 / 0 / 3 / 5 / 8. Minors 12 games,
+   2 / 0 / 2 / 4 / 7. Majors 14 games, 1 / 0 / 2 / 4 / 6. Top 4 of 9 with semifinal and final from
+   High School up. Caps 10 / 14 / 18 / 22 / 26 unchanged. `SEASON.gamesPerSeason` stays as a frozen
+   fallback for old snapshots (THE LAW rule 5); `startSeason` snapshots games, league size and
+   bracket beside cap and points.
+2. **Standings.** CPU records scaled to the season length (`scaledToSeason`, CPU rank r finishes
+   `round(n * r / (size - 1))`); the player wins ties. Schedule generator for any length and any
+   league size: ascending, champion once and last, extras on the middle slots, identical to
+   `repeatMiddle` at 12.
+3. **CPU level.** Two new tables replace the literal 0.5: `CPU_ROSTER_LEVEL` (mean skill points
+   per CPU player, little 4.1 / highschool 10.7 / college 16.4 / minors 21.0 / majors 22.1, the
+   study's roster multipliers 1.4 / 2.0 / 2.2 / 3.3 / 2.5 over today's means) and
+   `CPU_ROSTER_CEILING` (9 / 13 / 17 / 21 / 25). The slot ladder, styles and behaviour tables are
+   unchanged; `CPU_SIGMA_MIN_MS`, `CPU_LEVEL_SHORTFALL` and `LEAGUE_TIMING_WINDOW_MULT` unchanged.
+4. **Engine constants.** `FEEL.engine.cursorR` 0.55 / 0.35 to 0.34 / 0.22 with a new
+   `LEAGUE_CONTACT_MULT` (little 1.6, highschool 1.3, the rest 1.0) applied where swing.js reads
+   it; `SKILL_EFFECT.hitAcc.contactRadiusInPerPt` 0.09 to 0.045; `FEEL.engine.aimScatter` 0.12 to
+   0.30; `pitchAcc.throwAccuracyPerPt` 0.01 to 0.038; `pitchSpd.throwMphPerPt` 0.5 to 3.0;
+   `pitchSpin` break 0.02 to 0.05 and changeup gap 0.01 to 0.025; `AIM_CORNER_BIAS_BASE` /
+   `_SCALE` 0.9 / 0.9 to 0.62 / 0.30.
+5. **Three engine fixes so the pitching skills exist.** Pitch speed: the timing window scales
+   with time to the plate (`timeToPlateS / referenceFlightS`, threaded from the pitch into the
+   swing decision, bunt included). Accuracy: the corner aim resolves inside the zone (item 4).
+   Spin: the pitch is aimed at `target minus break` so the break lands on the aim, and the strike
+   call is unchanged in meaning; the batting-side target marker keeps showing the real crossing.
+6. **The simulator tells the truth.** `sim-baseball.mjs`: the player's skills per league become
+   the career ARRIVAL levels (5 / 10 / 14 / 18 / 22 per skill), one agent per game, the model
+   batter gets `skills` so power mode exists, `seasonsToCap` against the real room, runs per game
+   reported, the Perfect Season gate two-sided (2 to 10 percent), `--quick` never decides a band.
+   The career driver joins the repo as `sim-baseball-career.mjs` (plays whole careers through the
+   real engine and the real `career.js`, not a mirror; N and tier as arguments; prints first-attempt
+   Gold per league with intervals, seasons per league, seasons and games to the first title, the
+   Perfect Season rate) with a root CLAUDE.md row. Its assertion form pins: median first-attempt
+   Gold little >= 90, highschool 70 to 90, college 40 to 65, minors 25 to 45, majors <= 15; median
+   seasons to the first title 8 to 13; Majors seasons before it >= 2; Perfect Season 2 to 12.
+7. **Tests and docs.** `test-baseball-career.mjs` fixtures move to the new shape (the worked
+   example becomes a 3-0 Little League sweep plus Gold paying 30, all 30 fitting); `baseball/js/
+   test.js` contact fixtures recalibrated, a test for the flight-time window and the aim
+   compensation; `season.js` tests for the generator at every length and the 4-team bracket;
+   design doc sections 4, 7 and 8 restated with the measured bands (99.7 / 90 / 80 / 71 / 60);
+   `baseball/CLAUDE.md` entry with the study's scoreboard.
+8. **Screens.** Career home at Little League shows 4 standings rows and "Game n of 3"; the
+   season line names the playoff round; nothing else changes. The device probes' `career-season`
+   fixture moves to the new season shape.
+
+Deliverables: `node sim-baseball-career.mjs --assert` green at the median tier with N >= 150, the
+suites in item 7, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs
+baseball`, `node check-no-scroll.mjs baseball` green; stills of career home at Little League.
