@@ -65,18 +65,9 @@ on the stats/sync code they mostly govern):
 
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
-Matt (2026-08-04), after a session pushed a finished game to its feature branch and stopped
-there, leaving it invisible on the real site: *"Anytime I say, commit, push, or deploy, it means
-make it live on the gamehub app... Do not respond until it's fucking live."*
-
-**THE TRIGGER IS NOT THE WORD, IT IS THE REQUEST** (Matt, 2026-09-01, after a session fixed
-Skeeball's launch, pushed the branch, and asked whether to merge: *"ugh. you should know to deploy
-it. we've discussed this many times"*). This rule was written down as three words - commit, push,
-deploy - and a session read that as a whitelist, so **"fix it" got treated as a request for a diff
-rather than a request for a working app.** It is not. Any instruction to change, fix, add or
-remove something in this app is an instruction to make that change live, and the deploy is part of
-the work, not a separate decision to bring back for approval. A fix sitting on a branch has not
-fixed anything for the people playing the game.
+Any instruction to change, fix, add or remove something in this app is an instruction to make
+that change live, and the deploy is part of the work, not a separate decision to bring back for
+approval. A fix sitting on a branch has not fixed anything for the people playing the game.
 
 Asking first is only right for a genuinely destructive step this sequence does not cover (a
 force-push, a history rewrite) - never for the ordinary merge-and-deploy below. If the change
@@ -101,27 +92,21 @@ This whole sequence is pre-authorized by this instruction; it does not need to b
 per session, and it does not need Matt to have used one of the three words. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
-## When Matt asks what you are doing, ANSWER HIM. Immediately.
+Full incident and rationale: `docs/CLAUDE-HISTORY.md#asking-for-a-change-means-live-on-the-deployed-game-hub-not-just-committed-to-a-branch`
 
-Matt, 2026-09-08, after three messages during one long run ("any day now...", "dude what the fuck
-are you doing? what could possibly be taking so long") that were each read, noted, and answered
-only at the end of the work: *"Next time I message you asking what you're doing YOU MUST ANSWER
-ME."*
+## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A message that arrives mid-turn is not a note to fold into the final report. **Stop, and say where
 you actually are** - the step you are on, what is left, and why it is taking as long as it is -
 before the next tool call. A short honest answer costs one message; carrying on silently reads as
-being ignored, which is what it was.
+being ignored.
 
 This is not the same as asking permission and it does not mean abandoning the work. Answer, then
 carry on.
 
-## Mockups are sketches, not pitches
+Full incident: `docs/CLAUDE-HISTORY.md#when-matt-asks-what-you-are-doing-answer-him-immediately`
 
-Matt, 2026-09-12, on a Pier Nine blueprint stuffed with rationale: *"I need significantly less text.
-All of the below is wasteful, adds to clutter, and makes the whole thing more frustrating to see and
-use... You created this as if I'm going to pitch this in a meeting to other people. It's not a
-presentation. It's you giving me a quick mockup."*
+## Mockups are sketches, not pitches
 
 **A mockup is the thing itself and its numbers. Nothing else.** The drawing, the tables, the values.
 No lede, no framing paragraph, no "what this drawing is", no explaining why a decision was made, no
@@ -132,10 +117,9 @@ message, where a future session needs it and Matt does not have to scroll past i
 
 This applies to every artifact, mockup, plan page and diagram, in every session.
 
-## Send the Claude.ai handoff files WITHOUT being asked
+Full incident: `docs/CLAUDE-HISTORY.md#mockups-are-sketches-not-pitches`
 
-Matt, 2026-09-12: *"you must send me the stuff for Claude ai at the end of these messages. stop
-makign me ask for them. Make sure he can see everything."*
+## Send the Claude.ai handoff files WITHOUT being asked
 
 He runs a second Claude.ai conversation alongside this one and feeds it the work for review. **A
 claude.ai artifact URL is useless to it** - artifacts sit behind his account login, so there is
@@ -153,16 +137,16 @@ turn by sending the files, unprompted**:
 Watch the size: `SendUserFile` rejects about 1 MB. A dark page with gradients goes smaller as JPEG
 q90; a light page full of text goes smaller as PNG. Render full-page at `deviceScaleFactor: 1`.
 
-## Answer about the game you were asked about
+Full incident: `docs/CLAUDE-HISTORY.md#send-the-claudeai-handoff-files-without-being-asked`
 
-Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
-then Battleship: *"Why the fuck are we talking about chinchon?"* and *"don't do something random and
-start talking about battleship again."*
+## Answer about the game you were asked about
 
 When a session is asked to work on one game, the report is about THAT game. A pre-existing failure
 somewhere else, a pattern another game shares, an unrelated red test — none of it belongs in the
 reply, however true it is. Put it in the relevant `CLAUDE.md` if a future session needs it, and
 leave it there.
+
+Full incident: `docs/CLAUDE-HISTORY.md#answer-about-the-game-you-were-asked-about`
 
 ## Delegate to lesser-model subagents; the orchestrator's context is the scarce thing
 
@@ -214,17 +198,13 @@ The hub's top-bar version pill compares the ACTIVE service worker's cache versio
 (`version.json`, no-store). If they differ it renders `vN → vN+1` and marks itself stale.
 
 **THERE ARE TWO CAUSES AND THEY LOOK IDENTICAL. Tell them apart before you do anything else.**
-Until 2026-09-01 this section named only the second one, and that cost a session twenty minutes
-hunting a missing file that was not missing:
 
 1. **The pill is not listening** (fixed 2026-09-01, `_watchForUpdates` in `js/hub.js`). The update
-   ALREADY LANDED and the pill never noticed. `_initVersionPill` used to run once at load and
+   ALREADY LANDED and the pill never noticed — `_initVersionPill` used to run once at load and
    nothing subscribed to the service worker's lifecycle, so a perfectly successful update could not
-   reach the chip — measured: the controller swapped at t+8s, `controllerchange` fired, and the pill
-   read `v551 → v552` for ever on a device running v552. **Tapping it made it worse**: the old
-   `_forceUpdate` read the controller immediately after `reg.update()` (which resolves BEFORE the
-   new worker activates), concluded "stale", and reloaded into the same screen. Only force-quitting
-   cleared it. Matt filmed exactly this.
+   reach the chip. **Tapping it made it worse**: the old `_forceUpdate` read the controller
+   immediately after `reg.update()` (which resolves BEFORE the new worker activates), concluded
+   "stale", and reloaded into the same screen. Only force-quitting cleared it.
 2. **The shell install failed.** The atomic `cache.addAll(SHELL)` aborted — one 404 in the ~600 KB
    SHELL tier is enough — so `skipWaiting()` at the end of `install` never ran and the old worker
    kept serving the old build. `validate-sw-assets.mjs` and `test-sw-strategy.mjs` are the
@@ -237,26 +217,22 @@ hunting a missing file that was not missing:
   end up telling the truth on its own.
 - **Do all the deployed SHELL entries answer 200?** Pull the deployed `sw.js`, evaluate its `ASSETS`
   + `isShellAsset` to get the SHELL list, and request every one against the live site. All 200 rules
-  out case 2 entirely. (Done on 2026-09-01: 62 of 62, which is what proved the incident was case 1.)
+  out case 2 entirely.
 
 Since 2026-09-01 a new build also **applies itself silently** — the hub reloads onto it, but only on
 the launcher, never while a game is mounted (`this.current` gates it, and a held update is taken in
 `showLauncher`). So in normal use the pill should never show an arrow for more than a few seconds.
 An arrow that persists is a bug, not a prompt.
 
-**Much narrower since 2026-08-02** (see "The service worker's caching strategy" below): the
-install used to `cache.addAll()` the ENTIRE ~8.8 MB list atomically, so one 404'd `ASSETS`
-entry — a single missing card image — aborted the whole install and the previous worker kept
-serving the old build offline forever. Only the ~600 KB app shell is atomic now, so a bad path
-in a game folder no longer strands a deploy; it warms best-effort, logs loudly, and caches on
-demand instead. (`RESTORE.md` is a different thing — a device-restore/data-custody runbook, not a
-service-worker diagnostic; see "The shared profile" below for its role.)
+**Much narrower since 2026-08-02** (see "The service worker's caching strategy" below): only the
+~600 KB app shell is atomic, so a bad path in a game folder no longer strands a deploy; it warms
+best-effort, logs loudly, and caches on demand instead. (`RESTORE.md` is a different thing — a
+device-restore/data-custody runbook, not a service-worker diagnostic; see "The shared profile"
+below for its role.)
+
+Full incident and measured numbers: `docs/CLAUDE-HISTORY.md#diagnostic-the-version-pill-stuck-at-vn--vn1`
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
-
-Matt, minutes after a deploy, on mobile data: *"Whoa what the hell? I force closed and reopened and
-it was normal but what is this?"* - the launcher with no CSS at all, version pill reading the new
-build. Force-closing "fixed" it, which is what a transient server error always looks like.
 
 Cause: the network-first handler treated only a THROWN fetch as failure, so an error RESPONSE (a
 404 or 503) was handed straight to the page **even with a good cached copy one line away**. GitHub
@@ -268,13 +244,15 @@ Fixed in `sw.js`: `if (!res || !res.ok) return cached;` on the network-first pat
 also right for a genuinely removed file - this is an offline-first app whose cache is a coherent
 snapshot of one deploy that rolls over when `CACHE` is bumped. A request with NOTHING cached still
 passes the error through honestly rather than inventing an answer. `test-sw-strategy.mjs` carries
-both as a [KNOWN-BUG PROBE] pair; the first was born red against the unfixed worker.
+both as a [KNOWN-BUG PROBE] pair.
+
+Full incident: `docs/CLAUDE-HISTORY.md#diagnostic-the-launcher-renders-as-raw-unstyled-html-fixed-2026-08-11`
 
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
-Matt: *"the gamehub is sluggish and glitchy."* Both halves of `sw.js`'s strategy were tuned for
-a fast desktop connection and misbehaved on a phone with poor service. The full rationale is in
-`sw.js`'s own comments; the shape, so a future session doesn't "simplify" it back:
+Both halves of `sw.js`'s strategy were tuned for a fast desktop connection and misbehaved on a
+phone with poor service. The full rationale is in `sw.js`'s own comments; the shape, so a future
+session doesn't "simplify" it back:
 
 - **Two-tier precache.** `SHELL` (the hub itself — `index.html`, `css/`, `js/`, `icons/`,
   `profile/`; ~43 entries, ~600 KB) is atomic and blocks the install. `REST` (every game's own
@@ -294,91 +272,71 @@ a fast desktop connection and misbehaved on a phone with poor service. The full 
 - **A request with nothing cached is never short-circuited** by either mechanism: it waits for the
   network, because a deadline with no fallback would only turn a slow load into a broken one.
 - **(2026-08-23) The warm CARRIES UNCHANGED FILES FORWARD across a CACHE bump instead of
-  re-downloading them.** Matt: the launcher "became noticeably laggy where it used to be snappy."
-  Measured cause: CACHE is bumped on essentially every commit (182 bumps in the 14 days before
-  this landed), every bump rolled the cache name over, and `warmRest()` re-downloaded the ENTIRE
-  REST tier - 347 requests / 12.6 MB per deploy, saturating the connection for the whole session
-  on any device that opened the hub after a deploy, which at ~13 deploys/day meant essentially
-  every open. HTTP validators cannot fix it: GitHub Pages re-stamps every file's mtime (and so
-  its ETag) on every deploy, so a conditional request 200s the full body even for a file
-  unchanged in weeks. The fix is the **GENERATED `REST_MANIFEST` block in sw.js** - a content
-  hash per REST file, written by `validate-sw-assets.mjs` from the bytes on disk (that script
-  already runs before every deploy; `test-sw-strategy.mjs` fails if a stale manifest is about to
-  ship). The warm diffs it against the manifest the previous deploy stored in its cache and
-  copies unchanged files across; only genuinely changed files fetch. Measured effect: a
-  no-REST-change deploy fell from **12.6 MB / 387 requests to 1.5 MB / 95 requests** (the
-  remainder is the page's own load plus the still-atomic ~865 KB shell install), and the warm
-  settles in ~0 s instead of 17-31 s. A stale manifest is bounded: code is network-first at
-  request time regardless, so stale bytes could only ever be served offline or past the deadline.
+  re-downloading them,** via a **GENERATED `REST_MANIFEST` block in sw.js** - a content hash per
+  REST file, written by `validate-sw-assets.mjs` from the bytes on disk (that script already runs
+  before every deploy; `test-sw-strategy.mjs` fails if a stale manifest is about to ship). The
+  warm diffs it against the manifest the previous deploy stored in its cache and copies unchanged
+  files across; only genuinely changed files fetch. HTTP validators cannot do this: GitHub Pages
+  re-stamps every file's mtime (and so its ETag) on every deploy, so a conditional request 200s
+  the full body even for a file unchanged in weeks. A stale manifest is bounded: code is
+  network-first at request time regardless, so stale bytes could only ever be served offline or
+  past the deadline.
 - **(2026-09-01) The REST tier (every game's own files) is served CACHE-FIRST; the shell stays
-  network-first.** Matt, on a screen recording from Anita's phone of opening Skeeball: *"Why does
-  it take so long? It needs to be better than this."* Measured cause, with the whole game
-  verifiably already in the cache: opening it still sent **28 requests and 2,188 KB** to the
-  server. Network-first is why - `cache: 'reload'` bypasses the browser's HTTP cache on purpose,
-  and the cached copy was only served if the network LOST the `NET_TIMEOUT_MS` race, so every
-  module in a game's graph was re-downloaded in full on every open. The deadline and the latch
-  capped how bad that got; they never stopped it. The REST tier is the right boundary because it
-  is already per-deploy versioned by `REST_MANIFEST` (a content hash per file, generated from
-  disk, with `test-sw-strategy.mjs` failing a deploy whose manifest is stale) - a better freshness
-  signal than an HTTP validator, since Pages re-stamps every ETag on every deploy. Navigations are
-  excluded, so a game's standalone `index.html` is still fetched honestly. **The shell was left
-  untouched by this change and split by the next one, the same day - see the bullet below.** **The cost, accepted and verified:** on the first hub load after a deploy, a
-  game opened before the warm reaches its files runs the previous build's code for that one visit
-  (~15s on a fast link) - already true offline, now briefly true online. After: **19 KB and 2
-  requests** to open Skeeball. Full write-up, including the Skeeball-side half of the fix,
-  `skeeball/CLAUDE.md`, "What tapping Skeeball used to cost".
+  network-first.** `cache: 'reload'` bypasses the browser's HTTP cache on purpose, so without this
+  every module in a game's graph was re-downloaded in full on every open even when the game was
+  already complete in the cache. The REST tier is the right boundary because it is already
+  per-deploy versioned by `REST_MANIFEST` - a better freshness signal than an HTTP validator,
+  since Pages re-stamps every ETag on every deploy. Navigations are excluded, so a game's
+  standalone `index.html` is still fetched honestly. **The shell was left untouched by this
+  change and split by the next one, the same day - see the bullet below.** **The cost, accepted
+  and verified:** on the first hub load after a deploy, a game opened before the warm reaches its
+  files runs the previous build's code for that one visit - already true offline, now briefly true
+  online. Full write-up, including the Skeeball-side half of the fix, `skeeball/CLAUDE.md`, "What
+  tapping Skeeball used to cost".
 - **(2026-09-01) The SHELL is split: player-data modules stay network-first, everything else is
-  cache-first.** Measuring the hub's own launch showed the same bug the games had: a warm-cache
-  open sent **35 requests and 225 KB gzipped to the server every single time**, because the whole
-  shell was network-first. Matt's call on the trade was *"keep the stats code fresh"* rather than
-  cache the lot, so `NETWORK_FIRST` in `sw.js` names, by hand, every module that reads or writes
-  player data or gates whether it is VISIBLE (rule 1); `SHELL_CACHE_FIRST` is the remainder.
-  Measured after: **6 requests / 19 KB gzipped before the launcher appears** (was 27 / 167), and
-  the data modules load fresh BEHIND the painted launcher instead of in front of it. Two guards
-  hold it together, both pinned by `test-sw-strategy.mjs`: it is an **allow-list derived from
-  `ASSETS`**, which is the only formulation that cannot swallow `sw.js` (a cached `sw.js` freezes
-  the version pill on "up to date" for ever); and membership is **per file, never transitive** -
-  `js/hub.js` is cache-first and statically imports the network-first `js/profile-store.js`, which
-  is correct, because ES modules are fetched per URL. A structural test fails the build if a
-  cache-first shell module writes a `gamehub.*` key. The same change moved `hasName()` into
-  `js/profile-store.js` and made `js/hub.js`'s `stats-net.js` and `name-gate.js` imports lazy -
-  without that, `js/admin-config.js`'s static edge to `game-stats.js` kept 91 KB on the critical
-  path regardless of what the cache did.
+  cache-first.** Matt's call on the trade was *"keep the stats code fresh"* rather than cache the
+  lot, so `NETWORK_FIRST` in `sw.js` names, by hand, every module that reads or writes player data
+  or gates whether it is VISIBLE (rule 1); `SHELL_CACHE_FIRST` is the remainder, and the data
+  modules load fresh BEHIND the painted launcher instead of in front of it. Two guards hold it
+  together, both pinned by `test-sw-strategy.mjs`: it is an **allow-list derived from `ASSETS`**,
+  which is the only formulation that cannot swallow `sw.js` (a cached `sw.js` freezes the version
+  pill on "up to date" for ever); and membership is **per file, never transitive** - `js/hub.js`
+  is cache-first and statically imports the network-first `js/profile-store.js`, which is correct,
+  because ES modules are fetched per URL. A structural test fails the build if a cache-first shell
+  module writes a `gamehub.*` key. The same change moved `hasName()` into `js/profile-store.js`
+  and made `js/hub.js`'s `stats-net.js` and `name-gate.js` imports lazy - without that,
+  `js/admin-config.js`'s static edge to `game-stats.js` kept 91 KB on the critical path regardless
+  of what the cache did.
 - **(2026-09-11) A third tier: LAZY — in `ASSETS`, but never downloaded until somebody opens the
-  game that needs it.** Matt, on Boggle's two word lists: *"Can we make the dictionary only
-  download when you go to play the game? Seems like a lot for most people to download when they'll
-  never use it ever."* Measured: the REST tier is **11.92 MB across 255 files, and
-  `boggle/data/words.txt` + `words-es.txt` are 3.23 MB of it — 27%** of everything a device warms,
-  for ONE game, paid by every install whether or not anyone ever taps Boggle. The other two tiers
-  both do the wrong thing here, which is why it needed a third: leaving them in REST downloads
-  3.23 MB nobody asked for, while taking them OUT of `ASSETS` entirely would stop the download but
-  also drop them out of `REST_MANIFEST` and `CACHE_FIRST_PATHS` — so a player who DOES play Boggle
-  would re-download 1.6 MB on their next open after **every** deploy (~13/day). So a LAZY path
-  keeps everything `ASSETS` membership buys (`validate-sw-assets.mjs` still fails a deploy if the
-  file is missing, it still carries a content hash, it is still cache-first and cached on demand by
-  the fetch handler) and loses exactly one thing: **`warmRest()` never FETCHES it.** It still
-  CARRIES IT FORWARD across a `CACHE` bump if the device already has a copy — the `isLazyAsset`
-  check sits deliberately BELOW the carry-forward in the warm loop, and `test-sw-strategy.mjs` has
-  a `[KNOWN-BUG PROBE]` for exactly that ordering. Pay once, on first play, then never again.
-  **The cost, real and accepted: a device that has never opened Boggle can no longer play it
-  OFFLINE** — the first round needs a connection. The failure path was already there and already
-  translated (the fetch was always lazy at the JS level, so `renderLoadError` / `load_error` has
-  always handled it); it just becomes reachable. **Only put a file in `LAZY` if it is BOTH large
-  AND useless to anyone not playing that one game — never game CODE**, which is what a launcher
-  tile opens, is small, and would undo the 2026-09-01 cache-first win. Verified in a real browser:
-  a full hub load + warm caches 418 entries and makes **zero** word-list requests; opening Boggle
-  then fetches it exactly once (`fromSW=false`, 1.66 MB) and caches it.
+  game that needs it.** The other two tiers both do the wrong thing for a large, game-specific
+  file (e.g. Boggle's word lists): leaving it in REST downloads it for every install whether or
+  not anyone plays that game, while taking it OUT of `ASSETS` entirely would drop it out of
+  `REST_MANIFEST` and `CACHE_FIRST_PATHS` too, so a player who DOES play it would re-download it
+  on every deploy. A LAZY path keeps everything `ASSETS` membership buys (`validate-sw-assets.mjs`
+  still fails a deploy if the file is missing, it still carries a content hash, it is still
+  cache-first and cached on demand by the fetch handler) and loses exactly one thing:
+  **`warmRest()` never FETCHES it.** It still CARRIES IT FORWARD across a `CACHE` bump if the
+  device already has a copy — the `isLazyAsset` check sits deliberately BELOW the carry-forward in
+  the warm loop, and `test-sw-strategy.mjs` has a `[KNOWN-BUG PROBE]` for exactly that ordering.
+  Pay once, on first play, then never again. **The cost, real and accepted: a device that has
+  never opened that game can no longer play it OFFLINE** — the first round needs a connection; the
+  failure path (`renderLoadError` / `load_error`) was already there since the fetch was always
+  lazy at the JS level. **Only put a file in `LAZY` if it is BOTH large AND useless to anyone not
+  playing that one game — never game CODE**, which is what a launcher tile opens, is small, and
+  would undo the 2026-09-01 cache-first win.
 - **(2026-08-23) Old caches are deleted at the END of the warm, not at activate.** They are the
-  carry-forward copy source AND the fetch handler's fallback while the warm runs - the old
-  delete-at-activate behaviour opened a window on every deploy (seconds on wifi, minutes on a
-  phone) where games had no cache at all and every request queued behind the warm. Both fetch
-  paths now consult the CURRENT cache before the global `caches.match` (which searches in
-  cache-CREATION order and would otherwise let the older generation answer). At most one extra
-  generation lingers, and only until the next completed warm.
+  carry-forward copy source AND the fetch handler's fallback while the warm runs - deleting at
+  activate opened a window on every deploy where games had no cache at all and every request
+  queued behind the warm. Both fetch paths now consult the CURRENT cache before the global
+  `caches.match` (which searches in cache-CREATION order and would otherwise let the older
+  generation answer). At most one extra generation lingers, and only until the next completed
+  warm.
 
-Measured on a warm cache against a server injecting 8s per request (the regime the report was
-about): **40.6s → 2.6s** to a rendered launcher. `cache: 'reload'` is untouched — the
-fifth-playthrough HTTP-disk-cache fix it exists for is orthogonal and still needed.
+`cache: 'reload'` is untouched — the fifth-playthrough HTTP-disk-cache fix it exists for is
+orthogonal and still needed.
+
+Full incident narrative and measured before/after numbers for every bullet above:
+`docs/CLAUDE-HISTORY.md#the-service-workers-caching-strategy-rewritten-2026-08-02`
 
 ## Architecture
 
@@ -708,9 +666,8 @@ profile pill carries the unread badge, which is why the button is there and not 
 
 ## The profile page's structure (2026-08-31)
 
-Matt: *"We've just kind of thrown stuff in there over time and it looks disorganized."* It had FOUR
-container patterns at once — a card with a heading, a card that was itself a collapsible,
-collapsibles nested inside a card, and three loose buttons in no card at all. Now:
+It had FOUR container patterns at once — a card with a heading, a card that was itself a
+collapsible, collapsibles nested inside a card, and three loose buttons in no card at all. Now:
 
 **You** (identity only) · **Messages** · **Settings** (one list of collapsible rows) · **Your
 devices** · **Help** · **Reset profile**, alone at the bottom.
@@ -728,13 +685,15 @@ devices** · **Help** · **Reset profile**, alone at the bottom.
   (`.pf-add`) were unified with them** — they were the page's last odd style, a dashed accent
   outline on transparent against solid filled rows everywhere else. Only their widths still differ.
 
-**`messages/` is the ONE node in this database with real security rules on it.** Matt: *"Only admin
-should be able to see every thread. Others should only see their own."* Everything else is
-`auth != null`. A device claims `msgAuth/<auth.uid> = <its player code>`, and the rules scope every
-read to threads that code is in; `admins/<auth.uid>` (which already existed, set by hand in the
-console) grants Matt the read-all. **It does not survive somebody who has another player's
-5-character code and opens developer tools** - that code is printed on the profile page, so it is
-not a secret and cannot be made one.
+**`messages/` is the ONE node in this database with real security rules on it** (only admin can
+see every thread; everyone else only their own). Everything else is `auth != null`. A device
+claims `msgAuth/<auth.uid> = <its player code>`, and the rules scope every read to threads that
+code is in; `admins/<auth.uid>` (which already existed, set by hand in the console) grants Matt
+the read-all. **It does not survive somebody who has another player's 5-character code and opens
+developer tools** - that code is printed on the profile page, so it is not a secret and cannot be
+made one.
+
+Full incident: `docs/CLAUDE-HISTORY.md#the-profile-pages-structure-2026-08-31`
 
 Two knock-on effects, because a granted ancestor `.read` cascades and cannot be revoked below:
 
@@ -756,21 +715,15 @@ uses `rooms/`, which is already enumerated, and works without the paste.
 
 ## Deleting a device's history, and the rate gate (2026-09-12)
 
-A player (TP) told Matt he had cheated. Measured from `players/`, on ONE Windows laptop:
-**Tic Tac Toe 4,725 games played, 2,828 won, ONE loss, 1,896 draws** - a bot. On the same machine
-he edited Hill Climb's coins in devtools to buy every upgrade. His phone looked ordinary (200
-Beginner games with 5 losses and 2 draws) and his Connect Four was clean everywhere.
-
-Matt: *"we should delete all activity that took place on his windows device, and put safeguards in
-place to prevent him from doing it again. on either of these games - or any others."*
-
 **This session raised THE LAW and Matt overruled it, in these words:** *"It's my game, I control
 every aspect of it. if theres a rule somewhere that doesn't allow for it, i can change the rules.
 The rules are for YOU. so YOU cannot decide to do anything that violates the rules. I can decide to
-do anything I want."* That is the authority for the delete, and it is the ONLY thing that
-authorises it. **It does not generalise**: a session must still never delete player data on its own
-judgement, or to tidy something up, or because a cheat seems obvious. Matt asks, personally, per
-incident, or it does not happen. The restorable copy is `backups/rtdb-2026-09-12T22-08-55-909Z.json`.
+do anything I want."* That is the authority for the delete described below, and it is the ONLY
+thing that authorises it. **It does not generalise**: a session must still never delete player
+data on its own judgement, or to tidy something up, or because a cheat seems obvious. Matt asks,
+personally, per incident, or it does not happen. The restorable copy is
+`backups/rtdb-2026-09-12T22-08-55-909Z.json`. Full incident (the TP cheating report, measured
+numbers): `docs/CLAUDE-HISTORY.md#deleting-a-devices-history-and-the-rate-gate-2026-09-12`
 
 Three pieces, and the first two only work together:
 
@@ -806,10 +759,6 @@ ability to see it and undo it afterwards. Do not describe any of it as making th
 
 ## The admin control page (2026-08-24)
 
-Matt: *"I need an admin control page in the hub. I need to be able to make games admin only for
-testing and make them live. I need to be able to release specific skeeball machines too. I need all
-controls as possible from within the app."*
-
 Both switches existed before this; both were SOURCE EDITS. Hiding a game meant `devOnly: true` in
 `js/hub.js`, a `GAME_META` edit, a test-list edit, a `CACHE` bump and a deploy — Skeeball went
 through that cycle three times in three days (released 08-22, pulled back 08-23, re-released 08-24).
@@ -820,31 +769,28 @@ The launcher's **🛠️ Admin** button (rendered for Matt only, beside the bug 
 `js/admin-ui.js`, which writes `adminConfig/v1` through `js/admin-config.js`. Every device reads that
 node once per hub load and caches it locally.
 
-**It is written for ONE reader and looks like it.** Matt, on the first version: *"It's for me. I know
-what all the heading mean. I don't need 5 paragraphs explaining what live or admin only means."* So
-the page is four COLLAPSED accordion sections (Games, Skeeball machines, Player scores, This device;
-open state remembered in `gamehub.adminOpen.v1`), no explanatory prose, and **no Default buttons** —
-an override that matches the code default is the same thing, and "default" was a concept that existed
-nowhere but that button. `setGameLive(id, null)` / `setBoardMode(id, null)` still clear an override
-from code if a future screen needs it.
+**It is written for ONE reader** — Matt — so the page is four COLLAPSED accordion sections (Games,
+Skeeball machines, Player scores, This device; open state remembered in `gamehub.adminOpen.v1`),
+no explanatory prose, and **no Default buttons** — an override that matches the code default is
+the same thing, and "default" was a concept that existed nowhere but that button.
+`setGameLive(id, null)` / `setBoardMode(id, null)` still clear an override from code if a future
+screen needs it.
 
 - **An override sits ON TOP of the code default, it does not replace it.** An absent entry means
   "whatever `js/hub.js` says". A wiped, unreachable or never-written config leaves the app behaving
   exactly as it does today — which is also why a config failure can never take a released game off
   the family's launcher (THE LAW rule 1).
-- **A Skeeball machine has THREE states, and all three are READ-TIME ONLY.** Matt, on the first
-  version of the page: *"this doesn't allow me to select which skeeball machines are live and can be
-  unlocked and played vs what is not able to be played yet."* **Open** (everyone plays it now),
-  **Unlockable** (live, earned the normal way), **Testing** (nobody but a dev profile). Testing
-  overrides `boards.js`'s `adminOnly` the same way a game's live switch overrides `devOnly`, so
-  moving a machine to Unlockable really does make it earnable. `skeeball/js/ui.js` ORs
-  `isBoardReleased(id)` with the player's earned `isUnlocked(...)` and nothing writes `sk.unlocked`,
-  so nobody is ever credited with an unlock they did not earn — and moving a machine back only
-  DECLINES TO HONOR an earned unlock while it is set, never deletes it (rule 2).
+- **A Skeeball machine has THREE states, and all three are READ-TIME ONLY**: **Open** (everyone
+  plays it now), **Unlockable** (live, earned the normal way), **Testing** (nobody but a dev
+  profile). Testing overrides `boards.js`'s `adminOnly` the same way a game's live switch overrides
+  `devOnly`, so moving a machine to Unlockable really does make it earnable. `skeeball/js/ui.js`
+  ORs `isBoardReleased(id)` with the player's earned `isUnlocked(...)` and nothing writes
+  `sk.unlocked`, so nobody is ever credited with an unlock they did not earn — and moving a machine
+  back only DECLINES TO HONOR an earned unlock while it is set, never deletes it (rule 2).
 - **Every write verifies by fresh re-read and fails loudly** (rule 6). A dev origin never writes the
   family's config at all, same guard and same opt-in key as `js/stats-net.js`.
 - **An admin-only game is now hidden from the LEADERBOARD as well as the launcher (2026-09-09).**
-  Matt: *"hide admin only games from the leaderboard too."* `isGameOnLauncher(statsId)` in
+  `isGameOnLauncher(statsId)` in
   `js/game-stats-ui.js` is the hub card's own rule (`isGameLive(id, !devOnly) || dev`) exported once,
   so the launcher and the board cannot disagree; `js/leaderboard-ui.js` filters By Game through it
   and refuses to render a board for a game it hides. **Three things are deliberately NOT filtered
@@ -868,10 +814,9 @@ from code if a future screen needs it.
   through `skeeball/js/goals.js`'s `readGoals(boardId, sk)`, so the page can never disagree with the
   rails the player sees). Grouped by PERSON, not device — a void applies to every device record that
   person plays on, or their other phone re-supplies the numbers on its next sync.
-- **Scores thrown on a broken board can be voided, per player, per machine.** Matt, 2026-08-24:
-  *"Worried about people getting artificially high scores on a broken board. Which is exactly what
-  happened to classic and basketball skeeball."* The page's **Player scores** section marks a
-  machine's scores as not counting for one player. It is an OVERLAY in `adminConfig/v1`, applied
+- **Scores thrown on a broken board can be voided, per player, per machine.** The page's **Player
+  scores** section marks a machine's scores as not counting for one player. It is an OVERLAY in
+  `adminConfig/v1`, applied
   when numbers are DISPLAYED — editing `players/<id>` by hand cannot work, because every device
   mirrors its whole local store over that node on the next hub load. Full contract, and the two
   things it deliberately cannot do, in `js/stats-corrections.js`.
@@ -886,6 +831,7 @@ from code if a future screen needs it.
   local-only (update check, bug inbox, device id, the dev-write opt-in, re-show announcements).
 
 Full contract, the node shape, and how to add a third switch: `js/CLAUDE.md`, "The admin config".
+Full incident narrative and quotes: `docs/CLAUDE-HISTORY.md#the-admin-control-page-2026-08-24`
 
 ### Accessibility + copy conventions
 
