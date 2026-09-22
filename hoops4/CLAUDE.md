@@ -468,6 +468,60 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+### THE SCORING RATE: every lever measured, and Matt's call (2026-09-22)
+
+Matt, after playing the square board: *"I don't understand why you can't make it better than 20
+something % made shots."*
+
+**First, the number he is quoting is the GRID's, not a player's.** `probe-bounce.mjs` and
+`test.js` sweep every power x aim combination evenly, including the ones no thumb would ever
+produce - it is a floor, not an experience. The one measurement of a real gesture
+(`check-display.mjs`'s scripted thumb, seven columns) landed **19 of 28, 68%**. Both numbers are
+honest and they answer different questions; do not quote the grid as what a person shoots.
+
+**Second, it really did fall on purpose, twice.** Making the machine bouncy cost 37.7% -> 23.7%,
+and turning the bounce sideways bought back to 29.4%. Those were Matt's own asks on two different
+days, in two different directions.
+
+Every lever was then swept on the full 231-throw grid, against the shipped build (**28.6% scored,
+1.7% parked, 45.5% of misses bouncing, mean rebound 0.48 m/s**):
+
+| lever | scored | parked | misses bouncing / mean rebound |
+|---|---|---|---|
+| **shipped** | **28.6%** | **1.7%** | 45.5% / 0.48 |
+| **hoop mouth r x1.10** | **31.6%** | **0.9%** | 43.0% / 0.51 |
+| hoop mouth r x1.05 | 26.4% | 0.9% | 44.1% / 0.50 |
+| ringRest 0.30 | 29.9% | 3.5% | 40.1% / 0.38 |
+| ringRest 0.40 / 0.46 / 0.62 / 0.72 | 28.1 / 26.4 / 26.0 / 26.8% | 3.5 / 1.7 / 1.3 / 1.3% | ~45% / 0.44-0.53 |
+| riserRest 0.05 | 31.2% | 5.2% | 41.5% / 0.43 |
+| riserRest 0.30 | 30.3% | 3.5% | 44.1% / 0.46 |
+| speed band 6.45/6.70 | 30.7% | **6.1%** | 45.0% / 0.46 |
+| speed band 6.40/6.85 | 21.6% | 3.5% | 48.1% / 0.50 |
+| boardRest 0.40 / 0.20 / 0.05 | **28.6%, all three** | 1.7% | bounce only falls |
+| deadRest 0.32 / 0.20 / 0.06 | **28.6%, all three** | 3.0 / 1.7 / 1.7% | bounce only falls |
+| jitterAim / jitterSpeed, 0.000 to 0.013 | **28.6%, every value** | 1.7% | unchanged |
+| bounceSideways 0.8 | 28.6% | 1.7% | worse ratio (3.92:1 vs 4.48:1) |
+
+**Four findings worth keeping:**
+
+1. **Only ONE change raises scoring without paying for it: widening the hoop mouth.** +3.0 points
+   AND parked nearly halved AND the bounce intact. Everything else that scores higher does it by
+   tripling the parked rate or by flattening the machine's most-struck surface back toward the
+   "beanbag" it was raised out of.
+2. **The two candidate wins do not stack.** `holeR x1.10` + `ringRest 0.30` measured **28.1%** -
+   worse than the mouth alone and back at baseline. Never assume two levers add.
+3. **Three knobs are NOT scoring levers at all**: `boardRest`, `deadRest` and the jitter pair move
+   the scoring rate by exactly zero at every value tested. Lowering them is pure cost.
+4. **`holeR x1.05` measured WORSE than baseline (26.4%) while x1.10 measured better.** That is a
+   quantisation artefact of 21 discrete aim steps, not a curve - so a midpoint cannot be
+   interpolated from this grid, and a small delta on this instrument means nothing.
+
+**MATT'S CALL, ASKED AND ANSWERED: leave the hoops alone.** He was given the table above and chose
+it, so the rate stays at 28.6% and **this question is closed.** A future session must not widen
+the mouth, deaden the rim, or retune the band to chase a scoring number - `boarddef.js` already
+says `RIM` is never changed without him, root `CLAUDE.md` says a mouth's width is his number, and
+he has now said no to the one change that would have worked. Re-open it only if he does.
+
 #### The Menu button is SKEEBALL'S button, with skeeball's sheet (2026-09-22)
 
 Matt, with a screenshot of each: *"make the 'menu' button look just like skeeball. With the same
