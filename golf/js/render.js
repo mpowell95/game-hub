@@ -159,6 +159,63 @@ export const THEMES = {
     swamp: '#4f6b3a',
     swampEdge: '#6f8a4a',
   },
+  // LINKS (2026-09-22): a coastal course. Fescue rather than parkland rye - the fairway yellower
+  // and flatter, the rough a straw-tan, the base a dune-grass olive - with pot-bunker sand a shade
+  // darker than the desert's, and a grey North Sea for water with a sandy bank.
+  links: {
+    ...PALETTE,
+    fairwayA: '#a9b465',
+    fairwayB: '#a1ab5c',
+    lightRough: '#a39f5c',
+    heavyRough: '#8c8a4a',
+    treesFloor: '#7d7a40',
+    green: '#9fcf5f',
+    greenEdge: '#8bbd4f',
+    fringe: '#95b955',
+    tee: '#b5cf6c',
+    sand: '#e8dcb5',
+    sandDot: '#d4c69c',
+    water: '#3f86a8',
+    waterBand: '#336f8e',
+    waterEdge: '#274f66',
+    bank: '#8a7a5a',
+    bankMud: '#4a4030',
+    treeCanopy: '#4f6a2a',
+    treeRim: '#2f4418',
+    path: '#8f8a78',
+    setupA: '#3e4a2a',
+    setupB: '#6b7240',
+    swamp: '#4f5f3a',
+    swampEdge: '#707a4a',
+  },
+  // TROPICAL (2026-09-22): lush and saturated - jungle for the base, white beach sand, and a
+  // turquoise lagoon whose bank is beach rather than dirt.
+  tropical: {
+    ...PALETTE,
+    fairwayA: '#7fc04e',
+    fairwayB: '#76b645',
+    lightRough: '#63a23a',
+    heavyRough: '#37752a',
+    treesFloor: '#1c4416',       // dark jungle floor: palm fronds vanished on anything lighter
+    green: '#9be35a',
+    greenEdge: '#86d04a',
+    fringe: '#8acb4c',
+    tee: '#a9dc62',
+    sand: '#fbf3de',
+    sandDot: '#efe3c4',
+    water: '#27c3d6',
+    waterBand: '#1aa9c0',
+    waterEdge: '#0f7f9a',
+    bank: '#e8dcb8',
+    bankMud: '#c9b78a',
+    treeCanopy: '#2f7a34',
+    treeRim: '#1a4a20',
+    path: '#b8a888',
+    setupA: '#0f5a4a',
+    setupB: '#1f8a6a',
+    swamp: '#3a6a44',
+    swampEdge: '#5a8a54',
+  },
 };
 
 /** The fill/rim pair for every OBSTACLE CATALOGUE name (`golf/js/obstacles.js`), plus the three
@@ -188,6 +245,7 @@ export const TREE_FILL = {
   // POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a plain grey disc with a dark
   // crossarm - not green at all, since a utility pole carries no canopy.
   pole: ['#9a9a92', '#4f4f48'],
+  gorse: ['#4a6a2c', '#2c421a'],     // dark, dense; the yellow flowers are treeAccent's
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
@@ -331,6 +389,7 @@ export function treeShapes(px, py, r, shape) {
       // radiating branches are `treeAccent`'s job.
       return [[px, py, r * 0.35]];
     case 'bush':
+    case 'gorse':
       // Three small overlapping circles, brighter green (TREE_FILL carries the colour) - no
       // trunk, no rim key needed at this size to read as a shrub rather than a tree.
       return [
@@ -392,6 +451,17 @@ export function treeShapes(px, py, r, shape) {
  *  `treeShapes`'s geometry and needs no accent. */
 export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
   switch (shape) {
+    case 'gorse': {
+      // Gorse in flower: yellow dots scattered over the dark shrub. The flowers are what tell it
+      // from a plain bush at tile size.
+      ctx.fillStyle = '#f2c230';
+      const dr = Math.max(0.6, r * 0.09);
+      for (let k = 0; k < 11; k++) {
+        const a = rnd() * Math.PI * 2; const d = Math.sqrt(rnd()) * r * 0.75;
+        ctx.beginPath(); ctx.arc(px + Math.cos(a) * d, py + Math.sin(a) * d, dr, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
     case 'willow': {
       ctx.strokeStyle = tintOf(fill, 1.15);
       ctx.lineWidth = Math.max(0.6, r * 0.05);

@@ -40,20 +40,24 @@ export const OBSTACLE_CATALOG = [
   { name: 'birch', shape: 'canopy', trunk: 0.5, canopy: 3.5, height: 12, looks: ['parkland'] },
   { name: 'willow', shape: 'willow', trunk: 1.0, canopy: 9.0, height: 12, looks: ['parkland'] },
   { name: 'cypress', shape: 'cypress', trunk: 0.7, canopy: 2.5, height: 22, looks: ['parkland'] },
-  { name: 'deadtree', shape: 'dead', trunk: 0.7, canopy: 3.0, height: 10, looks: ['parkland', 'desert'] },
-  { name: 'bush', shape: 'bush', trunk: 0.4, canopy: 2.5, height: 2, looks: ['parkland', 'desert'] },
-  { name: 'palm', shape: 'palm', trunk: 0.5, canopy: 4.0, height: 16, looks: ['desert'] },
+  { name: 'deadtree', shape: 'dead', trunk: 0.7, canopy: 3.0, height: 10, looks: ['parkland', 'desert', 'links'] },
+  { name: 'bush', shape: 'bush', trunk: 0.4, canopy: 2.5, height: 2, looks: ['parkland', 'desert', 'links', 'tropical'] },
+  { name: 'palm', shape: 'palm', trunk: 0.5, canopy: 4.0, height: 16, looks: ['desert', 'tropical'] },
   { name: 'saguaro', shape: 'cactus', trunk: 0.9, canopy: 1.8, height: 15, looks: ['desert'] },
   { name: 'paloverde', shape: 'canopy', trunk: 0.7, canopy: 6.5, height: 8, looks: ['desert'] },
   { name: 'joshua', shape: 'joshua', trunk: 0.6, canopy: 3.0, height: 9, looks: ['desert'] },
-  { name: 'boulder', shape: 'rock', trunk: 3.2, canopy: 3.2, height: 40, looks: ['desert', 'parkland'] },
-  { name: 'smallrock', shape: 'rock', trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland'] },
-  { name: 'rockpile', shape: 'rocks', trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland'] },
+  { name: 'boulder', shape: 'rock', trunk: 3.2, canopy: 3.2, height: 40, looks: ['desert', 'parkland', 'links', 'tropical'] },
+  { name: 'smallrock', shape: 'rock', trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland', 'links'] },
+  { name: 'rockpile', shape: 'rocks', trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland', 'links'] },
   { name: 'log', shape: 'log', trunk: 1.2, canopy: 1.2, height: 1.5, looks: ['parkland'] },
   // A POWER POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md): a thin trunk that blocks at every
   // height. Placed on its own it is just a post; a hole's `lines` recipe puts one at every point of
   // a wire, and the WIRE between them is a separate rule (shot.js `wireHit`), not a tree.
   { name: 'pole', shape: 'pole', trunk: 0.3, canopy: 0.3, height: 40, looks: ['parkland', 'desert'] },
+  // GORSE (2026-09-22, the Links look): the coastal shrub a links course is lined with. Low and
+  // dense - every club flies it, but a ball that lands in it is in it. `looks` edits above are
+  // ordering hints only and never reorder the table.
+  { name: 'gorse', shape: 'gorse', trunk: 0.5, canopy: 3.0, height: 2.5, looks: ['links'] },
 ];
 
 /** The catalogue index of a named entry, or -1. Use it wherever an index is needed from code, so a

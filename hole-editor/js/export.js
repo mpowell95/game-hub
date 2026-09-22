@@ -5,6 +5,7 @@
 
 import { serialiseDocument } from './model.js';
 import { slugOf, defaultsFor } from './course.js';
+import { THEME_DEFAULTS } from './starter.js';
 
 // --- verbatim blocks (section 8.1/8.2) -----------------------------------------------------------
 // Copied from golf/courses/redmesa.js as shipped. If that file's header, obstacle table or house
@@ -185,13 +186,15 @@ export function generateSource(doc, date = new Date().toISOString().slice(0, 10)
 
 function customMeta(doc) {
   const name = (doc.course && doc.course.name) || 'My Course';
-  const theme = (doc.course && doc.course.theme) === 'desert' ? 'desert' : 'parkland';
+  const t = doc.course && doc.course.theme;
+  const theme = THEME_DEFAULTS[t] ? t : 'parkland';
   const slug = slugOf(name);
   return { name, theme, slug, constName: slug.toUpperCase() + '_COURSE' };
 }
 
 function customDefaults(meta) {
-  const rough = meta.theme === 'desert' ? '\n  rough: 7,' : '';
+  const r = defaultsFor(meta.theme).rough;
+  const rough = r != null ? `\n  rough: ${r},` : '';
   const belts = fmtInline(defaultsFor(meta.theme).belts);
   // THE CATALOGUE IS IMPORTED, NOT INLINED (2026-09-22). Every placed tree stores an INDEX into
   // `treeTypes`, so an exported course that carried its own copy of the table would be frozen at
