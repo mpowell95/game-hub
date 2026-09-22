@@ -530,12 +530,15 @@ export class Actors {
     return true;
   }
 
-  /** The stadium, for one league's fence shape. Called once per play screen (ui.js's _renderPlay),
-   *  never per frame; a second call replaces the first, which is what a league change would need. */
-  buildField(fenceFt) {
+  /** The stadium, for one league's fence shape AND its own backdrop (R13, docs/BASEBALL-3D-BUILD.md
+   *  section 9, "R13", item 2 - `league` picks `field.js`'s own `LEAGUE_STADIUM` dressing;
+   *  omitted, it defaults to Majors' bowl, same as before this stage). Called once per play screen
+   *  (ui.js's _renderPlay), never per frame; a second call replaces the first, which is what a
+   *  league change would need. */
+  buildField(fenceFt, league) {
     if (!this.scene || !fenceFt) return;
     if (this.stadium) { this.stadium.dispose(); this.stadium = null; }
-    this.stadium = buildStadium(this.scene, { fenceFt });
+    this.stadium = buildStadium(this.scene, { fenceFt, league });
   }
 
   async load(url) {

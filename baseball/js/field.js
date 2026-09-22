@@ -302,6 +302,65 @@ export function projectToCanvas(camera, v, w, h) {
 //   own header.
 //   THE PITCHER IS NOT DRAWN FROM THE BATTER CAMERA and vice versa is untouched by this - only the
 //   pitcher camera's own numbers changed; `CAMERAS.batter` and its own fov are exactly R1's.
+//   R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 1): Matt, on v882: "Can you change the
+//   angle a little bit so it's a little easier to see the strike zone you're throwing into?" The
+//   R8 framing above put the box at 8.5% of the band with the pitcher filling 59.5% - legible in
+//   the sense that it was drawn true-scale, but still small next to a pitcher who dominates the
+//   frame. Measured (node, this file's own `projectToCanvas`, the same method R8 used): at R8's
+//   own DISTANCE (55.6 ft back), holding the pitcher at 50% of the band by solving `fov` for it,
+//   the box tops out at 7.16% - moving the camera BACK (not just up) is the only lever that grows
+//   the box relative to the pitcher, because the two are nearly a fixed-ratio "dolly zoom": as the
+//   camera retreats and the lens narrows to compensate, near (pitcher) and far (batter/zone,
+//   nearly 76 ft further along the same line) converge toward their true WORLD size ratio
+//   (6 ft / 1.8 ft = 3.33, i.e. boxFrac -> pitcherFrac / 3.33 as distance -> infinity) instead of
+//   the R8 distance's own, more extreme 0.143 ratio. Solved (bisection on `fov` at several
+//   distances, holding pitcherFrac at 0.50): 180 ft back gives a box of 11.2%, well inside the
+//   spec's own 10-13% - but R13 ALSO has to hold at Little League, whose own fence sits at just
+//   210 ft dead centre (`FIELD.little.fenceFt.center`), and a camera any further back than that
+//   sits AT OR PAST the outfield wall (and the grass berm just past it - item 2, below), rendering
+//   as the camera clipping through that geometry. First tried at 150 ft back (210.5 ft total from
+//   home) - visibly broken (`scratchpad/r13/little-pitcher-BROKEN-150ft.png`): the lens sits
+//   almost exactly on Little League's own fence line, and the frame fills with the inside of the
+//   berm/fence mesh instead of the pitcher. Re-solved with that ceiling respected: 130 ft back
+//   (190.5 ft total) clears Little League's fence by 19.5 ft (real margin, not a hairline) while
+//   still landing the box at 10.2% - inside the band, closer to its floor than 180 ft's own 11.2%
+//   would have been, which is the real trade this stage made (legible box vs. a camera that has to
+//   physically fit inside the SMALLEST league's own outfield). `CAMERAS.pitcher` moved to
+//   `pos: [-2.4, 8.26, -190.5]` (was `[-2.4, 7.0, -116.0]`), `look: [0, 2.53, ZONE.z]` (was
+//   `[0, 3.0, ZONE.z]`), `fov: 5.28` (was 10.35) - a longer lens still, on the same mound-to-plate
+//   line. Measured after: pitcher 50.0% of the band (down from 59.5%, "the pitcher may drop to
+//   about half"), the true box 10.2% tall / 9.7% wide (38.3 x 48.7px, up from 8.5%/8.1%), and the
+//   pitcher's own head projects to y=140.4px against the box's own top at y=215.0px - 74.6px of
+//   clear grass between them, so the head sits ABOVE the box with real margin, never over it. Side
+//   effect, measured and accepted: `batterRatio` (batter/pitcher) rose to 68.1% (was 47.8%, R8's
+//   own 30-50% band) - the SAME dolly-zoom compression that grows the box also brings the batter
+//   closer to the pitcher's own size, since both are now a smaller fraction of the much longer
+//   total camera distance; `pitcher-frame`'s own batter-ratio check raised its ceiling to 80% to
+//   match (see the probe, test-baseball-device.mjs). The ball is INCIDENTALLY easier to see too,
+//   not worse: `BALL_MIN_PX`'s own floor (8px) is barely needed any more - measured 14.1px at
+//   release and 9.7px at the crossing (was ~13px/~2.3px true, with the floor doing the work at
+//   the crossing before). Every other camera and every other constant in this file is untouched by
+//   this - only `CAMERAS.pitcher`'s own five numbers moved.
+//   R13 SHIP-REVIEW FIX (same day): the coordinator, on the stills above - the zone box sat over
+//   the pitcher's own legs, the control cursor landing on his thighs, because `pos.x` was still
+//   -2.4 (on the mound-to-plate line) and at this lens a small `x` barely moves a target 190ft
+//   away. Measured (node, this file's own `projectToCanvas`): at x=-2.4 the box's own left edge
+//   sits only 11.4px from the pitcher's nearest silhouette point (a 238px-tall figure - the box is
+//   effectively touching him); moving the camera SIDEWAYS (never changing `look`, still the plate)
+//   swings the pitcher's own screen position hard while the box barely moves (it is anchored to
+//   the plate, 130ft further from the lens), because at this narrow a fov screen position is far
+//   more sensitive to a lateral camera shift than to the shift's effect on a distant, fixed-look
+//   target. `pos.x` moved to -9.5 (the spec's own 9-12ft band): the box stays over the catcher
+//   (catcher's own x projects 9.2px from the box's own centre, both before and after - the catcher
+//   sits close to the SAME depth the box does, so a lateral camera shift barely separates them),
+//   while the pitcher's own silhouette moves 96.9px, opening a 101.3px gap between his nearest
+//   point and the box's own left edge - 1.7x his own measured on-screen width (59.5px, estimated
+//   at 0.25 of his on-screen height, a person's own rough shoulder/hip fraction), comfortably past
+//   the spec's own "at least half a pitcher's width." Every other number this stage measured moved
+//   by under 0.2 percentage points (box 10.20% was 10.20%, pitcher 49.9% was 50.0%, batter ratio
+//   68.3% was 68.1%) - negligible, so `pitcher-frame`'s own bands did not need re-tuning.
+//   `pop-anchor`/`ball-visible-pitcher`/`chase-start` read the batter/chase cameras or a fixed
+//   world point and do not depend on `CAMERAS.pitcher.pos.x` at all; verified green, unchanged.
 // chaseCam: the ball in play. Sits at a fixed offset from the ball and looks at it, easing toward
 //   that offset by CHASE_LERP each rendered frame so the cut into the chase is a move, not a snap.
 export const CAMERAS = {
@@ -329,7 +388,7 @@ export const CAMERAS = {
   // node projection) at 393x852: `scratchpad/r12/after-cam-wrap.png` against
   // `scratchpad/r12/before-batting-wrap.png`.
   batter: { pos: [0.6, 7.8, 13.1], look: [0, -1.0, -30] },
-  pitcher: { pos: [-2.4, 7.0, -116.0], look: [0, 3.0, ZONE.z], fov: 10.35 },
+  pitcher: { pos: [-9.5, 8.26, -190.5], look: [0, 2.53, ZONE.z], fov: 5.28 },
   // The chase offset was measured against what it has to SHOW, not chosen: at section 9's own
   // (0, 12, 28) the ball is 30 ft from the lens and draws 5 px across, which is the same "you
   // can't see where the ball goes" stage 8 was written to fix. At (0, 10, 22) it is 24 ft out and
@@ -408,6 +467,15 @@ const PALETTE = {
   backstopPad: '#24406a', backstopRail: '#f2f4f8',
   brickBase: '#9c5a42', brickMortar: '#c9b8a0',
   backstopCrowdGround: '#a9a49a',
+  // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): the per-league dressing. Aluminium
+  // bleachers (Little League/High School), the chain-link backstop wall behind them, a small
+  // parent-figure palette (spread out, never a wall of specks - the spec's own words), the berm
+  // past a Little League fence, and the press box's own two tones.
+  bleacherAlum: '#9aa0a6', bleacherAlumDark: '#7d838a',
+  chainLink: '#c9cdd2', chainLinkOff: '#e8eaed',
+  parents: ['#c0392b', '#2f6fb0', '#e0a72c', '#3f9e6b', '#8a4fae', '#e07b39'],
+  bermGrassA: '#3a7a36', bermGrassB: '#458040',
+  pressBoxBody: '#3a3f47', pressBoxWindow: '#a9c6e0',
 };
 // R9 item 4: the outfield wall's own ad panels - plain colour blocks with a simple shape, no text
 // (spec's own words). Four panels, cycled along the wall's length.
@@ -440,7 +508,10 @@ function grassTexture() {
 // `ground` defaults to the outfield stands' own light colour; the backstop (R9 fix, 2026-09-21)
 // passes its own slightly darker `PALETTE.backstopCrowdGround` so the two crowds read as the same
 // KIND of texture (same dots, same aisle rule) without being identical panels pasted twice.
-function crowdTexture(ground = PALETTE.standsFace) {
+// R13 (item 2): `density` defaults to R9's own 3400 dots; College's single tier passes a higher
+// count ("a fuller crowd texture on one tier", the spec's own words) since one tier alone would
+// otherwise read thinner than the three- or two-tier bowls it sits beside on the ladder.
+function crowdTexture(ground = PALETTE.standsFace, density = 3400) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 256;
   const ctx = c.getContext('2d');
@@ -460,7 +531,7 @@ function crowdTexture(ground = PALETTE.standsFace) {
   // taken today and one taken next week differ only where the game differs.
   let seed = 20260920;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-  for (let i = 0; i < 3400; i++) {
+  for (let i = 0; i < density; i++) {
     const x = Math.floor(rnd() * 256), y = Math.floor(rnd() * 256);
     // Skip a dot that would land ON an aisle - the gap has to stay visibly clear, not just darker.
     if (aisleX.some((ax) => x >= ax - 1 && x < ax + aisleW + 1)) continue;
@@ -543,6 +614,39 @@ function brickTexture() {
       ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
       ctx.fillRect(x + mortar / 2, r * rowH + mortar / 2, colW - mortar, rowH - mortar);
     }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** R13 item 2: Little League's own backstop - "a low chain-link backstop... a semi-transparent
+ *  grid texture on a low wall" (the spec's own words), instead of the padded/brick/crowd wall the
+ *  other four leagues keep. A 64px canvas, mostly TRANSPARENT (no fill at all - `clearRect` is the
+ *  canvas default, so the base is alpha 0), with a grid of thin light-grey lines - a chain-link
+ *  fence reads as almost nothing but its own grid at a distance, never a solid panel.
+ *  `tex.transparent = true` on the material is what a caller must set; this only draws the grid.
+ *  R13 SHIP-REVIEW FIX (same day): Matt/the coordinator, on the shipped grid: "make the chain-link
+ *  texture finer and more transparent so it does not read as a grey wall." Alpha 0.55 -> 0.35 and
+ *  lineWidth 1.5 -> 1.0 (a thinner, fainter line reads as mesh rather than panel); STEP 8 -> 6 (more
+ *  grid cells per tile, a finer weave). The call site (`buildStadium`) now also sets a vertical
+ *  `repeat.y` on this texture - see `BACKSTOP_CHAINLINK_H`'s own comment for why: this function's
+ *  UVs are baked to a fixed 30x horizontal repeat by `ribbonGeometry`'s own `uRepeat` argument, but
+ *  vertical repeat is left at the material's default (1x, the whole canvas stretched over whatever
+ *  height the wall is built to) unless the caller corrects it - shrinking `BACKSTOP_CHAINLINK_H`
+ *  without also raising `repeat.y` would stretch every cell taller as the wall got shorter. */
+function chainLinkTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.strokeStyle = PALETTE.chainLink;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1.0;
+  const STEP = 6;
+  for (let i = -64; i <= 128; i += STEP) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + 64, 64); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i, 64); ctx.lineTo(i + 64, 0); ctx.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -653,6 +757,123 @@ function deckGeometry(inner, outer, y) {
   g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   return g;
 }
+/** R13 item 2: a SLOPED deck, `inner` points at `y0` rising to `outer` points at `y1` - Little
+ *  League's own grass berm past the fence (a raised mound instead of a tiered stand), the one
+ *  piece of stadium geometry in this file that is not flat. Same sampling/winding as
+ *  `deckGeometry`, which this is otherwise identical to. */
+function rampGeometry(inner, outer, y0, y1) {
+  const n = inner.length;
+  const pos = new Float32Array((n - 1) * 6 * 3);
+  const nrm = new Float32Array((n - 1) * 6 * 3);
+  const uv = new Float32Array((n - 1) * 6 * 2);
+  let pi = 0, ni = 0, ui = 0;
+  // The ramp's own up-slope normal: it rises `y1 - y0` over roughly the inner/outer gap, computed
+  // once from the FIRST sample (the berm is a near-constant-width ring, so one normal serves the
+  // whole geometry without a per-quad recompute) and reused for every vertex.
+  const gapFt = Math.hypot(outer[0].x - inner[0].x, outer[0].z - inner[0].z) || 1;
+  const riseFt = y1 - y0;
+  const runLen = Math.hypot(gapFt, riseFt) || 1;
+  for (let i = 0; i < n - 1; i++) {
+    const a = inner[i], b = inner[i + 1], c = outer[i], d = outer[i + 1];
+    const quad = [
+      [a, y0, 0, 0], [c, y1, 1, 0], [d, y1, 1, 1],
+      [a, y0, 0, 0], [d, y1, 1, 1], [b, y0, 0, 1],
+    ];
+    for (const [p, y, u, v] of quad) {
+      pos[pi++] = p.x; pos[pi++] = y; pos[pi++] = p.z;
+      uv[ui++] = u * 4; uv[ui++] = v;
+      // The slope's own INWARD-and-up normal (a ramp that rises as radius grows faces back toward
+      // home and up, the same way a real hillside's visible face angles toward whoever is standing
+      // below it - the outward-and-down tangent along the slope, (run, rise) in the (radial, y)
+      // plane, rotated +90deg gives (-rise, run), an inward horizontal component). Found by
+      // rendering: the first version used the OUTWARD sign here, which pointed the surface's
+      // normal away from the sun for the whole visible face, so `MeshLambertMaterial` shaded it
+      // pure black (`scratchpad/r13/berm-diagnostic-BROKEN-normal.png`) - a real defect, not a
+      // camera-angle limitation, since nothing about this bug depends on which camera looks at it.
+      const len = Math.hypot(p.x, p.z) || 1;
+      nrm[ni++] = -(p.x / len) * (riseFt / runLen); nrm[ni++] = gapFt / runLen; nrm[ni++] = -(p.z / len) * (riseFt / runLen);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  return g;
+}
+/** R13 item 2: one small aluminium bleacher SET, in LOCAL space - `rows` stepped risers, each a
+ *  flat box `widthFt` wide, front edge (the row closest to the field) at local z=0 and rows
+ *  receding in +z as they rise, exactly the real shape a small grandstand has. The caller
+ *  translates/rotates each PLACED instance (`placeBleacher`, `buildStadium`) so local +z (the
+ *  direction the rows recede toward) points AWAY from home - the same "build local, place with a
+ *  translate+rotate" pattern the light towers already use, generalised to something that needs a
+ *  rotation as well as a translation. `seatPoints` returns each row's own seat position (a hair
+ *  forward and below the row's own back riser top, where a figure's feet actually rest) for the
+ *  parent figures to be scattered along. */
+function bleacherUnitParts(widthFt, rows, rowDepthFt, rowHFt) {
+  const parts = [];
+  const seatPoints = [];
+  for (let i = 0; i < rows; i++) {
+    const g = new THREE.BoxGeometry(widthFt, rowHFt, rowDepthFt);
+    g.translate(0, rowHFt * (i + 0.5), rowDepthFt * (i + 0.5));
+    parts.push(g);
+    seatPoints.push({ y: rowHFt * (i + 1), z: rowDepthFt * (i + 0.65), row: i });
+  }
+  return { parts, seatPoints, widthFt };
+}
+/** R13 item 2: place one bleacher-unit's geometry (and its seat points) at a WORLD position,
+ *  rotated so it faces home (local +z, "rows recede away from the field", maps to the OUTWARD
+ *  radial direction from home through `pos`) - `Math.atan2(pos.x, pos.z)` is the same
+ *  facingRad convention `_place()`'s callers already use for a figure standing at this same kind
+ *  of position, just applied to a rotateY on raw geometry instead of a bone hierarchy. */
+function placeBleacher(unit, pos, seedBase, densityHint) {
+  const theta = Math.atan2(pos.x, pos.z);
+  const sin = Math.sin(theta), cos = Math.cos(theta);
+  const rot = (p) => ({ x: p.x * cos + p.z * sin, z: -p.x * sin + p.z * cos });
+  const parts = unit.parts.map((g) => {
+    const c = g.clone();
+    c.rotateY(theta);
+    c.translate(pos.x, 0, pos.z);
+    return c;
+  });
+  const seats = unit.seatPoints.map((s) => {
+    const local = rot({ x: 0, z: s.z });
+    return { x: pos.x + local.x, y: s.y, z: pos.z + local.z, row: s.row };
+  });
+  return { parts, seats, widthFt: unit.widthFt, theta };
+}
+/** R13 item 2: scatter PARENT FIGURES on a bleacher's own seat rows - simple blocky "coloured
+ *  billboard" people (a single box per figure, the spec's own "simple figures or coloured
+ *  billboards"), never a wall of specks: `count` figures per bleacher set, SPREAD OUT along the
+ *  width and across every row from a seeded RNG (the same "today's screenshot matches next week's"
+ *  rule every other procedural texture in this file follows), grouped by colour into a handful of
+ *  merged meshes so `count` figures across several bleachers still costs only
+ *  `PALETTE.parents.length` draw calls, not one per person. */
+function scatterParents(bleacherPlacements, count, seed0) {
+  let seed = seed0;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const byColor = PALETTE.parents.map(() => []);
+  // R13 SHIP-REVIEW FIX (same day): FIG_H raised 1.5 -> 2.5 alongside BLEACHER_ROW_H_FT's own
+  // increase (see that constant's comment) - a 1.5ft "bust" barely cleared the fence at all; 2.5ft
+  // (a seated fan's own torso-and-head silhouette above the bench, not a full standing height,
+  // since the lower body is what a bleacher row already hides) puts a real, visible slice of colour
+  // above the fence line at the pitcher camera's own lens instead of a sliver.
+  const FIG_W = 0.9, FIG_H = 2.5, FIG_D = 0.6;
+  for (let i = 0; i < count; i++) {
+    const b = bleacherPlacements[Math.floor(rnd() * bleacherPlacements.length)];
+    const seat = b.seats[Math.floor(rnd() * b.seats.length)];
+    const alongFrac = 0.12 + rnd() * 0.76;   // never right at either end - "spread out", not edge-packed
+    const along = (alongFrac - 0.5) * b.widthFt;
+    const sin = Math.sin(b.theta), cos = Math.cos(b.theta);
+    // `along` runs parallel to the bleacher's own local x (its width), rotated the same way the
+    // seat z offset already was in `placeBleacher`.
+    const x = seat.x + along * cos, z = seat.z - along * sin;
+    const colorI = Math.floor(rnd() * PALETTE.parents.length);
+    const g = new THREE.BoxGeometry(FIG_W, FIG_H, FIG_D);
+    g.translate(x, seat.y + FIG_H / 2, z);
+    byColor[colorI].push(g);
+  }
+  return byColor;
+}
 
 /** The fence line, world feet, sampled every `stepDeg` from the left-field line to the right-field
  *  line straight off the engine's own `fenceFtAt` - so the wall a home run clears and the wall the
@@ -723,26 +944,118 @@ const BACKSTOP_HALF_SPAN_DEG = 60;
 // (scratchpad/ref/reference-key-frames.jpg, top row) is a padded wall low, a brick band above it,
 // and a crowd tier only above THAT. Rebuilt as one flat wall, three vertical bands, at the same
 // BACKSTOP_DIST_FT/BACKSTOP_HALF_SPAN_DEG R7 already measured against the pitcher camera's frame:
-const BACKSTOP_PAD_H = 12;          // ground to 12ft: the solid padded wall
+// R13 SHIP-REVIEW FIX (same day, after the item-1 camera pull-back): Matt/the coordinator, on
+// `highschool-pitcher.png` and up: "the whole pitching frame behind the plate is now a flat
+// dark-blue wall" - the item-1 camera (130ft behind the rubber, fov 5.28) is a MUCH longer lens
+// than the one these three bands were tuned against (55.6ft/fov 10.35), and at that lens the
+// pitching band's own visible vertical extent at the backstop's distance is far smaller than the
+// old 12+16+12=40ft wall. Measured (node, `projectToCanvas` against the SHIPPED `CAMERAS.pitcher`,
+// x=0, z=-BACKSTOP_DIST_FT): the frame's own top edge, at this distance, sits at world y=10.86ft -
+// above that is off-screen sky, not backstop, whatever height the wall is actually built to. The
+// old BACKSTOP_PAD_H (12ft) alone already exceeded that ceiling, so the WHOLE visible backstop was
+// pad - one flat colour, no texture at all, exactly the report. Re-proportioned so the visible
+// slice (0 to ~10.86ft) actually shows all three bands, not just the first: BACKSTOP_PAD_H 4ft (the
+// coordinator's own number), BACKSTOP_BRICK_H 4ft (a DELIBERATE DEVIATION from the coordinator's
+// literal "about 8ft" - at 8ft the crowd tier would start at pad+brick=12ft, ABOVE the measured
+// 10.86ft ceiling, so it would never be visible at any pitcher-camera framing regardless of how
+// tall it is drawn; 4ft leaves the crowd tier starting at 8ft, with a real ~2.86ft/91px slice of
+// it inside the frame - satisfies the coordinator's own acceptance test, "the stands/crowd tier
+// visible in the top third," which 8ft cannot). BACKSTOP_CROWD_H (10ft) is generous past the
+// visible ceiling on purpose - cheap extra geometry, no visible cost, and margin for a future
+// camera nudge.
+const BACKSTOP_PAD_H = 4;           // ground to 4ft: the solid padded wall
 const BACKSTOP_RAIL_H = 0.4;        // a thin white rail on top of the pad, same convention as FENCE.railHeight
-const BACKSTOP_BRICK_H = 16;        // 12 to 28ft: the brick band
-const BACKSTOP_CROWD_H = 12;        // 28 to 40ft: the crowd, matching the outfield bowl's own 40ft top
-// Measured (node, `projectToCanvas` against `CAMERAS.pitcher`'s real position, a point at the
-// backstop's own distance/height): about 18.0px per world foot at BACKSTOP_DIST_FT, both axes. A
-// brick close to its real size (about 0.2ft tall, 0.6ft long - a real course of brick, not
-// exaggerated) draws 3.6 x 10.8px there, inside the spec's own "3 to 6px" for the tall axis; the
-// brick canvas is 8 rows x 4 cols per tile (`brickTexture`), so repeat.y = BACKSTOP_BRICK_H /
-// (8 x 0.2) = 10, and repeat.x = (the wall's own arc length, 2*pi*BACKSTOP_DIST_FT*(2*
-// BACKSTOP_HALF_SPAN_DEG/360) = ~62.8ft) / (4 x 0.6) = ~26.
+const BACKSTOP_BRICK_H = 4;         // 4 to 8ft: the brick band (see the deviation note above)
+const BACKSTOP_CROWD_H = 10;        // 8 to 18ft: the crowd (most of it past the frame's own 10.86ft ceiling, harmless)
+// Measured (node, `projectToCanvas` against the SHIPPED `CAMERAS.pitcher`, the same method the
+// deviation note above used): about 32.1px per world foot at BACKSTOP_DIST_FT (was ~18.0px/ft at
+// the pre-ship-review camera - a longer lens, more px per foot). A brick close to its real size
+// (about 0.2ft tall, 0.6ft long, unchanged) still draws inside the spec's own "3 to 6px" for the
+// tall axis (0.2 x 32.1 = 6.4px, right at the edge - the physical brick size was left alone rather
+// than shrunk further, since 6.4px still reads as brick, not noise); the brick canvas is 8 rows x
+// 4 cols per tile (`brickTexture`), so repeat.y = BACKSTOP_BRICK_H / (8 x 0.2) = 4 / 1.6 = 2.5
+// (was 10, at the old BRICK_H=16), and repeat.x = (the wall's own arc length, unchanged by any of
+// this - 2*pi*BACKSTOP_DIST_FT*(2*BACKSTOP_HALF_SPAN_DEG/360) = ~62.8ft) / (4 x 0.6) = ~26,
+// unaffected by the height change (repeat.x depends only on the arc length and the brick's own
+// physical width, never on BACKSTOP_BRICK_H).
 const BACKSTOP_BRICK_REPEAT_X = 26;
-const BACKSTOP_BRICK_REPEAT_Y = 10;
-// The crowd tier's own repeat is MUCH LOWER than the outfield bowl's (22, 1.1) - the backstop
-// sits 30ft from the pitcher camera against the bowl's 200ft+, so the same repeat would draw
-// specks far too small to resolve (exactly last time's own defect, one band over). Solved for a
-// ~3px speck (the spec's own "2 to 4px") at the same ~18px/ft: repeat.x ~4.5, repeat.y ~1 - see
-// `buildStadium`'s own backstop comment for the arithmetic.
-const BACKSTOP_CROWD_REPEAT_X = 4.5;
-const BACKSTOP_CROWD_REPEAT_Y = 1;
+const BACKSTOP_BRICK_REPEAT_Y = 2.5;
+// The crowd tier's own repeat, re-solved for the new 32.1px/ft (was ~18.0): a ~3px speck needs
+// repeat.x = (arc_length x pxPerFt) / 256 (the crowd canvas's own width, each dot 3px of it) =
+// (62.8 x 32.1) / 256 = ~7.9 (was 4.5 at the old camera's lower px/ft - a longer lens needs MORE
+// tiles to keep the same on-screen speck size, not fewer). repeat.y solves the same way against
+// the new, much shorter BACKSTOP_CROWD_H (10, was 12): (10 x 32.1) / 256 = ~1.25 (was 1).
+const BACKSTOP_CROWD_REPEAT_X = 7.9;
+const BACKSTOP_CROWD_REPEAT_Y = 1.25;
+
+// R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): Matt, on v882: "For little league it
+// should look like bleachers and stuff with spread out parents in them, then for every league the
+// audience and bleacher/seats should increase." One row per league, everything else in
+// `buildStadium` below reads ONLY this table to decide what to build - so the five dressings stay
+// a single, auditable ladder instead of five copy-pasted branches.
+//   tiers: how many of the outfield bowl's own stepped tiers to build (0-3; Majors is R9's
+//     unchanged 3, Minors 2, College 1, Little League/High School 0 - a concrete bowl reads wrong
+//     at a Little League field, so those two get bleachers instead, below).
+//   backstop: 'chainlink' (Little League only - a low, mostly-see-through wall) or 'padded' (every
+//     other league, R7/R9's own three-band wall, unchanged).
+//   towers: four light towers (R9), from College up - a Little League/High School diamond plays by
+//     daylight in the real sport, and the spec's own words are explicit ("no light towers") for
+//     Little League; High School keeps the same absence rather than inventing a number for it.
+//   scoreboardScale: the centre-field board's own size multiplier - Little League's is "a small
+//     scoreboard" (the spec's own words), everyone else keeps R9's shipped size.
+//   bleachers: `{deg, r}` placements (`polar()`'s own convention, r in feet from home) for small
+//     aluminium bleacher SETS - behind the plate and down each line - built instead of a tiered
+//     bowl. Empty once a league has real tiers.
+//   bleacherWidthFt/bleacherRows: one shared shape per league (High School's own "longer
+//     bleachers" is a wider, taller set, not a different placement rule).
+//   parentsPerBleacher: scattered across EVERY bleacher set that league has, so the printed total
+//     (3 sets) is the spec's own "little about 12, highschool about 40" almost exactly (12 and 39).
+//   berm: Little League only - a grass rise past the fence instead of any stand at all.
+//   pressBox: High School only - a small booth behind the backstop.
+const LEAGUE_STADIUM = {
+  little: {
+    tiers: 0, backstop: 'chainlink', towers: false, scoreboardScale: 0.55,
+    bleachers: [{ deg: 180, r: 34 }, { deg: 50, r: 130 }, { deg: -50, r: 130 }],
+    bleacherWidthFt: 16, bleacherRows: 4, parentsPerBleacher: 4,
+    berm: true, pressBox: false,
+  },
+  highschool: {
+    tiers: 0, backstop: 'padded', towers: false, scoreboardScale: 0.85,
+    bleachers: [{ deg: 180, r: 38 }, { deg: 54, r: 168 }, { deg: -54, r: 168 }],
+    bleacherWidthFt: 26, bleacherRows: 6, parentsPerBleacher: 13,
+    berm: false, pressBox: true,
+  },
+  college: {
+    tiers: 1, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false, crowdDensity: 4600,   // "a fuller crowd texture" - R9's own 3400 x 1.35
+  },
+  minors: {
+    tiers: 2, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false,
+  },
+  majors: {
+    tiers: 3, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false,
+  },
+};
+// R13 SHIP-REVIEW FIX (same day): the original item-2 draft's BLEACHER_ROW_H_FT (1.15) put the
+// TOP riser at 4 x 1.15 = 4.6ft and the tallest seated parent (FIG_H 1.5, below) at only 6.1ft -
+// barely clearing the chain-link fence's own new 6ft height at all, so from the pitcher camera's
+// own extreme telephoto lens (the same measured 10.86ft visible ceiling the padded-backstop bands
+// were re-proportioned against, above) almost none of a parent figure ever cleared the fence line -
+// "bleachers and parents visible above it" was only a sliver at the shipped size. Raised so a
+// parent's own head clears the fence with real margin, verified by rendering (`little-pitcher.png`):
+// riser top 4 x 1.4 = 5.6ft (just under the fence, where a real small bleacher sits), parent heads
+// (below) at 5.6 + 2.5 = 8.1ft - solidly inside the visible ceiling, not a bare sliver.
+const BLEACHER_ROW_DEPTH_FT = 2.4, BLEACHER_ROW_H_FT = 1.4;
+// R13: the berm's own extent past the fence, and the press box's own box, both fixed shapes
+// (neither scales with `fenceFt` - a Little League/High School dressing never sees a fence far
+// enough out for that to matter, the same reasoning R9's towers/scoreboard already rely on).
+const BERM_EXTRA_FT = 18, BERM_RISE_FT = 7;
+const PRESS_BOX_W = 18, PRESS_BOX_H = 6, PRESS_BOX_D = 8, PRESS_BOX_DIST_FT = 34, PRESS_BOX_Y = BACKSTOP_PAD_H + BACKSTOP_BRICK_H + 2;
 
 /** Build the whole stadium into `scene` for one league. Returns a handle with `dispose()` (every
  *  geometry, material and texture this made), `group`, and `fencePts` so a test can sample the wall
@@ -766,10 +1079,18 @@ const BACKSTOP_CROWD_REPEAT_Y = 1;
  *  27 / 9645, chase camera 14 / 5449 - a few more draw calls than the number above (the backstop
  *  is no longer "free" inside the outfield stands' own merge), still well inside a phone's budget.
  *
- *  Note on leagues: only the FENCE varies. `FIELD[league].fieldScale` scales the named-park
- *  distances inside the engine (settings.js's own comment), never the diamond - the base paths and
- *  the rubber are regulation at every league there, so they are regulation here too. */
-export function buildStadium(scene, { fenceFt }) {
+ *  Note on leagues: only the FENCE varies through R9. `FIELD[league].fieldScale` scales the
+ *  named-park distances inside the engine (settings.js's own comment), never the diamond - the
+ *  base paths and the rubber are regulation at every league there, so they are regulation here too.
+ *
+ *  R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): the BACKDROP now varies by league too
+ *  - `LEAGUE_STADIUM` (above) is the one table everything below reads. `league` defaults to
+ *  `'majors'` so an old caller (or a test that never passes it) gets R9's own bowl unchanged, byte
+ *  for byte. Draw calls per league, measured (batter/pitcher/chase cameras, each league's own real
+ *  fence shape): see the R13 entry in `baseball/CLAUDE.md` for the numbers - every league stays
+ *  comfortably inside the same phone budget the R9 bowl alone already was. */
+export function buildStadium(scene, { fenceFt, league = 'majors' }) {
+  const cfg = LEAGUE_STADIUM[league] || LEAGUE_STADIUM.majors;
   const group = new THREE.Group();
   const geos = [];
   const mats = [];
@@ -883,124 +1204,180 @@ export function buildStadium(scene, { fenceFt }) {
   const railMat = new THREE.MeshLambertMaterial({ color: PALETTE.rail, side: THREE.DoubleSide });
   group.add(new THREE.Mesh(railGeo, railMat)); track(railGeo, railMat);
 
-  // --- the stands: three stepped tiers, each 12 ft deep, rising to 40 ft. Flat boxes, as budgeted:
-  // one vertical face and one horizontal deck per tier, all faces merged and all decks merged.
-  const crowdTex = crowdTexture(); texs.push(crowdTex);
-  // R9 item 4: repeat lowered from the R1/R7 value (60, 1.4) - at that spatial frequency the crowd
-  // aliased into flat grey-brown static up close (the backstop, ~20-30ft from the pitcher camera,
-  // and the chase camera on a deep fly), which read as "renders near-black" for the same reason the
-  // lighting did: neither the colour nor the texture was ever actually resolved at those distances.
-  // Anisotropic filtering (the renderer's own max, the standard fix for a texture viewed at a
-  // shallow angle) is the other half - a flat repeat count change alone still aliased at the
-  // backstop's own steep viewing angle.
-  crowdTex.repeat.set(22, 1.1);
-  crowdTex.anisotropy = 8;
-  const faceParts = [], deckParts = [];
-  const tierBase = [FENCE.height, 16, 28];
-  const tierTop = [16, 28, 40];
-  for (let k = 0; k < 3; k++) {
-    const inner = standsPoints(fenceFt, 14 + k * 12);
-    const outer = standsPoints(fenceFt, 14 + (k + 1) * 12);
-    faceParts.push(ribbonGeometry(inner, tierBase[k], tierTop[k], 1));
-    deckParts.push(deckGeometry(inner, outer, tierTop[k]));
+  // --- the stands: R13 - `cfg.tiers` stepped tiers (0-3, `LEAGUE_STADIUM`'s own table), each 12 ft
+  // deep, rising to 40 ft. Flat boxes, as budgeted: one vertical face and one horizontal deck per
+  // tier, all faces merged and all decks merged. Little League/High School build NONE of this at
+  // all (`cfg.tiers === 0`) - their own dressing is the bleachers/berm/press-box block below.
+  if (cfg.tiers > 0) {
+    const crowdTex = crowdTexture(PALETTE.standsFace, cfg.crowdDensity || 3400); texs.push(crowdTex);
+    // R9 item 4: repeat lowered from the R1/R7 value (60, 1.4) - at that spatial frequency the crowd
+    // aliased into flat grey-brown static up close (the backstop, ~20-30ft from the pitcher camera,
+    // and the chase camera on a deep fly), which read as "renders near-black" for the same reason the
+    // lighting did: neither the colour nor the texture was ever actually resolved at those distances.
+    // Anisotropic filtering (the renderer's own max, the standard fix for a texture viewed at a
+    // shallow angle) is the other half - a flat repeat count change alone still aliased at the
+    // backstop's own steep viewing angle.
+    crowdTex.repeat.set(22, 1.1);
+    crowdTex.anisotropy = 8;
+    const faceParts = [], deckParts = [];
+    const tierBase = [FENCE.height, 16, 28];
+    const tierTop = [16, 28, 40];
+    for (let k = 0; k < cfg.tiers; k++) {
+      const inner = standsPoints(fenceFt, 14 + k * 12);
+      const outer = standsPoints(fenceFt, 14 + (k + 1) * 12);
+      faceParts.push(ribbonGeometry(inner, tierBase[k], tierTop[k], 1));
+      deckParts.push(deckGeometry(inner, outer, tierTop[k]));
+    }
+    const faceGeo = mergeGeometries(faceParts, false);
+    // R9 item 4: UNLIT (MeshBasicMaterial, was MeshLambertMaterial) - the measured cause of "renders
+    // near-black" (this function's own PALETTE.standsFace comment): a vertical face's normal points
+    // horizontally, so the mostly-overhead sun barely lights it regardless of the texture's own
+    // colours. The sky already draws unlit for the identical reason (background scenery that must
+    // read correctly no matter which way the light happens to be facing); the crowd now matches it.
+    const faceMat = new THREE.MeshBasicMaterial({ map: crowdTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(faceGeo, faceMat)); track(faceGeo, faceMat);
+    const deckGeo = mergeGeometries(deckParts, false);
+    const deckMat = new THREE.MeshLambertMaterial({ color: PALETTE.standsDeck, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(deckGeo, deckMat)); track(deckGeo, deckMat);
+    for (const g of [...faceParts, ...deckParts]) g.dispose();
   }
-  const faceGeo = mergeGeometries(faceParts, false);
-  // R9 item 4: UNLIT (MeshBasicMaterial, was MeshLambertMaterial) - the measured cause of "renders
-  // near-black" (this function's own PALETTE.standsFace comment): a vertical face's normal points
-  // horizontally, so the mostly-overhead sun barely lights it regardless of the texture's own
-  // colours. The sky already draws unlit for the identical reason (background scenery that must
-  // read correctly no matter which way the light happens to be facing); the crowd now matches it.
-  const faceMat = new THREE.MeshBasicMaterial({ map: crowdTex, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(faceGeo, faceMat)); track(faceGeo, faceMat);
-  const deckGeo = mergeGeometries(deckParts, false);
-  const deckMat = new THREE.MeshLambertMaterial({ color: PALETTE.standsDeck, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(deckGeo, deckMat)); track(deckGeo, deckMat);
-  for (const g of [...faceParts, ...deckParts]) g.dispose();
 
-  // --- R9 fix (2026-09-21): the backstop, rebuilt to read like the reference instead of the
-  // outfield stands' own crowd tier carried straight up from the ground (this function's own
-  // BACKSTOP_PAD_H/BACKSTOP_BRICK_H/BACKSTOP_CROWD_H comment has the measurement). One flat wall
-  // at BACKSTOP_DIST_FT (R7's own distance, unchanged), three vertical bands - not R7's two radial
-  // tiers, since the reference's own backstop reads as a near-flat wall, not a stepped bowl. Same
-  // camera-visibility fact R7 already established: the batter camera (z = 13.1, looking toward -z)
-  // never reaches z = 30, so nothing here needs a per-camera visibility toggle.
+  // --- R13 item 2: Little League's own backstop is a LOW, mostly-see-through chain-link wall
+  // instead of the padded/brick/crowd wall every other league keeps (below). One ribbon,
+  // `BACKSTOP_CHAINLINK_H` tall, the semi-transparent grid texture (`chainLinkTexture`) on BOTH
+  // sides so it reads the same from the pitcher camera as from anywhere else a future camera might
+  // look from. R13 SHIP-REVIEW FIX (same day): Matt/the coordinator's own literal number - "a 6 ft
+  // chain-link" - replaces the original item-2 draft's 10ft (a real Little League backstop height,
+  // but taller than the coordinator's own explicit ask once the camera's real framing was measured
+  // against it - the bleachers/parents behind it need real sky between the fence top and their own
+  // feet to read as "above it," not "on top of it"). `repeat.y` is set here (not inside
+  // `chainLinkTexture` itself, which has no height to read) to keep the grid's own cells close to
+  // SQUARE as the wall gets shorter: `ribbonGeometry`'s own `uRepeat` (30, unchanged) bakes one
+  // horizontal tile every 62.8/30 = ~2.09ft of arc; matching that physical size vertically at the
+  // new 6ft height needs repeat.y = 6 / 2.09 = ~2.87 - left at the material's own default (1x)
+  // would stretch every diamond of the mesh three times taller than it is wide.
   const backstopPts = backstopPoints(BACKSTOP_DIST_FT, BACKSTOP_HALF_SPAN_DEG);
+  if (cfg.backstop === 'chainlink') {
+    const BACKSTOP_CHAINLINK_H = 6;
+    const clGeo = ribbonGeometry(backstopPts, 0, BACKSTOP_CHAINLINK_H, 30);
+    const clTex = chainLinkTexture(); texs.push(clTex);
+    clTex.repeat.set(1, 2.87);
+    // Rendering this at distance found a FOURTH problem the alpha/lineWidth/STEP changes above
+    // don't touch: WebGL's own mipmap minification averages a fine grid of thin lines, viewed from
+    // far enough away that many texels land under one screen pixel, into a near-solid GRAY HAZE -
+    // the exact "reads as a grey wall" symptom, just from a different cause than the shipped
+    // texture's own alpha/coarseness. A grid pattern is the one shape mipmapping handles worst (a
+    // brick or crowd texture's own solid-fill blocks survive averaging as a colour; a grid of
+    // mostly-transparent lines averages toward a flat, medium-alpha grey no matter how the lines
+    // themselves are drawn). Disabling mipmaps for this one texture - sampled at full resolution
+    // every frame, never blurred toward its own average - is what actually lets the grid read as a
+    // fence with real gaps instead of a haze; `THREE.LinearFilter` on `minFilter` is the standard
+    // fix for exactly this failure mode.
+    clTex.generateMipmaps = false;
+    clTex.minFilter = THREE.LinearFilter;
+    const clMat = new THREE.MeshBasicMaterial({ map: clTex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    group.add(new THREE.Mesh(clGeo, clMat)); track(clGeo, clMat);
+    // A thin dark top rail (a real chain-link fence's own top pipe) - unlit, the same convention
+    // every other rail-on-a-wall in this file already uses.
+    const clRailGeo = ribbonGeometry(backstopPts, BACKSTOP_CHAINLINK_H, BACKSTOP_CHAINLINK_H + 0.25);
+    const clRailMat = new THREE.MeshLambertMaterial({ color: PALETTE.bleacherAlumDark, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(clRailGeo, clRailMat)); track(clRailGeo, clRailMat);
+  } else {
+    // --- R9 fix (2026-09-21): the backstop, rebuilt to read like the reference instead of the
+    // outfield stands' own crowd tier carried straight up from the ground (this function's own
+    // BACKSTOP_PAD_H/BACKSTOP_BRICK_H/BACKSTOP_CROWD_H comment has the measurement). One flat wall
+    // at BACKSTOP_DIST_FT (R7's own distance, unchanged), three vertical bands - not R7's two radial
+    // tiers, since the reference's own backstop reads as a near-flat wall, not a stepped bowl. Same
+    // camera-visibility fact R7 already established: the batter camera (z = 13.1, looking toward -z)
+    // never reaches z = 30, so nothing here needs a per-camera visibility toggle.
 
-  // Band 1: the padded wall, ground to BACKSTOP_PAD_H - a solid muted dark blue, no texture (the
-  // spec's own "a solid padded wall"), with a thin white rail on top (the same ribbon-on-a-wall
-  // convention the outfield fence's own rail already uses).
-  const padGeo = ribbonGeometry(backstopPts, 0, BACKSTOP_PAD_H);
-  const padMat = new THREE.MeshLambertMaterial({ color: PALETTE.backstopPad, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(padGeo, padMat)); track(padGeo, padMat);
-  const backstopRailGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_RAIL_H);
-  const backstopRailMat = new THREE.MeshLambertMaterial({ color: PALETTE.backstopRail, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(backstopRailGeo, backstopRailMat)); track(backstopRailGeo, backstopRailMat);
+    // Band 1: the padded wall, ground to BACKSTOP_PAD_H - a solid muted dark blue, no texture (the
+    // spec's own "a solid padded wall"), with a thin white rail on top (the same ribbon-on-a-wall
+    // convention the outfield fence's own rail already uses). R13: UNLIT (`MeshBasicMaterial`, was
+    // `MeshLambertMaterial`) - the pitcher camera's own pull-back (item 1) means this band alone
+    // now fills most of the visible backstop (the brick/crowd bands above it sit further out of
+    // frame than before), and under Lambert shading it measured (10,24,38) against its own raw
+    // (36,64,106) - the same "vertical face, mostly-overhead sun" darkening the crowd/sky already
+    // needed fixing for, just newly PROMINENT rather than newly broken.
+    const padGeo = ribbonGeometry(backstopPts, 0, BACKSTOP_PAD_H);
+    const padMat = new THREE.MeshBasicMaterial({ color: PALETTE.backstopPad, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(padGeo, padMat)); track(padGeo, padMat);
+    const backstopRailGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_RAIL_H);
+    const backstopRailMat = new THREE.MeshLambertMaterial({ color: PALETTE.backstopRail, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(backstopRailGeo, backstopRailMat)); track(backstopRailGeo, backstopRailMat);
 
-  // Band 2: brick, BACKSTOP_PAD_H to BACKSTOP_PAD_H + BACKSTOP_BRICK_H - the spec's own "a brick
-  // band... tiled so a brick is 3 to 6px at the pitcher camera's lens" (BACKSTOP_BRICK_REPEAT_*'s
-  // own comment has the measurement this repeat is set from).
-  const brickGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_BRICK_H);
-  const brickTex = brickTexture(); texs.push(brickTex);
-  brickTex.repeat.set(BACKSTOP_BRICK_REPEAT_X, BACKSTOP_BRICK_REPEAT_Y);
-  brickTex.anisotropy = 8;
-  const brickMat = new THREE.MeshLambertMaterial({ map: brickTex, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(brickGeo, brickMat)); track(brickGeo, brickMat);
+    // Band 2: brick, BACKSTOP_PAD_H to BACKSTOP_PAD_H + BACKSTOP_BRICK_H - the spec's own "a brick
+    // band... tiled so a brick is 3 to 6px at the pitcher camera's lens" (BACKSTOP_BRICK_REPEAT_*'s
+    // own comment has the measurement this repeat is set from).
+    const brickGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_BRICK_H);
+    const brickTex = brickTexture(); texs.push(brickTex);
+    brickTex.repeat.set(BACKSTOP_BRICK_REPEAT_X, BACKSTOP_BRICK_REPEAT_Y);
+    brickTex.anisotropy = 8;
+    const brickMat = new THREE.MeshLambertMaterial({ map: brickTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(brickGeo, brickMat)); track(brickGeo, brickMat);
 
-  // Band 3: the crowd, ONLY above the brick - a darker ground (`PALETTE.backstopCrowdGround`) and
-  // a MUCH LOWER repeat than the outfield bowl's own (this file's own BACKSTOP_CROWD_REPEAT_*
-  // comment has the measurement), since the backstop sits far closer to the pitcher camera than
-  // the outfield stands ever do. Unlit, same reason the outfield crowd is unlit (a vertical face's
-  // normal points horizontally, so the mostly-overhead sun barely lights it).
-  const backstopCrowdTop = BACKSTOP_PAD_H + BACKSTOP_BRICK_H + BACKSTOP_CROWD_H;
-  const backstopCrowdGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H + BACKSTOP_BRICK_H, backstopCrowdTop);
-  const backstopCrowdTex = crowdTexture(PALETTE.backstopCrowdGround); texs.push(backstopCrowdTex);
-  backstopCrowdTex.repeat.set(BACKSTOP_CROWD_REPEAT_X, BACKSTOP_CROWD_REPEAT_Y);
-  backstopCrowdTex.anisotropy = 8;
-  const backstopCrowdMat = new THREE.MeshBasicMaterial({ map: backstopCrowdTex, side: THREE.DoubleSide });
-  group.add(new THREE.Mesh(backstopCrowdGeo, backstopCrowdMat)); track(backstopCrowdGeo, backstopCrowdMat);
-
-  // --- R9 item 4: four light towers, ringing the outfield (the spec's own "four light towers").
-  // Two merged meshes total (every pole in one, every light bank in the other) - the same
-  // merge-by-material budget discipline the stands already follow, so four towers cost two draw
-  // calls, not eight. Positioned by the SAME `polar()`/fenceFtAt convention every other angle in
-  // this file uses, a fixed distance past the fence so they read as standing just outside the wall.
-  const TOWER_DEG = [-38, -13, 13, 38];
-  const TOWER_EXTRA_FT = 18;   // past the fence, at this angle
-  const TOWER_POLE_H = 70, TOWER_HEAD_H = 10, TOWER_HEAD_W = 16;
-  const poleParts = [], headParts = [];
-  for (const deg of TOWER_DEG) {
-    const ft = fenceFtAt(deg, fenceFt) + TOWER_EXTRA_FT;
-    const p = polar(deg, ft);
-    const pole = new THREE.CylinderGeometry(0.7, 0.9, TOWER_POLE_H, 8);
-    pole.translate(p.x, TOWER_POLE_H / 2, -p.y);
-    poleParts.push(pole);
-    const head = new THREE.BoxGeometry(TOWER_HEAD_W, TOWER_HEAD_H, 2.4);
-    // Angled down a little toward the infield, the way a real light bank tilts to aim at the field
-    // rather than the sky - a flat box reads as a panel either way, but the tilt is what a real
-    // tower's silhouette has that a vertical one does not.
-    head.rotateX(-0.35);
-    head.translate(p.x, TOWER_POLE_H + TOWER_HEAD_H * 0.4, -p.y);
-    headParts.push(head);
+    // Band 3: the crowd, ONLY above the brick - a darker ground (`PALETTE.backstopCrowdGround`) and
+    // a MUCH LOWER repeat than the outfield bowl's own (this file's own BACKSTOP_CROWD_REPEAT_*
+    // comment has the measurement), since the backstop sits far closer to the pitcher camera than
+    // the outfield stands ever do. Unlit, same reason the outfield crowd is unlit (a vertical face's
+    // normal points horizontally, so the mostly-overhead sun barely lights it).
+    const backstopCrowdTop = BACKSTOP_PAD_H + BACKSTOP_BRICK_H + BACKSTOP_CROWD_H;
+    const backstopCrowdGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H + BACKSTOP_BRICK_H, backstopCrowdTop);
+    const backstopCrowdTex = crowdTexture(PALETTE.backstopCrowdGround); texs.push(backstopCrowdTex);
+    backstopCrowdTex.repeat.set(BACKSTOP_CROWD_REPEAT_X, BACKSTOP_CROWD_REPEAT_Y);
+    backstopCrowdTex.anisotropy = 8;
+    const backstopCrowdMat = new THREE.MeshBasicMaterial({ map: backstopCrowdTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(backstopCrowdGeo, backstopCrowdMat)); track(backstopCrowdGeo, backstopCrowdMat);
   }
-  const poleGeo = mergeGeometries(poleParts, false);
-  const poleMat = new THREE.MeshLambertMaterial({ color: PALETTE.towerPole });
-  group.add(new THREE.Mesh(poleGeo, poleMat)); track(poleGeo, poleMat);
-  const headGeo = mergeGeometries(headParts, false);
-  // Unlit, on purpose - a light fixture reading as LIT (a pale, glowing panel) rather than shaded
-  // like an ordinary grey box is what makes it recognisable as a bank of lights from a distance.
-  const headMat = new THREE.MeshBasicMaterial({ color: PALETTE.towerHead });
-  group.add(new THREE.Mesh(headGeo, headMat)); track(headGeo, headMat);
-  for (const g of [...poleParts, ...headParts]) g.dispose();
 
-  // --- R9 item 4: the centre-field scoreboard block - a dark body with a lit "screen" panel set
-  // into its face, standing just past the centre-field fence (the spec's own "a centre-field
-  // scoreboard block"). Two meshes (body, screen); the screen shares the tower head's own unlit
-  // treatment for the same reason.
+  // --- R9 item 4, R13-gated: four light towers, ringing the outfield (the spec's own "four light
+  // towers") - College and up only (`cfg.towers`); Little League/High School play with none, the
+  // spec's own explicit call for Little League, kept for High School too rather than inventing a
+  // number for it. Two merged meshes total (every pole in one, every light bank in the other) - the
+  // same merge-by-material budget discipline the stands already follow, so four towers cost two
+  // draw calls, not eight. Positioned by the SAME `polar()`/fenceFtAt convention every other angle
+  // in this file uses, a fixed distance past the fence so they read as standing just outside the wall.
+  if (cfg.towers) {
+    const TOWER_DEG = [-38, -13, 13, 38];
+    const TOWER_EXTRA_FT = 18;   // past the fence, at this angle
+    const TOWER_POLE_H = 70, TOWER_HEAD_H = 10, TOWER_HEAD_W = 16;
+    const poleParts = [], headParts = [];
+    for (const deg of TOWER_DEG) {
+      const ft = fenceFtAt(deg, fenceFt) + TOWER_EXTRA_FT;
+      const p = polar(deg, ft);
+      const pole = new THREE.CylinderGeometry(0.7, 0.9, TOWER_POLE_H, 8);
+      pole.translate(p.x, TOWER_POLE_H / 2, -p.y);
+      poleParts.push(pole);
+      const head = new THREE.BoxGeometry(TOWER_HEAD_W, TOWER_HEAD_H, 2.4);
+      // Angled down a little toward the infield, the way a real light bank tilts to aim at the field
+      // rather than the sky - a flat box reads as a panel either way, but the tilt is what a real
+      // tower's silhouette has that a vertical one does not.
+      head.rotateX(-0.35);
+      head.translate(p.x, TOWER_POLE_H + TOWER_HEAD_H * 0.4, -p.y);
+      headParts.push(head);
+    }
+    const poleGeo = mergeGeometries(poleParts, false);
+    const poleMat = new THREE.MeshLambertMaterial({ color: PALETTE.towerPole });
+    group.add(new THREE.Mesh(poleGeo, poleMat)); track(poleGeo, poleMat);
+    const headGeo = mergeGeometries(headParts, false);
+    // Unlit, on purpose - a light fixture reading as LIT (a pale, glowing panel) rather than shaded
+    // like an ordinary grey box is what makes it recognisable as a bank of lights from a distance.
+    const headMat = new THREE.MeshBasicMaterial({ color: PALETTE.towerHead });
+    group.add(new THREE.Mesh(headGeo, headMat)); track(headGeo, headMat);
+    for (const g of [...poleParts, ...headParts]) g.dispose();
+  }
+
+  // --- R9 item 4, R13-scaled: the centre-field scoreboard block - a dark body with a lit "screen"
+  // panel set into its face, standing just past the centre-field fence (the spec's own "a
+  // centre-field scoreboard block"). Two meshes (body, screen); the screen shares the tower head's
+  // own unlit treatment for the same reason. `cfg.scoreboardScale` shrinks Little League's own
+  // board (the spec's own "a small scoreboard") without a second, hand-duplicated shape.
   {
     const deg = 0;
     const ft = fenceFtAt(deg, fenceFt) + 22;
     const p = polar(deg, ft);
-    const bodyW = 44, bodyH = 20, bodyD = 3;
+    const sc = cfg.scoreboardScale;
+    const bodyW = 44 * sc, bodyH = 20 * sc, bodyD = 3 * sc;
     const bodyGeo = new THREE.BoxGeometry(bodyW, bodyH, bodyD);
     bodyGeo.translate(p.x, bodyH / 2 + 2, -p.y);
     const bodyMat = new THREE.MeshLambertMaterial({ color: PALETTE.scoreboardBody });
@@ -1012,6 +1389,88 @@ export function buildStadium(scene, { fenceFt }) {
     screenGeo.translate(inward.x, bodyH * 0.56 + 2, -inward.y);
     const screenMat = new THREE.MeshBasicMaterial({ color: PALETTE.scoreboardScreen });
     group.add(new THREE.Mesh(screenGeo, screenMat)); track(screenGeo, screenMat);
+  }
+
+  // --- R13 item 2: small aluminium bleacher SETS with spread-out parents (Little League/High
+  // School only, `cfg.bleachers`) - behind the plate and down each line, built from
+  // `bleacherUnitParts`/`placeBleacher`/`scatterParents` (this file's own helpers, above). One
+  // merged mesh for every bleacher set's risers (they all share one shape and one material), and
+  // one merged mesh PER PARENT COLOUR (`PALETTE.parents.length` of them) rather than one per person
+  // - `scatterParents`'s own header has the reasoning.
+  if (cfg.bleachers.length) {
+    const unit = bleacherUnitParts(cfg.bleacherWidthFt, cfg.bleacherRows, BLEACHER_ROW_DEPTH_FT, BLEACHER_ROW_H_FT);
+    const placements = cfg.bleachers.map((b) => {
+      const p = polar(b.deg, b.r);
+      return placeBleacher(unit, { x: p.x, z: -p.y }, 0, 0);
+    });
+    const riserParts = placements.flatMap((pl) => pl.parts);
+    const riserGeo = mergeGeometries(riserParts, false);
+    const riserMat = new THREE.MeshLambertMaterial({ color: PALETTE.bleacherAlum, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(riserGeo, riserMat)); track(riserGeo, riserMat);
+    for (const g of riserParts) g.dispose();
+
+    const totalParents = cfg.parentsPerBleacher * cfg.bleachers.length;
+    const byColor = scatterParents(placements, totalParents, 20260922 + cfg.bleacherRows);
+    for (let i = 0; i < byColor.length; i++) {
+      const parts = byColor[i];
+      if (!parts.length) continue;
+      const geo = mergeGeometries(parts, false);
+      const mat = new THREE.MeshLambertMaterial({ color: PALETTE.parents[i] });
+      group.add(new THREE.Mesh(geo, mat)); track(geo, mat);
+      for (const g of parts) g.dispose();
+    }
+  }
+
+  // --- R13 item 2: Little League's own grass berm past the fence (`cfg.berm`) - a raised mound
+  // instead of any stand, textured the same as the infield/outfield grass (a slightly darker green
+  // so it still reads as its own, further-away surface) but on ONE sloped ramp
+  // (`rampGeometry`), not a flat deck - the one non-flat piece of stadium geometry in this file.
+  // Two real defects, both found by rendering and neither visible from the numbers alone:
+  //   1. The ramp's NEAR edge starts at `FENCE.height + FENCE.railHeight` (the wall's own rail
+  //      top), not the ground - starting it lower left most of the slope hidden BEHIND the wall
+  //      itself from every camera (`scratchpad/r13/little-batter-BEFORE-berm-fix.png`), so nothing
+  //      of that hidden run did any visual work; this way the WHOLE rise (`BERM_RISE_FT`) crests
+  //      visibly above the wall.
+  //   2. UNLIT (`MeshBasicMaterial`, was `MeshLambertMaterial`) - the same fix R9's own crowd faces
+  //      already needed, for the identical reason (that PALETTE.standsFace comment, above): a
+  //      near-vertical slope this size gets almost no light from the mostly-overhead sun, and
+  //      `bermGrassA` (#3a7a36, already a dark green) under Lambert shading with that little light
+  //      rendered as a solid BLACK band (`scratchpad/r13/berm-diagnostic-BROKEN-normal.png` - fixing
+  //      the ramp's own vertex normal direction, below, was a real, separate defect but did not fix
+  //      this: three.js's `DoubleSide` shading derives the effective normal from triangle winding
+  //      at the fragment stage, not from a mismatched vertex normal, so no normal sign could have
+  //      fixed a lighting-brightness problem). Background scenery that has to read correctly
+  //      regardless of which way the sun happens to face is unlit everywhere else in this file
+  //      (sky, both crowd tiers); the berm is the same kind of surface and now follows the same rule.
+  // A THIRD defect, also found only by rendering: a `map` (`grassTexture()`) AND a `color` tint
+  // together multiply (three.js's own convention), so `bermGrassA` (already a mid-brightness
+  // green) times the grass texture's own mid-brightness greens compounded into something close to
+  // BLACK all over again (measured: rendered pixel (8,70,6), against `bermGrassA` x `grassA`'s own
+  // predicted (14,68,12) - the match that found it). The mowing-stripe texture does no visual work
+  // at this size and distance anyway, so the fix is to drop it: a flat `bermGrassA` colour, no map.
+  if (cfg.berm) {
+    const bermInner = standsPoints(fenceFt, 1);
+    const bermOuter = standsPoints(fenceFt, 1 + BERM_EXTRA_FT);
+    const bermGeo = rampGeometry(bermInner, bermOuter, FENCE.height + FENCE.railHeight, FENCE.height + FENCE.railHeight + BERM_RISE_FT);
+    const bermMat = new THREE.MeshBasicMaterial({ color: PALETTE.bermGrassA, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(bermGeo, bermMat)); track(bermGeo, bermMat);
+  }
+
+  // --- R13 item 2: High School's own press box (`cfg.pressBox`) - a small elevated booth behind
+  // the backstop, a dark body with a lighter "window" band across its front (unlit, the same
+  // "reads correctly regardless of the sun" convention every other panel in this file already
+  // follows for a strip that has to read as glass rather than shaded plastic).
+  if (cfg.pressBox) {
+    const p = polar(180, PRESS_BOX_DIST_FT);
+    const pos = { x: p.x, z: -p.y };
+    const bodyGeo = new THREE.BoxGeometry(PRESS_BOX_W, PRESS_BOX_H, PRESS_BOX_D);
+    bodyGeo.translate(pos.x, PRESS_BOX_Y + PRESS_BOX_H / 2, pos.z);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: PALETTE.pressBoxBody });
+    group.add(new THREE.Mesh(bodyGeo, bodyMat)); track(bodyGeo, bodyMat);
+    const winGeo = new THREE.BoxGeometry(PRESS_BOX_W * 0.86, PRESS_BOX_H * 0.4, 0.2);
+    winGeo.translate(pos.x, PRESS_BOX_Y + PRESS_BOX_H * 0.66, pos.z - PRESS_BOX_D / 2 - 0.05);
+    const winMat = new THREE.MeshBasicMaterial({ color: PALETTE.pressBoxWindow });
+    group.add(new THREE.Mesh(winGeo, winMat)); track(winGeo, winMat);
   }
 
   scene.add(group);

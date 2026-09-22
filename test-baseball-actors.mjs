@@ -976,8 +976,9 @@ async function runMotionHalf() {
   await page.goto('http://localhost:8123/', { waitUntil: 'domcontentloaded' });
 
   const measured = await page.evaluate(async () => {
-    const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD } = await import('/baseball/js/actors.js');
+    const { Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD, CATCHER_FACING_RAD } = await import('/baseball/js/actors.js');
     const F = await import('/baseball/js/field.js');
+    const THREE = await import('/baseball/js/vendor/three.module.min.js');
     const wrap = document.createElement('div');
     // The REAL field band on a 393x852 phone, measured in the hub: 393 x 429 CSS px.
     const W = 393, H = 429;
@@ -1059,9 +1060,53 @@ async function runMotionHalf() {
       bunt: run('batter', 'Bunt', batterPos, BATTER_FACING_RAD, 'batter'),
       pickoff: run('pitcher', 'Pickoff', pitcherPos, PITCHER_FACING_RAD, 'pitcher'),
     };
+
+    // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 4): Matt, on v882, "the batter's feet
+    // are below the ground." `footY` (actors.js `_makeActor`) is measured ONCE from the bind pose,
+    // so any clip whose hips/legs move away from that bind pose can put the true, animated lowest
+    // foot bone above or below where `_place()`'s own correction assumed it would be. Sampled at
+    // FIVE evenly-spaced times across each clip's own duration (t = dur x i/4, matching the sample
+    // grid `hipsOffset.y` was solved against in poses.js), the WORLD Y of the lower of footL/footR
+    // (raw `getWorldPosition`, not a camera projection - the actual ground-truth height), compared
+    // to the y the actor was PLACED at (0 for the batter/runner/catcher, `RUBBER.y` = 0.83 ft for
+    // the pitcher standing on the mound crown - "on the ground" means at the actor's OWN placement
+    // height, not always world 0).
+    const catcherPos = { x: F.CATCHER.x, y: 0, z: F.CATCHER.z };
+    await actors.setCatcher({ side: 'away', pos: catcherPos, heightFt: F.FIGURE_HEIGHT_FT, facingRad: CATCHER_FACING_RAD });
+    const groundCases = [
+      { clip: 'Idle', role: 'batter', pos: batterPos, facingRad: BATTER_FACING_RAD },
+      { clip: 'Set', role: 'pitcher', pos: pitcherPos, facingRad: PITCHER_FACING_RAD },
+      { clip: 'Swing', role: 'batter', pos: batterPos, facingRad: BATTER_FACING_RAD },
+      { clip: 'Run', role: 'r1', pos: runnerPos, facingRad: 0 },
+      { clip: 'Bunt', role: 'batter', pos: batterPos, facingRad: BATTER_FACING_RAD },
+      { clip: 'Pickoff', role: 'pitcher', pos: pitcherPos, facingRad: PITCHER_FACING_RAD },
+      { clip: 'Crouch', role: 'catcher', pos: catcherPos, facingRad: CATCHER_FACING_RAD },
+    ];
+    const ground = groundCases.map((c) => {
+      const act = actors.actors[c.role];
+      actors.place(c.role, { pos: c.pos, heightFt: F.FIGURE_HEIGHT_FT, facingRad: c.facingRad });
+      act.mixer.stopAllAction(); act.current = null;
+      actors.play(c.role, c.clip);
+      const a = act.actions[c.clip];
+      a.timeScale = 1;
+      const dur = a.getClip().duration;
+      const wp = (bone) => { const p = new THREE.Vector3(); act.bones[bone].getWorldPosition(p); return p.y; };
+      const groundY = c.pos.y || 0;
+      const samples = [];
+      for (let i = 0; i < 5; i++) {
+        const t = (dur * i) / 4;
+        a.time = t; a.paused = true;
+        act.mixer.update(0);
+        act.pivot.updateMatrixWorld(true);
+        samples.push({ t: Number(t.toFixed(3)), offset: Number((Math.min(wp('footL'), wp('footR')) - groundY).toFixed(4)) });
+      }
+      act.mixer.stopAllAction();
+      return { clip: c.clip, groundY, samples };
+    });
+
     actors.dispose();
     wrap.remove();
-    return out;
+    return { ...out, ground };
   });
 
   await browser.close();
@@ -1109,6 +1154,26 @@ async function runMotionHalf() {
   else fail('Bunt hips give', `${n(measured.bunt.hips.travel)}px - the bat is not being given with, the batter is a statue`);
   check('Pickoff (pitcher, pitcherCam): handR path length', measured.pickoff.handR.path, MOTION_FLOORS.pickoffHandPath);
   check('Pickoff (pitcher, pitcherCam): handR moves inside the first 20% of the clip', measured.pickoff.early, MOTION_FLOORS.pickoffEarlyMove);
+
+  // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 4): Matt, on v882, "the batter's feet are
+  // below the ground." Each STANDING clip, sampled at five times across its own duration (the same
+  // grid poses.js's own `hipsOffset.y` corrections were solved against): the lowest foot bone's
+  // WORLD Y (not a projection - the real ground-truth height) must land within 0.1 ft of the actor's
+  // own placement height (0 for the batter/runner/catcher, `RUBBER.y` for the pitcher on the mound).
+  const GROUND_BUDGET_FT = 0.1;
+  if (!measured.ground) {
+    fail('foot-on-ground', 'no ground measurement returned');
+  } else {
+    for (const g of measured.ground) {
+      const worst = g.samples.reduce((a, b) => (Math.abs(b.offset) > Math.abs(a.offset) ? b : a));
+      const line = g.samples.map((s) => `t=${s.t.toFixed(2)}:${s.offset >= 0 ? '+' : ''}${s.offset.toFixed(3)}ft`).join('  ');
+      if (Math.abs(worst.offset) > GROUND_BUDGET_FT) {
+        fail(`foot-on-ground: ${g.clip}`, `worst sample ${worst.offset.toFixed(3)}ft at t=${worst.t.toFixed(2)} (budget +/-${GROUND_BUDGET_FT}ft) - ${line}`);
+      } else {
+        ok(`foot-on-ground: ${g.clip} - worst ${worst.offset.toFixed(3)}ft (budget +/-${GROUND_BUDGET_FT}ft) - ${line}`);
+      }
+    }
+  }
 }
 
 // Stage 7 starts Swing and Miss with NO cross-fade, so their first keyframe has to BE the pose the
