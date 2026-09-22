@@ -468,6 +468,54 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+#### The Menu button is SKEEBALL'S button, with skeeball's sheet (2026-09-22)
+
+Matt, with a screenshot of each: *"make the 'menu' button look just like skeeball. With the same
+options."*
+
+It was a 13px pill reading "Menu" that QUIT the match on one tap (straight into `leaveMatch`).
+Skeeball's is a 44x44 hamburger that opens a **pause sheet**, and that difference is the point: a
+button that ends a game on a single tap with no way to say you did not mean it is the exact
+complaint skeeball itself got on 2026-08-21.
+
+So `.h4-menu` is now `.sk-menu`'s box verbatim - absolute, `top: max(10px, env(safe-area-inset-top))`,
+`right: 12px`, 44x44, `☰` - and `_showPause()` is `skeeball/js/ui.js`'s `_showPause` ported:
+the same `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same
+Resume / New game / leave stack.
+
+**Top right is not a style choice, it is the fix this game already needed once.** The hub's
+floating "Hub" chip owns the top LEFT, and the previous Menu button shared its band on a notched
+phone. The HUD row's `padding-left: 76px` stays for the turn pill and gains a mirrored
+`padding-right: 64px`, because the button is absolutely positioned now and the row no longer
+CONTAINS it.
+
+**Three things differ from skeeball, each for a reason:**
+
+- **The third button is this game's own destination.** Skeeball's quits to its machine gallery;
+  this game has no gallery, and the Menu button has always gone to the setup screen where you
+  change opponent and shot rule. In a turn-by-turn match it reads "Back to multiplayer" instead,
+  because that is where the rest of your matches are.
+- **New game is HIDDEN in any multiplayer match**, and that is a rule rather than tidiness: there
+  is nobody on the other end of a unilateral restart. In a live room both engines would replay
+  different boards from the next move on; a turn-by-turn challenge is a shared move log, and a
+  rematch there is a new challenge.
+- **Leaving still routes through `leaveMatch()`**, so the mid-game confirm and the async
+  "your match is saved" toast are unchanged - the sheet is a new door onto the same behaviour,
+  not a replacement for it.
+
+**PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up (skeeball's 2026-08-26 lesson),
+and it is if anything more load-bearing here: a ball still in the air when you tap would otherwise
+go on flying, drop through a hoop, take your turn and hand the CPU its shot while you read the
+menu. `preserveDrawingBuffer` keeps the last frame on the canvas, so the machine freezes rather
+than going black. `leaveMatch`'s cancel path restarts the loop, or declining the confirm would
+leave a permanently frozen game.
+
+Measured in a browser **with a 59px inset simulated**, since a headless one has none: the button
+is 44x44 at x 337 / y 59 and `elementFromPoint` returns it at its own centre; the sheet reads
+Paused / Resume / New game / Back to setup screen with an X; `raf` is 0 while it is up and
+non-zero after Resume; no page errors. `test-game-conventions.mjs` 11/11, `test-hoops4-mp.mjs`
+77/77, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
 #### Two buttons in one place, and why a measurement said otherwise
 
 Matt, on the build that shipped the Menu button: *"whatever back button you made is hidden behind

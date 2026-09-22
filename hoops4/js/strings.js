@@ -26,6 +26,14 @@ export const STRINGS = {
     you: 'You', shooting: 'is shooting', yourShot: 'Your shot',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     menu: 'Menu',
+    // THE PAUSE SHEET. Matt asked for skeeball's button and skeeball's options, so these mirror
+    // its `paused`/`resume`/`new_game` - except the third, which goes where THIS game's menu
+    // button has always gone (its own setup screen), not out to a gallery this game does not have.
+    paused: 'Paused',
+    resume: 'Resume',
+    newGame: 'New game',
+    backSetup: 'Back to setup screen',
+    backMp: 'Back to multiplayer',
     // --- the setup screen, restructured 2026-09-22 ------------------------------------------
     // Matt: "What is 2 player? There should be options to play the computer player and
     // 'Multiplayer Options'... The computer player options should just have the difficulties and
@@ -115,6 +123,11 @@ export const STRINGS = {
     you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     menu: 'Menú',
+    paused: 'En pausa',
+    resume: 'Continuar',
+    newGame: 'Partida nueva',
+    backSetup: 'Volver a la pantalla de inicio',
+    backMp: 'Volver a multijugador',
     vsCpu: 'Jugar contra la máquina',
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',

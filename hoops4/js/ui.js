@@ -634,7 +634,7 @@ class Hoops4 {
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
           <span class="h4-leg" hidden></span>
-          <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">☰</button>
         </div>
         <div class="h4-stage">
           <canvas class="h4-canvas"></canvas>
@@ -644,7 +644,65 @@ class Hoops4 {
       </div>`;
     this.paintHud();
     this.bindSwipe();
-    this.on(this.root.querySelector('.h4-menu'), 'click', () => this.leaveMatch());
+    this.on(this.root.querySelector('.h4-menu'), 'click', () => this._showPause());
+  }
+
+  /**
+   * THE PAUSE SHEET, WHICH IS SKEEBALL'S. Matt: "make the 'menu' button look just like skeeball.
+   * With the same options." So this is `skeeball/js/ui.js`'s `_showPause` ported: the same
+   * `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same Resume / New game /
+   * leave stack, and the same 44x44 hamburger opening it.
+   *
+   * **The third option is this game's own destination, not skeeball's.** Skeeball's third button
+   * quits to its machine gallery; this game has no gallery, and the Menu button has always gone
+   * to its setup screen, which is where you change opponent and shot rule. In a turn-by-turn
+   * match it goes to the multiplayer screen instead, because that is where the rest of your
+   * matches are.
+   *
+   * **New game is hidden in any multiplayer match**, and that is a rule rather than tidiness:
+   * there is nobody on the other end of a unilateral restart. In a live room both engines would
+   * be replaying different boards from the next move on, and a turn-by-turn challenge is a shared
+   * document with a move log - a rematch there is a new challenge, which the game-over card
+   * already says.
+   *
+   * **PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up, which is skeeball's own
+   * lesson (2026-08-26) and is if anything more load-bearing here: a ball still in the air when
+   * you tap the button would otherwise go on flying, drop through a hoop, take your turn and hand
+   * the CPU its shot while you sat reading the menu. The canvas keeps showing its last frame.
+   */
+  _showPause() {
+    // NOT ONCE THE MATCH IS OVER - the game-over card is already up or about to be, and it
+    // carries its own Play again / Quit.
+    if (!this.match || this.match.over) return;
+    const isAsync = !!(this.mp && this.mp.kind === 'async');
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-pause" role="dialog" aria-modal="true" aria-label="${t('paused')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="h4-pause-title">${t('paused')}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
+          ${this.mp ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('newGame')}</button>`}
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="leave">${isAsync ? t('backMp') : t('backSetup')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.stopLoop();
+    const close = () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (!this.disposed) this.startLoop();
+    };
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('[data-role="resume"]'), 'click', close);
+    const nw = el.querySelector('[data-role="new"]');
+    // A live ball is abandoned, not banked: nothing is recorded until a match ENDS, so a
+    // restart loses a board and no history (THE LAW rule 2).
+    if (nw) this.on(nw, 'click', () => { if (el.parentNode) el.parentNode.removeChild(el); this.start(); });
+    this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      this.leaveMatch();
+    });
   }
 
   /** OUT OF A MATCH, BUT NOT OUT OF THE GAME. Matt: "we had the Hub back button. That's more of
