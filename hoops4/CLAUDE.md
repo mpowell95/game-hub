@@ -69,6 +69,7 @@ measuring and all three answer to a change in here:
 | `reference/hoops/sweep-speed.mjs` | the launch speed band, against THIS engine (`--scan`, then `--band=min,max`) |
 | `hoops4/js/test.js` | Matt's four requirements, as numbers. Headless, ~2 min |
 | `reference/hoops/check-display.mjs` | the machine as the PLAYER sees it, in a real browser: is the whole display on screen, is anything occluding it, is column N under hoop N, and does a real swipe reach all seven |
+| `reference/hoops/probe-bounce.mjs` | DOES A MISS ACTUALLY BOUNCE? Counts, per throw, every surface the ball touches and every time it goes from falling to rising - which is what found that the rim was lively and everything a miss LANDS on was dead. `--set boardRest=0.3,riserRest=0.4,captureDrop=0.4` measures a candidate without editing `boarddef.js`, the same shape `tune-boggle-es.mjs` uses. Note `captureDrop` measurably does nothing here: on a collared basket the binding rule is "the centre is below the rim inside the mouth", not the kinematic prediction |
 
 `reference/hoops/sweep-hoops-columns.mjs` is the original FEASIBILITY sweep (write-up:
 `reference/hoops/FINDINGS.md`) and is kept for the record only — it predates this folder and
@@ -213,6 +214,53 @@ consequence: 4 captured balls escaped past the rail where their own throat was c
 **The holes did not move** when the cabinet widened — the pitch is still 1.30X and the outer pair
 still at ±3.90X.
 
+### "NOT VERY BOUNCY" WAS NEVER THE RIM (2026-09-22)
+
+Matt asked for bouncier rims when the machine was built, and again after a build whose `ringRest`
+was already 0.62, the highest in the repo: *"they're not very bouncy, like I asked."*
+
+He was right, and the rim was never the problem. `reference/hoops/probe-bounce.mjs` throws the
+real grid and counts, per throw, what the ball TOUCHES and whether it ever goes from falling to
+rising fast enough to see. On the 0.62 build: **47% of misses bounced at all**, 0.60 bounces per
+miss, mean best rebound **0.38 m/s** - a dribble. And here is what a miss actually meets, counted
+over 231 throws:
+
+| surface | throws that touch it | restitution it had |
+|---|---|---|
+| **riser** (the display panel) | 165 | 0.05 |
+| **cupSeg** (the rims) | 115 | 0.62 |
+| **fin / finCap** | 111 | 0.03 |
+| **board** (the hoop shelf) | 51 | 0.05 |
+
+**A lively rim over a beanbag floor feels like a beanbag.** The rim is struck by half the throws
+and the ball then lands on something dead. Three changes, each on a surface the measurement named:
+
+- **The shelf and the display panel got real restitution** (0.58 and 0.70). The riser needed its
+  OWN contact material to get there - it used to share the shelf's, so the most-struck surface on
+  the machine could not be tuned apart from the floor a scored ball lands on. The trough got one
+  too and stays dead on purpose: a bouncy catch pit throws a dead ball back out onto the lane.
+- **The fins and the chamfers are hoop hardware, so they bounce like the rims.** They fell through
+  to `matWall` (0.03) and a near-miss that clipped one simply died. A ball kicking off a fin into
+  the next basket is exactly the unpredictability Matt asked for, and nothing steers it there.
+- **The side rails stay dead** (0.03). That is a measured fix - a live rail made the outer columns
+  catch-alls for every over-aimed ball - and it is not what anyone is looking at when they say the
+  machine does not bounce.
+
+Measured after, same grid: **60% of misses bounce, 1.31 bounces each, mean best rebound 0.72 m/s.**
+
+**The cost, real and accepted: the scoring rate falls**, 37.7% of the grid to 23.7%, because a
+lively machine throws more balls back out. That is the trade Matt asked for, it is well inside
+`test.js`'s own 8-75% band, and under shoot-till-you-make-one a lower rate buys more shots per
+turn rather than a worse game. Parking went DOWN with it, 8.9% to 4.6%.
+
+**THE METRIC THAT SHOULD HAVE CAUGHT THIS WAS BROKEN.** `test.js` printed "rattled without scoring
+0 (0.0%)" under Matt's own bounce requirement, on every build ever shipped, for two reasons:
+`events` is an array of OBJECTS and the test asked `ev.includes('rattle')`, and on this machine a
+`rattle` only fires on a ball that WAS captured, so the "without scoring" half can never be true
+anyway. A number that cannot move is worse than no number. It is replaced by a measurement of the
+thing Matt can see - what fraction of misses bounce, and how hard - as two assertions that can go
+red.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
@@ -220,6 +268,18 @@ Matt, on a phone screenshot of the shipped v886: *"These don't look like real ba
 They were real wire baskets, ported from HOT SHOT, and they still read as a **wire fence**. Four
 things were wrong at once, and each one is only visible at the size a hoop actually occupies -
 about thirty pixels tall on a 393 px phone:
+
+**Then it was still not HOT SHOT's.** Matt, on the build that followed: *"They're still not the
+same."* The construction had been ADAPTED rather than ported - a threshold changed here, the orange
+moved there - and each small departure made it something else. It is HOT SHOT's `_wireBasket` now,
+at its own proportions and its own tube radii: the orange carries the rim AND the bottom ring AND
+the ten ribs, and the white net gets THREE bands because `collarH > R * 0.9` (the adapted version
+used a threshold that gave this machine ONE band, and one band of strands over an orange frame is
+the wire fence). The backboard is HOT SHOT's cream ARCH with a white box outlined in orange,
+bottomed at the rim so the net hangs clear below it, rather than the flat rectangle that replaced
+it first.
+
+The four readings that came before that are all still true, and are why the port was needed:
 
 - **The rim was PALE and so was the net.** The pale rim came from reading the reference photo, and
   optimising for it was the wrong call: two greys, one on top of the other, is a mesh band. The
@@ -263,7 +323,7 @@ is what `VISUAL-PROCESS.md` is for.
 
 | he asked for | how | measured |
 |---|---|---|
-| "rims a little bouncier than other skeeball games" | `ringRest` 0.46 (HOT SHOT 0.30, THE CLASSIC 0.18) plus `captureDrop` 0.52 (HOT SHOT 0.35) | both asserted in `test.js` |
+| "rims a little bouncier than other skeeball games", and then "they're not very bouncy, like I asked" | `ringRest` 0.72 (HOT SHOT 0.30, THE CLASSIC 0.18) AND the shelf, the display panel, the fins and the chamfers made live - see "NOT VERY BOUNCY WAS NEVER THE RIM" above | 60% of misses bounce, 1.31 bounces each, mean best rebound 0.72 m/s, all three asserted in `test.js` |
 | "a little bit of unpredictability" | a SEEDED per-throw scatter on the launch only | seeded replays exactly; unseeded is bit-identical to before |
 | "a ball can't get stuck balancing between two rims" | **the fins** — see below | 18 saddle drops, **0** stay |
 | "once it goes into a basket, it goes down that column 100% of the time" | **no rimout**, plus a throat 8 ball-radii tall | **100.00%** (94.07%, then 98.21%) |

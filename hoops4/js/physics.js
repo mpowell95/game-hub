@@ -104,6 +104,13 @@ function buildWorld(board) {
   const matWood = new CANNON.Material('wood');     // lane + hump: varnished, low bounce
   const matBoard = new CANNON.Material('board');   // the face: livelier
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
+  // THE RISER AND THE TROUGH GOT THEIR OWN MATERIALS (2026-09-22). They used to share the
+  // shelf's, which meant the display panel - the most-struck surface on the machine, 165 of 231
+  // throws - and the catch pit could not be tuned apart from the floor a scored ball lands on.
+  // The panel needs to come BACK at the player and the pit needs to swallow; one number cannot
+  // be both. Defaults here are the old shared values, so a board that sets neither is unchanged.
+  const matRiser = new CANNON.Material('riser');
+  const matTrough = new CANNON.Material('trough');
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // kick panel: padded, kills the ball
   // The BACK WALL gets its OWN material so it can rebound a hard throw at the player (the classic's
@@ -134,6 +141,8 @@ function buildWorld(board) {
     new CANNON.ContactMaterial(a, b, { friction, restitution }));
   contact(matBall, matWood, pick(MAT.woodFric, 0.30), pick(MAT.woodRest, 0.22));
   contact(matBall, matBoard, pick(MAT.boardFric, 0.62), pick(MAT.boardRest, 0.08));
+  contact(matBall, matRiser, pick(MAT.riserFric, 0.10), pick(MAT.riserRest, 0.08));
+  contact(matBall, matTrough, pick(MAT.troughFric, 0.40), pick(MAT.troughRest, 0.06));
   contact(matBall, matWall, pick(MAT.wallFric, 0.04), pick(MAT.wallRest, 0.50));
   // GUARD: the rings are PVC, not steel - a ball that clips a rim loses its energy and drops or
   // dribbles down rather than bouncing across ring tops and back out. Low restitution kills the
@@ -158,11 +167,22 @@ function buildWorld(board) {
       type: CANNON.Body.STATIC,
       shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
-        : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
-          : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
-            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' ? matBack
-              : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+        : s.part === 'board' ? matBoard
+          : s.part === 'riser' ? matRiser
+            : s.part === 'trough' ? matTrough
+              : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
+                // THE FINS AND THE CHAMFERS ARE HOOP HARDWARE, so they bounce like the rims.
+                // They used to fall through to matWall (0.03) and a near-miss that clipped one
+                // simply died - which is 111 of 231 throws, and most of what "not very bouncy"
+                // was. A ball kicking off a fin into the next basket is exactly the
+                // unpredictability Matt asked for, and nothing steers it there.
+                : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat'
+                  || s.part === 'splitter' || s.part === 'fin' || s.part === 'finCap'
+                  || s.part === 'chamfer' ? matRing
+                  : s.part === 'backboard' ? matBack
+                    // The SIDE RAILS stay dead on purpose (wallRest 0.03, measured): a live rail
+                    // made the outer columns catch-alls for every over-aimed ball.
+                    : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR
