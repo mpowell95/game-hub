@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v909';
+const CACHE = 'game-hub-v910';
 
 const ASSETS = [
   './',
@@ -873,16 +873,16 @@ const REST_MANIFEST = {
   './golf/': 'ca3b3b7acc',
   './golf/index.html': 'ca3b3b7acc',
   './golf/css/golf.css': '5daf144650',
-  './golf/js/ui.js': '6cec6f4881',
-  './golf/js/strings.js': '54bff39d35',
-  './golf/js/holes.js': '13b91eb70f',
-  './golf/js/obstacles.js': '521257b8dd',
+  './golf/js/ui.js': 'f80f7eeef2',
+  './golf/js/strings.js': '25124a996a',
+  './golf/js/holes.js': 'e4871d322a',
+  './golf/js/obstacles.js': 'c86e71ac0b',
   './golf/js/club-art.js': 'b501cf9342',
   './golf/js/clubs.js': '8ed3f0cc3f',
   './golf/js/swing.js': '50dfc9ca97',
-  './golf/js/shot.js': '3f40cf2d06',
-  './golf/js/render.js': 'cf15f6289d',
-  './golf/js/holegen.js': '3e600de935',
+  './golf/js/shot.js': '084c415dbb',
+  './golf/js/render.js': '8563f8e8a0',
+  './golf/js/holegen.js': 'eb3422d062',
   './golf/js/rounds.js': 'f9e4a66390',
   './golf/js/board.js': 'f6c1612123',
   './golf/js/save.js': '0126d36c18',

@@ -403,6 +403,69 @@ export function treeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   return null;
 }
 
+/** DOES A POWER LINE STOP THIS SHOT (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md)? Returns
+ *  `{ wire, at, p }` - the index into `hole.lines`, where the ball met it, and how far through the
+ *  flight - or null.
+ *
+ *  A WIRE IS A BAND, NOT A CYLINDER. A canopy blocks from the ground up to its height; a wire only
+ *  stops a ball travelling between `lo` and `hi`, so a high shot sails over it and a low runner, a
+ *  putt or a chip still climbing passes under it. That is the whole point of a band, and it is why
+ *  this is its own rule rather than a row in the tree catalogue. The poles ARE trees (holegen.js
+ *  puts one at every point), so a pole trunk is `treeHit`'s business, not this one's.
+ *
+ *  Same sampling as `treeHit` (flightPoint, the same STEP, the same `startAt` so the ball's own
+ *  position can never block leaving it). Between each pair of samples the 2-D step is intersected
+ *  with every span, and the ball's height is interpolated at the crossing. */
+export function wireHit(hole, from, dirRad, distanceYd, sideYd, apex) {
+  const lines = hole.lines;
+  if (!Array.isArray(lines) || !lines.length) return null;
+  const cos = Math.cos(dirRad);
+  const sin = Math.sin(dirRad);
+  const STEP = 0.4;
+  const steps = Math.max(2, Math.ceil(distanceYd / STEP));
+  const startAt = Math.min(0.35, 1.2 / Math.max(1, distanceYd));
+  const pos = (p) => {
+    const f = flightPoint(p, distanceYd, sideYd, apex);
+    return { x: from[0] + sin * f.along + cos * f.side, y: from[1] + cos * f.along - sin * f.side, h: f.height };
+  };
+  let prev = null;
+  let prevP = 0;
+  for (let i = 1; i <= steps; i++) {
+    const p = i / steps;
+    if (p < startAt) continue;
+    const cur = pos(p);
+    if (!prev) { prev = pos(Math.max(startAt, (i - 1) / steps)); prevP = Math.max(startAt, (i - 1) / steps); }
+    let best = null;
+    for (let li = 0; li < lines.length; li++) {
+      const ln = lines[li];
+      const pts = ln.pts || [];
+      for (let k = 0; k + 1 < pts.length; k++) {
+        const t = segCross(prev.x, prev.y, cur.x, cur.y, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]);
+        if (t == null) continue;
+        const h = prev.h + (cur.h - prev.h) * t;
+        if (h < ln.lo || h > ln.hi) continue;
+        if (!best || t < best.t) best = { t, li, x: prev.x + (cur.x - prev.x) * t, y: prev.y + (cur.y - prev.y) * t };
+      }
+    }
+    if (best) return { wire: best.li, at: [best.x, best.y], p: prevP + (p - prevP) * best.t };
+    prev = cur;
+    prevP = p;
+  }
+  return null;
+}
+
+/** Where segment A (a->b) crosses segment C (c->d), as the fraction along A, or null. */
+function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-12) return null;             // parallel: a ball running along a wire never crosses it
+  const qx = cx - ax, qy = cy - ay;
+  const t = (qx * sy - qy * sx) / den;
+  const u = (qx * ry - qy * rx) / den;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return t;
+}
+
 /**
  * Resolve one full-swing shot.
  *
@@ -465,7 +528,12 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   // for the same reason: one number for "how far off the aim line did it finish".
   const sideYd = Math.tan(mishitDeg * DEG) * carry + wind.sideYd;
 
-  const blocked = treeHit(hole, from, aimRad, carry, sideYd, apex);
+  // A tree or a power line, whichever the ball meets FIRST (2026-09-22). A wire block resolves
+  // exactly like a canopy block - the ball falls where it met the wire, no penalty stroke - and
+  // carries `wire` (an index into hole.lines) where a tree block carries `tree`/`type`.
+  const byTree = treeHit(hole, from, aimRad, carry, sideYd, apex);
+  const byWire = wireHit(hole, from, aimRad, carry, sideYd, apex);
+  const blocked = byWire && (!byTree || byWire.p < byTree.p) ? byWire : byTree;
   const cos = Math.cos(aimRad);
   const sin = Math.sin(aimRad);
 
@@ -497,8 +565,10 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     //
     // The kick is PERPENDICULAR to the shot line, on the side the ball was already curving to,
     // because that is what a ball glancing off a trunk does.
-    const bt = blocked.tree;
-    const need = blocked.type.trunk + BLOCK_CLEAR_YD;
+    // A WIRE has no trunk to step clear of, so only rule 2 applies to it: `bt` is a point nothing
+    // can be inside, and `need` 0 makes both trunk checks below no-ops.
+    const bt = blocked.tree || { x: Infinity, y: Infinity };
+    const need = blocked.tree ? blocked.type.trunk + BLOCK_CLEAR_YD : 0;
     if (Math.hypot(landing[0] - bt.x, landing[1] - bt.y) < need) {
       const side = f.side >= 0 ? 1 : -1;
       landing[0] = bt.x + cos * side * need;

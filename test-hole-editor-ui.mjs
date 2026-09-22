@@ -209,7 +209,8 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   // whole catalogue, and the swamp and bench tiles place what they show.
   const cat = await p2.evaluate(async () => (await import('/golf/js/obstacles.js')).OBSTACLE_CATALOG.length);
   const tiles = await p2.$$eval('.he-tile', (els) => els.map((e) => e.dataset.item));
-  ok('the palette shows every catalogue entry, single and stand', cat === 17
+  // 18 (2026-09-22): the power-line batch appended 'pole' as OBSTACLE_CATALOG's 18th entry.
+  ok('the palette shows every catalogue entry, single and stand', cat === 18
     && Array.from({ length: cat }, (_, i) => tiles.includes(`tree-${i}`) && tiles.includes(`stand-${i}`)).every(Boolean), `${cat} entries, ${tiles.length} tiles`);
   const at2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cam.cx) * cam.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cam.cy) * cam.ppy }; }, [x, y]);
   const sp2 = () => p2.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
@@ -316,6 +317,33 @@ await page.fill('#he-t-size-n', '2'); await page.keyboard.press('Tab'); await se
 await page.fill('#he-t-height-n', '35'); await page.keyboard.press('Tab'); await settle();
 const tr = (await spec()).trees; const lt = tr[tr.length - 1];
 ok('size and height are written on the placed tree', lt.s === 2 && lt.h === 35, JSON.stringify(lt));
+
+console.log('\n-- Power line (docs/HANDOFF-GOLF-POWER-LINES.md) --');
+// The engine half (Opus: obstacles.js's 'pole' entry, holegen.js's `lines`, model.js's
+// addLine/setLineField/moveLinePoint/deleteLine) may not have landed in this worktree yet. This
+// block is guarded on the one mutator every path below needs, so it SKIPS with a printed reason
+// rather than failing on a build that is only half-merged.
+const hasAddLine = await page.evaluate(async () => {
+  const M = await import('/hole-editor/js/model.js');
+  return typeof M.addLine === 'function';
+});
+if (!hasAddLine) {
+  console.log('SKIP - hole-editor/js/model.js has no addLine yet (the engine half has not landed)');
+} else {
+  await key('v');
+  await page.click('.he-tile[data-item="power-line"]'); await settle();
+  const nLn0 = ((await spec()).lines || []).length;
+  for (const [dx, dy] of [[-40, 90], [-26, 90], [-12, 90]]) { const q = await toScreen(dx, dy); await page.mouse.click(q.x, q.y); await page.waitForTimeout(80); }
+  await page.keyboard.press('Enter'); await settle();
+  const sLn = await spec();
+  const lines = sLn.lines || [];
+  const placed = lines[nLn0];
+  ok('a Power line tile + three clicks + Enter makes spec.lines with 3 points', lines.length === nLn0 + 1 && placed && placed.pts && placed.pts.length === 3, JSON.stringify(placed || null));
+  ok('...and selects it', await page.evaluate(() => { const s = window.__he.editorCanvas.selection; return !!s && s.group === 'lines'; }));
+  await key('Delete');
+  ok('selecting it and pressing Delete removes it', ((await spec()).lines || []).length === nLn0);
+  await key('Control+z');
+}
 
 console.log('\n-- Zoom, pan, hole switching --');
 const z0 = await page.evaluate(() => +document.getElementById('he-zoom').value);

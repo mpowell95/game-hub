@@ -15,6 +15,7 @@ import {
   addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
   addCross, setCrossField, deleteCross, deleteObject,
   addDecor, setDecorField, deleteDecor,
+  addLine, setLineField, moveLinePoint, deleteLine,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
@@ -40,6 +41,7 @@ const MUTATORS = {
   addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
   addCross, setCrossField, deleteCross, deleteObject,
   addDecor, setDecorField, deleteDecor,
+  addLine, setLineField, moveLinePoint, deleteLine,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
@@ -64,6 +66,10 @@ const TOOLS = [
   // Decor (2026-09-22): art only, never consulted for anything. Its tiles live in the palette like
   // every other object, and `toolState.decorKind` says which sprite the next click drops.
   ['decor', 'K', '⚑', 'Decor', false],
+  // Power line (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md): picking this tool STARTS DRAWING a
+  // line (setTool below) - click the poles, Enter or double-click finishes (model.js addLine via
+  // addDrawnShape's 'lines' route), Esc cancels. Its tile lives in the palette.
+  ['line', 'L', '⚡', 'Power line', false],
 ];
 
 const root = document.getElementById('he-root');
@@ -251,9 +257,14 @@ ribbon.innerHTML = [
 const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
 
 function setTool(id) {
+  // Leaving the Power line tool mid-line abandons that line, exactly as Esc would.
+  if (currentTool === 'line' && id !== 'line' && editorCanvas.drawing && editorCanvas.drawing.group === 'lines') editorCanvas.cancelDraw();
   currentTool = id;
   for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.setAttribute('aria-pressed', String(btn.dataset.tool === id));
   editorCanvas.setTool(id);
+  // THE POWER LINE TOOL IS THE DRAWING FLOW. Selecting it (its palette tile, or the L key) starts a
+  // line; the canvas's own click-points / Enter / Esc handling does the rest.
+  if (id === 'line' && !(editorCanvas.drawing && editorCanvas.drawing.group === 'lines')) editOps.startDraw('lines', null);
   refreshContext();
   refreshPalette();
 }
@@ -452,7 +463,7 @@ editorCanvas.ops = editOps;
 
 // Duplicate (ribbon + D): the selected bunker / lake / tree / stand / cross, 12 yd further up the
 // hole, and the copy becomes the selection so it can be dragged straight away.
-const DUPLICABLE = ['bunkers', 'water', 'trees', 'sentinels', 'cross', 'decor'];
+const DUPLICABLE = ['bunkers', 'water', 'trees', 'sentinels', 'cross', 'decor', 'lines'];
 function duplicateSelected() {
   const sel = editorCanvas.selection;
   if (!sel || !DUPLICABLE.includes(sel.group)) return;

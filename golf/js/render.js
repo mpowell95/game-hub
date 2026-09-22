@@ -185,6 +185,9 @@ export const TREE_FILL = {
   smallrock: ['#9a9086', '#5e564c'],
   rockpile: ['#8f8578', '#544c42'],
   log: ['#8a6a42', '#5c4529'],
+  // POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a plain grey disc with a dark
+  // crossarm - not green at all, since a utility pole carries no canopy.
+  pole: ['#9a9a92', '#4f4f48'],
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
@@ -358,6 +361,17 @@ export function treeShapes(px, py, r, shape) {
       const rr = r * 0.45;
       return [-0.85, -0.28, 0.28, 0.85].map((t) => [px + t * r, py, rr]);
     }
+    case 'pole':
+      // A UTILITY POLE (2026-09-22, section 4): a small solid disc for the base seen from
+      // directly above - no canopy circles, same reason `dead` has none. The crossarm that
+      // actually reads as "pole" rather than "rock" is `treeAccent`'s job, below.
+      //
+      // FLOORED, unlike every other shape here: the catalogue's own pole entry is `canopy: 0.3`
+      // (a physically honest ~11" pole), which at `MAP_PPY` (2.4 px/yd) rasterises to a
+      // SUB-PIXEL 0.36 px disc - invisible, not small. A pole is read at a glance, never measured
+      // against a club's flight the way a tree's canopy is, so a floor costs nothing a player
+      // could rely on.
+      return [[px, py, Math.max(1.1, r * 0.5)]];
     case 'canopy':
     default:
       return [
@@ -473,6 +487,20 @@ export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
       ctx.fill();
       break;
     }
+    case 'pole': {
+      // A short dark crossarm stroke across the disc - the one thing that separates a pole from a
+      // rock at this pixel size, seen from directly above. Floored the same way `treeShapes`'s
+      // disc is (the raw canopy-derived `r` here is 0.72 raster px at MAP_PPY, sub-pixel).
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(0.9, r * 0.22);
+      ctx.lineCap = 'round';
+      const arm = Math.max(2.2, r * 1.7);
+      ctx.beginPath();
+      ctx.moveTo(px - arm, py);
+      ctx.lineTo(px + arm, py);
+      ctx.stroke();
+      break;
+    }
     default:
       break;
   }
@@ -531,6 +559,86 @@ export function drawDecorSprite(ctx, kind, px, py, ppy, rot, pal) {
     ctx.fill();
   }
   ctx.restore();
+}
+
+/** THE WIRE (2026-09-22, `docs/HANDOFF-GOLF-POWER-LINES.md` section 4): two thin parallel dark
+ *  strokes along each span of `hole.lines`, plus a shadow offset by the same SHADOW_LEN/
+ *  SHADOW_DROP rule a tree uses - `h` (the wire's own height) standing in for a tree's `height`.
+ *  Drawn AFTER the poles (which are ordinary TREE entries, from `hole.treeTypes`, and so are
+ *  already composited by the tree pass above this call site) directly onto the MAP canvas rather
+ *  than the translucent tree layer: a wire has no canopy to fade for a putt underneath it, so it
+ *  stays solid at every zoom, the same as a green's edge or a bunker's rim.
+ *
+ *  Everything is worked out in RASTER (map-pixel) space, off points already run through `toPx`,
+ *  so the perpendicular offset between the two strokes is exact regardless of the world/screen
+ *  y-flip `toPx` carries. Every stroke is floored at 1 raster px, which is what keeps a wire
+ *  legible at `MAP_PPY` (2.4 px/yd) - the same floor `swamp`'s reeds and a green's edge use.
+ *
+ *  Guarded on `hole.lines` being absent, which is every course except one built in the Course
+ *  Creator: `buildMap` is called on every hole in this repo and must not assume the field exists. */
+const WIRE_GAP_YD = 0.25;         // MEASURED against the spec's "about 0.25 yd apart"
+const WIRE_STROKE_YD = 0.10;      // a thin cable, floored below to stay visible at MAP_PPY
+const WIRE_COLOR = '#26261f';
+
+function drawWire(ctx, hole, toPx) {
+  if (!hole.lines || !hole.lines.length) return;
+  for (const ln of hole.lines) {
+    const pts = ln.pts;
+    if (!pts || pts.length < 2) continue;
+    // The BUILT hole's own shape is `{pts, lo, hi}` (holegen.js, docs/HANDOFF-GOLF-POWER-LINES.md
+    // section 1) - the wire is drawn at the CENTRE of that band, `lo + 1`. `ln.h` is kept as a
+    // fallback for a hand-built stand-in hole (a browser probe, or a palette sampler built before
+    // the engine's holegen.js ran) that sets the height directly rather than the band.
+    const h = ln.lo != null ? ln.lo + 1 : (ln.h == null ? 10 : ln.h);
+    const raster = pts.map((p) => toPx(p[0], p[1]));
+
+    // The shadow first, so the wire itself paints over it - the same offset-and-composite rule a
+    // tree's crown shadow uses, just applied to a polyline instead of an ellipse per canopy.
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(1, MAP_PPY * WIRE_STROKE_YD * 3);
+    ctx.beginPath();
+    raster.forEach(([x, y], i) => {
+      const sxp = x - h * SHADOW_LEN * MAP_PPY;
+      const syp = y + h * SHADOW_DROP * MAP_PPY;
+      if (i === 0) ctx.moveTo(sxp, syp); else ctx.lineTo(sxp, syp);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Two parallel strokes, offset along each point's own normal (averaged from the segments
+    // either side, so a bend in the span is followed rather than kinked at the vertex).
+    const gapPx = Math.max(1, WIRE_GAP_YD * MAP_PPY);
+    const lw = Math.max(1, MAP_PPY * WIRE_STROKE_YD);
+    ctx.strokeStyle = WIRE_COLOR;
+    ctx.lineWidth = lw;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i < raster.length; i++) {
+        const [x, y] = raster[i];
+        let nx = 0; let ny = 0;
+        if (i > 0) {
+          const [px0, py0] = raster[i - 1];
+          const dx = x - px0; const dy = y - py0;
+          const len = Math.hypot(dx, dy) || 1;
+          nx += -dy / len; ny += dx / len;
+        }
+        if (i < raster.length - 1) {
+          const [px1, py1] = raster[i + 1];
+          const dx = px1 - x; const dy = py1 - y;
+          const len = Math.hypot(dx, dy) || 1;
+          nx += -dy / len; ny += dx / len;
+        }
+        const nlen = Math.hypot(nx, ny) || 1;
+        nx /= nlen; ny /= nlen;
+        const ox = x + nx * side * gapPx / 2;
+        const oy = y + ny * side * gapPx / 2;
+        if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+      }
+      ctx.stroke();
+    }
+  }
 }
 
 /** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
@@ -855,6 +963,11 @@ export function buildMap(hole, theme) {
   }
 
   ctx.drawImage(treesCv, 0, 0);
+
+  // THE WIRE, after the trees (section 4): the poles themselves are ordinary tree entries and are
+  // already part of `treesCv` above; only the cable spanning them is drawn here.
+  drawWire(ctx, hole, toPx);
+
   return { canvas: cv, ground: groundCv, trees: treesCv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }
 

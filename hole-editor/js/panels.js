@@ -347,12 +347,16 @@ function objTargetFor(spec, selection, groups) {
   return null;
 }
 
-// The drawing hint shown while a shape is being drawn, in place of the tool's controls.
+// The drawing hint shown while a shape is being drawn, in place of the tool's controls. A power
+// line (`group: 'lines'`) is a span of poles, not a closed shape, so it gets its own wording.
 function drawingHint(el, ctx) {
+  const isLine = ctx.drawing.group === 'lines';
   const n = ctx.drawing.points.length;
   el.innerHTML = `
-    <div class="he-empty">Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.</div>
-    <div class="he-field__value" style="margin:6px 0;">${n} corner${n === 1 ? '' : 's'}</div>
+    <div class="he-empty">${isLine
+    ? 'Drawing a power line: click each pole on the map. Enter or double-click to finish, Esc to cancel.'
+    : 'Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.'}</div>
+    <div class="he-field__value" style="margin:6px 0;">${n} ${isLine ? `pole${n === 1 ? '' : 's'}` : `corner${n === 1 ? '' : 's'}`}</div>
     <button class="gh-btn gh-btn--block" id="he-draw-undo" ${n ? '' : 'disabled'} style="margin-bottom:6px;">Delete last point (Backspace)</button>
     <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-draw-cancel">Cancel (Esc)</button>`;
   el.querySelector('#he-draw-undo').addEventListener('click', () => ctx.ops.undoDrawPoint());
@@ -712,6 +716,32 @@ function renderDecor(el, ctx) {
   ));
 }
 
+/** A power line (`docs/HANDOFF-GOLF-POWER-LINES.md` section 4): its wire height and how many
+ *  poles carry it. No shape controls here - a line's SHAPE is edited by dragging its point
+ *  handles on the map, the way a route waypoint is; Delete removes the whole span. */
+function renderLine(el, ctx) {
+  const { spec, selection, ops } = ctx;
+  const ln = spec.lines && spec.lines[selection.index];
+  if (!ln) { el.innerHTML = '<div class="he-empty">Selected.</div>'; return; }
+  const h = ln.h == null ? 10 : ln.h;
+  el.innerHTML = `
+    ${slider('he-line-h', 'Wire height (yd)', 4, 20, 0.5, h)}
+    <div class="he-field"><span class="he-field__label">Poles</span><span class="he-field__value">${(ln.pts || []).length}</span></div>
+    <div class="he-empty" style="margin-top:6px;">Drag a pole's gold handle to move it. Delete removes the whole line.</div>
+  `;
+  wireSlider(el, 'he-line-h', ops, (s, v) => (
+    typeof ops.mutators.setLineField === 'function' ? ops.mutators.setLineField(s, selection.index, 'h', v) : s
+  ));
+}
+
+/** The 'line' ribbon tool (section 4, main.js's tool wiring): drawing itself is the shared Draw
+ *  mode (`drawingHint`), so this only has to cover before-the-first-click and after-it-exists. */
+function renderLineTool(el, ctx) {
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
+  if (ctx.selection && ctx.selection.group === 'lines') { renderLine(el, ctx); return; }
+  el.innerHTML = '<div class="he-empty">Click the hole to start a power line, one pole per click. Enter or double-click to finish, Esc to cancel.</div>';
+}
+
 function renderSelect(el, ctx) {
   const { selection } = ctx;
   if (!selection) { el.innerHTML = '<div class="he-empty">Click an object to select it.</div>'; return; }
@@ -719,7 +749,7 @@ function renderSelect(el, ctx) {
   if (selection.group === 'waypoint') { el.innerHTML = '<div class="he-empty">Waypoint selected. Drag to move (switch to Route for Dogleg/Straighten).</div>'; return; }
   if (selection.group === 'guard') { renderGuardHit(el, ctx); return; }
   if (selection.group === 'pins') { el.innerHTML = `<div class="he-empty">Pin ${selection.index + 1} selected. Drag to move it on the green; Delete removes it. Switch to Green (G) to add more.</div>`; return; }
-  const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross, decor: renderDecor };
+  const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross, decor: renderDecor, lines: renderLine };
   const fn = byGroup[selection.group];
   if (fn) fn(el, ctx); else el.innerHTML = '<div class="he-empty">Selected.</div>';
 }
@@ -733,6 +763,7 @@ export function renderContextPanel(el, ctx) {
     select: renderSelect, route: renderRoute, width: renderWidth, bunker: renderBunker,
     water: renderWater, tree: renderTree, belts: renderBelts, green: renderGreen,
     slope: renderSlope, cross: renderCross, ruler: renderRuler, decor: renderDecor,
+    line: renderLineTool,
   };
   const fn = byTool[ctx.tool];
   if (fn) fn(el, ctx); else el.innerHTML = '<span class="he-empty">Tools land in step 4.</span>';
