@@ -396,6 +396,33 @@ const TEAM_STYLE_NAMES = {
 };
 function teamDisplayName(styleId, fallback) { return TEAM_STYLE_NAMES[styleId] || fallback || '?'; }
 
+// Ship review (Matt, 2026-09-22: "use trophies for gold silver and bronze - not just the colors"):
+// one inline SVG cup per tier. The tiers differ in more than hue (root CLAUDE.md, colorblind-safe):
+// Gold is the tallest cup and carries a star, Silver a band, Bronze the smallest plain cup, and every
+// one sits over its own name. An unwon trophy renders as a grey silhouette (CSS), a won one in metal.
+const TROPHY_METAL = {
+  1: { fill: '#c67b3b', dark: '#7a4a1e', light: '#e9a86a' },
+  2: { fill: '#c3c9d2', dark: '#6e7681', light: '#eef1f5' },
+  3: { fill: '#e8b923', dark: '#a67c00', light: '#fff0a6' },
+};
+function trophySVG(tier) {
+  const m = TROPHY_METAL[tier] || TROPHY_METAL[1];
+  const cupTop = tier === 3 ? 8 : tier === 2 ? 12 : 16;      // Gold tallest, Bronze shortest
+  const mark = tier === 3
+    ? `<polygon points="32,15 34.4,20.4 40.2,21 35.9,25 37.1,30.8 32,27.9 26.9,30.8 28.1,25 23.8,21 29.6,20.4" fill="${m.dark}"/>`
+    : tier === 2 ? `<rect x="21" y="21" width="22" height="4" rx="2" fill="${m.dark}"/>` : '';
+  return `<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">
+    <path d="M12 ${cupTop + 6} h-4 a6 6 0 0 0 0 12 h6" fill="none" stroke="${m.dark}" stroke-width="3"/>
+    <path d="M52 ${cupTop + 6} h4 a6 6 0 0 1 0 12 h-6" fill="none" stroke="${m.dark}" stroke-width="3"/>
+    <path d="M18 ${cupTop} h28 v${34 - cupTop} a14 14 0 0 1 -28 0 z" fill="${m.fill}" stroke="${m.dark}" stroke-width="2.5"/>
+    <path d="M22 ${cupTop + 4} v${28 - cupTop} a10 10 0 0 0 4 8" fill="none" stroke="${m.light}" stroke-width="2.5" stroke-linecap="round"/>
+    ${mark}
+    <rect x="29" y="46" width="6" height="7" fill="${m.dark}"/>
+    <rect x="19" y="52" width="26" height="6" rx="2" fill="${m.fill}" stroke="${m.dark}" stroke-width="2"/>
+  </svg>`;
+}
+
+
 class BaseballPlayScreen {
   constructor(container) {
     this.container = container;
@@ -991,13 +1018,13 @@ class BaseballPlayScreen {
   _careerTrophyHTML(state) {
     const best = Number(state.bestTrophyByLeague[state.league]) || 0;
     const shapes = [
-      { n: 1, cls: 'bronze', shape: 'circle', key: 'trophy_bronze' },
-      { n: 2, cls: 'silver', shape: 'triangle', key: 'trophy_silver' },
-      { n: 3, cls: 'gold', shape: 'diamond', key: 'trophy_gold' },
+      { n: 1, cls: 'bronze', key: 'trophy_bronze' },
+      { n: 2, cls: 'silver', key: 'trophy_silver' },
+      { n: 3, cls: 'gold', key: 'trophy_gold' },
     ];
     return `<div class="bb-trophies">${shapes.map((s) => `
-      <div class="bb-trophy${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
-        <span class="bb-trophy-shape bb-trophy-${s.shape}" aria-hidden="true"></span>
+      <div class="bb-trophy bb-trophy--${s.cls}${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
+        <span class="bb-trophy-shape" aria-hidden="true">${trophySVG(s.n)}</span>
         <span class="bb-trophy-label">${t(s.key)}</span>
       </div>`).join('')}</div>`;
   }
@@ -4227,7 +4254,7 @@ class BaseballPlayScreen {
     const state = this.career.state;
     const season = state.season; // still 'done', still carrying the league just played
     const advanced = trophy === 3 && season && season.league !== state.league;
-    const shapeCls = trophy === 1 ? 'circle' : trophy === 2 ? 'triangle' : trophy === 3 ? 'diamond' : null;
+
     const titleText = trophy === 1 ? t('trophy_bronze') : trophy === 2 ? t('trophy_silver')
       : trophy === 3 ? t('trophy_gold') : t('season_missed');
     const modal = document.createElement('div');
@@ -4236,7 +4263,7 @@ class BaseballPlayScreen {
       <div class="bb-end-modal">
         <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
         <div class="bb-end-title">${t('season_over')}</div>
-        ${shapeCls ? `<div class="bb-trophy-big bb-trophy-${shapeCls}" aria-hidden="true"></div>` : ''}
+        ${trophy > 0 ? `<div class="bb-trophy-big" aria-hidden="true">${trophySVG(trophy)}</div>` : ''}
         <div class="bb-end-line">${titleText}</div>
         <div class="bb-end-line">${t('points_earned').replace('{n}', String(result.pointsEarned || 0))}</div>
         ${advanced ? `<div class="bb-end-line">${t('league_advanced').replace('{league}', t('league_' + state.league))}</div>` : ''}
