@@ -345,7 +345,9 @@
 .ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 48px; }
 .ms-root .ms-bar .gh-seg__item { gap: 7px; font-size: 15px; font-weight: 700; }
 .ms-root .ms-bar .gh-seg__item svg { width: 18px; height: 18px; }
-.ms-root .ms-helpbtn { width: 48px; height: 48px; flex: 0 0 auto; }
+.ms-root .ms-helpbtn,
+.ms-root .ms-backbtn { width: 48px; height: 48px; flex: 0 0 auto; touch-action: manipulation; }
+.ms-root .ms-backbtn svg { width: 22px; height: 22px; }
 
 /* ---------------- overlay ---------------- */
 .ms-root .ms-ov {

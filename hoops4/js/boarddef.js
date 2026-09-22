@@ -3,9 +3,17 @@
 // same fields. This is NOT a skeeball machine: it is not in skeeball's BOARDS, it has no unlock,
 // no rack of nine and no objectives. It only shares the physics.
 //
-// EVERY NUMBER BELOW THAT DIFFERS FROM HOT SHOT WAS MEASURED, NOT CHOSEN. The sweep that
-// produced them is reference/hoops/sweep-hoops-columns.mjs and the numbers are written up in
-// reference/hoops/FINDINGS.md. Re-run both after touching anything in here.
+// EVERY NUMBER BELOW THAT DIFFERS FROM HOT SHOT WAS MEASURED, NOT CHOSEN. Three tools produce
+// them and all three must be re-run after touching anything in here:
+//
+//   reference/hoops/sweep-speed.mjs       the launch speed band, against THIS engine
+//   hoops4/js/test.js                     Matt's four requirements, as numbers
+//   reference/hoops/check-display.mjs     the machine as the PLAYER sees it, in a real browser
+//
+// reference/hoops/sweep-hoops-columns.mjs is the original FEASIBILITY sweep and is kept for the
+// record only: it predates this folder and throws at a synthetic board through HOT SHOT's engine,
+// so it cannot answer anything about the cabinet as built. The write-up is
+// reference/hoops/FINDINGS.md.
 
 const X = 1.00 / 6.875;            // the unit: one hole diameter, exactly as skeeball defines it
 
@@ -54,60 +62,59 @@ export const BOARD_W = Math.max(
 // So: a short apron, then ONE riser carrying the grid screen face-on to the player, then the
 // shelf the seven hoops are sunk into, then a back wall. The player throws up and over the
 // screen into the hoops above it, which is the real machine's shot.
-// X, vertical - this face IS the Connect 4 display, and its height is set by TWO things at once.
+// THE DISPLAY IS A VERTICAL PANEL, FACE ON TO THE PLAYER, AND THAT IS THE WHOLE POINT OF IT.
 //
-// THE SCREEN HAS TO CLEAR THE RAMP CREST. The camera stands behind the ball, so the crest (top
-// y 0.388) cuts a sight line straight across anything low on the board - the same occlusion
-// sight.mjs exists to catch, and at 2.3X it hid 43% of the display. At 4.2X the shelf stands at
-// 0.811 m and 0.42 m of screen clears the crest instead of 0.15 m.
+// In the real cabinet the grid is a widescreen panel standing under the hoop row, square to the
+// player, with a column directly beneath each hoop. Being able to READ it - which column a shot
+// drops into, and who owns what - is the game.
 //
-// AND A TALLER MACHINE TURNED OUT TO PLAY BETTER, which is the opposite of what an earlier pass
-// here concluded. That pass measured a 0.697 m shelf as unreachable (6-10% scoring, up to 73%
-// parked) and blamed the HEIGHT. It was wrong: the fault was the shelf LAYOUT of the time (hoops
-// 1.2X from the front edge, with bare shelf behind them to park on). Re-swept against the
-// corrected back-of-shelf layout, height is a straight win - 4.2X scores 33.3% with 6.7% parked
-// and the best column separation measured anywhere (2.11x the spread), against 36.3% / 7.4% /
-// 0.92 at 2.3X. The speed range did not have to move for it.
-const SCREEN_RISER = 4.2;
-// THE SHELF IS 4.0X AND THE HOOPS SIT 0.75X FROM ITS BACK EDGE - which is HOT SHOT's layout,
-// and Matt's explicit call on that machine ("the baskets sit at the back of each tread"). It
-// took three measured attempts to arrive back at it:
+// THE FIRST BUILD RAKED IT BACK AT 38 DEGREES and that is what made the machine unreadable. The
+// reasoning was sound and the arithmetic was right: six rows at the column pitch is 7.80X, a
+// panel that size standing vertical puts the hoops at 1.335 m, and the sweep says scoring there
+// is 0.0-1.3% at every launch speed up to 8.8 m/s (the ball has to rise 1.14 m in the 0.26 m
+// between the ramp crest and the board - a 75-degree launch off a 70-degree ramp). Raking it
+// spends that height along the cabinet instead of up it, and the hoops come back down to 0.90 m.
 //
-//   shelf 3.2X, hoops 1.2X from the FRONT  ->  2.0X of bare shelf behind the row, and 119 of 325
-//                                              throws parked on it after flying over the hoops
-//   shelf 2.2X, hoops 1.2X from the front  ->  parking fixed, but the back wall was now so close
-//                                              that shots caromed off it across columns: the
-//                                              middle three columns' mean aims collapsed to
-//                                              -0.03 / 0.00 / +0.06 and aim stopped choosing
-//   shelf 4.0X, hoops 0.75X from the BACK  ->  38.9% scored, 9.3% parked, and the gap between
-//                                              adjacent columns' mean aim is 1.68x their spread
+// WHAT THAT MISSED IS THAT A RAKED PANEL IS SEEN EDGE ON. Measured through the real play camera
+// (`reference/hoops/check-display.mjs`): at 38 degrees the display projected to 309 x 159 px on a
+// 393 x 852 phone - 20% of the frame - every round cell an ellipse 1.7 times wider than tall, the
+// whole bottom row hidden behind the ramp crest and the board's own front rail, and the hoop row
+// fanned 15 px off its own columns by perspective. A Connect 4 board you cannot read is not a
+// Connect 4 board.
 //
-// The shelf has to be DEEP for control (the ball lands in front of the row and the landing point
-// is what picks the column) and the row has to be at the BACK so there is nowhere behind it to
-// park. Both at once is the only thing that satisfies both.
-const SHELF = 4.0;
+// THE SIZE IS WHAT GIVES, NOT THE ANGLE. The panel stands vertical and is as tall as the space
+// between the board's lip and the hoop shelf allows - 4.80X, which puts the shelf at exactly the
+// height the rake did. Six rows in 4.80X is a row pitch of 0.80X against a column pitch of 1.30X,
+// so the board is WIDE: round cells with more air between columns than between rows. That is what
+// a widescreen panel showing a 7x6 grid looks like, and it is the reference cabinet's own shape.
+//
+//     rake   panel    hoops    the display, on a 393px phone
+//      38    7.80X    0.95 m   309 x 159 px, cells 1.7:1, bottom row occluded
+//      90    4.80X    0.95 m   face on, nothing occluded, no perspective fan   <- this
+//
+// The hoops do not move: 4.80X vertical rises the same 0.70 m the 7.80X rake did, so the shelf,
+// the hoop row and every height the sweep measured are where they were. What DOES move is the
+// shelf's DISTANCE - the rake's 0.89 m of horizontal run is gone, so the throw is 0.89 m shorter
+// and `minSpeed`/`maxSpeed` were re-measured for it (see the throw section below).
+const PANEL_RAKE = Math.PI / 2;        // vertical: the display faces the player
+const PANEL_L = 4.80;                  // X, floor to shelf - the height the rake used to rise
+const PANEL_W = (COLS - 1) * PITCH + PITCH;   // 9.10X - seven columns, edge to edge
+const SHELF = 4.0;                     // X. Deep for control; see HOOP_FROM_BACK below.
+const BACK_RISER = 1.8;                // X
+// THE HOOPS SIT 0.75X FROM THE SHELF'S BACK EDGE, which is HOT SHOT's layout and Matt's explicit
+// call on that machine. The shelf has to be DEEP (the ball lands in front of the row and the
+// landing point is what picks the column) AND the row has to be at the BACK (nothing behind it to
+// park on).
 const HOOP_FROM_BACK = 0.75;
-const BACK_RISER = 1.8;     // X
-//
-// THERE IS NO APRON IN FRONT OF THE SCREEN, and that is a measured decision rather than a
-// simplification. A first cut put a 1.0X near-flat tread at the board's bottom edge; it is a
-// PARKING SPOT. A throw that fails to clear the riser lands on it, stops, and waits out the
-// watchdog - 49% of throws parked, against 12% on the build before. The real cabinet has nothing
-// there either: below the hoops is the display, and below that the ball return. So the screen
-// riser now rises straight off the board's bottom edge and a short throw hits it, drops to the
-// trough and is a clean fast miss.
-//
-// THE RISER'S HEIGHT IS SET BY REACH, NOT BY THE SCREEN. The shelf has to land near 0.53 m, the
-// height the 861-throw sweep proved the dial can cover; at 3.2X it stood at 0.697 m and scoring
-// collapsed to 6-10% with up to 73% of throws parking short. So the screen is WIDE rather than
-// tall, which is also how the real cabinet's display is shaped.
-// THE DISPLAY SITS ON THE UPPER PART OF THE RISER, NOT ALL OF IT. The ramp crest (top y 0.388)
-// cuts a sight line across the bottom of the board from a camera standing behind the ball, so
-// anything painted below about 0.42 m is not visible from where the game is actually played -
-// the occlusion sight.mjs exists to catch. Starting the panel above that line is what lets it
-// be large AND wholly on screen.
-export const SCREEN_V = [X * SCREEN_RISER * 0.36, X * SCREEN_RISER * 0.99];
-const ROW_V = X * (SCREEN_RISER + SHELF - HOOP_FROM_BACK);
+
+// The display owns the whole vertical face. Nothing occludes it: the ramp crest's sightline
+// crosses the panel's own plane at 0.15 m, below the 0.20 m lip the panel stands on, which is
+// what raking it away from the camera used to break. `reference/hoops/check-display.mjs`
+// raycasts all 42 cells from the play camera and fails if one of them is hidden - re-run it
+// after any change to the lip, the rails, the ramp or the camera.
+export const SCREEN_V = [0, X * PANEL_L];
+export const SCREEN_W = X * PANEL_W;
+const ROW_V = X * (PANEL_L + SHELF - HOOP_FROM_BACK);
 
 export const BOARD = {
   id: 'hoops4',
@@ -115,9 +122,10 @@ export const BOARD = {
 
   look: {
     wood: '#b8823f', woodDark: '#7c4d22',
-    cabinet: '#1d1f24', cabinetEdge: '#101114',
-    face: '#1f5fa8', faceEdge: '#164a86',
-    ring: '#e8541f', ringLip: '#ff8a1f',
+    cabinet: '#17181c', cabinetEdge: '#0c0d10',
+    cabRed: '#c0392b', cabYellow: '#d9a520',   // the cabinet's player sides, as on the real one
+    face: '#1668cf', faceEdge: '#0e4796',     // the lit display blue
+    ring: '#e6e2d8', ringLip: '#cfcabf',      // the reference's rims are PALE, not orange
     value: '#ffffff', pocket: '#08121f',
     marquee: '#243044', marqueeText: '#ffce3a',
     bulb: '#ffce3a', glow: '#ff9d3d',
@@ -136,9 +144,27 @@ export const BOARD = {
     // 70 degrees at the lip, HOT SHOT's - the throw has to read as a basketball SHOT, a high arc
     // dropping into a hoop from above, not a skeeball roll.
     humpAngles: [0.1995, 0.3990, 0.5985, 0.7980, 0.9975, 1.2217],
-    troughLen: 0.225,
+    // THE BOARD STANDS ABOVE THE RAMP CREST, AND THE GAP IN FRONT OF IT IS 0.70 m. Both numbers
+    // are the same defect: the camera could not see the bottom of the display.
+    //
+    // The ramp crest is 0.464 m up (six segments to 70 degrees) and the board's lip used to be
+    // 0.20 m up, 0.225 m behind it - so the crest stood 0.26 m PROUD of the foot of the display,
+    // a quarter of a metre in front of it. Measured through the real play camera
+    // (`reference/hoops/check-display.mjs` raycasts all 42 cells): the bottom row was hidden
+    // behind the ramp, and on a board that FILLS FROM THE BOTTOM that is the row that matters.
+    // The camera cannot solve it - the sightline from the serve spot's side of the crest only
+    // clears it from 3.2 m up, which is a bird's eye view of a machine whose whole point is that
+    // it faces you. This is skeeball's own lesson and its own fix: raise the BOARD, the way a
+    // real cabinet is built (`skeeball/CLAUDE.md`, boardLipY 0.07 -> 0.20).
+    //
+    // Raising it costs distance, and that is what the trough buys. At 0.225 m of run a ball
+    // leaving a 70-degree ramp can climb 0.62 m at the absolute best, and a board 0.32 m higher
+    // needs 0.73 m - impossible, at any speed. At 0.70 m of run the same shot clears the panel's
+    // top edge by 0.29 m and comes down on the shelf. The gap reads right too: on the real
+    // cabinet there IS an open span between where you shoot and the backboard.
+    troughLen: 0.70,
     troughDepth: 0.15,
-    boardLipY: 0.20,
+    boardLipY: 0.52,
     boardTilt: 0.8726,              // unused while `steps` exists; kept for the spec's readers
     boardW: X * BOARD_W,
     // Sized to stop an overshoot and no more. At HOT SHOT's 0.85 it stood 1.7 m up from a shelf
@@ -147,13 +173,13 @@ export const BOARD = {
     railH: X * 0.6875,
     laneRailH: X * 0.34375,
 
-    // ONE STEP. apron -> the screen riser -> the hoop shelf -> the back wall.
+    // THE CABINET, three segments: the raked display, the hoop shelf, the back wall.
     steps: [
-      { len: X * SCREEN_RISER, tilt: Math.PI / 2 },   // the Connect 4 display, facing the player
-      { len: X * SHELF, tilt: 0.10 },                 // the seven hoops are sunk into this
+      { len: X * PANEL_L, tilt: PANEL_RAKE },   // the Connect 4 display, raked toward the player
+      { len: X * SHELF, tilt: 0.10 },           // the seven hoops are sunk into this
       { len: X * BACK_RISER, tilt: Math.PI / 2 },
     ],
-    boardLen: X * (SCREEN_RISER + SHELF + BACK_RISER),
+    boardLen: X * (PANEL_L + SHELF + BACK_RISER),
 
     holeR: X * RIM,
     ringH: X,
@@ -170,12 +196,23 @@ export const BOARD = {
     captureDrop: 0.52,
 
     // --- the throw ----------------------------------------------------------------------------
-    // MEASURED, and re-measured for the one-step cabinet. It brackets the band that actually
-    // reaches the hoop shelf: 13 of 13 powers score, all 7 columns, the best scoring rate of six
-    // candidate ranges swept (27.4%). At HOT SHOT's 2.60/6.60 nothing scored below power 0.65 -
-    // two thirds of the dial dead, which is a spec failure on its own.
-    minSpeed: 4.40,
-    maxSpeed: 5.60,
+    // MEASURED, and re-measured for THIS cabinet - a speed band is the one number that a change
+    // to the machine's DEPTH always invalidates, and this cabinet's depth has changed twice.
+    // `reference/hoops/sweep-speed.mjs --scan` walks every launch speed and reports what reaches
+    // a hoop; on the vertical build with the board raised and a 0.70 m trough, nothing at all
+    // scores below 6.00 or above 6.65, and four candidate bands inside that window were scored
+    // over the real power x aim grid:
+    //
+    //     band          scored    live powers   columns   ordered
+    //     6.00 / 6.60   31.5%     11 of 11      7 of 7    yes
+    //     6.05 / 6.50   39.2%     11 of 11      7 of 7    yes   <- this
+    //     5.95 / 6.65   30.6%     11 of 11      7 of 7    yes
+    //
+    // "Live powers" is the one that would be a spec failure on its own: at HOT SHOT's 2.60/6.60
+    // nothing scored below power 0.65, two thirds of the dial dead. Every band here lights the
+    // whole dial; this one scores most often and spreads the columns widest.
+    minSpeed: 6.05,
+    maxSpeed: 6.50,
     aimMax: 0.45,
 
     // THE SWIPE MAPS STRAIGHT ONTO AIM HERE (skeeball's default is the SQUARE of it).
@@ -191,9 +228,9 @@ export const BOARD = {
     // reaches aim 1.0; nothing here needs past 0.42, so a bigger divisor spends the whole thumb
     // arc on the range that exists - +/-0.42 of aim over +/-26 degrees of swipe rather than
     // +/-9. THIS IS THE NUMBER TO TUNE FIRST if Matt finds the columns fiddly: it is pure input
-    // shaping and touches no physics. The columns now sit at aim -0.52 .. +0.54, so 0.85 spends
-    // about +/-26 degrees of thumb arc on reaching them end to end.
-    aimDiv: 0.85,
+    // shaping and touches no physics. The columns sit at aim -0.37 .. +0.38 on the raked
+    // cabinet, so 1.00 spends about +/-22 degrees of thumb arc reaching them end to end.
+    aimDiv: 1.00,
 
     // A SEEDED PER-THROW SCATTER, which is the ONLY randomness in this engine and the only one
     // in any engine in this repo. MACHINE-SPEC.md section 9 bans steering a ball toward a hole;

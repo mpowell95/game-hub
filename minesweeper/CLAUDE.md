@@ -10,7 +10,13 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
 ## Hub integration
 
 - **In-hub `module:`**, `js/hub.js` id `minesweeper`, stats id `minesweeper`.
-- **`devOnly: true`** — admin only, Matt's call on the day it shipped. That is a DEFAULT, not a
+- **LIVE for everyone since 2026-09-22.** It shipped `devOnly: true` and was released in code
+  rather than by an override, after Matt set it live on the admin page and the tile did not appear.
+  **An override beats the registry default in BOTH directions**, so a stale
+  `adminConfig/v1/games/minesweeper.live = false` would still hide it; setting it back to Live on
+  that page writes `true` and the two agree. Keeping one decision in two places is what made this
+  confusing, which is why `devOnly` is gone rather than left with an override on top of it.
+- **(historical) `devOnly: true` while it was tested.** That is a DEFAULT, not a
   lock: the admin control page can release it to everyone with no commit and no deploy. Which is
   exactly why it HAS a `GAME_META` row in `js/leaderboard-ui.js` — a game released that way gets no
   release commit to add one, and a missing row counts every play on it as zero (rule 1, and how
@@ -105,6 +111,17 @@ comment says so rather than leaving a future reader to assume it is load-bearing
 
 **No-guess boards are explicitly out of scope.** A classic Minesweeper position can require a coin
 flip. Generating only logically-solvable boards is a much larger job and nothing here assumes it.
+
+## Getting out of a game
+
+The play screen has a back arrow at the left of the bottom bar (`data-act="tomenu"`), added
+2026-09-22: the only way back to setup had been the hub's own back button, which leaves the game
+entirely.
+
+**It does not confirm, and it should not.** `_backToMenu()` stops the clock, writes the save (which
+banks the elapsed time with it) and renders the menu, where the button now reads **Resume**. The
+board comes back exactly as it was. That is the same property `isInProgress()` returns `false` for:
+leaving this game costs nothing, so a confirm would be asking about a risk that does not exist.
 
 ## The explosion
 
