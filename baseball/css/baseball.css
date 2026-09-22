@@ -36,16 +36,69 @@
 }
 
 /* ---------------------------------------------------------------- setup screen ---- */
+/* R15-B (docs/BASEBALL-3D-BUILD.md section 9): two tabs now sit above whichever body renders, so
+ * this outer wrapper is TOP-ALIGNED (never centered - Career's content varies far more in height
+ * than Quick Play's ever did) with a smaller gap/padding than before this stage, to make room for
+ * the tab row on the short phone height. `.bb-setup-quickplay` carries the OLD centered layout so
+ * Quick Play's own look is unchanged. */
 .bb-setup {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow: hidden;
+  gap: 10px;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  padding-top: calc(14px + env(safe-area-inset-top));
+}
+
+.bb-setup-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 340px;
+  flex: 0 0 auto;
+}
+.bb-tab {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 24px;
-  padding-top: calc(24px + env(safe-area-inset-top));
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  gap: 6px;
+  border-radius: var(--gh-r-md, 10px);
+  border: 2px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.bb-tab[aria-pressed="true"] { background: #ffce3a; border-color: #1a2233; color: #1a2233; }
+:root.gh-dark .bb-root .bb-tab { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
+:root.gh-dark .bb-root .bb-tab[aria-pressed="true"] { background: #ffce3a; color: #1a2233; border-color: #e9eef6; }
+
+.bb-setup-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bb-setup-quickplay {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  overflow: hidden;
 }
 
 .bb-setup-title {
@@ -132,6 +185,98 @@
 .bb-pcd { display: flex; flex-direction: column; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .bb-pcd b { font-size: 11px; font-weight: 700; opacity: .65; }
 :root.gh-dark .bb-root .bb-playerchip { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
+
+/* ---------------------------------------------------------------- R15-B: career home ---- */
+.bb-career {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.bb-career--empty { align-items: center; justify-content: center; }
+
+.bb-ladder { display: flex; gap: 4px; width: 100%; flex: 0 0 auto; }
+.bb-ladder-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 30px;
+  border-radius: var(--gh-r-md, 8px);
+  background: var(--gh-surface-2, #eef2f8);
+  color: var(--gh-ink, #1a2233);
+  font-size: 11px;
+  font-weight: 800;
+}
+.bb-ladder-step.is-current { background: #ffce3a; color: #1a2233; }
+.bb-ladder-mark { font-weight: 900; min-height: 11px; line-height: 1; }
+.bb-ladder-label { opacity: .75; }
+.bb-ladder-step.is-current .bb-ladder-label { opacity: 1; }
+
+.bb-career-line { font-size: 13px; font-weight: 700; text-align: center; flex: 0 0 auto; }
+.bb-career-opp { font-weight: 600; opacity: .8; font-size: 12px; }
+
+.bb-standings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+  font-size: 11px;
+  flex: 1;
+  min-height: 0;
+}
+.bb-standings-col { display: flex; flex-direction: column; gap: 2px; min-height: 0; justify-content: center; }
+.bb-standing-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+.bb-standing-row.is-you { background: #ffce3a; color: #1a2233; font-weight: 800; }
+.bb-standing-rank { width: 13px; opacity: .7; font-variant-numeric: tabular-nums; }
+.bb-standing-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+.bb-standing-rec { font-variant-numeric: tabular-nums; opacity: .85; }
+
+.bb-trophies { display: flex; gap: 10px; justify-content: center; flex: 0 0 auto; }
+.bb-trophy { display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .4; }
+.bb-trophy.is-won { opacity: 1; }
+.bb-trophy-shape { width: 16px; height: 16px; }
+.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
+.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.bb-trophy.is-won .bb-trophy-shape { outline: 2px solid var(--gh-ink, #1a2233); outline-offset: 1px; }
+.bb-trophy-label { font-size: 11px; font-weight: 700; opacity: .85; }
+
+.bb-career-sync { font-size: 11px; text-align: center; min-height: 14px; opacity: .8; flex: 0 0 auto; }
+.bb-sync-glyph { margin-right: 4px; }
+
+.bb-career-actions { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 0 0 auto; }
+.bb-retire-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: .65;
+  font-size: 13px;
+  min-height: 44px;
+  min-width: 88px;
+  touch-action: manipulation;
+}
+
+.bb-points-pill--single { align-self: center; }
+.bb-trophy-big { width: 56px; height: 56px; margin: 6px auto; }
+.bb-trophy-big.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
+.bb-trophy-big.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+.bb-trophy-big.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+
+:root.gh-dark .bb-root .bb-ladder-step { background: #1b2434; color: #e9eef6; }
+:root.gh-dark .bb-root .bb-ladder-step.is-current { background: #ffce3a; color: #1a2233; }
+:root.gh-dark .bb-root .bb-standing-row.is-you { background: #ffce3a; color: #1a2233; }
 
 /* ---------------------------------------------------------------- player screen ---- */
 .bb-player {
@@ -983,6 +1128,9 @@
   border-radius: 14px;
   padding: 24px;
   min-width: 240px;
+  max-width: 320px;
+  max-height: 85vh;
+  overflow-y: auto;
   text-align: center;
   position: relative;
 }
