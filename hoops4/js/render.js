@@ -620,7 +620,55 @@ export class Renderer {
    * will drop into IS the game. The first build laid the grid out on its own and ended up with a
    * narrow panel floating in the middle of a wide machine, lined up with nothing.
    */
-  setGrid(cells, win) {
+  /**
+   * THE DISC FALLS DOWN THE COLUMN. Matt: "Can you show the ball fall down the columns rather than
+   * go into the basket and just appear at the bottom of that column?"
+   *
+   * It drops from just above the board to its resting cell under something like gravity, then
+   * bounces once. Driven by the game's own loop (`stepDrop` from ui.js's tick) rather than its own
+   * rAF, so it cannot outlive the screen or run twice.
+   *
+   * `onDone` is how the game-over card waits for it: without that, a winning disc's card covers
+   * the very drop that won.
+   */
+  startDrop(cells, win, col, row, who, onDone) {
+    const R = 6;
+    this._drop = {
+      cells, win, c: col, r: row, who, t: 0,
+      // A lower cell falls further, so it takes longer. Bottom row ~0.45s, top row ~0.22s.
+      dur: 0.22 + 0.045 * (R - 1 - row),
+      onDone: typeof onDone === 'function' ? onDone : null,
+    };
+    this.setGrid(cells, win, this._drop);
+  }
+
+  /** Advance the fall. Called every frame by ui.js's tick; a no-op when nothing is falling. */
+  stepDrop(dt) {
+    const d = this._drop;
+    if (!d) return;
+    d.t += dt;
+    if (d.t < d.dur) { this.setGrid(d.cells, d.win, d); return; }
+    this._drop = null;
+    this.setGrid(d.cells, d.win);          // the disc is now just another counter
+    if (d.onDone) d.onDone();
+  }
+
+  /** Where a falling disc is right now, in canvas pixels: a gravity fall, then one small bounce. */
+  _dropY(d, top, rowPitch, R) {
+    const startY = top - rowPitch * 0.55;              // just above the lit field
+    const endY = top + rowPitch * (R - 1 - d.r + 0.5);
+    const p = Math.min(1, d.t / d.dur);
+    const FALL = 0.80;                                  // the rest of the time is the bounce
+    if (p < FALL) {
+      const q = p / FALL;
+      return startY + (endY - startY) * q * q;          // accelerating, like a dropped disc
+    }
+    // One decaying hop off the bottom, never more than a fifth of a cell high.
+    const q = (p - FALL) / (1 - FALL);
+    return endY - Math.sin(q * Math.PI) * rowPitch * 0.20 * (1 - q);
+  }
+
+  setGrid(cells, win, drop) {
     const cv = this.gridCanvas, x = cv.getContext('2d');
     const L = this.look, C = 7, R = 6;
     const pitch = this.gridPitch, rowPitch = this.gridRowPitch;
@@ -638,7 +686,10 @@ export class Renderer {
       for (let r = 0; r < R; r++) {
         const cx = this.colX[c];
         const cy = top + rowPitch * (R - 1 - r + 0.5);
-        const who = cells && cells[c] ? cells[c][r] : null;
+        let who = cells && cells[c] ? cells[c][r] : null;
+        // While the disc is falling its destination is still an empty hole - it is drawn below,
+        // in the air, instead.
+        if (drop && c === drop.c && r === drop.r) who = null;
         if (who === null || who === undefined) {
           // AN EMPTY SLOT IS A DARK HOLE. It was cream, and a cream disc on a blue field reads as
           // a board already full of white counters - the grid looked like a waffle rather than
@@ -651,11 +702,22 @@ export class Renderer {
         } else {
           this._ball2d(x, cx, cy, rad, who === 0 ? L.red : L.yellow, who === 0);
         }
-        if (win && win.some((w) => w[0] === c && w[1] === r)) {
+        if (!drop && win && win.some((w) => w[0] === c && w[1] === r)) {
           x.beginPath(); x.arc(cx, cy, rad + 4, 0, Math.PI * 2);
           x.lineWidth = 6; x.strokeStyle = '#2e9d4a'; x.stroke();
         }
       }
+    }
+    if (drop) {
+      // CLIPPED TO THE LIT FIELD, so the disc slides in from behind the bezel rather than
+      // appearing out of nowhere above the board.
+      x.save();
+      x.beginPath();
+      x.rect(bez, bez, cv.width - bez * 2, cv.height - bez * 2);
+      x.clip();
+      this._ball2d(x, this.colX[drop.c], this._dropY(drop, top, rowPitch, R), rad,
+        drop.who === 0 ? L.red : L.yellow, drop.who === 0);
+      x.restore();
     }
     this.gridTex.needsUpdate = true;
   }
