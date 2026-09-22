@@ -468,6 +468,58 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+### The marquee is a SIGN now (2026-09-22)
+
+Matt, with a photo of BRICK CITY's marquee beside this one: *"please improve the game
+banner/header on connect 4. Do not copy brick city's banner, but see how cool it is? Connect 4
+hoops is laaame in comparison."*
+
+It was a flat three-stop orange gradient, a plain dark box, and two lines of default sans-serif.
+No frame, no texture, no depth, and nothing on it said WHICH machine it was.
+
+**Brick city was the quality BAR, not the design.** What was taken from `_paintMarquee()` is the
+construction of a lit sign - a layered frame, a textured panel rather than a flat fill, bulb bars,
+and lettering drawn several times (a dark offset copy for depth, two glow passes at shrinking
+blur, the crisp face, a thin keyline). What was NOT taken is anything you can see: no brick
+coursing, no red-brick palette, no HOT SHOT typography, and no import from `skeeball/` - those
+engine files are a deliberate fork and this drawing code is this game's own.
+
+Everything on it is drawn from `boarddef.js`'s own `look` block, so the sign belongs to the
+cabinet under it:
+
+- **The panel is the board's own lit blue** (`face` -> `faceEdge`), textured with a staggered
+  field of dark punched holes. That is this machine's coursing: the Connect 4 grid, which is the
+  same motif as the screen directly below it.
+- **A basketball on one side, a dropped red-over-yellow chip pair on the other** - the two games
+  this cabinet welds together, one per side, so the sign names both halves without a third word.
+- **Bulb bars top and bottom**, alternating lit and dim, so it reads as electric rather than
+  printed.
+
+**Three things were wrong on the first build and only a screenshot at PLAY SIZE found them** -
+which is `VISUAL-PROCESS.md`'s whole point, and the third time this game has learned it:
+
+- **"HOOPS" was a smudge.** Five characters under a nine-character word, in the rim's orange,
+  which is the lowest-contrast pair on the cabinet, with a glow behind it muddying what was left.
+  Measured on a 393px phone: 45px wide against CONNECT 4's 145. It is **letter-spaced to CONNECT
+  4's own measured width** (`signWord`'s `trackTo`, drawn character by character because
+  `ctx.letterSpacing` is not available everywhere this ships) and **in the bulb yellow**, the one
+  colour that stays crisp on that blue.
+- **The flanking icons were specks.** At `ph * 0.15` on a sign only ~340px wide at play size, an
+  icon is about 9px across and reads as dirt. They are `ph * 0.30` now, and the chip pair's two
+  discs nearly touch so the same height buys bigger chips.
+- **The sign had no room.** `mqH` 0.12 -> 0.145, into dead cabinet that was already above it.
+  `_marqueeTop` is computed from `mqH`, so the camera follows on its own - which
+  `check-display.mjs` then proved rather than assumed.
+
+The fascia below it gained a bright top edge, a centre seam and corner bolts, and is deliberately
+still quiet: it sits between the sign and the hoop row, and nothing there may compete with the
+hoops.
+
+Measured after: `check-display.mjs` **10/10** (all 42 cells on screen, nothing occluded, every
+hoop still nearest its own column, worst perspective fan 10.7px), `test-visual.mjs hoops4` 13/13,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-game-conventions.mjs` 11/11, no page
+errors. Still paint only - not one thing on the marquee or the fascia has a collider.
+
 ### THE SCORING RATE: every lever measured, and Matt's call (2026-09-22)
 
 Matt, after playing the square board: *"I don't understand why you can't make it better than 20

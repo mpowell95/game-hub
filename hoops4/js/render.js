@@ -557,30 +557,212 @@ export class Renderer {
     // THE HEADER, under the marquee. It used to hold seven white boards, which is where this
     // cabinet's "backboards" lived - half a metre above the hoops, connected to nothing. The real
     // boards are bolted behind the rims now (`_hoopBackboards`), so this is what it always
-    // actually was: a cabinet fascia. Kept dark and shallow so nothing competes with the hoop row.
+    // actually was: a cabinet fascia. Kept dark and shallow so nothing competes with the hoop row -
+    // just enough craft (a bright top edge, a quiet centre seam, corner bolts) to read as the same
+    // machine as the marquee above it, never louder than it.
     const bbH = bw * 0.10;
     panel(texFrom(1200, 180, (x, cv) => {
       const g = x.createLinearGradient(0, 0, 0, cv.height);
-      g.addColorStop(0, '#26303f'); g.addColorStop(1, '#161d28');
+      g.addColorStop(0, '#2a3546'); g.addColorStop(1, '#141a24');
       x.fillStyle = g; x.fillRect(0, 0, cv.width, cv.height);
-      x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(0, 0, cv.width, 5);
+      x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(0, 0, cv.width, 4);
+      x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(0, 4, cv.width, 2);
+      // a quiet centre seam, as if the fascia is two panels bolted together under the marquee
+      x.fillStyle = 'rgba(0,0,0,0.28)';
+      x.fillRect(cv.width / 2 - 1, 10, 2, cv.height - 16);
+      // four corner bolts - cheap and reads as "hardware" at play size
+      x.fillStyle = 'rgba(255,255,255,0.14)';
+      for (const bx of [cv.width * 0.06, cv.width * 0.94]) {
+        x.beginPath(); x.arc(bx, cv.height * 0.5, 5, 0, Math.PI * 2); x.fill();
+      }
     }), bw * 0.94, bbH, [0, topW[1] + bbH / 2 - 0.02, topW[2] + 0.014]);
 
-    // THE MARQUEE, over the top of the cabinet.
-    const mqH = bw * 0.12;
-    panel(texFrom(1400, 240, (x, cv) => {
-      const g = x.createLinearGradient(0, 0, cv.width, 0);
-      g.addColorStop(0, '#e8541f'); g.addColorStop(0.5, '#f07f1e'); g.addColorStop(1, '#f0b71e');
-      x.fillStyle = g; x.fillRect(0, 0, cv.width, cv.height);
-      x.fillStyle = '#14161b';
-      x.fillRect(cv.width * 0.22, 0, cv.width * 0.56, cv.height);
-      x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillStyle = '#ffffff';
-      x.font = '700 92px ui-sans-serif, system-ui, sans-serif';
-      x.fillText('CONNECT 4', cv.width / 2, cv.height * 0.35);
-      x.fillStyle = '#f0901e';
-      x.font = '700 76px ui-sans-serif, system-ui, sans-serif';
-      x.fillText('HOOPS', cv.width / 2, cv.height * 0.73);
+    // THE MARQUEE, over the top of the cabinet. Matt: "please improve the game banner/header on
+    // connect 4... Connect 4 hoops is laaame in comparison [to Brick City's]." The old sign was a
+    // flat three-stop orange gradient with a plain dark box and two lines of default text - no
+    // frame, no texture, no depth, nothing that says WHICH machine it is. This one is built the
+    // way a real lit sign is built - a layered frame, a textured panel, dimensional lettering,
+    // bulb bars - but drawn from THIS cabinet's own motifs and palette (`boarddef.js`'s `look`),
+    // never Brick City's brick coursing or its typography:
+    //   - the panel is the board's own lit blue (`L.face`/`L.faceEdge`), the same blue as the
+    //     Connect 4 screen below it, textured with a diagonal field of dark holes - this
+    //     machine's grid, not a brick course;
+    //   - a basketball sits at the left, a dropped red-over-yellow chip pair at the right - the
+    //     two games this cabinet welds together, one per side;
+    //   - "CONNECT 4" and "HOOPS" are each drawn three times (a dark offset copy for depth, two
+    //     glow passes at shrinking blur, then a crisp face on top with a thin dark keyline so it
+    //     stays readable small) in the cabinet's own red/orange, never Brick City's palette.
+    // 0.145 rather than 0.12: the two-line wordmark plus the bulb bars plus the frame had no room
+    // to breathe at the old height, and there is dead cabinet above the sign to grow into. The
+    // camera follows it automatically - `_marqueeTop` below is computed from `mqH`.
+    const mqH = bw * 0.145;
+    const MQW = 2040, MQH = 260;   // aspect matched to the panel's own (bw*1.02 / mqH), so the
+                                    // texture is not stretched more than the old one already was
+    const roundRectPath = (x, rx, ry, rw, rh, rr) => {
+      x.beginPath();
+      x.moveTo(rx + rr, ry);
+      x.arcTo(rx + rw, ry, rx + rw, ry + rh, rr);
+      x.arcTo(rx + rw, ry + rh, rx, ry + rh, rr);
+      x.arcTo(rx, ry + rh, rx, ry, rr);
+      x.arcTo(rx, ry, rx + rw, ry, rr);
+      x.closePath();
+    };
+    // Dimensional lettering: dark depth copy, two glow passes, crisp face, thin keyline.
+    //
+    // `trackTo` LETTER-SPACES the word to span a given width, and it is what makes the second
+    // line work. "HOOPS" is five characters under a nine-character word, so at any size that
+    // keeps it subordinate it renders as a short smudge in the middle of a very wide sign -
+    // measured at play size, 45px of a 393px screen against CONNECT 4's 145. Tracked out to the
+    // same width it reads as the second line of ONE sign instead. Drawn character by character
+    // because `ctx.letterSpacing` is not available everywhere this ships.
+    const signWord = (x, text, cx, cy, size, face, shadow, glow, trackTo) => {
+      x.textBaseline = 'middle';
+      x.font = `900 ${size}px ui-sans-serif, system-ui, sans-serif`;
+      const chars = [...text];
+      let track = 0, startX = cx;
+      if (trackTo) {
+        const natural = x.measureText(text).width;
+        track = chars.length > 1 ? (trackTo - natural) / (chars.length - 1) : 0;
+        startX = cx - (natural + track * (chars.length - 1)) / 2;
+      }
+      // One pass = one complete drawing of the word, so the glow of a letter cannot land on top
+      // of the face of the letter before it.
+      const pass = (dx, dy, style, blur) => {
+        x.save();
+        if (blur) { x.shadowColor = glow; x.shadowBlur = blur; x.globalAlpha = 0.55; }
+        x.fillStyle = style;
+        if (!trackTo) { x.textAlign = 'center'; x.fillText(text, cx + dx, cy + dy); }
+        else {
+          x.textAlign = 'left';
+          let px2 = startX;
+          for (const ch of chars) { x.fillText(ch, px2 + dx, cy + dy); px2 += x.measureText(ch).width + track; }
+        }
+        x.restore();
+      };
+      pass(size * 0.045, size * 0.07, shadow, 0);          // the depth copy underneath
+      pass(0, 0, glow, size * 0.34);                        // the wide glow
+      pass(0, 0, glow, size * 0.16);                        // the tight glow
+      pass(0, 0, face, 0);                                  // the crisp face
+      x.save();                                             // a thin dark keyline keeps it legible small
+      x.lineWidth = Math.max(2, size * 0.018);
+      x.strokeStyle = shadow;
+      if (!trackTo) { x.textAlign = 'center'; x.strokeText(text, cx, cy); }
+      else {
+        x.textAlign = 'left';
+        let px2 = startX;
+        for (const ch of chars) { x.strokeText(ch, px2, cy); px2 += x.measureText(ch).width + track; }
+      }
+      x.restore();
+    };
+    // A basketball, drawn in the ring's own orange - the hoop half of the machine.
+    const basketball = (x, cx, cy, r) => {
+      x.save();
+      x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fillStyle = L.ring; x.fill();
+      x.clip();
+      x.strokeStyle = L.ringLip; x.lineWidth = Math.max(2, r * 0.09);
+      x.beginPath(); x.moveTo(cx, cy - r); x.lineTo(cx, cy + r); x.stroke();
+      x.beginPath(); x.moveTo(cx - r, cy); x.lineTo(cx + r, cy); x.stroke();
+      x.beginPath(); x.moveTo(cx, cy - r); x.quadraticCurveTo(cx - r * 0.72, cy, cx, cy + r); x.stroke();
+      x.beginPath(); x.moveTo(cx, cy - r); x.quadraticCurveTo(cx + r * 0.72, cy, cx, cy + r); x.stroke();
+      x.restore();
+      x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2);
+      x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = 2; x.stroke();
+    };
+    // A dropped Connect 4 pair, red over yellow - the board half of the machine, THE PLAYERS'
+    // OWN COLOURS (`L.red`/`L.yellow`), never a red/green pair (Matt is red/green colourblind).
+    const chipPair = (x, cx, cy, r) => {
+      // NEARLY TOUCHING. At a 1.15 separation the pair spans the basketball's height with two
+      // discs too small to read as discs; closing the gap spends the same height on bigger chips,
+      // which is what makes the right side answer the left.
+      for (const [dy, col] of [[-r * 1.05, L.red], [r * 1.05, L.yellow]]) {
+        x.beginPath(); x.arc(cx, cy + dy, r, 0, Math.PI * 2);
+        x.fillStyle = col; x.fill();
+        x.lineWidth = Math.max(2, r * 0.14);
+        x.strokeStyle = 'rgba(0,0,0,0.4)'; x.stroke();
+        x.beginPath(); x.arc(cx - r * 0.3, cy + dy - r * 0.3, r * 0.32, 0, Math.PI * 2);
+        x.fillStyle = 'rgba(255,255,255,0.35)'; x.fill();
+      }
+    };
+    panel(texFrom(MQW, MQH, (x, cv) => {
+      const bezel = 10, border = 15, gap = 6;
+      const inset = bezel + border + gap;
+      const px = inset, py = inset, pw = cv.width - inset * 2, ph = cv.height - inset * 2;
+
+      // Layer 1: the dark outer bezel - the sign's own cabinet, one shade darker than the fascia
+      // below it so the two read as parts of the same machine.
+      x.fillStyle = L.cabinetEdge; x.fillRect(0, 0, cv.width, cv.height);
+
+      // Layer 2: the bright frame - a lit tube around the sign, in the machine's own bulb colour.
+      roundRectPath(x, bezel + border / 2, bezel + border / 2, cv.width - (bezel + border / 2) * 2, cv.height - (bezel + border / 2) * 2, 20);
+      x.save();
+      x.shadowColor = L.glow; x.shadowBlur = 16;
+      x.lineWidth = border; x.strokeStyle = L.bulb; x.stroke();
+      x.restore();
+
+      // Layer 3: the panel itself, in the board's OWN lit blue - this sign belongs to the machine
+      // whose screen is that colour, not a generic orange rectangle.
+      roundRectPath(x, px, py, pw, ph, 12);
+      x.save(); x.clip();
+      const bg = x.createLinearGradient(0, py, 0, py + ph);
+      bg.addColorStop(0, L.face); bg.addColorStop(1, L.faceEdge);
+      x.fillStyle = bg; x.fillRect(px, py, pw, ph);
+
+      // The panel's own texture: a diagonal field of dark holes, THIS machine's coursing - the
+      // Connect 4 grid, punched rather than printed, offset row to row the way a real board's
+      // holes sit above the seven columns beneath it.
+      const holeR = ph * 0.052, stepX = holeR * 3.1, stepY = holeR * 3.6;
+      let rowI = 0;
+      for (let hy = py - stepY; hy < py + ph + stepY; hy += stepY, rowI++) {
+        const off = (rowI % 2) ? stepX / 2 : 0;
+        for (let hx = px - stepX + off; hx < px + pw + stepX; hx += stepX) {
+          x.beginPath(); x.arc(hx, hy, holeR, 0, Math.PI * 2);
+          x.fillStyle = 'rgba(8,18,31,0.30)'; x.fill();
+          x.beginPath(); x.arc(hx - holeR * 0.32, hy - holeR * 0.32, holeR * 0.34, 0, Math.PI * 2);
+          x.fillStyle = 'rgba(255,255,255,0.08)'; x.fill();
+        }
+      }
+      x.restore();
+
+      // Layer 4: bulb bars along the top and bottom edges INSIDE the frame - chase lights, half
+      // lit bright and half glowing dim, so the sign reads as ELECTRIC rather than printed.
+      const bulbR = ph * 0.028, bulbN = 22;
+      for (const by of [py + bulbR * 1.6, py + ph - bulbR * 1.6]) {
+        for (let i = 0; i < bulbN; i++) {
+          const bx = px + pw * (i + 0.5) / bulbN;
+          const lit = i % 2 === 0;
+          x.beginPath(); x.arc(bx, by, bulbR, 0, Math.PI * 2);
+          x.fillStyle = lit ? L.bulb : L.glow;
+          x.globalAlpha = lit ? 1 : 0.55;
+          if (lit) { x.shadowColor = L.bulb; x.shadowBlur = bulbR * 2.2; }
+          x.fill();
+          x.shadowBlur = 0; x.globalAlpha = 1;
+        }
+      }
+
+      // Layer 5: the two flanking motifs - a basketball on the hoops' side, a dropped Connect 4
+      // pair on the board's side - so the sign names both halves of the machine without needing a
+      // third word.
+      // SIZED TO BE SEEN AT PLAY SIZE. At ph*0.15 they measured as two specks on a 393px phone -
+      // the whole sign is only ~340px wide there, so an icon at a seventh of its height is about
+      // 9px across and reads as dirt. A third of the panel's height is the smallest that says
+      // "basketball" and "two dropped chips" rather than "dot".
+      const midY = py + ph * 0.54, iconR = ph * 0.30;
+      basketball(x, px + pw * 0.075, midY, iconR);
+      chipPair(x, px + pw * 0.925, midY, iconR * 0.54);
+
+      // Layer 6: the wordmark. "CONNECT 4" in white (the ball, the neutral word) over "HOOPS" in
+      // the rim's own orange (the half that scores) - each dimensional, each keyed to a colour
+      // already on this cabinet.
+      const cx = px + pw / 2;
+      const capH = ph * 0.42;
+      x.font = `900 ${capH}px ui-sans-serif, system-ui, sans-serif`;
+      const topW2 = x.measureText('CONNECT 4').width;
+      signWord(x, 'CONNECT 4', cx, py + ph * 0.34, capH, '#ffffff', '#0c0d10', L.bulb);
+      // HOOPS IS YELLOW, NOT THE RIM'S ORANGE. Orange on this blue is the lowest-contrast pair on
+      // the cabinet and the glow behind it only muddied it further - at play size it was a smear.
+      // The bulb yellow is already the machine's accent, and it is the one colour on here that
+      // stays crisp against the board's blue.
+      signWord(x, 'HOOPS', cx, py + ph * 0.77, ph * 0.30, L.bulb, '#0c0d10', L.glow, topW2);
     }), bw * 1.02, mqH, [0, topW[1] + bbH + mqH / 2 + 0.01, topW[2] + 0.02]);
     // The highest lit thing on the machine, which is one of the two points the camera frames on.
     this._marqueeTop = [0, topW[1] + bbH + mqH, topW[2] + 0.02];
