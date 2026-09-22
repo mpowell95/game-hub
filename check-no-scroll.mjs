@@ -76,13 +76,18 @@ const EXTRA_SCREENS = {
       },
     },
   ],
-  // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player screen, reached by tapping the setup
-  // screen's player chip. Six skill rows, a 4x2 preset grid and a hand row on one screen - the
-  // tallest new content this stage adds, and exactly the kind of screen this file exists to catch.
+  // R14 (docs/BASEBALL-3D-BUILD.md section 9), preset row narrowed to three by R18: the player
+  // screen, reached by tapping the setup screen's player chip. Six skill rows, the preset chip
+  // row and a hand row on one screen - the tallest new content this stage adds, and exactly the
+  // kind of screen this file exists to catch.
   baseball: [
     {
       name: 'player screen',
       async open(page) {
+        // R18: Career is now the landing tab, so the Quick Play chip is one tab over, not on the
+        // default screen.
+        await page.waitForSelector('[data-act="tab"][data-tab="quickPlay"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="quickPlay"]');
         await page.waitForSelector('[data-act="player"]', { timeout: 8000 });
         await page.click('[data-act="player"]');
         await page.waitForSelector('[data-act="done"]', { timeout: 8000 });
