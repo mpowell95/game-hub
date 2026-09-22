@@ -125,11 +125,16 @@ export const BOARD = {
     cabinet: '#17181c', cabinetEdge: '#0c0d10',
     cabRed: '#c0392b', cabYellow: '#d9a520',   // the cabinet's player sides, as on the real one
     face: '#1668cf', faceEdge: '#0e4796',     // the lit display blue
-    ring: '#e6e2d8', ringLip: '#cfcabf',      // the reference's rims are PALE, not orange
+    // THE RIMS ARE ORANGE. They were pale (#e6e2d8), read off the reference photo, and Matt -
+    // looking at the machine on his phone - said the baskets "don't look like real baskets to
+    // me". He is right and the photo reading was the wrong thing to optimise: at the size a hoop
+    // occupies on a 393px screen the ONE thing that says "basketball hoop" is an orange ring with
+    // a white net under it, and a pale ring with a pale net under it is a wire fence.
+    ring: '#e8541f', ringLip: '#b83c10',
     value: '#ffffff', pocket: '#08121f',
     marquee: '#243044', marqueeText: '#ffce3a',
     bulb: '#ffce3a', glow: '#ff9d3d',
-    wall: '#15171c', net: '#e6e2d8',
+    wall: '#15171c', net: '#fbfaf7',
     red: '#e8463f', yellow: '#ffce3a',      // the two players, the real cabinet's colours
   },
 

@@ -213,6 +213,40 @@ consequence: 4 captured balls escaped past the rail where their own throat was c
 **The holes did not move** when the cabinet widened — the pitch is still 1.30X and the outer pair
 still at ±3.90X.
 
+### What makes a hoop read as a hoop (2026-09-22)
+
+Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
+
+They were real wire baskets, ported from HOT SHOT, and they still read as a **wire fence**. Four
+things were wrong at once, and each one is only visible at the size a hoop actually occupies -
+about thirty pixels tall on a 393 px phone:
+
+- **The rim was PALE and so was the net.** The pale rim came from reading the reference photo, and
+  optimising for it was the wrong call: two greys, one on top of the other, is a mesh band. The
+  rim is **orange** now and the net is **white**, because that pair is what a basketball hoop IS
+  at thirty pixels. The photo reading is recorded in `boarddef.js`'s `look` block next to the
+  value that replaced it.
+- **The ribs and the bottom ring were painted in the RIM's material**, so ten orange verticals
+  hung under an orange ring and the silhouette came out SQUARE. Only the rim ring is orange now;
+  everything below it belongs to the net.
+- **There was no backboard behind any hoop.** There were seven white boards - half a metre ABOVE
+  the row, on the cabinet's header, connected to nothing. A ring with a net is a ring with a net;
+  what makes the eye say "basketball hoop" is the board immediately behind it. `_hoopBackboards()`
+  hangs one on the back riser behind each rim, bottomed just under it so the rim reads as bolted
+  on, width = the column pitch minus a gap (HOT SHOT's own no-overlap rule), **one draw call for
+  all seven** via an `InstancedMesh`. The header strip is what it always actually was: a fascia.
+- **The fins spiked black against the wall.** They are load-bearing physics (nothing else stops a
+  ball balancing across two rims) and they had been pale grey, which made them fence posts, then
+  near-black, which made them silhouettes. They are the RISER'S OWN BLUE now - they stand in front
+  of that wall, so its colour is the only thing that makes them disappear.
+
+Draw calls: 33 before, 34 after (the backboards' one instanced mesh).
+
+**The lesson, and it is the same one `VISUAL-PROCESS.md` keeps teaching:** the construction was
+right and the READING was wrong. Nothing headless can see this, and neither can a crop at 6x zoom
+- it took a phone screenshot at play size. Crop the hoop row at the size it renders and ask what a
+stranger would call it.
+
 ### The hoops were drawn 90 degrees wrong, and it shipped
 
 `render.js` rotated each hoop group by `fr.tilt - Math.PI/2`, which maps its local +Y to nearly

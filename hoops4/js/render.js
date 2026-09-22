@@ -78,11 +78,14 @@ export class Renderer {
       case 'backboard': return m(L.marquee, 0.9);
       case 'trough': case 'troughWall': case 'kick': return m(L.cabinetEdge, 0.9);
       // THE FINS ARE THE HOOPS' MOUNTING HARDWARE. They are load-bearing physics (they are what
-      // stops a ball balancing across two rims - measured 0 of 18 saddle drops stay), but the
-      // first build painted them in the rim's orange and they read as seven traffic bollards
-      // standing in front of the targets. On the real cabinet the hoops hang off a pale strip,
-      // so that is what these are.
-      case 'fin': case 'finCap': return m('#b9b4a8', 0.55, 0.25);
+      // stops a ball balancing across two rims - measured 0 of 18 saddle drops stay), and what
+      // they must not do is compete with the baskets. Painted orange they read as traffic
+      // bollards; painted pale grey, next to a pale rim and a pale net, they read as FENCE POSTS
+      // and the whole row became a fence - which is what Matt saw. Near-black spiked against the
+      // lit backboards instead. The riser's own blue is what actually makes them disappear: they
+      // stand in front of that wall, so painting them its colour is the only thing that stops
+      // them being seven silhouettes between the baskets.
+      case 'fin': case 'finCap': return m(L.faceEdge, 0.7, 0.05);
       case 'chamfer': return m(L.cabinet, 0.8);
       default: return m(L.cabinetEdge, 0.9);
     }
@@ -159,32 +162,30 @@ export class Renderer {
     const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
 
     const rimMat = new THREE.MeshStandardMaterial({
-      color: COL(L.ring), roughness: 0.45, metalness: 0.35,
-      emissive: COL(L.ring), emissiveIntensity: 0.18,
+      color: COL(L.ring), roughness: 0.42, metalness: 0.20,
+      emissive: COL(L.ring), emissiveIntensity: 0.35,
     });
+    // ONLY THE RIM RING IS ORANGE. The pass before this also painted the ribs and the bottom ring
+    // in the rim's material, and ten orange verticals under an orange ring is a CAGE: at play
+    // size the silhouette came out square, which is exactly what "these don't look like real
+    // baskets" describes. On a real hoop the orange is one ring and everything below it is net.
     const wire = [];
     const NR = this.soft ? 16 : 32;
     for (let i = 0; i < NR; i++) {
       const p0 = (i / NR) * Math.PI * 2;
       const p1 = ((i + 1) / NR) * Math.PI * 2;
-      wire.push([P(R, 0, p0), P(R, 0, p1), 0.0062]);                  // the rim, on the physics profile
-      wire.push([P(Rbot, -depth, p0), P(Rbot, -depth, p1), 0.0034]);  // the small bottom ring
-    }
-    const RIBS = this.soft ? 6 : 10;
-    for (let i = 0; i < RIBS; i++) {                                  // tapered ribs between them
-      const a = (i / RIBS) * Math.PI * 2;
-      wire.push([P(R, 0, a), P(Rbot, -depth, a), 0.0030]);
+      wire.push([P(R, 0, p0), P(R, 0, p1), 0.0090]);                  // the rim, on the physics profile
     }
     const rim = new THREE.Mesh(this._mergedTubes(wire, 0.003), rimMat);
     rim.castShadow = !this.soft;
 
-    // THE NET IS DARKER THAN THE RIM, ON PURPOSE - the reference's rims are PALE (see the `look`
-    // block's own comment), and a pale net on a pale rim is exactly the "fence, not a basket"
-    // failure Matt flagged. Derived from the same `net` token rather than a new colour, so there
-    // is still one place that says what colour the netting is.
-    const netCol = COL(L.net).lerp(new THREE.Color(0x100f0d), 0.75);
+    // THE NET IS WHITE AND THE RIM IS ORANGE, and the contrast between them is the whole point.
+    // The pass before this darkened the net instead, because the rim was pale - two greys, which
+    // is what Matt was looking at when he said it did not read as a basket. Orange ring, white
+    // net: that pair is what a basketball hoop IS at thirty pixels tall.
+    const netCol = COL(L.net);
     const netMat = new THREE.MeshStandardMaterial({
-      color: netCol, roughness: 0.9, metalness: 0.02, emissive: netCol, emissiveIntensity: 0.05,
+      color: netCol, roughness: 0.75, metalness: 0.0, emissive: netCol, emissiveIntensity: 0.22,
     });
     // A basket deeper than its own radius reads knitted with three rings; this one is shallow
     // enough that two is plenty - same call HOT SHOT's net makes, against this basket's collarH.
@@ -192,7 +193,19 @@ export class Renderer {
       ? [{ r: R, y: 0 }, { r: (R + Rbot) / 2, y: -depth * 0.5 }, { r: Rbot * 1.04, y: -depth + 0.004 }]
       : [{ r: R, y: 0 }, { r: Rbot * 1.04, y: -depth + 0.004 }];
     const netSegs = [];
-    const S = this.soft ? 6 : 9;
+    // The ribs and the bottom ring belong to the NET, not to the rim - that is what makes the
+    // orange read as a ring and the white as a bag hanging off it.
+    const RB = this.soft ? 6 : 8;
+    for (let i = 0; i < RB; i++) {
+      const a = (i / RB) * Math.PI * 2;
+      netSegs.push([P(R, 0, a), P(Rbot, -depth, a)]);
+    }
+    const BR = this.soft ? 12 : 22;
+    for (let i = 0; i < BR; i++) {
+      const p0 = (i / BR) * Math.PI * 2, p1 = ((i + 1) / BR) * Math.PI * 2;
+      netSegs.push([P(Rbot, -depth, p0), P(Rbot, -depth, p1)]);
+    }
+    const S = this.soft ? 5 : 8;
     for (let b = 0; b < rings.length - 1; b++) {
       const hi = rings[b], lo = rings[b + 1];
       for (let i = 0; i < S; i++) {
@@ -216,6 +229,63 @@ export class Renderer {
 
     this._trash.push(rim.geometry, rimMat, net.geometry, netMat);
     return { rim, rimMat, net };
+  }
+
+  /**
+   * A BACKBOARD BEHIND EVERY HOOP. Matt, on a phone screenshot of the shipped build: *"These
+   * don't look like real baskets to me."*
+   *
+   * The machine already had seven white boards - but they were a strip of paint half a metre
+   * ABOVE the hoop row, on the cabinet's header, with nothing connecting a board to the rim under
+   * it. On its own a ring with a net is a ring with a net; what makes the eye read "basketball
+   * hoop" is the BOARD IMMEDIATELY BEHIND IT, and this row never had one.
+   *
+   * They hang on the back riser, which stands 0.109 m behind the hoop row, and each one is
+   * bottomed just under its own rim so the rim reads as bolted to it. Width is the column pitch
+   * minus a gap: HOT SHOT learned the same thing the hard way (`skeeball/CLAUDE.md`, "I do not
+   * want the backboards to overlap each other"), and a row of touching boards would read as one
+   * long panel again, which is the thing being fixed.
+   *
+   * ONE DRAW CALL for all seven - an InstancedMesh over one plane and one canvas, not seven
+   * meshes. Paint only: nothing here is a collider, and no hole's `r` or `collarH` is touched.
+   */
+  _hoopBackboards(M, G, L) {
+    const holes = Object.keys(G.holes).sort((a, b) => G.holes[a].u - G.holes[b].u);
+    if (holes.length < 2) return;
+    const back = M.frames[M.frames.length - 1];
+    const pitch = Math.abs(G.holes[holes[1]].u - G.holes[holes[0]].u);
+    const bw = Math.max(0.05, pitch - 0.014);
+    const bh = bw / 1.45;                       // a real backboard is wider than it is tall
+
+    const cv = document.createElement('canvas');
+    cv.width = 320; cv.height = Math.round(320 / 1.45);
+    const x = cv.getContext('2d');
+    x.fillStyle = '#f7f7f4'; x.fillRect(0, 0, cv.width, cv.height);
+    x.strokeStyle = '#1b2331'; x.lineWidth = 10;
+    x.strokeRect(5, 5, cv.width - 10, cv.height - 10);
+    x.strokeStyle = L.ring; x.lineWidth = 16;
+    x.strokeRect(cv.width * 0.28, cv.height * 0.34, cv.width * 0.44, cv.height * 0.50);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    const geo = new THREE.PlaneGeometry(bw, bh);
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
+    const mesh = new THREE.InstancedMesh(geo, mat, holes.length);
+    const dummy = new THREE.Object3D();
+    holes.forEach((id, i) => {
+      const H = G.holes[id];
+      const foot = M.faceToWorld(H.u, back.v0, 0.007);      // the riser's own plane, 7mm proud
+      const rimY = M.faceToWorld(H.u, H.v, H.collarH)[1];
+      // Bottomed a touch BELOW the rim, so the rim overlaps the board's lower edge from the play
+      // camera and the two read as one fitting rather than as two separate objects.
+      const y0 = Math.max(foot[1], rimY - bh * 0.22);
+      dummy.position.set(foot[0], y0 + bh / 2, foot[2]);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.add(mesh);
+    this._trash.push(geo, mat, tex);
   }
 
   _build() {
@@ -302,6 +372,8 @@ export class Renderer {
       this.scene.add(g);
       this.rims[id] = { group: g, rim, mat: rimMat };
     }
+
+    this._hoopBackboards(M, G, L);
 
     // --- THE SCREEN: the Connect 4 board, on the back wall -------------------------------------
     // The real cabinet shows the grid on an LCD above the hoops, which is also what makes this
@@ -449,23 +521,16 @@ export class Renderer {
     const topW = M.faceToWorld(0, back.v1, 0);
     const bw = G.boardW;
 
-    // THE BACKBOARD PANEL: seven white boards behind the hoops, as on the real machine.
-    const bbH = bw * 0.21;
-    panel(texFrom(1200, 360, (x, cv) => {
-      x.fillStyle = '#e9e4d6'; x.fillRect(0, 0, cv.width, cv.height);
-      x.fillStyle = '#d6cfbd';
-      x.fillRect(0, cv.height - 26, cv.width, 26);
-      const n = 7, pad = cv.width * 0.035;
-      const cw = (cv.width - pad * 2) / n;
-      for (let i = 0; i < n; i++) {
-        const cx = pad + cw * (i + 0.5);
-        x.fillStyle = '#ffffff';
-        x.fillRect(cx - cw * 0.34, cv.height * 0.22, cw * 0.68, cv.height * 0.50);
-        x.strokeStyle = '#9aa6c4'; x.lineWidth = 5;
-        x.strokeRect(cx - cw * 0.34, cv.height * 0.22, cw * 0.68, cv.height * 0.50);
-        x.strokeStyle = '#e8541f'; x.lineWidth = 6;
-        x.strokeRect(cx - cw * 0.13, cv.height * 0.42, cw * 0.26, cv.height * 0.22);
-      }
+    // THE HEADER, under the marquee. It used to hold seven white boards, which is where this
+    // cabinet's "backboards" lived - half a metre above the hoops, connected to nothing. The real
+    // boards are bolted behind the rims now (`_hoopBackboards`), so this is what it always
+    // actually was: a cabinet fascia. Kept dark and shallow so nothing competes with the hoop row.
+    const bbH = bw * 0.10;
+    panel(texFrom(1200, 180, (x, cv) => {
+      const g = x.createLinearGradient(0, 0, 0, cv.height);
+      g.addColorStop(0, '#26303f'); g.addColorStop(1, '#161d28');
+      x.fillStyle = g; x.fillRect(0, 0, cv.width, cv.height);
+      x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(0, 0, cv.width, 5);
     }), bw * 0.94, bbH, [0, topW[1] + bbH / 2 - 0.02, topW[2] + 0.014]);
 
     // THE MARQUEE, over the top of the cabinet.
