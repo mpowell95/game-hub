@@ -162,15 +162,31 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 16px 8px 76px;          /* 76px clears the hub's floating back button */
+  padding: 8px 16px;                   /* the hub's floating chip is a row BELOW this one */
   min-height: 38px;
 }
+/* BACK TO THIS GAME'S OWN SETUP SCREEN - not out to the launcher, which is what the hub's
+   floating "Hub" chip does. Two destinations, so two buttons, so two different words: this one
+   is labelled by where it goes. It sits in the HUD row (y ~8-46); the hub's chip floats at
+   y 54+, so they never overlap - the first attempt failed on the LABEL, not the position. */
+.h4-root .h4-menu {
+  appearance: none; flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--h4-ink, #fff);
+  font: inherit; font-size: 13px; font-weight: 700;
+  padding: 6px 12px; border-radius: 10px;
+  cursor: pointer; touch-action: manipulation;
+  min-height: 32px;
+}
+.h4-root .h4-menu:active { background: rgba(255, 255, 255, 0.16); }
+
 /* WHOSE SHOT IT IS, as a pill you cannot miss. It was a 14px coloured word, and the colour was
    the only thing separating "your turn" from "their turn" - unreadable for Matt (red/green
    colourblind) and too quiet to notice at all, which is why the CPU's turn read as the machine
    doing nothing until a ball suddenly appeared. The marker is a SHAPE first (disc / triangle). */
 .h4-root .h4-who {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 7px;
   font-size: 15px; font-weight: 800; letter-spacing: 0.02em;
   padding: 5px 12px; border-radius: 999px;
   border: 2px solid transparent; background: rgba(255, 255, 255, 0.06);

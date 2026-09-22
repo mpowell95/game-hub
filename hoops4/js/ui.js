@@ -368,6 +368,9 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
         <div class="h4-hud">
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">
+            <span aria-hidden="true">&lsaquo;</span> ${t('menu')}
+          </button>
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
         </div>
@@ -379,19 +382,46 @@ class Hoops4 {
       </div>`;
     this.paintHud();
     this.bindSwipe();
+    this.on(this.root.querySelector('.h4-menu'), 'click', () => this.leaveMatch());
   }
 
-  /** THE WAY OUT OF A MATCH IS THE HUB'S OWN BACK BUTTON, not one of this game's. Matt, on a
-   *  turn-by-turn challenge: "you should be able to leave the game and play a regular game (or
-   *  any other game) until the opponent plays. Right now there is no back button."
+  /** OUT OF A MATCH, BUT NOT OUT OF THE GAME. Matt: "we had the Hub back button. That's more of
+   *  a quit button. There is no back button to go back to the setup screen."
    *
-   *  There WAS one - the hub's floating "Hub" chip, which this HUD's 76px left padding exists to
-   *  clear. What there was not is a way out that did not first accuse you of abandoning the
-   *  match: `requestLeave()` in js/hub.js confirms whenever the mounted module says
-   *  `isInProgress()`, and this one said yes for a challenge whose move log is on the server and
-   *  cannot be lost. The fix is that answer (see isInProgress at the bottom of this file), not a
-   *  second button - a game inventing its own back chip beside the hub's is exactly the "USE
-   *  WHAT EXISTS" rule in the root CLAUDE.md. */
+   *  THE TWO ARE DIFFERENT DESTINATIONS AND THAT IS WHY THERE ARE TWO BUTTONS. The hub's floating
+   *  chip unmounts the module and lands on the launcher; this one stays inside Connect 4 Hoops
+   *  and goes to its setup screen, so you can switch opponent or shot rule without leaving. The
+   *  first attempt at this shipped as a second chip ALSO labelled "Back", stacked above the hub's
+   *  own - which is why it was pulled, and why this one is labelled by its DESTINATION. "Menu"
+   *  against "Hub" is two words for two places; "Back" against "Back" was one word for two.
+   *
+   *  A TURN-BY-TURN match leaves with no question asked, because there is nothing to lose: the
+   *  move log lives in `hoops/games/<id>` and re-opening replays it, so it goes straight to the
+   *  multiplayer screen where the rest of your matches are. Everything else (solo, two on one
+   *  phone, a live room) really does end when you walk away, so it asks first. */
+  leaveMatch() {
+    const isAsync = !!(this.mp && this.mp.kind === 'async');
+    const midGame = !!(this.match && !this.match.over && this.match.moves.length > 0);
+    const go = () => {
+      this.teardownEngine();
+      if (isAsync) this.showMultiplayer(); else this.renderSetup();
+    };
+    if (isAsync || !midGame) { go(); return; }
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('leaveQ')}">
+        <h2 class="gh-modal__title">${t('leaveQ')}</h2>
+        <p class="h4-sheet-body">${t('leaveLost')}</p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--block h4-leave-no">${t('leaveNo')}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-leave-yes">${t('leaveYes')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.on(el.querySelector('.h4-leave-no'), 'click', () => el.remove());
+    this.on(el.querySelector('.h4-leave-yes'), 'click', () => { el.remove(); go(); });
+  }
 
   /** What to call the other side, for the turn bar. The CPU is named by its DIFFICULTY, which is
    *  the only name it has; a real opponent by their profile name. */
