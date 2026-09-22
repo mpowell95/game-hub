@@ -9,6 +9,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
+import { GAME_ART } from '../../js/game-art.js';
 import { BOARD, COLS } from './boarddef.js';
 import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
@@ -223,23 +224,44 @@ class Hoops4 {
     // The selected option is marked by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone
     // (Matt is red/green colorblind - root CLAUDE.md's accessibility conventions).
     const check = '<span class="h4-opt-check" aria-hidden="true">&check;</span>';
+    // GUARD (THE LAW rule 5): `opponent: 'two'` is a real value in `gamehub.hoops4.v1` on any
+    // device that used the old screen, and it is NOT deleted or rewritten here. The CPU row just
+    // shows its nearest meaning (Medium) until the player picks something; `start()` reads the
+    // same fallback, so a device that never touches this screen keeps behaving sensibly.
+    const cpuPick = s.opponent === 'two' ? 2 : s.opponent;
     const opt = (v, label) => {
-      const on = s.opponent === v;
+      const on = cpuPick === v;
       return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-opp="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
     };
     const shotOpt = (v, label) => {
       const on = s.shots === v;
       return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-shots="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
     };
+    // ONE CARD IS THE COMPUTER GAME, AND MULTIPLAYER IS A DOOR. Matt: "What is 2 player? There
+    // should be options to play the computer player and 'Multiplayer Options'... The computer
+    // player options should just have the difficulties and the shots per turn option."
+    //
+    // "Two players" is gone from this row - it was pass-and-play wearing a label that read like
+    // a mode of the computer game, which is exactly what made him ask what it was. It is now
+    // "Pass and play" inside the multiplayer sheet, beside the other two ways two people play.
     this.root.innerHTML = `
       <div class="h4-setup">
         <h1 class="h4-title">${t('title')}</h1>
         <p class="h4-tag">${t('tagline')}</p>
+        <!-- A PICTURE OF THE THING. Matt: the setup screen "looks nothing like the others. it's
+             not on the theme or on brand of the game hub at all" - and what every other machine's
+             setup screen leads with is a picture of the machine (skeeball's gallery is a rendered
+             one per cabinet). This is the SAME art the launcher tile uses, from js/game-art.js,
+             so the screen you tap and the screen you land on are the same picture. It is inline
+             SVG already in the hub's bundle: no WebGL, no readback, no placeholder to correct
+             later, and nothing to go wrong offline. -->
+        <div class="h4-hero" aria-hidden="true">${GAME_ART['hoops4'] || ''}</div>
         <div class="gh-card h4-card">
+          <p class="h4-card-head">${t('vsCpu')}</p>
           <div class="h4-row">
-            <p class="h4-row-label">${t('opponent')}</p>
-            <div class="h4-opts h4-opts-4">
-              ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}${opt('two', t('twoPlayer'))}
+            <p class="h4-row-label">${t('difficulty')}</p>
+            <div class="h4-opts h4-opts-3">
+              ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}
             </div>
           </div>
           <div class="h4-row">
@@ -248,9 +270,9 @@ class Hoops4 {
               ${shotOpt('until', t('shotsUntil'))}${shotOpt('one', t('shotsOne'))}
             </div>
           </div>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>
         </div>
-        <button type="button" class="gh-btn gh-btn--primary h4-play">${t('play')}</button>
-        <button type="button" class="gh-btn h4-mp">${t('mp')}</button>
+        <button type="button" class="gh-btn gh-btn--block h4-mp">${t('multiplayer')}</button>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
       </div>`;
     for (const b of this.root.querySelectorAll('[data-opp]')) {
@@ -268,7 +290,9 @@ class Hoops4 {
         this.renderSetup();
       });
     }
-    this.on(this.root.querySelector('.h4-play'), 'click', () => this.start());
+    // Play means play the computer now, whatever `opponent` happens to hold - the row above can
+    // no longer select 'two', so an old stored 'two' must not silently start a pass-and-play game.
+    this.on(this.root.querySelector('.h4-play'), 'click', () => this.start({ vsCpu: true }));
     this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
   }
@@ -435,9 +459,10 @@ class Hoops4 {
     if (!opts.keepMp) { this.mp = null; this.myPlayer = RED; this._stopRoom(); }
     const vsCpu = opts.vsCpu === undefined ? this.settings.opponent !== 'two' : !!opts.vsCpu;
     const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
-    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? this.settings.opponent : 2, oneShot });
+    const skill = this.settings.opponent === 'two' ? 2 : this.settings.opponent;
+    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? skill : 2, oneShot });
     if (typeof opts.replay === 'function') opts.replay(this.match);
-    this.cpu = vsCpu ? new Cpu(this.settings.opponent) : null;
+    this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
     this.renderPlay();
     try {
@@ -542,7 +567,7 @@ class Hoops4 {
       return (other && (other.name || other.code)) || t('theirTurn');
     }
     if (this.match && this.match.vsCpu) {
-      return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));
+      return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));   // see cpuPick
     }
     return t('theirTurn');
   }
