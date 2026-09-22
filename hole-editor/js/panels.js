@@ -6,12 +6,12 @@
 import { paletteFor, fillsFor } from '../../golf/js/render.js';
 import { RED_MESA } from '../../golf/courses/redmesa.js';
 import { GREEN_SHAPES, SLOPE_PRESETS } from '../../golf/js/holegen.js';
-import { renderMapThumbnail } from './canvas.js';
+import { renderMapThumbnail, editorTheme } from './canvas.js';
 
 const ORIG_PAR = RED_MESA.par;
 const ORIG_YARDS = Math.round(RED_MESA.holes.reduce((a, h) => a + h.cardYards, 0));
 
-const THEME = 'desert';
+const THEME = 'desert';   // legend only; everything drawn goes through canvas.js's editorTheme()
 
 // section 4.4: one swatch per surface kind, in this order, always visible.
 const LEGEND_ORDER = [
@@ -28,7 +28,7 @@ const LEGEND_ORDER = [
 ];
 
 export function renderLegend(el) {
-  const fills = fillsFor(paletteFor(THEME));
+  const fills = fillsFor(paletteFor(editorTheme()));
   el.innerHTML = LEGEND_ORDER.map(([kind, label]) => `
     <div class="he-legend-row">
       <span class="he-swatch" style="background:${fills[kind] || '#888'}"></span>
@@ -134,11 +134,14 @@ export function renderHolePanel(el, doc, id, built, ops, hoverText, validateResu
       ${checkbox('he-h-rough-auto', 'Rough collar: course default', spec.rough == null)}
       ${spec.rough != null ? slider('he-h-rough', 'Rough collar', 3, 20, 1, spec.rough) : ''}
     </div>
+    <div class="he-subhead">Tree lines <span class="he-hint">(the woods down each side)</span></div>
+    <div id="he-h-belts"></div>
     ${broken ? `<div class="he-broken">${broken}</div>` : ''}
     ${renderValidateResults(validateResults)}
   `;
   wireValidateResults(el, onValidateRowClick || (() => {}));
   if (!ops) return;
+  renderBelts(el.querySelector('#he-h-belts'), { spec, ops, refresh: () => renderHolePanel(el, doc, id, built, ops, hoverText, validateResults, onValidateRowClick) });
   el.querySelector('#he-h-nick').addEventListener('change', (e) => ops.instant((s) => ops.mutators.setField(s, 'nickname', e.target.value)));
   wireSeg(el, 'par', (v) => ops.instant((s) => ops.mutators.setField(s, 'par', +v)));
   wireSlider(el, 'he-h-hard', ops, (s, v) => ops.mutators.setField(s, 'hard', v));
