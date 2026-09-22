@@ -1,5 +1,13 @@
 # Connect 4 Hoops — is the machine playable? (measured 2026-09-21)
 
+> **HISTORICAL. This measured a machine that does not exist.** It was the feasibility check taken
+> before `hoops4/` had a folder, so it throws at a synthetic board through HOT SHOT's engine, and
+> the cabinet has been rebuilt twice since (staircase → raked display → vertical display, board
+> raised above the ramp crest, 0.70 m trough). Every number below is superseded. What still
+> stands is the QUESTION it answered — can a swipe separate seven columns — and the answer, yes.
+> For the machine as built use `reference/hoops/sweep-speed.mjs`, `hoops4/js/test.js` and
+> `reference/hoops/check-display.mjs`.
+
 Design sketch: `skeeball/mockup-hoops-four.html`. Nothing is built; no folder, no engine, no
 `BOARDS` entry. This is the feasibility measurement that should decide whether it gets built.
 
