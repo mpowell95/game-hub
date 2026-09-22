@@ -35,6 +35,52 @@ const ID_RE = /^[a-z0-9]{6,24}$/;
 // 42 discs is all a board can hold, but the log also carries the MISSES that passed a turn under
 // one-shot, and a miss is cheap. 600 is a ceiling against a runaway writer, not a rule of the game.
 const MAX_MOVES = 600;
+// A SERIES IS 1, 3 OR 5 GAMES. Matt: "if you want to play a single game, best of 3 series or best
+// of 5 series." Only odd lengths, so a series always has a winner.
+export const SERIES_LENGTHS = [1, 3, 5];
+// What the challenger can say with the challenge. Matt: "Maybe include a caption option thing
+// where you can say something to your opponent with the challenge request thing?"
+export const MAX_CAPTION = 120;
+
+/** Trim a caption to something a screen can hold. Never throws; always returns a string. */
+export function cleanCaption(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, MAX_CAPTION);
+}
+
+/** How many games one side must win to take a series of `len`. 1 -> 1, 3 -> 2, 5 -> 3. */
+export function seriesTarget(len) {
+  const n = SERIES_LENGTHS.includes(+len) ? +len : 1;
+  return (n + 1) / 2;
+}
+
+/**
+ * Where a series stands AFTER this game, given its result. PURE, so the rules are testable
+ * without a database.
+ *
+ * `wins` is what each side had won BEFORE this game; `winner` is this game's ('a', 'b' or null
+ * for a draw). Returns the running total, whether the series is finished, and who took it.
+ */
+export function seriesAfter(game) {
+  const len = SERIES_LENGTHS.includes(+(game && game.series)) ? +game.series : 1;
+  const before = (game && game.seriesWins) || { a: 0, b: 0 };
+  const w = game && game.over ? game.over.winner : undefined;
+  const wins = {
+    a: (before.a | 0) + (w === 'a' ? 1 : 0),
+    b: (before.b | 0) + (w === 'b' ? 1 : 0),
+  };
+  const target = seriesTarget(len);
+  const champion = wins.a >= target ? 'a' : wins.b >= target ? 'b' : null;
+  // A DRAW COSTS THE SERIES A GAME AND GIVES NOBODY ANYTHING, so a series of drawn boards has to
+  // end rather than run for ever. `no` is this game's number; once it reaches `len` we are done
+  // whatever the score - the leader takes it, and a dead tie is an honest draw.
+  const no = Math.max(1, (game && game.seriesNo) | 0 || 1);
+  const exhausted = no >= len;
+  const done = !!champion || exhausted;
+  return {
+    len, no, wins, target, done,
+    winner: champion || (exhausted && wins.a !== wins.b ? (wins.a > wins.b ? 'a' : 'b') : null),
+  };
+}
 
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 
@@ -113,6 +159,12 @@ async function ready() {
  * position on the two devices, and then the two people are looking at different boards with
  * nothing on screen saying so. Anything that does not validate is not a match.
  */
+/**
+ * ALREADY EXPORTED, and worth keeping so: returning null here is a REFUSAL TO OPEN THE MATCH, so
+ * every field added to this shape afterwards has to be OPTIONAL or every document already in the
+ * database becomes unplayable. `test-hoops4-mp.mjs` pins that with a hand-written pre-series
+ * document.
+ */
 export function validateGame(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const a = asCode(raw.a && raw.a.code);
@@ -145,12 +197,25 @@ export function validateGame(raw) {
     if (w !== 'a' && w !== 'b' && w !== null && w !== undefined) return null;
     over = { winner: w == null ? null : w, why: String(raw.over.why || 'four'), at: ms(raw.over.at) };
   }
+  // THE SERIES FIELDS ARE OPTIONAL AND DEFAULT TO A SINGLE GAME. Every match document written
+  // before they existed has none of them, and `validateGame` returning null is a REFUSAL TO OPEN
+  // THE MATCH - so a required field here would have made every match in the database unplayable
+  // the moment this shipped. Defaults, never rejections.
+  const series = SERIES_LENGTHS.includes(+raw.series) ? +raw.series : 1;
+  const sw = (raw.seriesWins && typeof raw.seriesWins === 'object') ? raw.seriesWins : {};
+  const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   return {
     v: 1,
-    id: typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null,
+    id,
     created: ms(raw.created),
     updated: ms(raw.updated),
     oneShot: !!raw.oneShot,
+    series,
+    seriesNo: Math.min(series, Math.max(1, ms(raw.seriesNo) || 1)),
+    seriesWins: { a: Math.max(0, ms(sw.a)), b: Math.max(0, ms(sw.b)) },
+    // A single game is its own series, so `seriesOf` is always a usable grouping key.
+    seriesOf: (typeof raw.seriesOf === 'string' && ID_RE.test(raw.seriesOf)) ? raw.seriesOf : id,
+    caption: cleanCaption(raw.caption),
     a: { code: a, name: String((raw.a && raw.a.name) || ''), emoji: String((raw.a && raw.a.emoji) || '🙂') },
     b: { code: b, name: String((raw.b && raw.b.name) || ''), emoji: String((raw.b && raw.b.emoji) || '🙂') },
     turn: raw.turn,
@@ -221,6 +286,9 @@ export async function readMyGames() {
         yourTurn: !!r.yourTurn,
         over: !!r.over,
         oneShot: !!r.oneShot,
+        series: Math.max(1, ms(r.series) || 1),
+        seriesNo: Math.max(1, ms(r.seriesNo) || 1),
+        seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id,
       };
     }).filter((r) => ID_RE.test(r.id) && r.with));
   } catch (err) {
@@ -276,6 +344,10 @@ function rowFor(game, side) {
     yourTurn: !game.over && game.turn === side,
     over: !!game.over,
     oneShot: !!game.oneShot,
+    // Enough to write "Game 2 of 3" on the list without reading the match itself.
+    series: game.series | 0 || 1,
+    seriesNo: game.seriesNo | 0 || 1,
+    seriesOf: game.seriesOf || game.id,
   };
 }
 
@@ -292,7 +364,8 @@ async function writeRows(api, db, game) {
  *
  * Returns { ok:true, id, game } or { ok:false, reason, retryable }.
  */
-export async function createGame({ them, oneShot = false } = {}) {
+export async function createGame({ them, oneShot = false, series = 1, caption = '',
+  seriesNo = 1, seriesWins = null, seriesOf = null, first = 'me' } = {}) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
@@ -302,10 +375,23 @@ export async function createGame({ them, oneShot = false } = {}) {
   const mine = meLabel();
   const now = Date.now();
   const id = mintGameId();
+  // SIDE 'a' SHOOTS FIRST AND IS RED. `first` is what lets game 2 of a series start with the
+  // OTHER person: it puts them on side 'a' instead, so "you challenged, you go first" stays true
+  // of a challenge while a series still alternates.
+  const meSide = first === 'me' ? 'a' : 'b';
+  const seats = {
+    [meSide]: { code: me, name: mine.name, emoji: mine.emoji },
+    [meSide === 'a' ? 'b' : 'a']: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
+  };
+  const len = SERIES_LENGTHS.includes(+series) ? +series : 1;
   const doc = {
     v: 1, id, created: now, updated: now, oneShot: !!oneShot,
-    a: { code: me, name: mine.name, emoji: mine.emoji },
-    b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
+    series: len,
+    seriesNo: Math.min(len, Math.max(1, seriesNo | 0 || 1)),
+    seriesWins: { a: Math.max(0, (seriesWins && seriesWins.a) | 0), b: Math.max(0, (seriesWins && seriesWins.b) | 0) },
+    seriesOf: (typeof seriesOf === 'string' && ID_RE.test(seriesOf)) ? seriesOf : id,
+    caption: cleanCaption(caption),
+    a: seats.a, b: seats.b,
     turn: 'a', moves: null, over: null,
   };
   try {
@@ -396,6 +482,39 @@ export async function pushMove(id, { col, shots = 1, passed = false, over = null
 }
 
 /** Give the match up. The other person wins; nothing is deleted. */
+/**
+ * START THE NEXT GAME OF A SERIES, from a finished one. Either player may do it; whoever taps
+ * first creates it, and the other sees it appear in their list.
+ *
+ * NOT AUTOMATIC, ON PURPOSE. Creating it inside the finishing device's `pushMove` would mean a
+ * series silently stalls whenever that person happened to be offline at that moment - a failure
+ * with nobody looking at it. A button has somebody in front of it, and `createGame` already
+ * returns a reason it can say out loud.
+ *
+ * THE SIDES SWAP. Side 'a' shoots first, so alternating who holds it is the only thing that stops
+ * a best-of-3 being "the challenger shoots first, three times".
+ */
+export async function nextInSeries(game) {
+  const me = myCode();
+  if (!game || !game.over) return { ok: false, reason: 'not-over', retryable: false };
+  const side = sideOf(game, me);
+  if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
+  const st = seriesAfter(game);
+  if (st.done) return { ok: false, reason: 'series-over', retryable: false };
+  const them = side === 'a' ? game.b : game.a;
+  return createGame({
+    them,
+    oneShot: !!game.oneShot,
+    series: st.len,
+    seriesNo: st.no + 1,
+    seriesWins: st.wins,
+    seriesOf: game.seriesOf || game.id,
+    // Whoever did NOT shoot first last time shoots first now. This device is `side`; if it was
+    // 'a' it went first, so the next game hands 'a' to the other person.
+    first: side === 'a' ? 'them' : 'me',
+  });
+}
+
 export async function resignGame(id) {
   const me = myCode();
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
@@ -494,5 +613,5 @@ export function replay(match, game) {
 export default {
   asCode, myCode, meLabel, mintGameId, validateGame, replay, sideOf, isMyTurn, otherLabel,
   countMyTurns, sortRows, readMyGames, readGame, readOpponents,
-  createGame, pushMove, resignGame, outboxCount, queueMove, drainOutbox,
+  createGame, nextInSeries, pushMove, resignGame, outboxCount, queueMove, drainOutbox,
 };

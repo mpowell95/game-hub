@@ -202,6 +202,78 @@ check('a player code is normalised and validated',
 }
 
 // -----------------------------------------------------------------------------------------------
+// A SERIES, AND THE TERMS OF A CHALLENGE (2026-09-22)
+// -----------------------------------------------------------------------------------------------
+// Matt: "Before you challenge someone or anything, you should be able to select the shots per turn
+// setting and if you want to play a single game, best of 3 series or best of 5 series."
+{
+  const g = (o) => ({ series: 3, seriesNo: 1, seriesWins: { a: 0, b: 0 }, over: { winner: 'a' }, ...o });
+
+  check('a best of 3 needs two wins, a best of 5 needs three',
+    MP.seriesTarget(3) === 2 && MP.seriesTarget(5) === 3 && MP.seriesTarget(1) === 1);
+  check('a junk series length is a single game, never a crash',
+    MP.seriesTarget(4) === 1 && MP.seriesTarget(null) === 1 && MP.seriesTarget('x') === 1);
+
+  const g1 = MP.seriesAfter(g({}));
+  check('winning game 1 of 3 does not take the series', g1.wins.a === 1 && !g1.done);
+  const g2 = MP.seriesAfter(g({ seriesNo: 2, seriesWins: { a: 1, b: 0 } }));
+  check('winning game 2 at 1-0 takes it', g2.done && g2.winner === 'a' && g2.wins.a === 2);
+  const lvl = MP.seriesAfter(g({ seriesNo: 2, seriesWins: { a: 1, b: 0 }, over: { winner: 'b' } }));
+  check('losing game 2 at 1-0 levels it and plays on', !lvl.done && lvl.wins.a === 1 && lvl.wins.b === 1);
+  // A DRAWN BOARD GIVES NOBODY A WIN, so a series of draws has to end on its own length rather
+  // than run for ever looking for a target neither side can reach.
+  const drawn = MP.seriesAfter(g({ seriesNo: 3, seriesWins: { a: 1, b: 1 }, over: { winner: null } }));
+  check('a series that runs out of games ends, and a dead tie is a draw',
+    drawn.done && drawn.winner === null);
+  const lead = MP.seriesAfter(g({ seriesNo: 3, seriesWins: { a: 1, b: 0 }, over: { winner: null } }));
+  check('and if it runs out with somebody ahead, they take it', lead.done && lead.winner === 'a');
+  check('a single game is its own whole series', MP.seriesAfter(g({ series: 1, seriesNo: 1 })).done);
+
+  check('a caption is trimmed, collapsed and clamped',
+    MP.cleanCaption('  good   luck  ') === 'good luck'
+    && MP.cleanCaption('x'.repeat(500)).length === MP.MAX_CAPTION
+    && MP.cleanCaption(null) === '' && MP.cleanCaption(undefined) === '');
+
+  // THE ONE THAT MATTERS MOST: every match document written before series existed must still
+  // open. validateGame returning null is a REFUSAL TO OPEN THE MATCH, so a required new field
+  // would have made every existing game in the database unplayable the day this shipped.
+  const legacy = {
+    v: 1, id: 'abc123', created: 1, updated: 2, oneShot: false,
+    a: { code: 'AAAAA', name: 'Ana' }, b: { code: 'BBBBB', name: 'Bea' },
+    turn: 'a', moves: null, over: null,
+  };
+  const val = MP.validateGame(legacy);
+  check('a document written before series existed still validates', !!val);
+  check('...and reads as a single game with no caption',
+    !!val && val.series === 1 && val.seriesNo === 1 && val.caption === ''
+    && val.seriesWins.a === 0 && val.seriesWins.b === 0 && val.seriesOf === 'abc123');
+  const withSeries = MP.validateGame({ ...legacy, series: 5, seriesNo: 3, seriesWins: { a: 1, b: 1 },
+    seriesOf: 'zzz999', caption: '  hi  there  ' });
+  check('a series document round-trips its own fields',
+    !!withSeries && withSeries.series === 5 && withSeries.seriesNo === 3
+    && withSeries.seriesWins.a === 1 && withSeries.seriesOf === 'zzz999'
+    && withSeries.caption === 'hi there');
+  check('a nonsense series length falls back to a single game, it does not reject the match',
+    (MP.validateGame({ ...legacy, series: 4 }) || {}).series === 1
+    && (MP.validateGame({ ...legacy, seriesNo: 99, series: 3 }) || {}).seriesNo === 3);
+
+  const ui2 = readFileSync(new URL('./hoops4/js/ui.js', import.meta.url), 'utf8');
+  check('the terms are read from the MATCH, not from the launcher row',
+    /armed\.terms = bits\.join/.test(ui2) && /armed\.caption = game\.caption/.test(ui2));
+  // A series must NOT advance itself inside pushMove: the device that finishes a game may be
+  // offline at that moment, and a silently stalled series has nobody to report it to. Check
+  // pushMove's OWN BODY - the first draft of this split the file at pushMove and asserted
+  // nextInSeries never appeared after it, which is just where the function is defined.
+  const mpSrc = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  const pushBody = (mpSrc.split('export async function pushMove')[1] || '').split('\nexport ')[0];
+  check('the next game of a series is started by a button, never automatically',
+    /nextInSeries\(\{ \.\.\.mp\.game/.test(ui2) && pushBody.length > 200 && !/nextInSeries/.test(pushBody));
+  const mpui2 = readFileSync(new URL('./hoops4/js/mp-ui.js', import.meta.url), 'utf8');
+  check('a failed challenge keeps the form and what was typed in it',
+    /e2\.textContent = failure\(res\.reason\)/.test(mpui2) && /return;\n      \}\n      state\.terms = null;/.test(mpui2));
+}
+
+// -----------------------------------------------------------------------------------------------
 // THE LAUNCHER ALERT (hoops4/js/alert.js)
 // -----------------------------------------------------------------------------------------------
 // Matt: "to see a challenge, you must go into the hoops connect 4, click play a friend, then it's
