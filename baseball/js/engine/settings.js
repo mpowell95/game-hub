@@ -546,8 +546,19 @@ export const CPU_LEVEL_SHORTFALL = { little: 3, highschool: 1, college: 3, minor
 // `CPU_ROSTER_CEILING` is the per-skill ceiling: one point under each league's raw CAP, so the
 // champion is never generated AT the player's own ceiling (the study measured Minors' champion at
 // 22 of 22 and this is the "ceiling it at 21 by hand" that answers it).
+//
+// THE MINORS CEILING IS 22, NOT THE 21 THE R16 SPEC NAMED, and this is the one number in the
+// stage that was re-measured rather than transcribed. Two reasons, both measured with
+// `sim-baseball-career.mjs` (N=150, median tier): at 21 the table's own 21.0 mean is ARITHMETICALLY
+// UNREACHABLE (21 is the ceiling, so a mean of 21 needs every drawn value pinned on it, which
+// would flatten TEAM_LADDER_OFFSETS at that league entirely), and the roster it does produce
+// (20.23) made the Minors EASIER than College - first-attempt Gold 52.7% against College's 52.0%,
+// an inversion of the ladder Matt's own brief asks for ("each league after that should feel like a
+// real step up"). At 22, which is what the study's own 3.3x roster multiplier actually clamped
+// against, the realised mean is 20.96 (the table's number), the ladder keeps its shape
+// (18.7 .. 22.0 by slot) and the Minors reads 48.7% against College's 52.0%.
 export const CPU_ROSTER_LEVEL = { little: 4.1, highschool: 10.7, college: 16.4, minors: 21.0, majors: 22.1 };
-export const CPU_ROSTER_CEILING = { little: 9, highschool: 13, college: 17, minors: 21, majors: 25 };
+export const CPU_ROSTER_CEILING = { little: 9, highschool: 13, college: 17, minors: 22, majors: 25 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,

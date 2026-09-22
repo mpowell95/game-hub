@@ -125,7 +125,7 @@ export function rosterScaleFor(league) {
   // scale at which a mean-weight draw is certainly at the ceiling; above it the table's number is
   // simply unreachable, and the ladder is worth more than the last half point of the mean. The
   // realised means this produces (measured, `node baseball/js/test.js`): 4.16 / 10.76 / 16.43 /
-  // 20.23 / 22.30 - the Minors row is the one the bound binds.
+  // 20.96 / 22.30 - the Minors row is the one the bound binds.
   let lo = 0, hi = ceiling / SCALE_SPREAD_LO;
   for (let i = 0; i < 80; i++) {
     const mid = (lo + hi) / 2;
