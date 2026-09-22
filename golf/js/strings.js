@@ -176,6 +176,7 @@ export const STRINGS = {
     obst_rockpile: 'Rock pile',
     obst_log: 'Fallen log',
     obst_pole: 'Power pole',
+    obst_gorse: 'Gorse',
     // clubs
     club_driver: 'driver',
     club_3wood: '3 wood',
@@ -384,6 +385,7 @@ export const STRINGS = {
     obst_rockpile: 'Montón de rocas',
     obst_log: 'Tronco caído',
     obst_pole: 'Poste de luz',
+    obst_gorse: 'Tojo',
     club_driver: 'driver',
     club_3wood: 'madera 3',
     club_5wood: 'madera 5',

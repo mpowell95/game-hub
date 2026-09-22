@@ -419,8 +419,9 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.equal(resolveProfile('?course=custom').id, 'custom');
   });
 
-  await test('every starter hole builds and validates on BOTH looks, par 72', () => {
-    for (const theme of ['parkland', 'desert']) {
+  await test('every starter hole builds and validates on EVERY look, par 72', () => {
+    assert.deepEqual(Object.keys(THEME_DEFAULTS), ['parkland', 'desert', 'links', 'tropical']);
+    for (const theme of Object.keys(THEME_DEFAULTS)) {
       let par = 0;
       STARTER_SPECS.forEach((s, i) => {
         const h = makeHole({ ...THEME_DEFAULTS[theme], ...s, n: i + 1 });
@@ -464,6 +465,22 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     invalidateBuilds(doc);
     assert.equal(speciesOf(doc), 'saguaro');
     assert.equal(buildHole(doc, 'h-01').treeTypes.length, OBSTACLE_CATALOG.length, 'the catalogue is the table on both looks');
+  });
+
+  await test('Links and Tropical: belts of gorse and palms, a render palette each, and export keeps the look', async () => {
+    const { THEMES } = await import('./golf/js/render.js');
+    for (const [look, species] of [['links', 'gorse'], ['tropical', 'palm']]) {
+      assert.ok(THEMES[look], `render.js has a ${look} palette`);
+      setCourse(PROFILES.custom, look);
+      const doc = createDocument();
+      doc.course = setCourseMeta(doc, { theme: look }).course;
+      invalidateBuilds(doc);
+      const h = buildHole(doc, 'h-01');
+      assert.equal(h.treeTypes[h.treeBelts[0].type].name, species);
+      const src = generateSource(doc);
+      assert.ok(src.includes(`theme: '${look}'`), `export prints theme '${look}'`);
+    }
+    setCourse(PROFILES.custom, 'parkland');
   });
 
   await test('add hole appends a fresh starter with an id no other hole holds; delete keeps at least three', () => {
@@ -513,7 +530,8 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
   // --- the obstacle catalogue, and the migration onto it (2026-09-22) ------------------------
 
   await test('the catalogue is the shape the engine and the renderer each expect', () => {
-    assert.equal(OBSTACLE_CATALOG.length, 18);
+    assert.equal(OBSTACLE_CATALOG.length, 19);
+    assert.equal(OBSTACLE_CATALOG[18].name, 'gorse', 'appended after the pole');
     const names = OBSTACLE_CATALOG.map((o) => o.name);
     assert.equal(new Set(names).size, names.length, 'no duplicate names');
     for (const o of OBSTACLE_CATALOG) {
@@ -521,7 +539,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
       assert.ok(o.trunk > 0 && o.canopy >= o.trunk && o.height > 0, `${o.name} is not a valid tree type`);
       assert.equal(typeof o.shape, 'string');
       assert.ok(Array.isArray(o.looks) && o.looks.length, `${o.name} has no looks`);
-      assert.ok(o.looks.every((l) => l === 'parkland' || l === 'desert'), `${o.name} names a look that does not exist`);
+      assert.ok(o.looks.every((l) => l in THEME_DEFAULTS), `${o.name} names a look that does not exist`);
     }
     // A rock is solid to every club: canopy === trunk, height 40 (redmesa.js records the 8 iron's
     // 32.3 yd apex as why 40 and not 30).

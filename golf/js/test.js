@@ -1802,8 +1802,8 @@ console.log('\n-- 12e. THE COURSE ART PASS --');
 
   // Both themes must carry every new palette key, or a desert hole paints `undefined`.
   for (const key of ['water', 'waterBand', 'waterEdge', 'bank', 'bankMud', 'sandDot']) {
-    ok(`both themes define ${key}`,
-      typeof RN.THEMES.pine[key] === 'string' && typeof RN.THEMES.desert[key] === 'string',
+    ok(`every theme defines ${key}`,
+      Object.values(RN.THEMES).every((th) => typeof th[key] === 'string'),
       'a missing key paints `undefined`, which canvas silently ignores');
   }
 }
@@ -3268,7 +3268,7 @@ console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026
 {
   const { OBSTACLE_CATALOG, OBSTACLE_INDEX } = await import('./obstacles.js');
   ok('the pole is catalogue entry 17, appended (the order is frozen)',
-    OBSTACLE_INDEX.pole === 17 && OBSTACLE_CATALOG.length === 18 && OBSTACLE_CATALOG[16].name === 'log');
+    OBSTACLE_INDEX.pole === 17 && OBSTACLE_CATALOG.length >= 18 && OBSTACLE_CATALOG[16].name === 'log');
   ok('...a thin post that blocks at every height',
     OBSTACLE_CATALOG[17].trunk === 0.3 && OBSTACLE_CATALOG[17].canopy === 0.3 && OBSTACLE_CATALOG[17].height === 40);
   ok('obst_pole and blocked_wire exist in EN and ES',

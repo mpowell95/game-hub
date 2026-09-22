@@ -673,3 +673,23 @@ gets an 18th entry, `pole` (`trunk: 0.3, canopy: 0.3, height: 40`); a hole's rec
   the wire itself is unambiguous as two thin parallel dark lines the whole span. That merge is
   realistic, not a probe artefact - a power line usually crosses a fairway close to perpendicular to
   the hole's own direction, which is exactly the layout drawn here.
+
+## Two new looks: Links and Tropical (2026-09-22)
+
+The Course Creator's Look control is now a list of four (`LOOKS` in `main.js`): Parkland, Desert,
+Links, Tropical. A look is two data entries and nothing else:
+
+- a palette in `golf/js/render.js` `THEMES` (keyed by the look's own name; `paletteFor` falls back
+  to Pine Valley's for `parkland`, which has no entry of its own);
+- a default in `hole-editor/js/starter.js` `THEME_DEFAULTS` (belt species, optional `rough`).
+
+Links: fescue fairways, straw rough, dune-grass base, darker pot-bunker sand, a grey sea with a
+sandy bank; belts of **gorse**, a new catalogue entry (index 18, appended after the pole; `shape:
+'gorse'` = the bush's circles plus yellow flower dots in `treeAccent`). Tropical: saturated turf, a
+dark jungle floor (palm fronds vanished on anything lighter, measured by eye on a zoomed still),
+white sand, a turquoise lagoon with a beach bank; belts of palms. Catalogue `looks` hints were
+widened so each look lists its own species first (ordering only; the table order is unchanged).
+`export.js` now accepts any `THEME_DEFAULTS` key as the exported theme and prints that look's
+`rough`, instead of hard-coding desert. Wind was NOT made a property of a look: per-hole wind is
+already in the editor. Still: `reference/golf/looks-2026-09-22.png`. Mountain and Swamp looks are
+the next two if Matt wants them.

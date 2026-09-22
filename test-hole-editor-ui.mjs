@@ -210,7 +210,7 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   const cat = await p2.evaluate(async () => (await import('/golf/js/obstacles.js')).OBSTACLE_CATALOG.length);
   const tiles = await p2.$$eval('.he-tile', (els) => els.map((e) => e.dataset.item));
   // 18 (2026-09-22): the power-line batch appended 'pole' as OBSTACLE_CATALOG's 18th entry.
-  ok('the palette shows every catalogue entry, single and stand', cat === 18
+  ok('the palette shows every catalogue entry, single and stand', cat === 19
     && Array.from({ length: cat }, (_, i) => tiles.includes(`tree-${i}`) && tiles.includes(`stand-${i}`)).every(Boolean), `${cat} entries, ${tiles.length} tiles`);
   const at2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cam.cx) * cam.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cam.cy) * cam.ppy }; }, [x, y]);
   const sp2 = () => p2.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);

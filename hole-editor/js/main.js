@@ -24,7 +24,7 @@ import {
   setCourse, invalidateBuilds, setCourseMeta, addHole, deleteHole, mintId, normalise,
 } from './model.js';
 import { resolveProfile } from './course.js';
-import { starterSpec } from './starter.js';
+import { starterSpec, THEME_DEFAULTS } from './starter.js';
 import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, fetchDraft } from './drafts.js';
 import { EditorCanvas, fairwayEdgesAt, setEditorTheme } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
@@ -566,6 +566,9 @@ function replaceDocument(next) {
 // --- the Course panel (2026-09-22) ---------------------------------------------------------------
 // Course Creator: name, theme, hole count. Both editors: who is designing (player code), the
 // cloud status, other people's drafts to review, an import and a backup download.
+/** The Course Creator's looks: render.js THEMES + starter.js THEME_DEFAULTS, one row each. */
+const LOOKS = [['parkland', 'Parkland'], ['desert', 'Desert'], ['links', 'Links'], ['tropical', 'Tropical']];
+
 function renderCoursePanel() {
   const el = document.getElementById('he-course');
   if (!el) return;
@@ -579,9 +582,8 @@ function renderCoursePanel() {
     </div>
     <div class="he-field">
       <span class="he-field__label">Look</span>
-      <div class="gh-seg" data-seg="theme" role="group">
-        <button type="button" class="gh-seg__item" data-val="parkland" aria-pressed="${c.theme !== 'desert'}">Parkland</button>
-        <button type="button" class="gh-seg__item" data-val="desert" aria-pressed="${c.theme === 'desert'}">Desert</button>
+      <div class="gh-seg" data-seg="theme" role="group" style="display:grid;grid-template-columns:1fr 1fr;">
+        ${LOOKS.map(([val, label]) => `<button type="button" class="gh-seg__item" data-val="${val}" aria-pressed="${(THEME_DEFAULTS[c.theme] ? c.theme : 'parkland') === val}">${label}</button>`).join('')}
       </div>
     </div>
     <div class="he-field">
