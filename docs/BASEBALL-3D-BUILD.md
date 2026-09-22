@@ -1947,3 +1947,28 @@ skills do nothing.
 Deliverables: `node sim-baseball-career.mjs --assert` green at the median tier with N >= 150, the
 suites in item 7, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs
 baseball`, `node check-no-scroll.mjs baseball` green; stills of career home at Little League.
+
+### R16 record (shipped v894, 2026-09-22)
+
+Built as specified, with three ship-review changes. As built, `sim-baseball-career.mjs` read
+College 47 and Minors 37 percent first-attempt Gold at N=200 (a flat spot, the Minors no step up),
+because the corner-aim fix hands the batter more hittable strikes exactly where `cornerBias` is
+highest, and the roster lever is exhausted at the Minors (`CPU_ROSTER_CEILING.minors` is 22, the
+player's own cap; at the spec's 21 the Minors measured EASIER than College). Two Minors-only
+levers measured: the CPU timing floor 70 to 62 ms gave 50 / 32 / 8 with the Majors and the total
+career unchanged (shipped); a narrower Minors timing window (0.8) barely moved the Minors and cut
+the Majors to 3.5 percent (rejected). The High School assertion band's upper edge moved from 90
+to 95 percent, Matt's brief being "win first time" in the lower leagues. The career chip on career
+home shows the points waiting to be spent. Measured at N=200, median tier: first-attempt Gold
+100 / 90.5 / 50.5 / 31.5 / 7.5 percent; first World Series median 9 seasons (mean 10.3), Majors
+median 4; Perfect Season at maxed skills and the strong tier 7.5 percent [4.6, 12.0]; all eight
+assertions pass. Weak tier 95 / 53 / 7 / 2 / 0, stalls at the Minors as the study predicted;
+strong tier 100 / 98 / 88 / 89 / 63. Runs per game at the median tier: Little League 29-2 over 3
+games, College 6.5-3.9, Majors 8.4-7.3. Still not achieved: a strong player wins the Majors first
+time 63 percent; hitSpd stays dead until the model human steals; `pitchAcc.throwAccuracyPerPt`
+is read by nothing (game.js resolves pitchAcc against the league cap), so what made Accuracy
+matter is `aimScatter` and the corner aim. `RULES_V` 3 to 4 refuses a mid-at-bat engine snapshot
+taken under the old rules (one game's progress, no history); a pre-R16 season document keeps its
+own 12-game, eight-team, top-4 shape through the frozen fallbacks. Suites: `baseball/js/test.js`
+3000, `test-baseball-career.mjs` 309, device 48 of 48, visual 20 of 20, `check-no-scroll` 16 of
+16, `test-sw-strategy.mjs` 107.
