@@ -21,23 +21,38 @@
     // `?editor=1` so Matt can play a hole he is still designing, straight from its own
     // localStorage document - never from golf/courses/redmesa.js, which this never touches.
     // requireName() still runs as normal below; this only decides which course rounds.js sees.
-    if (location.search.includes('editor=1')) {
+    // `?editor=1` is Red Mesa (the original link); `?editor=custom` is the Course Creator's blank
+    // course (2026-09-22), whose defaults follow the theme its document carries.
+    const editorArg = new URLSearchParams(location.search).get('editor');
+    if (editorArg) {
       try {
-        const raw = localStorage.getItem('golf.holeEditor.redmesa.v1');
+        const courseId = editorArg === 'custom' ? 'custom' : 'redmesa';
+        const raw = localStorage.getItem(`golf.holeEditor.${courseId}.v1`);
         const doc = raw ? JSON.parse(raw) : null;
-        if (doc && doc.version === 1 && doc.courseId === 'redmesa') {
+        if (doc && doc.version === 1 && doc.courseId === courseId) {
           const { makeHole } = await import('./js/holegen.js');
-          const { RM_DEFAULTS } = await import('./courses/redmesa.js');
-          const holes = doc.order.map((id, i) => makeHole({ ...RM_DEFAULTS, ...doc.holes[id].spec, n: i + 1 }));
+          let defaults;
+          if (courseId === 'redmesa') ({ RM_DEFAULTS: defaults } = await import('./courses/redmesa.js'));
+          else { const { THEME_DEFAULTS } = await import('../hole-editor/js/starter.js'); defaults = THEME_DEFAULTS[(doc.course && doc.course.theme) || 'parkland'] || THEME_DEFAULTS.parkland; }
+          const holes = doc.order.map((id, i) => makeHole({ ...defaults, ...doc.holes[id].spec, n: i + 1 }));
           globalThis.__gfCourseOverride = {
-            id: 'redmesa',
-            name: 'Red Mesa (edit)',
-            theme: 'desert',
-            blurbKey: 'blurb_redmesa',
+            id: courseId,
+            name: courseId === 'redmesa' ? 'Red Mesa (edit)' : ((doc.course && doc.course.name) || 'Your course'),
+            theme: courseId === 'redmesa' ? 'desert' : ((doc.course && doc.course.theme) || 'parkland'),
+            blurbKey: courseId === 'redmesa' ? 'blurb_redmesa' : 'blurb_custom',
             holes,
             get par() { return this.holes.reduce((a, h) => a + h.par, 0); },
           };
           globalThis.__gfNoRecord = true;
+          // The setup screen lists COURSES, which rounds.js built before this script body ran
+          // (static imports evaluate first), so a course that exists nowhere else joins it here -
+          // and becomes the course the setup screen opens on, since that is what Play meant.
+          const R = await import('./js/rounds.js');
+          if (!R.COURSES.some((c) => c.id === courseId)) R.COURSES.push(globalThis.__gfCourseOverride);
+          try {
+            const s = JSON.parse(localStorage.getItem('gamehub.golf.v1') || '{}') || {};
+            localStorage.setItem('gamehub.golf.v1', JSON.stringify({ ...s, lastCourse: courseId }));
+          } catch { /* the chip is still there to tap */ }
         }
       } catch (e) {
         console.error('[golf] hole editor override failed to load - playing the shipped course instead', e);

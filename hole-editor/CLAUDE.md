@@ -532,3 +532,53 @@ guard queried the bare `#id`, which never exists, so **pinch, rough, green ry an
 drawn and dead since the day each shipped. `test-hole-editor-ui.mjs` now types into wind and
 rough and reads the spec back. The editor is not in `sw.js`, so no CACHE bump - but GitHub Pages
 caches for ten minutes and a browser holds the old `panels.js` until a hard refresh.
+
+## The Course Creator (2026-09-22): the same editor on a blank course, with cloud drafts
+
+Matt: *"I have a request for the hole editor/hole creator to be a tool I can send to the king of
+games and have him create a course... I don't wanna send him the Red Mesa or Oasis Sands courses.
+We'd have to set up or create basic holes for him to start with."* And: *"we should be able to
+have his edits autosave and be saved in the repo or something for me to review later, right?"*
+
+**The link: `/hole-editor/?course=new`.** The plain link is still Red Mesa, untouched.
+
+- **`course.js`** picks the profile from the URL: Red Mesa (recipes from `redmesa.js`, key
+  `golf.holeEditor.redmesa.v1`, ids `rm-NN`, exports `redmesa.js`) or the custom course (recipes
+  from `starter.js`, key `golf.holeEditor.custom.v1`, ids `h-NN`, exports `<slug>.js`). `model.js`
+  keeps one active profile (`setCourse`); its `RM_DEFAULTS` is now "the active course's defaults"
+  and follows the custom document's **theme** (parkland or desert obstacle table).
+- **`starter.js`**: eighteen plain holes, par 72, no hazards, a gentle bend on a few. Every one
+  builds and validates on both looks (`test-hole-editor.mjs`). `starterSpec(slot)` is also what
+  "+ Add hole" appends.
+- **The Course panel** (top of the right column): name, Parkland/Desert, hole count with add /
+  delete (floor of three, undoable), the designer line, the cloud status, "Open a draft...",
+  "Import file..." and "Download backup". Red Mesa's editor shows only the last four.
+- **Play** opens `golf/?editor=custom`; `golf/index.html` builds the course from the document with
+  the theme's defaults, pushes it onto `COURSES` for that page load (static imports evaluate before
+  the inline script, so `rounds.js` cannot do it) and points the setup screen at it. `ui.js`
+  treats a `custom` course as always open. Nothing is recorded (`__gfNoRecord`).
+- **Export** writes a complete course module named after the course (`kingslanding.js`) with its
+  own obstacle table and `RM_DEFAULTS`, so the fold-back is the same recipe as Red Mesa's: drop it
+  in `golf/courses/`, register it in `rounds.js`'s `COURSES`, add `course_<id>` / `blurb_<id>`
+  strings and a `GOLF_COURSE_PAR` row, bump CACHE, validate, deploy.
+
+**Cloud drafts (`drafts.js`).** Not the repo: GitHub Pages is static, and a page can only write to
+the repo with a token that would be public. The hub's Firebase can. Every edit autosaves (2.5 s
+after the last one) to `courseDrafts/<PLAYER CODE>/<courseId>` as `{ docJson, name, theme, holes,
+by, updatedAt }` - the document as ONE STRING, because RTDB rewrites nested arrays - verified by
+re-read, reported on the panel, never thrown. The browser copy is written first and always; the
+cloud is the review copy. **The designer is the hub profile's player code** when this browser has
+one (same origin, same localStorage), otherwise a code typed once into the panel and kept under
+`golf.holeEditor.code.v1`; the device claims it in `msgAuth/<uid>` exactly as messages do. "Open a
+draft..." lists every draft for this editor's course, newest first, with who and when; Load
+replaces the local document (confirmed) and from then on autosaves under the REVIEWER's code, so
+nobody's draft is ever overwritten by somebody else's edits. Nothing deletes a draft.
+
+**The rules** (`database.rules.json`, published by hand in the console): `courseDrafts` readable
+by anyone signed in; `$code` writable by the device that claimed that code, or an admin.
+`backups/rtdb-backup.mjs` backs the node up with the rest.
+
+**Not verified in this container**: the cloud write itself. Firebase does not boot on the dev
+origin here and dev never writes to the family database (`writesAllowed`), so the panel reads
+"Offline: saved on this device only" locally by design. The first real proof is Matt's own
+editor showing "Saved to cloud" after the rules are published.

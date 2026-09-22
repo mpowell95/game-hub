@@ -63,6 +63,9 @@ export const BRANCHES = [
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',
+  // courseDrafts/ (hole-editor/js/drafts.js): golf course designs autosaved by player code. Read
+  // by any signed-in session, so it backs up normally.
+  'courseDrafts',
   // messages/ is deliberately last: an anonymous sign-in is not on the admins allowlist, so this
   // one comes back denied and is recorded as such rather than as an empty branch. See the warning
   // main() prints, and database.rules.README.md for how to export it from the console.

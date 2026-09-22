@@ -151,6 +151,16 @@ NOT read the slope - its dots sit at fixed quarters of the club's range (15/30/4
 putter, 37.5/75/112/150 for the power putter). What Matt saw "adjusting for the slope" on a long
 downhill putt was the power putter being handed over at 55 ft, with its longer ladder.
 
+### The Course Creator (2026-09-22)
+
+`/hole-editor/?course=new` is the same editor on a blank 18-hole course (`hole-editor/js/starter.js`),
+for someone who has never seen Red Mesa. Its Play preview is `golf/?editor=custom`: `index.html`
+builds the course from the editor document, pushes it onto `COURSES` for that load and opens the
+setup screen on it; `course_custom` / `blurb_custom` name it; `ui.js` treats `custom` as open. A
+finished design exports a course module named after the course, folded in like Red Mesa was.
+Designs autosave to Firebase `courseDrafts/<CODE>/<courseId>` for review - `hole-editor/CLAUDE.md`,
+"The Course Creator".
+
 ## Harbor Links is gone from the product, but its keys are not
 
 Matt: *"I do not want to see 'harbor' anywhere in the hub. No mention of it ever."* So: no course

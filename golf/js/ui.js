@@ -733,6 +733,7 @@ class GolfGame {
 
   _courseOpen(courseId) {
     if (this._isDev()) return true;
+    if (courseId === 'custom') return true;   // a Course Creator preview, on this page load only
     if (this._courseTesting(courseId)) return false;
     return courseOpenByDefault(courseId) || isCourseReleased(courseId);
   }

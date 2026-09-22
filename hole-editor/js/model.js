@@ -6,14 +6,36 @@
 
 import { makeHole, slopeFrom } from '../../golf/js/holegen.js';
 import { dropLoops } from '../../golf/js/holes.js';
-import { SPECS, RM_DEFAULTS } from '../../golf/courses/redmesa.js';
+import { PROFILES, defaultsFor } from './course.js';
+import { starterSpec } from './starter.js';
 
-export const COURSE_ID = 'redmesa';
-export const HOLE_COUNT = 18;
-export const STORAGE_KEY = 'golf.holeEditor.redmesa.v1';
+// THE ACTIVE COURSE (2026-09-22). Red Mesa until setCourse() says otherwise, so every existing
+// caller (and every existing test) sees exactly what it always did. `RM_DEFAULTS` keeps its name
+// below because it is used in a dozen makeHole calls; it is simply "the active course's defaults".
+export let COURSE = PROFILES.redmesa;
+export let COURSE_ID = COURSE.id;
+export let HOLE_COUNT = COURSE.specs.length;
+export let STORAGE_KEY = COURSE.storageKey;
+let SPECS = COURSE.specs;
+let RM_DEFAULTS = COURSE.defaults;
+
+/** Point the model at a course profile (course.js). `theme` only matters for the custom course,
+ *  whose defaults (obstacle table, rough collar) follow the theme its document carries. */
+export function setCourse(profile, theme) {
+  COURSE = profile;
+  COURSE_ID = profile.id;
+  HOLE_COUNT = profile.specs.length;
+  STORAGE_KEY = profile.storageKey;
+  SPECS = profile.specs;
+  RM_DEFAULTS = profile.custom ? defaultsFor(theme || profile.theme) : profile.defaults;
+}
+
+/** Forget every cached build for a document - after a theme change, whose defaults are not part
+ *  of the cache key. */
+export function invalidateBuilds(doc) { _cache.delete(doc); }
 
 export function mintId(slot) {
-  return `rm-${String(slot).padStart(2, '0')}`;
+  return `${COURSE.idPrefix}-${String(slot).padStart(2, '0')}`;
 }
 
 /** Apply `at` -> `yd` (R1) to one array of placed things. Entries that are already `yd`-based,
@@ -153,7 +175,35 @@ export function createDocument() {
     order.push(id);
     holes[id] = { id, spec: JSON.parse(JSON.stringify(originals[id])), broken: null };
   }
-  return { version: 1, courseId: COURSE_ID, order, holes };
+  const doc = { version: 1, courseId: COURSE_ID, order, holes };
+  // A custom course carries its own name, theme and hole count; Red Mesa's are the shipped file's.
+  if (COURSE.custom) doc.course = { name: COURSE.name, theme: COURSE.theme };
+  return doc;
+}
+
+// --- the custom course's own shape (2026-09-22) ---------------------------------------------------
+// Only the blank course adds, removes and renames; Red Mesa is eighteen pages you shuffle.
+
+/** Course name / theme. Returns a NEW doc (holes shared); the caller pushes undo and re-sets the
+ *  model's defaults through setCourse() when the theme changed. */
+export function setCourseMeta(doc, patch) {
+  return { ...doc, course: { ...(doc.course || {}), ...patch } };
+}
+
+/** Append one starter hole after the last. Ids never repeat within a document, even after deletes. */
+export function addHole(doc) {
+  let n = doc.order.length + 1;
+  while (doc.holes[mintId(n)]) n++;
+  const id = mintId(n);
+  const spec = normalise(starterSpec(doc.order.length + 1), doc.order.length + 1);
+  return { ...doc, order: [...doc.order, id], holes: { ...doc.holes, [id]: { id, spec, broken: null } } };
+}
+
+/** Remove one hole. A course keeps at least three (the shortest round the game offers). */
+export function deleteHole(doc, id) {
+  if (doc.order.length <= 3 || !doc.holes[id]) return doc;
+  const holes = { ...doc.holes }; delete holes[id];
+  return { ...doc, order: doc.order.filter((x) => x !== id), holes };
 }
 
 // --- regeneration (section 3.3) ------------------------------------------------------------------
@@ -745,7 +795,7 @@ export function redo(state) {
 // --- persistence (section 3.6) --------------------------------------------------------------------
 
 export function serialiseDocument(doc) {
-  return JSON.stringify({ version: doc.version, courseId: doc.courseId, order: doc.order, holes: doc.holes });
+  return JSON.stringify({ version: doc.version, courseId: doc.courseId, ...(doc.course ? { course: doc.course } : {}), order: doc.order, holes: doc.holes });
 }
 
 /** Returns the parsed document, or null if the string is missing/malformed/a different version -

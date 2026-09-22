@@ -9,6 +9,9 @@ import RED_MESA from '../courses/redmesa.js';
 import OASIS_SANDS from '../courses/oasissands.js';
 
 export const COURSES = [PINE_VALLEY, RED_MESA, OASIS_SANDS];
+// A Course Creator preview (golf/index.html, `?editor=custom`) is a course that exists nowhere
+// else: index.html pushes its override onto this list for that page load only, AFTER the static
+// import graph (this file included) has evaluated - so nothing here can see it at module time.
 
 // HANDOFF-GOLF-HOLE-EDITOR.md phase 2: the hole editor's Play button opens the game with
 // `?editor=1`, which builds a course object from the editor's own localStorage document and sets
