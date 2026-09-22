@@ -108,7 +108,7 @@ stopped mid-verification when Matt paused.
    wind) and **Tropical** (palms, lagoons, sand); then Mountain and Swamp if he wants them. Each
    is about half a day of Sonnet art plus the two-line data entries. The Course Creator's Look
    control (`renderCoursePanel` in `main.js`) is a two-button segment today; make it a list.
-4. **The Help page.** Matt asked for instructions for the tool and agreed to a Help button in the
+4. **The Help page.** DONE 2026-09-22 (`hole-editor/help.html`). Matt asked for instructions for the tool and agreed to a Help button in the
    ribbon opening `/hole-editor/help.html`, deployed with the editor. Plain words for someone who
    has never seen it: start here (code, name, look, export often), one card per tool with a short
    looping recording, shapes, the green, trees (height rule of thumb: a palo verde is 8 yards,
