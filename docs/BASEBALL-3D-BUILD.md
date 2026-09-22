@@ -1848,3 +1848,33 @@ every regular and playoff game won in a Majors season. `js/career-store.js` gain
 `newCareerDoc`; `js/game-stats.js` gained `recordBaseballCareerStarted` (additive, exempt from the
 rate gate as a lifecycle event). `sim-baseball.mjs` was left on its own loop: re-seeding it from
 the careerId would invalidate every recorded scoreboard while measuring nothing new.
+
+### R15-B record (shipped v888, 2026-09-22)
+
+The setup screen has two tabs, Career and Quick Play; Quick Play is the default unless a career
+has a game saved, in which case the screen opens on Career with Resume. Career home stacks the
+player chip (hand and six skills), the five-step ladder, the season line, the next opponent and
+Home/Away, the nine-row standings in two columns, the trophy shelf (circle, triangle, diamond),
+a sync line when not OK, the primary button (Resume game / Play next game / Start a career) and
+Retire, which reads Forfeit while a game is saved. The player screen has three modes: Quick Play,
+career start (Little League's 15 and 15, cap 10, then Start) and career spend (one pool, plus
+only, no presets, hand fixed). A career game runs on the same play screen; the player can be the
+home side, so the HUD's You/CPU labels, the initial mode at a half boundary and the end modal
+read `playerSide`. Every pitch boundary checkpoints locally, every at-bat pushes, game end
+records once and pushes; the end modal shows the score, the record and the points earned, and
+a resolved season shows the trophy shape, the points and the new league. Resume rebuilds the
+engine from the checkpoint through `resumeGame`. Probes: `career-home`, `career-resume` (the
+count survives destroy and init through the hub's own mount), `career-forfeit`,
+`career-season` (a 9-3 season plus two playoff wins reads Gold, 38 points, advanced to High
+School). Three harness bugs found on the way: `addInitScript` re-runs on every navigation and
+was clearing the checkpoint the resume probe exists to prove survives; `check-no-scroll`'s
+extra screens ran on the same page with no reset; the stills script seeded the theme as JSON,
+which `js/theme.js` does not read. Ship review: the setup screen reserved no room for the hub's
+floating back pill (Quick Play only cleared it because its body is vertically centred), so
+`.bb-setup` now pads by `--bb-top-pad`; career home stacks from the top instead of stretching
+the standings; CPU teams show one proper noun per style (Aces, Sluggers, Flames, Foxes,
+Tricksters, Owls, Sparrows, Generals) instead of their generator key, until the real list of
+team names (design doc open item 12) is decided. Standings still use the `rawWins7` model, so a
+CPU record tops out at 7-0 beside the player's 12-game record. Suites: device 48 of 48, visual
+20 of 20, `check-no-scroll` 16 of 16, `baseball/js/test.js` 2799, `test-baseball-career.mjs`
+293.

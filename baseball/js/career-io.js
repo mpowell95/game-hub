@@ -20,7 +20,7 @@
 // `database.rules.json`'s `careers` branch is published by hand.
 
 import {
-  CAREER_SCHEMA_V, HEALTH_OK, HEALTH_DENIED, HEALTH_OFFLINE_LOCAL, HEALTH_FORK,
+  CAREER_SCHEMA_V, HEALTH_OK, HEALTH_PULLING, HEALTH_DENIED, HEALTH_OFFLINE_LOCAL, HEALTH_FORK,
   mintCareerId, newCareerDoc, loadLocalCareer, saveLocalCareer,
   pullCareer, pushCareer, retireCareer, careerSyncHealth, validateCareer,
 } from '../../js/career-store.js';
@@ -31,7 +31,7 @@ import { myCode } from '../../js/messages.js';
 import { RULES_V } from './engine/settings.js';
 import { newCareer, validateState, historyRow } from './engine/career.js';
 
-export { HEALTH_OK, HEALTH_DENIED, HEALTH_OFFLINE_LOCAL, HEALTH_FORK, careerSyncHealth };
+export { HEALTH_OK, HEALTH_PULLING, HEALTH_DENIED, HEALTH_OFFLINE_LOCAL, HEALTH_FORK, careerSyncHealth };
 
 /** The document currently in effect on this device, held so a save does not have to re-read the
  *  store to learn its own `careerId`/`seq`. Always refreshed from `loadLocalCareer()`'s own return
@@ -133,6 +133,16 @@ export async function startCareer(build) {
  *  not per pitch - a pitch-rate push would be a request every two seconds). */
 export function saveCheckpoint(state) {
   return saveLocal(state);
+}
+
+/** R15-B: a career-state change that is NOT a pitch/at-bat/game-end boundary - spending a skill
+ *  point on the player screen, or starting the next season. Local, then a coalesced push, the same
+ *  shape as `saveAtBat` (not awaited by the caller - a tap on a plus button must not wait on a
+ *  network round trip). */
+export function saveCareerState(state) {
+  const saved = saveLocal(state);
+  if (saved) push('saveCareerState');
+  return saved;
 }
 
 /** Every at-bat end. Local, then a coalesced push (one in flight, latest state wins - the store's
@@ -247,6 +257,6 @@ export function uninstallLifecycle() {
 
 export default {
   CAREER_SCHEMA_V,
-  loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, recordGameResult, retire,
-  installLifecycle, uninstallLifecycle, careerSyncHealth,
+  loadCareer, startCareer, saveCheckpoint, saveCareerState, saveAtBat, saveGameEnd,
+  recordGameResult, retire, installLifecycle, uninstallLifecycle, careerSyncHealth,
 };
