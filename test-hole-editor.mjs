@@ -420,7 +420,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
   });
 
   await test('every starter hole builds and validates on EVERY look, par 72', () => {
-    assert.deepEqual(Object.keys(THEME_DEFAULTS), ['parkland', 'desert', 'links', 'tropical']);
+    assert.deepEqual(Object.keys(THEME_DEFAULTS), ['parkland', 'desert', 'links', 'tropical', 'mountain', 'swamp']);
     for (const theme of Object.keys(THEME_DEFAULTS)) {
       let par = 0;
       STARTER_SPECS.forEach((s, i) => {
@@ -469,7 +469,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
 
   await test('Links and Tropical: belts of gorse and palms, a render palette each, and export keeps the look', async () => {
     const { THEMES } = await import('./golf/js/render.js');
-    for (const [look, species] of [['links', 'gorse'], ['tropical', 'palm']]) {
+    for (const [look, species] of [['links', 'gorse'], ['tropical', 'palm'], ['mountain', 'spruce'], ['swamp', 'willow']]) {
       assert.ok(THEMES[look], `render.js has a ${look} palette`);
       setCourse(PROFILES.custom, look);
       const doc = createDocument();
@@ -530,7 +530,8 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
   // --- the obstacle catalogue, and the migration onto it (2026-09-22) ------------------------
 
   await test('the catalogue is the shape the engine and the renderer each expect', () => {
-    assert.equal(OBSTACLE_CATALOG.length, 19);
+    assert.equal(OBSTACLE_CATALOG.length, 20);
+    assert.equal(OBSTACLE_CATALOG[19].name, 'spruce', 'appended after gorse');
     assert.equal(OBSTACLE_CATALOG[18].name, 'gorse', 'appended after the pole');
     const names = OBSTACLE_CATALOG.map((o) => o.name);
     assert.equal(new Set(names).size, names.length, 'no duplicate names');

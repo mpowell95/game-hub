@@ -705,3 +705,13 @@ recordings: much smaller and cheaper to make. Re-take them when the screen chang
 changing it needs no CACHE bump. Written alongside it: the drawing panel's corner count now
 refreshes on every click (`canvas.js` calls `onDrawChange` after each point; it read "0 corners"
 with three placed). UI suite: a probe for that and one that the Help link loads.
+
+### Mountain and Swamp (2026-09-22, same day)
+
+Two more looks, same two-entry recipe. **Mountain**: cool alpine greens, glacial blue water with a
+stone bank, granite-grey sand; belts of **spruce**, a new catalogue entry (index 19, `shape: 'fir'`
+in a blue-green `TREE_FILL`, height 20). **Swamp**: olive turf, murky green water with a mud bank;
+belts of weeping willows standing on a FLOODED floor (`treesFloor` is the swamp-water tone).
+Cypress belts were tried first and vanished: dark narrow crowns on a dark floor. The Look control
+is six buttons in two columns. Wind stays per hole (Hole panel, untick "Wind: auto"); no look
+changes it. Still: `reference/golf/looks-2026-09-22.png`, all six looks.

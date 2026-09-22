@@ -177,6 +177,7 @@ export const STRINGS = {
     obst_log: 'Fallen log',
     obst_pole: 'Power pole',
     obst_gorse: 'Gorse',
+    obst_spruce: 'Spruce',
     // clubs
     club_driver: 'driver',
     club_3wood: '3 wood',
@@ -386,6 +387,7 @@ export const STRINGS = {
     obst_log: 'Tronco caído',
     obst_pole: 'Poste de luz',
     obst_gorse: 'Tojo',
+    obst_spruce: 'Abeto',
     club_driver: 'driver',
     club_3wood: 'madera 3',
     club_5wood: 'madera 5',
