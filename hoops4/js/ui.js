@@ -89,6 +89,114 @@ class Hoops4 {
     if (this.disposed) return;
     this.root.classList.add('h4-root');
     this.renderSetup();
+    this.maybeCeremony();
+  }
+
+  /**
+   * THE FULL-SCREEN CHALLENGE CARD. Matt: "when you click into the game or click on the popup
+   * thing, it goes to a new, full screen popup thing that shows the challengers emoji and your
+   * emoji and it says 'XXXX Has Challenged You to Connect 4 Hoops'. The popup needs to clearly
+   * show that the challengers emoji and your emoji are opponents. and it should have some kind
+   * of animation. Like the key ceremony in Skeeball."
+   *
+   * ARMED, NEVER BACKFILLED - hoops4/js/alert.js holds the handoff, and the launcher arms it when
+   * the player taps the bubble or the tile. An absent entry means no card is owed, so a device
+   * that has never been challenged can never be shown one retroactively.
+   */
+  async maybeCeremony() {
+    let armed = null;
+    try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
+    if (!armed || this.disposed) return;
+    this.showCeremony(armed);
+  }
+
+  /**
+   * THE TIMELINE, in one place, because six animation-delays across five rules are unreadable.
+   * The sheet plays it; this only builds the DOM. (Skeeball's ceremony comment is the model, and
+   * so is its lesson - Matt on the first cut of that one: "you're rushing it... you just
+   * instantly swap what they are". Nothing here switches state; everything arrives.)
+   *
+   *    0.00  the veil darkens whatever is behind                          (ends 0.45)
+   *    0.25  THEIR avatar flies in from the left and overshoots           (ends 1.05)
+   *    0.45  YOUR avatar flies in from the right and overshoots           (ends 1.25)
+   *    1.15  VS lands between them with a flash                           (ends 1.60)
+   *    1.45  the headline rises under the pair                            (ends 2.05)
+   *    1.95  the buttons fade in                                          (ends 2.45)
+   *    then  IT HOLDS until the player taps (no auto-dismiss)
+   *
+   * REDUCED MOTION builds the same DOM and adds `is-still`, which settles every element on its
+   * final pose - never `display: none` on anything structural (docs/BUILDING-A-GAME.md Part 0).
+   */
+  showCeremony(a) {
+    const me = loadProfile() || {};
+    const still = (() => {
+      try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+    })();
+    const who = a.name || t('mpOpponent');
+    const head = a.kind === 'challenge'
+      ? t('cerChallenged', { who }) : t('cerYourTurn', { who });
+    // THE RING COLOURS ARE THE SIDES THEY WILL ACTUALLY PLAY - the challenger is side 'a', which
+    // is RED and shoots first. Paired with the same disc/triangle marker the turn pill uses, so
+    // "who is who" survives being colourblind (root CLAUDE.md).
+    const el = document.createElement('div');
+    el.className = 'h4-cer' + (still ? ' is-still' : '');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', head);
+    el.innerHTML = `
+      <div class="h4-cer-veil" aria-hidden="true"></div>
+      <div class="h4-cer-body">
+        <p class="h4-cer-head">${a.kind === 'challenge' ? t('cerHead') : t('cerHeadTurn')}</p>
+        <div class="h4-cer-pair">
+          <div class="h4-cer-side h4-cer-them">
+            <span class="h4-cer-face" aria-hidden="true">${a.emoji || '🙂'}</span>
+            <span class="h4-cer-name"><span class="h4-cer-mark" aria-hidden="true">&#9679;</span>${who}</span>
+          </div>
+          <span class="h4-cer-vs" aria-hidden="true">${t('cerVs')}</span>
+          <div class="h4-cer-side h4-cer-me">
+            <span class="h4-cer-face" aria-hidden="true">${me.emoji || '🙂'}</span>
+            <span class="h4-cer-name"><span class="h4-cer-mark" aria-hidden="true">&#9650;</span>${me.name || t('you')}</span>
+          </div>
+        </div>
+        <p class="h4-cer-line">${head}</p>
+        <div class="h4-cer-btns">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-cer-go">
+            ${a.kind === 'challenge' ? t('cerGo') : t('cerGoTurn')}</button>
+          <button type="button" class="gh-btn gh-btn--block h4-cer-later">${t('cerLater')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const close = () => { try { el.remove(); } catch {} };
+    this.on(el.querySelector('.h4-cer-later'), 'click', close);
+    // THE CARD STAYS UP UNTIL THE MATCH IS ACTUALLY OPEN. The first version closed it first and
+    // fell back to `toast()`, which returns silently when `.h4-toast` is not on screen - and it
+    // never is on the setup screen. So a match that had gone would have dropped the player back
+    // with no explanation at all: docs/BUILDING-A-GAME.md Part 0, "if you paint before the data
+    // has arrived, name the path back to the truth". The failure is said HERE, on the card.
+    const go = el.querySelector('.h4-cer-go');
+    this.on(go, 'click', async () => {
+      go.disabled = true;
+      try {
+        const MP = await import('./mp.js');
+        const game = await MP.readGame(a.id);
+        if (this.disposed) return;
+        if (!game) { this._ceremonyFailed(el, go); return; }
+        close();
+        this.startAsync(game);
+      } catch (err) {
+        console.error('[hoops4] could not open the challenge', err);
+        if (!this.disposed) this._ceremonyFailed(el, go);
+      }
+    });
+  }
+
+  /** The challenge could not be opened. Say so on the card rather than closing it. */
+  _ceremonyFailed(el, go) {
+    const line = el.querySelector('.h4-cer-line');
+    if (line) line.textContent = t('cerGone');
+    if (go) go.remove();
+    const later = el.querySelector('.h4-cer-later');
+    if (later) later.textContent = t('close');
   }
 
   // --- listener hygiene: destroy() must leave nothing behind ---------------------------------
