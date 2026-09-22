@@ -4,12 +4,10 @@ export const STRINGS = {
   en: {
     title: 'Connect 4 Hoops',
     tagline: 'Sink a hoop, drop a disc. Four in a row wins.',
-    opponent: 'Opponent',
     // THE HUB'S OWN DIFFICULTY WORDS, not this game's. They were 'Beginner / Steady /
     // Sharpshooter' - invented here and nowhere else in the repo. Matt: "you created brand new
     // terminology for the difficulties. Don't do that."
     cpu1: 'Easy', cpu2: 'Medium', cpu3: 'Hard',
-    twoPlayer: 'Two players',
     play: 'Play',
     howto: 'How to play',
     howtoBody: 'Swipe up the lane to shoot. How hard you swipe sets the arc, the angle picks the hoop. Sink any hoop and your disc drops down that column. Miss and you simply shoot again, so a turn only ends when a ball goes in. A ball that rims out into the next hoop still counts, in that column.',
@@ -20,6 +18,19 @@ export const STRINGS = {
     you: 'You', shooting: 'is shooting', yourShot: 'Your shot',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     menu: 'Menu',
+    // --- the setup screen, restructured 2026-09-22 ------------------------------------------
+    // Matt: "What is 2 player? There should be options to play the computer player and
+    // 'Multiplayer Options'... The computer player options should just have the difficulties and
+    // the shots per turn option."
+    vsCpu: 'Play the computer',
+    difficulty: 'Difficulty',
+    multiplayer: 'Multiplayer',
+    mpHome: 'Multiplayer',
+    mpLiveHint: 'You both play now',
+    mpPassPlay: 'Pass and play', mpPassPlayHint: 'Two of you on this phone',
+    mpChallengeHint: 'They play next time they open the hub',
+    mpActive: 'Active games',
+    mpNoActive: 'No games yet. Challenge somebody above.',
     // The full-screen challenge card (showCeremony in ui.js).
     cerHead: 'CHALLENGE', cerHeadTurn: 'YOUR TURN',
     cerChallenged: '{who} has challenged you to Connect 4 Hoops',
@@ -46,8 +57,6 @@ export const STRINGS = {
     shotsUntil: 'Till you make one', shotsOne: 'One shot only',
     // --- multiplayer ----------------------------------------------------------------------
     mp: 'Play a friend',
-    mpLive: 'Live game', mpLiveNote: 'Both of you play now, one after the other.',
-    mpTurns: 'Turn by turn', mpTurnsNote: 'Take your shot and hand it over. They play when they next open the hub.',
     mpHost: 'Host a game', mpJoin: 'Join a game',
     mpCode: 'Room code', mpCodeHint: 'Give them this code',
     mpEnterCode: 'Enter their code', mpJoinBtn: 'Join',
@@ -60,7 +69,7 @@ export const STRINGS = {
     mpChallenge: 'Challenge', mpPick: 'Who are you playing?',
     mpNoOne: 'Nobody to challenge yet. A player shows up here once they have opened the hub.',
     mpSent: 'Sent. They play next.', mpYourMove: 'Your move',
-    mpGames: 'Your games', mpNoGames: 'No games yet.',
+    mpGames: 'Your games',
     mpWaitingOn: 'Waiting on {who}', mpOver: 'Finished',
     mpResign: 'Resign', mpResigned: '{who} resigned',
     mpOffline: 'You are offline. The move is saved and will send itself.',
@@ -71,9 +80,7 @@ export const STRINGS = {
   es: {
     title: 'Connect 4 Hoops',
     tagline: 'Encesta y suelta una ficha. Cuatro en raya gana.',
-    opponent: 'Rival',
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
-    twoPlayer: 'Dos jugadores',
     play: 'Jugar',
     howto: 'Cómo se juega',
     howtoBody: 'Desliza hacia arriba para tirar. La fuerza marca el arco y el ángulo elige la canasta. Si encestas, tu ficha cae por esa columna. Si fallas, vuelves a tirar, así que el turno solo termina cuando entra una bola. Una bola que rebota y entra en la canasta de al lado también cuenta, en esa columna.',
@@ -82,6 +89,15 @@ export const STRINGS = {
     you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     menu: 'Menú',
+    vsCpu: 'Jugar contra la máquina',
+    difficulty: 'Dificultad',
+    multiplayer: 'Multijugador',
+    mpHome: 'Multijugador',
+    mpLiveHint: 'Los dos juegan ahora',
+    mpPassPlay: 'Pasar y jugar', mpPassPlayHint: 'Dos personas en este teléfono',
+    mpChallengeHint: 'Jugarán la próxima vez que abran el hub',
+    mpActive: 'Partidas activas',
+    mpNoActive: 'Aún no hay partidas. Reta a alguien arriba.',
     cerHead: 'RETO', cerHeadTurn: 'TE TOCA',
     cerChallenged: '{who} te ha retado a Connect 4 Hoops',
     cerYourTurn: 'Te toca contra {who}',
@@ -107,8 +123,6 @@ export const STRINGS = {
     shotsUntil: 'Hasta encestar', shotsOne: 'Un solo tiro',
     // --- multiplayer ----------------------------------------------------------------------
     mp: 'Jugar con alguien',
-    mpLive: 'Partida en vivo', mpLiveNote: 'Los dos juegan ahora, por turnos.',
-    mpTurns: 'Por turnos', mpTurnsNote: 'Tira y pasasela. Jugara la proxima vez que abra el hub.',
     mpHost: 'Crear partida', mpJoin: 'Unirse a una partida',
     mpCode: 'Codigo', mpCodeHint: 'Dale este codigo',
     mpEnterCode: 'Escribe su codigo', mpJoinBtn: 'Unirse',
@@ -121,7 +135,7 @@ export const STRINGS = {
     mpChallenge: 'Retar', mpPick: 'Contra quien juegas?',
     mpNoOne: 'Todavia no hay nadie a quien retar. Un jugador aparece aqui cuando abre el hub.',
     mpSent: 'Enviado. Le toca a el.', mpYourMove: 'Te toca',
-    mpGames: 'Tus partidas', mpNoGames: 'Todavia no hay partidas.',
+    mpGames: 'Tus partidas',
     mpWaitingOn: 'Esperando a {who}', mpOver: 'Terminada',
     mpResign: 'Rendirse', mpResigned: '{who} se rindio',
     mpOffline: 'Estas sin conexion. La jugada se guarda y se enviara sola.',

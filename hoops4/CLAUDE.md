@@ -492,6 +492,41 @@ a different match coming back round to you while you were playing something else
 Three `[KNOWN-BUG PROBE]` assertions in `test-hoops4-mp.mjs`, verified born red by reintroducing
 the faults.
 
+### "What is 2 player?" - the setup screen, split (2026-09-22)
+
+Matt: *"What is 2 player? There should be options to play the computer player and 'Multiplayer
+Options'. Then within multiplayer options, there's a Host game option, a pass and play option, a
+challenge option and a Live Challenges section that shows the active games and if it's your turn or
+their turn... The computer player options should just have the difficulties and the shots per turn
+option."*
+
+**The question answers itself: "Two players" was pass-and-play sitting in the OPPONENT row**, next
+to three CPU difficulties, so it read as a fourth difficulty. It is now "Pass and play" in the
+multiplayer sheet, beside the other two ways two people play.
+
+- **The setup screen is one card and one door.** "Play the computer" holds difficulty and shots per
+  turn and nothing else, with Play inside it; **Multiplayer** is a separate button below.
+- **The multiplayer sheet is four rows that say what they do** - Challenge, Host a game, Join a
+  game, Pass and play - each with one line under the name, replacing the section headings and
+  paragraphs it used to carry. Then **Active games**, which lists only matches still in play and
+  says whose turn each one is.
+- **And it has a picture of the machine now.** Matt, on the old screen: *"it looks nothing like the
+  others."* What every other machine's setup screen leads with is a picture of the machine, and
+  this had none. It reuses `GAME_ART['hoops4']` - the SAME inline SVG the launcher tile draws - so
+  the tile you tap and the screen you land on are the same picture, at no cost: no WebGL, no
+  readback, no placeholder needing correction, nothing to fail offline. A short phone drops the
+  picture rather than a control, because no game in this hub may scroll.
+
+**`opponent: 'two'` IS STILL A REAL VALUE** in `gamehub.hoops4.v1` on any device that used the old
+screen, and it is neither deleted nor rewritten (THE LAW rule 5). The difficulty row shows its
+nearest meaning (Medium) until the player picks again, `start()` and `themName()` read the same
+fallback, and Play now passes `vsCpu: true` explicitly so a stored `'two'` can never silently start
+a pass-and-play game from a button labelled "Play".
+
+**Still to come in this thread**: series (single / best of 3 / best of 5) with the shot rule and an
+optional caption attached to a challenge, shown to whoever accepts it; quick chat inside a match;
+challenge history with records; and the visual How to Play, which is still just words.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*

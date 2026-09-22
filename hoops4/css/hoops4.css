@@ -98,6 +98,18 @@
 }
 .h4-root .h4-tag { margin: 0; font-size: 13px; color: var(--h4s-muted); max-width: 34ch; }
 
+/* The cabinet, at the top of its own setup screen. Sized by the space that is actually spare -
+   the card below it is the control and must never be pushed off a short phone, so this shrinks
+   first (see the short-phone rule at the end of this file). */
+.h4-root .h4-hero {
+  width: min(420px, 100%);
+  border-radius: 14px;
+  overflow: hidden;
+  line-height: 0;
+  box-shadow: 0 6px 20px rgba(16, 32, 64, 0.18);
+}
+.h4-root .h4-hero svg { width: 100%; height: auto; display: block; }
+
 .h4-root .h4-card {
   width: min(420px, 100%);
   display: flex;
@@ -106,6 +118,13 @@
   text-align: left;
   /* .gh-card already supplies surface/border/radius/shadow/padding; only the layout of the two
      rows inside it is local. */
+}
+/* The card now says what it is for, because it is no longer the whole screen's only control -
+   "Play the computer" against the Multiplayer button below it. */
+.h4-root .h4-card-head {
+  margin: 0;
+  font-size: 15px; font-weight: 800;
+  color: var(--h4s-ink);
 }
 .h4-root .h4-row { display: flex; flex-direction: column; gap: 8px; }
 .h4-root .h4-row-label {
@@ -118,6 +137,9 @@
 }
 .h4-root .h4-opts { display: grid; gap: 8px; }
 .h4-root .h4-opts-4 { grid-template-columns: repeat(2, 1fr); }
+/* Three difficulties across, which fits at a phone width because the words are one each
+   (Easy / Medium / Hard). It was a 2x2 of four when "Two players" shared the row. */
+.h4-root .h4-opts-3 { grid-template-columns: repeat(3, 1fr); }
 .h4-root .h4-opts-2 { grid-template-columns: repeat(2, 1fr); }
 .h4-root .h4-opt {
   min-height: 44px;                    /* the UX floor's tap target */
@@ -315,6 +337,29 @@
   color: var(--h4s-muted);
 }
 .h4-root .h4-mp-sub { margin: 4px 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
+/* THE FOUR WAYS TWO PEOPLE PLAY, as four rows that each say what they do. One line of what it
+   is under the name, instead of the section headers and paragraphs this screen used to carry. */
+.h4-root .h4-mp-acts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.h4-root .h4-mp-act {
+  appearance: none;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; min-height: 56px;                 /* well past the UX floor's 44px */
+  padding: 10px 14px;
+  border: 1px solid var(--h4s-line, rgba(0, 0, 0, 0.14));
+  border-radius: 12px;
+  background: var(--h4s-surface, #fff);
+  color: var(--h4s-ink);
+  font: inherit; text-align: left;
+  cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-mp-act.is-primary {
+  border-color: var(--gh-accent, #1f5fa8);
+  border-width: 2px;
+}
+.h4-root .h4-mp-act:active { background: var(--h4s-surface-2, rgba(0, 0, 0, 0.04)); }
+.h4-root .h4-mp-act-name { font-size: 15px; font-weight: 800; }
+.h4-root .h4-mp-act-hint { font-size: 12px; color: var(--h4s-muted); }
+
 .h4-root .h4-mp-row { display: flex; gap: 8px; }
 .h4-root .h4-mp-row .gh-btn { flex: 1 1 0; min-height: 46px; }
 .h4-root .h4-mp-note { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
@@ -495,4 +540,10 @@
   .h4-root .h4-cer-face { width: 74px; height: 74px; font-size: 36px; }
   .h4-root .h4-cer-line { font-size: 17px; }
   .h4-root .h4-cer-body { gap: 10px; }
+}
+
+/* A SHORT PHONE DROPS THE PICTURE BEFORE IT DROPS A CONTROL. No game in this hub may scroll, and
+   the hero is the one thing on this screen nobody needs in order to start a game. */
+@media (max-height: 700px) {
+  .h4-root .h4-hero { display: none; }
 }
