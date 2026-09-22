@@ -693,3 +693,15 @@ widened so each look lists its own species first (ordering only; the table order
 `rough`, instead of hard-coding desert. Wind was NOT made a property of a look: per-hole wind is
 already in the editor. Still: `reference/golf/looks-2026-09-22.png`. Mountain and Swamp looks are
 the next two if Matt wants them.
+
+## Help page (2026-09-22)
+
+`hole-editor/help.html`, opened by the ribbon's **? Help** link (new tab). Plain words for someone
+who has never seen the tool: start here, the screen, adding things, drawing, one card per ribbon
+tool, the green, a tree-height rule of thumb, Validate/Play, saving and sending, keys. Pictures are
+STILL screenshots of the real Course Creator (`hole-editor/help/*.jpg`, ~125 KB each), not looping
+recordings: much smaller and cheaper to make. Re-take them when the screen changes. The whole
+`hole-editor/` folder is outside the service worker (`validate-sw-assets.mjs` EXCLUDED), so
+changing it needs no CACHE bump. Written alongside it: the drawing panel's corner count now
+refreshes on every click (`canvas.js` calls `onDrawChange` after each point; it read "0 corners"
+with three placed). UI suite: a probe for that and one that the Help link loads.

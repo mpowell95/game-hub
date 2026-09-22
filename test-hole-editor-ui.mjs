@@ -130,6 +130,7 @@ await key('h');
 await page.click('#he-w-draw'); await settle();
 for (const [dx, dy] of [[-30, 150], [-10, 150], [-10, 170]]) { const q = await toScreen(dx, dy); await page.mouse.click(q.x, q.y); await page.waitForTimeout(80); }
 ok('three clicks make three corners', (await page.evaluate(() => window.__he.editorCanvas.drawing.points.length)) === 3);
+ok('[KNOWN-BUG PROBE] ...and the panel counts them', /\b3 corners\b/.test(await page.evaluate(() => document.body.innerText)));
 await page.keyboard.press('Backspace'); await settle();
 ok('Backspace deletes the last corner', (await page.evaluate(() => window.__he.editorCanvas.drawing.points.length)) === 2);
 await page.click('#he-draw-undo'); await settle();
@@ -229,6 +230,9 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
   s = await st2();
   ok('the plain link still opens Red Mesa, untouched by the Course Creator', s.courseId === 'redmesa' && s.n === 18 && s.id === 'rm-01');
+  const help = await p2.$eval('#he-help', (a) => a.getAttribute('href'));
+  const helpRes = await p2.request.get(new globalThis.URL('help.html', p2.url()).href);
+  ok('the ribbon has a Help link to help.html, and it loads', help === 'help.html' && helpRes.ok());
   ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
   await p2.close();
 }

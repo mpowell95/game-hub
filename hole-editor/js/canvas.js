@@ -574,6 +574,9 @@ export class EditorCanvas {
         const last = this.drawing.points[this.drawing.points.length - 1];
         if (!last || Math.hypot(last[0] - w.x, last[1] - w.y) > 1) this.drawing.points.push([+w.x.toFixed(1), +w.y.toFixed(1)]);
         this.draw();
+        // The panel's corner count and "Delete last point" button read this (it said "0 corners"
+        // with three placed, and the button stayed disabled until something else re-rendered).
+        if (this.onDrawChange) this.onDrawChange(this.drawing);
         return;
       }
 
