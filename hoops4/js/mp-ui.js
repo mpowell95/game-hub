@@ -124,8 +124,10 @@ export function openMultiplayer(ui) {
       : r.yourTurn ? t('mpYourMove')
         : t('mpWaitingOn').replace('{who}', r.name || '?');
     const cls = r.over ? 'is-over' : r.yourTurn ? 'is-yours' : 'is-theirs';
+    // Only a real series says so - "Game 1 of 1" is noise on a one-off.
+    const leg = (r.series > 1) ? `<span class="h4-mp-leg">${esc(t('gameOf', { n: r.seriesNo, m: r.series }))}</span>` : '';
     return `<button type="button" class="h4-mp-game ${cls}" data-game="${esc(r.id)}">
-        <span class="h4-mp-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || '?')}</span>
+        <span class="h4-mp-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || '?')}${leg}</span>
         <span class="h4-mp-state">${esc(status)}</span>
       </button>`;
   }
@@ -206,18 +208,86 @@ export function openMultiplayer(ui) {
           <span class="h4-mp-state">${esc(o.code)}</span>
         </button>`).join('')}</div>` : note(t('mpNoOne')), 'home');
     for (const b of el.querySelectorAll('[data-who]')) {
-      ui.on(b, 'click', async () => {
-        if (state.busy) return;
-        state.busy = true;
-        const them = state.opponents[+b.dataset.who];
-        shell(t('mpChallenge'), `<p class="h4-mp-sub">${esc(them.name)}...</p>`, 'home');
-        const res = await MP.createGame({ them, oneShot: oneShot() });
-        state.busy = false;
-        if (!res.ok) { shell(t('mpChallenge'), note(failure(res.reason), 'warn'), 'home'); return; }
-        el.remove();
-        ui.startAsync(res.game);
+      ui.on(b, 'click', () => viewTerms(state.opponents[+b.dataset.who]));
+    }
+  }
+
+  // --- turn by turn: the terms ------------------------------------------------------------------
+  /**
+   * WHAT THE CHALLENGE IS, before it is sent. Matt: "Before you challenge someone or anything,
+   * you should be able to select the shots per turn setting and if you want to play a single
+   * game, best of 3 series or best of 5 series... Maybe include a caption option thing where you
+   * can say something to your opponent."
+   *
+   * The shot rule DEFAULTS to the setup screen's, because that is the one the challenger has
+   * already chosen for themselves - but it is settable here, because it is the rule BOTH people
+   * will play under and this is the only moment either of them agrees to it.
+   */
+  function viewTerms(them) {
+    if (!them) return go('home');
+    const terms = state.terms || (state.terms = { oneShot: oneShot(), series: 1, caption: '' });
+    // A CHECKMARK, NOT JUST A COLOUR. The setup screen's own comment says it: "The selected
+    // option is marked by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone (Matt is
+    // red/green colorblind)". The first version of this screen reused the class and forgot the
+    // glyph, which a screenshot caught - the options looked identical apart from their tint.
+    const pick = (group, value, label) => {
+      const on = terms[group] === value;
+      return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}"
+              data-set="${group}" data-val="${esc(String(value))}"
+              aria-pressed="${on}">${on ? '<span class="h4-opt-check" aria-hidden="true">&check;</span>' : ''}${esc(label)}</button>`;
+    };
+    shell(t('chTitle', { who: them.name }), `
+      <div class="h4-row">
+        <p class="h4-row-label">${t('shotMode')}</p>
+        <div class="h4-opts h4-opts-2">
+          ${pick('oneShot', false, t('shotsUntil'))}${pick('oneShot', true, t('shotsOne'))}
+        </div>
+      </div>
+      <div class="h4-row">
+        <p class="h4-row-label">${t('chSeries')}</p>
+        <div class="h4-opts h4-opts-3">
+          ${pick('series', 1, t('chSingle'))}${pick('series', 3, t('chBo3'))}${pick('series', 5, t('chBo5'))}
+        </div>
+      </div>
+      <label class="gh-field h4-row">
+        <span class="gh-field__label">${t('chCaption')}</span>
+        <input class="gh-input h4-mp-text" type="text" maxlength="${MP.MAX_CAPTION}"
+               placeholder="${t('chCaptionPh')}" data-role="caption" value="${esc(terms.caption)}">
+      </label>
+      <p class="h4-mp-note" data-role="err"></p>
+      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="send">${t('chSend')}</button>`,
+    'pick');
+    for (const b of el.querySelectorAll('[data-set]')) {
+      ui.on(b, 'click', () => {
+        const g = b.dataset.set;
+        terms[g] = g === 'series' ? +b.dataset.val : b.dataset.val === 'true';
+        // Keep whatever they have typed so far - re-rendering must not eat the caption.
+        const box = el.querySelector('[data-role="caption"]');
+        if (box) terms.caption = box.value;
+        viewTerms(them);
       });
     }
+    ui.on(el.querySelector('[data-act="send"]'), 'click', async () => {
+      if (state.busy) return;
+      state.busy = true;
+      const box = el.querySelector('[data-role="caption"]');
+      terms.caption = box ? box.value : '';
+      const err = el.querySelector('[data-role="err"]');
+      if (err) err.textContent = '';
+      const res = await MP.createGame({
+        them, oneShot: !!terms.oneShot, series: terms.series, caption: terms.caption,
+      });
+      state.busy = false;
+      if (!res.ok) {
+        // Stay on the form with what they typed still in it, rather than throwing it away.
+        const e2 = el.querySelector('[data-role="err"]');
+        if (e2) { e2.textContent = failure(res.reason); e2.classList.add('is-warn'); }
+        return;
+      }
+      state.terms = null;
+      el.remove();
+      ui.startAsync(res.game);
+    });
   }
 
   async function openGame(id) {
@@ -247,6 +317,7 @@ export function openMultiplayer(ui) {
     if (view === 'host') return viewHost();
     if (view === 'join') return viewJoin();
     if (view === 'pick') return viewPick();
+    if (view === 'terms') return viewTerms(state.them);
     if (view === 'pass') return startPassPlay();
     return viewHome();
   }
@@ -259,6 +330,11 @@ export function openMultiplayer(ui) {
   }
 
   go('home');
+  // Read-only hook for the headless drivers, the same precedent as `window.__skTest` and
+  // `window.__h4Test`. The opponent list comes from Firebase, which a local probe has no access
+  // to, so there is no other way to reach the terms screen and LOOK at it. The game never reads
+  // this; `reference/hoops/` does.
+  try { window.__h4Mp = { go, state, viewTerms }; } catch { /* no window */ }
   return { close };
 }
 

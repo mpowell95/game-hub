@@ -27,6 +27,22 @@ export const STRINGS = {
     mpHome: 'Multiplayer',
     mpPassPlay: 'Pass and play',
     mpActive: 'Active games',
+    // --- the terms of a challenge (2026-09-22) ----------------------------------------------
+    // Matt: "Before you challenge someone or anything, you should be able to select the shots per
+    // turn setting and if you want to play a single game, best of 3 series or best of 5 series.
+    // And when you accept a challenge and go to play, you should see what the shot settings and
+    // the series selection is."
+    chTitle: 'Challenge {who}',
+    chSeries: 'Series',
+    chSingle: 'Single game', chBo3: 'Best of 3', chBo5: 'Best of 5',
+    chCaption: 'Say something (optional)',
+    chCaptionPh: 'Good luck...',
+    chSend: 'Send challenge',
+    gameOf: 'Game {n} of {m}',
+    seriesScore: 'Series {a}\u2013{b}',
+    nextGame: 'Next game',
+    seriesWon: '{who} takes the series', seriesDrawn: 'Series drawn',
+    youTakeIt: 'You take the series',
     mpNoActive: 'No games yet. Challenge somebody above.',
     // The full-screen challenge card (showCeremony in ui.js).
     cerHead: 'CHALLENGE', cerHeadTurn: 'YOUR TURN',
@@ -91,6 +107,17 @@ export const STRINGS = {
     mpHome: 'Multijugador',
     mpPassPlay: 'Pasar y jugar',
     mpActive: 'Partidas activas',
+    chTitle: 'Retar a {who}',
+    chSeries: 'Serie',
+    chSingle: 'Una partida', chBo3: 'Al mejor de 3', chBo5: 'Al mejor de 5',
+    chCaption: 'Di algo (opcional)',
+    chCaptionPh: 'Suerte...',
+    chSend: 'Enviar reto',
+    gameOf: 'Partida {n} de {m}',
+    seriesScore: 'Serie {a}\u2013{b}',
+    nextGame: 'Siguiente partida',
+    seriesWon: '{who} gana la serie', seriesDrawn: 'Serie empatada',
+    youTakeIt: 'Ganas la serie',
     mpNoActive: 'Aún no hay partidas. Reta a alguien arriba.',
     cerHead: 'RETO', cerHeadTurn: 'TE TOCA',
     cerChallenged: '{who} te ha retado a Connect 4 Hoops',

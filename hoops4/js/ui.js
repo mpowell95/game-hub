@@ -108,6 +108,26 @@ class Hoops4 {
     let armed = null;
     try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
     if (!armed || this.disposed) return;
+    // THE TERMS COME FROM THE MATCH, NOT THE LAUNCHER. Matt: "when you accept a challenge and go
+    // to play, you should see what the shot settings and the series selection is and stuff like
+    // that." The launcher's index row does not carry the caption, so the document is read here -
+    // and the card is shown either way, because a card without its terms is still better than no
+    // card if the read fails.
+    try {
+      const MP = await import('./mp.js');
+      const game = await MP.readGame(armed.id);
+      if (this.disposed) return;
+      if (game) {
+        const bits = [game.oneShot ? t('shotsOne') : t('shotsUntil')];
+        if (game.series > 1) {
+          bits.push(t(game.series === 3 ? 'chBo3' : 'chBo5'));
+          if (game.seriesNo > 1) bits.push(t('gameOf', { n: game.seriesNo, m: game.series }));
+        }
+        armed.terms = bits.join(' \u00B7 ');
+        armed.caption = game.caption || '';
+      }
+    } catch { /* the card still shows; it just will not name the terms */ }
+    if (this.disposed) return;
     this.showCeremony(armed);
   }
 
@@ -160,6 +180,8 @@ class Hoops4 {
           </div>
         </div>
         <p class="h4-cer-line">${head}</p>
+        ${a.terms ? `<p class="h4-cer-terms">${a.terms}</p>` : ''}
+        ${a.caption ? `<p class="h4-cer-caption">&ldquo;${a.caption}&rdquo;</p>` : ''}
         <div class="h4-cer-btns">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-cer-go">
             ${a.kind === 'challenge' ? t('cerGo') : t('cerGoTurn')}</button>
@@ -490,6 +512,59 @@ class Hoops4 {
     }
   }
 
+  /**
+   * WHERE THE SERIES STANDS, on the game-over card, and the button that starts the next one.
+   *
+   * Only for a turn-by-turn match of more than one game. The line is painted from the SAME pure
+   * `seriesAfter()` both devices run, so the two cards cannot disagree about the score, and the
+   * button is replaced by a verdict once the series is decided.
+   */
+  async _paintSeriesEnd(card) {
+    const mp = this.mp;
+    if (!mp || mp.kind !== 'async' || !mp.game || !(mp.game.series > 1)) return;
+    let MP;
+    try { MP = await import('./mp.js'); } catch { return; }
+    if (this.disposed || !card.isConnected) return;
+    // The local match knows the result; the stored document may not have caught up yet, so the
+    // score is computed from the document plus THIS game's winner.
+    const side = mp.side;
+    const m = this.match;
+    const winnerSide = m.winner === null ? null : (m.winner === this.myPlayer ? side : (side === 'a' ? 'b' : 'a'));
+    const st = MP.seriesAfter({ ...mp.game, over: { winner: winnerSide } });
+    const line = card.querySelector('.h4-series');
+    if (line) {
+      const mine = side === 'a' ? st.wins.a : st.wins.b;
+      const theirs = side === 'a' ? st.wins.b : st.wins.a;
+      const score = t('seriesScore', { a: mine, b: theirs });
+      line.hidden = false;
+      line.textContent = st.done
+        ? `${score} \u00B7 ${st.winner === null ? t('seriesDrawn')
+          : st.winner === side ? t('youTakeIt') : t('seriesWon', { who: this.themName() })}`
+        : `${t('gameOf', { n: st.no, m: st.len })} \u00B7 ${score}`;
+    }
+    if (st.done) return;
+    // A LIVE SERIES REPLACES "Play again", which in multiplayer only quits to the setup screen.
+    const again = card.querySelector('.h4-again');
+    if (!again) return;
+    again.textContent = t('nextGame');
+    again.replaceWith(again.cloneNode(true));            // drop the quit-to-setup handler
+    const next = card.querySelector('.h4-again');
+    this.on(next, 'click', async () => {
+      next.disabled = true;
+      const res = await MP.nextInSeries({ ...mp.game, over: { winner: winnerSide } });
+      if (this.disposed) return;
+      if (!res || !res.ok) {
+        // Say it on the card. There is no toast on this screen and a dead button is worse than
+        // a sentence (docs/BUILDING-A-GAME.md Part 0).
+        if (line) line.textContent = t('mpOffline');
+        next.disabled = false;
+        return;
+      }
+      card.remove();
+      this.startAsync(res.game);
+    });
+  }
+
   renderLoadError() {
     this.root.innerHTML = `<div class="h4-setup"><p class="h4-note">${t('loadError')}</p>
       <button type="button" class="gh-btn gh-btn-primary h4-play">${t('play')}</button></div>`;
@@ -502,6 +577,7 @@ class Hoops4 {
         <div class="h4-hud">
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
+          <span class="h4-leg" hidden></span>
           <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
         </div>
         <div class="h4-stage">
@@ -599,6 +675,17 @@ class Hoops4 {
     who.className = 'h4-who ' + (red ? 'is-red' : 'is-yellow') + (mine ? ' is-mine' : ' is-them')
       + (waiting ? ' is-waiting' : '');
     sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
+    // WHICH GAME OF A SERIES, on the HUD, because it changes what the match is worth. Matt: "when
+    // you accept a challenge and go to play, you should see what the shot settings and the series
+    // selection is". The shot rule is visible in the play itself (a miss either passes the turn
+    // or does not); the series is not visible anywhere else.
+    const leg = this.root.querySelector('.h4-leg');
+    const g = this.mp && this.mp.kind === 'async' ? this.mp.game : null;
+    if (leg) {
+      const on = !!(g && g.series > 1);
+      leg.hidden = !on;
+      leg.textContent = on ? t('gameOf', { n: g.seriesNo, m: g.series }) : '';
+    }
   }
 
   toast(msg) {
@@ -779,11 +866,13 @@ class Hoops4 {
         <button type="button" class="h4-x" aria-label="${t('close')}">&times;</button>
         <h2>${head}</h2>
         <p class="h4-acc">${t('accuracy')} ${acc}% <span>(${r.myDiscs}/${r.myShots})</span></p>
+        <p class="h4-series" hidden></p>
         <button type="button" class="gh-btn gh-btn-primary h4-again">${t('again')}</button>
         <button type="button" class="gh-btn h4-quit">${t('quit')}</button>
       </div>`;
     this.root.appendChild(card);
     this.on(card.querySelector('.h4-x'), 'click', () => card.remove());
+    this._paintSeriesEnd(card);
     const again = card.querySelector('.h4-again');
     // "Play again" restarts a SOLO match. In multiplayer there is nobody on the other end of it -
     // a rematch is a new room or a new challenge - so the button quits to the setup screen.
