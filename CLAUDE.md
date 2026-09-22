@@ -167,33 +167,57 @@ leave it there.
 ## Delegate to lesser-model subagents; the orchestrator's context is the scarce thing
 
 Matt, 2026-09-22, after asking whether the session was using subagents: *"excellent... I'd like
-you and Opus to always delegate to lower model subagents to save context when possible."*
+you and Opus to always delegate to lower model subagents to save context when possible."* Then,
+his own rules, pasted the same day: every subagent call re-pays the full CLAUDE.md load (about
+28k tokens for this root file alone, more with a game's own file) before it does any real work.
+**Fewer, bigger, cheaper subagent calls beat many small expensive ones.**
 
-The session that reads this file is the ORCHESTRATOR. It writes the spec (into the stage doc, e.g.
-`docs/BASEBALL-3D-BUILD.md` section 9, committed BEFORE the build), launches the work as a
-subagent, reviews the result against stills and measured numbers, and does the merge, the CACHE
-bump, the suites on the merged tree, the PR, the deploy and the live check itself. It does not
-read whole files or run long suites when an agent can do that and report back.
+**When to use a subagent**
+- The task is self-contained and you can write a full brief for it: files, what to check, what
+  "done" looks like.
+- It is exploratory or broad (searching many files, running a long suite, reading big docs);
+  keep that OUT of the orchestrator's own context.
+- You would otherwise read whole files or run long suites yourself just to report a summary.
 
-- **Sonnet** for screens, CSS, textures, stills, probes, docs, and any stage whose spec is
-  concrete enough to hand over. This has been most stages (Baseball R6 through R15-B, the league
-  look-and-feel stage).
-- **Opus** for engine and architecture work, persistence, anything measured with the simulators
-  where the agent has to decide what to sweep (Baseball R5, R15-A, the economy study, R16).
-- **The orchestrator itself** only for a change smaller than the cost of briefing an agent (a
-  label rename, a CSS clearance fix, a trophy icon), and for CHECKING an agent's work: re-run its
-  key number on a fresh seed, open its stills, read the diff of the load-bearing lines.
-- **`model` must be passed explicitly on every Agent call.** A subagent with no `model` inherits
-  the orchestrator's own model, which is the most expensive one and defeats the point.
-- Agents run in their own worktree (`isolation: "worktree"`) with their own dev server port
-  (`PORT=8124`, `BB_BASE=http://localhost:8124` for the Baseball suites), never touch `sw.js`,
-  `version.json` or CACHE, never push, and commit on their worktree branch; the orchestrator
-  merges. An agent's report is model output: verify it, then relay what matters, never paste it.
-- Two agents can run in parallel when their files do not overlap (R14's screens and R15-A's
-  headless career loop were built at the same time); otherwise they run in sequence.
-- An agent cut off mid-verification (a usage limit, a harness timeout) is RESUMED with a message
-  listing exactly what is unverified, not restarted; it keeps its context. Tell agents to commit
-  what is green first so an interruption loses nothing.
+**When NOT to use a subagent**
+- A quick lookup, a single grep, a one-line edit: do it directly (Read, Grep, Edit).
+- You already know the answer or the exact file and line: go straight there.
+- The task is small enough that briefing an agent costs more than doing it yourself (a label
+  rename, a CSS clearance fix, a trophy icon).
+
+**Always pass `model` explicitly.** A subagent with no `model` inherits the orchestrator's own,
+the most expensive one, and defeats the point.
+- **Sonnet**: screens, CSS, textures, docs, stills, probes, any concretely specified stage
+  (Baseball R6 through R15-B, R17, R18).
+- **Opus**: engine and architecture, persistence, anything that needs judgment on what to sweep
+  or measure (Baseball R5, R15-A, the economy study, R16).
+- **Haiku**: trivial, mechanical, well-defined tasks (simple renames, straightforward lookups).
+
+**Batch, do not fan out.** One agent doing three related things beats three agents doing one
+each, since each pays the fixed context floor. Run agents in parallel only when their files and
+scope do not overlap (R14's screens and R15-A's headless career loop were built at the same
+time); otherwise sequence them. Write a tight, complete brief up front: a vague prompt causes
+back-and-forth turns, which multiplies the cost.
+
+**How a stage runs here.** The orchestrator writes the spec into the stage doc first (e.g.
+`docs/BASEBALL-3D-BUILD.md` section 9, committed BEFORE the build), launches the agent in its own
+worktree (`isolation: "worktree"`) with its own dev server port (`PORT=8124`,
+`BB_BASE=http://localhost:8124` for the Baseball suites), and reviews the result against stills
+and measured numbers: open the stills, re-run the key number on a fresh seed, read the diff of the
+load-bearing lines. An agent never touches `sw.js`, `version.json` or CACHE, never pushes, and
+commits on its worktree branch; the orchestrator merges, bumps CACHE past main, runs the suites on
+the merged tree, and deploys. An agent's report is model output: verify it, then relay what
+matters, never paste it. An agent cut off mid-verification (a usage limit, a harness timeout) is
+RESUMED with a message listing exactly what is unverified, not restarted; it keeps its context.
+Tell agents to commit what is green first so an interruption loses nothing.
+
+**Other context-saving habits**
+- Do not run `run-all-tests.mjs` unless asked by name (its own row below says the same); run only
+  the suites covering the files you touched.
+- Do not read entire large files when Grep or a targeted Read (offset and limit) answers the
+  question.
+- Keep replies to the game or task asked about; do not pull in unrelated context "while you are
+  at it" (the rule above, "Answer about the game you were asked about").
 
 ## Run it
 
