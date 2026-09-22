@@ -601,6 +601,63 @@ glyph the options differed only by tint. And the caption box reused `.h4-mp-inpu
 styled for the five-character ROOM CODE: uppercase, letter-spaced, centred. "First to three, no
 excuses" rendered as spaced capitals running off the end of its own box.
 
+### Square, and what it cost (2026-09-22)
+
+Matt, with an old screenshot beside a new one: *"The connect 4 board is shorter than it used to
+be. It should be a square. Not a short rectangle."*
+
+He was right and it was this repo's own doing: the board WAS 7.80X tall when it was raked, and the
+rebuild that stood it upright (v884, the one that fixed "I can't read the board") cut it to 4.80X.
+Width never changed, so the cells went to 1.63:1.
+
+**`PANEL_L` 4.80 -> 7.80X, `boardLipY` 0.52 -> 0.39.** Six rows over 7.80X is a row pitch of 1.30X,
+exactly the column pitch, so the cells are square. It grows BOTH ways: down to where the ramp crest
+starts hiding the bottom row, the rest up, which lifts the hoop row 1.265 -> 1.572 m.
+
+**The launch band had to move with the hoops, and that is the whole difference between this working
+and not.** On the old 6.05/6.50 nothing reached below power 0.50 - half the swipe dead, which is
+the exact failure this game's own `boarddef.js` already records against HOT SHOT's band. Re-derived
+to 6.35/6.80.
+
+**A COARSE GRID LIED.** A 77-throw sweep (7 aim steps) was used first because it runs in seconds.
+It ranked a different band best AND said the taller board outscored the short one outright. The
+real 231-throw grid (21 aim steps) disagreed on both. **Aim resolution is exactly what a narrow
+hoop row is sensitive to** - so a fast sweep can rank BANDS roughly, and must never be the thing a
+decision is made on.
+
+Measured on the 861-throw suite grid, against the 4.80X board:
+
+| | 4.80X shipped | 7.80X square |
+|---|---|---|
+| scored | 28.9% | **29.2%** |
+| parked (a ball that vanishes) | 7.32% | **2.44%** |
+| misses that bounce | 56% | 42% |
+| mean best rebound | 0.61 m/s | 0.47 m/s |
+
+`check-display.mjs` 13/13 - all 42 cells on screen, none behind the cabinet's own furniture - and
+**"every column is hit by the gesture that asks for it" now passes 7 of 7, where the 4.80X board
+fails at 6 of 7.**
+
+**THE COST IS THE BOUNCE, AND IT IS RECORDED AS A KNOWN GAP RATHER THAN PAPERED OVER.** The taller
+board lifts the hoops, the faster band makes balls arrive flatter, and they stop landing on the
+SHELF - the surface made live in v890 specifically to create bounce. `board` has dropped out of the
+top eight surfaces a miss touches entirely. Restoring it (riserRest 0.85) costs about four points
+of scoring, which is a trade between two things Matt has asked for at different times, so it was
+his to make: *"Ship square now, tune the bounce after you've felt it."*
+
+So `hoops4/js/test.js` gained a `KNOWN_GAPS` map, the same shape as
+`test-game-conventions.mjs`'s and for the same reason. The two bars are NOT lowered: the real
+number is measured and printed every run, the summary says `2 KNOWN GAP(S) STILL OWED`, and **a
+gap whose check starts passing FAILS the run and tells you to delete the entry** (verified by
+listing a passing check and watching it go red). A silently lowered bar is how a requirement
+disappears.
+
+**`deadRest` 0.32 -> 0.50 came free** on the way: same scoring, parking 3.0% -> 1.7%, a little
+bounce back. It SATURATES there - 0.50, 0.62 and 0.75 return byte-identical numbers. Found by
+teaching `probe-bounce.mjs` to PRINT which surfaces a miss touches, which it had collected since
+its first version and never shown; every restitution decision before that was a guess across
+variants instead of one look.
+
 ### How to play, drawn (2026-09-22)
 
 Matt: *"The How To Play is even worse. it's JUST words. That goes against everything I've ever
