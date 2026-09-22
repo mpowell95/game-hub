@@ -342,8 +342,14 @@
 }
 .bb-check { font-weight: 900; }
 
-.bb-preset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+/* R18 item 2: a caps label above one row of chips - Balanced/Hitter/Pitcher, plus Custom only
+ * while nothing matches. `display: flex` (not a fixed grid) so the row reads right at 3 chips
+ * AND at 4 - each chip takes an even share either way. */
+.bb-preset-block { display: flex; flex-direction: column; gap: 3px; }
+.bb-preset-label { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .65; padding: 0 2px; }
+.bb-preset-grid { display: flex; gap: 6px; }
 .bb-preset-chip {
+  flex: 1;
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -355,17 +361,24 @@
   background: var(--gh-surface, #fff);
   color: var(--gh-ink, #1a2233);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
   touch-action: manipulation;
 }
 .bb-preset-chip[aria-pressed="true"] { background: #ffce3a; border-color: #1a2233; color: #1a2233; }
+/* The Custom chip is a <div>, never a <button> (R18: "never as something to tap") - same look,
+ * `cursor: default` so it doesn't invite a tap the click delegation would silently ignore. */
+.bb-preset-chip--custom { cursor: default; }
 
-.bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 0 0 auto; }
-.bb-skill-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.bb-skill-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .7; text-align: center; }
+/* R18 item 3: "give the skill stats some more space" - rows grow from a compact stack to about
+ * 64px tall (measured against the two shipped stills, tall and short), and the points-left pill
+ * moves beside its column header instead of stacked below it. */
+.bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; }
+.bb-skill-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; justify-content: center; }
+.bb-skill-col-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.bb-skill-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .7; }
 .bb-points-pill {
   align-self: center;
   font-size: 12px;
@@ -373,11 +386,12 @@
   padding: 2px 10px;
   border-radius: var(--gh-r-pill, 999px);
   background: var(--gh-surface-2, #eef2f8);
+  white-space: nowrap;
 }
-.bb-skill-row { display: flex; flex-direction: column; gap: 2px; }
+.bb-skill-row { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; }
 .bb-skill-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .bb-skill-label { font-size: 12px; font-weight: 700; }
-.bb-skill-num { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bb-skill-num { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .bb-skill-row-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .bb-skill-btn {
   flex: 0 0 44px;
@@ -394,11 +408,29 @@
   touch-action: manipulation;
 }
 .bb-skill-btn[aria-disabled="true"] { opacity: .35; }
-.bb-skill-segbar { flex: 1; display: flex; gap: 1px; height: 16px; min-width: 0; }
+/* "12px bar cells": the segmented bar itself stands 12px tall now (was 16px) - the row's own
+ * height is what carries the extra room, not the bar. */
+.bb-skill-segbar { flex: 1; display: flex; gap: 1px; height: 12px; min-width: 0; }
 .bb-seg-cell { flex: 1; min-width: 1px; border-radius: 1px; background: var(--gh-border, rgba(16, 36, 58, .16)); }
 .bb-seg-cell.is-filled { background: #ffce3a; }
 
-.bb-player-actions { display: flex; gap: 10px; justify-content: center; padding-top: 2px; }
+.bb-player-actions { display: flex; gap: 10px; justify-content: center; padding-top: 2px; flex: 0 0 auto; }
+
+/* R18 item 4: the first-season block, career start mode only - fragments, no prose. Compact by
+ * necessity (it shares the screen with the skill columns and the buttons on the short phone
+ * height); `.bb-fs-title` carries the only emphasis, everything else is one flat weight. */
+.bb-first-season {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: var(--gh-r-md, 10px);
+  background: var(--gh-surface-2, #eef2f8);
+  flex: 0 0 auto;
+}
+.bb-fs-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.bb-fs-line { font-size: 11px; font-weight: 600; opacity: .85; }
 
 :root.gh-dark .bb-root .bb-hand-btn,
 :root.gh-dark .bb-root .bb-preset-chip,
