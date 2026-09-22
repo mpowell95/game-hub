@@ -19,11 +19,15 @@ import {
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
   detachGuards, insertSBend,
   setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
+  setCourse, invalidateBuilds, setCourseMeta, addHole, deleteHole, mintId, normalise,
 } from './model.js';
+import { resolveProfile } from './course.js';
+import { starterSpec } from './starter.js';
+import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, fetchDraft } from './drafts.js';
 import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
 import { validateHole } from '../../golf/js/holes.js';
-import { generateSource, generateJSON } from './export.js';
+import { generateSource, generateJSON, exportFileName } from './export.js';
 
 const MUTATORS = {
   setField,
@@ -78,6 +82,10 @@ root.innerHTML = `
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
     </div>
     <div class="he-right">
+      <div class="he-panel" data-panel="course">
+        <div class="he-panel__head">Course</div>
+        <div class="he-panel__body" id="he-course"></div>
+      </div>
       <div class="he-panel" data-panel="context">
         <div class="he-panel__head">Tool</div>
         <div class="he-panel__body" id="he-context"><span class="he-empty">Tools land in step 4.</span></div>
@@ -117,8 +125,13 @@ for (const panel of root.querySelectorAll('.he-panel')) {
 }
 
 // --- document + editor state -----------------------------------------------------------------
+// WHICH COURSE (2026-09-22): Red Mesa by default, the blank Course Creator on `?course=new`.
+const profile = resolveProfile();
+document.title = profile.title;
+const stored = loadDocument(localStorage.getItem(profile.storageKey));
+setCourse(profile, stored && stored.course && stored.course.theme);
 const originals = originalSpecs();
-let doc = loadDocument(localStorage.getItem(STORAGE_KEY));
+let doc = (stored && stored.courseId === profile.id) ? stored : null;
 if (!doc) doc = createDocument();
 const editorState = createEditorState(doc);
 let currentId = doc.order[0];
@@ -135,6 +148,28 @@ function saveNow() {
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 300);
+  autosaver.touch();
+}
+
+// --- cloud drafts (drafts.js): the review copy, autosaved under the designer's player code ------
+let cloudStatus = { state: 'idle' };
+const autosaver = makeAutosaver({
+  getDoc: () => doc,
+  getJson: () => serialiseDocument(doc),
+  getDesigner: designer,
+  onStatus: (s) => { cloudStatus = s; paintCloudStatus(); },
+});
+function cloudStatusText() {
+  const s = cloudStatus;
+  if (s.state === 'saving') return 'Saving to cloud...';
+  if (s.state === 'saved') return `Saved to cloud ${new Date(s.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  if (s.state === 'error') return s.error === 'offline' ? 'Offline: saved on this device only' : `Cloud save failed (${s.error}); saved on this device`;
+  if (s.state === 'nocode') return 'Enter your player code below to save to the cloud';
+  return 'Saved on this device';
+}
+function paintCloudStatus() {
+  const el = document.getElementById('he-cloud-status');
+  if (el) el.textContent = cloudStatusText();
 }
 
 const layers = { ...DEFAULT_LAYERS };
@@ -237,6 +272,7 @@ function onValidateRowClick(i) {
 
 function refreshPanels() {
   const built = getBuilt(currentId);
+  renderCoursePanel();
   renderHolePanel(document.getElementById('he-hole'), doc, currentId, built, editOps, lastWidthAtCursor, validateResults, onValidateRowClick);
   renderObjectsList(document.getElementById('he-objects'), doc, currentId, built);
 }
@@ -299,6 +335,12 @@ function pruneSelection() {
 let refreshQueued = false;
 function afterChange({ keepContext = false } = {}) {
   scheduleSave();
+  // An undo can take the current hole away (Course Creator: undo of "add hole").
+  if (!doc.holes[currentId]) {
+    currentId = doc.order[0];
+    editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+    syncZoomSlider();
+  }
   const inGesture = liveBeforeSpec != null;
   if (!inGesture) {
     // An edit makes the last Validate list stale (it described the hole before the edit).
@@ -412,7 +454,7 @@ document.getElementById('he-validate').addEventListener('click', () => {
 
 document.getElementById('he-compare').addEventListener('click', () => {
   openCompareModal({
-    originalBuilt: buildOriginalHole(currentId, originals),
+    originalBuilt: originals[currentId] ? buildOriginalHole(currentId, originals) : getBuilt(currentId),
     currentBuilt: getBuilt(currentId),
     slot: doc.order.indexOf(currentId) + 1,
     id: currentId,
@@ -424,7 +466,7 @@ document.getElementById('he-export').addEventListener('click', () => {
   const blob = new Blob([src], { type: 'text/javascript' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'redmesa.js';
+  a.download = exportFileName(doc);
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -437,13 +479,23 @@ document.getElementById('he-copy-json').addEventListener('click', () => {
 // game on the PREVIOUS save - flush immediately first so Play always reflects what is on screen.
 document.getElementById('he-play').addEventListener('click', () => {
   saveNow();
-  window.open('../golf/?editor=1', '_blank');
+  window.open(profile.custom ? '../golf/?editor=custom' : '../golf/?editor=1', '_blank');
 });
 
 // section 3.6: "Discard ALL edits" - confirm, then the fresh (unedited) document, whole course.
 document.getElementById('he-discard-all').addEventListener('click', () => {
-  if (!window.confirm('Discard ALL edits on every hole and start over from the original Red Mesa? This cannot be undone.')) return;
-  doc = createDocument();
+  if (!window.confirm(profile.custom
+    ? 'Discard ALL edits on every hole and start over from the blank course? This cannot be undone.'
+    : 'Discard ALL edits on every hole and start over from the original Red Mesa? This cannot be undone.')) return;
+  replaceDocument(createDocument());
+});
+
+/** Swap in a whole new document (discard, a loaded draft, an imported file): state, camera,
+ *  every panel, and the model's defaults for its theme. */
+function replaceDocument(next) {
+  doc = next;
+  setCourse(profile, doc.course && doc.course.theme);
+  invalidateBuilds(doc);
   editorState.doc = doc;
   editorState.undo = [];
   editorState.redo = [];
@@ -451,16 +503,174 @@ document.getElementById('he-discard-all').addEventListener('click', () => {
   validateResults = null;
   editorCanvas.cameras.clear();
   editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+  syncZoomSlider();
   refreshPanels();
   refreshStrip();
   refreshContext();
   scheduleSave();
-});
+}
+
+// --- the Course panel (2026-09-22) ---------------------------------------------------------------
+// Course Creator: name, theme, hole count. Both editors: who is designing (player code), the
+// cloud status, other people's drafts to review, an import and a backup download.
+function renderCoursePanel() {
+  const el = document.getElementById('he-course');
+  if (!el) return;
+  const who = designer();
+  const c = doc.course || {};
+  el.innerHTML = `
+    ${profile.custom ? `
+    <div class="he-field">
+      <span class="he-field__label">Course name</span>
+      <input type="text" id="he-c-name" value="${escHtml(c.name || '')}" maxlength="40" style="width:100%;" />
+    </div>
+    <div class="he-field">
+      <span class="he-field__label">Look</span>
+      <div class="gh-seg" data-seg="theme" role="group">
+        <button type="button" class="gh-seg__item" data-val="parkland" aria-pressed="${c.theme !== 'desert'}">Parkland</button>
+        <button type="button" class="gh-seg__item" data-val="desert" aria-pressed="${c.theme === 'desert'}">Desert</button>
+      </div>
+    </div>
+    <div class="he-field">
+      <span class="he-field__label">Holes: ${doc.order.length}</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="gh-btn gh-btn--sm" id="he-c-add">+ Add hole</button>
+        <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-c-del">Delete this hole</button>
+      </div>
+    </div>` : ''}
+    <div class="he-field">
+      <span class="he-field__label">Designer</span>
+      ${who
+        ? `<span class="he-field__value">${escHtml(who.name)} &middot; ${who.code}</span>${who.fromProfile ? '' : ' <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-c-forget">Change</button>'}`
+        : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <input type="text" id="he-c-code" placeholder="Player code (5 letters)" maxlength="5" style="width:11em;text-transform:uppercase;" />
+            <input type="text" id="he-c-who" placeholder="Your name" maxlength="40" style="width:11em;" />
+            <button class="gh-btn gh-btn--sm" id="he-c-login">Use this code</button>
+          </div>
+          <span class="he-empty">Your code is on your Game Hub profile page.</span>`}
+    </div>
+    <div class="he-field"><span class="he-field__value" id="he-cloud-status">${escHtml(cloudStatusText())}</span></div>
+    <div class="he-field" style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="gh-btn gh-btn--sm" id="he-c-drafts">Open a draft...</button>
+      <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-c-import">Import file...</button>
+      <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-c-backup">Download backup</button>
+      <input type="file" id="he-c-file" accept=".json,.txt,application/json" style="display:none;" />
+    </div>`;
+  if (profile.custom) {
+    el.querySelector('#he-c-name').addEventListener('change', (e) => { doc.course = setCourseMeta(doc, { name: e.target.value.trim() || 'My Course' }).course; refreshStrip(); scheduleSave(); });
+    for (const b of el.querySelectorAll('[data-seg="theme"] .gh-seg__item')) {
+      b.addEventListener('click', () => {
+        const theme = b.dataset.val;
+        if ((doc.course && doc.course.theme) === theme) return;
+        doc.course = setCourseMeta(doc, { theme }).course;
+        setCourse(profile, theme);
+        invalidateBuilds(doc);
+        editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+        afterChange();
+      });
+    }
+    el.querySelector('#he-c-add').addEventListener('click', () => {
+      pushUndo(editorState);
+      const next = addHole(doc);
+      doc.order = next.order; doc.holes = next.holes;
+      afterChange();
+      selectHole(doc.order[doc.order.length - 1]);
+    });
+    el.querySelector('#he-c-del').addEventListener('click', () => {
+      if (doc.order.length <= 3) { window.alert('A course keeps at least three holes.'); return; }
+      if (!window.confirm(`Delete hole ${doc.order.indexOf(currentId) + 1} (${currentId})? Undo brings it back.`)) return;
+      pushUndo(editorState);
+      const next = deleteHole(doc, currentId);
+      doc.order = next.order; doc.holes = next.holes;
+      afterChange();
+    });
+  }
+  const login = el.querySelector('#he-c-login');
+  if (login) login.addEventListener('click', () => {
+    const code = rememberDesigner(el.querySelector('#he-c-code').value, el.querySelector('#he-c-who').value);
+    if (!code) { window.alert('That is not a player code. It is 5 letters/numbers, on your Game Hub profile page.'); return; }
+    renderCoursePanel();
+    autosaver.touch();
+  });
+  const forget = el.querySelector('#he-c-forget');
+  if (forget) forget.addEventListener('click', () => { forgetDesigner(); cloudStatus = { state: 'idle' }; renderCoursePanel(); });
+  el.querySelector('#he-c-drafts').addEventListener('click', openDraftsModal);
+  el.querySelector('#he-c-import').addEventListener('click', () => el.querySelector('#he-c-file').click());
+  el.querySelector('#he-c-file').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    importDocumentText(await f.text(), f.name);
+    e.target.value = '';
+  });
+  el.querySelector('#he-c-backup').addEventListener('click', () => {
+    const blob = new Blob([serialiseDocument(doc)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${profile.custom ? ((doc.course && doc.course.name) || 'course').replace(/[^a-z0-9]+/gi, '-').toLowerCase() : 'redmesa'}-draft.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+
+function escHtml(s) { return String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+
+/** A document from text (a backup file, a draft, Copy JSON output). Refuses anything that is not
+ *  this editor's course, with the reason on screen. */
+function importDocumentText(text, label) {
+  const next = loadDocument(text);
+  if (!next) { window.alert(`${label || 'That file'} is not a hole editor document (a "Download backup" file or a draft).`); return false; }
+  if (next.courseId !== profile.id) {
+    window.alert(next.courseId === 'custom'
+      ? 'That is a Course Creator document. Open the editor with ?course=new to load it.'
+      : 'That is a Red Mesa document. Open the plain editor link to load it.');
+    return false;
+  }
+  if (!window.confirm(`Replace everything in this editor with ${label || 'this document'}? Your current work here is overwritten (the cloud copy is not, until you edit).`)) return false;
+  replaceDocument(next);
+  return true;
+}
+
+/** Every draft in the cloud for THIS editor's course, newest first, with a Load button each. */
+async function openDraftsModal() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#1e1e1e;border-radius:10px;padding:20px;min-width:520px;max-width:760px;max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:12px;color:#e8e8e8;font:14px sans-serif;';
+  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font:600 15px sans-serif;">Drafts in the cloud</div><button class="gh-btn gh-btn--sm" id="he-drafts-close">Close</button></div><div id="he-drafts-list">Loading...</div>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  box.querySelector('#he-drafts-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  const list = box.querySelector('#he-drafts-list');
+  let drafts = null;
+  try { drafts = await listDrafts(); } catch (err) { console.warn('[drafts] list failed', err); }
+  if (!drafts) { list.textContent = 'Could not reach the cloud.'; return; }
+  const mine = drafts.filter((d) => d.courseId === profile.id);
+  const other = drafts.length - mine.length;
+  if (!mine.length) { list.innerHTML = `<span class="he-empty">No ${profile.custom ? 'Course Creator' : 'Red Mesa'} drafts yet.${other ? ` (${other} in the other editor.)` : ''}</span>`; return; }
+  list.innerHTML = `<table style="border-collapse:collapse;width:100%;">${mine.map((d, i) => `<tr style="border-top:1px solid rgba(255,255,255,.12);">
+      <td style="padding:8px 6px;"><b>${escHtml(d.name)}</b><br><span class="he-empty">${d.holes} holes${d.theme ? ` &middot; ${escHtml(d.theme)}` : ''}</span></td>
+      <td style="padding:8px 6px;">${escHtml(d.by.name || d.code)}<br><span class="he-empty">${escHtml(d.code)}</span></td>
+      <td style="padding:8px 6px;white-space:nowrap;">${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : ''}</td>
+      <td style="padding:8px 6px;"><button class="gh-btn gh-btn--sm" data-load="${i}">Load</button></td>
+    </tr>`).join('')}</table>${other ? `<div class="he-empty" style="margin-top:8px;">${other} more in the other editor.</div>` : ''}`;
+  for (const b of list.querySelectorAll('[data-load]')) {
+    b.addEventListener('click', async () => {
+      const d = mine[+b.dataset.load];
+      b.disabled = true; b.textContent = 'Loading...';
+      const json = await fetchDraft(d.code, d.courseId);
+      if (!json) { b.textContent = 'Not found'; return; }
+      if (importDocumentText(json, `${d.by.name || d.code}'s "${d.name}"`)) close(); else { b.disabled = false; b.textContent = 'Load'; }
+    });
+  }
+}
 
 document.getElementById('he-reset').addEventListener('click', () => {
   if (!window.confirm(`Reset ${currentId} to its original design? This cannot be undone by anything but Undo.`)) return;
   pushUndo(editorState);
-  doc.holes[currentId].spec = JSON.parse(JSON.stringify(originals[currentId]));
+  const slot = doc.order.indexOf(currentId) + 1;
+  doc.holes[currentId].spec = originals[currentId] ? JSON.parse(JSON.stringify(originals[currentId])) : normalise(starterSpec(slot), slot);
   validateResults = null;
   afterChange();
 });

@@ -93,6 +93,8 @@ export const STRINGS = {
     course_pinevalley: 'Pine Valley',
     course_redmesa: 'Red Mesa',
     course_oasissands: 'Oasis Sands',
+    course_custom: 'Your course',
+    blurb_custom: 'A course built in the Course Creator.',
     // One per ROUNDS entry in js/rounds.js. A missing one is not a blank - the HUD prints the KEY,
     // which is what Matt's whole Pine Valley round showed ("round_set3b 2/3"). test.js checks that
     // every round has a label in both languages.
@@ -269,6 +271,8 @@ export const STRINGS = {
     course_pinevalley: 'Pine Valley',
     course_redmesa: 'Red Mesa',
     course_oasissands: 'Oasis Sands',
+    course_custom: 'Tu campo',
+    blurb_custom: 'Un campo creado en el Creador de campos.',
     round_quick3: 'hoyos 1-3',
     round_set3b: 'hoyos 4-6',
     round_set3c: 'hoyos 7-9',
