@@ -907,7 +907,7 @@ class BaseballPlayScreen {
   _careerChipInnerHTML(state) {
     const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${state.player.skills[id] || 0}</span>`).join('');
     return `
-      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span><span>${t('player_title')}</span></div>
+      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span>${(state.unspent | 0) > 0 ? `<span class="bb-playerchip-unspent">${t('points_left').replace('{n}', String(state.unspent | 0))}</span>` : ''}<span>${t('player_title')}</span></div>
       <div class="bb-playerchip-digits">${digits}</div>`;
   }
 
