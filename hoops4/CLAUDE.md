@@ -818,6 +818,100 @@ glyph the options differed only by tint. And the caption box reused `.h4-mp-inpu
 styled for the five-character ROOM CODE: uppercase, letter-spaced, centred. "First to three, no
 excuses" rendered as spaced capitals running off the end of its own box.
 
+### Quick chat inside a match (2026-09-22)
+
+From the same playtest list as the series and the caption. A **💬 button on the play HUD** (only
+in a multiplayer match) opens a panel: the last four lines of this match at the top, then the
+player's own quick-chat palette, then one free-text line (24 characters). What the other person
+says pops as a bubble under the HUD **named by their name**, and the button carries an unread
+COUNT while the panel is shut.
+
+**The palette is the hub's shared one**, `js/mp-reactions.js` - the same emojis and phrases every
+other multiplayer game offers, customised on the profile page (`gamehub.quickchat.v1`). A line on
+the wire is that module's tiny `{ t, v }` payload (`t:'e'` emoji, `t:'p'` preset phrase id,
+`t:'c'` free text), and the RECEIVER resolves a preset in its own language, so Anita reads
+"¡Bien!" when Matt tapped "Nice!".
+
+**It is NOT `js/mp-reactions-ui.js`'s floating button.** That one sits at the bottom right, which
+on this game is the middle of the swipe pad. This button sits in the HUD band immediately LEFT of
+the Menu button (`right: 64px`), for the same reason the Menu button is on the right at all: the
+hub's floating chip owns the top left, and horizontal separation is the axis a notch cannot move.
+The HUD reserves the extra 52px only in a multiplayer match (`.h4-hud.has-chat`). The bubbles hang
+from the RIGHT under the button and keep 96px clear on the left, because in the hub the chip sits
+at the top left from y 54 and the first build's left-aligned bubbles landed behind it.
+
+**Who said what is never a colour.** Every line in the panel starts "You:" or "Anita:" in bold and
+sits on its own side; a bubble leads with the sender's emoji and NAME; the unread badge is a
+number, not a dot.
+
+**Where it lives, per protocol - and in neither is it part of the match:**
+
+| | LIVE | TURN BY TURN |
+|---|---|---|
+| written to | `rooms/<CODE>/reactions/<role>` via `net.sendReaction` (the hub's EXISTING facility, no net.js change) | `hoops/games/<id>/chat/<key>` via `MP.sendChat` |
+| shape | `{ t, v, at }`, ONE slot per seat, overwritten by that seat's newest line | `{ by: 'a'\|'b', t, v, at }`, one child per line at a fresh time-ordered key (`mintGameId() + side`) |
+| read in | `ui.js` `_onRoom` → `chat.onReactions()`; the first snapshot only ADOPTS the stamps already there, so joining never replays old lines | `validateGame`'s `chat` on open, then `MP.watchChat` (read-only `onValue`) while the match is on screen |
+| "the last few" | this device's memory of the match (the room keeps only the latest per seat) | the stored list, newest 40 (`MAX_CHAT`) |
+| a failed send | best-effort by design (`sendReaction` swallows its own failure, as in every game) | verified by a fresh re-read of that one key; a failure keeps the panel open and SAYS so. No outbox: tap it again |
+
+**THE MOVE LOG IS NEVER TOUCHED.** `_onRoom` walks `room.moves` strictly by `seq`, and a chat
+entry there would stall the lockstep at the gap it made - so live chat rides `reactions`, a
+sibling child. On turn-by-turn, `sendChat` writes ONLY its own `chat/<key>`: never `moves`,
+`turn`, `over`, `updated` or either index row, so a chat line cannot move the replay or the turn,
+cannot reach the move outbox, and cannot flip the launcher's "your turn" bubble (which keys off
+`updated`). `test-hoops4-mp.mjs` asserts that structurally. You can chat on either person's turn,
+and on a finished match.
+
+**THE CHAT FIELD IS OPTIONAL, AND A BAD LINE IS DROPPED, NEVER A REASON TO REFUSE THE MATCH.**
+`validateGame` returning null is a refusal to OPEN the match - its whole-document rejection exists
+to protect the REPLAY, and chat is not in the replay. So every match written before chat existed
+(no `chat` key at all) opens exactly as before, and `chatFrom()` drops any entry that is not a
+well-formed `{ by, t, v, at }` while keeping the rest. `test-hoops4-mp.mjs` pins both with a
+hand-written pre-chat document (same spirit as the pre-series one) and a document full of junk.
+
+**"Since you were last here"** is `gamehub.hoops4.chatSeen.v1`, `{ <gameId>: <newest at> }`, the
+newest 60 matches: on open, the other person's lines newer than the mark pop as bubbles. A
+convenience in the same class as the alert's seen-list, never history - losing it re-shows a few
+lines.
+
+**No rules change.** Both `rooms` and `hoops` are `auth != null` read/write in
+`database.rules.json` with no per-child validation, so `chat` and `reactions` are covered already.
+
+### Challenge history with records (2026-09-22)
+
+**History** is the fifth row on the multiplayer home. It shows a **record per opponent** (W / L / D
+from YOUR side) and the **finished matches, newest first**: opponent, the result as a WORD (Won,
+Lost, Draw, Resigned, "Won, they resigned") plus a SHAPE (tick, cross, equals) and a heavier weight
+for a win, the date, and "Game 2 of 3" where it was part of a series. Never a colour alone.
+
+**A screen, not a schema change.** The data was already permanent - nothing in `mp.js` deletes a
+match or an index row - and `readMyGames()` already returned finished rows; the active list just
+filtered them out. The maths is `MP.recordsFrom(rows, myCode)`, pure and tested:
+
+- **Grouped by the opponent's PLAYER CODE, never by name**: a name can change and two people can
+  share one. The label is the name on their most recent match.
+- **A row's result comes from, in order**: the row's own `result`; else the MATCH, for an old row
+  (see below); else it is `unknown` - listed as "Finished", counted as played, and in NO
+  win/loss/draw column rather than guessed into one.
+
+**How old rows are handled.** Since 2026-09-22 `rowFor` adds an OPTIONAL `result` ('won' | 'lost'
+| 'draw', from that row's own side) and `why` to a FINISHED index row only - an unfinished row's
+`update` writes no such field. Every finished row written before that has neither. The stored row
+shape was not changed for old data and nothing is backfilled: the History screen READS the match
+for each old row (`MP.readGame`, newest 40, never written back) and works the result out from
+`over.winner` with `resultOf(game, side)`. A match that cannot be read is the `unknown` case above.
+
+**Tapping a finished match opens it READ ONLY** (`startAsync(game, { review: true })`): the board
+is replayed and the result card shown, `isMyShot()` refuses every shot, and **nothing is recorded
+again** - every write in `js/game-stats.js` is additive, so re-recording on each look would add a
+play per visit. A review also never offers "Next game" on a series (that game may already exist,
+and a second would fork the series), and a match a resignation ended (whose board never did) takes
+its headline from the stored `over.winner` instead of reading as a draw.
+
+The list lives inside the multiplayer sheet's existing contained scroller (`.h4-mp-body`,
+`overscroll-behavior: contain`), the same place the active list already grows; it shows the newest
+30 matches.
+
 ### Square, and what it cost (2026-09-22)
 
 Matt, with an old screenshot beside a new one: *"The connect 4 board is shorter than it used to
@@ -1110,6 +1204,7 @@ setup screen); it is DOM only and lazily imported, so a solo player downloads no
 | who is present | both, now | neither has to be |
 | how they find it | the host reads the code out | it is sitting in their list next time they open the hub |
 | ships without a rules change | **yes** | **no — see below** |
+| quick chat | `rooms/<CODE>/reactions/<role>` (net.sendReaction) | `hoops/games/<id>/chat/<key>`, OPTIONAL |
 
 **ADDRESSED BY PLAYER CODE, never by deviceId.** Several people here have two phones, and a match
 addressed to a device is playable on one of them and invisible on the other. This is the one thing
@@ -1162,7 +1257,12 @@ step with the rules file or a branch is silently missing from every snapshot.
 - **No launcher badge yet.** `countMyTurns(rows, code)` is exported and tested and is exactly what
   a badge would count, but nothing on the hub reads it. A badge goes where the thing it counts is
   reached (`js/CLAUDE.md`), and that is a hub-side change, not a hoops4 one.
-- **No rematch button on a finished async match.** Challenge them again from the picker.
+- **No rematch button on a finished async match.** Challenge them again from the picker, or from
+  the History screen's record of them - which lists, it does not challenge.
+- **No outbox for chat.** A turn-by-turn chat line that does not land says so and can be tapped
+  again; it is not queued like a move. A live chat line is best-effort, as in every game.
+- **No launcher alert for chat.** A chat line deliberately does not touch `updated`, so it cannot
+  raise the tile's bubble; it pops when the match is next opened.
 
 ## The CPU's difficulty is SHOT ACCURACY, not search depth
 
@@ -1193,16 +1293,12 @@ shaping and touches no physics.
 both went stale within a day of being written (THE LAW rule 9's sibling problem: an undocumented
 completion is re-derived as outstanding work). Track it here or nowhere.
 
-- **Quick chat inside a match.** Asked for in the 2026-09-22 playtest list, alongside the series
-  and the caption that did ship. `js/messages-ui.js` already has a quick-chat preset row and
-  `js/net.js` already carries a live room, so the live half is mostly wiring; the turn-by-turn
-  half needs a place on the match document, which means `validateGame` must keep treating it as
-  OPTIONAL for every match already in `hoops/games/` (see "A series, and the terms of a
-  challenge").
-- **Challenge history with records.** The data is already there and already permanent - a
-  finished match keeps its move list and both index rows, and nothing in `js/mp.js` deletes - so
-  this is a screen, not a schema change. `readMyGames()` returns finished matches today and the
-  active list filters them out.
+- ~~**Quick chat inside a match.**~~ **DONE 2026-09-22** - both protocols, see "Quick chat inside a
+  match". Live rides `rooms/<CODE>/reactions`; turn-by-turn is an OPTIONAL `chat` child that
+  `validateGame` never refuses a match over. No rules change was needed.
+- ~~**Challenge history with records.**~~ **DONE 2026-09-22** - the History screen, see "Challenge
+  history with records". A screen plus an optional `result` on NEW finished index rows; old rows
+  are worked out from their match.
 - **The two bounce gaps `test.js` owes.** The square board cost bounce (41% of misses against a
   50% bar, 0.45 m/s against 0.50) and the entries are deliberately still red. Matt's call was
   *"Ship square now, tune the bounce after you've felt it"* - he has now played it and the thing
@@ -1231,5 +1327,10 @@ completion is re-derived as outstanding work). Track it here or nowhere.
   rejection, the replay (position AND shot counts), the turn rules under both shot modes, the
   listing's order and the badge count, plus structural checks that every write is verified, a dev
   origin cannot write, and `hoops` is in both `database.rules.json` and the backup script's branch
-  list. The Firebase write path and `js/mp-ui.js` are NOT covered, and the suite header says so.
+  list. Since 2026-09-22 also the chat field (a hand-written PRE-CHAT document must open and replay
+  identically; garbage chat entries are dropped, not fatal; `cleanChat`/`chatFrom`/`unseenChat`;
+  `sendChat` touches nothing but its own key; `mp.js` contains no delete) and the history maths
+  (`recordsFrom`/`resultOf`: wins, losses, draws, resignations, grouping by code not name, old rows
+  with and without a readable match, rows missing fields). The Firebase write path and
+  `js/mp-ui.js` are NOT covered, and the suite header says so.
 - `node test-visual.mjs hoops4` — the only suite that LOOKS at it.
