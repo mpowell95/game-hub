@@ -253,6 +253,10 @@ lively machine throws more balls back out. That is the trade Matt asked for, it 
 `test.js`'s own 8-75% band, and under shoot-till-you-make-one a lower rate buys more shots per
 turn rather than a worse game. Parking went DOWN with it, 8.9% to 4.6%.
 
+**He rejected that trade the moment he played it, and he was right to** - see the next section.
+The bounce was kept; the accuracy was bought back by turning the bounce sideways and by taking
+`ringRest` back down from 0.72 to 0.55.
+
 **THE METRIC THAT SHOULD HAVE CAUGHT THIS WAS BROKEN.** `test.js` printed "rattled without scoring
 0 (0.0%)" under Matt's own bounce requirement, on every build ever shipped, for two reasons:
 `events` is an array of OBJECTS and the test asked `ev.includes('rattle')`, and on this machine a
@@ -260,6 +264,91 @@ turn rather than a worse game. Parking went DOWN with it, 8.9% to 4.6%.
 anyway. A number that cannot move is worse than no number. It is replaced by a measurement of the
 thing Matt can see - what fraction of misses bounce, and how hard - as two assertions that can go
 red.
+
+### The bounce goes SIDEWAYS, not forwards (2026-09-22)
+
+Matt, on the build the section above shipped: *"The bounce is good. But can we make it so it only
+bounces sideways? Like right now it bounces forward and rolls off the front of the machine a lot.
+I don't want that... I want the bounce just to make it more difficult to play a move where you
+intended. I want the bounce to add some randomness, not make the game measurably more
+difficult/players measurably less accurate."*
+
+Those are two different properties of a bounce and **every number in the section above measures
+only the first one.** How many misses bounced, how many times, how hard - all of them say HOW BIG,
+none of them says WHICH WAY. A bounce across the hoop row changes which column a shot finds, which
+is the randomness he asked for. A bounce toward the player only walks the ball off the shelf's
+front edge, which costs a shot and buys nothing. They look identical on screen and they were
+indistinguishable to the probe, which is how a build shipped that traded 14 points of scoring rate
+for the wrong one.
+
+So `reference/hoops/probe-bounce.mjs` was taught to tell them apart: the lateral/forward split of
+every bounce, and how many misses come back over the shelf's front edge.
+
+**The first thing it found is that the front-edge departure is NOT the bounce.** 89.6% of the
+misses that reach the shelf come off its front - and 89.7% of them did on the dead-shelf build
+too, and 89.7% again with the shelf's restitution set to 0.05. That is the shelf's own 0.10 rad
+**forward tilt**, which is HOT SHOT's and is there so a miss rolls home instead of parking. It is
+not optional: flattening it does raise scoring (32.5%) and does cut front departures (75.9%), but
+**parking goes from 6.1% to 11.7%** - one shot in nine stopping dead and vanishing, which is a far
+worse thing to watch than a ball rolling back to you.
+
+So the tilt stays and the fix is two things:
+
+**1. The sideways redirect** (`bounceSideways` in `boarddef.js`, the rule in `physics.js` section
+0a). When the ball bounces off the shelf or the hoop row's own furniture and comes off moving
+toward the player, its horizontal velocity is **rotated onto the u axis**. It is a rotation, not a
+kick: `hypot(vx, vz)` is identical before and after and the vertical component is never touched,
+so no energy is added and a livelier rim cannot become a ball fired off the machine. At 1.0 the
+whole forward component is turned, which is Matt's sentence literally.
+
+**It is not magnetism** (MACHINE-SPEC section 9). It never reads `G.holes`, never asks where a
+hoop is and never picks a side - the direction is the sign of the sideways drift the ball already
+had, so a ball drifting left comes off further left. That a bounced ball more often finds a basket
+is a consequence of the baskets being in a row along that axis, not of anything steering it.
+`test.js` asserts structurally that the rule reads no hole position, because this is exactly the
+rule a future session would "improve" by nudging the ball at the nearest hoop and no sweep would
+fail if it did. It is also deliberately **forward only**: a ball still travelling into the machine
+needs that momentum to reach the row at all.
+
+**2. `ringRest` back to 0.55 from 0.72.** Of every knob on the machine the rim is the one that
+moves the scoring rate, and the redirect alone is only worth about two points of it. The rest of
+the machine still carries the bounce he can see - the shelf at 0.58 and the display panel at 0.70,
+which is what the previous section was actually about - and 0.55 is still 1.8x HOT SHOT and 3x
+THE CLASSIC.
+
+The sweep, on the 11x21 grid, at the shipped 0.10 shelf tilt:
+
+| K (sideways) | ringRest | scored | parked | lateral:forward | misses bouncing / mean rebound |
+|---|---|---|---|---|---|
+| - | - | **30.7%** | 5.2% | 1.54:1 | 48% / 0.43 m/s | *(v889, before any bounce work)* |
+| 0.00 | 0.72 | **22.9%** | 6.1% | 1.43:1 | 59% / 0.71 m/s | *(v890, the build he played)* |
+| 0.55 | 0.72 | 25.1% | 6.5% | 2.73:1 | 58% / 0.69 m/s |
+| 0.80 | 0.62 | 25.5% | 10.4% | 3.44:1 | 58% / 0.64 m/s |
+| 0.80 | 0.55 | 27.7% | 7.8% | 3.73:1 | 58% / 0.63 m/s |
+| 0.80 | 0.46 | 29.4% | 6.9% | 2.95:1 | 56% / 0.59 m/s |
+| 0.90 | 0.46 | 30.3% | 6.9% | 2.69:1 | 56% / 0.58 m/s |
+| 1.00 | 0.72 | 26.4% | 6.9% | 3.36:1 | 58% / 0.70 m/s |
+| 1.00 | 0.62 | 28.6% | 8.7% | 3.45:1 | 56% / 0.62 m/s |
+| **1.00** | **0.55** | **29.4%** | 7.8% | **4.37:1** | 56% / 0.61 m/s | **<- shipped** |
+
+Forward velocity per bounce fell from 0.29 m/s to 0.10 m/s, lateral held at 0.46, and the scoring
+rate came back to within 1.3 points of the build before any of this started - with the bounce
+itself almost entirely intact (56% of misses bounce against 59%, mean best rebound 0.61 against
+0.71, both far above the 48% / 0.43 of the build he called not bouncy).
+
+**Two things this deliberately does not claim.** Balls still leave over the front edge at about
+the same rate, because the tilt is what sends them there and the tilt is load-bearing; what
+changed is that they leave having first been thrown ACROSS the row rather than straight at the
+player. And the scoring rate is 29.4%, not 30.7% - a bouncy machine costs something, and the
+honest number is printed here rather than rounded up.
+
+On `test.js`'s own bigger grid (861 shots, which is the number to quote): **scored 28.9%, parked
+7.32%, lateral 0.57 m/s against forward 0.14, a 4.00:1 ratio, 56% of misses bouncing at a mean
+best rebound of 0.66 m/s**, and every column still reachable. Parking is up from v890's 4.6% and
+still below the 8.9% of the build before any of the bounce work.
+
+`test.js` carries the bar as section 1b: the lateral:forward ratio must stay at or above 2.0, the
+redirect must be switched on, and it must read no hole position.
 
 ### What makes a hoop read as a hoop (2026-09-22)
 
