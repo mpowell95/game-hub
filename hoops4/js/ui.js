@@ -460,7 +460,13 @@ class Hoops4 {
       <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <h2 class="gh-modal__title">${t('howto')}</h2>
-        <p class="h4-sheet-body">${t('howtoBody')}</p>
+        <p class="h4-how-goal">${t('howtoGoal')}</p>
+        ${this._howtoDiagram()}
+        <p class="h4-how-cap">${t('howtoCap')}</p>
+        <p class="h4-how-eg">${t('howtoEg')}</p>
+        <p class="h4-how-line">${t('howtoArc')}</p>
+        <p class="h4-how-line">${t('howtoAim')}</p>
+        <p class="h4-how-line">${t('howtoRim')}</p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-sheet-close">${t('close')}</button>
         </div>
@@ -470,6 +476,53 @@ class Hoops4 {
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('.h4-sheet-close'), 'click', close);
     this.on(el, 'click', (e) => { if (e.target === el) close(); });
+  }
+
+  /**
+   * THE ONE MECHANIC THAT IS NOT OBVIOUS, DRAWN. Seven hoops over a 7x6 grid, the third hoop
+   * taking a ball, and a dashed arrow carrying it down column 3 to a disc at the bottom.
+   *
+   * Everybody already knows Connect 4 and everybody already knows basketball. The thing nobody
+   * can guess is that the two are WIRED TOGETHER - which hoop you sink decides which column your
+   * disc falls down. That is the whole diagram, and the rest of the screen is four short lines.
+   * docs/BUILDING-A-GAME.md, "How-to-play screens": show it rather than describe it.
+   *
+   * COLOURBLIND-SAFE BY CONSTRUCTION: the chosen hoop is marked by a THICKER OUTLINE, a ball
+   * sitting in it and the arrow leaving it - never by its colour (root CLAUDE.md).
+   */
+  _howtoDiagram() {
+    const L = BOARD.look;
+    const cols = 7, rows = 4;                 // four rows is enough to read; six crowds it
+    const x0 = 14, dx = 24, hoopY = 16, gridY = 40, dy = 17, r = 6.2;
+    const cx = (c) => x0 + c * dx;
+    const pick = 2;                           // the third hoop, 0-based
+    let hoops = '', grid = '';
+    for (let c = 0; c < cols; c++) {
+      const on = c === pick;
+      hoops += `<ellipse cx="${cx(c)}" cy="${hoopY}" rx="8.5" ry="3.2" fill="none"
+        stroke="${on ? L.ring : '#7c8797'}" stroke-width="${on ? 3 : 1.6}"/>`;
+      for (let rw = 0; rw < rows; rw++) {
+        const filled = on && rw === rows - 1;
+        grid += `<circle cx="${cx(c)}" cy="${gridY + rw * dy}" r="${r}"
+          fill="${filled ? L.red : '#0e1c30'}" stroke="${filled ? '#8f1f18' : '#2b3b52'}"
+          stroke-width="${filled ? 2 : 1.2}"/>`;
+      }
+    }
+    return `
+      <div class="h4-how-fig" aria-hidden="true">
+        <svg viewBox="0 0 ${x0 * 2 + dx * (cols - 1)} ${gridY + dy * (rows - 1) + 14}" width="100%">
+          <rect x="4" y="${gridY - 12}" width="${x0 * 2 + dx * (cols - 1) - 8}"
+                height="${dy * (rows - 1) + 24}" rx="5" fill="${L.face}" opacity="0.9"/>
+          ${grid}
+          ${hoops}
+          <circle cx="${cx(pick)}" cy="${hoopY - 8}" r="4.4" fill="${L.ring}" stroke="#8f1f18" stroke-width="1"/>
+          <path d="M ${cx(pick)} ${hoopY + 6} V ${gridY + dy * (rows - 1) - 9}"
+                stroke="${L.ring}" stroke-width="2" stroke-dasharray="3 3" fill="none"/>
+          <path d="M ${cx(pick) - 4} ${gridY + dy * (rows - 1) - 13} L ${cx(pick)} ${gridY + dy * (rows - 1) - 8}
+                   L ${cx(pick) + 4} ${gridY + dy * (rows - 1) - 13}"
+                stroke="${L.ring}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>`;
   }
 
   // --- the match --------------------------------------------------------------------------------

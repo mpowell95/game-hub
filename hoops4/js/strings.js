@@ -9,7 +9,16 @@ export const STRINGS = {
     cpu1: 'Easy', cpu2: 'Medium', cpu3: 'Hard',
     play: 'Play',
     howto: 'How to play',
-    howtoBody: 'Swipe up the lane to shoot. How hard you swipe sets the arc, the angle picks the hoop. Sink any hoop and your disc drops down that column. Miss and you simply shoot again, so a turn only ends when a ball goes in. A ball that rims out into the next hoop still counts, in that column.',
+    // THE ONE MECHANIC THAT IS NOT OBVIOUS, drawn rather than described - everybody already knows
+    // Connect 4 and everybody already knows basketball; what they do not know is that the two are
+    // wired together. docs/BUILDING-A-GAME.md, "How-to-play screens". Matt, on the paragraph this
+    // replaces: "The How To Play is even worse. it's JUST words."
+    howtoGoal: 'Four in a row wins.',
+    howtoCap: 'The hoop you sink picks the column.',
+    howtoEg: 'Sink hoop 3 = disc down column 3.',
+    howtoArc: 'Swipe harder for a higher arc.',
+    howtoAim: 'The angle picks the hoop.',
+    howtoRim: 'Rim out into the next hoop? That one counts.',
     close: 'Close',
     yourTurn: 'Your turn', theirTurn: 'Their turn',
     // WHOSE SHOT IT IS, said before the shot rather than after it. Matt: "it's not clear when
@@ -95,7 +104,12 @@ export const STRINGS = {
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     play: 'Jugar',
     howto: 'Cómo se juega',
-    howtoBody: 'Desliza hacia arriba para tirar. La fuerza marca el arco y el ángulo elige la canasta. Si encestas, tu ficha cae por esa columna. Si fallas, vuelves a tirar, así que el turno solo termina cuando entra una bola. Una bola que rebota y entra en la canasta de al lado también cuenta, en esa columna.',
+    howtoGoal: 'Cuatro en raya gana.',
+    howtoCap: 'La canasta que encestas elige la columna.',
+    howtoEg: 'Encesta la 3 = ficha en la columna 3.',
+    howtoArc: 'Desliza más fuerte para un arco más alto.',
+    howtoAim: 'El ángulo elige la canasta.',
+    howtoRim: '¿Rebota a la de al lado? Cuenta esa.',
     close: 'Cerrar',
     yourTurn: 'Tu turno', theirTurn: 'Su turno',
     you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',

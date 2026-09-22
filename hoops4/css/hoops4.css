@@ -600,3 +600,35 @@
   color: var(--h4s-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* --- How to play -----------------------------------------------------------------------------
+   docs/BUILDING-A-GAME.md, "How-to-play screens": one bold sentence, a diagram of the ONE
+   non-obvious mechanic, a caption, a concrete "X = Y" example, then the edge cases as plain
+   single-row lines. Matt, on the paragraph this replaced: "it's JUST words."
+
+   EVERY LINE FITS ON ONE ROW - the sizes below are what a measurement said fits at 393px, not a
+   guess, and `check-no-scroll.mjs` holds the whole sheet to one screen. */
+.h4-root .h4-how-goal {
+  margin: 0;
+  font-size: 17px; font-weight: 800; color: var(--h4s-ink);
+}
+.h4-root .h4-how-fig {
+  margin: 12px 0 10px;
+  padding: 8px 6px;
+  background: #0b1523;
+  border-radius: 10px;
+  line-height: 0;
+}
+.h4-root .h4-how-cap {
+  margin: 0 0 6px;
+  font-size: 14px; font-weight: 700; color: var(--h4s-ink);
+}
+.h4-root .h4-how-eg {
+  margin: 0 0 10px;
+  font-size: 13px; font-weight: 700; color: var(--h4s-muted);
+  font-variant-numeric: tabular-nums;
+}
+.h4-root .h4-how-line {
+  margin: 0 0 5px;
+  font-size: 13px; color: var(--h4s-muted);
+}
