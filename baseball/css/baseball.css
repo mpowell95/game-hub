@@ -372,11 +372,14 @@
  * `cursor: default` so it doesn't invite a tap the click delegation would silently ignore. */
 .bb-preset-chip--custom { cursor: default; }
 
-/* R18 item 3: "give the skill stats some more space" - rows grow from a compact stack to about
- * 64px tall (measured against the two shipped stills, tall and short), and the points-left pill
- * moves beside its column header instead of stacked below it. */
-.bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; }
-.bb-skill-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* R18 item 3, ship review (390 x 664 metrics; a min-height media query below grows these on the
+ * tall 393 x 852 screen): "give the skill stats some more space" means the ROWS carry more room
+ * (a taller button/bar/text), not a bigger gap around small content. `flex: 1` on `.bb-skill-cols`
+ * still lets this block claim whatever room the screen actually has, but `align-content: center`
+ * (not per-row growth) is what absorbs any real leftover - ONE centred cluster with a tight,
+ * CAPPED gap between its own rows, never three small rows stretched apart by a 100px gap. */
+.bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; align-content: center; }
+.bb-skill-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .bb-skill-col-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .bb-skill-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .7; }
 .bb-points-pill {
@@ -388,12 +391,9 @@
   background: var(--gh-surface-2, #eef2f8);
   white-space: nowrap;
 }
-/* flex: 1 (not a fixed height) so the three rows share whatever room the column actually has -
- * ~64px each at 393x852, less on the short 390x664 height - rather than the rows staying compact
- * and leaving one big dead gap in the middle of a tall screen. */
-.bb-skill-row { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 56px; }
+.bb-skill-row { display: flex; flex-direction: column; justify-content: center; gap: 4px; flex: 0 0 auto; }
 .bb-skill-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.bb-skill-label { font-size: 12px; font-weight: 700; }
+.bb-skill-label { font-size: 13px; font-weight: 700; }
 .bb-skill-num { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .bb-skill-row-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .bb-skill-btn {
@@ -411,17 +411,28 @@
   touch-action: manipulation;
 }
 .bb-skill-btn[aria-disabled="true"] { opacity: .35; }
-/* "12px bar cells": the segmented bar itself stands 12px tall now (was 16px) - the row's own
- * height is what carries the extra room, not the bar. */
 .bb-skill-segbar { flex: 1; display: flex; gap: 1px; height: 12px; min-width: 0; }
 .bb-seg-cell { flex: 1; min-width: 1px; border-radius: 1px; background: var(--gh-border, rgba(16, 36, 58, .16)); }
 .bb-seg-cell.is-filled { background: #ffce3a; }
 
+/* Tall screen only (393 x 852 and taller): the rows themselves grow - 18px bar cells, 52px
+ * +/-buttons, a 15px label and a 16px value - and the gap between rows widens, capped at 20px.
+ * Nothing here changes on the short 390 x 664 height, which keeps the rules above unmodified. */
+@media (min-height: 700px) {
+  .bb-skill-col { gap: 20px; }
+  .bb-skill-row { gap: 8px; }
+  .bb-skill-label { font-size: 15px; }
+  .bb-skill-num { font-size: 16px; }
+  .bb-skill-btn { flex: 0 0 52px; width: 52px; height: 52px; font-size: 20px; }
+  .bb-skill-segbar { height: 18px; }
+}
+
 .bb-player-actions { display: flex; gap: 10px; justify-content: center; padding-top: 2px; flex: 0 0 auto; }
 
-/* R18 item 4: the first-season block, career start mode only - fragments, no prose. Compact by
- * necessity (it shares the screen with the skill columns and the buttons on the short phone
- * height); `.bb-fs-title` carries the only emphasis, everything else is one flat weight. */
+/* R18 item 4: the first-season block, career start mode only - fragments, no prose.
+ * `.bb-fs-title` carries the only emphasis, everything else is one flat weight. Stays at its
+ * current (compact) size on the short screen; the tall media query above gives it a little more
+ * air (13px text, line-height ~1.5). */
 .bb-first-season {
   display: flex;
   flex-direction: column;
@@ -434,6 +445,10 @@
 }
 .bb-fs-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
 .bb-fs-line { font-size: 11px; font-weight: 600; opacity: .85; }
+@media (min-height: 700px) {
+  .bb-first-season { gap: 3px; padding: 8px 10px; }
+  .bb-fs-title, .bb-fs-line { font-size: 13px; line-height: 1.5; }
+}
 
 :root.gh-dark .bb-root .bb-hand-btn,
 :root.gh-dark .bb-root .bb-preset-chip,
