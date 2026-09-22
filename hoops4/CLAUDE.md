@@ -406,13 +406,16 @@ not overlap - and the Menu button now leads the row, so it is a normal 16px gutt
 Measured after: `test-game-conventions.mjs` 11/11, `test-visual.mjs hoops4` 13/13,
 `check-no-scroll.mjs hoops4` 4 screens / 0 scroll.
 
-**Still open from that list** (rounds 2-4): the launcher challenge alert and the full-screen
-challenge ceremony; the Multiplayer Options restructure with active games and history; series
-(single / best of 3 / best of 5), a caption with a challenge and quick chat in a match; a visual
-How to Play; a taller board with bigger cells. And the SCORING RATE, which is what Matt actually
-wants from the bounce work - *"i don't care where balls roll off, front or back... I want more
-balls to bounce around, but ultimately go in a basket"* - so the front-edge question is closed and
-the next lever to measure is making the per-hoop backboards SOLID so a shot can be banked in.
+**All but two of that list shipped the same day**, each with its own section below: the launcher
+challenge alert and the full-screen ceremony, the Multiplayer Options restructure with active
+games, series with a caption, the visual How to Play, and the square board. **Still owed from it:
+quick chat inside a match, and challenge history with records** - both tracked in "Still open" at
+the foot of this file, which is the one list to read.
+
+**The SCORING RATE thread that started here is CLOSED** - see "THE SCORING RATE: every lever
+measured, and Matt's call". The backboards-as-a-banking-surface lead named here was measured and
+came out a wash (+2.6 points of scoring against worse parking), and the sweep that followed it
+found only one clean lever, which Matt declined. Do not pick this back up from this paragraph.
 
 ### The challenge has to reach you on the LAUNCHER (2026-09-22)
 
@@ -765,9 +768,10 @@ nearest meaning (Medium) until the player picks again, `start()` and `themName()
 fallback, and Play now passes `vsCpu: true` explicitly so a stored `'two'` can never silently start
 a pass-and-play game from a button labelled "Play".
 
-**Still to come in this thread**: series (single / best of 3 / best of 5) with the shot rule and an
-optional caption attached to a challenge, shown to whoever accepts it; quick chat inside a match;
-challenge history with records; and the visual How to Play, which is still just words.
+**Of this thread, the series + caption and the visual How to Play both shipped** (the two sections
+immediately below). **Quick chat inside a match and challenge history with records did not**, and
+are carried in "Still open" at the foot of this file rather than here - a mid-file "still to come"
+list goes stale the moment the next section lands, which is how this one did.
 
 ### A series, and the terms of a challenge (2026-09-22)
 
@@ -1180,6 +1184,26 @@ shaping and touches no physics.
 
 ## Still open
 
+**This is the list.** Two sections above used to carry their own "still to come" paragraphs and
+both went stale within a day of being written (THE LAW rule 9's sibling problem: an undocumented
+completion is re-derived as outstanding work). Track it here or nowhere.
+
+- **Quick chat inside a match.** Asked for in the 2026-09-22 playtest list, alongside the series
+  and the caption that did ship. `js/messages-ui.js` already has a quick-chat preset row and
+  `js/net.js` already carries a live room, so the live half is mostly wiring; the turn-by-turn
+  half needs a place on the match document, which means `validateGame` must keep treating it as
+  OPTIONAL for every match already in `hoops/games/` (see "A series, and the terms of a
+  challenge").
+- **Challenge history with records.** The data is already there and already permanent - a
+  finished match keeps its move list and both index rows, and nothing in `js/mp.js` deletes - so
+  this is a screen, not a schema change. `readMyGames()` returns finished matches today and the
+  active list filters them out.
+- **The two bounce gaps `test.js` owes.** The square board cost bounce (41% of misses against a
+  50% bar, 0.45 m/s against 0.50) and the entries are deliberately still red. Matt's call was
+  *"Ship square now, tune the bounce after you've felt it"* - he has now played it and the thing
+  he raised was the scoring rate, not the bounce, and that question is closed. **Ask him before
+  spending anything here**: every lever that restores bounce costs scoring, which is the axis he
+  cared about.
 - **The `hoops` rules are not published.** Turn-by-turn cannot write until they are pasted into
   the Firebase console — see "Multiplayer" above. Live multiplayer works without it.
 - **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
