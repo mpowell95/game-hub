@@ -34,6 +34,7 @@ let shots = 0, scored = 0, rattled = 0, parked = 0, worstSettle = 0;
 const settleTimes = [];
 const parkedAt = [];
 let capturedCount = 0, paidCount = 0;
+let missCount = 0, bouncedMisses = 0, bounceTotal = 0, bounceBest = 0;
 
 for (let p = 0; p < POWERS; p++) {
   for (let a = 0; a < AIMS; a++) {
@@ -44,8 +45,12 @@ for (let p = 0; p < POWERS; p++) {
     const ev = r.events || [];
     const hole = r.outcome && r.outcome.hole;
     if (hole && G.holes[hole]) { scored++; hits.set(hole, (hits.get(hole) || 0) + 1); }
-    // A rim was touched and nothing was scored: the bounce Matt asked for.
-    if (!hole && (ev.includes('rattle') || ev.includes('bounce'))) rattled++;
+    // A rim was touched and nothing was scored. GUARD: `events` is an array of OBJECTS, so the
+    // `ev.includes('rattle')` this used to be was always false and this line reported 0.0% for
+    // every build ever shipped - printed directly under Matt's "make the rims bouncier"
+    // requirement, which is exactly the number that should have caught "they're not very bouncy,
+    // like I asked". A metric that cannot move is worse than no metric.
+    if (!hole && ev.some((e) => e && (e.type === 'rattle' || e.type === 'bounce'))) rattled++;
     if (r.emergencyUsed) { parked++; parkedAt.push({ power, aim }); }
     if (r.time > worstSettle) worstSettle = r.time;
     settleTimes.push(r.time);
@@ -60,7 +65,12 @@ for (let i = 1; i <= COLS; i++) {
 const missing = [];
 for (let i = 1; i <= COLS; i++) if (!hits.get('c' + i)) missing.push(i);
 console.log(`\nshots ${shots}   scored ${scored} (${(100 * scored / shots).toFixed(1)}%)`);
-console.log(`rattled without scoring ${rattled} (${(100 * rattled / shots).toFixed(1)}%)`);
+// "RATTLED WITHOUT SCORING" IS STRUCTURALLY ZERO ON THIS MACHINE and printing it was a lie of
+// omission. There is no rimout here (see hoops4/CLAUDE.md, "There is NO rimout on this machine"),
+// so `rattle` only ever fires on a ball that WAS captured - which means it scored, so the
+// !hole half can never be true. The number is kept in the sweep because a future machine with a
+// rimout would want it; it is no longer printed under a heading about bounce, because the real
+// bounce measurement is further down and it is the one that can go red.
 console.log(`watchdog fired (parked/jammed) ${parked} (${(100 * parked / shots).toFixed(2)}%)`);
 console.log(`worst settle ${worstSettle.toFixed(2)} s\n`);
 
@@ -82,13 +92,25 @@ for (let p = 0; p < POWERS; p++) {
     const st = startThrow(BOARD, { power: p / (POWERS - 1), aim: -1 + (2 * a) / (AIMS - 1) });
     let capturedBy = null;
     let guard = 20000;
+    let prevVy = 0, bounces = 0, best = 0;
     while (!st.done && guard-- > 0) {
       substep(st);
       if (!capturedBy && st.captured) capturedBy = st.captured;
+      // A BOUNCE, measured rather than inferred from an event name: the ball was falling and is
+      // now rising fast enough to see. This is the same definition `probe-bounce.mjs` uses.
+      const vy = st.ball.velocity.y;
+      if (prevVy < -0.25 && vy > 0.45) { bounces++; best = Math.max(best, vy); }
+      prevVy = vy;
     }
     if (capturedBy) {
       capturedCount++;
       if (st.outcome && st.outcome.hole === capturedBy) paidCount++;
+    }
+    if (!(st.outcome && G.holes[st.outcome.hole])) {
+      missCount++;
+      if (bounces) bouncedMisses++;
+      bounceTotal += bounces;
+      bounceBest += best;
     }
   }
 }
@@ -167,10 +189,27 @@ check('parking is a miss, not the usual outcome', parked / shots < 0.20,
 check('nothing takes absurdly long to settle', worstSettle < 9.0, worstSettle.toFixed(2) + ' s');
 
 // ---------------------------------------------------------------------------------------------
-// 1. THE RIMS ARE BOUNCIER THAN THE OTHER MACHINES
+// 1. THE RIMS ARE BOUNCIER THAN THE OTHER MACHINES - AND A MISS ACTUALLY BOUNCES
 // ---------------------------------------------------------------------------------------------
+// The material numbers below are necessary and were never sufficient. Matt, on a build whose
+// ringRest was already the highest in the repo: *"they're not very bouncy, like I asked."* He was
+// right - measured, only 47% of misses bounced at all and the mean best rebound was 0.38 m/s,
+// because the rim is bouncy but what a miss LANDS ON was not: the shelf at 0.05, the display wall
+// at 0.05 and the fins at 0.03. So the bar is now on the THING HE CAN SEE, not on a knob.
+const bouncedPct = missCount ? bouncedMisses / missCount : 0;
+const meanBest = missCount ? bounceBest / missCount : 0;
+console.log(`misses ${missCount}: ${(100 * bouncedPct).toFixed(0)}% bounced, `
+  + `${(bounceTotal / Math.max(1, missCount)).toFixed(2)} bounces each, `
+  + `mean best rebound ${meanBest.toFixed(2)} m/s\n`);
+check('a miss usually BOUNCES rather than thudding', bouncedPct >= 0.50,
+  `${(100 * bouncedPct).toFixed(0)}% of misses`);
+check('and the bounce is big enough to see', meanBest >= 0.50,
+  `mean best rebound ${meanBest.toFixed(2)} m/s`);
 check('the rims are bouncier than every other machine in the repo',
   G.mat.ringRest > 0.30, 'ringRest ' + G.mat.ringRest);
+check('the surfaces a miss lands on are live too, not just the rim',
+  G.mat.boardRest >= 0.30 && G.mat.riserRest >= 0.30,
+  `board ${G.mat.boardRest}, riser ${G.mat.riserRest}`);
 check('capture is harder than HOT SHOT, so a shot that is not a swish can bounce out',
   G.captureDrop > 0.35, 'captureDrop ' + G.captureDrop);
 check('a rim is never touched by a fin', true);   // enforced geometrically by `inset`; see below

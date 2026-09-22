@@ -248,8 +248,27 @@ export const BOARD = {
 
     // --- bounce and grip ------------------------------------------------------------------------
     mat: {
+      // THE SHELF BOUNCES, AND THIS IS THE HALF OF "BOUNCIER" THAT WAS MISSING. Matt, twice:
+      // "make sure the rims are a little bouncier than other skeeball games... if you don't get a
+      // swish it should bounce", and then, having played the build that raised ringRest to 0.62:
+      // "they're not very bouncy, like I asked."
+      //
+      // He was right and the rims were never the problem. MEASURED over 231 throws
+      // (`probe-bounce.mjs`): only 47% of misses bounced at all, 0.60 bounces per miss, and the
+      // mean best rebound was 0.38 m/s - a dribble. The rim is hit by half the throws, but what a
+      // miss LANDS ON afterwards was dead: the shelf at 0.05, the display wall at 0.05 and the
+      // fins at 0.03. A lively rim over a beanbag floor feels like a beanbag.
       boardFric: 0.12,
-      boardRest: 0.05,
+      boardRest: 0.58,
+      // The vertical display panel is the single most-hit surface on the machine - 165 of 231
+      // throws touch a riser, because a shot that falls short hits the face of the board. It is a
+      // painted steel panel, so it plays like one: a short shot comes BACK at the player.
+      riserFric: 0.10,
+      riserRest: 0.70,
+      // The trough is the catch pit and stays dead, deliberately: a bouncy trough throws a dead
+      // ball back out onto the lane instead of ending the shot.
+      troughFric: 0.40,
+      troughRest: 0.06,
       woodFric: 0.30,
       woodRest: 0.22,
       // THE SIDE WALLS ARE DEAD, and this is a measured gameplay fix rather than a look. At HOT
@@ -270,9 +289,9 @@ export const BOARD = {
       // so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4 and
       // 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce number
       // that broke it would go red rather than quietly leak balls into the wrong column.
-      ringRest: 0.62,
+      ringRest: 0.72,
       ring100Fric: 0.06,
-      ring100Rest: 0.62,
+      ring100Rest: 0.72,
       deadFric: 0.06,
       deadRest: 0.32,
       backFric: 0,

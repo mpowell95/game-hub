@@ -156,56 +156,65 @@ export class Renderer {
     const R = H.r + G.collarThick / 2;
     // THE NET NEVER CLOSES TIGHTER THAN THE BALL (HOT SHOT's own fix, 2026-09-05): a taper drawn
     // as a fixed proportion of the rim can narrow below the ball's own radius and end up drawing
-    // a scored ball passing THROUGH the wires. Floor it at the ball's own size instead.
-    const Rbot = Math.min(R, Math.max(R * 0.55, G.ballR * 1.05));
-    const depth = H.collarH * 1.15;
+    // a scored ball passing THROUGH the wires.
+    const Rbot = Math.min(R, Math.max(R * 0.58, G.ballR * 1.02));
+    // HOT SHOT builds its basket with the rim at +collarH above the face; this group is already
+    // positioned AT the rim, so every one of its heights is shifted down by collarH. yBot is its
+    // 0.005 above the face.
+    const yBot = -(H.collarH - 0.005);
     const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
 
+    // THE ORANGE WIRE: rim, small bottom ring, ten tapered ribs - HOT SHOT's `_wireBasket`, at its
+    // own proportions and its own tube radii.
+    //
+    // The pass before this made ONLY the rim orange, reasoning that ten orange verticals under an
+    // orange ring read as a cage. That was true of THAT build and the cause was elsewhere: its net
+    // had one band where HOT SHOT's has three, so the orange had nothing to sit behind. With the
+    // real net the orange reads as the basket's frame, which is what it is. Matt: "They're still
+    // not the same" - so this is now HOT SHOT's recipe rather than an adaptation of it.
     const rimMat = new THREE.MeshStandardMaterial({
-      color: COL(L.ring), roughness: 0.42, metalness: 0.20,
-      emissive: COL(L.ring), emissiveIntensity: 0.35,
+      color: COL(L.ring), roughness: 0.4, metalness: 0.25,
+      emissive: COL(L.ring), emissiveIntensity: 0.4,
     });
-    // ONLY THE RIM RING IS ORANGE. The pass before this also painted the ribs and the bottom ring
-    // in the rim's material, and ten orange verticals under an orange ring is a CAGE: at play
-    // size the silhouette came out square, which is exactly what "these don't look like real
-    // baskets" describes. On a real hoop the orange is one ring and everything below it is net.
-    const wire = [];
+    const orange = [];
     const NR = this.soft ? 16 : 32;
     for (let i = 0; i < NR; i++) {
       const p0 = (i / NR) * Math.PI * 2;
       const p1 = ((i + 1) / NR) * Math.PI * 2;
-      wire.push([P(R, 0, p0), P(R, 0, p1), 0.0090]);                  // the rim, on the physics profile
+      orange.push([P(R, 0, p0), P(R, 0, p1), 0.0062]);               // the rim, ON the physics profile
+      orange.push([P(Rbot, yBot, p0), P(Rbot, yBot, p1), 0.0034]);   // the small bottom ring
     }
-    const rim = new THREE.Mesh(this._mergedTubes(wire, 0.003), rimMat);
+    const RIBS = this.soft ? 6 : 10;
+    for (let i = 0; i < RIBS; i++) {                                 // tapered ribs between them
+      const a = (i / RIBS) * Math.PI * 2;
+      orange.push([P(R, 0, a), P(Rbot, yBot, a), 0.0030]);
+    }
+    const rim = new THREE.Mesh(this._mergedTubes(orange, 0.003), rimMat);
     rim.castShadow = !this.soft;
 
-    // THE NET IS WHITE AND THE RIM IS ORANGE, and the contrast between them is the whole point.
-    // The pass before this darkened the net instead, because the rim was pale - two greys, which
-    // is what Matt was looking at when he said it did not read as a basket. Orange ring, white
-    // net: that pair is what a basketball hoop IS at thirty pixels tall.
-    const netCol = COL(L.net);
+    // THE WHITE NET: crossing bands of strands from the rim down to the base, plus a ring where
+    // they meet. HOT SHOT's own rule for how many bands - a DEEP basket needs three or its
+    // strands read as long bare wires. This machine's collarH is 1.6x its rim radius, so it gets
+    // three; the build before this used a threshold that gave it ONE, and one band of strands
+    // over an orange frame is the "wire fence" Matt kept seeing.
     const netMat = new THREE.MeshStandardMaterial({
-      color: netCol, roughness: 0.75, metalness: 0.0, emissive: netCol, emissiveIntensity: 0.22,
+      color: 0xf7f2e4, roughness: 0.9, emissive: 0xf7f2e4, emissiveIntensity: 0.5,
     });
-    // A basket deeper than its own radius reads knitted with three rings; this one is shallow
-    // enough that two is plenty - same call HOT SHOT's net makes, against this basket's collarH.
-    const rings = H.collarH > R * 1.4
-      ? [{ r: R, y: 0 }, { r: (R + Rbot) / 2, y: -depth * 0.5 }, { r: Rbot * 1.04, y: -depth + 0.004 }]
-      : [{ r: R, y: 0 }, { r: Rbot * 1.04, y: -depth + 0.004 }];
+    const d = H.collarH;
+    const rings = d > R * 0.9
+      ? [
+        { r: R, y: -0.004 },
+        { r: R * 0.87, y: -d * 0.33 },
+        { r: R * 0.71, y: -d * 0.66 },
+        { r: Rbot * 1.04, y: yBot + 0.004 },
+      ]
+      : [
+        { r: R, y: -0.004 },
+        { r: R * 0.78, y: -d * 0.54 },
+        { r: Rbot * 1.04, y: yBot + 0.004 },
+      ];
     const netSegs = [];
-    // The ribs and the bottom ring belong to the NET, not to the rim - that is what makes the
-    // orange read as a ring and the white as a bag hanging off it.
-    const RB = this.soft ? 6 : 8;
-    for (let i = 0; i < RB; i++) {
-      const a = (i / RB) * Math.PI * 2;
-      netSegs.push([P(R, 0, a), P(Rbot, -depth, a)]);
-    }
-    const BR = this.soft ? 12 : 22;
-    for (let i = 0; i < BR; i++) {
-      const p0 = (i / BR) * Math.PI * 2, p1 = ((i + 1) / BR) * Math.PI * 2;
-      netSegs.push([P(Rbot, -depth, p0), P(Rbot, -depth, p1)]);
-    }
-    const S = this.soft ? 5 : 8;
+    const S = this.soft ? 6 : 9;
     for (let b = 0; b < rings.length - 1; b++) {
       const hi = rings[b], lo = rings[b + 1];
       for (let i = 0; i < S; i++) {
@@ -216,7 +225,7 @@ export class Renderer {
         }
       }
     }
-    for (let b = 1; b < rings.length - 1; b++) {                      // a ring at every crossing
+    for (let b = 1; b < rings.length - 1; b++) {                     // a ring at every crossing
       const RS = this.soft ? 16 : 28;
       for (let i = 0; i < RS; i++) {
         const p0 = (i / RS) * Math.PI * 2;
@@ -257,28 +266,52 @@ export class Renderer {
     const bw = Math.max(0.05, pitch - 0.014);
     const bh = bw / 1.45;                       // a real backboard is wider than it is tall
 
+    // HOT SHOT'S CARD, not a rectangle: a cream ARCH with a white box outlined in orange. Matt,
+    // on the flat white board this drew first: "They're still not the same." The arch is the shape
+    // skeeball's `_hoopBackboard` settled on after two rounds with him, and the reason it is an
+    // ellipse rather than a semicircle is written up in `skeeball/CLAUDE.md`: a semicircle's
+    // height IS half its width, so height can only be bought with width, and width is capped by
+    // the no-overlap rule. Skeeball prints a basket's VALUE in the box; this machine has none, so
+    // the box is left as what it is on a real board, the shooter's square.
     const cv = document.createElement('canvas');
-    cv.width = 320; cv.height = Math.round(320 / 1.45);
+    cv.width = 360; cv.height = Math.round(360 * bh / bw);
     const x = cv.getContext('2d');
-    x.fillStyle = '#f7f7f4'; x.fillRect(0, 0, cv.width, cv.height);
-    x.strokeStyle = '#1b2331'; x.lineWidth = 10;
-    x.strokeRect(5, 5, cv.width - 10, cv.height - 10);
-    x.strokeStyle = L.ring; x.lineWidth = 16;
-    x.strokeRect(cv.width * 0.28, cv.height * 0.34, cv.width * 0.44, cv.height * 0.50);
+    const cw = cv.width, ch = cv.height;
+    x.fillStyle = '#f4f1e7';
+    x.beginPath();
+    x.ellipse(cw / 2, ch, cw / 2, ch, 0, Math.PI, 0);
+    x.fill();
+    x.lineWidth = Math.max(4, ch * 0.055);
+    x.strokeStyle = '#3a3630';
+    x.beginPath();
+    x.ellipse(cw / 2, ch, cw / 2 - x.lineWidth / 2, ch - x.lineWidth / 2, 0, Math.PI, 0);
+    x.stroke();
+    const bxw = cw * 0.50, bxh = ch * 0.44;
+    const bx = (cw - bxw) / 2, by = ch * 0.58 - bxh / 2;
+    x.fillStyle = '#ffffff';
+    x.fillRect(bx, by, bxw, bxh);
+    x.lineWidth = Math.max(4, ch * 0.06);
+    x.strokeStyle = L.ring;
+    x.strokeRect(bx, by, bxw, bxh);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
 
     const geo = new THREE.PlaneGeometry(bw, bh);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
+    // TRANSPARENT, because an arch leaves the canvas's corners empty: without this they render
+    // as two black triangles either side of every board.
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.75, transparent: true, alphaTest: 0.4,
+    });
     const mesh = new THREE.InstancedMesh(geo, mat, holes.length);
     const dummy = new THREE.Object3D();
     holes.forEach((id, i) => {
       const H = G.holes[id];
       const foot = M.faceToWorld(H.u, back.v0, 0.007);      // the riser's own plane, 7mm proud
       const rimY = M.faceToWorld(H.u, H.v, H.collarH)[1];
-      // Bottomed a touch BELOW the rim, so the rim overlaps the board's lower edge from the play
-      // camera and the two read as one fitting rather than as two separate objects.
-      const y0 = Math.max(foot[1], rimY - bh * 0.22);
+      // Bottomed AT the rim, which is how HOT SHOT hangs its own cards: the whole board stands
+      // above the ring and the net hangs clear below it. Sunk lower the rim crosses the card's
+      // face a third of the way up and the two read as one lump.
+      const y0 = Math.max(foot[1], rimY - bh * 0.04);
       dummy.position.set(foot[0], y0 + bh / 2, foot[2]);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
