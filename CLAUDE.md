@@ -731,11 +731,16 @@ Two knock-on effects, because a granted ancestor `.read` cascades and cannot be 
 script in this repo deploys them. Deploy the app first, the rules second: a device claims itself on
 its next hub load.
 
-**OUTSTANDING, 2026-09-22: `hoops` is in `database.rules.json` and has NOT been published.** It is
-Connect 4 Hoops' turn-by-turn multiplayer (`hoops/games/<id>` plus a per-player index). Until the
-file is pasted into the console, that half of the game fails softly and says so on screen - a
-denied write is deliberately not retryable, so nothing piles up in an outbox. Its LIVE multiplayer
-uses `rooms/`, which is already enumerated, and works without the paste.
+**`hoops` was PUBLISHED by Matt on 2026-09-22** and Connect 4 Hoops' turn-by-turn multiplayer has
+worked since (he confirmed it the same session, and has played challenges through it). The node is
+`hoops/games/<id>` plus a per-player index.
+
+**This row said "OUTSTANDING, has NOT been published" for the rest of that day, and a later session
+repeated it back to Matt as a thing he still owed.** It was written in the commit that ADDED the
+branch to `database.rules.json` - correct at that minute, wrong an hour later, and nothing made it
+false. **When a step is "Matt pastes this into a console", the line recording it is stale the
+moment he does, and only this file can be updated to say so.** Write such a line with the date it
+was true, and close it the moment it is done.
 
 ## Deleting a device's history, and the rate gate (2026-09-12)
 

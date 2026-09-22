@@ -1137,12 +1137,17 @@ next time the screen opens, rather than lost with an apology.
 
 ### `hoops` is a new top-level node, so THE RULES HAVE TO BE PUBLISHED BY HAND
 
+**PUBLISHED 2026-09-22. This section is history plus the failure mode, not an open task.**
+
 Since the Messages work the database's root is `.read: false / .write: false` with every branch
-enumerated in `database.rules.json` (root `CLAUDE.md`, "Messages"). `hoops` is added to that file
-here — but **no script in this repo deploys it**: it is pasted into the Firebase console (Realtime
-Database → Rules → paste → Publish). Until that happens, turn-by-turn fails SOFTLY and says so:
-`readMyGames()` returns `[]`, `createGame()` returns `{ ok:false, reason:'denied' }`, and a denied
-write is deliberately **not retryable**, so it can never sit in the outbox for ever.
+enumerated in `database.rules.json` (root `CLAUDE.md`, "Messages"). `hoops` was added to that file
+here — and **no script in this repo deploys it**, so Matt pasted it into the Firebase console
+(Realtime Database → Rules → paste → Publish) the same day and confirmed turn-by-turn worked.
+
+The soft-failure path below is what happens when the rules are ABSENT, and it is still the
+behaviour to expect on a fresh Firebase project or if the node is ever dropped from the published
+rules: `readMyGames()` returns `[]`, `createGame()` returns `{ ok:false, reason:'denied' }`, and a
+denied write is deliberately **not retryable**, so it can never sit in the outbox for ever.
 
 **LIVE multiplayer is unaffected and needs no rules change** — `rooms/` is already enumerated.
 That is why the two halves are separated the way they are: the half that can ship on a push does.
@@ -1204,8 +1209,10 @@ completion is re-derived as outstanding work). Track it here or nowhere.
   he raised was the scoring rate, not the bounce, and that question is closed. **Ask him before
   spending anything here**: every lever that restores bounce costs scoring, which is the axis he
   cared about.
-- **The `hoops` rules are not published.** Turn-by-turn cannot write until they are pasted into
-  the Firebase console — see "Multiplayer" above. Live multiplayer works without it.
+- ~~**The `hoops` rules are not published.**~~ **DONE - Matt published them 2026-09-22** and
+  turn-by-turn has worked since. Kept as a struck line because this entry outlived the fact and
+  got quoted back at him as outstanding work; see the root `CLAUDE.md`'s Messages section for the
+  lesson.
 - **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
   `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
   the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
