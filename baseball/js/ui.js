@@ -430,10 +430,11 @@ class BaseballPlayScreen {
     this.screen = 'setup'; // setup | play | end
     this.league = LEAGUE_ORDER[0]; // Quick Play opens on Little League (the ladder's first rung), never mid-ladder
 
-    // R15-B: the setup screen's two tabs. Quick Play stays the default (unchanged screen for
-    // everyone who has not touched Career yet); Career is reached by tapping the other tab, and
-    // that first tap is when `_loadCareerAsync` even matters for what is painted.
-    this.tab = 'quickPlay'; // 'career' | 'quickPlay'
+    // R18 (docs/BASEBALL-3D-BUILD.md section 9): Career is the landing tab. Matt, on the shipped
+    // R15-B default: "My landing page is still quick play." Quick Play is one tap away, and a
+    // resumable in-progress career game still wins the race in `_loadCareerAsync` below (it only
+    // ever MOVES the tab to Career, so defaulting here to Career already is a no-op for that case).
+    this.tab = 'career'; // 'career' | 'quickPlay'
     this._tabChosenByPlayer = false; // true once the player has tapped a tab themselves this session
     this.career = null;         // { doc, state, health } | null, once loaded
     this.careerLoaded = false;  // true once the first loadCareer() attempt has settled
@@ -819,8 +820,9 @@ class BaseballPlayScreen {
   _playerChipInnerHTML() {
     const qp = this.quickPlay;
     const hand = this._effectiveHand();
-    const presetLabel = SETTINGS.PRESETS[qp.presetId] ? t('preset_' + qp.presetId)
-      : qp.presetId === 'random' ? t('preset_random') : t('preset_custom');
+    // R18: no separate "Random" label any more - a Randomize roll reads as Custom, same as any
+    // other build that matches none of the three named presets (item 2).
+    const presetLabel = SETTINGS.PRESETS[qp.presetId] ? t('preset_' + qp.presetId) : t('preset_custom');
     const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${qp.skills[id] || 0}</span>`).join('');
     return `
       <div class="bb-playerchip-top"><span>${t('hand_' + hand.toLowerCase())}</span><span>${presetLabel}</span></div>
@@ -1093,16 +1095,45 @@ class BaseballPlayScreen {
     return this.career.state;
   }
 
+  /** R18 item 4: the first-season block, career start mode only, between the skills and the
+   *  buttons. Fragments only, no sentence, no explanation (Matt: "EXTREMELY SHORT AND CONCISE").
+   *  Every number is read from `SETTINGS.SEASON`/`POINTS.little`/`CAPS.little` - never typed here -
+   *  so a future tuning pass to the Little League economy can never leave this block stale. A
+   *  career always starts at `LEAGUE_ORDER[0]` (Little League), so this never reads any other
+   *  league's row. */
+  _firstSeasonBlockHTML() {
+    const league = LEAGUE_ORDER[0];
+    const games = SETTINGS.gamesForLeague(league);
+    const teams = SETTINGS.slotsForLeague(league).length + 1; // the CPU slots plus the player
+    const rounds = SETTINGS.SEASON.playoffRounds
+      .map((r) => (r === 'championship' ? t('first_season_final') : t('season_' + r)))
+      .join(' · ');
+    const pts = SETTINGS.POINTS[league];
+    const cap = SETTINGS.CAPS[league];
+    return `
+      <div class="bb-first-season">
+        <div class="bb-fs-title">${t('first_season_title').replace('{league}', t('league_' + league))}</div>
+        <div class="bb-fs-line">${t('first_season_games').replace('{games}', String(games)).replace('{teams}', String(teams))}</div>
+        <div class="bb-fs-line">${rounds}</div>
+        <div class="bb-fs-line">${t('first_season_points')
+          .replace('{win}', String(pts.win)).replace('{loss}', String(pts.loss))
+          .replace('{bronze}', String(pts.bronze)).replace('{silver}', String(pts.silver)).replace('{gold}', String(pts.gold))}</div>
+        <div class="bb-fs-line">${t('first_season_cap').replace('{cap}', String(cap))}</div>
+      </div>`;
+  }
+
   // -------------------------------------------------------------------------- player screen ----
-  /** R14 item 1, extended by R15-B item 1: hand, the 4x2 preset grid, two skill columns, Randomize
-   *  and Done. Fits one phone screen at both heights in both hosts, nothing scrolls
-   *  (`.bb-player-topspacer` clears the hub's floating back pill the same way `.bb-play`'s own top
-   *  spacer does). Full re-render on every tap - a handful of DOM nodes, no animation, the same
-   *  pattern `_renderSetup` already uses for its league rows.
+  /** R14 item 1, extended by R15-B item 1 and R18 items 2-4: hand, the preset chip row (the three
+   *  named presets plus Custom when nothing matches), two skill columns with the first-season
+   *  block below them in career-start mode, and Randomize/Done at the bottom. Fits one phone
+   *  screen at both heights in both hosts, nothing scrolls (`.bb-player-topspacer` clears the
+   *  hub's floating back pill the same way `.bb-play`'s own top spacer does). Full re-render on
+   *  every tap - a handful of DOM nodes, no animation, the same pattern `_renderSetup` already
+   *  uses for its league rows.
    *
    *  `mode` is one of:
-   *    'quickPlay'   - R14, unchanged: presets, Custom, Randomize, a minus AND a plus per skill,
-   *                    a per-SIDE points-left pill (hitting/pitching budgets, `build.js`).
+   *    'quickPlay'   - R14/R18: Balanced/Hitter/Pitcher plus Custom, Randomize, a minus AND a plus
+   *                    per skill, a per-SIDE points-left pill (hitting/pitching budgets, `build.js`).
    *    'careerStart' - the same controls, budgeted at Little League's own start budget/cap
    *                    (`budgetFor('little')`/`capFor('little')`, the doc's own 15/15, cap 10),
    *                    building `this._careerStartBuild` rather than `this.quickPlay`. The button
@@ -1134,11 +1165,14 @@ class BaseballPlayScreen {
         return `<button type="button" class="bb-hand-btn" data-act="hand" data-hand="${h}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span>' : ''}${t('hand_' + h.toLowerCase())}</button>`;
       }).join('');
 
-    const presetChipsHTML = !presetsEnabled ? '' : [...PRESET_ORDER, 'custom'].map((pid) => {
-      const sel = build.presetId === pid || (pid === 'custom' && build.presetId === 'random');
-      const label = pid === 'custom' ? t('preset_custom') : t('preset_' + pid);
-      return `<button type="button" class="bb-preset-chip" data-act="preset" data-preset="${pid}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span> ' : ''}${label}</button>`;
-    }).join('');
+    // R18 item 2: the three named presets are always shown, always tappable; Custom is a fourth
+    // chip that appears only while the build matches none of them (a Randomize roll, or a
+    // hand-tuned plus/minus), and is never itself something to tap.
+    const isNamedPreset = PRESET_ORDER.includes(build.presetId);
+    const presetChipsHTML = !presetsEnabled ? '' : PRESET_ORDER.map((pid) => {
+      const sel = build.presetId === pid;
+      return `<button type="button" class="bb-preset-chip" data-act="preset" data-preset="${pid}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span> ' : ''}${t('preset_' + pid)}</button>`;
+    }).join('') + (isNamedPreset ? '' : `<div class="bb-preset-chip bb-preset-chip--custom" aria-pressed="true"><span class="bb-check" aria-hidden="true">&#10003;</span> ${t('preset_custom')}</div>`);
 
     const skillRowHTML = (id) => {
       const val = build.skills[id] || 0;
@@ -1161,6 +1195,13 @@ class BaseballPlayScreen {
     const singlePillHTML = m === 'careerSpend' ? `<div class="bb-points-pill bb-points-pill--single">${pointsLeft(careerState.unspent)}</div>` : '';
     const hitLeft = m === 'careerSpend' ? null : budget - SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
     const pitchLeft = m === 'careerSpend' ? null : budget - SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
+    // R18 item 3: the points-left pill sits BESIDE its column header, not stacked below it - one
+    // less row of vertical space spent per column.
+    const colHeadHTML = (label, left) => `
+      <div class="bb-skill-col-head-row">
+        <span class="bb-skill-col-head">${label}</span>
+        ${m === 'careerSpend' ? '' : `<span class="bb-points-pill">${pointsLeft(left)}</span>`}
+      </div>`;
 
     const doneAct = m === 'careerStart' ? 'start-career' : 'done';
     const doneLabel = m === 'careerStart' ? t('start_career') : t('done');
@@ -1171,20 +1212,19 @@ class BaseballPlayScreen {
         <div class="bb-player-body">
           <h2 class="bb-player-title">${t('player_title')}</h2>
           <div class="bb-hand-row">${handHTML}</div>
-          ${presetChipsHTML ? `<div class="bb-preset-grid">${presetChipsHTML}</div>` : ''}
+          ${presetChipsHTML ? `<div class="bb-preset-block"><div class="bb-preset-label">${t('preset_heading')}</div><div class="bb-preset-grid">${presetChipsHTML}</div></div>` : ''}
           ${singlePillHTML}
           <div class="bb-skill-cols">
             <div class="bb-skill-col">
-              <div class="bb-skill-col-head">${t('hitting_col')}</div>
-              ${m === 'careerSpend' ? '' : `<div class="bb-points-pill">${pointsLeft(hitLeft)}</div>`}
+              ${colHeadHTML(t('hitting_col'), hitLeft)}
               ${SETTINGS.HIT_SKILL_IDS.map(skillRowHTML).join('')}
             </div>
             <div class="bb-skill-col">
-              <div class="bb-skill-col-head">${t('pitching_col')}</div>
-              ${m === 'careerSpend' ? '' : `<div class="bb-points-pill">${pointsLeft(pitchLeft)}</div>`}
+              ${colHeadHTML(t('pitching_col'), pitchLeft)}
               ${SETTINGS.PITCH_SKILL_IDS.map(skillRowHTML).join('')}
             </div>
           </div>
+          ${m === 'careerStart' ? this._firstSeasonBlockHTML() : ''}
           <div class="bb-player-actions">
             ${randomizeEnabled ? `<button type="button" class="gh-btn gh-btn--sm" data-act="randomize">${t('randomize')}</button>` : ''}
             <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-act="${doneAct}">${doneLabel}</button>
@@ -1210,6 +1250,9 @@ class BaseballPlayScreen {
         this._renderPlayer(m);
       });
     });
+    // R18 item 2: only the three named presets are ever rendered as buttons here - Custom is a
+    // display-only chip (see `_renderPlayer`'s `presetChipsHTML`), so `pid` is always a real
+    // `SETTINGS.PRESETS` key.
     root.querySelectorAll('[data-act="preset"]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const pid = btn.dataset.preset;
@@ -1217,7 +1260,7 @@ class BaseballPlayScreen {
         const budget = budgetFor(league);
         const cap = capFor(league);
         const cur = targetBuild();
-        const skills = pid === 'custom' ? cur.skills : scalePreset(SETTINGS.PRESETS[pid], budget, cap);
+        const skills = scalePreset(SETTINGS.PRESETS[pid], budget, cap);
         setBuild(Object.assign({}, cur, { presetId: pid, skills, league, updatedAt: Date.now() }));
         this._renderPlayer(m);
       });

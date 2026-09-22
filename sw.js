@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v907';
+const CACHE = 'game-hub-v909';
 
 const ASSETS = [
   './',
@@ -834,18 +834,18 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
-  './hoops4/css/hoops4.css': 'f9d4b1e6d3',
-  './hoops4/js/ui.js': '0e4f1adb52',
+  './hoops4/css/hoops4.css': '66b75ebdaf',
+  './hoops4/js/ui.js': 'a1b9ae56f8',
   './hoops4/js/boarddef.js': '04ecef7964',
   './hoops4/js/machine.js': '8470d48a80',
   './hoops4/js/physics.js': 'a354682698',
   './hoops4/js/render.js': '8b0f98e770',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': '419699b47c',
-  './hoops4/js/mp-ui.js': '587d5843cb',
+  './hoops4/js/mp.js': 'c1d8de8783',
+  './hoops4/js/mp-ui.js': 'dce267cd9c',
   './hoops4/js/alert.js': '390d553c75',
-  './hoops4/js/strings.js': '32c426c654',
+  './hoops4/js/strings.js': 'f48f3c0efc',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
@@ -894,11 +894,11 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '9b85898fdc',
-  './baseball/js/ui.js': '482b5b2f88',
+  './baseball/css/baseball.css': '88d63a86df',
+  './baseball/js/ui.js': 'ed29f89b54',
   './baseball/js/field.js': '549d87932f',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': 'cf10f6e515',
+  './baseball/js/strings.js': '4a542cafed',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '18eaa14aeb',
   './baseball/js/poses.js': 'a8cde6e9fb',
@@ -913,7 +913,7 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': 'db1b039a7b',
+  './baseball/js/engine/settings.js': '803516a817',
   './baseball/js/engine/pitch.js': '56c5aa0d80',
   './baseball/js/engine/swing.js': 'ad5bda9322',
   './baseball/js/engine/outcomes.js': '441c7c7345',

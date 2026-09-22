@@ -47,6 +47,54 @@ export function cleanCaption(v) {
   return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, MAX_CAPTION);
 }
 
+// --- quick chat inside a match (2026-09-22) -------------------------------------------------------
+// Matt's playtest list asked for it alongside the series and the caption. A chat line is the SAME
+// tiny `{ t, v }` payload every other multiplayer game in the hub sends (js/mp-reactions.js):
+//   t:'e' an emoji, t:'p' a preset phrase id, t:'c' a short free-text line.
+// The receiver resolves a preset to ITS OWN language, so Anita reads "¡Bien!" when Matt tapped
+// "Nice!". On a turn-by-turn match it is stored at `hoops/games/<id>/chat/<key>` as
+// `{ by:'a'|'b', t, v, at }`.
+//
+// CHAT IS NOT PART OF THE MATCH. It never touches `moves`, `turn`, `over`, `updated` or either
+// index row, so it cannot move the replay, the turn, the outbox or the launcher alert. And it is
+// OPTIONAL in the strongest sense: every match written before it existed has no `chat` at all,
+// and a malformed chat entry is DROPPED, never allowed to refuse the match - `validateGame`'s
+// whole-document rejection exists to protect the REPLAY, and chat is not in the replay.
+export const CHAT_MAXLEN = 24;      // the same cap js/mp-reactions.js puts on a custom line
+export const MAX_CHAT = 40;         // how many a validated match carries (the newest)
+const CHAT_TYPES = ['e', 'p', 'c'];
+
+/** Trim a free-text chat line to what a bubble can hold. Never throws; always a string. */
+export function cleanChat(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, CHAT_MAXLEN);
+}
+
+/**
+ * The chat on a raw match document, cleaned: oldest first, the newest `MAX_CHAT` only, and every
+ * entry that is not a well-formed `{ by, t, v, at }` DROPPED rather than rejected. Pure.
+ */
+export function chatFrom(raw) {
+  if (!raw || typeof raw !== 'object') return [];
+  const out = [];
+  for (const key of Object.keys(raw)) {
+    const c = raw[key];
+    if (!c || typeof c !== 'object') continue;
+    if (c.by !== 'a' && c.by !== 'b') continue;
+    if (!CHAT_TYPES.includes(c.t)) continue;
+    const v = c.t === 'c' ? cleanChat(c.v) : String(c.v == null ? '' : c.v).slice(0, CHAT_MAXLEN);
+    if (!v) continue;
+    out.push({ key, by: c.by, t: c.t, v, at: ms(c.at) });
+  }
+  out.sort((x, y) => (x.at - y.at) || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
+  return out.slice(-MAX_CHAT);
+}
+
+/** The other side's chat lines newer than `seenAt` - what "since you were last here" shows. */
+export function unseenChat(chat, side, seenAt) {
+  const since = ms(seenAt);
+  return (Array.isArray(chat) ? chat : []).filter((c) => c && c.by !== side && c.at > since);
+}
+
 /** How many games one side must win to take a series of `len`. 1 -> 1, 3 -> 2, 5 -> 3. */
 export function seriesTarget(len) {
   const n = SERIES_LENGTHS.includes(+len) ? +len : 1;
@@ -221,6 +269,8 @@ export function validateGame(raw) {
     turn: raw.turn,
     moves,
     over,
+    // OPTIONAL, and never a reason to refuse the match: see `chatFrom`.
+    chat: chatFrom(raw.chat),
   };
 }
 
@@ -289,6 +339,10 @@ export async function readMyGames() {
         series: Math.max(1, ms(r.series) || 1),
         seriesNo: Math.max(1, ms(r.seriesNo) || 1),
         seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id,
+        // OPTIONAL, and ABSENT on every finished row written before the history screen existed
+        // (2026-09-22). `recordsFrom` works out an old row's result from its match instead.
+        result: RESULTS.includes(r.result) ? r.result : null,
+        why: typeof r.why === 'string' ? r.why : '',
       };
     }).filter((r) => ID_RE.test(r.id) && r.with));
   } catch (err) {
@@ -348,6 +402,11 @@ function rowFor(game, side) {
     series: game.series | 0 || 1,
     seriesNo: game.seriesNo | 0 || 1,
     seriesOf: game.seriesOf || game.id,
+    // THE RESULT FROM THIS ROW'S OWN SIDE, once the match is over - what the history screen
+    // counts. ADDED 2026-09-22 and OPTIONAL: rows written before it have none, and `recordsFrom`
+    // falls back to the match itself for those. Only set when there is something to say, so an
+    // `update` on an unfinished match never writes a field it does not need.
+    ...(game.over ? { result: resultOf(game, side), why: String(game.over.why || 'four') } : {}),
   };
 }
 
@@ -542,6 +601,133 @@ export async function resignGame(id) {
   }
 }
 
+// --- quick chat: the write and the watch -----------------------------------------------------------
+
+/**
+ * Say something in a turn-by-turn match. `payload` is `{ t, v }` (see `chatFrom`). ANY time, not
+ * only on your turn - the point of chat is the other person's turn - and on a finished match too.
+ *
+ * ADDITIVE: one new child at a fresh time-ordered key, never a `set` over `chat` itself, so two
+ * people typing at once cannot overwrite each other. It touches NOTHING else on the match - not
+ * `updated`, not either index row - so a chat line can never flip the launcher's "your turn"
+ * alert, move the turn, or reach the move outbox. VERIFIED by a fresh re-read of that one key
+ * (THE LAW rule 6). There is no outbox for chat: a line that does not land is reported as not
+ * sent, and the player can tap it again.
+ */
+export async function sendChat(id, payload) {
+  const me = myCode();
+  if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
+  if (!ID_RE.test(String(id || ''))) return { ok: false, reason: 'not-found', retryable: false };
+  const t = payload && CHAT_TYPES.includes(payload.t) ? payload.t : null;
+  const raw = payload && payload.v != null ? payload.v : '';
+  const v = t === 'c' ? cleanChat(raw) : String(raw).slice(0, CHAT_MAXLEN);
+  if (!t || !v) return { ok: false, reason: 'empty', retryable: false };
+  if (!writesAllowed('sendChat')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, reason: 'offline', retryable: true };
+    const { db, api } = boot;
+    const game = await readGame(id);
+    if (!game) return { ok: false, reason: 'not-found', retryable: true };
+    const side = sideOf(game, me);
+    if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
+    const at = Date.now();
+    const key = mintGameId() + side;
+    const entry = { by: side, t, v, at };
+    await api.set(api.ref(db, `hoops/games/${id}/chat/${key}`), entry);
+    const back = await api.get(api.ref(db, `hoops/games/${id}/chat/${key}`));
+    const got = back && back.exists() ? back.val() : null;
+    if (!got || got.v !== v || got.by !== side) {
+      console.error(`[hoops4] chat VERIFY FAILED for hoops/games/${id}/chat/${key} - nothing landed.`);
+      return { ok: false, reason: 'did-not-land', retryable: true };
+    }
+    return { ok: true, entry: { key, ...entry } };
+  } catch (err) {
+    console.error('[hoops4] could not send the chat line', err);
+    return { ok: false, reason: reasonOf(err), retryable: retryableOf(err) };
+  }
+}
+
+/** Watch one match's chat while it is on screen. READ ONLY. Calls `cb(chat)` with the cleaned
+ *  list (`chatFrom`) on every change; returns an unsubscribe that is always safe to call. */
+export async function watchChat(id, cb) {
+  if (!ID_RE.test(String(id || ''))) return () => {};
+  try {
+    const boot = await ready();
+    if (!boot || typeof boot.api.onValue !== 'function') return () => {};
+    const { db, api } = boot;
+    const stop = api.onValue(api.ref(db, `hoops/games/${id}/chat`), (snap) => {
+      try { cb(chatFrom(snap && snap.exists() ? snap.val() : null)); }
+      catch (err) { console.warn('[hoops4] chat callback', err); }
+    }, () => { /* a denied or dropped watch is not worth an error: the list keeps what it had */ });
+    return () => { try { stop(); } catch { /* already detached */ } };
+  } catch { return () => {}; }
+}
+
+// --- challenge history ------------------------------------------------------------------------------
+
+export const RESULTS = ['won', 'lost', 'draw'];
+
+/** One finished match's result from `side`'s point of view: 'won', 'lost' or 'draw'. null if the
+ *  match is not over or `side` is not a side. A resignation is a win for the other person. */
+export function resultOf(game, side) {
+  if (!game || !game.over || (side !== 'a' && side !== 'b')) return null;
+  const w = game.over.winner;
+  if (w !== 'a' && w !== 'b') return 'draw';
+  return w === side ? 'won' : 'lost';
+}
+
+/**
+ * THE RECORDS, from a player's own index rows. PURE, so the maths is testable without a database.
+ *
+ * Only FINISHED rows count. A row's result is, in order: its own `result` (every row written since
+ * 2026-09-22), else the result worked out from `row.game` - a validated match the screen read for
+ * an OLD row that carries no result - else it is `unknown`: counted as played and listed, but in
+ * no win/loss/draw column rather than guessed into one (THE LAW rule 4's spirit).
+ *
+ * GROUPED BY THE OPPONENT'S PLAYER CODE, never by name: a name can be changed and two people can
+ * share one, a code cannot. The label is the name on their most recent match.
+ *
+ * Returns `{ opponents, finished }`: `opponents` sorted by games played (then most recent), each
+ * `{ code, name, emoji, won, lost, draw, unknown, played, last }`; `finished` newest first, each
+ * the row plus its `result` and `resigned` ('me' | 'them' | null).
+ */
+export function recordsFrom(rows, code) {
+  const me = asCode(code);
+  const finished = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || typeof r !== 'object' || !r.over) continue;
+    const them = asCode(r.with);
+    if (!them || them === me) continue;
+    let result = RESULTS.includes(r.result) ? r.result : null;
+    let why = typeof r.why === 'string' ? r.why : '';
+    if (!result && r.game && me) {
+      result = resultOf(r.game, sideOf(r.game, me));
+      if (r.game.over && !why) why = String(r.game.over.why || '');
+    }
+    const resigned = why === 'resign' && (result === 'won' || result === 'lost')
+      ? (result === 'won' ? 'them' : 'me') : null;
+    finished.push({ ...r, with: them, result: result || null, resigned, updated: ms(r.updated) });
+  }
+  finished.sort((x, y) => y.updated - x.updated);
+  const by = new Map();
+  for (const r of finished) {                 // newest first, so the first row seen names them
+    let o = by.get(r.with);
+    if (!o) {
+      o = { code: r.with, name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
+        won: 0, lost: 0, draw: 0, unknown: 0, played: 0, last: r.updated };
+      by.set(r.with, o);
+    }
+    o.played += 1;
+    if (r.result === 'won') o.won += 1;
+    else if (r.result === 'lost') o.lost += 1;
+    else if (r.result === 'draw') o.draw += 1;
+    else o.unknown += 1;
+  }
+  const opponents = [...by.values()].sort((x, y) => (y.played - x.played) || (y.last - x.last));
+  return { opponents, finished };
+}
+
 /** A Firebase permission failure is NOT retryable and must not sit in the outbox forever: it
  *  means `database.rules.json` has not been published yet, which no amount of retrying fixes. */
 function reasonOf(err) {
@@ -614,4 +800,5 @@ export default {
   asCode, myCode, meLabel, mintGameId, validateGame, replay, sideOf, isMyTurn, otherLabel,
   countMyTurns, sortRows, readMyGames, readGame, readOpponents,
   createGame, nextInSeries, pushMove, resignGame, outboxCount, queueMove, drainOutbox,
+  cleanChat, chatFrom, unseenChat, sendChat, watchChat, resultOf, recordsFrom,
 };

@@ -106,6 +106,16 @@ export const STRINGS = {
     mpNeedName: 'Set up your profile first so they know who is playing.',
     mpOnline: 'online', mpOpponent: 'Opponent',
     mpUnavailable: 'Turn by turn is not switched on yet. Live games still work.',
+    // Quick chat inside a match (2026-09-22). The preset phrases themselves come from the hub's
+    // shared quick-chat palette (js/mp-reactions.js), already translated there.
+    chat: 'Chat', chatPh: 'Say something', chatSend: 'Send', chatYou: 'You',
+    chatNone: 'Nothing said yet.', chatNotSent: 'Message not sent. Try again.',
+    // Challenge history (2026-09-22).
+    mpHistory: 'History', histRecords: 'Records', histGames: 'Finished games',
+    histNone: 'No finished games yet.',
+    histWon: 'Won', histLost: 'Lost', histDraw: 'Draw', histResigned: 'Resigned',
+    histTheyResigned: 'Won, they resigned', histUnknown: 'Finished',
+    histLine: 'W {w} · L {l} · D {d}',
   },
   es: {
     title: 'Connect 4 Hoops',
@@ -190,6 +200,13 @@ export const STRINGS = {
     mpNeedName: 'Configura tu perfil primero para que sepan quien juega.',
     mpOnline: 'en linea', mpOpponent: 'Rival',
     mpUnavailable: 'El modo por turnos todavia no esta activado. Las partidas en vivo si funcionan.',
+    chat: 'Chat', chatPh: 'Di algo', chatSend: 'Enviar', chatYou: 'Tú',
+    chatNone: 'Nadie ha dicho nada.', chatNotSent: 'Mensaje no enviado. Inténtalo otra vez.',
+    mpHistory: 'Historial', histRecords: 'Récords', histGames: 'Partidas terminadas',
+    histNone: 'Aún no hay partidas terminadas.',
+    histWon: 'Ganada', histLost: 'Perdida', histDraw: 'Empate', histResigned: 'Te rendiste',
+    histTheyResigned: 'Ganada, se rindió', histUnknown: 'Terminada',
+    histLine: 'G {w} · P {l} · E {d}',
   },
 };
 export default STRINGS;

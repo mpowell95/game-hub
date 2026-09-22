@@ -4,6 +4,51 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R18: the career start screen (2026-09-22)
+
+Matt, with a screenshot of the career-start player screen on his phone: *"My landing page is
+still quick play... Simplify the presets. Those names don't help at all... it's not even clear
+that they ARE presets. And give the skill stats some more space. Everything here is all crammed
+to the top half of the page... Nobody would ever guess that they're going to win more skill
+points and be able to allocate them. Show the economy chart but ONLY for little league... say
+play your first season or something and say how many regular season games and playoffs etc. but
+DO NOT explain anything in paragraph prose."* Spec: `docs/BASEBALL-3D-BUILD.md` section 9, R18.
+
+- **Career is the landing tab** (`this.tab` defaults to `'career'`). Every pre-existing device
+  probe wanted Quick Play's setup screen, so `test-baseball-device.mjs`'s shared `mountInHub()`
+  and `check-no-scroll.mjs`'s player-screen extra tap the Quick Play tab first; the career probes
+  force their own tab as before.
+- **Three presets, labelled PRESET**: Balanced 5/5/5 and 5/5/5, Hitter 7/7/1 hitting with 5/5/5
+  pitching, Pitcher 5/5/5 hitting with 7/7/1 pitching (`settings.js` `PRESETS`, replacing the
+  seven; design doc section 6 is [Draft] there). Custom is a display-only chip that appears only
+  while the build matches none of the three (a plus, a minus or Randomize makes it appear; tapping
+  a preset makes it go). A stored `presetId` that no longer exists reads as Custom. `build.js`
+  unchanged; `test.js`'s preset assertions cover the three tables.
+- **The skills carry the room.** A `min-height: 700px` media block grows the rows on a tall
+  phone (52 px buttons, 18 px bar cells, 15 px labels, 16 px values, the gap between rows capped
+  at 20 px) and `align-content: center` holds the three rows as one cluster; the short phone
+  keeps 44 px buttons and 12 px cells. The first attempt used `flex: 1` per row, which spread
+  three small rows apart with about 100 px of dead space between them on the tall screen; rows
+  grow, gaps do not.
+- **The first-season block**, career start only, between the skills and the buttons, five
+  fragment lines with every number read from `SEASON`, `POINTS.little` and `CAPS.little`:
+  FIRST SEASON · LITTLE LEAGUE / 3 games · 4 teams · everyone makes the playoffs / Semifinal ·
+  Final / Win +6 · Loss +2 · Bronze +4 · Silver +8 · Gold +12 / Points buy skills · max 10 each.
+  Absent on the Quick Play player screen. 13 px at line height 1.5 on a tall phone.
+- **Probes**: `player-screen`, `player-budget`, `first-season-block` in
+  `test-baseball-device.mjs`; `check-no-scroll` 16 of 16 in both hosts at both heights.
+
+## How a stage runs (orchestrator + subagent, 2026-09-22)
+
+The orchestrator writes the stage spec into the stage doc first (e.g. `docs/BASEBALL-3D-BUILD.md`
+section 9, committed BEFORE the build), then launches the agent in its own worktree
+(`isolation: "worktree"`) with its own dev server port (`PORT=8124`,
+`BB_BASE=http://localhost:8124` for the Baseball suites). It reviews the result against stills
+and measured numbers: open the stills, re-run the key number on a fresh seed, read the diff of the
+load-bearing lines. Agents commit what is green first so an interruption loses nothing. Past
+picks: **Sonnet** for R6 through R15-B, R17, R18; **Opus** for R5, R15-A, the economy study, R16.
+General rules: root `CLAUDE.md`, "Subagents: save USAGE".
+
 ## R16: the career economy, rebuilt from measurement (2026-09-22)
 
 **Ship review, same day (orchestrator).** Three changes on top of the stage. (1) `CPU_SIGMA_MIN_MS.minors`

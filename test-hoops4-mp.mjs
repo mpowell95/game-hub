@@ -186,7 +186,7 @@ check('a player code is normalised and validated',
   check('the win/lose headline is read from THIS device\'s side in multiplayer',
     /m\.winner === this\.myPlayer \? t\('youWin'\)/.test(ui));
   check('leaving detaches from the room and ends it', /_stopRoom\(\)/.test(ui)
-    && /leaveRoom\(mp\.code, mp\.role\)/.test(ui) && /teardownEngine\(\) \{\n    this\._stopRoom\(\);/.test(ui));
+    && /leaveRoom\(mp\.code, mp\.role\)/.test(ui) && /teardownEngine\(\) \{\n    (?:this\._unmountChat\(\);\n    )?this\._stopRoom\(\);/.test(ui));
   check('a failed turn-by-turn send never also says it was sent',
     /this\.toast\(t\('mpUnavailable'\)\);\n      return;/.test(ui));
   check('a fresh solo match clears the multiplayer state', /if \(!opts\.keepMp\)/.test(ui));
@@ -344,6 +344,189 @@ check('a player code is normalised and validated',
   check('the ceremony settles to its final pose under reduced motion, never hidden',
     /is-still[\s\S]{0,400}animation: none;[\s\S]{0,120}opacity: 1;/.test(h4css)
     && !/prefers-reduced-motion[\s\S]{0,400}\.h4-cer[\s\S]{0,200}display: none/.test(h4css));
+}
+
+// -----------------------------------------------------------------------------------------------
+// QUICK CHAT INSIDE A MATCH (2026-09-22)
+// -----------------------------------------------------------------------------------------------
+// The chat field is OPTIONAL and is NOT part of the replay. validateGame returning null is a
+// refusal to open the match, so neither a match written before chat existed nor a match with a
+// mangled chat entry may ever be refused because of it.
+{
+  // A HAND-WRITTEN PRE-CHAT DOCUMENT, shaped like one `createGame` + two `pushMove`s wrote before
+  // this change: series fields present (it post-dates the series work), NO `chat` key at all.
+  const preChat = {
+    v: 1, id: 'mf3k2p9x4q7r1t8w', created: 1758520000000, updated: 1758520900000, oneShot: false,
+    series: 3, seriesNo: 1, seriesWins: { a: 0, b: 0 }, seriesOf: 'mf3k2p9x4q7r1t8w',
+    caption: 'First to two',
+    a: { code: 'ABCDE', name: 'Matt', emoji: '🏀' },
+    b: { code: 'FGHJK', name: 'Anita', emoji: '🌟' },
+    turn: 'a',
+    moves: {
+      '0000': { by: 'a', col: 3, shots: 2, at: 1758520100000 },
+      '0001': { by: 'b', col: 4, shots: 1, at: 1758520900000 },
+    },
+  };
+  const g = MP.validateGame(preChat);
+  check('a document written before chat existed still validates', !!g);
+  check('...and reads as a match with no chat', !!g && Array.isArray(g.chat) && g.chat.length === 0);
+  const withChat = MP.validateGame({ ...preChat, chat: {
+    k2: { by: 'b', t: 'p', v: 'nice', at: 1758520950000 },
+    k1: { by: 'a', t: 'e', v: '🔥', at: 1758520920000 },
+  } });
+  const replayOf = (doc) => {
+    const m = MP.replay(new Match({ oneShot: false }), doc);
+    return JSON.stringify({ cells: m.cells(), turn: m.turn, shots: m.shots, over: m.over });
+  };
+  check('chat changes nothing about the replay',
+    !!withChat && replayOf(g) === replayOf(withChat) && withChat.turn === g.turn
+    && withChat.moves.length === g.moves.length);
+  check('chat comes back oldest first, whatever order the keys arrived in',
+    !!withChat && withChat.chat.map((c) => c.v).join(',') === '🔥,nice');
+
+  // GARBAGE CHAT: every bad entry is DROPPED and the match still opens.
+  const junk = MP.validateGame({ ...preChat, chat: {
+    ok1: { by: 'a', t: 'c', v: '  good   luck  ', at: 5 },
+    nobody: { by: 'x', t: 'c', v: 'who?', at: 6 },
+    badType: { by: 'b', t: 'z', v: 'hmm', at: 7 },
+    empty: { by: 'b', t: 'c', v: '   ', at: 8 },
+    notObj: 'hello',
+    nullish: null,
+    long: { by: 'b', t: 'c', v: 'x'.repeat(500), at: 9 },
+  } });
+  check('a match with garbage chat entries still validates', !!junk);
+  check('...with the bad entries dropped and the good ones cleaned',
+    !!junk && junk.chat.length === 2 && junk.chat[0].v === 'good luck'
+    && junk.chat[1].v.length === MP.CHAT_MAXLEN);
+  check('a chat field that is not even an object is ignored, not fatal',
+    (MP.validateGame({ ...preChat, chat: 'lol' }) || {}).chat.length === 0
+    && (MP.validateGame({ ...preChat, chat: [1, 2, 3] }) || { chat: [9] }).chat.length === 0);
+
+  // THE PURE HELPERS
+  check('cleanChat trims, collapses and clamps',
+    MP.cleanChat('  hi   there ') === 'hi there' && MP.cleanChat('y'.repeat(99)).length === MP.CHAT_MAXLEN
+    && MP.cleanChat(null) === '' && MP.cleanChat(undefined) === '');
+  {
+    const many = {};
+    for (let i = 0; i < MP.MAX_CHAT + 15; i++) many['k' + i] = { by: i % 2 ? 'a' : 'b', t: 'e', v: '👍', at: 1000 + i };
+    const list = MP.chatFrom(many);
+    check('only the newest MAX_CHAT lines are kept, oldest of those first',
+      list.length === MP.MAX_CHAT && list[0].at === 1015 && list[list.length - 1].at === 1000 + MP.MAX_CHAT + 14);
+  }
+  check('equal timestamps fall back to key order, so both phones agree',
+    MP.chatFrom({ b: { by: 'a', t: 'e', v: '2', at: 1 }, a: { by: 'b', t: 'e', v: '1', at: 1 } })
+      .map((c) => c.v).join('') === '12');
+  {
+    const list = MP.chatFrom({
+      x: { by: 'a', t: 'e', v: '1', at: 10 }, y: { by: 'b', t: 'e', v: '2', at: 20 },
+      z: { by: 'b', t: 'e', v: '3', at: 30 },
+    });
+    check('unseenChat is only the OTHER side\'s lines newer than the mark',
+      MP.unseenChat(list, 'a', 20).map((c) => c.v).join('') === '3'
+      && MP.unseenChat(list, 'b', 0).map((c) => c.v).join('') === '1'
+      && MP.unseenChat(null, 'a', 0).length === 0);
+  }
+
+  // STRUCTURAL: the chat write is additive, verified, and never touches the move log or turn.
+  const src = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  const sendBody = (src.split('export async function sendChat')[1] || '').split('\nexport ')[0];
+  check('a chat line is written at its own new key under chat/, and verified by re-read',
+    /hoops\/games\/\$\{id\}\/chat\/\$\{key\}/.test(sendBody) && /chat VERIFY FAILED/.test(sendBody)
+    && /writesAllowed\('sendChat'\)/.test(sendBody));
+  check('a chat line never writes moves, turn, updated, over or an index row',
+    sendBody.length > 200 && !/moves|turn:|updated|over:|writeRows|api\.update/.test(sendBody));
+  // NOTHING IN mp.js DELETES DATA (THE LAW). No remove(), no write of null over a path.
+  const code = src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  check('mp.js contains no delete or remove of data',
+    !/\bremove\s*\(/.test(code) && !/\.delete\s*\(/.test(code) && !/removeItem/.test(code)
+    && !/api\.(set|update)\([^;]*,\s*null\s*\)/.test(code));
+
+  const ui = readFileSync(new URL('./hoops4/js/ui.js', import.meta.url), 'utf8');
+  check('live chat rides room.reactions, never the move log',
+    /this\._chat\.onReactions\(room\.reactions/.test(ui) && /sendReaction\(mp\.code, mp\.role, payload\)/.test(ui)
+    && !/appendMove\([^)]*payload/.test(ui));
+  check('the chat is torn down with the engine', /teardownEngine\(\) \{\n    this\._unmountChat\(\);/.test(ui));
+  check('a reviewed (finished) match can neither be shot in nor recorded again',
+    /if \(this\.mp\.review\) return false;/.test(ui) && /if \(review\) this\.recorded = true;/.test(ui));
+}
+
+// -----------------------------------------------------------------------------------------------
+// CHALLENGE HISTORY WITH RECORDS (2026-09-22)
+// -----------------------------------------------------------------------------------------------
+{
+  const C = 'MNPQR';
+  const row = (id, o = {}) => ({ id, with: o.with || B, name: o.name || 'Anita', emoji: '🌟',
+    updated: o.updated == null ? 100 : o.updated, over: o.over !== false, yourTurn: false,
+    series: o.series || 1, seriesNo: o.seriesNo || 1,
+    ...(o.result !== undefined ? { result: o.result } : {}), ...(o.why ? { why: o.why } : {}),
+    ...(o.game ? { game: o.game } : {}) });
+  const rows = [
+    row('w1', { result: 'won', updated: 10 }),
+    row('w2', { result: 'won', updated: 50 }),
+    row('l1', { result: 'lost', updated: 30 }),
+    row('d1', { result: 'draw', updated: 20 }),
+    row('r1', { result: 'lost', why: 'resign', updated: 40 }),
+    row('r2', { result: 'won', why: 'resign', updated: 45, with: C, name: 'Bea' }),
+    row('live', { over: false, updated: 999 }),
+  ];
+  const { opponents, finished } = MP.recordsFrom(rows, A);
+  const anita = opponents.find((o) => o.code === B);
+  check('wins, losses and draws are counted from YOUR side',
+    anita && anita.won === 2 && anita.lost === 2 && anita.draw === 1 && anita.played === 5,
+    JSON.stringify(anita));
+  check('an unfinished match is not in the history', !finished.some((r) => r.id === 'live'));
+  check('finished matches come newest first',
+    finished.map((r) => r.id).join(',') === 'w2,r2,r1,l1,d1,w1', finished.map((r) => r.id).join(','));
+  check('a resignation is a loss for who resigned and says so',
+    finished.find((r) => r.id === 'r1').resigned === 'me' && finished.find((r) => r.id === 'r2').resigned === 'them');
+  check('opponents are sorted by games played', opponents[0].code === B && opponents[1].code === C);
+
+  // GROUPED BY CODE, NOT NAME: a renamed person is still one record, two people who share a name
+  // are still two.
+  const renamed = MP.recordsFrom([
+    row('a', { result: 'won', name: 'Anita', updated: 1 }),
+    row('b', { result: 'lost', name: 'Nita', updated: 2 }),
+    row('c', { result: 'won', name: 'Anita', with: C, updated: 3 }),
+  ], A).opponents;
+  check('records group by the opponent\'s CODE, not their name',
+    renamed.length === 2 && renamed.find((o) => o.code === B).played === 2);
+  check('...labelled by the name on their most recent match',
+    renamed.find((o) => o.code === B).name === 'Nita');
+
+  // OLD ROWS: no `result` on the row. With the match read, the result is worked out from it;
+  // without it, the row is counted as played and in NO column rather than guessed into one.
+  const oldGame = MP.validateGame({ ...doc({ winner: 'b', why: 'four', at: 5 }) });
+  const oldRows = MP.recordsFrom([
+    row('o1', { game: oldGame }),                                       // A is side a, b won
+    row('o2', {}),                                                      // match unreadable
+    row('o3', { game: MP.validateGame({ ...doc({ winner: null, why: 'full', at: 6 }) }) }),
+  ], A);
+  const o = oldRows.opponents[0];
+  check('an old row with no result takes it from its match',
+    oldRows.finished.find((r) => r.id === 'o1').result === 'lost' && o.lost === 1 && o.draw === 1);
+  check('an old row whose match cannot be read is counted, but in no column',
+    o.unknown === 1 && o.played === 3 && oldRows.finished.find((r) => r.id === 'o2').result === null);
+  check('the same old match reads as a WIN for the other side',
+    MP.recordsFrom([row('o1', { with: A, game: oldGame })], B).opponents[0].won === 1);
+
+  check('rows missing fields cannot throw or count',
+    MP.recordsFrom([null, {}, { over: true }, { over: true, with: 'nope' }, 'x'], A).finished.length === 0
+    && MP.recordsFrom(null, A).opponents.length === 0
+    && MP.recordsFrom([row('self', { with: A, result: 'won' })], A).finished.length === 0);
+  check('a junk result on a row is treated as unknown, not as a win',
+    MP.recordsFrom([row('j', { result: 'WINNER' })], A).opponents[0].unknown === 1);
+
+  check('resultOf reads a match from each side',
+    MP.resultOf(oldGame, 'a') === 'lost' && MP.resultOf(oldGame, 'b') === 'won'
+    && MP.resultOf(MP.validateGame(doc()), 'a') === null && MP.resultOf(oldGame, 'z') === null);
+
+  // New finished rows carry the result, optionally; an unfinished row writes no result field.
+  const src = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  check('a finished index row carries its result; an unfinished one writes no such field',
+    /\.\.\.\(game\.over \? \{ result: resultOf\(game, side\)/.test(src));
+  const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', import.meta.url), 'utf8');
+  check('the history opens a finished match READ ONLY',
+    /openGame\(b\.dataset\.past, \{ review: true \}\)/.test(mpui));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
