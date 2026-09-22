@@ -25,6 +25,15 @@ export const STRINGS = {
     hub_soon_tag: 'Soon',
     hub_test_tag: 'Test',
     hub_new_tag: 'New',
+    // The launcher's challenge bubble (js/hub.js, _paintGameAlert). The two states are told
+    // apart by their WORDS as well as their colour - Matt is red/green colourblind, and a purple
+    // bubble against a blue one is exactly the kind of hue-only signal the repo does not ship.
+    hub_alert_head: '\u2694\uFE0F CHALLENGE ALERT! \u2694\uFE0F',
+    hub_alert_challenged: "{who} challenged you!",
+    hub_alert_your_turn: 'Your Turn!',
+    hub_alert_someone: 'Someone',
+    hub_alert_more: '+{n} waiting',
+    hub_alert_dismiss: 'Dismiss',
     hub_new_aria: 'New game',
     hub_fav_add: 'Add {title} to favorites',
     hub_fav_remove: 'Remove {title} from favorites',
@@ -659,6 +668,12 @@ export const STRINGS = {
     hub_soon_tag: 'Pronto',
     hub_test_tag: 'Prueba',
     hub_new_tag: 'Nuevo',
+    hub_alert_head: '\u2694\uFE0F \u00A1RETO! \u2694\uFE0F',
+    hub_alert_challenged: '\u00A1{who} te ha retado!',
+    hub_alert_your_turn: '\u00A1Te toca!',
+    hub_alert_someone: 'Alguien',
+    hub_alert_more: '+{n} esperando',
+    hub_alert_dismiss: 'Descartar',
     hub_new_aria: 'Juego nuevo',
     hub_fav_add: 'Añadir {title} a favoritos',
     hub_fav_remove: 'Quitar {title} de favoritos',

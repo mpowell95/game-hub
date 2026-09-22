@@ -310,6 +310,12 @@ export const GAMES = [
       es: 'Encesta en una de las siete canastas y tu ficha cae por esa columna. Cuatro en raya gana.',
     },
     module: '../hoops4/js/ui.js',
+    // SOMEBODY MAY BE WAITING ON YOU, and the launcher is where that has to be said. A game may
+    // declare an `alerts` module exporting check() / armCeremony(); the hub imports it lazily
+    // AFTER the launcher has painted and draws a speech bubble on that game's tile. This is the
+    // only per-game hook of its kind - see _checkGameAlerts below for why it is a registry entry
+    // rather than js/hub.js knowing what a Connect 4 Hoops challenge is.
+    alerts: () => import('../hoops4/js/alert.js'),
     // Owns the whole viewport (a fixed edge-to-edge canvas under a thin HUD), so the hub's header
     // collapses to the floating back button - the same call as Skeeball and Pinball.
     immersive: true,
@@ -540,6 +546,7 @@ class Hub {
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._afterPaint(() => this._maybeAnnounce());
+    this._afterPaint(() => this._checkGameAlerts());
     // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
     // and so a new build applies itself while they are on the launcher (see _watchForUpdates).
     this._watchForUpdates();
@@ -923,8 +930,21 @@ class Hub {
         this.render();   // full re-render: ordering logic stays in exactly one place
         return;
       }
+      // The challenge bubble. The X puts it away; anywhere else on it opens the game with the
+      // full-screen card armed. Checked BEFORE .hub-card because the bubble overlaps the tile.
+      const dismiss = e.target.closest('[data-role="alert-dismiss"]');
+      if (dismiss) { e.preventDefault(); e.stopPropagation(); this._dismissGameAlert(); return; }
+      const bubble = e.target.closest('.hub-alert');
+      if (bubble) { e.preventDefault(); e.stopPropagation(); this._openAlertGame(); return; }
       const card = e.target.closest('.hub-card');
       if (!card) return;
+      // Matt: "when you click into the game or click on the popup thing, it goes to a new, full
+      // screen popup thing" - so the TILE arms the card too, not just the bubble.
+      if (this._gameAlert && this._gameAlert.game === card.dataset.id && !this._favEdit) {
+        e.preventDefault();
+        this._openAlertGame();
+        return;
+      }
       // Edit mode replaces the favorite heart with move arrows and must not let a mis-tap
       // launch (or navigate away to) the game underneath - card.dataset.favGroup marks every
       // tile in the favorites group, button or <a> alike.
@@ -985,6 +1005,113 @@ class Hub {
 
     this.initFirstRun();
     this._initVersionPill();
+    // render() rewrites the grid, so a bubble already decided has to be redrawn. The NETWORK
+    // check is separate (_checkGameAlerts) and only runs on the launcher; this is pure DOM.
+    this._paintGameAlert();
+  }
+
+  // --- a game saying somebody is waiting on you -------------------------------------------------
+  /**
+   * Ask every game that declares an `alerts` module whether it wants the launcher's attention.
+   *
+   * WHY THE HUB DOES NOT KNOW WHAT A CHALLENGE IS. Matt: "to see a challenge, you must go into
+   * the hoops connect 4, click play a friend... There is no other notification anywhere." The
+   * launcher is the right place to say it, but "a Connect 4 Hoops turn-by-turn match" is not
+   * something js/hub.js should be able to name - so a registry entry hands over a module and the
+   * hub only handles the shape it returns. Today hoops4 is the only registrant.
+   *
+   * LAZY AND AFTER THE PAINT, ALWAYS. This reaches Firebase; putting it on the critical path
+   * would trade a launcher that appears in 6 requests for one that waits on a network read.
+   * Everything is guarded: a game tile must never be able to break the launcher.
+   */
+  async _checkGameAlerts() {
+    for (const g of GAMES) {
+      if (typeof g.alerts !== 'function') continue;
+      try {
+        const mod = await g.alerts();
+        const alert = await mod.check();
+        if (!alert) continue;
+        this._gameAlert = { game: g.id, alert, mod };
+        this._paintGameAlert();
+        // A tile the player cannot see is not "super obvious". Bring it into view ONCE per
+        // alert, gently, and never fight a scroll they have already started.
+        if (this._alertScrolledFor !== alert.id) {
+          this._alertScrolledFor = alert.id;
+          const cell = this._cellFor(g.id);
+          if (cell && cell.scrollIntoView) {
+            try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+          }
+        }
+        return;                                  // one bubble at a time
+      } catch (err) {
+        console.warn('[hub] alert check failed for', g.id, err);
+      }
+    }
+  }
+
+  /** The grid cell holding a game's tile. A favourited game is drawn twice; the first is the
+   *  favourites copy at the top of the page, which is the one worth pointing at. */
+  _cellFor(id) {
+    if (!this.el || !this.el.grid) return null;
+    const card = this.el.grid.querySelector(`.hub-card[data-id="${id}"]`);
+    return card ? card.closest('.hub-cell') : null;
+  }
+
+  /** Draw (or redraw) the speech bubble. Pure DOM - the decision was made in _checkGameAlerts. */
+  _paintGameAlert() {
+    const prev = this.root && this.root.querySelector('.hub-alert');
+    if (prev) prev.remove();
+    const state = this._gameAlert;
+    if (!state || !state.alert) return;
+    const cell = this._cellFor(state.game);
+    if (!cell) return;
+    const a = state.alert;
+    const head = t('hub_alert_head');
+    const line = a.kind === 'challenge'
+      ? t('hub_alert_challenged', { who: a.name || t('hub_alert_someone') })
+      : t('hub_alert_your_turn');
+    const el = document.createElement('div');
+    // role=status + aria-live: this appears without the player doing anything, so it has to be
+    // announced rather than just drawn.
+    // WHICH WAY IT GROWS, measured rather than assumed. The bubble is wider than a tile, so it
+    // has to grow toward the middle of the grid; and on the top row there is nothing above it to
+    // grow into, so it flips underneath. Both are read off the real layout - a two-column grid
+    // today, but nothing here hard-codes two columns or a row height.
+    const grid = this.el.grid;
+    const rightHalf = cell.offsetLeft + cell.offsetWidth / 2 > grid.clientWidth / 2;
+    const noRoomAbove = cell.offsetTop < 120;
+    el.className = `hub-alert is-${a.kind} ${rightHalf ? 'is-col-right' : 'is-col-left'}`
+      + (noRoomAbove ? ' is-below' : '');
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = `
+      <button type="button" class="hub-alert-x" data-role="alert-dismiss"
+              aria-label="${t('hub_alert_dismiss')}">&times;</button>
+      <span class="hub-alert-head">${head}</span>
+      <span class="hub-alert-line">${line}</span>
+      ${a.count > 1 ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
+    cell.appendChild(el);
+  }
+
+  /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
+  _openAlertGame() {
+    const state = this._gameAlert;
+    if (!state) return;
+    try { state.mod.armCeremony(state.alert); } catch {}
+    this._dismissGameAlert(false);
+    this.launch(state.game);
+  }
+
+  /** Put the bubble away. `paint` is false when something else is about to repaint anyway. */
+  _dismissGameAlert(paint = true) {
+    const state = this._gameAlert;
+    if (!state) return;
+    try {
+      const row = state.mod.rowFor(state.alert.id);
+      state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
+    } catch {}
+    this._gameAlert = null;
+    if (paint) this._paintGameAlert();
   }
 
   /** The theme toggle's face: sun/moon for the RESOLVED theme, plus an "A" badge when the

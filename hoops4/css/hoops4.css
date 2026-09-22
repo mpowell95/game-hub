@@ -351,3 +351,148 @@
 .h4-root .h4-mp-game.is-over { opacity: .62; }
 .h4-root .h4-mp-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .h4-root .h4-mp-state { font-size: 12px; font-weight: 600; color: var(--h4s-muted); white-space: nowrap; }
+
+/* ------------------------------------------------- the challenge ceremony --- */
+/* Matt: "it goes to a new, full screen popup thing that shows the challengers emoji and your
+   emoji... The popup needs to clearly show that the challengers emoji and your emoji are
+   opponents. and it should have some kind of animation. Like the key ceremony in Skeeball."
+
+   THE TIMELINE LIVES IN ui.js's showCeremony() comment, next to the DOM it builds. This sheet
+   plays it. Skeeball's ceremony is the model in two ways: one documented timeline rather than
+   delays scattered across rules, and nothing INSTANTLY SWAPS - every element arrives.
+
+   Everything animated here is transform/opacity only (the UX floor bans animating layout). */
+.h4-root .h4-cer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.h4-root .h4-cer-veil {
+  position: absolute;
+  inset: 0;
+  /* NEARLY SOLID, and that is skeeball's lesson repeated rather than rediscovered: its own
+     ceremony comment says "WITHOUT THIS THE CEREMONY IS ILLEGIBLE ON A LIT MACHINE". Here the
+     screen behind is the HUB-SKINNED setup card, which is WHITE in light mode - at 0.92 the
+     headings read straight through the veil and the card sat in a jumble of its own setup
+     screen. Measured against a screenshot, not guessed. */
+  background: rgba(5, 8, 16, 0.985);
+  box-shadow: inset 0 0 180px 60px rgba(0, 0, 0, 0.9);
+  animation: h4-cer-veil 0.45s ease-out both;
+}
+@keyframes h4-cer-veil { from { opacity: 0; } to { opacity: 1; } }
+
+.h4-root .h4-cer-body {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.h4-root .h4-cer-head {
+  margin: 0;
+  font-size: 13px; font-weight: 900; letter-spacing: 0.22em;
+  color: #ffce3a;
+  animation: h4-cer-rise 0.6s ease-out 1.45s both;
+}
+
+/* THE PAIR. They arrive from opposite sides and stop facing each other, which is the whole point:
+   "clearly show that the challengers emoji and your emoji are opponents." */
+.h4-root .h4-cer-pair {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; width: 100%;
+}
+.h4-root .h4-cer-side {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  flex: 1 1 0; min-width: 0;
+}
+.h4-root .h4-cer-them { animation: h4-cer-inL 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) 0.25s both; }
+.h4-root .h4-cer-me   { animation: h4-cer-inR 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) 0.45s both; }
+@keyframes h4-cer-inL { from { opacity: 0; transform: translateX(-70px); } to { opacity: 1; transform: none; } }
+@keyframes h4-cer-inR { from { opacity: 0; transform: translateX(70px); }  to { opacity: 1; transform: none; } }
+
+/* THE RING IS THE SIDE THEY WILL PLAY - red for the challenger (side 'a', who shoots first),
+   yellow for the person being challenged. Never colour alone: the name carries the same disc /
+   triangle marker the in-game turn pill uses. */
+.h4-root .h4-cer-face {
+  display: flex; align-items: center; justify-content: center;
+  width: 92px; height: 92px; border-radius: 50%;
+  font-size: 46px; line-height: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 4px solid var(--h4-red);
+  box-shadow: 0 0 26px rgba(232, 70, 63, 0.45);
+}
+.h4-root .h4-cer-me .h4-cer-face {
+  border-color: var(--h4-yellow);
+  box-shadow: 0 0 26px rgba(255, 206, 58, 0.45);
+}
+.h4-root .h4-cer-name {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 800; color: #fff;
+}
+.h4-root .h4-cer-mark { font-size: 11px; color: var(--h4-red); }
+.h4-root .h4-cer-me .h4-cer-mark { color: var(--h4-yellow); }
+
+.h4-root .h4-cer-vs {
+  flex: 0 0 auto;
+  font-size: 22px; font-weight: 900; letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.55);
+  animation: h4-cer-vs 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) 1.15s both;
+}
+@keyframes h4-cer-vs {
+  from { opacity: 0; transform: scale(2.4); filter: blur(4px); }
+  to   { opacity: 1; transform: scale(1);  filter: blur(0); }
+}
+
+.h4-root .h4-cer-line {
+  margin: 0;
+  font-size: 19px; font-weight: 800; line-height: 1.25; color: #fff;
+  animation: h4-cer-rise 0.6s ease-out 1.45s both;
+}
+@keyframes h4-cer-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.h4-root .h4-cer-btns {
+  width: 100%; display: flex; flex-direction: column; gap: 8px;
+  animation: h4-cer-rise 0.5s ease-out 1.95s both;
+}
+
+/* REDUCED MOTION: the same DOM, every element settled on its final pose. Nothing is hidden and
+   nothing is display:none - docs/BUILDING-A-GAME.md, Part 0. */
+.h4-root .h4-cer.is-still .h4-cer-veil,
+.h4-root .h4-cer.is-still .h4-cer-head,
+.h4-root .h4-cer.is-still .h4-cer-them,
+.h4-root .h4-cer.is-still .h4-cer-me,
+.h4-root .h4-cer.is-still .h4-cer-vs,
+.h4-root .h4-cer.is-still .h4-cer-line,
+.h4-root .h4-cer.is-still .h4-cer-btns {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .h4-root .h4-cer-veil,
+  .h4-root .h4-cer-head,
+  .h4-root .h4-cer-them,
+  .h4-root .h4-cer-me,
+  .h4-root .h4-cer-vs,
+  .h4-root .h4-cer-line,
+  .h4-root .h4-cer-btns {
+    animation: none; opacity: 1; transform: none; filter: none;
+  }
+}
+
+/* A SHORT PHONE still has to fit it - no game in this hub may scroll. */
+@media (max-height: 700px) {
+  .h4-root .h4-cer-face { width: 74px; height: 74px; font-size: 36px; }
+  .h4-root .h4-cer-line { font-size: 17px; }
+  .h4-root .h4-cer-body { gap: 10px; }
+}

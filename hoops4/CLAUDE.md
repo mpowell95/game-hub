@@ -414,6 +414,60 @@ wants from the bounce work - *"i don't care where balls roll off, front or back.
 balls to bounce around, but ultimately go in a basket"* - so the front-edge question is closed and
 the next lever to measure is making the per-hoop backboards SOLID so a shot can be banked in.
 
+### The challenge has to reach you on the LAUNCHER (2026-09-22)
+
+Matt, having played the shipped multiplayer: *"to see a challenge, you must go into the hoops
+connect 4, click play a friend, then it's displayed below 'Challenge'. There is no other
+notification anywhere. Instead of that, can it be super obvious? at least the first time?"* - with
+mockups: a chunky speech bubble, hard black outline, tail pointing at the tile. Purple for a new
+challenge, blue for your turn.
+
+**Three pieces, and the hub deliberately owns none of the vocabulary.**
+
+**`hoops4/js/alert.js`** decides. `decideAlert(rows, seen)` is pure and tested
+(`test-hoops4-mp.mjs`): a match id this device has never seen is a **challenge**; one it has seen
+whose `updated` has moved past the acknowledged stamp, with the turn back on you, is a **turn**; a
+finished match is neither. A challenge outranks a turn, because it is the bigger event and the one
+with a person's name on it. Matt's rule for when it shows: *"Whenever there's something new... A
+new challenge, or the turn flipping to you, brings it back"* - so the seen map records a STAMP per
+match, not a boolean, and anything newer re-arms it.
+
+**`js/hub.js` knows only that a registry entry may declare an `alerts` module.** The hoops4 entry
+declares one; the hub imports it lazily AFTER the launcher has painted, draws the bubble into that
+game's `.hub-cell`, and scrolls the tile into view once. Everything is guarded - a game tile must
+never be able to break the launcher. Putting it on the critical path would trade a launcher that
+appears in 6 requests for one that waits on a Firebase read.
+
+**WHY alert.js IS IN hoops4/ AND NOT js/.** It writes a `gamehub.*` key, and `test-sw-strategy.mjs`
+has a structural check that no cache-first SHELL module does that. The game's own folder is the
+REST tier, where the rule does not apply.
+
+**The bubble's geometry is measured, not assumed.** It is wider than a tile, so it anchors to
+whichever side of the grid its tile is on (`is-col-left` / `is-col-right`, from the cell's real
+offset) and always grows inward - it can never hang off the edge of a phone. On the top row there
+is nothing above to grow into, so it flips underneath and the tail turns over (`is-below`).
+
+**The two states are told apart by their WORDS, not their colour.** "{who} challenged you!" against
+"Your Turn!". Matt is red/green colourblind and purple-against-blue would be exactly the hue-only
+signal this repo does not ship.
+
+**The ceremony** (`showCeremony` in `ui.js`) is armed by the launcher and taken once on mount -
+skeeball's key-ceremony shape, ARMED and never backfilled, so a device that has never been
+challenged cannot be shown one retroactively. Their emoji flies in from the left, yours from the
+right, VS lands between them: *"The popup needs to clearly show that the challengers emoji and your
+emoji are opponents."* The rings are the sides they will actually play (the challenger is side 'a',
+which is RED and shoots first), each paired with the same disc/triangle marker the in-game turn
+pill uses. The timeline lives in one comment above the DOM it builds, which is skeeball's rule, and
+so is the lesson underneath it - nothing switches state, everything arrives.
+
+**Two things caught by looking rather than by a test.** The veil was `rgba(...,0.92)` and the
+hub-skinned setup card behind it is WHITE in light mode, so its headings read straight through and
+the ceremony sat in a jumble of its own setup screen - skeeball's ceremony comment says exactly
+this about a lit machine, and it had to be rediscovered from a screenshot. And the first version of
+"Let's play" closed the card before reading the match, falling back to `toast()` - which returns
+silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
+gone would have dropped the player back with no explanation at all. The card stays up and says so.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
