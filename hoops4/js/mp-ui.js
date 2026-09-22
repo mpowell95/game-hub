@@ -13,7 +13,8 @@
 //               follows a person to every device they own. You take your turn and hand it over;
 //               they play next time they open the hub. There is no push notification in this repo
 //               (js/CLAUDE.md says so in as many words), so the game waits for them on this list.
-import { makeT } from '../../js/i18n.js';
+import { makeT, getLang } from '../../js/i18n.js';
+import { loadPalette, paletteItems, reactionText } from '../../js/mp-reactions.js';
 import { STRINGS } from './strings.js';
 import { deviceId } from '../../js/game-stats.js';
 import * as MP from './mp.js';
@@ -96,6 +97,7 @@ export function openMultiplayer(ui) {
         ${act('host', t('mpHost'))}
         ${act('join', t('mpJoin'))}
         ${act('pass', t('mpPassPlay'))}
+        ${act('history', t('mpHistory'))}
       </div>
       <section class="h4-mp-sec">
         <h3>${t('mpActive')}</h3>
@@ -111,7 +113,7 @@ export function openMultiplayer(ui) {
     state.games = rows;
     // ACTIVE means active: a finished match is not something you can take a turn in, and Matt
     // asked for this list to say "if it's your turn or their turn". Finished ones belong in the
-    // challenge history, which is the next round's work.
+    // challenge history (`viewHistory`, the "History" row above).
     const live = rows.filter((r) => r && !r.over);
     box.innerHTML = live.length ? live.map(gameRow).join('') : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
     for (const b of box.querySelectorAll('[data-game]')) {
@@ -290,14 +292,78 @@ export function openMultiplayer(ui) {
     });
   }
 
-  async function openGame(id) {
+  async function openGame(id, opts) {
     if (state.busy) return;
     state.busy = true;
     const game = await MP.readGame(id);
     state.busy = false;
     if (!game) { shell(t('mpGames'), note(failure('not-found'), 'warn'), 'home'); return; }
     el.remove();
-    ui.startAsync(game);
+    ui.startAsync(game, opts);
+  }
+
+  // --- challenge history ----------------------------------------------------------------------
+  /**
+   * EVERY FINISHED MATCH, AND THE RECORD AGAINST EACH PERSON. A SCREEN, NOT A SCHEMA CHANGE: the
+   * data was already permanent (nothing in mp.js deletes a match or an index row), and
+   * `readMyGames()` already returned finished rows - the active list just filtered them out.
+   *
+   * The maths is `MP.recordsFrom`, pure and tested. A row written since 2026-09-22 carries its own
+   * `result`; an OLDER finished row does not, so its match is READ here (never written back) and
+   * the result worked out from that. A match that cannot be read is listed as "Finished" and
+   * counted in no column rather than guessed into one.
+   *
+   * Grouped by the other person's PLAYER CODE, labelled by their name. Result words plus a SHAPE
+   * (tick / cross / equals), never a colour alone (Matt is red/green colourblind).
+   */
+  async function viewHistory() {
+    shell(t('mpHistory'), `<p class="h4-mp-sub">${t('mpGames')}...</p>`, 'home');
+    const me = MP.myCode();
+    const rows = state.games && state.games.length ? state.games : await MP.readMyGames();
+    const done = rows.filter((r) => r && r.over).map((r) => ({ ...r }));
+    // Old rows only, newest first, and bounded: one read each.
+    const old = done.filter((r) => !r.result).sort((x, y) => y.updated - x.updated).slice(0, 40);
+    await Promise.all(old.map(async (r) => { try { r.game = await MP.readGame(r.id); } catch { r.game = null; } }));
+    if (closed || state.view !== 'history') return;
+    const { opponents, finished } = MP.recordsFrom(done, me);
+    const lang = getLang();
+    const day = (ms) => {
+      if (!ms) return '';
+      try { return new Date(ms).toLocaleDateString(lang === 'es' ? 'es' : 'en', { month: 'short', day: 'numeric' }); }
+      catch { return ''; }
+    };
+    const recRow = (o) => `
+      <div class="h4-mp-game h4-hist-rec">
+        <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name || o.code)}</span>
+        <span class="h4-mp-state h4-hist-line">${esc(t('histLine', { w: o.won, l: o.lost, d: o.draw }))}</span>
+      </div>`;
+    const word = (r) => (r.resigned === 'me' ? t('histResigned')
+      : r.resigned === 'them' ? t('histTheyResigned')
+        : r.result === 'won' ? t('histWon') : r.result === 'lost' ? t('histLost')
+          : r.result === 'draw' ? t('histDraw') : t('histUnknown'));
+    const mark = (r) => (r.result === 'won' ? '\u2713' : r.result === 'lost' ? '\u2715'
+      : r.result === 'draw' ? '=' : '\u2022');
+    const gameRow2 = (r) => {
+      const leg = r.series > 1 ? `<span class="h4-mp-leg">${esc(t('gameOf', { n: r.seriesNo, m: r.series }))}</span>` : '';
+      return `<button type="button" class="h4-mp-game h4-hist-game is-${esc(r.result || 'unknown')}" data-past="${esc(r.id)}">
+          <span class="h4-mp-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || '?')}${leg}</span>
+          <span class="h4-mp-state h4-hist-res"><span class="h4-hist-mark" aria-hidden="true">${mark(r)}</span>${esc(word(r))}<span class="h4-hist-day">${esc(day(r.updated))}</span></span>
+        </button>`;
+    };
+    shell(t('mpHistory'), finished.length ? `
+      <section class="h4-mp-sec">
+        <h3>${t('histRecords')}</h3>
+        <div class="h4-mp-games">${opponents.map(recRow).join('')}</div>
+      </section>
+      <section class="h4-mp-sec">
+        <h3>${t('histGames')}</h3>
+        <div class="h4-mp-games">${finished.slice(0, 30).map(gameRow2).join('')}</div>
+      </section>` : note(t('histNone')), 'home');
+    // READ ONLY: a finished match opens as a replay with its result card, and nothing is recorded
+    // again (ui.js's `review`).
+    for (const b of el.querySelectorAll('[data-past]')) {
+      ui.on(b, 'click', () => openGame(b.dataset.past, { review: true }));
+    }
   }
 
   /** A denied write means `database.rules.json` has not been published yet. Say what is wrong
@@ -319,6 +385,7 @@ export function openMultiplayer(ui) {
     if (view === 'pick') return viewPick();
     if (view === 'terms') return viewTerms(state.them);
     if (view === 'pass') return startPassPlay();
+    if (view === 'history') return viewHistory();
     return viewHome();
   }
 
@@ -334,8 +401,215 @@ export function openMultiplayer(ui) {
   // `window.__h4Test`. The opponent list comes from Firebase, which a local probe has no access
   // to, so there is no other way to reach the terms screen and LOOK at it. The game never reads
   // this; `reference/hoops/` does.
-  try { window.__h4Mp = { go, state, viewTerms }; } catch { /* no window */ }
+  try { window.__h4Mp = { go, state, viewTerms, viewHistory }; } catch { /* no window */ }
   return { close };
 }
 
-export default { openMultiplayer };
+// --- quick chat INSIDE a match (2026-09-22) ---------------------------------------------------------
+//
+// Matt's playtest list, alongside the series and the caption. A 💬 button on the play HUD opens the
+// player's own quick-chat palette (the hub's shared one, `js/mp-reactions.js` - the same emojis
+// and phrases every other multiplayer game offers, customised on the profile page) plus one short
+// free-text line. What the other person says pops as a bubble NAMED BY THEIR NAME, and the last few
+// lines of this match sit at the top of the panel, each labelled "You:" or "Anita:" in words (and
+// aligned to its own side), never by colour alone.
+//
+// NOT js/mp-reactions-ui.js's floating button, deliberately: that one sits at the BOTTOM RIGHT,
+// which on this game is the middle of the swipe pad. This button sits in the HUD's band, left of
+// the Menu button - the top left belongs to the hub's floating chip (see hoops4.css).
+//
+// This controller is TRANSPORT-BLIND. ui.js hands it `send(payload)` and feeds it what arrives:
+//   LIVE          net.sendReaction / `room.reactions` (one slot per seat, the hub's existing
+//                 facility) through `onReactions()`. The room carries only the latest line per
+//                 seat, so "the last few" is this device's memory of the match.
+//   TURN BY TURN  MP.sendChat / MP.watchChat (`hoops/games/<id>/chat`) through `add()`.
+
+const CHAT_SHOW = 4;      // lines shown at the top of the panel
+const CHAT_KEEP = 30;     // lines this device remembers for the match
+const POP_MS = 4500;
+const MAX_POPS = 3;
+
+/**
+ * `root`  the game's .h4-root element; everything is appended inside it (so a module teardown
+ *         that empties the root takes it all), and destroy() removes it explicitly as well.
+ * `send`  async (payload {t, v}) => { ok, reason? }.
+ * `them`  () => ({ name, emoji }) for the other person.
+ * `failText` (reason) => the sentence to show when a line did not send.
+ */
+export function createMatchChat({ root, send, them, failText }) {
+  const log = [];
+  const known = new Set();
+  const timers = new Set();
+  const offs = [];
+  let unread = 0;
+  let open = false;
+  let busy = false;
+  let err = '';
+  let seeded = false;
+  let destroyed = false;
+  const lastAt = Object.create(null);
+  const listen = (tg, ty, fn, o) => { tg.addEventListener(ty, fn, o); offs.push(() => tg.removeEventListener(ty, fn, o)); };
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'h4-chat-btn';
+  const panel = document.createElement('div');
+  panel.className = 'h4-chat';
+  panel.hidden = true;
+  panel.setAttribute('role', 'dialog');
+  const pops = document.createElement('div');
+  pops.className = 'h4-chat-pops';
+  pops.setAttribute('aria-live', 'polite');
+  root.appendChild(pops);
+  root.appendChild(panel);
+  root.appendChild(btn);
+
+  const textOf = (e) => reactionText({ t: e.t, v: e.v }, getLang());
+  const whoOf = (e) => (e.mine ? t('chatYou') : ((them() || {}).name || '?'));
+
+  function paintBtn() {
+    btn.setAttribute('aria-label', t('chat') + (unread ? ` (${unread})` : ''));
+    btn.setAttribute('aria-expanded', String(open));
+    // THE BADGE IS A NUMBER, not a dot: a count says something a colour cannot.
+    btn.innerHTML = `<span aria-hidden="true">💬</span>${unread
+      ? `<span class="h4-chat-badge" aria-hidden="true">${unread > 9 ? '9+' : unread}</span>` : ''}`;
+    btn.classList.toggle('is-open', open);
+  }
+
+  function paintPanel() {
+    if (!open) return;
+    const items = paletteItems(loadPalette(), getLang());
+    const emojis = items.filter((i) => i.payload.t === 'e');
+    const words = items.filter((i) => i.payload.t !== 'e');
+    const lines = log.slice(-CHAT_SHOW);
+    panel.setAttribute('aria-label', t('chat'));
+    panel.innerHTML = `
+      <div class="h4-chat-log">${lines.length ? lines.map((e) => `
+        <p class="h4-chat-line ${e.mine ? 'is-mine' : 'is-them'}"><b class="h4-chat-who">${esc(whoOf(e))}:</b> <span>${esc(textOf(e))}</span></p>`).join('')
+        : `<p class="h4-chat-none">${t('chatNone')}</p>`}</div>
+      <div class="h4-chat-emojis">${emojis.map((i) => `
+        <button type="button" class="h4-chat-emoji" data-k="${esc(i.key)}" aria-label="${esc(i.text)}">${esc(i.text)}</button>`).join('')}</div>
+      <div class="h4-chat-phrases">${words.map((i) => `
+        <button type="button" class="h4-chat-phrase" data-k="${esc(i.key)}">${esc(i.text)}</button>`).join('')}</div>
+      <form class="h4-chat-form" data-role="form">
+        <input class="gh-input h4-chat-input" type="text" maxlength="${MP.CHAT_MAXLEN}" autocomplete="off"
+               enterkeyhint="send" placeholder="${esc(t('chatPh'))}" aria-label="${esc(t('chatPh'))}">
+        <button type="submit" class="gh-btn gh-btn--primary h4-chat-send">${t('chatSend')}</button>
+      </form>
+      ${err ? `<p class="h4-chat-err" role="alert">${esc(err)}</p>` : ''}`;
+    panel._items = Object.create(null);
+    for (const i of items) panel._items[i.key] = i.payload;
+  }
+
+  function setOpen(on) {
+    open = !!on;
+    panel.hidden = !open;
+    if (open) { unread = 0; err = ''; paintPanel(); }
+    paintBtn();
+  }
+
+  async function doSend(payload) {
+    if (busy || !payload) return;
+    busy = true;
+    let res;
+    try { res = await send(payload); } catch (e) { res = { ok: false, reason: String(e) }; }
+    busy = false;
+    if (destroyed) return;
+    if (!res || !res.ok) {
+      // NO SILENT FAILURE (THE LAW rule 6): the panel stays open and says so.
+      err = failText ? failText(res && res.reason) : t('chatNotSent');
+      if (!open) setOpen(true); else paintPanel();
+      return;
+    }
+    const e = res.entry || {};
+    add({ key: e.key || `me${Date.now()}`, mine: true, t: payload.t, v: payload.v, at: e.at || Date.now() }, { pop: true });
+    setOpen(false);
+  }
+
+  function onPanelClick(e) {
+    const b = e.target.closest('button[data-k]');
+    if (!b || !panel._items) return;
+    doSend(panel._items[b.getAttribute('data-k')]);
+  }
+  function onSubmit(e) {
+    e.preventDefault();
+    const input = panel.querySelector('.h4-chat-input');
+    const v = MP.cleanChat(input ? input.value : '');
+    if (!v) return;
+    doSend({ t: 'c', v });
+  }
+  // Closing on a tap anywhere else - bound to the game's own root, never document.
+  function onOutside(e) {
+    if (!open) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    setOpen(false);
+  }
+  listen(btn, 'click', () => setOpen(!open));
+  listen(panel, 'click', onPanelClick);
+  listen(panel, 'submit', onSubmit);
+  listen(root, 'pointerdown', onOutside, true);
+
+  function popBubble(e) {
+    const text = textOf(e);
+    if (!text) return;
+    const who = e.mine ? { name: t('chatYou'), emoji: '' } : (them() || {});
+    const el = document.createElement('div');
+    el.className = 'h4-chat-pop' + (e.mine ? ' is-mine' : '') + (e.t === 'e' ? ' is-emoji' : '');
+    el.innerHTML = `<span class="h4-chat-pop-who">${who.emoji ? `<span aria-hidden="true">${esc(who.emoji)}</span> ` : ''}${esc(who.name || '?')}</span>`
+      + `<span class="h4-chat-pop-text">${esc(text)}</span>`;
+    pops.appendChild(el);
+    while (pops.children.length > MAX_POPS) pops.removeChild(pops.firstChild);
+    const t1 = setTimeout(() => { timers.delete(t1); el.classList.add('is-off');
+      const t2 = setTimeout(() => { timers.delete(t2); el.remove(); }, 260); timers.add(t2); }, POP_MS);
+    timers.add(t1);
+  }
+
+  /** One line of this match. `pop` shows it as a bubble; a line from them also badges the
+   *  button while the panel is shut. Duplicates (by key) are ignored, so a watch that delivers a
+   *  line this device already added cannot show it twice. */
+  function add(e, { pop = false } = {}) {
+    if (!e || known.has(e.key)) return;
+    known.add(e.key);
+    log.push(e);
+    log.sort((x, y) => x.at - y.at);
+    while (log.length > CHAT_KEEP) log.shift();
+    if (pop) popBubble(e);
+    if (!e.mine && pop && !open) { unread += 1; paintBtn(); }
+    if (open) paintPanel();
+  }
+
+  /** LIVE: `room.reactions` is one slot per seat, overwritten by that seat's newest line. The first
+   *  snapshot only ADOPTS the stamps already there, so joining a room never replays a line that
+   *  was said before this device was looking - js/mp-reactions-ui.js's own seeding rule. */
+  function onReactions(rx, mySeat) {
+    if (!rx || typeof rx !== 'object') { seeded = true; return; }
+    if (!seeded) {
+      for (const k of Object.keys(rx)) lastAt[k] = (rx[k] && rx[k].at) || 0;
+      seeded = true;
+      return;
+    }
+    for (const k of Object.keys(rx)) {
+      if (k === String(mySeat)) continue;
+      const r = rx[k];
+      const at = (r && r.at) || 0;
+      if (!(at > (lastAt[k] || 0))) continue;
+      lastAt[k] = at;
+      if (r.t !== 'e' && r.t !== 'p' && r.t !== 'c') continue;
+      add({ key: `${k}:${at}`, mine: false, t: r.t, v: String(r.v || ''), at }, { pop: true });
+    }
+  }
+
+  function destroy() {
+    destroyed = true;
+    for (const off of offs) { try { off(); } catch { /* gone */ } }
+    offs.length = 0;
+    for (const x of timers) clearTimeout(x);
+    timers.clear();
+    for (const n of [btn, panel, pops]) if (n.parentNode) n.parentNode.removeChild(n);
+  }
+
+  paintBtn();
+  return { add, onReactions, setOpen, destroy, get log() { return log.slice(); } };
+}
+
+export default { openMultiplayer, createMatchChat };

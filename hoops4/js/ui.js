@@ -34,6 +34,23 @@ const readSettings = () => {
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
+// WHAT THIS DEVICE HAS ALREADY SEEN of each turn-by-turn match's chat: `{ <gameId>: <newest at> }`,
+// so opening a match pops only what the other person said since. A convenience (THE LAW rule 2's
+// carve-out, like the alert's seen-list), never history: losing it re-shows a few lines, nothing
+// more. Bounded to the newest 60 matches.
+const CHAT_SEEN_KEY = 'gamehub.hoops4.chatSeen.v1';
+const readChatSeen = () => {
+  try { const v = JSON.parse(localStorage.getItem(CHAT_SEEN_KEY) || 'null'); return v && typeof v === 'object' ? v : {}; }
+  catch { return {}; }
+};
+const writeChatSeen = (id, at) => {
+  try {
+    const all = { ...readChatSeen(), [id]: at };
+    const keep = Object.entries(all).sort((x, y) => (+y[1] || 0) - (+x[1] || 0)).slice(0, 60);
+    localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch { /* a convenience: at worst a line pops twice */ }
+};
+
 /** Inject the shared primitives (css/ui.css) idempotently, THEN this game's own sheet. Module
  *  stylesheets are never removed on destroy() - they live in the shared document.head for the
  *  life of the page (a hub-wide fact), which is why every rule is scoped under .h4-root. Same
@@ -81,6 +98,8 @@ class Hoops4 {
     this.myPlayer = RED;     // which side THIS device plays in a multiplayer match
     this.net = null;
     this._roomStop = null;
+    this._chat = null;       // the in-match quick chat (mp-ui.js createMatchChat), multiplayer only
+    this._chatStop = null;
     this.busy = false;
     this._bound = [];
   }
@@ -361,16 +380,21 @@ class Hoops4 {
 
   /** A TURN-BY-TURN match (hoops4/js/mp.js). The board is REPLAYED from the move log - there is
    *  no stored position, because a log is the thing that cannot silently be subtly wrong. */
-  async startAsync(game) {
+  async startAsync(game, opts = {}) {
     const MP = await import('./mp.js');
     if (this.disposed) return;
     const side = MP.sideOf(game, MP.myCode());
     if (!side) { this.renderSetup(); return; }
-    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false };
+    // `review` is a FINISHED match opened from the challenge history: a replay with its result
+    // card, READ ONLY. Nobody may shoot in it (isMyShot) and nothing is recorded again - every
+    // write in js/game-stats.js is additive, so re-recording on each look would inflate the
+    // play count by one per visit.
+    const review = !!(opts && opts.review && game.over);
+    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false, review };
     this.myPlayer = side === 'a' ? RED : YELLOW;
     await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
     if (this.disposed || !this.match) return;
-    if (game.over) { this.finish(); return; }
+    if (game.over) { if (review) this.recorded = true; this.finish(); return; }
     // The match is on the server, so leaving really is free - say so rather than leaving the
     // player to discover it. This is the reassurance half of the isInProgress() fix below.
     this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
@@ -382,12 +406,17 @@ class Hoops4 {
   isMyShot() {
     if (!this.match || this.match.over) return false;
     if (!this.mp) return true;
+    if (this.mp.review) return false;              // a finished match from the history is read only
     return this.match.turn === this.myPlayer;
   }
 
   /** One entry of the shared move log arrived from the other device. */
   _onRoom(room) {
     if (!room || !this.mp || this.mp.kind !== 'live' || !this.match) return;
+    // QUICK CHAT rides the room's own `reactions` child (net.sendReaction, one slot per seat) -
+    // NEVER the move log, whose entries this loop walks strictly by `seq`. A chat line in `moves`
+    // would stall the lockstep at the first gap it made.
+    if (this._chat) this._chat.onReactions(room.reactions, this.mp.role);
     const log = room.moves || {};
     // STRICTLY IN ORDER, and only once. Out-of-order or duplicated application is how two boards
     // stop being the same board, which is the failure every lockstep invariant in js/CLAUDE.md
@@ -451,6 +480,70 @@ class Hoops4 {
     }
     mp.game = r.game;
     if (!m.over) { mp.sent = true; this.toast(t('mpSent')); }
+  }
+
+  // --- quick chat inside a match (2026-09-22) ------------------------------------------------
+  //
+  // The DOM is `mp-ui.js`'s `createMatchChat`; this is only the wiring to the two transports.
+  //   LIVE          net.sendReaction into `rooms/<CODE>/reactions/<role>` (the hub's existing
+  //                 facility), read back in `_onRoom`. Never the move log.
+  //   TURN BY TURN  MP.sendChat into `hoops/games/<id>/chat`, and MP.watchChat while the match is
+  //                 on screen. What the other person said since this device last looked pops on
+  //                 open, remembered per match in CHAT_SEEN_KEY (a convenience, not history).
+  async _mountChat() {
+    this._unmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    let mod;
+    try { mod = await import('./mp-ui.js'); } catch { return; }
+    if (this.disposed || this.mp !== mp || this._chat) return;
+    const themLabel = () => {
+      if (mp.kind === 'live') return { name: (mp.them && mp.them.name) || this.themName(), emoji: (mp.them && mp.them.emoji) || '' };
+      const g = mp.game || {};
+      const o = mp.side === 'a' ? g.b : g.a;
+      return { name: (o && (o.name || o.code)) || this.themName(), emoji: (o && o.emoji) || '' };
+    };
+    const failText = (reason) => (reason === 'denied' || reason === 'dev-origin-blocked'
+      ? t('mpUnavailable') : t('chatNotSent'));
+    const chat = mod.createMatchChat({ root: this.root, send: (p) => this._sendChat(p), them: themLabel, failText });
+    this._chat = chat;
+    if (mp.kind !== 'async') return;
+
+    const seen = readChatSeen();
+    const seenAt = seen[mp.id] || 0;
+    const mine = (c) => c.by === mp.side;
+    const feed = (list) => {
+      let newest = 0;
+      for (const c of list || []) {
+        const fresh = !mine(c) && c.at > seenAt;
+        chat.add({ key: c.key, mine: mine(c), t: c.t, v: c.v, at: c.at }, { pop: fresh });
+        if (!mine(c)) newest = Math.max(newest, c.at);
+      }
+      if (newest > (readChatSeen()[mp.id] || 0)) writeChatSeen(mp.id, newest);
+    };
+    feed(mp.game && mp.game.chat);
+    const stop = await mp.MP.watchChat(mp.id, feed);
+    if (this.disposed || this._chat !== chat) { try { stop(); } catch {} return; }
+    this._chatStop = stop;
+  }
+
+  _unmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch {} this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch {} this._chat = null; }
+  }
+
+  /** Send one chat line over whichever transport this match uses. Resolves `{ ok, reason, entry }`. */
+  async _sendChat(payload) {
+    const mp = this.mp;
+    if (!mp) return { ok: false, reason: 'no-match' };
+    if (mp.kind === 'live') {
+      if (!this.net) return { ok: false, reason: 'offline' };
+      // net.sendReaction is BEST-EFFORT BY DESIGN (it swallows its own failure, so a dropped
+      // reaction never costs an error in any game). The line shows as sent on this device.
+      await this.net.sendReaction(mp.code, mp.role, payload);
+      return { ok: true };
+    }
+    return mp.MP.sendChat(mp.id, payload);
   }
 
   showHowto() {
@@ -579,6 +672,7 @@ class Hoops4 {
     const mp = this.mp;
     if (!mp || mp.kind !== 'async' || !mp.game || !(mp.game.series > 1)) return;
     let MP;
+    const review = !!mp.review;
     try { MP = await import('./mp.js'); } catch { return; }
     if (this.disposed || !card.isConnected) return;
     // The local match knows the result; the stored document may not have caught up yet, so the
@@ -598,7 +692,9 @@ class Hoops4 {
           : st.winner === side ? t('youTakeIt') : t('seriesWon', { who: this.themName() })}`
         : `${t('gameOf', { n: st.no, m: st.len })} \u00B7 ${score}`;
     }
-    if (st.done) return;
+    // A REVIEW never offers the next game: that game may already exist, and a second one would
+    // fork the series. The score line above is still shown.
+    if (st.done || review) return;
     // A LIVE SERIES REPLACES "Play again", which in multiplayer only quits to the setup screen.
     const again = card.querySelector('.h4-again');
     if (!again) return;
@@ -630,7 +726,7 @@ class Hoops4 {
   renderPlay() {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
-        <div class="h4-hud">
+        <div class="h4-hud${this.mp ? ' has-chat' : ''}">
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
           <span class="h4-leg" hidden></span>
@@ -645,6 +741,7 @@ class Hoops4 {
     this.paintHud();
     this.bindSwipe();
     this.on(this.root.querySelector('.h4-menu'), 'click', () => this._showPause());
+    if (this.mp) this._mountChat();
   }
 
   /**
@@ -1041,7 +1138,13 @@ class Hoops4 {
     const r = m.result();
     const acc = r.myShots ? Math.round((100 * r.myDiscs) / r.myShots) : 0;
     let head;
-    if (m.winner === null) head = t('draw');
+    const rv = this.mp && this.mp.review && this.mp.game && this.mp.game.over;
+    if (rv && !m.over) {
+      // A REVIEWED match whose board never ended it - a resignation. The stored result is the
+      // truth; the board alone would read as a draw.
+      const w = rv.winner;
+      head = (w !== 'a' && w !== 'b') ? t('draw') : (w === this.mp.side ? t('youWin') : t('youLose'));
+    } else if (m.winner === null) head = t('draw');
     else if (this.mp) head = m.winner === this.myPlayer ? t('youWin') : t('youLose');
     else if (m.vsCpu) head = m.winner === RED ? t('youWin') : t('youLose');
     else head = m.winner === RED ? t('redWins') : t('yellowWins');
@@ -1087,6 +1190,7 @@ class Hoops4 {
   }
 
   teardownEngine() {
+    this._unmountChat();
     this._stopRoom();
     this.mp = null;
     this.myPlayer = RED;
