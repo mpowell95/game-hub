@@ -28,7 +28,7 @@ export const STRINGS = {
     // The launcher's challenge bubble (js/hub.js, _paintGameAlert). The two states are told
     // apart by their WORDS as well as their colour - Matt is red/green colourblind, and a purple
     // bubble against a blue one is exactly the kind of hue-only signal the repo does not ship.
-    hub_alert_head: '\u2694\uFE0F CHALLENGE ALERT! \u2694\uFE0F',
+    hub_alert_head: 'CHALLENGE ALERT!',
     hub_alert_challenged: "{who} challenged you!",
     hub_alert_your_turn: 'Your Turn!',
     hub_alert_someone: 'Someone',
@@ -668,7 +668,7 @@ export const STRINGS = {
     hub_soon_tag: 'Pronto',
     hub_test_tag: 'Prueba',
     hub_new_tag: 'Nuevo',
-    hub_alert_head: '\u2694\uFE0F \u00A1RETO! \u2694\uFE0F',
+    hub_alert_head: '\u00A1RETO!',
     hub_alert_challenged: '\u00A1{who} te ha retado!',
     hub_alert_your_turn: '\u00A1Te toca!',
     hub_alert_someone: 'Alguien',

@@ -468,6 +468,30 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+#### The bubble that would not go away
+
+Matt, on the first build of it: *"the popup looks great as is! and the versus / matchup page and
+everything. The only thing is that once I've clicked on the new challenge popup and gone into the
+matchup and played and stuff, it should go away. I just did that and it stayed there even though
+it's not my turn."*
+
+**Two faults, and either one alone brings it back.**
+
+`_dismissGameAlert` took a `paint = false` on the open-the-game path, reasoning that mounting a
+game was about to replace the view anyway. **It is not: `launch()` only HIDES the grid and
+`showLauncher()` only un-hides it.** Neither re-renders, so the bubble element was still sitting in
+its cell the whole time and simply came back into view on return. And `_checkGameAlerts` assigned
+`this._gameAlert` only when it FOUND something, so an alert that had stopped being true was never
+cleared either.
+
+The decision logic was right all along - `decideAlert` returns null for a match whose stamp you
+have acknowledged and whose turn is not yours. Nothing was wrong with WHAT it decided; the DOM just
+never heard about it. `showLauncher()` now re-asks as well, which also catches the other direction:
+a different match coming back round to you while you were playing something else.
+
+Three `[KNOWN-BUG PROBE]` assertions in `test-hoops4-mp.mjs`, verified born red by reintroducing
+the faults.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*

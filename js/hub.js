@@ -1025,26 +1025,29 @@ class Hub {
    * Everything is guarded: a game tile must never be able to break the launcher.
    */
   async _checkGameAlerts() {
+    let found = null;
     for (const g of GAMES) {
       if (typeof g.alerts !== 'function') continue;
       try {
         const mod = await g.alerts();
         const alert = await mod.check();
-        if (!alert) continue;
-        this._gameAlert = { game: g.id, alert, mod };
-        this._paintGameAlert();
-        // A tile the player cannot see is not "super obvious". Bring it into view ONCE per
-        // alert, gently, and never fight a scroll they have already started.
-        if (this._alertScrolledFor !== alert.id) {
-          this._alertScrolledFor = alert.id;
-          const cell = this._cellFor(g.id);
-          if (cell && cell.scrollIntoView) {
-            try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
-          }
-        }
-        return;                                  // one bubble at a time
+        if (alert) { found = { game: g.id, alert, mod }; break; }   // one bubble at a time
       } catch (err) {
         console.warn('[hub] alert check failed for', g.id, err);
+      }
+    }
+    // ASSIGNED EVERY TIME, INCLUDING TO NULL. The first version only assigned when it FOUND
+    // something and returned early, so an alert that had stopped being true was never cleared -
+    // half of why Matt's bubble survived him playing the turn.
+    this._gameAlert = found;
+    this._paintGameAlert();
+    // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
+    // gently, and never fight a scroll they have already started.
+    if (found && this._alertScrolledFor !== found.alert.id) {
+      this._alertScrolledFor = found.alert.id;
+      const cell = this._cellFor(found.game);
+      if (cell && cell.scrollIntoView) {
+        try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
       }
     }
   }
@@ -1066,7 +1069,17 @@ class Hub {
     const cell = this._cellFor(state.game);
     if (!cell) return;
     const a = state.alert;
-    const head = t('hub_alert_head');
+    // CROSSED SWORDS, DRAWN RATHER THAN TYPED. Matt's mockup used the ⚔️ emoji and he was clear
+    // it is the idea, not the asset: "it doesn't have to be that specific swords image. You can
+    // recreate something." Drawing it removes the one real risk an emoji carried - it is a font
+    // glyph, so a device without a colour emoji font renders a tofu box in the middle of the
+    // headline (which is exactly what happened in the headless browser this was checked in).
+    // currentColor, so it takes the bubble's own ink on either variant.
+    const swords = `<svg class="hub-alert-swords" viewBox="0 0 24 24" aria-hidden="true"
+        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
+        <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
+    const head = `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
     const line = a.kind === 'challenge'
       ? t('hub_alert_challenged', { who: a.name || t('hub_alert_someone') })
       : t('hub_alert_your_turn');
@@ -1098,12 +1111,21 @@ class Hub {
     const state = this._gameAlert;
     if (!state) return;
     try { state.mod.armCeremony(state.alert); } catch {}
-    this._dismissGameAlert(false);
+    this._dismissGameAlert();
     this.launch(state.game);
   }
 
-  /** Put the bubble away. `paint` is false when something else is about to repaint anyway. */
-  _dismissGameAlert(paint = true) {
+  /**
+   * Put the bubble away: acknowledge the match AND take the element out of the DOM.
+   *
+   * IT ALWAYS REPAINTS. It used to take a `paint = false` on the open-the-game path, on the
+   * reasoning that mounting a game was about to replace the view anyway. It does not:
+   * `launch()` only HIDES the grid, and `showLauncher()` only un-hides it - neither re-renders,
+   * so the bubble element was still sitting in its cell and came back into view on return. Matt:
+   * "once I've clicked on the new challenge popup and gone into the matchup and played and stuff,
+   * it should go away. I just did that and it stayed there even though it's not my turn."
+   */
+  _dismissGameAlert() {
     const state = this._gameAlert;
     if (!state) return;
     try {
@@ -1111,7 +1133,7 @@ class Hub {
       state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
     } catch {}
     this._gameAlert = null;
-    if (paint) this._paintGameAlert();
+    this._paintGameAlert();
   }
 
   /** The theme toggle's face: sun/moon for the RESOLVED theme, plus an "A" badge when the
@@ -1639,6 +1661,10 @@ class Hub {
     // config landed, and went straight into the game - see the note on `onAdminConfig` in _boot.
     this._maybeAnnounce();
     this._drainBugReports();   // and the connection may have come back while they played
+    // AND ASK AGAIN WHETHER ANYBODY IS WAITING. Two directions, both real: the turn they just
+    // took means their own bubble should be gone, and a match they are NOT looking at may have
+    // come back round while they played. Same afterPaint-class work as the announcement above.
+    this._checkGameAlerts();
     // A new build that landed WHILE they were playing was deliberately held (never interrupt a
     // game). They are on the launcher now, so it is safe to take it.
     if (this._updateWaiting) { this._updateWaiting = false; this._applyUpdate(); }

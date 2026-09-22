@@ -247,6 +247,22 @@ check('a player code is normalised and validated',
     /_afterPaint\(\(\) => this\._checkGameAlerts\(\)\)/.test(hub));
   check('a game tile cannot break the launcher', /console\.warn\('\[hub\] alert check failed for'/.test(hub));
 
+  // [KNOWN-BUG PROBE] THE BUBBLE THAT WOULD NOT GO AWAY (2026-09-22). Matt, having played the
+  // turn it was pointing at: "it should go away. I just did that and it stayed there even though
+  // it's not my turn." Two faults, and each one alone is enough to bring it back:
+  //   1. _dismissGameAlert took a `paint = false` on the open-the-game path, so the element was
+  //      never removed - and neither launch() nor showLauncher() re-renders the grid, they only
+  //      hide and un-hide it, so the same node came back into view on return.
+  //   2. _checkGameAlerts only assigned this._gameAlert when it FOUND something, so an alert
+  //      that had stopped being true was never cleared.
+  check('[KNOWN-BUG PROBE] dismissing an alert always removes it from the DOM',
+    !/_dismissGameAlert\(false\)/.test(hub)
+    && /_dismissGameAlert\(\) \{[\s\S]{0,600}this\._gameAlert = null;\n    this\._paintGameAlert\(\);/.test(hub));
+  check('[KNOWN-BUG PROBE] the alert check clears a stale alert, not just sets a new one',
+    /this\._gameAlert = found;\n    this\._paintGameAlert\(\);/.test(hub));
+  check('[KNOWN-BUG PROBE] returning to the launcher re-asks who is waiting',
+    /showLauncher\(\)[\s\S]{0,1400}this\._checkGameAlerts\(\);/.test(hub));
+
   // The two states differ by their WORDS, not only their colour (Matt is red/green colourblind).
   const strings = readFileSync(new URL('./js/strings.js', import.meta.url), 'utf8');
   check('the bubble says which state it is in, in words',
