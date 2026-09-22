@@ -56,6 +56,7 @@ const CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circ
 const X_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const TICK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12.6 9.6 18 20 6.4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const SHOVEL_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.5 3.2 20.8 10.5M17.2 6.9 8.4 15.7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M8.4 15.7 5.6 12.9 2.6 19.2c-.3.7.4 1.4 1.1 1.1Z" fill="currentColor"/></svg>`;
+const BACK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ARROW_SVG = `<svg viewBox="0 0 40 24" width="40" height="24" fill="none" aria-hidden="true"><path d="M4 12h30M27 5l7 7-7 7" stroke="#1769d4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const FACE_SVG = (kind) => {
   const eyes = kind === 'dead'
@@ -371,6 +372,7 @@ class MinesweeperUI {
         <div class="ms-loupe" hidden><div class="ms-zc"></div></div>
       </div>
       <div class="ms-bar">
+        <button type="button" class="gh-btn gh-btn--icon ms-backbtn" data-act="tomenu" aria-label="${esc(t('back'))}">${BACK_SVG}</button>
         <div class="gh-seg" role="group">
           <button type="button" class="gh-seg__item" data-mode="dig" aria-pressed="${this.mode === 'dig'}">${SHOVEL_SVG}<span>${esc(t('dig'))}</span></button>
           <button type="button" class="gh-seg__item" data-mode="flag" aria-pressed="${this.mode === 'flag'}">${FLAG_SVG('currentColor')}<span>${esc(t('flag'))}</span></button>
@@ -413,7 +415,8 @@ class MinesweeperUI {
       if (md) { this.mode = md.dataset.mode; this._syncMode(); this._persist(); return; }
       const act = ev.target.closest('[data-act]');
       if (!act) return;
-      if (act.dataset.act === 'new') this.newGame();
+      if (act.dataset.act === 'tomenu') this._backToMenu();
+      else if (act.dataset.act === 'new') this.newGame();
       else if (act.dataset.act === 'howto') this.renderHowTo();
       else if (act.dataset.act === 'close') this._dismissResult();
       else if (act.dataset.act === 'again') this.newGame();
@@ -423,6 +426,17 @@ class MinesweeperUI {
 
     if (g.dead || g.won) this._showResult(false);
     else if (g.generated) this._startTimer();
+  }
+
+  /** Back to the setup screen, keeping the board.
+   *
+   *  No confirm, deliberately: the save is written on the way out and the clock is banked with it,
+   *  so the setup screen comes up offering Resume and the board is exactly where it was. That is
+   *  the same property `isInProgress()` returns false for - leaving this game costs nothing. */
+  _backToMenu() {
+    this._stopTimer();
+    this._persist();
+    this.renderMenu();
   }
 
   _buildBoard() {

@@ -181,11 +181,14 @@ export const GAMES = [
     art: GAME_ART['pipes'],
   },
   {
-    // ADMIN ONLY while it is tested (Matt, 2026-09-21). `devOnly` is only a DEFAULT since the
-    // admin control page shipped - it can be released to everyone from inside the app with no
-    // commit and no deploy, which is exactly why it still has a GAME_META row in
-    // js/leaderboard-ui.js: a game released that way gets no release commit to add one, and a
-    // missing row counts every play on it as zero (THE LAW rule 1, and how Yahtzee shipped).
+    // RELEASED 2026-09-22 (Matt: "I made it live in the admin settings but it didn't work. Please
+    // make live."). `devOnly` is gone rather than left with a live override on top of it: an
+    // override and a code default that disagree is one decision stored in two places, and only the
+    // registry is visible to somebody reading this file.
+    //
+    // NOTE FOR A FUTURE RELEASE: an override BEATS this default in BOTH directions, so a stale
+    // `games.minesweeper.live = false` in adminConfig/v1 would still hide it even now. Setting it
+    // back to Live on the admin page writes `true` and they agree again.
     //
     // NOT immersive: this is a grid puzzle like Sudoku, and the vertical budget its cell sizes
     // are derived from assumes the hub's ordinary header is there (reference/minesweeper/SPEC.md).
@@ -196,7 +199,7 @@ export const GAMES = [
     module: '../minesweeper/js/ui.js',
     accent: '#1f5fa8',
     art: GAME_ART['minesweeper'],
-    devOnly: true,
+    released: '2026-09-22',
   },
   {
     id: 'sudoku',
