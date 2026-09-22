@@ -1628,3 +1628,180 @@ so the bands are pad 4 ft, brick 4 ft, crowd from 8 ft. The `Set` clip's legs we
 Pickoff and Run floated up to 1.1 ft; a measured -1.594 ft per unit `hipsOffset.y` coefficient
 fixes each clip, with Run restated on five keys because no single shift fits it. New actors-suite
 check `foot-on-ground` (seven clips, five samples, 0.1 ft). Draw calls per league 26 to 31.
+
+### R14: your player and the skill points, in Quick Play (2026-09-22)
+
+Matt, on v885: *"Also I don't see anything about the skill points we discussed."* Then: *"Go, build
+the skill points and career."* Two stages: this one puts the player and the points on the screen
+and into Quick Play so the points can be felt; R15 builds the career that earns them. Design doc
+sections 6 and 7 are the contract; `settings.js` already holds `PRESETS`, `CAPS`,
+`START_POINTS_PER_SIDE`, `START_CAP`, `SKILL_IDS`, `SKILL_EFFECT`.
+
+1. **A player screen.** The Quick Play setup screen gets one row under the league list, the
+   player chip: hand, preset name, and the six values as six small digits under their two-letter
+   labels. Tapping it opens the player screen (`.bb-player`, full screen, fits one phone screen at
+   both heights in both hosts, nothing scrolls). Contents, top to bottom: title; hand as two
+   toggle buttons L and R (the chosen one filled with a check mark, never colour alone); a 4x2
+   grid of chips for the seven presets and Custom (chosen chip filled with a check mark); two
+   columns, Hitting and Pitching, each with three skill rows: label, a minus button, a segmented
+   bar of `cap` cells with `value` filled and the number beside it, a plus button; a points-left
+   pill above each column; Randomize and Done. Every tap target 44 px. All strings through `t()`
+   in EN and ES. No helper text anywhere.
+2. **The budget in Quick Play is derived from `CAPS`, not invented.** A pure module,
+   `baseball/js/build.js`: `budgetFor(league)` is `START_POINTS_PER_SIDE` (15) per side at Little
+   League, and `3 * CAPS[previous league]` per side above it (the build of a player who maxed the
+   league below: 30, 42, 54, 66); `capFor(league)` is `START_CAP` at Little League and
+   `CAPS[league]` above it. `scalePreset(preset, budget, cap)` scales a preset row to the budget
+   proportionally, rounds, clamps to the cap and repairs the rounding one point at a time by the
+   largest remainder so each side sums to the budget exactly (Slugger at Majors: Power at the cap,
+   the rest carried over). `randomBuild(budget, cap, rand)` is a true random split within caps.
+   `adjust(build, id, delta, budget, cap)` is what the plus and minus buttons call; a tap that
+   would break the budget or the cap is a no-op and the button reads disabled. Changing the league
+   rescales the current preset, or re-rolls a random build, or clamps a Custom build to the new
+   cap and budget. All of it unit-tested in `baseball/js/test.js` (a new section: every preset at
+   every league sums to the budget and never exceeds the cap; Randomize never exceeds either;
+   `adjust` refuses at both edges).
+3. **What the choice is stored in.** `gamehub.baseball.v1` gains a `quickPlay` field:
+   `{ presetId, hand, skills, league, updatedAt }`. It is a preference (one tap recreates it, THE
+   LAW rule 2's exemption); it never touches `career` on the same key. Nothing is written to
+   `gamehub.stats`. **The hand rule**: while `bb.hand` in the stats store is null, L and R are a
+   free choice in Quick Play; once a career has recorded it (R15 writes it through
+   `setBaseballHand` at career start, the design doc's "once per player"), the player screen
+   shows that hand only and the toggle is gone. Quick Play never calls `setBaseballHand`.
+4. **The player plays with the build.** `_startGame` builds `makePlayerTeam({skills, hand})` from
+   the stored build instead of a random preset and a coin-flip hand. Every one of the nine roster
+   slots carries the same six skills, as today.
+5. **Spin is felt.** `SKILL_EFFECT.pitchSpin.breakPerPt` is declared and unused. Wire it:
+   `breakOffsetFor` (or its caller in `flyPitch`) multiplies the handed break by
+   `1 + pitchSpin * breakPerPt` for the curveball, slider, screwball and cutter (never the
+   knuckleball's random break, never the fastball). The changeup gap already reads
+   `changeupGapPerPt`. A `test.js` assertion pins that Spin 10 breaks more than Spin 0 and Spin 0
+   equals today's table. `sim-baseball.mjs --quick --assert` is re-run and its scoreboard pasted
+   into the record; a change in the season bands is reported, not tuned here.
+6. **A dev seam for the probes.** `window.__bbTest.setBuild({presetId, hand, skills})` under the
+   existing dev gate, so `test-baseball-device.mjs` can start a game with a known build. New
+   device probes: `player-screen` (opens from the chip, all six rows and both pills present, every
+   control at least 44 px, no scroll), `player-budget` (tapping plus until the pill reads 0 leaves
+   the sum at the budget; a plus at the cap is a no-op), `player-persists` (the choice survives a
+   remount).
+
+Deliverables: stills of the setup screen and the player screen at 393x852 and at the short phone
+height in both hosts, light and dark; the budget table as measured by the test; the sim
+scoreboard. `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
+`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
+`node test-game-conventions.mjs` green.
+
+### R15: the career (2026-09-22)
+
+Design doc sections 4, 5, 7, 15 and 16 are the contract, all [Locked] except the numbers marked
+[Draft]. `baseball/js/engine/season.js` (schedule, scripted standings, bracket, trophy) and
+`js/career-store.js` (the document, `reconcile`, `pullCareer`/`pushCareer`/`retireCareer`) exist
+and are tested; the engine's `snapshot()`/`fromSnapshot()` are the resume path. R15 builds the
+loop between them and the screens over it. Two halves, built in parallel: A is headless, B is
+the screens.
+
+**A. `baseball/js/engine/career.js`, pure and headless-tested (Opus).** No DOM, no Firebase, no
+`Math.random`: every function takes the career `state` and returns a new one, so
+`test-baseball-career.mjs` can play whole careers in node.
+
+1. **The document's `state`**, frozen once shipped, `rulesV` from `settings.js`:
+   ```
+   state: {
+     startedAt, player: { hand, presetId, skills: {six} }, unspent,
+     league, seasonsPlayed, wsTitles, perfectSeasons,
+     season: {
+       n, league, seed, cap, points: POINTS[league] snapshot,
+       schedule: [{opponentIndex, home}] x12 (snapshotted at season start),
+       results: [{ idx, opponentIndex, won, you, cpu, forfeit }],
+       phase: 'regular' | 'semifinal' | 'championship' | 'done',
+       playoff: null | { seeds, semiOpponentIndex, finalOpponentIndex, semi: result|null, final: result|null },
+       trophy: null | 0..3, perfect: bool
+     },
+     game: null | { meta: { kind, idx, opponentIndex, home, seed }, snap: engine snapshot },
+     stats: { the per-career additive counters, same keys as BB_ADDITIVE_KEYS, plus streak }
+   }
+   ```
+   `newCareer({hand, presetId, skills, now, seed})` starts at Little League, season 1, with the
+   start build (15 and 15, cap 10) and `unspent 0`. `startSeason(state, seed)` snapshots the
+   schedule (`makeSchedule`), the cap (`CAPS[league]`) and the point table (`POINTS[league]`) so a
+   tuning deploy applies from the next season and never rewrites one in progress. The league's
+   eight teams are rebuilt from `makeLeague(league)` with the season seed, never stored.
+2. **The game loop.** `nextGame(state)` returns the meta of the game to play (the next regular
+   game, the semifinal, or the championship) or null when the season is done.
+   `startGame(state, seed)` writes `state.game.meta` and a fresh engine snapshot;
+   `checkpoint(state, snap)` replaces `state.game.snap` (called at every pitch boundary);
+   `finishGame(state, {won, you, cpu, forfeit, gameStats})` folds the result: a regular game
+   appends to `results` and pays `points.win` or `points.loss` into `unspent`; a playoff game
+   pays nothing per win and moves the bracket. Forfeit is a loss with `forfeit: true`.
+3. **Standings and playoffs.** After game 12, `scriptedStandings` with the player's record; top 4
+   go on (`playoffs(standings)` with `BRACKET_MODEL`), otherwise the season resolves with trophy 0.
+   Semifinal loss Bronze, final loss Silver, win Gold; the trophy bonus pays into `unspent`. A
+   Gold advances the league (Majors stays Majors and counts `wsTitles`; every game won in that
+   Majors season including the playoffs counts `perfectSeasons`). Anything else replays the
+   league. `resolveSeason` returns the recorder call the UI must make exactly once:
+   `{ league, trophy, extras }` for `recordBaseball`, where `extras` carries the season's
+   `seasons: 1`, the trophy, the streak best and the per-career counters accumulated since the
+   last record. Tie-breakers: the player never ties a CPU team on wins in the scripted table
+   (`scriptedStandings` breaks ties on strength rank, the player last); document it.
+4. **Points and caps.** `earn(state, n)` adds to `unspent` and clamps it to the cap room
+   (`sum over skills of cap - skill`); the excess is lost, as the doc says. `spend(state, id)`
+   moves one point from `unspent` onto a skill under the cap. The cap only rises (a replayed
+   season keeps the league's cap; advancing raises it).
+5. **Persistence wiring, in `baseball/js/career-io.js`** (the one file that touches
+   `js/career-store.js` and `js/game-stats.js`): `loadCareer()` (local, then `pullCareer` with
+   the store's own deadline), `saveCheckpoint(state)` (local only, per pitch boundary, through
+   `saveLocalCareer`), `saveAtBat(state)` (local then `pushCareer`, coalesced), `saveGameEnd`
+   (push, then verify by the store's own health), `retire(state)` (builds the frozen history row
+   and calls `retireCareer`). It also writes `setBaseballHand` once at career start and calls
+   `recordBaseball` exactly once per resolved season and once per game for `total`
+   (played/won/lost: one `recordBaseball(league, won, gameExtras)` per game with the game's own
+   counters, and the season's trophy rides on the last game of the season). Every write verifies
+   or logs loudly. `pagehide`/`visibilitychange` hidden triggers a push. Sync health words from
+   the doc's table are the only sync copy the screens show, each with a glyph.
+6. **Tests.** `test-baseball-career.mjs` (node, in `run-all-tests.mjs`): a full career played
+   with scripted results reaches the Majors, a missed playoff replays the league, Bronze and
+   Silver replay, points and caps bind exactly as the doc's table says (a 9-3 Gold season at
+   Little League earns 38, room 30, 8 lost), unspent never exceeds room, a season snapshot
+   survives a changed `POINTS`, a resumed mid-at-bat game restores the count (through the real
+   engine's `fromSnapshot`), forfeit is a loss, Retire produces the frozen history row, and a
+   career document round-trips `validateCareer`. Extend `sim-baseball.mjs` to drive
+   `career.js` for its seasons instead of its own loop only if that is a small change;
+   otherwise leave the sim alone and say so.
+
+**B. The career screens (Sonnet), after R14 lands.**
+
+1. **The setup screen gains a mode.** Two tabs at the top, Career and Quick Play (the chosen one
+   filled with a check mark). Career home: the player chip (opens the same player screen as R14,
+   with `unspent` as the pool: one points-left pill, spend only, no Randomize, no presets once
+   the career exists), the league name and a five-step ladder with the current rung marked, the
+   season record (W-L, game n of 12, or the playoff round), the next opponent's name and home or
+   away, the standings as a nine-row table (yours marked), the trophy shelf (three shapes: Bronze
+   a circle, Silver a triangle, Gold a diamond, never colour alone), and one primary button: Play
+   next game, or Resume game when `state.game` is set, or Start a career when there is none. A
+   Retire button at the bottom, blocked while a game is in progress (the button reads Forfeit
+   first), with a confirm modal.
+2. **Starting a career** goes through the player screen with the start build (presets, Custom,
+   Randomize, L/R unless `bb.hand` is set), then Start.
+3. **In a career game** the play screen is the same play screen. The scoreboard shows the
+   opponent's name. The forfeit route is the existing back confirm; a forfeit is recorded as a
+   loss through `finishGame`. Every pitch boundary calls `saveCheckpoint`; every at-bat end calls
+   `saveAtBat`; the end modal shows the score, the record, and the points earned this game, with
+   Continue back to career home. A season's end shows a modal: the trophy shape and name, or
+   Missed the playoffs, the points earned, and the new league when advancing.
+4. **Resume.** On mount, `loadCareer()`; if `state.game` is set, the primary button is Resume and
+   it rebuilds the game with `Game.fromSnapshot(snap, agents)` and the same CPU team (rebuilt from
+   the season seed and `opponentIndex`). The hub's `isInProgress()` stays true for a career game
+   in play; leaving the hub mid-game is allowed because the game resumes.
+5. **Probes.** `test-baseball-device.mjs`: `career-home` (all blocks present, one screen, no
+   scroll), `career-resume` (start a game, take two pitches, remount, Resume, the count is the
+   same), `career-forfeit` (forfeit records a loss and the record updates),
+   `career-season` (scripted through a dev seam `__bbTest.scriptSeason(results)` that plays the
+   regular season with given results, then the standings and the trophy modal read right).
+
+Deliverables: stills of career home at start, mid-season, in the playoffs, after a Gold, and of
+the season modal; the points table as measured by the test; `node test-baseball-career.mjs`,
+`node test-career-sync.mjs`, `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node
+test-baseball-device.mjs`, `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
+`node players-agg.test.mjs`, `node test-game-conventions.mjs` green. `database.rules.json`'s
+`careers` branch must be published by Matt before a push can land; until then every push records
+`HEALTH_DENIED` and the career plays locally, which is the designed state.
