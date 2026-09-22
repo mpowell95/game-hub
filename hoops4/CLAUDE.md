@@ -697,6 +697,39 @@ Measured: 28 frames from y -77.8 to 931.6 with the gaps widening 2.1 / 6.1 / 10.
 back up to 912.5 settling at 929.4, `onDone` fired, no page errors. `test-game-conventions.mjs`
 11/11, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
 
+#### It starts when the ball goes IN, not when the throw resolves
+
+Matt, on a screen recording of the first build: *"There's a tiny lag between when the ball goes into
+the basket and when it's shown falling. There shouldn't be. It should look like it's the same ball
+that goes in the basket falling down the column."*
+
+**It was not tiny and it was not a frame-timing problem. Measured over the 231-throw grid, the gap
+between the capture and the throw resolving is a median of 0.346 s, p90 0.712 s, worst 0.917 s** -
+and the drop was started at `resolve()`, so every one of those milliseconds was dead time with the
+ball already in the basket and nothing happening on the board.
+
+The gap is the throat. `physics.js` treats capture as COMMITTED here, and `finishAt` only fires
+once the ball has fallen 0.26 m below the capture point. That fall is correct and is not being
+shortened - it is what makes a captured ball unable to come back out.
+
+So the drop starts on the **capture event** in `tick`, from a PREDICTED cell (`_dropOnCapture`).
+Predicting is safe here for exactly one reason, and it is a property of this machine rather than a
+guess: **there is no rimout, so a captured ball scores in that column 100% of the time** (measured;
+see "There is NO rimout on this machine"). It is still never authoritative - `_paintShot` hands the
+real grid to `commitDrop` when the move lands, or calls `cancelDrop` if the rules refused it (a
+full column is a miss, so `_dropOnCapture` checks `canPlay` before starting at all).
+
+**The match is matched on the PREDICTION, not on whether a disc is still in the air.** A top-row
+fall is 0.22 s and the median resolve gap is 0.35 s, so the drop routinely FINISHES before the
+throw resolves; keying off `dropTarget()` would then see nothing flying and start the whole fall a
+second time. `_predicted` is set at capture and consumed by `_paintShot`, which covers both
+orderings.
+
+Verified in a real browser, instrumenting the renderer over made shots: **exactly one `startDrop`
+and one `commitDrop` per made shot, the drop starting on the same frame as the capture**, no page
+errors. `test-game-conventions.mjs` 11/11, `test-hoops4-mp.mjs` 77/77,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
 ### How to play, drawn (2026-09-22)
 
 Matt: *"The How To Play is even worse. it's JUST words. That goes against everything I've ever
