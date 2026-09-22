@@ -164,6 +164,37 @@ somewhere else, a pattern another game shares, an unrelated red test — none of
 reply, however true it is. Put it in the relevant `CLAUDE.md` if a future session needs it, and
 leave it there.
 
+## Delegate to lesser-model subagents; the orchestrator's context is the scarce thing
+
+Matt, 2026-09-22, after asking whether the session was using subagents: *"excellent... I'd like
+you and Opus to always delegate to lower model subagents to save context when possible."*
+
+The session that reads this file is the ORCHESTRATOR. It writes the spec (into the stage doc, e.g.
+`docs/BASEBALL-3D-BUILD.md` section 9, committed BEFORE the build), launches the work as a
+subagent, reviews the result against stills and measured numbers, and does the merge, the CACHE
+bump, the suites on the merged tree, the PR, the deploy and the live check itself. It does not
+read whole files or run long suites when an agent can do that and report back.
+
+- **Sonnet** for screens, CSS, textures, stills, probes, docs, and any stage whose spec is
+  concrete enough to hand over. This has been most stages (Baseball R6 through R15-B, the league
+  look-and-feel stage).
+- **Opus** for engine and architecture work, persistence, anything measured with the simulators
+  where the agent has to decide what to sweep (Baseball R5, R15-A, the economy study, R16).
+- **The orchestrator itself** only for a change smaller than the cost of briefing an agent (a
+  label rename, a CSS clearance fix, a trophy icon), and for CHECKING an agent's work: re-run its
+  key number on a fresh seed, open its stills, read the diff of the load-bearing lines.
+- **`model` must be passed explicitly on every Agent call.** A subagent with no `model` inherits
+  the orchestrator's own model, which is the most expensive one and defeats the point.
+- Agents run in their own worktree (`isolation: "worktree"`) with their own dev server port
+  (`PORT=8124`, `BB_BASE=http://localhost:8124` for the Baseball suites), never touch `sw.js`,
+  `version.json` or CACHE, never push, and commit on their worktree branch; the orchestrator
+  merges. An agent's report is model output: verify it, then relay what matters, never paste it.
+- Two agents can run in parallel when their files do not overlap (R14's screens and R15-A's
+  headless career loop were built at the same time); otherwise they run in sequence.
+- An agent cut off mid-verification (a usage limit, a harness timeout) is RESUMED with a message
+  listing exactly what is unverified, not restarted; it keeps its context. Tell agents to commit
+  what is green first so an interruption loses nothing.
+
 ## Run it
 
 ```
