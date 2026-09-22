@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import * as SETTINGS from './baseball/js/engine/settings.js';
 import { Game } from './baseball/js/engine/game.js';
 import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher } from './baseball/js/engine/agents.js';
-import { makeLeague, makePlayerTeam, effectiveCapFor, teamStrength, POSITIONS } from './baseball/js/engine/teams.js';
+import { makeLeague, leagueTeamsFor, makePlayerTeam, effectiveCapFor, teamStrength, POSITIONS } from './baseball/js/engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './baseball/js/engine/season.js';
 import { hashSeed, mulberry32 } from './baseball/js/engine/rng.js';
 import { flyPitch } from './baseball/js/engine/pitch.js';
@@ -140,6 +140,10 @@ const MODEL_TIERS = {
 // go into any skill, up to the league's own raw CAPS).
 const MAXED_TIER = { ...MODEL_TIERS.strong };
 const PERFECT_SEASON_MIN_ODDS = 0.02; // Draft, per the handoff - roughly once every 50 seasons
+// R16: THE GATE IS TWO-SIDED NOW. `>= 2%` alone is a gate a Perfect Season can pass by being
+// ROUTINE, and it did: audit finding 8 measured it passing at 59% and at 87%, against doc §5's
+// [Locked] "a rare challenge". 10% is the top of the band the R16 study measured and set.
+const PERFECT_SEASON_MAX_ODDS = 0.10;
 function maxedSkillsFor(league, settings) {
   const capInt = Math.floor(settings.CAPS[league] != null ? settings.CAPS[league] : settings.CAPS.majors);
   const skills = {};
@@ -372,27 +376,38 @@ function mkCpuAgent(team, league, settings) {
     },
   };
 }
-function mkModelAgent(league, settings, tier) {
+// R16: `skills` is passed to `ModelBatter` now, which is what turns POWER MODE ON - audit finding
+// 5 of the study is that the shipped simulator never passed them, so its model human swung CONTACT
+// at every pitch of every measurement this file has ever printed. Optional, so the handful of
+// callers that genuinely have no player build (the style sweeps) keep their exact old behaviour.
+function mkModelAgent(league, settings, tier, skills) {
   const cpu = settings.CPU[league] || settings.CPU.college;
   // BB-2d commit 2: swingIn/chase come from the MODEL TIER now, never the league's own CPU row -
   // "does a human swing at this pitch" is a fact about the human, not about which league they are
   // playing in. cornerBias/pitchMix stay read from the league's CPU row: the PITCHER half of the
   // model still stands in for "a human choosing among the pitches this league's CPU would choose
   // among", which is a fact about the league, not the batter's own discipline.
-  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: tier.swingIn, chase: tier.chase, settings });
+  const batter = new ModelBatter({ timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma, swingIn: tier.swingIn, chase: tier.chase, settings, skills });
   const pitcher = new ModelPitcher({ league, settings, variety: tier.variety, cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix });
   return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v) };
 }
 
-/** The player's own skills for measurement: `PRESETS.twoWayStar` scaled to `effectiveCapFor`
- *  (doc's own expected level for that league), per the handoff. */
+// R16 (docs/BASEBALL-3D-BUILD.md section 9): THE PLAYER THIS TOOL MEASURES DID NOT EXIST.
+// `playerSkillsFor` used to scale `PRESETS.twoWayStar` to `effectiveCapFor(league)` - the CPU's own
+// generation level - which gave the player 4 / 7 / 8 / 9 / 11 points per skill by league. A real
+// career player ARRIVES at each rung holding 5 / 10 / 14 / 18 / 22 (measured with
+// `sim-baseball-career.mjs`: every point earned fits under the caps within one or two seasons, so
+// the arrival level is simply the previous rung's cap). Every "5 to 15 seasons to Gold" number
+// this file has ever printed was measured 2 to 11 points per skill BELOW any real player, which is
+// audit finding 1 of the R16 study and the reason its scoreboard could not be believed.
+const CAREER_ARRIVAL_SKILL = { little: 5, highschool: 10, college: 14, minors: 18, majors: 22 };
+/** The player's own skills for measurement: the CAREER ARRIVAL level for that league, flat across
+ *  the six skills (a career player spends lowest-first, so they arrive level). */
 function playerSkillsFor(league, settings) {
-  const preset = settings.PRESETS.twoWayStar;
-  const cap = effectiveCapFor(league);
-  const scale = cap / settings.START_CAP;
-  const capInt = Math.floor(cap);
+  const cap = settings.CAPS[league] != null ? settings.CAPS[league] : settings.CAPS.majors;
+  const pts = CAREER_ARRIVAL_SKILL[league] != null ? CAREER_ARRIVAL_SKILL[league] : settings.START_CAP;
   const skills = {};
-  for (const id of settings.SKILL_IDS) skills[id] = Math.max(0, Math.min(capInt, Math.round(preset[id] * scale)));
+  for (const id of settings.SKILL_IDS) skills[id] = Math.max(0, Math.min(Math.floor(cap), pts));
   return skills;
 }
 
@@ -673,45 +688,60 @@ async function measureLeagueGames(league, settings) {
 // full-CAPS skills, never `effectiveCapFor`) instead of looking `tier` up in MODEL_TIERS - every
 // existing caller passes a MODEL_TIERS key string and gets the old behavior unchanged.
 async function playSeason(league, settings, tier, seasonSeed, override = null) {
-  const teams = makeLeague(league);
-  const schedule = makeSchedule(league, seasonSeed, settings.SCHEDULE_SHAPE);
+  // R16: the season this plays is the season the game plays - this league's OWN length, its own
+  // teams (Little League is four of them) and its own playoff format. A flat 12 games over all
+  // eight slots measured a season that no longer exists.
+  const teams = leagueTeamsFor(league);
+  const n = settings.gamesForLeague ? settings.gamesForLeague(league) : settings.SEASON.gamesPerSeason;
+  const format = settings.playoffFormatFor ? settings.playoffFormatFor(league) : 'top4';
+  const schedule = makeSchedule(league, seasonSeed, n, teams.length, settings.SCHEDULE_SHAPE);
   const skills = (override && override.skills) || playerSkillsFor(league, settings);
-  const playerAgent = mkModelAgent(league, settings, (override && override.tier) || MODEL_TIERS[tier]);
+  const modelTier = (override && override.tier) || MODEL_TIERS[tier];
   const playerTeam = makePlayerTeam({ skills, hand: 'R' });
+  // R16: A FRESH AGENT PER GAME (audit finding 6) - one agent reused across a season leaks its
+  // ModelPitcher's `_lastType` across game boundaries, so the variety model measured something no
+  // real game does. The career loop starts a new agent every game and so does this now.
+  const newAgent = () => mkModelAgent(league, settings, modelTier, skills);
 
-  let wins = 0, losses = 0;
+  let wins = 0, losses = 0, runsFor = 0, runsAgainst = 0;
   for (let i = 0; i < schedule.length; i++) {
     const g = schedule[i];
     const opponent = teams[g.opponentIndex];
     const seed = hashSeed('bb-season', league, tier, seasonSeed, i);
-    const res = await playOneGame(league, settings, opponent, playerAgent, playerTeam, seed >>> 0, g.home);
+    const res = await playOneGame(league, settings, opponent, newAgent(), playerTeam, seed >>> 0, g.home);
     if (res.won) wins += 1; else losses += 1;
+    runsFor += res.playerRuns; runsAgainst += res.oppRuns;
   }
 
   // BB-2b commit 2: bracket/home/standings are no longer hardcoded here - `scriptedStandings`/
   // `playoffs` read `settings.STANDINGS_MODEL`/`settings.BRACKET_MODEL` themselves (Open item 13),
   // and both playoff games' home/away now follows `settings.PLAYOFF_HOME` instead of being forced
   // player-home while the 12-game regular season alternates 6/6 (baseball/CLAUDE.md's own finding).
-  const standings = scriptedStandings(teams, { wins, losses }, settings.STANDINGS_MODEL);
+  const standings = scriptedStandings(teams, { wins, losses }, n, settings.STANDINGS_MODEL, settings.STANDINGS_TIEBREAK);
   const playerRank = standings.findIndex((r) => r.isPlayer);
-  const madePlayoffs = playerRank < 4;
+  const madePlayoffs = format === 'all' ? true : playerRank < 4;
   let reachedSemifinal = false, reachedChampionship = false, wonChampionship = false;
   if (madePlayoffs) {
-    const bracket = playoffs(standings, settings.BRACKET_MODEL);
+    const bracket = playoffs(standings, settings.BRACKET_MODEL, format);
     const sfIndex = bracket.semifinals.findIndex((pair) => pair.some((t) => t.isPlayer));
     reachedSemifinal = true;
     const sfOpponentRow = bracket.semifinals[sfIndex].find((t) => !t.isPlayer);
     const sfOpponentTeam = teams.find((t) => t.name === sfOpponentRow.id) || teams[teams.length - 1];
     const sfHome = decidePlayoffHome(settings.PLAYOFF_HOME, seasonSeed, 'semifinal', wins, winsForTeam(standings, sfOpponentTeam));
     const sfSeed = hashSeed('bb-playoff-sf', league, tier, seasonSeed);
-    const sfRes = await playOneGame(league, settings, sfOpponentTeam, playerAgent, playerTeam, sfSeed >>> 0, sfHome);
+    const sfRes = await playOneGame(league, settings, sfOpponentTeam, newAgent(), playerTeam, sfSeed >>> 0, sfHome);
     if (sfRes.won) {
       reachedChampionship = true;
-      // doc §8, [Locked]: "the championship opponent is always the toughest team in the league."
-      const champOpponent = teams[teams.length - 1];
+      // doc §8, [Locked]: "the championship opponent is always the toughest team in the league" -
+      // and in R16's everyone-in bracket, whoever won the other semifinal (scripted by strength).
+      let champOpponent = teams[teams.length - 1];
+      if (format === 'all') {
+        const other = bracket.winners.find((w, i) => w && i !== sfIndex && !w.isPlayer);
+        if (other) champOpponent = teams.find((t) => t.name === other.id) || champOpponent;
+      }
       const chHome = decidePlayoffHome(settings.PLAYOFF_HOME, seasonSeed, 'final', wins, winsForTeam(standings, champOpponent));
       const chSeed = hashSeed('bb-playoff-champ', league, tier, seasonSeed);
-      const chRes = await playOneGame(league, settings, champOpponent, playerAgent, playerTeam, chSeed >>> 0, chHome);
+      const chRes = await playOneGame(league, settings, champOpponent, newAgent(), playerTeam, chSeed >>> 0, chHome);
       wonChampionship = chRes.won;
     }
   }
@@ -722,7 +752,11 @@ async function playSeason(league, settings, tier, seasonSeed, override = null) {
   // won (doc §5, [Locked]: "win every Majors regular season, playoff, and World Series game in one
   // season"). Purely additive; no existing caller reads it.
   const perfectSeason = losses === 0 && wonChampionship;
-  return { wins, losses, madePlayoffs, trophy, points, reachedChampionship, wonChampionship, perfectSeason };
+  // R16: RUNS PER GAME, reported. Audit finding 9: they were never reported, which is how
+  // three-inning games ending 26-1 went unnoticed for the whole of phase 2.
+  const games = Math.max(1, wins + losses);
+  return { wins, losses, madePlayoffs, trophy, points, reachedChampionship, wonChampionship, perfectSeason,
+    runsForPerGame: runsFor / games, runsAgainstPerGame: runsAgainst / games };
 }
 
 /** BB-2d commit 3: the maxed-tier profile has never been measured before this commit - every
@@ -752,8 +786,13 @@ async function measureLeagueSeasons(league, settings) {
     const champGames = seasons.filter((s) => s.reachedChampionship);
     const champWinRate = champGames.length ? champGames.filter((s) => s.trophy === 3).length / champGames.length : null;
     const avgPoints = mean(seasons.map((s) => s.points));
-    const capRoom = Math.max(0, settings.CAPS[league] * settings.SKILL_IDS.length
-      - settings.START_POINTS_PER_SIDE * 2);
+    // R16: THE REAL ROOM. This used to be the league's whole cap minus the START build (78 points
+    // at College), which is the room a player would have if they arrived at every rung holding
+    // their opening 30 - audit finding 7, "a cap room 2 to 5 times too large above Little League".
+    // A career player ARRIVES holding the previous rung's cap, so the room a season is actually
+    // filling is six times the difference between this league's cap and that arrival level.
+    const arrival = CAREER_ARRIVAL_SKILL[league] != null ? CAREER_ARRIVAL_SKILL[league] : settings.START_CAP;
+    const capRoom = Math.max(0, settings.SKILL_IDS.length * (settings.CAPS[league] - arrival));
     // BB-2c: the regular-season win RATE (design doc v9 §8's own per-league band) - wins across
     // the whole 12-game schedule, not the flat "vs one average opponent" number `measureLeagueGames`
     // reports elsewhere in this file (that number ignores the schedule's own repeats entirely).
@@ -765,7 +804,13 @@ async function measureLeagueSeasons(league, settings) {
       champWinRate,
       seasonWinRate,
       avgPointsPerSeason: avgPoints,
+      capRoom,
       seasonsToCap: avgPoints > 0 ? capRoom / avgPoints : Infinity,
+      // R16, audit finding 9: runs per game, reported. Nothing printed them before, which is how a
+      // three-inning game ending 26-1 went unnoticed for the whole of phase 2.
+      runsForPerGame: mean(seasons.map((s) => s.runsForPerGame)),
+      runsAgainstPerGame: mean(seasons.map((s) => s.runsAgainstPerGame)),
+      gamesPerSeason: mean(seasons.map((s) => s.wins + s.losses)),
     };
   }
   return perTier;
@@ -1735,7 +1780,8 @@ async function main() {
         console.log(`    ${tier.padEnd(8)} top4=${(s.top4Rate * 100).toFixed(0)}%  gold=${(s.goldRate * 100).toFixed(0)}%  ` +
           `E[seasons to Gold]=${s.expectedSeasonsToGold === Infinity ? 'inf' : s.expectedSeasonsToGold.toFixed(2)}  ` +
           `champGameWin=${s.champWinRate == null ? 'n/a' : (s.champWinRate * 100).toFixed(0) + '%'}  ` +
-          `pts/season=${s.avgPointsPerSeason.toFixed(1)}  seasonsToCap=${s.seasonsToCap === Infinity ? 'inf' : s.seasonsToCap.toFixed(1)}`);
+          `pts/season=${s.avgPointsPerSeason.toFixed(1)}  room=${s.capRoom}  seasonsToCap=${s.seasonsToCap === Infinity ? 'inf' : s.seasonsToCap.toFixed(1)}  ` +
+          `runs=${s.runsForPerGame.toFixed(1)}-${s.runsAgainstPerGame.toFixed(1)} per game over ${s.gamesPerSeason.toFixed(0)}`);
       }
     }
   }
@@ -1772,10 +1818,20 @@ async function main() {
   // -----------------------------------------------------------------------------------------
   // The promise scoreboard.
   console.log('\n=== PROMISE SCOREBOARD ===');
+  // R16, audit finding 3: `--quick` is 30 seasons and 40 games per cell, and the intervals that
+  // gives are WIDER THAN THE BANDS BELOW - "4 of 30 Golds" is a 5 to 30 percent interval, so a
+  // quick run cannot decide anything. It still prints the whole scoreboard; it just never turns a
+  // line into a verdict, and never fails the process.
   let anyFail = false;
+  if (FLAG_QUICK) {
+    console.log('  NOTE  --quick: every line below is a MEASUREMENT, not a verdict. At 1/10 of the');
+    console.log('        sample the intervals are wider than the bands, so nothing here decides a band');
+    console.log('        and --assert cannot fail. Run without --quick to decide anything.');
+  }
   const scoreLine = (label, ok, measured, threshold) => {
-    if (!ok) anyFail = true;
-    console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${label}: measured ${measured}, threshold ${threshold}`);
+    if (!ok && !FLAG_QUICK) anyFail = true;
+    const tag = FLAG_QUICK ? (ok ? 'ok  ' : 'off ') : (ok ? 'PASS' : 'FAIL');
+    console.log(`  [${tag}] ${label}: measured ${measured}, threshold ${threshold}`);
   };
 
   // BB-2b commit 2: these three lines used to report the MEDIAN across leagues, which a small
@@ -1817,8 +1873,9 @@ async function main() {
 
     // BB-2d commit 3, doc §5 [Locked]: Perfect Season must be reachable for the MAXED tier, not the
     // median one - measured separately above (Majors only).
-    scoreLine('PERFECT_SEASON_REACHABLE (maxed tier, Majors)', maxed.perfectRate >= PERFECT_SEASON_MIN_ODDS,
-      maxed.perfectRate.toFixed(4), `>= ${PERFECT_SEASON_MIN_ODDS}`);
+    scoreLine('PERFECT_SEASON_BAND (maxed tier, Majors)',
+      maxed.perfectRate >= PERFECT_SEASON_MIN_ODDS && maxed.perfectRate <= PERFECT_SEASON_MAX_ODDS,
+      maxed.perfectRate.toFixed(4), `${PERFECT_SEASON_MIN_ODDS} to ${PERFECT_SEASON_MAX_ODDS} (R16: two-sided - a rate of 0.87 passed the old one-sided gate)`);
 
     // LADDER_MONOTONE: median win rate against the league-average team falls each league up.
     const ladderWinRates = LEAGUES.map((lg) => mean(report.leagues[lg].default.gameStats.map((t) => t.perTier.median.winRate)));
