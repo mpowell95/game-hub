@@ -2413,12 +2413,26 @@ if (!process.env.BB_DEVICE_QUICK) {
 // device) - `startCareer` refuses without one (`myCode()`, js/messages.js). Every other probe in
 // this file never needed a career, so none of them set one; these do, one distinct 5-char code
 // per probe (the CODE_ALPHABET js/profile-store.js/js/messages.js's CODE_RE both use).
+//
+// `page.addInitScript` re-runs before EVERY navigation on that page, not just the first - so
+// `career-resume`'s own deliberate second `mountInHub()` call (a fresh `page.goto`, simulating
+// "force close and reopen") re-ran this same script and, on its first cut, wiped
+// `gamehub.baseball.v1` (CAREER_LOCAL_KEY, js/career-store.js) right back out from under the very
+// resume it was trying to prove - a real bug in the harness, not a timing race (the first fix
+// attempt, a longer `waitForSelector` before the click, still failed for this reason: the button
+// never rendered because `this.career` was null again, not because it rendered late). The clear
+// is guarded by a one-time localStorage flag so it fires on the FIRST load of a probe's page
+// (clearing any stale save left by an earlier run of this suite) and never again on that same
+// page's later navigations, which is what a real "force close and reopen" preserves.
 function bbProfileInit() {
   return ({ name, code }) => {
     localStorage.setItem('gamehub.profile', JSON.stringify({
       name, playerId: code, emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
     }));
-    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\.|gamehub\.baseball\.v1|gamehub\.careerSync/.test(k)) localStorage.removeItem(k);
+    if (!localStorage.getItem('__bbTestInitDone')) {
+      for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\.|gamehub\.baseball\.v1|gamehub\.careerSync/.test(k)) localStorage.removeItem(k);
+      localStorage.setItem('__bbTestInitDone', '1');
+    }
     window.__bbDevForce = true;
   };
 }
@@ -2528,7 +2542,10 @@ function bbProfileInit() {
         if (mountErr2) {
           fail('career-resume', `remount failed: ${mountErr2}`);
         } else {
-          await pageR.waitForTimeout(300);
+          // loadCareer() on this fresh mount races a real network pull (up to
+          // CAREER_PULL_TIMEOUT_MS = 2500ms) before the career tab auto-switch can fire - a fixed
+          // short wait here raced that and lost. Wait for the real button instead.
+          await pageR.waitForSelector('[data-act="career-primary"]', { timeout: 8000 }).catch(() => {});
           const resumeErr = await pageR.evaluate(() => {
             const btn = document.querySelector('[data-act="career-primary"]');
             if (!btn) return 'no primary button on remount';

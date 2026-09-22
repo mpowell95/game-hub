@@ -93,9 +93,17 @@ const EXTRA_SCREENS = {
     // Career tab (no career yet, on a fresh profile) and the player screen it opens in ITS OWN
     // "start a career" flavor (presets/Custom/Randomize/hand, budgeted at Little League - a
     // different skill-point table than Quick Play's, so it earns its own scroll check).
+    //
+    // Each extra runs on the SAME page as the one before it, in array order (the runner above
+    // never reloads between extras) - so a career extra opening right after "player screen" lands
+    // on the PLAYER SCREEN, not the setup screen the tab bar lives on. `backToSetup` returns there
+    // first (clicking Done, the player screen's own way back, if that screen happens to be up)
+    // before looking for the tab - found the hard way when both career extras first shipped
+    // timing out on a tab selector that was never missing, just on a different screen.
     {
       name: 'career tab',
       async open(page) {
+        await backToSetup(page);
         await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
         await page.click('[data-act="tab"][data-tab="career"]');
         await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
@@ -105,6 +113,7 @@ const EXTRA_SCREENS = {
     {
       name: 'career start player screen',
       async open(page) {
+        await backToSetup(page);
         await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
         await page.click('[data-act="tab"][data-tab="career"]');
         await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
@@ -115,6 +124,17 @@ const EXTRA_SCREENS = {
     },
   ],
 };
+
+/** Baseball-only helper (see the comment above): if the player screen (either mode - Quick Play's
+ *  own or a career one) is currently up from a previous extra, tap its Done button to return to
+ *  the setup screen. A no-op when the setup screen is already showing. */
+async function backToSetup(page) {
+  const doneBtn = await page.$('[data-act="done"]');
+  if (doneBtn) {
+    await doneBtn.click();
+    await page.waitForSelector('[data-act="tab"]', { timeout: 8000 }).catch(() => {});
+  }
+}
 
 /** Every game folder, discovered from disk so a NEW game is covered the day it appears - the same
  *  rule `test-game-conventions.mjs` follows, and for the same reason. */

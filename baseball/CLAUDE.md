@@ -125,6 +125,16 @@ Play is unchanged), plus four new career probes:
   `r2-cadence` uses) until the engine shows genuine progress, remounts through the hub's own path
   (a fresh `page.goto`, the same "force close and reopen" the doc's resume promise covers), taps
   Resume, and asserts the inning/half/outs/count are byte-identical to what was checkpointed.
+  **This probe found a real bug in the HARNESS, not in `ui.js`, and it is worth knowing before
+  writing another remount-through-`page.goto` probe**: `page.addInitScript` re-runs before EVERY
+  navigation on a page, not just the first - `bbProfileInit()`'s cleanup step (clearing any stale
+  `.save.`/`.mp.`/`gamehub.baseball.v1`/`gamehub.careerSync` keys left by an earlier suite run) was
+  re-firing on the probe's own deliberate second `mountInHub()` call and wiping the very
+  `gamehub.baseball.v1` checkpoint (`CAREER_LOCAL_KEY`, `js/career-store.js`) the remount exists to
+  prove survives. A longer `waitForSelector` before the click did not fix it - the button never
+  rendered at all, because `this.career` was genuinely `null` again, not late. Fixed by guarding
+  the clear with a one-time `localStorage` flag so it fires on a page's FIRST load only, never on
+  that same page's later navigations - which is what a real force-close-and-reopen preserves.
 - **`career-forfeit`**: standalone only (the only host with a back button of its own) - starts a
   game, taps back, confirms, and asserts `careerState().season.results[0]` reads `{won:false,
   forfeit:true}` and career home is what's on screen afterward.
@@ -141,10 +151,30 @@ not a regression from this stage.
 
 `node check-no-scroll.mjs baseball`: the existing 4 default screens plus 3 EXTRA_SCREENS entries
 (R14's `player screen`, plus this stage's `career tab` and `career start player screen`), all
-clean at both phone heights in both hosts.
+clean at both phone heights in both hosts (16 screens total, 0 scroll). **A second harness bug,
+found the same way**: `check-no-scroll.mjs`'s own runner drives every `EXTRA_SCREENS` entry for a
+game on ONE page, in array order, with no reload between them - so `career tab`, which runs right
+after `player screen`, was landing on the PLAYER SCREEN (still up from the entry before it) and
+timing out looking for a tab bar that was never missing, just on a different screen. Fixed with a
+small `backToSetup()` helper (clicks Done, the player screen's own way back, only when that screen
+happens to be up) called at the top of both career extras' own `open()` - a no-op when the setup
+screen is already showing.
 
 `node test-visual.mjs baseball`: unaffected (the PLAY probe still finds `.bb-play-btn` on Quick
 Play's own default tab).
+
+**Stills**: `scratchpad/r15/*.png` (28 - 7 screens x {tall 393x852, short 390x664} x {light, dark}) -
+career home with no career yet, at the very start of season 1, mid-season (six games in), in the
+playoffs (a 9-3 regular season), career home right after a Gold season with the season modal up,
+and the career player screen in both its `careerStart` and `careerSpend` flavors. Captured with a
+fresh page mount per shot (never a shared, sequentially-mutated page), so none of the two harness
+bugs above touch it. **The script's own theme seed had a bug, found rendering the first pair**:
+`localStorage.setItem('gamehub.theme.v1', JSON.stringify(th))` wrote `'"dark"'` (JSON-quoted) where
+`js/theme.js` reads a bare `'light'|'dark'|'auto'` string - a value outside that set silently falls
+back to `'auto'`, so every "dark" still was rendering light-mode pixels under a screenshot named
+`-dark`. Fixed to write the bare string; re-verified by reading the pixels back (dark stills now
+show the real dark palette, and the trophy diamond's own vermilion is legible against a dark
+`.bb-end-modal` on `career-gold-modal-*-dark`).
 
 ### What was rejected
 
