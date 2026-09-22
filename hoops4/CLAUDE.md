@@ -556,6 +556,51 @@ a pass-and-play game from a button labelled "Play".
 optional caption attached to a challenge, shown to whoever accepts it; quick chat inside a match;
 challenge history with records; and the visual How to Play, which is still just words.
 
+### A series, and the terms of a challenge (2026-09-22)
+
+Matt: *"Before you challenge someone or anything, you should be able to select the shots per turn
+setting and if you want to play a single game, best of 3 series or best of 5 series. And when you
+accept a challenge and go to play, you should see what the shot settings and the series selection
+is and stuff like that. Maybe include a caption option thing where you can say something to your
+opponent with the challenge request thing?"*
+
+**Picking an opponent no longer sends the challenge.** It opens a terms screen: shots per turn
+(defaulting to the challenger's own setup choice, because it is the rule BOTH people will play
+under and this is the only moment either agrees to it), the series, and an optional caption. A
+failed send keeps the form and everything typed in it.
+
+**THE NEW FIELDS ARE OPTIONAL, AND THAT IS THE LOAD-BEARING PART.** `validateGame` returning null
+is a REFUSAL TO OPEN THE MATCH - so a required `series` would have made every match already in
+`hoops/games/` unplayable the moment this shipped. Everything defaults: `series` 1, `seriesNo` 1,
+`seriesWins` 0-0, `seriesOf` the game's own id, `caption` empty. `test-hoops4-mp.mjs` pins it with
+a hand-written pre-series document.
+
+**`seriesAfter(game)` is pure and is the only place the rules live**, so the two devices cannot
+disagree about the score. A best of 3 needs two wins, a best of 5 needs three. **A drawn board
+gives nobody a win**, so a series also ends when it runs out of games - the leader takes it, and a
+dead tie is an honest draw. Without that, three drawn boards would chase a target neither side can
+reach for ever.
+
+**The next game is started by a BUTTON, never automatically.** Creating it inside the finishing
+device's `pushMove` would stall a series silently whenever that person happened to be offline at
+that moment - a failure with nobody looking at it. A button has somebody in front of it, and
+`createGame` already returns a reason it can say out loud. `test-hoops4-mp.mjs` asserts `pushMove`'s
+own body never calls it.
+
+**The sides swap each game** (`first: 'them'`), because side 'a' shoots first and otherwise a best
+of 3 is just "the challenger shoots first, three times".
+
+**Where the terms are shown**: on the full-screen card when you accept (read from the MATCH, not
+from the launcher's index row, which carries no caption), as "Game 2 of 3" on the play HUD and on
+each row of the active list, and as the running score on the game-over card.
+
+**Two things a screenshot caught that a test would not have.** The terms screen reused `.h4-opt`
+for its selectors but not the CHECKMARK that goes with it - the setup screen's own comment says
+selection is marked "by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone", and without the
+glyph the options differed only by tint. And the caption box reused `.h4-mp-input`, which is
+styled for the five-character ROOM CODE: uppercase, letter-spaced, centred. "First to three, no
+excuses" rendered as spaced capitals running off the end of its own box.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
