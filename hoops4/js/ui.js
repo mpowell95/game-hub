@@ -538,6 +538,9 @@ class Hoops4 {
     if (typeof opts.replay === 'function') opts.replay(this.match);
     this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
+    // A new match cannot inherit the last one's falling disc, or _whenLanded would hold its first
+    // move for a drop that will never land.
+    this._dropping = false; this._afterDrop = null;
     this.renderPlay();
     try {
       const [phys, mach, rend] = await Promise.all([
@@ -843,6 +846,9 @@ class Hoops4 {
   stopLoop() { if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; } }
 
   tick(dt) {
+    // THE DISC FALLING DOWN ITS COLUMN, advanced by the game's own loop. A no-op unless one is
+    // in the air - see render.js's startDrop.
+    if (this.rend) this.rend.stepDrop(dt);
     const st = this.throwState;
     if (st && !st.done) {
       this.engine.phys.step(BOARD, st, dt);
@@ -870,8 +876,8 @@ class Hoops4 {
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
 
-    if (m.over) { this.finish(); return; }
-    this.maybeCpu();
+    if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
+    this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
   }
 
   /** Everything a settled shot changes on screen. Shared by a local shot and a remote one, so the
@@ -882,10 +888,30 @@ class Hoops4 {
     else if (res.type === 'full') { this.toast(t('full')); }
     else { this.toast(t('inCol').replace('{n}', String(res.col + 1))); }
     if (this.rend) {
-      this.rend.setGrid(m.cells(), res.type === 'win' ? res.cells : null);
+      const win = res.type === 'win' ? res.cells : null;
+      // A DISC THAT LANDED FALLS DOWN ITS COLUMN. Matt: "Can you show the ball fall down the
+      // columns rather than go into the basket and just appear at the bottom of that column?"
+      // A miss or a full column changes no cell, so there is nothing to drop and it paints at
+      // once. `onDone` is what makes the game-over card wait: a winning disc's card would
+      // otherwise cover the drop that won.
+      if (Number.isInteger(res.row) && Number.isInteger(res.col)) {
+        this._dropping = true;
+        this.rend.startDrop(m.cells(), win, res.col, res.row, res.by, () => {
+          this._dropping = false;
+          if (this.disposed) return;
+          if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+        });
+      } else {
+        this.rend.setGrid(m.cells(), win);
+      }
       this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
     this.paintHud();
+  }
+
+  /** Run `fn` once the falling disc has landed, or immediately if nothing is falling. */
+  _whenLanded(fn) {
+    if (this._dropping) this._afterDrop = fn; else fn();
   }
 
   finish() {

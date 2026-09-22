@@ -658,6 +658,45 @@ teaching `probe-bounce.mjs` to PRINT which surfaces a miss touches, which it had
 its first version and never shown; every restitution decision before that was a guess across
 variants instead of one look.
 
+### The disc FALLS down its column (2026-09-22)
+
+Matt: *"Can you show the ball fall down the columns rather than go into the basket and just appear
+at the bottom of that column?"* It did exactly that - `setGrid` repainted the whole grid the
+instant a ball was captured, so the disc teleported to the bottom of its column and the one piece
+of feedback tying the basket you sank to the move you made was missing.
+
+`render.js` gained `startDrop` / `stepDrop` / `_dropY`, and `setGrid` a third `drop` argument. The
+falling disc is drawn on the SAME `CanvasTexture` as the counters - there is no second layer and
+no new draw call, because the grid was already a painted canvas on a plane (see "The grid is a
+SCREEN").
+
+**Three things about it are load-bearing:**
+
+- **It is driven by the game's own loop**, not its own `requestAnimationFrame`. `ui.js`'s `tick`
+  calls `stepDrop(dt)` first, so a drop cannot outlive the screen, cannot run twice, and stops
+  with everything else when the loop stops. A private rAF here would be the one animation in the
+  game that `destroy()` does not cancel.
+- **The target cell is drawn EMPTY while the disc is in the air**, and the win ring is suppressed
+  for the whole drop. Otherwise the disc is already sitting in the hole it is falling into, and a
+  winning move rings four cells before the fourth one arrives.
+- **`onDone` is what makes everything downstream wait.** `resolve()` defers `finish()` and
+  `maybeCpu()` through `_whenLanded`, so a game-over card cannot cover the drop that won and the
+  CPU cannot start its shot while the player's disc is still falling. A miss or a shot into a full
+  column changes no cell, so there is nothing to drop and it paints at once - `_whenLanded` runs
+  its callback immediately in that case, which is why the timing of a miss is unchanged.
+
+`start()` clears `_dropping`/`_afterDrop`: a new match inheriting the last one's flag would hold
+its first move for a drop that will never land.
+
+The fall is a quadratic (accelerating, like a dropped disc) for the first 80% of it and one
+decaying hop of a fifth of a cell for the rest. Duration is per row - about 0.45 s to the bottom
+row, 0.22 s to the top - so a disc that falls further takes longer, and a nearly full column does
+not feel sluggish.
+
+Measured: 28 frames from y -77.8 to 931.6 with the gaps widening 2.1 / 6.1 / 10.2 / 14.3, a bounce
+back up to 912.5 settling at 929.4, `onDone` fired, no page errors. `test-game-conventions.mjs`
+11/11, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
 ### How to play, drawn (2026-09-22)
 
 Matt: *"The How To Play is even worse. it's JUST words. That goes against everything I've ever
