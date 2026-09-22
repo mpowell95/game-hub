@@ -386,6 +386,16 @@ export function isInProgress() {
 
 function randPick(arr, rand = Math.random) { return arr[Math.floor(rand() * arr.length)]; }
 
+// Ship review (R15-B): a CPU team's `name` is its generator key (`little-balanced`), which is not
+// a name a player should read. Until doc section 17's open item 12 (the real list of 40 team
+// names) is decided, a team is shown by its style, one proper noun per style, untranslated (open
+// item 15: team names are proper nouns and are not translated). Falls back to the raw name.
+const TEAM_STYLE_NAMES = {
+  balanced: 'Generals', smallBall: 'Sparrows', patient: 'Owls', junkballers: 'Tricksters',
+  shifters: 'Foxes', flamethrowers: 'Flames', sluggers: 'Sluggers', aces: 'Aces',
+};
+function teamDisplayName(styleId, fallback) { return TEAM_STYLE_NAMES[styleId] || fallback || '?'; }
+
 class BaseballPlayScreen {
   constructor(container) {
     this.container = container;
@@ -941,7 +951,7 @@ class BaseballPlayScreen {
     const teams = leagueTeams(state);
     const opp = teams[meta.opponentIndex];
     const where = meta.home ? t('home_game') : t('away_game');
-    return `${t('vs_team').replace('{team}', opp ? opp.name : '?')} &middot; ${where}`;
+    return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, opp.name) : '?')} &middot; ${where}`;
   }
 
   /** The nine-row standings table, the player's own row marked (never colour alone - a glyph, not
@@ -955,7 +965,7 @@ class BaseballPlayScreen {
     const rowHTML = (r, i) => `
       <div class="bb-standing-row${r.isPlayer ? ' is-you' : ''}">
         <span class="bb-standing-rank">${i + 1}</span>
-        <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : r.id}</span>
+        <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : teamDisplayName(r.styleId, r.id)}</span>
         <span class="bb-standing-rec">${r.wins}-${r.losses}</span>
       </div>`;
     const col1 = rows.slice(0, 5).map((r, i) => rowHTML(r, i)).join('');

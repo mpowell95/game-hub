@@ -49,7 +49,10 @@
   overflow: hidden;
   gap: 10px;
   padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
-  padding-top: calc(14px + env(safe-area-inset-top));
+  /* Ship review (R15-B): the tab row must clear the hub's floating back pill. `--bb-top-pad` is
+   * the measured pill clearance in the hub and the safe-area inset standalone (`_fitInsets`);
+   * Quick Play only ever cleared the pill because its body is vertically centred. */
+  padding-top: calc(10px + var(--bb-top-pad, 0px));
 }
 
 .bb-setup-tabs {
@@ -193,7 +196,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   overflow: hidden;
 }
 .bb-career--empty { align-items: center; justify-content: center; }
@@ -226,10 +229,9 @@
   grid-template-columns: 1fr 1fr;
   gap: 0 10px;
   font-size: 11px;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
 }
-.bb-standings-col { display: flex; flex-direction: column; gap: 2px; min-height: 0; justify-content: center; }
+.bb-standings-col { display: flex; flex-direction: column; gap: 2px; }
 .bb-standing-row {
   display: flex;
   align-items: center;
