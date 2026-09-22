@@ -710,9 +710,11 @@ body {
   border-bottom-right-radius: 0; border-top-left-radius: 3px;
 }
 .hub-alert-head {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 900; letter-spacing: 0.04em;
   color: #111; text-transform: uppercase;
 }
+.hub-alert-swords { width: 15px; height: 15px; flex: 0 0 auto; }
 .hub-alert-line {
   font-size: 19px; font-weight: 900; line-height: 1.1;
   color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);

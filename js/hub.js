@@ -1066,7 +1066,17 @@ class Hub {
     const cell = this._cellFor(state.game);
     if (!cell) return;
     const a = state.alert;
-    const head = t('hub_alert_head');
+    // CROSSED SWORDS, DRAWN RATHER THAN TYPED. Matt's mockup used the ⚔️ emoji and he was clear
+    // it is the idea, not the asset: "it doesn't have to be that specific swords image. You can
+    // recreate something." Drawing it removes the one real risk an emoji carried - it is a font
+    // glyph, so a device without a colour emoji font renders a tofu box in the middle of the
+    // headline (which is exactly what happened in the headless browser this was checked in).
+    // currentColor, so it takes the bubble's own ink on either variant.
+    const swords = `<svg class="hub-alert-swords" viewBox="0 0 24 24" aria-hidden="true"
+        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
+        <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
+    const head = `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
     const line = a.kind === 'challenge'
       ? t('hub_alert_challenged', { who: a.name || t('hub_alert_someone') })
       : t('hub_alert_your_turn');

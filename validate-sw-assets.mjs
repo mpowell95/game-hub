@@ -163,10 +163,27 @@ let missingFailed = false;
 if (missingFromAssets.length) {
   // A FAILURE, NOT A WARNING (2026-09-22). It was a warning with exit 0 for as long as this file
   // has existed, and a warning in a pre-deploy gate is a line of text nobody reads: `hoops4/js/
-  // alert.js` shipped missing from ASSETS while this script printed WARN and exited clean. What a
-  // missing entry actually costs is the OFFLINE app - the file is never precached, so the feature
-  // works on a good connection and is silently dead on a bad one, which is the hardest kind of
-  // bug to be told about.
+  // alert.js` shipped missing from ASSETS while this script printed WARN and exited clean.
+  //
+  // WHAT A MISSING ENTRY ACTUALLY COSTS, corrected the same day by Matt, who was right: the first
+  // version of this comment said "the OFFLINE app", and for that particular file that was the
+  // wrong headline - a turn-by-turn challenge needs the network anyway, so its alert module being
+  // unreachable offline costs nothing that was not already gone. Matt: "This is multiplayer - of
+  // course it breaks the offline functionality... But everything else still should."
+  //
+  // The real cost is on EVERY OPEN, online, and it is `CACHE_FIRST_PATHS` - built in sw.js from
+  // ASSETS, exactly like `REST_MANIFEST`. A file outside ASSETS is therefore:
+  //   - NOT cache-first, so it takes a network round trip on every single request rather than
+  //     being served from the cache (js/hub.js imports alert.js on every launcher paint);
+  //   - NOT in REST_MANIFEST, so it has no content hash and is not carried forward across a
+  //     CACHE bump - it re-downloads after every deploy, at ~13 deploys a day;
+  //   - NOT warmed by warmRest, so the first open after a deploy pays for it in front of the
+  //     player.
+  // That is the same trio root CLAUDE.md spells out for Boggle's word lists, in the entry
+  // explaining why a LAZY tier had to exist instead of just dropping them from ASSETS.
+  //
+  // Offline still matters for everything that is NOT a network feature - a game's code, its CSS,
+  // its art - which is most of what this list holds.
   //
   // It is safe to be a failure because the exclusion list below it is real: measured across the
   // whole repo the day this changed, exactly 14 files sat outside ASSETS and all 14 matched a
